@@ -108,3 +108,12 @@ Living document of facts and decisions told by the user. Keep this up to date.
   not 'header' with wayland-scanner); after wl_surface_commit must wl_display_flush()
   before a prepare_read/poll loop (frames never arrive otherwise). VM now has
   meson/ninja/gcc/libwayland-dev/wayland-protocols installed.
+- 2026-10-25 (M2b — dex2jvm WORKS): com.macapk.dex (ported verbatim, 36 files) compiles
+  clean with javac 21 on the ARM64 VM and converted tests/uibench/uibench.apk ->
+  2,272 JVM .class files in 796 ms (`java -cp out com.macapk.dex.Main <apk> <out.jar>`).
+  uibench.apk is pure-Java (no .so). Whole tree now compiles together (framework seed +
+  dex2jvm + smoke) via: javac -nowarn -d out $(find runtime/java tests/smoke -name "*.java")
+  on ~/apklayer-m1 (note: runtime/java path after the scp layout change).
+  Next: class-load smoke (run a converted app class against the framework seed), then
+  android.app bootstrap (ActivityThread-style driver, Mac.apk Boot.java as reference),
+  then resource system (AssetManager/XmlBlock) + hwui->Skiko surface bridge.
