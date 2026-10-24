@@ -22,3 +22,17 @@ executable('apklayer-window',
   ['src/window.c', xdg_header, xdg_code],
   dependencies: [wl_client_dep],
   install: false)
+
+# JNI companion for the JVM framework base (implements the small set of natives the
+# framework expects from the old ObjC runtime).
+cc = meson.get_compiler('c')
+jni_out = run_command('sh', '-c',
+  'R=$(readlink -f "$(command -v javac)"); echo "${R%/bin/javac}/include"', check: true)
+jni_inc = jni_out.stdout().strip()
+jni_args = ['-I' + jni_inc, '-I' + jni_inc + '/linux', '-fPIC']
+
+shared_library('apklayer-jni',
+  ['src/jni/nativelog.c'],
+  c_args: jni_args,
+  gnu_symbol_visibility: 'default',
+  install: false)

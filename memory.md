@@ -127,3 +127,19 @@ Living document of facts and decisions told by the user. Keep this up to date.
   Next: runner (Boot-style in-process driver: parse manifest -> makeApplication ->
   instantiate Activity -> drive lifecycle) + surface bridge (ViewRootImpl->HWUI->Skiko
   linux-arm64 -> our Wayland window) + userspace binder where unavoidable.
+- 2026-10-25 (M2d — REAL APP ACTIVITY INSTANTIATED): tests/runner/AppRunner.java loads
+  converted uibench classes over the java_mac framework; `com.android.test.uibench.MainActivity`
+  resolves the full chain (AppCompatActivity<-FragmentActivity<-...<-android.app.Activity<-
+  ContextThemeWrapper<-ContextWrapper<-Context), static-init passes, and the Activity
+  CONSTRUCTS successfully on the bare JVM (`INSTANTIATED: ...@67424e82`). First JNI gap
+  (com.macapk.loader.NativeLog.print) implemented in bridge/src/jni/nativelog.c
+  (meson target libapklayer-jni.so; loaded via -Dapklayer.jni=<path>). Framework's own
+  logging/Looper init ran (I/Looper: MAIN thread pinned; PresentedSdk gate messages).
+  Run recipe on VM:
+    java -XX:UseSVE=0 -Dapklayer.jni=~/apklayer-m1/bridge/b/libapklayer-jni.so \
+         -cp ~/apklayer-mac/out_mac:~/apklayer-mac/runnerout apklayer.runner.AppRunner \
+         /tmp/uibench-classes.jar com.android.test.uibench.MainActivity
+  Meson gotcha learned: JDK include via R=$(readlink -f $(command -v javac)); ${R%/bin/javac}/include.
+  Next: attach/launch path — ContextImpl + Resources (AssetManager is native-backed in
+  java_mac; check how Mac.apk bridges it), Instrumentation.execStartActivity-style driver
+  (Boot.java reference), then ViewRootImpl -> our Wayland surface bridge.
