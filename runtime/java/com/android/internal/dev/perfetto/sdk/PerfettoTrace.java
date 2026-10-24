@@ -13,6 +13,8 @@ public final class PerfettoTrace {
         public void emit() {}
     }
     private static final Builder B = new Builder();
+    public static void register(boolean register) {}
+    public static void registerCategories() {}
     public static Builder begin(Object category, String name) { return B; }
     public static Builder end(Object category) { return B; }
 }

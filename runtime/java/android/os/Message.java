@@ -22,7 +22,6 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.ravenwood.annotation.RavenwoodKeepWholeClass;
 import android.ravenwood.annotation.RavenwoodRedirect;
 import android.ravenwood.annotation.RavenwoodRedirectionClass;
-import android.util.TimeUtils;
 
 import com.android.internal.annotations.VisibleForTesting;
 
@@ -675,7 +674,7 @@ public final class Message { // apklayer patch: no Parcelable
     String toString(long now) {
         StringBuilder b = new StringBuilder();
         b.append("{ when=");
-        TimeUtils.formatDuration(when - now, b);
+        b.append(when - now).append("ms"); // apklayer patch: no TimeUtils
 
         if (target != null) {
             if (callback != null) {
@@ -717,34 +716,6 @@ public final class Message { // apklayer patch: no Parcelable
     }
 
 
-    public static final @NonNull Parcelable.Creator<Message> CREATOR
-            = new Parcelable.Creator<Message>() {
-        public Message createFromParcel(Parcel source) {
-            Message msg = Message.obtain();
-            msg.readFromParcel(source);
-            return msg;
-        }
-
-        public Message[] newArray(int size) {
-            return new Message[size];
-        }
-    };
-
-
-
-    private void readFromParcel(Parcel source) {
-        what = source.readInt();
-        arg1 = source.readInt();
-        arg2 = source.readInt();
-        if (source.readInt() != 0) {
-            obj = source.readParcelable(getClass().getClassLoader(), java.lang.Object.class);
-        }
-        when = source.readLong();
-        data = source.readBundle();
-        replyTo = Messenger.readMessengerOrNullFromParcel(source);
-        sendingUid = source.readInt();
-        workSourceUid = source.readInt();
-    }
 
     /*
      * This class is used to find matches for MessageQueue.hasMessages() and

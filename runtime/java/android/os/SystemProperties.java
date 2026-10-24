@@ -107,35 +107,59 @@ public class SystemProperties {
 
     @FastNative
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
-    private static native String native_get(String key, String def);
+    private static String native_get(String key, String def) { // apklayer patch: JVM-safe default (was native)
+        return def;
+    }
     @FastNative
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
-    private static native int native_get_int(String key, int def);
+    private static int native_get_int(String key, int def) { // apklayer patch: JVM-safe default (was native)
+        return def;
+    }
     @FastNative
     @UnsupportedAppUsage
-    private static native long native_get_long(String key, long def);
+    private static long native_get_long(String key, long def) { // apklayer patch: JVM-safe default (was native)
+        return def;
+    }
     @FastNative
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
-    private static native boolean native_get_boolean(String key, boolean def);
+    private static boolean native_get_boolean(String key, boolean def) { // apklayer patch: JVM-safe default (was native)
+        return def;
+    }
 
     @FastNative
-    private static native long native_find(String name);
+    private static long native_find(String name) { // apklayer patch: JVM-safe default (was native)
+        return 0;
+    }
     @FastNative
-    private static native String native_get(long handle);
+    private static String native_get(long handle) { // apklayer patch: JVM-safe default (was native)
+        return null;
+    }
     @CriticalNative
-    private static native int native_get_int(long handle, int def);
+    private static int native_get_int(long handle, int def) { // apklayer patch: JVM-safe default (was native)
+        return def;
+    }
     @CriticalNative
-    private static native long native_get_long(long handle, long def);
+    private static long native_get_long(long handle, long def) { // apklayer patch: JVM-safe default (was native)
+        return def;
+    }
     @CriticalNative
-    private static native boolean native_get_boolean(long handle, boolean def);
+    private static boolean native_get_boolean(long handle, boolean def) { // apklayer patch: JVM-safe default (was native)
+        return def;
+    }
 
     // _NOT_ FastNative: native_set performs IPC and can block
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
-    private static native void native_set(String key, String def);
+    private static void native_set(String key, String def) { // apklayer patch: JVM-safe default (was native)
+        
+    }
 
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
-    private static native void native_add_change_callback();
-    private static native void native_report_sysprop_change();
+    private static void native_add_change_callback() { // apklayer patch: JVM-safe default (was native)
+        
+    }
+    private static void native_report_sysprop_change() { // apklayer patch: JVM-safe default (was native)
+        
+    }
 
     /**
      * Get the String value for the given {@code key}.

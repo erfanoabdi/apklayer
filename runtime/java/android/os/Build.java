@@ -38,5 +38,6 @@ public class Build {
         public static final int UPSIDE_DOWN_CAKE = 34;
         public static final int VANS = 35;
         public static final int VANILLA_ICE_CREAM = 36;
+        public static final int CINNAMON_BUN = 37;
     }
 }

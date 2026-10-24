@@ -194,7 +194,7 @@ public class HandlerThread extends Thread {
     @NonNull
     public Executor getThreadExecutor() {
         if (mExecutor == null) {
-            mExecutor = new HandlerExecutor(getThreadHandler());
+            mExecutor = command -> getThreadHandler().post(command); // apklayer patch: inline executor (no HandlerExecutor class in tree)
         }
         return mExecutor;
     }

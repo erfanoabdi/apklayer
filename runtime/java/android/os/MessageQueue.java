@@ -81,14 +81,40 @@ public final class MessageQueue {
 
     private final Thread mLooperThread;
 
-    private native static long nativeInit();
-    private native static void nativeDestroy(long ptr);
+    // apklayer patch: native epoll bridge replaced with JVM wait/notify (see pollOnce).
+    private final Object mPollLock = new Object();
+    private boolean mWoke;
+    private long nativeInit() { return 1; }
+    private void nativeDestroy(long ptr) {}
     @UnsupportedAppUsage
-    private native void nativePollOnce(long ptr, int timeoutMillis); /*non-static for callbacks*/
-    private native static void nativeWake(long ptr);
-    private native static boolean nativeIsPolling(long ptr);
-    private native static void nativeSetFileDescriptorEvents(long ptr, int fd, int events);
-    private native static void nativeSetSkipEpollWaitForZeroTimeout(long ptr);
+    private void nativePollOnce(long ptr, int timeoutMillis) { // apklayer patch: JVM wait/notify
+        synchronized (mPollLock) {
+            if (mWoke) { mWoke = false; return; }
+            if (timeoutMillis == 0) return;
+            final boolean finite = timeoutMillis > 0;
+            final long deadline = finite ? System.currentTimeMillis() + timeoutMillis : 0;
+            try {
+                while (!mWoke) {
+                    long waitMs = 1000L;
+                    if (finite) {
+                        long rem = deadline - System.currentTimeMillis();
+                        if (rem <= 0) break;
+                        waitMs = Math.min(rem, 1000L);
+                    }
+                    mPollLock.wait(waitMs);
+                }
+            } catch (InterruptedException e) {
+                // apklayer patch: interrupt wakes the poller; next() re-checks state.
+            }
+            mWoke = false;
+        }
+    }
+    private void nativeWake(long ptr) { // apklayer patch
+        synchronized (mPollLock) { mWoke = true; mPollLock.notifyAll(); }
+    }
+    private boolean nativeIsPolling(long ptr) { return false; }
+    private void nativeSetFileDescriptorEvents(long ptr, int fd, int events) {}
+    private void nativeSetSkipEpollWaitForZeroTimeout(long ptr) {}
 
     MessageQueue(boolean quitAllowed) {
         mQuitAllowed = quitAllowed;
@@ -269,7 +295,7 @@ public final class MessageQueue {
 
     private void updateOnFileDescriptorEventListenerLocked(FileDescriptor fd, int events,
             OnFileDescriptorEventListener listener) {
-        final int fdNum = fd.getInt$();
+        final int fdNum = System.identityHashCode(fd) /* apklayer patch: FileDescriptor.getInt$() is libcore-internal */;
 
         int index = -1;
         FileDescriptorRecord record = null;
@@ -1263,7 +1289,6 @@ public final class MessageQueue {
         }
     }
 
-    @NeverCompile
 
     /**
      * Callback interface for discovering when a thread is going to block

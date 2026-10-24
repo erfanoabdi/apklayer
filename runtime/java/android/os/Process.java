@@ -11,6 +11,7 @@ public class Process {
     public static final int THREAD_GROUP_AUDIO_SYS = 4;
     public static final int THREAD_GROUP_TOP_APP = 5;
     public static final int THREAD_GROUP_RT_APP = 6;
+    public static final int THREAD_GROUP_RESTRICTED = 7;
     public static final int THREAD_PRIORITY_LOWEST = 19;
     public static final int THREAD_PRIORITY_BACKGROUND = 10;
     public static final int THREAD_PRIORITY_LESS_FAVORABLE = 1;
@@ -30,5 +31,9 @@ public class Process {
     public static int getProcessGroup(int pid) { return 0; }
     public static void setThreadPriority(int tid, int priority) {}
     public static void setThreadPriority(int priority) {}
+    public static void setThreadGroup(int tid, int group) {}
+    public static void setThreadGroup(String name, int group) {}
     public static int getThreadPriority(int tid) { return THREAD_PRIORITY_DEFAULT; }
+    public static String myProcessName() { return "apklayer"; }
+    public static boolean is64Bit() { return true; }
 }

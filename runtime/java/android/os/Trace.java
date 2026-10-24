@@ -126,11 +126,17 @@ public final class Trace {
     @UnsupportedAppUsage
     @CriticalNative
     @android.ravenwood.annotation.RavenwoodReplace
-    private static native boolean nativeIsTagEnabled(long tag);
+    private static boolean nativeIsTagEnabled(long tag) { // apklayer patch: JVM-safe default (was native)
+        return false;
+    }
     @android.ravenwood.annotation.RavenwoodReplace
-    private static native void nativeSetAppTracingAllowed(boolean allowed);
+    private static void nativeSetAppTracingAllowed(boolean allowed) { // apklayer patch: JVM-safe default (was native)
+        
+    }
     @android.ravenwood.annotation.RavenwoodReplace
-    private static native void nativeSetTracingEnabled(boolean allowed);
+    private static void nativeSetTracingEnabled(boolean allowed) { // apklayer patch: JVM-safe default (was native)
+        
+    }
 
     private static boolean nativeIsTagEnabled$ravenwood(long traceTag) {
         // Tracing currently completely disabled under Ravenwood
@@ -146,25 +152,43 @@ public final class Trace {
     }
 
     @FastNative
-    private static native void nativeTraceCounter(long tag, String name, long value);
+    private static void nativeTraceCounter(long tag, String name, long value) { // apklayer patch: JVM-safe default (was native)
+        
+    }
     @FastNative
-    private static native void nativeTraceBegin(long tag, String name);
+    private static void nativeTraceBegin(long tag, String name) { // apklayer patch: JVM-safe default (was native)
+        
+    }
     @CriticalNative
-    private static native void nativeTraceEnd(long tag);
+    private static void nativeTraceEnd(long tag) { // apklayer patch: JVM-safe default (was native)
+        
+    }
     @FastNative
-    private static native void nativeAsyncTraceBegin(long tag, String name, int cookie);
+    private static void nativeAsyncTraceBegin(long tag, String name, int cookie) { // apklayer patch: JVM-safe default (was native)
+        
+    }
     @FastNative
-    private static native void nativeAsyncTraceEnd(long tag, String name, int cookie);
+    private static void nativeAsyncTraceEnd(long tag, String name, int cookie) { // apklayer patch: JVM-safe default (was native)
+        
+    }
     @FastNative
-    private static native void nativeAsyncTraceForTrackBegin(long tag,
-            String trackName, String name, int cookie);
+    private static void nativeAsyncTraceForTrackBegin(long tag,
+            String trackName, String name, int cookie) { // apklayer patch: JVM-safe default (was native)
+        
+    }
     @FastNative
-    private static native void nativeAsyncTraceForTrackEnd(long tag,
-            String trackName, int cookie);
+    private static void nativeAsyncTraceForTrackEnd(long tag,
+            String trackName, int cookie) { // apklayer patch: JVM-safe default (was native)
+        
+    }
     @FastNative
-    private static native void nativeInstant(long tag, String name);
+    private static void nativeInstant(long tag, String name) { // apklayer patch: JVM-safe default (was native)
+        
+    }
     @FastNative
-    private static native void nativeInstantForTrack(long tag, String trackName, String name);
+    private static void nativeInstantForTrack(long tag, String trackName, String name) { // apklayer patch: JVM-safe default (was native)
+        
+    }
 
     private Trace() {
     }

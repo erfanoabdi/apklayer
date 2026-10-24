@@ -86,3 +86,16 @@ Living document of facts and decisions told by the user. Keep this up to date.
   Log.java edits (no RuntimeInit/FastPrintWriter/LineBreakBufferedWriter), SystemProperties
   Binder no-ops. Compile/run on VM: javac -nowarn -d out $(find java tests/smoke -name "*.java");
   java -XX:UseSVE=0 -cp out apklayer.smoke.Smoke  (sources synced to ~/apklayer-m1 on VM).
+- 2026-10-25 (M1b PASSED): the genuine AOSP message loop (Looper, Handler, HandlerThread,
+  Message, LegacyMessageQueue/MessageQueue — copied from los24) compiles with javac 21 and
+  runs on stock OpenJDK on the bare Ubuntu ARM64 VM: post + sendMessage(what=42,obj) +
+  postDelayed all dispatched -> `looper_ok=true`. Key insight: LegacyMessageQueue is pure
+  Java except the native epoll bridge, which we replaced with JVM wait/notify
+  (mPollLock/mWoke; semantics preserved). Also stripped natives in SystemProperties (JVM
+  -D properties) and Trace (disabled). Thin stubs added: Binder, Process, SystemClock,
+  Bundle, Messenger, ThreadLocalWorkSource, StrictMode, VMRuntime, Flags, Perfetto*
+  (all marked "apklayer patch"). Seed now ~50 files in runtime/java.
+  Next: M2 — first window via Wayland (UIBench APK at /Users/erfanabdi/TestApps/uibench.apk
+  on the Mac). Needs: dex2jvm decision (port com.macapk.dex AGPL vs alternative), ActivityThread
+  bootstrap w/o system_server, and the surface bridge (HWUI->EGL->wl_surface or
+  Bitmap->SHM path). Userspace binder = allowed substitute for the kernel driver (user OK).

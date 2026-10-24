@@ -16,3 +16,24 @@ Copied unmodified from los24: Base64, RemoteException, AndroidException, DeadSys
 DeadSystemRuntimeException, MutableInt, MutableBoolean, HexEncoding, IntDef/NonNull/Nullable/
 SystemApi, UnsupportedAppUsage, GuardedBy, VisibleForTesting, Ravenwood* annotations,
 FastNative/CriticalNative.
+
+## M1b additions (message loop)
+- android/os/MessageQueue.java (from LegacyMessageQueue): native epoll bridge -> JVM
+  wait/notify poll; fd-event natives -> no-ops; fd.getInt$() -> identityHashCode.
+- android/os/SystemProperties.java, android/os/Trace.java: all `static native` decls
+  stripped to JVM-safe defaults.
+- android/os/Looper.java: CompatChanges->false; Perfetto blocks removed; LooperDoctor off;
+  dumpDebug(proto) removed.
+- android/os/Handler.java: IMessenger/Messenger block removed.
+- android/os/Message.java: Parcelable + CREATOR + writeToParcel/readFromParcel + proto dump
+  removed; TimeUtils.formatDuration -> plain ms.
+- android/os/HandlerThread.java: HandlerExecutor -> inline lambda executor.
+- New apklayer stubs (patch-marked): Binder, Process, SystemClock, Bundle, Messenger,
+  ThreadLocalWorkSource, StrictMode, dalvik.system.VMRuntime, android.os.Flags,
+  PerfettoCategories, com.android.internal.dev.perfetto.sdk.PerfettoTrace, LooperDoctor,
+  android.os.Build (constants), DeadObjectException.
+- Copied unmodified (M1b): Looper, Handler, HandlerThread, Message, LegacyMessageQueue
+  MessageQueue, Pools, Trace*, SparseArray, ArraySet, MapCollections, UtilConfig,
+  ContainerHelpers, EmptyArray, ArrayUtils, GrowingArrayUtils, Slog, Printer,
+  TraceNameSupplier, ChangeId/EnabledSince/Overridable, FlaggedApi/TestApi/SuppressLint,
+  NeverCompile, RavenwoodReplace (+ earlier seed). (* = natives stripped)

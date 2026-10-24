@@ -16,7 +16,6 @@
 
 package android.os;
 
-import static android.internal.perfetto.protos.AndroidTrackEventOuterClass.AndroidTrackEvent.MESSAGE_QUEUE;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -644,15 +643,6 @@ public final class Looper {
     }
 
     /** @hide */
-    public void dumpDebug(ProtoOutputStream proto, long fieldId) {
-        final long looperToken = proto.start(fieldId);
-        proto.write(LooperProto.THREAD_NAME, mThread.getName());
-        proto.write(LooperProto.THREAD_ID, mThread.getId());
-        if (mQueue != null) {
-            mQueue.dumpDebug(proto, LooperProto.QUEUE);
-        }
-        proto.end(looperToken);
-    }
 
     @Override
     public String toString() {
