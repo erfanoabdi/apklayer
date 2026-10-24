@@ -1,0 +1,26 @@
+// android.bluetooth.le.ScanCallback
+//
+// The callback an app subclasses to receive BLE scan results. Mac.apk has no
+// radio, so a scan never delivers results; BluetoothLeScanner.startScan
+// reports SCAN_FAILED_INTERNAL_ERROR to onScanFailed so apps don't wait
+// forever. The full overridable surface + SCAN_FAILED_* constants must exist.
+// Mirrors frameworks/base/core/java/android/bluetooth/le/ScanCallback.java.
+package android.bluetooth.le;
+
+import java.util.List;
+
+public abstract class ScanCallback {
+
+    public static final int SCAN_FAILED_ALREADY_STARTED = 1;
+    public static final int SCAN_FAILED_APPLICATION_REGISTRATION_FAILED = 2;
+    public static final int SCAN_FAILED_INTERNAL_ERROR = 3;
+    public static final int SCAN_FAILED_FEATURE_UNSUPPORTED = 4;
+    public static final int SCAN_FAILED_OUT_OF_HARDWARE_RESOURCES = 5;
+    public static final int SCAN_FAILED_SCANNING_TOO_FREQUENTLY = 6;
+
+    public ScanCallback() {}
+
+    public void onScanResult(int callbackType, ScanResult result) {}
+    public void onBatchScanResults(List<ScanResult> results) {}
+    public void onScanFailed(int errorCode) {}
+}
