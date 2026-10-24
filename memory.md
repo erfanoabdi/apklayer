@@ -143,3 +143,15 @@ Living document of facts and decisions told by the user. Keep this up to date.
   Next: attach/launch path — ContextImpl + Resources (AssetManager is native-backed in
   java_mac; check how Mac.apk bridges it), Instrumentation.execStartActivity-style driver
   (Boot.java reference), then ViewRootImpl -> our Wayland surface bridge.
+- 2026-10-25 (M2e — JAVA FRAME ON WAYLAND): bridge/src/jni/nativecocoa.c implements the
+  whole com.macapk.loader.NativeCocoa host seam (71 natives) for Linux: init/present* over
+  our own wl_shm xdg_toplevel (480x800 phone canvas), runLoop=pump(16ms), rest stubbed.
+  FrameSmoke (tests/smoke/FrameSmoke.java, reflective) -> `FRAME init=ok size=480x800
+  presented=1` exit 0 on the VM with WAYLAND_DISPLAY=wayland-0. A Java-drawn gradient now
+  reaches a real Wayland window through the framework's own host seam.
+  Build: ninja -C ~/apklayer-m1/bridge/b -> libapklayer-jni.so (jni include via
+  R=$(readlink -f $(command -v javac)); ${R%/bin/javac}/include).
+  Next: run Boot.run(apkPath, appJar, appDir, manifestPath) against uibench — inspect its
+  required inputs (manifest file format from apk_unpacker; com.macapk.loader has
+  ArscReader + BinaryXmlParser pure-Java; AppClassLoader) and drive a real Activity to
+  present via ViewCanvasDriver -> NativeCocoa.presentBitmap.

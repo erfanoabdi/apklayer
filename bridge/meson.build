@@ -32,7 +32,8 @@ jni_inc = jni_out.stdout().strip()
 jni_args = ['-I' + jni_inc, '-I' + jni_inc + '/linux', '-fPIC']
 
 shared_library('apklayer-jni',
-  ['src/jni/nativelog.c'],
+  ['src/jni/nativelog.c', 'src/jni/nativecocoa.c', xdg_header, xdg_code],
+  dependencies: [wl_client_dep],
   c_args: jni_args,
   gnu_symbol_visibility: 'default',
   install: false)
