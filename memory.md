@@ -117,3 +117,13 @@ Living document of facts and decisions told by the user. Keep this up to date.
   Next: class-load smoke (run a converted app class against the framework seed), then
   android.app bootstrap (ActivityThread-style driver, Mac.apk Boot.java as reference),
   then resource system (AssetManager/XmlBlock) + hwui->Skiko surface bridge.
+- 2026-10-25 (M2c — framework base VALIDATED): Mac.apk runtime/java snapshot copied to
+  runtime/java_mac (3049 files) compiles CLEAN with `javac --release 21` on the ARM64 VM
+  (0 errors). LoadProbe vs converted uibench: **800/800 app classes link** (was 567/800 with
+  our hand-grown seed). Decision locked: java_mac is the framework base; the hand seed
+  (runtime/java) is archived for reference (M1 loop proven there). VM layout:
+  ~/apklayer-mac/{java_mac,out_mac,probeout}; probe:
+  `java -XX:UseSVE=0 -cp out_mac:probeout apklayer.probe.LoadProbe /tmp/uibench-classes.jar`.
+  Next: runner (Boot-style in-process driver: parse manifest -> makeApplication ->
+  instantiate Activity -> drive lifecycle) + surface bridge (ViewRootImpl->HWUI->Skiko
+  linux-arm64 -> our Wayland window) + userspace binder where unavoidable.

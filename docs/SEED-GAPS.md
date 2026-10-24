@@ -28,3 +28,7 @@ Growth order (leaves first, then the graph pulls in upward):
 4. app: Activity/Application/ContextImpl/ActivityThread driver (Boot-style).
 
 Each step: copy from los24 -> javac on VM -> thin-patch marked "apklayer patch" -> commit.
+
+## Update (M2c): gaps CLOSED by framework-base switch
+Adopted Mac.apk runtime/java (3049 files, compiles clean, javac 21, ARM64 VM).
+LoadProbe: classes=800 linked=800 failed=0. Hand-grown seed superseded (kept for history).
