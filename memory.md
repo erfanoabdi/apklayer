@@ -155,3 +155,15 @@ Living document of facts and decisions told by the user. Keep this up to date.
   required inputs (manifest file format from apk_unpacker; com.macapk.loader has
   ArscReader + BinaryXmlParser pure-Java; AppClassLoader) and drive a real Activity to
   present via ViewCanvasDriver -> NativeCocoa.presentBitmap.
+- 2026-10-25 (M3 attempt #1): tests/launcher/Launch.java (unpack APK -> BinaryXmlParser
+  decodes binary AXML to text (pure Java!) -> dex2jvm -> Boot.run) gets Mac.apk's Boot deep
+  into startup on the VM: manifest parsed (32 activities, launcher MainActivity), class
+  loader built, display 960x1600px/480x800dp config built, AWT initialised (framework
+  Canvas is AWT-backed), monet/BC/translator warnings non-fatal. Hard blockers from logs:
+  (a) MACAPK_FW_RES_APK unset -> platform resources empty -> every @android: ref fails;
+      need framework-res.apk staged next to jars (tools/framework-res.apk) or env var set.
+  (b) "resources.arsc NOT ingested ... installed apk set is the only resource source" and
+      "MACAPK_APK_PATH is unset" -> set MACAPK_APK_PATH to the apk (also picks SDK 27).
+  Boot.run returned (exit 0) after theme warning. Next: source framework-res.apk
+  (Mac.apk release bundle / their staged runtime), re-run with MACAPK_FW_RES_APK +
+  MACAPK_APK_PATH env set; watch tail of /tmp/launch1.log for the next gate.
