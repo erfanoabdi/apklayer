@@ -24,9 +24,6 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.os.DeadSystemException;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.os.RuntimeInit;
-import com.android.internal.util.FastPrintWriter;
-import com.android.internal.util.LineBreakBufferedWriter;
 import com.android.internal.util.Preconditions;
 
 import dalvik.annotation.optimization.FastNative;
@@ -132,7 +129,7 @@ public final class Log {
 
     private static TerribleFailureHandler sWtfHandler = new TerribleFailureHandler() {
             public void onTerribleFailure(String tag, TerribleFailure what, boolean system) {
-                RuntimeInit.wtf(tag, what, system);
+                System.err.println("WTF: " + tag + ": " + what); // apklayer patch: no RuntimeInit
             }
         };
 
@@ -391,7 +388,7 @@ public final class Log {
         }
 
         StringWriter sw = new StringWriter();
-        PrintWriter pw = new FastPrintWriter(sw, false, 256);
+        PrintWriter pw = new PrintWriter(sw, false); // apklayer patch
         tr.printStackTrace(pw);
         pw.flush();
         return sw.toString();
@@ -478,7 +475,7 @@ public final class Log {
         // At least assume you can print *some* characters (tag is not too large).
         bufferSize = Math.max(bufferSize, 100);
 
-        LineBreakBufferedWriter lbbw = new LineBreakBufferedWriter(logWriter, bufferSize);
+        PrintWriter lbbw = new PrintWriter(logWriter); // apklayer patch: no line-break buffering
 
         lbbw.println(msg);
 
@@ -530,7 +527,7 @@ public final class Log {
                 - 32;                                              // Some slack.
         bufferSize = Math.max(bufferSize, 100);
 
-        try (LineBreakBufferedWriter lbbw = new LineBreakBufferedWriter(logWriter, bufferSize)) {
+        try (PrintWriter lbbw = new PrintWriter(logWriter)) { // apklayer patch
             logStackTrace(lbbw, bufID, priority, msg, skippedInitialLines);
         }
         return logWriter.getWritten();

@@ -279,7 +279,7 @@ public class SystemProperties {
             }
             callbacks = new ArrayList<Runnable>(sChangeCallbacks);
         }
-        final long token = Binder.clearCallingIdentity();
+        final long token = 0; // apklayer patch: no Binder identity
         try {
             for (int i = 0; i < callbacks.size(); i++) {
                 try {
@@ -291,7 +291,7 @@ public class SystemProperties {
                 }
             }
         } finally {
-            Binder.restoreCallingIdentity(token);
+            // apklayer patch: no Binder identity
         }
     }
 

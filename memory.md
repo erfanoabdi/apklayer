@@ -76,3 +76,13 @@ Living document of facts and decisions told by the user. Keep this up to date.
 - 2026-10-25: Parallels VM prepared for M1: `openjdk-21-jdk-headless` (21.0.12 arm64) installed
   via apt (needed `apt-get update` first). HotSpot prints a harmless SVE warning on this VM —
   pass `-XX:UseSVE=0`. Mesa EGL/GL libs already present.
+- 2026-10-25 (M1 smoke PASSED): genuine AOSP classes from los24 (android.util.Base64 unmodified;
+  Log/SystemProperties patched thin; plus annotation/internal deps) compile with plain `javac
+  --release 21` and run on stock OpenJDK 21 on the bare Ubuntu ARM64 VM:
+  `apklayer M1 smoke: base64=aGVsbG8gYXBrbGF5ZXI= roundtrip_ok=true jvm=21.0.12.1`.
+  Seed lives in runtime/java (24 files), smoke in tests/smoke. Thin patches marked
+  "apklayer patch" inline. Notable stubs so far: minimal android/os/Build.java, minimal
+  com.android.internal.util.Preconditions, DeadObjectException (upstream is aidl-generated),
+  Log.java edits (no RuntimeInit/FastPrintWriter/LineBreakBufferedWriter), SystemProperties
+  Binder no-ops. Compile/run on VM: javac -nowarn -d out $(find java tests/smoke -name "*.java");
+  java -XX:UseSVE=0 -cp out apklayer.smoke.Smoke  (sources synced to ~/apklayer-m1 on VM).
