@@ -73,3 +73,6 @@ Living document of facts and decisions told by the user. Keep this up to date.
   converts classes.dex -> JVM jar at install time, cached by FRAMEWORK_ID. Details:
   docs/M0-FINDINGS.md. Open decision for user: port com.macapk.dex (AGPL) vs alternative
   dex->class converter.
+- 2026-10-25: Parallels VM prepared for M1: `openjdk-21-jdk-headless` (21.0.12 arm64) installed
+  via apt (needed `apt-get update` first). HotSpot prints a harmless SVE warning on this VM —
+  pass `-XX:UseSVE=0`. Mesa EGL/GL libs already present.
