@@ -67,3 +67,9 @@ Living document of facts and decisions told by the user. Keep this up to date.
   (no ANGLE/MoltenVK needed on Linux), vendored small prebuilts where Mac.apk does
   (BouncyCastle etc.).
 - 2026-10-25: Use git; commit at every step of work.
+- 2026-10-25 (M0 recon): Mac.apk runs **HotSpot OpenJDK 21**, not ART. Framework = synced AOSP
+  java compiled via javac --release 21 -> android-framework.jar (java_base_patch via
+  --patch-module). Apps: pure-Java **dex2jvm** (runtime/java/com/macapk/dex, 36 files, AGPL)
+  converts classes.dex -> JVM jar at install time, cached by FRAMEWORK_ID. Details:
+  docs/M0-FINDINGS.md. Open decision for user: port com.macapk.dex (AGPL) vs alternative
+  dex->class converter.
