@@ -7,3 +7,4 @@
 | runtime/java/com/macapk/** (other) | Mac.apk | AGPL-3.0 |
 
 apklayer as a whole therefore inherits AGPL-3.0 obligations while this code is present.
+| runtime/prebuilt/framework-res.apk | AOSP platform resources (Apache-2.0), extracted from Mac.apk v1.0.2303 `macapk.dmg` staged runtime (`Contents/Resources/tools/framework-res.apk`) | Apache-2.0 (AOSP artifact) |
