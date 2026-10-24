@@ -6,11 +6,10 @@ wl_client_dep = dependency('wayland-client')
 wl_protos_dep = dependency('wayland-protocols')
 scanner = find_program('wayland-scanner')
 
-xdg_xml = wl_protos_dep.get_variable(pkgconfig: 'pkgdatadir') /
-          'stable/xdg-shell/xdg-shell.xml'
+xdg_xml = wl_protos_dep.get_variable(pkgconfig: 'pkgdatadir') + '/stable/xdg-shell/xdg-shell.xml'
 
 xdg_header = custom_target('xdg-shell-header',
-  command: [scanner, 'header', '@INPUT@', '@OUTPUT@'],
+  command: [scanner, 'client-header', '@INPUT@', '@OUTPUT@'],
   input: xdg_xml,
   output: 'xdg-shell-client-protocol.h')
 

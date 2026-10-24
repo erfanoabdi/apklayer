@@ -99,3 +99,12 @@ Living document of facts and decisions told by the user. Keep this up to date.
   on the Mac). Needs: dex2jvm decision (port com.macapk.dex AGPL vs alternative), ActivityThread
   bootstrap w/o system_server, and the surface bridge (HWUI->EGL->wl_surface or
   Bitmap->SHM path). Userspace binder = allowed substitute for the kernel driver (user OK).
+- 2026-10-25 (M2a — first window): bridge/ (meson, C, libwayland + xdg-shell) opens a real
+  xdg_toplevel on the VM's GNOME Wayland session and presents 2 SHM frames:
+  `apklayer-window: mapped=1 frames=2`, exit 0. Build/run on VM: sources synced to
+  ~/apklayer-m1/bridge; `meson setup -Dbuildtype=release b && ninja -C b`; run with
+  `XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 ./b/apklayer-window`.
+  Gotchas learned: meson 1.3.2 (no `/` path join; one-expr-per-line; use 'client-header'
+  not 'header' with wayland-scanner); after wl_surface_commit must wl_display_flush()
+  before a prepare_read/poll loop (frames never arrive otherwise). VM now has
+  meson/ninja/gcc/libwayland-dev/wayland-protocols installed.

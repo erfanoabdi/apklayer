@@ -160,6 +160,7 @@ int main(void)
         struct wl_callback *cb = wl_surface_frame(surface);
         wl_callback_add_listener(cb, &frame_listener, NULL);
         wl_surface_commit(surface);
+        wl_display_flush(display); /* apklayer fix: send requests; poll loop below does not flush */
     }
 
     /* Pump events until both frame callbacks land (max ~5s). */
