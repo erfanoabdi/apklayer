@@ -8,7 +8,7 @@
 | `tests/uibench/uibench.apk` | AOSP UiBench test app | Apache-2.0 |
 | `archive/**` | AOSP (Apache-2.0) and Mac.apk (AGPL-3.0) code from earlier milestones; not built | as marked in each origin |
 
-While `runtime/dex2jvm` is present, apklayer as a whole carries **AGPL-3.0** obligations.
+apklayer itself is AGPL-3.0-or-later (PLAN D5), compatible with all of the above.
 
 ## Consumed at runtime (not vendored; staged on the VM under `~/rob`)
 

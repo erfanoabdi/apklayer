@@ -48,7 +48,7 @@ VM access: `ssh parallels@10.211.55.4` (password `1234`). Setup details are in m
 | `tests/uibench/` | target APK |
 | `archive/` | superseded approaches (M1 seed, Mac.apk java_mac era, M0 plan), reference only |
 
-## License note
+## License
 
-While `runtime/dex2jvm` (from Mac.apk) is present, the tree carries **AGPL-3.0** obligations.
-AOSP-derived parts are Apache-2.0 and Robolectric parts are MIT. See `docs/THIRD_PARTY.md`.
+apklayer is **AGPL-3.0-or-later** (`LICENSE`, `NOTICE`). Third-party parts keep their own
+licenses (dex2jvm AGPL-3.0, AOSP Apache-2.0, Robolectric MIT); see `docs/THIRD_PARTY.md`.
