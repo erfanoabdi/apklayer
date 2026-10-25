@@ -20,7 +20,6 @@ starts and draws a non-blank frame with no uncaught exception.
 
 Not yet tried: multi-dex apps (ASTRO, Sensors Multitool, Spic) and apps with native libraries (P4).
 | ASTRO_File_Manager_v8.10.1_Softgozar.com | 2 none | FAIL | java.lang.NoSuchMethodError: 'com.google.common.collect.ImmutableMap com.google.common.collect.ImmutableMap$Builder.buildOrThrow()' |
-| Barcode Scanner_v4.7.8_apkpure.com | 1 none | FAIL | java.lang.IllegalArgumentException: Don't know what to do with dataSource org.robolectric.shadows.util.DataSource@4a703c8c - either add an exception with addExc |
 | Device Info HW_v4.26.5_apkpure.com | 1 none | FAIL | Exception in thread "Thread-5" java.lang.NullPointerException: Cannot read the array length because "<local3>" is null |
 | DisplayLink Presenter_4.2.0.6 (43a748f131d)_APKPure | 1 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | blank frame |
 | MotCamera2_signed | 1 arm64-v8a | FAIL | java.lang.RuntimeException: java.lang.NullPointerException: Cannot read field "mShouldHideWhenLocked" because "<local3>" is null |
@@ -43,3 +42,4 @@ Not yet tried: multi-dex apps (ASTRO, Sensors Multitool, Spic) and apps with nat
 | spic-v1.4.0 | 2 none | FAIL | java.lang.NoSuchMethodError: 'com.google.common.collect.ImmutableMap com.google.common.collect.ImmutableMap$Builder.buildOrThrow()' |
 | uibench | 1 none | PASS | com.android.test.uibench.MainActivity (tap diff 0%) |
 | whatsapp | 3 arm64-v8a | FAIL | java.lang.NoClassDefFoundError: java/lang/RunnableEBaseShape3S0100000_I0_3 |
+| Barcode Scanner_v4.7.8_apkpure.com | 1 none | FAIL | blank frame |

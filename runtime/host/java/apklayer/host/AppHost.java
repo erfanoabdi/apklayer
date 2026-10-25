@@ -57,6 +57,7 @@ import org.robolectric.shadow.api.Shadow;
 import org.robolectric.shadows.ShadowApplication;
 import org.robolectric.shadows.ShadowChoreographer;
 import org.robolectric.shadows.ShadowLog;
+import org.robolectric.shadows.ShadowMediaPlayer;
 import org.robolectric.shadows.ShadowPausedLooper;
 import org.robolectric.shadows.ShadowSystemClock;
 import org.robolectric.shadows.ShadowView;
@@ -115,6 +116,14 @@ public final class AppHost implements Runnable {
         ShadowChoreographer.setPaused(true);
         ShadowChoreographer.setFrameDelay(Duration.ofMillis(15));
         ShadowLog.setCaptureLogsEnabled(false);
+        // Apps that fire a startup sound (beep, shutter, notification) must not die in
+        // Robolectric's media shadow: an unregistered data source throws from prepare().
+        // Robolectric maps any unmatched String/Uri/FD source to the "unknown" string
+        // source, so registering a do-nothing MediaInfo for it makes prepare() succeed
+        // silently until the real media backend lands (PLAN P5).
+        // A catch-all provider answers any data source with a zero-duration, event-free
+        // MediaInfo — like a codec that accepts the file but decodes nothing.
+        ShadowMediaPlayer.setMediaInfoProvider(ds -> new ShadowMediaPlayer.MediaInfo(0, 0));
 
         Display display = app.getSystemService(DisplayManager.class).getDisplay(Display.DEFAULT_DISPLAY);
         int width = display.getWidth(), height = display.getHeight();

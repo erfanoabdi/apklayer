@@ -3,32 +3,22 @@ Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/apklayer/host/AppHost.j
 Note: Recompile with -Xlint:deprecation for details.
 Note: /Users/erfanabdi/GitHub/apklayer/runtime/dex2jvm/com.macapk.dex/ApiIndexLoader.java uses or overrides a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
-[macapk-dex] 393 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/Barcode Scanner_v4.7.8_apkpure.com-classes.jar in 708 ms
+[macapk-dex] 393 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/Barcode Scanner_v4.7.8_apkpure.com-classes.jar in 506 ms
 [apklayer] DoNotInstrument stamped on 393 classes
 [apklayer] no apklayer-shell: headless
-java.lang.IllegalArgumentException: Don't know what to do with dataSource org.robolectric.shadows.util.DataSource@4a703c8c - either add an exception with addException() or media info with addMediaInfo()
-	at org.robolectric.shadows.ShadowMediaPlayer.doSetDataSource(ShadowMediaPlayer.java:668)
-	at org.robolectric.shadows.ShadowMediaPlayer.setDataSource(ShadowMediaPlayer.java:608)
-	at org.robolectric.shadows.ShadowMediaPlayer.setDataSource(ShadowMediaPlayer.java:643)
-	at android.media.MediaPlayer.setDataSource(MediaPlayer.java)
-	at com.google.zxing.client.android.BeepManager.buildMediaPlayer(BeepManager.java:90)
-	at com.google.zxing.client.android.BeepManager.updatePrefs(BeepManager.java:61)
-	at com.google.zxing.client.android.BeepManager.<init>(BeepManager.java:50)
-	at com.google.zxing.client.android.CaptureActivity.onCreate(CaptureActivity.java:140)
-	at android.app.Activity.performCreate(Activity.java:9155)
-	at android.app.Activity.performCreate(Activity.java:9133)
-	at android.app.Instrumentation.callActivityOnCreate(Instrumentation.java:1521)
-	at org.robolectric.android.internal.RoboMonitoringInstrumentation.callActivityOnCreate(RoboMonitoringInstrumentation.java:382)
-	at org.robolectric.android.controller.ActivityController.lambda$create$0(ActivityController.java:136)
-	at org.robolectric.shadows.ShadowPausedLooper.runPaused(ShadowPausedLooper.java:257)
-	at org.robolectric.android.controller.ActivityController.create(ActivityController.java:134)
-	at org.robolectric.android.controller.ActivityController.create(ActivityController.java:144)
-	at org.robolectric.android.controller.ActivityController.setup(ActivityController.java:340)
-	at apklayer.host.AppHost.launch(AppHost.java:351)
-	at apklayer.host.AppHost.run(AppHost.java:137)
-	at apklayer.host.Main.lambda$main$0(Main.java:41)
-	at org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:101)
-	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
-	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
-	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
-	at java.base/java.lang.Thread.run(Thread.java:1583)
+[apklayer] started com.google.zxing.client.android.CaptureActivity depth=1
+[apklayer] script: tap:100,80
+[apklayer] tap injected at 100,80
+[apklayer] script: tap:100,129
+[apklayer] tap injected at 100,129
+[apklayer] script: tap:first
+[apklayer] tap injected at 280,24
+[apklayer] snapshot -> /Users/erfanabdi/GitHub/apklayer/build/check/Barcode Scanner_v4.7.8_apkpure.com-5000ms.png (frame 3)
+[apklayer] started com.google.zxing.client.android.share.ShareActivity depth=2
+[apklayer] snapshot -> /Users/erfanabdi/GitHub/apklayer/build/check/Barcode Scanner_v4.7.8_apkpure.com-5500ms.png (frame 11)
+[apklayer] script: back
+[apklayer] finished com.google.zxing.client.android.share.ShareActivity depth=1
+[apklayer] snapshot -> /Users/erfanabdi/GitHub/apklayer/build/check/Barcode Scanner_v4.7.8_apkpure.com-6700ms.png (frame 13)
+[apklayer] script: back
+[apklayer] finished com.google.zxing.client.android.CaptureActivity depth=0
+[apklayer] exit: frames=13 depth=0
