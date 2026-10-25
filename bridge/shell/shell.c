@@ -305,7 +305,8 @@ static int32_t keysym_to_android(xkb_keysym_t sym, int32_t *uni)
     case XKB_KEY_BackSpace: return 67;
     case XKB_KEY_Tab: return 61;
     case XKB_KEY_space: return 62;
-    case XKB_KEY_Escape: return 111;
+    case XKB_KEY_Escape: return 4; /* KEYCODE_BACK: desktop Esc = Android Back */
+    case XKB_KEY_XF86Back: return 4;
     case XKB_KEY_Delete: return 112;
     case XKB_KEY_Home: return 3;
     case XKB_KEY_End: return 123;
@@ -384,6 +385,7 @@ static void kb_key(void *d, struct wl_keyboard *k, uint32_t s, uint32_t t, uint3
     int n = xkb_state_key_get_utf8(xkb_state, kc, u8, sizeof u8);
     int32_t uni = 0;
     int32_t code = keysym_to_android(sym, &uni);
+    if (sym == XKB_KEY_Left && (kb_android_meta() & 0x02)) code = 4; /* Alt+Left = Back */
     if (n > 1) uni = (int32_t)(unsigned char)u8[0]; /* state-aware: shift/symbols */
     int32_t v[5] = { keyboard_focus->id, (int32_t)(st ? 0 : 1), code, uni,
                      (int32_t)kb_android_meta() };
