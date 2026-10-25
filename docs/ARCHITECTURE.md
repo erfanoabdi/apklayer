@@ -17,7 +17,7 @@ result to the Linux desktop through a thin host layer (Wayland today).
  │ Robolectric sandbox: android-all-instrumented 8.1 (SDK 27) + shadows 4.17    │
  │ NATIVE graphics: librobolectric-nativeruntime = real HWUI/Skia/minikin       │
  │                                                                              │
- │ tests/rob driver (RunUiBench)                                                │
+ │ runtime/host driver (RunUiBench)                                                │
  │   activity back stack ← startActivity()/finish() (recorded by Robolectric)   │
  │   every 16 ms: idle main Looper → draw all windows (WindowManagerGlobal)     │
  │                → Bitmap → int[]                                              │
@@ -35,13 +35,13 @@ result to the Linux desktop through a thin host layer (Wayland today).
 | Path | Role |
 |---|---|
 | `runtime/dex2jvm/` | DEX → JVM bytecode (from Mac.apk, AGPL). Reads class hierarchy from its own classpath, so it must be run with the target `android-all` on it. |
-| `tests/rob/apklayer/tools/DenyInstrument.java` | Stamps a runtime-visible `@DoNotInstrument` on the app classes. dex2jvm's `<init>` lowering conflicts with Robolectric's constructor renaming. |
-| `tests/rob/apklayer/rob/RunUiBench.java` | Driver. It runs as a JUnit test under `RobolectricTestRunner` and handles the lifecycle, back stack, window composition and input dispatch. |
-| `tests/rob/apklayer/rob/HostWindow.java` | Host presenter access: a shared framebuffer (pure Java), or in-process JNI through `WlWindow`. |
-| `tests/stubs/android/os/Build.java` | Outer-classpath `Build` so conscrypt can read `SDK_INT` outside the sandbox. |
-| `bridge/src/present.c` | Wayland client: xdg_toplevel, wl_shm buffer, wl_seat pointer/keyboard queue, plus JNI entry points. |
-| `bridge/src/presentd.c` | Out-of-process presenter that maps the shared framebuffer. Lets the app JVM's arch differ from the host's. |
-| `scripts/apklayer-rob.sh` | Syncs to the VM, rebuilds, converts and runs. |
+| `runtime/host/java/apklayer/tools/DenyInstrument.java` | Stamps a runtime-visible `@DoNotInstrument` on the app classes. dex2jvm's `<init>` lowering conflicts with Robolectric's constructor renaming. |
+| `runtime/host/java/apklayer/rob/RunUiBench.java` | Driver. It runs as a JUnit test under `RobolectricTestRunner` and handles the lifecycle, back stack, window composition and input dispatch. |
+| `runtime/host/java/apklayer/rob/HostWindow.java` | Host presenter access: a shared framebuffer (pure Java), or in-process JNI through `WlWindow`. |
+| `runtime/host/stubs/android/os/Build.java` | Outer-classpath `Build` so conscrypt can read `SDK_INT` outside the sandbox. |
+| `bridge/shell/present.c` | Wayland client: xdg_toplevel, wl_shm buffer, wl_seat pointer/keyboard queue, plus JNI entry points. |
+| `bridge/shell/presentd.c` | Out-of-process presenter that maps the shared framebuffer. Lets the app JVM's arch differ from the host's. |
+| `scripts/vm-run.sh` | Syncs to the VM, rebuilds, converts and runs. |
 
 ## Shared framebuffer layout (`/dev/shm/apklayer-fb`, little-endian int32)
 

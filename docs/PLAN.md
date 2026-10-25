@@ -78,7 +78,7 @@ at every step. Update memory.md and goal.md when a phase completes.
 
 ### P1 — Product foundation: `apklayer run any.apk` (M6)
 
-1. **Restructure** per the layout above. Move `tests/rob/*` → `runtime/host/`, `tests/stubs` →
+1. ✅ (done 2026-10-25) **Restructure** per the layout above. Move `tests/rob/*` → `runtime/host/`, `tests/stubs` →
    `runtime/host/stubs`, and `bridge/src/*` → `bridge/shell/`. Keep `tests/` for test assets only.
 2. **deps.lock + fetch-deps.sh.** Record exactly what `~/rob` holds today. Then add the SDK 36
    android-all-instrumented jar and the pinned Robolectric release (D1, D2). This is a one-time
@@ -282,8 +282,8 @@ double-click `Markor.apk` → it opens and is usable on both.
 
 ## 5. Immediate next tasks (start here)
 
-1. Add `LICENSE` (AGPL-3.0-or-later) (D5).
-2. Restructure directories (P1.1). Make the existing script work with the new paths and verify
+1. ✅ Add `LICENSE` (AGPL-3.0-or-later) (D5).
+2. ✅ Restructure directories (P1.1). Make the existing script work with the new paths and verify
    uibench.
 3. Write `deps/deps.lock` for the current `~/rob` contents (P1.2).
 4. Fetch SDK 36 android-all + the pinned Robolectric once, then switch uibench to SDK 36 (P1.4).

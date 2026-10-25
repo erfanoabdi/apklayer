@@ -16,17 +16,17 @@ app.apk ──dex2jvm──> JVM classes ┐
         └─ manifest/resources ───┤ (AOSP PackageParser)
                                  ▼
   android-all (unmodified AOSP) + Robolectric shadows + native HWUI/Skia
-  driver: lifecycle, back stack, windows, input        (tests/rob)
+  driver: lifecycle, back stack, windows, input        (runtime/host/java)
                                  │ /dev/shm/apklayer-fb (pixels ⇄ input)
                                  ▼
-  apklayer-presentd ──> Wayland window                  (bridge/)
+  apklayer-presentd ──> Wayland window                  (bridge/shell/)
 ```
 
 ## Run (on the Parallels VM, from the Mac)
 
 ```sh
-APKLAYER_GFX=NATIVE ./scripts/apklayer-rob.sh            # uibench
-APKLAYER_GFX=NATIVE ./scripts/apklayer-rob.sh my.apk     # another APK (driver is still uibench-specific: see docs/PLAN.md P1)
+APKLAYER_GFX=NATIVE ./scripts/vm-run.sh            # uibench
+APKLAYER_GFX=NATIVE ./scripts/vm-run.sh my.apk     # another APK (driver is still uibench-specific: see docs/PLAN.md P1)
 ```
 
 Left-click taps; drag scrolls; Esc/Backspace is Back; closing the window exits.
@@ -41,10 +41,10 @@ VM access: `ssh parallels@10.211.55.4` (password `1234`). Setup details are in m
 | `docs/PLAN.md` | **plan of record**: decisions D1–D23, phases P1–P7, exit tests, next tasks |
 | `docs/PATCHES.md` / `docs/THIRD_PARTY.md` | patch log (none) / licenses |
 | `runtime/dex2jvm/` | DEX → JVM converter (from Mac.apk, AGPL) |
-| `tests/rob/` | driver (RunUiBench, HostWindow, WlWindow, DenyInstrument) |
-| `tests/stubs/` | outer-classpath `android.os.Build` |
+| `runtime/host/java/` | driver (RunUiBench, HostWindow, WlWindow, DenyInstrument) |
+| `runtime/host/stubs/` | outer-classpath `android.os.Build` |
 | `bridge/` | meson: `apklayer-presentd`, `libapklayer-wl.so` (Wayland + input) |
-| `scripts/apklayer-rob.sh` | sync → build → convert → run on the VM |
+| `scripts/vm-run.sh` | sync → build → convert → run on the VM |
 | `tests/uibench/` | target APK |
 | `archive/` | superseded approaches (M1 seed, Mac.apk java_mac era, M0 plan), reference only |
 

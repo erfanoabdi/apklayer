@@ -15,7 +15,7 @@ Instead:
    Robolectric's NATIVE graphics runtime (real HWUI/Skia).
 3. **dex2jvm** (`runtime/dex2jvm`, from Mac.apk, AGPL) converts app DEX → JVM classes,
    against the android-all class hierarchy; app classes stamped `@DoNotInstrument`.
-4. **apklayer's own host layer**: `bridge/` (Wayland presenter + input). Driver: `tests/rob`.
+4. **apklayer's own host layer**: `bridge/shell/` (Wayland presenter + input). Driver: `runtime/host/`.
 5. Earlier stacks (hand-grown seed, Mac.apk `java_mac`) live in `archive/`, reference only.
 
 ## Hard rules (user)

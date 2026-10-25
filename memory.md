@@ -30,8 +30,8 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
 
 ## Current state (2026-10-25, M5 done)
 - uibench runs with full UI + mouse/keyboard on the VM's Wayland desktop (user tested it).
-- One command: `APKLAYER_GFX=NATIVE ./scripts/apklayer-rob.sh [app.apk]` (default uibench).
-  It syncs tests/rob, tests/stubs, runtime/dex2jvm and bridge to the VM, rebuilds, converts
+- One command: `APKLAYER_GFX=NATIVE ./scripts/vm-run.sh [app.apk]` (default uibench).
+  It syncs runtime/host, runtime/dex2jvm and bridge/shell to the VM, rebuilds, converts
   the DEX, writes test_config.properties and runs. Close the window to exit.
   Verification flags: `APKLAYER_JOPTS='-Dapklayer.frames=150 -Dapklayer.snapframes=140
   -Dapklayer.script=40:tap:100,80+80:tap:100,129'` (snapshots → /tmp/apklayer-frame-N.png on VM).
@@ -52,9 +52,9 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
 - dex2jvm reads the framework class hierarchy from ITS OWN classpath: run it with
   `android-all` on the cp, or the output fails verification (e.g. AbsActionBarView.access$101).
   Don't let it see the Mac's Android SDK either.
-- dex2jvm output needs `@DoNotInstrument` (tests/rob/.../DenyInstrument): its `<init>` lowering
+- dex2jvm output needs `@DoNotInstrument` (runtime/host/java/.../DenyInstrument): its `<init>` lowering
   collides with Robolectric's constructor renaming.
-- Only `tests/stubs/android/os/Build.java` is needed on the outer classpath (conscrypt reads
+- Only `runtime/host/stubs/android/os/Build.java` is needed on the outer classpath (conscrypt reads
   SDK_INT). android-stub.jar (API 35) covers shadow signatures newer than 27.
 - Robolectric source has an experimental **Simulator** module (SandboxBuilder, AppLoader,
   FrameListener, Mouse/KeyboardHandler): the planned replacement for the JUnit driver.

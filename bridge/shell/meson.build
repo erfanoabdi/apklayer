@@ -1,4 +1,4 @@
-project('apklayer-bridge', 'c',
+project('apklayer-shell', 'c',
   version: '0.1',
   default_options: ['warning_level=2'])
 
@@ -27,14 +27,14 @@ jni_args = ['-I' + jni_inc, '-I' + jni_inc + '/linux', '-fPIC']
 # Minimal presenter for the Robolectric-based runner: plain C ABI (apklayer_wayland_*)
 # plus the JNI entry points of apklayer.wayland.WlWindow.
 shared_library('apklayer-wl',
-  ['src/present.c', xdg_header, xdg_code],
+  ['present.c', xdg_header, xdg_code],
   dependencies: [wl_client_dep],
   c_args: jni_args,
   install: false)
 
-# Out-of-process presenter: maps the app's shared framebuffer (see src/presentd.c).
+# Out-of-process presenter: maps the app's shared framebuffer (see presentd.c).
 executable('apklayer-presentd',
-  ['src/presentd.c', 'src/present.c', xdg_header, xdg_code],
+  ['presentd.c', 'present.c', xdg_header, xdg_code],
   dependencies: [wl_client_dep],
   c_args: jni_args,
   install: false)

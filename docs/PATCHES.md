@@ -10,7 +10,7 @@ How apklayer adapts upstream without patching it:
 | App resources/manifest in Robolectric | AGP's documented `com/android/tools/test_config.properties` (`android_resource_apk=`) on the classpath |
 | dex2jvm output vs Robolectric instrumentation | Post-process with `DenyInstrument` (adds `@DoNotInstrument`); the converter itself is untouched |
 | dex2jvm class hierarchy | Run it with `android-all` on its classpath |
-| conscrypt reading `Build.SDK_INT` outside the sandbox | Outer-classpath `tests/stubs/android/os/Build.java` (constants only) |
+| conscrypt reading `Build.SDK_INT` outside the sandbox | Outer-classpath `runtime/host/stubs/android/os/Build.java` (constants only) |
 | Graphics mode | Robolectric's own `-Drobolectric.graphicsMode` |
 
 Rule: if a patch ever becomes unavoidable, keep it thin, mark it inline `apklayer patch`,

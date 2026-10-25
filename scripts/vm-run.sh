@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# apklayer-rob: run an APK on the Robolectric method with our Wayland presenter (on the VM).
-# Usage: apklayer-rob [app.apk]        (default: tests/uibench/uibench.apk)
+# vm-run: run an APK on the Robolectric method with our Wayland presenter (on the VM).
+# Usage: vm-run.sh [app.apk]        (default: tests/uibench/uibench.apk)
 #   Syncs sources to the VM, rebuilds the bridge, converts the APK's DEX with dex2jvm against
 #   the android-all framework it runs on, and launches the driver.
 # APKLAYER_GFX=NATIVE: real HWUI/Skia via Robolectric's native runtime. Its prebuilts exist for
@@ -17,18 +17,19 @@ VM="${APKLY_VM:-parallels@10.211.55.4}"
 VM_PASS="${APKLY_VM_PASS:-1234}"
 vm() { sshpass -p "$VM_PASS" ssh -o StrictHostKeyChecking=no "$VM" "$@"; }
 
-# Sources (driver, stubs, dex2jvm, bridge) + the APK -> VM; bridge rebuilt incrementally.
-vm "rm -rf apklayer-m1/tests apklayer-m1/runtime && mkdir -p apklayer-m1/bridge apklayer-apps"
-(cd "$ROOT" && COPYFILE_DISABLE=1 tar -cz tests/rob tests/stubs runtime/dex2jvm bridge/meson.build bridge/src) \
-  | vm "tar -xz -C apklayer-m1 2>/dev/null; find apklayer-m1 -name '._*' -delete; ninja -C apklayer-m1/bridge/b >/dev/null"
+# Sources (host, dex2jvm, shell) + the APK -> VM; the shell is rebuilt incrementally.
+vm "rm -rf apklayer-m1/tests apklayer-m1/runtime apklayer-m1/bridge/src && mkdir -p apklayer-m1 apklayer-apps"
+(cd "$ROOT" && COPYFILE_DISABLE=1 tar -cz runtime/host runtime/dex2jvm bridge/shell/meson.build bridge/shell/*.c) \
+  | vm "tar -xz -C apklayer-m1 2>/dev/null; find apklayer-m1 -name '._*' -delete
+        cd apklayer-m1/bridge/shell && { [ -d b ] || meson setup -Dbuildtype=release b >/dev/null; } && ninja -C b >/dev/null"
 sshpass -p "$VM_PASS" scp -q -o StrictHostKeyChecking=no "$APK" "$VM:apklayer-apps/$NAME.apk"
 
 vm bash -s <<EOF
 set -e
 R=\$HOME/rob; S=\$HOME/apklayer-m1; A=\$HOME/apklayer-apps/$NAME.apk
 rm -rf \$R/robout \$R/stubout \$R/d2j && mkdir -p \$R/robout \$R/stubout \$R/d2j
-javac -nowarn -d \$R/stubout \$(find \$S/tests/stubs -name "*.java")
-javac -nowarn -d \$R/robout -cp "\$R/libs/*:\$R/android-all/*" \$(find \$S/tests/rob -name "*.java")
+javac -nowarn -d \$R/stubout \$(find \$S/runtime/host/stubs -name "*.java")
+javac -nowarn -d \$R/robout -cp "\$R/libs/*:\$R/android-all/*" \$(find \$S/runtime/host/java -name "*.java")
 javac -nowarn -d \$R/d2j \$(find \$S/runtime/dex2jvm -name "*.java")
 
 # DEX -> JVM classes; the class hierarchy comes from the framework we run on (android-all).
@@ -45,7 +46,7 @@ GFX=${APKLAYER_GFX:-LEGACY}
 if [ "\$GFX" = NATIVE ]; then
   JAVA="\$HOME/jdk21-x86/bin/java -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Dapklayer.fb=/dev/shm/apklayer-fb"
   rm -f /dev/shm/apklayer-fb
-  \$S/bridge/b/apklayer-presentd /dev/shm/apklayer-fb &
+  \$S/bridge/shell/b/apklayer-presentd /dev/shm/apklayer-fb &
 else
   JAVA="java -XX:UseSVE=0"
 fi
@@ -54,7 +55,7 @@ cd /tmp
   -Drobolectric.offline=true \
   -Drobolectric.graphicsMode=\$GFX \
   -Drobolectric.dependency.dir=\$R/android-all \
-  -Dapklayer.wl=\$S/bridge/b/libapklayer-wl.so \
+  -Dapklayer.wl=\$S/bridge/shell/b/libapklayer-wl.so \
   -Dapklayer.hostcp=\$R/robout \
   -cp "\$R/libs/*:\$R/stubout:\$R/android-stub.jar:\$R/robout:\$R/cfg:/tmp/$NAME-dni.jar" \
   org.junit.runner.JUnitCore apklayer.rob.RunUiBench \
