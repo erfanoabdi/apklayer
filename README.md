@@ -4,51 +4,51 @@ Run Android APKs natively on Linux. No emulator, no VM, no Linux-inside-Linux.
 
 ## Status (2026-10-25)
 
-**Method pivot in effect** (see `goal.md`): apklayer follows the **Robolectric
-method** — unmodified AOSP compiled for the JVM (`android-all-instrumented`) plus
-MIT-licensed shadows — so Android version updates stay replicable. Mac.apk's
-hand-patched framework snapshot is **reference only**.
+**uibench runs with its full UI and is interactive in a Wayland window.** It uses the real
+AOSP View system, HWUI/Skia rendering, activities, dialogs, and mouse/keyboard input.
 
-Current pipeline (all running on the Parallels Ubuntu ARM64 VM):
+apklayer follows the **Robolectric method**: the unmodified AOSP framework compiled for the
+JVM (`android-all`) plus MIT-licensed shadows, so Android version updates stay replicable.
+There are zero hand patches to AOSP or Robolectric.
 
 ```
-uibench.apk ──dex2jvm──> app classes (stamped @DoNotInstrument)
-              +
-android-all-instrumented 8.1.0 (unmodified AOSP on JVM) + Robolectric shadows
-              │  tests/rob: RunUiBench driver (real Activity lifecycle)
-              ▼
-real View tree -> Canvas -> Bitmap -> int[] -> libapklayer-wl.so -> Wayland window
+app.apk ──dex2jvm──> JVM classes ┐
+        └─ manifest/resources ───┤ (AOSP PackageParser)
+                                 ▼
+  android-all (unmodified AOSP) + Robolectric shadows + native HWUI/Skia
+  driver: lifecycle, back stack, windows, input        (tests/rob)
+                                 │ /dev/shm/apklayer-fb (pixels ⇄ input)
+                                 ▼
+  apklayer-presentd ──> Wayland window                  (bridge/)
 ```
 
-Gate reached: **full uibench main UI renders to the Wayland window** (NATIVE graphics =
-real HWUI/Skia, ~43 fps). Next: input + navigating into sub-activities (M5).
+## Run (on the Parallels VM, from the Mac)
+
+```sh
+APKLAYER_GFX=NATIVE ./scripts/apklayer-rob.sh            # uibench
+APKLAYER_GFX=NATIVE ./scripts/apklayer-rob.sh my.apk     # another APK (driver is still uibench-specific: see roadmap M6)
+```
+
+Left-click taps; drag scrolls; Esc/Backspace is Back; closing the window exits.
+VM access: `ssh parallels@10.211.55.4` (password `1234`). Setup details are in memory.md.
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `goal.md` / `memory.md` | mission, rules, running log (read these first) |
-| `runtime/dex2jvm/` | DEX -> JVM class converter (from Mac.apk, AGPL, in active use) |
-| `runtime/java_mac/` | Mac.apk framework snapshot — **reference only, not the runtime base** |
-| `runtime/prebuilt/framework-res.apk` | AOSP platform resources (for the retired java_mac path) |
-| `bridge/` | meson build: `libapklayer-wl.so` (Wayland presenter), `libapklayer-jni.so` (retired java_mac bridge), `apklayer-window` PoC |
-| `tests/rob/` | Robolectric-method driver (RunUiBench, HostWindow, WlWindow, DenyInstrument) |
+| `goal.md` / `memory.md` | mission, rules, milestones / facts and decisions (read first) |
+| `docs/ARCHITECTURE.md` | how the pipeline works, framebuffer layout |
+| `docs/ROADMAP.md` | path to a full APK opener (M6+) |
+| `docs/PATCHES.md` / `docs/THIRD_PARTY.md` | patch log (none) / licenses |
+| `runtime/dex2jvm/` | DEX → JVM converter (from Mac.apk, AGPL) |
+| `tests/rob/` | driver (RunUiBench, HostWindow, WlWindow, DenyInstrument) |
+| `tests/stubs/` | outer-classpath `android.os.Build` |
+| `bridge/` | meson: `apklayer-presentd`, `libapklayer-wl.so` (Wayland + input) |
+| `scripts/apklayer-rob.sh` | sync → build → convert → run on the VM |
 | `tests/uibench/` | target APK |
-| `archive/seed-m1/` | archived hand-grown M1 seed (do not extend) |
-| `scripts/apklayer-rob.sh` | one-shot: sync -> build -> run the driver on the VM |
-| `docs/` | findings, patch log, third-party inventory |
-
-## Testing
-
-- VM: `ssh parallels@10.211.55.4` (password `1234`), GNOME Wayland, OpenJDK 21 ARM64.
-- VM layout: `~/rob/libs` (Robolectric deps), `~/rob/android-all/` (framework jars),
-  `~/rob/android-stub.jar` (API-35 stubs), `~/apklayer-apps/uibench` (unpacked APK),
-  `~/apklayer-m1/bridge/b/` (libapklayer-wl.so).
-- Run (full UI): `APKLAYER_GFX=NATIVE APKLY_VM_PASS=1234 ./scripts/apklayer-rob.sh /tmp/uibench-classes.jar
-  com.android.test.uibench.MainActivity '$HOME/apklayer-apps/uibench'`
+| `archive/` | superseded approaches (M1 seed, Mac.apk java_mac era, M0 plan), reference only |
 
 ## License note
 
-While `runtime/dex2jvm` (from Mac.apk) is present the tree carries **AGPL-3.0**
-obligations; AOSP-derived parts are Apache-2.0; Robolectric parts MIT.
-See `docs/THIRD_PARTY.md`.
+While `runtime/dex2jvm` (from Mac.apk) is present, the tree carries **AGPL-3.0** obligations.
+AOSP-derived parts are Apache-2.0 and Robolectric parts are MIT. See `docs/THIRD_PARTY.md`.

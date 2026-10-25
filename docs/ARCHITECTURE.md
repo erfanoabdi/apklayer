@@ -1,47 +1,70 @@
-# apklayer — Architecture (M0 notes)
+# apklayer — Architecture (Robolectric method)
 
-## The one-sentence plan
-Boot real ART + real AOSP framework Java on a Linux distro, and replace only what Android
-expects from *its* kernel/HALs with a thin bridge to standard Linux desktop APIs.
+## One sentence
+Run the **unmodified AOSP framework compiled for the JVM** (Robolectric's `android-all`), load
+the APK's DEX as JVM classes (dex2jvm), drive the real Activity lifecycle, and connect the
+result to the Linux desktop through a thin host layer (Wayland today).
 
-## Why Mac.apk's shape (and not ATL's)
-- Mac.apk keeps the AOSP framework **as-is in Java** (~3k framework classes, thin
-  `java_base_patch`/`jdk_unsupported_patch` overlays). Compatibility comes for free because
-  apps talk to the real framework; maintenance is re-applying overlays on AOSP bumps.
-- ATL re-implements framework classes natively (C++ `api-impl`), which caps app
-  compatibility forever. Not our path.
+## Pipeline
 
-## Process model (mirrors Mac.apk)
-- `apklayer` CLI unpacks the APK → verifies → spawns `app_process` (one process group per app:
-  app_process + zygote-like children; Mac.apk has `app_process_group.cpp`, 66 lines — that's
-  the whole trick, no system_server initially).
-- ART runs the app's dex with `framework.jar` on the boot classpath; `ActivityThread` is
-  driven by our loader stub (Mac.apk: `com.macapk.loader.Boot.main(apkPath)`).
+```
+ app.apk ─┬─ classes*.dex ──dex2jvm──> app classes (.jar) ──DenyInstrument──> @DoNotInstrument
+          │                 (hierarchy from android-all)
+          └─ manifest + resources.arsc ──AOSP PackageParser / AssetManager (via test_config.properties)
 
-## Host bridge (the only code we really write)
-| Android side          | Linux side                                   |
-|-----------------------|----------------------------------------------|
-| SurfaceFlinger/HWUI   | HWUI → EGL on host Mesa; present to Wayland (fallback X11) |
-| Input (evdev via SF)  | libinput / wl_keyboard / wl_touch            |
-| AudioFlinger          | PipeWire (or ALSA fallback)                  |
-| /system partition     | our runtime dir (read-only) + per-app data   |
-| bionic                | glibc (AOSP host builds already do this)     |
-| SELinux, init, servicemanager | omitted; shims where a class insists |
+ JVM process (x86_64 under Rosetta on the arm64 VM; native on x86_64 hosts)
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │ Robolectric sandbox: android-all-instrumented 8.1 (SDK 27) + shadows 4.17    │
+ │ NATIVE graphics: librobolectric-nativeruntime = real HWUI/Skia/minikin       │
+ │                                                                              │
+ │ tests/rob driver (RunUiBench)                                                │
+ │   activity back stack ← startActivity()/finish() (recorded by Robolectric)   │
+ │   every 16 ms: idle main Looper → draw all windows (WindowManagerGlobal)     │
+ │                → Bitmap → int[]                                              │
+ │   input ring → MotionEvent/KeyEvent → topmost window                         │
+ └───────────────┬──────────────────────────────────────────────▲───────────────┘
+                 │ /dev/shm/apklayer-fb (pixels + input ring)    │
+ ┌───────────────▼──────────────────────────────────────────────┴───────────────┐
+ │ apklayer-presentd (native, host arch): wl_shm xdg_toplevel, wl_seat input    │
+ └──────────────────────────────────────────────────────────────────────────────┘
+                                   Wayland compositor
+```
 
-No binder/SurfaceFlinger needed for the window path if we bridge HWUI directly — this also
-sidesteps Ubuntu kernels lacking binder (M1/M2 need none).
+## Components
 
-## Build strategy ("write less, copy more")
-- **Never build AOSP** (user rule). `runtime/` assembles **prebuilt** AOSP artifacts
-  (candidate source: ATL release prebuilts; arm64 source to be decided with the user) into
-  `runtime/out/<variant>/`.
-- The los24 tree is read-only reference: copy code from it, never compile it, never touch
-  its `out/`.
-- Meson builds only apklayer's own glue (bridge/, cli/).
+| Path | Role |
+|---|---|
+| `runtime/dex2jvm/` | DEX → JVM bytecode (from Mac.apk, AGPL). Reads class hierarchy from its own classpath, so it must be run with the target `android-all` on it. |
+| `tests/rob/apklayer/tools/DenyInstrument.java` | Stamps a runtime-visible `@DoNotInstrument` on the app classes. dex2jvm's `<init>` lowering conflicts with Robolectric's constructor renaming. |
+| `tests/rob/apklayer/rob/RunUiBench.java` | Driver. It runs as a JUnit test under `RobolectricTestRunner` and handles the lifecycle, back stack, window composition and input dispatch. |
+| `tests/rob/apklayer/rob/HostWindow.java` | Host presenter access: a shared framebuffer (pure Java), or in-process JNI through `WlWindow`. |
+| `tests/stubs/android/os/Build.java` | Outer-classpath `Build` so conscrypt can read `SDK_INT` outside the sandbox. |
+| `bridge/src/present.c` | Wayland client: xdg_toplevel, wl_shm buffer, wl_seat pointer/keyboard queue, plus JNI entry points. |
+| `bridge/src/presentd.c` | Out-of-process presenter that maps the shared framebuffer. Lets the app JVM's arch differ from the host's. |
+| `scripts/apklayer-rob.sh` | Syncs to the VM, rebuilds, converts and runs. |
 
-## ABI strategy
-- ARM64 Linux hosts: arm64-v8a native libs load natively — zero translation. This is our
-  primary target (the test VM is aarch64).
-- x86_64 hosts: run pure-Java apps first; ABI translation later (own or berberis/box86-style).
+## Shared framebuffer layout (`/dev/shm/apklayer-fb`, little-endian int32)
 
-## Milestones — see goal.md (M0..M4).
+| Index | Meaning |
+|---|---|
+| 0 | magic `APKL` (0 = producer gone) |
+| 1, 2 | width, height |
+| 3 | frame sequence (bumped after the pixels are written) |
+| 4 | close requested (set by presentd) |
+| 5 | input events written (monotonic, set by presentd) |
+| 8 .. 8+4·64 | input ring: `{0 down / 1 up / 2 move, x, y, 0}` or `{100, evdev key, pressed, 0}` |
+| 264 .. | ARGB pixels, width × height |
+
+## Why these choices
+- **Unmodified framework.** Android version bumps mean switching the `android-all` jar, not
+  re-applying patches. There are no hand patches to AOSP or Robolectric (see docs/PATCHES.md).
+- **NATIVE graphics.** LEGACY mode is a recording fake: it draws no text and doesn't compose
+  `translate`. NATIVE mode runs AOSP's own HWUI/Skia.
+- **Rosetta + split presenter.** Robolectric publishes its native runtime for linux-x86_64,
+  mac and windows only, never linux-arm64. Building it means building AOSP (forbidden). The
+  arm64 VM therefore runs an x86_64 JDK under Rosetta (C1 JIT + Serial GC, because C2 and G1
+  crash there). Frames cross a shared file to a native presenter, so no x86_64 Wayland
+  library is needed.
+
+## Known limits
+See goal.md → "Roadmap" and docs/ROADMAP.md.

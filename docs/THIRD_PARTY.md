@@ -1,10 +1,21 @@
-# Third-party code in this tree
+# Third-party code and artifacts
+
+## In this tree
 
 | Path | Origin | License |
 |---|---|---|
-| runtime/java/** (AOSP classes) | LineageOS 24 (AOSP) | Apache-2.0 |
-| runtime/java/com/macapk/dex/** ("dex2jvm") | Mac.apk (kksimp) — DEX→JVM converter, copied verbatim | AGPL-3.0 (Copyright Mac.apk authors) |
-| runtime/java/com/macapk/** (other) | Mac.apk | AGPL-3.0 |
+| `runtime/dex2jvm/` (`com.macapk.dex`) | Mac.apk (kksimp), DEX→JVM converter, copied verbatim | AGPL-3.0 |
+| `tests/uibench/uibench.apk` | AOSP UiBench test app | Apache-2.0 |
+| `archive/**` | AOSP (Apache-2.0) and Mac.apk (AGPL-3.0) code from earlier milestones; not built | as marked in each origin |
 
-apklayer as a whole therefore inherits AGPL-3.0 obligations while this code is present.
-| runtime/prebuilt/framework-res.apk | AOSP platform resources (Apache-2.0), extracted from Mac.apk v1.0.2303 `macapk.dmg` staged runtime (`Contents/Resources/tools/framework-res.apk`) | Apache-2.0 (AOSP artifact) |
+While `runtime/dex2jvm` is present, apklayer as a whole carries **AGPL-3.0** obligations.
+
+## Consumed at runtime (not vendored; staged on the VM under `~/rob`)
+
+| Artifact | Origin | License |
+|---|---|---|
+| `android-all-instrumented-8.1.0-robolectric-4611349-i7.jar` | Robolectric build of unmodified AOSP | Apache-2.0 |
+| Robolectric 4.17 (`robolectric`, `shadows-framework`, `sandbox`, `resources`, `nativeruntime`, …) | robolectric.org | MIT |
+| `nativeruntime-dist-compat-1.0.19` (HWUI/Skia/SQLite natives) | Robolectric prebuilt from AOSP sources | Apache-2.0 (AOSP) |
+| `android-stub.jar` (API 35 stubs) | Android SDK platform | Apache-2.0 |
+| JDK 21 linux-x86 (`~/jdk21-x86`) | LOCAL copy of los24 `prebuilts/jdk/jdk21/linux-x86` | GPLv2 + Classpath Exception |

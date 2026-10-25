@@ -1,39 +1,17 @@
-# Thin patches over copied AOSP sources (M1 seed)
+# Patches over upstream code
 
-All marked inline with `// apklayer patch`. Principle: keep upstream files byte-identical
-where possible; patches are minimal diffs, logged here.
+**Current pipeline: zero patches** to AOSP (`android-all`), Robolectric or dex2jvm. All three
+are consumed exactly as published or copied.
 
-| File | Patch |
+How apklayer adapts upstream without patching it:
+
+| Need | How (no patch) |
 |---|---|
-| android/util/Log.java | dropped imports/usages of RuntimeInit (wtf -> stderr), FastPrintWriter, LineBreakBufferedWriter (plain PrintWriter/BufferedWriter) |
-| android/os/SystemProperties.java | Binder.clear/restoreCallingIdentity -> no-op |
-| android/os/Build.java | minimal stub (constants only; upstream graph too heavy) |
-| android/os/DeadObjectException.java | hand-written (upstream generated from .aidl) |
-| com/android/internal/util/Preconditions.java | minimal stand-in (upstream pulls Build/TextUtils/errorprone) |
-| tests/smoke/Smoke.java | apklayer-authored smoke test (apklayer.smoke package) |
+| App resources/manifest in Robolectric | AGP's documented `com/android/tools/test_config.properties` (`android_resource_apk=`) on the classpath |
+| dex2jvm output vs Robolectric instrumentation | Post-process with `DenyInstrument` (adds `@DoNotInstrument`); the converter itself is untouched |
+| dex2jvm class hierarchy | Run it with `android-all` on its classpath |
+| conscrypt reading `Build.SDK_INT` outside the sandbox | Outer-classpath `tests/stubs/android/os/Build.java` (constants only) |
+| Graphics mode | Robolectric's own `-Drobolectric.graphicsMode` |
 
-Copied unmodified from los24: Base64, RemoteException, AndroidException, DeadSystemException,
-DeadSystemRuntimeException, MutableInt, MutableBoolean, HexEncoding, IntDef/NonNull/Nullable/
-SystemApi, UnsupportedAppUsage, GuardedBy, VisibleForTesting, Ravenwood* annotations,
-FastNative/CriticalNative.
-
-## M1b additions (message loop)
-- android/os/MessageQueue.java (from LegacyMessageQueue): native epoll bridge -> JVM
-  wait/notify poll; fd-event natives -> no-ops; fd.getInt$() -> identityHashCode.
-- android/os/SystemProperties.java, android/os/Trace.java: all `static native` decls
-  stripped to JVM-safe defaults.
-- android/os/Looper.java: CompatChanges->false; Perfetto blocks removed; LooperDoctor off;
-  dumpDebug(proto) removed.
-- android/os/Handler.java: IMessenger/Messenger block removed.
-- android/os/Message.java: Parcelable + CREATOR + writeToParcel/readFromParcel + proto dump
-  removed; TimeUtils.formatDuration -> plain ms.
-- android/os/HandlerThread.java: HandlerExecutor -> inline lambda executor.
-- New apklayer stubs (patch-marked): Binder, Process, SystemClock, Bundle, Messenger,
-  ThreadLocalWorkSource, StrictMode, dalvik.system.VMRuntime, android.os.Flags,
-  PerfettoCategories, com.android.internal.dev.perfetto.sdk.PerfettoTrace, LooperDoctor,
-  android.os.Build (constants), DeadObjectException.
-- Copied unmodified (M1b): Looper, Handler, HandlerThread, Message, LegacyMessageQueue
-  MessageQueue, Pools, Trace*, SparseArray, ArraySet, MapCollections, UtilConfig,
-  ContainerHelpers, EmptyArray, ArrayUtils, GrowingArrayUtils, Slog, Printer,
-  TraceNameSupplier, ChangeId/EnabledSince/Overridable, FlaggedApi/TestApi/SuppressLint,
-  NeverCompile, RavenwoodReplace (+ earlier seed). (* = natives stripped)
+Rule: if a patch ever becomes unavoidable, keep it thin, mark it inline `apklayer patch`,
+and log it here. The M1 seed's patch log is in `archive/seed-m1/docs/PATCHES.md`.
