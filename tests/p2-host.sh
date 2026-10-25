@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # P2 host-level check (Mac or Linux, headless): drives the shell-event paths of AppHost with the
 # same int[] events ShellClient produces: key (Back, typing), wheel, configure (resize, HiDPI).
-# Exit 0 = all pass. Usage: tests/p2-host.sh [group...]   groups: back type resize hidpi wheel dialog dpad lifecycle
+# Exit 0 = all pass. Usage: tests/p2-host.sh [group...]   groups: back type resize hidpi wheel dialog dpad lifecycle clipboard
 # (no argument = all; run only the groups for the code you changed)
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -75,6 +75,14 @@ log=$("$ROOT/scripts/check.sh" "$APK" "2000:state:0+3000:state:1+4000:state:2+50
 check "inactive window pauses the activity, active resumes it" 'grep -q "lifecycle: paused" <<<"$log" && grep -q "lifecycle: resumed" <<<"$log"'
 check "minimized window stops the activity" 'grep -q "lifecycle: stopped (minimized)" <<<"$log"'
 check "frame is still drawn after restore" '[ "$(python3 -c "from PIL import Image; print(len(set(Image.open(\"$ROOT/build/check/uibench-6000ms.png\").convert(\"L\").getdata())))")" -gt 3 ]'
+fi
+
+if want clipboard; then
+# 10. Clipboard: system selection -> app clipboard, app copy -> system, no echo loop
+log=$("$ROOT/scripts/check.sh" "$APK" "2000:clipin:hello+3000:clipcopy:copied text+4000:clipin:copied text" "1500" 5000 2>&1)
+check "system selection reaches the app clipboard" 'grep -q "clipboard from the system (5 chars)" <<<"$log"'
+check "app copy goes to the system" 'grep -q "clipboard to the system (11 chars)" <<<"$log"'
+check "the echo of our own text is ignored" '[ "$(grep -c "clipboard from the system" <<<"$log")" = 1 ]'
 fi
 
 exit $fail

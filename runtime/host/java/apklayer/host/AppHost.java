@@ -85,6 +85,8 @@ public final class AppHost implements Runnable {
     private final Set<Activity> stopped = new HashSet<>();
     private Handler main;
     private boolean pausedByFocus, stoppedByMinimize; // lifecycle driven by the window state
+    private String lastClipboard = ""; // last text exchanged with the shell, to avoid echo loops
+    private ShellClient shell;
     private HostInput input;
     private ScriptRunner scriptRunner;
 
@@ -140,7 +142,7 @@ public final class AppHost implements Runnable {
                 hostState(flags);
             }
         });
-        scriptRunner = new ScriptRunner(input);
+        scriptRunner = new ScriptRunner(input, this::hostClipboardIn, this::hostClipboardCopy);
 
         ShellClient shell = ShellClient.connect(app.getPackageName());
         if (shell == null) {
@@ -174,6 +176,8 @@ public final class AppHost implements Runnable {
             }
         }
         ShellFrameListener frames = new ShellFrameListener(shell);
+        this.shell = shell;
+        app.getSystemService(android.content.ClipboardManager.class).addPrimaryClipChangedListener(this::onAppClipboardChanged);
         ScreenUpdateHandler.create(frames).requestStartUi();
 
         launch(launcherIntent(app));
@@ -334,6 +338,7 @@ public final class AppHost implements Runnable {
                     break;
 
                 for (int[] ev; shell != null && (ev = shell.poll()) != null; ) input.onHostEvent(ev);
+                for (String clip; shell != null && (clip = shell.pollClipboard()) != null; ) hostClipboardIn(clip);
                 while (!script.isEmpty() && script.firstKey() <= elapsed) scriptRunner.runStep(script.pollFirstEntry().getValue());
                 while (!snaps.isEmpty() && snaps.firstKey() <= elapsed) {
                     long sMs = snaps.firstKey();
@@ -475,6 +480,35 @@ public final class AppHost implements Runnable {
             stoppedByMinimize = false;
             System.out.println("[apklayer] lifecycle: resumed");
         }
+    }
+
+    /** The system selection changed (from the shell): make it the app's primary clip. */
+    private void hostClipboardIn(String text) {
+        if (text.equals(lastClipboard)) return;
+        lastClipboard = text;
+        System.out.println("[apklayer] clipboard from the system (" + text.length() + " chars)");
+        android.content.ClipboardManager cm =
+                RuntimeEnvironment.getApplication().getSystemService(android.content.ClipboardManager.class);
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("apklayer", text));
+    }
+
+    /** The app changed its primary clip: hand the text to the system selection. */
+    private void onAppClipboardChanged() {
+        android.content.ClipboardManager cm =
+                RuntimeEnvironment.getApplication().getSystemService(android.content.ClipboardManager.class);
+        android.content.ClipData clip = cm.getPrimaryClip();
+        if (clip == null || clip.getItemCount() == 0) return;
+        CharSequence text = clip.getItemAt(0).coerceToText(RuntimeEnvironment.getApplication());
+        if (text == null || text.length() == 0 || text.toString().equals(lastClipboard)) return;
+        lastClipboard = text.toString();
+        System.out.println("[apklayer] clipboard to the system (" + text.length() + " chars)");
+        if (shell != null) shell.sendClipboard(lastClipboard);
+    }
+
+    /** Script step: the app itself copies text. */
+    private void hostClipboardCopy(String text) {
+        RuntimeEnvironment.getApplication().getSystemService(android.content.ClipboardManager.class)
+                .setPrimaryClip(android.content.ClipData.newPlainText("apklayer", text));
     }
 
     private void hostResize(int w, int h, int scalePct) {

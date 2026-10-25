@@ -22,11 +22,12 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 final class ShellClient {
     private static final int HELLO = 1, WINDOW_CREATE = 2, FRAME = 3;
     private static final int INPUT = 101, CLOSE = 103, RELEASE = 104, KEY = 105, SCROLL = 106,
-            CONFIGURE = 107, STATE = 108;
+            CONFIGURE = 107, STATE = 108, CLIPBOARD = 109, CLIPBOARD_SET = 5;
     private static final int WINDOW_ID = 1, NBUF = 2;
 
     private final SocketChannel channel;
     private final ConcurrentLinkedQueue<int[]> input = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<String> clipboardIn = new ConcurrentLinkedQueue<>();
     private final boolean[] busy = new boolean[NBUF];
     private volatile boolean closed;
     private Path file;
@@ -129,6 +130,20 @@ final class ShellClient {
         return input.poll();
     }
 
+    /** Text the system selection changed to (from the shell), or null. */
+    String pollClipboard() {
+        return clipboardIn.poll();
+    }
+
+    /** The app copied text: the shell becomes the selection owner. */
+    void sendClipboard(String text) {
+        try {
+            send(CLIPBOARD_SET, ByteBuffer.wrap(text.getBytes(StandardCharsets.UTF_8)));
+        } catch (IOException e) {
+            System.out.println("[apklayer] clipboard send failed: " + e);
+        }
+    }
+
     boolean closed() {
         return closed;
     }
@@ -184,6 +199,8 @@ final class ShellClient {
                 } else if (type == CONFIGURE) {
                     // {14, w, h, scale*100}
                     input.add(new int[] {14, body.getInt(4), body.getInt(8), body.getInt(12)});
+                } else if (type == CLIPBOARD) {
+                    clipboardIn.add(new String(body.array(), 0, len, StandardCharsets.UTF_8));
                 } else if (type == STATE) {
                     // {15, flags}: bit0 active, bit1 minimized
                     input.add(new int[] {15, body.getInt(4)});

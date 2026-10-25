@@ -88,6 +88,7 @@ static void kb_enter(void *d, struct wl_keyboard *k, uint32_t s, struct wl_surfa
 {
     (void)d; (void)k; (void)s; (void)keys;
     keyboard_focus = window_for_surface(sf);
+    clipboard_push(keyboard_focus); /* the app sees what was copied elsewhere while it had no focus */
     if (debug_input) fprintf(stderr, "[shell] keyboard enter: %s\n", keyboard_focus ? "window" : "?");
 }
 static void kb_leave(void *d, struct wl_keyboard *k, uint32_t s, struct wl_surface *sf)
@@ -118,7 +119,8 @@ void key_event(uint32_t evdev, int down)
 }
 static void kb_key(void *d, struct wl_keyboard *k, uint32_t s, uint32_t t, uint32_t key, uint32_t st)
 {
-    (void)d; (void)k; (void)s; (void)t;
+    (void)d; (void)k; (void)t;
+    last_input_serial = s;
     int down = st == WL_KEYBOARD_KEY_STATE_PRESSED;
     if (debug_input) fprintf(stderr, "[shell] key %u down=%d focus=%d\n", key, down, keyboard_focus != NULL);
     key_event(key, down);

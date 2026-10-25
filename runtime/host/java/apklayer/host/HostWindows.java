@@ -231,4 +231,40 @@ final class HostWindows {
             }
         }
     }
+
+    private static boolean hoverActive;
+
+    /** Hover (mouse move without a button): offered to the topmost window under the pointer. */
+    static void dispatchHover(MotionEvent e) {
+        Object wmg = android.view.WindowManagerGlobal.getInstance();
+        List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
+        View root = topWindow(views, (int) e.getX(), (int) e.getY());
+        if (root == null) return;
+        if (!hoverActive) { // ViewRootImpl starts a hover stream with ENTER
+            MotionEvent enter = MotionEvent.obtain(e);
+            enter.setAction(MotionEvent.ACTION_HOVER_ENTER);
+            root.dispatchGenericMotionEvent(enter);
+            hoverActive = true;
+        }
+        root.dispatchGenericMotionEvent(e);
+        if (Boolean.getBoolean("apklayer.debugwheel")) {
+            View t = viewAt(root, (int) e.getX(), (int) e.getY());
+            System.out.println("[apklayer] hover over " + (t == null ? "none" : t.getClass().getSimpleName() + " hovered=" + t.isHovered()));
+        }
+    }
+
+    /** Right click: long press (and context menu) on the view under the pointer, or its ancestors. */
+    static void longClickAt(int x, int y) {
+        Object wmg = android.view.WindowManagerGlobal.getInstance();
+        List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
+        View root = topWindow(views, x, y);
+        if (root == null) return;
+        for (View v = viewAt(root, x, y); v != null; v = v.getParent() instanceof View ? (View) v.getParent() : null) {
+            if (v.isLongClickable() && v.performLongClick(x, y)) {
+                if (Boolean.getBoolean("apklayer.debugwheel")) System.out.println("[apklayer] long click on " + v.getClass().getSimpleName());
+                return;
+            }
+        }
+        if (Boolean.getBoolean("apklayer.debugwheel")) System.out.println("[apklayer] right click at " + x + "," + y + ": no long-clickable view");
+    }
 }

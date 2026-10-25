@@ -60,6 +60,8 @@ static void registry(void *d, struct wl_registry *r, uint32_t name, const char *
         subcompositor = wl_registry_bind(r, name, &wl_subcompositor_interface, 1);
     else if (!strcmp(iface, wp_cursor_shape_manager_v1_interface.name))
         cursor_mgr = wl_registry_bind(r, name, &wp_cursor_shape_manager_v1_interface, 1);
+    else if (!strcmp(iface, wl_data_device_manager_interface.name))
+        data_mgr = wl_registry_bind(r, name, &wl_data_device_manager_interface, ver < 3 ? ver : 3);
     else if (!strcmp(iface, wl_shm_interface.name))
         shm = wl_registry_bind(r, name, &wl_shm_interface, 1);
     else if (!strcmp(iface, xdg_wm_base_interface.name)) {

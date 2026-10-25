@@ -5,7 +5,7 @@
 # You can watch it in the VM's desktop.
 # Covers: Esc/Back, title bar buttons (Back, Maximize/Restore, Close), edge resize, title bar
 # move, D-pad navigation, wheel delivery. Not covered: HiDPI scale > 1 (needs a 2x output).
-# Usage: tests/vm/e2e.sh [group...]   groups: window keys wheel lifecycle close (default all; run only what you changed)
+# Usage: tests/vm/e2e.sh [group...]   groups: window keys wheel lifecycle clipboard close (default all; run only what you changed)
 # Exit 0 = all pass.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -115,6 +115,24 @@ keys abs:$(pm 900 150) click sleep:2000                       # click the deskto
 check "clicking the desktop pauses the activity (window inactive)" 'grep -q "lifecycle: paused" "$LOG"'
 keys abs:$(pm $((L + 200)) $((T + 300))) click sleep:2000    # click the window: it activates again
 check "clicking the window resumes the activity" 'grep -q "lifecycle: resumed" "$LOG"'
+fi
+
+if want clipboard; then
+# --- clipboard: system selection -> app, and app copy -> system selection ---
+read -r L T R <<<"$(geom)"
+vm 'export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0; echo -n "from the desktop" | wl-copy'
+keys abs:$(pm 900 150) click sleep:500 abs:$(pm $((L + 200)) $((T + 300))) click sleep:2000   # focus the window: the shell pushes the selection
+check "text copied on the desktop reaches the app clipboard" 'grep -q "clipboard from the system (16 chars)" "$LOG"'
+# app -> system: restart the app with a scripted copy 15 s after start
+vm 'pkill -f apklayer.host; true'; : > "$LOG"
+vm 'bash -s' >> "$LOG" 2>&1 <<'R' &
+export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 APKLAYER_JOPTS="-Dapklayer.script=15000:clipcopy:copied-in-the-app"
+~/apklayer-m1/bin/apklayer run ~/apklayer-apps/uibench.apk 2>&1 | grep --line-buffered -v '^OpenJDK'
+R
+waitfor "clipboard to the system" 90
+sleep 1
+got=$(vm 'XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 wl-paste -n 2>/dev/null')
+check "text copied in the app is the system selection (wl-paste: '$got')" '[ "$got" = "copied-in-the-app" ]'
 fi
 
 if want close; then

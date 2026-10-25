@@ -52,6 +52,7 @@ int main(void)
     decor_setup(compositor, subcompositor, shm);
     if (!compositor || !shm || !wm_base) { fprintf(stderr, "[shell] missing Wayland globals\n"); return 1; }
 
+    clipboard_init();
     for (int i = 0; i < MAX_CLIENTS; i++) clients[i].fd = -1;
     int lfd = listen_socket(path);
     fprintf(stderr, "[shell] listening on %s\n", path);

@@ -13,10 +13,24 @@ void send_msg(struct client *c, uint32_t type, const int32_t *v, int n)
     }
 }
 
+/* Variable-length message (text payloads): header and data in one write. */
+void send_bytes(struct client *c, uint32_t type, const char *data, size_t len)
+{
+    if (!c || c->fd < 0 || len > 60000) return;
+    uint8_t *buf = malloc(8 + len);
+    if (!buf) return;
+    uint32_t hdr[2] = { type, (uint32_t)len };
+    memcpy(buf, hdr, 8);
+    memcpy(buf + 8, data, len);
+    if (write(c->fd, buf, 8 + len) < 0 && errno != EAGAIN)
+        fprintf(stderr, "[shell] write to %s failed: %s\n", c->pkg, strerror(errno));
+    free(buf);
+}
+
 void send_input(struct window *w, int32_t type, int32_t a, int32_t b)
 {
     if (!w) return;
-    if (type <= EV_MOVE) { a = a * w->scale / 100; b = b * w->scale / 100; } /* logical -> px */
+    if (type <= EV_SECONDARY) { a = a * w->scale / 100; b = b * w->scale / 100; } /* logical -> px */
     int32_t v[4] = { w->id, type, a, b };
     send_msg(w->client, MSG_INPUT, v, 4);
 }
@@ -54,6 +68,9 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         window_create(c, v[0], v[1], v[2], text, title);
         break;
     }
+    case MSG_CLIPBOARD_SET:
+        clipboard_set((const char *)p, len);
+        break;
     case MSG_FRAME: {
         struct window *w = len >= 24 ? window_find(c, v[0]) : NULL;
         if (w) window_frame(w, v[1], v + 2);

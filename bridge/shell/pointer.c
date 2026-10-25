@@ -58,6 +58,7 @@ static void ptr_motion(void *d, struct wl_pointer *p, uint32_t t, wl_fixed_t x, 
         return;
     }
     if (ptr_down) send_input(pointer_focus, EV_MOVE, ptr_x, ptr_y);
+    else if (pointer_focus) send_input(pointer_focus, EV_HOVER, ptr_x, ptr_y);
 }
 
 
@@ -185,6 +186,7 @@ static void bar_button(struct window *w, uint32_t serial, uint32_t time)
 static void ptr_button(void *d, struct wl_pointer *p, uint32_t s, uint32_t t, uint32_t b, uint32_t st)
 {
     (void)d; (void)p;
+    last_input_serial = s;
     int pressed = st == WL_POINTER_BUTTON_STATE_PRESSED;
     if (pressed && pointer_decor_win && b == 0x110) { bar_button(pointer_decor_win, s, t); return; }
     if (pressed && pointer_focus && (b == 0x110 || b == 0x111)) {
@@ -198,6 +200,10 @@ static void ptr_button(void *d, struct wl_pointer *p, uint32_t s, uint32_t t, ui
         /* Content edges resize the window instead of reaching the app. */
         uint32_t edge = b == 0x110 ? resize_edge(pointer_focus, ptr_x, ptr_y + DECOR_H) : 0;
         if (edge) { xdg_toplevel_resize(pointer_focus->toplevel, seat, s, edge); return; }
+    }
+    if (b == 0x111 && pressed && pointer_focus) { /* right click = long press */
+        send_input(pointer_focus, EV_SECONDARY, ptr_x, ptr_y);
+        return;
     }
     if (b != 0x110 /* BTN_LEFT */ || pointer_decor_win) return;
     if (!pressed && !ptr_down) return; /* release of a press the shell consumed (resize edge) */

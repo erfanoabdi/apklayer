@@ -94,7 +94,13 @@ final class HostInput {
     /** Shell input {type, a, b, 0} (bridge/shell/shell.c): pointer -> MotionEvent, Esc/Backspace -> Back. */
     void onHostEvent(int[] ev) {
         long now = SystemClock.uptimeMillis();
-        if (ev[0] <= 2) {
+        if (ev[0] == 3) { // hover: {3, x, y}
+            MotionEvent hover = MotionEvent.obtain(now, now, MotionEvent.ACTION_HOVER_MOVE, ev[1], ev[2], 0);
+            hover.setSource(android.view.InputDevice.SOURCE_MOUSE);
+            main.post(() -> HostWindows.dispatchHover(hover));
+        } else if (ev[0] == 4) { // right click: {4, x, y}: long press on the view under the pointer
+            main.post(() -> HostWindows.longClickAt(ev[1], ev[2]));
+        } else if (ev[0] <= 2) {
             if (ev[0] == MotionEvent.ACTION_DOWN) downTime = now;
             inject(MotionEvent.obtain(downTime, now, ev[0], ev[1], ev[2], 0));
         } else if (ev[0] == 12) { // key (xkb): {12, action, android keycode, unicode, meta}
