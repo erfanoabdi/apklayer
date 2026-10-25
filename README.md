@@ -26,7 +26,7 @@ app.apk ──dex2jvm──> JVM classes ┐
 
 ```sh
 APKLAYER_GFX=NATIVE ./scripts/apklayer-rob.sh            # uibench
-APKLAYER_GFX=NATIVE ./scripts/apklayer-rob.sh my.apk     # another APK (driver is still uibench-specific: see roadmap M6)
+APKLAYER_GFX=NATIVE ./scripts/apklayer-rob.sh my.apk     # another APK (driver is still uibench-specific: see docs/PLAN.md P1)
 ```
 
 Left-click taps; drag scrolls; Esc/Backspace is Back; closing the window exits.
@@ -38,7 +38,7 @@ VM access: `ssh parallels@10.211.55.4` (password `1234`). Setup details are in m
 |---|---|
 | `goal.md` / `memory.md` | mission, rules, milestones / facts and decisions (read first) |
 | `docs/ARCHITECTURE.md` | how the pipeline works, framebuffer layout |
-| `docs/ROADMAP.md` | path to a full APK opener (M6+) |
+| `docs/PLAN.md` | **plan of record**: decisions D1–D23, phases P1–P7, exit tests, next tasks |
 | `docs/PATCHES.md` / `docs/THIRD_PARTY.md` | patch log (none) / licenses |
 | `runtime/dex2jvm/` | DEX → JVM converter (from Mac.apk, AGPL) |
 | `tests/rob/` | driver (RunUiBench, HostWindow, WlWindow, DenyInstrument) |

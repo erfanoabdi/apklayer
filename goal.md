@@ -39,12 +39,15 @@ Instead:
 | M3 | Robolectric pipeline end-to-end on the VM | done: real PackageParser via AGP `test_config.properties`, app theme resolves |
 | M4 | uibench full UI on the Wayland window | done: NATIVE graphics (real HWUI/Skia), ~43 fps |
 | M5 | Interactive: pointer/keyboard, activity back stack, dialogs | done: clicks, drag, Esc/Backspace = Back, dialogs composited |
-| M6 | Any pure-Java APK via `apklayer run app.apk` (Robolectric Simulator, no JUnit) | **next** |
-| M7 | Modern framework (SDK 35/36 android-all), resize/HiDPI, persistent app data | pending |
-| M8 | Native `.so` in APKs (bionic-on-glibc loader) | pending |
-| M9 | Platform services (WebView, media, portals, notifications), binder-lite | pending |
+| M6 | P1: product foundation: `apklayer run any.apk` on SDK 36, Simulator host (no JUnit), shell protocol, CLI, install cache | **next** |
+| M7 | P2: desktop-grade window and input (resize, HiDPI, wheel, touch, IME, clipboard) | pending |
+| — | P3: compatibility corpus (30 F-Droid APKs), continuous from here | pending |
+| M8 | P4: native `.so` in APKs (bionic_translation + NDK shims → Mesa/PipeWire) | pending |
+| M9 | P5: platform services (WebView→WPE, media→GStreamer, portals, microG) | pending |
+| M10 | P6: multiple apps (apklayerd, cross-app intents/binder-lite, bwrap) | pending |
+| M11 | P7: ship (Flatpak, desktop integration, performance budget) | pending |
 
-Details and options for M6+: **docs/ROADMAP.md**.
+Decisions, phases, exit tests and the immediate task list: **docs/PLAN.md** (plan of record).
 
 ## Definition of done (v1)
 

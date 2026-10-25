@@ -67,4 +67,5 @@ result to the Linux desktop through a thin host layer (Wayland today).
   library is needed.
 
 ## Known limits
-See goal.md → "Roadmap" and docs/ROADMAP.md.
+See docs/PLAN.md: the plan of record, with the target architecture (apklayer-shell + one JVM
+per app + apklayerd) and phases P1–P7.

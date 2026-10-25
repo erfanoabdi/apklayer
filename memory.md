@@ -32,7 +32,8 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
   the DEX, writes test_config.properties and runs. Close the window to exit.
   Verification flags: `APKLAYER_JOPTS='-Dapklayer.frames=150 -Dapklayer.snapframes=140
   -Dapklayer.script=40:tap:100,80+80:tap:100,129'` (snapshots → /tmp/apklayer-frame-N.png on VM).
-- Architecture: docs/ARCHITECTURE.md. Roadmap: docs/ROADMAP.md.
+- Architecture: docs/ARCHITECTURE.md. **Plan of record: docs/PLAN.md** (all decisions made;
+  follow its phase order and "Immediate next tasks").
 
 ## Key technical facts learned (don't re-discover)
 - Robolectric reads `android_resource_apk` ONLY from classpath
