@@ -18,7 +18,7 @@ evidence breaks it. If that happens, change this file in the same commit as the 
 | D5 | License | **apklayer is AGPL-3.0-or-later.** Add `LICENSE`. | Forced by dex2jvm, and compatible with Apache-2.0 (AOSP) and MIT (Robolectric). |
 | D6 | Process model | **One JVM per app.** All windows go to a single per-session native **`apklayer-shell`** (today's `apklayer-presentd`, grown). App JVMs contain **no apklayer native code** until D9. | Crash isolation. App JVM arch can differ from the host's. One component owns Wayland. |
 | D7 | Frame transport | Per window: a pixel file in `/dev/shm` (double-buffered, damage rect in header). Control, input and wakeups go over a **Unix domain socket** (pure-Java `SocketChannel` on the app side, no polling). | Removes busy polling and tearing. Pure Java in the app process. |
-| D8 | Rendering | **Now:** CPU HWUI/Skia from the Robolectric prebuilt; present only damaged regions. **Later (P7):** apklayer's **own Meson build of AOSP's native runtime** (HWUI, Skia, minikin, androidfw, the `libandroid_runtime` JNI subset) from los24 sources, with HWUI's GPU pipelines enabled (`EglManager` + `SkiaOpenGLPipeline` on Mesa EGL/Wayland; `SkiaVulkanPipeline` on Mesa Vulkan). | The prebuilt is AOSP's *host* HWUI variant, which compiles only `platform/host` stubs and excludes `SkiaOpenGLPipeline`, `SkiaVulkanPipeline`, `EglManager` and `VulkanManager` (frameworks/base/libs/hwui/Android.bp). GPU HWUI on Linux therefore means compiling HWUI's device sources for Linux ourselves. That needs no Soong or AOSP tree build, but it does compile AOSP C++ (needs the user's OK, like the javac approval). The same build gives native linux-arm64 (D17). |
+| D8 | Rendering | **Now:** CPU HWUI/Skia from the Robolectric prebuilt; present only damaged regions. **Later (P7):** apklayer's **own Meson build of AOSP's native runtime** (HWUI, Skia, minikin, androidfw, the `libandroid_runtime` JNI subset) from los24 sources, with HWUI's GPU pipelines enabled (`EglManager` + `SkiaOpenGLPipeline` on Mesa EGL/Wayland; `SkiaVulkanPipeline` on Mesa Vulkan). Its source/flag lists come from **one Soong host build in OrbStack** (see P7). | The prebuilt is AOSP's *host* HWUI variant, which compiles only `platform/host` stubs and excludes `SkiaOpenGLPipeline`, `SkiaVulkanPipeline`, `EglManager` and `VulkanManager` (frameworks/base/libs/hwui/Android.bp). GPU HWUI on Linux therefore means compiling HWUI's device sources for Linux ourselves. The same build gives native linux-arm64 (D17). User rule (2026-10-25): AOSP builds are OK **only when absolutely necessary**, run locally on the OrbStack VM. |
 | D9 | Native `.so` in APKs | **ATL's `bionic_translation`**, not libhybris. It loads bionic-linked app `.so` files into a glibc process without an Android system image, builds with Meson, supports x86_64 and aarch64, and is used daily by ATL on real apps. libhybris solves the reverse problem: glibc userlands using Android *vendor HAL/GPU blobs* on Android-kernel phones (Halium: Sailfish, Ubuntu Touch, Droidian). It expects the device's Android `/system`+`/vendor` libraries and focuses on HAL wrappers (gralloc, hwcomposer, camera, sensors). We have no system image, and app NDK libs only need the stable NDK ABI. Alongside it go apklayer **NDK shims** in `bridge/ndk/`: `liblog`, `libandroid` (AAsset*, ANativeWindow*, AConfiguration*), `libEGL`/`libGLESv*` → Mesa, `libOpenSLES`/`libaaudio` → PipeWire. Load the APK's ABI that matches the **app JVM's arch**. No ISA translation. | The proven approach, already built with Meson. JNI is the same standard ABI under HotSpot. APKs almost always ship both arm64-v8a and x86_64. |
 | D10 | GL/Vulkan in apps | `GLSurfaceView`, `SurfaceView` and `TextureView` get a real **EGL surface on a `wl_subsurface`** placed at the view's screen rect, rendered by **Mesa** directly. Vulkan goes the same way via the Mesa Vulkan WSI. | Games and video need real GPU output. Mesa speaks the same GLES/EGL/Vulkan as Android drivers. |
 | D11 | WebView | **WPE WebKit** (`wpe-webkit-2.0` + `wpebackend-fdo` SHM export), rendered into the `WebView`'s canvas by an apklayer shadow of `android.webkit.WebView`. | WPE is built for embedding into a custom renderer, which matches our bitmap composition. WebKitGTK (ATL's choice) is a GTK widget, which doesn't. |
@@ -33,6 +33,7 @@ evidence breaks it. If that happens, change this file in the same commit as the 
 | D20 | App data | Per app `~/.local/share/apklayer/apps/<pkg>/` holding `data/` (Context data, cache and files dirs, databases, shared_prefs), `apk/` and `classes.jar`. External storage is `~/.local/share/apklayer/storage/emulated/0` (Android/data scoped). | Survives restarts. Matches Android's layout. |
 | D21 | Split APKs | Accept `.apks`/`.xapk`/`.apkm`. Use the base APK for resources, merge DEX from all splits, and pick ABI/density/locale config splits that match the host. | Most store downloads are splits today. |
 | D22 | Fixes to framework behaviour | Only as **apklayer shadows** (`runtime/host/shadows`, Robolectric's own extension mechanism). Never edit android-all, Robolectric or dex2jvm. Every shadow is listed in docs/PATCHES.md. | This keeps the "no hand patches" principle. Shadows are how Robolectric itself adapts AOSP. |
+| D24 | AOSP builds | **Allowed only when absolutely necessary, only on the OrbStack `ubuntu22-x86` VM**, with a separate `OUT_DIR=~/apklayer-aosp-out` (los24's own `out/` is never touched). Each build is listed with its justification in docs/AOSP-BUILDS.md. The only planned one is P7.1 (plus P7.3 if JNI signatures mismatch). | User rule. Soong is the only authoritative resolver of AOSP's native module graph (Skia, HWUI, minikin, ICU, HarfBuzz…); re-deriving it by hand would be thousands of lines of guesswork. |
 | D23 | Verification | Every feature lands with a **scripted headless check**: the existing `-Dapklayer.script`/snapshot mechanism, run by `scripts/check.sh` on the Mac (fast) and on the VM (real Wayland). The corpus (P3) gates releases. | The user tests by hand; we must catch regressions first. |
 
 ---
@@ -223,18 +224,27 @@ location or SafetyNet-free APIs runs.
 
 ### P7 — Own native runtime: native arm64 + GPU HWUI (M11)
 
-1. **Pin the source revision.** The JNI natives must match the android-all SDK 36 jar's
-   `native` method signatures. Identify its AOSP build (`13921718`) and use the matching
-   los24 sources. Verify with a generated list of JNI registrations vs the jar's natives.
-2. **Meson build** (`runtime/native/`) of the AOSP *host* native set, from los24 sources:
-   Skia, HWUI (host variant first), minikin, libandroidfw, libutils/libcutils (host),
-   harfbuzz/freetype/icu (system libs where ABI-compatible), and the `libandroid_runtime`
-   JNI subset that Robolectric's prebuilt exports. Targets: x86_64 and aarch64. Output: a
-   drop-in `libandroid_runtime.so` that Robolectric's `DefaultNativeRuntimeLoader` loads
-   (`native/linux/<arch>/`). No Soong, no OrbStack, no AOSP tree build.
-3. **Native arm64:** run the whole stack on the arm64 VM with the arm64 JDK. Remove the
-   Rosetta stopgap from the scripts.
-4. **GPU HWUI:** compile HWUI's device pipeline sources (`EglManager`,
+1. **Soong host build, x86_64 (necessary: D24).** In OrbStack, with
+   `OUT_DIR=~/apklayer-aosp-out` and `SOONG_GEN_COMPDB=1`, build only the host variant of
+   `libandroid_runtime` (`host_supported` in frameworks/base/core/jni/Android.bp; the same
+   module layoutlib and Robolectric ship). Outputs: the x86_64 `.so` and
+   `compile_commands.json` holding the exact sources, defines and flags of every module in
+   its graph. Validate: its exported JNI registrations match Robolectric's prebuilt and the
+   android-all SDK 36 jar's `native` methods (generated diff, must be empty).
+2. **arm64 glibc via Meson (necessary: Soong has no glibc arm64 host target).** Soong's
+   cross-host options are `linux_bionic` (bionic binaries) and musl arm/arm64, and neither
+   loads into a glibc JVM. `scripts/compdb2meson.py` turns the compdb into
+   `runtime/native/meson.build` (same sources/defines; target triple and sysroot swapped to
+   `aarch64-linux-gnu`). It is built **natively on the arm64 VM** with clang. It also
+   rebuilds x86_64, so Soong is not needed again until a source bump.
+3. **If step 1's JNI diff is not empty** (los24 differs from android-all build 13921718):
+   build android-all from the same los24 tree too (`robolectric-host-android_all`, in
+   external/robolectric). Java and natives then come from one revision. This is the only
+   other allowed Soong build.
+4. **Native arm64:** drop the generated `libandroid_runtime.so` into
+   `native/linux/aarch64/` on the classpath (where `DefaultNativeRuntimeLoader` looks), run the
+   whole stack with the arm64 JDK, and remove the Rosetta stopgap from the scripts.
+5. **GPU HWUI:** compile HWUI's device pipeline sources (`EglManager`,
    `SkiaOpenGLPipeline`, `RenderThread`, `SkiaVulkanPipeline`, `VulkanManager`) against Mesa,
    with a `ReliableSurface`/`ANativeWindow` backed by a shell `wl_surface` (dmabuf). Switch
    `ThreadedRenderer` to it. The CPU path stays as a fallback.

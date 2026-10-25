@@ -12,9 +12,12 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
   (Wayland/X11, PipeWire, Mesa).
 
 ## Hard rules from the user
-- **Do NOT build AOSP** (no Soong builds of los24 in the OrbStack VM or anywhere else).
-  "I don't want you to waste my resource and time on it, do not waste time on AOSP."
-- **Do NOT use or inspect los24's `out/`**: "it's not related to your work."
+- **AOSP builds: only when absolutely necessary** (updated 2026-10-25: "i'm fine with aosp
+  build but when its abolutly necessary. we can build it locally on my orb"). Run them on the
+  OrbStack VM with a separate OUT_DIR (`~/apklayer-aosp-out`), never los24's `out/`, and log
+  each one with its justification in docs/AOSP-BUILDS.md. Earlier stance: "do not waste time
+  on AOSP".
+- **Do NOT use or inspect los24's existing `out/`**: "it's not related to your work."
 - The AOSP tree is a **read-only reference**: read source to copy/understand, and use its
   prebuilts (e.g. JDK) locally; don't compile it.
 - **Write as little code as possible; copy from AOSP/Robolectric as much as possible.**
@@ -58,8 +61,8 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
 - AOSP HWUI host variant (what Robolectric's prebuilt is) compiles only `platform/host` stubs;
   the GPU pipelines (SkiaOpenGL/SkiaVulkan, EglManager, VulkanManager) are device-only in
   frameworks/base/libs/hwui/Android.bp. GPU HWUI and native arm64 both need our own Meson
-  build of AOSP native libs (PLAN P7). That compiles AOSP C++ but isn't a Soong build, so it
-  needs the user's OK first.
+  build of AOSP native libs (PLAN P7): one Soong x86_64 host build in OrbStack gives the
+  compdb, then Meson rebuilds for x86_64 + arm64.
 - User (2026-10-25): native linux-arm64 WILL be supported, but later. Rosetta/FEX are not a
   product path, only the dev-VM stopgap until PLAN P7.
 - `pkill -f <pattern>` over ssh can kill the ssh shell itself; use `pkill -x` or a `[x]yz` pattern.
@@ -76,7 +79,10 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
 - LineageOS 24 tree (Android 16-era): `/Users/erfanabdi/OrbStack/ubuntu22-x86/home/erfanabdi/los24`
   (211 GB excl. out). Mounted from the OrbStack `ubuntu22-x86` VM; listings over the mount
   are slow, so prefer `orb -m ubuntu22-x86 bash -c '...'`.
-- OrbStack VM (x86_64, 17 cores, 98 GB RAM) is reserved for the user: **no AOSP builds there**.
+- OrbStack VM (x86_64, 17 cores, 98 GB RAM, 2.3 TB free): the place for the rare necessary
+  AOSP builds (see the rule above). Soong facts: `libandroid_runtime` is host_supported (the
+  layoutlib/Robolectric native runtime). Soong cross-hosts are only linux_bionic arm64 and musl
+  arm/arm64, with **no glibc arm64 host target**, hence PLAN P7's compdb → Meson step.
 
 ## Testing Linux VM (Parallels on this Mac)
 - `ssh parallels@10.211.55.4`, password `1234` (sshpass on the Mac; sudo = same password).

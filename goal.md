@@ -25,7 +25,9 @@ Instead:
 - Thin patches only, marked "apklayer patch", logged in docs/PATCHES.md (currently none).
 - Binder: a userspace driver-like component is acceptable.
 - GUI target: Wayland; test in the Parallels Ubuntu VM (ssh parallels@10.211.55.4).
-- Do NOT build AOSP (anywhere); los24 is a source/prebuilt reference only.
+- AOSP builds only when absolutely necessary, locally on the OrbStack VM, with a separate
+  OUT_DIR (never los24's `out/`); each one is justified in docs/AOSP-BUILDS.md. Otherwise
+  los24 is a source/prebuilt reference.
 - Prefer local artifacts over network downloads.
 - Git: commit at every step.
 
@@ -45,7 +47,7 @@ Instead:
 | M8 | P4: native `.so` in APKs (bionic_translation + NDK shims → Mesa/PipeWire) | pending |
 | M9 | P5: platform services (WebView→WPE, media→GStreamer, portals, microG) | pending |
 | M10 | P6: multiple apps (apklayerd, cross-app intents/binder-lite, bwrap) | pending |
-| M11 | P7: own native runtime (Meson build of AOSP native libs) → native arm64 + GPU HWUI | pending |
+| M11 | P7: own native runtime (one Soong host build in OrbStack → compdb → Meson for x86_64 + arm64) → native arm64 + GPU HWUI | pending |
 | M12 | P8: ship (Flatpak for x86_64 + arm64, desktop integration, performance budget) | pending |
 
 Decisions, phases, exit tests and the immediate task list: **docs/PLAN.md** (plan of record).
