@@ -1,48 +1,51 @@
 # apklayer — Goal
 
-**Mission:** Run Android APKs natively on Linux — no emulator, no VM, no container — by keeping
-AOSP itself as intact as possible and bridging only the host boundary.
+**Mission:** Run Android APKs natively on Linux — no emulator, no VM, no
+Linux-inside-Linux. Target test app: **`tests/uibench/uibench.apk`, full UI**
+(rendered to a real Wayland window).
 
-## Principles (non-negotiable)
-1. **AOSP stays AOSP.** Real ART, real `framework.jar` (Java), real `libandroid_runtime`,
-   `libhwui` — patched as little as possible, via thin overlays (Mac.apk `java_base_patch`
-   style), never forks.
-2. **Bridge, don't rewrite.** Everything Linux-specific lives in one thin native bridge:
-   windowing/input (Wayland/X11), GPU (EGL/Vulkan via Mesa), audio (PipeWire). No ATL-style
-   C++ re-implementations of framework classes.
-3. **Never build AOSP** (user rule — no time/resources spent on Soong builds). Runtime
-   artifacts (ART, boot jars, framework.jar, native libs) must come from **prebuilt sources**;
-   the los24 tree is read-only reference for copying code, and its `out/` is off-limits.
-   → Pending user decision: ATL release prebuilts (x86_64) vs. another source for arm64.
-4. **Write minimal code, copy maximum AOSP.** Stack for our own glue: C++/Rust/Java + Meson.
-5. **ARM64 first.** The test VM is aarch64, matching Android's primary ABI (arm64-v8a) —
-   native execution of app native libs, no binary translation.
-6. **Every milestone is verified on the Parallels VM** (Ubuntu 24.04 ARM64,
-   `parallels@10.211.55.4`) with a real APK, not just unit tests.
+## Method (user directive, 2026-10-25)
+
+**The Robolectric method.** Do NOT build on Mac.apk's hand-patched framework
+snapshot — manually patched framework files are unmaintainable across Android
+version updates. Instead:
+
+1. **Unmodified AOSP compiled to JVM** — `org.robolectric:android-all-instrumented`
+   (MIT tooling, real framework code, no hand patches). Android version updates
+   stay replicable because nothing is hand-edited.
+2. **Robolectric shadows + sandbox** (MIT) for the parts that need host bindings.
+3. **dex2jvm** (`runtime/dex2jvm`, from Mac.apk, AGPL) converts app DEX -> JVM classes.
+   App classes are stamped `@DoNotInstrument` (their ctor lowering collides with
+   Robolectric's `<init>` renaming).
+4. **apklayer's own host layer**: `bridge/src/jni/present.c` -> `libapklayer-wl.so`
+   (Wayland xdg_toplevel + wl_shm). Frames: real View tree -> Canvas -> Bitmap ->
+   `int[]` -> Wayland. Driver: `tests/rob` (RunUiBench + HostWindow).
+5. The old Mac.apk stack (`runtime/java_mac`, Boot driver, NativeCocoa bridge) is
+   **reference only** — retired as a runtime base.
+
+## Hard rules (user)
+
+- Never stop until the goal (full uibench UI); report, but do not pause.
+- Copy from AOSP/Robolectric rather than write new code; write less.
+- Thin patches only, marked "apklayer patch", logged in docs/PATCHES.md.
+- Binder: a userspace driver-like component is acceptable.
+- GUI target: Wayland; test in the Parallels Ubuntu VM (ssh parallels@10.211.55.4).
+- Do NOT build AOSP in OrbStack; los24 is a source reference only.
+- Git: commit at every step.
 
 ## Milestones
-- **M0 — Recon (read-only).** Map exactly how Mac.apk boots: unpacker → HotSpot/ART +
-  loader jar (`com.macapk.loader.Boot.main`) → app_process group → window/GL bridge. Extract
-  the minimum artifact set an APK needs at runtime. Decide artifact source **with the user**
-  (no AOSP builds).
-- **M1 — app_process on bare Linux.** A prebuilt ART + boot classpath running inside the
-  Ubuntu VM (outside any Android system image), executing a trivial test: load a DEX, use
-  `android.util.Log` and a Handler/Looper. Proof that AOSP userspace runs on a vanilla Linux
-  kernel with minimal glue.
-- **M2 — First window.** Render one app: bridge HWUI/SurfaceFlinger output to a real
-  Wayland/X11 surface (start with shared-memory/BLAST-style buffers → `wl_surface`; GL via
-  EGL on Mesa). A stock test APK shows a window, receives touches, buttons work.
-- **M3 — APK pipeline.** `apklayer install app.apk` → unpack, manifest parse, data dirs,
-  launch via our app_process, lifecycle, back gesture, clipboard, IME, audio output.
-- **M4 — Compatibility & polish.** Multi-window/instances, notifications (libnotify),
-  permissions UX, small launcher (GTK/Qt), CI running the test app on the VM.
+
+| # | Milestone | Status |
+|---|---|---|
+| M0 | Sources & tooling recon (Mac.apk, ATL, los24, VM) | done |
+| M1 | AOSP code runs on a stock JVM (message loop proven) | done |
+| M2 | Real app Activity constructs against a JVM framework | done (java_mac era) |
+| M3 | **Robolectric pipeline end-to-end on VM** (android-all 8.1.0 + shadows + dex2jvm app + Wayland presenter) | **in progress** — sandbox boots, manifest+resources load, MainActivity created; last gate: theme resolution ("You need to use a Theme.AppCompat theme" in postCreate) |
+| M4 | uibench renders frames to the Wayland window (full UI) | pending |
+| M5 | Input (touch/keyboard), resize, lifecycle; second APK | pending |
+| M6 | Binder-lite + ContentProvider subset; system-service fakes | pending |
 
 ## Definition of done (v1)
-`apklayer run some.apk` on a normal ARM64 Linux desktop → the app opens as a normal Linux
-window, renders through the host GPU, takes input, plays audio, persists data — running the
-genuine AOSP framework on genuine ART.
 
-## Working agreements
-- References: `/Users/erfanabdi/GitHub/Mac.apk` (how), `/Users/erfanabdi/GitHub/android_translation_layer`
-  (what NOT to do + possible prebuilts), los24 tree via OrbStack (read-only source reference).
-- Keep `memory.md` updated with facts; keep this file updated with milestone progress.
+`uibench.apk` launches under apklayer on the Wayland desktop: real View tree
+drawn, visible and interactive.

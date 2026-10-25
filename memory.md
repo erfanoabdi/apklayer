@@ -176,3 +176,35 @@ Living document of facts and decisions told by the user. Keep this up to date.
   Remaining: verify frames actually present (added PRESENT frame logging to jni), missing
   native setTopActivityConfigChanges (added), NativeSqlite.nativeOpen (media provider,
   non-fatal), input injection (registerTouchDispatcher currently stubbed).
+
+## 2026-10-25 (evening) — ROBOLECTRIC PIVOT (user directive)
+- User rejected the java_mac approach: "you copied whole android framework from mac.apk,
+  that's manually patched files that won't be good to replicate by the android version
+  updates, so you should use robolectric's method — keep working until full UI running
+  uibench.apk." java_mac = reference only from now on. Hand-written stubs discouraged;
+  prefer copying Robolectric/AOSP artifacts.
+- Robolectric repo studied at /Users/erfanabdi/GitHub/robolectric (MIT): sandbox
+  instrumentation, shadows/framework, resources (CppAssetManager2/LoadedArsc),
+  nativeruntime. We consume PUBLISHED artifacts: robolectric 4.17 (maven -> ~/rob/libs,
+  plus manual androidx.test monitor/annotation jars) and
+  android-all-instrumented-8.1.0-robolectric-4611349-i7.jar (SDK 27 -> ~/rob/android-all).
+  API-35 android.jar stubs -> ~/rob/android-stub.jar (satisfies shadow signatures newer
+  than 27; outer classpath only, like AGP's mockable jar).
+- Driver: tests/rob — RunUiBench (JUnit4 + RobolectricTestRunner, @Config sdk=27,
+  manifest uibench/AndroidManifest.xml via -Dandroid_resource_apk, qualifiers w480dp-h800dp,
+  LEGACY graphics), HostWindow (plain-loader JNI bridge to libapklayer-wl.so so JNI
+  bindings survive the sandbox), DenyInstrument (ASM stamps RUNTIME-visible
+  @DoNotInstrument on dex2jvm output — required: its <init>->__constructor__ lowering
+  VerifyErrors under Robolectric's own <init> renaming; AnnotationCollector only honors
+  VISIBLE annotations).
+- bridge: libapklayer-wl.so (present.c) = our Wayland presenter (init/present/pump/
+  shouldClose C ABI). libapklayer-jni.so (NativeCocoa/NativeOs/NativeLog) = retired path.
+- scripts/apklayer-rob.sh = one-shot sync+build+run on VM.
+- Gates passed: deps resolve; sandbox boots (needs outer stubout Build SDK_INT=27 for
+  conscrypt, androidx.test monitor classes.jar, android-stub.jar on outer cp); app
+  classes load (DoNotInstrument); manifest+resources load via android_resource_apk;
+  MainActivity CREATED. Current gate: IllegalStateException in postCreate — AppCompat
+  "You need to use a Theme.AppCompat theme"; driver-side setTheme fallback added
+  (resolve Theme.AppCompat(.Light)/AppTheme from app package). Next: fix resource
+  package resolution (pkg printed org.robolectric.default -> getIdentifier returned 0;
+  must make Robolectric use com.android.test.uibench package) then frames -> Wayland.

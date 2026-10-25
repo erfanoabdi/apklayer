@@ -2,41 +2,53 @@
 
 Run Android APKs natively on Linux. No emulator, no VM, no Linux-inside-Linux.
 
-apklayer boots the **genuine AOSP stack** — ART, `framework.jar`, `libandroid_runtime`,
-`libhwui` — directly on a normal Linux distro, and bridges only the host boundary:
-windowing/input (Wayland/X11), GPU (Vulkan/GL via Mesa), audio (PipeWire).
+## Status (2026-10-25)
 
-The design deliberately mirrors [Mac.apk](https://github.com/kksimp/Mac.apk), which does the
-same on macOS: the Android framework stays **as-is in Java** (patches are thin overlays, never
-forks), and everything host-specific lives in one small native bridge.
+**Method pivot in effect** (see `goal.md`): apklayer follows the **Robolectric
+method** — unmodified AOSP compiled for the JVM (`android-all-instrumented`) plus
+MIT-licensed shadows — so Android version updates stay replicable. Mac.apk's
+hand-patched framework snapshot is **reference only**.
 
-## Status
+Current pipeline (all running on the Parallels Ubuntu ARM64 VM):
 
-`M0` recon → `M1` app_process on bare Linux (see `goal.md`).
+```
+uibench.apk ──dex2jvm──> app classes (stamped @DoNotInstrument)
+              +
+android-all-instrumented 8.1.0 (unmodified AOSP on JVM) + Robolectric shadows
+              │  tests/rob: RunUiBench driver (real Activity lifecycle)
+              ▼
+real View tree -> Canvas -> Bitmap -> int[] -> libapklayer-wl.so -> Wayland window
+```
+
+Gate reached: sandbox boots, binary manifest + resources load, MainActivity is
+created. Next gate: AppCompat theme resolution in `postCreate`.
 
 ## Layout
 
-```
-bridge/     thin native host bridge (C++) — windowing, input, GL, audio
-cli/        `apklayer` launcher CLI (C++ or Rust, TBD)
-runtime/    runtime packaging: assemble prebuilt AOSP artifacts + thin patches/
-  patches/  thin overlays over AOSP sources (Mac.apk java_base_patch style) — kept minimal
-tests/      APK test apps + on-VM test harness
-docs/       architecture + decision notes
-```
+| Path | What |
+|---|---|
+| `goal.md` / `memory.md` | mission, rules, running log (read these first) |
+| `runtime/dex2jvm/` | DEX -> JVM class converter (from Mac.apk, AGPL, in active use) |
+| `runtime/java_mac/` | Mac.apk framework snapshot — **reference only, not the runtime base** |
+| `runtime/prebuilt/framework-res.apk` | AOSP platform resources (for the retired java_mac path) |
+| `bridge/` | meson build: `libapklayer-wl.so` (Wayland presenter), `libapklayer-jni.so` (retired java_mac bridge), `apklayer-window` PoC |
+| `tests/rob/` | Robolectric-method driver (RunUiBench, HostWindow, WlWindow, DenyInstrument) |
+| `tests/uibench/` | target APK |
+| `archive/seed-m1/` | archived hand-grown M1 seed (do not extend) |
+| `scripts/apklayer-rob.sh` | one-shot: sync -> build -> run the driver on the VM |
+| `docs/` | findings, patch log, third-party inventory |
 
-AOSP itself is **not vendored and never built here** (user rule): `runtime/` assembles
-**prebuilt** AOSP artifacts; the los24 tree is a read-only reference for copying code.
-We write glue, not frameworks.
+## Testing
 
-## Build
+- VM: `ssh parallels@10.211.55.4` (password `1234`), GNOME Wayland, OpenJDK 21 ARM64.
+- VM layout: `~/rob/libs` (Robolectric deps), `~/rob/android-all/` (framework jars),
+  `~/rob/android-stub.jar` (API-35 stubs), `~/apklayer-apps/uibench` (unpacked APK),
+  `~/apklayer-m1/bridge/b/` (libapklayer-wl.so).
+- Run: `APKLY_VM_PASS=1234 ./scripts/apklayer-rob.sh /tmp/uibench-classes.jar
+  com.android.test.uibench.MainActivity '$HOME/apklayer-apps/uibench'`
 
-Meson builds apklayer's own glue only:
+## License note
 
-```sh
-meson setup build && meson compile -C build
-```
-
-## License
-
-TBD (upstream AOSP is Apache-2.0; Mac.apk is AGPL-3.0 — decide before shipping).
+While `runtime/dex2jvm` (from Mac.apk) is present the tree carries **AGPL-3.0**
+obligations; AOSP-derived parts are Apache-2.0; Robolectric parts MIT.
+See `docs/THIRD_PARTY.md`.
