@@ -29,11 +29,24 @@ scripts/fetch-deps.sh          # pinned deps (deps/deps.lock) -> ~/.cache/apklay
 meson setup b && ninja -C b    # b/bridge/shell/apklayer-shell, b/runtime/{dex2jvm,host}/*.jar
 ```
 
+## Use (Linux)
+
+```sh
+bin/apklayer install app.apk        # convert once (cached), menu entry + icon, .apk file handler
+bin/apklayer run <package|app.apk>  # starts the session shell if needed; app data persists
+bin/apklayer list
+bin/apklayer uninstall <package>
+```
+
+Apps live in `~/.local/share/apklayer/apps/<package>/` (`base.apk`, `classes.jar`, `icon.png`,
+`info.properties`, `data/`). Settings for menu launches go in `~/.config/apklayer/env`
+(e.g. `APKLAYER_JAVA`).
+
 ## Run (on the Parallels VM, from the Mac)
 
 ```sh
 ./scripts/vm-run.sh            # uibench on the VM's Wayland desktop
-./scripts/vm-run.sh my.apk     # any APK: its launcher activity starts
+./scripts/vm-run.sh my.apk     # any APK: installed via bin/apklayer, then its launcher activity runs
 ./scripts/check.sh             # headless check on this machine (snapshots in build/check/)
 ```
 
@@ -54,7 +67,8 @@ VM access: `ssh parallels@10.211.55.4` (password `1234`). Setup details are in m
 | `deps/deps.lock`, `scripts/fetch-deps.sh` | pinned dependencies (sha256), local-first fetch into `~/.cache/apklayer/deps` |
 | `meson.build`, `meson_options.txt` | one build for C and Java (`scripts/javac-jar.sh` compiles each jar in one javac call) |
 | `bridge/shell/` | `apklayer-shell` (session Wayland shell: windows, zero-copy frames, input) |
-| `scripts/vm-run.sh` | sync → build → convert → run on the VM |
+| `bin/apklayer` | the CLI: install / run / list / uninstall |
+| `scripts/vm-run.sh` | sync → Meson build → `apklayer run` on the VM |
 | `tests/uibench/` | target APK |
 | `archive/` | superseded approaches (M1 seed, Mac.apk java_mac era, M0 plan), reference only |
 

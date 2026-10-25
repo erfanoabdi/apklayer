@@ -7,6 +7,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APK="${1:-$ROOT/tests/uibench/uibench.apk}"
+APK="$(cd "$(dirname "$APK")" && pwd)/$(basename "$APK")"
 SCRIPT="${2:-2000:tap:100,80+4000:tap:100,129+6000:back+7000:back}"
 SNAPS="${3:-1500,3500,5800,8000}"
 RUNMS="${4:-8500}"

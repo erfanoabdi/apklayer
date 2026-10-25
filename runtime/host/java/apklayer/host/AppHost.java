@@ -7,8 +7,14 @@ import android.app.Activity;
 import android.app.Application;
 import android.app.UiAutomation;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.TypedArray;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.drawable.Drawable;
 import android.hardware.display.DisplayManager;
 import android.os.Handler;
 import android.os.Looper;
@@ -20,14 +26,22 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import androidx.test.platform.app.InstrumentationRegistry;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.io.Writer;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
+import javax.imageio.ImageIO;
 import org.robolectric.Robolectric;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.android.controller.ActivityController;
@@ -57,29 +71,43 @@ import org.robolectric.simulator.ScreenUpdateHandler;
  *
  * <p>Debug/verification properties: {@code apklayer.script} ("ms:tap:x,y+ms:back+..."),
  * {@code apklayer.snapms} (snapshot times in ms), {@code apklayer.runms} (exit after),
- * {@code apklayer.snapshot} (PNG path prefix).
+ * {@code apklayer.snapshot} (PNG path prefix). {@code apklayer.data} + {@code apklayer.package}:
+ * persistent app data root for that package.
  */
 public final class AppHost implements Runnable {
     private static final int KEY_ESC = 1, KEY_BACKSPACE = 14; // evdev codes from the shell
 
     private final AndroidSandbox sandbox;
     private final Path apk;
+    private final Path describe;
     private final Deque<ActivityController<? extends Activity>> stack = new ArrayDeque<>();
     private final Set<Activity> stopped = new HashSet<>();
     private Handler main;
     private UiAutomation uiAutomation;
     private long downTime;
 
-    public AppHost(AndroidSandbox sandbox, Path apk) {
+    /** @param describe if non-null, write the app's metadata there instead of running it */
+    public AppHost(AndroidSandbox sandbox, Path apk, Path describe) {
         this.sandbox = sandbox;
         this.apk = apk;
+        this.describe = describe;
     }
 
     @Override
     public void run() {
         Thread.currentThread().setContextClassLoader(sandbox.getRobolectricClassLoader());
         setUpApplication();
-        Application app = RuntimeEnvironment.getApplication();
+        Application app = RuntimeEnvironment.getApplication(); // created here (lazy), on persistent dirs
+        if (describe != null) {
+            describe(app, describe);
+            return;
+        }
+        if (Boolean.getBoolean("apklayer.debugdata")) {
+            SharedPreferences prefs = app.getSharedPreferences("apklayer_probe", 0);
+            int launches = prefs.getInt("launches", 0) + 1;
+            prefs.edit().putInt("launches", launches).commit();
+            System.out.println("[apklayer] data: " + app.getDataDir() + " launches=" + launches);
+        }
 
         // Simulator.start(): real draws and animations, a paused Choreographer driven by the loop.
         ShadowView.setUseRealViewAnimations(true);
@@ -98,7 +126,7 @@ public final class AppHost implements Runnable {
             System.out.println("[apklayer] no apklayer-shell: headless");
         } else {
             try {
-                shell.createWindow(width, height, String.valueOf(app.getApplicationInfo().loadLabel(app.getPackageManager())));
+                shell.createWindow(width, height, label(app));
             } catch (java.io.IOException e) {
                 throw new RuntimeException(e);
             }
@@ -122,19 +150,93 @@ public final class AppHost implements Runnable {
         FixedConfiguration configuration = FixedConfiguration.newBuilder()
                 .put(ConscryptMode.Mode.class, ConscryptMode.Mode.OFF)
                 .put(LooperMode.Mode.class, LooperMode.Mode.PAUSED)
-                .put(LazyApplication.LazyLoad.class, LazyApplication.LazyLoad.OFF)
+                // Lazy: the package and its storage are set up first, so the data dirs can be
+                // made persistent before Application.onCreate runs (persistDataDirs).
+                .put(LazyApplication.LazyLoad.class, LazyApplication.LazyLoad.ON)
                 .put(GraphicsMode.Mode.class, GraphicsMode.Mode.NATIVE)
                 .put(SQLiteMode.Mode.class, SQLiteMode.Mode.NATIVE)
                 .put(Config.class, config)
                 .build();
         sandbox.getTestEnvironment().setUpApplicationState("apklayer", configuration, manifest);
+        persistDataDirs();
+    }
+
+    /**
+     * PLAN D20: Robolectric creates the app's data dirs ({@code <package>-dataDir}, {@code
+     * userDataDir}, {@code deviceDataDir}) in its per-run temp directory when the (lazy)
+     * Application is created, and deletes them at exit. They are pre-created here as links into
+     * the persistent per-app tree ({@code apklayer.data}); TempDirectory.createIfNotExists keeps
+     * an existing entry, and the exit cleanup does not follow links.
+     */
+    private static void persistDataDirs() {
+        String root = System.getProperty("apklayer.data");
+        String pkg = System.getProperty("apklayer.package");
+        if (root == null || pkg == null) return; // ephemeral (headless checks)
+        Path temp = RuntimeEnvironment.getTempDirectory().getBasePath();
+        String[][] links = {{pkg + "-dataDir", "app"}, {"userDataDir", "user"}, {"deviceDataDir", "device"}};
+        try {
+            for (String[] link : links) {
+                Path dir = temp.resolve(link[0]);
+                if (Files.exists(dir, LinkOption.NOFOLLOW_LINKS)) continue;
+                Files.createSymbolicLink(dir, Files.createDirectories(Path.of(root, link[1])));
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private static ResolveInfo launcher(Application app) {
+        Intent query = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(app.getPackageName());
+        List<ResolveInfo> found = app.getPackageManager().queryIntentActivities(query, 0);
+        if (found.isEmpty()) throw new IllegalStateException("no launcher activity in " + app.getPackageName());
+        return found.get(0);
     }
 
     private static Intent launcherIntent(Application app) {
-        Intent query = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
-        List<ResolveInfo> found = app.getPackageManager().queryIntentActivities(query, 0);
-        if (found.isEmpty()) throw new IllegalStateException("no launcher activity in " + app.getPackageName());
-        return query.setClassName(app.getPackageName(), found.get(0).activityInfo.name);
+        return new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                .setClassName(app.getPackageName(), launcher(app).activityInfo.name);
+    }
+
+    /** What a launcher shows: the launcher activity's label (falls back to the app's). */
+    private static String label(Application app) {
+        return String.valueOf(launcher(app).loadLabel(app.getPackageManager()));
+    }
+
+    /**
+     * Install-time metadata (PLAN D19): info.properties plus the launcher icon rendered by the
+     * framework's own drawable code (adaptive icons included) as a 256 px PNG.
+     */
+    private static void describe(Application app, Path dir) {
+        try {
+            PackageManager pm = app.getPackageManager();
+            ResolveInfo launcher = launcher(app);
+            PackageInfo pkg = pm.getPackageInfo(app.getPackageName(), 0);
+            Properties info = new Properties();
+            info.setProperty("package", app.getPackageName());
+            info.setProperty("label", label(app));
+            info.setProperty("launcher", launcher.activityInfo.name);
+            info.setProperty("versionName", String.valueOf(pkg.versionName));
+            info.setProperty("versionCode", String.valueOf(pkg.getLongVersionCode()));
+            info.setProperty("targetSdk", String.valueOf(app.getApplicationInfo().targetSdkVersion));
+            Files.createDirectories(dir);
+            try (Writer out = Files.newBufferedWriter(dir.resolve("info.properties"))) {
+                info.store(out, "apklayer install metadata");
+            }
+
+            int size = 256;
+            Drawable icon = launcher.loadIcon(pm);
+            Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+            icon.setBounds(0, 0, size, size);
+            icon.draw(new Canvas(bitmap));
+            int[] px = new int[size * size];
+            bitmap.getPixels(px, 0, size, 0, 0, size, size);
+            BufferedImage img = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+            img.setRGB(0, 0, size, size, px, 0, size);
+            ImageIO.write(img, "png", dir.resolve("icon.png").toFile());
+            System.out.println("[apklayer] described " + app.getPackageName() + " (" + info.getProperty("label") + ")");
+        } catch (IOException | PackageManager.NameNotFoundException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /** Simulator.loop(), plus host input, navigation and the verification hooks. */
@@ -191,16 +293,18 @@ public final class AppHost implements Runnable {
 
     /** Builds and fully starts the activity, as the simulator does (Robolectric.setupActivity). */
     private void launch(Intent intent) {
-        ActivityController<? extends Activity> previous = stack.peek();
-        if (previous != null) previous.pause();
         Class<? extends Activity> cls;
         try {
             cls = Class.forName(intent.getComponent() != null ? intent.getComponent().getClassName()
                     : RuntimeEnvironment.getApplication().getPackageManager()
                             .resolveActivity(intent, 0).activityInfo.name).asSubclass(Activity.class);
-        } catch (ClassNotFoundException e) {
-            throw new RuntimeException(e);
+        } catch (ClassNotFoundException | NullPointerException e) {
+            // Android would crash the app here; on the desktop the app stays on its current screen.
+            System.out.println("[apklayer] cannot start " + intent + ": " + e);
+            return;
         }
+        ActivityController<? extends Activity> previous = stack.peek();
+        if (previous != null) previous.pause();
         ActivityController<? extends Activity> c = Robolectric.buildActivity(cls, intent).setup();
         // As in Android, the previous activity is stopped only once an opaque activity covers it;
         // behind a translucent one (dialog-style) it stays paused and visible.

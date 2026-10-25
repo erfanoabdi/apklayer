@@ -30,6 +30,12 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
 
 ## Current state (2026-10-25, M5 done)
 - uibench runs with full UI + mouse/keyboard on the VM's Wayland desktop (user tested it).
+- CLI (P1.7–P1.9): `bin/apklayer install|run|list|uninstall`; apps in ~/.local/share/apklayer/apps/<pkg>
+  (data/ persists via links: LazyApplication ON + pre-created `<pkg>-dataDir`/userDataDir/deviceDataDir
+  links in Robolectric's temp dir). Menu launches read `~/.config/apklayer/env` (vm-run writes the
+  Rosetta APKLAYER_JAVA there). `gtk-launch apklayer-<pkg>` from ssh works with
+  DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus. uibench's manifest declares
+  InflatingEmojiListActivity, which is NOT in its dex (the host logs it and stays on screen).
 - On the VM: `./scripts/vm-run.sh [app.apk]` (default uibench). Headless on the Mac:
   `./scripts/check.sh [apk] [script] [snapms] [runms]` → build/check/*.png (fast iteration).
   It syncs the deps cache, runtime/host, runtime/dex2jvm and bridge/shell to the VM, rebuilds, converts

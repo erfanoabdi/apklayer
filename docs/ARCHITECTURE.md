@@ -45,7 +45,8 @@ result to the Linux desktop through a thin host layer (Wayland today).
 | `runtime/host/java/apklayer/host/ShellClient.java` | Pure-Java client of apklayer-shell: Unix socket, the window's two-buffer shm file, damage rect vs. the shown frame, buffer release tracking (latest frame wins). |
 | `runtime/host/jvm.args` | JDK `--add-opens` flags Robolectric needs on modern SDKs (copied from Robolectric's own test configuration). |
 | `bridge/shell/shell.c` | `apklayer-shell`: the session's Wayland side for all apps (windows, zero-copy frames, input routing). Protocol documented at the top of the file. |
-| `scripts/vm-run.sh` | Syncs to the VM, rebuilds, converts, (re)starts the shell daemon and runs the app. |
+| `bin/apklayer` | CLI (PLAN D19). `install`: dex2jvm (cached by APK sha256 + android-all + dex2jvm commit) → DenyInstrument → `Main --describe` (package, label, launcher, version, launcher icon drawn by the framework) → `~/.local/share/apklayer/apps/<pkg>/` + `.desktop` entry (StartupWMClass = app_id) + `.apk` MIME handler. `run`: starts the shell if needed, runs the host with persistent data. Config: `~/.config/apklayer/env`. |
+| `scripts/vm-run.sh` | Syncs to the VM, builds with Meson, restarts the shell and runs `bin/apklayer run <apk>`. |
 | `scripts/check.sh` | Headless scripted run with snapshots (fast check on the Mac). |
 
 ## Shell protocol v1 (Unix socket, little-endian `{u32 type, u32 len, payload}`)
@@ -59,6 +60,15 @@ result to the Linux desktop through a thin host layer (Wayland today).
 | shell → app | 101 INPUT | `i32 id, type, a, b`: type 0/1/2 = touch DOWN/UP/MOVE at (a, b); 100 = key (evdev a, pressed b) |
 | shell → app | 103 CLOSE | `i32 id` (window closed by the user) |
 | shell → app | 104 RELEASE | `i32 id, buf` (compositor released that buffer) |
+
+## App data (PLAN D20)
+
+Robolectric creates `<pkg>-dataDir`, `userDataDir` and `deviceDataDir` in its per-run temp
+directory when the Application is created, and deletes them at exit. The host runs with
+`LazyApplication` ON and pre-creates those three entries as links into
+`apps/<pkg>/data/{app,user,device}` (`-Dapklayer.data`, `-Dapklayer.package`) before the
+Application exists. Robolectric keeps an existing entry and its exit cleanup does not follow
+links, so SharedPreferences, databases, files and caches persist across launches.
 
 ## Why these choices
 - **Unmodified framework.** Android version bumps mean switching the `android-all` jar, not

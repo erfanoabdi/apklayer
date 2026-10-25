@@ -14,6 +14,8 @@ How apklayer adapts upstream without patching it:
 | Android API classes on the outer classpath | SDK `android-36.1/android.jar` (as AGP's mockable jar) |
 | Graphics mode, looper, SQLite | `FixedConfiguration` as in the simulator's `AppLoader` (NATIVE graphics/SQLite, PAUSED looper) |
 | Activity stacking (Robolectric records `startActivity`, doesn't launch) | Host back stack in `AppHost`, emulating `ActivityThread`: pause previous → start new → stop previous and set its decor INVISIBLE only if the new window is opaque; restore on finish |
+| Persistent app data (Robolectric uses throwaway temp dirs) | `LazyApplication` ON + data dirs pre-created as links into `apps/<pkg>/data` (see ARCHITECTURE.md "App data") |
+| An activity declared in the manifest but missing from the dex | Logged and ignored (the app stays on its screen); Android would crash the app. uibench's `InflatingEmojiListActivity` is such a case |
 | A decor that never records its first draw when its activity adds a dialog in `onCreate` | `AppHost` invalidates each newly launched decor once |
 
 Rule: if a patch ever becomes unavoidable, keep it thin, mark it inline `apklayer patch`,

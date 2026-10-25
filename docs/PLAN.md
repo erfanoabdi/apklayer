@@ -299,5 +299,8 @@ double-click `Markor.apk` → it opens and is usable on both.
    dex2jvm.jar and apklayer-host.jar (jars via `scripts/javac-jar.sh`; the shell is optional where
    Wayland is missing). The Mac quick check (`scripts/check.sh`) uses plain javac on the same
    sources, because the Mac has no Meson.
-8. Data dirs, CLI, install cache, desktop entries (P1.7–P1.9).
+8. ✅ Data dirs, CLI, install cache, desktop entries (P1.7–P1.9): `bin/apklayer`; data persists
+   via links pre-created before the lazy Application; `Main --describe` writes info + icon;
+   `.desktop` + MIME handler; config in `~/.config/apklayer/env`. Verified on the VM, including a
+   menu-style launch with `gtk-launch`.
 9. P1 exit test with uibench + two corpus T1 apps.

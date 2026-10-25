@@ -320,11 +320,12 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         fprintf(stderr, "[shell] %s (pid %d) connected\n", c->pkg, c->pid);
         break;
     case MSG_WINDOW_CREATE: {
-        if (len < 13) return;
-        char text[1024];
-        snprintf(text, sizeof text, "%.*s", (int)(len - 12), (const char *)p + 12);
-        const char *title = text + strlen(text) + 1;
-        if (title > text + (len - 12)) title = "";
+        if (len < 13 || len - 12 >= 1024) return;
+        char text[1024];                        /* "path\0title", copied by length */
+        memcpy(text, p + 12, len - 12);
+        text[len - 12] = 0;
+        size_t path_len = strlen(text);
+        const char *title = path_len + 1 < len - 12 ? text + path_len + 1 : "";
         window_create(c, v[0], v[1], v[2], text, title);
         break;
     }

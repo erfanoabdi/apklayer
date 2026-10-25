@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+# apklayer — run Android apps on Linux (PLAN D19).
+#   apklayer install <app.apk>     convert + describe + install (menu entry, icon, .apk handler)
+#   apklayer run <package|app.apk> run an installed app (an .apk path is installed first)
+#   apklayer list                  installed apps
+#   apklayer uninstall <package>   remove an app and its data
+# Environment (also read from ~/.config/apklayer/env, so menu launches get it too):
+#   APKLAYER_JAVA (java command + flags for the app JVM, default "java"),
+#   APKLAYER_BUILD (Meson build dir, default <repo>/b), APKLAYER_DEPS (~/.cache/apklayer/deps).
+set -euo pipefail
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/apklayer/env"
+# shellcheck disable=SC1090
+[ -f "$CONFIG" ] && . "$CONFIG"
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+BUILD="${APKLAYER_BUILD:-$ROOT/b}"
+DEPS="${APKLAYER_DEPS:-$HOME/.cache/apklayer/deps}"
+JAVA="${APKLAYER_JAVA:-java}"
+DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+APPS="$DATA_HOME/apklayer/apps"
+HOST_JAR="$BUILD/runtime/host/apklayer-host.jar"
+DEX2JVM_JAR="$BUILD/runtime/dex2jvm/dex2jvm.jar"
+SHELL_BIN="$BUILD/bridge/shell/apklayer-shell"
+
+TMP=""
+trap 'rm -rf "$TMP"' EXIT
+die() { echo "apklayer: $*" >&2; exit 1; }
+prop() { sed -n "s/^$2=//p" "$1" | head -1; }
+host_cp() { echo "$DEPS/libs/*:$DEPS/android-stub.jar:$HOST_JAR:$1"; }
+# The cache key of a conversion: same APK, same framework, same converter -> same classes.
+cache_key() {
+    { sha256sum "$1" | cut -c1-64; ls "$DEPS/android-all"; cat "$ROOT/runtime/dex2jvm/com.macapk.dex/.dex2jvm-commit" 2>/dev/null; } \
+        | sha256sum | cut -c1-64
+}
+host() {
+    # shellcheck disable=SC2086
+    $JAVA @"$ROOT/runtime/host/jvm.args" -Drobolectric.offline=true \
+        -Drobolectric.dependency.dir="$DEPS/android-all" "$@"
+}
+
+cmd_install() {
+    local apk="$1"
+    [ -f "$apk" ] || die "no such file: $apk"
+    [ -f "$HOST_JAR" ] && [ -f "$DEX2JVM_JAR" ] || die "not built: run 'meson setup b && ninja -C b' in $ROOT"
+    mkdir -p "$APPS"
+    local key tmp classes=""
+    key="$(cache_key "$apk")"
+    tmp="$(mktemp -d "$APPS/.install.XXXXXX")"
+    TMP="$tmp"
+
+    for d in "$APPS"/*/; do  # reuse an identical conversion
+        [ -f "$d/key" ] && [ "$(cat "$d/key")" = "$key" ] && classes="$d/classes.jar" && break
+    done
+    cp "$apk" "$tmp/base.apk"
+    if [ -n "$classes" ]; then
+        cp "$classes" "$tmp/classes.jar"
+    else
+        echo "apklayer: converting $(basename "$apk")"
+        # dex2jvm reads the class hierarchy from its classpath (the framework we run on); keep it
+        # away from any installed Android SDK, which it would otherwise prefer.
+        ANDROID_HOME="$tmp" ANDROID_SDK_ROOT="$tmp" java -Duser.home="$tmp" \
+            -cp "$DEX2JVM_JAR:$DEPS/android-all/*" com.macapk.dex.Main "$tmp/base.apk" "$tmp/raw.jar" >/dev/null
+        java -cp "$DEPS/libs/*:$HOST_JAR" apklayer.tools.DenyInstrument "$tmp/raw.jar" "$tmp/classes.jar" >/dev/null
+        rm -f "$tmp/raw.jar"
+    fi
+    echo "$key" > "$tmp/key"
+    host -Djava.awt.headless=true -cp "$(host_cp "$tmp/classes.jar")" \
+        apklayer.host.Main --describe "$tmp" "$tmp/base.apk" "$tmp/classes.jar" | grep -v '^\[apklayer\] described' || true
+    [ -f "$tmp/info.properties" ] || die "could not read $(basename "$apk")"
+
+    local pkg label dir
+    pkg="$(prop "$tmp/info.properties" package)"
+    label="$(prop "$tmp/info.properties" label)"
+    dir="$APPS/$pkg"
+    mkdir -p "$dir/data"
+    for f in base.apk classes.jar key info.properties icon.png; do mv -f "$tmp/$f" "$dir/$f"; done
+    write_desktop "$pkg" "$label" "$dir"
+    INSTALLED="$pkg"
+    echo "apklayer: installed $pkg ($label) -> $dir"
+}
+
+write_desktop() {
+    local pkg="$1" label="$2" dir="$3" apps_dir="$DATA_HOME/applications"
+    mkdir -p "$apps_dir"
+    cat > "$apps_dir/apklayer-$pkg.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=$label
+Comment=Android app ($pkg) via apklayer
+Exec=$ROOT/bin/apklayer run $pkg
+Icon=$dir/icon.png
+StartupWMClass=$pkg
+Categories=Utility;
+EOF
+    cat > "$apps_dir/apklayer-open-apk.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Android app (apklayer)
+Exec=$ROOT/bin/apklayer run %f
+MimeType=application/vnd.android.package-archive;
+NoDisplay=true
+EOF
+    command -v update-desktop-database >/dev/null && update-desktop-database "$apps_dir" 2>/dev/null || true
+    command -v xdg-mime >/dev/null && xdg-mime default apklayer-open-apk.desktop application/vnd.android.package-archive 2>/dev/null || true
+}
+
+ensure_shell() {
+    local sock="${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR is not set}/apklayer/shell.sock"
+    if [ -S "$sock" ] && pgrep -x apklayer-shell >/dev/null; then return; fi
+    [ -x "$SHELL_BIN" ] || die "apklayer-shell not built ($SHELL_BIN)"
+    setsid "$SHELL_BIN" > "${XDG_RUNTIME_DIR}/apklayer-shell.log" 2>&1 < /dev/null &
+    for _ in $(seq 1 50); do [ -S "$sock" ] && return; sleep 0.1; done
+    die "apklayer-shell did not start (see $XDG_RUNTIME_DIR/apklayer-shell.log)"
+}
+
+cmd_run() {
+    local target="$1" pkg="$1"
+    if [ -f "$target" ]; then
+        cmd_install "$target"
+        pkg="$INSTALLED"
+    fi
+    local dir="$APPS/$pkg"
+    [ -f "$dir/info.properties" ] || die "not installed: $pkg (apklayer install <app.apk>)"
+    ensure_shell
+    cd "$dir"
+    host -Dapklayer.data="$dir/data" -Dapklayer.package="$pkg" ${APKLAYER_JOPTS:-} \
+        -cp "$(host_cp "$dir/classes.jar")" apklayer.host.Main "$dir/base.apk" "$dir/classes.jar"
+}
+
+cmd_list() {
+    for f in "$APPS"/*/info.properties; do
+        [ -f "$f" ] || continue
+        printf '%-40s %-24s %s\n' "$(prop "$f" package)" "$(prop "$f" label)" "$(prop "$f" versionName)"
+    done
+}
+
+cmd_uninstall() {
+    [ -d "$APPS/$1" ] || die "not installed: $1"
+    rm -rf "${APPS:?}/$1" "$DATA_HOME/applications/apklayer-$1.desktop"
+    echo "apklayer: removed $1"
+}
+
+case "${1:-}" in
+    install) shift; [ $# -eq 1 ] || die "usage: apklayer install <app.apk>"; cmd_install "$1" ;;
+    run) shift; [ $# -eq 1 ] || die "usage: apklayer run <package|app.apk>"; cmd_run "$1" ;;
+    list) cmd_list ;;
+    uninstall) shift; [ $# -eq 1 ] || die "usage: apklayer uninstall <package>"; cmd_uninstall "$1" ;;
+    *) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac
