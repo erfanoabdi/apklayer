@@ -45,7 +45,8 @@ Instead:
 | M8 | P4: native `.so` in APKs (bionic_translation + NDK shims → Mesa/PipeWire) | pending |
 | M9 | P5: platform services (WebView→WPE, media→GStreamer, portals, microG) | pending |
 | M10 | P6: multiple apps (apklayerd, cross-app intents/binder-lite, bwrap) | pending |
-| M11 | P7: ship (Flatpak, desktop integration, performance budget) | pending |
+| M11 | P7: own native runtime (Meson build of AOSP native libs) → native arm64 + GPU HWUI | pending |
+| M12 | P8: ship (Flatpak for x86_64 + arm64, desktop integration, performance budget) | pending |
 
 Decisions, phases, exit tests and the immediate task list: **docs/PLAN.md** (plan of record).
 

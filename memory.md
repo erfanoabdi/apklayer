@@ -55,6 +55,13 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
   SDK_INT). android-stub.jar (API 35) covers shadow signatures newer than 27.
 - Robolectric source has an experimental **Simulator** module (SandboxBuilder, AppLoader,
   FrameListener, Mouse/KeyboardHandler): the planned replacement for the JUnit driver.
+- AOSP HWUI host variant (what Robolectric's prebuilt is) compiles only `platform/host` stubs;
+  the GPU pipelines (SkiaOpenGL/SkiaVulkan, EglManager, VulkanManager) are device-only in
+  frameworks/base/libs/hwui/Android.bp. GPU HWUI and native arm64 both need our own Meson
+  build of AOSP native libs (PLAN P7). That compiles AOSP C++ but isn't a Soong build, so it
+  needs the user's OK first.
+- User (2026-10-25): native linux-arm64 WILL be supported, but later. Rosetta/FEX are not a
+  product path, only the dev-VM stopgap until PLAN P7.
 - `pkill -f <pattern>` over ssh can kill the ssh shell itself; use `pkill -x` or a `[x]yz` pattern.
 
 ## Reference projects on this machine
