@@ -35,6 +35,7 @@ static struct wl_buffer *buffer;
 static uint32_t *pixels;           /* mmap'd SHM backing */
 static int phone_w = WIN_W, phone_h = WIN_H;
 static int frames_presented;
+static volatile int g_quit;
 
 static void frame_done(void *d, struct wl_callback *cb, uint32_t t)
 {
@@ -137,6 +138,9 @@ static void present_copy_and_commit(const int32_t *src, int w, int h)
     wl_surface_commit(surface);
     wl_display_flush(display);
     frames_presented++;
+    if (frames_presented <= 3 || frames_presented % 60 == 0)
+        fprintf(stderr, "[apklayer-jni] PRESENT frame %d %dx%d\n",
+                frames_presented, cw, ch);
 }
 
 static void pump(int timeout_ms)
@@ -219,7 +223,9 @@ JNIEXPORT void JNICALL
 Java_com_macapk_loader_NativeCocoa_runLoop(JNIEnv *e, jclass c)
 {
     (void)e; (void)c;
-    pump(16);
+    /* Host run loop: blocks until the app quits (matches the AppKit contract the
+     * loader expects — Boot.run returns only after this). */
+    while (!g_quit) pump(50);
 }
 
 JNIEXPORT void JNICALL
@@ -238,8 +244,9 @@ JNIEXPORT void JNICALL
 Java_com_macapk_loader_NativeCocoa_exitProcess(JNIEnv *e, jclass c, jint code,
                                                jstring relaunch)
 {
-    (void)e; (void)c; (void)relaunch;
-    exit((int)code);
+    (void)c; (void)relaunch;
+    fprintf(stderr, "[apklayer] app requested exit code=%d\n", (int)code);
+    g_quit = 1; /* unblock runLoop; Boot.run then returns and the JVM winds down */
 }
 
 JNIEXPORT jlong JNICALL
@@ -360,6 +367,10 @@ Java_com_macapk_loader_NativeCocoa_restoreUserOrientation(JNIEnv *e, jclass c)
 JNIEXPORT void JNICALL
 Java_com_macapk_loader_NativeCocoa_setSecureContent(JNIEnv *e, jclass c, jboolean s)
 { (void)e; (void)c; (void)s; }
+
+JNIEXPORT void JNICALL
+Java_com_macapk_loader_NativeCocoa_setTopActivityConfigChanges(JNIEnv *e, jclass c, jint changes)
+{ (void)e; (void)c; (void)changes; }
 
 JNIEXPORT void JNICALL
 Java_com_macapk_loader_NativeCocoa_setWindowModeForToken(JNIEnv *e, jclass c,

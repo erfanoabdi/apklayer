@@ -167,3 +167,12 @@ Living document of facts and decisions told by the user. Keep this up to date.
   Boot.run returned (exit 0) after theme warning. Next: source framework-res.apk
   (Mac.apk release bundle / their staged runtime), re-run with MACAPK_FW_RES_APK +
   MACAPK_APK_PATH env set; watch tail of /tmp/launch1.log for the next gate.
+- 2026-10-25 (M3 attempt#3 — APP RUNNING): with framework-res.apk + MACAPK_APK_PATH +
+  blocking runLoop + NativeOs natives, launch3.log shows the FULL path: resource index,
+  theme, starting window, Application init, LAUNCH_ACTIVITY posted, "starting activity
+  com.android.test.uibench.MainActivity", fragments resumed
+  (TestListFragment view=true resumed=true), "main loop dispatched #1 on thread=main".
+  Process stayed alive until `timeout 45` SIGTERM (exit 124) — the app was RUNNING.
+  Remaining: verify frames actually present (added PRESENT frame logging to jni), missing
+  native setTopActivityConfigChanges (added), NativeSqlite.nativeOpen (media provider,
+  non-fatal), input injection (registerTouchDispatcher currently stubbed).
