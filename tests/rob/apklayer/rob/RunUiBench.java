@@ -65,6 +65,7 @@ public final class RunUiBench {
             bmp.getPixels(px, 0, w, 0, 0, w, h);
             win.present(px, w, h);
             frames++;
+            if (frames == 30) dumpPng(px, w, h, "/tmp/apklayer-frame.png");
             if (frames % 60 == 1) {
                 System.out.println("[apklayer-rob] frame " + frames + " ("
                         + (System.currentTimeMillis() - t0) + " ms)");
@@ -72,5 +73,14 @@ public final class RunUiBench {
             Thread.sleep(16);
         }
         System.out.println("[apklayer-rob] DONE frames=" + frames);
+    }
+
+    /** Debug snapshot of a presented frame (what the Wayland window shows). */
+    private static void dumpPng(int[] px, int w, int h, String path) throws Exception {
+        java.awt.image.BufferedImage img =
+                new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        img.setRGB(0, 0, w, h, px, 0, w);
+        javax.imageio.ImageIO.write(img, "png", new java.io.File(path));
+        System.out.println("[apklayer-rob] snapshot -> " + path);
     }
 }

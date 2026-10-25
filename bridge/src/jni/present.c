@@ -2,8 +2,8 @@
  * apklayer minimal Wayland presenter (for the Robolectric-based runner).
  * Exports: apklayer_wayland_init(w,h), apklayer_wayland_present(int* argb,w,h),
  *          apklayer_wayland_pump(ms), apklayer_wayland_should_close().
- * Plain C ABI (called via JNI from apklayer.wayland.WlWindow, which lives in the
- * NON-instrumented classpath).
+ * Plain C ABI, plus JNI wrappers (bottom) for apklayer.wayland.WlWindow, which lives in
+ * the NON-instrumented classpath.
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -125,3 +125,27 @@ void apklayer_wayland_pump(int timeout_ms)
 }
 
 int apklayer_wayland_should_close(void) { return close_requested; }
+
+/* JNI entry points for apklayer.wayland.WlWindow (loaded only by the plain, non-sandbox
+ * classloader, so these bind exactly once). */
+#include <jni.h>
+
+JNIEXPORT jboolean JNICALL Java_apklayer_wayland_WlWindow_init(JNIEnv *e, jclass c, jint w, jint h)
+{ (void)e; (void)c; return apklayer_wayland_init(w, h) ? JNI_TRUE : JNI_FALSE; }
+
+JNIEXPORT jint JNICALL Java_apklayer_wayland_WlWindow_present(JNIEnv *e, jclass c,
+                                                              jintArray argb, jint w, jint h)
+{
+    (void)c;
+    if (!argb) return 0;
+    jint *px = (*e)->GetPrimitiveArrayCritical(e, argb, NULL);
+    int n = apklayer_wayland_present((const int32_t *)px, w, h);
+    (*e)->ReleasePrimitiveArrayCritical(e, argb, px, JNI_ABORT);
+    return n;
+}
+
+JNIEXPORT void JNICALL Java_apklayer_wayland_WlWindow_pump(JNIEnv *e, jclass c, jint ms)
+{ (void)e; (void)c; apklayer_wayland_pump(ms); }
+
+JNIEXPORT jboolean JNICALL Java_apklayer_wayland_WlWindow_shouldClose(JNIEnv *e, jclass c)
+{ (void)e; (void)c; return apklayer_wayland_should_close() ? JNI_TRUE : JNI_FALSE; }

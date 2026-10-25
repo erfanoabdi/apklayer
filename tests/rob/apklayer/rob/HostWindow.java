@@ -13,19 +13,20 @@ public final class HostWindow {
     private final Object window;
     private final Method present;
     private final Method shouldClose;
+    private final Method pump;
 
-    private HostWindow(Object window, Method present, Method shouldClose) {
+    private HostWindow(Object window, Method present, Method shouldClose, Method pump) {
         this.window = window;
         this.present = present;
         this.shouldClose = shouldClose;
+        this.pump = pump;
     }
 
     public static HostWindow get(int w, int h) {
         if (INSTANCE != null) return INSTANCE;
         try {
-            String lib = System.getProperty("apklayer.wl");
-            if (lib != null) System.load(lib);
-
+            // The native lib is loaded by WlWindow's static init inside the plain loader;
+            // loading it here too would bind it to the sandbox loader first.
             String cp = System.getProperty("apklayer.hostcp");
             java.net.URL[] urls = { new java.io.File(cp).toURI().toURL() };
             java.net.URLClassLoader plain =
@@ -36,7 +37,8 @@ public final class HostWindow {
             if (!ok) return null;
             INSTANCE = new HostWindow(win,
                     win.getMethod("present", int[].class, int.class, int.class),
-                    win.getMethod("shouldClose"));
+                    win.getMethod("shouldClose"),
+                    win.getMethod("pump", int.class));
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 try { win.getMethod("pump", int.class).invoke(null, 0); } catch (Exception ignored) {}
             }));
@@ -48,12 +50,11 @@ public final class HostWindow {
     }
 
     public void present(int[] px, int w, int h) throws Exception {
-        present.invoke(window, px, w, h);
-        Class<?> win = window.getClass();
-        win.getMethod("pump", int.class).invoke(window, 0);
+        present.invoke(null, px, w, h);
+        pump.invoke(null, 0);
     }
 
     public boolean shouldClose() throws Exception {
-        return (Boolean) shouldClose.invoke(window);
+        return (Boolean) shouldClose.invoke(null);
     }
 }

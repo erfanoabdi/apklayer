@@ -31,11 +31,12 @@ jni_out = run_command('sh', '-c',
 jni_inc = jni_out.stdout().strip()
 jni_args = ['-I' + jni_inc, '-I' + jni_inc + '/linux', '-fPIC']
 
-# Minimal presenter for the Robolectric-based runner: plain C ABI (apklayer_wayland_*),
-# wrapped by apklayer.wayland.WlWindow.
+# Minimal presenter for the Robolectric-based runner: plain C ABI (apklayer_wayland_*)
+# plus the JNI entry points of apklayer.wayland.WlWindow.
 shared_library('apklayer-wl',
   ['src/jni/present.c', xdg_header, xdg_code],
   dependencies: [wl_client_dep],
+  c_args: jni_args,
   install: false)
 
 shared_library('apklayer-jni',
