@@ -23,7 +23,11 @@ static int listen_socket(const char *path)
 {
     int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
     struct sockaddr_un addr = { .sun_family = AF_UNIX };
-    snprintf(addr.sun_path, sizeof addr.sun_path, "%s", path);
+    if (strlen(path) >= sizeof addr.sun_path) {
+        fprintf(stderr, "[shell] socket path too long: %s\n", path);
+        exit(1);
+    }
+    strcpy(addr.sun_path, path);
     unlink(path);
     if (fd < 0 || bind(fd, (struct sockaddr *)&addr, sizeof addr) < 0 || listen(fd, 8) < 0) {
         fprintf(stderr, "[shell] cannot listen on %s: %s\n", path, strerror(errno));

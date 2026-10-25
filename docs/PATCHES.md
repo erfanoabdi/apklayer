@@ -20,3 +20,7 @@ How apklayer adapts upstream without patching it:
 
 Rule: if a patch ever becomes unavoidable, keep it thin, mark it inline `apklayer patch`,
 and log it here. The M1 seed's patch log is in `archive/seed-m1/docs/PATCHES.md`.
+
+| `HostDefaults.REDIRECT_EXIT = null` (dex2jvm) | An app's `System.exit` really exits: apklayer runs one app per JVM, so Mac.apk's `MacApkProcessExit` (which fakes ActivityManager in a shared JVM) is not used |
+| `MacApkUnsafe.warn` (vendored from Mac.apk) | Mac.apk's `NativeLog.w` (JNI logcat) replaced by a stderr line; no other change |
+| App-bundled library relocation (`DenyInstrument`, ASM `ClassRemapper`) | An app that bundles its own Guava gets it moved under `apklayer.relocated.` at install, so it never mixes with the host's Guava 33 in the sandbox class loader. Not done for BouncyCastle (providers are registered by class-name strings) |

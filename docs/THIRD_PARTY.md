@@ -19,3 +19,5 @@ apklayer itself is AGPL-3.0-or-later (PLAN D5), compatible with all of the above
 | `nativeruntime-dist-compat-1.0.19` (HWUI/Skia/SQLite natives) | Robolectric prebuilt from AOSP sources | Apache-2.0 (AOSP) |
 | `android-stub.jar` (SDK platform android-36.1 `android.jar`) | Android SDK platform | Apache-2.0 |
 | JDK 21 linux-x86 (`~/jdk21-x86`) | LOCAL copy of los24 `prebuilts/jdk/jdk21/linux-x86` | GPLv2 + Classpath Exception |
+
+- `runtime/host/java/com/macapk/loader/MacApkUnsafe.java`: copied verbatim from Mac.apk (AGPL-3.0). The converter redirects an app's `sun.misc.Unsafe` calls to it (ART-layout reads answered safely on HotSpot).

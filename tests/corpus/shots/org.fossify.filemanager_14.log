@@ -1,0 +1,55 @@
+deps: /Users/erfanabdi/.cache/apklayer/deps — 37 already present, 0 copied locally, 0 resolved via maven
+Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/apklayer/host/AppHost.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /Users/erfanabdi/GitHub/apklayer/runtime/dex2jvm/com.macapk.dex/ApiIndexLoader.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+[macapk-dex] 6024 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/org.fossify.filemanager_14-classes.jar in 805 ms
+[apklayer] DoNotInstrument stamped on 6024 classes
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by g03
+WARNING: Please consider reporting this to the maintainers of class g03
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+java.lang.NoClassDefFoundError: com/macapk/loader/MacApkUnsafe
+	at g03.j(r8-map-id-16aaaa01c400da3fe8ffb3dc65e2460dca3a264591894b8b669936f11c1d9c8f:6)
+	at g03.i(r8-map-id-16aaaa01c400da3fe8ffb3dc65e2460dca3a264591894b8b669936f11c1d9c8f:6)
+	at gj1.g(r8-map-id-16aaaa01c400da3fe8ffb3dc65e2460dca3a264591894b8b669936f11c1d9c8f:55)
+	at gj1.a(r8-map-id-16aaaa01c400da3fe8ffb3dc65e2460dca3a264591894b8b669936f11c1d9c8f:296)
+	at org.fossify.commons.FossifyApp.setupAppLockManager(r8-map-id-16aaaa01c400da3fe8ffb3dc65e2460dca3a264591894b8b669936f11c1d9c8f:17)
+	at org.fossify.commons.FossifyApp.onCreate(r8-map-id-16aaaa01c400da3fe8ffb3dc65e2460dca3a264591894b8b669936f11c1d9c8f:7)
+	at org.fossify.filemanager.App.onCreate(r8-map-id-16aaaa01c400da3fe8ffb3dc65e2460dca3a264591894b8b669936f11c1d9c8f:1)
+	at android.app.Instrumentation.callApplicationOnCreate(Instrumentation.java:1381)
+	at org.robolectric.android.internal.RoboMonitoringInstrumentation.callApplicationOnCreate(RoboMonitoringInstrumentation.java:162)
+	at org.robolectric.android.internal.AndroidTestEnvironment.lambda$installAndCreateApplication$2(AndroidTestEnvironment.java:456)
+	at org.robolectric.util.PerfStatsCollector.measure(PerfStatsCollector.java:123)
+	at org.robolectric.android.internal.AndroidTestEnvironment.installAndCreateApplication(AndroidTestEnvironment.java:454)
+	at org.robolectric.android.internal.AndroidTestEnvironment.lambda$createApplicationSupplier$0(AndroidTestEnvironment.java:309)
+	at org.robolectric.util.PerfStatsCollector.measure(PerfStatsCollector.java:71)
+	at org.robolectric.android.internal.AndroidTestEnvironment.lambda$createApplicationSupplier$1(AndroidTestEnvironment.java:306)
+	at com.google.common.base.Suppliers$NonSerializableMemoizingSupplier.get(Suppliers.java:194)
+	at org.robolectric.RuntimeEnvironment.lambda$getApplication$0(RuntimeEnvironment.java:76)
+	at org.robolectric.shadows.ShadowInstrumentation.runOnMainSyncNoIdle(ShadowInstrumentation.java:1189)
+	at org.robolectric.RuntimeEnvironment.getApplication(RuntimeEnvironment.java:76)
+	at apklayer.host.AppHost.run(AppHost.java:107)
+	at apklayer.host.Main.lambda$main$0(Main.java:41)
+	at org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:101)
+	at java.base/java.util.concurrent.FutureTask.run(Unknown Source)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)
+	at java.base/java.lang.Thread.run(Unknown Source)
+Caused by: java.lang.ClassNotFoundException: com.macapk.loader.MacApkUnsafe
+	at org.robolectric.internal.bytecode.SandboxClassLoader.getByteCode(SandboxClassLoader.java:239)
+	at org.robolectric.internal.bytecode.SandboxClassLoader.maybeInstrumentClass(SandboxClassLoader.java:213)
+	at org.robolectric.internal.bytecode.SandboxClassLoader.lambda$loadClass$0(SandboxClassLoader.java:191)
+	at org.robolectric.util.PerfStatsCollector.measure(PerfStatsCollector.java:71)
+	at org.robolectric.internal.bytecode.SandboxClassLoader.loadClass(SandboxClassLoader.java:191)
+	at java.base/java.lang.ClassLoader.loadClass(Unknown Source)
+	at g03.j(r8-map-id-16aaaa01c400da3fe8ffb3dc65e2460dca3a264591894b8b669936f11c1d9c8f:6)
+	at g03.i(r8-map-id-16aaaa01c400da3fe8ffb3dc65e2460dca3a264591894b8b669936f11c1d9c8f:6)
+	at gj1.g(r8-map-id-16aaaa01c400da3fe8ffb3dc65e2460dca3a264591894b8b669936f11c1d9c8f:55)
+	at gj1.a(r8-map-id-16aaaa01c400da3fe8ffb3dc65e2460dca3a264591894b8b669936f11c1d9c8f:296)
+	at org.fossify.commons.FossifyApp.setupAppLockManager(r8-map-id-16aaaa01c400da3fe8ffb3dc65e2460dca3a264591894b8b669936f11c1d9c8f:17)
+	at org.fossify.commons.FossifyApp.onCreate(r8-map-id-16aaaa01c400da3fe8ffb3dc65e2460dca3a264591894b8b669936f11c1d9c8f:7)
+	at org.fossify.filemanager.App.onCreate(r8-map-id-16aaaa01c400da3fe8ffb3dc65e2460dca3a264591894b8b669936f11c1d9c8f:1)
+	at android.app.Instrumentation.$$robo$$android_app_Instrumentation$callApplicationOnCreate(Instrumentation.java:1381)
+	at android.app.Instrumentation.callApplicationOnCreate(Instrumentation.java)
+	... 18 more

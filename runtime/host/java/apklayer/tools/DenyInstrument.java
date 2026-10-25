@@ -4,6 +4,8 @@ import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.commons.ClassRemapper;
+import org.objectweb.asm.commons.Remapper;
 
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -20,12 +22,41 @@ import java.util.jar.JarOutputStream;
  * lowering (<init> -> __constructor__) collides with Robolectric's own <init> renaming
  * (VerifyError). App classes don't need shadow dispatch — only the framework does.
  *
+ * Also relocates an app's bundled Guava into a private package: an older or shrunk copy would
+ * otherwise mix with the host's Guava 33 in the same class loader (NoSuchMethodError).
+ *
  * Usage: java -cp <asm>:... apklayer.tools.DenyInstrument <in.jar> <out.jar>
  */
 public final class DenyInstrument {
     private static final String ANNO = "Lorg/robolectric/annotation/internal/DoNotInstrument;";
 
+    /** Libraries the host itself runs (Guava 33) whose app copy is relocated. */
+    private static final String[][] LIBRARIES = {
+        {"com/google/common/", "com/google/thirdparty/"}};
+    // not BouncyCastle: it registers its providers by class-name strings, which relocation cannot follow
+    private static final java.util.List<String> RELOCATED = new java.util.ArrayList<>(); // active prefixes
+    private static final String RELOCATED_TO = "apklayer/relocated/";
+
+    /** Maps the bundled Guava's internal names into the private package. */
+    private static final Remapper RELOCATOR = new Remapper() {
+        @Override
+        public String map(String name) {
+            for (String prefix : RELOCATED) {
+                if (name.startsWith(prefix)) return RELOCATED_TO + name;
+            }
+            return name;
+        }
+    };
+
     public static void main(String[] args) throws Exception {
+        try (JarFile probe = new JarFile(args[0])) {
+            for (String[] library : LIBRARIES) {
+                boolean bundled = Collections.list(probe.entries()).stream()
+                        .anyMatch(en -> en.getName().startsWith(library[0]));
+                if (bundled) RELOCATED.addAll(java.util.Arrays.asList(library));
+            }
+        }
+        boolean relocate = !RELOCATED.isEmpty();
         try (JarFile in = new JarFile(args[0]);
              JarOutputStream out = new JarOutputStream(
                      new BufferedOutputStream(new FileOutputStream(args[1])))) {
@@ -38,21 +69,25 @@ public final class DenyInstrument {
                 }
                 ClassReader cr = new ClassReader(bytes);
                 ClassWriter cw = new ClassWriter(0);
-                cr.accept(new ClassVisitor(Opcodes.ASM9, cw) {
+                ClassVisitor target = new ClassVisitor(Opcodes.ASM9, cw) {
                     @Override
                     public void visit(int version, int access, String name, String signature,
                                       String superName, String[] interfaces) {
                         super.visit(version, access, name, signature, superName, interfaces);
                         super.visitAnnotation(ANNO, true).visitEnd();
                     }
-                }, 0);
-                JarEntry ne = new JarEntry(e.getName());
+                };
+                cr.accept(relocate ? new ClassRemapper(target, RELOCATOR) : target, 0);
+                String entryName = e.getName();
+                if (relocate) entryName = RELOCATOR.map(entryName.substring(0, entryName.length() - 6)) + ".class";
+                JarEntry ne = new JarEntry(entryName);
                 out.putNextEntry(ne);
                 out.write(cw.toByteArray());
                 out.closeEntry();
                 count++;
             }
-            System.out.println("[apklayer] DoNotInstrument stamped on " + count + " classes");
+            System.out.println("[apklayer] DoNotInstrument stamped on " + count + " classes"
+                    + (relocate ? " (relocated " + RELOCATED + ")" : ""));
         }
     }
 }

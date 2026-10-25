@@ -33,7 +33,8 @@ public final class HostDefaults {
 
     public static final String SYNTHETIC_PREFIX = "macapk";
     public static final String REDIRECT_UNSAFE = "com/macapk/loader/MacApkUnsafe";
-    public static final String REDIRECT_EXIT = "com/macapk/loader/MacApkProcessExit";
+    // apklayer runs one app per JVM: System.exit really exits (no ProcessExit redirect, apklayer patch)
+    public static final String REDIRECT_EXIT = null;
     public static final String LOG_TAG = "macapk-dex";
     public static final String PARSED_MARKER = "true";
     public static final String LIBRARY = "classloader";

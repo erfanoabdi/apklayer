@@ -1,0 +1,29 @@
+deps: /Users/erfanabdi/.cache/apklayer/deps — 37 already present, 0 copied locally, 0 resolved via maven
+Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/apklayer/host/AppHost.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /Users/erfanabdi/GitHub/apklayer/runtime/dex2jvm/com.macapk.dex/ApiIndexLoader.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+[macapk-dex] 5181 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/org.fossify.calendar_23-classes.jar in 694 ms
+[apklayer] DoNotInstrument stamped on 5181 classes
+java.lang.IllegalStateException: WorkManager is not initialized properly.  You have explicitly disabled WorkManagerInitializer in your manifest, have not manually called WorkManager#initialize at this point, and your Application does not implement Configuration.Provider.
+	at co3.a(r8-map-id-87f4f307ee5751550f93cee6ebedea5a770f5da6e7201f780ce0cdce8821c569:29)
+	at org.fossify.calendar.App.onCreate(r8-map-id-87f4f307ee5751550f93cee6ebedea5a770f5da6e7201f780ce0cdce8821c569:22)
+	at android.app.Instrumentation.callApplicationOnCreate(Instrumentation.java:1381)
+	at org.robolectric.android.internal.RoboMonitoringInstrumentation.callApplicationOnCreate(RoboMonitoringInstrumentation.java:162)
+	at org.robolectric.android.internal.AndroidTestEnvironment.lambda$installAndCreateApplication$2(AndroidTestEnvironment.java:456)
+	at org.robolectric.util.PerfStatsCollector.measure(PerfStatsCollector.java:123)
+	at org.robolectric.android.internal.AndroidTestEnvironment.installAndCreateApplication(AndroidTestEnvironment.java:454)
+	at org.robolectric.android.internal.AndroidTestEnvironment.lambda$createApplicationSupplier$0(AndroidTestEnvironment.java:309)
+	at org.robolectric.util.PerfStatsCollector.measure(PerfStatsCollector.java:71)
+	at org.robolectric.android.internal.AndroidTestEnvironment.lambda$createApplicationSupplier$1(AndroidTestEnvironment.java:306)
+	at com.google.common.base.Suppliers$NonSerializableMemoizingSupplier.get(Suppliers.java:194)
+	at org.robolectric.RuntimeEnvironment.lambda$getApplication$0(RuntimeEnvironment.java:76)
+	at org.robolectric.shadows.ShadowInstrumentation.runOnMainSyncNoIdle(ShadowInstrumentation.java:1189)
+	at org.robolectric.RuntimeEnvironment.getApplication(RuntimeEnvironment.java:76)
+	at apklayer.host.AppHost.run(AppHost.java:107)
+	at apklayer.host.Main.lambda$main$0(Main.java:41)
+	at org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:101)
+	at java.base/java.util.concurrent.FutureTask.run(Unknown Source)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)
+	at java.base/java.lang.Thread.run(Unknown Source)

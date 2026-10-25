@@ -1,0 +1,29 @@
+deps: /Users/erfanabdi/.cache/apklayer/deps — 37 already present, 0 copied locally, 0 resolved via maven
+Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/apklayer/host/AppHost.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /Users/erfanabdi/GitHub/apklayer/runtime/dex2jvm/com.macapk.dex/ApiIndexLoader.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+[macapk-dex] 10956 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/ws.xsoh.etar_57-classes.jar in 868 ms
+[apklayer] DoNotInstrument stamped on 10956 classes
+[apklayer] no apklayer-shell: headless
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by j$.sun.misc.DesugarUnsafe
+WARNING: Please consider reporting this to the maintainers of class j$.sun.misc.DesugarUnsafe
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+Invalid ID 0x00000000.
+[apklayer] started com.android.calendar.AllInOneActivity depth=1
+[apklayer] cannot start Intent { act=android.settings.REQUEST_SCHEDULE_EXACT_ALARM xflg=0x4 }: java.lang.NullPointerException: Cannot read field "activityInfo" because the return value of "android.content.pm.PackageManager.resolveActivity(android.content.Intent, int)" is null
+[apklayer] cannot start Intent { act=android.content.pm.action.REQUEST_PERMISSIONS xflg=0x4 pkg=org.robolectric.permissioncontroller (has extras) }: java.lang.NullPointerException: Cannot read field "activityInfo" because the return value of "android.content.pm.PackageManager.resolveActivity(android.content.Intent, int)" is null
+[apklayer] script: tap:100,80
+[apklayer] tap injected at 100,80
+[apklayer] script: tap:100,129
+[apklayer] tap injected at 100,129
+[apklayer] script: tap:first
+[apklayer] tap injected at 240,432
+[apklayer] snapshot -> /Users/erfanabdi/GitHub/apklayer/build/check/ws.xsoh.etar_57-5000ms.png (frame 69)
+[apklayer] snapshot -> /Users/erfanabdi/GitHub/apklayer/build/check/ws.xsoh.etar_57-5500ms.png (frame 70)
+[apklayer] script: back
+[apklayer] snapshot -> /Users/erfanabdi/GitHub/apklayer/build/check/ws.xsoh.etar_57-6700ms.png (frame 110)
+[apklayer] script: back
+[apklayer] finished com.android.calendar.AllInOneActivity depth=0
+[apklayer] exit: frames=110 depth=0

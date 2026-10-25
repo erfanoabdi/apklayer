@@ -149,3 +149,15 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
   and must be ordered by window type; the window root has no input focus unless the host sets it.
 - Frame size drives the shell buffers (`ShellClient.present(px, w, h)`); a shm file is never
   truncated/reused across resizes (the compositor may still read it).
+
+## P2 done (2026-10-26) — what to remember
+- Shell protocol additions (all documented in bridge/shell/shell.h): KEY 105, SCROLL 106, CONFIGURE 107,
+  STATE 108 (active/minimized), CLIPBOARD 109 / CLIPBOARD_SET 5, IME 110 / TEXT_INPUT 6, TOUCH 111;
+  INPUT types 3 = hover, 4 = right click. Host event tags (HostInput): 12 key, 13 wheel, 14 configure,
+  15 state, 16 touch (0..4 are the old pointer types: tags must never collide).
+- Orientation: the host reshapes the window from `getRequestedOrientation()` (followOrientation).
+- Verification: `tests/p2-host.sh [group]`, `tests/vm/e2e.sh [group]`; script steps in ScriptRunner
+  (tap, key, keydown/keyup, wheel, configure, state, touch, hover, rclick, ime, clipin, clipcopy, orient).
+- P3.1: `scripts/fetch-corpus.sh [tier]` pins F-Droid APKs in tests/corpus/corpus.lock; cache in
+  ~/.cache/apklayer/corpus. The user said: do not chase individual failing corpus apps; fix only shared,
+  framework-level causes.
