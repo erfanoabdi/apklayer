@@ -86,6 +86,7 @@ public final class AppHost implements Runnable {
     private Handler main;
     private boolean pausedByFocus, stoppedByMinimize; // lifecycle driven by the window state
     private int logicalW, logicalH, logicalScale = 100; // current window size in dp and scale %
+    private boolean imeEnabled;                          // text input enabled in the shell for the focused field
     private int lastOrientation = -2;                    // top activity's requested orientation last applied
     private String lastClipboard = ""; // last text exchanged with the shell, to avoid echo loops
     private ShellClient shell;
@@ -151,6 +152,10 @@ public final class AppHost implements Runnable {
         scriptRunner = new ScriptRunner(input, java.util.Map.of(
                 "clipin", this::hostClipboardIn, // the system selection changed
                 "clipcopy", this::hostClipboardCopy, // the app copies text itself
+                "ime", arg -> { // ime:<commit>|<preedit>: as the compositor's input method would
+                    String[] parts = arg.split("\\|", -1);
+                    hostIme(0, 0, parts[0], parts.length > 1 ? parts[1] : "");
+                },
                 "orient", o -> { // orient:<ActivityInfo.SCREEN_ORIENTATION_* value>
                     Activity top = stack.peek().get();
                     top.setRequestedOrientation(Integer.parseInt(o));
@@ -350,6 +355,7 @@ public final class AppHost implements Runnable {
                     break;
 
                 for (int[] ev; shell != null && (ev = shell.poll()) != null; ) input.onHostEvent(ev);
+                for (Object[] ime; shell != null && (ime = shell.pollIme()) != null; ) hostIme((int) ime[0], (int) ime[1], (String) ime[2], (String) ime[3]);
                 for (String clip; shell != null && (clip = shell.pollClipboard()) != null; ) hostClipboardIn(clip);
                 while (!script.isEmpty() && script.firstKey() <= elapsed) scriptRunner.runStep(script.pollFirstEntry().getValue());
                 while (!snaps.isEmpty() && snaps.firstKey() <= elapsed) {
@@ -387,6 +393,7 @@ public final class AppHost implements Runnable {
                 }
                 followNavigation();
                 followOrientation();
+                followTextInput();
             }
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -437,6 +444,36 @@ public final class AppHost implements Runnable {
             System.out.println("[apklayer] orientation " + (landscape ? "landscape" : "portrait") + " requested");
             hostResize(logicalH, logicalW, logicalScale);
         }
+    }
+
+    /** Tells the shell when a text field gets or loses focus, so the IME turns on and off. */
+    private void followTextInput() {
+        if (shell == null) return;
+        boolean editor = HostWindows.focusedEditor() != null;
+        if (editor != imeEnabled) {
+            imeEnabled = editor;
+            shell.sendTextInput(editor);
+            if (Boolean.getBoolean("apklayer.debugkeys")) System.out.println("[apklayer] text input " + (editor ? "on" : "off"));
+        }
+    }
+
+    /**
+     * IME event (zwp_text_input_v3 done): delete surrounding text, commit, then the new preedit,
+     * through the focused field's InputConnection (PLAN P2.6).
+     */
+    private void hostIme(int before, int after, String commit, String preedit) {
+        View f = HostWindows.focusedEditor();
+        if (f == null) return;
+        android.view.inputmethod.InputConnection ic = f.onCreateInputConnection(new android.view.inputmethod.EditorInfo());
+        if (ic == null) return;
+        ic.beginBatchEdit();
+        if (before > 0 || after > 0) ic.deleteSurroundingText(before, after);
+        if (!commit.isEmpty()) ic.commitText(commit, 1);
+        if (!preedit.isEmpty()) ic.setComposingText(preedit, 1);
+        else if (commit.isEmpty()) ic.setComposingText("", 1); // preedit cancelled
+        ic.endBatchEdit();
+        if (Boolean.getBoolean("apklayer.debugkeys") && f instanceof android.widget.TextView tv)
+            System.out.println("[apklayer] ime applied, field text: " + tv.getText());
     }
 
     private void followNavigation() {

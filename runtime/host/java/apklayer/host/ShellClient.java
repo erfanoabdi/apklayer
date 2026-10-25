@@ -22,11 +22,12 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 final class ShellClient {
     private static final int HELLO = 1, WINDOW_CREATE = 2, FRAME = 3;
     private static final int INPUT = 101, CLOSE = 103, RELEASE = 104, KEY = 105, SCROLL = 106,
-            CONFIGURE = 107, STATE = 108, CLIPBOARD = 109, CLIPBOARD_SET = 5;
+            CONFIGURE = 107, STATE = 108, CLIPBOARD = 109, CLIPBOARD_SET = 5, TEXT_INPUT = 6, IME = 110;
     private static final int WINDOW_ID = 1, NBUF = 2;
 
     private final SocketChannel channel;
     private final ConcurrentLinkedQueue<int[]> input = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<Object[]> imeIn = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<String> clipboardIn = new ConcurrentLinkedQueue<>();
     private final boolean[] busy = new boolean[NBUF];
     private volatile boolean closed;
@@ -144,6 +145,20 @@ final class ShellClient {
         }
     }
 
+    /** IME event {delete_before, delete_after, commit, preedit}, or null. */
+    Object[] pollIme() {
+        return imeIn.poll();
+    }
+
+    /** A text field gained or lost focus: enable or disable the compositor's input method. */
+    void sendTextInput(boolean enabled) {
+        try {
+            send(TEXT_INPUT, buf(8).putInt(WINDOW_ID).putInt(enabled ? 1 : 0));
+        } catch (IOException e) {
+            System.out.println("[apklayer] text input send failed: " + e);
+        }
+    }
+
     boolean closed() {
         return closed;
     }
@@ -199,6 +214,14 @@ final class ShellClient {
                 } else if (type == CONFIGURE) {
                     // {14, w, h, scale*100}
                     input.add(new int[] {14, body.getInt(4), body.getInt(8), body.getInt(12)});
+                } else if (type == IME) {
+                    // {id, delete_before, delete_after} utf8 commit \0 utf8 preedit
+                    byte[] raw = body.array();
+                    int split = 12;
+                    while (split < len && raw[split] != 0) split++;
+                    imeIn.add(new Object[] {body.getInt(4), body.getInt(8),
+                            new String(raw, 12, split - 12, StandardCharsets.UTF_8),
+                            split + 1 <= len ? new String(raw, split + 1, len - split - 1, StandardCharsets.UTF_8) : ""});
                 } else if (type == CLIPBOARD) {
                     clipboardIn.add(new String(body.array(), 0, len, StandardCharsets.UTF_8));
                 } else if (type == STATE) {

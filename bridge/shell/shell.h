@@ -14,6 +14,7 @@
  *                  2 WINDOW_CREATE  {i32 id, i32 w, i32 h} utf8 "shm-path\0title"
  *                  3 FRAME          {i32 id, i32 buf, i32 x, i32 y, i32 w, i32 h}  (damage rect)
  *                  4 WINDOW_DESTROY {i32 id}
+ *                  6 TEXT_INPUT     {i32 id, i32 enabled}: a text field gained/lost focus (IME on/off)
  *                  5 CLIPBOARD_SET  utf8 text: the app copied something; the shell owns the selection
  *   shell -> app 101 INPUT          {i32 id, i32 type, i32 a, i32 b}
  *                    type 0/1/2 = MotionEvent DOWN/UP/MOVE at (a, b); 3 = hover move, 4 = right click (long press); 100 = key (evdev a, pressed b)
@@ -23,6 +24,7 @@
  *                                    i32 unicode (UTF-32), i32 android meta}  (xkb-translated, P2)
  *                106 SCROLL         {i32 id, i32 x, i32 y, i32 vscroll*1000, i32 hscroll*1000}
  *                                    (x,y in buffer pixels; scroll in notches, +vscroll = up)
+ *                110 IME            {i32 id, i32 delete_before, i32 delete_after} utf8 commit "\0" utf8 preedit
  *                109 CLIPBOARD      utf8 text: the system selection changed (text only, < 60 KB)
  *                108 STATE          {i32 id, i32 flags}  bit0 = window active (focused), bit1 = minimized
  *                                    (apps pause on !active, stop on minimized, resume on active)
@@ -54,7 +56,8 @@
 #include "decor.h"
 enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
        MSG_INPUT = 101, MSG_CLOSE = 103, MSG_RELEASE = 104,
-       MSG_KEY = 105, MSG_SCROLL = 106, MSG_CONFIGURE = 107, MSG_STATE = 108, MSG_CLIPBOARD = 109 };
+       MSG_KEY = 105, MSG_SCROLL = 106, MSG_CONFIGURE = 107, MSG_STATE = 108, MSG_CLIPBOARD = 109, MSG_IME = 110 };
+#define MSG_TEXT_INPUT 6
 /* app -> shell uses type 5 for MSG_CLIPBOARD_SET (text); shell -> app 109 pushes the selection */
 #define MSG_CLIPBOARD_SET 5
 enum { EV_DOWN = 0, EV_UP = 1, EV_MOVE = 2, EV_HOVER = 3, EV_SECONDARY = 4, EV_KEY = 100 };
@@ -90,6 +93,7 @@ struct window {
 
 /* ---- state shared between the modules (defined in main.c) ---- */
 extern struct wl_display *display;
+extern struct zwp_text_input_manager_v3 *text_mgr;  /* textinput.c */
 extern struct wl_data_device_manager *data_mgr;  /* clipboard.c */
 extern uint32_t last_input_serial;  /* clipboard.c: serial of the last key/button, for set_selection */
 extern struct wl_compositor *compositor;
@@ -111,6 +115,7 @@ extern long long repeat_next_ms;
 /* ---- functions shared between the modules ---- */
 void send_state(struct window *w);  /* window.c */
 void send_bytes(struct client *c, uint32_t type, const char *data, size_t len);  /* client.c */
+void text_input_enable(struct window *w, int enable);  /* textinput.c */
 void clipboard_init(void);  /* clipboard.c */
 void clipboard_push(struct window *w);  /* clipboard.c */
 void clipboard_set(const char *text, size_t len);  /* clipboard.c */

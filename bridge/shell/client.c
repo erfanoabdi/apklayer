@@ -68,6 +68,11 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         window_create(c, v[0], v[1], v[2], text, title);
         break;
     }
+    case MSG_TEXT_INPUT: {
+        struct window *w = len >= 8 ? window_find(c, v[0]) : NULL;
+        if (w) text_input_enable(w, v[1]);
+        break;
+    }
     case MSG_CLIPBOARD_SET:
         clipboard_set((const char *)p, len);
         break;

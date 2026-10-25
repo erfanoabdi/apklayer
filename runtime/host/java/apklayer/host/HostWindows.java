@@ -267,4 +267,13 @@ final class HostWindows {
         }
         if (Boolean.getBoolean("apklayer.debugwheel")) System.out.println("[apklayer] right click at " + x + "," + y + ": no long-clickable view");
     }
+
+    /** The focused view of the topmost window if it takes text input, else null. */
+    static View focusedEditor() {
+        Object wmg = android.view.WindowManagerGlobal.getInstance();
+        List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
+        View root = topWindow(views, -1, -1);
+        View f = root == null ? null : root.findFocus();
+        return f != null && f.onCheckIsTextEditor() ? f : null;
+    }
 }

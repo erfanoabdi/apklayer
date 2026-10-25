@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # P2 host-level check (Mac or Linux, headless): drives the shell-event paths of AppHost with the
 # same int[] events ShellClient produces: key (Back, typing), wheel, configure (resize, HiDPI).
-# Exit 0 = all pass. Usage: tests/p2-host.sh [group...]   groups: back type resize hidpi wheel dialog dpad lifecycle clipboard orient
+# Exit 0 = all pass. Usage: tests/p2-host.sh [group...]   groups: back type resize hidpi wheel dialog dpad lifecycle clipboard orient ime
 # (no argument = all; run only the groups for the code you changed)
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -90,6 +90,12 @@ if want orient; then
 log=$("$ROOT/scripts/check.sh" "$APK" "2000:orient:0+4000:orient:1" "1500,3000,5500" 6000 2>&1)
 check "landscape request -> 800x480 window" '[ "$(size "$ROOT/build/check/uibench-3000ms.png")" = 800x480 ]'
 check "portrait request -> 480x800 window" '[ "$(size "$ROOT/build/check/uibench-5500ms.png")" = 480x800 ]'
+fi
+
+if want ime; then
+# 12. IME: preedit then commit (as zwp_text_input_v3 would deliver) land in the focused EditText
+log=$("$ROOT/scripts/check.sh" "$APK" "2000:tap:100,374+3500:tap:100,80+5000:tap:200,150+6000:ime:|ni+6300:ime:你好|" "7000" 7500 "-Dapklayer.debugkeys=true" 2>&1)
+check "IME composing + commit text reaches the focused field" 'grep -q "ime applied, field text: .*你好" <<<"$log"'
 fi
 
 exit $fail
