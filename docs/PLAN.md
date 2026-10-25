@@ -285,7 +285,7 @@ double-click `Markor.apk` → it opens and is usable on both.
 1. ✅ Add `LICENSE` (AGPL-3.0-or-later) (D5).
 2. ✅ Restructure directories (P1.1). Make the existing script work with the new paths and verify
    uibench.
-3. Write `deps/deps.lock` for the current `~/rob` contents (P1.2).
+3. ✅ Write `deps/deps.lock` for the current `~/rob` contents (P1.2).
 4. Fetch SDK 36 android-all + the pinned Robolectric once, then switch uibench to SDK 36 (P1.4).
 5. Vendor the Simulator and write `apklayer.host.Main`, porting RunUiBench's stack, window and
    input logic (P1.5).
