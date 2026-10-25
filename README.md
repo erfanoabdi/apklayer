@@ -17,9 +17,9 @@ app.apk ──dex2jvm──> JVM classes ┐
                                  ▼
   android-all 16 (unmodified AOSP) + Robolectric shadows + native HWUI/Skia
   driver: lifecycle, back stack, windows, input        (runtime/host/java)
-                                 │ /dev/shm/apklayer-fb (pixels ⇄ input)
+                                 │ Unix socket + shm buffers (frames ⇄ input)
                                  ▼
-  apklayer-presentd ──> Wayland window                  (bridge/shell/)
+  apklayer-shell (one per session) ──> Wayland windows  (bridge/shell/)
 ```
 
 ## Run (on the Parallels VM, from the Mac)
@@ -45,7 +45,7 @@ VM access: `ssh parallels@10.211.55.4` (password `1234`). Setup details are in m
 | `runtime/host/java/` | host (`apklayer.host`: Main, AppHost, ShellFrameListener, HostWindow), WlWindow, DenyInstrument |
 | `runtime/host/jvm.args` | JDK flags Robolectric needs |
 | `deps/deps.lock`, `scripts/fetch-deps.sh` | pinned dependencies (sha256), local-first fetch into `~/.cache/apklayer/deps` |
-| `bridge/` | meson: `apklayer-presentd`, `libapklayer-wl.so` (Wayland + input) |
+| `bridge/shell/` | meson: `apklayer-shell` (session Wayland shell: windows, zero-copy frames, input) |
 | `scripts/vm-run.sh` | sync → build → convert → run on the VM |
 | `tests/uibench/` | target APK |
 | `archive/` | superseded approaches (M1 seed, Mac.apk java_mac era, M0 plan), reference only |

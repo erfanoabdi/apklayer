@@ -292,7 +292,9 @@ double-click `Markor.apk` → it opens and is usable on both.
 5. ✅ Simulator-based host `apklayer.host.Main` (P1.5). The published `simulator-4.17.jar` is used
    unmodified (no vendored source needed); JUnit removed from the product. Port of RunUiBench's stack, window and
    input logic (P1.5).
-6. Shell protocol v1 over a Unix socket with damage-driven frames (P1.6).
+6. ✅ Shell protocol v1 over a Unix socket with damage-driven frames (P1.6): `apklayer-shell`
+   (multi-app, zero-copy shm pools, wl_buffer.release flow), pure-Java `ShellClient`; the JNI
+   presenter (libapklayer-wl, WlWindow) and presentd were removed.
 7. Top-level Meson build (P1.3).
 8. Data dirs, CLI, install cache, desktop entries (P1.7–P1.9).
 9. P1 exit test with uibench + two corpus T1 apps.

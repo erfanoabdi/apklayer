@@ -82,6 +82,11 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
   compdb, then Meson rebuilds for x86_64 + arm64.
 - User (2026-10-25): native linux-arm64 WILL be supported, but later. Rosetta/FEX are not a
   product path, only the dev-VM stopgap until PLAN P7.
+- P1.6 shell: `apklayer-shell` daemon (bridge/shell/shell.c) on `$XDG_RUNTIME_DIR/apklayer/shell.sock`;
+  vm-run (re)starts it detached, log /tmp/apklayer-shell.log. App side = pure Java ShellClient.
+  Rosetta flake: Robolectric TempDirectory cleanup at JVM exit sometimes SIGSEGVs in HotSpot
+  (LinkResolver); harmless, gone with native arm64 (P7). The VM is ~2x slower than the Mac, so
+  scripted snapshots there need ~1.5 s more after a launch.
 - `pkill -f <pattern>` over ssh can kill the ssh shell itself; use `pkill -x` or a `[x]yz` pattern.
 
 ## Reference projects on this machine

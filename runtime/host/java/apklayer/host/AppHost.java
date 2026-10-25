@@ -93,15 +93,23 @@ public final class AppHost implements Runnable {
         main = new Handler(Looper.getMainLooper());
         uiAutomation = InstrumentationRegistry.getInstrumentation().getUiAutomation();
 
-        HostWindow window = HostWindow.get(width, height);
-        if (window == null) System.out.println("[apklayer] no host window: headless");
-        ShellFrameListener frames = new ShellFrameListener(window);
+        ShellClient shell = ShellClient.connect(app.getPackageName());
+        if (shell == null) {
+            System.out.println("[apklayer] no apklayer-shell: headless");
+        } else {
+            try {
+                shell.createWindow(width, height, String.valueOf(app.getApplicationInfo().loadLabel(app.getPackageManager())));
+            } catch (java.io.IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        ShellFrameListener frames = new ShellFrameListener(shell);
         ScreenUpdateHandler.create(frames).requestStartUi();
 
         launch(launcherIntent(app));
         // Like Simulator.postMotionEvent: an off-screen move so the first frame is drawn.
         inject(MotionEvent.obtain(0, SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE, width, height, 0));
-        loop(window, frames);
+        loop(shell, frames);
     }
 
     /** Robolectric simulator AppLoader: application state straight from the APK. */
@@ -130,7 +138,7 @@ public final class AppHost implements Runnable {
     }
 
     /** Simulator.loop(), plus host input, navigation and the verification hooks. */
-    private void loop(HostWindow window, ShellFrameListener frames) {
+    private void loop(ShellClient shell, ShellFrameListener frames) {
         ShadowPausedLooper looper = Shadow.extract(Looper.myLooper());
         looper.idle();
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
@@ -148,18 +156,17 @@ public final class AppHost implements Runnable {
         for (String ms : System.getProperty("apklayer.snapms", "").split(",")) {
             if (!ms.isEmpty()) snaps.put(Long.parseLong(ms), ms);
         }
-        long runMs = Long.getLong("apklayer.runms", window == null ? 3000 : Long.MAX_VALUE);
+        long runMs = Long.getLong("apklayer.runms", shell == null ? 3000 : Long.MAX_VALUE);
         String snapPrefix = System.getProperty("apklayer.snapshot", "/tmp/apklayer-frame");
         long start = System.nanoTime();
-        int[] ev = new int[4];
 
         try {
             while (!stack.isEmpty()) {
                 long now = System.nanoTime();
                 long elapsed = (now - start) / 1_000_000;
-                if (elapsed >= runMs || (window != null && window.shouldClose())) break;
+                if (elapsed >= runMs || (shell != null && shell.closed())) break;
 
-                while (window != null && window.nextEvent(ev)) onHostEvent(ev);
+                for (int[] ev; shell != null && (ev = shell.poll()) != null; ) onHostEvent(ev);
                 while (!script.isEmpty() && script.firstKey() <= elapsed) runStep(script.pollFirstEntry().getValue());
                 while (!snaps.isEmpty() && snaps.firstKey() <= elapsed) {
                     frames.snapshot(snapPrefix + "-" + snaps.pollFirstEntry().getValue() + "ms.png");
@@ -258,7 +265,7 @@ public final class AppHost implements Runnable {
         }
     }
 
-    /** Host input {type, a, b, 0} (bridge/shell/present.c): pointer -> MotionEvent, Esc/Backspace -> Back. */
+    /** Shell input {type, a, b, 0} (bridge/shell/shell.c): pointer -> MotionEvent, Esc/Backspace -> Back. */
     private void onHostEvent(int[] ev) {
         long now = SystemClock.uptimeMillis();
         if (ev[0] <= 2) {

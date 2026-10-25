@@ -6,8 +6,9 @@
 #   android-all framework it runs on, and launches the host.
 # Graphics are always NATIVE (real HWUI/Skia via Robolectric's native runtime). Its prebuilts
 #   exist for linux-x86_64 only, so on the arm64 VM the app JVM is x86_64 under Rosetta (C2 and
-#   G1 crash there: C1 + Serial GC) and frames cross a shared framebuffer to the native
-#   apklayer-presentd. This Rosetta path is a development stopgap until PLAN P7 (native arm64).
+#   G1 crash there: C1 + Serial GC); the native arm64 apklayer-shell owns the Wayland side, so
+#   no x86_64 native code is needed. This Rosetta path is a development stopgap until PLAN P7.
+#   The shell is (re)started as a session daemon; its log is /tmp/apklayer-shell.log.
 # APKLAYER_JOPTS: extra JVM flags for verification, e.g.
 #   -Dapklayer.script=2000:tap:100,80+4000:back -Dapklayer.snapms=1500,3500 -Dapklayer.runms=6000
 set -e
@@ -42,16 +43,16 @@ java -XX:UseSVE=0 -cp "\$B/d2j:\$R/android-all/*" com.macapk.dex.Main \$A /tmp/$
 java -XX:UseSVE=0 -cp "\$R/libs/*:\$B/host" apklayer.tools.DenyInstrument /tmp/$NAME-classes.jar /tmp/$NAME-dni.jar
 
 export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0
-JAVA="\$HOME/jdk21-x86/bin/java -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Dapklayer.fb=/dev/shm/apklayer-fb"
-rm -f /dev/shm/apklayer-fb
-\$S/bridge/shell/b/apklayer-presentd /dev/shm/apklayer-fb &
+JAVA="\$HOME/jdk21-x86/bin/java -XX:TieredStopAtLevel=1 -XX:+UseSerialGC"
+pkill -x apklayer-shell || true; sleep 0.3
+setsid nohup \$S/bridge/shell/b/apklayer-shell > /tmp/apklayer-shell.log 2>&1 < /dev/null &
+for i in \$(seq 1 50); do [ -S \$XDG_RUNTIME_DIR/apklayer/shell.sock ] && break; sleep 0.1; done
 cd /tmp
 \$JAVA @\$S/runtime/host/jvm.args $APKLAYER_JOPTS \
   -Drobolectric.offline=true \
   -Drobolectric.dependency.dir=\$R/android-all \
-  -Dapklayer.wl=\$S/bridge/shell/b/libapklayer-wl.so \
-  -Dapklayer.hostcp=\$B/host \
   -cp "\$R/libs/*:\$R/android-stub.jar:\$B/host:/tmp/$NAME-dni.jar" \
   apklayer.host.Main \$A /tmp/$NAME-dni.jar \
   2>&1 | grep --line-buffered -vE '^OpenJDK'
+sed 's/^/  /' /tmp/apklayer-shell.log | tail -6
 EOF

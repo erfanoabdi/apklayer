@@ -8,15 +8,15 @@ import org.robolectric.simulator.FrameListener;
 
 /**
  * Receives the composed screen from Robolectric's ScreenUpdateHandler (only when something
- * drew) and hands it to the host presenter. Keeps the last frame for debug snapshots.
+ * drew) and hands it to apklayer-shell. Keeps the last frame for debug snapshots.
  */
 final class ShellFrameListener implements FrameListener {
-    private final HostWindow window;
+    private final ShellClient shell;
     private int[] pixels = new int[0];
     private int width, height, frames;
 
-    ShellFrameListener(HostWindow window) {
-        this.window = window;
+    ShellFrameListener(ShellClient shell) {
+        this.shell = shell;
     }
 
     @Override
@@ -27,9 +27,9 @@ final class ShellFrameListener implements FrameListener {
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
         bitmap.recycle();
         frames++;
-        if (window != null) {
+        if (shell != null) {
             try {
-                window.present(pixels, width, height);
+                shell.present(pixels);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
