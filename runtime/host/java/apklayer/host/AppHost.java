@@ -10,6 +10,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ActivityInfo;
 import android.content.pm.ResolveInfo;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
@@ -222,6 +223,7 @@ public final class AppHost implements Runnable {
                 .build();
         sandbox.getTestEnvironment().setUpApplicationState("apklayer", configuration, manifest);
         persistDataDirs();
+        provideExternalStorage();
     }
 
     /**
@@ -231,6 +233,20 @@ public final class AppHost implements Runnable {
      * the persistent per-app tree ({@code apklayer.data}); TempDirectory.createIfNotExists keeps
      * an existing entry, and the exit cleanup does not follow links.
      */
+    /**
+     * Android always has a primary external volume; the sandbox's current-user environment has none
+     * (apps index getExternalDirs()[0], e.g. Environment.isExternalStorageManager()).
+     */
+    private static void provideExternalStorage() {
+        android.os.Environment.UserEnvironment userEnv = new android.os.Environment.UserEnvironment(0) {
+            @Override
+            public java.io.File[] getExternalDirs() {
+                return new java.io.File[] {android.os.Environment.getExternalStorageDirectory()};
+            }
+        };
+        org.robolectric.util.ReflectionHelpers.setStaticField(android.os.Environment.class, "sCurrentUser", userEnv);
+    }
+
     private static void persistDataDirs() {
         String root = System.getProperty("apklayer.data");
         String pkg = System.getProperty("apklayer.package");
@@ -405,10 +421,13 @@ public final class AppHost implements Runnable {
     private void launch(Intent intent) {
         Class<? extends Activity> cls;
         try {
-            cls = Class.forName(intent.getComponent() != null ? intent.getComponent().getClassName()
-                    : RuntimeEnvironment.getApplication().getPackageManager()
-                            .resolveActivity(intent, 0).activityInfo.name).asSubclass(Activity.class);
-        } catch (ClassNotFoundException | NullPointerException e) {
+            ActivityInfo info = intent.getComponent() != null
+                    ? RuntimeEnvironment.getApplication().getPackageManager().getActivityInfo(intent.getComponent(), 0)
+                    : RuntimeEnvironment.getApplication().getPackageManager().resolveActivity(intent, 0).activityInfo;
+            // an <activity-alias> names its real class in targetActivity
+            cls = Class.forName(info.targetActivity != null ? info.targetActivity : info.name)
+                    .asSubclass(Activity.class);
+        } catch (ClassNotFoundException | NullPointerException | android.content.pm.PackageManager.NameNotFoundException e) {
             // Android would crash the app here; on the desktop the app stays on its current screen.
             System.out.println("[apklayer] cannot start " + intent + ": " + e);
             return;

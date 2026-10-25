@@ -43,20 +43,20 @@ Not yet tried: multi-dex apps (ASTRO, Sensors Multitool, Spic) and apps with nat
 | uibench | 1 none | PASS | com.android.test.uibench.MainActivity (tap diff 0%) |
 | whatsapp | 3 arm64-v8a | FAIL | java.lang.NoClassDefFoundError: java/lang/RunnableEBaseShape3S0100000_I0_3 |
 | Barcode Scanner_v4.7.8_apkpure.com | 1 none | PASS | com.google.zxing.client.android.CaptureActivity (tap diff 66%) |
-| net.gsantner.markor_163 | 2 none | PASS | net.gsantner.markor.activity.MainActivity (tap diff 0%) |
-| org.fossify.calendar_23 | 1 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | java.lang.IllegalStateException: WorkManager is not initialized properly.  You have explicitly disabled WorkManagerInitializer in your manifest, have not manual |
-| org.fossify.clock_10 | 1 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | no frame (rc=0, likely hang/timeout) |
-| org.fossify.contacts_13 | 2 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | no frame (rc=0, likely hang/timeout) |
-| org.fossify.filemanager_14 | 1 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | java.lang.NoClassDefFoundError: com/macapk/loader/MacApkUnsafe |
-| org.fossify.gallery_29 | 1 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | no frame (rc=0, likely hang/timeout) |
-| org.fossify.messages_25 | 1 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | java.lang.NoClassDefFoundError: com/macapk/loader/MacApkUnsafe |
-| org.fossify.notes_13 | 1 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | no frame (rc=0, likely hang/timeout) |
-| ws.xsoh.etar_57 | 4 none | PASS | com.android.calendar.AllInOneActivity (tap diff 26%) |
-| me.zhanghai.android.files_40 | 2 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | java.lang.ExceptionInInitializerError |
+| com.amaze.filemanager_126 | 1 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | java.lang.IllegalAccessError: failed to access class org.bouncycastle.util.Strings$1 from class ch.qos.logback.core.util.Loader (org.bouncycastle.util.Strings$1 |
+| com.beemdevelopment.aegis_82 | 2 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | java.lang.IllegalAccessError: class com.bumptech.glide.load.engine.bitmap_recycle.LruArrayPool$KeyPool cannot access its abstract superclass org.bouncycastle.as |
 | com.ichi2.anki_22503300 | 3 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | no frame (rc=0, likely hang/timeout) |
 | de.dennisguse.opentracks_6766 | 5 none | FAIL | blank frame |
 | me.hackerchick.catima_1006 | 2 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | activity not started |
-| org.fdroid.fdroid_1023052 | 2 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | blank frame |
+| me.zhanghai.android.files_40 | 2 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | java.lang.ExceptionInInitializerError |
+| net.gsantner.markor_163 | 2 none | PASS | net.gsantner.markor.activity.MainActivity (tap diff 0%) |
 | net.osmand.plus_541003 | 5 arm64-v8a | FAIL | java.lang.UnsupportedOperationException: Tried to obtain display from a Context not associated with one. Only visual Contexts (such as Activity or one created w |
-| com.beemdevelopment.aegis_82 | 2 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | blank frame |
-| com.amaze.filemanager_126 | 1 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | java.lang.InternalError: cannot create instance of org.bouncycastle.jcajce.provider.digest.GOST3411$Mappings : java.lang.ClassCastException: class org.bouncycas |
+| org.fdroid.fdroid_1023052 | 2 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | blank frame |
+| ws.xsoh.etar_57 | 4 none | PASS | com.android.calendar.AllInOneActivity (tap diff 26%) |
+| org.fossify.notes_13 | 1 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | java.lang.RuntimeException: java.lang.NullPointerException: null cannot be cast to non-null type org.fossify.notes.adapters.NotesPagerAdapter |
+| org.fossify.clock_10 | 1 x86,armeabi-v7a,x86_64,arm64-v8a | PASS | org.fossify.clock.activities.SplashActivity (tap diff 0%) |
+| org.fossify.contacts_13 | 2 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | blank frame |
+| org.fossify.messages_25 | 1 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | no frame (rc=0, likely hang/timeout) |
+| org.fossify.calendar_23 | 1 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | java.lang.IllegalStateException: WorkManager is not initialized properly.  You have explicitly disabled WorkManagerInitializer in your manifest, have not manual |
+| org.fossify.gallery_29 | 1 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | blank frame |
+| org.fossify.filemanager_14 | 1 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | blank frame |

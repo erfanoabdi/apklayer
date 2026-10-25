@@ -306,8 +306,8 @@ Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacAp
 only showing the first 100 warnings, of 128 total; use -Xmaxwarns if you would like to see more
 Note: /Users/erfanabdi/GitHub/apklayer/runtime/dex2jvm/com.macapk.dex/ApiIndexLoader.java uses or overrides a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
-[macapk-dex] 14393 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/de.dennisguse.opentracks_6766-classes.jar in 956 ms
-[apklayer] DoNotInstrument stamped on 14393 classes (bundled Guava relocated)
+[macapk-dex] 14393 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/de.dennisguse.opentracks_6766-classes.jar in 961 ms
+[apklayer] DoNotInstrument stamped on 14393 classes (relocated [com/google/common/, com/google/thirdparty/])
 [apklayer] no apklayer-shell: headless
 [apklayer] started de.dennisguse.opentracks.introduction.IntroductionActivity depth=1
 [apklayer] script: tap:100,80

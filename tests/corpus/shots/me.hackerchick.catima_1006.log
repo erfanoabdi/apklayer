@@ -306,8 +306,8 @@ Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacAp
 only showing the first 100 warnings, of 128 total; use -Xmaxwarns if you would like to see more
 Note: /Users/erfanabdi/GitHub/apklayer/runtime/dex2jvm/com.macapk.dex/ApiIndexLoader.java uses or overrides a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
-[macapk-dex] 4295 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/me.hackerchick.catima_1006-classes.jar in 582 ms
-[apklayer] DoNotInstrument stamped on 4295 classes (bundled Guava relocated)
+[macapk-dex] 4295 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/me.hackerchick.catima_1006-classes.jar in 612 ms
+[apklayer] DoNotInstrument stamped on 4295 classes (relocated [com/google/common/, com/google/thirdparty/])
 [apklayer] no apklayer-shell: headless
 WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
 WARNING: sun.misc.Unsafe::objectFieldOffset has been called by kotlinx.coroutines.flow.StateFlowImpl

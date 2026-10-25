@@ -306,8 +306,8 @@ Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacAp
 only showing the first 100 warnings, of 128 total; use -Xmaxwarns if you would like to see more
 Note: /Users/erfanabdi/GitHub/apklayer/runtime/dex2jvm/com.macapk.dex/ApiIndexLoader.java uses or overrides a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
-[macapk-dex] 19701 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/org.fdroid.fdroid_1023052-classes.jar in 957 ms
-[apklayer] DoNotInstrument stamped on 19701 classes (bundled Guava relocated)
+[macapk-dex] 19701 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/org.fdroid.fdroid_1023052-classes.jar in 1047 ms
+[apklayer] DoNotInstrument stamped on 19701 classes (relocated [com/google/common/, com/google/thirdparty/])
 [apklayer] no apklayer-shell: headless
 [apklayer] started org.fdroid.fdroid.views.main.MainActivity depth=1
 [apklayer] cannot start Intent { act=android.content.pm.action.REQUEST_PERMISSIONS xflg=0x4 pkg=org.robolectric.permissioncontroller (has extras) }: java.lang.NullPointerException: Cannot read field "activityInfo" because the return value of "android.content.pm.PackageManager.resolveActivity(android.content.Intent, int)" is null

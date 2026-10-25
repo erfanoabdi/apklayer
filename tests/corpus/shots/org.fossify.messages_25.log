@@ -1,53 +1,320 @@
 deps: /Users/erfanabdi/.cache/apklayer/deps — 37 already present, 0 copied locally, 0 resolved via maven
-Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/apklayer/host/AppHost.java uses or overrides a deprecated API.
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:4: warning: Unsafe is internal proprietary API and may be removed in a future release
+import sun.misc.Unsafe;
+               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:86: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static int getInt(Unsafe u, java.lang.Object o, long off) {
+                             ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:89: warning: [removal] getInt(Object,long) in Unsafe has been deprecated and marked for removal
+            try { return u.getInt(o, off); }
+                          ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:92: warning: [removal] getInt(Object,long) in Unsafe has been deprecated and marked for removal
+        return u.getInt(o, off);
+                ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:95: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void putInt(Unsafe u, java.lang.Object o, long off, int a2) {
+                              ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:98: warning: [removal] putInt(Object,long,int) in Unsafe has been deprecated and marked for removal
+            try { u.putInt(o, off, a2); }
+                   ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:101: warning: [removal] putInt(Object,long,int) in Unsafe has been deprecated and marked for removal
+        u.putInt(o, off, a2);
+         ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:104: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static java.lang.Object getObject(Unsafe u, java.lang.Object o, long off) {
+                                             ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:107: warning: [removal] getObject(Object,long) in Unsafe has been deprecated and marked for removal
+            try { return u.getObject(o, off); }
+                          ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:110: warning: [removal] getObject(Object,long) in Unsafe has been deprecated and marked for removal
+        return u.getObject(o, off);
+                ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:113: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void putObject(Unsafe u, java.lang.Object o, long off, java.lang.Object a2) {
+                                 ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:116: warning: [removal] putObject(Object,long,Object) in Unsafe has been deprecated and marked for removal
+            try { u.putObject(o, off, a2); }
+                   ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:119: warning: [removal] putObject(Object,long,Object) in Unsafe has been deprecated and marked for removal
+        u.putObject(o, off, a2);
+         ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:122: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static boolean getBoolean(Unsafe u, java.lang.Object o, long off) {
+                                     ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:125: warning: [removal] getBoolean(Object,long) in Unsafe has been deprecated and marked for removal
+            try { return u.getBoolean(o, off); }
+                          ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:128: warning: [removal] getBoolean(Object,long) in Unsafe has been deprecated and marked for removal
+        return u.getBoolean(o, off);
+                ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:131: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void putBoolean(Unsafe u, java.lang.Object o, long off, boolean a2) {
+                                  ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:134: warning: [removal] putBoolean(Object,long,boolean) in Unsafe has been deprecated and marked for removal
+            try { u.putBoolean(o, off, a2); }
+                   ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:137: warning: [removal] putBoolean(Object,long,boolean) in Unsafe has been deprecated and marked for removal
+        u.putBoolean(o, off, a2);
+         ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:140: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static byte getByte(Unsafe u, java.lang.Object o, long off) {
+                               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:143: warning: [removal] getByte(Object,long) in Unsafe has been deprecated and marked for removal
+            try { return u.getByte(o, off); }
+                          ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:146: warning: [removal] getByte(Object,long) in Unsafe has been deprecated and marked for removal
+        return u.getByte(o, off);
+                ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:149: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void putByte(Unsafe u, java.lang.Object o, long off, byte a2) {
+                               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:152: warning: [removal] putByte(Object,long,byte) in Unsafe has been deprecated and marked for removal
+            try { u.putByte(o, off, a2); }
+                   ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:155: warning: [removal] putByte(Object,long,byte) in Unsafe has been deprecated and marked for removal
+        u.putByte(o, off, a2);
+         ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:158: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static short getShort(Unsafe u, java.lang.Object o, long off) {
+                                 ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:161: warning: [removal] getShort(Object,long) in Unsafe has been deprecated and marked for removal
+            try { return u.getShort(o, off); }
+                          ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:164: warning: [removal] getShort(Object,long) in Unsafe has been deprecated and marked for removal
+        return u.getShort(o, off);
+                ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:167: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void putShort(Unsafe u, java.lang.Object o, long off, short a2) {
+                                ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:170: warning: [removal] putShort(Object,long,short) in Unsafe has been deprecated and marked for removal
+            try { u.putShort(o, off, a2); }
+                   ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:173: warning: [removal] putShort(Object,long,short) in Unsafe has been deprecated and marked for removal
+        u.putShort(o, off, a2);
+         ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:176: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static char getChar(Unsafe u, java.lang.Object o, long off) {
+                               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:179: warning: [removal] getChar(Object,long) in Unsafe has been deprecated and marked for removal
+            try { return u.getChar(o, off); }
+                          ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:182: warning: [removal] getChar(Object,long) in Unsafe has been deprecated and marked for removal
+        return u.getChar(o, off);
+                ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:185: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void putChar(Unsafe u, java.lang.Object o, long off, char a2) {
+                               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:188: warning: [removal] putChar(Object,long,char) in Unsafe has been deprecated and marked for removal
+            try { u.putChar(o, off, a2); }
+                   ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:191: warning: [removal] putChar(Object,long,char) in Unsafe has been deprecated and marked for removal
+        u.putChar(o, off, a2);
+         ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:194: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static long getLong(Unsafe u, java.lang.Object o, long off) {
+                               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:197: warning: [removal] getLong(Object,long) in Unsafe has been deprecated and marked for removal
+            try { return u.getLong(o, off); }
+                          ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:200: warning: [removal] getLong(Object,long) in Unsafe has been deprecated and marked for removal
+        return u.getLong(o, off);
+                ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:203: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void putLong(Unsafe u, java.lang.Object o, long off, long a2) {
+                               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:206: warning: [removal] putLong(Object,long,long) in Unsafe has been deprecated and marked for removal
+            try { u.putLong(o, off, a2); }
+                   ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:209: warning: [removal] putLong(Object,long,long) in Unsafe has been deprecated and marked for removal
+        u.putLong(o, off, a2);
+         ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:212: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static float getFloat(Unsafe u, java.lang.Object o, long off) {
+                                 ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:215: warning: [removal] getFloat(Object,long) in Unsafe has been deprecated and marked for removal
+            try { return u.getFloat(o, off); }
+                          ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:218: warning: [removal] getFloat(Object,long) in Unsafe has been deprecated and marked for removal
+        return u.getFloat(o, off);
+                ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:221: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void putFloat(Unsafe u, java.lang.Object o, long off, float a2) {
+                                ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:224: warning: [removal] putFloat(Object,long,float) in Unsafe has been deprecated and marked for removal
+            try { u.putFloat(o, off, a2); }
+                   ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:227: warning: [removal] putFloat(Object,long,float) in Unsafe has been deprecated and marked for removal
+        u.putFloat(o, off, a2);
+         ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:230: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static double getDouble(Unsafe u, java.lang.Object o, long off) {
+                                   ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:233: warning: [removal] getDouble(Object,long) in Unsafe has been deprecated and marked for removal
+            try { return u.getDouble(o, off); }
+                          ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:236: warning: [removal] getDouble(Object,long) in Unsafe has been deprecated and marked for removal
+        return u.getDouble(o, off);
+                ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:239: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void putDouble(Unsafe u, java.lang.Object o, long off, double a2) {
+                                 ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:242: warning: [removal] putDouble(Object,long,double) in Unsafe has been deprecated and marked for removal
+            try { u.putDouble(o, off, a2); }
+                   ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:245: warning: [removal] putDouble(Object,long,double) in Unsafe has been deprecated and marked for removal
+        u.putDouble(o, off, a2);
+         ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:248: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static byte getByte(Unsafe u, long addr) {
+                               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:249: warning: [removal] getByte(long) in Unsafe has been deprecated and marked for removal
+        try { return u.getByte(addr); }
+                      ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:253: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void putByte(Unsafe u, long addr, byte a1) {
+                               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:254: warning: [removal] putByte(long,byte) in Unsafe has been deprecated and marked for removal
+        try { u.putByte(addr, a1); }
+               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:258: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static short getShort(Unsafe u, long addr) {
+                                 ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:259: warning: [removal] getShort(long) in Unsafe has been deprecated and marked for removal
+        try { return u.getShort(addr); }
+                      ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:263: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void putShort(Unsafe u, long addr, short a1) {
+                                ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:264: warning: [removal] putShort(long,short) in Unsafe has been deprecated and marked for removal
+        try { u.putShort(addr, a1); }
+               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:268: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static char getChar(Unsafe u, long addr) {
+                               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:269: warning: [removal] getChar(long) in Unsafe has been deprecated and marked for removal
+        try { return u.getChar(addr); }
+                      ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:273: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void putChar(Unsafe u, long addr, char a1) {
+                               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:274: warning: [removal] putChar(long,char) in Unsafe has been deprecated and marked for removal
+        try { u.putChar(addr, a1); }
+               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:278: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static int getInt(Unsafe u, long addr) {
+                             ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:279: warning: [removal] getInt(long) in Unsafe has been deprecated and marked for removal
+        try { return u.getInt(addr); }
+                      ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:283: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void putInt(Unsafe u, long addr, int a1) {
+                              ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:284: warning: [removal] putInt(long,int) in Unsafe has been deprecated and marked for removal
+        try { u.putInt(addr, a1); }
+               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:288: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static long getLong(Unsafe u, long addr) {
+                               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:289: warning: [removal] getLong(long) in Unsafe has been deprecated and marked for removal
+        try { return u.getLong(addr); }
+                      ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:293: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void putLong(Unsafe u, long addr, long a1) {
+                               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:294: warning: [removal] putLong(long,long) in Unsafe has been deprecated and marked for removal
+        try { u.putLong(addr, a1); }
+               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:298: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static float getFloat(Unsafe u, long addr) {
+                                 ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:299: warning: [removal] getFloat(long) in Unsafe has been deprecated and marked for removal
+        try { return u.getFloat(addr); }
+                      ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:303: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void putFloat(Unsafe u, long addr, float a1) {
+                                ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:304: warning: [removal] putFloat(long,float) in Unsafe has been deprecated and marked for removal
+        try { u.putFloat(addr, a1); }
+               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:308: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static double getDouble(Unsafe u, long addr) {
+                                   ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:309: warning: [removal] getDouble(long) in Unsafe has been deprecated and marked for removal
+        try { return u.getDouble(addr); }
+                      ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:313: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void putDouble(Unsafe u, long addr, double a1) {
+                                 ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:314: warning: [removal] putDouble(long,double) in Unsafe has been deprecated and marked for removal
+        try { u.putDouble(addr, a1); }
+               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:318: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static long getAddress(Unsafe u, long addr) {
+                                  ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:319: warning: [removal] getAddress(long) in Unsafe has been deprecated and marked for removal
+        try { return u.getAddress(addr); }
+                      ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:323: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void putAddress(Unsafe u, long addr, long a1) {
+                                  ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:324: warning: [removal] putAddress(long,long) in Unsafe has been deprecated and marked for removal
+        try { u.putAddress(addr, a1); }
+               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:328: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void setMemory(Unsafe u, java.lang.Object o, long off, long a2, byte a3) {
+                                 ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:331: warning: [removal] setMemory(Object,long,long,byte) in Unsafe has been deprecated and marked for removal
+            try { u.setMemory(o, off, a2, a3); }
+                   ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:334: warning: [removal] setMemory(Object,long,long,byte) in Unsafe has been deprecated and marked for removal
+        u.setMemory(o, off, a2, a3);
+         ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:337: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void setMemory(Unsafe u, long addr, long a1, byte a2) {
+                                 ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:338: warning: [removal] setMemory(long,long,byte) in Unsafe has been deprecated and marked for removal
+        try { u.setMemory(addr, a1, a2); }
+               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:342: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void copyMemory(Unsafe u, java.lang.Object o, long off, java.lang.Object a2, long a3, long a4) {
+                                  ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:345: warning: [removal] copyMemory(Object,long,Object,long,long) in Unsafe has been deprecated and marked for removal
+            try { u.copyMemory(o, off, a2, a3, a4); }
+                   ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:348: warning: [removal] copyMemory(Object,long,Object,long,long) in Unsafe has been deprecated and marked for removal
+        u.copyMemory(o, off, a2, a3, a4);
+         ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:351: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static void copyMemory(Unsafe u, long addr, long a1, long a2) {
+                                  ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:352: warning: [removal] copyMemory(long,long,long) in Unsafe has been deprecated and marked for removal
+        try { u.copyMemory(addr, a1, a2); }
+               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:356: warning: Unsafe is internal proprietary API and may be removed in a future release
+    public static boolean compareAndSwapObject(Unsafe u, java.lang.Object o, long off, java.lang.Object a2, java.lang.Object a3) {
+                                               ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:359: warning: [removal] compareAndSwapObject(Object,long,Object,Object) in Unsafe has been deprecated and marked for removal
+            try { return u.compareAndSwapObject(o, off, a2, a3); }
+                          ^
+/Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:362: warning: [removal] compareAndSwapObject(Object,long,Object,Object) in Unsafe has been deprecated and marked for removal
+        return u.compareAndSwapObject(o, off, a2, a3);
+                ^
+Note: Some input files use or override a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
+Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java has additional uses or overrides of a deprecated API that is marked for removal.
+100 warnings
+only showing the first 100 warnings, of 128 total; use -Xmaxwarns if you would like to see more
 Note: /Users/erfanabdi/GitHub/apklayer/runtime/dex2jvm/com.macapk.dex/ApiIndexLoader.java uses or overrides a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
-[macapk-dex] 5398 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/org.fossify.messages_25-classes.jar in 681 ms
+[macapk-dex] 5398 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/org.fossify.messages_25-classes.jar in 672 ms
 [apklayer] DoNotInstrument stamped on 5398 classes
 WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
 WARNING: sun.misc.Unsafe::objectFieldOffset has been called by e63
 WARNING: Please consider reporting this to the maintainers of class e63
 WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
-java.lang.NoClassDefFoundError: com/macapk/loader/MacApkUnsafe
-	at e63.i(r8-map-id-f1b0231353cdbb9ca23fdc07cc16ba761216d3413efaec2a17b71728ab204808:6)
-	at e63.h(r8-map-id-f1b0231353cdbb9ca23fdc07cc16ba761216d3413efaec2a17b71728ab204808:6)
-	at tl1.g(r8-map-id-f1b0231353cdbb9ca23fdc07cc16ba761216d3413efaec2a17b71728ab204808:55)
-	at tl1.a(r8-map-id-f1b0231353cdbb9ca23fdc07cc16ba761216d3413efaec2a17b71728ab204808:296)
-	at org.fossify.messages.App.a(r8-map-id-f1b0231353cdbb9ca23fdc07cc16ba761216d3413efaec2a17b71728ab204808:34)
-	at org.fossify.messages.App.onCreate(r8-map-id-f1b0231353cdbb9ca23fdc07cc16ba761216d3413efaec2a17b71728ab204808:1)
-	at android.app.Instrumentation.callApplicationOnCreate(Instrumentation.java:1381)
-	at org.robolectric.android.internal.RoboMonitoringInstrumentation.callApplicationOnCreate(RoboMonitoringInstrumentation.java:162)
-	at org.robolectric.android.internal.AndroidTestEnvironment.lambda$installAndCreateApplication$2(AndroidTestEnvironment.java:456)
-	at org.robolectric.util.PerfStatsCollector.measure(PerfStatsCollector.java:123)
-	at org.robolectric.android.internal.AndroidTestEnvironment.installAndCreateApplication(AndroidTestEnvironment.java:454)
-	at org.robolectric.android.internal.AndroidTestEnvironment.lambda$createApplicationSupplier$0(AndroidTestEnvironment.java:309)
-	at org.robolectric.util.PerfStatsCollector.measure(PerfStatsCollector.java:71)
-	at org.robolectric.android.internal.AndroidTestEnvironment.lambda$createApplicationSupplier$1(AndroidTestEnvironment.java:306)
-	at com.google.common.base.Suppliers$NonSerializableMemoizingSupplier.get(Suppliers.java:194)
-	at org.robolectric.RuntimeEnvironment.lambda$getApplication$0(RuntimeEnvironment.java:76)
-	at org.robolectric.shadows.ShadowInstrumentation.runOnMainSyncNoIdle(ShadowInstrumentation.java:1189)
-	at org.robolectric.RuntimeEnvironment.getApplication(RuntimeEnvironment.java:76)
-	at apklayer.host.AppHost.run(AppHost.java:107)
-	at apklayer.host.Main.lambda$main$0(Main.java:41)
-	at org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:101)
-	at java.base/java.util.concurrent.FutureTask.run(Unknown Source)
-	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)
-	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)
-	at java.base/java.lang.Thread.run(Unknown Source)
-Caused by: java.lang.ClassNotFoundException: com.macapk.loader.MacApkUnsafe
-	at org.robolectric.internal.bytecode.SandboxClassLoader.getByteCode(SandboxClassLoader.java:239)
-	at org.robolectric.internal.bytecode.SandboxClassLoader.maybeInstrumentClass(SandboxClassLoader.java:213)
-	at org.robolectric.internal.bytecode.SandboxClassLoader.lambda$loadClass$0(SandboxClassLoader.java:191)
-	at org.robolectric.util.PerfStatsCollector.measure(PerfStatsCollector.java:71)
-	at org.robolectric.internal.bytecode.SandboxClassLoader.loadClass(SandboxClassLoader.java:191)
-	at java.base/java.lang.ClassLoader.loadClass(Unknown Source)
-	at e63.i(r8-map-id-f1b0231353cdbb9ca23fdc07cc16ba761216d3413efaec2a17b71728ab204808:6)
-	at e63.h(r8-map-id-f1b0231353cdbb9ca23fdc07cc16ba761216d3413efaec2a17b71728ab204808:6)
-	at tl1.g(r8-map-id-f1b0231353cdbb9ca23fdc07cc16ba761216d3413efaec2a17b71728ab204808:55)
-	at tl1.a(r8-map-id-f1b0231353cdbb9ca23fdc07cc16ba761216d3413efaec2a17b71728ab204808:296)
-	at org.fossify.messages.App.a(r8-map-id-f1b0231353cdbb9ca23fdc07cc16ba761216d3413efaec2a17b71728ab204808:34)
-	at org.fossify.messages.App.onCreate(r8-map-id-f1b0231353cdbb9ca23fdc07cc16ba761216d3413efaec2a17b71728ab204808:1)
-	at android.app.Instrumentation.$$robo$$android_app_Instrumentation$callApplicationOnCreate(Instrumentation.java:1381)
-	at android.app.Instrumentation.callApplicationOnCreate(Instrumentation.java)
-	... 18 more
+[apklayer] no apklayer-shell: headless
+[apklayer] started org.fossify.messages.activities.SplashActivity depth=1
+[apklayer] started org.fossify.messages.activities.MainActivity depth=2
+[apklayer] finished org.fossify.messages.activities.MainActivity depth=1
+[apklayer] finished org.fossify.messages.activities.SplashActivity depth=0
+[apklayer] exit: frames=3 depth=0

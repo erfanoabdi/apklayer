@@ -299,14 +299,14 @@ import sun.misc.Unsafe;
 /Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java:362: warning: [removal] compareAndSwapObject(Object,long,Object,Object) in Unsafe has been deprecated and marked for removal
         return u.compareAndSwapObject(o, off, a2, a3);
                 ^
-Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/apklayer/host/AppHost.java uses or overrides a deprecated API.
+Note: Some input files use or override a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
 Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacApkUnsafe.java has additional uses or overrides of a deprecated API that is marked for removal.
 100 warnings
 only showing the first 100 warnings, of 128 total; use -Xmaxwarns if you would like to see more
 Note: /Users/erfanabdi/GitHub/apklayer/runtime/dex2jvm/com.macapk.dex/ApiIndexLoader.java uses or overrides a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
-[macapk-dex] 11204 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/com.ichi2.anki_22503300-classes.jar in 1019 ms
+[macapk-dex] 11204 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/com.ichi2.anki_22503300-classes.jar in 998 ms
 [apklayer] DoNotInstrument stamped on 11204 classes
 WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
 WARNING: sun.misc.Unsafe::objectFieldOffset has been called by oz6
