@@ -185,6 +185,14 @@ Tests: `tests/p2-host.sh [group]` (headless, Mac) and `tests/vm/e2e.sh [group]` 
 
 **Exit test P3:** ≥ 90% of T1 passes.
 
+**P3 status (2026-10-26):** corpus fetched (`scripts/fetch-corpus.sh`, `tests/corpus/corpus.lock`, 17 T1 apps from F-Droid), harness
+fixed (non-blank = >1% of pixels differ from the background). **T1: 7/17 pass (41%)**, up from 2/17 after shared fixes only:
+`MacApkUnsafe` vendored, no `System.exit` redirect, app-bundled Guava relocated, `<activity-alias>` launchers, a primary external
+volume for the sandbox user. Remaining failures are app-specific (user direction: do not chase individual apps): BouncyCastle
+class-loader clash (amaze, aegis), `WorkManager` not initialized (fossify calendar), `Display from a non-visual Context` (osmand),
+ExceptionInInitializerError (Material Files), hangs (AnkiDroid, fossify messages), and apps that end after the first frame. The fix
+loop continues in the background of later phases; the 90% exit test is **not** met yet.
+
 ### P4 — Native libraries in APKs (M8)
 
 1. Vendor ATL's `bionic_translation` (Meson subproject in `subprojects/`, from the local ATL

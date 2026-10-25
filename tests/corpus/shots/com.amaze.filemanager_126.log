@@ -306,7 +306,7 @@ Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacAp
 only showing the first 100 warnings, of 128 total; use -Xmaxwarns if you would like to see more
 Note: /Users/erfanabdi/GitHub/apklayer/runtime/dex2jvm/com.macapk.dex/ApiIndexLoader.java uses or overrides a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
-[macapk-dex] 7988 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/com.amaze.filemanager_126-classes.jar in 782 ms
+[macapk-dex] 7988 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/com.amaze.filemanager_126-classes.jar in 810 ms
 [apklayer] DoNotInstrument stamped on 7988 classes (relocated [com/google/common/, com/google/thirdparty/])
 java.lang.IllegalAccessError: failed to access class org.bouncycastle.util.Strings$1 from class ch.qos.logback.core.util.Loader (org.bouncycastle.util.Strings$1 is in unnamed module of loader 'app'; ch.qos.logback.core.util.Loader is in unnamed module of loader org.robolectric.simulator.SimulatorClassLoader @548a102f)
 	at ch.qos.logback.core.util.Loader.<clinit>(Unknown Source)
@@ -328,7 +328,7 @@ java.lang.IllegalAccessError: failed to access class org.bouncycastle.util.Strin
 	at org.robolectric.RuntimeEnvironment.lambda$getApplication$0(RuntimeEnvironment.java:76)
 	at org.robolectric.shadows.ShadowInstrumentation.runOnMainSyncNoIdle(ShadowInstrumentation.java:1189)
 	at org.robolectric.RuntimeEnvironment.getApplication(RuntimeEnvironment.java:76)
-	at apklayer.host.AppHost.run(AppHost.java:107)
+	at apklayer.host.AppHost.run(AppHost.java:108)
 	at apklayer.host.Main.lambda$main$0(Main.java:41)
 	at org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:101)
 	at java.base/java.util.concurrent.FutureTask.run(Unknown Source)

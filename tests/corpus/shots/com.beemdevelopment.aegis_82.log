@@ -306,7 +306,7 @@ Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacAp
 only showing the first 100 warnings, of 128 total; use -Xmaxwarns if you would like to see more
 Note: /Users/erfanabdi/GitHub/apklayer/runtime/dex2jvm/com.macapk.dex/ApiIndexLoader.java uses or overrides a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
-[macapk-dex] 4405 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/com.beemdevelopment.aegis_82-classes.jar in 620 ms
+[macapk-dex] 4405 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/com.beemdevelopment.aegis_82-classes.jar in 625 ms
 [apklayer] DoNotInstrument stamped on 4405 classes (relocated [com/google/common/, com/google/thirdparty/])
 [apklayer] no apklayer-shell: headless
 WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
@@ -355,8 +355,8 @@ java.lang.IllegalAccessError: class com.bumptech.glide.load.engine.bitmap_recycl
 	at org.robolectric.android.controller.ActivityController.create(ActivityController.java:134)
 	at org.robolectric.android.controller.ActivityController.create(ActivityController.java:144)
 	at org.robolectric.android.controller.ActivityController.setup(ActivityController.java:340)
-	at apklayer.host.AppHost.launch(AppHost.java:418)
-	at apklayer.host.AppHost.run(AppHost.java:200)
+	at apklayer.host.AppHost.launch(AppHost.java:437)
+	at apklayer.host.AppHost.run(AppHost.java:201)
 	at apklayer.host.Main.lambda$main$0(Main.java:41)
 	at org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:101)
 	at java.base/java.util.concurrent.FutureTask.run(Unknown Source)

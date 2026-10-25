@@ -306,7 +306,7 @@ Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacAp
 only showing the first 100 warnings, of 128 total; use -Xmaxwarns if you would like to see more
 Note: /Users/erfanabdi/GitHub/apklayer/runtime/dex2jvm/com.macapk.dex/ApiIndexLoader.java uses or overrides a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
-[macapk-dex] 5156 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/org.fossify.notes_13-classes.jar in 766 ms
+[macapk-dex] 5156 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/org.fossify.notes_13-classes.jar in 641 ms
 [apklayer] DoNotInstrument stamped on 5156 classes
 [apklayer] no apklayer-shell: headless
 [apklayer] started org.fossify.notes.activities.SplashActivity depth=1
@@ -319,7 +319,7 @@ Note: Recompile with -Xlint:deprecation for details.
 [apklayer] tap injected at 368,32
 [apklayer] snapshot -> /Users/erfanabdi/GitHub/apklayer/build/check/org.fossify.notes_13-5000ms.png (frame 9)
 java.lang.RuntimeException: java.lang.NullPointerException: null cannot be cast to non-null type org.fossify.notes.adapters.NotesPagerAdapter
-	at apklayer.host.AppHost.loop(AppHost.java:400)
+	at apklayer.host.AppHost.loop(AppHost.java:415)
 	at apklayer.host.AppHost.run(AppHost.java:204)
 	at apklayer.host.Main.lambda$main$0(Main.java:41)
 	at org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:101)
@@ -345,5 +345,5 @@ Caused by: java.lang.NullPointerException: null cannot be cast to non-null type 
 	at org.robolectric.shadows.LooperControlService.executeControlTask(LooperControlService.java:174)
 	at org.robolectric.shadows.LooperControlService.executeControlTask(LooperControlService.java:166)
 	at org.robolectric.shadows.ShadowPausedLooper.idle(ShadowPausedLooper.java:104)
-	at apklayer.host.AppHost.loop(AppHost.java:386)
+	at apklayer.host.AppHost.loop(AppHost.java:401)
 	... 7 more

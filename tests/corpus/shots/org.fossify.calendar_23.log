@@ -306,7 +306,7 @@ Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacAp
 only showing the first 100 warnings, of 128 total; use -Xmaxwarns if you would like to see more
 Note: /Users/erfanabdi/GitHub/apklayer/runtime/dex2jvm/com.macapk.dex/ApiIndexLoader.java uses or overrides a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
-[macapk-dex] 5181 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/org.fossify.calendar_23-classes.jar in 679 ms
+[macapk-dex] 5181 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/org.fossify.calendar_23-classes.jar in 690 ms
 [apklayer] DoNotInstrument stamped on 5181 classes
 java.lang.IllegalStateException: WorkManager is not initialized properly.  You have explicitly disabled WorkManagerInitializer in your manifest, have not manually called WorkManager#initialize at this point, and your Application does not implement Configuration.Provider.
 	at co3.a(r8-map-id-87f4f307ee5751550f93cee6ebedea5a770f5da6e7201f780ce0cdce8821c569:29)

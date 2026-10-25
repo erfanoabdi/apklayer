@@ -306,37 +306,36 @@ Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacAp
 only showing the first 100 warnings, of 128 total; use -Xmaxwarns if you would like to see more
 Note: /Users/erfanabdi/GitHub/apklayer/runtime/dex2jvm/com.macapk.dex/ApiIndexLoader.java uses or overrides a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
-[macapk-dex] 28397 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/net.osmand.plus_541003-classes.jar in 1716 ms
+[macapk-dex] 28397 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/net.osmand.plus_541003-classes.jar in 1744 ms
 [apklayer] DoNotInstrument stamped on 28397 classes (relocated [com/google/common/, com/google/thirdparty/])
-Startup service net.osmand.plus.routing.RoutingHelper took too long 30 ms
-Startup service net.osmand.plus.resources.ResourceManager took too long 16 ms
-Startup service net.osmand.plus.plugins.monitoring.SavingTrackHelper took too long 19 ms
+Startup service net.osmand.plus.routing.RoutingHelper took too long 31 ms
+Startup service net.osmand.plus.resources.ResourceManager took too long 15 ms
+Startup service net.osmand.plus.plugins.monitoring.SavingTrackHelper took too long 20 ms
 Startup service net.osmand.plus.notifications.NotificationHelper took too long 9 ms
-Startup service net.osmand.plus.track.helpers.GpxSelectionHelper took too long 8 ms
-Startup service net.osmand.plus.poi.PoiFiltersHelper took too long 24 ms
-Startup service net.osmand.plus.search.QuickSearchHelper took too long 38 ms
-Startup service net.osmand.plus.views.OsmandMap took too long 25 ms
-Startup service net.osmand.plus.quickaction.MapButtonsHelper took too long 16 ms
-Time to start application 861 ms. Should be less < 800 ms
+Startup service net.osmand.plus.poi.PoiFiltersHelper took too long 30 ms
+Startup service net.osmand.plus.search.QuickSearchHelper took too long 45 ms
+Startup service net.osmand.plus.views.OsmandMap took too long 29 ms
+Startup service net.osmand.plus.quickaction.MapButtonsHelper took too long 17 ms
+Time to start application 879 ms. Should be less < 800 ms
 Initialized BUNDLED_OSF_IMPORTED in 9 ms
 Time to init plugins 41 ms. Should be less < 800 ms
-Initialized INIT_RENDERERS in 46 ms
+Initialized INIT_RENDERERS in 43 ms
 [apklayer] no apklayer-shell: headless
-Initialized ROUTING_CONFIG_INITIALIZED in 15 ms
-Initialized POI_TYPES_INITIALIZED in 24 ms
-Initialized ASSETS_COPIED in 492 ms
-Initialized MAPS_INITIALIZED in 29 ms
-Initialized INDEXES_RELOADED in 0 ms
+Initialized ROUTING_CONFIG_INITIALIZED in 18 ms
+Initialized POI_TYPES_INITIALIZED in 22 ms
+Initialized ASSETS_COPIED in 476 ms
+Initialized MAPS_INITIALIZED in 26 ms
+Initialized INDEXES_RELOADED in 1 ms
 Initialized TRAVEL_INITIALIZED in 3 ms
-Initialized NATIVE_INITIALIZED in 7 ms
-Initialized FAVORITES_INITIALIZED in 3 ms
-Initialized GPX_DB_INITIALIZED in 32 ms
-Initialized POI_FILTERS_INITIALIZED in 180 ms
-Initialized INDEX_REGION_BOUNDARIES in 115 ms
+Initialized NATIVE_INITIALIZED in 4 ms
+Initialized FAVORITES_INITIALIZED in 4 ms
+Initialized GPX_DB_INITIALIZED in 29 ms
+Initialized POI_FILTERS_INITIALIZED in 194 ms
+Initialized INDEX_REGION_BOUNDARIES in 108 ms
 Initialized LOAD_GPX_TRACKS in 0 ms
 Initialized SAVE_GPX_TRACKS in 7 ms
-Initialized MARKERS_GROUPS_SYNCED in 16 ms
-Initialized SEARCH_UI_CORE_INITIALIZED in 13 ms
+Initialized MARKERS_GROUPS_SYNCED in 15 ms
+Initialized SEARCH_UI_CORE_INITIALIZED in 6 ms
 Initialized LIVE_UPDATES_ALERTS_CHECKED in 0 ms
 java.lang.UnsupportedOperationException: Tried to obtain display from a Context not associated with one. Only visual Contexts (such as Activity or one created with Context#createWindowContext) or ones created with Context#createDisplayContext are associated with displays. Other types of Contexts are typically related to background entities and may return an arbitrary display.
 	at android.app.ContextImpl.getDisplay(ContextImpl.java:3159)
@@ -354,8 +353,8 @@ java.lang.UnsupportedOperationException: Tried to obtain display from a Context 
 	at org.robolectric.android.controller.ActivityController.create(ActivityController.java:134)
 	at org.robolectric.android.controller.ActivityController.create(ActivityController.java:144)
 	at org.robolectric.android.controller.ActivityController.setup(ActivityController.java:340)
-	at apklayer.host.AppHost.launch(AppHost.java:418)
-	at apklayer.host.AppHost.run(AppHost.java:200)
+	at apklayer.host.AppHost.launch(AppHost.java:437)
+	at apklayer.host.AppHost.run(AppHost.java:201)
 	at apklayer.host.Main.lambda$main$0(Main.java:41)
 	at org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:101)
 	at java.base/java.util.concurrent.FutureTask.run(Unknown Source)

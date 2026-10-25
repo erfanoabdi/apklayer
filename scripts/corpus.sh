@@ -35,16 +35,16 @@ tier() {
     END { n = 0; s = ""; for (a in abis) { s = s (n++ ? "," : "") a }; printf "%d %s\n", d, (n ? s : "none") }'
 }
 
-# nonblank <png>: mean pixel deviation from the modal (background) colour.
+# nonblank <png>: percent (rounded up) of pixels that differ visibly from the modal (background) colour.
 nonblank() {
   python3 - "$1" <<'PY'
-import sys, collections
+import sys, collections, math
 from PIL import Image
 im = Image.open(sys.argv[1]).convert("RGB").resize((160, 100))
 px = list(im.getdata())
 bg = collections.Counter(px).most_common(1)[0][0]
-dev = sum(abs(r-bg[0])+abs(g-bg[1])+abs(b-bg[2]) for r, g, b in px) / (len(px)*3)
-print(int(dev))
+diff = sum(1 for r, g, b in px if abs(r-bg[0])+abs(g-bg[1])+abs(b-bg[2]) > 30)
+print(math.ceil(100 * diff / len(px)))
 PY
 }
 
@@ -89,12 +89,10 @@ for APK in "${APKS[@]}"; do
   EXC=$(logf "$LOG" | grep -m1 -E 'Exception in thread|FATAL|no launcher' | cut -c1-160)
   [ -z "$EXC" ] && EXC=$(logf "$LOG" | grep -m1 -E '^[a-z][a-z0-9.]*\.[A-Za-z]*(Exception|Error)' | cut -c1-160)
   V1=0; V2=0; D=0
+  [ -f "$PNG1" ] && V1=$(nonblank "$PNG1")
   if [ -f "$PNG1" ] && [ -f "$PNG2" ]; then
-    V1=$(nonblank "$PNG1"); RC1=$?
-    V2=$(nonblank "$PNG2"); RC2=$?
-    D=$(diffpct "$PNG1" "$PNG2"); RC3=$?
-    [ $RC1 -ne 0 ] && echo "!! nonblank($PNG1) failed" >&2
-    [ $RC3 -ne 0 ] && echo "!! diffpct failed" >&2
+    V2=$(nonblank "$PNG2")
+    D=$(diffpct "$PNG1" "$PNG2")
   fi
   # For scripted runs (e.g. uibench's own script) the script itself proves interaction;
   # the auto-tap is a best-effort extra for unscripted apps. Accept a PASS when the run
@@ -102,9 +100,9 @@ for APK in "${APKS[@]}"; do
   DEPTH=$(logf "$LOG" | sed -n 's/.*depth=\([0-9]*\).*/\1/p' | sort -n | tail -1)
   [ -z "$DEPTH" ] && DEPTH=0
   STATUS="FAIL"
-  # V1 threshold is low (2): camera/preview apps paint their first frame dark; a real
-  # state change (V2 or D) is the actual evidence the UI is alive.
-  if [ -n "$ACT" ] && [ -z "$EXC" ] && [ "$V1" -gt 1 ] && [ "$V2" -gt 4 ] && { [ "$D" -gt 0 ] || [ "$DEPTH" -ge 2 ]; }; then
+  # Non-blank = more than 1% of pixels differ visibly from the background (clean Material screens
+  # are mostly one colour); a state change (D or navigation depth) is the evidence the UI is alive.
+  if [ -n "$ACT" ] && [ -z "$EXC" ] && [ "$V1" -ge 2 ] && [ "$V2" -ge 2 ] && { [ "$D" -gt 0 ] || [ "$DEPTH" -ge 2 ]; }; then
     STATUS="PASS"
   fi
   # keep artifacts
@@ -114,7 +112,8 @@ for APK in "${APKS[@]}"; do
   if [ "$STATUS" = FAIL ]; then
     if [ -n "$EXC" ]; then CAUSE="$EXC"
     elif [ ! -f "$PNG1" ]; then CAUSE="no frame (rc=$RC, likely hang/timeout)"
-    elif [ "$V1" -le 4 ]; then CAUSE="blank frame"
+    elif [ "$V1" -lt 2 ]; then CAUSE="blank frame"
+    elif [ ! -f "$PNG2" ]; then CAUSE="no second frame (the app ended after the first snapshot or the tap)"
     elif [ "$D" -eq 0 ]; then CAUSE="tap caused no state change"
     else CAUSE="activity not started"; fi
   fi

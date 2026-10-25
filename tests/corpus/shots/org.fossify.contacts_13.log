@@ -306,7 +306,7 @@ Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/com/macapk/loader/MacAp
 only showing the first 100 warnings, of 128 total; use -Xmaxwarns if you would like to see more
 Note: /Users/erfanabdi/GitHub/apklayer/runtime/dex2jvm/com.macapk.dex/ApiIndexLoader.java uses or overrides a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
-[macapk-dex] 11061 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/org.fossify.contacts_13-classes.jar in 746 ms
+[macapk-dex] 11061 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/org.fossify.contacts_13-classes.jar in 717 ms
 [apklayer] DoNotInstrument stamped on 11061 classes
 [apklayer] no apklayer-shell: headless
 [apklayer] started org.fossify.contacts.activities.SplashActivity depth=1
