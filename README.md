@@ -42,7 +42,7 @@ VM access: `ssh parallels@10.211.55.4` (password `1234`). Setup details are in m
 | `docs/PLAN.md` | **plan of record**: decisions D1–D23, phases P1–P7, exit tests, next tasks |
 | `docs/PATCHES.md` / `docs/THIRD_PARTY.md` | patch log (none) / licenses |
 | `runtime/dex2jvm/` | DEX → JVM converter (from Mac.apk, AGPL) |
-| `runtime/host/java/` | host (`apklayer.host`: Main, AppHost, ShellFrameListener, HostWindow), WlWindow, DenyInstrument |
+| `runtime/host/java/` | host (`apklayer.host`: Main, AppHost, ShellFrameListener, ShellClient), DenyInstrument |
 | `runtime/host/jvm.args` | JDK flags Robolectric needs |
 | `deps/deps.lock`, `scripts/fetch-deps.sh` | pinned dependencies (sha256), local-first fetch into `~/.cache/apklayer/deps` |
 | `bridge/shell/` | meson: `apklayer-shell` (session Wayland shell: windows, zero-copy frames, input) |
