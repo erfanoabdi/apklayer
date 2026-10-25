@@ -11,6 +11,7 @@ APK="$(cd "$(dirname "$APK")" && pwd)/$(basename "$APK")"
 SCRIPT="${2:-2000:tap:100,80+4000:tap:100,129+6000:back+7000:back}"
 SNAPS="${3:-1500,3500,5800,8000}"
 RUNMS="${4:-8500}"
+EXTRA_JOPTS="${5:-}"
 NAME="$(basename "$APK" .apk)"
 DEPS="$HOME/.cache/apklayer/deps"
 OUT="$ROOT/build/check"
@@ -32,6 +33,6 @@ cd "$OUT"
 "${J}java" @"$ROOT/runtime/host/jvm.args" -Djava.awt.headless=true \
   -Drobolectric.offline=true -Drobolectric.dependency.dir="$DEPS/android-all" \
   -Dapklayer.script="$SCRIPT" -Dapklayer.snapms="$SNAPS" -Dapklayer.runms="$RUNMS" \
-  -Dapklayer.snapshot="$OUT/$NAME" ${APKLAYER_JOPTS:-} \
+  -Dapklayer.snapshot="$OUT/$NAME" ${APKLAYER_JOPTS:-} $EXTRA_JOPTS \
   -cp "$DEPS/libs/*:$DEPS/android-stub.jar:$OUT/host:$OUT/$NAME-dni.jar" \
   apklayer.host.Main "$APK" "$OUT/$NAME-dni.jar"

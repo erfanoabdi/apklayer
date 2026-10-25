@@ -252,25 +252,54 @@ public final class AppHost implements Runnable {
 
         TreeMap<Long, String> script = new TreeMap<>();
         for (String step : System.getProperty("apklayer.script", "").split("[+;]")) {
-            if (!step.isEmpty()) script.put(Long.parseLong(step.split(":", 2)[0]), step.split(":", 2)[1]);
+            if (step.isEmpty()) continue;
+            String[] kv = step.split(":", 2);
+            long ms = Long.parseLong(kv[0]);
+            // allow multiple steps at the same time, separated by ','
+            script.merge(ms, kv[1], (a, b) -> a + ";" + b);
+        }
+        if (Boolean.getBoolean("apklayer.autotap")) {
+            long t = Long.getLong("apklayer.autotap.ms", 4500);
+            script.put(t, "tap:first");
         }
         TreeMap<Long, String> snaps = new TreeMap<>();
         for (String ms : System.getProperty("apklayer.snapms", "").split(",")) {
             if (!ms.isEmpty()) snaps.put(Long.parseLong(ms), ms);
         }
-        long runMs = Long.getLong("apklayer.runms", shell == null ? 3000 : Long.MAX_VALUE);
+        // runms must be honoured in headless mode too (corpus harness schedules snapshots
+        // and taps at absolute times and relies on the run ending on schedule).
+        // Headless runs must advance PAUSED clocks by the scheduled deadline (Simulator
+        // does this with ShadowSystemClock::advanceTo + idleFor); wall-clock waiting only
+        // works with a live window (shell mode), where real time drives the frame clock.
+        boolean pausedMode = shell == null;
+        long runMs = Long.getLong("apklayer.runms", pausedMode ? 3000 : Long.MAX_VALUE);
         String snapPrefix = System.getProperty("apklayer.snapshot", "/tmp/apklayer-frame");
-        long start = System.nanoTime();
+        // Schedule clock: in headless (PAUSED) mode the sandbox clock is stepped by the loop
+        // below, so schedule script/snapshot times on it — a "6 s" run then completes in well
+        // under a second of real time. In shell mode real time drives everything.
+        long start = pausedMode ? SystemClock.uptimeMillis() : System.nanoTime() / 1_000_000;
+        long lastSnapshotAt = -1; // dedupe snapshot times that land in the same loop iteration
 
         try {
             while (!stack.isEmpty()) {
                 long now = System.nanoTime();
-                long elapsed = (now - start) / 1_000_000;
-                if (elapsed >= runMs || (shell != null && shell.closed())) break;
+                long elapsed = (pausedMode ? SystemClock.uptimeMillis() : System.nanoTime() / 1_000_000) - start;
+                // exit when the run time is up (or the window closed) and every scheduled
+                // snapshot/script step has fired — the corpus harness relies on the final
+                // snapshot at runms actually being taken.
+                if (script.isEmpty() && snaps.isEmpty()
+                        && (elapsed >= runMs || (shell != null && shell.closed())))
+                    break;
 
                 for (int[] ev; shell != null && (ev = shell.poll()) != null; ) onHostEvent(ev);
                 while (!script.isEmpty() && script.firstKey() <= elapsed) runStep(script.pollFirstEntry().getValue());
                 while (!snaps.isEmpty() && snaps.firstKey() <= elapsed) {
+                    long sMs = snaps.firstKey();
+                    if (sMs == lastSnapshotAt) { // same instant already captured this iteration
+                        snaps.pollFirstEntry();
+                        continue;
+                    }
+                    lastSnapshotAt = sMs;
                     frames.snapshot(snapPrefix + "-" + snaps.pollFirstEntry().getValue() + "ms.png");
                     if (Boolean.getBoolean("apklayer.debugwindows")) dumpWindows();
                 }
@@ -278,11 +307,25 @@ public final class AppHost implements Runnable {
                 long nextTask = looper.getNextScheduledTaskTime().toMillis();
                 long nextVsync = ShadowChoreographer.getNextVsyncTime();
                 long timeout = nextTask == 0 || nextVsync == 0 ? max(nextTask, nextVsync) : min(nextTask, nextVsync);
-                // Bounded so host input and the scripted steps are serviced while idle.
-                long wait = timeout == 0 ? 8 : max(1, min(8, timeout - SystemClock.uptimeMillis()));
-                looper.poll(wait);
-                ShadowSystemClock.advanceBy(Duration.ofNanos(System.nanoTime() - now));
-                looper.idle();
+                if (pausedMode) {
+                    // PAUSED looper mode: scheduled Runnables and vsync callbacks only run
+                    // when the (paused) clock is advanced. Step it to the next deadline and
+                    // drain — wall time is irrelevant here, so a "6 s" run completes in well
+                    // under a second of real time (the scripted ms are scheduler time).
+                    if (timeout != 0) {
+                        ShadowSystemClock.advanceBy(Duration.ofMillis(max(1, timeout - SystemClock.uptimeMillis())));
+                    } else {
+                        ShadowSystemClock.advanceBy(Duration.ofMillis(8));
+                    }
+                    looper.idle();
+                } else {
+                    // Shell mode: a live window; real time drives everything. Bounded poll
+                    // so host input and scripted steps are serviced while idle.
+                    long wait = timeout == 0 ? 8 : max(1, min(8, timeout - SystemClock.uptimeMillis()));
+                    looper.poll(wait);
+                    ShadowSystemClock.advanceBy(Duration.ofNanos(System.nanoTime() - now));
+                    looper.idle();
+                }
                 followNavigation();
             }
         } catch (Exception e) {
@@ -382,11 +425,34 @@ public final class AppHost implements Runnable {
     }
 
     private void runStep(String step) {
+        for (String s : step.split(";")) { // multiple steps scheduled at the same instant
+            if (!s.isEmpty()) runOneStep(s);
+        }
+    }
+
+    private void runOneStep(String step) {
         System.out.println("[apklayer] script: " + step);
         long now = SystemClock.uptimeMillis();
         if (step.startsWith("tap:")) {
-            String[] xy = step.substring(4).split(",");
-            int x = Integer.parseInt(xy[0]), y = Integer.parseInt(xy[1]);
+            String xy = step.substring(4);
+            int x, y;
+            if (xy.equals("first")) {
+                int[] c = firstClickableCenter();
+                if (c == null) {
+                    System.out.println("[apklayer] script: no clickable view");
+                    return;
+                }
+                x = c[0];
+                y = c[1];
+            } else {
+                String[] p = xy.split(",");
+                x = Integer.parseInt(p[0]);
+                y = Integer.parseInt(p[1]);
+            }
+            // DOWN/UP at the same uptimeMillis can be swallowed by tap-vs-scroll tracking;
+            // put UP 50 ms in the future, like the shell path does.
+            System.out.println("[apklayer] tap injected at " + x + "," + y);
+            if (Boolean.getBoolean("apklayer.debugclickables")) dumpClickables();
             inject(MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0));
             inject(MotionEvent.obtain(now, now + 50, MotionEvent.ACTION_UP, x, y, 0));
         } else if (step.equals("back")) {
@@ -395,8 +461,116 @@ public final class AppHost implements Runnable {
         }
     }
 
+    /** Center of the first clickable view in the topmost window (corpus tap, PLAN P3.2). */
+    private int[] firstClickableCenter() {
+        Object wmg = android.view.WindowManagerGlobal.getInstance();
+        List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
+        int[] loc = new int[2];
+        for (View root : views) {
+            View v = findClickable(root);
+            if (v != null) {
+                v.getLocationOnScreen(loc);
+                return new int[] { loc[0] + v.getWidth() / 2, loc[1] + v.getHeight() / 2 };
+            }
+        }
+        return null;
+    }
+
+    private static View findClickable(View v) {
+        if (v.getVisibility() != View.VISIBLE) return null;
+        // The real tap target of list screens is the item view, not the clickable
+        // AdapterView (which is only clickable for empty-space/long-press semantics).
+        // Descend first; prefer the smallest clickable that covers less than half the
+        // screen (a row/button), else the largest clickable overall.
+        if (v instanceof android.widget.AdapterView<?> a) {
+            View child = firstClickableChild(a);
+            if (child != null) return child;
+        }
+        if (v.isClickable() && v.isEnabled() && v.getWidth() > 0 && v.getHeight() > 0) {
+            View best = v;
+            if (v instanceof android.view.ViewGroup g) {
+                View c = firstClickableChild(g);
+                if (c != null && (long) c.getWidth() * c.getHeight() < (long) v.getWidth() * v.getHeight() / 2)
+                    best = c;
+            }
+            return best;
+        }
+        return firstClickableChild(v);
+    }
+
+    private static View firstClickableChild(View v) {
+        if (v instanceof android.view.ViewGroup g) {
+            for (int i = 0; i < g.getChildCount(); i++) {
+                View c = findClickable(g.getChildAt(i));
+                if (c != null) return c;
+            }
+        }
+        return null;
+    }
+
     /** Input goes through UiAutomation, which routes it to the right window (like the simulator). */
     private void inject(InputEvent event) {
         main.post(() -> uiAutomation.injectInputEvent(event, true));
+    }
+
+    private static void dumpClickables() {
+        Object wmg = android.view.WindowManagerGlobal.getInstance();
+        List<View> roots = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
+        int[] loc = new int[2];
+        int n = 0;
+        for (View root : roots) {
+            java.util.ArrayDeque<View> q = new java.util.ArrayDeque<>();
+            q.add(root);
+            while (!q.isEmpty() && n < 25) {
+                View v = q.poll();
+                if (v.getVisibility() != View.VISIBLE) continue;
+                if (v.isClickable() && v.getWidth() > 0) {
+                    v.getLocationOnScreen(loc);
+                    System.out.println("[apklayer]   click " + v.getClass().getSimpleName() + " \""
+                            + (v instanceof android.widget.TextView t ? t.getText() : "") + "\" ["
+                            + loc[0] + "," + loc[1] + " " + v.getWidth() + "x" + v.getHeight() + "]");
+                    n++;
+                }
+                if (v instanceof android.view.ViewGroup g) {
+                    for (int i = 0; i < g.getChildCount(); i++) q.add(g.getChildAt(i));
+                }
+            }
+        }
+    }
+
+    /**
+     * Inject an input event and wait until the main looper has finished dispatching it
+     * (queue idle, no delayed work) — for scripted steps that must take effect before the
+     * next snapshot. Returns after a bounded timeout if the app keeps the looper busy.
+     */
+    private void injectSync(InputEvent event) {
+        final java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        main.post(() -> {
+            uiAutomation.injectInputEvent(event, true);
+            done.countDown();
+        });
+        long deadline = System.nanoTime() + 1_000_000_000L; // 1 s
+        try {
+            while (!done.await(2, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                if (System.nanoTime() > deadline) break;
+                Thread.sleep(1);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        // Let the main run loop (which owns the Choreographer frame clock) dispatch this
+        // event and draw the result: the loop polls the looper and advances the vsync
+        // clock itself, and the scripted step returns to it. Wait until the looper has
+        // drained or a bounded timeout, so the next snapshot sees the resulting state.
+        long drainDeadline = System.nanoTime() + 500_000_000L; // 500 ms
+        ShadowPausedLooper rl = Shadow.extract(Looper.getMainLooper());
+        try {
+            while (rl.getNextScheduledTaskTime().toMillis() != 0) {
+                if (System.nanoTime() > drainDeadline) break;
+                Thread.sleep(2);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

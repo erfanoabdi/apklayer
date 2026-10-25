@@ -1,0 +1,24 @@
+deps: /Users/erfanabdi/.cache/apklayer/deps — 37 already present, 0 copied locally, 0 resolved via maven
+Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/apklayer/host/AppHost.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /Users/erfanabdi/GitHub/apklayer/runtime/dex2jvm/com.macapk.dex/ApiIndexLoader.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+[macapk-dex] 1789 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/net.typeblog.shelter_20-classes.jar in 326 ms
+[apklayer] DoNotInstrument stamped on 1789 classes
+[apklayer] no apklayer-shell: headless
+[apklayer] started net.typeblog.shelter.ui.MainActivity depth=1
+[apklayer] started net.typeblog.shelter.ui.SetupWizardActivity depth=2
+[apklayer] script: tap:100,80
+[apklayer] tap injected at 100,80
+[apklayer] script: tap:100,129
+[apklayer] tap injected at 100,129
+[apklayer] script: tap:first
+[apklayer] tap injected at 414,772
+[apklayer] snapshot -> /Users/erfanabdi/GitHub/apklayer/build/check/net.typeblog.shelter_20-5000ms.png (frame 27)
+[apklayer] snapshot -> /Users/erfanabdi/GitHub/apklayer/build/check/net.typeblog.shelter_20-5500ms.png (frame 45)
+[apklayer] script: back
+[apklayer] finished net.typeblog.shelter.ui.SetupWizardActivity depth=1
+[apklayer] snapshot -> /Users/erfanabdi/GitHub/apklayer/build/check/net.typeblog.shelter_20-6700ms.png (frame 52)
+[apklayer] script: back
+[apklayer] finished net.typeblog.shelter.ui.MainActivity depth=0
+[apklayer] exit: frames=52 depth=0

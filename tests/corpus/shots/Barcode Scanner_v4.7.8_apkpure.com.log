@@ -1,0 +1,34 @@
+deps: /Users/erfanabdi/.cache/apklayer/deps — 37 already present, 0 copied locally, 0 resolved via maven
+Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/apklayer/host/AppHost.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /Users/erfanabdi/GitHub/apklayer/runtime/dex2jvm/com.macapk.dex/ApiIndexLoader.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+[macapk-dex] 393 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/Barcode Scanner_v4.7.8_apkpure.com-classes.jar in 708 ms
+[apklayer] DoNotInstrument stamped on 393 classes
+[apklayer] no apklayer-shell: headless
+java.lang.IllegalArgumentException: Don't know what to do with dataSource org.robolectric.shadows.util.DataSource@4a703c8c - either add an exception with addException() or media info with addMediaInfo()
+	at org.robolectric.shadows.ShadowMediaPlayer.doSetDataSource(ShadowMediaPlayer.java:668)
+	at org.robolectric.shadows.ShadowMediaPlayer.setDataSource(ShadowMediaPlayer.java:608)
+	at org.robolectric.shadows.ShadowMediaPlayer.setDataSource(ShadowMediaPlayer.java:643)
+	at android.media.MediaPlayer.setDataSource(MediaPlayer.java)
+	at com.google.zxing.client.android.BeepManager.buildMediaPlayer(BeepManager.java:90)
+	at com.google.zxing.client.android.BeepManager.updatePrefs(BeepManager.java:61)
+	at com.google.zxing.client.android.BeepManager.<init>(BeepManager.java:50)
+	at com.google.zxing.client.android.CaptureActivity.onCreate(CaptureActivity.java:140)
+	at android.app.Activity.performCreate(Activity.java:9155)
+	at android.app.Activity.performCreate(Activity.java:9133)
+	at android.app.Instrumentation.callActivityOnCreate(Instrumentation.java:1521)
+	at org.robolectric.android.internal.RoboMonitoringInstrumentation.callActivityOnCreate(RoboMonitoringInstrumentation.java:382)
+	at org.robolectric.android.controller.ActivityController.lambda$create$0(ActivityController.java:136)
+	at org.robolectric.shadows.ShadowPausedLooper.runPaused(ShadowPausedLooper.java:257)
+	at org.robolectric.android.controller.ActivityController.create(ActivityController.java:134)
+	at org.robolectric.android.controller.ActivityController.create(ActivityController.java:144)
+	at org.robolectric.android.controller.ActivityController.setup(ActivityController.java:340)
+	at apklayer.host.AppHost.launch(AppHost.java:351)
+	at apklayer.host.AppHost.run(AppHost.java:137)
+	at apklayer.host.Main.lambda$main$0(Main.java:41)
+	at org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:101)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)

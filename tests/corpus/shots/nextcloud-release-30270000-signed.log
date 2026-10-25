@@ -1,0 +1,31 @@
+deps: /Users/erfanabdi/.cache/apklayer/deps — 37 already present, 0 copied locally, 0 resolved via maven
+Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/apklayer/host/AppHost.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /Users/erfanabdi/GitHub/apklayer/runtime/dex2jvm/com.macapk.dex/ApiIndexLoader.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+[macapk-dex] 30802 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/nextcloud-release-30270000-signed-classes.jar in 1952 ms
+[apklayer] DoNotInstrument stamped on 30802 classes
+java.lang.ArrayIndexOutOfBoundsException: Index 0 out of bounds for length 0
+	at android.os.Environment.isExternalStorageManager(Environment.java:1510)
+	at com.owncloud.android.utils.PermissionUtil.checkExternalStoragePermission(PermissionUtil.kt:99)
+	at com.owncloud.android.MainApp.initSyncOperations(MainApp.java:541)
+	at com.owncloud.android.MainApp.onCreate(MainApp.java:337)
+	at android.app.Instrumentation.callApplicationOnCreate(Instrumentation.java:1381)
+	at org.robolectric.android.internal.RoboMonitoringInstrumentation.callApplicationOnCreate(RoboMonitoringInstrumentation.java:162)
+	at org.robolectric.android.internal.AndroidTestEnvironment.lambda$installAndCreateApplication$2(AndroidTestEnvironment.java:456)
+	at org.robolectric.util.PerfStatsCollector.measure(PerfStatsCollector.java:123)
+	at org.robolectric.android.internal.AndroidTestEnvironment.installAndCreateApplication(AndroidTestEnvironment.java:454)
+	at org.robolectric.android.internal.AndroidTestEnvironment.lambda$createApplicationSupplier$0(AndroidTestEnvironment.java:309)
+	at org.robolectric.util.PerfStatsCollector.measure(PerfStatsCollector.java:71)
+	at org.robolectric.android.internal.AndroidTestEnvironment.lambda$createApplicationSupplier$1(AndroidTestEnvironment.java:306)
+	at com.google.common.base.Suppliers$NonSerializableMemoizingSupplier.get(Suppliers.java:183)
+	at org.robolectric.RuntimeEnvironment.lambda$getApplication$0(RuntimeEnvironment.java:76)
+	at org.robolectric.shadows.ShadowInstrumentation.runOnMainSyncNoIdle(ShadowInstrumentation.java:1189)
+	at org.robolectric.RuntimeEnvironment.getApplication(RuntimeEnvironment.java:76)
+	at apklayer.host.AppHost.run(AppHost.java:100)
+	at apklayer.host.Main.lambda$main$0(Main.java:41)
+	at org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:101)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
