@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit;
  */
 @RunWith(RobolectricTestRunner.class)
 @GraphicsMode(GraphicsMode.Mode.LEGACY)
-@Config(sdk = 27, manifest = "uiaction/AndroidManifest.xml", qualifiers = "480x800-xxhdpi")
+@Config(sdk = 27, manifest = "uibench/AndroidManifest.xml", qualifiers = "w480dp-h800dp")
 public final class RunUiBench {
 
     @Test(timeout = 120_000)
@@ -34,7 +34,18 @@ public final class RunUiBench {
                 .loadClass("com.android.test.uibench.MainActivity");
 
         ActivityController<?> controller = Robolectric.buildActivity((Class) actClass);
-        Activity activity = controller.setup().get();
+        Activity activity = controller.create().get();
+
+        // The bundled appcompat (support-v7) needs one of its own themes; resolve it from
+        // the APK's own resource table (its styles are compiled in under the app package).
+        String pkg = activity.getPackageName();
+        int t = activity.getResources().getIdentifier("Theme.AppCompat.Light", "style", pkg);
+        if (t == 0) t = activity.getResources().getIdentifier("Theme.AppCompat", "style", pkg);
+        if (t == 0) t = activity.getResources().getIdentifier("AppTheme", "style", pkg);
+        if (t != 0) activity.setTheme(t);
+        System.out.println("[apklayer-rob] theme id=" + t + " pkg=" + pkg);
+
+        controller.start().postCreate(null).resume().visible();
         System.out.println("[apklayer-rob] activity resumed: " + activity);
 
         View decor = activity.getWindow().getDecorView();
