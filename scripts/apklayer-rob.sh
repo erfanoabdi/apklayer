@@ -4,7 +4,7 @@
 #   manifest-dir: dir containing the unpacked APK (binary AndroidManifest.xml + resources.arsc)
 # APKLAYER_GFX=NATIVE: real HWUI/Skia via Robolectric's native runtime. Its prebuilts exist for
 #   linux-x86_64 only, so on the arm64 VM the app JVM is x86_64 (Rosetta; C2 crashes there, so
-#   C1 only) and frames go through a shared framebuffer to the native apklayer-presentd.
+#   C1 only; G1 also crashes there, so Serial GC) and frames go through a shared framebuffer to the native apklayer-presentd.
 #   APKLAYER_GFX=LEGACY (default): arm64 JVM, in-process presenter, no text rendering.
 # APKLAYER_JOPTS: extra JVM flags, e.g. -Dapklayer.script=10:tap:100,80+60:back
 #   -Dapklayer.snapframes=50,90 -Dapklayer.frames=120 (headless-style verification).
@@ -16,6 +16,9 @@ D=apklayer-m1/tests/rob
 
 sshpass -p "$VM_PASS" ssh -o StrictHostKeyChecking=no "$VM" "rm -rf $D && mkdir -p $D"
 (cd "$(dirname "$0")/../tests" && rm -f rob/apklayer/rob/._* stubs/android/*/*. _* 2>/dev/null; find . -name '._*' -delete 2>/dev/null; COPYFILE_DISABLE=1 tar -cz rob stubs) | sshpass -p "$VM_PASS" ssh -o StrictHostKeyChecking=no "$VM" "tar -xz -C $D"
+
+# Bridge (presenter) sources -> VM, rebuilt incrementally.
+(cd "$(dirname "$0")/../bridge" && COPYFILE_DISABLE=1 tar -cz meson.build src) | sshpass -p "$VM_PASS" ssh -o StrictHostKeyChecking=no "$VM" "tar -xz -C apklayer-m1/bridge 2>/dev/null; ninja -C apklayer-m1/bridge/b >/dev/null"
 
 sshpass -p "$VM_PASS" ssh -o StrictHostKeyChecking=no "$VM" bash -s <<EOF
 set -e
@@ -41,7 +44,7 @@ cd \$(dirname $MANIFEST_DIR)
 export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0
 GFX=${APKLAYER_GFX:-LEGACY}
 if [ "\$GFX" = NATIVE ]; then
-  JAVA="\$HOME/jdk21-x86/bin/java -XX:TieredStopAtLevel=1 -Dapklayer.fb=/dev/shm/apklayer-fb"
+  JAVA="\$HOME/jdk21-x86/bin/java -XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Dapklayer.fb=/dev/shm/apklayer-fb"
   rm -f /dev/shm/apklayer-fb
   \$HOME/apklayer-m1/bridge/b/apklayer-presentd /dev/shm/apklayer-fb &
 else
@@ -55,5 +58,5 @@ fi
   -Dapklayer.hostcp=\$R/robout \
   -cp "\$R/libs/*:\$R/stubout:\$R/android-stub.jar:\$R/robout:\$R/cfg:/tmp/app-dni.jar:\$HOME/apklayer-apps" \
   org.junit.runner.JUnitCore apklayer.rob.RunUiBench \
-  2>&1 | grep -vE '^OpenJDK' | tail -60
+  2>&1 | grep --line-buffered -vE '^OpenJDK'
 EOF

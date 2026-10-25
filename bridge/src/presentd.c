@@ -61,6 +61,7 @@ int main(int argc, char **argv)
         int32_t ev[4];
         while (apklayer_wayland_next_event(ev)) {
             int32_t n = fb[5];
+            if (n < 20) fprintf(stderr, "[presentd] input %d: %d %d %d\n", n, ev[0], ev[1], ev[2]);
             volatile int32_t *slot = fb + 8 + 4 * (n % EV_RING);
             for (int i = 0; i < 4; i++) slot[i] = ev[i];
             __atomic_store_n(&fb[5], n + 1, __ATOMIC_RELEASE);
