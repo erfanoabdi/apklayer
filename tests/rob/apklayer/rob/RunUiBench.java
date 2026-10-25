@@ -20,12 +20,13 @@ import java.util.concurrent.TimeUnit;
 /**
  * apklayer driver on the Robolectric method: unmodified framework (android-all-instrumented)
  * + shadows; the app is the dex2jvm-converted uibench classes; the manifest/resources come
- * from the real APK (binary resources mode). Frames: real View tree -> Canvas -> Bitmap ->
+ * from the real APK (binary resources mode, AGP's test_config.properties contract: the real
+ * PackageParser reads the APK, so package/themes are unmodified). Frames: real View tree -> Canvas -> Bitmap ->
  * presented on the host Wayland window (driver-side, outside the sandbox).
  */
 @RunWith(RobolectricTestRunner.class)
 @GraphicsMode(GraphicsMode.Mode.LEGACY)
-@Config(sdk = 27, manifest = "uibench/AndroidManifest.xml", qualifiers = "w480dp-h800dp")
+@Config(sdk = 27, qualifiers = "w480dp-h800dp")
 public final class RunUiBench {
 
     @Test(timeout = 120_000)
@@ -36,14 +37,7 @@ public final class RunUiBench {
         ActivityController<?> controller = Robolectric.buildActivity((Class) actClass);
         Activity activity = controller.create().get();
 
-        // The bundled appcompat (support-v7) needs one of its own themes; resolve it from
-        // the APK's own resource table (its styles are compiled in under the app package).
-        String pkg = activity.getPackageName();
-        int t = activity.getResources().getIdentifier("Theme.AppCompat.Light", "style", pkg);
-        if (t == 0) t = activity.getResources().getIdentifier("Theme.AppCompat", "style", pkg);
-        if (t == 0) t = activity.getResources().getIdentifier("AppTheme", "style", pkg);
-        if (t != 0) activity.setTheme(t);
-        System.out.println("[apklayer-rob] theme id=" + t + " pkg=" + pkg);
+        System.out.println("[apklayer-rob] created " + activity + " pkg=" + activity.getPackageName());
 
         controller.start().postCreate(null).resume().visible();
         System.out.println("[apklayer-rob] activity resumed: " + activity);

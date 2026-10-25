@@ -21,6 +21,13 @@ javac -nowarn -d \$R/robout -cp "\$R/libs/*:\$R/android-all/*" \
   \$HOME/apklayer-m1/tests/rob/rob/apklayer/rob/*.java \
   \$HOME/apklayer-m1/tests/rob/rob/apklayer/wayland/*.java \
   \$HOME/apklayer-m1/tests/rob/rob/apklayer/tools/*.java
+# AGP build-system API: Robolectric reads these only from the classpath (not -D props).
+mkdir -p \$R/cfg/com/android/tools
+cat > \$R/cfg/com/android/tools/test_config.properties <<PROPS
+android_merged_manifest=$MANIFEST_DIR/manifest.txt
+android_resource_apk=$MANIFEST_DIR/base.apk
+android_custom_package=
+PROPS
 DN=/tmp/app-dni.jar
 java -cp "\$R/libs/*:\$R/robout" apklayer.tools.DenyInstrument $APPJAR \$DN
 cd $MANIFEST_DIR/../ || cd \$HOME
@@ -29,10 +36,9 @@ XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 \
 java -XX:UseSVE=0 \
   -Drobolectric.offline=true \
   -Drobolectric.dependency.dir=\$R/android-all \
-  -Dandroid_resource_apk=\$HOME/apklayer-m1/tests/uibench/uibench.apk \
   -Dapklayer.wl=\$HOME/apklayer-m1/bridge/b/libapklayer-wl.so \
   -Dapklayer.hostcp=\$R/robout \
-  -cp "\$R/libs/*:\$R/stubout:\$R/android-stub.jar:\$R/robout:/tmp/app-dni.jar:\$HOME/apklayer-apps" \
+  -cp "\$R/libs/*:\$R/stubout:\$R/android-stub.jar:\$R/robout:\$R/cfg:/tmp/app-dni.jar:\$HOME/apklayer-apps" \
   org.junit.runner.JUnitCore apklayer.rob.RunUiBench \
   2>&1 | grep -vE '^OpenJDK' | tail -60
 EOF
