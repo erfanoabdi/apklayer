@@ -3,7 +3,7 @@ Note: /Users/erfanabdi/GitHub/apklayer/runtime/host/java/apklayer/host/AppHost.j
 Note: Recompile with -Xlint:deprecation for details.
 Note: /Users/erfanabdi/GitHub/apklayer/runtime/dex2jvm/com.macapk.dex/ApiIndexLoader.java uses or overrides a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
-[macapk-dex] 393 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/Barcode Scanner_v4.7.8_apkpure.com-classes.jar in 506 ms
+[macapk-dex] 393 classes -> /Users/erfanabdi/GitHub/apklayer/build/check/Barcode Scanner_v4.7.8_apkpure.com-classes.jar in 515 ms
 [apklayer] DoNotInstrument stamped on 393 classes
 [apklayer] no apklayer-shell: headless
 [apklayer] started com.google.zxing.client.android.CaptureActivity depth=1

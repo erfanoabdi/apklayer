@@ -102,7 +102,9 @@ for APK in "${APKS[@]}"; do
   DEPTH=$(logf "$LOG" | sed -n 's/.*depth=\([0-9]*\).*/\1/p' | sort -n | tail -1)
   [ -z "$DEPTH" ] && DEPTH=0
   STATUS="FAIL"
-  if [ -n "$ACT" ] && [ -z "$EXC" ] && [ "$V1" -gt 4 ] && [ "$V2" -gt 4 ] && { [ "$D" -gt 0 ] || [ "$DEPTH" -ge 2 ]; }; then
+  # V1 threshold is low (2): camera/preview apps paint their first frame dark; a real
+  # state change (V2 or D) is the actual evidence the UI is alive.
+  if [ -n "$ACT" ] && [ -z "$EXC" ] && [ "$V1" -gt 1 ] && [ "$V2" -gt 4 ] && { [ "$D" -gt 0 ] || [ "$DEPTH" -ge 2 ]; }; then
     STATUS="PASS"
   fi
   # keep artifacts

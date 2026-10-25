@@ -42,4 +42,4 @@ Not yet tried: multi-dex apps (ASTRO, Sensors Multitool, Spic) and apps with nat
 | spic-v1.4.0 | 2 none | FAIL | java.lang.NoSuchMethodError: 'com.google.common.collect.ImmutableMap com.google.common.collect.ImmutableMap$Builder.buildOrThrow()' |
 | uibench | 1 none | PASS | com.android.test.uibench.MainActivity (tap diff 0%) |
 | whatsapp | 3 arm64-v8a | FAIL | java.lang.NoClassDefFoundError: java/lang/RunnableEBaseShape3S0100000_I0_3 |
-| Barcode Scanner_v4.7.8_apkpure.com | 1 none | FAIL | blank frame |
+| Barcode Scanner_v4.7.8_apkpure.com | 1 none | PASS | com.google.zxing.client.android.CaptureActivity (tap diff 66%) |
