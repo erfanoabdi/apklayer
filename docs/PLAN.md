@@ -295,6 +295,9 @@ double-click `Markor.apk` → it opens and is usable on both.
 6. ✅ Shell protocol v1 over a Unix socket with damage-driven frames (P1.6): `apklayer-shell`
    (multi-app, zero-copy shm pools, wl_buffer.release flow), pure-Java `ShellClient`; the JNI
    presenter (libapklayer-wl, WlWindow) and presentd were removed.
-7. Top-level Meson build (P1.3).
+7. ✅ Top-level Meson build (P1.3): `meson setup b && ninja -C b` builds apklayer-shell,
+   dex2jvm.jar and apklayer-host.jar (jars via `scripts/javac-jar.sh`; the shell is optional where
+   Wayland is missing). The Mac quick check (`scripts/check.sh`) uses plain javac on the same
+   sources, because the Mac has no Meson.
 8. Data dirs, CLI, install cache, desktop entries (P1.7–P1.9).
 9. P1 exit test with uibench + two corpus T1 apps.

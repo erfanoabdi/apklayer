@@ -2,7 +2,7 @@
 # vm-run: run an APK on the Robolectric method with our Wayland presenter (on the VM).
 # Usage: vm-run.sh [app.apk]        (default: tests/uibench/uibench.apk)
 #   Mirrors the deps cache (deps/deps.lock, filled by scripts/fetch-deps.sh on the Mac) and the
-#   sources to the VM, rebuilds the shell, converts the APK's DEX with dex2jvm against the
+#   sources to the VM, builds everything with Meson, converts the APK's DEX with dex2jvm against the
 #   android-all framework it runs on, and launches the host.
 # Graphics are always NATIVE (real HWUI/Skia via Robolectric's native runtime). Its prebuilts
 #   exist for linux-x86_64 only, so on the arm64 VM the app JVM is x86_64 under Rosetta (C2 and
@@ -24,34 +24,31 @@ vm() { sshpass -p "$VM_PASS" ssh -o StrictHostKeyChecking=no "$VM" "$@"; }
 vm "mkdir -p .cache/apklayer apklayer-apps"
 rsync -a --delete -e "sshpass -p $VM_PASS ssh -o StrictHostKeyChecking=no" "$DEPS/" "$VM:.cache/apklayer/deps/"
 
-# Sources (host, dex2jvm, shell) + the APK -> VM; the shell is rebuilt incrementally.
-vm "rm -rf apklayer-m1/tests apklayer-m1/runtime apklayer-m1/bridge/src && mkdir -p apklayer-m1"
-(cd "$ROOT" && COPYFILE_DISABLE=1 tar -cz runtime/host runtime/dex2jvm bridge/shell/meson.build bridge/shell/*.c) \
-  | vm "tar -xz -C apklayer-m1 2>/dev/null; find apklayer-m1 -name '._*' -delete
-        cd apklayer-m1/bridge/shell && { [ -d b ] || meson setup -Dbuildtype=release b >/dev/null; } && ninja -C b >/dev/null"
+# Sources -> VM, then one Meson build (shell + dex2jvm.jar + apklayer-host.jar).
+vm "rm -rf apklayer-m1 && mkdir -p apklayer-m1"
+(cd "$ROOT" && COPYFILE_DISABLE=1 tar -cz meson.build meson_options.txt runtime bridge scripts/javac-jar.sh) \
+  | vm "tar -xz -C apklayer-m1 2>/dev/null && cd apklayer-m1 && meson setup b >/dev/null && ninja -C b >/dev/null"
 sshpass -p "$VM_PASS" scp -q -o StrictHostKeyChecking=no "$APK" "$VM:apklayer-apps/$NAME.apk"
 
 vm bash -s <<EOF
 set -e
-R=\$HOME/.cache/apklayer/deps; S=\$HOME/apklayer-m1; B=\$HOME/apklayer-build; A=\$HOME/apklayer-apps/$NAME.apk
-rm -rf \$B && mkdir -p \$B/host \$B/d2j
-javac -nowarn -d \$B/host -cp "\$R/libs/*:\$R/android-all/*" \$(find \$S/runtime/host/java -name "*.java")
-javac -nowarn -d \$B/d2j \$(find \$S/runtime/dex2jvm -name "*.java")
+R=\$HOME/.cache/apklayer/deps; S=\$HOME/apklayer-m1; A=\$HOME/apklayer-apps/$NAME.apk
+HOST=\$S/b/runtime/host/apklayer-host.jar; D2J=\$S/b/runtime/dex2jvm/dex2jvm.jar
 
 # DEX -> JVM classes; the class hierarchy comes from the framework we run on (android-all).
-java -XX:UseSVE=0 -cp "\$B/d2j:\$R/android-all/*" com.macapk.dex.Main \$A /tmp/$NAME-classes.jar
-java -XX:UseSVE=0 -cp "\$R/libs/*:\$B/host" apklayer.tools.DenyInstrument /tmp/$NAME-classes.jar /tmp/$NAME-dni.jar
+java -XX:UseSVE=0 -cp "\$D2J:\$R/android-all/*" com.macapk.dex.Main \$A /tmp/$NAME-classes.jar
+java -XX:UseSVE=0 -cp "\$R/libs/*:\$HOST" apklayer.tools.DenyInstrument /tmp/$NAME-classes.jar /tmp/$NAME-dni.jar
 
 export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0
 JAVA="\$HOME/jdk21-x86/bin/java -XX:TieredStopAtLevel=1 -XX:+UseSerialGC"
 pkill -x apklayer-shell || true; sleep 0.3
-setsid nohup \$S/bridge/shell/b/apklayer-shell > /tmp/apklayer-shell.log 2>&1 < /dev/null &
+setsid nohup \$S/b/bridge/shell/apklayer-shell > /tmp/apklayer-shell.log 2>&1 < /dev/null &
 for i in \$(seq 1 50); do [ -S \$XDG_RUNTIME_DIR/apklayer/shell.sock ] && break; sleep 0.1; done
 cd /tmp
 \$JAVA @\$S/runtime/host/jvm.args $APKLAYER_JOPTS \
   -Drobolectric.offline=true \
   -Drobolectric.dependency.dir=\$R/android-all \
-  -cp "\$R/libs/*:\$R/android-stub.jar:\$B/host:/tmp/$NAME-dni.jar" \
+  -cp "\$R/libs/*:\$R/android-stub.jar:\$HOST:/tmp/$NAME-dni.jar" \
   apklayer.host.Main \$A /tmp/$NAME-dni.jar \
   2>&1 | grep --line-buffered -vE '^OpenJDK'
 sed 's/^/  /' /tmp/apklayer-shell.log | tail -6

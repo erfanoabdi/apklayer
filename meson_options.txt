@@ -1,0 +1,2 @@
+option('deps', type: 'string', value: '',
+  description: 'Directory filled by scripts/fetch-deps.sh (default: ~/.cache/apklayer/deps)')

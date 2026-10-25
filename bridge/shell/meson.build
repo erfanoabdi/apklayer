@@ -1,10 +1,8 @@
-project('apklayer-shell', 'c',
-  version: '0.1',
-  default_options: ['warning_level=2'])
-
-wl_client_dep = dependency('wayland-client')
-wl_protos_dep = dependency('wayland-protocols')
-scanner = find_program('wayland-scanner')
+# apklayer-shell needs Wayland; it is skipped where Wayland isn't available (e.g. macOS).
+wl_client_dep = dependency('wayland-client', required: host_machine.system() == 'linux')
+wl_protos_dep = dependency('wayland-protocols', required: host_machine.system() == 'linux')
+scanner = find_program('wayland-scanner', required: host_machine.system() == 'linux')
+if wl_client_dep.found() and wl_protos_dep.found() and scanner.found()
 
 xdg_xml = wl_protos_dep.get_variable(pkgconfig: 'pkgdatadir') + '/stable/xdg-shell/xdg-shell.xml'
 
@@ -23,3 +21,4 @@ executable('apklayer-shell',
   ['shell.c', xdg_header, xdg_code],
   dependencies: [wl_client_dep],
   install: false)
+endif

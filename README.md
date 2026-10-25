@@ -22,6 +22,13 @@ app.apk ──dex2jvm──> JVM classes ┐
   apklayer-shell (one per session) ──> Wayland windows  (bridge/shell/)
 ```
 
+## Build (Linux)
+
+```sh
+scripts/fetch-deps.sh          # pinned deps (deps/deps.lock) -> ~/.cache/apklayer/deps, local-first
+meson setup b && ninja -C b    # b/bridge/shell/apklayer-shell, b/runtime/{dex2jvm,host}/*.jar
+```
+
 ## Run (on the Parallels VM, from the Mac)
 
 ```sh
@@ -45,7 +52,8 @@ VM access: `ssh parallels@10.211.55.4` (password `1234`). Setup details are in m
 | `runtime/host/java/` | host (`apklayer.host`: Main, AppHost, ShellFrameListener, ShellClient), DenyInstrument |
 | `runtime/host/jvm.args` | JDK flags Robolectric needs |
 | `deps/deps.lock`, `scripts/fetch-deps.sh` | pinned dependencies (sha256), local-first fetch into `~/.cache/apklayer/deps` |
-| `bridge/shell/` | meson: `apklayer-shell` (session Wayland shell: windows, zero-copy frames, input) |
+| `meson.build`, `meson_options.txt` | one build for C and Java (`scripts/javac-jar.sh` compiles each jar in one javac call) |
+| `bridge/shell/` | `apklayer-shell` (session Wayland shell: windows, zero-copy frames, input) |
 | `scripts/vm-run.sh` | sync → build → convert → run on the VM |
 | `tests/uibench/` | target APK |
 | `archive/` | superseded approaches (M1 seed, Mac.apk java_mac era, M0 plan), reference only |
