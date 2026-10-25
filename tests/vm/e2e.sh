@@ -5,7 +5,8 @@
 # You can watch it in the VM's desktop.
 # Covers: Esc/Back, title bar buttons (Back, Maximize/Restore, Close), edge resize, title bar
 # move, D-pad navigation, wheel delivery. Not covered: HiDPI scale > 1 (needs a 2x output).
-# Usage: tests/vm/e2e.sh        Exit 0 = all pass.
+# Usage: tests/vm/e2e.sh [group...]   groups: window keys wheel close (default all; run only what you changed)
+# Exit 0 = all pass.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 VM="${APKLY_VM:-parallels@10.211.55.4}"; PASS="${APKLY_VM_PASS:-1234}"
@@ -15,6 +16,8 @@ vm() { sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" "$@"; }
 keys() { vm "echo $PASS | sudo -S /tmp/uinput-keys $* 2>/dev/null"; }
 pm() { echo "$(( $1 * 1000 / SW )),$(( $2 * 1000 / SH ))"; }          # px -> permille pair
 LOG="$(mktemp)"; fail=0
+WANTED=("$@")
+want() { [ ${#WANTED[@]} -eq 0 ] && return 0; for g in "${WANTED[@]}"; do [ "$g" = "$1" ] && return 0; done; return 1; }
 check() { if eval "$2"; then echo "PASS  $1"; else echo "FAIL  $1"; fail=1; fi; }
 shlog() { vm "cat /run/user/1000/apklayer-shell.log"; }
 waitfor() { timeout "$2" bash -c "until grep -q '$1' '$LOG'; do sleep 1; done"; }
@@ -42,32 +45,41 @@ read -r L T R <<<"$(geom)" || { echo "FAIL  could not find the window in a scree
 echo "window title bar: left=$L top=$T right=$R"
 BY=$((T + 16)); MAXX=$((R - 60)); CLOSEX=$((R - 20)); BACKX=$((L + 20))
 
+if want window; then
 # --- title bar: Maximize and Restore ---
 keys abs:$(pm $MAXX $BY) sleep:400 click sleep:3000
 check "title bar Maximize button maximizes (big rebuffer)" 'shlog | grep -q "rebuffered 9[0-9][0-9]x"'
 read -r L2 T2 R2 <<<"$(geom)"
 keys abs:$(pm $((R2 - 60)) $((T2 + 16))) sleep:400 click sleep:3000
 check "title bar Restore button restores the small size" 'shlog | grep rebuffered | tail -1 | grep -q "rebuffered [4-5][0-9][0-9]x"'
+fi
 
+if want window; then
 # --- title bar drag moves the window ---
 read -r L T R <<<"$(geom)"
 keys drag:$(pm $((L + 150)) $((T + 16))),$(pm $((L + 300)) $((T + 120))) sleep:1200
 read -r L3 T3 R3 <<<"$(geom)"
 check "dragging the title bar moves the window (+~150 px)" '[ $((L3 - L)) -gt 100 ]'
+fi
 
+if want window; then
 # --- resize cursor over the edges (the shell logs the cursor it sets) ---
 read -r L T R <<<"$(geom)"
 keys abs:$(pm $((L + 200)) $((T + 200))) sleep:500 abs:$(pm $((R - 3)) $((T + 200))) sleep:800
 check "right edge shows the east/right resize cursor" 'shlog | grep "cursor " | tail -1 | grep -q right_side'
 keys abs:$(pm $((L + 200)) $((T + 200))) sleep:800
 check "cursor goes back to the arrow inside the window" 'shlog | grep "cursor " | tail -1 | grep -q left_ptr'
+fi
 
+if want window; then
 # --- resize by holding an edge ---
 W0=$(shlog | grep rebuffered | tail -1 | sed 's/.*rebuffered \([0-9]*\)x.*/\1/')
 keys drag:$(pm $((R3 - 2)) $((T3 + 300))),$(pm $((R3 + 100)) $((T3 + 300))) sleep:1500
 W1=$(shlog | grep rebuffered | tail -1 | sed 's/.*rebuffered \([0-9]*\)x.*/\1/')
 check "holding the right edge and dragging resizes the window ($W0 -> $W1)" '[ "$W1" -gt "$((W0 + 50))" ]'
+fi
 
+if want keys; then
 # --- D-pad menu selection, then the Back button in the title bar ---
 read -r L T R <<<"$(geom)"
 keys abs:$(pm $((L + 200)) $((T + 400))) click sleep:600   # focus the window content (opens an entry)
@@ -81,7 +93,9 @@ check "title bar Back button goes back one screen" '[ "$(count "finished .*depth
 fin=$(count "finished .*depth=")
 keys key:1 sleep:2000
 check "Esc goes back one screen" '[ "$(count "finished .*depth=")" -gt "$fin" ]'
+fi
 
+if want wheel; then
 # --- wheel: sweep the pointer over the screen; the shell sees scroll events inside the window ---
 grid=""; for y in 300 450 600; do for x in 250 400 550; do grid="$grid abs:$(pm $x $y) wheel:-1 sleep:120"; done; done
 keys $grid
@@ -92,9 +106,13 @@ if shlog | grep -q "axis "; then
 else
   echo "SKIP  wheel: the test mouse's wheel produced no Wayland axis events (uinput limitation)"
 fi
+fi
 
+if want close; then
 # --- Close button ends the app ---
 read -r L T R <<<"$(geom)"
 keys abs:$(pm $((R - 20)) $((T + 16))) sleep:400 click sleep:3000
 check "title bar Close button closes the app" 'grep -q "finished .*depth=0\|exit:" "$LOG"'
+fi
+
 exit $fail
