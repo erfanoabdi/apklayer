@@ -40,8 +40,8 @@ version updates. Instead:
 | M0 | Sources & tooling recon (Mac.apk, ATL, los24, VM) | done |
 | M1 | AOSP code runs on a stock JVM (message loop proven) | done |
 | M2 | Real app Activity constructs against a JVM framework | done (java_mac era) |
-| M3 | **Robolectric pipeline end-to-end on VM** (android-all 8.1.0 + shadows + dex2jvm app + Wayland presenter) | **in progress** — sandbox boots, manifest+resources load, MainActivity created; last gate: theme resolution ("You need to use a Theme.AppCompat theme" in postCreate) |
-| M4 | uibench renders frames to the Wayland window (full UI) | pending |
+| M3 | **Robolectric pipeline end-to-end on VM** (android-all 8.1.0 + shadows + dex2jvm app + Wayland presenter) | done — real PackageParser via AGP `test_config.properties`; MainActivity resumes with its AppCompat theme |
+| M4 | uibench renders frames to the Wayland window (full UI) | **done (render)** — NATIVE graphics (real HWUI/Skia), ~43 fps to Wayland; x86_64 JVM under Rosetta + shared fb -> native arm64 `apklayer-presentd` |
 | M5 | Input (touch/keyboard), resize, lifecycle; second APK | pending |
 | M6 | Binder-lite + ContentProvider subset; system-service fakes | pending |
 

@@ -2,6 +2,10 @@
 # apklayer-rob: run a converted APK on the Robolectric method with our Wayland presenter.
 # Usage: apklayer-rob <converted-classes.jar> <activity FQCN> [manifest-dir]
 #   manifest-dir: dir containing the unpacked APK (binary AndroidManifest.xml + resources.arsc)
+# APKLAYER_GFX=NATIVE: real HWUI/Skia via Robolectric's native runtime. Its prebuilts exist for
+#   linux-x86_64 only, so on the arm64 VM the app JVM is x86_64 (Rosetta; C2 crashes there, so
+#   C1 only) and frames go through a shared framebuffer to the native apklayer-presentd.
+#   APKLAYER_GFX=LEGACY (default): arm64 JVM, in-process presenter, no text rendering.
 set -e
 APPJAR="$1"; ACTIVITY="$2"; MANIFEST_DIR="${3:-$HOME/apklayer-apps/uibench}"
 VM="${APKLY_VM:-parallels@10.211.55.4}"
@@ -32,9 +36,18 @@ DN=/tmp/app-dni.jar
 java -cp "\$R/libs/*:\$R/robout" apklayer.tools.DenyInstrument $APPJAR \$DN
 cd $MANIFEST_DIR/../ || cd \$HOME
 cd \$(dirname $MANIFEST_DIR)
-XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 \
-java -XX:UseSVE=0 \
+export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0
+GFX=${APKLAYER_GFX:-LEGACY}
+if [ "\$GFX" = NATIVE ]; then
+  JAVA="\$HOME/jdk21-x86/bin/java -XX:TieredStopAtLevel=1 -Dapklayer.fb=/dev/shm/apklayer-fb"
+  rm -f /dev/shm/apklayer-fb
+  \$HOME/apklayer-m1/bridge/b/apklayer-presentd /dev/shm/apklayer-fb &
+else
+  JAVA="java -XX:UseSVE=0"
+fi
+\$JAVA \
   -Drobolectric.offline=true \
+  -Drobolectric.graphicsMode=\$GFX \
   -Drobolectric.dependency.dir=\$R/android-all \
   -Dapklayer.wl=\$HOME/apklayer-m1/bridge/b/libapklayer-wl.so \
   -Dapklayer.hostcp=\$R/robout \

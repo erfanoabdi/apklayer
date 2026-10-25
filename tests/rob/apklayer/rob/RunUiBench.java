@@ -12,7 +12,6 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
-import org.robolectric.annotation.GraphicsMode;
 import org.robolectric.shadows.ShadowLooper;
 
 import java.util.concurrent.TimeUnit;
@@ -23,9 +22,9 @@ import java.util.concurrent.TimeUnit;
  * from the real APK (binary resources mode, AGP's test_config.properties contract: the real
  * PackageParser reads the APK, so package/themes are unmodified). Frames: real View tree -> Canvas -> Bitmap ->
  * presented on the host Wayland window (driver-side, outside the sandbox).
+ * Graphics mode comes from -Drobolectric.graphicsMode (LEGACY|NATIVE).
  */
 @RunWith(RobolectricTestRunner.class)
-@GraphicsMode(GraphicsMode.Mode.LEGACY)
 @Config(sdk = 27, qualifiers = "w480dp-h800dp")
 public final class RunUiBench {
 
@@ -48,10 +47,7 @@ public final class RunUiBench {
         System.out.println("[apklayer-rob] decor " + w + "x" + h);
 
         HostWindow win = HostWindow.get(w, h);
-        if (win == null) {
-            System.out.println("[apklayer-rob] host window unavailable (headless?)");
-            return;
-        }
+        if (win == null) System.out.println("[apklayer-rob] no host window: headless snapshot only");
 
         Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bmp);
@@ -59,13 +55,14 @@ public final class RunUiBench {
 
         long t0 = System.currentTimeMillis();
         int frames = 0;
-        while (!win.shouldClose() && System.currentTimeMillis() - t0 < 60_000) {
+        while (win != null ? !win.shouldClose() && System.currentTimeMillis() - t0 < 60_000
+                           : frames < 30) {
             ShadowLooper.idleMainLooper(16, TimeUnit.MILLISECONDS);
             decor.draw(canvas);
             bmp.getPixels(px, 0, w, 0, 0, w, h);
-            win.present(px, w, h);
+            if (win != null) win.present(px, w, h);
             frames++;
-            if (frames == 30) dumpPng(px, w, h, "/tmp/apklayer-frame.png");
+            if (frames == 30) dumpPng(px, w, h, System.getProperty("apklayer.snapshot", "/tmp/apklayer-frame.png"));
             if (frames % 60 == 1) {
                 System.out.println("[apklayer-rob] frame " + frames + " ("
                         + (System.currentTimeMillis() - t0) + " ms)");

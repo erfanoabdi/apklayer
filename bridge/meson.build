@@ -46,3 +46,10 @@ shared_library('apklayer-jni',
   c_args: jni_args,
   gnu_symbol_visibility: 'default',
   install: false)
+
+# Out-of-process presenter: maps the app's shared framebuffer (see src/presentd.c).
+executable('apklayer-presentd',
+  ['src/presentd.c', 'src/jni/present.c', xdg_header, xdg_code],
+  dependencies: [wl_client_dep],
+  c_args: jni_args,
+  install: false)

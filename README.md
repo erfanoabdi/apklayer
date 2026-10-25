@@ -20,8 +20,8 @@ android-all-instrumented 8.1.0 (unmodified AOSP on JVM) + Robolectric shadows
 real View tree -> Canvas -> Bitmap -> int[] -> libapklayer-wl.so -> Wayland window
 ```
 
-Gate reached: sandbox boots, binary manifest + resources load, MainActivity is
-created. Next gate: AppCompat theme resolution in `postCreate`.
+Gate reached: **full uibench main UI renders to the Wayland window** (NATIVE graphics =
+real HWUI/Skia, ~43 fps). Next: input + navigating into sub-activities (M5).
 
 ## Layout
 
@@ -44,7 +44,7 @@ created. Next gate: AppCompat theme resolution in `postCreate`.
 - VM layout: `~/rob/libs` (Robolectric deps), `~/rob/android-all/` (framework jars),
   `~/rob/android-stub.jar` (API-35 stubs), `~/apklayer-apps/uibench` (unpacked APK),
   `~/apklayer-m1/bridge/b/` (libapklayer-wl.so).
-- Run: `APKLY_VM_PASS=1234 ./scripts/apklayer-rob.sh /tmp/uibench-classes.jar
+- Run (full UI): `APKLAYER_GFX=NATIVE APKLY_VM_PASS=1234 ./scripts/apklayer-rob.sh /tmp/uibench-classes.jar
   com.android.test.uibench.MainActivity '$HOME/apklayer-apps/uibench'`
 
 ## License note

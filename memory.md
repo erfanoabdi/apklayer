@@ -208,3 +208,26 @@ Living document of facts and decisions told by the user. Keep this up to date.
   (resolve Theme.AppCompat(.Light)/AppTheme from app package). Next: fix resource
   package resolution (pkg printed org.robolectric.default -> getIdentifier returned 0;
   must make Robolectric use com.android.test.uibench package) then frames -> Wayland.
+
+## 2026-10-25 (night) — FULL UIBENCH UI ON WAYLAND (M3+M4 render)
+- Theme gate root cause: Robolectric reads android_resource_apk/android_merged_manifest ONLY from
+  classpath /com/android/tools/test_config.properties (AGP contract), not -D props; and @Config
+  manifest pointing at the binary AXML fails to parse -> org.robolectric.default. Script now writes
+  that file (manifest.txt = text-decoded manifest, base.apk). The real PackageParser parses the APK.
+- LEGACY graphics = recording fake (no text, translate not composed) -> never full UI.
+  NATIVE graphics renders the complete UI (verified first on the Mac with mac-arm64 dylib).
+- Robolectric native runtime ships linux-x86_64 / mac / windows only — NO linux-arm64 in any
+  android-all (checked 27, 36, 37) nor nativeruntime-dist-compat. In AOSP it is a prebuilt too
+  (built from a custom AOSP hostruntime branch with Soong) -> building it = AOSP build (rule!).
+- Solution on the arm64 VM: Rosetta for Linux is active (binfmt RosettaLinux, amd64 foreign arch,
+  libc6:amd64). x86_64 JDK = LOCAL los24 prebuilts/jdk/jdk21/linux-x86 -> VM ~/jdk21-x86.
+  HotSpot C2 bus-errors under Rosetta -> -XX:TieredStopAtLevel=1 (C1 only) works.
+  No x86_64 libwayland locally -> frames go through a shared file /dev/shm/apklayer-fb
+  (pure-Java MappedByteBuffer in HostWindow) to native arm64 bridge/b/apklayer-presentd.
+- Run: APKLAYER_GFX=NATIVE APKLY_VM_PASS=1234 ./scripts/apklayer-rob.sh /tmp/uibench-classes.jar
+  com.android.test.uibench.MainActivity '$HOME/apklayer-apps/uibench'  -> ~43 fps, snapshot
+  /tmp/apklayer-frame.png on VM.
+- User (2026-10-25): "stop downloads, try to use local stuff" — prefer local artifacts (los24
+  prebuilts, OrbStack VM, existing ~/rob) over network downloads.
+- Next: M5 input (presentd forwards wl_pointer into the fb; Java injects MotionEvents) and
+  following startActivity into sub-activities.
