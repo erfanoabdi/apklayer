@@ -85,6 +85,8 @@ public final class AppHost implements Runnable {
     private final Set<Activity> stopped = new HashSet<>();
     private Handler main;
     private boolean pausedByFocus, stoppedByMinimize; // lifecycle driven by the window state
+    private int logicalW, logicalH, logicalScale = 100; // current window size in dp and scale %
+    private int lastOrientation = -2;                    // top activity's requested orientation last applied
     private String lastClipboard = ""; // last text exchanged with the shell, to avoid echo loops
     private ShellClient shell;
     private HostInput input;
@@ -130,6 +132,10 @@ public final class AppHost implements Runnable {
 
         Display display = app.getSystemService(DisplayManager.class).getDisplay(Display.DEFAULT_DISPLAY);
         int width = display.getWidth(), height = display.getHeight();
+        float density = app.getResources().getDisplayMetrics().density;
+        logicalW = Math.round(width / density);
+        logicalH = Math.round(height / density);
+        logicalScale = Math.round(density * 100);
         main = new Handler(Looper.getMainLooper());
         input = new HostInput(main, InstrumentationRegistry.getInstrumentation().getUiAutomation(), new HostInput.WindowEvents() {
             @Override
@@ -142,7 +148,13 @@ public final class AppHost implements Runnable {
                 hostState(flags);
             }
         });
-        scriptRunner = new ScriptRunner(input, this::hostClipboardIn, this::hostClipboardCopy);
+        scriptRunner = new ScriptRunner(input, java.util.Map.of(
+                "clipin", this::hostClipboardIn, // the system selection changed
+                "clipcopy", this::hostClipboardCopy, // the app copies text itself
+                "orient", o -> { // orient:<ActivityInfo.SCREEN_ORIENTATION_* value>
+                    Activity top = stack.peek().get();
+                    top.setRequestedOrientation(Integer.parseInt(o));
+                }));
 
         ShellClient shell = ShellClient.connect(app.getPackageName());
         if (shell == null) {
@@ -374,6 +386,7 @@ public final class AppHost implements Runnable {
                     looper.idle();
                 }
                 followNavigation();
+                followOrientation();
             }
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -410,6 +423,22 @@ public final class AppHost implements Runnable {
     }
 
     /** Follows the app's startActivity() calls and finish() of the top activity. */
+    /**
+     * PLAN P2.3: a portrait/landscape request from the top activity (manifest screenOrientation or
+     * setRequestedOrientation) reshapes the window. Other values keep the current shape.
+     */
+    private void followOrientation() {
+        if (stack.isEmpty() || logicalW == 0) return;
+        int req = stack.peek().get().getRequestedOrientation();
+        if (req == lastOrientation) return;
+        lastOrientation = req;
+        boolean landscape = req == 0 || req == 6 || req == 11, portrait = req == 1 || req == 7 || req == 12;
+        if ((landscape && logicalW < logicalH) || (portrait && logicalW > logicalH)) {
+            System.out.println("[apklayer] orientation " + (landscape ? "landscape" : "portrait") + " requested");
+            hostResize(logicalH, logicalW, logicalScale);
+        }
+    }
+
     private void followNavigation() {
         ShadowApplication shadowApp = Shadow.extract(RuntimeEnvironment.getApplication());
         Intent next = shadowApp.getNextStartedActivity();
@@ -514,6 +543,9 @@ public final class AppHost implements Runnable {
     private void hostResize(int w, int h, int scalePct) {
         int dpi = 160 * scalePct / 100;
         int wdp = Math.max(1, w), hdp = Math.max(1, h);
+        logicalW = w;
+        logicalH = h;
+        logicalScale = scalePct;
         System.out.println("[apklayer] configure " + w + "x" + h + " @" + scalePct + "% -> " + wdp
                 + "x" + hdp + "dp @" + dpi + "dpi");
         RuntimeEnvironment.setQualifiers("w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi");

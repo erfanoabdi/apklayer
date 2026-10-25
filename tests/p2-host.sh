@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # P2 host-level check (Mac or Linux, headless): drives the shell-event paths of AppHost with the
 # same int[] events ShellClient produces: key (Back, typing), wheel, configure (resize, HiDPI).
-# Exit 0 = all pass. Usage: tests/p2-host.sh [group...]   groups: back type resize hidpi wheel dialog dpad lifecycle clipboard
+# Exit 0 = all pass. Usage: tests/p2-host.sh [group...]   groups: back type resize hidpi wheel dialog dpad lifecycle clipboard orient
 # (no argument = all; run only the groups for the code you changed)
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -83,6 +83,13 @@ log=$("$ROOT/scripts/check.sh" "$APK" "2000:clipin:hello+3000:clipcopy:copied te
 check "system selection reaches the app clipboard" 'grep -q "clipboard from the system (5 chars)" <<<"$log"'
 check "app copy goes to the system" 'grep -q "clipboard to the system (11 chars)" <<<"$log"'
 check "the echo of our own text is ignored" '[ "$(grep -c "clipboard from the system" <<<"$log")" = 1 ]'
+fi
+
+if want orient; then
+# 11. Orientation: a landscape request makes the window landscape, portrait brings it back
+log=$("$ROOT/scripts/check.sh" "$APK" "2000:orient:0+4000:orient:1" "1500,3000,5500" 6000 2>&1)
+check "landscape request -> 800x480 window" '[ "$(size "$ROOT/build/check/uibench-3000ms.png")" = 800x480 ]'
+check "portrait request -> 480x800 window" '[ "$(size "$ROOT/build/check/uibench-5500ms.png")" = 480x800 ]'
 fi
 
 exit $fail

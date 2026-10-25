@@ -67,13 +67,12 @@ import org.robolectric.simulator.ScreenUpdateHandler;
 /** Scripted verification steps (-Dapklayer.script): tap, key, wheel, configure, back. */
 final class ScriptRunner {
     private final HostInput input;
-    private final java.util.function.Consumer<String> clipboardIn, clipboardCopy;
+    /** Steps provided by the host itself: name -> action(argument), e.g. clipin, clipcopy, orient. */
+    private final java.util.Map<String, java.util.function.Consumer<String>> hostSteps;
 
-    ScriptRunner(HostInput input, java.util.function.Consumer<String> clipboardIn,
-            java.util.function.Consumer<String> clipboardCopy) {
+    ScriptRunner(HostInput input, java.util.Map<String, java.util.function.Consumer<String>> hostSteps) {
         this.input = input;
-        this.clipboardIn = clipboardIn;
-        this.clipboardCopy = clipboardCopy;
+        this.hostSteps = hostSteps;
     }
 
     void runStep(String step) {
@@ -122,10 +121,8 @@ final class ScriptRunner {
         } else if (step.startsWith("hover:")) { // hover:x,y mouse move without a button
             String[] p = step.substring(6).split(",");
             input.onHostEvent(new int[] {3, Integer.parseInt(p[0]), Integer.parseInt(p[1])});
-        } else if (step.startsWith("clipin:")) { // clipin:<text>: the system selection changed
-            clipboardIn.accept(step.substring(7));
-        } else if (step.startsWith("clipcopy:")) { // clipcopy:<text>: the app copies text itself
-            clipboardCopy.accept(step.substring(9));
+        } else if (hostSteps.containsKey(step.substring(0, Math.max(0, step.indexOf(':'))))) {
+            hostSteps.get(step.substring(0, step.indexOf(':'))).accept(step.substring(step.indexOf(':') + 1));
         } else if (step.startsWith("state:")) { // state:<flags> (1 active, 2 minimized): window focus/minimize from the shell
             input.onHostEvent(new int[] {15, Integer.parseInt(step.substring(6))});
         } else if (step.startsWith("wheel:")) { // wheel:x,y,vnotches*1000 (+ = up): as the shell sends it
