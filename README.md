@@ -70,6 +70,7 @@ VM access: `ssh parallels@10.211.55.4` (password `1234`). Setup details are in m
 | `bin/apklayer` | the CLI: install / run / list / uninstall |
 | `scripts/vm-run.sh` | sync → Meson build → `apklayer run` on the VM |
 | `tests/uibench/` | target APK |
+| `tests/corpus/results.md` | which real apps run and why the others fail |
 | `archive/` | superseded approaches (M1 seed, Mac.apk java_mac era, M0 plan), reference only |
 
 ## License

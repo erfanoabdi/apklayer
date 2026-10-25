@@ -36,6 +36,9 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
   Rosetta APKLAYER_JAVA there). `gtk-launch apklayer-<pkg>` from ssh works with
   DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus. uibench's manifest declares
   InflatingEmojiListActivity, which is NOT in its dex (the host logs it and stays on screen).
+- Test APKs: the user's `~/TestApps` (25 APKs; pure-Java single-dex: gpstest, Vibrations Test, Device
+  Info HW, drminfo, Barcode Scanner, opencamera, NewPipe, Shelter). Results + causes in
+  tests/corpus/results.md (Vibrations Test and Open Camera pass; five fail with listed causes).
 - On the VM: `./scripts/vm-run.sh [app.apk]` (default uibench). Headless on the Mac:
   `./scripts/check.sh [apk] [script] [snapms] [runms]` → build/check/*.png (fast iteration).
   It syncs the deps cache, runtime/host, runtime/dex2jvm and bridge/shell to the VM, rebuilds, converts

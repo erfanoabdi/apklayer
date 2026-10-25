@@ -303,4 +303,8 @@ double-click `Markor.apk` → it opens and is usable on both.
    via links pre-created before the lazy Application; `Main --describe` writes info + icon;
    `.desktop` + MIME handler; config in `~/.config/apklayer/env`. Verified on the VM, including a
    menu-style launch with `gtk-launch`.
-9. P1 exit test with uibench + two corpus T1 apps.
+9. ◐ P1 exit test: uibench + **Vibrations Test + Open Camera pass headless on the Mac** (local
+   APKs from ~/TestApps, no download). Still to do: run those two on the VM through `apklayer run`.
+   Five more apps fail with concrete, listed causes (tests/corpus/results.md) that are P3 fix-loop
+   items: manifest ContentProviders before Application.onCreate (Firebase), a `getprop` stand-in,
+   `Display.getHdrCapabilities`, the MediaPlayer data source, the NewPipe startup NPE.
