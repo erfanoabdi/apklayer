@@ -95,7 +95,7 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
   scripts/javac-jar.sh (Meson's jar() compiles per file and can't resolve dex2jvm's flat
   `com.macapk.dex/` dir). The Mac has no meson/ninja (not installed: avoid downloads), so check.sh
   uses javac directly. Exclude macOS `._*` AppleDouble files (COPYFILE_DISABLE=1 for tar).
-- P1.6 shell: `apklayer-shell` daemon (bridge/shell/shell.c) on `$XDG_RUNTIME_DIR/apklayer/shell.sock`;
+- P1.6 shell: `apklayer-shell` daemon (bridge/shell/, see docs/ARCHITECTURE.md) on `$XDG_RUNTIME_DIR/apklayer/shell.sock`;
   vm-run (re)starts it detached, log /tmp/apklayer-shell.log. App side = pure Java ShellClient.
   Rosetta flake: Robolectric TempDirectory cleanup at JVM exit sometimes SIGSEGVs in HotSpot
   (LinkResolver); harmless, gone with native arm64 (P7). The VM is ~2x slower than the Mac, so
@@ -134,3 +134,18 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
 - Mac has JDK 21 at `/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec/openjdk.jdk/Contents/Home`
   and the mac-arm64 Robolectric native runtime works there, so fast headless iteration is
   possible on the Mac using `~/.cache/apklayer/deps` (same jars as the VM).
+
+## VM testing toolbox (2026-10-26)
+- Screenshots of the VM desktop: `prlctl capture "Ubuntu 24.04 (with Rosetta)" --file x.png` on the Mac
+  (the guest's own screenshot D-Bus API is denied; the capture does not include the cursor).
+- Real input: `tests/vm/uinput-keys.c` (compile with gcc on the VM, run with sudo): keyboard device +
+  an absolute-pointer device (permille coordinates). VM screen is 1024x768. Wheel events from this
+  device only sometimes reach the compositor, so the VM wheel check may SKIP.
+- GNOME on the VM (mutter 46) has no cursor-shape-v1 and no server-side decorations; the shell draws
+  its own title bar (decor.c) and sets resize cursors through the wl_cursor theme.
+- `tests/p2-host.sh` / `tests/vm/e2e.sh` accept group names; run only what the change touched.
+- Gotchas learned: Robolectric's `UiAutomation` key injection skips `ViewRootImpl` (no focus
+  navigation) and offers wheel events to the first touch-modal root; dialogs are separate windows
+  and must be ordered by window type; the window root has no input focus unless the host sets it.
+- Frame size drives the shell buffers (`ShellClient.present(px, w, h)`); a shm file is never
+  truncated/reused across resizes (the compositor may still read it).

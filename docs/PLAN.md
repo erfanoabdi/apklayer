@@ -57,7 +57,7 @@ evidence breaks it. If that happens, change this file in the same commit as the 
 Target repo layout:
 
 ```
-bridge/shell/        apklayer-shell (C, shell.c)
+bridge/shell/        apklayer-shell (C: main, client, window, decor, pointer, keyboard, registry)
 bridge/ndk/          NDK shim libraries (C)                         (P4)
 runtime/dex2jvm/     unchanged
 runtime/host/        Java: simulator/ (vendored, MIT), apklayer/host/ (launcher, Wayland FrameListener,
@@ -148,6 +148,24 @@ Data written by the app survives a restart.
 
 **Exit test P2:** a corpus app with text fields accepts typing (including Unicode), scrolls
 with the wheel, resizes without restarting, and renders sharp at 200% scale.
+
+**P2 status (2026-10-26):**
+
+| Item | State |
+|---|---|
+| 1 Resize | ✅ in-place rebuffer of the toplevel; in-place configuration change (activities are not recreated yet); compositor resize + edge/corner drag + maximize verified on the VM |
+| 2 HiDPI | ◐ scale plumbing done (wl_output v2, buffer scale, pointer scaling, startup scale applied before launch); verified headless at 200%, **not on a 2x output** |
+| 3 Orientation | pending |
+| 4 Pointer | ◐ wheel → `ACTION_SCROLL` (notches, dialogs get it); no drag-fling, hover, right-click long-press yet |
+| 5 Touch | pending |
+| 6 Keyboard | ◐ xkb, key repeat, Unicode typing, D-pad/Tab navigation, Esc/Alt+Left/Backspace = Back; **no IME (`zwp_text_input_v3`) yet** |
+| 7 Clipboard | pending |
+| 8 Multiple windows | ◐ dialogs are separate windows and get input; toasts/overlays as subsurfaces pending |
+| 9 Lifecycle | ◐ minimize button exists; `onPause/onStop` on minimize/focus loss pending |
+| Window decoration | ✅ (added at user request) client-side title bar: Back, Minimize, Maximize/Restore, Close, drag-to-move, double-click maximize, edge/corner resize with resize cursors (cursor-shape or wl_cursor fallback) |
+
+Tests: `tests/p2-host.sh [group]` (headless, Mac) and `tests/vm/e2e.sh [group]` (real uinput input +
+`prlctl capture` screenshots on the VM). Run only the groups for the code you changed.
 
 ### P3 — Compatibility engine (runs continuously from here on)
 
@@ -279,6 +297,20 @@ double-click `Markor.apk` → it opens and is usable on both.
 - Every phase: update goal.md (milestone status), memory.md (facts learned) and this file
   (if a decision changed, with the reason).
 - Report progress to the user at every exit test, with a snapshot.
+
+## 4b. User concerns tracker (never drop these)
+
+| Concern (user) | State |
+|---|---|
+| Keep working toward the goal without stopping; report progress | ongoing: report at every milestone/exit test |
+| Keep the md files (PLAN, memory, goal, ARCHITECTURE, README) current | done at each step; check before every commit |
+| File architecture: `shell.c` / `AppHost.java` too big | ✅ 2026-10-26: shell split into 7 modules, host into AppHost/HostInput/HostWindows/ScriptRunner. Watch next: `ShellClient`, `HostWindows`; `Translator.java` (4.6k, vendored from Mac.apk) is deliberately left alone |
+| Window decoration (resize, close, minimize, back button) | ✅ |
+| Resize by holding the edges, resize cursor | ✅ (cursor appearance depends on the system theme; the VM theme is old) |
+| D-pad menu selection and mouse-wheel scrolling (incl. Dialog List) | ✅ fixed (window focus + touch mode; dialog-aware routing) |
+| Test efficiency: only run tests for what changed | ✅ group arguments on both test scripts |
+| The user does not test by hand: verify on the VM before reporting | ongoing |
+| See what happens in the VM (visible in the Parallels window) | ongoing: tests run in the real session |
 
 ## 5. Immediate next tasks (start here)
 

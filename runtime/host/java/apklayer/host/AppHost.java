@@ -77,7 +77,6 @@ import org.robolectric.simulator.ScreenUpdateHandler;
  * persistent app data root for that package.
  */
 public final class AppHost implements Runnable {
-    private static final int KEY_ESC = 1, KEY_BACKSPACE = 14; // evdev codes from the shell
 
     private final AndroidSandbox sandbox;
     private final Path apk;
@@ -85,8 +84,8 @@ public final class AppHost implements Runnable {
     private final Deque<ActivityController<? extends Activity>> stack = new ArrayDeque<>();
     private final Set<Activity> stopped = new HashSet<>();
     private Handler main;
-    private UiAutomation uiAutomation;
-    private long downTime;
+    private HostInput input;
+    private ScriptRunner scriptRunner;
 
     /** @param describe if non-null, write the app's metadata there instead of running it */
     public AppHost(AndroidSandbox sandbox, Path apk, Path describe) {
@@ -129,7 +128,8 @@ public final class AppHost implements Runnable {
         Display display = app.getSystemService(DisplayManager.class).getDisplay(Display.DEFAULT_DISPLAY);
         int width = display.getWidth(), height = display.getHeight();
         main = new Handler(Looper.getMainLooper());
-        uiAutomation = InstrumentationRegistry.getInstrumentation().getUiAutomation();
+        input = new HostInput(main, InstrumentationRegistry.getInstrumentation().getUiAutomation(), this::hostResize);
+        scriptRunner = new ScriptRunner(input);
 
         ShellClient shell = ShellClient.connect(app.getPackageName());
         if (shell == null) {
@@ -167,7 +167,7 @@ public final class AppHost implements Runnable {
 
         launch(launcherIntent(app));
         // Like Simulator.postMotionEvent: an off-screen move so the first frame is drawn.
-        inject(MotionEvent.obtain(0, SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE, width, height, 0));
+        input.inject(MotionEvent.obtain(0, SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE, width, height, 0));
         loop(shell, frames);
     }
 
@@ -322,8 +322,8 @@ public final class AppHost implements Runnable {
                         && (elapsed >= runMs || (shell != null && shell.closed())))
                     break;
 
-                for (int[] ev; shell != null && (ev = shell.poll()) != null; ) onHostEvent(ev);
-                while (!script.isEmpty() && script.firstKey() <= elapsed) runStep(script.pollFirstEntry().getValue());
+                for (int[] ev; shell != null && (ev = shell.poll()) != null; ) input.onHostEvent(ev);
+                while (!script.isEmpty() && script.firstKey() <= elapsed) scriptRunner.runStep(script.pollFirstEntry().getValue());
                 while (!snaps.isEmpty() && snaps.firstKey() <= elapsed) {
                     long sMs = snaps.firstKey();
                     if (sMs == lastSnapshotAt) { // same instant already captured this iteration
@@ -332,7 +332,7 @@ public final class AppHost implements Runnable {
                     }
                     lastSnapshotAt = sMs;
                     frames.snapshot(snapPrefix + "-" + snaps.pollFirstEntry().getValue() + "ms.png");
-                    if (Boolean.getBoolean("apklayer.debugwindows")) dumpWindows();
+                    if (Boolean.getBoolean("apklayer.debugwindows")) HostWindows.dumpWindows();
                 }
 
                 long nextTask = looper.getNextScheduledTaskTime().toMillis();
@@ -432,177 +432,6 @@ public final class AppHost implements Runnable {
         c.get().getWindow().getDecorView().setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
     }
 
-    /** Debug: the window list as WindowManagerGlobal holds it. */
-    private static void dumpWindows() {
-        Object wmg = android.view.WindowManagerGlobal.getInstance();
-        List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
-        for (View v : views) {
-            System.out.println("[apklayer]   window " + v.getClass().getSimpleName() + " " + v.getWidth() + "x"
-                    + v.getHeight() + " vis=" + v.getVisibility() + " attached=" + v.isAttachedToWindow()
-                    + " ctx=" + v.getContext().getClass().getSimpleName());
-        }
-    }
-
-    /** Shell input {type, a, b, 0} (bridge/shell/shell.c): pointer -> MotionEvent, Esc/Backspace -> Back. */
-    private void onHostEvent(int[] ev) {
-        long now = SystemClock.uptimeMillis();
-        if (ev[0] <= 2) {
-            if (ev[0] == MotionEvent.ACTION_DOWN) downTime = now;
-            inject(MotionEvent.obtain(downTime, now, ev[0], ev[1], ev[2], 0));
-        } else if (ev[0] == 12) { // key (xkb): {12, action, android keycode, unicode, meta}
-            hostKey(now, ev[1], ev[2], ev[3], ev[4]);
-        } else if (ev[0] == 13) { // wheel: {13, x, y, vscroll*1000, hscroll*1000}
-            MotionEvent.PointerProperties pp = new MotionEvent.PointerProperties();
-            pp.id = 0;
-            pp.toolType = MotionEvent.TOOL_TYPE_MOUSE;
-            MotionEvent.PointerCoords pc = new MotionEvent.PointerCoords();
-            pc.x = ev[1];
-            pc.y = ev[2];
-            pc.setAxisValue(MotionEvent.AXIS_VSCROLL, ev[3] / 1000f);
-            pc.setAxisValue(MotionEvent.AXIS_HSCROLL, ev[4] / 1000f);
-            MotionEvent scroll = MotionEvent.obtain(now, now, MotionEvent.ACTION_SCROLL, 1,
-                    new MotionEvent.PointerProperties[] {pp}, new MotionEvent.PointerCoords[] {pc},
-                    0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_MOUSE, 0);
-            main.post(() -> dispatchToTopWindow(scroll));
-        } else if (ev[0] == 14) { // configure: {14, logical w, logical h, scale*100}
-            hostResize(ev[1], ev[2], ev[3]);
-        } else if (ev[0] == 100 && (ev[1] == KEY_ESC || ev[1] == KEY_BACKSPACE)) {
-            // no xkb keymap in the shell: raw evdev {100, code, pressed}
-            inject(new KeyEvent(now, now, ev[2] == 1 ? KeyEvent.ACTION_DOWN : KeyEvent.ACTION_UP,
-                    KeyEvent.KEYCODE_BACK, 0));
-        }
-    }
-
-    /**
-     * The window an input event should go to: among the visible, attached windows (containing the
-     * point when x >= 0), the highest window type wins (dialogs and popups sit above the activity
-     * window), then the most recently added.
-     */
-    private static View topWindow(List<View> views, int x, int y) {
-        View best = null;
-        int bestType = -1;
-        for (View v : views) {
-            if (v.getVisibility() != View.VISIBLE || !v.isAttachedToWindow()) continue;
-            if (x >= 0) {
-                int[] loc = new int[2];
-                v.getLocationOnScreen(loc);
-                if (x < loc[0] || y < loc[1] || x >= loc[0] + v.getWidth() || y >= loc[1] + v.getHeight()) continue;
-            }
-            int type = v.getLayoutParams() instanceof android.view.WindowManager.LayoutParams
-                    ? ((android.view.WindowManager.LayoutParams) v.getLayoutParams()).type : 0;
-            if (type >= bestType) { // >=: later windows win ties
-                best = v;
-                bestType = type;
-            }
-        }
-        return best;
-    }
-
-    /**
-     * Wheel events: hit-test the topmost visible window ourselves and offer the event to the view
-     * under the pointer and then its ancestors (what Android's generic-pointer routing does).
-     * UiAutomation's injector offers them to the first touch-modal root instead, which can be a
-     * stopped activity's window, and its dispatch doesn't reach nested scrollers here.
-     */
-    private static void dispatchToTopWindow(MotionEvent e) {
-        Object wmg = android.view.WindowManagerGlobal.getInstance();
-        List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
-        View root = topWindow(views, (int) e.getX(), (int) e.getY());
-        if (root == null) return;
-        View target = viewAt(root, (int) e.getX(), (int) e.getY());
-        boolean debug = Boolean.getBoolean("apklayer.debugwheel");
-        for (View v = target; v != null; v = v.getParent() instanceof View ? (View) v.getParent() : null) {
-            if (v.onGenericMotionEvent(e)) {
-                if (debug) System.out.println("[apklayer] wheel handled by " + v.getClass().getSimpleName());
-                return;
-            }
-        }
-        if (debug) System.out.println("[apklayer] wheel at " + e.getX() + "," + e.getY() + ": no view handled it (target "
-                + (target == null ? "none" : target.getClass().getSimpleName()) + ")");
-    }
-
-    /** Deepest visible view containing the screen point (x, y), topmost child first. */
-    private static View viewAt(View v, int x, int y) {
-        int[] loc = new int[2];
-        v.getLocationOnScreen(loc);
-        if (v.getVisibility() != View.VISIBLE || x < loc[0] || y < loc[1] || x >= loc[0] + v.getWidth()
-                || y >= loc[1] + v.getHeight()) return null;
-        if (v instanceof android.view.ViewGroup) {
-            android.view.ViewGroup g = (android.view.ViewGroup) v;
-            for (int i = g.getChildCount() - 1; i >= 0; i--) {
-                View hit = viewAt(g.getChildAt(i), x, y);
-                if (hit != null) return hit;
-            }
-        }
-        return v;
-    }
-
-    private boolean backspaceIsBack; // the current Backspace press was turned into Back
-
-    /** A key from the shell: action 0 = down / 1 = up, Android keycode, UTF-32 char (0 = none). */
-    private void hostKey(long now, int action, int code, int unicode, int meta) {
-        if (Boolean.getBoolean("apklayer.debugkeys"))
-            System.out.println("[apklayer] key action=" + action + " code=" + code + " uni=" + unicode + " meta=" + meta);
-        int act = action == 0 ? KeyEvent.ACTION_DOWN : KeyEvent.ACTION_UP;
-        if (code == KeyEvent.KEYCODE_DEL) {
-            // Desktop Backspace is also "go back" when nothing is being edited.
-            if (act == KeyEvent.ACTION_DOWN && !backspaceIsBack) backspaceIsBack = !focusIsTextEditor();
-            if (backspaceIsBack) {
-                inject(new KeyEvent(now, now, act, KeyEvent.KEYCODE_BACK, 0));
-                if (act == KeyEvent.ACTION_UP) backspaceIsBack = false;
-                return;
-            }
-        }
-        if (code == 0) { // no Android keycode (non-US characters, symbols): type the character
-            if (act == KeyEvent.ACTION_DOWN && unicode > 0)
-                inject(new KeyEvent(now, new String(Character.toChars(unicode)), 0, 0));
-            return;
-        }
-        injectKey(new KeyEvent(now, now, act, code, 0, meta), isNavigationKey(code));
-    }
-
-    private static boolean isNavigationKey(int code) {
-        return code == KeyEvent.KEYCODE_TAB || (code >= KeyEvent.KEYCODE_DPAD_UP && code <= KeyEvent.KEYCODE_DPAD_CENTER)
-                || code == KeyEvent.KEYCODE_PAGE_UP || code == KeyEvent.KEYCODE_PAGE_DOWN
-                || code == KeyEvent.KEYCODE_MOVE_HOME || code == KeyEvent.KEYCODE_MOVE_END;
-    }
-
-    /**
-     * Keys go through the topmost visible window's ViewRootImpl input pipeline, like a real input
-     * channel: focus navigation (Tab, arrows), key shortcuts and the IME run there, whereas
-     * UiAutomation's injector only calls decor.dispatchKeyEvent.
-     */
-    private void injectKey(KeyEvent event, boolean navigation) {
-        main.post(() -> {
-            Object wmg = android.view.WindowManagerGlobal.getInstance();
-            List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
-            View root = topWindow(views, -1, -1);
-            android.view.ViewRootImpl impl = root == null ? null : root.getViewRootImpl();
-            if (impl != null) {
-                // A real window manager tells the root it has input focus; here nobody does
-                // (and it is lost on relayout), and keyboard navigation leaves touch mode.
-                if (!root.hasWindowFocus()) impl.windowFocusChanged(true);
-                if (navigation && root.isInTouchMode()) {
-                    org.robolectric.util.ReflectionHelpers.callInstanceMethod(impl, "ensureTouchModeLocally",
-                            org.robolectric.util.ReflectionHelpers.ClassParameter.from(boolean.class, false));
-                }
-                impl.dispatchInputEvent(event);
-                return;
-            }
-            uiAutomation.injectInputEvent(event, true);
-        });
-    }
-
-    /** True if the focused view of the topmost window takes text input. */
-    private static boolean focusIsTextEditor() {
-        Object wmg = android.view.WindowManagerGlobal.getInstance();
-        List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
-        for (int i = views.size() - 1; i >= 0; i--) {
-            View f = views.get(i).findFocus();
-            if (f != null) return f.onCheckIsTextEditor();
-        }
-        return false;
-    }
 
     /**
      * Resize / DPI (PLAN P2): logical size and output scale -> sandbox qualifiers (density =
@@ -640,170 +469,4 @@ public final class AppHost implements Runnable {
         }
     }
 
-    private void runStep(String step) {
-        for (String s : step.split(";")) { // multiple steps scheduled at the same instant
-            if (!s.isEmpty()) runOneStep(s);
-        }
-    }
-
-    private void runOneStep(String step) {
-        System.out.println("[apklayer] script: " + step);
-        long now = SystemClock.uptimeMillis();
-        if (step.startsWith("tap:")) {
-            String xy = step.substring(4);
-            int x, y;
-            if (xy.equals("first")) {
-                int[] c = firstClickableCenter();
-                if (c == null) {
-                    System.out.println("[apklayer] script: no clickable view");
-                    return;
-                }
-                x = c[0];
-                y = c[1];
-            } else {
-                String[] p = xy.split(",");
-                x = Integer.parseInt(p[0]);
-                y = Integer.parseInt(p[1]);
-            }
-            // DOWN/UP at the same uptimeMillis can be swallowed by tap-vs-scroll tracking;
-            // put UP 50 ms in the future, like the shell path does.
-            System.out.println("[apklayer] tap injected at " + x + "," + y);
-            if (Boolean.getBoolean("apklayer.debugclickables")) dumpClickables();
-            inject(MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0));
-            inject(MotionEvent.obtain(now, now + 50, MotionEvent.ACTION_UP, x, y, 0));
-        } else if (step.startsWith("key:")) { // key:<android keycode>[,unicode]: down+up via the host key path
-            String[] p = step.substring(4).split(",");
-            int code = Integer.parseInt(p[0]), uni = p.length > 1 ? Integer.parseInt(p[1]) : 0;
-            onHostEvent(new int[] {12, 0, code, uni, 0});
-            onHostEvent(new int[] {12, 1, code, uni, 0});
-        } else if (step.startsWith("keydown:") || step.startsWith("keyup:")) { // one half of key:, as separate loop turns
-            boolean down = step.startsWith("keydown:");
-            int code = Integer.parseInt(step.substring(step.indexOf(':') + 1));
-            onHostEvent(new int[] {12, down ? 0 : 1, code, 0, 0});
-        } else if (step.startsWith("wheel:")) { // wheel:x,y,vnotches*1000 (+ = up): as the shell sends it
-            String[] p = step.substring(6).split(",");
-            onHostEvent(new int[] {13, Integer.parseInt(p[0]), Integer.parseInt(p[1]),
-                    Integer.parseInt(p[2]), 0});
-        } else if (step.startsWith("configure:")) { // configure:w,h[,scale%]: logical size like a compositor resize
-            String[] p = step.substring(10).split(",");
-            onHostEvent(new int[] {14, Integer.parseInt(p[0]), Integer.parseInt(p[1]),
-                    p.length > 2 ? Integer.parseInt(p[2]) : 100});
-        } else if (step.equals("back")) {
-            inject(new KeyEvent(now, now, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK, 0));
-            inject(new KeyEvent(now, now, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK, 0));
-        }
-    }
-
-    /** Center of the first clickable view in the topmost window (corpus tap, PLAN P3.2). */
-    private int[] firstClickableCenter() {
-        Object wmg = android.view.WindowManagerGlobal.getInstance();
-        List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
-        int[] loc = new int[2];
-        for (View root : views) {
-            View v = findClickable(root);
-            if (v != null) {
-                v.getLocationOnScreen(loc);
-                return new int[] { loc[0] + v.getWidth() / 2, loc[1] + v.getHeight() / 2 };
-            }
-        }
-        return null;
-    }
-
-    private static View findClickable(View v) {
-        if (v.getVisibility() != View.VISIBLE) return null;
-        // The real tap target of list screens is the item view, not the clickable
-        // AdapterView (which is only clickable for empty-space/long-press semantics).
-        // Descend first; prefer the smallest clickable that covers less than half the
-        // screen (a row/button), else the largest clickable overall.
-        if (v instanceof android.widget.AdapterView<?> a) {
-            View child = firstClickableChild(a);
-            if (child != null) return child;
-        }
-        if (v.isClickable() && v.isEnabled() && v.getWidth() > 0 && v.getHeight() > 0) {
-            View best = v;
-            if (v instanceof android.view.ViewGroup g) {
-                View c = firstClickableChild(g);
-                if (c != null && (long) c.getWidth() * c.getHeight() < (long) v.getWidth() * v.getHeight() / 2)
-                    best = c;
-            }
-            return best;
-        }
-        return firstClickableChild(v);
-    }
-
-    private static View firstClickableChild(View v) {
-        if (v instanceof android.view.ViewGroup g) {
-            for (int i = 0; i < g.getChildCount(); i++) {
-                View c = findClickable(g.getChildAt(i));
-                if (c != null) return c;
-            }
-        }
-        return null;
-    }
-
-    /** Input goes through UiAutomation, which routes it to the right window (like the simulator). */
-    private void inject(InputEvent event) {
-        main.post(() -> uiAutomation.injectInputEvent(event, true));
-    }
-
-    private static void dumpClickables() {
-        Object wmg = android.view.WindowManagerGlobal.getInstance();
-        List<View> roots = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
-        int[] loc = new int[2];
-        int n = 0;
-        for (View root : roots) {
-            java.util.ArrayDeque<View> q = new java.util.ArrayDeque<>();
-            q.add(root);
-            while (!q.isEmpty() && n < 25) {
-                View v = q.poll();
-                if (v.getVisibility() != View.VISIBLE) continue;
-                if (v.isClickable() && v.getWidth() > 0) {
-                    v.getLocationOnScreen(loc);
-                    System.out.println("[apklayer]   click " + v.getClass().getSimpleName() + " \""
-                            + (v instanceof android.widget.TextView t ? t.getText() : "") + "\" ["
-                            + loc[0] + "," + loc[1] + " " + v.getWidth() + "x" + v.getHeight() + "]");
-                    n++;
-                }
-                if (v instanceof android.view.ViewGroup g) {
-                    for (int i = 0; i < g.getChildCount(); i++) q.add(g.getChildAt(i));
-                }
-            }
-        }
-    }
-
-    /**
-     * Inject an input event and wait until the main looper has finished dispatching it
-     * (queue idle, no delayed work) — for scripted steps that must take effect before the
-     * next snapshot. Returns after a bounded timeout if the app keeps the looper busy.
-     */
-    private void injectSync(InputEvent event) {
-        final java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
-        main.post(() -> {
-            uiAutomation.injectInputEvent(event, true);
-            done.countDown();
-        });
-        long deadline = System.nanoTime() + 1_000_000_000L; // 1 s
-        try {
-            while (!done.await(2, java.util.concurrent.TimeUnit.MILLISECONDS)) {
-                if (System.nanoTime() > deadline) break;
-                Thread.sleep(1);
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-        // Let the main run loop (which owns the Choreographer frame clock) dispatch this
-        // event and draw the result: the loop polls the looper and advances the vsync
-        // clock itself, and the scripted step returns to it. Wait until the looper has
-        // drained or a bounded timeout, so the next snapshot sees the resulting state.
-        long drainDeadline = System.nanoTime() + 500_000_000L; // 500 ms
-        ShadowPausedLooper rl = Shadow.extract(Looper.getMainLooper());
-        try {
-            while (rl.getNextScheduledTaskTime().toMillis() != 0) {
-                if (System.nanoTime() > drainDeadline) break;
-                Thread.sleep(2);
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    }
 }
