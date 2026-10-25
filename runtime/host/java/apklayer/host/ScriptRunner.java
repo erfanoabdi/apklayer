@@ -112,6 +112,8 @@ final class ScriptRunner {
             boolean down = step.startsWith("keydown:");
             int code = Integer.parseInt(step.substring(step.indexOf(':') + 1));
             input.onHostEvent(new int[] {12, down ? 0 : 1, code, 0, 0});
+        } else if (step.startsWith("state:")) { // state:<flags> (1 active, 2 minimized): window focus/minimize from the shell
+            input.onHostEvent(new int[] {15, Integer.parseInt(step.substring(6))});
         } else if (step.startsWith("wheel:")) { // wheel:x,y,vnotches*1000 (+ = up): as the shell sends it
             String[] p = step.substring(6).split(",");
             input.onHostEvent(new int[] {13, Integer.parseInt(p[0]), Integer.parseInt(p[1]),

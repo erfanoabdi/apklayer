@@ -5,7 +5,7 @@
 # You can watch it in the VM's desktop.
 # Covers: Esc/Back, title bar buttons (Back, Maximize/Restore, Close), edge resize, title bar
 # move, D-pad navigation, wheel delivery. Not covered: HiDPI scale > 1 (needs a 2x output).
-# Usage: tests/vm/e2e.sh [group...]   groups: window keys wheel close (default all; run only what you changed)
+# Usage: tests/vm/e2e.sh [group...]   groups: window keys wheel lifecycle close (default all; run only what you changed)
 # Exit 0 = all pass.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -106,6 +106,15 @@ if shlog | grep -q "axis "; then
 else
   echo "SKIP  wheel: the test mouse's wheel produced no Wayland axis events (uinput limitation)"
 fi
+fi
+
+if want lifecycle; then
+# --- lifecycle: focus loss pauses the activity, focusing the window resumes it ---
+read -r L T R <<<"$(geom)"
+keys abs:$(pm 900 150) click sleep:2000                       # click the desktop: the window deactivates
+check "clicking the desktop pauses the activity (window inactive)" 'grep -q "lifecycle: paused" "$LOG"'
+keys abs:$(pm $((L + 200)) $((T + 300))) click sleep:2000    # click the window: it activates again
+check "clicking the window resumes the activity" 'grep -q "lifecycle: resumed" "$LOG"'
 fi
 
 if want close; then

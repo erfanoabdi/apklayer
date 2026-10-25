@@ -22,6 +22,8 @@
  *                                    i32 unicode (UTF-32), i32 android meta}  (xkb-translated, P2)
  *                106 SCROLL         {i32 id, i32 x, i32 y, i32 vscroll*1000, i32 hscroll*1000}
  *                                    (x,y in buffer pixels; scroll in notches, +vscroll = up)
+ *                108 STATE          {i32 id, i32 flags}  bit0 = window active (focused), bit1 = minimized
+ *                                    (apps pause on !active, stop on minimized, resume on active)
  *                107 CONFIGURE      {i32 id, i32 logical w, i32 logical h, i32 scale*100}
  *                                    the app renders w*scale x h*scale pixels and re-sends
  *                                    WINDOW_CREATE with the same id to rebuffer in place
@@ -50,7 +52,7 @@
 #include "decor.h"
 enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
        MSG_INPUT = 101, MSG_CLOSE = 103, MSG_RELEASE = 104,
-       MSG_KEY = 105, MSG_SCROLL = 106, MSG_CONFIGURE = 107 };
+       MSG_KEY = 105, MSG_SCROLL = 106, MSG_CONFIGURE = 107, MSG_STATE = 108 };
 enum { EV_DOWN = 0, EV_UP = 1, EV_MOVE = 2, EV_KEY = 100 };
 #define MAX_CLIENTS 32
 #define MAX_WINDOWS 64
@@ -68,6 +70,7 @@ struct window {
     int told_scale;             /* scale last announced to the app */
     int cfg_w, cfg_h;           /* latest logical content size requested by the compositor, 0 = none */
     int maximized, activated;   /* xdg toplevel states */
+    int minimized;              /* set by our Minimize button, cleared when the window is activated again */
     struct decor decor;         /* title bar subsurface */
     int last_click_ms;          /* double click on the title bar = maximize */
     int bar_hover;              /* DECOR_* under the pointer, DECOR_NONE if none */
@@ -100,6 +103,7 @@ extern int repeat_key;                        /* evdev code of the held repeatin
 extern long long repeat_next_ms;
 
 /* ---- functions shared between the modules ---- */
+void send_state(struct window *w);  /* window.c */
 void send_msg(struct client *c, uint32_t type, const int32_t *v, int n);  /* client.c */
 void send_input(struct window *w, int32_t type, int32_t a, int32_t b);  /* client.c */
 void client_read(struct client *c);  /* client.c */

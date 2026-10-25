@@ -84,6 +84,7 @@ public final class AppHost implements Runnable {
     private final Deque<ActivityController<? extends Activity>> stack = new ArrayDeque<>();
     private final Set<Activity> stopped = new HashSet<>();
     private Handler main;
+    private boolean pausedByFocus, stoppedByMinimize; // lifecycle driven by the window state
     private HostInput input;
     private ScriptRunner scriptRunner;
 
@@ -128,7 +129,17 @@ public final class AppHost implements Runnable {
         Display display = app.getSystemService(DisplayManager.class).getDisplay(Display.DEFAULT_DISPLAY);
         int width = display.getWidth(), height = display.getHeight();
         main = new Handler(Looper.getMainLooper());
-        input = new HostInput(main, InstrumentationRegistry.getInstrumentation().getUiAutomation(), this::hostResize);
+        input = new HostInput(main, InstrumentationRegistry.getInstrumentation().getUiAutomation(), new HostInput.WindowEvents() {
+            @Override
+            public void configure(int w, int h, int scalePct) {
+                hostResize(w, h, scalePct);
+            }
+
+            @Override
+            public void state(int flags) {
+                hostState(flags);
+            }
+        });
         scriptRunner = new ScriptRunner(input);
 
         ShellClient shell = ShellClient.connect(app.getPackageName());
@@ -438,6 +449,34 @@ public final class AppHost implements Runnable {
      * 160 x scale). The screen capture then comes out at the new pixel size and the shell
      * client rebuffers the window to match (ShellClient.present).
      */
+    /**
+     * Window state from the shell (PLAN P2.9): an inactive window pauses the top activity, a
+     * minimized one stops it; becoming active again restarts/resumes it.
+     */
+    private void hostState(int flags) {
+        boolean active = (flags & 1) != 0, minimized = (flags & 2) != 0;
+        ActivityController<? extends Activity> top = stack.peek();
+        if (top == null) return;
+        System.out.println("[apklayer] window state active=" + active + " minimized=" + minimized);
+        if (minimized && !stoppedByMinimize) {
+            if (!pausedByFocus) top.pause();
+            setVisible(top.stop(), false);
+            pausedByFocus = true;
+            stoppedByMinimize = true;
+            System.out.println("[apklayer] lifecycle: stopped (minimized)");
+        } else if (!active && !pausedByFocus) {
+            top.pause();
+            pausedByFocus = true;
+            System.out.println("[apklayer] lifecycle: paused (window inactive)");
+        } else if (active && !minimized && (pausedByFocus || stoppedByMinimize)) {
+            if (stoppedByMinimize) setVisible(top.restart().resume().visible(), true);
+            else top.resume();
+            pausedByFocus = false;
+            stoppedByMinimize = false;
+            System.out.println("[apklayer] lifecycle: resumed");
+        }
+    }
+
     private void hostResize(int w, int h, int scalePct) {
         int dpi = 160 * scalePct / 100;
         int wdp = Math.max(1, w), hdp = Math.max(1, h);

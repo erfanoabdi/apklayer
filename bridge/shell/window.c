@@ -38,6 +38,13 @@ static void show(struct window *w, int buf, const int32_t *d)
     wl_surface_commit(w->surface);
 }
 
+/* Tells the app whether its window is active / minimized (Android lifecycle: pause, stop, resume). */
+void send_state(struct window *w)
+{
+    int32_t v[2] = { w->id, (w->activated ? 1 : 0) | (w->minimized ? 2 : 0) };
+    send_msg(w->client, MSG_STATE, v, 2);
+}
+
 /* Window geometry = content + title bar; the bar follows the content width and scale. */
 void window_layout(struct window *w)
 {
@@ -77,6 +84,7 @@ static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t c
         if (*state == XDG_TOPLEVEL_STATE_ACTIVATED) activated = 1;
     }
     int changed = maximized != w->maximized || activated != w->activated;
+    int active_changed = activated != w->activated;
     w->maximized = maximized;
     w->activated = activated;
     /* The configure size is the window geometry: content + title bar. 0x0 = "your preferred
@@ -86,7 +94,9 @@ static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t c
     ch = ch > DECOR_H ? ch - DECOR_H : 0;
     w->cfg_w = cw > 0 ? cw : 0;
     w->cfg_h = ch > 0 ? ch : 0;
+    if (activated) w->minimized = 0;
     if (w->configured && changed) window_layout(w);
+    if (w->configured && active_changed) send_state(w);
     if (cw > 0 && ch > 0 && w->configured
         && (cw != w->w * 100 / w->scale || ch != w->h * 100 / w->scale)) {
         int32_t v[4] = { w->id, cw, ch, output_scale };

@@ -163,7 +163,11 @@ static void bar_button(struct window *w, uint32_t serial, uint32_t time)
     if (edge) { xdg_toplevel_resize(w->toplevel, seat, serial, edge); return; }
     switch (hit) {
     case DECOR_BACK: send_back(w); break;
-    case DECOR_MIN: xdg_toplevel_set_minimized(w->toplevel); break;
+    case DECOR_MIN:
+        w->minimized = 1;
+        send_state(w); /* the app stops before the window disappears */
+        xdg_toplevel_set_minimized(w->toplevel);
+        break;
     case DECOR_MAX: toggle_maximize(w); break;
     case DECOR_CLOSE: {
         int32_t v[1] = { w->id };

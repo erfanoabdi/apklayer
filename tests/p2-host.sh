@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # P2 host-level check (Mac or Linux, headless): drives the shell-event paths of AppHost with the
 # same int[] events ShellClient produces: key (Back, typing), wheel, configure (resize, HiDPI).
-# Exit 0 = all pass. Usage: tests/p2-host.sh [group...]   groups: back type resize hidpi wheel dialog dpad
+# Exit 0 = all pass. Usage: tests/p2-host.sh [group...]   groups: back type resize hidpi wheel dialog dpad lifecycle
 # (no argument = all; run only the groups for the code you changed)
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -67,6 +67,14 @@ if want dpad; then
 # 8. D-pad: Down, Down, Enter opens a menu entry (keyboard-only navigation, real key timing)
 log=$("$ROOT/scripts/check.sh" "$APK" "2000:key:20+2400:key:20+2800:keydown:66+2860:keyup:66" "1500" 4500 2>&1)
 check "D-pad Down, Down, Enter opens the second menu entry" 'grep -q "started .*depth=2" <<<"$log"'
+fi
+
+if want lifecycle; then
+# 9. Window state from the shell: inactive -> paused, minimized -> stopped, active -> resumed + redrawn
+log=$("$ROOT/scripts/check.sh" "$APK" "2000:state:0+3000:state:1+4000:state:2+5000:state:1" "6000" 6500 2>&1)
+check "inactive window pauses the activity, active resumes it" 'grep -q "lifecycle: paused" <<<"$log" && grep -q "lifecycle: resumed" <<<"$log"'
+check "minimized window stops the activity" 'grep -q "lifecycle: stopped (minimized)" <<<"$log"'
+check "frame is still drawn after restore" '[ "$(python3 -c "from PIL import Image; print(len(set(Image.open(\"$ROOT/build/check/uibench-6000ms.png\").convert(\"L\").getdata())))")" -gt 3 ]'
 fi
 
 exit $fail

@@ -69,19 +69,23 @@ import org.robolectric.simulator.ScreenUpdateHandler;
  * into Android events for the sandbox, and injects them into the topmost window.
  */
 final class HostInput {
-    /** A compositor resize or scale change: logical size in dp, scale in percent. */
-    interface ConfigureHandler {
+    /** What the host does with window-level events from the shell. */
+    interface WindowEvents {
+        /** A compositor resize or scale change: logical size in dp, scale in percent. */
         void configure(int w, int h, int scalePct);
+
+        /** Window state: bit0 = active (focused), bit1 = minimized. */
+        void state(int flags);
     }
 
     private static final int KEY_ESC = 1, KEY_BACKSPACE = 14; // evdev codes from the shell
     private final Handler main;
     private final UiAutomation uiAutomation;
-    private final ConfigureHandler onConfigure;
+    private final WindowEvents onConfigure;
     private long downTime;
     private boolean backspaceIsBack; // the current Backspace press was turned into Back
 
-    HostInput(Handler main, UiAutomation uiAutomation, ConfigureHandler onConfigure) {
+    HostInput(Handler main, UiAutomation uiAutomation, WindowEvents onConfigure) {
         this.main = main;
         this.uiAutomation = uiAutomation;
         this.onConfigure = onConfigure;
@@ -108,6 +112,8 @@ final class HostInput {
                     new MotionEvent.PointerProperties[] {pp}, new MotionEvent.PointerCoords[] {pc},
                     0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_MOUSE, 0);
             main.post(() -> HostWindows.dispatchToTopWindow(scroll));
+        } else if (ev[0] == 15) { // window state: {15, flags}
+            onConfigure.state(ev[1]);
         } else if (ev[0] == 14) { // configure: {14, logical w, logical h, scale*100}
             onConfigure.configure(ev[1], ev[2], ev[3]);
         } else if (ev[0] == 100 && (ev[1] == KEY_ESC || ev[1] == KEY_BACKSPACE)) {
