@@ -7,12 +7,14 @@ How apklayer adapts upstream without patching it:
 
 | Need | How (no patch) |
 |---|---|
-| App resources/manifest in Robolectric | AGP's documented `com/android/tools/test_config.properties` (`android_resource_apk=`) on the classpath |
+| App resources/manifest in Robolectric | The APK is passed as the manifest (`new AndroidManifest(..., apk)`), exactly as Robolectric's simulator `AppLoader` does |
 | dex2jvm output vs Robolectric instrumentation | Post-process with `DenyInstrument` (adds `@DoNotInstrument`); the converter itself is untouched |
 | dex2jvm class hierarchy | Run it with `android-all` on its classpath |
 | JDK module access on SDK 36 | `runtime/host/jvm.args` (Robolectric's own `--add-opens` list) |
 | Android API classes on the outer classpath | SDK `android-36.1/android.jar` (as AGP's mockable jar) |
-| Graphics mode | Robolectric's own `-Drobolectric.graphicsMode` |
+| Graphics mode, looper, SQLite | `FixedConfiguration` as in the simulator's `AppLoader` (NATIVE graphics/SQLite, PAUSED looper) |
+| Activity stacking (Robolectric records `startActivity`, doesn't launch) | Host back stack in `AppHost`, emulating `ActivityThread`: pause previous → start new → stop previous and set its decor INVISIBLE only if the new window is opaque; restore on finish |
+| A decor that never records its first draw when its activity adds a dialog in `onCreate` | `AppHost` invalidates each newly launched decor once |
 
 Rule: if a patch ever becomes unavoidable, keep it thin, mark it inline `apklayer patch`,
 and log it here. The M1 seed's patch log is in `archive/seed-m1/docs/PATCHES.md`.

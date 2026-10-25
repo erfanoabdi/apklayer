@@ -30,11 +30,13 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
 
 ## Current state (2026-10-25, M5 done)
 - uibench runs with full UI + mouse/keyboard on the VM's Wayland desktop (user tested it).
-- One command: `APKLAYER_GFX=NATIVE ./scripts/vm-run.sh [app.apk]` (default uibench).
+- On the VM: `./scripts/vm-run.sh [app.apk]` (default uibench). Headless on the Mac:
+  `./scripts/check.sh [apk] [script] [snapms] [runms]` → build/check/*.png (fast iteration).
   It syncs the deps cache, runtime/host, runtime/dex2jvm and bridge/shell to the VM, rebuilds, converts
-  the DEX, writes test_config.properties and runs. Close the window to exit.
-  Verification flags: `APKLAYER_JOPTS='-Dapklayer.frames=150 -Dapklayer.snapframes=140
-  -Dapklayer.script=40:tap:100,80+80:tap:100,129'` (snapshots → /tmp/apklayer-frame-N.png on VM).
+  the DEX and runs `apklayer.host.Main <apk> <classes.jar>`. Close the window to exit.
+  Verification flags (time-based now, frames are damage-driven): `APKLAYER_JOPTS='-Dapklayer.runms=9000
+  -Dapklayer.snapms=6000 -Dapklayer.script=2500:tap:100,80+4500:back'` (snapshots →
+  /tmp/apklayer-frame-<ms>ms.png on the VM); `-Dapklayer.debugwindows=true` dumps the window list.
 - Architecture: docs/ARCHITECTURE.md. **Plan of record: docs/PLAN.md** (all decisions made;
   follow its phase order and "Immediate next tasks").
 
@@ -65,7 +67,14 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
 - Robolectric 4.17 knows SDKs up to 37 (17-robolectric-15733970); `org.robolectric:simulator:4.17`
   is published on Maven (in the lock).
 - Robolectric source has an experimental **Simulator** module (SandboxBuilder, AppLoader,
-  FrameListener, Mouse/KeyboardHandler): the planned replacement for the JUnit driver.
+  FrameListener, Mouse/KeyboardHandler). **Now the host** (P1.5): `apklayer.host.Main` uses the
+  published simulator-4.17.jar (SandboxBuilder, FixedConfiguration, ScreenUpdateHandler); no JUnit.
+  Gotchas: `RoboMonitoringInstrumentation.startActivitySyncInternal` NPEs in windowFocusChanged
+  (view root null), so use `Robolectric.buildActivity(cls, intent).setup()` like the simulator.
+  `LazyApplication` is in `org.robolectric.annotation.experimental` in 4.17. Robolectric's
+  window-list listener (forces a capture when windows change) only exists for SDK > 36, so the
+  host invalidates/toggles visibility to get fresh frames. takeScreenshot ignores FLAG_DIM_BEHIND
+  (no dim behind dialogs yet; P2).
 - AOSP HWUI host variant (what Robolectric's prebuilt is) compiles only `platform/host` stubs;
   the GPU pipelines (SkiaOpenGL/SkiaVulkan, EglManager, VulkanManager) are device-only in
   frameworks/base/libs/hwui/Android.bp. GPU HWUI and native arm64 both need our own Meson

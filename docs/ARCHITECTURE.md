@@ -10,18 +10,18 @@ result to the Linux desktop through a thin host layer (Wayland today).
 ```
  app.apk ─┬─ classes*.dex ──dex2jvm──> app classes (.jar) ──DenyInstrument──> @DoNotInstrument
           │                 (hierarchy from android-all)
-          └─ manifest + resources.arsc ──AOSP PackageParser / AssetManager (via test_config.properties)
+          └─ manifest + resources.arsc ──AOSP PackageParser / AssetManager (APK passed as the manifest)
 
  JVM process (x86_64 under Rosetta on the arm64 VM; native on x86_64 hosts)
  ┌──────────────────────────────────────────────────────────────────────────────┐
  │ Robolectric sandbox: android-all-instrumented 16 (SDK 36) + shadows 4.17     │
- │ NATIVE graphics: librobolectric-nativeruntime = real HWUI/Skia/minikin       │
+ │ NATIVE graphics: libandroid_runtime (in android-all) = real HWUI/Skia        │
  │                                                                              │
- │ runtime/host driver (RunUiBench)                                                │
+ │ apklayer.host (Simulator method, no JUnit): Main → SandboxBuilder → AppHost  │
  │   activity back stack ← startActivity()/finish() (recorded by Robolectric)   │
- │   every 16 ms: idle main Looper → draw all windows (WindowManagerGlobal)     │
- │                → Bitmap → int[]                                              │
- │   input ring → MotionEvent/KeyEvent → topmost window                         │
+ │   event loop: Looper + paused Choreographer; real draw traversals            │
+ │   on draw: ScreenUpdateHandler → takeScreenshot (all windows) → int[]        │
+ │   input ring → MotionEvent/KeyEvent → UiAutomation.injectInputEvent          │
  └───────────────┬──────────────────────────────────────────────▲───────────────┘
                  │ /dev/shm/apklayer-fb (pixels + input ring)    │
  ┌───────────────▼──────────────────────────────────────────────┴───────────────┐
@@ -36,8 +36,10 @@ result to the Linux desktop through a thin host layer (Wayland today).
 |---|---|
 | `runtime/dex2jvm/` | DEX → JVM bytecode (from Mac.apk, AGPL). Reads class hierarchy from its own classpath, so it must be run with the target `android-all` on it. |
 | `runtime/host/java/apklayer/tools/DenyInstrument.java` | Stamps a runtime-visible `@DoNotInstrument` on the app classes. dex2jvm's `<init>` lowering conflicts with Robolectric's constructor renaming. |
-| `runtime/host/java/apklayer/rob/RunUiBench.java` | Driver. It runs as a JUnit test under `RobolectricTestRunner` and handles the lifecycle, back stack, window composition and input dispatch. |
-| `runtime/host/java/apklayer/rob/HostWindow.java` | Host presenter access: a shared framebuffer (pure Java), or in-process JNI through `WlWindow`. |
+| `runtime/host/java/apklayer/host/Main.java` | Entry point: builds the sandbox with Robolectric's simulator `SandboxBuilder` (no JUnit) and runs `AppHost` in it. |
+| `runtime/host/java/apklayer/host/AppHost.java` | App setup as in the simulator's `AppLoader` (manifest = the APK), the simulator's event loop, launcher resolution, back stack (`Robolectric.setupActivity`-style launches; previous activity stopped and hidden unless the new one is translucent, as `ActivityThread` does), host input → `UiAutomation.injectInputEvent`, verification hooks. |
+| `runtime/host/java/apklayer/host/ShellFrameListener.java` | `FrameListener` for Robolectric's `ScreenUpdateHandler`: receives the composed screen (`UiAutomation.takeScreenshot`) only when something drew, and presents it. |
+| `runtime/host/java/apklayer/host/HostWindow.java` | Host presenter access: a shared framebuffer (pure Java), or in-process JNI through `WlWindow`. |
 | `runtime/host/jvm.args` | JDK `--add-opens` flags Robolectric needs on modern SDKs (copied from Robolectric's own test configuration). |
 | `bridge/shell/present.c` | Wayland client: xdg_toplevel, wl_shm buffer, wl_seat pointer/keyboard queue, plus JNI entry points. |
 | `bridge/shell/presentd.c` | Out-of-process presenter that maps the shared framebuffer. Lets the app JVM's arch differ from the host's. |

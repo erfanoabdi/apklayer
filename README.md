@@ -25,8 +25,9 @@ app.apk ──dex2jvm──> JVM classes ┐
 ## Run (on the Parallels VM, from the Mac)
 
 ```sh
-APKLAYER_GFX=NATIVE ./scripts/vm-run.sh            # uibench
-APKLAYER_GFX=NATIVE ./scripts/vm-run.sh my.apk     # another APK (driver is still uibench-specific: see docs/PLAN.md P1)
+./scripts/vm-run.sh            # uibench on the VM's Wayland desktop
+./scripts/vm-run.sh my.apk     # any APK: its launcher activity starts
+./scripts/check.sh             # headless check on this machine (snapshots in build/check/)
 ```
 
 Left-click taps; drag scrolls; Esc/Backspace is Back; closing the window exits.
@@ -41,7 +42,8 @@ VM access: `ssh parallels@10.211.55.4` (password `1234`). Setup details are in m
 | `docs/PLAN.md` | **plan of record**: decisions D1–D23, phases P1–P7, exit tests, next tasks |
 | `docs/PATCHES.md` / `docs/THIRD_PARTY.md` | patch log (none) / licenses |
 | `runtime/dex2jvm/` | DEX → JVM converter (from Mac.apk, AGPL) |
-| `runtime/host/java/` | driver (RunUiBench, HostWindow, WlWindow, DenyInstrument) |
+| `runtime/host/java/` | host (`apklayer.host`: Main, AppHost, ShellFrameListener, HostWindow), WlWindow, DenyInstrument |
+| `runtime/host/jvm.args` | JDK flags Robolectric needs |
 | `deps/deps.lock`, `scripts/fetch-deps.sh` | pinned dependencies (sha256), local-first fetch into `~/.cache/apklayer/deps` |
 | `bridge/` | meson: `apklayer-presentd`, `libapklayer-wl.so` (Wayland + input) |
 | `scripts/vm-run.sh` | sync → build → convert → run on the VM |

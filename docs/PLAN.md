@@ -13,7 +13,7 @@ evidence breaks it. If that happens, change this file in the same commit as the 
 |---|---|---|---|
 | D1 | Framework | **Robolectric `android-all-instrumented` SDK 36** (Android 16, `16-robolectric-13921718-i7`). Drop SDK 27. Run every app on SDK 36 regardless of its `targetSdk`, as real devices do. | Modern apps and AndroidX need it. Matches the los24 source reference (Android 16). From SDK 35 on, the native graphics runtime ships inside the jar. One SDK means one thing to make solid. |
 | D2 | Robolectric | **Pin to the newest Robolectric release that supports SDK 36 and contains the `simulator` module.** Coordinates and sha256 recorded in `deps/deps.lock`. | A single pinned version. The Simulator replaces our JUnit harness. |
-| D3 | App host | **Vendor Robolectric's Simulator** (`simulator/`, MIT) into `runtime/host/simulator/` unmodified. Add apklayer classes beside it: a Wayland `FrameListener`, an input source, and the activity stack. **No JUnit anywhere in the product.** | Copy, don't write. The Simulator is exactly "run an app outside tests". |
+| D3 | App host | **Use Robolectric's Simulator** (`org.robolectric:simulator:4.17`, MIT) from the published jar, unmodified (it is on Maven, so no vendored copy). Add apklayer classes beside it: a Wayland `FrameListener`, an input source, and the activity stack. **No JUnit anywhere in the product.** | Copy, don't write. The Simulator is exactly "run an app outside tests". |
 | D4 | DEX conversion | **Keep dex2jvm** (AGPL), unmodified. Always run it with the target android-all on its classpath. Cache the output by `sha256(apk) + android-all id + dex2jvm commit`. | It works on real apps today. Replacing it gains nothing for users. |
 | D5 | License | **apklayer is AGPL-3.0-or-later.** Add `LICENSE`. | Forced by dex2jvm, and compatible with Apache-2.0 (AOSP) and MIT (Robolectric). |
 | D6 | Process model | **One JVM per app.** All windows go to a single per-session native **`apklayer-shell`** (today's `apklayer-presentd`, grown). App JVMs contain **no apklayer native code** until D9. | Crash isolation. App JVM arch can differ from the host's. One component owns Wayland. |
@@ -289,7 +289,8 @@ double-click `Markor.apk` → it opens and is usable on both.
 4. ✅ Fetch SDK 36 android-all + the pinned Robolectric once, then switch uibench to SDK 36 (P1.4).
    Result: Robolectric 4.17 already supports SDK 36 and publishes `simulator`, so no version bump was needed.
    The `Build` stub was dropped; `android-stub.jar` = SDK android-36.1; `--add-opens` flags are in `runtime/host/jvm.args`.
-5. Vendor the Simulator and write `apklayer.host.Main`, porting RunUiBench's stack, window and
+5. ✅ Simulator-based host `apklayer.host.Main` (P1.5). The published `simulator-4.17.jar` is used
+   unmodified (no vendored source needed); JUnit removed from the product. Port of RunUiBench's stack, window and
    input logic (P1.5).
 6. Shell protocol v1 over a Unix socket with damage-driven frames (P1.6).
 7. Top-level Meson build (P1.3).

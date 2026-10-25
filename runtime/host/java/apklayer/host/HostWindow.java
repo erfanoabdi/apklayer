@@ -1,4 +1,4 @@
-package apklayer.rob;
+package apklayer.host;
 
 import java.lang.reflect.Method;
 
@@ -50,13 +50,14 @@ public final class HostWindow {
                 fb.put(1, w).put(2, h).put(0, FB_MAGIC);
                 INSTANCE = new HostWindow(fb);
                 Runtime.getRuntime().addShutdownHook(new Thread(() -> fb.put(0, 0)));
-                System.out.println("[apklayer-rob] shared framebuffer " + fbPath + " " + w + "x" + h);
+                System.out.println("[apklayer] shared framebuffer " + fbPath + " " + w + "x" + h);
                 return INSTANCE;
             } catch (Exception e) {
-                System.out.println("[apklayer-rob] shared framebuffer failed: " + e);
+                System.out.println("[apklayer] shared framebuffer failed: " + e);
                 return null;
             }
         }
+        if (System.getProperty("apklayer.hostcp") == null) return null; // headless
         try {
             // The native lib is loaded by WlWindow's static init inside the plain loader;
             // loading it here too would bind it to the sandbox loader first.
@@ -78,7 +79,7 @@ public final class HostWindow {
             }));
             return INSTANCE;
         } catch (Throwable t) {
-            System.out.println("[apklayer-rob] host window load failed: " + t);
+            System.out.println("[apklayer] host window load failed: " + t);
             return null;
         }
     }

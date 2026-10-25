@@ -41,7 +41,7 @@ Instead:
 | M3 | Robolectric pipeline end-to-end on the VM | done: real PackageParser via AGP `test_config.properties`, app theme resolves |
 | M4 | uibench full UI on the Wayland window | done: NATIVE graphics (real HWUI/Skia), ~43 fps |
 | M5 | Interactive: pointer/keyboard, activity back stack, dialogs | done: clicks, drag, Esc/Backspace = Back, dialogs composited |
-| M6 | P1: product foundation: `apklayer run any.apk` on SDK 36, Simulator host (no JUnit), shell protocol, CLI, install cache | **next** |
+| M6 | P1: product foundation: `apklayer run any.apk` on SDK 36, Simulator host (no JUnit), shell protocol, CLI, install cache | **in progress**: SDK 36 ✅, Simulator host ✅, deps lock ✅ |
 | M7 | P2: desktop-grade window and input (resize, HiDPI, wheel, touch, IME, clipboard) | pending |
 | — | P3: compatibility corpus (30 F-Droid APKs), continuous from here | pending |
 | M8 | P4: native `.so` in APKs (bionic_translation + NDK shims → Mesa/PipeWire) | pending |

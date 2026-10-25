@@ -6,7 +6,8 @@
 #   sdk:<path under the Android SDK>               file from a local Android SDK
 # scripts/fetch-deps.sh resolves local sources first and downloads only what is missing.
 #
-# Robolectric 4.17 runtime (resolved from org.robolectric:robolectric:4.17 + junit:4.13.2)
+# Robolectric 4.17 runtime (resolved from org.robolectric:robolectric:4.17; no JUnit: the host is
+# the Simulator-style apklayer.host.Main)
 9d9158ccaa34c8ea175fe95b4900eef743bea2eddb4528735aa81dac5310aeba libs/annotations-4.17.jar maven:org.robolectric:annotations:4.17:jar
 ed825d10ab1399c8c0cb669e688cf0c8c82629b4c8399b58352b68e92ca10fcb libs/asm-9.10.1.jar maven:org.ow2.asm:asm:9.10.1:jar
 6d0abefb7cbf972ea16edb37ec14835372505063a45f976ab7ea889ed9497895 libs/asm-commons-9.10.1.jar maven:org.ow2.asm:asm-commons:9.10.1:jar
@@ -18,13 +19,11 @@ f8a8f5020c66abc53a3d33cbc855ef8fc06187fa652fb3c0eda6c94e4335b2e9 libs/conscrypt-
 5ff62326b49c308c1d060466ae3cf4aa0e3deaf9295f077a6886048dda3e9b14 libs/espresso-idling-resource-3.7.0.aar maven:androidx.test.espresso:espresso-idling-resource:3.7.0:aar
 cbfc3906b19b8f55dd7cfd6dfe0aa4532e834250d7f080bd8d211a3e246b59cb libs/failureaccess-1.0.3.jar maven:com.google.guava:failureaccess:1.0.3:jar
 dc573e1fca4fd5454f4a5fd3d7da2df03002876a4175bafc14a95980dd7713b3 libs/guava-33.6.0-jre.jar maven:com.google.guava:guava:33.6.0-jre:jar
-66fdef91e9739348df7a096aa384a5685f4e875584cce89386a7a47251c4d8e9 libs/hamcrest-core-1.3.jar maven:org.hamcrest:hamcrest-core:1.3:jar
 e962c1758d9659ea1e1fbab99c58683f654d304e1126ace19aaabfe39e0edb25 libs/icu4j-78.3.jar maven:com.ibm.icu:icu4j:78.3:jar
 84d3a150518485f8140ea99b8a985656749629f6433c92b80c75b36aba3b099b libs/j2objc-annotations-3.1.jar maven:com.google.j2objc:j2objc-annotations:3.1:jar
 e04ba5195bcd555dc95650f7cc614d151e4bcd52d29a10b8aa2197f3ab89ab9b libs/javax.annotation-api-1.3.2.jar maven:javax.annotation:javax.annotation-api:1.3.2:jar
 91c77044a50c481636c32d916fd89c9118a72195390452c81065080f957de7ff libs/javax.inject-1.jar maven:javax.inject:javax.inject:1:jar
 1fad6e6be7557781e4d33729d49ae1cdc8fdda6fe477bb0cc68ce351eafdfbab libs/jspecify-1.0.0.jar maven:org.jspecify:jspecify:1.0.0:jar
-33b836ebbfdf91ea24a6b074b859b97c8afbc6fe163751fc0cda9fa673d218e5 libs/junit-4.17.jar maven:org.robolectric:junit:4.17:jar
 b372a037d4230aa57fbeffdef30fd6123f9c0c2db85d0aced00c91b974f33f99 libs/listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar maven:com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava:jar
 56cb7496a06d9f2dca7d3ff76c50a8a30bd18e00a24a3b267d5a31437b278e67 libs/monitor-1.8.0.aar maven:androidx.test:monitor:1.8.0:aar
 d79187d1241f3b7cc7a3338678874329aa0d6de9fc7bc9f8a1d7b350d9d777fd libs/nativeruntime-4.17.jar maven:org.robolectric:nativeruntime:4.17:jar
@@ -41,8 +40,6 @@ c8f7a98e7394adda02f6317249710e4d1b4c7a25aa8c7eace0c2eea52eb8bf85 libs/snakeyaml-
 ff534578f2e3dc6030d1f4a6896df3d20573644858c6ade878efb75d2a36504b libs/test-parameter-injector-1.22.jar maven:com.google.testparameterinjector:test-parameter-injector:1.22:jar
 7b34ee3139de81e4eb3e35877e028aa0f9eb2b08e3e1f50eefb93ca825dafcaa libs/utils-4.17.jar maven:org.robolectric:utils:4.17:jar
 f80de68e0f8538b6204576af42eeea9e6806426dcf313558d7df16d4cabc4f41 libs/utils-reflector-4.17.jar maven:org.robolectric:utils-reflector:4.17:jar
-# JUnit (current driver only; removed with the Simulator host, PLAN P1.5)
-8e495b634469d64fb8acfa3495a065cbacc8a0fff55ce1e31007be4c16dc57d3 libs/junit-4.13.2.jar maven:junit:junit:4.13.2:jar
 # androidx.test classes the sandbox needs on the classpath (AAR payloads)
 0d897808fd493386a74364d21b2ae39b9becf7f92040a8ff770aa4af95340384 libs/androidx.test.core-core-1.7.0.jar aar-classes:androidx.test:core:1.7.0
 343391452abb133d044d8e5665ef2e2e670412a5c8a0f0ee992db9ecea7c7896 libs/androidx.test.monitor-1.8.0.jar aar-classes:androidx.test:monitor:1.8.0
