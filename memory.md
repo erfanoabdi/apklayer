@@ -31,7 +31,7 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
 ## Current state (2026-10-25, M5 done)
 - uibench runs with full UI + mouse/keyboard on the VM's Wayland desktop (user tested it).
 - One command: `APKLAYER_GFX=NATIVE ./scripts/vm-run.sh [app.apk]` (default uibench).
-  It syncs runtime/host, runtime/dex2jvm and bridge/shell to the VM, rebuilds, converts
+  It syncs the deps cache, runtime/host, runtime/dex2jvm and bridge/shell to the VM, rebuilds, converts
   the DEX, writes test_config.properties and runs. Close the window to exit.
   Verification flags: `APKLAYER_JOPTS='-Dapklayer.frames=150 -Dapklayer.snapframes=140
   -Dapklayer.script=40:tap:100,80+80:tap:100,129'` (snapshots → /tmp/apklayer-frame-N.png on VM).
@@ -54,8 +54,16 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
   Don't let it see the Mac's Android SDK either.
 - dex2jvm output needs `@DoNotInstrument` (runtime/host/java/.../DenyInstrument): its `<init>` lowering
   collides with Robolectric's constructor renaming.
-- Only `runtime/host/stubs/android/os/Build.java` is needed on the outer classpath (conscrypt reads
-  SDK_INT). android-stub.jar (API 35) covers shadow signatures newer than 27.
+- **SDK 36 (Android 16) is live** (P1.4): android-all-instrumented 16-robolectric-13921718-i7.
+  Needs Robolectric's `--add-opens` flags (`runtime/host/jvm.args`, passed as `@argfile`).
+  The `Build` outer stub is no longer needed (archived). `android-stub.jar` IS still needed
+  (outer cp needs android.app.Application etc.) = SDK `platforms/android-36.1/android.jar`
+  (the Mac's android-36 platform is a partial install).
+- Deps: `deps/deps.lock` (sha256) + `scripts/fetch-deps.sh` (local-first) → `~/.cache/apklayer/deps`
+  on the Mac (source of truth); vm-run.sh rsyncs it to the VM's same path. `~/rob` on the VM is
+  legacy (8.1 era) and can be deleted.
+- Robolectric 4.17 knows SDKs up to 37 (17-robolectric-15733970); `org.robolectric:simulator:4.17`
+  is published on Maven (in the lock).
 - Robolectric source has an experimental **Simulator** module (SandboxBuilder, AppLoader,
   FrameListener, Mouse/KeyboardHandler): the planned replacement for the JUnit driver.
 - AOSP HWUI host variant (what Robolectric's prebuilt is) compiles only `platform/host` stubs;
@@ -89,12 +97,13 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
 - Ubuntu 24.04, kernel 6.8, **aarch64**, 8 CPUs, ~8 GB RAM, GNOME Wayland (`wayland-0`,
   XDG_RUNTIME_DIR=/run/user/1000). OpenJDK 21 arm64 (`-XX:UseSVE=0`), meson/ninja/gcc,
   libwayland-dev, wayland-protocols. No binder/ashmem in the kernel.
-- Layout: `~/rob/{libs,android-all,android-stub.jar}` (Robolectric deps), `~/jdk21-x86`,
-  `~/apklayer-m1/` (synced sources; bridge build in `bridge/b`), `~/apklayer-apps/<name>.apk`.
+- Layout: `~/.cache/apklayer/deps` (mirror of the Mac cache), `~/jdk21-x86`, `~/apklayer-m1/`
+  (synced sources; shell build in `bridge/shell/b`), `~/apklayer-build/` (compiled host/d2j/cfg),
+  `~/apklayer-apps/<name>.apk`.
   Old dirs `~/apklayer-mac`, `~/apklayer-m1/runtime/java*` belong to the archived java_mac era.
 
 ## Environment notes
 - Host: macOS (Apple Silicon), zsh (avoid `echo ===`, because zsh expands `=`).
 - Mac has JDK 21 at `/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec/openjdk.jdk/Contents/Home`
   and the mac-arm64 Robolectric native runtime works there, so fast headless iteration is
-  possible on the Mac (copy `~/rob` from the VM to a scratch dir).
+  possible on the Mac using `~/.cache/apklayer/deps` (same jars as the VM).

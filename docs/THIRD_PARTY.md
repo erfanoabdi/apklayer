@@ -10,12 +10,12 @@
 
 apklayer itself is AGPL-3.0-or-later (PLAN D5), compatible with all of the above.
 
-## Consumed at runtime (not vendored; staged on the VM under `~/rob`)
+## Consumed at runtime (not vendored; pinned in deps/deps.lock, cached in ~/.cache/apklayer/deps)
 
 | Artifact | Origin | License |
 |---|---|---|
-| `android-all-instrumented-8.1.0-robolectric-4611349-i7.jar` | Robolectric build of unmodified AOSP | Apache-2.0 |
-| Robolectric 4.17 (`robolectric`, `shadows-framework`, `sandbox`, `resources`, `nativeruntime`, …) | robolectric.org | MIT |
+| `android-all-instrumented-16-robolectric-13921718-i7.jar` (SDK 36) | Robolectric build of unmodified AOSP | Apache-2.0 |
+| Robolectric 4.17 (`robolectric`, `shadows-framework`, `sandbox`, `resources`, `nativeruntime`, `simulator`, …) | robolectric.org | MIT |
 | `nativeruntime-dist-compat-1.0.19` (HWUI/Skia/SQLite natives) | Robolectric prebuilt from AOSP sources | Apache-2.0 (AOSP) |
-| `android-stub.jar` (API 35 stubs) | Android SDK platform | Apache-2.0 |
+| `android-stub.jar` (SDK platform android-36.1 `android.jar`) | Android SDK platform | Apache-2.0 |
 | JDK 21 linux-x86 (`~/jdk21-x86`) | LOCAL copy of los24 `prebuilts/jdk/jdk21/linux-x86` | GPLv2 + Classpath Exception |

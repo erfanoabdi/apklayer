@@ -15,7 +15,7 @@ There are zero hand patches to AOSP or Robolectric.
 app.apk ──dex2jvm──> JVM classes ┐
         └─ manifest/resources ───┤ (AOSP PackageParser)
                                  ▼
-  android-all (unmodified AOSP) + Robolectric shadows + native HWUI/Skia
+  android-all 16 (unmodified AOSP) + Robolectric shadows + native HWUI/Skia
   driver: lifecycle, back stack, windows, input        (runtime/host/java)
                                  │ /dev/shm/apklayer-fb (pixels ⇄ input)
                                  ▼
@@ -42,7 +42,7 @@ VM access: `ssh parallels@10.211.55.4` (password `1234`). Setup details are in m
 | `docs/PATCHES.md` / `docs/THIRD_PARTY.md` | patch log (none) / licenses |
 | `runtime/dex2jvm/` | DEX → JVM converter (from Mac.apk, AGPL) |
 | `runtime/host/java/` | driver (RunUiBench, HostWindow, WlWindow, DenyInstrument) |
-| `runtime/host/stubs/` | outer-classpath `android.os.Build` |
+| `deps/deps.lock`, `scripts/fetch-deps.sh` | pinned dependencies (sha256), local-first fetch into `~/.cache/apklayer/deps` |
 | `bridge/` | meson: `apklayer-presentd`, `libapklayer-wl.so` (Wayland + input) |
 | `scripts/vm-run.sh` | sync → build → convert → run on the VM |
 | `tests/uibench/` | target APK |

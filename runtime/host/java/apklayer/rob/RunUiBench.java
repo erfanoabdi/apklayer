@@ -46,7 +46,7 @@ import java.util.concurrent.TimeUnit;
  * window drives the top activity; startActivity()/finish() are followed with a back stack.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 27, qualifiers = "w480dp-h800dp")
+@Config(sdk = 36, qualifiers = "w480dp-h800dp")
 public final class RunUiBench {
 
     private static final int W = 480, H = 800;

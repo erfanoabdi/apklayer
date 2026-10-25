@@ -46,7 +46,9 @@ f80de68e0f8538b6204576af42eeea9e6806426dcf313558d7df16d4cabc4f41 libs/utils-refl
 # androidx.test classes the sandbox needs on the classpath (AAR payloads)
 0d897808fd493386a74364d21b2ae39b9becf7f92040a8ff770aa4af95340384 libs/androidx.test.core-core-1.7.0.jar aar-classes:androidx.test:core:1.7.0
 343391452abb133d044d8e5665ef2e2e670412a5c8a0f0ee992db9ecea7c7896 libs/androidx.test.monitor-1.8.0.jar aar-classes:androidx.test:monitor:1.8.0
-# Framework (unmodified AOSP for the JVM)
-9aa87154e4b464edd7bd4f7f8870402599a2d90c14c660ed6907d42c7410e05f android-all/android-all-instrumented-8.1.0-robolectric-4611349-i7.jar maven:org.robolectric:android-all-instrumented:8.1.0-robolectric-4611349-i7:jar
-# API 35 stubs for shadow signatures newer than the running SDK (outer classpath only)
-4566663c3876e022b4fa4ced8c8697c4ab1688267f090114fd92d027b32e619b android-stub.jar sdk:platforms/android-35/android.jar
+# Robolectric Simulator: host for running an app outside JUnit (PLAN D3, P1.5)
+fb4429d037510c031174c91d956866f2fb03b6a8a153c9bec541bd9ab8e387d8 libs/simulator-4.17.jar maven:org.robolectric:simulator:4.17:jar
+# Framework (unmodified AOSP for the JVM): SDK 36 / Android 16 (PLAN D1)
+16f1f751643d1d3d5592008846bbdfc1e57cff15e6ec303d26584de3b6ac25ec android-all/android-all-instrumented-16-robolectric-13921718-i7.jar maven:org.robolectric:android-all-instrumented:16-robolectric-13921718-i7:jar
+# Android API stubs on the outer classpath (like AGP's mockable android.jar); the sandbox uses android-all
+2981111371989ae7141868d6162070c89f0f1d505f66ac9dc7fdfd4d8c744264 android-stub.jar sdk:platforms/android-36.1/android.jar

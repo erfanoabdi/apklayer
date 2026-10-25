@@ -286,7 +286,9 @@ double-click `Markor.apk` → it opens and is usable on both.
 2. ✅ Restructure directories (P1.1). Make the existing script work with the new paths and verify
    uibench.
 3. ✅ Write `deps/deps.lock` for the current `~/rob` contents (P1.2).
-4. Fetch SDK 36 android-all + the pinned Robolectric once, then switch uibench to SDK 36 (P1.4).
+4. ✅ Fetch SDK 36 android-all + the pinned Robolectric once, then switch uibench to SDK 36 (P1.4).
+   Result: Robolectric 4.17 already supports SDK 36 and publishes `simulator`, so no version bump was needed.
+   The `Build` stub was dropped; `android-stub.jar` = SDK android-36.1; `--add-opens` flags are in `runtime/host/jvm.args`.
 5. Vendor the Simulator and write `apklayer.host.Main`, porting RunUiBench's stack, window and
    input logic (P1.5).
 6. Shell protocol v1 over a Unix socket with damage-driven frames (P1.6).
