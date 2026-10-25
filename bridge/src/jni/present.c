@@ -1,7 +1,10 @@
 /*
  * apklayer minimal Wayland presenter (for the Robolectric-based runner).
  * Exports: apklayer_wayland_init(w,h), apklayer_wayland_present(int* argb,w,h),
- *          apklayer_wayland_pump(ms), apklayer_wayland_should_close().
+ *          apklayer_wayland_pump(ms), apklayer_wayland_should_close(),
+ *          apklayer_wayland_next_event(int32_t ev[4]) -> 1 if an input event was dequeued:
+ *            {0=down,1=up,2=move (MotionEvent action codes), x, y, 0} for the pointer,
+ *            {100, evdev keycode, 1=pressed/0=released, 0} for the keyboard.
  * Plain C ABI, plus JNI wrappers (bottom) for apklayer.wayland.WlWindow, which lives in
  * the NON-instrumented classpath.
  */
@@ -27,8 +30,80 @@ static struct xdg_surface *xdg_surface;
 static struct xdg_toplevel *toplevel;
 static struct wl_buffer *buffer;
 static uint32_t *pixels;
+static struct wl_seat *seat;
 static volatile int close_requested;
 static int frames_presented;
+
+/* Input queue filled by the seat listeners, drained by apklayer_wayland_next_event(). */
+#define EVQ 256
+static int32_t evq[EVQ][4];
+static unsigned evq_head, evq_tail;
+static int ptr_x, ptr_y, ptr_down;
+
+static void push_event(int32_t a, int32_t b, int32_t c)
+{
+    if (evq_tail - evq_head >= EVQ) return;
+    int32_t *e = evq[evq_tail++ % EVQ];
+    e[0] = a; e[1] = b; e[2] = c; e[3] = 0;
+}
+
+static void ptr_enter(void *d, struct wl_pointer *p, uint32_t s, struct wl_surface *sf,
+                      wl_fixed_t x, wl_fixed_t y)
+{ (void)d; (void)p; (void)s; (void)sf; ptr_x = wl_fixed_to_int(x); ptr_y = wl_fixed_to_int(y); }
+static void ptr_leave(void *d, struct wl_pointer *p, uint32_t s, struct wl_surface *sf)
+{
+    (void)d; (void)p; (void)s; (void)sf;
+    if (ptr_down) { ptr_down = 0; push_event(1, ptr_x, ptr_y); }
+}
+static void ptr_motion(void *d, struct wl_pointer *p, uint32_t t, wl_fixed_t x, wl_fixed_t y)
+{
+    (void)d; (void)p; (void)t;
+    ptr_x = wl_fixed_to_int(x); ptr_y = wl_fixed_to_int(y);
+    if (ptr_down) push_event(2, ptr_x, ptr_y);
+}
+static void ptr_button(void *d, struct wl_pointer *p, uint32_t s, uint32_t t, uint32_t b,
+                       uint32_t st)
+{
+    (void)d; (void)p; (void)s; (void)t;
+    if (b != 0x110 /* BTN_LEFT */) return;
+    ptr_down = st == WL_POINTER_BUTTON_STATE_PRESSED;
+    push_event(ptr_down ? 0 : 1, ptr_x, ptr_y);
+}
+static void ptr_axis(void *d, struct wl_pointer *p, uint32_t t, uint32_t a, wl_fixed_t v)
+{ (void)d; (void)p; (void)t; (void)a; (void)v; }
+static const struct wl_pointer_listener ptr_listener = {
+    ptr_enter, ptr_leave, ptr_motion, ptr_button, ptr_axis };
+
+static void kb_keymap(void *d, struct wl_keyboard *k, uint32_t f, int32_t fd, uint32_t sz)
+{ (void)d; (void)k; (void)f; (void)sz; close(fd); }
+static void kb_enter(void *d, struct wl_keyboard *k, uint32_t s, struct wl_surface *sf,
+                     struct wl_array *keys)
+{ (void)d; (void)k; (void)s; (void)sf; (void)keys; }
+static void kb_leave(void *d, struct wl_keyboard *k, uint32_t s, struct wl_surface *sf)
+{ (void)d; (void)k; (void)s; (void)sf; }
+static void kb_key(void *d, struct wl_keyboard *k, uint32_t s, uint32_t t, uint32_t key,
+                   uint32_t st)
+{ (void)d; (void)k; (void)s; (void)t; push_event(100, key, st == WL_KEYBOARD_KEY_STATE_PRESSED); }
+static void kb_mods(void *d, struct wl_keyboard *k, uint32_t s, uint32_t a, uint32_t b,
+                    uint32_t c, uint32_t g)
+{ (void)d; (void)k; (void)s; (void)a; (void)b; (void)c; (void)g; }
+static const struct wl_keyboard_listener kb_listener = {
+    kb_keymap, kb_enter, kb_leave, kb_key, kb_mods };
+
+static void seat_caps(void *d, struct wl_seat *st, uint32_t caps)
+{
+    (void)d;
+    static int have_ptr, have_kb;
+    if ((caps & WL_SEAT_CAPABILITY_POINTER) && !have_ptr) {
+        have_ptr = 1;
+        wl_pointer_add_listener(wl_seat_get_pointer(st), &ptr_listener, NULL);
+    }
+    if ((caps & WL_SEAT_CAPABILITY_KEYBOARD) && !have_kb) {
+        have_kb = 1;
+        wl_keyboard_add_listener(wl_seat_get_keyboard(st), &kb_listener, NULL);
+    }
+}
+static const struct wl_seat_listener seat_listener = { seat_caps };
 
 static void frame_done(void *d, struct wl_callback *cb, uint32_t t)
 { (void)d; (void)t; wl_callback_destroy(cb); }
@@ -59,6 +134,11 @@ static void registry(void *d, struct wl_registry *r, uint32_t name, const char *
         shm = wl_registry_bind(r, name, &wl_shm_interface, 1);
     else if (!strcmp(iface, xdg_wm_base_interface.name))
         wm_base = wl_registry_bind(r, name, &xdg_wm_base_interface, 1);
+    else if (!strcmp(iface, wl_seat_interface.name) && !seat) {
+        /* v1: only the events our listeners above implement are ever sent. */
+        seat = wl_registry_bind(r, name, &wl_seat_interface, 1);
+        wl_seat_add_listener(seat, &seat_listener, NULL);
+    }
 }
 static void registry_rm(void *d, struct wl_registry *r, uint32_t n)
 { (void)d; (void)r; (void)n; }
@@ -126,6 +206,13 @@ void apklayer_wayland_pump(int timeout_ms)
 
 int apklayer_wayland_should_close(void) { return close_requested; }
 
+int apklayer_wayland_next_event(int32_t ev[4])
+{
+    if (evq_head == evq_tail) return 0;
+    memcpy(ev, evq[evq_head++ % EVQ], sizeof(evq[0]));
+    return 1;
+}
+
 /* JNI entry points for apklayer.wayland.WlWindow (loaded only by the plain, non-sandbox
  * classloader, so these bind exactly once). */
 #include <jni.h>
@@ -149,3 +236,13 @@ JNIEXPORT void JNICALL Java_apklayer_wayland_WlWindow_pump(JNIEnv *e, jclass c, 
 
 JNIEXPORT jboolean JNICALL Java_apklayer_wayland_WlWindow_shouldClose(JNIEnv *e, jclass c)
 { (void)e; (void)c; return apklayer_wayland_should_close() ? JNI_TRUE : JNI_FALSE; }
+
+JNIEXPORT jboolean JNICALL Java_apklayer_wayland_WlWindow_nextEvent(JNIEnv *e, jclass c,
+                                                                    jintArray out)
+{
+    (void)c;
+    int32_t ev[4];
+    if (!apklayer_wayland_next_event(ev)) return JNI_FALSE;
+    (*e)->SetIntArrayRegion(e, out, 0, 4, (const jint *)ev);
+    return JNI_TRUE;
+}

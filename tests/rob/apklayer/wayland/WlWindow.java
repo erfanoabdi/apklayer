@@ -15,4 +15,6 @@ public final class WlWindow {
     public static native int present(int[] argb, int w, int h);
     public static native void pump(int timeoutMs);
     public static native boolean shouldClose();
+    /** Dequeues one input event into ev[4] (layout: bridge/src/jni/present.c). */
+    public static native boolean nextEvent(int[] ev);
 }

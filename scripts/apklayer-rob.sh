@@ -6,6 +6,8 @@
 #   linux-x86_64 only, so on the arm64 VM the app JVM is x86_64 (Rosetta; C2 crashes there, so
 #   C1 only) and frames go through a shared framebuffer to the native apklayer-presentd.
 #   APKLAYER_GFX=LEGACY (default): arm64 JVM, in-process presenter, no text rendering.
+# APKLAYER_JOPTS: extra JVM flags, e.g. -Dapklayer.script=10:tap:100,80+60:back
+#   -Dapklayer.snapframes=50,90 -Dapklayer.frames=120 (headless-style verification).
 set -e
 APPJAR="$1"; ACTIVITY="$2"; MANIFEST_DIR="${3:-$HOME/apklayer-apps/uibench}"
 VM="${APKLY_VM:-parallels@10.211.55.4}"
@@ -45,7 +47,7 @@ if [ "\$GFX" = NATIVE ]; then
 else
   JAVA="java -XX:UseSVE=0"
 fi
-\$JAVA \
+\$JAVA $APKLAYER_JOPTS \
   -Drobolectric.offline=true \
   -Drobolectric.graphicsMode=\$GFX \
   -Drobolectric.dependency.dir=\$R/android-all \

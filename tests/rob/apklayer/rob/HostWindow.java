@@ -27,9 +27,10 @@ public final class HostWindow {
     }
 
     // Shared framebuffer layout: see bridge/src/presentd.c.
-    private static final int FB_MAGIC = 0x4C4B5041, FB_HDR = 8;
+    private static final int FB_MAGIC = 0x4C4B5041, EV_RING = 64, FB_HDR = 8 + 4 * EV_RING;
     private java.nio.IntBuffer fb;
-    private int seq;
+    private int seq, evRead;
+    private Method nextEvent;
 
     private HostWindow(java.nio.IntBuffer fb) {
         this(null, null, null, null);
@@ -71,6 +72,7 @@ public final class HostWindow {
                     win.getMethod("present", int[].class, int.class, int.class),
                     win.getMethod("shouldClose"),
                     win.getMethod("pump", int.class));
+            INSTANCE.nextEvent = win.getMethod("nextEvent", int[].class);
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 try { win.getMethod("pump", int.class).invoke(null, 0); } catch (Exception ignored) {}
             }));
@@ -88,6 +90,16 @@ public final class HostWindow {
         }
         present.invoke(null, px, w, h);
         pump.invoke(null, 0);
+    }
+
+    /** Next input event {type, a, b, 0} (see bridge/src/jni/present.c), or false if none. */
+    public boolean nextEvent(int[] ev) throws Exception {
+        if (fb != null) {
+            if (evRead == fb.get(5)) return false;
+            fb.get(8 + 4 * (Integer.remainderUnsigned(evRead++, EV_RING)), ev, 0, 4);
+            return true;
+        }
+        return (Boolean) nextEvent.invoke(null, (Object) ev);
     }
 
     public boolean shouldClose() throws Exception {
