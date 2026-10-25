@@ -31,7 +31,7 @@ final class ShellClient {
     private volatile boolean closed;
     private Path file;
     private IntBuffer pixels;
-    private int width, height, next;
+    private int width, height, next, generation;
     private int[] shown, pending;
     private String title = "apklayer";
 
@@ -71,23 +71,30 @@ final class ShellClient {
         sendWindowCreate();
     }
 
-    /** Resize (P2): remap the shared file at the new size and recreate the window (same id). */
-    synchronized void resize(int w, int h) throws IOException {
-        if (w <= 0 || h <= 0 || (w == width && h == height)) return;
+    /**
+     * Resize / DPI (P2): new buffers for the same window id; the shell rebuffers the existing
+     * toplevel in place. A fresh file per size: the compositor may still be reading the old one
+     * (truncating it would kill the shell with SIGBUS), and the old mapping is dropped.
+     */
+    private synchronized void resize(int w, int h) throws IOException {
+        Path old = file;
         width = w;
         height = h;
         shown = null;
         pending = null;
         busy[0] = busy[1] = false;
         next = 0;
+        generation++;
         mapBuffers();
         sendWindowCreate();
+        if (old != null) Files.deleteIfExists(old); // mappings stay valid after unlink
     }
 
     private void mapBuffers() throws IOException {
-        file = Path.of("/dev/shm", "apklayer-" + ProcessHandle.current().pid() + "-" + WINDOW_ID);
-        try (FileChannel fc = FileChannel.open(file, StandardOpenOption.CREATE, StandardOpenOption.READ,
-                StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
+        file = Path.of("/dev/shm", "apklayer-" + ProcessHandle.current().pid() + "-" + WINDOW_ID
+                + "-" + generation);
+        try (FileChannel fc = FileChannel.open(file, StandardOpenOption.CREATE_NEW, StandardOpenOption.READ,
+                StandardOpenOption.WRITE)) {
             pixels = fc.map(FileChannel.MapMode.READ_WRITE, 0, 4L * width * height * NBUF)
                     .order(ByteOrder.LITTLE_ENDIAN).asIntBuffer();
         }
@@ -101,7 +108,8 @@ final class ShellClient {
     }
 
     /** Presents a frame; only the rectangle that changed since the last frame is damaged. */
-    synchronized void present(int[] px) throws IOException {
+    synchronized void present(int[] px, int w, int h) throws IOException {
+        if (w != width || h != height) resize(w, h); // the frame size drives the window buffers
         int b = free();
         if (b < 0) {
             pending = px.clone();
@@ -166,16 +174,16 @@ final class ShellClient {
                 if (type == INPUT) {
                     input.add(new int[] {body.getInt(4), body.getInt(8), body.getInt(12), 0});
                 } else if (type == KEY) {
-                    // {2, action, android keycode, unicode, android meta}
-                    input.add(new int[] {2, body.getInt(4), body.getInt(8), body.getInt(12),
+                    // {12, action, android keycode, unicode, android meta}
+                    input.add(new int[] {12, body.getInt(4), body.getInt(8), body.getInt(12),
                             body.getInt(16)});
                 } else if (type == SCROLL) {
-                    // {3, x, y, vscroll px, hscroll px}
-                    input.add(new int[] {3, body.getInt(4), body.getInt(8), body.getInt(12),
+                    // {13, x, y, vscroll px, hscroll px}
+                    input.add(new int[] {13, body.getInt(4), body.getInt(8), body.getInt(12),
                             body.getInt(16)});
                 } else if (type == CONFIGURE) {
-                    // {4, w, h, scale*100}
-                    input.add(new int[] {4, body.getInt(4), body.getInt(8), body.getInt(12)});
+                    // {14, w, h, scale*100}
+                    input.add(new int[] {14, body.getInt(4), body.getInt(8), body.getInt(12)});
                 } else if (type == RELEASE) {
                     released(body.getInt(4));
                 } else if (type == CLOSE) {
@@ -193,7 +201,7 @@ final class ShellClient {
         if (pending != null) {
             int[] px = pending;
             pending = null;
-            present(px);
+            present(px, width, height);
         }
     }
 

@@ -29,7 +29,7 @@ final class ShellFrameListener implements FrameListener {
         frames++;
         if (shell != null) {
             try {
-                shell.present(pixels);
+                shell.present(pixels, width, height);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

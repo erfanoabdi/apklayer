@@ -16,5 +16,6 @@ if wl_client_dep.found() and wl_protos_dep.found() and xkb_dep.found() and scann
   executable('apklayer-shell',
     ['shell.c', xdg_header, xdg_code],
     dependencies: [wl_client_dep, xkb_dep],
+    c_args: ['-Werror=incompatible-pointer-types', '-Werror=implicit-function-declaration'],
     install: false)
 endif

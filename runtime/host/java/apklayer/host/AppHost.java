@@ -35,6 +35,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
@@ -138,6 +139,27 @@ public final class AppHost implements Runnable {
                 shell.createWindow(width, height, label(app));
             } catch (java.io.IOException e) {
                 throw new RuntimeException(e);
+            }
+        }
+        if (shell != null) {
+            // The shell answers the window with its logical size and the output scale (HiDPI):
+            // apply it before the first activity so the app starts at its final density.
+            long deadline = System.nanoTime() + 1_500_000_000L;
+            boolean configured = false;
+            while (!configured && System.nanoTime() < deadline) {
+                int[] ev = shell.poll();
+                if (ev == null) {
+                    try {
+                        Thread.sleep(10);
+                    } catch (InterruptedException e) {
+                        break;
+                    }
+                } else if (ev[0] == 14) {
+                    hostResize(ev[1], ev[2], ev[3]);
+                    width = display.getWidth();
+                    height = display.getHeight();
+                    configured = true;
+                }
             }
         }
         ShellFrameListener frames = new ShellFrameListener(shell);
@@ -300,7 +322,7 @@ public final class AppHost implements Runnable {
                         && (elapsed >= runMs || (shell != null && shell.closed())))
                     break;
 
-                for (int[] ev; shell != null && (ev = shell.poll()) != null; ) onHostEvent(shell, ev);
+                for (int[] ev; shell != null && (ev = shell.poll()) != null; ) onHostEvent(ev);
                 while (!script.isEmpty() && script.firstKey() <= elapsed) runStep(script.pollFirstEntry().getValue());
                 while (!snaps.isEmpty() && snaps.firstKey() <= elapsed) {
                     long sMs = snaps.firstKey();
@@ -422,57 +444,156 @@ public final class AppHost implements Runnable {
     }
 
     /** Shell input {type, a, b, 0} (bridge/shell/shell.c): pointer -> MotionEvent, Esc/Backspace -> Back. */
-    private void onHostEvent(ShellClient shell, int[] ev) {
+    private void onHostEvent(int[] ev) {
         long now = SystemClock.uptimeMillis();
         if (ev[0] <= 2) {
             if (ev[0] == MotionEvent.ACTION_DOWN) downTime = now;
             inject(MotionEvent.obtain(downTime, now, ev[0], ev[1], ev[2], 0));
-        } else if (ev[0] == 2) { // key (xkb): {2, action, android keycode, unicode, meta}
-            if (ev[2] == 0 && ev[3] > 0) { // no keycode, just a character (typed text)
-                if (ev[1] == 0) inject(new KeyEvent(now, new String(Character.toChars(ev[3])), 0, 0));
-            } else {
-                inject(new KeyEvent(now, now, ev[1], ev[2], 0, ev[4], 0, 0, 0, 0));
-            }
-        } else if (ev[0] == 3) { // wheel: {3, x, y, vscroll px, hscroll px}
+        } else if (ev[0] == 12) { // key (xkb): {12, action, android keycode, unicode, meta}
+            hostKey(now, ev[1], ev[2], ev[3], ev[4]);
+        } else if (ev[0] == 13) { // wheel: {13, x, y, vscroll*1000, hscroll*1000}
             MotionEvent.PointerProperties pp = new MotionEvent.PointerProperties();
             pp.id = 0;
             pp.toolType = MotionEvent.TOOL_TYPE_MOUSE;
             MotionEvent.PointerCoords pc = new MotionEvent.PointerCoords();
             pc.x = ev[1];
             pc.y = ev[2];
-            pc.setAxisValue(MotionEvent.AXIS_VSCROLL, ev[3]);
-            pc.setAxisValue(MotionEvent.AXIS_HSCROLL, ev[4]);
-            inject(MotionEvent.obtain(now, now, MotionEvent.ACTION_SCROLL, 1,
+            pc.setAxisValue(MotionEvent.AXIS_VSCROLL, ev[3] / 1000f);
+            pc.setAxisValue(MotionEvent.AXIS_HSCROLL, ev[4] / 1000f);
+            MotionEvent scroll = MotionEvent.obtain(now, now, MotionEvent.ACTION_SCROLL, 1,
                     new MotionEvent.PointerProperties[] {pp}, new MotionEvent.PointerCoords[] {pc},
-                    0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_MOUSE, 0));
-        } else if (ev[0] == 4) { // configure: {4, w, h, scale*100}
-            hostResize(shell, ev[1], ev[2], ev[3]);
+                    0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_MOUSE, 0);
+            main.post(() -> dispatchToTopWindow(scroll));
+        } else if (ev[0] == 14) { // configure: {14, logical w, logical h, scale*100}
+            hostResize(ev[1], ev[2], ev[3]);
         } else if (ev[0] == 100 && (ev[1] == KEY_ESC || ev[1] == KEY_BACKSPACE)) {
+            // no xkb keymap in the shell: raw evdev {100, code, pressed}
             inject(new KeyEvent(now, now, ev[2] == 1 ? KeyEvent.ACTION_DOWN : KeyEvent.ACTION_UP,
                     KeyEvent.KEYCODE_BACK, 0));
         }
     }
 
     /**
-     * Resize / DPI (PLAN P2): update the sandbox qualifiers from the new size and output
-     * scale (density = 160 x scale), recreate the shell window buffers at the new pixel
-     * size, and relayout the app's windows.
+     * Wheel events: hit-test the topmost visible window ourselves and offer the event to the view
+     * under the pointer and then its ancestors (what Android's generic-pointer routing does).
+     * UiAutomation's injector offers them to the first touch-modal root instead, which can be a
+     * stopped activity's window, and its dispatch doesn't reach nested scrollers here.
      */
-    private void hostResize(ShellClient shell, int w, int h, int scalePct) {
-        int dpi = 160 * scalePct / 100;
-        int wdp = Math.max(1, w * 160 / dpi), hdp = Math.max(1, h * 160 / dpi);
-        System.out.println("[apklayer] configure " + w + "x" + h + " @" + scalePct + "% -> " + wdp
-                + "x" + hdp + "dp @" + dpi + "dpi");
-        try {
-            shell.resize(w, h);
-        } catch (Exception e) {
-            System.out.println("[apklayer] resize failed: " + e);
-            return;
-        }
-        RuntimeEnvironment.setQualifiers("w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi");
+    private static void dispatchToTopWindow(MotionEvent e) {
         Object wmg = android.view.WindowManagerGlobal.getInstance();
         List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
-        for (View v : views) {
+        for (int i = views.size() - 1; i >= 0; i--) {
+            View root = views.get(i);
+            if (root.getVisibility() != View.VISIBLE || !root.isAttachedToWindow()) continue;
+            View target = viewAt(root, (int) e.getX(), (int) e.getY());
+            for (View v = target; v != null; v = v.getParent() instanceof View ? (View) v.getParent() : null) {
+                if (v.onGenericMotionEvent(e)) break;
+            }
+            return;
+        }
+    }
+
+    /** Deepest visible view containing the screen point (x, y), topmost child first. */
+    private static View viewAt(View v, int x, int y) {
+        int[] loc = new int[2];
+        v.getLocationOnScreen(loc);
+        if (v.getVisibility() != View.VISIBLE || x < loc[0] || y < loc[1] || x >= loc[0] + v.getWidth()
+                || y >= loc[1] + v.getHeight()) return null;
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = g.getChildCount() - 1; i >= 0; i--) {
+                View hit = viewAt(g.getChildAt(i), x, y);
+                if (hit != null) return hit;
+            }
+        }
+        return v;
+    }
+
+    private boolean backspaceIsBack; // the current Backspace press was turned into Back
+
+    /** A key from the shell: action 0 = down / 1 = up, Android keycode, UTF-32 char (0 = none). */
+    private void hostKey(long now, int action, int code, int unicode, int meta) {
+        int act = action == 0 ? KeyEvent.ACTION_DOWN : KeyEvent.ACTION_UP;
+        if (code == KeyEvent.KEYCODE_DEL) {
+            // Desktop Backspace is also "go back" when nothing is being edited.
+            if (act == KeyEvent.ACTION_DOWN && !backspaceIsBack) backspaceIsBack = !focusIsTextEditor();
+            if (backspaceIsBack) {
+                inject(new KeyEvent(now, now, act, KeyEvent.KEYCODE_BACK, 0));
+                if (act == KeyEvent.ACTION_UP) backspaceIsBack = false;
+                return;
+            }
+        }
+        if (code == 0) { // no Android keycode (non-US characters, symbols): type the character
+            if (act == KeyEvent.ACTION_DOWN && unicode > 0)
+                inject(new KeyEvent(now, new String(Character.toChars(unicode)), 0, 0));
+            return;
+        }
+        injectKey(new KeyEvent(now, now, act, code, 0, meta));
+    }
+
+    /**
+     * Keys go through the topmost visible window's ViewRootImpl input pipeline, like a real input
+     * channel: focus navigation (Tab, arrows), key shortcuts and the IME run there, whereas
+     * UiAutomation's injector only calls decor.dispatchKeyEvent.
+     */
+    private void injectKey(KeyEvent event) {
+        main.post(() -> {
+            Object wmg = android.view.WindowManagerGlobal.getInstance();
+            List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
+            for (int i = views.size() - 1; i >= 0; i--) {
+                View root = views.get(i);
+                android.view.ViewRootImpl impl = root.getViewRootImpl();
+                if (root.getVisibility() == View.VISIBLE && impl != null) {
+                    impl.dispatchInputEvent(event);
+                    return;
+                }
+            }
+            uiAutomation.injectInputEvent(event, true);
+        });
+    }
+
+    /** True if the focused view of the topmost window takes text input. */
+    private static boolean focusIsTextEditor() {
+        Object wmg = android.view.WindowManagerGlobal.getInstance();
+        List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
+        for (int i = views.size() - 1; i >= 0; i--) {
+            View f = views.get(i).findFocus();
+            if (f != null) return f.onCheckIsTextEditor();
+        }
+        return false;
+    }
+
+    /**
+     * Resize / DPI (PLAN P2): logical size and output scale -> sandbox qualifiers (density =
+     * 160 x scale). The screen capture then comes out at the new pixel size and the shell
+     * client rebuffers the window to match (ShellClient.present).
+     */
+    private void hostResize(int w, int h, int scalePct) {
+        int dpi = 160 * scalePct / 100;
+        int wdp = Math.max(1, w), hdp = Math.max(1, h);
+        System.out.println("[apklayer] configure " + w + "x" + h + " @" + scalePct + "% -> " + wdp
+                + "x" + hdp + "dp @" + dpi + "dpi");
+        RuntimeEnvironment.setQualifiers("w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi");
+        // Applied in place, like an activity that handles the change itself: new resources
+        // configuration, onConfigurationChanged, and the window roots relayout at the new size.
+        // (Android would recreate activities that don't declare it; recreation doesn't re-attach
+        // windows in this sandbox yet, and the startup scale is applied before any launch.)
+        android.content.res.Resources appRes = RuntimeEnvironment.getApplication().getResources();
+        for (ActivityController<? extends Activity> c : new ArrayList<>(stack)) {
+            try {
+                Activity a = c.get();
+                a.getResources().updateConfiguration(appRes.getConfiguration(), appRes.getDisplayMetrics());
+                a.onConfigurationChanged(appRes.getConfiguration());
+                android.view.ViewRootImpl root = a.getWindow().getDecorView().getViewRootImpl();
+                if (root != null) root.updateConfiguration(Display.INVALID_DISPLAY);
+            } catch (Throwable e) {
+                System.out.println("[apklayer] configuration change failed: " + e);
+                e.printStackTrace(System.out);
+            }
+        }
+        Object wmg = android.view.WindowManagerGlobal.getInstance();
+        List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
+        for (View v : views) { // force a fresh frame at the new size
             v.requestLayout();
             v.invalidate();
         }
@@ -509,6 +630,19 @@ public final class AppHost implements Runnable {
             if (Boolean.getBoolean("apklayer.debugclickables")) dumpClickables();
             inject(MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0));
             inject(MotionEvent.obtain(now, now + 50, MotionEvent.ACTION_UP, x, y, 0));
+        } else if (step.startsWith("key:")) { // key:<android keycode>[,unicode]: down+up via the host key path
+            String[] p = step.substring(4).split(",");
+            int code = Integer.parseInt(p[0]), uni = p.length > 1 ? Integer.parseInt(p[1]) : 0;
+            onHostEvent(new int[] {12, 0, code, uni, 0});
+            onHostEvent(new int[] {12, 1, code, uni, 0});
+        } else if (step.startsWith("wheel:")) { // wheel:x,y,vnotches*1000 (+ = up): as the shell sends it
+            String[] p = step.substring(6).split(",");
+            onHostEvent(new int[] {13, Integer.parseInt(p[0]), Integer.parseInt(p[1]),
+                    Integer.parseInt(p[2]), 0});
+        } else if (step.startsWith("configure:")) { // configure:w,h[,scale%]: logical size like a compositor resize
+            String[] p = step.substring(10).split(",");
+            onHostEvent(new int[] {14, Integer.parseInt(p[0]), Integer.parseInt(p[1]),
+                    p.length > 2 ? Integer.parseInt(p[2]) : 100});
         } else if (step.equals("back")) {
             inject(new KeyEvent(now, now, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK, 0));
             inject(new KeyEvent(now, now, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK, 0));
