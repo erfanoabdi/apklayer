@@ -15,7 +15,12 @@
  *                    type 0/1/2 = MotionEvent DOWN/UP/MOVE at (a, b); 100 = key (evdev a, pressed b)
  *                103 CLOSE          {i32 id}
  *                104 RELEASE        {i32 id, i32 buf}
+ *                105 KEY            {i32 id, i32 action(0 down,1 up), i32 android keycode,
+ *                                    i32 unicode, i32 android meta}  (xkb-translated, P2)
+ *                106 SCROLL         {i32 id, i32 x, i32 y, i32 vscroll*1000, i32 hscroll*1000}
+ *                107 CONFIGURE      {i32 id, i32 w, i32 h, i32 scale*100}  (resize / DPI)
  */
+#define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -29,11 +34,15 @@
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
+
+#include <xkbcommon/xkbcommon.h>
+
 #include <wayland-client.h>
 #include "xdg-shell-client-protocol.h"
 
 enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
-       MSG_INPUT = 101, MSG_CLOSE = 103, MSG_RELEASE = 104 };
+       MSG_INPUT = 101, MSG_CLOSE = 103, MSG_RELEASE = 104,
+       MSG_KEY = 105, MSG_SCROLL = 106, MSG_CONFIGURE = 107 };
 enum { EV_DOWN = 0, EV_UP = 1, EV_MOVE = 2, EV_KEY = 100 };
 #define MAX_CLIENTS 32
 #define MAX_WINDOWS 64
@@ -64,6 +73,11 @@ static struct wl_compositor *compositor;
 static struct wl_shm *shm;
 static struct xdg_wm_base *wm_base;
 static struct wl_seat *seat;
+static struct wl_output *output;
+static int output_scale = 100;            /* percent: 100 = 1x, 200 = 2x (P2 HiDPI) */
+static struct xkb_context *xkb_ctx;
+static struct xkb_keymap *xkb_keymap_g;
+static struct xkb_state *xkb_state;
 static struct client clients[MAX_CLIENTS];
 static struct window windows[MAX_WINDOWS];
 static struct window *pointer_focus, *keyboard_focus;
@@ -129,14 +143,27 @@ static void xs_configure(void *data, struct xdg_surface *xs, uint32_t serial)
     xdg_surface_ack_configure(xs, serial);
     if (!w->configured) {
         w->configured = 1;
+        /* Tell the app its size and the output scale (P2 HiDPI: density = 160*scale). */
+        int32_t v[4] = { w->id, w->w, w->h, output_scale };
+        send_msg(w->client, MSG_CONFIGURE, v, 4);
         if (w->pending_buf >= 0) show(w, w->pending_buf, w->pending_damage);
         else wl_surface_commit(w->surface);
     }
 }
 static const struct xdg_surface_listener xs_listener = { xs_configure };
-
-static void top_configure(void *d, struct xdg_toplevel *t, int32_t w, int32_t h, struct wl_array *s)
-{ (void)d; (void)t; (void)w; (void)h; (void)s; }
+static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t ch,
+                          struct wl_array *s)
+{
+    (void)t; (void)s;
+    struct window *w = d;
+    /* 0x0 means "use your preferred size". Any other size is a resize request:
+     * forward it to the app (P2). The app relayouts and recreates its buffers by
+     * sending WINDOW_CREATE again with the same id; the shell then swaps the buffers. */
+    if (cw > 0 && ch > 0 && w->configured && (cw != w->w || ch != w->h)) {
+        int32_t v[4] = { w->id, cw, ch, output_scale };
+        send_msg(w->client, MSG_CONFIGURE, v, 4);
+    }
+}
 static void top_close(void *data, struct xdg_toplevel *t)
 {
     (void)t;
@@ -146,9 +173,15 @@ static void top_close(void *data, struct xdg_toplevel *t)
 }
 static const struct xdg_toplevel_listener top_listener = { top_configure, top_close };
 
+static void window_destroy(struct window *w);
+
 static void window_create(struct client *c, int id, int width, int height, const char *path,
                           const char *title)
 {
+    /* Resize (P2): the app re-sends WINDOW_CREATE with the same id and new buffers;
+     * tear the old window down first and recreate at the new size. */
+    for (int i = 0; i < MAX_WINDOWS; i++)
+        if (windows[i].client == c && windows[i].id == id) window_destroy(&windows[i]);
     struct window *w = NULL;
     for (int i = 0; i < MAX_WINDOWS && !w; i++)
         if (!windows[i].client) w = &windows[i];
@@ -177,8 +210,7 @@ static void window_create(struct client *c, int id, int width, int height, const
     xdg_toplevel_add_listener(w->toplevel, &top_listener, w);
     xdg_toplevel_set_title(w->toplevel, title[0] ? title : c->pkg);
     xdg_toplevel_set_app_id(w->toplevel, c->pkg);
-    xdg_toplevel_set_min_size(w->toplevel, width, height);
-    xdg_toplevel_set_max_size(w->toplevel, width, height);
+    xdg_toplevel_set_min_size(w->toplevel, 240, 240); /* desktop-resizable (P2) */
     wl_surface_commit(w->surface);
     fprintf(stderr, "[shell] %s: window %d %dx%d \"%s\"\n", c->pkg, id, width, height, title);
 }
@@ -233,13 +265,108 @@ static void ptr_button(void *d, struct wl_pointer *p, uint32_t s, uint32_t t, ui
     ptr_down = st == WL_POINTER_BUTTON_STATE_PRESSED;
     send_input(pointer_focus, ptr_down ? EV_DOWN : EV_UP, ptr_x, ptr_y);
 }
+static double axis_v, axis_h; /* accumulated wheel deltas, flushed on pointer frame (P2) */
 static void ptr_axis(void *d, struct wl_pointer *p, uint32_t t, uint32_t a, wl_fixed_t v)
-{ (void)d; (void)p; (void)t; (void)a; (void)v; }
+{
+    (void)d; (void)p; (void)t;
+    double val = wl_fixed_to_double(v);
+    if (a == WL_POINTER_AXIS_VERTICAL_SCROLL) axis_v += val;
+    else if (a == WL_POINTER_AXIS_HORIZONTAL_SCROLL) axis_h += val;
+}
+static void ptr_frame(void *d, struct wl_pointer *p)
+{
+    (void)d; (void)p;
+    if ((axis_v != 0 || axis_h != 0) && pointer_focus) {
+        /* Wayland wheel axis is in degrees (~15/click); Android ACTION_SCROLL axis is
+         * pixels — ~4 px per degree is a natural feel (~60 px per click). */
+        int32_t v[5] = { pointer_focus->id, ptr_x, ptr_y, (int32_t)(axis_v * 4),
+                         (int32_t)(axis_h * 4) };
+        send_msg(pointer_focus->client, MSG_SCROLL, v, 5);
+    }
+    axis_v = axis_h = 0;
+}
 static const struct wl_pointer_listener ptr_listener = {
-    ptr_enter, ptr_leave, ptr_motion, ptr_button, ptr_axis };
+    ptr_enter, ptr_leave, ptr_motion, ptr_button, ptr_axis, ptr_frame };
 
-static void kb_keymap(void *d, struct wl_keyboard *k, uint32_t f, int32_t fd, uint32_t sz)
-{ (void)d; (void)k; (void)f; (void)sz; close(fd); }
+/* ---- keyboard: xkb -> Android key events (P2) ---- */
+
+/* keysym -> Android keycode; printable keys derive from the char (a-z=29.., 0-9=7..),
+ * specials by table. KEYCODE_UNKNOWN (0) with a nonzero unicode still types. */
+static int32_t keysym_to_android(xkb_keysym_t sym, int32_t *uni)
+{
+    char u8[8];
+    int n = xkb_keysym_to_utf8(sym, u8, sizeof u8);
+    if (n > 1) *uni = (int32_t)(unsigned char)u8[0];
+    if (n > 1 && u8[0] >= 'a' && u8[0] <= 'z') return 29 + (u8[0] - 'a');
+    if (n > 1 && u8[0] >= 'A' && u8[0] <= 'Z') return 29 + (u8[0] - 'A');
+    if (n > 1 && u8[0] >= '0' && u8[0] <= '9') return 7 + (u8[0] - '0');
+    switch (sym) {
+    case XKB_KEY_Return: case XKB_KEY_KP_Enter: return 66;
+    case XKB_KEY_BackSpace: return 67;
+    case XKB_KEY_Tab: return 61;
+    case XKB_KEY_space: return 62;
+    case XKB_KEY_Escape: return 111;
+    case XKB_KEY_Delete: return 112;
+    case XKB_KEY_Home: return 3;
+    case XKB_KEY_End: return 123;
+    case XKB_KEY_Page_Up: return 92;
+    case XKB_KEY_Page_Down: return 93;
+    case XKB_KEY_Up: return 19;
+    case XKB_KEY_Down: return 20;
+    case XKB_KEY_Left: return 21;
+    case XKB_KEY_Right: return 22;
+    case XKB_KEY_Shift_L: return 59;
+    case XKB_KEY_Shift_R: return 60;
+    case XKB_KEY_Control_L: return 129;
+    case XKB_KEY_Control_R: return 130;
+    case XKB_KEY_Alt_L: return 57;
+    case XKB_KEY_Alt_R: return 58;
+    case XKB_KEY_Meta_L: case XKB_KEY_Super_L: return 117;
+    case XKB_KEY_Meta_R: case XKB_KEY_Super_R: return 118;
+    default: return 0;
+    }
+}
+
+/* Android KeyEvent meta bits: SHIFT=1, ALT=2, CTRL=0x1000, META=0x10000. */
+static uint32_t kb_android_meta(void)
+{
+    if (!xkb_state) return 0;
+    uint32_t m = 0;
+    if (xkb_state_mod_name_is_active(xkb_state, XKB_MOD_NAME_SHIFT, XKB_STATE_MODS_EFFECTIVE))
+        m |= 1;
+    if (xkb_state_mod_name_is_active(xkb_state, XKB_MOD_NAME_ALT, XKB_STATE_MODS_EFFECTIVE))
+        m |= 2;
+    if (xkb_state_mod_name_is_active(xkb_state, XKB_MOD_NAME_CTRL, XKB_STATE_MODS_EFFECTIVE))
+        m |= 0x1000;
+    if (xkb_state_mod_name_is_active(xkb_state, XKB_MOD_NAME_LOGO, XKB_STATE_MODS_EFFECTIVE))
+        m |= 0x10000;
+    return m;
+}
+
+static void kb_keymap(void *d, struct wl_keyboard *k, uint32_t fmt, int32_t fd, uint32_t sz)
+{
+    (void)d; (void)k; (void)fmt;
+    char *map = malloc(sz + 1);
+    if (map) {
+        ssize_t got = 0;
+        while (got < (ssize_t)sz) {
+            ssize_t r = read(fd, map + got, sz - (size_t)got);
+            if (r <= 0) break;
+            got += r;
+        }
+        map[got] = 0;
+        if (!xkb_ctx) xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+        if (xkb_state) { xkb_state_unref(xkb_state); xkb_state = NULL; }
+        if (xkb_keymap_g) xkb_keymap_unref(xkb_keymap_g);
+        xkb_keymap_g = xkb_ctx ? xkb_keymap_new_from_string(xkb_ctx, map,
+                            XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS) : NULL;
+        if (xkb_keymap_g) xkb_state = xkb_state_new(xkb_keymap_g);
+        fprintf(stderr, "[shell] xkb keymap loaded (%zd bytes, %s)\n", got,
+                xkb_keymap_g ? "ok" : "FAILED");
+    }
+    free(map);
+    close(fd);
+}
 static void kb_enter(void *d, struct wl_keyboard *k, uint32_t s, struct wl_surface *sf,
                      struct wl_array *keys)
 { (void)d; (void)k; (void)s; (void)keys; keyboard_focus = window_for_surface(sf); }
@@ -248,11 +375,26 @@ static void kb_leave(void *d, struct wl_keyboard *k, uint32_t s, struct wl_surfa
 static void kb_key(void *d, struct wl_keyboard *k, uint32_t s, uint32_t t, uint32_t key, uint32_t st)
 {
     (void)d; (void)k; (void)s; (void)t;
-    send_input(keyboard_focus, EV_KEY, (int32_t)key, st == WL_KEYBOARD_KEY_STATE_PRESSED);
+    if (!keyboard_focus) return;
+    if (!xkb_state) { send_input(keyboard_focus, EV_KEY, (int32_t)key, st); return; }
+    xkb_keycode_t kc = key + 8; /* evdev -> xkb keycode */
+    xkb_state_update_key(xkb_state, kc, st ? XKB_KEY_DOWN : XKB_KEY_UP);
+    xkb_keysym_t sym = xkb_state_key_get_one_sym(xkb_state, kc);
+    char u8[8];
+    int n = xkb_state_key_get_utf8(xkb_state, kc, u8, sizeof u8);
+    int32_t uni = 0;
+    int32_t code = keysym_to_android(sym, &uni);
+    if (n > 1) uni = (int32_t)(unsigned char)u8[0]; /* state-aware: shift/symbols */
+    int32_t v[5] = { keyboard_focus->id, (int32_t)(st ? 0 : 1), code, uni,
+                     (int32_t)kb_android_meta() };
+    send_msg(keyboard_focus->client, MSG_KEY, v, 5);
 }
-static void kb_mods(void *d, struct wl_keyboard *k, uint32_t s, uint32_t a, uint32_t b,
-                    uint32_t c, uint32_t g)
-{ (void)d; (void)k; (void)s; (void)a; (void)b; (void)c; (void)g; }
+static void kb_mods(void *d, struct wl_keyboard *k, uint32_t s, uint32_t dm, uint32_t lm,
+                    uint32_t km, uint32_t group)
+{
+    (void)d; (void)k; (void)s;
+    if (xkb_state) xkb_state_update_mask(xkb_state, dm, lm, km, 0, 0, group);
+}
 static const struct wl_keyboard_listener kb_listener = {
     kb_keymap, kb_enter, kb_leave, kb_key, kb_mods };
 
@@ -270,6 +412,21 @@ static void seat_caps(void *d, struct wl_seat *st, uint32_t caps)
     }
 }
 static const struct wl_seat_listener seat_listener = { seat_caps };
+
+/* ---- output: integer scale feeds CONFIGURE (P2 HiDPI) ---- */
+
+static void out_geometry(void *d, struct wl_output *o, int32_t x, int32_t y, int32_t pw,
+                         int32_t ph, int32_t sub, const char *make, const char *model,
+                         int32_t tf)
+{ (void)d; (void)o; (void)x; (void)y; (void)pw; (void)ph; (void)sub; (void)make; (void)model; (void)tf; }
+static void out_mode(void *d, struct wl_output *o, uint32_t f, int32_t w, int32_t h,
+                     int32_t refresh)
+{ (void)d; (void)o; (void)f; (void)w; (void)h; (void)refresh; }
+static void out_scale(void *d, struct wl_output *o, int32_t s)
+{ (void)d; (void)o; output_scale = s * 100; }
+static void out_done(void *d, struct wl_output *o) { (void)d; (void)o; }
+static const struct wl_output_listener out_listener = {
+    out_geometry, out_mode, out_done, out_scale };
 
 /* ---- globals ---- */
 
@@ -291,6 +448,9 @@ static void registry(void *d, struct wl_registry *r, uint32_t name, const char *
         /* v1: only the events our listeners above implement are ever sent. */
         seat = wl_registry_bind(r, name, &wl_seat_interface, 1);
         wl_seat_add_listener(seat, &seat_listener, NULL);
+    } else if (!strcmp(iface, wl_output_interface.name) && !output) {
+        output = wl_registry_bind(r, name, &wl_output_interface, 1);
+        wl_output_add_listener(output, &out_listener, NULL);
     }
 }
 static void registry_rm(void *d, struct wl_registry *r, uint32_t n)

@@ -300,7 +300,7 @@ public final class AppHost implements Runnable {
                         && (elapsed >= runMs || (shell != null && shell.closed())))
                     break;
 
-                for (int[] ev; shell != null && (ev = shell.poll()) != null; ) onHostEvent(ev);
+                for (int[] ev; shell != null && (ev = shell.poll()) != null; ) onHostEvent(shell, ev);
                 while (!script.isEmpty() && script.firstKey() <= elapsed) runStep(script.pollFirstEntry().getValue());
                 while (!snaps.isEmpty() && snaps.firstKey() <= elapsed) {
                     long sMs = snaps.firstKey();
@@ -422,14 +422,59 @@ public final class AppHost implements Runnable {
     }
 
     /** Shell input {type, a, b, 0} (bridge/shell/shell.c): pointer -> MotionEvent, Esc/Backspace -> Back. */
-    private void onHostEvent(int[] ev) {
+    private void onHostEvent(ShellClient shell, int[] ev) {
         long now = SystemClock.uptimeMillis();
         if (ev[0] <= 2) {
             if (ev[0] == MotionEvent.ACTION_DOWN) downTime = now;
             inject(MotionEvent.obtain(downTime, now, ev[0], ev[1], ev[2], 0));
+        } else if (ev[0] == 2) { // key (xkb): {2, action, android keycode, unicode, meta}
+            if (ev[2] == 0 && ev[3] > 0) { // no keycode, just a character (typed text)
+                if (ev[1] == 0) inject(new KeyEvent(now, new String(Character.toChars(ev[3])), 0, 0));
+            } else {
+                inject(new KeyEvent(now, now, ev[1], ev[2], 0, ev[4], 0, 0, 0, 0));
+            }
+        } else if (ev[0] == 3) { // wheel: {3, x, y, vscroll px, hscroll px}
+            MotionEvent.PointerProperties pp = new MotionEvent.PointerProperties();
+            pp.id = 0;
+            pp.toolType = MotionEvent.TOOL_TYPE_MOUSE;
+            MotionEvent.PointerCoords pc = new MotionEvent.PointerCoords();
+            pc.x = ev[1];
+            pc.y = ev[2];
+            pc.setAxisValue(MotionEvent.AXIS_VSCROLL, ev[3]);
+            pc.setAxisValue(MotionEvent.AXIS_HSCROLL, ev[4]);
+            inject(MotionEvent.obtain(now, now, MotionEvent.ACTION_SCROLL, 1,
+                    new MotionEvent.PointerProperties[] {pp}, new MotionEvent.PointerCoords[] {pc},
+                    0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_MOUSE, 0));
+        } else if (ev[0] == 4) { // configure: {4, w, h, scale*100}
+            hostResize(shell, ev[1], ev[2], ev[3]);
         } else if (ev[0] == 100 && (ev[1] == KEY_ESC || ev[1] == KEY_BACKSPACE)) {
             inject(new KeyEvent(now, now, ev[2] == 1 ? KeyEvent.ACTION_DOWN : KeyEvent.ACTION_UP,
                     KeyEvent.KEYCODE_BACK, 0));
+        }
+    }
+
+    /**
+     * Resize / DPI (PLAN P2): update the sandbox qualifiers from the new size and output
+     * scale (density = 160 x scale), recreate the shell window buffers at the new pixel
+     * size, and relayout the app's windows.
+     */
+    private void hostResize(ShellClient shell, int w, int h, int scalePct) {
+        int dpi = 160 * scalePct / 100;
+        int wdp = Math.max(1, w * 160 / dpi), hdp = Math.max(1, h * 160 / dpi);
+        System.out.println("[apklayer] configure " + w + "x" + h + " @" + scalePct + "% -> " + wdp
+                + "x" + hdp + "dp @" + dpi + "dpi");
+        try {
+            shell.resize(w, h);
+        } catch (Exception e) {
+            System.out.println("[apklayer] resize failed: " + e);
+            return;
+        }
+        RuntimeEnvironment.setQualifiers("w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi");
+        Object wmg = android.view.WindowManagerGlobal.getInstance();
+        List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
+        for (View v : views) {
+            v.requestLayout();
+            v.invalidate();
         }
     }
 

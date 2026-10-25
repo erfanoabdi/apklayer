@@ -21,7 +21,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  */
 final class ShellClient {
     private static final int HELLO = 1, WINDOW_CREATE = 2, FRAME = 3;
-    private static final int INPUT = 101, CLOSE = 103, RELEASE = 104;
+    private static final int INPUT = 101, CLOSE = 103, RELEASE = 104, KEY = 105, SCROLL = 106,
+            CONFIGURE = 107;
     private static final int WINDOW_ID = 1, NBUF = 2;
 
     private final SocketChannel channel;
@@ -32,6 +33,7 @@ final class ShellClient {
     private IntBuffer pixels;
     private int width, height, next;
     private int[] shown, pending;
+    private String title = "apklayer";
 
     private ShellClient(SocketChannel channel) {
         this.channel = channel;
@@ -64,15 +66,38 @@ final class ShellClient {
     void createWindow(int w, int h, String title) throws IOException {
         width = w;
         height = h;
+        this.title = title;
+        mapBuffers();
+        sendWindowCreate();
+    }
+
+    /** Resize (P2): remap the shared file at the new size and recreate the window (same id). */
+    synchronized void resize(int w, int h) throws IOException {
+        if (w <= 0 || h <= 0 || (w == width && h == height)) return;
+        width = w;
+        height = h;
+        shown = null;
+        pending = null;
+        busy[0] = busy[1] = false;
+        next = 0;
+        mapBuffers();
+        sendWindowCreate();
+    }
+
+    private void mapBuffers() throws IOException {
         file = Path.of("/dev/shm", "apklayer-" + ProcessHandle.current().pid() + "-" + WINDOW_ID);
         try (FileChannel fc = FileChannel.open(file, StandardOpenOption.CREATE, StandardOpenOption.READ,
                 StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
-            pixels = fc.map(FileChannel.MapMode.READ_WRITE, 0, 4L * w * h * NBUF)
+            pixels = fc.map(FileChannel.MapMode.READ_WRITE, 0, 4L * width * height * NBUF)
                     .order(ByteOrder.LITTLE_ENDIAN).asIntBuffer();
         }
         file.toFile().deleteOnExit();
+    }
+
+    private void sendWindowCreate() throws IOException {
         byte[] text = (file + "\0" + title).getBytes(StandardCharsets.UTF_8);
-        send(WINDOW_CREATE, buf(12 + text.length).putInt(WINDOW_ID).putInt(w).putInt(h).put(text));
+        send(WINDOW_CREATE, buf(12 + text.length).putInt(WINDOW_ID).putInt(width).putInt(height)
+                .put(text));
     }
 
     /** Presents a frame; only the rectangle that changed since the last frame is damaged. */
@@ -140,6 +165,17 @@ final class ShellClient {
                 readFully(body);
                 if (type == INPUT) {
                     input.add(new int[] {body.getInt(4), body.getInt(8), body.getInt(12), 0});
+                } else if (type == KEY) {
+                    // {2, action, android keycode, unicode, android meta}
+                    input.add(new int[] {2, body.getInt(4), body.getInt(8), body.getInt(12),
+                            body.getInt(16)});
+                } else if (type == SCROLL) {
+                    // {3, x, y, vscroll px, hscroll px}
+                    input.add(new int[] {3, body.getInt(4), body.getInt(8), body.getInt(12),
+                            body.getInt(16)});
+                } else if (type == CONFIGURE) {
+                    // {4, w, h, scale*100}
+                    input.add(new int[] {4, body.getInt(4), body.getInt(8), body.getInt(12)});
                 } else if (type == RELEASE) {
                     released(body.getInt(4));
                 } else if (type == CLOSE) {
