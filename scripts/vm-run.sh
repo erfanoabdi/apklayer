@@ -11,7 +11,7 @@
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APK="${1:-$ROOT/tests/uibench/uibench.apk}"
-NAME="$(basename "$APK" .apk)"
+NAME="$(basename "$APK" .apk | tr -c 'A-Za-z0-9._\n-' '_')"   # the VM copy gets a shell-safe name
 VM="${APKLY_VM:-parallels@10.211.55.4}"
 VM_PASS="${APKLY_VM_PASS:-1234}"
 DEPS="$HOME/.cache/apklayer/deps"
