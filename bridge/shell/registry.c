@@ -5,10 +5,14 @@
 static void seat_caps(void *d, struct wl_seat *st, uint32_t caps)
 {
     (void)d;
-    static int have_ptr, have_kb;
+    static int have_ptr, have_kb, have_touch;
     if ((caps & WL_SEAT_CAPABILITY_POINTER) && !have_ptr) {
         have_ptr = 1;
         wl_pointer_add_listener(wl_seat_get_pointer(st), &ptr_listener, NULL);
+    }
+    if ((caps & WL_SEAT_CAPABILITY_TOUCH) && !have_touch) {
+        have_touch = 1;
+        wl_touch_add_listener(wl_seat_get_touch(st), &touch_listener, NULL);
     }
     if ((caps & WL_SEAT_CAPABILITY_KEYBOARD) && !have_kb) {
         have_kb = 1;

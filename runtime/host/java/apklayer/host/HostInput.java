@@ -118,6 +118,8 @@ final class HostInput {
                     new MotionEvent.PointerProperties[] {pp}, new MotionEvent.PointerCoords[] {pc},
                     0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_MOUSE, 0);
             main.post(() -> HostWindows.dispatchToTopWindow(scroll));
+        } else if (ev[0] == 16) { // touch: {16, action, finger, x, y}
+            touch(now, ev[1], ev[2], ev[3], ev[4]);
         } else if (ev[0] == 15) { // window state: {15, flags}
             onConfigure.state(ev[1]);
         } else if (ev[0] == 14) { // configure: {14, logical w, logical h, scale*100}
@@ -216,5 +218,85 @@ final class HostInput {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    private final java.util.LinkedHashMap<Integer, float[]> fingers = new java.util.LinkedHashMap<>();
+    private long touchDownTime;
+
+    /** Finger events -> one multi-pointer MotionEvent stream (DOWN, POINTER_DOWN, MOVE, POINTER_UP, UP). */
+    private void touch(long now, int action, int finger, int x, int y) {
+        if (action == 3) { // cancel
+            if (!fingers.isEmpty()) injectTouch(now, MotionEvent.ACTION_CANCEL);
+            fingers.clear();
+            return;
+        }
+        if (action == 0) {
+            if (fingers.isEmpty()) touchDownTime = now;
+            fingers.put(finger, new float[] {x, y});
+            int idx = indexOf(finger);
+            injectTouch(now, fingers.size() == 1 ? MotionEvent.ACTION_DOWN
+                    : MotionEvent.ACTION_POINTER_DOWN | (idx << MotionEvent.ACTION_POINTER_INDEX_SHIFT));
+        } else if (action == 2) {
+            float[] p = fingers.get(finger);
+            if (p == null) return;
+            p[0] = x;
+            p[1] = y;
+            injectTouch(now, MotionEvent.ACTION_MOVE);
+        } else if (action == 1 && fingers.containsKey(finger)) {
+            int idx = indexOf(finger);
+            injectTouch(now, fingers.size() == 1 ? MotionEvent.ACTION_UP
+                    : MotionEvent.ACTION_POINTER_UP | (idx << MotionEvent.ACTION_POINTER_INDEX_SHIFT));
+            fingers.remove(finger);
+        }
+    }
+
+    private int indexOf(int finger) {
+        int i = 0;
+        for (int id : fingers.keySet()) {
+            if (id == finger) return i;
+            i++;
+        }
+        return -1;
+    }
+
+    private void injectTouch(long now, int action) {
+        int n = fingers.size();
+        MotionEvent.PointerProperties[] props = new MotionEvent.PointerProperties[n];
+        MotionEvent.PointerCoords[] coords = new MotionEvent.PointerCoords[n];
+        int i = 0;
+        for (java.util.Map.Entry<Integer, float[]> e : fingers.entrySet()) {
+            props[i] = new MotionEvent.PointerProperties();
+            props[i].id = e.getKey();
+            props[i].toolType = MotionEvent.TOOL_TYPE_FINGER;
+            coords[i] = new MotionEvent.PointerCoords();
+            coords[i].x = e.getValue()[0];
+            coords[i].y = e.getValue()[1];
+            coords[i].pressure = 1f;
+            coords[i].size = 1f;
+            i++;
+        }
+        if (Boolean.getBoolean("apklayer.debugkeys"))
+            System.out.println("[apklayer] touch action=" + MotionEvent.actionToString(action) + " pointers=" + n);
+        inject(MotionEvent.obtain(touchDownTime, now, action, n, props, coords, 0, 0, 1f, 1f, 0, 0,
+                android.view.InputDevice.SOURCE_TOUCHSCREEN, 0));
+    }
+
+    /**
+     * Views that don't handle ACTION_SCROLL still scroll by touch: replay the wheel as a short touch
+     * drag (DOWN, a few MOVEs, UP) so the velocity tracker produces a fling (PLAN P2.4).
+     */
+    private void wheelAsDrag(MotionEvent scroll) {
+        float notchPx = 64 * android.content.res.Resources.getSystem().getDisplayMetrics().density;
+        float dy = scroll.getAxisValue(MotionEvent.AXIS_VSCROLL) * notchPx;   // + = content moves down
+        float dx = scroll.getAxisValue(MotionEvent.AXIS_HSCROLL) * -notchPx;
+        if (dy == 0 && dx == 0) return;
+        float x = scroll.getX(), y = scroll.getY();
+        long t = SystemClock.uptimeMillis();
+        int steps = 5;
+        inject(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0));
+        for (int i = 1; i <= steps; i++) {
+            inject(MotionEvent.obtain(t, t + i * 16L, MotionEvent.ACTION_MOVE, x + dx * i / steps, y + dy * i / steps, 0));
+        }
+        inject(MotionEvent.obtain(t, t + (steps + 1) * 16L, MotionEvent.ACTION_UP, x + dx, y + dy, 0));
     }
 }

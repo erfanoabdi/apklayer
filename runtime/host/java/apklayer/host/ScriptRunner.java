@@ -115,6 +115,10 @@ final class ScriptRunner {
             boolean down = step.startsWith("keydown:");
             int code = Integer.parseInt(step.substring(step.indexOf(':') + 1));
             input.onHostEvent(new int[] {12, down ? 0 : 1, code, 0, 0});
+        } else if (step.startsWith("touch:")) { // touch:<action 0 down/1 up/2 move/3 cancel>,<finger>,<x>,<y>
+            String[] p = step.substring(6).split(",");
+            input.onHostEvent(new int[] {16, Integer.parseInt(p[0]), Integer.parseInt(p[1]),
+                    p.length > 2 ? Integer.parseInt(p[2]) : 0, p.length > 3 ? Integer.parseInt(p[3]) : 0});
         } else if (step.startsWith("rclick:")) { // rclick:x,y right click = long press
             String[] p = step.substring(7).split(",");
             input.onHostEvent(new int[] {4, Integer.parseInt(p[0]), Integer.parseInt(p[1])});

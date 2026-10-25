@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 final class ShellClient {
     private static final int HELLO = 1, WINDOW_CREATE = 2, FRAME = 3;
     private static final int INPUT = 101, CLOSE = 103, RELEASE = 104, KEY = 105, SCROLL = 106,
-            CONFIGURE = 107, STATE = 108, CLIPBOARD = 109, CLIPBOARD_SET = 5, TEXT_INPUT = 6, IME = 110;
+            CONFIGURE = 107, STATE = 108, CLIPBOARD = 109, CLIPBOARD_SET = 5, TEXT_INPUT = 6, IME = 110, TOUCH = 111;
     private static final int WINDOW_ID = 1, NBUF = 2;
 
     private final SocketChannel channel;
@@ -214,6 +214,9 @@ final class ShellClient {
                 } else if (type == CONFIGURE) {
                     // {14, w, h, scale*100}
                     input.add(new int[] {14, body.getInt(4), body.getInt(8), body.getInt(12)});
+                } else if (type == TOUCH) {
+                    // {16, action, finger, x, y}
+                    input.add(new int[] {16, body.getInt(4), body.getInt(8), body.getInt(12), body.getInt(16)});
                 } else if (type == IME) {
                     // {id, delete_before, delete_after} utf8 commit \0 utf8 preedit
                     byte[] raw = body.array();

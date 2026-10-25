@@ -24,6 +24,7 @@
  *                                    i32 unicode (UTF-32), i32 android meta}  (xkb-translated, P2)
  *                106 SCROLL         {i32 id, i32 x, i32 y, i32 vscroll*1000, i32 hscroll*1000}
  *                                    (x,y in buffer pixels; scroll in notches, +vscroll = up)
+ *                111 TOUCH          {i32 id, i32 action(0 down,1 up,2 move,3 cancel), i32 finger, i32 x, i32 y}  (pixels)
  *                110 IME            {i32 id, i32 delete_before, i32 delete_after} utf8 commit "\0" utf8 preedit
  *                109 CLIPBOARD      utf8 text: the system selection changed (text only, < 60 KB)
  *                108 STATE          {i32 id, i32 flags}  bit0 = window active (focused), bit1 = minimized
@@ -56,7 +57,7 @@
 #include "decor.h"
 enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
        MSG_INPUT = 101, MSG_CLOSE = 103, MSG_RELEASE = 104,
-       MSG_KEY = 105, MSG_SCROLL = 106, MSG_CONFIGURE = 107, MSG_STATE = 108, MSG_CLIPBOARD = 109, MSG_IME = 110 };
+       MSG_KEY = 105, MSG_SCROLL = 106, MSG_CONFIGURE = 107, MSG_STATE = 108, MSG_CLIPBOARD = 109, MSG_IME = 110, MSG_TOUCH = 111 };
 #define MSG_TEXT_INPUT 6
 /* app -> shell uses type 5 for MSG_CLIPBOARD_SET (text); shell -> app 109 pushes the selection */
 #define MSG_CLIPBOARD_SET 5
@@ -116,7 +117,8 @@ extern long long repeat_next_ms;
 void send_state(struct window *w);  /* window.c */
 void send_bytes(struct client *c, uint32_t type, const char *data, size_t len);  /* client.c */
 void text_input_enable(struct window *w, int enable);  /* textinput.c */
-void clipboard_init(void);  /* clipboard.c */
+void clipboard_init(void);
+extern const struct wl_touch_listener touch_listener;  /* touch.c */  /* clipboard.c */
 void clipboard_push(struct window *w);  /* clipboard.c */
 void clipboard_set(const char *text, size_t len);  /* clipboard.c */
 void send_msg(struct client *c, uint32_t type, const int32_t *v, int n);  /* client.c */

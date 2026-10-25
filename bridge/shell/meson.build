@@ -25,7 +25,7 @@ if wl_client_dep.found() and wl_protos_dep.found() and xkb_dep.found() and scann
       command: [scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
   endforeach
   executable('apklayer-shell',
-    ['main.c', 'client.c', 'window.c', 'pointer.c', 'keyboard.c', 'registry.c', 'clipboard.c', 'textinput.c', 'decor.c', generated],
+    ['main.c', 'client.c', 'window.c', 'pointer.c', 'keyboard.c', 'registry.c', 'clipboard.c', 'textinput.c', 'touch.c', 'decor.c', generated],
     dependencies: [wl_client_dep, wl_cursor_dep, xkb_dep],
     c_args: ['-Werror=incompatible-pointer-types', '-Werror=implicit-function-declaration'],
     install: false)

@@ -42,7 +42,7 @@ Instead:
 | M4 | uibench full UI on the Wayland window | done: NATIVE graphics (real HWUI/Skia), ~43 fps |
 | M5 | Interactive: pointer/keyboard, activity back stack, dialogs | done: clicks, drag, Esc/Backspace = Back, dialogs composited |
 | M6 | P1: product foundation: `apklayer run any.apk` on SDK 36, Simulator host (no JUnit), shell protocol, CLI, install cache | **in progress**: SDK 36 ✅, deps lock ✅, Simulator host ✅, shell protocol ✅, Meson ✅, CLI + install + persistent data + menu entries ✅; exit test: 2 extra apps pass headless (Mac), VM run pending |
-| M7 | P2: desktop-grade window and input (resize, HiDPI, wheel, touch, IME, clipboard) | **in progress**: resize ✅, window decoration ✅, keyboard/D-pad/wheel ✅, HiDPI plumbing ◐ (untested on 2x), IME/clipboard/touch/orientation/lifecycle pending (see docs/PLAN.md P2 status) |
+| M7 | P2: desktop-grade window and input (resize, HiDPI, wheel, touch, IME, clipboard) | **done** (2026-10-26): see docs/PLAN.md P2 status; open caveats: 2x output and a real IME not exercised |
 | — | P3: compatibility corpus (30 F-Droid APKs), continuous from here | pending |
 | M8 | P4: native `.so` in APKs (bionic_translation + NDK shims → Mesa/PipeWire) | pending |
 | M9 | P5: platform services (WebView→WPE, media→GStreamer, portals, microG) | pending |

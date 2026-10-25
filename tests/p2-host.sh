@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # P2 host-level check (Mac or Linux, headless): drives the shell-event paths of AppHost with the
 # same int[] events ShellClient produces: key (Back, typing), wheel, configure (resize, HiDPI).
-# Exit 0 = all pass. Usage: tests/p2-host.sh [group...]   groups: back type resize hidpi wheel dialog dpad lifecycle clipboard orient ime
+# Exit 0 = all pass. Usage: tests/p2-host.sh [group...]   groups: back type resize hidpi wheel dialog dpad lifecycle clipboard orient ime touch fling
 # (no argument = all; run only the groups for the code you changed)
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -96,6 +96,20 @@ if want ime; then
 # 12. IME: preedit then commit (as zwp_text_input_v3 would deliver) land in the focused EditText
 log=$("$ROOT/scripts/check.sh" "$APK" "2000:tap:100,374+3500:tap:100,80+5000:tap:200,150+6000:ime:|ni+6300:ime:你好|" "7000" 7500 "-Dapklayer.debugkeys=true" 2>&1)
 check "IME composing + commit text reaches the focused field" 'grep -q "ime applied, field text: .*你好" <<<"$log"'
+fi
+
+if want touch; then
+# 13. Touch: one finger taps a list entry; two fingers form a multi-pointer stream
+log=$("$ROOT/scripts/check.sh" "$APK" "2000:touch:0,1,100,80+2050:touch:1,1,100,80+4000:touch:0,1,100,80+4050:touch:0,2,300,300+4100:touch:2,2,310,310+4150:touch:1,2,0,0+4200:touch:1,1,0,0" "1500" 5000 "-Dapklayer.debugkeys=true" 2>&1)
+check "single-finger touch taps a menu entry (depth 2)" 'grep -q "started .*depth=2" <<<"$log"'
+check "second finger gives a POINTER_DOWN with 2 pointers" 'grep -q "ACTION_POINTER_DOWN.* pointers=2\|POINTER_DOWN(1) pointers=2" <<<"$log"'
+fi
+
+if want fling; then
+# 14. A wheel turn replayed as a touch drag scrolls a list (for views without ACTION_SCROLL support)
+"$ROOT/scripts/check.sh" "$APK" "2000:tap:100,80+3500:tap:100,129+5500:wheel:240,400,-3000" \
+  "5000,7500" 8000 "-Dapklayer.wheeldrag=true" >/dev/null 2>&1
+check "wheel as touch drag scrolls the dialog list" 'differs "$ROOT/build/check/uibench-5000ms.png" "$ROOT/build/check/uibench-7500ms.png"'
 fi
 
 exit $fail

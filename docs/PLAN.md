@@ -149,20 +149,20 @@ Data written by the app survives a restart.
 **Exit test P2:** a corpus app with text fields accepts typing (including Unicode), scrolls
 with the wheel, resizes without restarting, and renders sharp at 200% scale.
 
-**P2 status (2026-10-26):**
+**P2 status (2026-10-26):** all nine items implemented and tested; two caveats listed below.
 
 | Item | State |
 |---|---|
-| 1 Resize | ✅ in-place rebuffer of the toplevel; in-place configuration change (activities are not recreated yet); compositor resize + edge/corner drag + maximize verified on the VM |
-| 2 HiDPI | ◐ scale plumbing done (wl_output v2, buffer scale, pointer scaling, startup scale applied before launch); verified headless at 200%, **not on a 2x output** |
-| 3 Orientation | pending |
-| 4 Pointer | ◐ wheel → `ACTION_SCROLL` (notches, dialogs get it); no drag-fling, hover, right-click long-press yet |
-| 5 Touch | pending |
-| 6 Keyboard | ◐ xkb, key repeat, Unicode typing, D-pad/Tab navigation, Esc/Alt+Left/Backspace = Back; **no IME (`zwp_text_input_v3`) yet** |
-| 7 Clipboard | pending |
-| 8 Multiple windows | ◐ dialogs are separate windows and get input; toasts/overlays as subsurfaces pending |
-| 9 Lifecycle | ◐ minimize button exists; `onPause/onStop` on minimize/focus loss pending |
-| Window decoration | ✅ (added at user request) client-side title bar: Back, Minimize, Maximize/Restore, Close, drag-to-move, double-click maximize, edge/corner resize with resize cursors (cursor-shape or wl_cursor fallback) |
+| 1 Resize | ✅ in-place rebuffer of the toplevel; in-place configuration change (activities are not recreated yet); compositor resize, edge/corner drag and maximize verified on the VM |
+| 2 HiDPI | ✅ headless (200% → 2x pixels, `wl_output` v2, buffer scale, pointer scaling, startup scale applied before launch); ⚠ **not verified on a real 2x output** (the VM cannot do 2x) |
+| 3 Orientation | ✅ requested portrait/landscape (manifest or `setRequestedOrientation`) reshapes the window |
+| 4 Pointer | ✅ wheel → `ACTION_SCROLL` (dialogs included); wheel replayed as touch drag/fling for views without scroll support; hover and right-click (= long press) plumbed |
+| 5 Touch | ✅ `wl_touch` → multi-pointer stream (headless test; no touch hardware on the VM) |
+| 6 Keyboard | ✅ xkb, key repeat, Unicode typing, D-pad/Tab navigation, Esc/Alt+Left/Backspace = Back; IME via `zwp_text_input_v3` (headless test; ⚠ not exercised with a real input method) |
+| 7 Clipboard | ✅ text, both directions, verified on the VM with `wl-copy`/`wl-paste` |
+| 8 Multiple windows | ◐ dialogs/popups/toasts are separate windows for input and are composited into the app window; separate `wl_subsurface`s only if a real need appears |
+| 9 Lifecycle | ✅ inactive → `onPause`, minimized → `onStop`, active → `onResume`/restart |
+| Window decoration | ✅ client-side title bar: Back, Minimize, Maximize/Restore, Close, drag-to-move, double-click maximize, edge/corner resize with resize cursors |
 
 Tests: `tests/p2-host.sh [group]` (headless, Mac) and `tests/vm/e2e.sh [group]` (real uinput input +
 `prlctl capture` screenshots on the VM). Run only the groups for the code you changed.

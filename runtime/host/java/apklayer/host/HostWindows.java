@@ -110,21 +110,22 @@ final class HostWindows {
      * UiAutomation's injector offers them to the first touch-modal root instead, which can be a
      * stopped activity's window, and its dispatch doesn't reach nested scrollers here.
      */
-    static void dispatchToTopWindow(MotionEvent e) {
+    static boolean dispatchToTopWindow(MotionEvent e) {
         Object wmg = android.view.WindowManagerGlobal.getInstance();
         List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
         View root = topWindow(views, (int) e.getX(), (int) e.getY());
-        if (root == null) return;
+        if (root == null) return false;
         View target = viewAt(root, (int) e.getX(), (int) e.getY());
         boolean debug = Boolean.getBoolean("apklayer.debugwheel");
         for (View v = target; v != null; v = v.getParent() instanceof View ? (View) v.getParent() : null) {
             if (v.onGenericMotionEvent(e)) {
                 if (debug) System.out.println("[apklayer] wheel handled by " + v.getClass().getSimpleName());
-                return;
+                return true;
             }
         }
         if (debug) System.out.println("[apklayer] wheel at " + e.getX() + "," + e.getY() + ": no view handled it (target "
                 + (target == null ? "none" : target.getClass().getSimpleName()) + ")");
+        return false;
     }
 
     /** Deepest visible view containing the screen point (x, y), topmost child first. */
