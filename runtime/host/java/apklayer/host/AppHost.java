@@ -474,6 +474,31 @@ public final class AppHost implements Runnable {
     }
 
     /**
+     * The window an input event should go to: among the visible, attached windows (containing the
+     * point when x >= 0), the highest window type wins (dialogs and popups sit above the activity
+     * window), then the most recently added.
+     */
+    private static View topWindow(List<View> views, int x, int y) {
+        View best = null;
+        int bestType = -1;
+        for (View v : views) {
+            if (v.getVisibility() != View.VISIBLE || !v.isAttachedToWindow()) continue;
+            if (x >= 0) {
+                int[] loc = new int[2];
+                v.getLocationOnScreen(loc);
+                if (x < loc[0] || y < loc[1] || x >= loc[0] + v.getWidth() || y >= loc[1] + v.getHeight()) continue;
+            }
+            int type = v.getLayoutParams() instanceof android.view.WindowManager.LayoutParams
+                    ? ((android.view.WindowManager.LayoutParams) v.getLayoutParams()).type : 0;
+            if (type >= bestType) { // >=: later windows win ties
+                best = v;
+                bestType = type;
+            }
+        }
+        return best;
+    }
+
+    /**
      * Wheel events: hit-test the topmost visible window ourselves and offer the event to the view
      * under the pointer and then its ancestors (what Android's generic-pointer routing does).
      * UiAutomation's injector offers them to the first touch-modal root instead, which can be a
@@ -482,15 +507,18 @@ public final class AppHost implements Runnable {
     private static void dispatchToTopWindow(MotionEvent e) {
         Object wmg = android.view.WindowManagerGlobal.getInstance();
         List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
-        for (int i = views.size() - 1; i >= 0; i--) {
-            View root = views.get(i);
-            if (root.getVisibility() != View.VISIBLE || !root.isAttachedToWindow()) continue;
-            View target = viewAt(root, (int) e.getX(), (int) e.getY());
-            for (View v = target; v != null; v = v.getParent() instanceof View ? (View) v.getParent() : null) {
-                if (v.onGenericMotionEvent(e)) break;
+        View root = topWindow(views, (int) e.getX(), (int) e.getY());
+        if (root == null) return;
+        View target = viewAt(root, (int) e.getX(), (int) e.getY());
+        boolean debug = Boolean.getBoolean("apklayer.debugwheel");
+        for (View v = target; v != null; v = v.getParent() instanceof View ? (View) v.getParent() : null) {
+            if (v.onGenericMotionEvent(e)) {
+                if (debug) System.out.println("[apklayer] wheel handled by " + v.getClass().getSimpleName());
+                return;
             }
-            return;
         }
+        if (debug) System.out.println("[apklayer] wheel at " + e.getX() + "," + e.getY() + ": no view handled it (target "
+                + (target == null ? "none" : target.getClass().getSimpleName()) + ")");
     }
 
     /** Deepest visible view containing the screen point (x, y), topmost child first. */
@@ -513,6 +541,8 @@ public final class AppHost implements Runnable {
 
     /** A key from the shell: action 0 = down / 1 = up, Android keycode, UTF-32 char (0 = none). */
     private void hostKey(long now, int action, int code, int unicode, int meta) {
+        if (Boolean.getBoolean("apklayer.debugkeys"))
+            System.out.println("[apklayer] key action=" + action + " code=" + code + " uni=" + unicode + " meta=" + meta);
         int act = action == 0 ? KeyEvent.ACTION_DOWN : KeyEvent.ACTION_UP;
         if (code == KeyEvent.KEYCODE_DEL) {
             // Desktop Backspace is also "go back" when nothing is being edited.
@@ -528,7 +558,13 @@ public final class AppHost implements Runnable {
                 inject(new KeyEvent(now, new String(Character.toChars(unicode)), 0, 0));
             return;
         }
-        injectKey(new KeyEvent(now, now, act, code, 0, meta));
+        injectKey(new KeyEvent(now, now, act, code, 0, meta), isNavigationKey(code));
+    }
+
+    private static boolean isNavigationKey(int code) {
+        return code == KeyEvent.KEYCODE_TAB || (code >= KeyEvent.KEYCODE_DPAD_UP && code <= KeyEvent.KEYCODE_DPAD_CENTER)
+                || code == KeyEvent.KEYCODE_PAGE_UP || code == KeyEvent.KEYCODE_PAGE_DOWN
+                || code == KeyEvent.KEYCODE_MOVE_HOME || code == KeyEvent.KEYCODE_MOVE_END;
     }
 
     /**
@@ -536,17 +572,22 @@ public final class AppHost implements Runnable {
      * channel: focus navigation (Tab, arrows), key shortcuts and the IME run there, whereas
      * UiAutomation's injector only calls decor.dispatchKeyEvent.
      */
-    private void injectKey(KeyEvent event) {
+    private void injectKey(KeyEvent event, boolean navigation) {
         main.post(() -> {
             Object wmg = android.view.WindowManagerGlobal.getInstance();
             List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
-            for (int i = views.size() - 1; i >= 0; i--) {
-                View root = views.get(i);
-                android.view.ViewRootImpl impl = root.getViewRootImpl();
-                if (root.getVisibility() == View.VISIBLE && impl != null) {
-                    impl.dispatchInputEvent(event);
-                    return;
+            View root = topWindow(views, -1, -1);
+            android.view.ViewRootImpl impl = root == null ? null : root.getViewRootImpl();
+            if (impl != null) {
+                // A real window manager tells the root it has input focus; here nobody does
+                // (and it is lost on relayout), and keyboard navigation leaves touch mode.
+                if (!root.hasWindowFocus()) impl.windowFocusChanged(true);
+                if (navigation && root.isInTouchMode()) {
+                    org.robolectric.util.ReflectionHelpers.callInstanceMethod(impl, "ensureTouchModeLocally",
+                            org.robolectric.util.ReflectionHelpers.ClassParameter.from(boolean.class, false));
                 }
+                impl.dispatchInputEvent(event);
+                return;
             }
             uiAutomation.injectInputEvent(event, true);
         });
@@ -635,6 +676,10 @@ public final class AppHost implements Runnable {
             int code = Integer.parseInt(p[0]), uni = p.length > 1 ? Integer.parseInt(p[1]) : 0;
             onHostEvent(new int[] {12, 0, code, uni, 0});
             onHostEvent(new int[] {12, 1, code, uni, 0});
+        } else if (step.startsWith("keydown:") || step.startsWith("keyup:")) { // one half of key:, as separate loop turns
+            boolean down = step.startsWith("keydown:");
+            int code = Integer.parseInt(step.substring(step.indexOf(':') + 1));
+            onHostEvent(new int[] {12, down ? 0 : 1, code, 0, 0});
         } else if (step.startsWith("wheel:")) { // wheel:x,y,vnotches*1000 (+ = up): as the shell sends it
             String[] p = step.substring(6).split(",");
             onHostEvent(new int[] {13, Integer.parseInt(p[0]), Integer.parseInt(p[1]),

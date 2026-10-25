@@ -42,7 +42,10 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include <wayland-client.h>
+#include <wayland-cursor.h>
 #include "xdg-shell-client-protocol.h"
+#include "cursor-shape-v1-client-protocol.h"
+#include "decor.h"
 
 enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
        MSG_INPUT = 101, MSG_CLOSE = 103, MSG_RELEASE = 104,
@@ -64,7 +67,11 @@ struct window {
     int id, w, h, configured;   /* w,h: buffer pixels */
     int scale;                  /* percent the buffers were rendered at (wl buffer scale) */
     int told_scale;             /* scale last announced to the app */
-    int cfg_w, cfg_h;           /* latest logical size requested by the compositor, 0 = none */
+    int cfg_w, cfg_h;           /* latest logical content size requested by the compositor, 0 = none */
+    int maximized, activated;   /* xdg toplevel states */
+    struct decor decor;         /* title bar subsurface */
+    int last_click_ms;          /* double click on the title bar = maximize */
+    int bar_hover;              /* DECOR_* under the pointer, DECOR_NONE if none */
     struct wl_surface *surface;
     struct xdg_surface *xdg_surface;
     struct xdg_toplevel *toplevel;
@@ -77,6 +84,14 @@ struct window {
 
 static struct wl_display *display;
 static struct wl_compositor *compositor;
+static struct wl_subcompositor *subcompositor;
+static struct wp_cursor_shape_manager_v1 *cursor_mgr;
+static struct wp_cursor_shape_device_v1 *cursor_dev; /* shape of the pointer, set per region */
+static uint32_t ptr_enter_serial;
+static struct wl_cursor_theme *cursor_theme;  /* fallback when the compositor has no cursor-shape */
+static struct wl_surface *cursor_surface;
+static struct wl_pointer *the_pointer;
+static const char *cursor_name_cur;
 static struct wl_shm *shm;
 static struct xdg_wm_base *wm_base;
 static struct wl_seat *seat;
@@ -119,7 +134,9 @@ static void send_input(struct window *w, int32_t type, int32_t a, int32_t b)
 static struct window *window_for_surface(struct wl_surface *s)
 {
     for (int i = 0; i < MAX_WINDOWS; i++)
-        if (windows[i].client && windows[i].surface == s) return &windows[i];
+        if (windows[i].client && (windows[i].surface == s
+                                  || (windows[i].decor.surface && windows[i].decor.surface == s)))
+            return &windows[i];
     return NULL;
 }
 
@@ -149,6 +166,15 @@ static void show(struct window *w, int buf, const int32_t *d)
     wl_surface_commit(w->surface);
 }
 
+/* Window geometry = content + title bar; the bar follows the content width and scale. */
+static void window_layout(struct window *w)
+{
+    int lw = w->w * 100 / w->scale, lh = w->h * 100 / w->scale;
+    decor_update(&w->decor, lw, w->scale, w->maximized,
+                 w->bar_hover, w->activated);
+    xdg_surface_set_window_geometry(w->xdg_surface, 0, -DECOR_H, lw, lh + DECOR_H);
+}
+
 static void xs_configure(void *data, struct xdg_surface *xs, uint32_t serial)
 {
     struct window *w = data;
@@ -169,13 +195,26 @@ static const struct xdg_surface_listener xs_listener = { xs_configure };
 static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t ch,
                           struct wl_array *st)
 {
-    (void)t; (void)st;
+    (void)t;
     struct window *w = d;
-    /* 0x0 means "use your preferred size". Any other size is a resize request: tell the app
-     * (logical size); it relayouts and re-sends WINDOW_CREATE with the same id, and the shell
-     * swaps the buffers of the existing toplevel (no re-map). */
+    int maximized = 0, activated = 0;
+    uint32_t *state;
+    wl_array_for_each(state, st) {
+        if (*state == XDG_TOPLEVEL_STATE_MAXIMIZED || *state == XDG_TOPLEVEL_STATE_FULLSCREEN)
+            maximized = 1;
+        if (*state == XDG_TOPLEVEL_STATE_ACTIVATED) activated = 1;
+    }
+    int changed = maximized != w->maximized || activated != w->activated;
+    w->maximized = maximized;
+    w->activated = activated;
+    /* The configure size is the window geometry: content + title bar. 0x0 = "your preferred
+     * size". Any other size is a resize request: tell the app the logical content size; it
+     * relayouts and re-sends WINDOW_CREATE with the same id, and the shell swaps the buffers of
+     * the existing toplevel (no re-map). */
+    ch = ch > DECOR_H ? ch - DECOR_H : 0;
     w->cfg_w = cw > 0 ? cw : 0;
     w->cfg_h = ch > 0 ? ch : 0;
+    if (w->configured && changed) window_layout(w);
     if (cw > 0 && ch > 0 && w->configured
         && (cw != w->w * 100 / w->scale || ch != w->h * 100 / w->scale)) {
         int32_t v[4] = { w->id, cw, ch, output_scale };
@@ -220,6 +259,7 @@ static int window_buffers(struct window *w, int width, int height, const char *p
     w->pending_buf = -1;
     w->scale = w->told_scale ? w->told_scale : 100;
     wl_surface_set_buffer_scale(w->surface, (w->scale + 50) / 100);
+    if (w->xdg_surface) window_layout(w);
     return 0;
 }
 
@@ -249,11 +289,14 @@ static void window_create(struct client *c, int id, int width, int height, const
     }
     w->xdg_surface = xdg_wm_base_get_xdg_surface(wm_base, w->surface);
     xdg_surface_add_listener(w->xdg_surface, &xs_listener, w);
+    decor_create(&w->decor, w->surface);
+    w->bar_hover = DECOR_NONE;
     w->toplevel = xdg_surface_get_toplevel(w->xdg_surface);
     xdg_toplevel_add_listener(w->toplevel, &top_listener, w);
     xdg_toplevel_set_title(w->toplevel, title[0] ? title : c->pkg);
     xdg_toplevel_set_app_id(w->toplevel, c->pkg);
-    xdg_toplevel_set_min_size(w->toplevel, 240, 240); /* desktop-resizable (P2) */
+    xdg_toplevel_set_min_size(w->toplevel, 240, 240 + DECOR_H);
+    window_layout(w); /* geometry needs the toplevel role */ /* desktop-resizable (P2) */
     wl_surface_commit(w->surface);
     fprintf(stderr, "[shell] %s: window %d %dx%d \"%s\"\n", c->pkg, id, width, height, title);
 }
@@ -263,6 +306,7 @@ static void window_destroy(struct window *w)
     if (pointer_focus == w) pointer_focus = NULL;
     if (keyboard_focus == w) keyboard_focus = NULL;
     for (int i = 0; i < NBUF; i++) if (w->buffers[i]) wl_buffer_destroy(w->buffers[i]);
+    decor_destroy(&w->decor);
     xdg_toplevel_destroy(w->toplevel);
     xdg_surface_destroy(w->xdg_surface);
     wl_surface_destroy(w->surface);
@@ -282,39 +326,193 @@ static void window_frame(struct window *w, int buf, const int32_t *damage)
 
 /* ---- input ---- */
 
+static struct window *pointer_decor_win; /* window whose title bar the pointer is over, if any */
+
+static void bar_set_hover(struct window *w, int hover)
+{
+    if (!w || w->bar_hover == hover) return;
+    w->bar_hover = hover;
+    window_layout(w);
+    wl_surface_commit(w->surface); /* geometry/position apply with the parent commit */
+}
+
+static void update_cursor(void);
+
 static void ptr_enter(void *d, struct wl_pointer *p, uint32_t s, struct wl_surface *sf,
                       wl_fixed_t x, wl_fixed_t y)
 {
-    (void)d; (void)p; (void)s;
-    pointer_focus = window_for_surface(sf);
+    (void)d;
+    ptr_enter_serial = s;
+    cursor_name_cur = NULL; /* every enter needs the cursor set again */
+    the_pointer = p;
+    if (!cursor_dev && cursor_mgr) cursor_dev = wp_cursor_shape_manager_v1_get_pointer(cursor_mgr, p);
+    struct window *w = window_for_surface(sf);
     ptr_x = wl_fixed_to_int(x); ptr_y = wl_fixed_to_int(y);
+    if (w && sf == w->decor.surface) { pointer_decor_win = w; pointer_focus = NULL; }
+    else { pointer_decor_win = NULL; pointer_focus = w; }
+    if (debug_input) fprintf(stderr, "[shell] pointer enter %s at %d,%d\n",
+                             pointer_decor_win ? "title bar" : w ? "content" : "?", ptr_x, ptr_y);
+    update_cursor();
 }
 static void ptr_leave(void *d, struct wl_pointer *p, uint32_t s, struct wl_surface *sf)
 {
     (void)d; (void)p; (void)s; (void)sf;
     if (ptr_down) { ptr_down = 0; send_input(pointer_focus, EV_UP, ptr_x, ptr_y); }
+    if (pointer_decor_win) bar_set_hover(pointer_decor_win, DECOR_NONE);
     pointer_focus = NULL;
+    pointer_decor_win = NULL;
 }
 static void ptr_motion(void *d, struct wl_pointer *p, uint32_t t, wl_fixed_t x, wl_fixed_t y)
 {
     (void)d; (void)p; (void)t;
     ptr_x = wl_fixed_to_int(x); ptr_y = wl_fixed_to_int(y);
-    if (ptr_down) send_input(pointer_focus, EV_MOVE, ptr_x, ptr_y);
-}
-static uint32_t kb_android_meta(void);
-static void ptr_button(void *d, struct wl_pointer *p, uint32_t s, uint32_t t, uint32_t b, uint32_t st)
-{
-    (void)d; (void)p; (void)t;
-    if (st == WL_POINTER_BUTTON_STATE_PRESSED && pointer_focus && (kb_android_meta() & 0x02)
-        && (b == 0x110 || b == 0x111)) {
-        /* No window decorations on GNOME: Alt+left-drag moves, Alt+right-drag resizes. */
-        if (b == 0x110) xdg_toplevel_move(pointer_focus->toplevel, seat, s);
-        else xdg_toplevel_resize(pointer_focus->toplevel, seat, s,
-                                 XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT);
+    update_cursor();
+    if (pointer_decor_win) {
+        bar_set_hover(pointer_decor_win, decor_hit(&pointer_decor_win->decor, ptr_x, ptr_y));
         return;
     }
-    if (b != 0x110 /* BTN_LEFT */) return;
-    ptr_down = st == WL_POINTER_BUTTON_STATE_PRESSED;
+    if (ptr_down) send_input(pointer_focus, EV_MOVE, ptr_x, ptr_y);
+}
+
+static uint32_t kb_android_meta(void);
+
+/* xdg_toplevel resize edge under (x, y) given in window geometry coordinates (bar included). */
+static uint32_t resize_edge(const struct window *w, int x, int y)
+{
+    const int E = 8;
+    int lw = w->w * 100 / w->scale, lh = w->h * 100 / w->scale + DECOR_H;
+    uint32_t e = 0;
+    if (x < E) e |= XDG_TOPLEVEL_RESIZE_EDGE_LEFT;
+    if (x >= lw - E) e |= XDG_TOPLEVEL_RESIZE_EDGE_RIGHT;
+    if (y < E) e |= XDG_TOPLEVEL_RESIZE_EDGE_TOP;
+    if (y >= lh - E) e |= XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM;
+    return w->maximized ? 0 : e;
+}
+
+/* Cursor names (xcursor) for a resize edge; NULL = the default arrow. */
+static const char *edge_cursor_name(uint32_t edge)
+{
+    switch (edge) {
+    case XDG_TOPLEVEL_RESIZE_EDGE_TOP: return "top_side";
+    case XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM: return "bottom_side";
+    case XDG_TOPLEVEL_RESIZE_EDGE_LEFT: return "left_side";
+    case XDG_TOPLEVEL_RESIZE_EDGE_RIGHT: return "right_side";
+    case XDG_TOPLEVEL_RESIZE_EDGE_TOP_LEFT: return "top_left_corner";
+    case XDG_TOPLEVEL_RESIZE_EDGE_TOP_RIGHT: return "top_right_corner";
+    case XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT: return "bottom_left_corner";
+    case XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT: return "bottom_right_corner";
+    default: return "left_ptr";
+    }
+}
+
+/* Themed cursor through wl_pointer.set_cursor (no cursor-shape protocol on this compositor). */
+static void set_themed_cursor(const char *name)
+{
+    if (!the_pointer) return;
+    if (!cursor_theme) {
+        int size = 24 * ((output_scale + 50) / 100);
+        cursor_theme = wl_cursor_theme_load(NULL, size, shm);
+        cursor_surface = wl_compositor_create_surface(compositor);
+        if (!cursor_theme) { fprintf(stderr, "[shell] no cursor theme\n"); return; }
+    }
+    struct wl_cursor *c = wl_cursor_theme_get_cursor(cursor_theme, name);
+    if (!c && !strcmp(name, "left_ptr")) c = wl_cursor_theme_get_cursor(cursor_theme, "default");
+    if (!c) return;
+    struct wl_cursor_image *img = c->images[0];
+    int scale = (output_scale + 50) / 100;
+    wl_surface_set_buffer_scale(cursor_surface, scale);
+    wl_surface_attach(cursor_surface, wl_cursor_image_get_buffer(img), 0, 0);
+    wl_surface_damage_buffer(cursor_surface, 0, 0, (int)img->width, (int)img->height);
+    wl_surface_commit(cursor_surface);
+    wl_pointer_set_cursor(the_pointer, ptr_enter_serial, cursor_surface,
+                          (int32_t)img->hotspot_x / scale, (int32_t)img->hotspot_y / scale);
+}
+
+/* Resize cursor over the window edges and corners, the default arrow elsewhere. */
+static void update_cursor(void)
+{
+    struct window *w = pointer_decor_win ? pointer_decor_win : pointer_focus;
+    uint32_t edge = 0;
+    if (w) edge = resize_edge(w, ptr_x, ptr_y + (pointer_decor_win ? 0 : DECOR_H));
+    const char *name = edge_cursor_name(edge);
+    if (name == cursor_name_cur) return; /* string literals: identity compare is enough */
+    cursor_name_cur = name;
+    if (debug_input) fprintf(stderr, "[shell] cursor %s\n", name);
+    if (cursor_dev) {
+        int shape;
+        switch (edge) {
+        case XDG_TOPLEVEL_RESIZE_EDGE_TOP: shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_N_RESIZE; break;
+        case XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM: shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_S_RESIZE; break;
+        case XDG_TOPLEVEL_RESIZE_EDGE_LEFT: shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_W_RESIZE; break;
+        case XDG_TOPLEVEL_RESIZE_EDGE_RIGHT: shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_E_RESIZE; break;
+        case XDG_TOPLEVEL_RESIZE_EDGE_TOP_LEFT: shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NW_RESIZE; break;
+        case XDG_TOPLEVEL_RESIZE_EDGE_TOP_RIGHT: shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NE_RESIZE; break;
+        case XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT: shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_SW_RESIZE; break;
+        case XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT: shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_SE_RESIZE; break;
+        default: shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT; break;
+        }
+        wp_cursor_shape_device_v1_set_shape(cursor_dev, ptr_enter_serial, (uint32_t)shape);
+    } else {
+        set_themed_cursor(name);
+    }
+}
+
+static void send_back(struct window *w)
+{
+    int32_t down[5] = { w->id, 0, 4 /* KEYCODE_BACK */, 0, 0 };
+    int32_t up[5] = { w->id, 1, 4, 0, 0 };
+    send_msg(w->client, MSG_KEY, down, 5);
+    send_msg(w->client, MSG_KEY, up, 5);
+}
+
+static void toggle_maximize(struct window *w)
+{
+    if (w->maximized) xdg_toplevel_unset_maximized(w->toplevel);
+    else xdg_toplevel_set_maximized(w->toplevel);
+}
+
+static void bar_button(struct window *w, uint32_t serial, uint32_t time)
+{
+    int hit = decor_hit(&w->decor, ptr_x, ptr_y);
+    uint32_t edge = resize_edge(w, ptr_x, ptr_y);
+    if (edge) { xdg_toplevel_resize(w->toplevel, seat, serial, edge); return; }
+    switch (hit) {
+    case DECOR_BACK: send_back(w); break;
+    case DECOR_MIN: xdg_toplevel_set_minimized(w->toplevel); break;
+    case DECOR_MAX: toggle_maximize(w); break;
+    case DECOR_CLOSE: {
+        int32_t v[1] = { w->id };
+        send_msg(w->client, MSG_CLOSE, v, 1);
+        break;
+    }
+    case DECOR_BAR:
+        if ((int)time - w->last_click_ms < 400) { toggle_maximize(w); w->last_click_ms = 0; }
+        else { w->last_click_ms = (int)time; xdg_toplevel_move(w->toplevel, seat, serial); }
+        break;
+    default: break;
+    }
+}
+
+static void ptr_button(void *d, struct wl_pointer *p, uint32_t s, uint32_t t, uint32_t b, uint32_t st)
+{
+    (void)d; (void)p;
+    int pressed = st == WL_POINTER_BUTTON_STATE_PRESSED;
+    if (pressed && pointer_decor_win && b == 0x110) { bar_button(pointer_decor_win, s, t); return; }
+    if (pressed && pointer_focus && (b == 0x110 || b == 0x111)) {
+        if (kb_android_meta() & 0x02) {
+            /* Alt+left-drag moves, Alt+right-drag resizes (also without the title bar). */
+            if (b == 0x110) xdg_toplevel_move(pointer_focus->toplevel, seat, s);
+            else xdg_toplevel_resize(pointer_focus->toplevel, seat, s,
+                                     XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_RIGHT);
+            return;
+        }
+        /* Content edges resize the window instead of reaching the app. */
+        uint32_t edge = b == 0x110 ? resize_edge(pointer_focus, ptr_x, ptr_y + DECOR_H) : 0;
+        if (edge) { xdg_toplevel_resize(pointer_focus->toplevel, seat, s, edge); return; }
+    }
+    if (b != 0x110 /* BTN_LEFT */ || pointer_decor_win) return;
+    if (!pressed && !ptr_down) return; /* release of a press the shell consumed (resize edge) */
+    ptr_down = pressed;
     send_input(pointer_focus, ptr_down ? EV_DOWN : EV_UP, ptr_x, ptr_y);
 }
 static double axis_v, axis_h; /* accumulated wheel deltas, flushed on pointer frame (P2) */
@@ -322,6 +520,7 @@ static void ptr_axis(void *d, struct wl_pointer *p, uint32_t t, uint32_t a, wl_f
 {
     (void)d; (void)p; (void)t;
     double val = wl_fixed_to_double(v);
+    if (debug_input) fprintf(stderr, "[shell] axis %u %.1f (focus %s)\n", a, val, pointer_focus ? "content" : pointer_decor_win ? "bar" : "none");
     if (a == WL_POINTER_AXIS_VERTICAL_SCROLL) axis_v += val;
     else if (a == WL_POINTER_AXIS_HORIZONTAL_SCROLL) axis_h += val;
 }
@@ -537,9 +736,14 @@ static const struct xdg_wm_base_listener wm_listener = { wm_ping };
 
 static void registry(void *d, struct wl_registry *r, uint32_t name, const char *iface, uint32_t ver)
 {
-    (void)d; (void)ver;
+    (void)d;
+    if (debug_input) fprintf(stderr, "[shell] global %s v%u\n", iface, ver);
     if (!strcmp(iface, wl_compositor_interface.name))
         compositor = wl_registry_bind(r, name, &wl_compositor_interface, 4);
+    else if (!strcmp(iface, wl_subcompositor_interface.name))
+        subcompositor = wl_registry_bind(r, name, &wl_subcompositor_interface, 1);
+    else if (!strcmp(iface, wp_cursor_shape_manager_v1_interface.name))
+        cursor_mgr = wl_registry_bind(r, name, &wp_cursor_shape_manager_v1_interface, 1);
     else if (!strcmp(iface, wl_shm_interface.name))
         shm = wl_registry_bind(r, name, &wl_shm_interface, 1);
     else if (!strcmp(iface, xdg_wm_base_interface.name)) {
@@ -653,6 +857,7 @@ int main(void)
     struct wl_registry *reg = wl_display_get_registry(display);
     wl_registry_add_listener(reg, &registry_listener, NULL);
     wl_display_roundtrip(display);
+    decor_setup(compositor, subcompositor, shm);
     if (!compositor || !shm || !wm_base) { fprintf(stderr, "[shell] missing Wayland globals\n"); return 1; }
 
     for (int i = 0; i < MAX_CLIENTS; i++) clients[i].fd = -1;

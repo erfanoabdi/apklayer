@@ -40,4 +40,14 @@ check "configure 360x600 @200% -> 720x1200 frame" '[ "$(size "$ROOT/build/check/
   "3800,6000" 6500 >/dev/null 2>&1
 check "wheel scrolls the list" 'differs "$ROOT/build/check/uibench-3800ms.png" "$ROOT/build/check/uibench-6000ms.png"'
 
+# 7. Wheel in a dialog window (General > Dialog List): the dialog is a separate window above the
+#    activity window and must receive the wheel (and keys), not the activity underneath.
+"$ROOT/scripts/check.sh" "$APK" "2000:tap:100,80+3500:tap:100,129+5500:wheel:240,400,-5000" \
+  "5000,7000" 7500 >/dev/null 2>&1
+check "wheel scrolls the list inside a dialog" 'differs "$ROOT/build/check/uibench-5000ms.png" "$ROOT/build/check/uibench-7000ms.png"'
+
+# 8. D-pad: Down, Down, Enter opens a menu entry (keyboard-only navigation, real key timing)
+log=$("$ROOT/scripts/check.sh" "$APK" "2000:key:20+2400:key:20+2800:keydown:66+2860:keyup:66" "1500" 4500 2>&1)
+check "D-pad Down, Down, Enter opens the second menu entry" 'grep -q "started .*depth=2" <<<"$log"'
+
 exit $fail
