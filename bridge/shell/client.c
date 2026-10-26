@@ -57,6 +57,7 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         c->pid = v[0];
         snprintf(c->pkg, sizeof c->pkg, "%.*s", (int)(len - 4), (const char *)p + 4);
         fprintf(stderr, "[shell] %s (pid %d) connected\n", c->pkg, c->pid);
+        send_msg(c, MSG_DISPLAY, &(int32_t){ output_refresh_mhz }, 1);
         break;
     case MSG_WINDOW_CREATE: {
         if (len < 13 || len - 12 >= 1024) return;
@@ -71,6 +72,11 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
     case MSG_TEXT_INPUT: {
         struct window *w = len >= 8 ? window_find(c, v[0]) : NULL;
         if (w) text_input_enable(w, v[1]);
+        break;
+    }
+    case MSG_VSYNC_REQUEST: {
+        struct window *w = len >= 4 ? window_find(c, v[0]) : NULL;
+        if (w) window_vsync_request(w);
         break;
     }
     case MSG_CLIPBOARD_SET:

@@ -22,7 +22,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 final class ShellClient {
     private static final int HELLO = 1, WINDOW_CREATE = 2, FRAME = 3;
     private static final int INPUT = 101, CLOSE = 103, RELEASE = 104, KEY = 105, SCROLL = 106,
-            CONFIGURE = 107, STATE = 108, CLIPBOARD = 109, CLIPBOARD_SET = 5, TEXT_INPUT = 6, IME = 110, TOUCH = 111;
+            CONFIGURE = 107, STATE = 108, CLIPBOARD = 109, CLIPBOARD_SET = 5, TEXT_INPUT = 6, IME = 110, TOUCH = 111,
+            DISPLAY = 112, VSYNC = 113, VSYNC_REQUEST = 7;
     private static final int WINDOW_ID = 1, NBUF = 2;
 
     private final SocketChannel channel;
@@ -31,6 +32,7 @@ final class ShellClient {
     private final ConcurrentLinkedQueue<String> clipboardIn = new ConcurrentLinkedQueue<>();
     private final boolean[] busy = new boolean[NBUF];
     private volatile boolean closed;
+    private HostVsync vsync;
     private Path file;
     private IntBuffer pixels;
     private int width, height, next, generation;
@@ -55,6 +57,7 @@ final class ShellClient {
             ShellClient c = new ShellClient(ch);
             byte[] name = pkg.getBytes(StandardCharsets.UTF_8);
             c.send(HELLO, buf(4 + name.length).putInt((int) ProcessHandle.current().pid()).put(name));
+            c.vsync = HostVsync.start(c);
             Thread reader = new Thread(c::readLoop, "apklayer-shell-reader");
             reader.setDaemon(true);
             reader.start();
@@ -159,6 +162,15 @@ final class ShellClient {
         }
     }
 
+    /** The native Choreographer wants the next frame: the shell answers with the compositor's frame callback. */
+    void sendVsyncRequest() {
+        try {
+            send(VSYNC_REQUEST, buf(4).putInt(WINDOW_ID));
+        } catch (IOException e) {
+            // shell gone: the read loop notices
+        }
+    }
+
     boolean closed() {
         return closed;
     }
@@ -230,6 +242,10 @@ final class ShellClient {
                 } else if (type == STATE) {
                     // {15, flags}: bit0 active, bit1 minimized
                     input.add(new int[] {15, body.getInt(4)});
+                } else if (type == DISPLAY) {
+                    if (vsync != null) vsync.display(body.getInt(0));
+                } else if (type == VSYNC) {
+                    if (vsync != null) vsync.vsync(body.getInt(4));
                 } else if (type == RELEASE) {
                     released(body.getInt(4));
                 } else if (type == CLOSE) {

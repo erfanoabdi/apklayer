@@ -31,12 +31,20 @@ static void out_geometry(void *d, struct wl_output *o, int32_t x, int32_t y, int
 { (void)d; (void)o; (void)x; (void)y; (void)pw; (void)ph; (void)sub; (void)make; (void)model; (void)tf; }
 static void out_mode(void *d, struct wl_output *o, uint32_t f, int32_t w, int32_t h,
                      int32_t refresh)
-{ (void)d; (void)o; (void)f; (void)w; (void)h; (void)refresh; }
+{
+    (void)d; (void)o; (void)w; (void)h;
+    if ((f & WL_OUTPUT_MODE_CURRENT) && refresh > 0) output_refresh_mhz = refresh;
+}
 static void out_scale(void *d, struct wl_output *o, int32_t s)
 { (void)d; (void)o; output_scale = s * 100; }
 static void out_done(void *d, struct wl_output *o)
 {
     (void)d; (void)o;
+    static int told_refresh;
+    if (told_refresh != output_refresh_mhz) {   /* the output's mode changed: apps follow the real refresh rate */
+        told_refresh = output_refresh_mhz;
+        for (int i = 0; i < MAX_CLIENTS; i++) send_msg(&clients[i], MSG_DISPLAY, &(int32_t){ output_refresh_mhz }, 1);
+    }
     /* Scale changed (HiDPI, or moved to another output): tell every app so it re-renders. */
     for (int i = 0; i < MAX_WINDOWS; i++) {
         struct window *w = &windows[i];

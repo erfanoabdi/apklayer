@@ -15,6 +15,7 @@
  *                  3 FRAME          {i32 id, i32 buf, i32 x, i32 y, i32 w, i32 h}  (damage rect)
  *                  4 WINDOW_DESTROY {i32 id}
  *                  6 TEXT_INPUT     {i32 id, i32 enabled}: a text field gained/lost focus (IME on/off)
+ *                  7 VSYNC_REQUEST  {i32 id}: tell me when the compositor shows the next frame of this window
  *                  5 CLIPBOARD_SET  utf8 text: the app copied something; the shell owns the selection
  *   shell -> app 101 INPUT          {i32 id, i32 type, i32 a, i32 b}
  *                    type 0/1/2 = MotionEvent DOWN/UP/MOVE at (a, b); 3 = hover move, 4 = right click (long press); 100 = key (evdev a, pressed b)
@@ -29,6 +30,8 @@
  *                109 CLIPBOARD      utf8 text: the system selection changed (text only, < 60 KB)
  *                108 STATE          {i32 id, i32 flags}  bit0 = window active (focused), bit1 = minimized
  *                                    (apps pause on !active, stop on minimized, resume on active)
+ *                112 DISPLAY        {i32 refresh in mHz}: the output's refresh rate (sent at HELLO and when it changes)
+ *                113 VSYNC          {i32 id, i32 ms}: answer to VSYNC_REQUEST, the compositor's frame callback time (ms)
  *                107 CONFIGURE      {i32 id, i32 logical w, i32 logical h, i32 scale*100}
  *                                    the app renders w*scale x h*scale pixels and re-sends
  *                                    WINDOW_CREATE with the same id to rebuffer in place
@@ -57,7 +60,8 @@
 #include "decor.h"
 enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
        MSG_INPUT = 101, MSG_CLOSE = 103, MSG_RELEASE = 104,
-       MSG_KEY = 105, MSG_SCROLL = 106, MSG_CONFIGURE = 107, MSG_STATE = 108, MSG_CLIPBOARD = 109, MSG_IME = 110, MSG_TOUCH = 111 };
+       MSG_KEY = 105, MSG_SCROLL = 106, MSG_CONFIGURE = 107, MSG_STATE = 108, MSG_CLIPBOARD = 109, MSG_IME = 110, MSG_TOUCH = 111, MSG_DISPLAY = 112, MSG_VSYNC = 113 };
+#define MSG_VSYNC_REQUEST 7
 #define MSG_TEXT_INPUT 6
 /* app -> shell uses type 5 for MSG_CLIPBOARD_SET (text); shell -> app 109 pushes the selection */
 #define MSG_CLIPBOARD_SET 5
@@ -88,6 +92,7 @@ struct window {
     void *map;
     size_t map_len;
     struct wl_buffer *buffers[NBUF];
+    struct wl_callback *vsync_cb;   /* frame callback in flight for MSG_VSYNC_REQUEST */
     int pending_buf;            /* frame received before the first configure */
     int32_t pending_damage[4];
 };
@@ -104,6 +109,7 @@ extern struct wl_shm *shm;
 extern struct xdg_wm_base *wm_base;
 extern struct wl_seat *seat;
 extern struct wl_output *output;
+extern int output_refresh_mhz;       /* the output's current mode (wl_output.mode), 60000 until known */
 extern int output_scale;            /* percent: 100 = 1x, 200 = 2x (P2 HiDPI) */
 extern struct window windows[MAX_WINDOWS];
 extern struct window *pointer_focus, *keyboard_focus;
@@ -133,6 +139,7 @@ void window_layout(struct window *w);  /* window.c */
 void window_create(struct client *c, int id, int width, int height, const char *path, const char *title);  /* window.c */
 void window_destroy(struct window *w);  /* window.c */
 void window_frame(struct window *w, int buf, const int32_t *damage);  /* window.c */
+void window_vsync_request(struct window *w);  /* window.c */
 extern const struct wl_pointer_listener ptr_listener;  /* pointer.c */
 extern const struct wl_keyboard_listener kb_listener;  /* keyboard.c */
 extern const struct wl_registry_listener registry_listener;  /* registry.c */

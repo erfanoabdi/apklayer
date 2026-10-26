@@ -11,6 +11,7 @@ struct wl_shm *shm;
 struct xdg_wm_base *wm_base;
 struct wl_seat *seat;
 struct wl_output *output;
+int output_refresh_mhz = 60000;
 int output_scale = 100;            /* percent: 100 = 1x, 200 = 2x (P2 HiDPI) */
 struct window windows[MAX_WINDOWS];
 struct window *pointer_focus, *keyboard_focus;
