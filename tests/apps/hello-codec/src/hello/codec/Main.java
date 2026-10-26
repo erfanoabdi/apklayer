@@ -31,6 +31,7 @@ public class Main extends Activity implements SurfaceHolder.Callback {
             codec.start();
             MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
             int rendered = 0;
+            long t0 = System.nanoTime();
             for (int i = 0; new File(String.format("/tmp/codec-f-%03d.bin", i)).exists(); i++) {
                 byte[] frame = Files.readAllBytes(new File(String.format("/tmp/codec-f-%03d.bin", i)).toPath());
                 int in = codec.dequeueInputBuffer(1_000_000);
@@ -43,7 +44,7 @@ public class Main extends Activity implements SurfaceHolder.Callback {
                     if (info.size > 0) rendered++;
                 }
             }
-            System.out.println("[hello-codec] rendered " + rendered + " frames");
+            System.out.println("[hello-codec] rendered " + rendered + " frames in " + (System.nanoTime() - t0) / 1_000_000 + " ms");
             // the last frame stays on the surface
         } catch (Exception e) {
             System.out.println("[hello-codec] failed: " + e);

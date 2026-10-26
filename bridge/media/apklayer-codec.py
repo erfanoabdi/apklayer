@@ -34,7 +34,7 @@ VIDEO_OUT = "videoconvert ! videoscale ! video/x-raw,format=RGBA,width=%s,height
 PIPES = {
     "video/x-vnd.on2.vp9": ("video/x-vp9", "vp9dec ! " + VIDEO_OUT),
     "video/x-vnd.on2.vp8": ("video/x-vp8", "vp8dec ! " + VIDEO_OUT),
-    "video/avc": ("video/x-h264,stream-format=byte-stream,alignment=au", "h264parse ! avdec_h264 ! " + VIDEO_OUT),
+    "video/avc": ("video/x-h264,stream-format=byte-stream,alignment=au", "h264parse ! avdec_h264 max-threads=1 ! " + VIDEO_OUT),
     "video/av01": ("video/x-av1,stream-format=obu-stream,alignment=tu", "av1dec ! " + VIDEO_OUT),
     "audio/mp4a-latm": ("audio/mpeg,mpegversion=4,stream-format=raw,rate=%s,channels=%s%s" % (
         rate, channels, ",codec_data=(buffer)" + csd[0].hex() if csd else ""),
@@ -45,11 +45,14 @@ PIPES = {
                    "mpg123audiodec ! audioconvert ! audioresample ! " + RAW_AUDIO),
 }
 caps, chain = PIPES[mime]
-pipe = Gst.parse_launch('appsrc name=src format=time caps="%s" ! %s ! appsink name=sink sync=false max-buffers=8' % (caps, chain))
+pipe = Gst.parse_launch('appsrc name=src format=time caps="%s" ! %s ! appsink name=sink sync=false max-buffers=16' % (caps, chain))
 src, sink = pipe.get_by_name("src"), pipe.get_by_name("sink")
 pipe.set_state(Gst.State.PLAYING)
 is_video = mime.startswith("video/")
 pts = 0
+# How long to wait for the decoded frame of an input. A decoder that runs behind answers with older frames on later
+# inputs (the host's codec returns one output per input); waiting long for a frame that is not coming stalls playback.
+PULL_WAIT_MS = 20
 if mime == "video/avc":  # SPS/PPS in byte-stream form go in first
     for blob in csd:
         src.push_buffer(Gst.Buffer.new_wrapped(blob))
@@ -66,7 +69,7 @@ while True:
         buf.pts = pts
         pts += 1000
         src.push_buffer(buf)
-        sample = sink.try_pull_sample(300 * Gst.MSECOND)
+        sample = sink.try_pull_sample(PULL_WAIT_MS * Gst.MSECOND)
         if sample:
             ok, info = sample.get_buffer().map(Gst.MapFlags.READ)
             if ok:
