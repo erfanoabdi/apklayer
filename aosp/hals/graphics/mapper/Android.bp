@@ -10,6 +10,8 @@ cc_library_shared {
         "libbase",
         "libcutils",
         "libgralloctypes",
+        "libhidlbase",
+        "libutils",
         "liblog",
     ],
     compile_multilib: "64",

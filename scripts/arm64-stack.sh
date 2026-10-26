@@ -6,7 +6,7 @@
 set -u
 N="${APKLAYER_NATIVE:-$HOME/arm64-native}"; L="$HOME/android-arm64/lib64"; LOGS="${APKLAYER_LOGS:-/tmp/apklayer-stack}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}" APKLAYER_INSTANCE="${APKLAYER_INSTANCE:-default}"
-export LD_LIBRARY_PATH="$HOME/bt-arm/bionic_translation/b:$N" XDG_DATA_DIRS="$N/share" LD_PRELOAD="libgcc_s.so.1:$N/libapklayer-paths.so" BIONIC_LD_LIBRARY_PATH="$L"
+export LD_LIBRARY_PATH="$HOME/bt-arm/bionic_translation/b:$N" XDG_DATA_DIRS="$N/share" LD_PRELOAD="$N/libapklayer-preload.so:libgcc_s.so.1" BIONIC_LD_LIBRARY_PATH="$L"
 export APKLAYER_NATIVE="$N" APKLAYER_CRASH_TRACE=1 APKLAYER_HOST_LIBS="$N/libapklayer-hal-graphics.so"
 mkdir -p "$LOGS"; rm -f "$LOGS"/*.log
 declare -A name_of

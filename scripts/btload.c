@@ -26,7 +26,7 @@ int main(int argc, char **argv)
             if (!dlopen(l, RTLD_NOW | RTLD_GLOBAL)) fprintf(stderr, "btload: %s\n", dlerror());
     }
     apklayer_log_to_stderr();
-    if (getenv("APKLAYER_CRASH_TRACE")) { extern void apklayer_crash_trace(void); apklayer_crash_trace(); }
+    if (getenv("APKLAYER_CRASH_TRACE")) { extern void apklayer_crash_trace_signals(void); apklayer_crash_trace_signals(); }
     void *h = bionic_dlopen(argv[2], 2 /* RTLD_NOW */);
     if (h) printf("LOADED %s\n", argv[2]); else printf("FAILED %s: %s\n", argv[2], bionic_dlerror());
     if (h) { extern void apklayer_install_path_layer(void); apklayer_install_path_layer(); } /* libc_bio is loaded now */

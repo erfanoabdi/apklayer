@@ -141,6 +141,16 @@ static void crash_trace_handler(int sig, siginfo_t *info, void *ctx)
 }
 
 
+/* For executables (btload): also segfaults and the like. Not for the JVM, which uses SIGSEGV internally. */
+void apklayer_crash_trace_signals(void)
+{
+    struct sigaction sa = { .sa_sigaction = crash_trace_handler, .sa_flags = SA_SIGINFO | SA_RESETHAND };
+    sigaction(SIGABRT, &sa, NULL);
+    sigaction(SIGSEGV, &sa, NULL);
+    sigaction(SIGBUS, &sa, NULL);
+    sigaction(SIGILL, &sa, NULL);
+}
+
 void apklayer_crash_trace(void)
 {
     struct sigaction sa = { .sa_sigaction = crash_trace_handler, .sa_flags = SA_SIGINFO | SA_RESETHAND };
