@@ -278,6 +278,22 @@ location or SafetyNet-free APIs runs.
 > (30 Android libc/linker/property symbols: stubs and fortify wrappers); `scripts/android-stubs.py` (generates do-nothing
 > stubs for the ~140 GL/EGL symbols nothing provides, from the actual gap); `libgcc_s` in the process (unwinder); the cfg.d
 > mapping `libdl_android.so → libdl_bio.so.0`. Test harness: a 15-line C program (`btload`) that does what NativeLoader does.
+> **P7.0c result (2026-10-26): uibench starts on the arm64 JVM with the device natives, up to the first binder call.**
+> The font-init abort was not version skew (disproved: same abort with the tree's own Robolectric) but ART's calling
+> convention: `@CriticalNative` methods (285 of them: fonts, paint, canvas...) are called by ART *without* `JNIEnv`/`jclass`,
+> the device libraries are built that way, Robolectric's host build compiles the two parameters back in. HotSpot passes them,
+> so every argument arrived shifted (`Font_Builder_addAxis` got `env` as its builder pointer). Fix, in the shim: those methods
+> are registered through a thunk that drops the two arguments (`runtime_shim.c: critical_thunk`). The list comes from
+> `apklayer.host.CriticalNatives` (ASM over the build's own javac output, `framework.jar*` under
+> `out/soong/.intermediates/frameworks/base/framework-minus-apex/android_common/javac`, because the android-all jar has the
+> annotation stripped), written into `native-runtime.jar` by `scripts/build-native-arm64.sh`. Also: device liblog goes to
+> stderr through its own `__android_log_set_logger` (warnings and worse; all with `APKLAYER_RUNTIME_DEBUG`), so fatal HWUI
+> messages are no longer lost; the LineageOS framework hardcodes `/system/framework/org.lineageos.platform-res.apk`
+> (`ShadowHostApkAssets` redirects it to `android-root/system/framework/`, set by `-Dapklayer.platformres`); Robolectric's
+> `MediaCodecInfoBuilder` does not fit this framework (`mMime`), so codec registration is skipped with a log line. Needed
+> next: **a service manager** (libbinder waits for `servicemanager`: binder step above) and folding the aosp-flavor host
+> build (host-classes + `META-INF/services`) into the staging script.
+>
 > **Next (P7.0b): `JNI_OnLoad` and the JNI registration**: the library registers natives under the framework's class names,
 > Robolectric's shadows call its own `org.robolectric.nativeruntime.*Natives` classes; intercept `RegisterNatives` and
 > bind the same functions to the Robolectric class, then run the sandbox with this native runtime on the arm64 JVM.

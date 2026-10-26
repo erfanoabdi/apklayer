@@ -140,7 +140,11 @@ public final class AppHost implements Runnable {
         // MediaInfo — like a codec that accepts the file but decodes nothing.
         ShadowMediaPlayer.setMediaInfoProvider(ShadowHostMediaPlayer::mediaInfo);
         HostAudio.install();
-        HostCodecs.install();
+        try {
+            HostCodecs.install();
+        } catch (Exception e) { // Robolectric's MediaCodecInfoBuilder sets fields a newer framework may not have
+            System.err.println("[apklayer] MediaCodec decoders not registered on this framework: " + e.getMessage());
+        }
 
         Display display = app.getSystemService(DisplayManager.class).getDisplay(Display.DEFAULT_DISPLAY);
         int width = display.getWidth(), height = display.getHeight();

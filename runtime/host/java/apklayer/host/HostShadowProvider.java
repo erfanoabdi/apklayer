@@ -29,4 +29,9 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.app.ContextImpl", ShadowHostContextImpl.class.getName()),
                 Map.entry("android.media.AudioTrack", ShadowHostAudioTrack.class.getName()));
     }
+
+    /** Classes that Robolectric picks the shadow for by a ShadowPicker: ours must be listed here to take part. */
+    @Override public Map<String, String> getShadowPickerMap() {
+        return Map.of("android.content.res.ApkAssets", ShadowHostApkAssets.Picker.class.getName());
+    }
 }

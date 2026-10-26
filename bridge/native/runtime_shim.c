@@ -47,6 +47,15 @@ static void crash_trace(int sig, siginfo_t *info, void *ctx)
     raise(sig);
 }
 
+static jclass class_class;
+/* Android's liblog writes to logd, which does not exist here; its logger hook (liblog's own API) sends warnings and worse
+ * to stderr, everything with APKLAYER_RUNTIME_DEBUG, so a LOG_ALWAYS_FATAL message is not lost. */
+struct android_log_message { size_t size; int32_t buffer_id; int32_t priority; const char *tag, *file; uint32_t line; const char *message; };
+static void stderr_logger(const struct android_log_message *m)
+{
+    if (m->priority >= 5 || getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[log %d] %s: %s\n", m->priority, m->tag, m->message);
+}
+
 static char binding_prefix[64] = "", binding_suffix[64] = "";
 static jniNativeInterface *real_table;
 
@@ -59,17 +68,67 @@ static void parse_binding_format(const char *fmt)
     snprintf(binding_suffix, sizeof binding_suffix, "%s", at + strlen("${method}"));
 }
 
+/* ART calls @CriticalNative methods without JNIEnv and jclass; the device libraries are built that way (Robolectric's host
+ * build adds both parameters back at compile time). The JVM passes them, so those natives are registered through a thunk
+ * that shifts the integer arguments down two registers (floats travel in other registers; up to six integer arguments). */
+#include <sys/mman.h>
+static uint32_t *thunk_page; static size_t thunk_used;
+
+static void *critical_thunk(void *target)
+{
+    static const uint32_t code[] = { 0xaa0203e0, 0xaa0303e1, 0xaa0403e2, 0xaa0503e3, 0xaa0603e4, 0xaa0703e5, 0x58000050, 0xd61f0200 };
+    if (!thunk_page || thunk_used + 40 > 4096) {
+        thunk_page = mmap(NULL, 4096, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        thunk_used = 0;
+        if (thunk_page == MAP_FAILED) { thunk_page = NULL; return target; }
+    }
+    uint32_t *t = (uint32_t *)((char *)thunk_page + thunk_used);
+    memcpy(t, code, sizeof code);
+    memcpy(t + 8, &target, 8);
+    __builtin___clear_cache((char *)t, (char *)t + 40);
+    thunk_used += 40;
+    return t;
+}
+
+static jmethodID critical_of; static jclass critical_class; static int critical_count;
+
+/* the class's @CriticalNative methods ("name"+"signature"), from apklayer.host.CriticalNatives */
+static jobjectArray critical_methods(JNIEnv *env, jclass cls)
+{
+    if (!critical_of) return NULL;
+    jmethodID get_name = (*env)->GetMethodID(env, class_class, "getName", "()Ljava/lang/String;");
+    jobject name = (*env)->CallObjectMethod(env, cls, get_name);
+    jobjectArray r = (*env)->CallStaticObjectMethod(env, critical_class, critical_of, name);
+    if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); r = NULL; }
+    return r;
+}
+
+static int is_critical(JNIEnv *env, jobjectArray list, const JNINativeMethod *m)
+{
+    char key[512];
+    snprintf(key, sizeof key, "%s%s", m->name, m->signature);
+    for (jsize i = 0; list && i < (*env)->GetArrayLength(env, list); i++) {
+        jstring e = (*env)->GetObjectArrayElement(env, list, i);
+        const char *c = (*env)->GetStringUTFChars(env, e, NULL);
+        int same = !strcmp(c, key);
+        (*env)->ReleaseStringUTFChars(env, e, c);
+        (*env)->DeleteLocalRef(env, e);
+        if (same) return 1;
+    }
+    return 0;
+}
+
 static jint JNICALL renaming_register_natives(JNIEnv *env, jclass cls, const JNINativeMethod *methods, jint n)
 {
-    int bound = 0, skipped = 0;
+    jobjectArray critical = critical_methods(env, cls);
     for (jint i = 0; i < n; i++) {
         char name[256];
         snprintf(name, sizeof name, "%s%s%s", binding_prefix, methods[i].name, binding_suffix);
-        JNINativeMethod one = { name, methods[i].signature, methods[i].fnPtr };
-        if (real_table->RegisterNatives(env, cls, &one, 1) == 0) bound++;
-        else { (*env)->ExceptionClear(env); skipped++; } /* not a method Robolectric instruments */
+        void *fn = methods[i].fnPtr;
+        if (is_critical(env, critical, &methods[i])) { fn = critical_thunk(fn); critical_count++; if (getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[runtime] critical %s\n", methods[i].name); }
+        JNINativeMethod one = { name, methods[i].signature, fn };
+        if (real_table->RegisterNatives(env, cls, &one, 1) != 0) (*env)->ExceptionClear(env); /* not a method Robolectric instruments */
     }
-    (void)bound; (void)skipped;
     return 0; /* startReg aborts the process on failure; skipped methods are expected */
 }
 
@@ -85,7 +144,6 @@ static void JNICALL apply_free_function(JNIEnv *env, jclass cls, jlong free_func
  * finding it, so a <clinit> that calls a not-yet-registered native (com.google.android.gles_jni.EGLImpl) would fail.
  * This FindClass loads without initializing (Class.forName(name, false, loader)); initialization then happens on first use. */
 static jobject class_loader;
-static jclass class_class;
 static jmethodID for_name;
 
 static jclass JNICALL lazy_find_class(JNIEnv *env, const char *name)
@@ -194,6 +252,9 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     dl_parse_library_path(libs, ":");
     void *rt = bionic_dlopen("libandroid_runtime.so", 2 /* RTLD_NOW */);
     if (!rt) { fprintf(stderr, "[runtime] cannot load libandroid_runtime.so: %s\n", bionic_dlerror()); return -1; }
+    void *liblog = bionic_dlopen("liblog.so", 2);
+    void (*set_logger)(void (*)(const struct android_log_message *)) = liblog ? bionic_dlsym(liblog, "__android_log_set_logger") : NULL;
+    if (set_logger) set_logger(stderr_logger);
     /* intercept RegisterNatives for the duration of startReg (JVMTI's supported JNI function table swap) */
     jvmtiEnv *ti;
     if ((*vm)->GetEnv(vm, (void **)&ti, JVMTI_VERSION_1_2) != JNI_OK) { fprintf(stderr, "[runtime] no JVMTI\n"); return -1; }
@@ -210,11 +271,18 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
         class_class = (*env)->NewGlobalRef(env, (*env)->FindClass(env, "java/lang/Class"));
         for_name = (*env)->GetStaticMethodID(env, class_class, "forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;");
         if (class_loader && for_name) patched.FindClass = lazy_find_class;
+        jstring cn = (*env)->NewStringUTF(env, "apklayer.host.CriticalNatives");
+        jobject cc = (*env)->CallStaticObjectMethod(env, class_class, for_name, cn, JNI_TRUE, class_loader);
+        if (cc) {
+            critical_class = (*env)->NewGlobalRef(env, cc);
+            critical_of = (*env)->GetStaticMethodID(env, critical_class, "of", "(Ljava/lang/String;)[Ljava/lang/String;");
+        }
+        (*env)->ExceptionClear(env);
     }
     (*ti)->SetJNIFunctionTable(ti, &patched);
     int failed = register_classes(env, vm, rt);
     (*ti)->SetJNIFunctionTable(ti, orig);
     if (failed) fprintf(stderr, "[runtime] %d registrations did not run (see above)\n", failed);
-    fprintf(stderr, "[runtime] Android's framework natives registered\n");
+    fprintf(stderr, "[runtime] Android's framework natives registered (%d critical natives adapted%s)\n", critical_count, critical_of ? "" : "; CriticalNatives unavailable");
     return JNI_VERSION_1_6;
 }
