@@ -45,19 +45,36 @@ public class ShadowSurfaceControl {
     surfaceControlReflector.finalize();
   }
 
+  // The JNI function itself: Robolectric renames the native method to $$robo$$nativeCreate$nativeBinding (the shim registers
+  // libandroid_runtime's functions under that name). A @Direct reflector call would reach the generated stub that returns 0.
+  private static long nativeCreateBinding(
+      SurfaceSession session, String name, int w, int h, int format, int flags, long parentObject) {
+    try {
+      java.lang.reflect.Method m =
+          SurfaceControl.class.getDeclaredMethod(
+              "$$robo$$nativeCreate$nativeBinding",
+              SurfaceSession.class, String.class, int.class, int.class, int.class, int.class, long.class, Parcel.class);
+      m.setAccessible(true);
+      return (long) m.invoke(null, session, name, w, h, format, flags, parentObject, null);
+    } catch (java.lang.reflect.InvocationTargetException e) {
+      throw new RuntimeException(e.getCause());
+    } catch (ReflectiveOperationException e) {
+      throw new LinkageError("SurfaceControl native binding", e);
+    }
+  }
+
   // apklayer patch: no fake nativeCreate; SurfaceControls are real layers of the instance's SurfaceFlinger. The metadata Parcel is
   // Robolectric's Java Parcel (no native object behind it), so the real native create gets none (it only carries the window type).
   @Implementation(minSdk = Q)
   protected static long nativeCreate(
       SurfaceSession session, String name, int w, int h, int format, int flags, long parentObject, Parcel metadata) {
     long handle = 0;
-    for (int attempt = 0; attempt < 12 && handle == 0; attempt++) {
+    for (int attempt = 0; attempt < 3 && handle == 0; attempt++) {
       if (attempt > 0) {
         System.err.println("[apklayer] SurfaceControl.nativeCreate returned 0, retrying (" + attempt + ")");
         try { Thread.sleep(1000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
       }
-      handle = reflector(SurfaceControlReflector.class)
-          .nativeCreate(session, name, w, h, format, flags, parentObject, null);
+      handle = nativeCreateBinding(session, name, w, h, format, flags, parentObject);
     }
     System.err.println("[apklayer] SurfaceControl.nativeCreate(" + name + ", " + w + "x" + h + ", format " + format + ", flags 0x" + Integer.toHexString(flags) + ", session " + (session != null) + ", parent " + parentObject + ") = " + handle);
     return handle;
