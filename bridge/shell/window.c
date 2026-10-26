@@ -67,6 +67,7 @@ static void xs_configure(void *data, struct xdg_surface *xs, uint32_t serial)
         w->told_scale = output_scale;
         send_msg(w->client, MSG_CONFIGURE, v, 4);
         if (w->pending_buf >= 0) show(w, w->pending_buf, w->pending_damage);
+        else if (w->pending_dbuf >= 0) window_dmabuf_show(w, w->pending_dbuf, w->pending_ddamage);
         else wl_surface_commit(w->surface);
     }
 }
@@ -122,6 +123,7 @@ static int window_buffers(struct window *w, int width, int height, const char *p
         w->w = width;
         w->h = height;
         w->pending_buf = -1;
+    w->pending_dbuf = -1;
         w->scale = w->told_scale ? w->told_scale : 100;
         wl_surface_set_buffer_scale(w->surface, (w->scale + 50) / 100);
         if (w->xdg_surface) window_layout(w);
@@ -147,6 +149,7 @@ static int window_buffers(struct window *w, int width, int height, const char *p
     w->w = width;
     w->h = height;
     w->pending_buf = -1;
+    w->pending_dbuf = -1;
     w->scale = w->told_scale ? w->told_scale : 100;
     wl_surface_set_buffer_scale(w->surface, (w->scale + 50) / 100);
     if (w->xdg_surface) window_layout(w);

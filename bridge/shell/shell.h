@@ -108,6 +108,8 @@ struct window {
     struct wl_callback *vsync_cb;   /* frame callback in flight for MSG_VSYNC_REQUEST */
     int pending_buf;            /* frame received before the first configure */
     int32_t pending_damage[4];
+    int pending_dbuf;           /* dmabuf frame received before the first configure (committing a buffer earlier is an xdg-shell error) */
+    int32_t pending_ddamage[4];
 };
 
 /* ---- state shared between the modules (defined in main.c) ---- */
@@ -154,6 +156,10 @@ void window_create(struct client *c, int id, int width, int height, const char *
 void window_destroy(struct window *w);  /* window.c */
 void window_frame(struct window *w, int buf, const int32_t *damage);  /* window.c */
 void window_vsync_request(struct window *w);  /* window.c */
+#define DMABUF_LINEAR_MAX 64
+extern uint32_t dmabuf_linear[DMABUF_LINEAR_MAX]; /* formats the compositor takes with the linear modifier (registry.c) */
+extern int dmabuf_linear_n;
+void window_dmabuf_show(struct window *w, int buf, const int32_t *damage);
 void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int nfds);  /* dmabuf.c */
 void window_dmabuf_destroy(struct window *w);  /* dmabuf.c */
 extern const struct wl_pointer_listener ptr_listener;  /* pointer.c */

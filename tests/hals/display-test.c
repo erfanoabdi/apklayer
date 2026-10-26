@@ -6,6 +6,7 @@
 #include <drm_fourcc.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -39,7 +40,7 @@ int main(void)
     printf("  output refresh: %u mHz\n", refresh);
     CHECK(refresh >= 24000 && refresh <= 400000, "the output's refresh rate arrives");
 
-    enum { FRAMES = 90 };
+    const int FRAMES = getenv("APKLAYER_TEST_FRAMES") ? atoi(getenv("APKLAYER_TEST_FRAMES")) : 90; /* a longer run lets a screenshot catch the window */
     for (int f = 0; f < FRAMES; f++) {
         int slot = f % 3;
         uint32_t stride; struct apklayer_gfx_mapping *m;

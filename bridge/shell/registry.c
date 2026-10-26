@@ -2,6 +2,19 @@
 #include "shell.h"
 #include "text-input-v3-client-protocol.h"
 
+uint32_t dmabuf_linear[DMABUF_LINEAR_MAX];
+int dmabuf_linear_n;
+
+/* what the compositor accepts (debug: APKLAYER_RUNTIME_DEBUG), to see why a buffer might not show */
+static void dmabuf_format(void *d, struct zwp_linux_dmabuf_v1 *m, uint32_t fmt) { (void)d; (void)m; if (getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[shell] dmabuf format %.4s\n", (char *)&fmt); }
+static void dmabuf_modifier(void *d, struct zwp_linux_dmabuf_v1 *m, uint32_t fmt, uint32_t hi, uint32_t lo)
+{
+    (void)d; (void)m;
+    if (hi == 0 && lo == 0 && dmabuf_linear_n < DMABUF_LINEAR_MAX) dmabuf_linear[dmabuf_linear_n++] = fmt;  /* DRM_FORMAT_MOD_LINEAR is accepted for this format */
+    if (getenv("APKLAYER_RUNTIME_DEBUG") && (fmt == 0x34325241 || fmt == 0x34324241 || fmt == 0x34325258)) fprintf(stderr, "[shell] dmabuf modifier %.4s 0x%08x%08x\n", (char *)&fmt, hi, lo);
+}
+static const struct zwp_linux_dmabuf_v1_listener dmabuf_listener = { dmabuf_format, dmabuf_modifier };
+
 static void seat_caps(void *d, struct wl_seat *st, uint32_t caps)
 {
     (void)d;
@@ -78,7 +91,10 @@ static void registry(void *d, struct wl_registry *r, uint32_t name, const char *
     else if (!strcmp(iface, zwp_text_input_manager_v3_interface.name))
         text_mgr = wl_registry_bind(r, name, &zwp_text_input_manager_v3_interface, 1);
     else if (!strcmp(iface, zwp_linux_dmabuf_v1_interface.name))
+    {
         dmabuf_mgr = wl_registry_bind(r, name, &zwp_linux_dmabuf_v1_interface, ver < 3 ? ver : 3);
+        zwp_linux_dmabuf_v1_add_listener(dmabuf_mgr, &dmabuf_listener, NULL);
+    }
     else if (!strcmp(iface, wl_shm_interface.name))
         shm = wl_registry_bind(r, name, &wl_shm_interface, 1);
     else if (!strcmp(iface, xdg_wm_base_interface.name)) {

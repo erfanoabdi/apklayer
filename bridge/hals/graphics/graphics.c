@@ -217,7 +217,7 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
         static const uint32_t import_usage[] = { GBM_BO_USE_LINEAR, GBM_BO_USE_RENDERING, GBM_BO_USE_RENDERING | GBM_BO_USE_SCANOUT, 0 };
         for (size_t u = 0; u < sizeof import_usage / sizeof *import_usage && !m->bo; u++)
             m->bo = gbm_bo_import(gfx->gbm, GBM_BO_IMPORT_FD, &fd_data, import_usage[u]);
-        if (!m->bo && getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[gfx] gbm_bo_import fd %d %ux%u stride %u format 0x%x: %s\n", fd_data.fd, fd_data.width, fd_data.height, fd_data.stride, fd_data.format, strerror(errno));
+        if (!m->bo && getenv("APKLAYER_RUNTIME_DEBUG")) { char link[64] = "?", path[40]; snprintf(path, sizeof path, "/proc/self/fd/%d", fd_data.fd); ssize_t n = readlink(path, link, sizeof link - 1); if (n > 0) link[n] = 0; fprintf(stderr, "[gfx] gbm_bo_import fd %d (%s) %ux%u stride %u format 0x%x: %s\n", fd_data.fd, link, fd_data.width, fd_data.height, fd_data.stride, fd_data.format, strerror(errno)); }
         uint32_t map_stride = 0;
         if (m->bo) {
             addr = gbm_bo_map(m->bo, 0, 0, fd_data.width, fd_data.height,
