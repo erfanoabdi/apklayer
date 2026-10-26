@@ -19,6 +19,11 @@ and interactive (reached: M5).
    so if it runs, almost any ordinary app will. It is used as a late stress test of compatibility, never to decide a design.
    System services stay **Robolectric shadows** (user: "we don't need them to be real, even for SystemUI").
 
+4. **Proof of compatibility: the relevant CTS tests (user, 2026-10-26).** At the end, apklayer is measured against Android's own
+   Compatibility Test Suite, the app-facing modules (views, widgets, graphics, text, content, os, media, and the like), run with the
+   shadow-based system, so "compatible" is a number from the real tests and not a claim. Failures are triaged into real gaps
+   (fixed) and tests that assert a real device's system behaviour (listed with the reason).
+
 ## Method (user directive, 2026-10-25)
 
 **The Robolectric method.** Do NOT build on Mac.apk's hand-patched framework snapshot,
@@ -65,7 +70,8 @@ Instead:
 | M10 | P6: multiple apps (apklayerd, cross-app intents/binder-lite, bwrap) | pending |
 | M11 | P7: device-library route: the tree's arm64 Android libraries on bionic_translation (no Rosetta), own SurfaceFlinger stack with GPU zero-copy rendering (PLAN P7.1) | **in progress**: native runtime loads, app starts on arm64 (P7.0); servicemanager runs on kernel binder (P7.1); SurfaceFlinger, gralloc and HWC next |
 | M12 | P8 (ship): Flatpak for x86_64 + arm64, desktop integration, performance budget | pending |
-| M13 | Vision phases (PLAN P8: SystemUI and system services; P9: several phone instances at once) | not scheduled |
+| M13 | Vision phases (PLAN P8: SystemUI as a yardstick; P9: several phone instances at once) | not scheduled |
+| M14 | P10: relevant CTS tests run and tracked (the compatibility proof) | not scheduled |
 
 Decisions, phases, exit tests and the immediate task list: **docs/PLAN.md** (plan of record).
 

@@ -514,3 +514,14 @@ accounts and storage. Isolation between instances and from the host is the P6 sa
 Design rule from now on: nothing in P7 may assume a single instance (no fixed `/dev/binder`, fixed socket names or global
 property store; take an instance id/root as a parameter).
 
+### P10 — Compatibility proof: the relevant CTS tests (user, 2026-10-26: "at the end of the goals add running relative CTS tests to make sure our apklayer is really compatible")
+Last phase; the measure of "compatible". The tree has the sources (`~/los24/cts/tests/tests/<module>`: `view`, `widget`, `graphics`,
+`text`, `content`, `os`, ... about 170 modules). Approach: (1) choose the **app-facing** modules (what ordinary apps depend on:
+view, widget, graphics, text, content/resources, os basics, media, input, drawables) and leave out device-system ones (telephony,
+SELinux, permissions policy, hardware certification); (2) build each module's test APK incrementally in ~/los24 (logged in
+docs/AOSP-BUILDS.md); (3) run it with our own instrumentation runner (AndroidJUnitRunner inside an instance, results in a stable
+format) on the shadow-based system; (4) keep a table per module: passed / failed / skipped, with each failure classified as a **gap
+to fix** or **asserts real-device behaviour** (reason listed, expected-failure file under `tests/cts/`); (5) track the pass rate
+per module over time, run the chosen subset in CI-style scripts on the VM. Exit test: the chosen modules reach an agreed pass
+rate with every remaining failure explained. This also feeds P3: every gap found is a gap real apps can hit.
+
