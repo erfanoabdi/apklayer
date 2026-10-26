@@ -14,6 +14,8 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
+#include <time.h>
+#include <unistd.h>
 #include <ucontext.h>
 
 #include "register_table.h"
@@ -54,6 +56,13 @@ struct android_log_message { size_t size; int32_t buffer_id; int32_t priority; c
 static void stderr_logger(const struct android_log_message *m)
 {
     if (m->priority >= 5 || getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[log %d] %s: %s\n", m->priority, m->tag, m->message);
+    const char *dump = getenv("APKLAYER_DUMP_ON"); /* debug: the first log line containing this text prints the JVM's thread dump and exits */
+    if (dump && strstr(m->message, dump)) {
+        if (getenv("APKLAYER_DUMP_ABORT")) abort(); /* with -Dapklayer.runtimetrace=true: the native call chain instead */
+        kill(getpid(), SIGQUIT);
+        nanosleep(&(struct timespec){ 2, 0 }, NULL);
+        _exit(3);
+    }
 }
 
 static char binding_prefix[64] = "", binding_suffix[64] = "";

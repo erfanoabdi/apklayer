@@ -294,6 +294,20 @@ location or SafetyNet-free APIs runs.
 > next: **a service manager** (libbinder waits for `servicemanager`: binder step above) and folding the aosp-flavor host
 > build (host-classes + `META-INF/services`) into the staging script.
 >
+> **P7.0d result (2026-10-26): the app STARTS on the arm64 JVM with the device natives (no Rosetta), but does not render yet.**
+> uibench's `MainActivity` starts, `frames=1`, exit code 134 at shutdown (an abort while the process tears down: not yet
+> looked at). The libbinder wait seen before came from the RenderThread (found with the shim's `APKLAYER_DUMP_ON`/
+> `APKLAYER_DUMP_ABORT` debug aid: `RenderThread::initThreadLocals` → `AChoreographer_create` → `DisplayEventReceiver` →
+> ComposerService = SurfaceFlinger over binder). Fix: `bridge/ndk/libnativedisplay.c`, our own `libnativedisplay.so` mapped by
+> cfg.d: Choreographer as a 60 Hz timerfd clock, weak stubs for the rest of the exports. So **no servicemanager was needed for
+> this**; kernel binder works on the VM (`modprobe binder_linux`, `mount -t binder binder /dev/binderfs`) and stays for later.
+> Why no pixels: the baseline (x86 Rosetta path) makes 20 frames and a real image, ours one blank frame. For SDK 36+
+> Robolectric's `ShadowNativeHardwareRenderer` does not apply (`maxSdk = UPSIDE_DOWN_CAKE`), the real `HardwareRenderer` natives
+> run; Google's host libhwui renders into something Robolectric can read back, the device libhwui renders into a BufferQueue
+> `ANativeWindow` (gralloc, SurfaceFlinger). **Next: give libhwui an `ANativeWindow` of our own** (a CPU-readable buffer; ATL's
+> `libandroid` ANativeWindow is the local reference) or draw through `HardwareBufferRenderer`/`Bitmap` canvases, then compare
+> frames with the x86 path (`tests/vm` corpus T1).
+>
 > **Next (P7.0b): `JNI_OnLoad` and the JNI registration**: the library registers natives under the framework's class names,
 > Robolectric's shadows call its own `org.robolectric.nativeruntime.*Natives` classes; intercept `RegisterNatives` and
 > bind the same functions to the Robolectric class, then run the sandbox with this native runtime on the arm64 JVM.
