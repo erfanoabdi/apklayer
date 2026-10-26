@@ -3,8 +3,7 @@
 cc_library_shared {
     name: "mapper.apklayer",
     srcs: ["Mapper.cpp"],
-    local_include_dirs: ["../common", "../host-include"],
-    header_libs: ["libdrm_headers", "libbase_headers", "libimapper_stablec", "libimapper_providerutils"],
+    header_libs: ["libapklayer_gralloc_common_headers", "libapklayer_graphics_host_headers", "libdrm_headers", "libbase_headers", "libimapper_stablec", "libimapper_providerutils"],
     shared_libs: [
         "android.hardware.graphics.allocator-V2-ndk",
         "android.hardware.graphics.common-V7-ndk",

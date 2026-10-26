@@ -1,0 +1,10 @@
+# Properties a desktop instance defines itself (loaded after the tree's build.prop files; ro.* are write-once, so these
+# only fill what the build files lack). The display values are refined at instance start from the real output.
+ro.sf.lcd_density=160
+ro.surface_flinger.max_frame_buffer_acquired_buffers=3
+ro.boot.hardware=apklayer
+ro.hardware=apklayer
+ro.hardware.egl=apklayer
+ro.hardware.gralloc=apklayer
+ro.zygote=zygote64
+ro.product.cpu.abilist=arm64-v8a

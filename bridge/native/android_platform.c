@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
+int __system_property_area_init(void); /* properties.c */
 #include <signal.h>
 #include <ucontext.h>
 #include <unistd.h>
@@ -41,17 +42,9 @@ int __b64_ntop(const unsigned char *src, size_t len, char *dst, size_t size)
     return (int)o;
 }
 
-/* system properties: an empty, read-only store */
-int __system_properties_init(void) { return 0; }
+/* system properties: the real store is properties.c */
+int __system_properties_init(void) { return __system_property_area_init(); }
 int __system_properties_zygote_reload(void) { return 0; }
-uint32_t __system_property_area_serial(void) { return 0; }
-uint32_t __system_property_serial(const void *pi) { (void)pi; return 0; }
-int __system_property_foreach(void (*cb)(const void *, void *), void *cookie) { (void)cb; (void)cookie; return 0; }
-void __system_property_read_callback(const void *pi, void (*cb)(void *, const char *, const char *, uint32_t), void *cookie)
-{ (void)pi; (void)cb; (void)cookie; }
-int __system_property_set(const char *name, const char *value) { (void)name; (void)value; return 0; }
-bool __system_property_wait(const void *pi, uint32_t old, uint32_t *new_serial, const struct timespec *timeout)
-{ (void)pi; (void)old; (void)new_serial; (void)timeout; return false; }
 
 /* linker namespaces (libdl_android) and bionic's android_* helpers */
 void *android_create_namespace(const char *a, const char *b, const char *c, uint64_t d, const char *e, void *f)
