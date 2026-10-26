@@ -9,6 +9,8 @@ product than `gsi_arm64 userdebug`):
 `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m <target>`.
 Every build gets an entry here **before** it runs.
 
+**Faster iteration (user, 2026-10-26: a fresh shell redoes `breakfast`, 45 s, and `m` redoes make analysis, ~6 min):** `scripts/aosp-build.sh` caches the `breakfast` environment and builds with `--soong-only`; `scripts/aosp-build.sh --ninja <output>` rebuilds source-only edits with ninja directly (no analysis, every error at once). Still one Soong build at a time.
+
 | Date | Target(s) | Why it is necessary | Command | Result |
 |---|---|---|---|---|
 | 2026-10-26 | host `libandroid_runtime` (x86_64 glibc) + compdb | (for a Meson/retargeting route to an arm64 glibc library) | `SOONG_GEN_COMPDB=1 m out/soong/.intermediates/frameworks/base/core/jni/libandroid_runtime/linux_glibc_x86_64_shared/libandroid_runtime.so` in ~/los24 | **aborted by the user's decision during Soong/kati analysis, nothing was built**: use the arm64 bionic libraries already in `out/target/product/generic_arm64/system/lib64` through bionic_translation instead (PLAN P7). `out/` untouched (117 GB) |
