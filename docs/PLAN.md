@@ -234,7 +234,7 @@ Each item is an apklayer shadow plus a host backend, with its own scripted check
    data dir.
 2. **Media → GStreamer** (D12): MediaPlayer (local/http), AudioTrack, SoundPool, MediaCodec
    (decode to Surface → subsurface; decode to ByteBuffer), MediaExtractor/MediaMuxer basic.
-3. **Portals** (D13): file chooser for SAF; OpenURI for outbound `ACTION_VIEW`/`SEND`;
+3. **Portals** (D13) — ✅ so far (2026-10-26, `HostPortals`): `ACTION_VIEW` of http/https/mailto/tel/geo that no app activity handles → `xdg-open`; notifications the app posts → `notify-send` (actions/PendingIntent and file chooser pending). Check: `APKLAYER_JOPTS='-Dapklayer.runms=16000 -Dapklayer.script=9000:notify:Hello+9500:view:https://example.org/' scripts/vm-run.sh` prints `notification:` and `opened`. file chooser for SAF; OpenURI for outbound `ACTION_VIEW`/`SEND`;
    Notification → org.freedesktop.Notifications (with actions → PendingIntent); camera via
    PipeWire camera portal → Camera2 minimal; location → GeoClue portal → LocationManager.
 4. **Connectivity:** ConnectivityManager/NetworkCallback reflect NetworkManager state;

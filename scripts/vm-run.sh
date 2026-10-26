@@ -21,12 +21,14 @@ vm() { sshpass -p "$VM_PASS" ssh -o StrictHostKeyChecking=no "$VM" "$@"; }
 vm "mkdir -p .cache/apklayer apklayer-apps"
 rsync -a --delete -e "sshpass -p $VM_PASS ssh -o StrictHostKeyChecking=no" "$DEPS/" "$VM:.cache/apklayer/deps/"
 
-vm "rm -rf apklayer-m1 && mkdir -p apklayer-m1"
-(cd "$ROOT" && COPYFILE_DISABLE=1 tar -cz meson.build meson_options.txt bin runtime bridge scripts/javac-jar.sh) \
-  | vm "tar -xz -C apklayer-m1 2>/dev/null && cd apklayer-m1 && meson setup b >/dev/null && ninja -C b >/dev/null"
+RSYNC="rsync -a --delete -e 'sshpass -p $VM_PASS ssh -o StrictHostKeyChecking=no'"
+vm "mkdir -p apklayer-m1"
+# incremental: only changed sources are copied and rebuilt (the Meson build dir b/ and native/ are kept)
+(cd "$ROOT" && eval $RSYNC --exclude='._*' --exclude=b meson.build meson_options.txt bin runtime bridge "$VM:apklayer-m1/" && \
+  eval $RSYNC scripts/javac-jar.sh "$VM:apklayer-m1/scripts/" 2>/dev/null || { vm "mkdir -p apklayer-m1/scripts"; eval $RSYNC scripts/javac-jar.sh "$VM:apklayer-m1/scripts/"; })
+vm "cd apklayer-m1 && { [ -d b ] || meson setup b >/dev/null; } && { ninja -C b > /tmp/ninja.log 2>&1 || { grep -a -B2 -A4 'error' /tmp/ninja.log | head -30; exit 1; }; }"
 if [ -d "$ROOT/build/native/x86_64" ]; then  # bionic linker + JNI loader (scripts/build-native.sh)
-  vm "mkdir -p apklayer-m1/native"
-  sshpass -p "$VM_PASS" scp -qr -o StrictHostKeyChecking=no "$ROOT"/build/native/x86_64/* "$VM:apklayer-m1/native/"
+  eval $RSYNC "$ROOT"/build/native/x86_64/ "$VM:apklayer-m1/native/"
 fi
 sshpass -p "$VM_PASS" scp -q -o StrictHostKeyChecking=no "$APK" "$VM:apklayer-apps/$NAME.apk"
 
@@ -36,6 +38,8 @@ mkdir -p \$HOME/.config/apklayer
 echo 'APKLAYER_JAVA="\$HOME/jdk21-x86/bin/java -XX:TieredStopAtLevel=1 -XX:+UseSerialGC"' > \$HOME/.config/apklayer/env
 export APKLAYER_JOPTS="$APKLAYER_JOPTS" APKLAYER_DEBUG_INPUT="${APKLAYER_DEBUG_INPUT:-}"
 pkill -x apklayer-shell || true
-\$HOME/apklayer-m1/bin/apklayer run \$HOME/apklayer-apps/$NAME.apk 2>&1 | grep --line-buffered -vE '^OpenJDK'
+# a file, not a pipe: the detached session shell would otherwise hold the pipe open after the app exits
+\$HOME/apklayer-m1/bin/apklayer run \$HOME/apklayer-apps/$NAME.apk > /tmp/apklayer-run.log 2>&1 < /dev/null
+grep -vE '^OpenJDK' /tmp/apklayer-run.log
 sed 's/^/  /' \$XDG_RUNTIME_DIR/apklayer-shell.log | tail -6
 EOF

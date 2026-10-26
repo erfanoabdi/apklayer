@@ -157,6 +157,15 @@ public final class AppHost implements Runnable {
                     String[] parts = arg.split("\\|", -1);
                     hostIme(0, 0, parts[0], parts.length > 1 ? parts[1] : "");
                 },
+                "view", u -> RuntimeEnvironment.getApplication().startActivity( // view:<uri>: as if the app fired ACTION_VIEW
+                        new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(u)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)),
+                "notify", t -> { // notify:<title>: as if the app posted a notification
+                    android.app.Application ctx = RuntimeEnvironment.getApplication();
+                    android.app.NotificationManager nm = ctx.getSystemService(android.app.NotificationManager.class);
+                    nm.createNotificationChannel(new android.app.NotificationChannel("test", "test", android.app.NotificationManager.IMPORTANCE_DEFAULT));
+                    nm.notify(1, new android.app.Notification.Builder(ctx, "test").setSmallIcon(android.R.drawable.ic_dialog_info)
+                            .setContentTitle(t).setContentText("from apklayer").build());
+                },
                 "orient", o -> { // orient:<ActivityInfo.SCREEN_ORIENTATION_* value>
                     Activity top = stack.peek().get();
                     top.setRequestedOrientation(Integer.parseInt(o));
@@ -411,6 +420,7 @@ public final class AppHost implements Runnable {
                 followOrientation();
                 followTextInput();
                 HostSurfaces.follow();
+                HostPortals.followNotifications();
             }
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -429,6 +439,7 @@ public final class AppHost implements Runnable {
             cls = Class.forName(info.targetActivity != null ? info.targetActivity : info.name)
                     .asSubclass(Activity.class);
         } catch (ClassNotFoundException | NullPointerException | android.content.pm.PackageManager.NameNotFoundException e) {
+            if (HostPortals.open(intent)) return;
             // Android would crash the app here; on the desktop the app stays on its current screen.
             System.out.println("[apklayer] cannot start " + intent + ": " + e);
             return;
