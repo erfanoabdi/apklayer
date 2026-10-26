@@ -137,7 +137,37 @@ EGLImage imageFromNativeBuffer(EGLDisplay dpy, ANativeWindowBuffer* buf) {
     if (image == EGL_NO_IMAGE)
         ALOGE("host eglCreateImageKHR(dmabuf %ux%u fourcc 0x%x planes %u modifier 0x%llx) failed: EGL error 0x%x", d.width, d.height, d.fourcc,
               d.numPlanes, (unsigned long long)d.modifier, host<EGLint (*)()>("eglGetError")());
+    else
+        ALOGI("imported buffer id %llx: %ux%u fourcc 0x%x android format %u usage 0x%llx planes %u stride %u modifier 0x%llx", (unsigned long long)d.id,
+              d.width, d.height, d.fourcc, d.androidFormat, (unsigned long long)d.usage, d.numPlanes, d.stride[0], (unsigned long long)d.modifier);
     return image;
+}
+
+// Diagnostics for the GL calls that decide whether Skia can use an imported buffer as a render target: wrapped when Skia asks for them
+// through eglGetProcAddress, they log what fails (framebuffer completeness, the attachment, the image binding) with the GL error.
+typedef unsigned int GLenum_;
+typedef int GLint_;
+typedef unsigned int GLuint_;
+typedef GLenum_ (*GetErrorFn)();
+GetErrorFn glErrorFn() {
+    static GetErrorFn f = reinterpret_cast<GetErrorFn>(host<void*(*)(const char*)>("eglGetProcAddress")("glGetError"));
+    return f;
+}
+GLenum_ (*realCheck)(GLenum_);
+void (*realAttach)(GLenum_, GLenum_, GLenum_, GLuint_, GLint_);
+void (*realTarget)(GLenum_, void*);
+GLenum_ wrapCheckFramebufferStatus(GLenum_ target) {
+    GLenum_ status = realCheck(target);
+    if (status != 0x8CD5 /* GL_FRAMEBUFFER_COMPLETE */) ALOGE("glCheckFramebufferStatus(0x%x) = 0x%x (not complete), glError 0x%x", target, status, glErrorFn()());
+    return status;
+}
+void wrapFramebufferTexture2D(GLenum_ target, GLenum_ attachment, GLenum_ textarget, GLuint_ texture, GLint_ level) {
+    realAttach(target, attachment, textarget, texture, level);
+    if (GLenum_ e = glErrorFn()()) ALOGE("glFramebufferTexture2D(0x%x, 0x%x, 0x%x, tex %u, %d) -> glError 0x%x", target, attachment, textarget, texture, level, e);
+}
+void wrapEGLImageTargetTexture2DOES(GLenum_ target, void* image) {
+    realTarget(target, image);
+    if (GLenum_ e = glErrorFn()()) ALOGE("glEGLImageTargetTexture2DOES(0x%x, %p) -> glError 0x%x", target, image, e);
 }
 
 }  // namespace
@@ -252,6 +282,13 @@ __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char* name) {
         {"eglCreatePlatformWindowSurface", (void*)eglCreatePlatformWindowSurface},
     };
     for (auto& o : ours) if (!strcmp(name, o.n)) return reinterpret_cast<__eglMustCastToProperFunctionPointerType>(o.f);
+    auto proc = host<__eglMustCastToProperFunctionPointerType (*)(const char*)>("eglGetProcAddress");
+    if (!strcmp(name, "glCheckFramebufferStatus") && (realCheck = reinterpret_cast<decltype(realCheck)>(proc(name))))
+        return reinterpret_cast<__eglMustCastToProperFunctionPointerType>(wrapCheckFramebufferStatus);
+    if (!strcmp(name, "glFramebufferTexture2D") && (realAttach = reinterpret_cast<decltype(realAttach)>(proc(name))))
+        return reinterpret_cast<__eglMustCastToProperFunctionPointerType>(wrapFramebufferTexture2D);
+    if (!strcmp(name, "glEGLImageTargetTexture2DOES") && (realTarget = reinterpret_cast<decltype(realTarget)>(proc(name))))
+        return reinterpret_cast<__eglMustCastToProperFunctionPointerType>(wrapEGLImageTargetTexture2DOES);
     return host<__eglMustCastToProperFunctionPointerType (*)(const char*)>("eglGetProcAddress")(name);
 }
 

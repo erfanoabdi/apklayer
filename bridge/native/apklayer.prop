@@ -8,3 +8,7 @@ ro.hardware.egl=apklayer
 ro.hardware.gralloc=apklayer
 ro.zygote=zygote64
 ro.product.cpu.abilist=arm64-v8a
+# SurfaceFlinger pre-compiles shaders at startup by rendering into dummy buffers of many formats; one of them cannot be wrapped as a
+# render target on the VM's virtio-gpu (Skia: "WrapBackendTexture failed to wrap the texture into a renderable target"). An optimisation
+# only: shaders compile at first use instead. To revisit when the failing format is known.
+service.sf.prime_shader_cache=0
