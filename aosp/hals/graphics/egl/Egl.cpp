@@ -102,7 +102,12 @@ const char* kAndroidExtensions =
 // An ANativeWindowBuffer of our gralloc as a dmabuf EGLImage on the host.
 EGLImage imageFromNativeBuffer(EGLDisplay dpy, ANativeWindowBuffer* buf) {
     HandleData d;
-    if (buf == nullptr || !decode(buf->handle, &d)) { tError = EGL_BAD_PARAMETER; return EGL_NO_IMAGE; }
+    if (buf == nullptr || !decode(buf->handle, &d)) {
+        ALOGE("eglCreateImageKHR(native buffer): not one of our gralloc handles (buffer %p, handle %p, fds %d, ints %d)", buf,
+              buf ? buf->handle : nullptr, buf && buf->handle ? buf->handle->numFds : -1, buf && buf->handle ? buf->handle->numInts : -1);
+        tError = EGL_BAD_PARAMETER;
+        return EGL_NO_IMAGE;
+    }
     SharedMetadata* meta = mapMetadata(buf->handle);
     int32_t dataspace = meta ? meta->dataspace : 0;
     if (meta) unmapMetadata(meta);
@@ -128,7 +133,11 @@ EGLImage imageFromNativeBuffer(EGLDisplay dpy, ANativeWindowBuffer* buf) {
     }
     a.push_back(EGL_NONE);
     auto create = host<PFNEGLCREATEIMAGEKHRPROC>("eglCreateImageKHR");
-    return create(dpy, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, a.data());
+    EGLImage image = create(dpy, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, a.data());
+    if (image == EGL_NO_IMAGE)
+        ALOGE("host eglCreateImageKHR(dmabuf %ux%u fourcc 0x%x planes %u modifier 0x%llx) failed: EGL error 0x%x", d.width, d.height, d.fourcc,
+              d.numPlanes, (unsigned long long)d.modifier, host<EGLint (*)()>("eglGetError")());
+    return image;
 }
 
 }  // namespace

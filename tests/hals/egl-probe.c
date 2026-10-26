@@ -11,6 +11,7 @@
 #include <drm_fourcc.h>
 #include <gbm.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -30,6 +31,11 @@ static EGLImage import(EGLDisplay dpy, const struct apklayer_gfx_buffer *b, PFNE
         a[n++] = fdk[i]; a[n++] = b->fd[i];
         a[n++] = offk[i]; a[n++] = b->offset[i];
         a[n++] = pitchk[i]; a[n++] = b->stride[i];
+        if (getenv("PROBE_MODIFIERS") && b->modifier != DRM_FORMAT_MOD_INVALID) { /* what the Android-side EGL layer passes */
+            static const EGLint lo[] = { EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, EGL_DMA_BUF_PLANE1_MODIFIER_LO_EXT, EGL_DMA_BUF_PLANE2_MODIFIER_LO_EXT };
+            static const EGLint hi[] = { EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, EGL_DMA_BUF_PLANE1_MODIFIER_HI_EXT, EGL_DMA_BUF_PLANE2_MODIFIER_HI_EXT };
+            a[n++] = lo[i]; a[n++] = (EGLint)(b->modifier & 0xffffffff); a[n++] = hi[i]; a[n++] = (EGLint)(b->modifier >> 32);
+        }
     }
     a[n++] = EGL_NONE;
     return create(dpy, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, a);
@@ -89,6 +95,45 @@ int main(void)
             glDeleteTextures(1, &tex);
             ((PFNEGLDESTROYIMAGEKHRPROC)eglGetProcAddress("eglDestroyImageKHR"))(dpy, img);
         }
+        apklayer_gfx_buffer_close(&b);
+    }
+
+    /* Render into an imported dmabuf: SurfaceFlinger's framebuffer target. The EGLImage becomes a texture, the texture a framebuffer
+     * attachment; try the allocation usages a gralloc buffer for GPU_RENDER_TARGET can get. */
+    static const struct { uint32_t usage; const char *name; } usages[] = {
+        { APKLAYER_GFX_SAMPLE | APKLAYER_GFX_RENDER, "sample+render" },
+        { APKLAYER_GFX_SAMPLE | APKLAYER_GFX_RENDER | APKLAYER_GFX_SCANOUT, "sample+render+scanout" },
+        { APKLAYER_GFX_SAMPLE | APKLAYER_GFX_RENDER | APKLAYER_GFX_CPU_WRITE, "sample+render+cpu(linear)" },
+    };
+    for (size_t i = 0; i < sizeof usages / sizeof *usages; i++) {
+        struct apklayer_gfx_buffer b;
+        char what[128];
+        if (apklayer_gfx_alloc(gfx, 256, 128, DRM_FORMAT_ABGR8888, usages[i].usage, &b) != 0) { printf("SKIP  %s: no allocation\n", usages[i].name); continue; }
+        EGLImage img = import(dpy, &b, create);
+        GLuint tex = 0, fbo = 0;
+        GLenum status = 0;
+        if (img) {
+            glGenTextures(1, &tex);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            target(GL_TEXTURE_2D, img);
+            glGenFramebuffers(1, &fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+            status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        }
+        snprintf(what, sizeof what, "dmabuf (%s, modifier 0x%llx) is a complete framebuffer (status 0x%x, glError 0x%x)", usages[i].name, (unsigned long long)b.modifier, status, glGetError());
+        CHECK(img && status == GL_FRAMEBUFFER_COMPLETE, what);
+        if (img && status == GL_FRAMEBUFFER_COMPLETE) {
+            glClearColor(0.f, 1.f, 0.f, 1.f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            uint8_t px[4] = { 0 };
+            glReadPixels(10, 10, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+            snprintf(what, sizeof what, "  cleared pixel reads back as %u,%u,%u,%u", px[0], px[1], px[2], px[3]);
+            CHECK(px[1] == 255 && px[0] == 0, what);
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        if (fbo) glDeleteFramebuffers(1, &fbo);
+        if (tex) glDeleteTextures(1, &tex);
         apklayer_gfx_buffer_close(&b);
     }
 
