@@ -371,6 +371,12 @@ location or SafetyNet-free APIs runs.
 > **EGL layer (Android side, `aosp/hals/graphics/egl`): our own `libEGL`, mapped over Android's loader by cfg.d**, forwarding to
 > the host EGL (GBM platform, the HAL's gbm device), adding the Android extensions above, and later window surfaces over
 > ANativeWindow (host GBM surface or FBO, buffers attached to the BufferQueue).
+> **Display path measured (2026-10-26, `tests/hals/display-test.c`, `bridge/shell/dmabuf.c`, `bridge/hals/graphics/display.c`):** the shell imports
+> dmabufs through `zwp_linux_dmabuf_v1` (new messages DMABUF_FRAME with SCM_RIGHTS fds, DMABUF_RELEASE, an empty-path WINDOW_CREATE for
+> dmabuf-only windows; the shell now reads with recvmsg), real GPU buffers from the graphics HAL are presented, 89 of 90 released back by the
+> compositor, and vsync comes from the compositor's frame callbacks. **Finding: the VM's `wl_output` says 59.9 Hz but the frame callbacks run
+> at about 111 Hz (the Mac's ProMotion display is 120 Hz and Parallels reports the mode as 60).** "Real refresh rate" must therefore come from
+> the measured callback cadence, not the mode: the composer HAL will report `getDisplayVsyncPeriod` from measured frame callbacks.
 > 4. **Window surfaces**: libhwui's EGL window surface on the SF's buffers (Mesa Android platform / our libEGL shim).
 > 5. **Presentation**: the client target's dmabuf to the shell over SCM_RIGHTS, `zwp_linux_dmabuf_v1`, zero copy.
 > 6. Same service later answers input (InputFlinger), camera, and the userspace binder (design above) replaces the kernel one.

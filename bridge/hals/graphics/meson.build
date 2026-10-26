@@ -3,10 +3,12 @@ gbm_dep = dependency('gbm', required: false)
 drm_dep = dependency('libdrm', required: false)
 if gbm_dep.found() and drm_dep.found()
   gfx_inc = include_directories('include')
-  libgfx = shared_library('apklayer-hal-graphics', 'graphics.c',
-    include_directories: gfx_inc, dependencies: [gbm_dep, drm_dep], install: true)
+  libgfx = shared_library('apklayer-hal-graphics', ['graphics.c', 'display.c'],
+    include_directories: gfx_inc, dependencies: [gbm_dep, drm_dep, dependency('threads')], install: true)
   executable('graphics-test', '../../../tests/hals/graphics-test.c',
     include_directories: gfx_inc, dependencies: [drm_dep], link_with: libgfx)
+  executable('display-test', '../../../tests/hals/display-test.c',
+    include_directories: gfx_inc, dependencies: [drm_dep, dependency('threads')], link_with: libgfx)
   egl_dep = dependency('egl', required: false)
   glesv2_dep = dependency('glesv2', required: false)
   if egl_dep.found() and glesv2_dep.found()

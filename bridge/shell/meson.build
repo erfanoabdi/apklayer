@@ -12,6 +12,7 @@ if wl_client_dep.found() and wl_protos_dep.found() and xkb_dep.found() and scann
     'cursor-shape-v1': protodir / 'staging/cursor-shape/cursor-shape-v1.xml',
     'text-input-v3': protodir / 'unstable/text-input/text-input-unstable-v3.xml',
     'tablet-v2': protodir / 'unstable/tablet/tablet-unstable-v2.xml',
+    'linux-dmabuf-v1': protodir / 'stable/linux-dmabuf/linux-dmabuf-v1.xml',
   }
   generated = []
   foreach name, xml : protocols
@@ -25,7 +26,7 @@ if wl_client_dep.found() and wl_protos_dep.found() and xkb_dep.found() and scann
       command: [scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
   endforeach
   executable('apklayer-shell',
-    ['main.c', 'client.c', 'window.c', 'pointer.c', 'keyboard.c', 'registry.c', 'clipboard.c', 'textinput.c', 'touch.c', 'decor.c', generated],
+    ['main.c', 'client.c', 'window.c', 'pointer.c', 'keyboard.c', 'registry.c', 'clipboard.c', 'textinput.c', 'touch.c', 'decor.c', 'dmabuf.c', generated],
     dependencies: [wl_client_dep, wl_cursor_dep, xkb_dep],
     c_args: ['-Werror=incompatible-pointer-types', '-Werror=implicit-function-declaration'],
     install: false)

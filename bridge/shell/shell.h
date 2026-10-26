@@ -15,6 +15,11 @@
  *                  3 FRAME          {i32 id, i32 buf, i32 x, i32 y, i32 w, i32 h}  (damage rect)
  *                  4 WINDOW_DESTROY {i32 id}
  *                  6 TEXT_INPUT     {i32 id, i32 enabled}: a text field gained/lost focus (IME on/off)
+ *                  8 DMABUF_FRAME   {i32 id, buf(0..7), fourcc, w, h, nplanes, mod_lo, mod_hi, stride[4], offset[4], damage x,y,w,h}
+ *                                   + nplanes dmabuf fds as SCM_RIGHTS. First use of `buf` creates the buffer from the fds (the
+ *                                   shell keeps it); nplanes = 0 shows the buffer already created. The window is created with
+ *                                   WINDOW_CREATE and an EMPTY shm path (a dmabuf-only window). Zero copy: the compositor gets the
+ *                                   dmabufs through zwp_linux_dmabuf_v1.
  *                  7 VSYNC_REQUEST  {i32 id}: tell me when the compositor shows the next frame of this window
  *                  5 CLIPBOARD_SET  utf8 text: the app copied something; the shell owns the selection
  *   shell -> app 101 INPUT          {i32 id, i32 type, i32 a, i32 b}
@@ -30,6 +35,7 @@
  *                109 CLIPBOARD      utf8 text: the system selection changed (text only, < 60 KB)
  *                108 STATE          {i32 id, i32 flags}  bit0 = window active (focused), bit1 = minimized
  *                                    (apps pause on !active, stop on minimized, resume on active)
+ *                114 DMABUF_RELEASE {i32 id, buf}: the compositor is done with that dmabuf buffer (it may be drawn into again)
  *                112 DISPLAY        {i32 refresh in mHz}: the output's refresh rate (sent at HELLO and when it changes)
  *                113 VSYNC          {i32 id, i32 ms}: answer to VSYNC_REQUEST, the compositor's frame callback time (ms)
  *                107 CONFIGURE      {i32 id, i32 logical w, i32 logical h, i32 scale*100}
@@ -57,10 +63,14 @@
 #include <wayland-cursor.h>
 #include "xdg-shell-client-protocol.h"
 #include "cursor-shape-v1-client-protocol.h"
+#include "linux-dmabuf-v1-client-protocol.h"
 #include "decor.h"
 enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
        MSG_INPUT = 101, MSG_CLOSE = 103, MSG_RELEASE = 104,
-       MSG_KEY = 105, MSG_SCROLL = 106, MSG_CONFIGURE = 107, MSG_STATE = 108, MSG_CLIPBOARD = 109, MSG_IME = 110, MSG_TOUCH = 111, MSG_DISPLAY = 112, MSG_VSYNC = 113 };
+       MSG_KEY = 105, MSG_SCROLL = 106, MSG_CONFIGURE = 107, MSG_STATE = 108, MSG_CLIPBOARD = 109, MSG_IME = 110, MSG_TOUCH = 111, MSG_DISPLAY = 112, MSG_VSYNC = 113, MSG_DMABUF_RELEASE = 114 };
+#define MSG_DMABUF_FRAME 8
+#define DBUF_MAX 8
+#define CLIENT_MAX_FDS 16
 #define MSG_VSYNC_REQUEST 7
 #define MSG_TEXT_INPUT 6
 /* app -> shell uses type 5 for MSG_CLIPBOARD_SET (text); shell -> app 109 pushes the selection */
@@ -74,6 +84,8 @@ struct client {
     char pkg[128];
     uint8_t rx[65536];
     size_t rx_len;
+    int fds[CLIENT_MAX_FDS];   /* fds received with SCM_RIGHTS, consumed in order by the messages that declare them */
+    int nfds;
 };
 struct window {
     struct client *client;
@@ -92,6 +104,7 @@ struct window {
     void *map;
     size_t map_len;
     struct wl_buffer *buffers[NBUF];
+    struct wl_buffer *dbufs[DBUF_MAX]; /* imported dmabuf buffers of a dmabuf window */
     struct wl_callback *vsync_cb;   /* frame callback in flight for MSG_VSYNC_REQUEST */
     int pending_buf;            /* frame received before the first configure */
     int32_t pending_damage[4];
@@ -106,6 +119,7 @@ extern struct wl_compositor *compositor;
 extern struct wl_subcompositor *subcompositor;
 extern struct wp_cursor_shape_manager_v1 *cursor_mgr;
 extern struct wl_shm *shm;
+extern struct zwp_linux_dmabuf_v1 *dmabuf_mgr;  /* dmabuf.c */
 extern struct xdg_wm_base *wm_base;
 extern struct wl_seat *seat;
 extern struct wl_output *output;
@@ -140,6 +154,8 @@ void window_create(struct client *c, int id, int width, int height, const char *
 void window_destroy(struct window *w);  /* window.c */
 void window_frame(struct window *w, int buf, const int32_t *damage);  /* window.c */
 void window_vsync_request(struct window *w);  /* window.c */
+void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int nfds);  /* dmabuf.c */
+void window_dmabuf_destroy(struct window *w);  /* dmabuf.c */
 extern const struct wl_pointer_listener ptr_listener;  /* pointer.c */
 extern const struct wl_keyboard_listener kb_listener;  /* keyboard.c */
 extern const struct wl_registry_listener registry_listener;  /* registry.c */

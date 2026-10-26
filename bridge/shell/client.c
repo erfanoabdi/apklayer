@@ -1,5 +1,6 @@
 /* App connections: the unix socket protocol (see shell.h) and sending messages to apps. */
 #include "shell.h"
+#include <sys/uio.h>
 
 /* ---- sending to apps ---- */
 
@@ -42,6 +43,7 @@ static void client_drop(struct client *c)
 {
     for (int i = 0; i < MAX_WINDOWS; i++)
         if (windows[i].client == c) window_destroy(&windows[i]);
+    for (int i = 0; i < c->nfds; i++) close(c->fds[i]);
     fprintf(stderr, "[shell] %s (pid %d) disconnected\n", c->pkg[0] ? c->pkg : "?", c->pid);
     close(c->fd);
     memset(c, 0, sizeof *c);
@@ -74,6 +76,16 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         if (w) text_input_enable(w, v[1]);
         break;
     }
+    case MSG_DMABUF_FRAME: {
+        struct window *w = len >= 80 ? window_find(c, v[0]) : NULL;
+        int nplanes = len >= 80 ? v[5] : 0;
+        if (nplanes < 0 || nplanes > 4 || nplanes > c->nfds) nplanes = 0;
+        if (w) window_dmabuf_frame(w, v, c->fds, nplanes);
+        for (int i = 0; i < nplanes; i++) close(c->fds[i]); /* the shell kept its own dup, if it needed one */
+        memmove(c->fds, c->fds + nplanes, (size_t)(c->nfds - nplanes) * sizeof(int));
+        c->nfds -= nplanes;
+        break;
+    }
     case MSG_VSYNC_REQUEST: {
         struct window *w = len >= 4 ? window_find(c, v[0]) : NULL;
         if (w) window_vsync_request(w);
@@ -97,8 +109,20 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
 
 void client_read(struct client *c)
 {
-    ssize_t n = read(c->fd, c->rx + c->rx_len, sizeof c->rx - c->rx_len);
+    struct iovec iov = { c->rx + c->rx_len, sizeof c->rx - c->rx_len };
+    char control[CMSG_SPACE(sizeof(int) * CLIENT_MAX_FDS)];
+    struct msghdr mh = { .msg_iov = &iov, .msg_iovlen = 1, .msg_control = control, .msg_controllen = sizeof control };
+    ssize_t n = recvmsg(c->fd, &mh, MSG_CMSG_CLOEXEC);
     if (n <= 0) { client_drop(c); return; }
+    for (struct cmsghdr *cm = CMSG_FIRSTHDR(&mh); cm; cm = CMSG_NXTHDR(&mh, cm)) {
+        if (cm->cmsg_level != SOL_SOCKET || cm->cmsg_type != SCM_RIGHTS) continue;
+        int count = (int)((cm->cmsg_len - CMSG_LEN(0)) / sizeof(int));
+        for (int i = 0; i < count; i++) {
+            int fd;
+            memcpy(&fd, CMSG_DATA(cm) + i * sizeof(int), sizeof fd);
+            if (c->nfds < CLIENT_MAX_FDS) c->fds[c->nfds++] = fd; else close(fd);
+        }
+    }
     c->rx_len += (size_t)n;
     size_t off = 0;
     while (c->rx_len - off >= 8) {

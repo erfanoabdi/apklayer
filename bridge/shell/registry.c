@@ -77,6 +77,8 @@ static void registry(void *d, struct wl_registry *r, uint32_t name, const char *
         data_mgr = wl_registry_bind(r, name, &wl_data_device_manager_interface, ver < 3 ? ver : 3);
     else if (!strcmp(iface, zwp_text_input_manager_v3_interface.name))
         text_mgr = wl_registry_bind(r, name, &zwp_text_input_manager_v3_interface, 1);
+    else if (!strcmp(iface, zwp_linux_dmabuf_v1_interface.name))
+        dmabuf_mgr = wl_registry_bind(r, name, &zwp_linux_dmabuf_v1_interface, ver < 3 ? ver : 3);
     else if (!strcmp(iface, wl_shm_interface.name))
         shm = wl_registry_bind(r, name, &wl_shm_interface, 1);
     else if (!strcmp(iface, xdg_wm_base_interface.name)) {

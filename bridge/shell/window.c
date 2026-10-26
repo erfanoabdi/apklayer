@@ -118,6 +118,15 @@ static const struct xdg_toplevel_listener top_listener = {
 /* (Re)creates the buffers of w from the shared file. */
 static int window_buffers(struct window *w, int width, int height, const char *path)
 {
+    if (!path[0]) { /* a dmabuf-only window: its buffers arrive with DMABUF_FRAME */
+        w->w = width;
+        w->h = height;
+        w->pending_buf = -1;
+        w->scale = w->told_scale ? w->told_scale : 100;
+        wl_surface_set_buffer_scale(w->surface, (w->scale + 50) / 100);
+        if (w->xdg_surface) window_layout(w);
+        return 0;
+    }
     int fd = open(path, O_RDWR);
     if (fd < 0) { fprintf(stderr, "[shell] open %s: %s\n", path, strerror(errno)); return -1; }
     size_t len = (size_t)width * height * 4 * NBUF;
@@ -187,6 +196,7 @@ void window_destroy(struct window *w)
     if (pointer_focus == w) pointer_focus = NULL;
     if (keyboard_focus == w) keyboard_focus = NULL;
     for (int i = 0; i < NBUF; i++) if (w->buffers[i]) wl_buffer_destroy(w->buffers[i]);
+    window_dmabuf_destroy(w);
     decor_destroy(&w->decor);
     xdg_toplevel_destroy(w->toplevel);
     xdg_surface_destroy(w->xdg_surface);
