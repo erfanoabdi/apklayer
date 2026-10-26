@@ -221,6 +221,18 @@ EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig cfg, EGLContext share, con
     return host<PFNEGLCREATECONTEXTPROC>("eglCreateContext")(dpy, cfg, share, a.data());
 }
 
+// apklayer patch (diagnostic): log the GL the context really gives (Skia's renderability caps depend on it)
+EGLBoolean eglMakeCurrent(EGLDisplay dpy, EGLSurface draw, EGLSurface read, EGLContext ctx) {
+    EGLBoolean ok = host<PFNEGLMAKECURRENTPROC>("eglMakeCurrent")(dpy, draw, read, ctx);
+    static bool logged;
+    if (ok && ctx != EGL_NO_CONTEXT && !logged) {
+        logged = true;
+        auto gs = host<const unsigned char* (*)(unsigned)>("glGetString");
+        if (gs) ALOGI("GL version '%s' renderer '%s' extensions '%s'", gs(0x1F02), gs(0x1F01), gs(0x1F03));
+    }
+    return ok;
+}
+
 EGLBoolean eglChooseConfig(EGLDisplay dpy, const EGLint* attribs, EGLConfig* cfgs, EGLint size, EGLint* num) {
     auto a = filtered(attribs, {EGL_RECORDABLE_ANDROID, EGL_PROTECTED_CONTENT_EXT});
     return host<PFNEGLCHOOSECONFIGPROC>("eglChooseConfig")(dpy, a.data(), cfgs, size, num);
@@ -252,7 +264,7 @@ EGLBoolean eglPresentationTimeANDROID(EGLDisplay, EGLSurface, EGLnsecsANDROID) {
     X(eglCreateSync) X(eglCreateSyncKHR) X(eglDestroyContext) X(eglDestroyImage) X(eglDestroyImageKHR) X(eglDestroySurface) \
     X(eglDestroySync) X(eglDestroySyncKHR) X(eglDupNativeFenceFDANDROID) X(eglGetConfigAttrib) X(eglGetConfigs) \
     X(eglGetCurrentContext) X(eglGetCurrentDisplay) X(eglGetCurrentSurface) X(eglGetSyncAttrib) X(eglGetSyncAttribKHR) \
-    X(eglInitialize) X(eglMakeCurrent) X(eglQueryAPI) X(eglQueryContext) X(eglQuerySurface) X(eglReleaseTexImage) \
+    X(eglInitialize) X(eglQueryAPI) X(eglQueryContext) X(eglQuerySurface) X(eglReleaseTexImage) \
     X(eglReleaseThread) X(eglSetDamageRegionKHR) X(eglSignalSyncKHR) X(eglSurfaceAttrib) X(eglSwapBuffers) \
     X(eglSwapBuffersWithDamageKHR) X(eglSwapInterval) X(eglTerminate) X(eglWaitClient) X(eglWaitGL) X(eglWaitNative) \
     X(eglWaitSync) X(eglWaitSyncKHR) X(eglLockSurfaceKHR) X(eglUnlockSurfaceKHR)
