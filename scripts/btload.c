@@ -4,6 +4,7 @@
  * LD_PRELOAD=libgcc_s.so.1 plus the platform/stub libraries). Used for PLAN P7.0. */
 #define _GNU_SOURCE
 #include <link.h>
+#include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +19,12 @@ int main(int argc, char **argv)
     _r_debug_ptr = &_r_debug;
     extern void apklayer_log_to_stderr(void);
     dl_parse_library_path(argv[1], ":");
+    /* host libraries the Android code calls into (APKLAYER_HOST_LIBS, colon separated), global so the bionic linker finds their symbols */
+    if (getenv("APKLAYER_HOST_LIBS")) {
+        char *libs = strdup(getenv("APKLAYER_HOST_LIBS"));
+        for (char *save, *l = strtok_r(libs, ":", &save); l; l = strtok_r(NULL, ":", &save))
+            if (!dlopen(l, RTLD_NOW | RTLD_GLOBAL)) fprintf(stderr, "btload: %s\n", dlerror());
+    }
     apklayer_log_to_stderr();
     if (getenv("APKLAYER_CRASH_TRACE")) { extern void apklayer_crash_trace(void); apklayer_crash_trace(); }
     void *h = bionic_dlopen(argv[2], 2 /* RTLD_NOW */);

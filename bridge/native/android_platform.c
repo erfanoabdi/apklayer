@@ -122,6 +122,7 @@ void apklayer_log_to_stderr(void)
 static void crash_trace_handler(int sig, siginfo_t *info, void *ctx)
 {
     (void)info;
+    fflush(NULL); /* bionic_translation prints abort messages with printf: block-buffered into a file, they would be lost */
     ucontext_t *uc = ctx;
     uint64_t pc = uc->uc_mcontext.pc, *fp = (uint64_t *)uc->uc_mcontext.regs[29];
     fprintf(stderr, "[runtime-trace] signal %d pc=0x%llx\n", sig, (unsigned long long)pc);

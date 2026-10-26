@@ -1,0 +1,5 @@
+// Our allow-all access policy for the service manager (the tree's cmds/servicemanager module libapklayer_servicemanager uses it).
+filegroup {
+    name: "apklayer_servicemanager_access",
+    srcs: ["Access.cpp"],
+}

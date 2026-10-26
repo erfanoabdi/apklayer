@@ -12,8 +12,9 @@ cc -shared -fPIC -O2 -Wall -I"$JH/include" -I"$JH/include/linux" -o "$tmp/liband
     -L"$HOME/bt-arm/bionic_translation/b" -ldl_bio -Wl,-rpath,"$HOME/bt-arm/bionic_translation/b"
 # the launcher for Android executables built as libraries (btload --main) and the property tool, in $native/bin
 mkdir -p "$native/bin"
-cc -O2 -Wall -o "$native/bin/btload" scripts/btload.c bridge/native/android_platform.c bridge/native/properties.c bridge/native/android_stubs.c \
+cc -O2 -Wall -o "$native/bin/btload" scripts/btload.c bridge/native/android_platform.c bridge/native/properties.c bridge/native/binder_compat.c bridge/native/android_stubs.c \
     -rdynamic -L"$HOME/bt-arm/bionic_translation/b" -ldl_bio -Wl,-rpath,"$HOME/bt-arm/bionic_translation/b"
+[ ! -e b/bridge/hals/graphics/libapklayer-hal-graphics.so ] || cp b/bridge/hals/graphics/libapklayer-hal-graphics.so "$native/"  # the host HAL library btload loads for the Android-side HAL services
 cc -O2 -Wall -o "$native/bin/aprop" bridge/native/aprop.c bridge/native/properties.c
 java -cp "$classes:$(ls "$native"/aosp/*.jar | tr '\n' ':')" apklayer.host.CriticalNatives "$tmp/critical-natives.txt" $(ls "$shards" | grep -E "^framework\.jar[0-9]+$" | sed "s|^|$shards/|")
 # Our own versions of device libraries that need a service the desktop does not have (bridge/ndk/<name>.c): the source's
@@ -30,7 +31,7 @@ ndk_lib() { # ndk_lib <real library name> <our file name>
     map_lib "$1" "$2"
 }
 ndk_lib libnativedisplay.so libnativedisplay.so.1
-ndk_lib libselinux.so libapklayer_selinux.so
+ndk_lib libselinux.so libapklayer_selinux.so  # still needed by the libraries that link it (the service manager no longer uses it)
 mkdir -p "$tmp/jar/native/linux/x86_64" && cp "$tmp/libandroid_runtime.so" "$tmp/jar/native/linux/x86_64/" && cp "$tmp/critical-natives.txt" "$tmp/jar/"
 rm -f "$native/native-runtime.jar" && (cd "$tmp/jar" && jar cf "$native/native-runtime.jar" .)
 # Robolectric loads the library from the framework jar's own native/ first: keep the same copy there
