@@ -496,11 +496,16 @@ double-click `Markor.apk` → it opens and is usable on both.
    items: manifest ContentProviders before Application.onCreate (Firebase), a `getprop` stand-in,
    `Display.getHdrCapabilities`, the MediaPlayer data source, the NewPipe startup NPE.
 
-### P8 — Vision: SystemUI and the system services on this stack (user, 2026-10-26: "hopefully one day we can run the whole systemUI apk")
-Not scheduled. What it needs beyond P7: the framework's Java system services (`system_server`: activity, window, package, notification,
-display, input managers) on HotSpot over the real binder (`services.jar` from the same tree), the full HAL set under `aosp/hals`
-(camera, gnss, vibrator, sensors, power, input, audio), a real property service and init, and the userspace-binder driver so none of
-it needs kernel modules. Every P7 interface is chosen so this stays possible: real SurfaceFlinger, real binder, per-domain HALs.
+### P8 — Vision: the SystemUI APK on this stack (user, 2026-10-26: "i really like Robolectric shadows and we should even use them for systemui as well, we don't need them to be real")
+Not scheduled. **System services remain Robolectric shadows, SystemUI included; no `system_server` is run.** SystemUI is then an
+ordinary APK in an instance whose shadow layer is extended with what it talks to: `StatusBarManager`/`IStatusBarService`
+(notifications, quick settings, panel state), window types (status bar, navigation bar, keyguard, notification shade), insets and
+display cutouts, `NotificationListenerService` feed, `KeyguardManager`, input monitors, wallpaper, `SurfaceControl` layers through
+the real SurfaceFlinger. The shadows are fed from the host side (notifications from other instances and the desktop, battery,
+connectivity, time), so the desktop and the phone UI see the same state. Open questions to research when it is scheduled: how
+much of SystemUI's hidden-API surface Robolectric's shadows already cover, how privileged window types are composed, and what the
+shadow-to-host feed looks like. Real services (binder, SurfaceFlinger, HALs) are kept only where they bring graphics and hardware
+fidelity cheaply. Every P7 interface keeps this open.
 
 ### P9 — Vision: several phone instances at once (user, 2026-10-26)
 Each instance is a full virtual phone made of ordinary host processes: **its own binder domain** (a separate binderfs device
