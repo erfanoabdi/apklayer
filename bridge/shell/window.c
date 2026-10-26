@@ -98,7 +98,7 @@ static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t c
     if (activated) w->minimized = 0;
     if (w->configured && changed) window_layout(w);
     if (w->configured && active_changed) send_state(w);
-    if (cw > 0 && ch > 0 && w->configured
+    if (cw > 0 && ch > 0 && w->configured && !w->proxy   /* a display window keeps the display's size: the compositor shrinking it to fit the screen is not a display change */
         && (cw != w->w * 100 / w->scale || ch != w->h * 100 / w->scale)) {
         int32_t v[4] = { W_ID(w), cw, ch, output_scale };
         w->told_scale = output_scale;

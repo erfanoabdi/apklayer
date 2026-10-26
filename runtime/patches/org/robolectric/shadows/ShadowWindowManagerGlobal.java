@@ -233,7 +233,14 @@ public class ShadowWindowManagerGlobal {
 
     protected int addToDisplay(Object[] args) {
       int sdk = getApiLevel();
-      WindowInfo windowInfo = windows.computeIfAbsent((IWindow) args[0], id -> new WindowInfo());
+      WindowInfo windowInfo =
+          windows.computeIfAbsent(
+              (IWindow) args[0],
+              id -> {
+                WindowInfo created = new WindowInfo();
+                created.zOrder = ++nextZOrder; // apklayer patch: windows stack in the order they were added
+                return created;
+              });
       int displayId = (int) args[sdk <= R ? 4 : 3];
       // TODO: This is to allow window insets to be keyed per display, i.e. a window has requested
       //  insets visibility changed before it was added to a display, does android actually allow
@@ -318,11 +325,25 @@ public class ShadowWindowManagerGlobal {
       }
     }
 
+    // The window manager's job for the compositor: the window's layer at its frame, stacked by type and order of adding
+    // (base application windows below dialogs below sub-windows below system windows), visible.
+    private void placeLayer(SurfaceControl layer, WindowInfo windowInfo) {
+      if (layer == null || !layer.isValid()) return;
+      int type = windowInfo.attrs.type;
+      int z = type * 1000 + windowInfo.zOrder; // by window type first (base application < dialogs < sub-windows < system), then by order added
+      new SurfaceControl.Transaction()
+          .setPosition(layer, windowInfo.frame.left, windowInfo.frame.top)
+          .setLayer(layer, z)
+          .show(layer)
+          .apply();
+    }
+
     private int relayoutImpl(Object[] args) {
       int sdk = getApiLevel();
       WindowRelayoutResult windowLayoutResult =
           sdk >= VANILLA_ICE_CREAM ? findFirst(WindowRelayoutResult.class, args) : null;
 
+      SurfaceControl layer = null; // apklayer patch: this window's SurfaceFlinger layer, placed below once its frame is known
       // Simulate initializing the SurfaceControl member object, which happens during this method.
       if (sdk >= Q) {
         // apklayer patch: the client-managed SurfaceControl is an argument (relayout2); older shapes carry it in the result
@@ -333,6 +354,7 @@ public class ShadowWindowManagerGlobal {
           surfaceControl = ReflectionHelpers.getField(windowLayoutResult, "surfaceControl");
         }
         if (surfaceControl != null) Shadow.<ShadowSurfaceControl>extract(surfaceControl).initializeNativeObject();
+        layer = surfaceControl;
       }
 
       IWindow window = (IWindow) args[0];
@@ -371,6 +393,28 @@ public class ShadowWindowManagerGlobal {
                     ? windowLayoutResult.insetsState
                     : findFirst(InsetsState.class, args))
                 : null);
+        placeLayer(layer, windowInfo);
+        if (System.getProperty("apklayer.tracewindows") != null) {
+          System.err.println(
+              "[apklayer] window "
+                  + windowInfo.attrs.getTitle()
+                  + " type "
+                  + windowInfo.attrs.type
+                  + " attrs "
+                  + windowInfo.attrs.width
+                  + "x"
+                  + windowInfo.attrs.height
+                  + " gravity 0x"
+                  + Integer.toHexString(windowInfo.attrs.gravity)
+                  + " requested "
+                  + args[requestedSizeIdx]
+                  + "x"
+                  + args[requestedSizeIdx + 1]
+                  + " -> frame "
+                  + windowInfo.frame.toShortString()
+                  + " z "
+                  + windowInfo.zOrder);
+        }
       }
 
       return inTouchMode ? RELAYOUT_RES_IN_TOUCH_MODE : 0;
@@ -662,7 +706,11 @@ public class ShadowWindowManagerGlobal {
     }
   }
 
+  // apklayer patch: the window manager's share that SurfaceFlinger needs: where a window's layer is and above what
+  static int nextZOrder;
+
   static final class WindowInfo {
+    int zOrder;
     final Rect displayFrame = new Rect();
     final ClientWindowFrames frames;
     final Rect frame;
