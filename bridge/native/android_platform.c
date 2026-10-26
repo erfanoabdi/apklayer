@@ -6,6 +6,9 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <signal.h>
+#include <ucontext.h>
+#include <unistd.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -87,11 +90,65 @@ int __android_log_vprint(int prio, const char *tag, const char *fmt, va_list ap)
 {
     static int debug = -1;
     if (debug < 0) debug = getenv("APKLAYER_LINKER_DEBUG") != NULL;
-    if (prio < 5 && !debug) return 0;
+    if (!debug && (prio < 5 || (prio < 6 && tag && strstr(tag, "linker")))) return 0; /* the linker's "not prelinked" warning is every library */
     char buf[1024];
     int n = vsnprintf(buf, sizeof buf, fmt, ap);
     size_t len = strlen(buf);
     while (len && buf[len - 1] == '\n') buf[--len] = 0;
     if (len) fprintf(stderr, "[%s] %s\n", tag ? tag : "linker", buf);
     return n;
+}
+
+/* Android's liblog writes to logd, which does not exist here; its own logger hook sends warnings and worse to stderr, all
+ * of it with APKLAYER_RUNTIME_DEBUG, so a LOG_ALWAYS_FATAL message is not lost. Call after the process can load liblog. */
+extern void *bionic_dlopen(const char *filename, int flag);
+extern void *bionic_dlsym(void *handle, const char *symbol);
+struct android_log_message { size_t size; int32_t buffer_id; int32_t priority; const char *tag, *file; uint32_t line; const char *message; };
+static void stderr_logger(const struct android_log_message *m)
+{
+    if (m->priority >= 5 || getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[log %d] %s: %s\n", m->priority, m->tag, m->message);
+    const char *dump = getenv("APKLAYER_DUMP_ON"); /* debug: the first log line containing this text prints the JVM's thread dump and exits */
+    if (dump && strstr(m->message, dump)) {
+        if (getenv("APKLAYER_DUMP_ABORT")) abort(); /* with -Dapklayer.runtimetrace=true: the native call chain instead */
+        kill(getpid(), SIGQUIT);
+        nanosleep(&(struct timespec){ 2, 0 }, NULL);
+        _exit(3);
+    }
+}
+
+void apklayer_log_to_stderr(void)
+{
+    void *liblog = bionic_dlopen("liblog.so", 2);
+    void (*set_logger)(void (*)(const struct android_log_message *)) = liblog ? bionic_dlsym(liblog, "__android_log_set_logger") : NULL;
+    if (set_logger) set_logger(stderr_logger);
+}
+
+/* Debug aid (-Dapklayer.runtimetrace=true, or APKLAYER_CRASH_TRACE=1 in btload): on SIGABRT/SIGSEGV print the frame-pointer chain of the faulting thread and the
+ * memory map lines of the Android libraries, so addresses can be resolved with readelf/nm (gdb cannot unwind libraries
+ * that the bionic linker loaded). Android's arm64 code keeps frame pointers. */
+static void crash_trace_handler(int sig, siginfo_t *info, void *ctx)
+{
+    (void)info;
+    ucontext_t *uc = ctx;
+    uint64_t pc = uc->uc_mcontext.pc, *fp = (uint64_t *)uc->uc_mcontext.regs[29];
+    fprintf(stderr, "[runtime-trace] signal %d pc=0x%llx\n", sig, (unsigned long long)pc);
+    for (int i = 0; i < 32 && fp && ((uintptr_t)fp & 7) == 0; i++) {
+        fprintf(stderr, "[runtime-trace] #%d lr=0x%llx\n", i, (unsigned long long)fp[1]);
+        uint64_t *next = (uint64_t *)fp[0];
+        if (next <= fp) break;
+        fp = next;
+    }
+    FILE *maps = fopen("/proc/self/maps", "r");
+    char line[512];
+    while (maps && fgets(line, sizeof line, maps)) if (strstr(line, "android-arm64") || strstr(line, "android-libs")) fputs(line, stderr);
+    fflush(stderr);
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+
+
+void apklayer_crash_trace(void)
+{
+    struct sigaction sa = { .sa_sigaction = crash_trace_handler, .sa_flags = SA_SIGINFO | SA_RESETHAND };
+    sigaction(SIGABRT, &sa, NULL);
 }

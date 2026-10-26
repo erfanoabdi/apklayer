@@ -11,10 +11,16 @@ cc -shared -fPIC -O2 -Wall -I"$JH/include" -I"$JH/include/linux" -o "$tmp/liband
     bridge/native/runtime_shim.c bridge/native/android_platform.c bridge/native/android_stubs.c \
     -L"$HOME/bt-arm/bionic_translation/b" -ldl_bio -Wl,-rpath,"$HOME/bt-arm/bionic_translation/b"
 java -cp "$classes:$(ls "$native"/aosp/*.jar | tr '\n' ':')" apklayer.host.CriticalNatives "$tmp/critical-natives.txt" $(ls "$shards" | grep -E "^framework\.jar[0-9]+$" | sed "s|^|$shards/|")
-# libnativedisplay: software vsync (bridge/ndk/libnativedisplay.c) + weak stubs for the real library's other exports
-nm -D --defined-only "$HOME/android-arm64/lib64/libnativedisplay.so" | awk '$2 ~ /[TW]/ {sub(/@.*/, "", $3); print "__attribute__((weak)) long " $3 "(void) { return 0; }"}' | sort -u > "$tmp/nd_stubs.c"
-cc -shared -fPIC -O2 -Wall -o "$native/libnativedisplay.so.1" bridge/ndk/libnativedisplay.c "$tmp/nd_stubs.c"
-grep -q '^libnativedisplay.so' "$native/share/bionic_translation/cfg.d/bionic_translation.cfg" || echo 'libnativedisplay.so libnativedisplay.so.1' >> "$native/share/bionic_translation/cfg.d/bionic_translation.cfg"
+# Our own versions of device libraries that need a service the desktop does not have (bridge/ndk/<name>.c): the source's
+# functions plus weak do-nothing stubs for every other export of the real library, mapped by bionic_translation's cfg.d.
+ndk_lib() { # ndk_lib <real library name> <our file name>
+    base="${1%.so}"
+    nm -D --defined-only "$HOME/android-arm64/lib64/$1" | awk '$2 ~ /[TW]/ {sub(/@.*/, "", $3); print "__attribute__((weak)) long " $3 "(void) { return 0; }"}' | sort -u > "$tmp/$base-stubs.c"
+    cc -shared -fPIC -O2 -Wall -o "$native/$2" "bridge/ndk/$base.c" "$tmp/$base-stubs.c"
+    grep -q "^$1 " "$native/share/bionic_translation/cfg.d/bionic_translation.cfg" || echo "$1 $2" >> "$native/share/bionic_translation/cfg.d/bionic_translation.cfg"
+}
+ndk_lib libnativedisplay.so libnativedisplay.so.1
+ndk_lib libselinux.so libapklayer_selinux.so
 mkdir -p "$tmp/jar/native/linux/x86_64" && cp "$tmp/libandroid_runtime.so" "$tmp/jar/native/linux/x86_64/" && cp "$tmp/critical-natives.txt" "$tmp/jar/"
 rm -f "$native/native-runtime.jar" && (cd "$tmp/jar" && jar cf "$native/native-runtime.jar" .)
 # Robolectric loads the library from the framework jar's own native/ first: keep the same copy there

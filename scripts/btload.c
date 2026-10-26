@@ -5,6 +5,7 @@
 #define _GNU_SOURCE
 #include <link.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 extern void dl_parse_library_path(const char *path, char *delim);
 extern void *bionic_dlsym(void *handle, const char *symbol);
@@ -15,7 +16,10 @@ int main(int argc, char **argv)
 {
     if (argc < 3) return 2;
     _r_debug_ptr = &_r_debug;
+    extern void apklayer_log_to_stderr(void);
     dl_parse_library_path(argv[1], ":");
+    apklayer_log_to_stderr();
+    if (getenv("APKLAYER_CRASH_TRACE")) { extern void apklayer_crash_trace(void); apklayer_crash_trace(); }
     void *h = bionic_dlopen(argv[2], 2 /* RTLD_NOW */);
     if (h) printf("LOADED %s\n", argv[2]); else printf("FAILED %s: %s\n", argv[2], bionic_dlerror());
     if (!h || argc < 4 || strcmp(argv[3], "--main")) return h ? 0 : 1;

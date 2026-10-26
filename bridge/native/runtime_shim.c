@@ -25,46 +25,9 @@ extern void *bionic_dlopen(const char *filename, int flag);
 extern void *bionic_dlsym(void *handle, const char *symbol);
 extern char *bionic_dlerror(void);
 extern struct r_debug *_r_debug_ptr;
-
-/* Debug aid (-Dapklayer.runtimetrace=true): on SIGABRT/SIGSEGV print the frame-pointer chain of the faulting thread and the
- * memory map lines of the Android libraries, so addresses can be resolved with readelf/nm (gdb cannot unwind libraries
- * that the bionic linker loaded). Android's arm64 code keeps frame pointers. */
-static void crash_trace(int sig, siginfo_t *info, void *ctx)
-{
-    (void)info;
-    ucontext_t *uc = ctx;
-    uint64_t pc = uc->uc_mcontext.pc, *fp = (uint64_t *)uc->uc_mcontext.regs[29];
-    fprintf(stderr, "[runtime-trace] signal %d pc=0x%llx\n", sig, (unsigned long long)pc);
-    for (int i = 0; i < 32 && fp && ((uintptr_t)fp & 7) == 0; i++) {
-        fprintf(stderr, "[runtime-trace] #%d lr=0x%llx\n", i, (unsigned long long)fp[1]);
-        uint64_t *next = (uint64_t *)fp[0];
-        if (next <= fp) break;
-        fp = next;
-    }
-    FILE *maps = fopen("/proc/self/maps", "r");
-    char line[512];
-    while (maps && fgets(line, sizeof line, maps)) if (strstr(line, "android-arm64") || strstr(line, "android-libs")) fputs(line, stderr);
-    fflush(stderr);
-    signal(sig, SIG_DFL);
-    raise(sig);
-}
+void apklayer_log_to_stderr(void), apklayer_crash_trace(void); /* android_platform.c */
 
 static jclass class_class;
-/* Android's liblog writes to logd, which does not exist here; its logger hook (liblog's own API) sends warnings and worse
- * to stderr, everything with APKLAYER_RUNTIME_DEBUG, so a LOG_ALWAYS_FATAL message is not lost. */
-struct android_log_message { size_t size; int32_t buffer_id; int32_t priority; const char *tag, *file; uint32_t line; const char *message; };
-static void stderr_logger(const struct android_log_message *m)
-{
-    if (m->priority >= 5 || getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[log %d] %s: %s\n", m->priority, m->tag, m->message);
-    const char *dump = getenv("APKLAYER_DUMP_ON"); /* debug: the first log line containing this text prints the JVM's thread dump and exits */
-    if (dump && strstr(m->message, dump)) {
-        if (getenv("APKLAYER_DUMP_ABORT")) abort(); /* with -Dapklayer.runtimetrace=true: the native call chain instead */
-        kill(getpid(), SIGQUIT);
-        nanosleep(&(struct timespec){ 2, 0 }, NULL);
-        _exit(3);
-    }
-}
-
 static char binding_prefix[64] = "", binding_suffix[64] = "";
 static jniNativeInterface *real_table;
 
@@ -243,8 +206,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     if (dladdr((void *)JNI_OnLoad, &self)) dlopen(self.dli_fname, RTLD_NOW | RTLD_GLOBAL);
 
     if (system_property(env, "apklayer.runtimetrace")) {
-        struct sigaction sa = { .sa_sigaction = crash_trace, .sa_flags = SA_SIGINFO | SA_RESETHAND };
-        sigaction(SIGABRT, &sa, NULL);
+        apklayer_crash_trace();
     }
     char *libs = system_property(env, "apklayer.androidlibs"), *format = system_property(env, "method_binding_format");
     if (!libs) { fprintf(stderr, "[runtime] -Dapklayer.androidlibs is not set\n"); return -1; }
@@ -261,9 +223,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     dl_parse_library_path(libs, ":");
     void *rt = bionic_dlopen("libandroid_runtime.so", 2 /* RTLD_NOW */);
     if (!rt) { fprintf(stderr, "[runtime] cannot load libandroid_runtime.so: %s\n", bionic_dlerror()); return -1; }
-    void *liblog = bionic_dlopen("liblog.so", 2);
-    void (*set_logger)(void (*)(const struct android_log_message *)) = liblog ? bionic_dlsym(liblog, "__android_log_set_logger") : NULL;
-    if (set_logger) set_logger(stderr_logger);
+    apklayer_log_to_stderr();
     /* intercept RegisterNatives for the duration of startReg (JVMTI's supported JNI function table swap) */
     jvmtiEnv *ti;
     if ((*vm)->GetEnv(vm, (void **)&ti, JVMTI_VERSION_1_2) != JNI_OK) { fprintf(stderr, "[runtime] no JVMTI\n"); return -1; }
