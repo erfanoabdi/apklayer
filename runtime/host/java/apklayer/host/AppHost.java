@@ -579,7 +579,7 @@ public final class AppHost implements Runnable {
         for (java.util.Iterator<java.util.Map.Entry<HostApps.Routed, Object[]>> it = crossApp.entrySet().iterator(); it.hasNext(); ) {
             java.util.Map.Entry<HostApps.Routed, Object[]> e = it.next();
             Object[] answer = HostApps.readResult(e.getKey());
-            if (answer == null && e.getKey().process().isAlive()) continue;
+            if (answer == null && e.getKey().process() != null && e.getKey().process().isAlive()) continue;
             if (answer == null) answer = new Object[] {Activity.RESULT_CANCELED, null};
             it.remove();
             Activity requester = (Activity) e.getValue()[0];

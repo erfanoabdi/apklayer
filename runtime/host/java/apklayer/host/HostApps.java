@@ -37,6 +37,7 @@ final class HostApps {
         String apps = System.getProperty("apklayer.apps"), cli = System.getProperty("apklayer.cli");
         if (apps == null || cli == null || intent.getAction() == null) return null;
         String self = RuntimeEnvironment.getApplication().getPackageName();
+        List<String[]> matches = new ArrayList<>(); // {package, activity, label}
         try (var dirs = Files.list(Path.of(apps))) {
             for (Path dir : (Iterable<Path>) dirs.sorted()::iterator) {
                 String pkg = dir.getFileName().toString();
@@ -44,17 +45,39 @@ final class HostApps {
                 Path file = dir.resolve("info.properties");
                 if (pkg.equals(self) || !Files.exists(file)) continue;
                 try (InputStream in = Files.newInputStream(file)) { info.load(in); }
-                for (String key : info.stringPropertyNames()) {
+                for (String key : info.stringPropertyNames().stream().sorted().toList()) {
                     if (!key.startsWith("filter.")) continue;
                     ManifestFilters.Filter f = ManifestFilters.Filter.decode(info.getProperty(key));
                     if (matches(f, intent)) {
-                        return start(cli, pkg, f.activity(), intent, wantsResult);
+                        matches.add(new String[] {pkg, f.activity(), info.getProperty("label", pkg)});
+                        break; // one entry per app
                     }
                 }
             }
+            if (matches.isEmpty()) return null;
+            String[] chosen = matches.size() == 1 ? matches.get(0) : choose(matches);
+            return chosen == null ? new Routed(null, null) : start(cli, chosen[0], chosen[1], intent, wantsResult);
         } catch (IOException e) {
             System.out.println("[apklayer] cannot read the installed apps: " + e.getMessage());
         }
+        return null;
+    }
+
+    /** Several apps can handle the intent: the user picks one in a desktop list (APKLAYER_CHOOSER overrides it for tests). */
+    private static String[] choose(List<String[]> matches) throws IOException {
+        List<String> cmd = new ArrayList<>(List.of("zenity", "--list", "--title=Open with", "--column=Package", "--column=App", "--hide-column=1"));
+        for (String[] m : matches) { cmd.add(m[0]); cmd.add(m[2]); }
+        String override = System.getenv("APKLAYER_CHOOSER"); // tests: a command printing the chosen package
+        if (override != null) cmd = List.of("sh", "-c", override);
+        Process p = new ProcessBuilder(cmd).redirectError(ProcessBuilder.Redirect.INHERIT).start();
+        String answer = new String(p.getInputStream().readAllBytes()).trim();
+        try {
+            if (p.waitFor() != 0) return null;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        }
+        for (String[] m : matches) if (m[0].equals(answer)) return m;
         return null;
     }
 

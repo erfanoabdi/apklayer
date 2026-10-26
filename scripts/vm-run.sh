@@ -38,6 +38,7 @@ mkdir -p \$HOME/.config/apklayer
 echo 'APKLAYER_JAVA="\$HOME/jdk21-x86/bin/java -XX:TieredStopAtLevel=1 -XX:+UseSerialGC"' > \$HOME/.config/apklayer/env
 export APKLAYER_JOPTS="$APKLAYER_JOPTS" APKLAYER_DEBUG_INPUT="${APKLAYER_DEBUG_INPUT:-}"
 ${APKLAYER_PICKER:+export APKLAYER_PICKER='$APKLAYER_PICKER'}
+${APKLAYER_CHOOSER:+export APKLAYER_CHOOSER='$APKLAYER_CHOOSER'}
 pkill -x apklayer-shell || true
 # a file, not a pipe: the detached session shell would otherwise hold the pipe open after the app exits
 \$HOME/apklayer-m1/bin/apklayer run \$HOME/apklayer-apps/$NAME.apk > /tmp/apklayer-run.log 2>&1 < /dev/null
