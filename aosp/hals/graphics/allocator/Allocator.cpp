@@ -4,12 +4,14 @@
 
 #include <aidl/android/hardware/graphics/allocator/AllocationError.h>
 #include <aidl/android/hardware/graphics/allocator/BnAllocator.h>
+#include <aidl/android/hardware/graphics/common/BlendMode.h>
 #include <aidlcommonsupport/NativeHandle.h>
 #include <android-base/logging.h>
 #include <android/binder_manager.h>
 #include <android/binder_process.h>
 
 #include <fcntl.h>
+#include <sys/mman.h>
 #include <unistd.h>
 
 #include <atomic>
@@ -18,6 +20,7 @@
 #include "gralloc_handle.h"
 
 using namespace aidl::android::hardware::graphics::allocator;
+using aidl::android::hardware::graphics::common::BlendMode;
 using aidl::android::hardware::graphics::common::PixelFormat;
 using namespace apklayer::gralloc;
 
@@ -88,8 +91,9 @@ class Allocator : public BnAllocator {
 
     // The handle's fds are dups of the buffer's (the caller closes buf); stride is in pixels for the first plane.
     native_handle_t* toHandle(const BufferDescriptorInfo& d, const apklayer_gfx_buffer& buf, int32_t* stride) {
-        native_handle_t* h = native_handle_create(buf.num_planes, kNumInts);
+        native_handle_t* h = native_handle_create(buf.num_planes + 1, kNumInts);  // plane fds + the metadata page
         if (h == nullptr) return nullptr;
+        for (int i = 0; i < h->numFds; i++) h->data[i] = -1;
         HandleData data = {};
         data.magic = kMagic;
         data.version = kVersion;
@@ -112,6 +116,18 @@ class Allocator : public BnAllocator {
             data.stride[i] = buf.stride[i];
             data.offset[i] = buf.offset[i];
             if (h->data[i] < 0) { native_handle_close(h); native_handle_delete(h); return nullptr; }
+        }
+        h->data[buf.num_planes] = memfd_create("apklayer-gralloc-metadata", MFD_CLOEXEC);
+        if (h->data[buf.num_planes] < 0 || ftruncate(h->data[buf.num_planes], kMetadataSize) < 0) {
+            native_handle_close(h);
+            native_handle_delete(h);
+            return nullptr;
+        }
+        if (SharedMetadata* meta = mapMetadata(h)) {
+            *meta = {};
+            meta->blendMode = static_cast<int32_t>(BlendMode::PREMULTIPLIED);
+            memcpy(meta->name, d.name.data(), std::min(sizeof(meta->name) - 1, d.name.size()));
+            unmapMetadata(meta);
         }
         encode(h, data);
         *stride = d.format == PixelFormat::BLOB ? d.width : buf.stride[0] / bytesPerPixel(buf.fourcc);

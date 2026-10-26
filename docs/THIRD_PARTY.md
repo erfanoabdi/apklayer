@@ -26,3 +26,5 @@ apklayer itself is AGPL-3.0-or-later (PLAN D5), compatible with all of the above
 
 - `bridge/ndk/*.c`: apklayer's own small glibc shims for NDK libraries (liblog, libandroid, libEGL). Checked against ATL's `src/libandroid` (needs libutils / is stubs) and AOSP liblog (needs logd): not reusable, so kept small.
 - Mesa (llvmpipe, EGL, GLES) and LLVM 15 from the build VM's Ubuntu x86_64 userspace, bundled into `build/native/x86_64` by `scripts/build-native.sh` (MIT / Apache-2.0 with LLVM exception). Not committed.
+| `aosp/hals/graphics/mapper/Mapper.cpp` | structure and the metadata-provider pattern follow `external/minigbm/cros_gralloc/mapper_stablec/Mapper.cpp` (Apache-2.0, The Android Open Source Project / ChromiumOS); the buffer model and all implementations are our own |
+
