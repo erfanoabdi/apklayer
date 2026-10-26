@@ -357,7 +357,9 @@ location or SafetyNet-free APIs runs.
 > bionic libraries under btload, SF's RenderEngine (Skia/GL ES 3.0 on virgl) composes `sftest`'s layer into our gralloc framebuffer and
 > the shell receives its dmabuf frames (buffers rotate, one fd set per buffer). The last blocker was a generated do-nothing stub for
 > `glEGLImageTargetTexture2DOES` in btload; GL extension stubs now forward to the host driver. Still open: window surfaces for EGL
-> (step 3b), present fences, resize, Java side. Pixel check done: the composer reads a presented frame back through the driver
+> present fences, Java side. **Step 3b done (2026-10-26)**: EGL window surfaces over an ANativeWindow (host gbm_surface + one GPU blit into the
+> dequeued buffer, native fence), `gltest` renders GL ES into a BufferQueue layer through SurfaceFlinger (300 frames reach the shell) and
+> follows a layer resize (new surface pair behind the same EGLSurface). Pixel check done: the composer reads a presented frame back through the driver
 > (`APKLAYER_RUNTIME_DEBUG`) and (10,10) is the expected bar colour of `sftest` (480x320 layer at the top left, black elsewhere).
 >
 > **Measured on the VM's virtio-gpu (2026-10-26, `tests/hals/graphics-test.c`): GBM allocates ARGB/ABGR/XRGB8888, RGB565, RGBA_F16 and
