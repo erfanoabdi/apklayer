@@ -9,6 +9,8 @@ Goal and plan: `goal.md`, `docs/PLAN.md`. Status and local reference projects: `
 4. Reuse local sources first (memory.md "Reference projects"); smallest edit; no redoing finished work.
 5. Never `pkill -f` a pattern contained in your own command line.
 
+6. **Never ask the user to test by hand or leave an app open for them** (user, 2026-10-26: "i don't like to do manual testings for you"). Verify with automated checks on the VM (scripted input, snapshots, logs, `-Dapklayer.perf`); what only a person can judge goes into docs/PLAN.md as "needs a human check" and is not asked for.
+
 ## Before writing or downloading anything
 1. Read `memory.md` "Reference projects on this machine". Robolectric, Mac.apk, android_translation_layer
    (ATL) and the AOSP tree are all **local**; never clone or download what is there.

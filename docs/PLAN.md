@@ -247,6 +247,8 @@ Each item is an apklayer shadow plus a host backend, with its own scripted check
 
 - **T2 status (2026-10-26, VM smoke runs, `tests/vm/smoke.sh`):** AntennaPod renders its home screen; NewPipe browses YouTube and plays video + audio (laggy, see above); Nextcloud shows its first-run screen. ownCloud (`org.nitri.ownCloud`) is not on F-Droid under that name, so it is not pinned. Formal T2 percentage (corpus.lock + a scripted pass criterion on the VM) is still to do.
 
+- **Revisit list (user, 2026-10-26):** (1) NewPipe video/audio lag (an audio-clock fix made no difference to the user), (2) **desktop notifications are annoying**: every app notification, including ongoing/media/progress updates, becomes a `notify-send`. Needs de-duplication per (app, id), honoring channel importance and `ongoing`/silent flags, update-in-place via the notification id (D-Bus `replaces_id`), and a per-app mute. Not done yet.
+
 **Exit test P5:** corpus T2 ≥ 80%. A video plays with sound, a WebView-based app logs in to a
 test page, and "Open link" opens the host browser.
 
