@@ -69,6 +69,7 @@ Instead:
 | M9 | P5: platform services (WebView→WPE, media→GStreamer, portals, microG) | pending |
 | M10 | P6: multiple apps (apklayerd, cross-app intents/binder-lite, bwrap) | pending |
 | M11 | P7: device-library route: the tree's arm64 Android libraries on bionic_translation (no Rosetta), own SurfaceFlinger stack with GPU zero-copy rendering (PLAN P7.1) | **in progress**: native runtime loads, app starts on arm64 (P7.0); servicemanager runs on kernel binder (P7.1); SurfaceFlinger, gralloc and HWC next |
+| M11b | P7.5: Vulkan (our libvulkan layer over the host driver, dmabuf swapchain) | not started |
 | M12 | P8 (ship): Flatpak for x86_64 + arm64, desktop integration, performance budget | pending |
 | M13 | Vision phases (PLAN P8: SystemUI as a yardstick; P9: several phone instances at once) | not scheduled |
 | M14 | P10: relevant CTS tests run and tracked (the compatibility proof) | not scheduled |
