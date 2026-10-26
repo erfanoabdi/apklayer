@@ -102,7 +102,7 @@ std::vector<EGLint> filtered(const EGLint* attribs, std::initializer_list<EGLint
 
 const char* kAndroidExtensions =
         " EGL_ANDROID_image_native_buffer EGL_ANDROID_get_native_client_buffer EGL_ANDROID_blob_cache EGL_IMG_context_priority"
-        " EGL_ANDROID_recordable";
+        " EGL_ANDROID_recordable EGL_KHR_swap_buffers_with_damage";  // the last: implemented here (HWUI refuses to start without it)
 
 // An ANativeWindowBuffer of our gralloc as a dmabuf EGLImage on the host.
 EGLImage imageFromNativeBuffer(EGLDisplay dpy, ANativeWindowBuffer* buf) {

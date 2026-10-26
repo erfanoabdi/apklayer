@@ -16,4 +16,9 @@ import org.robolectric.shadow.api.Shadow;
 public class ShadowBlastBufferQueue {
 
   // apklayer patch: no fake BLASTBufferQueue; the real one (libgui) feeds the window's layer in SurfaceFlinger
+
+  // The apply token is a Java android.os.Binder; reading its native peer needs the real android.os.Binder JNI, which this runtime
+  // does not register (Binder stays Robolectric's in-process one). The token only orders transactions of one client: skipped.
+  @Implementation
+  protected static void nativeSetApplyToken(long ptr, android.os.IBinder applyToken) {}
 }

@@ -140,7 +140,10 @@ cmd_run() {
     [ -f "$dir/info.properties" ] || die "not installed: $pkg (apklayer install <app.apk>)"
     ensure_shell
     cd "$dir"
-    export LIBGL_DRIVERS_PATH="${APKLAYER_NATIVE:-$ROOT/native}/dri" __EGL_VENDOR_LIBRARY_FILENAMES="${APKLAYER_NATIVE:-$ROOT/native}/glvnd/50_mesa.json" LIBGL_ALWAYS_SOFTWARE=1  # bundled Mesa (GLES, P4.3)
+    # bundled software Mesa (GLES, P4.3) for the Rosetta/x86 flavors; the tree flavor (device libraries, P7) uses the host's own GPU driver
+    if [ ! -d "${APKLAYER_NATIVE:-$ROOT/native}/aosp" ]; then
+        export LIBGL_DRIVERS_PATH="${APKLAYER_NATIVE:-$ROOT/native}/dri" __EGL_VENDOR_LIBRARY_FILENAMES="${APKLAYER_NATIVE:-$ROOT/native}/glvnd/50_mesa.json" LIBGL_ALWAYS_SOFTWARE=1
+    fi
     export APKLAYER_GLDIR="${XDG_RUNTIME_DIR:-/tmp}/apklayer/gl-$pkg"; rm -rf "$APKLAYER_GLDIR"; mkdir -p "$APKLAYER_GLDIR"  # GL frames of native SurfaceViews (P4.3)
     export APKLAYER_APK="$dir/base.apk"  # NDK libandroid shim reads assets from it
     export LD_LIBRARY_PATH="${APKLAYER_NATIVE:-$ROOT/native}:${APKLAYER_NATIVE:-$ROOT/native}/glibc${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"  # bionic linker + its libs (P4)
