@@ -582,6 +582,12 @@ Also AHardwareBuffer import for Vulkan, and HWUI's Vulkan backend (`debug.hwui.r
 works. First step: probe the VM's driver for the needed extensions (virtio-gpu may lack them; Venus would provide them), then the
 layer, then a `vktest` tool beside `gltest`.
 
+**Probe (2026-10-26, Parallels VM):** no hardware Vulkan: the only device is llvmpipe (CPU; `VK_EXT_external_memory_dma_buf` and
+`external_memory_fd` yes, but no `image_drm_format_modifier` and no `external_semaphore_fd`), and the Venus ICD (`virtio_icd.json`) finds no GPU
+(Parallels' virtio-gpu offers no Venus). The layer can be written against llvmpipe for structure (dmabuf import, dequeue/queue) but
+synchronisation and the zero-copy claim need a machine with a real GPU driver (a Mesa or NVIDIA desktop); mark such steps "needs real
+GPU" and verify there.
+
 ### P7 fallback and x86 counterpart (user, 2026-10-26)
 **Fallback (done):** Robolectric 4.17's own native runtime for arm64 (third party, `scripts/fetch-robolectric-arm64.sh`, THIRD_PARTY.md) as a selectable flavor
 of `bin/apklayer` (`APKLAYER_NATIVE` directory holding `robolectric-nativeruntime-linux-aarch64.jar`, Maven Robolectric and its android-all as in the
