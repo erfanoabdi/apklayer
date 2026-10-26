@@ -271,6 +271,17 @@ location or SafetyNet-free APIs runs.
 
 ### P7 — Own native runtime: native arm64 + GPU HWUI (M11)
 
+> **P7.0 result (2026-10-26): ✅ the device `libandroid_runtime.so` LOADS on the arm64 VM** (no Rosetta, no recompilation): its
+> 237-library closure (91 MB, collected from `~/los24/out/target/product/generic_arm64`) is opened by bionic_translation.
+> What it took: bionic_translation built natively for arm64 (libunwind 1.8.1 from the local source, `libegl-dev`,
+> `libbsd-dev`); `SO_MAX` 128 → 512 in its linker (one line, PATCHES.md); `bridge/native/android_platform.c`
+> (30 Android libc/linker/property symbols: stubs and fortify wrappers); `scripts/android-stubs.py` (generates do-nothing
+> stubs for the ~140 GL/EGL symbols nothing provides, from the actual gap); `libgcc_s` in the process (unwinder); the cfg.d
+> mapping `libdl_android.so → libdl_bio.so.0`. Test harness: a 15-line C program (`btload`) that does what NativeLoader does.
+> **Next (P7.0b): `JNI_OnLoad` and the JNI registration**: the library registers natives under the framework's class names,
+> Robolectric's shadows call its own `org.robolectric.nativeruntime.*Natives` classes; intercept `RegisterNatives` and
+> bind the same functions to the Robolectric class, then run the sandbox with this native runtime on the arm64 JVM.
+>
 > **Revised 2026-10-26 (user decision): no Meson/retargeting build.** Use the arm64 **bionic** (Android) libraries
 > already built in `~/los24/out/target/product/generic_arm64/system/lib64` (`libandroid_runtime.so`, `libhwui.so`, …)
 > and load them into the arm64 JVM with bionic_translation, as P4 does for apps' native libraries. Steps and open
