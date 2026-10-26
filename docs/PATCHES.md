@@ -33,3 +33,4 @@ and log it here. The M1 seed's patch log is in `archive/seed-m1/docs/PATCHES.md`
 | The package `android` (with a placeholder signing certificate) and the app's own signing info are registered (`AppHost.installSystemPackage`); `ShadowHostPackageManager.hasSigningCertificate` | Real devices have both; androidx.media and NewPipe's media browser check callers against them |
 | Runtime permission requests are granted at once (`HostPortals.requestPermissions`) | No permission prompt exists on the desktop yet; the result goes to `onRequestPermissionsResult` as on Android |
 | `ShadowHostConnectivityManager`, `ShadowHostDownloadManager` (same registration) | Subclasses of Robolectric's shadows: network callbacks fire for the desktop's connection, and enqueued downloads run |
+| `HostKeyStoreProvider` (a JCA provider added at app start) | Robolectric has no "AndroidKeyStore"; a software store in the app's data directory stands in. Not hardware-backed |

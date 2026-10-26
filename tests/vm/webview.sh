@@ -3,7 +3,7 @@
 # evaluateJavascript("6 * 7") answers 42, and the engine's green page is composed into the window frame.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; VM="${APKLY_VM:-parallels@10.211.55.4}"; PASS="${APKLY_VM_PASS:-1234}"
-"$ROOT/tests/apps/build.sh" hello-webview >/dev/null
+"$ROOT/tests/apps/build.sh" hello-webview >/dev/null || { echo 'FAIL  the sample app does not build'; exit 1; }
 LOG=$(APKLAYER_JOPTS='-Dapklayer.runms=31000 -Dapklayer.snapms=14000,20000 -Dapklayer.script=16000:click:240,340+18000:key:29,97+19000:key:30,98' "$ROOT/scripts/vm-run.sh" "$ROOT/build/hello-webview.apk" 2>&1)
 for t in 14000 20000; do sshpass -p "$PASS" scp -q -o StrictHostKeyChecking=no "$VM:/tmp/apklayer-frame-${t}ms.png" /tmp/webview-frame-$t.png; done
 sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" 'pkill -x apklayer-shell; pkill -f "[a]pklayer-webview"; pkill -f "[a]pklayer.host.Main"; true'

@@ -218,6 +218,7 @@ public final class AppHost implements Runnable {
         app.getSystemService(android.content.ClipboardManager.class).addPrimaryClipChangedListener(this::onAppClipboardChanged);
         ScreenUpdateHandler.create(frames).requestStartUi();
 
+        if (java.security.Security.getProvider("AndroidKeyStore") == null) java.security.Security.addProvider(new HostKeyStoreProvider());
         installSystemPackage(app);
         installNetwork(app);
         installProviders(app);

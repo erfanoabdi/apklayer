@@ -239,7 +239,7 @@ Each item is an apklayer shadow plus a host backend, with its own scripted check
    PipeWire camera portal → Camera2 minimal; location → GeoClue portal → LocationManager.
 4. **Connectivity** — ✅ first slice (2026-10-26, checked in `tests/vm/media.sh`): the default network is an unmetered Wi-Fi one and registered `NetworkCallback`s get `onAvailable`/`onCapabilitiesChanged` (`ShadowHostConnectivityManager`; following NetworkManager's real state is pending); `DownloadManager` downloads over HTTP into the destination or `Download/` and broadcasts `ACTION_DOWNLOAD_COMPLETE` (`ShadowHostDownloadManager`; progress, pause/retry, notifications pending). Original item: ConnectivityManager/NetworkCallback reflect NetworkManager state;
    DownloadManager → a JVM HTTP client into the app's external dir.
-5. **Accounts/keystore:** AndroidKeyStore backed by a per-app software keystore file
+5. **Accounts/keystore** — ◐ AndroidKeyStore AES/HMAC keys ✅ (2026-10-26, `HostKeyStoreProvider`: a software JCEKS store in the app's data dir behind `KeyStore.getInstance("AndroidKeyStore")` and `KeyGenerator.getInstance("AES", "AndroidKeyStore")`; checked in `tests/vm/media.sh`). Pending: key pairs (RSA/EC with certificates), `AccountManager`. Original item: AndroidKeyStore backed by a per-app software keystore file
    (BouncyCastle). AccountManager is local.
 6. **microG** (D14): bundled, auto-installed. GCM/FCM out of scope until accounts work.
 

@@ -3,7 +3,7 @@
 # the GStreamer engine reaches "playing", and the app's completion callback runs.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; VM="${APKLY_VM:-parallels@10.211.55.4}"; PASS="${APKLY_VM_PASS:-1234}"
-"$ROOT/tests/apps/build.sh" hello-media >/dev/null
+"$ROOT/tests/apps/build.sh" hello-media >/dev/null || { echo 'FAIL  the sample app does not build'; exit 1; }
 # a local web server for the DownloadManager check (stopped below)
 sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" 'nohup python3 -m http.server 18080 --bind 127.0.0.1 --directory /etc >/dev/null 2>&1 &'
 LOG=$(APKLAYER_JOPTS='-Dapklayer.runms=14000' "$ROOT/scripts/vm-run.sh" "$ROOT/build/hello-media.apk" 2>&1)
@@ -18,4 +18,5 @@ check "AudioTrack PCM reaches the audio server" 'grep -q "audio track 22050 Hz, 
 check "SoundPool reports the load and plays a stream" 'grep -qE "soundpool loaded status=0 stream=[1-9]" <<<"$LOG"'
 check "the network callback fires for an unmetered Wi-Fi connection" 'grep -q "network available, metered=false wifi=true" <<<"$LOG"'
 check "DownloadManager fetches the file and broadcasts completion" 'grep -q "hello-media\] download complete id=0" <<<"$LOG" && grep -q "\[apklayer\] download 0 ->" <<<"$LOG"'
+check "AndroidKeyStore: AES key by alias, GCM round trip" 'grep -q "keystore roundtrip=hello alias=true" <<<"$LOG"'
 exit $fail

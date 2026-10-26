@@ -56,6 +56,27 @@ public class Main extends Activity {
             dm.enqueue(new android.app.DownloadManager.Request(android.net.Uri.parse("http://127.0.0.1:18080/hostname"))
                     .setDestinationUri(android.net.Uri.fromFile(new File(getCacheDir(), "hostname.txt"))));
 
+            // AndroidKeyStore: generate an AES key by alias, encrypt and decrypt with it
+            try {
+                javax.crypto.KeyGenerator kg = javax.crypto.KeyGenerator.getInstance("AES", "AndroidKeyStore");
+                kg.init(new android.security.keystore.KeyGenParameterSpec.Builder("hello-key",
+                        android.security.keystore.KeyProperties.PURPOSE_ENCRYPT | android.security.keystore.KeyProperties.PURPOSE_DECRYPT)
+                        .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
+                        .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE).build());
+                kg.generateKey();
+                java.security.KeyStore ks = java.security.KeyStore.getInstance("AndroidKeyStore");
+                ks.load(null);
+                javax.crypto.SecretKey key = (javax.crypto.SecretKey) ks.getKey("hello-key", null);
+                javax.crypto.Cipher c = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+                c.init(javax.crypto.Cipher.ENCRYPT_MODE, key);
+                byte[] enc = c.doFinal("hello".getBytes());
+                javax.crypto.Cipher dc = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+                dc.init(javax.crypto.Cipher.DECRYPT_MODE, key, new javax.crypto.spec.GCMParameterSpec(128, c.getIV()));
+                System.out.println("[hello-media] keystore roundtrip=" + new String(dc.doFinal(enc)) + " alias=" + ks.containsAlias("hello-key"));
+            } catch (Throwable e) {
+                System.out.println("[hello-media] keystore failed: " + e);
+            }
+
             MediaPlayer mp = new MediaPlayer();
             mp.setDataSource(wav.getPath());
             mp.setOnCompletionListener(m -> System.out.println("[hello-media] completed"));
