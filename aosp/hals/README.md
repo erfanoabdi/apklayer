@@ -6,7 +6,7 @@ side translates Android calls and types; everything that touches the desktop liv
 
 | Directory | AOSP interface | Host side (`bridge/hals/`) | Status |
 |---|---|---|---|
-| `graphics/allocator`, `graphics/mapper` | `android.hardware.graphics.allocator`, stable-C `IMapper` | `graphics/` over libgbm, dmabuf | planned (P7.1) |
+| `graphics/allocator`, `graphics/mapper` | `android.hardware.graphics.allocator`, stable-C `IMapper` | `graphics/` over libgbm, dmabuf | host side done and tested (`bridge/hals/graphics`); Android side next (P7.1) |
 | `graphics/composer` | `android.hardware.graphics.composer3` | `graphics/` over Wayland `zwp_linux_dmabuf_v1`, real vsync | planned (P7.1) |
 | `camera` | `android.hardware.camera.provider` | PipeWire / V4L2 | planned |
 | `gnss` | `android.hardware.gnss` | GeoClue / gpsd | planned |

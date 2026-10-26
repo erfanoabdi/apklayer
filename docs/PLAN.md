@@ -353,6 +353,12 @@ location or SafetyNet-free APIs runs.
 > DEVICE/CLIENT from what the compositor offers. **Acceptance test for P7.1:** a GL SurfaceView plus a video layer, copies and CPU
 > use measured (target: zero CPU copies of pixels).
 >
+> **Measured on the VM's virtio-gpu (2026-10-26, `tests/hals/graphics-test.c`): GBM allocates ARGB/ABGR/XRGB8888, RGB565, RGBA_F16 and
+> RGBA_1010102, but NOT NV12, I420, YV12 or P010**, so YUV needs the fallback decided earlier: one GBM buffer per plane (R8 for
+> luma, GR88 for chroma; the HAL struct already carries a dmabuf per plane), imported to EGL as a multi-plane dmabuf image, with
+> `eglQueryDmaBufFormatsEXT` deciding at startup whether the driver accepts it; otherwise the GPU-shader conversion to RGBA. Also
+> measured: `mmap` of a virtio-gpu dmabuf is refused (EACCES), so CPU access always goes through the driver (`gbm_bo_import` +
+> `gbm_bo_map`), which is coherent on every driver.
 > 4. **Window surfaces**: libhwui's EGL window surface on the SF's buffers (Mesa Android platform / our libEGL shim).
 > 5. **Presentation**: the client target's dmabuf to the shell over SCM_RIGHTS, `zwp_linux_dmabuf_v1`, zero copy.
 > 6. Same service later answers input (InputFlinger), camera, and the userspace binder (design above) replaces the kernel one.
