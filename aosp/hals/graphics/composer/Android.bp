@@ -20,5 +20,5 @@ cc_library_shared {
     ],
     static_libs: ["libaidlcommonsupport"],
     allow_undefined_symbols: true,
-    cflags: ["-Wall", "-Werror", "-Wno-unused-parameter", "-Wno-deprecated-declarations"],
+    cflags: ["-Wall", "-Werror", "-Wno-main", "-Wno-unused-parameter", "-Wno-deprecated-declarations"],
 }
