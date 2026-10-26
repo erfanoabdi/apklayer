@@ -177,17 +177,14 @@ EGLSurface eglCreatePlatformWindowSurface(EGLDisplay d, EGLConfig c, void* w, co
     return eglCreateWindowSurface(d, c, reinterpret_cast<EGLNativeWindowType>(w), nullptr);
 }
 
-void* eglGetProcAddress(const char* name);
-
 // Android's EGL extensions the framework asks for that need no real work here.
-EGLBoolean eglSetBlobCacheFuncsANDROID(EGLDisplay, void*, void*) { return EGL_TRUE; }
+void eglSetBlobCacheFuncsANDROID(EGLDisplay, EGLSetBlobFuncANDROID, EGLGetBlobFuncANDROID) {}
 EGLBoolean eglGetFrameTimestampSupportedANDROID(EGLDisplay, EGLSurface, EGLint) { return EGL_FALSE; }
 EGLBoolean eglGetCompositorTimingSupportedANDROID(EGLDisplay, EGLSurface, EGLint) { return EGL_FALSE; }
 EGLBoolean eglGetCompositorTimingANDROID(EGLDisplay, EGLSurface, EGLint, const EGLint*, EGLnsecsANDROID*) { return fail(EGL_BAD_ACCESS); }
 EGLBoolean eglGetNextFrameIdANDROID(EGLDisplay, EGLSurface, EGLuint64KHR*) { return fail(EGL_BAD_ACCESS); }
 EGLBoolean eglGetFrameTimestampsANDROID(EGLDisplay, EGLSurface, EGLuint64KHR, EGLint, const EGLint*, EGLnsecsANDROID*) { return fail(EGL_BAD_ACCESS); }
 EGLBoolean eglPresentationTimeANDROID(EGLDisplay, EGLSurface, EGLnsecsANDROID) { return EGL_TRUE; }
-void eglBeginFrame(EGLDisplay, EGLSurface) {}
 
 // ---- forwarded to the host, untouched ----
 // A tail call through a pointer resolved at load: no signature needed.
@@ -205,14 +202,14 @@ void eglBeginFrame(EGLDisplay, EGLSurface) {}
 #define DECLARE_SLOT(name) __attribute__((used)) void* host_slot_##name;
 FORWARDED(DECLARE_SLOT)
 
+// file-scope assembly: no C declaration to clash with the EGL headers' signatures
 #define DEFINE_STUB(name) \
-    __attribute__((naked, visibility("default"))) void name() { \
-        asm volatile("adrp x16, host_slot_" #name "\n\tldr x16, [x16, :lo12:host_slot_" #name "]\n\tbr x16"); \
-    }
+    __asm__(".text\n.globl " #name "\n.type " #name ",%function\n" #name ":\n\tadrp x16, host_slot_" #name \
+            "\n\tldr x16, [x16, :lo12:host_slot_" #name "]\n\tbr x16\n");
 FORWARDED(DEFINE_STUB)
 
 // extensions an app or library may ask eglGetProcAddress for: ours where we implement them, the host's otherwise
-void* eglGetProcAddress(const char* name) {
+__eglMustCastToProperFunctionPointerType eglGetProcAddress(const char* name) {
     struct { const char* n; void* f; } ours[] = {
         {"eglCreateImageKHR", (void*)eglCreateImageKHR}, {"eglCreateImage", (void*)eglCreateImage},
         {"eglGetNativeClientBufferANDROID", (void*)eglGetNativeClientBufferANDROID},
@@ -226,8 +223,8 @@ void* eglGetProcAddress(const char* name) {
         {"eglPresentationTimeANDROID", (void*)eglPresentationTimeANDROID},
         {"eglCreatePlatformWindowSurface", (void*)eglCreatePlatformWindowSurface},
     };
-    for (auto& o : ours) if (!strcmp(name, o.n)) return o.f;
-    return reinterpret_cast<void*>(host<void* (*)(const char*)>("eglGetProcAddress")(name));
+    for (auto& o : ours) if (!strcmp(name, o.n)) return reinterpret_cast<__eglMustCastToProperFunctionPointerType>(o.f);
+    return host<__eglMustCastToProperFunctionPointerType (*)(const char*)>("eglGetProcAddress")(name);
 }
 
 __attribute__((constructor)) static void resolveForwarded() {
@@ -236,3 +233,7 @@ __attribute__((constructor)) static void resolveForwarded() {
 }
 
 }  // extern "C"
+
+// Android's libEGL exports this one with C++ linkage (_Z13eglBeginFramePvS_); callers in the framework expect that symbol.
+void eglBeginFrame(void*, void*) {}
+

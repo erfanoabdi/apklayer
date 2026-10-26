@@ -12,6 +12,7 @@ cc_library_shared {
         "libgralloctypes",
         "liblog",
     ],
+    compile_multilib: "64",
     allow_undefined_symbols: true,
     cpp_std: "c++20",
     cflags: ["-Wall", "-Werror"],

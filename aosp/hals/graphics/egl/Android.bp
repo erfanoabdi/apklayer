@@ -11,6 +11,7 @@ cc_library_shared {
         "libnativebase_headers",
     ],
     shared_libs: ["libcutils", "liblog", "libnativewindow"],
+    compile_multilib: "64",
     allow_undefined_symbols: true,
     cflags: ["-Wall", "-Werror", "-Wno-unused-parameter"],
 }

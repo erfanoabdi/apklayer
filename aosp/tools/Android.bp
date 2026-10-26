@@ -2,6 +2,7 @@ cc_library_shared {
     name: "libapklayer_servicetool",
     srcs: ["servicetool.cpp"],
     shared_libs: ["libbinder", "libutils", "liblog"],
+    compile_multilib: "64",
     cflags: ["-Wall", "-Werror", "-Wno-main"],
 }
 

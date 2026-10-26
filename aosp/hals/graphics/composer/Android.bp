@@ -19,6 +19,7 @@ cc_library_shared {
         "liblog",
     ],
     static_libs: ["libaidlcommonsupport"],
+    compile_multilib: "64",
     allow_undefined_symbols: true,
     cflags: ["-Wall", "-Werror", "-Wno-main", "-Wno-unused-parameter", "-Wno-deprecated-declarations"],
 }
