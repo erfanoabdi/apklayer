@@ -360,6 +360,17 @@ location or SafetyNet-free APIs runs.
 > `eglQueryDmaBufFormatsEXT` deciding at startup whether the driver accepts it; otherwise the GPU-shader conversion to RGBA. Also
 > measured: `mmap` of a virtio-gpu dmabuf is refused (EACCES), so CPU access always goes through the driver (`gbm_bo_import` +
 > `gbm_bo_map`), which is coherent on every driver.
+> **Measured (2026-10-26, `tests/hals/egl-probe.c`, VM virtio-gpu = virgl on the host GPU): the host EGL on `EGL_PLATFORM_GBM_KHR` over our
+> graphics HAL's device gives everything the Android side needs**: EGL 1.5, a GLES3 surfaceless context, `EGL_EXT_image_dma_buf_import(_modifiers)`
+> (RGBA8888 and the packed NV12/YV12 import and bind as textures), `EGL_KHR_fence_sync/wait_sync`, `EGL_ANDROID_native_fence_sync`
+> (real sync_file fds), `EGL_KHR_surfaceless_context`, `EGL_KHR_no_config_context`, `EGL_EXT_buffer_age`. Missing (to be added by
+> our EGL layer): `EGL_ANDROID_image_native_buffer` (ANativeWindowBuffer to dmabuf import), `EGL_IMG_context_priority`,
+> `EGL_KHR_partial_update`. SurfaceFlinger's RenderEngine uses about 25 EGL calls (`eglGetDisplay/Initialize/ChooseConfig/
+> CreateContext/MakeCurrent/CreatePbufferSurface/Create+DestroySyncKHR/WaitSyncKHR/DupNativeFenceFDANDROID/QueryString...`) and
+> Skia's `GrAHardwareBufferUtils` for images (`eglGetNativeClientBufferANDROID`, `eglCreateImageKHR(EGL_NATIVE_BUFFER_ANDROID)`).
+> **EGL layer (Android side, `aosp/hals/graphics/egl`): our own `libEGL`, mapped over Android's loader by cfg.d**, forwarding to
+> the host EGL (GBM platform, the HAL's gbm device), adding the Android extensions above, and later window surfaces over
+> ANativeWindow (host GBM surface or FBO, buffers attached to the BufferQueue).
 > 4. **Window surfaces**: libhwui's EGL window surface on the SF's buffers (Mesa Android platform / our libEGL shim).
 > 5. **Presentation**: the client target's dmabuf to the shell over SCM_RIGHTS, `zwp_linux_dmabuf_v1`, zero copy.
 > 6. Same service later answers input (InputFlinger), camera, and the userspace binder (design above) replaces the kernel one.

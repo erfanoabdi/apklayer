@@ -44,6 +44,9 @@ struct apklayer_gfx;
 struct apklayer_gfx *apklayer_gfx_open(const char *render_node);
 void apklayer_gfx_close(struct apklayer_gfx *gfx);
 
+/* The driver's GBM device: the native display for EGL_PLATFORM_GBM_KHR, so rendering and allocation use the same GPU. */
+struct gbm_device *apklayer_gfx_gbm_device(struct apklayer_gfx *gfx);
+
 /* Can buffers of this format be allocated for these usages on this device? */
 bool apklayer_gfx_supports(struct apklayer_gfx *gfx, uint32_t fourcc, uint32_t usage);
 

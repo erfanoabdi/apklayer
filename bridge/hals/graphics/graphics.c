@@ -53,6 +53,8 @@ void apklayer_gfx_close(struct apklayer_gfx *gfx)
     free(gfx);
 }
 
+struct gbm_device *apklayer_gfx_gbm_device(struct apklayer_gfx *gfx) { return gfx->gbm; }
+
 static uint32_t gbm_flags(uint32_t usage)
 {
     uint32_t f = 0;
