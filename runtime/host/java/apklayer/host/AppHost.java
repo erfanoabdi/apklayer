@@ -176,12 +176,16 @@ public final class AppHost implements Runnable {
                     input.onHostEvent(new int[] {0, Integer.parseInt(p[0]), Integer.parseInt(p[1])});
                     input.onHostEvent(new int[] {1, Integer.parseInt(p[0]), Integer.parseInt(p[1])});
                 },
-                "notify", t -> { // notify:<title>: as if the app posted a notification
+                "notify", t -> { // notify:<title>[,<id>[,<importance>[,ongoing]]]: as if the app posted a notification
+                    String[] p = t.split(",");
+                    int id = p.length > 1 ? Integer.parseInt(p[1]) : 1, importance = p.length > 2 ? Integer.parseInt(p[2]) : android.app.NotificationManager.IMPORTANCE_DEFAULT;
                     android.app.Application ctx = RuntimeEnvironment.getApplication();
                     android.app.NotificationManager nm = ctx.getSystemService(android.app.NotificationManager.class);
-                    nm.createNotificationChannel(new android.app.NotificationChannel("test", "test", android.app.NotificationManager.IMPORTANCE_DEFAULT));
-                    nm.notify(1, new android.app.Notification.Builder(ctx, "test").setSmallIcon(android.R.drawable.ic_dialog_info)
-                            .setContentTitle(t).setContentText("from apklayer").build());
+                    nm.createNotificationChannel(new android.app.NotificationChannel("ch" + importance, "test " + importance, importance));
+                    android.app.Notification.Builder nb = new android.app.Notification.Builder(ctx, "ch" + importance)
+                            .setSmallIcon(android.R.drawable.ic_dialog_info).setContentTitle(p[0]).setContentText("from apklayer");
+                    if (p.length > 3) nb.setOngoing(true);
+                    nm.notify(id, nb.build());
                 },
                 "orient", o -> { // orient:<ActivityInfo.SCREEN_ORIENTATION_* value>
                     Activity top = stack.peek().get();
