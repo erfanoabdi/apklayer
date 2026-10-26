@@ -1,0 +1,13 @@
+// apklayer's own code for the AOSP tree (synced to vendor/apklayer by scripts/sync-aosp.sh; built with `m <module>` as
+// recorded in docs/AOSP-BUILDS.md). Executables are built as shared libraries exporting main(): bionic_translation loads
+// libraries, scripts/btload.c --main runs them.
+package {
+    default_visibility: ["//visibility:public"],
+}
+
+cc_library_shared {
+    name: "libapklayer_servicetool",
+    srcs: ["tools/servicetool.cpp"],
+    shared_libs: ["libbinder", "libutils", "liblog"],
+    cflags: ["-Wall", "-Werror"],
+}
