@@ -495,3 +495,10 @@ double-click `Markor.apk` → it opens and is usable on both.
    Five more apps fail with concrete, listed causes (tests/corpus/results.md) that are P3 fix-loop
    items: manifest ContentProviders before Application.onCreate (Firebase), a `getprop` stand-in,
    `Display.getHdrCapabilities`, the MediaPlayer data source, the NewPipe startup NPE.
+
+### P8 — Vision: SystemUI and the system services on this stack (user, 2026-10-26: "hopefully one day we can run the whole systemUI apk")
+Not scheduled. What it needs beyond P7: the framework's Java system services (`system_server`: activity, window, package, notification,
+display, input managers) on HotSpot over the real binder (`services.jar` from the same tree), the full HAL set under `aosp/hals`
+(camera, gnss, vibrator, sensors, power, input, audio), a real property service and init, and the userspace-binder driver so none of
+it needs kernel modules. Every P7 interface is chosen so this stays possible: real SurfaceFlinger, real binder, per-domain HALs.
+

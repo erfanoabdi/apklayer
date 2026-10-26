@@ -1,7 +1,14 @@
 #!/bin/sh
-# sync-aosp: copy apklayer's AOSP-side sources (aosp/) into the tree at ~/los24/vendor/apklayer (OrbStack), where
-# `m <module>` builds them. Only that directory is written; never touches out/.
+# sync-aosp: mirror apklayer's AOSP-side sources (aosp/) into the tree at ~/los24/vendor/apklayer (OrbStack), where
+# `m <module>` builds them, and commit the change there (vendor/apklayer has its own git history).
+# Usage: scripts/sync-aosp.sh "commit message".  Only that directory is written; never touches out/.
 set -e
 cd "$(dirname "$0")/.."
-orb -m ubuntu22-x86 mkdir -p /home/erfanabdi/los24/vendor/apklayer
-tar cf - -C aosp . | orb -m ubuntu22-x86 tar xf - -C '/home/erfanabdi/los24/vendor/apklayer'
+msg="${1:-sync from apklayer $(git rev-parse --short HEAD)}"
+dest=/home/erfanabdi/los24/vendor/apklayer
+orb -m ubuntu22-x86 mkdir -p "$dest"
+orb -m ubuntu22-x86 find "$dest" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+tar cf - -C aosp . | orb -m ubuntu22-x86 tar xf - -C "$dest"
+orb -m ubuntu22-x86 sh -c "cd $dest && { [ -d .git ] || git init -q; } && git add -A && { git diff --cached --quiet || git commit -q -m '$msg
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>'; } && git log --oneline | head -1"

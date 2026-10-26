@@ -93,3 +93,30 @@ links, so SharedPreferences, databases, files and caches persist across launches
 ## Known limits
 See docs/PLAN.md: the plan of record, with the target architecture (apklayer-shell + one JVM
 per app + apklayerd) and phases P1–P7.
+
+## Android side and host side (device-library route, PLAN P7)
+
+The route that runs Android's own userspace (framework natives, libgui, libhwui, SurfaceFlinger, servicemanager) on a Linux
+desktop splits every hardware-facing service in two:
+
+```
+ app / SystemUI / framework (Java, HotSpot)
+        |  binder (kernel binderfs now, userspace binder later)
+ Android side, built in LineageOS by Soong, runs on bionic_translation:
+   aosp/hals/<domain>/    AIDL HAL frontends (composer3, allocator, mapper, camera, gnss, vibrator, sensors, ...)
+   aosp/tools/            development tools
+        |  plain C API  (bridge/hals/<domain>/include/apklayer/<domain>.h)
+ Host side, built by Meson, glibc:
+   bridge/hals/<domain>/  GBM, EGL, Wayland dmabuf, PipeWire, V4L2, GeoClue, iio, evdev force feedback ...
+   bridge/ndk/            replacement libraries mapped over device libraries (libnativedisplay, libselinux, ...)
+   bridge/shell/          the Wayland client (windows, input, vsync)
+```
+
+The same C API shape as libhybris's compat layers, in the opposite direction: there the host calls an Android HAL, here an
+Android HAL calls the host. Rules: the Android side stays thin (translate, never decide); no GPU/vendor specifics in the Android
+side; buffers cross as dmabuf fds and fences as sync_file fds; one directory per domain on both sides, named as AOSP names it.
+`aosp/` is mirrored into `~/los24/vendor/apklayer` (its own git history, one commit per sync) by `scripts/sync-aosp.sh`.
+
+Long-term goal (user, 2026-10-26): with real binder, real SurfaceFlinger and these HALs the stack should one day run the whole
+SystemUI APK (and the system services it needs) as ordinary apps; every design choice here keeps that open.
+

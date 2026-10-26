@@ -1,0 +1,6 @@
+cc_library_shared {
+    name: "libapklayer_servicetool",
+    srcs: ["servicetool.cpp"],
+    shared_libs: ["libbinder", "libutils", "liblog"],
+    cflags: ["-Wall", "-Werror"],
+}
