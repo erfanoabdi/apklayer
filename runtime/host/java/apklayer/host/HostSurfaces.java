@@ -43,6 +43,7 @@ final class HostSurfaces {
         final HostSurface surface;
         HostHolder(HostSurface surface) { this.surface = surface; }
         @Override public Surface getSurface() { return surface; }
+        @Override public android.graphics.Rect getSurfaceFrame() { return new android.graphics.Rect(0, 0, Math.max(1, surface.width()), Math.max(1, surface.height())); }
     }
 
     private static final Map<SurfaceView, HostSurface> surfaces = new WeakHashMap<>();
