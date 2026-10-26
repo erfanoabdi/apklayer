@@ -14,6 +14,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "register_table.h"
+
 extern void dl_parse_library_path(const char *path, char *delim);
 extern void *bionic_dlopen(const char *filename, int flag);
 extern void *bionic_dlsym(void *handle, const char *symbol);
@@ -46,6 +48,33 @@ static jint JNICALL renaming_register_natives(JNIEnv *env, jclass cls, const JNI
     return 0; /* startReg aborts the process on failure; skipped methods are expected */
 }
 
+/* libcore.util.NativeAllocationRegistry.applyFreeFunction: part of ART's libcore on a device, a host-runtime function in
+ * Google's HostRuntime.cpp; neither exists here, so it is provided (it just calls the free function). */
+static void JNICALL apply_free_function(JNIEnv *env, jclass cls, jlong free_function, jlong ptr)
+{
+    (void)env; (void)cls;
+    ((void (*)(void *))(uintptr_t)free_function)((void *)(uintptr_t)ptr);
+}
+
+/* HotSpot's FindClass runs the class's static initializer; ART's does not. Android registers a class's natives right after
+ * finding it, so a <clinit> that calls a not-yet-registered native (com.google.android.gles_jni.EGLImpl) would fail.
+ * This FindClass loads without initializing (Class.forName(name, false, loader)); initialization then happens on first use. */
+static jobject class_loader;
+static jclass class_class;
+static jmethodID for_name;
+
+static jclass JNICALL lazy_find_class(JNIEnv *env, const char *name)
+{
+    char dotted[512];
+    size_t i = 0;
+    for (; name[i] && i < sizeof dotted - 1; i++) dotted[i] = name[i] == '/' ? '.' : name[i];
+    dotted[i] = 0;
+    jstring s = (*env)->NewStringUTF(env, dotted);
+    jobject c = (*env)->CallStaticObjectMethod(env, class_class, for_name, s, JNI_FALSE, class_loader);
+    (*env)->DeleteLocalRef(env, s);
+    return (jclass)c; /* NULL with the pending exception, like FindClass */
+}
+
 static char *system_property(JNIEnv *env, const char *key)
 {
     jclass sys = (*env)->FindClass(env, "java/lang/System");
@@ -57,6 +86,39 @@ static char *system_property(JNIEnv *env, const char *key)
     char *copy = strdup(c);
     (*env)->ReleaseStringUTFChars(env, v, c);
     return copy;
+}
+
+/* Registers what Google's HostRuntime would: the classes named by core_native_classes (one function each), the
+ * libcore NativeAllocationRegistry native, then HWUI's graphics classes. The device libraries have the functions as
+ * global C++ symbols. Returns the number of registrations that could not be run. */
+static int register_classes(JNIEnv *env, JavaVM *vm, void *rt)
+{
+    int failed = 0;
+    void **java_vm_slot = bionic_dlsym(rt, "_ZN7android14AndroidRuntime8mJavaVME"); /* AndroidRuntime::mJavaVM */
+    if (java_vm_slot) *java_vm_slot = vm;
+    void *hwui = bionic_dlopen("libhwui.so", 2);
+
+    char *classes = system_property(env, "core_native_classes");
+    for (char *save, *c = classes ? strtok_r(classes, ",", &save) : NULL; c; c = strtok_r(NULL, ",", &save)) {
+        const char *symbol = NULL;
+        for (size_t i = 0; i < sizeof register_table / sizeof *register_table; i++)
+            if (!strcmp(register_table[i].java_class, c)) symbol = register_table[i].symbol;
+        int (*fn)(JNIEnv *) = symbol ? bionic_dlsym(rt, symbol) : NULL;
+        if (!fn && symbol && hwui) fn = bionic_dlsym(hwui, symbol);
+        if (!fn) { fprintf(stderr, "[runtime] no registration function for %s\n", c); failed++; continue; }
+        if (fn(env) < 0) { fprintf(stderr, "[runtime] registering %s failed\n", c); failed++; }
+    }
+
+    JNINativeMethod registry = { "applyFreeFunction", "(JJ)V", (void *)apply_free_function };
+    jclass nar = (*env)->FindClass(env, "libcore/util/NativeAllocationRegistry");
+    if (nar) (*env)->GetMethodID(env, nar, "<init>", "()V"), (*env)->ExceptionClear(env), (*env)->RegisterNatives(env, nar, &registry, 1);
+    else { (*env)->ExceptionClear(env); failed++; }
+
+    void (*init_graphics)(void) = hwui ? bionic_dlsym(hwui, "_Z20init_android_graphicsv") : NULL;
+    int (*register_graphics)(JNIEnv *) = hwui ? bionic_dlsym(hwui, "_Z33register_android_graphics_classesP7_JNIEnv") : NULL;
+    if (init_graphics) init_graphics();
+    if (!register_graphics || register_graphics(env) < 0) { fprintf(stderr, "[runtime] graphics registration failed\n"); failed++; }
+    return failed;
 }
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
@@ -73,13 +135,17 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     if (!libs) { fprintf(stderr, "[runtime] -Dapklayer.androidlibs is not set\n"); return -1; }
     parse_binding_format(format ? format : "$$robo$$${method}$nativeBinding");
 
+    char *probe = system_property(env, "apklayer.runtimeprobe"); /* debug: -Dapklayer.runtimeprobe=a/b/C loads that class and prints the exception */
+    if (probe) {
+        jclass c = (*env)->FindClass(env, probe);
+        fprintf(stderr, "[runtime] probe %s: %s\n", probe, c ? "found" : "NOT FOUND");
+        if (!c) { (*env)->ExceptionDescribe(env); (*env)->ExceptionClear(env); }
+    }
+
     _r_debug_ptr = &_r_debug;
     dl_parse_library_path(libs, ":");
     void *rt = bionic_dlopen("libandroid_runtime.so", 2 /* RTLD_NOW */);
     if (!rt) { fprintf(stderr, "[runtime] cannot load libandroid_runtime.so: %s\n", bionic_dlerror()); return -1; }
-    int (*start_reg)(JNIEnv *) = bionic_dlsym(rt, "_ZN7android14AndroidRuntime8startRegEP7_JNIEnv");
-    if (!start_reg) { fprintf(stderr, "[runtime] AndroidRuntime::startReg not found\n"); return -1; }
-
     /* intercept RegisterNatives for the duration of startReg (JVMTI's supported JNI function table swap) */
     jvmtiEnv *ti;
     if ((*vm)->GetEnv(vm, (void **)&ti, JVMTI_VERSION_1_2) != JNI_OK) { fprintf(stderr, "[runtime] no JVMTI\n"); return -1; }
@@ -88,10 +154,19 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     patched = *orig;
     real_table = orig;
     patched.RegisterNatives = renaming_register_natives;
+    {   /* the loader the sandbox's classes come from: the thread's context class loader */
+        jclass thread = (*env)->FindClass(env, "java/lang/Thread");
+        jobject cur = (*env)->CallStaticObjectMethod(env, thread, (*env)->GetStaticMethodID(env, thread, "currentThread", "()Ljava/lang/Thread;"));
+        jobject loader = (*env)->CallObjectMethod(env, cur, (*env)->GetMethodID(env, thread, "getContextClassLoader", "()Ljava/lang/ClassLoader;"));
+        class_loader = (*env)->NewGlobalRef(env, loader);
+        class_class = (*env)->NewGlobalRef(env, (*env)->FindClass(env, "java/lang/Class"));
+        for_name = (*env)->GetStaticMethodID(env, class_class, "forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;");
+        if (class_loader && for_name) patched.FindClass = lazy_find_class;
+    }
     (*ti)->SetJNIFunctionTable(ti, &patched);
-    int rc = start_reg(env);
+    int failed = register_classes(env, vm, rt);
     (*ti)->SetJNIFunctionTable(ti, orig);
-    if (rc < 0) { fprintf(stderr, "[runtime] AndroidRuntime::startReg failed (%d)\n", rc); return -1; }
-    fprintf(stderr, "[runtime] Android's framework natives registered (startReg=%d)\n", rc);
+    if (failed) fprintf(stderr, "[runtime] %d registrations did not run (see above)\n", failed);
+    fprintf(stderr, "[runtime] Android's framework natives registered\n");
     return JNI_VERSION_1_6;
 }

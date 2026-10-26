@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <netdb.h>
 #include <sys/socket.h>
 #include <sys/syscall.h>
 #include <time.h>
@@ -71,3 +72,8 @@ int malloc_iterate(uintptr_t base, size_t size, void (*cb)(uintptr_t, size_t, vo
 size_t malloc_backtrace(void *pointer, uintptr_t *frames, size_t max) { (void)pointer; (void)frames; (void)max; return 0; }
 void *memset_explicit(void *p, int c, size_t n) { volatile unsigned char *v = p; while (n--) *v++ = (unsigned char)c; return p; }
 pid_t pthread_gettid_np(pthread_t t) { (void)t; return (pid_t)syscall(SYS_gettid); } /* only the calling thread is known */
+
+/* network-scoped DNS (netd): the desktop has one network, so the network id and mark are ignored */
+int android_getaddrinfofornet(const char *hostname, const char *servname, const struct addrinfo *hints, unsigned netid, unsigned mark,
+                              struct addrinfo **res)
+{ (void)netid; (void)mark; return getaddrinfo(hostname, servname, hints, res); }
