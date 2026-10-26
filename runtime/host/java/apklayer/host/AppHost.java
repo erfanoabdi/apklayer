@@ -224,7 +224,8 @@ public final class AppHost implements Runnable {
         installSystemPackage(app);
         installNetwork(app);
         installProviders(app);
-        launch(launcherIntent(app));
+        Intent incoming = HostApps.incoming(); // another app started this one with an intent (PLAN P6)
+        launch(incoming != null ? incoming : launcherIntent(app));
         // Like Simulator.postMotionEvent: an off-screen move so the first frame is drawn.
         input.inject(MotionEvent.obtain(0, SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE, width, height, 0));
         loop(shell, frames);
@@ -372,6 +373,8 @@ public final class AppHost implements Runnable {
             info.setProperty("versionName", String.valueOf(pkg.versionName));
             info.setProperty("versionCode", String.valueOf(pkg.getLongVersionCode()));
             info.setProperty("targetSdk", String.valueOf(app.getApplicationInfo().targetSdkVersion));
+            List<ManifestFilters.Filter> filters = ManifestFilters.read(app);
+            for (int i = 0; i < filters.size(); i++) info.setProperty("filter." + i, filters.get(i).encode()); // for cross-app intents (PLAN P6)
             Files.createDirectories(dir);
             try (Writer out = Files.newBufferedWriter(dir.resolve("info.properties"))) {
                 info.store(out, "apklayer install metadata");
@@ -519,6 +522,7 @@ public final class AppHost implements Runnable {
                         .receiveResult(intent, picked != null ? Activity.RESULT_OK : Activity.RESULT_CANCELED, picked);
                 return;
             }
+            if (HostApps.route(intent)) return; // another installed app handles it
             // Android would crash the app here; on the desktop the app stays on its current screen.
             System.out.println("[apklayer] cannot start " + intent + ": " + e);
             return;
