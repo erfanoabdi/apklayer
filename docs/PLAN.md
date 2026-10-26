@@ -290,6 +290,16 @@ location or SafetyNet-free APIs runs.
 >   service manager and the few system services apps call (activity, package, window, display, input, notification, …) would
 >   be apklayer's own, answering over it. Fallback with no kernel module: libbinder's RPC binder over a Unix socket
 >   (`libbinder_rpc_unstable.so` is in `out/`). Ships as a requirement for Flatpak users (kernel module) or the RPC path.
+> - **Binder decision (user, 2026-10-26): kernel binder (`binder_linux`) for now; later apklayer writes a userspace binder so that
+>   *everyone* can run Android apps without kernel drivers** (the goal is all users, not only the dev VM).
+>   Research (2026-10-26, no mature userspace *driver* exists): Android's own **RPC binder** (`RpcServer`/`RpcSession` over Unix
+>   sockets/vsock; official, but `ProcessState` still opens /dev/binder, so libbinder would need a backend patch); `rsbinder`
+>   (Rust library, needs kernel binderfs); Waydroid (bridges the host kernel binder); **Fuchsia Starnix's
+>   `src/starnix/modules/binderfs/binder.rs`** (a Rust implementation of the driver's command protocol: the best design reference).
+>   Our design: all Android code runs on bionic_translation's libc, so `open("/dev/binder")`, `ioctl(BINDER_WRITE_READ…)` and
+>   `mmap` are answered by apklayer's own driver inside that layer (talking to `apklayerd` across processes), with unmodified
+>   libbinder/AIDL on top; semantics (nodes, refs, transactions, thread pools, buffers, death notifications, fd passing via
+>   SCM_RIGHTS) follow the kernel driver and Starnix.
 > - **Input**: libinput-style `InputChannel` (socketpair, no binder needed) fed from the shell's events instead of Robolectric's
 >   UiAutomation injection.
 > - **GPU**: HWUI's GL pipeline over libgui `BufferQueue` (in-process) with buffers as dmabufs to the shell; Mesa on `/dev/dri`,
