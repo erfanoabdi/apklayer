@@ -256,6 +256,10 @@ class Client : public BnComposerClient {
         b.fourcc = d.fourcc;
         b.modifier = d.modifier;
         b.num_planes = d.numPlanes;
+        b.packed = d.packed;
+        b.alloc_fourcc = d.allocFourcc;
+        b.alloc_width = d.allocWidth;
+        b.alloc_height = d.allocHeight;
         for (int i = 0; i < kMaxPlanes; i++) b.fd[i] = i < static_cast<int>(d.numPlanes) ? h->data[i] : -1;
         for (uint32_t i = 0; i < d.numPlanes; i++) { b.stride[i] = d.stride[i]; b.offset[i] = d.offset[i]; }
         if (getenv("APKLAYER_RUNTIME_DEBUG")) logPixels(b);
