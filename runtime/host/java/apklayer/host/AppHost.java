@@ -164,6 +164,11 @@ public final class AppHost implements Runnable {
                         new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(u)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)),
                 "pick", a -> stack.peek().get().startActivityForResult( // pick:<ACTION_*>: as if the app opened a document picker
                         new Intent(a).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"), 7),
+                "click", c -> { // click:<x>,<y>: a pointer press + release through the shell's event path
+                    String[] p = c.split(",");
+                    input.onHostEvent(new int[] {0, Integer.parseInt(p[0]), Integer.parseInt(p[1])});
+                    input.onHostEvent(new int[] {1, Integer.parseInt(p[0]), Integer.parseInt(p[1])});
+                },
                 "notify", t -> { // notify:<title>: as if the app posted a notification
                     android.app.Application ctx = RuntimeEnvironment.getApplication();
                     android.app.NotificationManager nm = ctx.getSystemService(android.app.NotificationManager.class);

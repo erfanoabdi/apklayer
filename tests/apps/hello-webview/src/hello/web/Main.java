@@ -18,6 +18,6 @@ public class Main extends Activity {
             }
         });
         setContentView(v);
-        v.loadDataWithBaseURL("https://example.org/", "<html><body style='background:#2a6;font:40px sans-serif'><h1>Hello WebKit</h1></body></html>", "text/html", "utf-8", null);
+        v.loadDataWithBaseURL("https://example.org/", "<html><body style='background:#2a6;font:40px sans-serif' onclick=\"document.body.style.background='#c22'\"><h1>Hello WebKit</h1></body></html>", "text/html", "utf-8", null);
     }
 }

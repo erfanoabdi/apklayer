@@ -40,6 +40,7 @@ final class HostWebViews {
         String url, data;
         Object eval;
         int w, h, seen, evals;
+        volatile int rx = -1, ry = -1; // the engine's rectangle in the window (kept by follow(), read by pointer())
 
         Engine(WebView view, Path frame, Path dataDir) throws IOException {
             this.view = view;
@@ -60,7 +61,7 @@ final class HostWebViews {
             reader.start();
         }
 
-        void send(String line) {
+        synchronized void send(String line) {
             if (Boolean.getBoolean("apklayer.debugwebview")) System.out.println("[apklayer] webview> " + line.substring(0, Math.min(60, line.length())));
             try {
                 in.write((line + "\n").getBytes(StandardCharsets.UTF_8));
@@ -166,6 +167,14 @@ final class HostWebViews {
                 default -> { }
             }
         }
+        if (wv.getParent() instanceof View parent && parent.isShown()) {
+            int[] loc = new int[2];
+            parent.getLocationOnScreen(loc);
+            e.rx = loc[0];
+            e.ry = loc[1];
+        } else {
+            e.rx = -1;
+        }
         int seq = seq(e.frame);
         if (seq != e.seen) {
             e.seen = seq;
@@ -184,6 +193,32 @@ final class HostWebViews {
         } catch (IOException e) {
             return 0;
         }
+    }
+
+    private static volatile Engine pressedIn;
+
+    /**
+     * Pointer events over a WebView go to its engine instead of the (frameless) view: a click on release,
+     * the wheel as page scroll. ev is a HostInput event; returns true if it was consumed.
+     */
+    static boolean pointer(int[] ev) {
+        if (ev[0] > 2 && ev[0] != 13) return false;
+        Engine hit = null;
+        for (Engine e : engines.values())
+            if (e != null && e.rx >= 0 && ev[1] >= e.rx && ev[2] >= e.ry && ev[1] < e.rx + e.w && ev[2] < e.ry + e.h) hit = e;
+        if (ev[0] == 13) {
+            if (hit == null) return false;
+            hit.send("scroll " + (-ev[4] / 10) + " " + (-ev[3] / 10)); // notch*1000 -> 100 px per notch; wheel up scrolls up
+            return true;
+        }
+        if (ev[0] == 0) pressedIn = hit;
+        Engine down = pressedIn;
+        if (down == null) return false;
+        if (ev[0] == 1) {
+            pressedIn = null;
+            if (hit == down) down.send("click " + (ev[1] - down.rx) + " " + (ev[2] - down.ry));
+        }
+        return true;
     }
 
     /** Blits each WebView's latest engine frame into the composed window frame. */
