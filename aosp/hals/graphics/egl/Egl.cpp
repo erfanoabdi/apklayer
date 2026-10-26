@@ -239,8 +239,20 @@ __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char* name) {
     return host<__eglMustCastToProperFunctionPointerType (*)(const char*)>("eglGetProcAddress")(name);
 }
 
+// A forwarded function the host does not have: fails instead of crashing on a null call.
+static long unsupportedForwarded() {
+    tError = EGL_BAD_ACCESS;
+    return 0;
+}
+
 __attribute__((constructor)) static void resolveForwarded() {
-#define RESOLVE(name) host_slot_##name = dlsym(hostLib(), #name);
+    // glvnd's libEGL exports only the core entry points by name; extension functions (eglDestroyImageKHR, the *SyncKHR and
+    // *ANDROID ones...) come from its eglGetProcAddress
+    auto proc = host<__eglMustCastToProperFunctionPointerType (*)(const char*)>("eglGetProcAddress");
+#define RESOLVE(name)                                                                        \
+    host_slot_##name = dlsym(hostLib(), #name);                                              \
+    if (!host_slot_##name && proc) host_slot_##name = reinterpret_cast<void*>(proc(#name));  \
+    if (!host_slot_##name) { ALOGW("host EGL has no " #name); host_slot_##name = reinterpret_cast<void*>(&unsupportedForwarded); }
     FORWARDED(RESOLVE)
 }
 

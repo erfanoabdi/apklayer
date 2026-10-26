@@ -21,7 +21,14 @@ if [ "${APKLAYER_START_SHELL:-1}" = 1 ]; then
     pkill -x apklayer-shell 2>/dev/null; rm -f "$XDG_RUNTIME_DIR/apklayer/shell.sock"
     start shell "$HOME/apklayer-m1/b/bridge/shell/apklayer-shell"
 fi
-svc() { start "$1" "$N/bin/btload" "$L" "$2" --main "${@:3}"; }
+svc() { # svc <name> <lib> [args]; APKLAYER_GDB=<name> runs that one under gdb (backtrace of a crash goes to its log)
+    if [ "${APKLAYER_GDB:-}" = "$1" ]; then
+        start "$1" gdb -batch -ex "handle SIGUSR1 nostop noprint pass" -ex "handle SIGUSR2 nostop noprint pass" -ex run -ex "bt 8" -ex "info registers pc lr sp" \
+            --args "$N/bin/btload" "$L" "$2" --main "${@:3}"
+    else
+        start "$1" "$N/bin/btload" "$L" "$2" --main "${@:3}"
+    fi
+}
 svc servicemanager libapklayer_servicemanager.so /dev/binder
 svc allocator libapklayer_allocator.so
 svc composer libapklayer_composer.so

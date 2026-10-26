@@ -52,7 +52,17 @@ void *android_create_namespace(const char *a, const char *b, const char *c, uint
 void *android_get_exported_namespace(const char *name) { (void)name; return NULL; }
 bool android_link_namespaces(void *a, void *b, const char *c) { (void)a; (void)b; (void)c; return true; }
 bool android_dlwarning(void *obj, void (*cb)(void *, const char *)) { (void)obj; (void)cb; return false; }
+/* fdsan: bionic's file-descriptor ownership checks. The functions are weak imports that libcutils (native_handle_close) calls
+ * unconditionally, so unresolved they were a null call. There is no tracking here: owner tags are computed as bionic does and
+ * ignored, closing is a plain close. */
 uint64_t android_fdsan_get_owner_tag(int fd) { (void)fd; return 0; }
+uint64_t android_fdsan_create_owner_tag(int type, uint64_t tag) { return type == 0 ? 0 : ((uint64_t)type << 56) | (tag & 0x00ffffffffffffffULL); }
+void android_fdsan_exchange_owner_tag(int fd, uint64_t expected, uint64_t desired) { (void)fd; (void)expected; (void)desired; }
+int android_fdsan_close_with_tag(int fd, uint64_t tag) { (void)tag; return close(fd); }
+const char *android_fdsan_get_tag_type(uint64_t tag) { (void)tag; return "unknown"; }
+uint64_t android_fdsan_get_tag_value(uint64_t tag) { return tag & 0x00ffffffffffffffULL; }
+int android_fdsan_get_error_level(void) { return 0; }
+int android_fdsan_set_error_level(int level) { (void)level; return 0; }
 int android_get_application_target_sdk_version(void) { return 36; }
 int android_get_device_api_level(void) { return 36; }
 bool android_mallopt(int opcode, void *arg, size_t size) { (void)opcode; (void)arg; (void)size; return true; }
@@ -119,6 +129,24 @@ void apklayer_log_to_stderr(void)
 /* Debug aid (-Dapklayer.runtimetrace=true, or APKLAYER_CRASH_TRACE=1 in btload): on SIGABRT/SIGSEGV print the frame-pointer chain of the faulting thread and the
  * memory map lines of the Android libraries, so addresses can be resolved with readelf/nm (gdb cannot unwind libraries
  * that the bionic linker loaded). Android's arm64 code keeps frame pointers. */
+/* name the library of an address (any library, host ones too): "[runtime-trace] where <addr> <path>+<file offset>" */
+static void where(uint64_t addr)
+{
+    FILE *mf = fopen("/proc/self/maps", "r");
+    char line[512];
+    while (mf && fgets(line, sizeof line, mf)) {
+        unsigned long long lo, hi, off;
+        if (sscanf(line, "%llx-%llx %*s %llx", &lo, &hi, &off) != 3 || addr < lo || addr >= hi) continue;
+        char *path = strchr(line, '/');
+        if (path) {
+            path[strcspn(path, "\n")] = 0;
+            fprintf(stderr, "[runtime-trace] where 0x%llx %s+0x%llx\n", (unsigned long long)addr, path, (unsigned long long)(addr - lo + off));
+        }
+        break;
+    }
+    if (mf) fclose(mf);
+}
+
 static void crash_trace_handler(int sig, siginfo_t *info, void *ctx)
 {
     (void)info;
@@ -126,8 +154,12 @@ static void crash_trace_handler(int sig, siginfo_t *info, void *ctx)
     ucontext_t *uc = ctx;
     uint64_t pc = uc->uc_mcontext.pc, *fp = (uint64_t *)uc->uc_mcontext.regs[29];
     fprintf(stderr, "[runtime-trace] signal %d pc=0x%llx\n", sig, (unsigned long long)pc);
+    where(pc);
+    fprintf(stderr, "[runtime-trace] lr=0x%llx\n", (unsigned long long)uc->uc_mcontext.regs[30]);
+    where(uc->uc_mcontext.regs[30]);
     for (int i = 0; i < 32 && fp && ((uintptr_t)fp & 7) == 0; i++) {
         fprintf(stderr, "[runtime-trace] #%d lr=0x%llx\n", i, (unsigned long long)fp[1]);
+        if (i < 6) where(fp[1]);
         uint64_t *next = (uint64_t *)fp[0];
         if (next <= fp) break;
         fp = next;
