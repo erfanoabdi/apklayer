@@ -23,5 +23,6 @@ Goal and plan: `goal.md`, `docs/PLAN.md`. Status and local reference projects: `
 - **NEVER use `sleep` or poll loops (`until ...; do sleep`) in commands, and no `timeout` wrappers.** The user has complained repeatedly. Run the command and read its output, or use run_in_background and wait for the notification. Keep scripts short.
 - **3-second rule (user, 2026-10-26):** a command that has not produced output after ~3 seconds is killed (TaskStop/pkill), then read what it left and decide. No waiting on blocked commands, no `tail -f | grep` waits.
 - Monitors and background jobs: stop each one (TaskStop) as soon as its answer is in, and close test apps on the VM when done. Never leave `tail -f` monitors running.
+- **No background launches.** `run_in_background` is not a way around the no-waiting rule. A test app is started, checked and closed (on the VM too: stopping a Mac job does not stop the remote app) inside one foreground command that ends with `pkill -x apklayer-shell; pkill -f '[a]pklayer.host.Main'`. Before ending a turn, confirm nothing of mine still runs (Mac `ps`, VM `ps`).
 - No long scripts. Do not chase single failing corpus apps.
 - VM: `ssh parallels@10.211.55.4` (pw 1234). After a VM restart re-register Rosetta binfmt (see memory.md).

@@ -97,14 +97,15 @@ final class HostSurfaces {
             try {
                 ByteBuffer b = ByteBuffer.wrap(Files.readAllBytes(f)).order(ByteOrder.LITTLE_ENDIAN);
                 int fw = b.getInt(0), fh = b.getInt(4);
+                java.nio.IntBuffer px = b.position(12).asIntBuffer();
                 int[] loc = new int[2];
                 sv.getLocationOnScreen(loc);
                 for (int y = 0; y < sv.getHeight() && loc[1] + y < h; y++) {
                     for (int x = 0; x < sv.getWidth() && loc[0] + x < w; x++) {
                         if (loc[0] + x < 0 || loc[1] + y < 0) continue;
                         int sx = x * fw / sv.getWidth(), sy = y * fh / sv.getHeight();
-                        int p = 12 + (sy * fw + sx) * 4;
-                        argb[(loc[1] + y) * w + loc[0] + x] = 0xFF000000 | (b.get(p) & 0xFF) << 16 | (b.get(p + 1) & 0xFF) << 8 | (b.get(p + 2) & 0xFF);
+                        int v = px.get(sy * fw + sx); // little-endian RGBA bytes
+                        argb[(loc[1] + y) * w + loc[0] + x] = 0xFF000000 | (v & 0xFF) << 16 | (v & 0xFF00) | (v >> 16 & 0xFF);
                     }
                 }
             } catch (IOException | RuntimeException ex) {
