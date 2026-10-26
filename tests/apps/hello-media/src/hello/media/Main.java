@@ -37,6 +37,25 @@ public class Main extends Activity {
                     + " stream=" + pool.play(id, 1, 1, 1, 0, 1)));
             sp.load(wav.getPath(), 1);
 
+            // connectivity: the callback must fire for the desktop's network
+            android.net.ConnectivityManager cm = getSystemService(android.net.ConnectivityManager.class);
+            cm.registerDefaultNetworkCallback(new android.net.ConnectivityManager.NetworkCallback() {
+                @Override public void onAvailable(android.net.Network n) {
+                    System.out.println("[hello-media] network available, metered=" + cm.isActiveNetworkMetered()
+                            + " wifi=" + (cm.getActiveNetworkInfo().getType() == android.net.ConnectivityManager.TYPE_WIFI));
+                }
+            });
+
+            // DownloadManager: fetch a local file through a file: URL; the completion broadcast must arrive
+            android.app.DownloadManager dm = getSystemService(android.app.DownloadManager.class);
+            registerReceiver(new android.content.BroadcastReceiver() {
+                @Override public void onReceive(android.content.Context c, android.content.Intent i) {
+                    System.out.println("[hello-media] download complete id=" + i.getLongExtra(android.app.DownloadManager.EXTRA_DOWNLOAD_ID, -1));
+                }
+            }, new android.content.IntentFilter(android.app.DownloadManager.ACTION_DOWNLOAD_COMPLETE), RECEIVER_EXPORTED);
+            dm.enqueue(new android.app.DownloadManager.Request(android.net.Uri.parse("http://127.0.0.1:18080/hostname"))
+                    .setDestinationUri(android.net.Uri.fromFile(new File(getCacheDir(), "hostname.txt"))));
+
             MediaPlayer mp = new MediaPlayer();
             mp.setDataSource(wav.getPath());
             mp.setOnCompletionListener(m -> System.out.println("[hello-media] completed"));

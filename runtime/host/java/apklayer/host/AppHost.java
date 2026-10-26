@@ -219,6 +219,7 @@ public final class AppHost implements Runnable {
         ScreenUpdateHandler.create(frames).requestStartUi();
 
         installSystemPackage(app);
+        installNetwork(app);
         installProviders(app);
         launch(launcherIntent(app));
         // Like Simulator.postMotionEvent: an off-screen move so the first frame is drawn.
@@ -291,6 +292,13 @@ public final class AppHost implements Runnable {
         List<ResolveInfo> found = app.getPackageManager().queryIntentActivities(query, 0);
         if (found.isEmpty()) throw new IllegalStateException("no launcher activity in " + app.getPackageName());
         return found.get(0);
+    }
+
+    /** The desktop's connection: an unmetered Wi-Fi network (Robolectric defaults to a mobile one). */
+    private static void installNetwork(Application app) {
+        org.robolectric.shadows.ShadowConnectivityManager cm = Shadow.extract(app.getSystemService(android.net.ConnectivityManager.class));
+        cm.setActiveNetworkInfo(org.robolectric.shadows.ShadowNetworkInfo.newInstance(android.net.NetworkInfo.DetailedState.CONNECTED,
+                android.net.ConnectivityManager.TYPE_WIFI, 0, true, android.net.NetworkInfo.State.CONNECTED));
     }
 
     /** Every Android device has the package "android" (the framework); androidx.media and others look it up. */
