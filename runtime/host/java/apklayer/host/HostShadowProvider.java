@@ -26,6 +26,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.app.DownloadManager", ShadowHostDownloadManager.class.getName()),
                 Map.entry("android.media.MediaCodec", ShadowHostMediaCodec.class.getName()),
                 Map.entry("android.view.SurfaceView", ShadowHostSurfaceView.class.getName()),
-                Map.entry("android.app.ContextImpl", ShadowHostContextImpl.class.getName()));
+                Map.entry("android.app.ContextImpl", ShadowHostContextImpl.class.getName()),
+                Map.entry("android.media.AudioTrack", ShadowHostAudioTrack.class.getName()));
     }
 }
