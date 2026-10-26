@@ -18,8 +18,8 @@
 
 #include <cstring>
 #include <initializer_list>
-#include <map>
 #include <mutex>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -153,14 +153,35 @@ EGLImage imageFromNativeBuffer(EGLDisplay dpy, ANativeWindowBuffer* buf) {
 // The host's GBM platform has no pbuffers and cannot render into somebody else's buffer, so an Android window is a host window
 // surface on a gbm_surface of the same size, and eglSwapBuffers copies the finished frame on the GPU (glBlitFramebuffer between two
 // dmabuf EGLImages, a native fence handed to the BufferQueue: no CPU touch) into a buffer dequeued from the ANativeWindow.
-// Not handled yet: the window changing size (the gbm_surface cannot be resized under a live EGLSurface).
+// A resize (the window's default size changing) makes a new surface pair behind the same app-side EGLSurface.
+// The app's EGLSurface is the address of its Window: the host surface behind it is replaced when the Android window changes size.
 struct Window {
+    EGLDisplay dpy;
+    EGLConfig cfg;
     ANativeWindow* native;
     void* gbmSurface;
+    EGLSurface host;
     uint32_t width, height;
+    EGLint visual;
 };
-std::mutex windowsLock;
-std::map<EGLSurface, Window> windows;  // host surface -> its Android window
+std::recursive_mutex windowsLock;
+std::set<Window*> windows;
+
+Window* windowOf(EGLSurface s) {  // windowsLock held
+    auto* w = static_cast<Window*>(s);
+    return windows.count(w) ? w : nullptr;
+}
+// the host's surface for one of ours (anything else, EGL_NO_SURFACE or a pbuffer, is the host's already)
+EGLSurface hostSurface(EGLSurface s) {
+    std::lock_guard<std::recursive_mutex> lock(windowsLock);
+    Window* w = windowOf(s);
+    return w ? w->host : s;
+}
+EGLSurface appSurface(EGLSurface host) {  // reverse, for eglGetCurrentSurface
+    std::lock_guard<std::recursive_mutex> lock(windowsLock);
+    for (Window* w : windows) if (w->host == host) return w;
+    return host;
+}
 
 constexpr int kApiEgl = 1;  // NATIVE_WINDOW_API_EGL
 constexpr uint64_t kUsageRender = 0x200, kUsageTexture = 0x100;  // GRALLOC_USAGE_HW_RENDER | HW_TEXTURE
@@ -243,7 +264,7 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
         gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CAA, srcFbo);
         gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA6, dstFbo);
         gl<void (*)(int, int, int, int, int, int, int, int, unsigned, unsigned)>("glBlitFramebuffer")(
-                0, 0, w.width, w.height, 0, 0, w.width, w.height, 0x4000 /* GL_COLOR_BUFFER_BIT */, 0x2600 /* GL_NEAREST */);
+                0, 0, w.width, w.height, 0, 0, dst->width, dst->height, 0x4000 /* GL_COLOR_BUFFER_BIT */, 0x2600 /* GL_NEAREST */);
         gl<void (*)()>("glFlush")();
         auto createSync = host<PFNEGLCREATESYNCKHRPROC>("eglCreateSyncKHR");
         auto dupFence = host<PFNEGLDUPNATIVEFENCEFDANDROIDPROC>("eglDupNativeFenceFDANDROID");
@@ -268,11 +289,65 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
     nw->queueBuffer(nw, dst, outFence);
 }
 
-EGLBoolean swapWindow(EGLDisplay dpy, EGLSurface surface, const char* hostName) {
-    EGLBoolean ok = host<EGLBoolean (*)(EGLDisplay, EGLSurface)>(hostName)(dpy, surface);
-    std::lock_guard<std::mutex> lock(windowsLock);
-    auto it = windows.find(surface);
-    if (ok && it != windows.end()) presentToWindow(dpy, it->second);
+// The Android window's current size: the user's if set, else the consumer's default (what a resize changes).
+bool windowSize(ANativeWindow* nw, uint32_t* w, uint32_t* h) {
+    int iw = 0, ih = 0;
+    nw->query(nw, 6 /* NATIVE_WINDOW_DEFAULT_WIDTH */, &iw);
+    nw->query(nw, 7 /* NATIVE_WINDOW_DEFAULT_HEIGHT */, &ih);
+    if (iw <= 0 || ih <= 0) { nw->query(nw, 0 /* WIDTH */, &iw); nw->query(nw, 1 /* HEIGHT */, &ih); }
+    if (iw <= 0 || ih <= 0) return false;
+    *w = iw;
+    *h = ih;
+    return true;
+}
+
+// A gbm_surface and a host window surface of the Android window's size, stored in the Window (the old pair is the caller's).
+bool attachHostSurface(Window* win) {
+    uint32_t w, h;
+    if (!windowSize(win->native, &w, &h)) return false;
+    void* gs = gbmFn<void* (*)(void*, uint32_t, uint32_t, uint32_t, uint32_t)>("gbm_surface_create")(
+            apklayer_gfx_gbm_device(gfx()), w, h, (uint32_t)win->visual, 1u << 2 /* GBM_BO_USE_RENDERING */);
+    if (!gs) { ALOGE("gbm_surface_create %ux%u format 0x%x failed", w, h, win->visual); return false; }
+    EGLSurface surface = host<PFNEGLCREATEPLATFORMWINDOWSURFACEPROC>("eglCreatePlatformWindowSurface")(win->dpy, win->cfg, gs, nullptr);
+    if (surface == EGL_NO_SURFACE) {
+        ALOGE("host window surface failed: 0x%x", host<EGLint (*)()>("eglGetError")());
+        gbmFn<void (*)(void*)>("gbm_surface_destroy")(gs);
+        return false;
+    }
+    win->gbmSurface = gs;
+    win->host = surface;
+    win->width = w;
+    win->height = h;
+    return true;
+}
+
+// The window changed size: a new surface pair, the context moved over if this surface was current, the old pair destroyed.
+void resizeWindow(Window* win) {
+    EGLSurface oldHost = win->host;
+    void* oldGbm = win->gbmSurface;
+    uint32_t oldW = win->width, oldH = win->height;
+    EGLDisplay cur = host<EGLDisplay (*)()>("eglGetCurrentDisplay")();
+    EGLContext ctx = host<EGLContext (*)()>("eglGetCurrentContext")();
+    bool wasDraw = host<EGLSurface (*)(EGLint)>("eglGetCurrentSurface")(EGL_DRAW) == oldHost;
+    bool wasRead = host<EGLSurface (*)(EGLint)>("eglGetCurrentSurface")(EGL_READ) == oldHost;
+    if (!attachHostSurface(win)) { win->host = oldHost; win->gbmSurface = oldGbm; win->width = oldW; win->height = oldH; return; }
+    if (wasDraw || wasRead)
+        host<PFNEGLMAKECURRENTPROC>("eglMakeCurrent")(cur, wasDraw ? win->host : host<EGLSurface (*)(EGLint)>("eglGetCurrentSurface")(EGL_DRAW),
+                                                      wasRead ? win->host : host<EGLSurface (*)(EGLint)>("eglGetCurrentSurface")(EGL_READ), ctx);
+    host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglDestroySurface")(win->dpy, oldHost);
+    gbmFn<void (*)(void*)>("gbm_surface_destroy")(oldGbm);
+    ALOGI("window %p resized %ux%u -> %ux%u", win, oldW, oldH, win->width, win->height);
+}
+
+EGLBoolean swapWindow(EGLDisplay dpy, EGLSurface surface) {
+    std::lock_guard<std::recursive_mutex> lock(windowsLock);
+    Window* win = windowOf(surface);
+    if (!win) return host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglSwapBuffers")(dpy, surface);
+    EGLBoolean ok = host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglSwapBuffers")(dpy, win->host);
+    if (!ok) return ok;
+    presentToWindow(dpy, *win);
+    uint32_t w, h;
+    if (windowSize(win->native, &w, &h) && (w != win->width || h != win->height)) resizeWindow(win);
     return ok;
 }
 
@@ -327,18 +402,6 @@ EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig cfg, EGLContext share, con
     return host<PFNEGLCREATECONTEXTPROC>("eglCreateContext")(dpy, cfg, share, a.data());
 }
 
-// apklayer patch (diagnostic): log the GL the context really gives (Skia's renderability caps depend on it)
-EGLBoolean eglMakeCurrent(EGLDisplay dpy, EGLSurface draw, EGLSurface read, EGLContext ctx) {
-    EGLBoolean ok = host<PFNEGLMAKECURRENTPROC>("eglMakeCurrent")(dpy, draw, read, ctx);
-    static bool logged;
-    if (ok && ctx != EGL_NO_CONTEXT && !logged) {
-        logged = true;
-        auto gs = host<const unsigned char* (*)(unsigned)>("glGetString");
-        if (gs) ALOGI("GL version '%s' renderer '%s' extensions '%s'", gs(0x1F02), gs(0x1F01), gs(0x1F03));
-    }
-    return ok;
-}
-
 EGLBoolean eglChooseConfig(EGLDisplay dpy, const EGLint* attribs, EGLConfig* cfgs, EGLint size, EGLint* num) {
     auto a = filtered(attribs, {EGL_RECORDABLE_ANDROID, EGL_PROTECTED_CONTENT_EXT});
     return host<PFNEGLCHOOSECONFIGPROC>("eglChooseConfig")(dpy, a.data(), cfgs, size, num);
@@ -347,45 +410,67 @@ EGLBoolean eglChooseConfig(EGLDisplay dpy, const EGLint* attribs, EGLConfig* cfg
 EGLSurface eglCreateWindowSurface(EGLDisplay dpy, EGLConfig cfg, EGLNativeWindowType native, const EGLint*) {
     auto* nw = reinterpret_cast<ANativeWindow*>(native);
     if (nw == nullptr || nw->common.magic != ANDROID_NATIVE_WINDOW_MAGIC) { tError = EGL_BAD_NATIVE_WINDOW; return EGL_NO_SURFACE; }
-    int w = 0, h = 0;
-    nw->query(nw, 0 /* NATIVE_WINDOW_WIDTH */, &w);
-    nw->query(nw, 1 /* NATIVE_WINDOW_HEIGHT */, &h);
-    if (w <= 0 || h <= 0) { nw->query(nw, 6 /* DEFAULT_WIDTH */, &w); nw->query(nw, 7 /* DEFAULT_HEIGHT */, &h); }
-    if (w <= 0 || h <= 0) { tError = EGL_BAD_NATIVE_WINDOW; return EGL_NO_SURFACE; }
-    EGLint visual = 0;
-    host<EGLBoolean (*)(EGLDisplay, EGLConfig, EGLint, EGLint*)>("eglGetConfigAttrib")(dpy, cfg, EGL_NATIVE_VISUAL_ID, &visual);
-    void* gs = gbmFn<void* (*)(void*, uint32_t, uint32_t, uint32_t, uint32_t)>("gbm_surface_create")(
-            apklayer_gfx_gbm_device(gfx()), w, h, (uint32_t)visual, 1u << 2 /* GBM_BO_USE_RENDERING */);
-    if (!gs) { ALOGE("gbm_surface_create %dx%d format 0x%x failed", w, h, visual); tError = EGL_BAD_ALLOC; return EGL_NO_SURFACE; }
-    EGLSurface surface = host<PFNEGLCREATEPLATFORMWINDOWSURFACEPROC>("eglCreatePlatformWindowSurface")(dpy, cfg, gs, nullptr);
-    if (surface == EGL_NO_SURFACE) { ALOGE("host window surface failed: 0x%x", host<EGLint (*)()>("eglGetError")()); return EGL_NO_SURFACE; }
+    auto* win = new Window{dpy, cfg, nw, nullptr, EGL_NO_SURFACE, 0, 0, 0};
+    host<EGLBoolean (*)(EGLDisplay, EGLConfig, EGLint, EGLint*)>("eglGetConfigAttrib")(dpy, cfg, EGL_NATIVE_VISUAL_ID, &win->visual);
+    if (!attachHostSurface(win)) { delete win; tError = EGL_BAD_ALLOC; return EGL_NO_SURFACE; }
     // the Android side: connect as an EGL producer and ask for buffers the GPU renders to and SurfaceFlinger samples
     native_window_api_connect(nw, kApiEgl);
     native_window_set_usage(nw, kUsageRender | kUsageTexture);
     native_window_set_buffers_format(nw, 1 /* HAL_PIXEL_FORMAT_RGBA_8888 */);
-    native_window_set_buffers_dimensions(nw, w, h);
-    std::lock_guard<std::mutex> lock(windowsLock);
-    windows[surface] = {nw, gs, (uint32_t)w, (uint32_t)h};
-    ALOGI("window surface %p: %dx%d, gbm format 0x%x", surface, w, h, visual);
-    return surface;
+    std::lock_guard<std::recursive_mutex> lock(windowsLock);
+    windows.insert(win);
+    ALOGI("window surface %p: %ux%u, gbm format 0x%x", win, win->width, win->height, win->visual);
+    return win;
 }
 
-EGLBoolean eglSwapBuffers(EGLDisplay dpy, EGLSurface surface) { return swapWindow(dpy, surface, "eglSwapBuffers"); }
+EGLBoolean eglSwapBuffers(EGLDisplay dpy, EGLSurface surface) { return swapWindow(dpy, surface); }
 
-EGLBoolean eglSwapBuffersWithDamageKHR(EGLDisplay dpy, EGLSurface surface, const EGLint*, EGLint) {
-    return swapWindow(dpy, surface, "eglSwapBuffers");
-}
+EGLBoolean eglSwapBuffersWithDamageKHR(EGLDisplay dpy, EGLSurface surface, const EGLint*, EGLint) { return swapWindow(dpy, surface); }
 
 EGLBoolean eglDestroySurface(EGLDisplay dpy, EGLSurface surface) {
     {
-        std::lock_guard<std::mutex> lock(windowsLock);
-        auto it = windows.find(surface);
-        if (it != windows.end()) {
-            native_window_api_disconnect(it->second.native, kApiEgl);
-            windows.erase(it);  // the gbm_surface goes with the process: Mesa still holds it until the surface is destroyed below
+        std::lock_guard<std::recursive_mutex> lock(windowsLock);
+        if (Window* w = windowOf(surface)) {
+            native_window_api_disconnect(w->native, kApiEgl);
+            windows.erase(w);
+            EGLBoolean ok = host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglDestroySurface")(dpy, w->host);
+            gbmFn<void (*)(void*)>("gbm_surface_destroy")(w->gbmSurface);
+            delete w;
+            return ok;
         }
     }
     return host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglDestroySurface")(dpy, surface);
+}
+
+EGLBoolean eglMakeCurrent(EGLDisplay dpy, EGLSurface draw, EGLSurface read, EGLContext ctx) {
+    EGLBoolean ok = host<PFNEGLMAKECURRENTPROC>("eglMakeCurrent")(dpy, hostSurface(draw), hostSurface(read), ctx);
+    static bool logged;
+    if (ok && ctx != EGL_NO_CONTEXT && !logged) {  // apklayer patch (diagnostic): the GL the context really gives (Skia's renderability caps depend on it)
+        logged = true;
+        auto gs = host<const unsigned char* (*)(unsigned)>("glGetString");
+        if (gs) ALOGI("GL version '%s' renderer '%s' extensions '%s'", gs(0x1F02), gs(0x1F01), gs(0x1F03));
+    }
+    return ok;
+}
+
+EGLSurface eglGetCurrentSurface(EGLint which) {
+    return appSurface(host<EGLSurface (*)(EGLint)>("eglGetCurrentSurface")(which));
+}
+
+EGLBoolean eglQuerySurface(EGLDisplay dpy, EGLSurface surface, EGLint attribute, EGLint* value) {
+    {
+        std::lock_guard<std::recursive_mutex> lock(windowsLock);
+        if (Window* w = windowOf(surface)) {
+            if (attribute == EGL_WIDTH) { *value = w->width; return EGL_TRUE; }
+            if (attribute == EGL_HEIGHT) { *value = w->height; return EGL_TRUE; }
+            surface = w->host;
+        }
+    }
+    return host<EGLBoolean (*)(EGLDisplay, EGLSurface, EGLint, EGLint*)>("eglQuerySurface")(dpy, surface, attribute, value);
+}
+
+EGLBoolean eglSurfaceAttrib(EGLDisplay dpy, EGLSurface surface, EGLint attribute, EGLint value) {
+    return host<EGLBoolean (*)(EGLDisplay, EGLSurface, EGLint, EGLint)>("eglSurfaceAttrib")(dpy, hostSurface(surface), attribute, value);
 }
 
 EGLSurface eglCreatePlatformWindowSurface(EGLDisplay d, EGLConfig c, void* w, const EGLAttrib*) {
@@ -408,9 +493,9 @@ EGLBoolean eglPresentationTimeANDROID(EGLDisplay, EGLSurface, EGLnsecsANDROID) {
     X(eglCreatePbufferFromClientBuffer) X(eglCreatePbufferSurface) X(eglCreatePixmapSurface) X(eglCreatePlatformPixmapSurface) \
     X(eglCreateSync) X(eglCreateSyncKHR) X(eglDestroyContext) X(eglDestroyImage) X(eglDestroyImageKHR) \
     X(eglDestroySync) X(eglDestroySyncKHR) X(eglDupNativeFenceFDANDROID) X(eglGetConfigAttrib) X(eglGetConfigs) \
-    X(eglGetCurrentContext) X(eglGetCurrentDisplay) X(eglGetCurrentSurface) X(eglGetSyncAttrib) X(eglGetSyncAttribKHR) \
-    X(eglInitialize) X(eglQueryAPI) X(eglQueryContext) X(eglQuerySurface) X(eglReleaseTexImage) \
-    X(eglReleaseThread) X(eglSetDamageRegionKHR) X(eglSignalSyncKHR) X(eglSurfaceAttrib) \
+    X(eglGetCurrentContext) X(eglGetCurrentDisplay) X(eglGetSyncAttrib) X(eglGetSyncAttribKHR) \
+    X(eglInitialize) X(eglQueryAPI) X(eglQueryContext) X(eglReleaseTexImage) \
+    X(eglReleaseThread) X(eglSetDamageRegionKHR) X(eglSignalSyncKHR) \
     X(eglSwapInterval) X(eglTerminate) X(eglWaitClient) X(eglWaitGL) X(eglWaitNative) \
     X(eglWaitSync) X(eglWaitSyncKHR) X(eglLockSurfaceKHR) X(eglUnlockSurfaceKHR)
 
