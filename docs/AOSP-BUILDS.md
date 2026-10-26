@@ -44,3 +44,4 @@ is the way to publish them when needed.
 
 | 2026-10-26 | `libapklayer_egl` (window surfaces) + `libapklayer_gltest` (new) + `libapklayer_composer` | P7.1 step 3b: EGL window surfaces over the ANativeWindow (gbm_surface + GPU copy) and the GL smoke tool; the composer carries debug pixel sampling | triggered by the user (no builds by the assistant in ~/los24) |
 | 2026-10-27 | `libapklayer_permission` (new; aosp/hals/permission) | libbinder's checkPermission() found no "permission" service and waits ("Waiting to check permission android.permission.ACCESS_SURFACE_FLINGER"); an allow-all PermissionController stands in for system_server's | triggered by the user (no builds by the assistant in ~/los24) |
+| 2026-10-27 | `libapklayer_vdisplay` (new; aosp/hals/graphics/vdisplay) | one SurfaceFlinger virtual display per app window (resizable, no HWC involvement): consumes its BufferQueue and presents the dmabufs to the shell | triggered by the user |

@@ -17,6 +17,7 @@ struct apklayer_display_callbacks {
     void (*vsync)(void *user, int64_t timestamp_ns);          /* answer to request_vsync: the window's next real frame */
     void (*refresh)(void *user, uint32_t refresh_mhz);        /* the output's refresh rate (also once right after open) */
     void (*released)(void *user, int slot);                   /* the compositor is done with that presented buffer */
+    void (*configure)(void *user, int32_t width, int32_t height, int32_t scale_percent);  /* the window's logical size (also once the window is up); may be NULL */
 };
 
 struct apklayer_display;

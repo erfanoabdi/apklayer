@@ -47,6 +47,7 @@ void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int
         for (int i = 0; i < nfds; i++)
             zwp_linux_buffer_params_v1_add(p, fds[i], i, (uint32_t)m[12 + i], (uint32_t)m[8 + i], (uint32_t)(modifier >> 32), (uint32_t)modifier);
         if (w->dbufs[buf]) wl_buffer_destroy(w->dbufs[buf]);
+        if (m[3] > 0 && m[4] > 0 && (m[3] != w->w || m[4] != w->h)) { w->w = m[3]; w->h = m[4]; if (w->configured) window_layout(w); }  /* the display changed size */
         w->dbufs[buf] = zwp_linux_buffer_params_v1_create_immed(p, m[3], m[4], (uint32_t)m[2], 0);
         zwp_linux_buffer_params_v1_destroy(p);
         wl_buffer_add_listener(w->dbufs[buf], &dbuf_listener, w);

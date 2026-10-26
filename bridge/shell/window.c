@@ -66,6 +66,7 @@ static void xs_configure(void *data, struct xdg_surface *xs, uint32_t serial)
         int32_t v[4] = { W_ID(w), lw, lh, output_scale };
         w->told_scale = output_scale;
         send_msg(W_TARGET(w), MSG_CONFIGURE, v, 4);
+        if (w->proxy) send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, lw, lh, output_scale }, 4);
         if (w->pending_buf >= 0) show(w, w->pending_buf, w->pending_damage);
         else if (w->pending_dbuf >= 0) window_dmabuf_show(w, w->pending_dbuf, w->pending_ddamage);
         else wl_surface_commit(w->surface);
@@ -98,11 +99,12 @@ static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t c
     if (activated) w->minimized = 0;
     if (w->configured && changed) window_layout(w);
     if (w->configured && active_changed) send_state(w);
-    if (cw > 0 && ch > 0 && w->configured && !w->proxy   /* a display window keeps the display's size: the compositor shrinking it to fit the screen is not a display change */
+    if (cw > 0 && ch > 0 && w->configured
         && (cw != w->w * 100 / w->scale || ch != w->h * 100 / w->scale)) {
         int32_t v[4] = { W_ID(w), cw, ch, output_scale };
         w->told_scale = output_scale;
         send_msg(W_TARGET(w), MSG_CONFIGURE, v, 4);
+        if (w->proxy) send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, cw, ch, output_scale }, 4);  /* the display's owner follows the window as well */
     }
 }
 static void top_close(void *data, struct xdg_toplevel *t)
@@ -215,6 +217,7 @@ void window_attach_input(struct client *c, int own_id, const char *title)
             w->told_scale = output_scale;
             send_msg(c, MSG_CONFIGURE, v, 4);
             send_state(w);
+            send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, v[1], v[2], output_scale }, 4);
         }
         return;
     }

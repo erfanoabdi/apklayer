@@ -22,6 +22,7 @@
 #define MSG_VSYNC 113
 #define MSG_DISPLAY 112
 #define MSG_DMABUF_RELEASE 114
+#define MSG_CONFIGURE 107
 #define WINDOW_ID 1
 #define SLOTS 8
 
@@ -101,6 +102,8 @@ static void *reader(void *arg)
             int64_t now = now_ns(), ms = now / 1000000;
             int64_t ts = now - ((ms - (int64_t)(uint32_t)body[1]) & 0xffffffffLL) * 1000000;
             if (d->cb.vsync) d->cb.vsync(d->cb.user, ts);
+        } else if (head[0] == MSG_CONFIGURE && len >= 16) {
+            if (d->cb.configure) d->cb.configure(d->cb.user, body[1], body[2], body[3]);
         } else if (head[0] == MSG_DMABUF_RELEASE && len >= 8) {
             if (d->cb.released) d->cb.released(d->cb.user, body[1]);
         }

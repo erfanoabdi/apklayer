@@ -1,0 +1,14 @@
+// The virtual display sink: one per app window, run by btload --main like the other services (see VirtualDisplay.cpp).
+cc_library_shared {
+    name: "libapklayer_vdisplay",
+    srcs: ["VirtualDisplay.cpp"],
+    header_libs: [
+        "libapklayer_gralloc_common_headers",
+        "libapklayer_graphics_host_headers",
+        "libdrm_headers",
+    ],
+    shared_libs: ["libgui", "libui", "libbinder", "libutils", "libcutils", "liblog"],
+    compile_multilib: "64",
+    allow_undefined_symbols: true,
+    cflags: ["-Wall", "-Werror", "-Wno-main", "-Wno-unused-parameter", "-Wno-deprecated-declarations"],
+}
