@@ -1,0 +1,16 @@
+// apklayer's libEGL: the host's EGL (GBM platform) with Android's driver extensions, mapped over Android's EGL loader by
+// bionic_translation's cfg.d. Host EGL and the host graphics HAL's functions resolve at load time (bionic_translation's glibc fallback).
+cc_library_shared {
+    name: "libapklayer_egl",
+    srcs: ["Egl.cpp"],
+    header_libs: [
+        "libapklayer_gralloc_common_headers",
+        "libapklayer_graphics_host_headers",
+        "libdrm_headers",
+        "libEGL_headers",
+        "libnativebase_headers",
+    ],
+    shared_libs: ["libcutils", "liblog", "libnativewindow"],
+    allow_undefined_symbols: true,
+    cflags: ["-Wall", "-Werror", "-Wno-unused-parameter"],
+}
