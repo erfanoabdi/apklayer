@@ -9,12 +9,12 @@ cc_library_shared {
         "android.hardware.graphics.allocator-V2-ndk",
         "android.hardware.graphics.common-V7-ndk",
         "android.hardware.common-V2-ndk",
-        "libaidlcommonsupport",
         "libbase",
         "libbinder_ndk",
         "libcutils",
         "liblog",
     ],
+    static_libs: ["libaidlcommonsupport"],
     allow_undefined_symbols: true,
     cflags: ["-Wall", "-Werror"],
 }

@@ -152,3 +152,7 @@ void apklayer_crash_trace(void)
     struct sigaction sa = { .sa_sigaction = crash_trace_handler, .sa_flags = SA_SIGINFO | SA_RESETHAND };
     sigaction(SIGABRT, &sa, NULL);
 }
+
+/* android::Layer::logFrameStats() is declared and called from SurfaceFlinger::logFrameStats but never defined in the tree (the
+ * surfaceflinger binary's linker drops the unused caller; as a library it stays, and bionic_translation resolves everything at load). */
+void _ZN7android5Layer13logFrameStatsEv(void) {}
