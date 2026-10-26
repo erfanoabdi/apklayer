@@ -18,11 +18,16 @@ cc -O2 -Wall -o "$native/bin/aprop" bridge/native/aprop.c bridge/native/properti
 java -cp "$classes:$(ls "$native"/aosp/*.jar | tr '\n' ':')" apklayer.host.CriticalNatives "$tmp/critical-natives.txt" $(ls "$shards" | grep -E "^framework\.jar[0-9]+$" | sed "s|^|$shards/|")
 # Our own versions of device libraries that need a service the desktop does not have (bridge/ndk/<name>.c): the source's
 # functions plus weak do-nothing stubs for every other export of the real library, mapped by bionic_translation's cfg.d.
+cfg="$native/share/bionic_translation/cfg.d/bionic_translation.cfg"
+map_lib() { # map_lib <name Android code asks for> <file that answers>: replaces any earlier mapping of the name
+    sed -i "/^$1[[:space:]]/d" "$cfg"
+    echo "$1 $2" >> "$cfg"
+}
 ndk_lib() { # ndk_lib <real library name> <our file name>
     base="${1%.so}"
     nm -D --defined-only "$HOME/android-arm64/lib64/$1" | awk '$2 ~ /[TW]/ {sub(/@.*/, "", $3); print "__attribute__((weak)) long " $3 "(void) { return 0; }"}' | sort -u > "$tmp/$base-stubs.c"
     cc -shared -fPIC -O2 -Wall -o "$native/$2" "bridge/ndk/$base.c" "$tmp/$base-stubs.c"
-    grep -q "^$1 " "$native/share/bionic_translation/cfg.d/bionic_translation.cfg" || echo "$1 $2" >> "$native/share/bionic_translation/cfg.d/bionic_translation.cfg"
+    map_lib "$1" "$2"
 }
 ndk_lib libnativedisplay.so libnativedisplay.so.1
 ndk_lib libselinux.so libapklayer_selinux.so
@@ -31,3 +36,5 @@ rm -f "$native/native-runtime.jar" && (cd "$tmp/jar" && jar cf "$native/native-r
 # Robolectric loads the library from the framework jar's own native/ first: keep the same copy there
 (cd "$tmp/jar" && zip -q "$native"/aosp/android-all/android-all-current-robolectric-r0.jar native/linux/x86_64/libandroid_runtime.so)
 rm -rf "$tmp"
+# our EGL (a bionic library built in the tree, aosp/hals/graphics/egl) answers for Android's libEGL once it is in the library set
+[ ! -e "$HOME/android-arm64/lib64/libapklayer_egl.so" ] || map_lib libEGL.so libapklayer_egl.so
