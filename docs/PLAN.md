@@ -243,6 +243,8 @@ Each item is an apklayer shadow plus a host backend, with its own scripted check
    (BouncyCastle). AccountManager is local.
 6. **microG** (D14): bundled, auto-installed. GCM/FCM out of scope until accounts work.
 
+- **P5 performance follow-up (user, 2026-10-26: NewPipe video+audio play but are "very very laggy"; revisit):** likely causes to measure first: (a) `MediaCodec` decode is synchronous per input buffer over pipes (engine 300 ms pull timeout; frames copied through Java), (b) RGBA frames written to a file and re-read by the host for every frame (`HostSurfaces.blit`, per-pixel scaling in Java), (c) the app JVM runs under Rosetta with C1 only, (d) llvmpipe/Python engines. Fix direction: shared-memory/dmabuf frame path straight to a Wayland subsurface (P5.2), async codec pipeline, native engines instead of Python.
+
 **Exit test P5:** corpus T2 ≥ 80%. A video plays with sound, a WebView-based app logs in to a
 test page, and "Open link" opens the host browser.
 
