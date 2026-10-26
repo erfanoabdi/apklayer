@@ -1,6 +1,7 @@
 /* Zero-copy window contents (PLAN P7.1): dmabufs from apklayer's HWC go to the compositor through zwp_linux_dmabuf_v1. The shell
  * imports each buffer once (first DMABUF_FRAME naming it carries the fds), then shows it by index; the compositor's
  * wl_buffer.release is passed back as DMABUF_RELEASE so the producer knows when it may draw into the buffer again. */
+#include <time.h>
 #include "shell.h"
 
 struct zwp_linux_dmabuf_v1 *dmabuf_mgr;
@@ -26,7 +27,11 @@ void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int
 {
     int buf = m[1];
     static unsigned frames;
-    if (getenv("APKLAYER_RUNTIME_DEBUG") && (frames++ % 5) == 0) fprintf(stderr, "[shell] dmabuf frame %u (buffer %d, %dx%d, %d fds)\n", frames, buf, m[3], m[4], nfds);
+    if (getenv("APKLAYER_RUNTIME_DEBUG")) {
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        fprintf(stderr, "[shell] t=%ld.%03ld dmabuf frame %u (buffer %d, %dx%d, %d fds)\n", (long)(ts.tv_sec % 1000), ts.tv_nsec / 1000000, ++frames, buf, m[3], m[4], nfds);
+    }
     if (buf < 0 || buf >= DBUF_MAX) return;
     if (nfds > 0) {
         if (!dmabuf_mgr) { fprintf(stderr, "[shell] no zwp_linux_dmabuf_v1: cannot show a dmabuf frame\n"); return; }
