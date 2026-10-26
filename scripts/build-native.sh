@@ -51,7 +51,7 @@ printf 'libm.so            libm.so.6\nlibdl.so           libdl_bio.so.0\n' >> ~/
 mkdir -p ~/bt/out/glibc
 for shim in ~/bt/ndk/*.c; do
   name=$(basename "$shim" .c)
-  cc -shared -fPIC -O2 -Wl,-soname,${name}_shim.so.0 -o ~/bt/out/glibc/${name}_shim.so.0 "$shim"
+  cc -shared -fPIC -O2 -Wl,-soname,${name}_shim.so.0 -o ~/bt/out/glibc/${name}_shim.so.0 "$shim" -lz
   printf '%s.so  %s_shim.so.0\n' "$name" "$name" >> ~/bt/out/share/bionic_translation/cfg.d/bionic_translation.cfg
 done
 # bundle the non-glibc shared libraries these need (the dev VM's x86_64 userspace is minimal)
