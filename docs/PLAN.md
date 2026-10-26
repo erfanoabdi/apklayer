@@ -326,6 +326,12 @@ location or SafetyNet-free APIs runs.
 >    (`libapklayer_surfaceflinger`) with a stub HWC, until the app's `Surface` gets buffers.
 > 2. **gralloc**: allocator + mapper over host `libgbm` (Mesa, NVIDIA via nvidia-drm, AMD, Intel alike), dmabuf modifiers negotiated, no per-GPU code; imports as `EGL_EXT_image_dma_buf_import`. No GPU/dmabuf on the host: an explicit shm + llvmpipe mode chosen at startup.
 > 3. **HWC**: `apklayer-hwc` (composer3), vsync from the shell.
+> **Video (user question, 2026-10-26): the same buffers carry YUV.** The allocator offers NV12/YV12/P010 (GBM formats, per-driver
+> availability checked at startup, NVIDIA's GBM is the doubtful one); sampling is `EGL_EXT_image_dma_buf_import` +
+> `GL_OES_EGL_image_external` (the GPU converts, no CPU copy); the HWC reports video layers as DEVICE composition so the NV12
+> dmabuf goes to the Wayland compositor as a `wl_subsurface` (overlay/scanout, colour metadata kept); `apklayer-codec` writes
+> decoded frames into BufferQueue buffers (zero-copy with VA-API/NVDEC/V4L2 dmabuf output, one CPU write for software
+> decoders, never a readback). Fallback: GPU shader to RGBA, then the explicit CPU mode.
 > 4. **Window surfaces**: libhwui's EGL window surface on the SF's buffers (Mesa Android platform / our libEGL shim).
 > 5. **Presentation**: the client target's dmabuf to the shell over SCM_RIGHTS, `zwp_linux_dmabuf_v1`, zero copy.
 > 6. Same service later answers input (InputFlinger), camera, and the userspace binder (design above) replaces the kernel one.
