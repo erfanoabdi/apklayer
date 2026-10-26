@@ -43,3 +43,27 @@ and log it here. The M1 seed's patch log is in `archive/seed-m1/docs/PATCHES.md`
 
 ## Robolectric `DefaultNativeRuntimeLoader` (arm64 Linux)
 `runtime/patches/org/robolectric/nativeruntime/DefaultNativeRuntimeLoader.java`: the tree's loader, one line changed (marked "apklayer patch"): `isSupported()` also accepts Linux aarch64, because the shim and the device libraries are arm64. `scripts/build-native-arm64.sh` compiles it into `native-runtime.jar` (it comes first on the classpath) and puts the shim under `native/linux/aarch64/` as well as `x86_64/` (the android-all jars need both copies too).
+
+## Robolectric shadows for the device-library (GPU) route — `runtime/patches/org/robolectric/shadows/`
+Copies of the tree's shadows (external/robolectric) with thin changes marked "apklayer patch", compiled into `native-runtime.jar` ahead of
+`Robolectric_all.jar` by `scripts/build-native-arm64.sh`. They make an app's window a real SurfaceFlinger layer instead of a simulated surface.
+- `ShadowSurfaceControl`: no fake `nativeCreate`; the JNI binding (`$$robo$$nativeCreate$nativeBinding`) runs against SurfaceFlinger, without
+  the Java metadata Parcel (no native peer here) and without `NOT_ADD_TO_ROOT` (no window manager parents the layer). `initializeNativeObject`
+  keeps a layer ViewRootImpl already made (Android 16 client-managed surfaces) and builds one only if the out SurfaceControl is empty.
+- `ShadowBlastBufferQueue`: empty (the real libgui BLASTBufferQueue runs); `nativeSetApplyToken` is a no-op (needs the real `android.os.Binder` JNI).
+- `ShadowWindowManagerGlobal`: the window session also answers `relayout2`/`relayoutAsync2` (Android 16 `useClientSurface`); the window's layer is placed
+  at its frame, in the app's layer stack (`-Dapklayer.layerstack`), stacked by window type then order added (the window manager's share for the compositor);
+  `-Dapklayer.tracewindows` prints each window's attrs, requested size and frame.
+- `ShadowDisplayEventReceiver`: `nativeInit` with the five-argument signature this tree's framework has while reporting SDK 36.
+- `org/robolectric/nativeruntime/DefaultNativeRuntimeLoader`: Linux aarch64 accepted; SurfaceControl, SurfaceSession and BLASTBufferQueue natives registered.
+
+## The runtime shim (`bridge/native/runtime_shim.c`) in the JVM
+Loads `APKLAYER_HOST_LIBS` (the host graphics HAL) globally; installs the path layer once libc_bio is loaded; hooks libutils thread creation
+(`androidSetCreateThreadFunc`) so binder-pool and callback threads attach to the JVM (what `AndroidRuntime::startReg` does on a device); adapts
+`@CriticalNative` natives with a thunk that moves the 7th to 12th arguments; logs the classes it registered under `APKLAYER_RUNTIME_DEBUG`.
+`bridge/native/properties.c`: `ro.hyphen.data.dir` may be replaced (the natives extract the hyphenation data to a fresh directory every start).
+`bridge/ndk/libnativedisplay.c`: `ADisplay_*` for HWUI's DeviceInfo (one internal display, sRGB 8888).
+
+## Shell: input proxy (`bridge/shell`)
+`MSG_ATTACH_INPUT`: an app takes over the input, state and size of the window with a given title (the display's window, owned by the composer or the
+virtual display sink). `W_TARGET`/`W_ID` route those messages; `window_attach_input`, `window_drop_proxy`.

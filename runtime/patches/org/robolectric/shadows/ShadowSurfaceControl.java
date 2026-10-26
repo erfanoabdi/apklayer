@@ -71,15 +71,7 @@ public class ShadowSurfaceControl {
     // The window manager would parent an app window's layer under its task and display; there is none here, so the layer joins the
     // root of the layer stack instead (NOT_ADD_TO_ROOT would leave it in no stack at all)
     flags &= ~SurfaceControl.NOT_ADD_TO_ROOT;
-    long handle = 0;
-    for (int attempt = 0; attempt < 3 && handle == 0; attempt++) {
-      if (attempt > 0) {
-        System.err.println("[apklayer] SurfaceControl.nativeCreate returned 0, retrying (" + attempt + ")");
-        try { Thread.sleep(1000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-      }
-      handle = nativeCreateBinding(session, name, w, h, format, flags, parentObject);
-    }
-    System.err.println("[apklayer] SurfaceControl.nativeCreate(" + name + ", " + w + "x" + h + ", format " + format + ", flags 0x" + Integer.toHexString(flags) + ", session " + (session != null) + ", parent " + parentObject + ") = " + handle);
+    long handle = nativeCreateBinding(session, name, w, h, format, flags, parentObject);
     return handle;
   }
 
@@ -87,10 +79,8 @@ public class ShadowSurfaceControl {
   void initializeNativeObject() {
     // Android 16 (client-managed surfaces): ViewRootImpl made the window's layer itself before relayout; replacing it would destroy it
     if (((SurfaceControl) realObject).isValid()) return;
-    System.err.println("[apklayer] relayout: creating a real SurfaceControl");
     SurfaceControl real =
         new SurfaceControl.Builder().setName("apklayer-window").setBLASTLayer().setFormat(android.graphics.PixelFormat.RGBA_8888).build();
-    System.err.println("[apklayer] SurfaceControl built: valid=" + real.isValid());
     ((SurfaceControl) realObject).copyFrom(real, "apklayer relayout");
     real.release();
   }

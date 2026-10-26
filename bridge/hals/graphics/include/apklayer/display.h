@@ -17,7 +17,6 @@ struct apklayer_display_callbacks {
     void (*vsync)(void *user, int64_t timestamp_ns);          /* answer to request_vsync: the window's next real frame */
     void (*refresh)(void *user, uint32_t refresh_mhz);        /* the output's refresh rate (also once right after open) */
     void (*released)(void *user, int slot);                   /* the compositor is done with that presented buffer */
-    void (*configure)(void *user, int32_t width, int32_t height, int32_t scale_percent);  /* the window's logical size (also once the window is up); may be NULL */
 };
 
 struct apklayer_display;
@@ -27,6 +26,11 @@ struct apklayer_display;
 struct apklayer_display *apklayer_display_open(const char *name, uint32_t width, uint32_t height,
                                                const struct apklayer_display_callbacks *callbacks);
 void apklayer_display_close(struct apklayer_display *d);
+
+/* The window's logical size and scale (percent), as the shell reports it: once the window is up and whenever it is resized. Runs on
+ * the reader thread. A separate setter, not a field of the callbacks struct: the composer was built against that struct. */
+void apklayer_display_set_configure_callback(struct apklayer_display *d,
+                                             void (*configure)(void *user, int32_t width, int32_t height, int32_t scale_percent), void *user);
 
 uint32_t apklayer_display_refresh_mhz(struct apklayer_display *d);  /* 0 until the shell has said (set during open) */
 

@@ -48,9 +48,9 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         apklayer_display_callbacks cb = {};
         cb.user = this;
         cb.released = &Sink::onReleased;
-        cb.configure = &Sink::onConfigure;
         mDisplay = apklayer_display_open(title, w, h, &cb);
         if (mDisplay == nullptr) { ALOGE("cannot open the shell window (is apklayer-shell running?)"); return false; }
+        apklayer_display_set_configure_callback(mDisplay, &Sink::onConfigure, this);
 
         mToken = SurfaceComposerClient::createVirtualDisplay(std::string(title), /*isSecure=*/false);
         if (mToken == nullptr) { ALOGE("createVirtualDisplay failed"); return false; }

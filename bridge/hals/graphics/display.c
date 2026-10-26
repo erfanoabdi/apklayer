@@ -34,6 +34,8 @@ struct apklayer_display {
     _Atomic uint32_t refresh_mhz;
     _Atomic int closing;
     uint8_t sent[SLOTS]; /* the slot's buffer was sent to the shell */
+    void (*_Atomic configure_fn)(void *, int32_t, int32_t, int32_t);
+    _Atomic(void *) configure_user;
 };
 
 static int send_msg(struct apklayer_display *d, uint32_t type, const void *payload, uint32_t len, const int *fds, int nfds)
@@ -103,7 +105,8 @@ static void *reader(void *arg)
             int64_t ts = now - ((ms - (int64_t)(uint32_t)body[1]) & 0xffffffffLL) * 1000000;
             if (d->cb.vsync) d->cb.vsync(d->cb.user, ts);
         } else if (head[0] == MSG_CONFIGURE && len >= 16) {
-            if (d->cb.configure) d->cb.configure(d->cb.user, body[1], body[2], body[3]);
+            void (*fn)(void *, int32_t, int32_t, int32_t) = atomic_load(&d->configure_fn);
+            if (fn) fn(atomic_load(&d->configure_user), body[1], body[2], body[3]);
         } else if (head[0] == MSG_DMABUF_RELEASE && len >= 8) {
             if (d->cb.released) d->cb.released(d->cb.user, body[1]);
         }
@@ -181,6 +184,12 @@ void apklayer_display_close(struct apklayer_display *d)
     pthread_join(d->reader, NULL);
     close(d->fd);
     free(d);
+}
+
+void apklayer_display_set_configure_callback(struct apklayer_display *d, void (*configure)(void *, int32_t, int32_t, int32_t), void *user)
+{
+    atomic_store(&d->configure_user, user);
+    atomic_store(&d->configure_fn, configure);
 }
 
 uint32_t apklayer_display_refresh_mhz(struct apklayer_display *d) { return atomic_load(&d->refresh_mhz); }

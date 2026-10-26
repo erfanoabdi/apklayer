@@ -158,13 +158,16 @@ cmd_run() {
         JAVA="$(native_java) -XX:TieredStopAtLevel=1 -XX:+UseSerialGC"
         ensure_stack
         # one virtual display per app window (resizable, composed by SurfaceFlinger on the GPU, shown by apklayer-shell): its own layer
-        # stack, a sink process that hands its buffers to the shell, and the app told which stack and window are its own
-        local stack=$(( $(printf '%s' "$pkg" | cksum | cut -d' ' -f1) % 900 + 10 ))
-        "$N/bin/btload" "$L" libapklayer_vdisplay.so --main "apklayer:$pkg" "$stack" "${APKLAYER_DISPLAY_WIDTH:-720}" "${APKLAYER_DISPLAY_HEIGHT:-1280}" \
-            > "${APKLAYER_LOGS:-/tmp/apklayer-stack}/vdisplay-$pkg.log" 2>&1 &
-        VDISPLAY_PID=$!
-        trap 'kill "$VDISPLAY_PID" 2>/dev/null; rm -rf "$TMP"' EXIT
-        APKLAYER_JOPTS="${APKLAYER_JOPTS:-} -Dapklayer.layerstack=$stack -Dapklayer.displaywindow=apklayer:$pkg"
+        # stack, a sink process that hands its buffers to the shell, and the app told which stack and window are its own. Without the
+        # sink library (an older build of the tree) the app uses the primary display's window.
+        if [ -f "$L/libapklayer_vdisplay.so" ]; then
+            local stack=$(( $(printf '%s' "$pkg" | cksum | cut -d' ' -f1) % 900 + 10 ))
+            "$N/bin/btload" "$L" libapklayer_vdisplay.so --main "apklayer:$pkg" "$stack" "${APKLAYER_DISPLAY_WIDTH:-720}" "${APKLAYER_DISPLAY_HEIGHT:-1280}" \
+                > "${APKLAYER_LOGS:-/tmp/apklayer-stack}/vdisplay-$pkg.log" 2>&1 &
+            VDISPLAY_PID=$!
+            trap 'kill "$VDISPLAY_PID" 2>/dev/null; rm -rf "$TMP"' EXIT
+            APKLAYER_JOPTS="${APKLAYER_JOPTS:-} -Dapklayer.layerstack=$stack -Dapklayer.displaywindow=apklayer:$pkg"
+        fi
     else
         ensure_shell
     fi

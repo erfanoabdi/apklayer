@@ -141,7 +141,6 @@ public class ShadowWindowManagerGlobal {
             new Class<?>[] {IWindowSession.class},
             (proxy, method, args) -> {
               String methodName = method.getName();
-              System.err.println("[apklayer] session." + methodName);
               switch (methodName) {
                 case "add": // SDK 16
                 case "addToDisplay": // SDK 17-29
@@ -316,7 +315,6 @@ public class ShadowWindowManagerGlobal {
     }
 
     protected int relayout(Object[] args) {
-      System.err.println("[apklayer] session.relayout called with " + java.util.Arrays.stream(args).map(a -> a == null ? "null" : a.getClass().getSimpleName()).collect(java.util.stream.Collectors.joining(",")));
       try {
         return relayoutImpl(args);
       } catch (Throwable t) {
