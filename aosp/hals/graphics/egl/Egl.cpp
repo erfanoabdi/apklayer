@@ -61,8 +61,17 @@ apklayer_gfx* gfx() {
 
 EGLDisplay gbmDisplay() {
     static EGLDisplay d = [] {
-        auto get = host<PFNEGLGETPLATFORMDISPLAYEXTPROC>("eglGetPlatformDisplayEXT");
-        return get ? get(EGL_PLATFORM_GBM_KHR, apklayer_gfx_gbm_device(gfx()), nullptr) : EGL_NO_DISPLAY;
+        EGLDisplay display = EGL_NO_DISPLAY;
+        void* gbm = apklayer_gfx_gbm_device(gfx());
+        if (auto get = host<PFNEGLGETPLATFORMDISPLAYPROC>("eglGetPlatformDisplay"))  // EGL 1.5 core
+            display = get(EGL_PLATFORM_GBM_KHR, gbm, nullptr);
+        if (display == EGL_NO_DISPLAY) {  // the extension, which glvnd only hands out through eglGetProcAddress
+            auto proc = host<__eglMustCastToProperFunctionPointerType (*)(const char*)>("eglGetProcAddress");
+            auto ext = proc ? reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(proc("eglGetPlatformDisplayEXT")) : nullptr;
+            if (ext) display = ext(EGL_PLATFORM_GBM_KHR, gbm, nullptr);
+        }
+        ALOGI("host EGL display on the GBM platform: %p", display);
+        return display;
     }();
     return d;
 }
