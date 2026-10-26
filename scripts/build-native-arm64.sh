@@ -16,6 +16,8 @@ cp -r bridge/native/android-root/. "$native/android-root/"  # apklayer's own fil
 cc -O2 -Wall -o "$native/bin/btload" scripts/btload.c bridge/native/android_platform.c bridge/native/properties.c bridge/native/paths.c bridge/native/binder_compat.c bridge/native/android_stubs.c \
     -rdynamic -L"$HOME/bt-arm/bionic_translation/b" -ldl_bio -Wl,-rpath,"$HOME/bt-arm/bionic_translation/b"
 [ ! -e b/bridge/hals/graphics/libapklayer-hal-graphics.so ] || cp b/bridge/hals/graphics/libapklayer-hal-graphics.so "$native/"  # the host HAL library btload loads for the Android-side HAL services
+# the path layer as an LD_PRELOAD library (it must be first in symbol lookup for every library of the process)
+cc -shared -fPIC -O2 -Wall -o "$native/libapklayer-paths.so" bridge/native/paths.c bridge/native/paths_preload.c -ldl
 cc -O2 -Wall -o "$native/bin/aprop" bridge/native/aprop.c bridge/native/properties.c
 java -cp "$classes:$(ls "$native"/aosp/*.jar | tr '\n' ':')" apklayer.host.CriticalNatives "$tmp/critical-natives.txt" $(ls "$shards" | grep -E "^framework\.jar[0-9]+$" | sed "s|^|$shards/|")
 # Our own versions of device libraries that need a service the desktop does not have (bridge/ndk/<name>.c): the source's

@@ -13,9 +13,9 @@ import re, sys
 bt = sys.argv[1]
 p = bt + '/libc/libc-misc.c'
 s = open(p).read()
-a = s.index('// this seems to not be a stable ABI')
-b = s.index('// actually misc stuff')
 if 'apklayer patch' not in s:
+    a = s.index('// this seems to not be a stable ABI')
+    b = s.index('// actually misc stuff')
     s = s[:a] + '// apklayer patch: the property functions are provided by apklayer (bridge/native/properties.c)\n\n' + s[b:]
     open(p, 'w').write(s)
 p = bt + '/libc/libc.c'
@@ -43,5 +43,55 @@ if 'apklayer patch: path layer' not in s:
     s = s.replace('\treturn lstat(path, buf);', '\tchar *mapped = (char *)path; bool free_it = libc_bio_apply_path_overrides(&mapped);\n\tint ret = lstat(mapped, buf);\n\tif (free_it) free(mapped);\n\treturn ret;')
     s = s.replace('\treturn fstatat(dirfd, pathname, buf, flags);', '\tchar *mapped = (char *)pathname; bool free_it = pathname && pathname[0] == \'/\' && libc_bio_apply_path_overrides(&mapped);\n\tint ret = fstatat(dirfd, mapped, buf, flags);\n\tif (free_it) free(mapped);\n\treturn ret;')
     open(p, 'w').write(s)
+s = open(p).read()
+if '#include <stdbool.h>' not in s:
+    open(p, 'w').write('#include <stdbool.h>\n#include <stdlib.h>\n' + s)
+PY
+#  4. also open via __open_2 (fortified open, libc-chk.c), openat/__openat_2, access, opendir and readlink go through the path layer
+python3 - "$bt" <<'PY'
+import sys
+bt = sys.argv[1]
+DECL = 'bool libc_bio_apply_path_overrides(char **path); /* apklayer patch: path layer */\n'
+def edit(path, fn):
+    s = open(path).read()
+    t = fn(s)
+    if t != s: open(path, 'w').write(t)
+def mapped(call, path_var, ret_type, ret_stmt):
+    return ('\tchar *mapped = (char *)%s; bool free_it = libc_bio_apply_path_overrides(&mapped);\n'
+            '\t%s ret = %s;\n\tif (free_it) free(mapped);\n\treturn ret;') % (path_var, ret_type, call)
+def chk(s):
+    if 'apklayer patch: path layer' in s: return s
+    s = '#include <stdbool.h>\n#include <stdlib.h>\n' + DECL + s
+    return s.replace('\treturn open(pathname, flags, 0);', mapped('open(mapped, flags, 0)', 'pathname', 'int', ''), 1)
+edit(bt + '/libc/libc-chk.c', chk)
+def verbose(s):
+    if 'apklayer patch: path layer' in s: return s
+    s = DECL + s
+    s = s.replace('\treturn access(path, amode);', mapped('access(mapped, amode)', 'path', 'int', ''), 1)
+    s = s.replace('\treturn opendir(path);', mapped('opendir(mapped)', 'path', 'DIR *', ''), 1)
+    s = s.replace('\treturn readlink(path, buf, bufsize);', mapped('readlink(mapped, buf, bufsize)', 'path', 'ssize_t', ''), 1)
+    return s
+edit(bt + '/libc/libc-verbose.h', verbose)
+def overrides(s):
+    if 'bionic_openat' in s: return s
+    return s + """
+/* apklayer patch: openat with an absolute path goes through the path layer */
+int bionic_openat(int dirfd, const char *path, int oflag, ...)
+{
+\tint mode = 0;
+\tif (OPEN_NEEDS_MODE(oflag)) { va_list arg; va_start(arg, oflag); mode = va_arg(arg, int); va_end(arg); }
+\tchar *mapped = (char *)path;
+\tbool free_it = path && path[0] == '/' && (*apply_path_overrides_func)(&mapped);
+\tint fd = openat(dirfd, mapped, oflag, mode);
+\tif (free_it) free(mapped);
+\treturn fd;
+}
+
+int bionic___openat_2(int dirfd, const char *path, int oflag)
+{
+\treturn bionic_openat(dirfd, path, oflag | O_LARGEFILE, 0);
+}
+"""
+edit(bt + '/libc/libc-open-overrides.c', overrides)
 PY
 

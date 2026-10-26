@@ -31,14 +31,21 @@ static const char *root(void)
 bool apklayer_apply_path_overrides(char **path)
 {
     const char *p = *path, *r = root();
+    static int debug = -1;
+    if (debug < 0) debug = getenv("APKLAYER_PATHS_DEBUG") != NULL;
+    if (debug) fprintf(stderr, "[paths] %s (root %s)\n", p, r);
     if (!r[0] || p[0] != '/') return false;
     for (int i = 0; prefixes[i]; i++) {
         if (strncmp(p, prefixes[i], strlen(prefixes[i]))) continue;
-        char *mapped;
-        if (asprintf(&mapped, "%s%s", r, p) < 0) return false;
-        if (access(mapped, F_OK) != 0) { free(mapped); return false; } /* not in the instance's root: the host's file */
-        *path = mapped;
-        return true;
+        /* /etc is a symlink to /system/etc on Android */
+        const char *tries[2] = { "", !strcmp(prefixes[i], "/etc/") ? "/system" : NULL };
+        for (int t = 0; t < 2 && tries[t]; t++) {
+            char *mapped;
+            if (asprintf(&mapped, "%s%s%s", r, tries[t], p) < 0) return false;
+            if (access(mapped, F_OK) == 0) { *path = mapped; return true; }
+            free(mapped); /* not in the instance's root: try the next spelling, then the host's own file */
+        }
+        return false;
     }
     return false;
 }
@@ -48,4 +55,5 @@ void apklayer_install_path_layer(void)
 {
     void (*set)(bool (*)(char **)) = dlsym(RTLD_DEFAULT, "libc_bio_set_apply_path_overrides_func");
     if (set) set(apklayer_apply_path_overrides);
+    if (getenv("APKLAYER_PATHS_DEBUG")) fprintf(stderr, "[paths] path layer %s\n", set ? "installed" : "NOT installed (libc_bio not loaded)");
 }
