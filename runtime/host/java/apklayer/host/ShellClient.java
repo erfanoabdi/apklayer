@@ -20,7 +20,9 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * frame waits and older pending frames are dropped.
  */
 final class ShellClient {
-    private static final int HELLO = 1, WINDOW_CREATE = 2, FRAME = 3;
+    private static final int HELLO = 1, WINDOW_CREATE = 2, FRAME = 3, ATTACH_INPUT = 9;
+    /** The title the display HAL gives its window (bridge/hals/graphics display, opened by the composer). */
+    private static final byte[] DISPLAY_WINDOW = System.getProperty("apklayer.displaywindow", "apklayer").getBytes(StandardCharsets.UTF_8);
     private static final int INPUT = 101, CLOSE = 103, RELEASE = 104, KEY = 105, SCROLL = 106,
             CONFIGURE = 107, STATE = 108, CLIPBOARD = 109, CLIPBOARD_SET = 5, TEXT_INPUT = 6, IME = 110, TOUCH = 111,
             DISPLAY = 112, VSYNC = 113, VSYNC_REQUEST = 7;
@@ -72,6 +74,12 @@ final class ShellClient {
         width = w;
         height = h;
         this.title = title;
+        if (Boolean.getBoolean("apklayer.gpu")) {
+            // GPU route: the window is the display of the instance's SurfaceFlinger (shown by its HWC); this app takes over that
+            // window's input, state and size instead of opening a window of pixels of its own
+            send(ATTACH_INPUT, buf(4 + DISPLAY_WINDOW.length).putInt(WINDOW_ID).put(DISPLAY_WINDOW));
+            return;
+        }
         mapBuffers();
         sendWindowCreate();
     }

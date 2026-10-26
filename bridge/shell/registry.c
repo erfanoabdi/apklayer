@@ -62,9 +62,9 @@ static void out_done(void *d, struct wl_output *o)
     for (int i = 0; i < MAX_WINDOWS; i++) {
         struct window *w = &windows[i];
         if (!w->client || !w->configured || w->told_scale == output_scale) continue;
-        int32_t v[4] = { w->id, w->w * 100 / w->scale, w->h * 100 / w->scale, output_scale };
+        int32_t v[4] = { W_ID(w), w->w * 100 / w->scale, w->h * 100 / w->scale, output_scale };
         w->told_scale = output_scale;
-        send_msg(w->client, MSG_CONFIGURE, v, 4);
+        send_msg(W_TARGET(w), MSG_CONFIGURE, v, 4);
     }
 }
 static const struct wl_output_listener out_listener = {

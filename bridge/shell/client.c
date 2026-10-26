@@ -32,8 +32,8 @@ void send_input(struct window *w, int32_t type, int32_t a, int32_t b)
 {
     if (!w) return;
     if (type <= EV_SECONDARY) { a = a * w->scale / 100; b = b * w->scale / 100; } /* logical -> px */
-    int32_t v[4] = { w->id, type, a, b };
-    send_msg(w->client, MSG_INPUT, v, 4);
+    int32_t v[4] = { W_ID(w), type, a, b };
+    send_msg(W_TARGET(w), MSG_INPUT, v, 4);
 }
 
 
@@ -41,6 +41,7 @@ void send_input(struct window *w, int32_t type, int32_t a, int32_t b)
 
 static void client_drop(struct client *c)
 {
+    window_drop_proxy(c);
     for (int i = 0; i < MAX_WINDOWS; i++)
         if (windows[i].client == c) window_destroy(&windows[i]);
     for (int i = 0; i < c->nfds; i++) close(c->fds[i]);
@@ -71,6 +72,13 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         window_create(c, v[0], v[1], v[2], text, title);
         break;
     }
+    case MSG_ATTACH_INPUT:
+        if (len >= 5) {
+            char title[64];
+            snprintf(title, sizeof title, "%.*s", (int)(len - 4 < 63 ? len - 4 : 63), (const char *)p + 4);
+            window_attach_input(c, v[0], title);
+        }
+        break;
     case MSG_TEXT_INPUT: {
         struct window *w = len >= 8 ? window_find(c, v[0]) : NULL;
         if (w) text_input_enable(w, v[1]);

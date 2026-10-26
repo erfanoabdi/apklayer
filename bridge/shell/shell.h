@@ -69,6 +69,7 @@ enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
        MSG_INPUT = 101, MSG_CLOSE = 103, MSG_RELEASE = 104,
        MSG_KEY = 105, MSG_SCROLL = 106, MSG_CONFIGURE = 107, MSG_STATE = 108, MSG_CLIPBOARD = 109, MSG_IME = 110, MSG_TOUCH = 111, MSG_DISPLAY = 112, MSG_VSYNC = 113, MSG_DMABUF_RELEASE = 114 };
 #define MSG_DMABUF_FRAME 8
+#define MSG_ATTACH_INPUT 9   /* app -> shell: {own window id, title of the window whose input, state and size this app takes over} */
 #define DBUF_MAX 8
 #define CLIENT_MAX_FDS 16
 #define MSG_VSYNC_REQUEST 7
@@ -86,6 +87,8 @@ struct client {
     size_t rx_len;
     int fds[CLIENT_MAX_FDS];   /* fds received with SCM_RIGHTS, consumed in order by the messages that declare them */
     int nfds;
+    char attach_title[64];     /* MSG_ATTACH_INPUT waiting for a window of that title to appear */
+    int attach_id;
 };
 struct window {
     struct client *client;
@@ -110,7 +113,13 @@ struct window {
     int32_t pending_damage[4];
     int pending_dbuf;           /* dmabuf frame received before the first configure (committing a buffer earlier is an xdg-shell error) */
     int32_t pending_ddamage[4];
+    char title[64];
+    struct client *proxy;       /* the app that took over this window's input (MSG_ATTACH_INPUT): the window belongs to the display HAL */
+    int proxy_id;               /* the id that app knows the window by */
 };
+/* who an input, state or size message about a window goes to, and under which window id */
+#define W_TARGET(w) ((w)->proxy ? (w)->proxy : (w)->client)
+#define W_ID(w) ((w)->proxy ? (w)->proxy_id : (w)->id)
 
 /* ---- state shared between the modules (defined in main.c) ---- */
 extern struct wl_display *display;
@@ -159,6 +168,8 @@ void window_vsync_request(struct window *w);  /* window.c */
 #define DMABUF_LINEAR_MAX 64
 extern uint32_t dmabuf_linear[DMABUF_LINEAR_MAX]; /* formats the compositor takes with the linear modifier (registry.c) */
 extern int dmabuf_linear_n;
+void window_attach_input(struct client *c, int own_id, const char *title);  /* window.c */
+void window_drop_proxy(struct client *c);  /* window.c */
 void window_dmabuf_show(struct window *w, int buf, const int32_t *damage);
 void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int nfds);  /* dmabuf.c */
 void window_dmabuf_destroy(struct window *w);  /* dmabuf.c */

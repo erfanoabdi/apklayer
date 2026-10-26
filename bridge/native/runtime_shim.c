@@ -42,24 +42,46 @@ static void parse_binding_format(const char *fmt)
 }
 
 /* ART calls @CriticalNative methods without JNIEnv and jclass; the device libraries are built that way (Robolectric's host
- * build adds both parameters back at compile time). The JVM passes them, so those natives are registered through a thunk
- * that shifts the integer arguments down two registers (floats travel in other registers; up to six integer arguments). */
+ * build adds both parameters back at compile time). The JVM passes them, so those natives are registered through a thunk that
+ * shifts the integer arguments down two registers, pulls the 7th and 8th (on the stack in the JVM's call, in x6 and x7 for the
+ * callee) from the stack and moves the stack arguments (the 9th on, up to the 12th) down two slots. Floats travel in their own
+ * registers and need no change. The thunk template is copied per target; its last word holds the target's address. */
 #include <sys/mman.h>
-static uint32_t *thunk_page; static size_t thunk_used;
+__asm__(
+    ".text\n.balign 4\n.globl apklayer_critical_tpl_start\n.globl apklayer_critical_tpl_end\n"
+    "apklayer_critical_tpl_start:\n"
+    "  stp x29, x30, [sp, #-16]!\n"
+    "  mov x29, sp\n"
+    "  sub sp, sp, #32\n"
+    "  ldp x9, x10, [x29, #32]\n"   /* a8, a9 */
+    "  stp x9, x10, [sp, #0]\n"
+    "  ldp x9, x10, [x29, #48]\n"   /* a10, a11 */
+    "  stp x9, x10, [sp, #16]\n"
+    "  mov x0, x2\n  mov x1, x3\n  mov x2, x4\n  mov x3, x5\n  mov x4, x6\n  mov x5, x7\n"
+    "  ldp x6, x7, [x29, #16]\n"    /* a6, a7 */
+    "  ldr x16, 1f\n"
+    "  blr x16\n"
+    "  mov sp, x29\n"
+    "  ldp x29, x30, [sp], #16\n"
+    "  ret\n"
+    ".balign 8\n1: .quad 0\n"
+    "apklayer_critical_tpl_end:\n");
+extern char apklayer_critical_tpl_start[], apklayer_critical_tpl_end[];
+static char *thunk_page; static size_t thunk_used;
 
 static void *critical_thunk(void *target)
 {
-    static const uint32_t code[] = { 0xaa0203e0, 0xaa0303e1, 0xaa0403e2, 0xaa0503e3, 0xaa0603e4, 0xaa0703e5, 0x58000050, 0xd61f0200 };
-    if (!thunk_page || thunk_used + 40 > 4096) {
+    size_t size = (size_t)(apklayer_critical_tpl_end - apklayer_critical_tpl_start);
+    if (!thunk_page || thunk_used + size > 4096) {
         thunk_page = mmap(NULL, 4096, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         thunk_used = 0;
         if (thunk_page == MAP_FAILED) { thunk_page = NULL; return target; }
     }
-    uint32_t *t = (uint32_t *)((char *)thunk_page + thunk_used);
-    memcpy(t, code, sizeof code);
-    memcpy(t + 8, &target, 8);
-    __builtin___clear_cache((char *)t, (char *)t + 40);
-    thunk_used += 40;
+    char *t = thunk_page + thunk_used;
+    memcpy(t, apklayer_critical_tpl_start, size);
+    memcpy(t + size - 8, &target, 8);
+    __builtin___clear_cache(t, t + size);
+    thunk_used += (size + 15) & ~(size_t)15;
     return t;
 }
 

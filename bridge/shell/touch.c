@@ -9,9 +9,9 @@ static void send_touch(int action, int finger, wl_fixed_t fx, wl_fixed_t fy)
 {
     if (!touch_window) return;
     int scale = touch_window->scale;
-    int32_t v[5] = { touch_window->id, action, finger, wl_fixed_to_int(fx) * scale / 100,
+    int32_t v[5] = { W_ID(touch_window), action, finger, wl_fixed_to_int(fx) * scale / 100,
                      wl_fixed_to_int(fy) * scale / 100 };
-    send_msg(touch_window->client, MSG_TOUCH, v, 5);
+    send_msg(W_TARGET(touch_window), MSG_TOUCH, v, 5);
 }
 
 static void t_down(void *d, struct wl_touch *t, uint32_t serial, uint32_t time,

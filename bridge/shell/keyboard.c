@@ -114,8 +114,8 @@ void key_event(uint32_t evdev, int down)
     if (sym == XKB_KEY_Left && (meta & 0x02)) code = 4; /* Alt+Left = Back */
     uni = (int32_t)xkb_state_key_get_utf32(xkb_state, kc); /* state-aware: shift, AltGr, dead keys */
     if (uni < 32 || uni == 127) uni = 0;                   /* control chars are not text */
-    int32_t v[5] = { keyboard_focus->id, down ? 0 : 1, code, uni, (int32_t)meta };
-    send_msg(keyboard_focus->client, MSG_KEY, v, 5);
+    int32_t v[5] = { W_ID(keyboard_focus), down ? 0 : 1, code, uni, (int32_t)meta };
+    send_msg(W_TARGET(keyboard_focus), MSG_KEY, v, 5);
 }
 static void kb_key(void *d, struct wl_keyboard *k, uint32_t s, uint32_t t, uint32_t key, uint32_t st)
 {

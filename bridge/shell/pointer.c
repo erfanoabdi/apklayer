@@ -145,10 +145,10 @@ static void update_cursor(void)
 
 static void send_back(struct window *w)
 {
-    int32_t down[5] = { w->id, 0, 4 /* KEYCODE_BACK */, 0, 0 };
-    int32_t up[5] = { w->id, 1, 4, 0, 0 };
-    send_msg(w->client, MSG_KEY, down, 5);
-    send_msg(w->client, MSG_KEY, up, 5);
+    int32_t down[5] = { W_ID(w), 0, 4 /* KEYCODE_BACK */, 0, 0 };
+    int32_t up[5] = { W_ID(w), 1, 4, 0, 0 };
+    send_msg(W_TARGET(w), MSG_KEY, down, 5);
+    send_msg(W_TARGET(w), MSG_KEY, up, 5);
 }
 
 static void toggle_maximize(struct window *w)
@@ -171,8 +171,8 @@ static void bar_button(struct window *w, uint32_t serial, uint32_t time)
         break;
     case DECOR_MAX: toggle_maximize(w); break;
     case DECOR_CLOSE: {
-        int32_t v[1] = { w->id };
-        send_msg(w->client, MSG_CLOSE, v, 1);
+        int32_t v[1] = { W_ID(w) };
+        send_msg(W_TARGET(w), MSG_CLOSE, v, 1);
         break;
     }
     case DECOR_BAR:
@@ -227,9 +227,9 @@ static void ptr_frame(void *d, struct wl_pointer *p)
          * AXIS_HSCROLL + = right, in notches (the view applies its scroll factor); sent *1000. */
         struct window *w = pointer_focus;
         if (debug_input) fprintf(stderr, "[shell] scroll v=%.1f h=%.1f at %d,%d\n", axis_v, axis_h, ptr_x, ptr_y);
-        int32_t v[5] = { w->id, ptr_x * w->scale / 100, ptr_y * w->scale / 100,
+        int32_t v[5] = { W_ID(w), ptr_x * w->scale / 100, ptr_y * w->scale / 100,
                          (int32_t)(-axis_v * 100), (int32_t)(axis_h * 100) };
-        send_msg(pointer_focus->client, MSG_SCROLL, v, 5);
+        send_msg(W_TARGET(pointer_focus), MSG_SCROLL, v, 5);
     }
     axis_v = axis_h = 0;
 }

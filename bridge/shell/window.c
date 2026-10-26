@@ -41,8 +41,8 @@ static void show(struct window *w, int buf, const int32_t *d)
 /* Tells the app whether its window is active / minimized (Android lifecycle: pause, stop, resume). */
 void send_state(struct window *w)
 {
-    int32_t v[2] = { w->id, (w->activated ? 1 : 0) | (w->minimized ? 2 : 0) };
-    send_msg(w->client, MSG_STATE, v, 2);
+    int32_t v[2] = { W_ID(w), (w->activated ? 1 : 0) | (w->minimized ? 2 : 0) };
+    send_msg(W_TARGET(w), MSG_STATE, v, 2);
 }
 
 /* Window geometry = content + title bar; the bar follows the content width and scale. */
@@ -63,9 +63,9 @@ static void xs_configure(void *data, struct xdg_surface *xs, uint32_t serial)
         /* Tell the app its size and the output scale (P2 HiDPI: density = 160*scale). */
         int32_t lw = w->cfg_w > 0 ? w->cfg_w : w->w * 100 / w->scale;
         int32_t lh = w->cfg_h > 0 ? w->cfg_h : w->h * 100 / w->scale;
-        int32_t v[4] = { w->id, lw, lh, output_scale };
+        int32_t v[4] = { W_ID(w), lw, lh, output_scale };
         w->told_scale = output_scale;
-        send_msg(w->client, MSG_CONFIGURE, v, 4);
+        send_msg(W_TARGET(w), MSG_CONFIGURE, v, 4);
         if (w->pending_buf >= 0) show(w, w->pending_buf, w->pending_damage);
         else if (w->pending_dbuf >= 0) window_dmabuf_show(w, w->pending_dbuf, w->pending_ddamage);
         else wl_surface_commit(w->surface);
@@ -100,17 +100,17 @@ static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t c
     if (w->configured && active_changed) send_state(w);
     if (cw > 0 && ch > 0 && w->configured
         && (cw != w->w * 100 / w->scale || ch != w->h * 100 / w->scale)) {
-        int32_t v[4] = { w->id, cw, ch, output_scale };
+        int32_t v[4] = { W_ID(w), cw, ch, output_scale };
         w->told_scale = output_scale;
-        send_msg(w->client, MSG_CONFIGURE, v, 4);
+        send_msg(W_TARGET(w), MSG_CONFIGURE, v, 4);
     }
 }
 static void top_close(void *data, struct xdg_toplevel *t)
 {
     (void)t;
     struct window *w = data;
-    int32_t v[1] = { w->id };
-    send_msg(w->client, MSG_CLOSE, v, 1);
+    int32_t v[1] = { W_ID(w) };
+    send_msg(W_TARGET(w), MSG_CLOSE, v, 1);
 }
 static const struct xdg_toplevel_listener top_listener = {
     .configure = top_configure, .close = top_close };
@@ -186,12 +186,44 @@ void window_create(struct client *c, int id, int width, int height, const char *
     w->bar_hover = DECOR_NONE;
     w->toplevel = xdg_surface_get_toplevel(w->xdg_surface);
     xdg_toplevel_add_listener(w->toplevel, &top_listener, w);
+    snprintf(w->title, sizeof w->title, "%s", title);
     xdg_toplevel_set_title(w->toplevel, title[0] ? title : c->pkg);
     xdg_toplevel_set_app_id(w->toplevel, c->pkg);
     xdg_toplevel_set_min_size(w->toplevel, 240, 240 + DECOR_H);
     window_layout(w); /* geometry needs the toplevel role */ /* desktop-resizable (P2) */
     wl_surface_commit(w->surface);
     fprintf(stderr, "[shell] %s: window %d %dx%d \"%s\"\n", c->pkg, id, width, height, title);
+    for (int i = 0; i < MAX_CLIENTS; i++)   /* an app that asked for a window of this title before it existed */
+        if (clients[i].fd >= 0 && clients[i].attach_title[0] && !strcmp(clients[i].attach_title, w->title))
+            window_attach_input(&clients[i], clients[i].attach_id, w->title);
+}
+
+/* An app takes over the input, state and size messages of the window titled `title` (the display HAL's window: the display belongs to
+ * the instance's SurfaceFlinger, the app is what its touches and keys are for). If there is no such window yet it is remembered. */
+void window_attach_input(struct client *c, int own_id, const char *title)
+{
+    snprintf(c->attach_title, sizeof c->attach_title, "%s", title);
+    c->attach_id = own_id;
+    for (int i = 0; i < MAX_WINDOWS; i++) {
+        struct window *w = &windows[i];
+        if (!w->client || w->client == c || strcmp(w->title, title) != 0) continue;
+        w->proxy = c;
+        w->proxy_id = own_id;
+        fprintf(stderr, "[shell] %s takes the input of window \"%s\" (as its window %d)\n", c->pkg, title, own_id);
+        if (w->configured) {  // its size, scale and state, now that someone listens
+            int32_t v[4] = { own_id, w->w * 100 / w->scale, w->h * 100 / w->scale, output_scale };
+            w->told_scale = output_scale;
+            send_msg(c, MSG_CONFIGURE, v, 4);
+            send_state(w);
+        }
+        return;
+    }
+}
+
+void window_drop_proxy(struct client *c)
+{
+    for (int i = 0; i < MAX_WINDOWS; i++)
+        if (windows[i].proxy == c) { windows[i].proxy = NULL; windows[i].proxy_id = 0; }
 }
 
 void window_destroy(struct window *w)
