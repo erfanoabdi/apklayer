@@ -568,6 +568,18 @@ to fix** or **asserts real-device behaviour** (reason listed, expected-failure f
 per module over time, run the chosen subset in CI-style scripts on the VM. Exit test: the chosen modules reach an agreed pass
 rate with every remaining failure explained. This also feeds P3: every gap found is a gap real apps can hit.
 
+### P7.5 — Vulkan (user goal, 2026-10-26)
+
+Android's `libvulkan.so` (the loader) is replaced, as `libEGL` is, by a layer of ours over the host's Vulkan loader (Mesa, NVIDIA,
+any vendor; no driver dependency). It adds what Android's WSI expects: `VK_KHR_android_surface` (`vkCreateAndroidSurfaceKHR` over an
+`ANativeWindow`) and a swapchain whose images are buffers dequeued from that window: each gralloc dmabuf is imported as a `VkImage`
+(`VK_EXT_external_memory_dma_buf`, `VK_EXT_image_drm_format_modifier`), acquire is `dequeueBuffer`, present is `queueBuffer` with the
+render-complete semaphore exported as a sync fd (`VK_KHR_external_semaphore_fd`). Zero copy (better than the GL window path, which
+needs one GPU blit because a GBM window surface cannot render into foreign buffers); resize is the app's `OUT_OF_DATE` handling.
+Also AHardwareBuffer import for Vulkan, and HWUI's Vulkan backend (`debug.hwui.renderer=skiavk`) as the target once the layer
+works. First step: probe the VM's driver for the needed extensions (virtio-gpu may lack them; Venus would provide them), then the
+layer, then a `vktest` tool beside `gltest`.
+
 ### P7 fallback and x86 counterpart (user, 2026-10-26)
 **Fallback (done):** Robolectric 4.17's own native runtime for arm64 (third party, `scripts/fetch-robolectric-arm64.sh`, THIRD_PARTY.md) as a selectable flavor
 of `bin/apklayer` (`APKLAYER_NATIVE` directory holding `robolectric-nativeruntime-linux-aarch64.jar`, Maven Robolectric and its android-all as in the

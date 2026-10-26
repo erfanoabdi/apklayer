@@ -10,6 +10,9 @@ and interactive (reached: M5).
    system services) runs on the Linux desktop; the hardware layer is apklayer's: HALs for graphics, camera, GNSS, vibrator,
    sensors and more, backed by the host's standard interfaces (GBM/EGL/Wayland, PipeWire/V4L2, GeoClue, evdev, IIO) and never
    tied to one GPU vendor. Rendering is GPU zero-copy (dmabuf end to end), paced by the real display's refresh rate.
+   **Vulkan is a goal too (user, 2026-10-26)**: apps and engines that draw with Vulkan (and HWUI's Vulkan backend) run on the
+   host's Vulkan driver, whatever the vendor, with swapchain images that are our gralloc dmabufs, so Vulkan frames reach
+   SurfaceFlinger with no copy (GL goes through one GPU copy, see PLAN P7.1 step 3b).
 2. **Whole phones as instances.** An instance is a complete virtual phone: its own service manager, SurfaceFlinger, HALs,
    system properties, storage and accounts, running as ordinary processes (no VM, no container image). Several instances run
    side by side and are isolated from each other and from the host, so the same app can run twice, each copy with its own data
