@@ -158,16 +158,16 @@ void (*realAttach)(GLenum_, GLenum_, GLenum_, GLuint_, GLint_);
 void (*realTarget)(GLenum_, void*);
 GLenum_ wrapCheckFramebufferStatus(GLenum_ target) {
     GLenum_ status = realCheck(target);
-    if (status != 0x8CD5 /* GL_FRAMEBUFFER_COMPLETE */) ALOGE("glCheckFramebufferStatus(0x%x) = 0x%x (not complete), glError 0x%x", target, status, glErrorFn()());
+    ALOGI("glCheckFramebufferStatus(0x%x) = 0x%x (complete is 0x8cd5), glError 0x%x", target, status, glErrorFn()());
     return status;
 }
 void wrapFramebufferTexture2D(GLenum_ target, GLenum_ attachment, GLenum_ textarget, GLuint_ texture, GLint_ level) {
     realAttach(target, attachment, textarget, texture, level);
-    if (GLenum_ e = glErrorFn()()) ALOGE("glFramebufferTexture2D(0x%x, 0x%x, 0x%x, tex %u, %d) -> glError 0x%x", target, attachment, textarget, texture, level, e);
+    ALOGI("glFramebufferTexture2D(0x%x, 0x%x, 0x%x, tex %u, %d) -> glError 0x%x", target, attachment, textarget, texture, level, glErrorFn()());
 }
 void wrapEGLImageTargetTexture2DOES(GLenum_ target, void* image) {
     realTarget(target, image);
-    if (GLenum_ e = glErrorFn()()) ALOGE("glEGLImageTargetTexture2DOES(0x%x, %p) -> glError 0x%x", target, image, e);
+    ALOGI("glEGLImageTargetTexture2DOES(0x%x, %p) -> glError 0x%x", target, image, glErrorFn()());
 }
 
 }  // namespace
