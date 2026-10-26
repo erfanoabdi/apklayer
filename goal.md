@@ -26,9 +26,9 @@ Instead:
 - Session rules (reuse local sources first, small edits, architecture, testing style) live in `CLAUDE.md`; keep it in sync with this list.
 - Binder: a userspace driver-like component is acceptable.
 - GUI target: Wayland; test in the Parallels Ubuntu VM (ssh parallels@10.211.55.4).
-- AOSP builds only when absolutely necessary, locally on the OrbStack VM, with a separate
-  OUT_DIR (never los24's `out/`); each one is justified in docs/AOSP-BUILDS.md. Otherwise
-  los24 is a source/prebuilt reference.
+- AOSP: the user built LineageOS 24 for apklayer in OrbStack (`~/los24`, `breakfast gsi_arm64 userdebug`,
+  its own `out/`). Build the libs/targets we need there (log each in docs/AOSP-BUILDS.md); do not rebuild
+  what `out/` already has. Otherwise los24 is the source/prebuilt reference.
 - Prefer local artifacts over network downloads.
 - Git: commit at every step.
 

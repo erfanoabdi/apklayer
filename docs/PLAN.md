@@ -33,7 +33,7 @@ evidence breaks it. If that happens, change this file in the same commit as the 
 | D20 | App data | Per app `~/.local/share/apklayer/apps/<pkg>/` holding `data/` (Context data, cache and files dirs, databases, shared_prefs), `apk/` and `classes.jar`. External storage is `~/.local/share/apklayer/storage/emulated/0` (Android/data scoped). | Survives restarts. Matches Android's layout. |
 | D21 | Split APKs | Accept `.apks`/`.xapk`/`.apkm`. Use the base APK for resources, merge DEX from all splits, and pick ABI/density/locale config splits that match the host. | Most store downloads are splits today. |
 | D22 | Fixes to framework behaviour | Only as **apklayer shadows** (`runtime/host/shadows`, Robolectric's own extension mechanism). Never edit android-all, Robolectric or dex2jvm. Every shadow is listed in docs/PATCHES.md. | This keeps the "no hand patches" principle. Shadows are how Robolectric itself adapts AOSP. |
-| D24 | AOSP builds | **Allowed only when absolutely necessary, only on the OrbStack `ubuntu22-x86` VM**, with a separate `OUT_DIR=~/apklayer-aosp-out` (los24's own `out/` is never touched). Each build is listed with its justification in docs/AOSP-BUILDS.md. The only planned one is P7.1 (plus P7.3 if JNI signatures mismatch). | User rule. Soong is the only authoritative resolver of AOSP's native module graph (Skia, HWUI, minikin, ICU, HarfBuzz…); re-deriving it by hand would be thousands of lines of guesswork. |
+| D24 | AOSP builds | **On the OrbStack `ubuntu22-x86` VM, in the user's LineageOS 24 build tree `~/los24` (`breakfast gsi_arm64 userdebug`, its existing `out/`; user, 2026-10-26: "you can also build libs and targets if you need")**. Each build is listed with its justification in docs/AOSP-BUILDS.md before it runs; build only what is needed. Planned: P7.1 (plus P7.3 if JNI signatures mismatch). | User rule. Soong is the only authoritative resolver of AOSP's native module graph (Skia, HWUI, minikin, ICU, HarfBuzz…); re-deriving it by hand would be thousands of lines of guesswork. |
 | D23 | Verification | Every feature lands with a **scripted headless check**: the existing `-Dapklayer.script`/snapshot mechanism, run by `scripts/check.sh` on the Mac (fast) and on the VM (real Wayland). The corpus (P3) gates releases. | The user tests by hand; we must catch regressions first. |
 
 ---
@@ -272,7 +272,7 @@ location or SafetyNet-free APIs runs.
 ### P7 — Own native runtime: native arm64 + GPU HWUI (M11)
 
 1. **Soong host build, x86_64 (necessary: D24).** In OrbStack, with
-   `OUT_DIR=~/apklayer-aosp-out` and `SOONG_GEN_COMPDB=1`, build only the host variant of
+   `SOONG_GEN_COMPDB=1` (in ~/los24 after `breakfast gsi_arm64 userdebug`, using its `out/`), build only the host variant of
    `libandroid_runtime` (`host_supported` in frameworks/base/core/jni/Android.bp; the same
    module layoutlib and Robolectric ship). Outputs: the x86_64 `.so` and
    `compile_commands.json` holding the exact sources, defines and flags of every module in
@@ -322,7 +322,7 @@ double-click `Markor.apk` → it opens and is usable on both.
 - One logical step = one commit, with the verification output in the commit message body.
 - Never edit upstream code (android-all, Robolectric, simulator, dex2jvm, bionic_translation).
   Adapt through shadows, configuration and post-processing, and log it in docs/PATCHES.md.
-- No AOSP builds, local artifacts first, one-time fetches only through `deps/deps.lock`.
+- AOSP builds only for what we need, in the user's ~/los24 tree and logged in docs/AOSP-BUILDS.md; local artifacts first, one-time fetches only through `deps/deps.lock`.
 - Every phase: update goal.md (milestone status), memory.md (facts learned) and this file
   (if a decision changed, with the reason).
 - Report progress to the user at every exit test, with a snapshot.

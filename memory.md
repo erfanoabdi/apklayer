@@ -12,12 +12,13 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
   (Wayland/X11, PipeWire, Mesa).
 
 ## Hard rules from the user
-- **AOSP builds: only when absolutely necessary** (updated 2026-10-25: "i'm fine with aosp
-  build but when its abolutly necessary. we can build it locally on my orb"). Run them on the
-  OrbStack VM with a separate OUT_DIR (`~/apklayer-aosp-out`), never los24's `out/`, and log
-  each one with its justification in docs/AOSP-BUILDS.md. Earlier stance: "do not waste time
-  on AOSP".
-- **Do NOT use or inspect los24's existing `out/`**: "it's not related to your work."
+- **AOSP builds (updated 2026-10-26, supersedes the 2026-10-25 rules)**: the user built LineageOS 24 in
+  OrbStack for apklayer: tree `~/los24`, product `breakfast gsi_arm64 userdebug`, its `out/` (115 GB,
+  `out/target/product/generic_arm64`) is ours to use. "you can also build libs and targets if you need".
+  Build only what is needed (log each build in docs/AOSP-BUILDS.md first), on the OrbStack VM,
+  `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m <target>`.
+  **Never wipe/clean `~/los24/out`** (user: "it's gonna take very long time"): no rm -rf out, m clean, installclean, other products.
+  Earlier (now void): separate OUT_DIR and "never touch los24's out/".
 - The AOSP tree is a **read-only reference**: read source to copy/understand, and use its
   prebuilts (e.g. JDK) locally; don't compile it.
 - **Write as little code as possible; copy from AOSP/Robolectric as much as possible.**
@@ -105,12 +106,12 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
 - `/Users/erfanabdi/GitHub/android_translation_layer`: ATL (re-implements framework APIs).
   Not our path; useful for its bionic-on-glibc native-lib loading (roadmap Phase 3).
 
-## AOSP source (read-only reference)
-- LineageOS 24 tree (Android 16-era): `/Users/erfanabdi/OrbStack/ubuntu22-x86/home/erfanabdi/los24`
-  (211 GB excl. out). Mounted from the OrbStack `ubuntu22-x86` VM; listings over the mount
+## AOSP source and build tree
+- LineageOS 24 tree (Android 16-era), **built by the user for apklayer**: `~/los24` in the OrbStack VM, i.e.
+  `/Users/erfanabdi/OrbStack/ubuntu22-x86/home/erfanabdi/los24` on the Mac (211 GB excl. 115 GB `out/`). Mounted from the OrbStack `ubuntu22-x86` VM; listings over the mount
   are slow, so prefer `orb -m ubuntu22-x86 bash -c '...'`.
-- OrbStack VM (x86_64, 17 cores, 98 GB RAM, 2.3 TB free): the place for the rare necessary
-  AOSP builds (see the rule above). Soong facts: `libandroid_runtime` is host_supported (the
+- OrbStack VM (x86_64, 17 cores, 98 GB RAM, 2.2 TB free): where AOSP builds run (see the rule above;
+  `out/` already holds the device build, the x86_64 *host* variants of modules such as `libandroid_runtime` are not built yet). Soong facts: `libandroid_runtime` is host_supported (the
   layoutlib/Robolectric native runtime). Soong cross-hosts are only linux_bionic arm64 and musl
   arm/arm64, with **no glibc arm64 host target**, hence PLAN P7's compdb → Meson step.
 
