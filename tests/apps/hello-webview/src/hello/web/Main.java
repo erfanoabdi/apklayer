@@ -33,8 +33,16 @@ public class Main extends Activity {
             }
         });
         setContentView(v);
+        // history: a second page, then ask the engine whether it can go back
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> v.loadUrl("data:text/html,<h1>two</h1>"), 21000);
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> v.loadUrl("data:text/html,<h1>three</h1>"), 23000);
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            System.out.println("[hello-webview] canGoBack=" + v.canGoBack() + " title=" + v.getTitle());
+            v.goBack();
+        }, 25000);
         v.loadDataWithBaseURL("https://example.org/", "<html><body style='background:#2a6;font:40px sans-serif' onclick=\"document.body.style.background='#c22'\">"
                 + "<h1>Hello WebKit</h1><a id=l href='https://example.org/next' onclick='event.stopPropagation()'>next</a>"
+                + "<input id=i style='position:fixed;top:250px;left:0;width:100%;height:80px;font-size:40px' oninput=\"Android.log('input=' + this.value)\">"
                 + "<script>Android.log(Android.hello('web'))</script></body></html>", "text/html", "utf-8", null);
     }
 }

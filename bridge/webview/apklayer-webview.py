@@ -5,13 +5,13 @@ Runs WebKitGTK offscreen (stopgap for WPE WebKit, D11) in its own process, becau
 may be a different architecture than the system WebKit. Commands arrive on stdin, one per line:
   size W H | load URL | html BASE64 [BASEURL] | eval ID BASE64(JS) | click X Y | scroll DX DY
   inject BASE64(JS) (a user script for every page, also run now) | policy ID allow|block
-  answer ID BASE64(JSON) (the result of a "call")
+  answer ID BASE64(JSON) (the result of a "call") | back | forward | reload | text BASE64 (typed text) | key NAME
 Events go to stdout: "started URL", "loaded URL", "title BASE64", "eval ID BASE64(JSON)",
-"nav ID URL" (a link click awaiting a policy answer), "call ID BASE64(path?query)" (the page called
+"history CANBACK CANFORWARD", "nav ID URL" (a link click awaiting a policy answer), "call ID BASE64(path?query)" (the page called
 apklayer://bridge/<interface>/<method>?a=<JSON args>, a synchronous XHR: addJavascriptInterface). Frames are written to
 $1 (<dir>/<id>.rgba, header {w,h,seq} little-endian + top-down RGBA), the format of the GL path.
 """
-import base64, os, struct, sys, time
+import base64, json, os, struct, sys, time
 os.environ.setdefault("WEBKIT_DISABLE_COMPOSITING_MODE", "1")
 import gi
 gi.require_version("Gtk", "3.0")
@@ -85,6 +85,9 @@ def on_load(v, event):
     touch()
     if event == WebKit2.LoadEvent.STARTED:
         say("started", v.get_uri())
+    if event in (WebKit2.LoadEvent.COMMITTED, WebKit2.LoadEvent.FINISHED):
+        bf = v.get_back_forward_list()
+        say("history", int(v.can_go_back()), int(v.can_go_forward()))
     if event == WebKit2.LoadEvent.FINISHED:
         say("loaded", v.get_uri())
 
@@ -148,10 +151,23 @@ def command(line):
         d = decisions.pop(int(parts[1]), None)
         if d is not None:
             d.use() if parts[2] == "allow" else d.ignore()
+    elif c == "back":
+        view.go_back()
+    elif c == "forward":
+        view.go_forward()
+    elif c == "reload":
+        view.reload()
+    elif c == "text":  # typed text goes to the focused element of the page
+        view.run_javascript("document.execCommand('insertText',false,%s)" % json.dumps(base64.b64decode(parts[1]).decode()), None, None, None)
+    elif c == "key":  # editing keys
+        js = {"BackSpace": "document.execCommand('delete')", "Delete": "document.execCommand('forwardDelete')",
+              "Return": "(e=>{if(e&&e.form)e.form.requestSubmit?e.form.requestSubmit():e.form.submit();else document.execCommand('insertParagraph')})(document.activeElement)"}.get(parts[1])
+        if js:
+            view.run_javascript(js, None, None, None)
     elif c == "scroll":
         view.run_javascript("window.scrollBy(%s,%s)" % (parts[1], parts[2]), None, None, None)
     elif c == "click":
-        view.run_javascript("(e=>e&&e.click())(document.elementFromPoint(%s,%s))" % (parts[1], parts[2]), None, None, None)
+        view.run_javascript("(e=>{if(e){if(e.focus)e.focus();e.click()}})(document.elementFromPoint(%s,%s))" % (parts[1], parts[2]), None, None, None)
 
 
 pending = b""

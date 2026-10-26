@@ -136,6 +136,7 @@ final class HostInput {
     void hostKey(long now, int action, int code, int unicode, int meta) {
         if (Boolean.getBoolean("apklayer.debugkeys"))
             System.out.println("[apklayer] key action=" + action + " code=" + code + " uni=" + unicode + " meta=" + meta);
+        if (HostWebViews.key(action, code, unicode, meta)) return; // a focused WebView takes typing itself
         int act = action == 0 ? KeyEvent.ACTION_DOWN : KeyEvent.ACTION_UP;
         if (code == KeyEvent.KEYCODE_DEL) {
             // Desktop Backspace is also "go back" when nothing is being edited.

@@ -38,7 +38,8 @@ final class HostWebViews {
         final java.util.Map<String, ValueCallback<String>> pending = new java.util.HashMap<>();
         final Path frame;
         final java.util.Set<String> exposed = new java.util.HashSet<>(); // addJavascriptInterface names already injected
-        String url, data;
+        String url;
+        Object lastBase, lastLoaded;
         int w, h, seen, evals;
         volatile int rx = -1, ry = -1; // the engine's rectangle in the window (kept by follow(), read by pointer())
 
@@ -139,19 +140,23 @@ final class HostWebViews {
         if (e.w != wv.getMeasuredWidth() || e.h != wv.getMeasuredHeight()) {
             e.send("size " + (e.w = wv.getMeasuredWidth()) + " " + (e.h = wv.getMeasuredHeight()));
         }
+        for (String cmd; (cmd = ((ShadowHostWebView) shadow).commands.poll()) != null; ) e.send(cmd);
         exposeInterfaces(wv, shadow, e); // before any load: the page's own scripts may call them at once
+        // Robolectric keeps one record per kind of load; whichever changed since the last look is the new load.
         String url = shadow.getLastLoadedUrl();
         ShadowWebView.LoadDataWithBaseURL withBase = shadow.getLastLoadDataWithBaseURL();
         ShadowWebView.LoadData loaded = shadow.getLastLoadData();
-        if (url != null && !url.equals(e.url) && withBase == null && loaded == null) {
+        if (withBase != null && withBase != e.lastBase) {
+            e.lastBase = withBase;
+            e.url = url;
+            e.send("html " + b64(withBase.data) + (withBase.baseUrl != null ? " " + withBase.baseUrl : ""));
+        } else if (loaded != null && loaded != e.lastLoaded) {
+            e.lastLoaded = loaded;
+            e.url = url;
+            e.send("html " + ("base64".equalsIgnoreCase(loaded.encoding) ? loaded.data : b64(android.net.Uri.decode(loaded.data))));
+        } else if (url != null && !url.equals(e.url)) {
             e.url = url;
             e.send("load " + url);
-        } else if (withBase != null && !withBase.data.equals(e.data)) {
-            e.send("html " + b64(withBase.data) + (withBase.baseUrl != null ? " " + withBase.baseUrl : ""));
-            e.data = withBase.data;
-        } else if (loaded != null && !loaded.data.equals(e.data)) {
-            e.data = loaded.data;
-            e.send("html " + ("base64".equalsIgnoreCase(loaded.encoding) ? loaded.data : b64(android.net.Uri.decode(loaded.data))));
         }
         for (Object[] call; (call = ((ShadowHostWebView) shadow).evals.poll()) != null; ) {
             String id = String.valueOf(++e.evals);
@@ -160,12 +165,19 @@ final class HostWebViews {
         }
         for (String[] ev; (ev = e.events.poll()) != null; ) {
             switch (ev[0]) {
+                case "history" -> {
+                    ((ShadowHostWebView) shadow).canBack = "1".equals(ev[1]);
+                    ((ShadowHostWebView) shadow).canForward = ev.length > 2 && "1".equals(ev[2]);
+                }
                 case "started" -> {
+                    ((ShadowHostWebView) shadow).currentUrl = ev.length > 1 ? ev[1] : null;
                     if (wv.getWebViewClient() != null) wv.getWebViewClient().onPageStarted(wv, ev.length > 1 ? ev[1] : "", null);
                 }
                 case "title" -> {
                     android.webkit.WebChromeClient chrome = shadow.getWebChromeClient();
-                    if (chrome != null && ev.length > 1) chrome.onReceivedTitle(wv, new String(Base64.getDecoder().decode(ev[1]), StandardCharsets.UTF_8));
+                    String title = ev.length > 1 ? new String(Base64.getDecoder().decode(ev[1]), StandardCharsets.UTF_8) : "";
+                    ((ShadowHostWebView) shadow).currentTitle = title;
+                    if (chrome != null) chrome.onReceivedTitle(wv, title);
                 }
                 case "call" -> e.send("answer " + ev[1] + " " + b64(bridgeCall(wv, shadow, new String(Base64.getDecoder().decode(ev[2]), StandardCharsets.UTF_8))));
                 case "nav" -> { // a link click: the app's shouldOverrideUrlLoading decides (true = the app handles it)
@@ -271,7 +283,7 @@ final class HostWebViews {
         }
     }
 
-    private static volatile Engine pressedIn;
+    private static volatile Engine pressedIn, focused;
 
     /**
      * Pointer events over a WebView go to its engine instead of the (frameless) view: a click on release,
@@ -287,7 +299,7 @@ final class HostWebViews {
             hit.send("scroll " + (-ev[4] / 10) + " " + (-ev[3] / 10)); // notch*1000 -> 100 px per notch; wheel up scrolls up
             return true;
         }
-        if (ev[0] == 0) pressedIn = hit;
+        if (ev[0] == 0) focused = pressedIn = hit;
         Engine down = pressedIn;
         if (down == null) return false;
         if (ev[0] == 1) {
@@ -295,6 +307,24 @@ final class HostWebViews {
             if (hit == down) down.send("click " + (ev[1] - down.rx) + " " + (ev[2] - down.ry));
         }
         return true;
+    }
+
+    /** Typing while a WebView has the pointer focus goes to its page: characters, Backspace, Delete, Enter. */
+    static boolean key(int action, int code, int unicode, int meta) {
+        Engine e = focused;
+        if (e == null || e.rx < 0 || !e.view.isShown()) return false;
+        boolean ctrl = (meta & (android.view.KeyEvent.META_CTRL_ON | android.view.KeyEvent.META_ALT_ON)) != 0;
+        String name = code == android.view.KeyEvent.KEYCODE_DEL ? "BackSpace" : code == android.view.KeyEvent.KEYCODE_FORWARD_DEL ? "Delete"
+                : code == android.view.KeyEvent.KEYCODE_ENTER ? "Return" : null;
+        if (name != null) {
+            if (action == 0) e.send("key " + name);
+            return true;
+        }
+        if (unicode > 0 && !ctrl) {
+            if (action == 0) e.send("text " + b64(new String(Character.toChars(unicode))));
+            return true;
+        }
+        return false;
     }
 
     /** Blits each WebView's latest engine frame into the composed window frame. */
