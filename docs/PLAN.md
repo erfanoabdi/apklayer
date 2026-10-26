@@ -340,6 +340,12 @@ double-click `Markor.apk` → it opens and is usable on both.
 | Test efficiency: only run tests for what changed | ✅ group arguments on both test scripts |
 | The user does not test by hand: verify on the VM before reporting | ongoing |
 | See what happens in the VM (visible in the Parallels window) | ongoing: tests run in the real session |
+| No sleeps / no waiting scripts; 3-second rule; no background launches; close everything started | rules in `CLAUDE.md` (NEVER section) |
+| Reuse local sources first; small edits; mind maintenance and architecture | rules in `CLAUDE.md`; vendored/own code logged in THIRD_PARTY/PATCHES |
+| Do not ask the user to test by hand | ✅ rule in `CLAUDE.md`; features that only a person can judge are listed here as "needs a human check" |
+| Revisit: NewPipe video/audio lag | open, see P5 "Revisit list" (measurements recorded) |
+| Revisit: desktop notifications annoying | policy ✅ (`tests/vm/notify.sh`); mute/cancel/actions still open |
+| Run multiple apps in the sandbox | P6 slice ✅ (cross-app intents + results, `tests/vm/share.sh`); per-app bwrap sandbox blocked by Ubuntu's userns restriction |
 
 ## 5. Immediate next tasks (start here)
 
