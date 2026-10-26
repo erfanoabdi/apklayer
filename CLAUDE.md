@@ -2,6 +2,13 @@
 
 Goal and plan: `goal.md`, `docs/PLAN.md`. Status and local reference projects: `memory.md`.
 
+## NEVER (user rules, repeated complaints; re-read at the start of every turn)
+1. No `sleep`, poll loops, `timeout` wrappers or `tail -f` waits. A command silent for ~3 s is killed, then inspect.
+2. No background launches via `run_in_background` to dodge waiting. Start, check and close an app in ONE foreground command.
+3. Always close what you start: test apps and shell on the VM (`pkill -x apklayer-shell; pkill -f '[a]pklayer.host.Main'`), Monitors and background tasks (TaskStop). Before ending a turn confirm nothing of yours still runs (Mac `ps`, VM `ps`).
+4. Reuse local sources first (memory.md "Reference projects"); smallest edit; no redoing finished work.
+5. Never `pkill -f` a pattern contained in your own command line.
+
 ## Before writing or downloading anything
 1. Read `memory.md` "Reference projects on this machine". Robolectric, Mac.apk, android_translation_layer
    (ATL) and the AOSP tree are all **local**; never clone or download what is there.
