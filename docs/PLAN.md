@@ -515,7 +515,7 @@ Design rule from now on: nothing in P7 may assume a single instance (no fixed `/
 property store; take an instance id/root as a parameter).
 
 ### P10 — Compatibility proof: the relevant CTS tests (user, 2026-10-26: "at the end of the goals add running relative CTS tests to make sure our apklayer is really compatible")
-Last phase; the measure of "compatible". The tree has the sources (`~/los24/cts/tests/tests/<module>`: `view`, `widget`, `graphics`,
+**Strictly the last thing we do (user, 2026-10-26: "i wouldn't waste time on CTS this early"): no CTS work before everything else is done.** The measure of "compatible". The tree has the sources (`~/los24/cts/tests/tests/<module>`: `view`, `widget`, `graphics`,
 `text`, `content`, `os`, ... about 170 modules). Approach: (1) choose the **app-facing** modules (what ordinary apps depend on:
 view, widget, graphics, text, content/resources, os basics, media, input, drawables) and leave out device-system ones (telephony,
 SELinux, permissions policy, hardware certification); (2) build each module's test APK incrementally in ~/los24 (logged in
