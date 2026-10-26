@@ -40,7 +40,9 @@ mkdir -p "$tmp/jar/native/linux/x86_64" "$tmp/jar/native/linux/aarch64" && cp "$
 javac -nowarn -d "$tmp/jar" -cp "$native/aosp/Robolectric_all.jar:$native/android-all/*" runtime/patches/org/robolectric/nativeruntime/DefaultNativeRuntimeLoader.java 2>&1 | grep -v '^Note' || true
 rm -f "$native/native-runtime.jar" && (cd "$tmp/jar" && jar cf "$native/native-runtime.jar" .)
 # Robolectric loads the library from the framework jar's own native/ first: keep the same copy there
-(cd "$tmp/jar" && zip -q "$native"/aosp/android-all/android-all-current-robolectric-r0.jar native/linux/x86_64/libandroid_runtime.so)
+(cd "$tmp/jar" && for j in "$native"/aosp/android-all/*.jar "$native"/android-all/*.jar; do zip -q "$j" native/linux/x86_64/libandroid_runtime.so native/linux/aarch64/libandroid_runtime.so; done)
+# the patched bionic_translation libraries (property functions removed, SO_MAX, path hook): a stale copy in $native made the JVM spin in the property reader
+for f in "$HOME"/bt-arm/bionic_translation/b/lib*_bio.so*; do [ -f "$f" ] && cp -f "$f" "$native/"; done
 rm -rf "$tmp"
 # our EGL (a bionic library built in the tree, aosp/hals/graphics/egl) answers for Android's libEGL once it is in the library set
 [ ! -e "$HOME/android-arm64/lib64/libapklayer_egl.so" ] || map_lib libEGL.so libapklayer_egl.so
