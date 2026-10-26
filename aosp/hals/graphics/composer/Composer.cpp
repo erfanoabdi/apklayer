@@ -4,6 +4,8 @@
 // frame callback; the period reported is measured from those callbacks, not the (possibly wrong) output mode.
 #define LOG_TAG "apklayer.composer"
 
+#include <cerrno>
+#include <cstring>
 #include <aidl/android/hardware/graphics/composer3/BnComposer.h>
 #include <aidl/android/hardware/graphics/composer3/BnComposerClient.h>
 #include <aidlcommonsupport/NativeHandle.h>
@@ -50,7 +52,7 @@ void logPixels(const apklayer_gfx_buffer& b) {
     uint32_t stride = 0;
     apklayer_gfx_mapping* map = nullptr;
     auto* p = static_cast<uint8_t*>(apklayer_gfx_map(gfx, &b, 0, false, &stride, &map));
-    if (!p) { ALOGI("present %u: cannot map the frame", n); return; }
+    if (!p) { ALOGI("present %u: cannot map the frame (%s; fourcc 0x%x alloc 0x%x %ux%u packed %u stride %u)", n, strerror(errno), b.fourcc, b.alloc_fourcc, b.alloc_width, b.alloc_height, b.packed, b.stride[0]); return; }
     auto px = [&](uint32_t x, uint32_t y) { const uint8_t* q = p + y * stride + x * 4; return (q[0] << 24) | (q[1] << 16) | (q[2] << 8) | q[3]; };
     ALOGI("present %u: %ux%u pixels(bytes 0..3) (10,10)=%08x (center)=%08x (corner)=%08x", n, b.width, b.height,
           px(10, 10), px(b.width / 2, b.height / 2), px(b.width - 10, b.height - 10));
