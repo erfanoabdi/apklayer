@@ -14,6 +14,8 @@ final class ShellFrameListener implements FrameListener {
     private final ShellClient shell;
     private int[] pixels = new int[0];
     private int width, height, frames;
+    private long composeNanos;
+    private static final boolean PERF = Boolean.getBoolean("apklayer.perf");
 
     ShellFrameListener(ShellClient shell) {
         this.shell = shell;
@@ -26,8 +28,11 @@ final class ShellFrameListener implements FrameListener {
         if (pixels.length != width * height) pixels = new int[width * height];
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
         bitmap.recycle();
+        long t0 = System.nanoTime();
         HostSurfaces.compose(pixels, width, height);
         HostWebViews.compose(pixels, width, height);
+        composeNanos += System.nanoTime() - t0;
+        if (PERF && frames % 60 == 0) System.out.println("[apklayer] perf frame: compose " + composeNanos / Math.max(1, frames) / 1000 + " us/frame, " + frames + " frames");
         frames++;
         if (shell != null) {
             try {

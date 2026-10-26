@@ -39,6 +39,7 @@ final class HostCodecs {
     /** By MIME type. */
     private static final Map<String, EngineCodec> codecs = new HashMap<>();
     private static final String GLDIR = System.getenv("APKLAYER_GLDIR");
+    private static final boolean PERF = Boolean.getBoolean("apklayer.perf"); // -Dapklayer.perf=true: timing lines
 
     static void install() {
         for (String[] d : DECODERS) {
@@ -72,6 +73,8 @@ final class HostCodecs {
         InputStream out;
         Path surfaceFile;
         int frameW, frameH, seq;
+        long inNanos, renderNanos;
+        int inCount, renderCount;
 
         EngineCodec(String mime, boolean video) {
             this.mime = mime;
@@ -111,6 +114,7 @@ final class HostCodecs {
         @Override
         public synchronized void process(ByteBuffer input, ByteBuffer output) {
             if (process == null) return;
+            long t0 = System.nanoTime();
             try {
                 byte[] data = new byte[input.remaining()];
                 input.get(data);
@@ -125,6 +129,8 @@ final class HostCodecs {
                     frameW = Integer.parseInt(header[2]);
                     frameH = Integer.parseInt(header[3]);
                 }
+                inNanos += System.nanoTime() - t0;
+                if (PERF && ++inCount % 60 == 0) System.out.println("[apklayer] perf " + mime + ": decode " + inNanos / inCount / 1000 + " us/buffer over " + inCount);
             } catch (IOException | RuntimeException e) {
                 System.out.println("[apklayer] codec engine for " + mime + ": " + e);
                 process.destroy();
@@ -142,6 +148,13 @@ final class HostCodecs {
         }
 
         void render(ByteBuffer frame) {
+            long t0 = System.nanoTime();
+            renderFrame(frame);
+            renderNanos += System.nanoTime() - t0;
+            if (PERF && ++renderCount % 60 == 0) System.out.println("[apklayer] perf " + mime + ": render " + renderNanos / renderCount / 1000 + " us/frame over " + renderCount);
+        }
+
+        private void renderFrame(ByteBuffer frame) {
             if (surfaceFile == null || frameW == 0 || frame.remaining() < frameW * frameH * 4) return;
             try {
                 ByteBuffer file = ByteBuffer.allocate(12 + frameW * frameH * 4).order(ByteOrder.LITTLE_ENDIAN);
