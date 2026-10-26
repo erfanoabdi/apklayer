@@ -14,9 +14,10 @@ and interactive (reached: M5).
    system properties, storage and accounts, running as ordinary processes (no VM, no container image). Several instances run
    side by side and are isolated from each other and from the host, so the same app can run twice, each copy with its own data
    and login. A single-app instance (today's `apklayer run <apk>`) is the small case; a full phone is the large one.
-3. **The full system one day.** The aim is to run the whole SystemUI APK as an instance's home screen. System services stay
-   **Robolectric shadows** (user: "we don't need them to be real, even for SystemUI"): the shadow layer, extended with
-   what SystemUI needs, plays the system; real code is used where it gives fidelity cheaply (SurfaceFlinger, binder, graphics).
+3. **SystemUI as a yardstick, not a goal (user, 2026-10-26).** Running the SystemUI APK is not something we build toward; it is
+   something it would be cool to be able to do, and a proof of breadth: SystemUI touches nearly every part of the platform API,
+   so if it runs, almost any ordinary app will. It is used as a late stress test of compatibility, never to decide a design.
+   System services stay **Robolectric shadows** (user: "we don't need them to be real, even for SystemUI").
 
 ## Method (user directive, 2026-10-25)
 

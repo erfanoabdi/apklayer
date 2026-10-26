@@ -496,16 +496,13 @@ double-click `Markor.apk` → it opens and is usable on both.
    items: manifest ContentProviders before Application.onCreate (Firebase), a `getprop` stand-in,
    `Display.getHdrCapabilities`, the MediaPlayer data source, the NewPipe startup NPE.
 
-### P8 — Vision: the SystemUI APK on this stack (user, 2026-10-26: "i really like Robolectric shadows and we should even use them for systemui as well, we don't need them to be real")
-Not scheduled. **System services remain Robolectric shadows, SystemUI included; no `system_server` is run.** SystemUI is then an
-ordinary APK in an instance whose shadow layer is extended with what it talks to: `StatusBarManager`/`IStatusBarService`
-(notifications, quick settings, panel state), window types (status bar, navigation bar, keyguard, notification shade), insets and
-display cutouts, `NotificationListenerService` feed, `KeyguardManager`, input monitors, wallpaper, `SurfaceControl` layers through
-the real SurfaceFlinger. The shadows are fed from the host side (notifications from other instances and the desktop, battery,
-connectivity, time), so the desktop and the phone UI see the same state. Open questions to research when it is scheduled: how
-much of SystemUI's hidden-API surface Robolectric's shadows already cover, how privileged window types are composed, and what the
-shadow-to-host feed looks like. Real services (binder, SurfaceFlinger, HALs) are kept only where they bring graphics and hardware
-fidelity cheaply. Every P7 interface keeps this open.
+### P8 — Yardstick: the SystemUI APK (user, 2026-10-26: not a goal, "just something cool"; covering it means almost any app works)
+Not scheduled, and it never drives a design decision. A late compatibility stress test: SystemUI uses nearly the whole platform
+API, privileged window types and hidden interfaces, so running it shows the shadow layer and the stack are broad enough for
+ordinary apps. **System services remain Robolectric shadows (user: "we don't need them to be real, even for SystemUI"); no
+`system_server`.** If attempted: extend the shadows for `StatusBarManager`/`IStatusBarService`, status/navigation/keyguard/shade
+window types, insets and cutouts, the notification-listener feed, keyguard, wallpaper, input monitors; feed them from the host.
+The useful by-product is the list of platform gaps it exposes, each of which also helps ordinary apps.
 
 ### P9 — Vision: several phone instances at once (user, 2026-10-26)
 Each instance is a full virtual phone made of ordinary host processes: **its own binder domain** (a separate binderfs device

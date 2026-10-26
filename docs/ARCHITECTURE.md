@@ -117,8 +117,8 @@ Android HAL calls the host. Rules: the Android side stays thin (translate, never
 side; buffers cross as dmabuf fds and fences as sync_file fds; one directory per domain on both sides, named as AOSP names it.
 `aosp/` is mirrored into `~/los24/vendor/apklayer` (its own git history, one commit per sync) by `scripts/sync-aosp.sh`.
 
-Long-term goal (user, 2026-10-26): the whole SystemUI APK as an instance's home screen, with the system services staying
-Robolectric shadows (no system_server). Real code is used for graphics, binder and hardware; every design choice keeps that open.
+Yardstick (user, 2026-10-26): the SystemUI APK is not a goal but a proof of breadth; the system services stay Robolectric
+shadows (no system_server). Real code is used for graphics, binder and hardware.
 
 Multiple instances (user, 2026-10-26): every piece above is per instance, parameterised by an instance root (data, properties,
 binder device, sockets). One instance = one full phone (or a single app). See PLAN P9.
