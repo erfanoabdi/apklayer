@@ -32,7 +32,9 @@ final class HostCodecs {
     /** name, mime, is video. */
     private static final String[][] DECODERS = {
         {"apklayer.vp9.decoder", "video/x-vnd.on2.vp9", "1"}, {"apklayer.vp8.decoder", "video/x-vnd.on2.vp8", "1"},
+        {"apklayer.avc.decoder", "video/avc", "1"}, {"apklayer.av1.decoder", "video/av01", "1"},
         {"apklayer.opus.decoder", "audio/opus", "0"}, {"apklayer.mp3.decoder", "audio/mpeg", "0"},
+        {"apklayer.aac.decoder", "audio/mp4a-latm", "0"},
     };
     /** By MIME type. */
     private static final Map<String, EngineCodec> codecs = new HashMap<>();
@@ -89,7 +91,16 @@ final class HostCodecs {
                         .redirectError(ProcessBuilder.Redirect.INHERIT).start();
                 in = process.getOutputStream();
                 out = new BufferedInputStream(process.getInputStream(), 1 << 20);
-                in.write(("cfg " + mime + " " + w + " " + h + " " + tw + " " + th + " " + rate + " " + ch + "\n").getBytes(StandardCharsets.UTF_8));
+                java.util.List<byte[]> csd = new java.util.ArrayList<>();
+                for (String key : new String[] {"csd-0", "csd-1", "csd-2"}) {
+                    ByteBuffer b = format.getByteBuffer(key);
+                    if (b != null) { byte[] bytes = new byte[b.remaining()]; b.duplicate().get(bytes); csd.add(bytes); }
+                }
+                in.write(("cfg " + mime + " " + w + " " + h + " " + tw + " " + th + " " + rate + " " + ch + " " + csd.size() + "\n").getBytes(StandardCharsets.UTF_8));
+                for (byte[] blob : csd) {
+                    in.write(("csd " + blob.length + "\n").getBytes(StandardCharsets.UTF_8));
+                    in.write(blob);
+                }
                 in.flush();
             } catch (IOException e) {
                 System.out.println("[apklayer] cannot start the codec engine: " + e);
