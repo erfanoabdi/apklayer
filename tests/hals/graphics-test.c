@@ -58,10 +58,35 @@ int main(void)
         apklayer_gfx_buffer_close(&b);
     }
 
-    int nv12 = apklayer_gfx_alloc(gfx, 64, 64, DRM_FORMAT_NV12, APKLAYER_GFX_SAMPLE, &b);
-    printf("NV12 sample-only alloc: %s", nv12 == 0 ? "ok" : strerror(-nv12));
-    if (nv12 == 0) { printf(" (planes=%d, strides %u/%u, modifier 0x%llx)", b.num_planes, b.stride[0], b.stride[1], (unsigned long long)b.modifier); apklayer_gfx_buffer_close(&b); }
-    printf("\n");
+    /* YUV: native if the driver has it, else split into per-plane buffers */
+    static const struct { uint32_t fourcc; const char *name; } yuv[] = {
+        { DRM_FORMAT_NV12, "NV12" }, { DRM_FORMAT_YVU420, "YV12" }, { DRM_FORMAT_P010, "P010" } };
+    for (size_t i = 0; i < sizeof yuv / sizeof *yuv; i++) {
+        int r2 = apklayer_gfx_alloc(gfx, 64, 64, yuv[i].fourcc, APKLAYER_GFX_SAMPLE | APKLAYER_GFX_CPU_WRITE, &b);
+        char what[64];
+        snprintf(what, sizeof what, "%s allocates (planes=%d)", yuv[i].name, r2 == 0 ? b.num_planes : 0);
+        CHECK(r2 == 0, what);
+        if (r2 == 0) {
+            uint32_t st; struct apklayer_gfx_mapping *mm = NULL;
+            for (int p = 0; p < b.num_planes; p++) {
+                uint8_t *px = apklayer_gfx_map(gfx, &b, p, true, &st, &mm);
+                snprintf(what, sizeof what, "%s plane %d maps (%ux%u, stride %u)", yuv[i].name, p, b.plane_width[p], b.plane_height[p], st);
+                CHECK(px != NULL, what);
+                if (px) { px[0] = (uint8_t)(0x80 + p); apklayer_gfx_unmap(mm); }
+            }
+            apklayer_gfx_buffer_close(&b);
+        }
+    }
+
+    r = apklayer_gfx_alloc_blob(gfx, 4096, &b);
+    CHECK(r == 0, "BLOB (plain memory) allocates");
+    if (r == 0) {
+        uint32_t st; struct apklayer_gfx_mapping *mm = NULL;
+        uint8_t *px = apklayer_gfx_map(gfx, &b, 0, true, &st, &mm);
+        CHECK(px != NULL && st == 4096, "BLOB maps");
+        if (px) { px[4095] = 7; apklayer_gfx_unmap(mm); }
+        apklayer_gfx_buffer_close(&b);
+    }
 
     CHECK(apklayer_gfx_alloc(gfx, 64, 64, 0x12345678, APKLAYER_GFX_SAMPLE, &b) == -ENOTSUP, "unknown format is refused explicitly (-ENOTSUP)");
     apklayer_gfx_close(gfx);
