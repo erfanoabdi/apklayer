@@ -25,6 +25,8 @@ void window_dmabuf_destroy(struct window *w)
 void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int nfds)
 {
     int buf = m[1];
+    static unsigned frames;
+    if (getenv("APKLAYER_RUNTIME_DEBUG") && (frames++ % 5) == 0) fprintf(stderr, "[shell] dmabuf frame %u (buffer %d, %dx%d, %d fds)\n", frames, buf, m[3], m[4], nfds);
     if (buf < 0 || buf >= DBUF_MAX) return;
     if (nfds > 0) {
         if (!dmabuf_mgr) { fprintf(stderr, "[shell] no zwp_linux_dmabuf_v1: cannot show a dmabuf frame\n"); return; }

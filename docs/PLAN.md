@@ -353,6 +353,12 @@ location or SafetyNet-free APIs runs.
 > DEVICE/CLIENT from what the compositor offers. **Acceptance test for P7.1:** a GL SurfaceView plus a video layer, copies and CPU
 > use measured (target: zero CPU copies of pixels).
 >
+> **Status (2026-10-26): the whole path works on the VM**: servicemanager, allocator, composer and the real SurfaceFlinger run as arm64
+> bionic libraries under btload, SF's RenderEngine (Skia/GL ES 3.0 on virgl) composes `sftest`'s layer into our gralloc framebuffer and
+> the shell receives its dmabuf frames (buffers rotate, one fd set per buffer). The last blocker was a generated do-nothing stub for
+> `glEGLImageTargetTexture2DOES` in btload; GL extension stubs now forward to the host driver. Still open: window surfaces for EGL
+> (step 3b), present fences, pixel check of the shown frame, resize, Java side.
+>
 > **Measured on the VM's virtio-gpu (2026-10-26, `tests/hals/graphics-test.c`): GBM allocates ARGB/ABGR/XRGB8888, RGB565, RGBA_F16 and
 > RGBA_1010102, but NOT NV12, I420, YV12 or P010**, so YUV needs a fallback: ONE linear R8/R16 allocation holding all planes back to back
 > (what a real NV12 buffer is; the Android side must report one base pointer with plane offsets, so separate per-plane buffers
