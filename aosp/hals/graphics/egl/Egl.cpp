@@ -199,7 +199,7 @@ EGLBoolean eglPresentationTimeANDROID(EGLDisplay, EGLSurface, EGLnsecsANDROID) {
     X(eglSwapBuffersWithDamageKHR) X(eglSwapInterval) X(eglTerminate) X(eglWaitClient) X(eglWaitGL) X(eglWaitNative) \
     X(eglWaitSync) X(eglWaitSyncKHR) X(eglLockSurfaceKHR) X(eglUnlockSurfaceKHR)
 
-#define DECLARE_SLOT(name) __attribute__((used)) void* host_slot_##name;
+#define DECLARE_SLOT(name) __attribute__((used, visibility("hidden"))) void* host_slot_##name;
 FORWARDED(DECLARE_SLOT)
 
 // file-scope assembly: no C declaration to clash with the EGL headers' signatures

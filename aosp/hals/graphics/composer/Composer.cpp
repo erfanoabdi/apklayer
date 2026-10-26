@@ -10,6 +10,7 @@
 #include <android-base/logging.h>
 #include <android/binder_manager.h>
 #include <android/binder_process.h>
+#include <log/log.h>
 #include <poll.h>
 
 #include <atomic>
