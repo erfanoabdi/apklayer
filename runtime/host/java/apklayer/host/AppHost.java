@@ -218,6 +218,7 @@ public final class AppHost implements Runnable {
         app.getSystemService(android.content.ClipboardManager.class).addPrimaryClipChangedListener(this::onAppClipboardChanged);
         ScreenUpdateHandler.create(frames).requestStartUi();
 
+        installSystemPackage(app);
         installProviders(app);
         launch(launcherIntent(app));
         // Like Simulator.postMotionEvent: an off-screen move so the first frame is drawn.
@@ -290,6 +291,26 @@ public final class AppHost implements Runnable {
         List<ResolveInfo> found = app.getPackageManager().queryIntentActivities(query, 0);
         if (found.isEmpty()) throw new IllegalStateException("no launcher activity in " + app.getPackageName());
         return found.get(0);
+    }
+
+    /** Every Android device has the package "android" (the framework); androidx.media and others look it up. */
+    private static void installSystemPackage(Application app) {
+        android.content.pm.PackageInfo info = new android.content.pm.PackageInfo();
+        info.packageName = "android";
+        android.content.pm.Signature[] platformCert = {new android.content.pm.Signature("3082")}; // some certificate
+        info.signatures = platformCert;
+        info.signingInfo = new android.content.pm.SigningInfo(new android.content.pm.SigningDetails(platformCert, 2, new android.util.ArraySet<>(), null));
+        info.applicationInfo = new android.content.pm.ApplicationInfo();
+        info.applicationInfo.packageName = "android";
+        info.applicationInfo.flags = android.content.pm.ApplicationInfo.FLAG_SYSTEM;
+        org.robolectric.shadows.ShadowPackageManager pm = Shadow.extract(app.getPackageManager());
+        pm.installPackage(info);
+        // the app's own package is "signed" too (apps compare their own and callers' signing certificates)
+        android.content.pm.PackageInfo own = pm.getInternalMutablePackageInfo(app.getPackageName());
+        if (own != null && own.signingInfo == null) {
+            own.signatures = platformCert;
+            own.signingInfo = info.signingInfo;
+        }
     }
 
     /**
@@ -479,6 +500,7 @@ public final class AppHost implements Runnable {
                     .asSubclass(Activity.class);
         } catch (ClassNotFoundException | NullPointerException | android.content.pm.PackageManager.NameNotFoundException e) {
             if (HostPortals.open(intent)) return;
+            if (HostPortals.requestPermissions(intent, request == null ? -1 : request.requestCode, stack.peek().get())) return;
             Intent picked = HostPortals.pick(intent);
             if (picked != null || HostPortals.isPicker(intent)) { // a desktop file dialog answers the document picker
                 if (wantsResult) ((ShadowActivity) Shadow.extract(stack.peek().get()))

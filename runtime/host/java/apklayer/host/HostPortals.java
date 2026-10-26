@@ -32,6 +32,21 @@ final class HostPortals {
         }
     }
 
+    /**
+     * Runtime permission requests (Activity.requestPermissions): the desktop has no permission prompts yet (a portal
+     * dialog is the later form), so everything asked for is granted and the result delivered like the system would.
+     */
+    static boolean requestPermissions(Intent intent, int requestCode, android.app.Activity requester) {
+        if (!"android.content.pm.action.REQUEST_PERMISSIONS".equals(intent.getAction())) return false;
+        String[] names = intent.getStringArrayExtra("android.content.pm.extra.REQUEST_PERMISSIONS_NAMES");
+        if (names == null) names = new String[0];
+        ((org.robolectric.shadows.ShadowApplication) Shadow.extract(RuntimeEnvironment.getApplication())).grantPermissions(names);
+        int[] granted = new int[names.length]; // PERMISSION_GRANTED == 0
+        System.out.println("[apklayer] permissions granted: " + String.join(", ", names));
+        if (requestCode >= 0) requester.onRequestPermissionsResult(requestCode, names, granted);
+        return true;
+    }
+
     private static final Set<String> PICKERS = Set.of(Intent.ACTION_OPEN_DOCUMENT, Intent.ACTION_GET_CONTENT,
             Intent.ACTION_CREATE_DOCUMENT, Intent.ACTION_OPEN_DOCUMENT_TREE);
 
