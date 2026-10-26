@@ -246,8 +246,15 @@ class Client : public BnComposerClient {
         HandleData d;
         native_handle_t* h = mClientSlot >= 0 ? mClientTargets[mClientSlot].get() : nullptr;
         if (h == nullptr || !decode(h, &d)) {
-            ALOGE("presentDisplay: no usable client target (slot %d, handle %p): nothing to show", mClientSlot, h);
-            return fail(IComposerClient::EX_BAD_PARAMETER);
+            // SurfaceFlinger composed nothing this frame (no layer is visible): there is nothing new to show, which is not an error
+            ALOGV("presentDisplay: no client target (slot %d): nothing to show", mClientSlot);
+            PresentFence pf;
+            pf.display = kDisplay;
+            out->push_back(CommandResultPayload::make<CommandResultPayload::Tag::presentFence>(std::move(pf)));
+            ReleaseFences rf;
+            rf.display = kDisplay;
+            out->push_back(CommandResultPayload::make<CommandResultPayload::Tag::releaseFences>(std::move(rf)));
+            return;
         }
         if (mClientFence >= 0) {  // wait for the GPU to finish the composition
             pollfd p = {mClientFence, POLLIN, 0};

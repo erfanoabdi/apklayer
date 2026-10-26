@@ -4,6 +4,9 @@
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <binder/ProcessState.h>
+#include <unistd.h>
+#include <utils/Vector.h>
+#include <utils/String16.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -20,6 +23,13 @@ extern "C" int main(int argc, char** argv) {
         sp<IBinder> b = sm->checkService(String16(argv[2]));
         printf("%s: %s\n", argv[2], b ? "found" : "not found");
         return b ? 0 : 1;
+    } else if (!strcmp(cmd, "dump") && argc > 2) {  // dump NAME [args...]: the service's dump() on stdout (SurfaceFlinger: layers, displays, composition)
+        sp<IBinder> b = sm->checkService(String16(argv[2]));
+        if (b == nullptr) { printf("%s: not found\n", argv[2]); return 1; }
+        Vector<String16> args;
+        for (int i = 3; i < argc; i++) args.add(String16(argv[i]));
+        fflush(stdout);
+        return b->dump(STDOUT_FILENO, args) == OK ? 0 : 1;
     } else if (!strcmp(cmd, "add") && argc > 2) {
         status_t st = sm->addService(String16(argv[2]), sp<BBinder>::make());
         printf("add %s: %d\n", argv[2], st);
@@ -27,7 +37,7 @@ extern "C" int main(int argc, char** argv) {
         if (st != OK) return 1;
         if (argc > 3 && !strcmp(argv[3], "--stay")) IPCThreadState::self()->joinThreadPool();
     } else {
-        fprintf(stderr, "usage: servicetool list | check NAME | add NAME [--stay]\n");
+        fprintf(stderr, "usage: servicetool list | check NAME | dump NAME [args] | add NAME [--stay]\n");
         return 2;
     }
     return 0;
