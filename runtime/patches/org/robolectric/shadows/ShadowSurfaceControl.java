@@ -7,6 +7,8 @@ import static android.os.Build.VERSION_CODES.Q;
 import static android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE;
 
 import android.os.Parcel;
+import org.robolectric.util.reflector.Static;
+import static org.robolectric.util.reflector.Reflector.reflector;
 import android.view.SurfaceControl;
 import android.view.SurfaceSession;
 import dalvik.system.CloseGuard;
@@ -21,7 +23,7 @@ import org.robolectric.util.reflector.Direct;
 import org.robolectric.util.reflector.ForType;
 
 /** Shadow for {@link android.view.SurfaceControl} */
-@Implements(value = SurfaceControl.class, isInAndroidSdk = false)
+@Implements(value = SurfaceControl.class, isInAndroidSdk = false, callNativeMethodsByDefault = true) // apklayer patch: the real natives (libgui) run
 public class ShadowSurfaceControl {
   private static final AtomicInteger nativeObject = new AtomicInteger();
 
@@ -43,7 +45,14 @@ public class ShadowSurfaceControl {
     surfaceControlReflector.finalize();
   }
 
-  // apklayer patch: no fake nativeCreate; SurfaceControls are real layers of the instance's SurfaceFlinger
+  // apklayer patch: no fake nativeCreate; SurfaceControls are real layers of the instance's SurfaceFlinger. The metadata Parcel is
+  // Robolectric's Java Parcel (no native object behind it), so the real native create gets none (it only carries the window type).
+  @Implementation(minSdk = Q)
+  protected static long nativeCreate(
+      SurfaceSession session, String name, int w, int h, int format, int flags, long parentObject, Parcel metadata) {
+    return reflector(SurfaceControlReflector.class)
+        .nativeCreate(session, name, w, h, format, flags, parentObject, null);
+  }
 
   // apklayer patch: relayout's out SurfaceControl becomes a real BLAST layer of SurfaceFlinger (the window's buffer queue layer)
   void initializeNativeObject() {
@@ -68,5 +77,10 @@ public class ShadowSurfaceControl {
 
     @Accessor("mFreeNativeResources")
     void setFreeNativeResources(Runnable runnable);
+
+    @Static
+    @Direct
+    long nativeCreate(
+        SurfaceSession session, String name, int w, int h, int format, int flags, long parentObject, Parcel metadata);
   }
 }

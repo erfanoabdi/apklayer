@@ -230,6 +230,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     dl_parse_library_path(libs, ":");
     void *rt = bionic_dlopen("libandroid_runtime.so", 2 /* RTLD_NOW */);
     if (!rt) { fprintf(stderr, "[runtime] cannot load libandroid_runtime.so: %s\n", bionic_dlerror()); return -1; }
+    { extern void apklayer_install_path_layer(void); apklayer_install_path_layer(); } /* libc_bio is loaded now: Android paths (/system, /vendor...) as btload does */
     apklayer_log_to_stderr();
     /* intercept RegisterNatives for the duration of startReg (JVMTI's supported JNI function table swap) */
     jvmtiEnv *ti;

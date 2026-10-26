@@ -34,7 +34,8 @@ svc allocator libapklayer_allocator.so
 svc composer libapklayer_composer.so
 svc surfaceflinger libapklayer_surfaceflinger.so
 tool="${1:-libapklayer_sftest.so}"; [ $# -gt 0 ] && shift
-svc tool "$tool" "$@"
+if [ "$tool" = none ]; then start keepalive tail -f /dev/null; else svc tool "$tool" "$@"; fi  # "none": only the services (an app brings its own windows); stop the stack with its pid file
+echo "$$" > "$LOGS/stack.pid"
 
 wait -n; status=$?   # the first process to exit ends the run
 for pid in "${!name_of[@]}"; do kill -0 "$pid" 2>/dev/null || echo "exited: ${name_of[$pid]} (status $status)"; done

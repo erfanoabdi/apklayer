@@ -32,6 +32,9 @@ static const struct { const char *java_class; const char *symbol; } register_tab
     { "android.view.MotionEvent", "register_android_view_MotionEvent" },
     { "android.view.MotionPredictor", "register_android_view_MotionPredictor" },
     { "android.view.Surface", "register_android_view_Surface" },
+    { "android.view.SurfaceControl", "register_android_view_SurfaceControl" },
+    { "android.view.SurfaceSession", "register_android_view_SurfaceSession" },
+    { "android.graphics.BLASTBufferQueue", "register_android_graphics_BLASTBufferQueue" },
     { "android.view.VelocityTracker", "register_android_view_VelocityTracker" },
     { "com.android.internal.util.VirtualRefBasePtr", "register_com_android_internal_util_VirtualRefBasePtr" },
 };

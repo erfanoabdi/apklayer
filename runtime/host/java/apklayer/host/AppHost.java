@@ -498,6 +498,7 @@ public final class AppHost implements Runnable {
                     ShadowSystemClock.advanceBy(Duration.ofNanos(System.nanoTime() - now));
                     looper.idle();
                 }
+                if (TRACE_ROOTS && now - lastRootTrace > 1_000_000_000L) { lastRootTrace = now; traceRoots(); }
                 followNavigation();
                 followOrientation();
                 followTextInput();
@@ -516,6 +517,40 @@ public final class AppHost implements Runnable {
                 System.out.println("[apklayer] thread " + t.getName() + " " + t.getState());
                 for (int i = 0; i < Math.min(st.length, 14); i++) System.out.println("[apklayer]     at " + st[i]);
             });
+        }
+    }
+
+    private static final boolean TRACE_ROOTS = Boolean.getBoolean("apklayer.traceroots");
+    private long lastRootTrace;
+
+    /** -Dapklayer.traceroots=true: once a second, the state of every window's ViewRootImpl (why does a window not draw?). */
+    private void traceRoots() {
+        java.util.List<?> roots;
+        try {
+            java.lang.reflect.Field rf = android.view.WindowManagerGlobal.class.getDeclaredField("mRoots");
+            rf.setAccessible(true);
+            roots = new ArrayList<>((java.util.List<?>) rf.get(android.view.WindowManagerGlobal.getInstance()));
+        } catch (Throwable e) {
+            System.out.println("[apklayer] root trace failed: " + e);
+            return;
+        }
+        if (roots.isEmpty()) System.out.println("[apklayer] root: no windows");
+        for (Object o : roots) {
+            try {
+                android.view.ViewRootImpl root = (android.view.ViewRootImpl) o;
+                StringBuilder sb = new StringBuilder("[apklayer] root:");
+                for (String f : new String[] {"mFirst", "mAdded", "mTraversalScheduled", "mWillDrawSoon", "mStopped", "mIsDrawing", "mLayoutRequested", "mRelayoutRequested"}) {
+                    java.lang.reflect.Field fld = android.view.ViewRootImpl.class.getDeclaredField(f);
+                    fld.setAccessible(true);
+                    sb.append(' ').append(f).append('=').append(fld.get(root));
+                }
+                java.lang.reflect.Field sf = android.view.ViewRootImpl.class.getDeclaredField("mSurface");
+                sf.setAccessible(true);
+                System.out.println(sb + " surfaceValid=" + ((android.view.Surface) sf.get(root)).isValid() + " visibility=" + root.getView().getVisibility()
+                        + " nextVsync=" + ShadowChoreographer.getNextVsyncTime());
+            } catch (Throwable e) {
+                System.out.println("[apklayer] root trace failed: " + e);
+            }
         }
     }
 

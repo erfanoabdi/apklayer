@@ -90,6 +90,10 @@ public class DefaultNativeRuntimeLoader implements NativeRuntimeLoader {
             "android.os.SystemProperties",
             "android.text.Hyphenator",
             "android.view.Surface",
+            // apklayer patch: windows are real SurfaceFlinger layers fed by a real BLASTBufferQueue
+            "android.view.SurfaceControl",
+            "android.view.SurfaceSession",
+            "android.graphics.BLASTBufferQueue",
             "com.android.internal.util.VirtualRefBasePtr",
             "libcore.util.NativeAllocationRegistry",
           });

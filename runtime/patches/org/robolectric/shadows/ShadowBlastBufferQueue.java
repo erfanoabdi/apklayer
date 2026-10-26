@@ -12,7 +12,7 @@ import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
 import org.robolectric.shadow.api.Shadow;
 
-@Implements(value = BLASTBufferQueue.class, isInAndroidSdk = false, minSdk = TIRAMISU)
+@Implements(value = BLASTBufferQueue.class, isInAndroidSdk = false, minSdk = TIRAMISU, callNativeMethodsByDefault = true) // apklayer patch: the real natives (libgui) run
 public class ShadowBlastBufferQueue {
 
   // apklayer patch: no fake BLASTBufferQueue; the real one (libgui) feeds the window's layer in SurfaceFlinger
