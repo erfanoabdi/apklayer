@@ -12,4 +12,6 @@ check "getDuration() is the file's real duration (2000 ms)" 'grep -q "prepared, 
 check "the GStreamer engine plays" 'grep -q "\[media\] state playing" <<<"$LOG"'
 check "no engine error" '! grep -q "media error" <<<"$LOG"'
 check "onCompletion runs" 'grep -q "hello-media\] completed" <<<"$LOG"'
+check "AudioTrack PCM reaches the audio server" 'grep -q "audio track 22050 Hz, 1 ch" <<<"$LOG" && grep -q "audiotrack wrote" <<<"$LOG"'
+check "SoundPool reports the load and plays a stream" 'grep -qE "soundpool loaded status=0 stream=[1-9]" <<<"$LOG"'
 exit $fail

@@ -134,6 +134,7 @@ public final class AppHost implements Runnable {
         // A catch-all provider answers any data source with a zero-duration, event-free
         // MediaInfo — like a codec that accepts the file but decodes nothing.
         ShadowMediaPlayer.setMediaInfoProvider(ShadowHostMediaPlayer::mediaInfo);
+        HostAudio.install();
 
         Display display = app.getSystemService(DisplayManager.class).getDisplay(Display.DEFAULT_DISPLAY);
         int width = display.getWidth(), height = display.getHeight();

@@ -22,6 +22,21 @@ public class Main extends Activity {
             for (int i = 0; i < n; i++) d.putShort((short) (Math.sin(2 * Math.PI * 440 * i / rate) * 8000));
             try (FileOutputStream out = new FileOutputStream(wav)) { out.write(d.array()); }
 
+            // AudioTrack: a streaming write of the same tone from a worker thread
+            new Thread(() -> {
+                android.media.AudioTrack t = new android.media.AudioTrack(android.media.AudioManager.STREAM_MUSIC, rate,
+                        android.media.AudioFormat.CHANNEL_OUT_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT, 8192, android.media.AudioTrack.MODE_STREAM);
+                t.play();
+                byte[] pcm = java.util.Arrays.copyOfRange(d.array(), 44, 44 + rate * 2); // 0.5 s
+                System.out.println("[hello-media] audiotrack wrote " + t.write(pcm, 0, pcm.length));
+                t.release();
+            }).start();
+            // SoundPool: load the file, play once it reports loaded
+            android.media.SoundPool sp = new android.media.SoundPool.Builder().setMaxStreams(2).build();
+            sp.setOnLoadCompleteListener((pool, id, status) -> System.out.println("[hello-media] soundpool loaded status=" + status
+                    + " stream=" + pool.play(id, 1, 1, 1, 0, 1)));
+            sp.load(wav.getPath(), 1);
+
             MediaPlayer mp = new MediaPlayer();
             mp.setDataSource(wav.getPath());
             mp.setOnCompletionListener(m -> System.out.println("[hello-media] completed"));
