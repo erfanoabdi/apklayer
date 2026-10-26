@@ -10,6 +10,7 @@
 #include <jni.h>
 #include <jvmti.h>
 #include <link.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -178,6 +179,7 @@ static int register_classes(JNIEnv *env, JavaVM *vm, void *rt)
         int (*fn)(JNIEnv *) = name ? find_register_function(rt, hwui, name) : NULL;
         if (!fn) { fprintf(stderr, "[runtime] no registration function for %s\n", c); failed++; continue; }
         if (fn(env) < 0) { fprintf(stderr, "[runtime] registering %s failed\n", c); failed++; }
+        else if (getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[runtime] registered %s\n", c);
     }
 
     JNINativeMethod registry = { "applyFreeFunction", "(JJ)V", (void *)apply_free_function };
@@ -193,6 +195,41 @@ static int register_classes(JNIEnv *env, JavaVM *vm, void *rt)
     if (init_graphics) init_graphics();
     if (!register_graphics || register_graphics(env) < 0) { fprintf(stderr, "[runtime] graphics registration failed\n"); failed++; }
     return failed;
+}
+
+/* Threads that libutils/libbinder create (the binder pool, threads calling back into Java) must be attached to the JVM, as
+ * AndroidRuntime::startReg arranges on a device; this runtime registers natives itself and never runs startReg, and the threads
+ * start while libandroid_runtime loads, so the hook is installed before that. */
+static JavaVM *g_vm;
+struct thread_start { int (*entry)(void *); void *user; char name[32]; };
+static void *attached_thread(void *arg)
+{
+    struct thread_start ts = *(struct thread_start *)arg;
+    free(arg);
+    JNIEnv *env = NULL;
+    JavaVMAttachArgs args = { JNI_VERSION_1_4, ts.name, NULL };
+    (*g_vm)->AttachCurrentThreadAsDaemon(g_vm, (void **)&env, &args);
+    ts.entry(ts.user);
+    (*g_vm)->DetachCurrentThread(g_vm);
+    return NULL;
+}
+static int create_attached(int (*entry)(void *), void *user, const char *name, int prio, size_t stack, void **id)
+{
+    (void)prio;
+    struct thread_start *ts = calloc(1, sizeof *ts);
+    ts->entry = entry;
+    ts->user = user;
+    snprintf(ts->name, sizeof ts->name, "%s", name ? name : "native");
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    if (stack) pthread_attr_setstacksize(&attr, stack);
+    pthread_t t;
+    int r = pthread_create(&t, &attr, attached_thread, ts);
+    pthread_attr_destroy(&attr);
+    if (r != 0) { free(ts); return 0; }
+    if (id) *id = (void *)(uintptr_t)t;
+    return 1;
 }
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
@@ -228,6 +265,13 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
 
     _r_debug_ptr = &_r_debug;
     dl_parse_library_path(libs, ":");
+    g_vm = vm;
+    {
+        void *utils = bionic_dlopen("libutils.so", 2);
+        void (*set_create)(int (*)(int (*)(void *), void *, const char *, int, size_t, void **)) = utils ? bionic_dlsym(utils, "androidSetCreateThreadFunc") : NULL;
+        if (set_create) set_create(create_attached);
+        else fprintf(stderr, "[runtime] cannot hook thread creation: no androidSetCreateThreadFunc\n");
+    }
     void *rt = bionic_dlopen("libandroid_runtime.so", 2 /* RTLD_NOW */);
     if (!rt) { fprintf(stderr, "[runtime] cannot load libandroid_runtime.so: %s\n", bionic_dlerror()); return -1; }
     { extern void apklayer_install_path_layer(void); apklayer_install_path_layer(); } /* libc_bio is loaded now: Android paths (/system, /vendor...) as btload does */
@@ -258,6 +302,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     }
     (*ti)->SetJNIFunctionTable(ti, &patched);
     int failed = register_classes(env, vm, rt);
+
     (*ti)->SetJNIFunctionTable(ti, orig);
     if (failed) fprintf(stderr, "[runtime] %d registrations did not run (see above)\n", failed);
     fprintf(stderr, "[runtime] Android's framework natives registered (%d critical natives adapted%s)\n", critical_count, critical_of ? "" : "; CriticalNatives unavailable");

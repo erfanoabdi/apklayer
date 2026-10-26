@@ -171,7 +171,9 @@ int __system_property_set(const char *name, const char *value)
     struct prop_info *pi = (struct prop_info *)__system_property_find(name);
     int r = 0;
     if (pi) {
-        if (!strncmp(name, "ro.", 3)) { r = -1; } /* write-once */
+        /* write-once, except what each launch of the native runtime sets for its own temporary directory (the framework natives
+         * extract the hyphenation data to a fresh directory every start): the new value replaces the old one */
+        if (!strncmp(name, "ro.", 3) && strcmp(name, "ro.hyphen.data.dir") != 0) { r = -1; }
         else {
             uint32_t s = atomic_load(&pi->serial);
             atomic_store(&pi->serial, s | 1); /* writer in progress */

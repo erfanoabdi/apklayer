@@ -50,8 +50,10 @@ public class ShadowSurfaceControl {
   @Implementation(minSdk = Q)
   protected static long nativeCreate(
       SurfaceSession session, String name, int w, int h, int format, int flags, long parentObject, Parcel metadata) {
-    return reflector(SurfaceControlReflector.class)
+    long handle = reflector(SurfaceControlReflector.class)
         .nativeCreate(session, name, w, h, format, flags, parentObject, null);
+    System.err.println("[apklayer] SurfaceControl.nativeCreate(" + name + ", " + w + "x" + h + ", format " + format + ", flags 0x" + Integer.toHexString(flags) + ", session " + (session != null) + ", parent " + parentObject + ") = " + handle);
+    return handle;
   }
 
   // apklayer patch: relayout's out SurfaceControl becomes a real BLAST layer of SurfaceFlinger (the window's buffer queue layer)
