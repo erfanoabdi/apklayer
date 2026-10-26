@@ -24,6 +24,10 @@ rsync -a --delete -e "sshpass -p $VM_PASS ssh -o StrictHostKeyChecking=no" "$DEP
 vm "rm -rf apklayer-m1 && mkdir -p apklayer-m1"
 (cd "$ROOT" && COPYFILE_DISABLE=1 tar -cz meson.build meson_options.txt bin runtime bridge scripts/javac-jar.sh) \
   | vm "tar -xz -C apklayer-m1 2>/dev/null && cd apklayer-m1 && meson setup b >/dev/null && ninja -C b >/dev/null"
+if [ -d "$ROOT/build/native/x86_64" ]; then  # bionic linker + JNI loader (scripts/build-native.sh)
+  vm "mkdir -p apklayer-m1/native"
+  sshpass -p "$VM_PASS" scp -qr -o StrictHostKeyChecking=no "$ROOT"/build/native/x86_64/* "$VM:apklayer-m1/native/"
+fi
 sshpass -p "$VM_PASS" scp -q -o StrictHostKeyChecking=no "$APK" "$VM:apklayer-apps/$NAME.apk"
 
 vm bash -s <<EOF

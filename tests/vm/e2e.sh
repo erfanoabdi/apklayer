@@ -129,6 +129,10 @@ vm 'bash -s' >> "$LOG" 2>&1 <<'R' &
 export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 APKLAYER_JOPTS="-Dapklayer.script=15000:clipcopy:copied-in-the-app"
 ~/apklayer-m1/bin/apklayer run ~/apklayer-apps/uibench.apk 2>&1 | grep --line-buffered -v '^OpenJDK'
 R
+waitfor "depth=1" 120
+sleep 3
+read -r L T R <<<"$(geom)"
+keys abs:$(pm $((L + 200)) $((T + 300))) click   # a focused window and a fresh input serial: only then may it own the selection
 waitfor "clipboard to the system" 90
 sleep 1
 got=$(vm 'XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 wl-paste -n 2>/dev/null')

@@ -71,6 +71,32 @@ public final class DenyInstrument {
                 ClassWriter cw = new ClassWriter(0);
                 ClassVisitor target = new ClassVisitor(Opcodes.ASM9, cw) {
                     @Override
+                    public org.objectweb.asm.MethodVisitor visitMethod(int access, String name, String desc,
+                                                                       String signature, String[] exceptions) {
+                        return new org.objectweb.asm.MethodVisitor(Opcodes.ASM9,
+                                super.visitMethod(access, name, desc, signature, exceptions)) {
+                            @Override
+                            public void visitMethodInsn(int opcode, String owner, String mname, String mdesc,
+                                                        boolean itf) {
+                                // the app's System/Runtime loadLibrary/load -> apklayer.host.NativeLoader (P4)
+                                if (opcode == Opcodes.INVOKESTATIC && owner.equals("java/lang/System")
+                                        && (mname.equals("loadLibrary") || mname.equals("load"))
+                                        && mdesc.equals("(Ljava/lang/String;)V")) {
+                                    super.visitMethodInsn(opcode, "apklayer/host/NativeLoader", mname, mdesc, false);
+                                } else if (opcode == Opcodes.INVOKEVIRTUAL && owner.equals("java/lang/Runtime")
+                                        && (mname.equals("loadLibrary") || mname.equals("load"))
+                                        && mdesc.equals("(Ljava/lang/String;)V")) {
+                                    super.visitMethodInsn(Opcodes.INVOKESTATIC, "apklayer/host/NativeLoader",
+                                            mname.equals("load") ? "runtimeLoad" : "runtimeLoadLibrary",
+                                            "(Ljava/lang/Runtime;Ljava/lang/String;)V", false);
+                                } else {
+                                    super.visitMethodInsn(opcode, owner, mname, mdesc, itf);
+                                }
+                            }
+                        };
+                    }
+
+                    @Override
                     public void visit(int version, int access, String name, String signature,
                                       String superName, String[] interfaces) {
                         super.visit(version, access, name, signature, superName, interfaces);

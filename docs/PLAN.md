@@ -209,6 +209,18 @@ loop continues in the background of later phases; the 90% exit test is **not** m
 4. ABI selection at install: the JVM arch's ABI → `armeabi-v7a`/`x86` are not supported →
    if the APK has no matching ABI, refuse with a clear message.
 
+**P4 status (2026-10-26):**
+- ✅ P4.1 `bionic_translation` (cloned from its upstream, not vendored) is built for x86_64 by `scripts/build-native.sh` in the OrbStack
+  x86_64 VM (libunwind 1.8 from source, clang for `libstdc++_bio`, a RELR compat header for glibc 2.35); the results land in
+  `build/native/x86_64/` and `vm-run.sh` ships them to the Parallels VM.
+- ✅ P4.2 `System.loadLibrary/load` and `Runtime.loadLibrary/load` in app classes are rewritten at install (`DenyInstrument`) to
+  `apklayer.host.NativeLoader`, which loads the `.so` with the bionic linker through the JNI helper `bridge/native/native_loader.c`
+  (`libapklayer_native.so`), runs `JNI_OnLoad`, and binds the exported `Java_*` functions with `RegisterNatives`.
+- ✅ P4.4 install extracts `lib/<abi>/*.so` for the app JVM's ABI (x86_64 under the Rosetta stopgap).
+- ✅ Verified: **CPU-Z loads its real `libcpuid.so` and starts** (`tests/vm/native.sh`).
+- ⏳ P4.3 NDK shims (`bridge/ndk/`: liblog, libandroid, EGL/GLES, audio, vulkan, mediandk) and the GLES `hello-gl2` sample: not started.
+  `libstdc++_bio` is built without `__cxa_guard` (needs libc++'s `<atomic>`).
+
 **Exit test P4:** corpus T3 apps start and render. A simple NDK GLES sample (`hello-gl2`)
 draws via Mesa in its subsurface.
 

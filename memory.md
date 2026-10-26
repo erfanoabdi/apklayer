@@ -161,3 +161,12 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
 - P3.1: `scripts/fetch-corpus.sh [tier]` pins F-Droid APKs in tests/corpus/corpus.lock; cache in
   ~/.cache/apklayer/corpus. The user said: do not chase individual failing corpus apps; fix only shared,
   framework-level causes.
+
+## P4 notes (2026-10-26)
+- Native build: `scripts/build-native.sh` (OrbStack x86_64 VM `ubuntu22-x86`; needs `~/GitHub/bionic_translation`). Output
+  `build/native/x86_64/` (bionic libs, libapklayer_native.so, bundled libEGL/libunwind/... because the Rosetta userspace is minimal,
+  and `share/bionic_translation/cfg.d` mapping `libc.so -> libc_bio.so.0` etc.). bin/apklayer sets `LD_LIBRARY_PATH` and `XDG_DATA_DIRS`
+  to that dir; `-Dapklayer.native` / `-Dapklayer.libdir` point the host at it.
+- The bionic linker needs `_r_debug_ptr` set by the host (done in the JNI helper's constructor), or it crashes in
+  `apkenv_notify_gdb_of_load`. gdb cannot ptrace under Rosetta: debug with a SIGSEGV handler + `addr2line` on a debug build.
+- Test: `tests/vm/native.sh` (CPU-Z). Corpus apps with native libs mostly also need NDK shims (liblog etc.) next.
