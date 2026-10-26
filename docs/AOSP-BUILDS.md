@@ -9,6 +9,8 @@ product than `gsi_arm64 userdebug`):
 `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m <target>`.
 Every build gets an entry here **before** it runs.
 
+**Builds are the user's from 2026-10-26 on ("do not build anything in my los24 anymore, tell me to trigger build"): the assistant edits `aosp/`, syncs it to `vendor/apklayer` and names the modules to build; the user runs the build. The persistent-terminal wrapper below is no longer used by the assistant.**
+
 **Persistent terminal (user, 2026-10-26: "open a terminal and run breakfast on it once and keep building there"):** `scripts/aosp-term.sh start` opens a `screen` session in OrbStack and runs `breakfast` once; `scripts/aosp-term.sh run <command>` (e.g. `m libapklayer_egl`) runs a command in it, waits for it without polling and prints the errors and result. This replaces a fresh shell per build (45 s of `breakfast` each time). Still one Soong build at a time.
 
 **Files taken from the tree (user, 2026-10-26: "push them so we don't forget"):** `deps/android-tree-files.lock` lists every file the arm64 route stages from the
