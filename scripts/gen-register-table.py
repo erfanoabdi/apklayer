@@ -3,7 +3,7 @@
 
 HostRuntime.cpp keeps a map {"android.os.Binder", REG_JNI(register_android_os_Binder), ...} used with the system property
 core_native_classes. The device libandroid_runtime/libhwui export the same functions as global C++ symbols, so
-bridge/native/runtime_shim.c can call them by (mangled) name for exactly the classes Robolectric asks for.
+bridge/native/runtime_shim.c can call them by name (it tries the global and the android:: C++ manglings) for exactly the classes Robolectric asks for.
 Usage: gen-register-table.py <path to HostRuntime.cpp> > bridge/native/register_table.h
 """
 import re, sys
@@ -16,5 +16,5 @@ print("static const struct { const char *java_class; const char *symbol; } regis
 for cls, fn in pairs:
     if fn == "register_libcore_util_NativeAllocationRegistry":
         continue  # defined in HostRuntime.cpp itself (host only); runtime_shim.c provides it
-    print('    { "%s", "_Z%d%sP7_JNIEnv" },' % (cls, len(fn), fn))
+    print('    { "%s", "%s" },' % (cls, fn))
 print("};")

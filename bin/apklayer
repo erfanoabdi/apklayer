@@ -29,7 +29,9 @@ prop() { sed -n "s/^$2=//p" "$1" | head -1; }
 # Robolectric's loader before its own x86_64 library) and android-libs/ (Android's libraries, loaded by bionic_translation).
 host_cp() {
     local n="${APKLAYER_NATIVE:-$ROOT/native}"
-    if [ -f "$n/native-runtime.jar" ]; then # our native runtime replaces Robolectric's prebuilt (x86_64 only): leave that jar out
+    if [ -f "$n/native-runtime.jar" ]; then
+        # our native runtime jar first. Robolectric's nativeruntime-dist-compat is left out: its fonts and x86 library belong to
+        # an older Android build; the fonts of the build the native libraries come from are used instead (-Drobolectric.nativeruntime.fontdir)
         echo "$n/native-runtime.jar:$(ls "$DEPS"/libs/*.jar | grep -v 'nativeruntime-dist-compat' | tr '\n' ':')$DEPS/android-stub.jar:$HOST_JAR:$1"
     else
         echo "$DEPS/libs/*:$DEPS/android-stub.jar:$HOST_JAR:$1"
@@ -136,8 +138,10 @@ cmd_run() {
     export APKLAYER_GLDIR="${XDG_RUNTIME_DIR:-/tmp}/apklayer/gl-$pkg"; rm -rf "$APKLAYER_GLDIR"; mkdir -p "$APKLAYER_GLDIR"  # GL frames of native SurfaceViews (P4.3)
     export APKLAYER_APK="$dir/base.apk"  # NDK libandroid shim reads assets from it
     export LD_LIBRARY_PATH="${APKLAYER_NATIVE:-$ROOT/native}:${APKLAYER_NATIVE:-$ROOT/native}/glibc${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"  # bionic linker + its libs (P4)
+    local nr="${APKLAYER_NATIVE:-$ROOT/native}/android-root" # data of Android's APEX modules (ICU, time zones) for the arm64 native runtime
+    if [ -d "$nr/apex" ]; then export ANDROID_ROOT="$nr/system" ANDROID_DATA="$nr/data" ANDROID_I18N_ROOT="$nr/apex/com.android.i18n" ANDROID_TZDATA_ROOT="$nr/apex/com.android.tzdata"; fi
     export XDG_DATA_DIRS="${APKLAYER_NATIVE:-$ROOT/native}/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"  # bionic_translation cfg.d
-    host -Dapklayer.data="$dir/data" -Dapklayer.package="$pkg" -Dapklayer.libdir="$dir/lib" -Dapklayer.native="${APKLAYER_NATIVE:-$ROOT/native}" -Dapklayer.androidlibs="${APKLAYER_NATIVE:-$ROOT/native}/android-libs" $([ -f "${APKLAYER_NATIVE:-$ROOT/native}/native-runtime.jar" ] && echo "-Dapklayer.nativejar=${APKLAYER_NATIVE:-$ROOT/native}/native-runtime.jar") -Dapklayer.apps="$APPS" -Dapklayer.cli="$ROOT/bin/apklayer" -Dapklayer.webview="$ROOT/bridge/webview/apklayer-webview.py" -Dapklayer.media="$ROOT/bridge/media/apklayer-media.py" -Dapklayer.codec="$ROOT/bridge/media/apklayer-codec.py" ${APKLAYER_JOPTS:-} \
+    host -Dapklayer.data="$dir/data" -Dapklayer.package="$pkg" -Dapklayer.libdir="$dir/lib" -Dapklayer.native="${APKLAYER_NATIVE:-$ROOT/native}" -Dapklayer.androidlibs="${APKLAYER_NATIVE:-$ROOT/native}/android-libs" $([ -d "$nr/system/fonts" ] && echo "-Drobolectric.nativeruntime.fontdir=$nr/system/fonts/") $([ -f "${APKLAYER_NATIVE:-$ROOT/native}/native-runtime.jar" ] && echo "-Dapklayer.nativejar=${APKLAYER_NATIVE:-$ROOT/native}/native-runtime.jar") -Dapklayer.apps="$APPS" -Dapklayer.cli="$ROOT/bin/apklayer" -Dapklayer.webview="$ROOT/bridge/webview/apklayer-webview.py" -Dapklayer.media="$ROOT/bridge/media/apklayer-media.py" -Dapklayer.codec="$ROOT/bridge/media/apklayer-codec.py" ${APKLAYER_JOPTS:-} \
         -cp "$(host_cp "$dir/classes.jar")" apklayer.host.Main "$dir/base.apk" "$dir/classes.jar"
 }
 

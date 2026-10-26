@@ -12,7 +12,9 @@
 #include <link.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <string.h>
+#include <ucontext.h>
 
 #include "register_table.h"
 
@@ -21,6 +23,29 @@ extern void *bionic_dlopen(const char *filename, int flag);
 extern void *bionic_dlsym(void *handle, const char *symbol);
 extern char *bionic_dlerror(void);
 extern struct r_debug *_r_debug_ptr;
+
+/* Debug aid (-Dapklayer.runtimetrace=true): on SIGABRT/SIGSEGV print the frame-pointer chain of the faulting thread and the
+ * memory map lines of the Android libraries, so addresses can be resolved with readelf/nm (gdb cannot unwind libraries
+ * that the bionic linker loaded). Android's arm64 code keeps frame pointers. */
+static void crash_trace(int sig, siginfo_t *info, void *ctx)
+{
+    (void)info;
+    ucontext_t *uc = ctx;
+    uint64_t pc = uc->uc_mcontext.pc, *fp = (uint64_t *)uc->uc_mcontext.regs[29];
+    fprintf(stderr, "[runtime-trace] signal %d pc=0x%llx\n", sig, (unsigned long long)pc);
+    for (int i = 0; i < 32 && fp && ((uintptr_t)fp & 7) == 0; i++) {
+        fprintf(stderr, "[runtime-trace] #%d lr=0x%llx\n", i, (unsigned long long)fp[1]);
+        uint64_t *next = (uint64_t *)fp[0];
+        if (next <= fp) break;
+        fp = next;
+    }
+    FILE *maps = fopen("/proc/self/maps", "r");
+    char line[512];
+    while (maps && fgets(line, sizeof line, maps)) if (strstr(line, "android-arm64") || strstr(line, "android-libs")) fputs(line, stderr);
+    fflush(stderr);
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
 
 static char binding_prefix[64] = "", binding_suffix[64] = "";
 static jniNativeInterface *real_table;
@@ -88,6 +113,22 @@ static char *system_property(JNIEnv *env, const char *key)
     return copy;
 }
 
+/* The registration functions are C++: some in the global namespace, some in android::. Tries both manglings in both libraries. */
+static void *find_register_function(void *rt, void *hwui, const char *name)
+{
+    char global[256], in_android[256];
+    snprintf(global, sizeof global, "_Z%zu%sP7_JNIEnv", strlen(name), name);
+    snprintf(in_android, sizeof in_android, "_ZN7android%zu%sEP7_JNIEnv", strlen(name), name);
+    void *libs[2] = { rt, hwui };
+    for (int i = 0; i < 2; i++) {
+        if (!libs[i]) continue;
+        void *fn = bionic_dlsym(libs[i], global);
+        if (!fn) fn = bionic_dlsym(libs[i], in_android);
+        if (fn) return fn;
+    }
+    return NULL;
+}
+
 /* Registers what Google's HostRuntime would: the classes named by core_native_classes (one function each), the
  * libcore NativeAllocationRegistry native, then HWUI's graphics classes. The device libraries have the functions as
  * global C++ symbols. Returns the number of registrations that could not be run. */
@@ -100,11 +141,11 @@ static int register_classes(JNIEnv *env, JavaVM *vm, void *rt)
 
     char *classes = system_property(env, "core_native_classes");
     for (char *save, *c = classes ? strtok_r(classes, ",", &save) : NULL; c; c = strtok_r(NULL, ",", &save)) {
-        const char *symbol = NULL;
+        if (!strcmp(c, "libcore.util.NativeAllocationRegistry")) continue; /* registered below */
+        const char *name = NULL;
         for (size_t i = 0; i < sizeof register_table / sizeof *register_table; i++)
-            if (!strcmp(register_table[i].java_class, c)) symbol = register_table[i].symbol;
-        int (*fn)(JNIEnv *) = symbol ? bionic_dlsym(rt, symbol) : NULL;
-        if (!fn && symbol && hwui) fn = bionic_dlsym(hwui, symbol);
+            if (!strcmp(register_table[i].java_class, c)) name = register_table[i].symbol;
+        int (*fn)(JNIEnv *) = name ? find_register_function(rt, hwui, name) : NULL;
         if (!fn) { fprintf(stderr, "[runtime] no registration function for %s\n", c); failed++; continue; }
         if (fn(env) < 0) { fprintf(stderr, "[runtime] registering %s failed\n", c); failed++; }
     }
@@ -114,8 +155,11 @@ static int register_classes(JNIEnv *env, JavaVM *vm, void *rt)
     if (nar) (*env)->GetMethodID(env, nar, "<init>", "()V"), (*env)->ExceptionClear(env), (*env)->RegisterNatives(env, nar, &registry, 1);
     else { (*env)->ExceptionClear(env); failed++; }
 
-    void (*init_graphics)(void) = hwui ? bionic_dlsym(hwui, "_Z20init_android_graphicsv") : NULL;
-    int (*register_graphics)(JNIEnv *) = hwui ? bionic_dlsym(hwui, "_Z33register_android_graphics_classesP7_JNIEnv") : NULL;
+    /* declared ANDROID_API in jni_runtime.h: extern "C" (unmangled) or not, depending on the build */
+    void (*init_graphics)(void) = hwui ? bionic_dlsym(hwui, "init_android_graphics") : NULL;
+    if (hwui && !init_graphics) init_graphics = bionic_dlsym(hwui, "_Z20init_android_graphicsv");
+    int (*register_graphics)(JNIEnv *) = hwui ? bionic_dlsym(hwui, "register_android_graphics_classes") : NULL;
+    if (hwui && !register_graphics) register_graphics = bionic_dlsym(hwui, "_Z33register_android_graphics_classesP7_JNIEnv");
     if (init_graphics) init_graphics();
     if (!register_graphics || register_graphics(env) < 0) { fprintf(stderr, "[runtime] graphics registration failed\n"); failed++; }
     return failed;
@@ -131,6 +175,10 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     Dl_info self;
     if (dladdr((void *)JNI_OnLoad, &self)) dlopen(self.dli_fname, RTLD_NOW | RTLD_GLOBAL);
 
+    if (system_property(env, "apklayer.runtimetrace")) {
+        struct sigaction sa = { .sa_sigaction = crash_trace, .sa_flags = SA_SIGINFO | SA_RESETHAND };
+        sigaction(SIGABRT, &sa, NULL);
+    }
     char *libs = system_property(env, "apklayer.androidlibs"), *format = system_property(env, "method_binding_format");
     if (!libs) { fprintf(stderr, "[runtime] -Dapklayer.androidlibs is not set\n"); return -1; }
     parse_binding_format(format ? format : "$$robo$$${method}$nativeBinding");
