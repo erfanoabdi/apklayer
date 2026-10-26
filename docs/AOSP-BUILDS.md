@@ -42,3 +42,4 @@ is the way to publish them when needed.
 | 2026-10-26 | `mapper.apklayer` again (adds `libhidlbase`, `libutils`) | the mapper failed to load: unresolved `hidl_string` (libgralloctypes' HIDL types) | `m mapper.apklayer` in the persistent terminal | started |
 | 2026-10-26 | `mapper.apklayer` + `libapklayer_egl` together (`--soong-only`) | the previous mapper-only `m` was cancelled by the user mid-run; both need rebuilding (the mapper's `libhidlbase`/`libutils` link, the EGL slots resolved through `eglGetProcAddress`) | `m --soong-only mapper.apklayer libapklayer_egl` in the persistent terminal | started |
 
+| 2026-10-26 | `libapklayer_egl` (window surfaces) + `libapklayer_gltest` (new) + `libapklayer_composer` | P7.1 step 3b: EGL window surfaces over the ANativeWindow (gbm_surface + GPU copy) and the GL smoke tool; the composer carries debug pixel sampling | triggered by the user (no builds by the assistant in ~/los24) |
