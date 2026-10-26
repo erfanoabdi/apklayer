@@ -314,13 +314,21 @@ location or SafetyNet-free APIs runs.
 > Google's host runtime has its own Surface/BufferQueue glue (a prebuilt in the tree, `robolectric_nativeruntime_native_prebuilt`,
 > no sources), the device libs expect SurfaceFlinger. Pieces, in order (each testable alone, all reusing the tree's real
 > libgui/libbinder through bionic_translation):
-> 1. **Service manager + our `apklayer-sf`** on kernel binder (`binder_linux` + binderfs works on the VM): registers `SurfaceFlinger`
->    (`ISurfaceComposer`, `ISurfaceComposerClient`, display events) and uses libgui's real `BufferQueueCore` for layers.
-> 2. **gralloc**: an `IAllocator` service + `IMapper` implementation over dmabuf (GBM), so `GraphicBuffer`s are GPU buffers.
-> 3. **Window surfaces**: libhwui's EGL surface on those buffers (EGLImage from dmabuf: Mesa's Android platform or our libEGL shim).
-> 4. **Composition**: the SF takes the acquired buffers' dmabuf fds to the shell (SCM_RIGHTS) which attaches them as
->    `zwp_linux_dmabuf_v1` wl_buffers: zero copy. Frame pacing from `wl_surface.frame` (done: P7.0e, HostVsync/libnativedisplay).
-> 5. Same service later answers input (InputFlinger), camera, and the userspace binder (design above) replaces the kernel one.
+> **Refined (2026-10-26, after finding the real pieces in `out/` and the tree): run the tree's REAL SurfaceFlinger** (built:
+> `system/bin/surfaceflinger`, an executable; rebuilt as a library the same way as the service manager so bionic_translation can
+> run its `main`) **with apklayer's own backends underneath**: SF's `RenderEngine` composites on the GPU (Mesa; the VM has a
+> virtio-gpu render node), transactions/BLAST/display events/screenshots (PixelCopy) are all real code. We write only what
+> a desktop lacks: (a) the HWC (`android.hardware.graphics.composer3` AIDL service, all layers client-composited; the client
+> target's dmabuf and the real `wl_surface.frame` pacing go to the shell), (b) gralloc (the tree's `external/minigbm`
+> allocator/mapper, real code, on the render node) and (c) the launcher. Per app first (an SF + HWC per app process, each on
+> its own binderfs instance), a shared one later. "apklayer-sf" = this set.
+> 1. **Service manager** (`libapklayer_servicemanager`, run by `btload --main`) on binderfs; then the SF library
+>    (`libapklayer_surfaceflinger`) with a stub HWC, until the app's `Surface` gets buffers.
+> 2. **gralloc**: minigbm allocator + mapper built from the tree.
+> 3. **HWC**: `apklayer-hwc` (composer3), vsync from the shell.
+> 4. **Window surfaces**: libhwui's EGL window surface on the SF's buffers (Mesa Android platform / our libEGL shim).
+> 5. **Presentation**: the client target's dmabuf to the shell over SCM_RIGHTS, `zwp_linux_dmabuf_v1`, zero copy.
+> 6. Same service later answers input (InputFlinger), camera, and the userspace binder (design above) replaces the kernel one.
 >
 > **Next (P7.0b): `JNI_OnLoad` and the JNI registration**: the library registers natives under the framework's class names,
 > Robolectric's shadows call its own `org.robolectric.nativeruntime.*Natives` classes; intercept `RegisterNatives` and
