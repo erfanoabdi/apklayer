@@ -256,7 +256,8 @@ test page, and "Open link" opens the host browser.
    receiving JVM unmarshals with the real `Parcel`/AIDL `Stub`.
 3. `BroadcastReceiver`s from the manifest: `BOOT_COMPLETED`-style system broadcasts are not
    sent; app-to-app explicit broadcasts are relayed.
-4. **Sandboxing outside Flatpak:** each app JVM runs under `bwrap`, seeing only its data dir,
+4. **`/data/data/<pkg>` for hardcoded paths** (found 2026-10-26 with Termux: renders its UI, then "files directory not found at /data/data/com.termux/files"): bind the app data dir there inside the `bwrap` mount namespace. On Ubuntu 24.04 unprivileged userns is blocked by AppArmor (`apparmor_restrict_unprivileged_userns=1`: `bwrap: setting up uid map: Permission denied`), so this needs a bwrap AppArmor profile (Flatpak ships one) or `sysctl` on the VM.
+4b. **Sandboxing outside Flatpak:** each app JVM runs under `bwrap`, seeing only its data dir,
    storage, the deps cache and the shell socket.
 
 **Exit test P6:** sharing text from one installed app to another works. An app using microG's
