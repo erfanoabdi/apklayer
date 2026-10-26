@@ -10,7 +10,7 @@ import org.robolectric.shadows.ShadowAudioTrack;
 
 /**
  * AudioTrack output (PLAN P5.2). Robolectric's AudioTrack shadow accepts every write and reports it to
- * listeners; this one streams the PCM to the desktop's audio server with pw-play (one process per track).
+ * listeners; this one streams the PCM to the desktop's audio server with pw-cat (one process per track).
  * The write blocks when the pipe is full, which paces a streaming app like a real AudioTrack.
  */
 final class HostAudio {
@@ -28,7 +28,7 @@ final class HostAudio {
             if (p == null) {
                 int enc = format.getEncoding();
                 String fmt = enc == AudioFormat.ENCODING_PCM_8BIT ? "u8" : enc == AudioFormat.ENCODING_PCM_FLOAT ? "f32" : "s16";
-                p = new ProcessBuilder("pw-play", "--raw", "--rate=" + format.getSampleRate(),
+                p = new ProcessBuilder("pw-cat", "-p", "--rate=" + format.getSampleRate(),
                         "--channels=" + Math.max(1, format.getChannelCount()), "--format=" + fmt, "-")
                         .redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.INHERIT).start();
                 players.put(track, p);

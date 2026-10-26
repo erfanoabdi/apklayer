@@ -19,4 +19,5 @@ check "SoundPool reports the load and plays a stream" 'grep -qE "soundpool loade
 check "the network callback fires for an unmetered Wi-Fi connection" 'grep -q "network available, metered=false wifi=true" <<<"$LOG"'
 check "DownloadManager fetches the file and broadcasts completion" 'grep -q "hello-media\] download complete id=0" <<<"$LOG" && grep -q "\[apklayer\] download 0 ->" <<<"$LOG"'
 check "AndroidKeyStore: AES key by alias, GCM round trip" 'grep -q "keystore roundtrip=hello alias=true" <<<"$LOG"'
+check "the audio player process starts cleanly (no pw-cat error)" '! grep -qE "pw-(cat|play): " <<<"$LOG"'
 exit $fail
