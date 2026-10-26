@@ -353,6 +353,8 @@ location or SafetyNet-free APIs runs.
 > DEVICE/CLIENT from what the compositor offers. **Acceptance test for P7.1:** a GL SurfaceView plus a video layer, copies and CPU
 > use measured (target: zero CPU copies of pixels).
 >
+> **UiBench on the GPU route (2026-10-27): the app's UI is on screen.** The tree flavor (`APKLAYER_NATIVE=~/arm64-native`, the arm64 JDK, the services-only stack `scripts/arm64-stack.sh none`) runs the real device libraries; Robolectric's windows use real SurfaceFlinger layers (relayout2, client-managed SurfaceControl, real BLASTBufferQueue), HWUI renders with Skia GL on the host GPU into our gralloc buffers through the EGL window-surface blit, SurfaceFlinger composes and our HWC shows the frame in the shell. Needs-cleanup list: runtime/patches (Robolectric shadows), the debug prints, input and window focus on the shell window, the display window versus the app window, per-launch properties, the launcher environment in bin/apklayer.
+>
 > **Status (2026-10-26): the whole path works on the VM**: servicemanager, allocator, composer and the real SurfaceFlinger run as arm64
 > bionic libraries under btload, SF's RenderEngine (Skia/GL ES 3.0 on virgl) composes `sftest`'s layer into our gralloc framebuffer and
 > the shell receives its dmabuf frames (buffers rotate, one fd set per buffer). The last blocker was a generated do-nothing stub for
