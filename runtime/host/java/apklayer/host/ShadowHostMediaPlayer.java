@@ -69,6 +69,12 @@ public class ShadowHostMediaPlayer extends ShadowMediaPlayer {
         super.setDataSource(context, u, headers);
     }
 
+    /** setDisplay/setSurface: the engine writes the video frames where HostSurfaces composes them over the view. */
+    @Implementation protected void _setVideoSurface(android.view.Surface surface) {
+        String dir = System.getenv("APKLAYER_GLDIR");
+        if (surface != null && dir != null) send("surface " + java.nio.file.Path.of(dir, surface.hashCode() + ".rgba"));
+    }
+
     private void send(String line) {
         if (uri == null) return;
         try {
