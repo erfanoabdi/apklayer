@@ -42,9 +42,16 @@ void* hostLib() {
     return h;
 }
 
+// A function of the host's libEGL. glvnd exports only the core entry points by name; extension functions (eglCreateImageKHR,
+// eglGetPlatformDisplayEXT, the *SyncKHR ones...) come from its eglGetProcAddress, so that is the fallback for every lookup.
 template <typename F>
 F host(const char* name) {
-    return reinterpret_cast<F>(dlsym(hostLib(), name));
+    void* p = dlsym(hostLib(), name);
+    if (!p && strcmp(name, "eglGetProcAddress") != 0) {
+        auto proc = reinterpret_cast<void* (*)(const char*)>(dlsym(hostLib(), "eglGetProcAddress"));
+        if (proc) p = proc(name);
+    }
+    return reinterpret_cast<F>(p);
 }
 
 thread_local EGLint tError = EGL_SUCCESS;  // errors of our own (the host keeps its own)
