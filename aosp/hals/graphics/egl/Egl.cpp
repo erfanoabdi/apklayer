@@ -23,7 +23,10 @@
 
 using namespace apklayer::gralloc;
 
-extern "C" ANativeWindowBuffer* AHardwareBuffer_to_ANativeWindowBuffer(AHardwareBuffer*);
+namespace android {
+// libnativewindow's platform-visible conversion (C++ linkage in this tree)
+ANativeWindowBuffer* AHardwareBuffer_to_ANativeWindowBuffer(AHardwareBuffer*);
+}  // namespace android
 
 #define EGL_NATIVE_BUFFER_ANDROID 0x3140
 #define EGL_PLATFORM_ANDROID_KHR 0x3141
@@ -144,7 +147,7 @@ const char* eglQueryString(EGLDisplay dpy, EGLint name) {
 const char* eglQueryStringImplementationANDROID(EGLDisplay dpy, EGLint name) { return eglQueryString(dpy, name); }
 
 EGLClientBuffer eglGetNativeClientBufferANDROID(const AHardwareBuffer* buffer) {
-    return buffer ? AHardwareBuffer_to_ANativeWindowBuffer(const_cast<AHardwareBuffer*>(buffer)) : nullptr;
+    return buffer ? android::AHardwareBuffer_to_ANativeWindowBuffer(const_cast<AHardwareBuffer*>(buffer)) : nullptr;
 }
 
 EGLImageKHR eglCreateImageKHR(EGLDisplay dpy, EGLContext ctx, EGLenum target, EGLClientBuffer buffer, const EGLint* attribs) {
