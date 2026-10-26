@@ -37,8 +37,8 @@ final class HostWebViews {
         final Queue<String[]> events = new ConcurrentLinkedQueue<>();
         final java.util.Map<String, ValueCallback<String>> pending = new java.util.HashMap<>();
         final Path frame;
+        final java.util.Set<String> exposed = new java.util.HashSet<>(); // addJavascriptInterface names already injected
         String url, data;
-        Object eval;
         int w, h, seen, evals;
         volatile int rx = -1, ry = -1; // the engine's rectangle in the window (kept by follow(), read by pointer())
 
@@ -119,6 +119,10 @@ final class HostWebViews {
     private static void drive(WebView wv) {
         Engine e = engines.get(wv);
         ShadowWebView shadow = Shadow.extract(wv);
+        if (!(shadow instanceof ShadowHostWebView)) {
+            if (engines.putIfAbsent(wv, null) == null) System.out.println("[apklayer] webview shadow is " + shadow.getClass().getName() + ", not ShadowHostWebView: no engine");
+            return;
+        }
         try {
             if (e == null) {
                 Path dir = Path.of(System.getProperty("apklayer.data", System.getProperty("java.io.tmpdir")), "webview");
@@ -135,6 +139,7 @@ final class HostWebViews {
         if (e.w != wv.getMeasuredWidth() || e.h != wv.getMeasuredHeight()) {
             e.send("size " + (e.w = wv.getMeasuredWidth()) + " " + (e.h = wv.getMeasuredHeight()));
         }
+        exposeInterfaces(wv, shadow, e); // before any load: the page's own scripts may call them at once
         String url = shadow.getLastLoadedUrl();
         ShadowWebView.LoadDataWithBaseURL withBase = shadow.getLastLoadDataWithBaseURL();
         ShadowWebView.LoadData loaded = shadow.getLastLoadData();
@@ -148,15 +153,25 @@ final class HostWebViews {
             e.data = loaded.data;
             e.send("html " + ("base64".equalsIgnoreCase(loaded.encoding) ? loaded.data : b64(android.net.Uri.decode(loaded.data))));
         }
-        Object evalKey = shadow.getLastEvaluatedJavascriptCallback() != null ? shadow.getLastEvaluatedJavascriptCallback() : shadow.getLastEvaluatedJavascript();
-        if (evalKey != null && evalKey != e.eval && shadow.getLastEvaluatedJavascript() != null) {
-            e.eval = evalKey;
+        for (Object[] call; (call = ((ShadowHostWebView) shadow).evals.poll()) != null; ) {
             String id = String.valueOf(++e.evals);
-            if (shadow.getLastEvaluatedJavascriptCallback() != null) e.pending.put(id, shadow.getLastEvaluatedJavascriptCallback());
-            e.send("eval " + id + " " + b64(shadow.getLastEvaluatedJavascript()));
+            if (call[1] != null) e.pending.put(id, (ValueCallback<String>) call[1]);
+            e.send("eval " + id + " " + b64((String) call[0]));
         }
         for (String[] ev; (ev = e.events.poll()) != null; ) {
             switch (ev[0]) {
+                case "started" -> {
+                    if (wv.getWebViewClient() != null) wv.getWebViewClient().onPageStarted(wv, ev.length > 1 ? ev[1] : "", null);
+                }
+                case "title" -> {
+                    android.webkit.WebChromeClient chrome = shadow.getWebChromeClient();
+                    if (chrome != null && ev.length > 1) chrome.onReceivedTitle(wv, new String(Base64.getDecoder().decode(ev[1]), StandardCharsets.UTF_8));
+                }
+                case "call" -> e.send("answer " + ev[1] + " " + b64(bridgeCall(wv, shadow, new String(Base64.getDecoder().decode(ev[2]), StandardCharsets.UTF_8))));
+                case "nav" -> { // a link click: the app's shouldOverrideUrlLoading decides (true = the app handles it)
+                    boolean override = wv.getWebViewClient() != null && wv.getWebViewClient().shouldOverrideUrlLoading(wv, request(ev[2]));
+                    e.send("policy " + ev[1] + (override ? " block" : " allow"));
+                }
                 case "loaded" -> {
                     if (wv.getWebViewClient() != null) wv.getWebViewClient().onPageFinished(wv, ev.length > 1 ? ev[1] : "");
                 }
@@ -181,6 +196,67 @@ final class HostWebViews {
             wv.getRootView().invalidate(); // the view itself has no bounds (see giveMeasure), so dirty the whole window
         }
     }
+
+    private static android.webkit.WebResourceRequest request(String url) {
+        return new android.webkit.WebResourceRequest() {
+            public android.net.Uri getUrl() { return android.net.Uri.parse(url); }
+            public boolean isForMainFrame() { return true; }
+            public boolean isRedirect() { return false; }
+            public boolean hasGesture() { return true; }
+            public String getMethod() { return "GET"; }
+            public Map<String, String> getRequestHeaders() { return Map.of(); }
+        };
+    }
+
+    // ---- addJavascriptInterface: JS calls come back as synchronous XHRs to a loopback server ----
+
+    /** The page's call apklayer://bridge/<interface>/<method>?a=<JSON args>; runs the Java method, returns JSON. */
+    private static String bridgeCall(WebView wv, ShadowWebView shadow, String pathAndQuery) {
+        String[] pq = pathAndQuery.split("\\?a=", 2), p = pq[0].split("/");
+        try {
+            Object target = shadow.getJavascriptInterface(p[0]);
+            org.json.JSONArray args = new org.json.JSONArray(pq.length > 1 ? java.net.URLDecoder.decode(pq[1], StandardCharsets.UTF_8) : "[]");
+            for (java.lang.reflect.Method m : target == null ? new java.lang.reflect.Method[0] : target.getClass().getMethods()) {
+                if (!m.getName().equals(p[1]) || m.getParameterCount() != args.length()) continue;
+                Object[] a = new Object[args.length()];
+                for (int i = 0; i < a.length; i++) {
+                    Class<?> t = m.getParameterTypes()[i];
+                    a[i] = t == int.class ? args.getInt(i) : t == long.class ? args.getLong(i) : t == double.class ? args.getDouble(i)
+                            : t == boolean.class ? args.getBoolean(i) : t == float.class ? (float) args.getDouble(i) : args.isNull(i) ? null : args.getString(i);
+                }
+                Object r = m.invoke(target, a);
+                return r == null ? "null" : r instanceof String ? org.json.JSONObject.quote((String) r) : String.valueOf(r);
+            }
+        } catch (Exception ex) {
+            System.out.println("[apklayer] javascript interface " + pathAndQuery + " failed: " + ex);
+        }
+        return "null";
+    }
+
+    /** Injects a JS object per addJavascriptInterface name (new ones only) into the engine. */
+    private static void exposeInterfaces(WebView wv, ShadowWebView shadow, Engine e) {
+        Map<String, Object> interfaces = org.robolectric.util.ReflectionHelpers.getField(shadow, "javascriptInterfaces");
+        for (Map.Entry<String, Object> i : interfaces.entrySet()) {
+            if (!e.exposed.add(i.getKey())) continue;
+            StringBuilder js = new StringBuilder("window." + i.getKey() + "={");
+            java.util.Set<String> names = new java.util.TreeSet<>();
+            boolean annotated = false;
+            for (java.lang.reflect.Method m : i.getValue().getClass().getMethods())
+                if (m.isAnnotationPresent(android.webkit.JavascriptInterface.class)) { names.add(m.getName()); annotated = true; }
+            if (!annotated) for (java.lang.reflect.Method m : i.getValue().getClass().getMethods())
+                if (m.getDeclaringClass() != Object.class) names.add(m.getName());
+            try {
+                for (String n : names)
+                    js.append(n).append(":function(){var x=new XMLHttpRequest();x.open('GET','apklayer://bridge/").append(i.getKey()).append("/").append(n)
+                      .append("?a='+encodeURIComponent(JSON.stringify([].slice.call(arguments))),false);x.send();return JSON.parse(x.responseText);},");
+                e.send("inject " + b64(js.append("};")));
+            } catch (RuntimeException ex) {
+                System.out.println("[apklayer] cannot expose " + i.getKey() + ": " + ex);
+            }
+        }
+    }
+
+    private static String b64(CharSequence s) { return b64(s.toString()); }
 
     private static String b64(String s) {
         return Base64.getEncoder().encodeToString(s.getBytes(StandardCharsets.UTF_8));

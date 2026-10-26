@@ -21,6 +21,7 @@ J="${JAVA_HOME:+$JAVA_HOME/bin/}"
 "$ROOT/scripts/fetch-deps.sh" "$DEPS" | tail -1
 rm -rf "$OUT" && mkdir -p "$OUT/host" "$OUT/d2j" "$OUT/home"
 "${J}javac" -nowarn -d "$OUT/host" -cp "$DEPS/libs/*:$DEPS/android-all/*" $(find "$ROOT/runtime/host/java" -name "*.java")
+cp -R "$ROOT/runtime/host/resources/." "$OUT/host/"
 "${J}javac" -nowarn -d "$OUT/d2j" $(find "$ROOT/runtime/dex2jvm" -name "*.java")
 
 # dex2jvm takes the class hierarchy from its classpath (android-all); keep it away from any

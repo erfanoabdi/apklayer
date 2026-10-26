@@ -10,6 +10,9 @@ sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" 'pkill -x apklayer-shel
 fail=0
 check() { if eval "$2"; then echo "PASS  $1"; else echo "FAIL  $1"; fail=1; fi; }
 check "WebViewClient.onPageFinished is called" 'grep -q "hello-webview\] page finished" <<<"$LOG"'
+check "onPageStarted is called" 'grep -q "hello-webview\] page started" <<<"$LOG"'
+check "the page calls an addJavascriptInterface object and gets its return value" 'grep -q "js says hi web" <<<"$LOG"'
+check "a link click asks shouldOverrideUrlLoading" 'grep -q "hello-webview\] link https://example.org/next" <<<"$LOG"'
 check "evaluateJavascript returns the page engine's answer" 'grep -q "6\*7 = 42" <<<"$LOG"'
 pixel() { python3 - "$1" <<'E2'
 import struct, zlib, sys

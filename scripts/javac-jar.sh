@@ -7,5 +7,7 @@ shift 4
 rm -rf "$classes" && mkdir -p "$classes"
 if [ "$cp" = "-" ]; then javac -nowarn -encoding UTF-8 -d "$classes" "$@"
 else javac -nowarn -encoding UTF-8 -cp "$cp" -d "$classes" "$@"; fi
+# JAR_RESOURCES: a directory copied into the jar as is (e.g. META-INF/services)
+[ -z "$JAR_RESOURCES" ] || cp -R "$JAR_RESOURCES"/. "$classes"/
 if [ "$main" = "-" ]; then jar --create --file "$out" -C "$classes" .
 else jar --create --file "$out" --main-class "$main" -C "$classes" .; fi
