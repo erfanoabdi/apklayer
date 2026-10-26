@@ -205,6 +205,13 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     Dl_info self;
     if (dladdr((void *)JNI_OnLoad, &self)) dlopen(self.dli_fname, RTLD_NOW | RTLD_GLOBAL);
 
+    /* host libraries the Android code calls into (APKLAYER_HOST_LIBS, colon separated: the graphics HAL), global like btload does */
+    if (getenv("APKLAYER_HOST_LIBS")) {
+        char *hl = strdup(getenv("APKLAYER_HOST_LIBS"));
+        for (char *save, *l = strtok_r(hl, ":", &save); l; l = strtok_r(NULL, ":", &save))
+            if (!dlopen(l, RTLD_NOW | RTLD_GLOBAL)) fprintf(stderr, "[runtime] %s\n", dlerror());
+    }
+
     if (system_property(env, "apklayer.runtimetrace")) {
         apklayer_crash_trace();
     }
