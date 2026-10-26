@@ -84,6 +84,10 @@ public final class AppHost implements Runnable {
     private final Path apk;
     private final Path describe;
     private final Deque<ActivityController<? extends Activity>> stack = new ArrayDeque<>();
+    /** Intents handed to other apps that will answer: routed handle -> {requesting activity, request intent}. */
+    private final java.util.Map<HostApps.Routed, Object[]> crossApp = new java.util.HashMap<>();
+    /** The activity another app started this process for (its result goes back, PLAN P6). */
+    private Activity incomingActivity;
     /** Activities started with startActivityForResult -> the request intent, to return their setResult. */
     private final java.util.Map<Activity, Intent> resultFor = new java.util.IdentityHashMap<>();
     private final Set<Activity> stopped = new HashSet<>();
@@ -226,6 +230,7 @@ public final class AppHost implements Runnable {
         installProviders(app);
         Intent incoming = HostApps.incoming(); // another app started this one with an intent (PLAN P6)
         launch(incoming != null ? incoming : launcherIntent(app));
+        if (incoming != null) incomingActivity = stack.peek().get();
         // Like Simulator.postMotionEvent: an off-screen move so the first frame is drawn.
         input.inject(MotionEvent.obtain(0, SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE, width, height, 0));
         loop(shell, frames);
@@ -490,6 +495,7 @@ public final class AppHost implements Runnable {
                 followTextInput();
                 HostSurfaces.follow();
                 HostWebViews.follow();
+                deliverCrossAppResults();
                 HostPortals.followNotifications();
             }
         } catch (Exception e) {
@@ -522,7 +528,11 @@ public final class AppHost implements Runnable {
                         .receiveResult(intent, picked != null ? Activity.RESULT_OK : Activity.RESULT_CANCELED, picked);
                 return;
             }
-            if (HostApps.route(intent)) return; // another installed app handles it
+            HostApps.Routed routed = HostApps.route(intent, wantsResult); // another installed app handles it
+            if (routed != null) {
+                if (wantsResult) crossApp.put(routed, new Object[] {stack.peek().get(), intent});
+                return;
+            }
             // Android would crash the app here; on the desktop the app stays on its current screen.
             System.out.println("[apklayer] cannot start " + intent + ": " + e);
             return;
@@ -558,6 +568,20 @@ public final class AppHost implements Runnable {
         // own decor's first draw, and the composed screen would show nothing behind the dialog.
         c.get().getWindow().getDecorView().invalidate();
         System.out.println("[apklayer] started " + c.get().getClass().getName() + " depth=" + stack.size());
+    }
+
+    /** Hands an answer from another app (or its disappearance, as RESULT_CANCELED) to the activity that asked. */
+    private void deliverCrossAppResults() {
+        for (java.util.Iterator<java.util.Map.Entry<HostApps.Routed, Object[]>> it = crossApp.entrySet().iterator(); it.hasNext(); ) {
+            java.util.Map.Entry<HostApps.Routed, Object[]> e = it.next();
+            Object[] answer = HostApps.readResult(e.getKey());
+            if (answer == null && e.getKey().process().isAlive()) continue;
+            if (answer == null) answer = new Object[] {Activity.RESULT_CANCELED, null};
+            it.remove();
+            Activity requester = (Activity) e.getValue()[0];
+            if (stack.stream().anyMatch(c -> c.get() == requester))
+                ((ShadowActivity) Shadow.extract(requester)).receiveResult((Intent) e.getValue()[1], (Integer) answer[0], (Intent) answer[1]);
+        }
     }
 
     /** Destroys the top activity (the paused/stopped state it is in decides which lifecycle calls remain). */
@@ -625,6 +649,10 @@ public final class AppHost implements Runnable {
         Activity top = stack.peek().get();
         if (top.isFinishing()) {
             stack.pop().pause().stop().destroy();
+            if (top == incomingActivity) {
+                ShadowActivity answered = Shadow.extract(top);
+                HostApps.writeResult(answered.getResultCode(), answered.getResultIntent());
+            }
             Intent request = resultFor.remove(top);
             if (request != null && !stack.isEmpty()) {
                 ShadowActivity child = Shadow.extract(top);

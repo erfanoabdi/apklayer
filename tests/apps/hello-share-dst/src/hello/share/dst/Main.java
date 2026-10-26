@@ -10,6 +10,12 @@ public class Main extends Activity {
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         Intent i = getIntent();
+        if ("hello.action.ASK".equals(i.getAction())) { // answer the caller and close
+            System.out.println("[hello-share-dst] asked: " + i.getStringExtra("q"));
+            setResult(RESULT_OK, new Intent().putExtra("answer", "42 for " + i.getStringExtra("q")));
+            finish();
+            return;
+        }
         String text = Intent.ACTION_SEND.equals(i.getAction()) ? i.getStringExtra(Intent.EXTRA_TEXT) : "(launched normally)";
         System.out.println("[hello-share-dst] got text: " + text);
         TextView v = new TextView(this);
