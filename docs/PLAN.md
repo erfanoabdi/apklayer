@@ -377,6 +377,15 @@ location or SafetyNet-free APIs runs.
 > compositor, and vsync comes from the compositor's frame callbacks. **Finding: the VM's `wl_output` says 59.9 Hz but the frame callbacks run
 > at about 111 Hz (the Mac's ProMotion display is 120 Hz and Parallels reports the mode as 60).** "Real refresh rate" must therefore come from
 > the measured callback cadence, not the mode: the composer HAL will report `getDisplayVsyncPeriod` from measured frame callbacks.
+> **Resizing and windows (user question, 2026-10-26: "with a custom HWC apps will run full screen as the whole display, can we still resize?").**
+> Yes, in two levels. (1) **The display follows the shell window**: the HWC's size is the window's size; the shell's CONFIGURE message
+> (already used for P2 resize/HiDPI) makes the HWC announce a new display configuration (or a hotplug re-announce) to SurfaceFlinger, which
+> re-lays out, and apps get a configuration change like a resized emulator window. To verify: how smoothly SurfaceFlinger takes a live
+> size change; rotation is the same mechanism. (2) **One shell window per Android top-level window**: SurfaceFlinger hands the HWC every
+> layer with its buffer and frame; the HWC maps each app's top-level layer to its own `xdg_toplevel` (the overlay/subsurface mechanism with
+> a toplevel), so windows resize, move, minimise and close individually and a resize resizes that Android window. Status bar, dialogs and
+> popups stay inside their window. Needs the shadow layer to expose per-window size and accept resizes from the shell. Rule for the code:
+> the display size and the window ids are always parameters, never constants.
 > 4. **Window surfaces**: libhwui's EGL window surface on the SF's buffers (Mesa Android platform / our libEGL shim).
 > 5. **Presentation**: the client target's dmabuf to the shell over SCM_RIGHTS, `zwp_linux_dmabuf_v1`, zero copy.
 > 6. Same service later answers input (InputFlinger), camera, and the userspace binder (design above) replaces the kernel one.
