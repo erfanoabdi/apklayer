@@ -2,6 +2,7 @@
 // renders GL ES into it with a plain EGL window surface (libapklayer_egl copies each frame on the GPU into the window's buffer).
 // Clears to a colour that changes every frame; halfway through the layer is resized. Usage: gltest [frames]
 #include <EGL/egl.h>
+#include <gui/BLASTBufferQueue.h>
 #include <gui/Surface.h>
 #include <gui/SurfaceComposerClient.h>
 #include <gui/SurfaceControl.h>
@@ -21,7 +22,9 @@ extern "C" int main(int argc, char** argv) {
     sp<SurfaceControl> sc = client->createSurface(String8("apklayer-gltest"), w, h, PIXEL_FORMAT_RGBA_8888, 0);
     if (sc == nullptr || !sc->isValid()) { fprintf(stderr, "gltest: createSurface failed\n"); return 1; }
     SurfaceComposerClient::Transaction().setLayer(sc, 0x7fffffff).show(sc).apply();
-    sp<Surface> surface = sc->getSurface();
+    sp<BLASTBufferQueue> bbq = sp<BLASTBufferQueue>::make("apklayer-gltest");  // what a window manager does for an app's window
+    bbq->update(sc, w, h, PIXEL_FORMAT_RGBA_8888);
+    sp<Surface> surface = bbq->getSurface(false);
 
     EGLDisplay dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     EGLint major, minor;
@@ -41,7 +44,7 @@ extern "C" int main(int argc, char** argv) {
     printf("gltest: window surface %p on a %ux%u layer\n", win, w, h);
     for (int f = 0; f < frames; f++) {
         if (f == frames / 2) {  // the layer's size changes: the window surface must follow (a new surface pair behind the same EGLSurface)
-            SurfaceComposerClient::Transaction().setBufferSize(sc, 640, 400).apply();
+            bbq->update(sc, 640, 400, PIXEL_FORMAT_RGBA_8888);
             printf("gltest: layer resized to 640x400 at frame %d\n", f);
         }
         clearColor((f % 60) / 60.0f, 1.0f - (f % 60) / 60.0f, 0.5f, 1.0f);
