@@ -510,6 +510,13 @@ public final class AppHost implements Runnable {
             throw new RuntimeException(e);
         }
         System.out.println("[apklayer] exit: frames=" + frames.frames() + " depth=" + stack.size());
+        if (Boolean.getBoolean("apklayer.threads")) { // -Dapklayer.threads=true: what every thread is doing at the end (stalls)
+            Thread.getAllStackTraces().forEach((t, st) -> {
+                if (st.length == 0 || t.isDaemon() && !t.getName().contains("Main") && !t.getName().contains("Render")) return;
+                System.out.println("[apklayer] thread " + t.getName() + " " + t.getState());
+                for (int i = 0; i < Math.min(st.length, 14); i++) System.out.println("[apklayer]     at " + st[i]);
+            });
+        }
     }
 
     /** Builds and fully starts the activity, as the simulator does (Robolectric.setupActivity). */

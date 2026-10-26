@@ -4,6 +4,8 @@
  * property service, no linker namespaces, no malloc debugging.  Names and signatures follow bionic's headers. */
 #define _GNU_SOURCE
 #include <errno.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -77,3 +79,19 @@ pid_t pthread_gettid_np(pthread_t t) { (void)t; return (pid_t)syscall(SYS_gettid
 int android_getaddrinfofornet(const char *hostname, const char *servname, const struct addrinfo *hints, unsigned netid, unsigned mark,
                               struct addrinfo **res)
 { (void)netid; (void)mark; return getaddrinfo(hostname, servname, hints, res); }
+
+/* bionic_translation's linker and wrapper log through __android_log_vprint, looked up in the glibc namespace; without
+ * one they print everything (thousands of lines per library). This one keeps warnings and worse, the rest with
+ * APKLAYER_LINKER_DEBUG=1. (The bionic side of the process has the real liblog; see the logger hook in runtime_shim.c.) */
+int __android_log_vprint(int prio, const char *tag, const char *fmt, va_list ap)
+{
+    static int debug = -1;
+    if (debug < 0) debug = getenv("APKLAYER_LINKER_DEBUG") != NULL;
+    if (prio < 5 && !debug) return 0;
+    char buf[1024];
+    int n = vsnprintf(buf, sizeof buf, fmt, ap);
+    size_t len = strlen(buf);
+    while (len && buf[len - 1] == '\n') buf[--len] = 0;
+    if (len) fprintf(stderr, "[%s] %s\n", tag ? tag : "linker", buf);
+    return n;
+}
