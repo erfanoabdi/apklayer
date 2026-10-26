@@ -126,6 +126,7 @@ public final class AppHost implements Runnable {
         ShadowChoreographer.setPaused(true);
         ShadowChoreographer.setFrameDelay(Duration.ofMillis(15));
         ShadowLog.setCaptureLogsEnabled(false);
+        if (Boolean.getBoolean("apklayer.logcat")) ShadowLog.stream = System.out; // debug: the app's android.util.Log lines
         // Apps that fire a startup sound (beep, shutter, notification) must not die in
         // Robolectric's media shadow: an unregistered data source throws from prepare().
         // Robolectric maps any unmatched String/Uri/FD source to the "unknown" string

@@ -114,7 +114,7 @@ public final class Services {
             try {
                 Running r = instance(cn, intent);
                 r.started = true;
-                r.controller.startCommand(0, ++startId);
+                r.service.onStartCommand(intent, 0, ++startId); // this call's intent (the controller would resend the creation one)
                 return cn;
             } catch (ClassNotFoundException e) {
                 return null;
