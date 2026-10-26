@@ -1,0 +1,20 @@
+// apklayer's gralloc allocator service (PLAN P7.1). The host graphics HAL's functions (apklayer_gfx_*) are resolved when the
+// library is loaded by bionic_translation (they live in the glibc process), hence allow_undefined_symbols.
+cc_library_shared {
+    name: "libapklayer_allocator",
+    srcs: ["Allocator.cpp"],
+    local_include_dirs: ["../common", "../host-include"],
+    header_libs: ["libdrm_headers"],
+    shared_libs: [
+        "android.hardware.graphics.allocator-V2-ndk",
+        "android.hardware.graphics.common-V7-ndk",
+        "android.hardware.common-V2-ndk",
+        "libaidlcommonsupport",
+        "libbase",
+        "libbinder_ndk",
+        "libcutils",
+        "liblog",
+    ],
+    allow_undefined_symbols: true,
+    cflags: ["-Wall", "-Werror"],
+}

@@ -9,6 +9,12 @@ dest=/home/erfanabdi/los24/vendor/apklayer
 orb -m ubuntu22-x86 mkdir -p "$dest"
 orb -m ubuntu22-x86 find "$dest" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 tar cf - -C aosp . | orb -m ubuntu22-x86 tar xf - -C "$dest"
+# the host HALs' C headers, which the Android-side code includes (the host side is the single source)
+for hal in bridge/hals/*/include; do
+    d=$(basename "$(dirname "$hal")")
+    orb -m ubuntu22-x86 mkdir -p "$dest/hals/$d/host-include"
+    tar cf - -C "$hal" . | orb -m ubuntu22-x86 tar xf - -C "$dest/hals/$d/host-include"
+done
 orb -m ubuntu22-x86 sh -c "cd $dest && { [ -d .git ] || git init -q; } && git add -A && { git diff --cached --quiet || git commit -q -m '$msg
 
 Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>'; } && git log --oneline | head -1"
