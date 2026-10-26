@@ -1,0 +1,8 @@
+# Apps the VM corpus run (tests/vm/corpus.sh) starts, one per line: <tier> <apk path, ~ allowed>
+T2 ~/.cache/apklayer/corpus/org.schabi.newpipe_1015.apk
+T2 ~/.cache/apklayer/corpus/de.danoeh.antennapod_3120395.apk
+T2 ~/TestApps/nextcloud-release-30270000-signed.apk
+T3 ~/TestApps/cpu_z.apk
+T3 ~/.cache/apklayer/corpus/com.termux_1002.apk
+T3 ~/.cache/apklayer/corpus/com.kunzisoft.keepass.libre_45600.apk
+T1 tests/uibench/uibench.apk
