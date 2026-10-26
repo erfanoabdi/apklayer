@@ -268,6 +268,18 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
         gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA6, dstFbo);
         gl<void (*)(int, int, int, int, int, int, int, int, unsigned, unsigned)>("glBlitFramebuffer")(
                 0, 0, w.width, w.height, 0, 0, dst->width, dst->height, 0x4000 /* GL_COLOR_BUFFER_BIT */, 0x2600 /* GL_NEAREST */);
+        if (getenv("APKLAYER_RUNTIME_DEBUG")) {  // what the blit copied: a pixel of the app's frame and of the window buffer
+            static int logged;
+            if (logged++ < 6) {
+                auto readPixels = gl<void (*)(int, int, int, int, unsigned, unsigned, void*)>("glReadPixels");
+                unsigned char a[4] = {0}, b[4] = {0};
+                gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8D40, srcFbo);
+                readPixels(w.width / 2, w.height / 4, 1, 1, 0x1908, 0x1401, a);
+                gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8D40, dstFbo);
+                readPixels(w.width / 2, w.height / 4, 1, 1, 0x1908, 0x1401, b);
+                ALOGI("window frame %u: app pixel %02x%02x%02x%02x -> window buffer pixel %02x%02x%02x%02x", logged, a[0], a[1], a[2], a[3], b[0], b[1], b[2], b[3]);
+            }
+        }
         gl<void (*)()>("glFlush")();
         auto createSync = host<PFNEGLCREATESYNCKHRPROC>("eglCreateSyncKHR");
         auto dupFence = host<PFNEGLDUPNATIVEFENCEFDANDROIDPROC>("eglDupNativeFenceFDANDROID");

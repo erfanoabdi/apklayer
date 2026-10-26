@@ -85,6 +85,8 @@ public class ShadowSurfaceControl {
 
   // apklayer patch: relayout's out SurfaceControl becomes a real BLAST layer of SurfaceFlinger (the window's buffer queue layer)
   void initializeNativeObject() {
+    // Android 16 (client-managed surfaces): ViewRootImpl made the window's layer itself before relayout; replacing it would destroy it
+    if (((SurfaceControl) realObject).isValid()) return;
     System.err.println("[apklayer] relayout: creating a real SurfaceControl");
     SurfaceControl real =
         new SurfaceControl.Builder().setName("apklayer-window").setBLASTLayer().setFormat(android.graphics.PixelFormat.RGBA_8888).build();
