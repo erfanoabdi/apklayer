@@ -34,7 +34,7 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
   the open caveats (2x output, real IME not exercised) are in docs/PLAN.md. P3 corpus: 7/17 T1 pass.
   P4 native libs: apps' `.so` load through bionic_translation (NativeLoader + JNI helper); NDK shims
   in `bridge/ndk` (log, android, EGL over bundled Mesa llvmpipe); SurfaceView surfaces via
-  `HostSurfaces` (native GL frames are composited into the window); sample `tests/native/hello-gl2`.
+  `HostSurfaces` (native GL frames are composited into the window); sample `tests/apps/hello-gl2`.
   Java GLSurfaceView does not render (EGL10 classes are stubs in the sandbox; see PLAN P4.3).
 - Session rules are in `CLAUDE.md` (no sleeps, 3-second rule, reuse local sources first).
 - Commands: `bin/apklayer install|run|list|uninstall`; apps in ~/.local/share/apklayer/apps/<pkg>

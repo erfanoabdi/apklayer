@@ -425,6 +425,7 @@ public final class AppHost implements Runnable {
                 followOrientation();
                 followTextInput();
                 HostSurfaces.follow();
+                HostWebViews.follow();
                 HostPortals.followNotifications();
             }
         } catch (Exception e) {

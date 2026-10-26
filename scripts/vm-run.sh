@@ -26,7 +26,7 @@ vm "mkdir -p apklayer-m1"
 # incremental: only changed sources are copied and rebuilt (the Meson build dir b/ and native/ are kept)
 (cd "$ROOT" && eval $RSYNC --exclude='._*' --exclude=b meson.build meson_options.txt bin runtime bridge "$VM:apklayer-m1/" && \
   eval $RSYNC scripts/javac-jar.sh "$VM:apklayer-m1/scripts/" 2>/dev/null || { vm "mkdir -p apklayer-m1/scripts"; eval $RSYNC scripts/javac-jar.sh "$VM:apklayer-m1/scripts/"; })
-vm "cd apklayer-m1 && { [ -d b ] || meson setup b >/dev/null; } && { ninja -C b > /tmp/ninja.log 2>&1 || { grep -a -B2 -A4 'error' /tmp/ninja.log | head -30; exit 1; }; }"
+vm "cd apklayer-m1 && { [ -d b ] && meson setup --reconfigure b >/dev/null 2>&1 || meson setup b >/dev/null; } && { ninja -C b > /tmp/ninja.log 2>&1 || { grep -a -B2 -A4 'error' /tmp/ninja.log | head -30; exit 1; }; }"
 if [ -d "$ROOT/build/native/x86_64" ]; then  # bionic linker + JNI loader (scripts/build-native.sh)
   eval $RSYNC "$ROOT"/build/native/x86_64/ "$VM:apklayer-m1/native/"
 fi

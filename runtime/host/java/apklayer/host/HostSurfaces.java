@@ -75,7 +75,7 @@ final class HostSurfaces {
         }
     }
 
-    private static Path file(HostSurface s) { return DIR == null ? null : DIR.resolve(s.hashCode() + ".rgba"); }
+    static Path file(HostSurface s) { return DIR == null ? null : DIR.resolve(s.hashCode() + ".rgba"); }
 
     private static int frameSeq(HostSurface s) {
         Path f = file(s);
@@ -90,27 +90,33 @@ final class HostSurfaces {
 
     /** Blits each SurfaceView's latest GL frame into the composed window frame (ARGB, w x h). */
     static void compose(int[] argb, int w, int h) {
-        for (Map.Entry<SurfaceView, HostSurface> e : surfaces.entrySet()) {
-            SurfaceView sv = e.getKey();
-            Path f = file(e.getValue());
-            if (f == null || !Files.exists(f) || !sv.isShown()) continue;
-            try {
-                ByteBuffer b = ByteBuffer.wrap(Files.readAllBytes(f)).order(ByteOrder.LITTLE_ENDIAN);
-                int fw = b.getInt(0), fh = b.getInt(4);
-                java.nio.IntBuffer px = b.position(12).asIntBuffer();
-                int[] loc = new int[2];
-                sv.getLocationOnScreen(loc);
-                for (int y = 0; y < sv.getHeight() && loc[1] + y < h; y++) {
-                    for (int x = 0; x < sv.getWidth() && loc[0] + x < w; x++) {
-                        if (loc[0] + x < 0 || loc[1] + y < 0) continue;
-                        int sx = x * fw / sv.getWidth(), sy = y * fh / sv.getHeight();
-                        int v = px.get(sy * fw + sx); // little-endian RGBA bytes
-                        argb[(loc[1] + y) * w + loc[0] + x] = 0xFF000000 | (v & 0xFF) << 16 | (v & 0xFF00) | (v >> 16 & 0xFF);
-                    }
+        for (Map.Entry<SurfaceView, HostSurface> e : surfaces.entrySet())
+            blitView(e.getKey(), file(e.getValue()), argb, w, h);
+    }
+
+    private static void blitView(View v, Path f, int[] argb, int w, int h) {
+        if (!v.isShown()) return;
+        int[] loc = new int[2];
+        v.getLocationOnScreen(loc);
+        blit(loc[0], loc[1], v.getWidth(), v.getHeight(), f, argb, w, h);
+    }
+
+    /** Copies the frame file {w,h,seq,RGBA rows} over the rectangle (x, y, vw, vh) of the window frame, scaled to it. */
+    static void blit(int x0, int y0, int vw, int vh, Path f, int[] argb, int w, int h) {
+        if (f == null || vw <= 0 || vh <= 0 || !Files.exists(f)) return;
+        try {
+            ByteBuffer b = ByteBuffer.wrap(Files.readAllBytes(f)).order(ByteOrder.LITTLE_ENDIAN);
+            int fw = b.getInt(0), fh = b.getInt(4);
+            java.nio.IntBuffer px = b.position(12).asIntBuffer();
+            for (int y = 0; y < vh && y0 + y < h; y++) {
+                for (int x = 0; x < vw && x0 + x < w; x++) {
+                    if (x0 + x < 0 || y0 + y < 0) continue;
+                    int c = px.get((y * fh / vh) * fw + x * fw / vw); // little-endian RGBA bytes
+                    argb[(y0 + y) * w + x0 + x] = 0xFF000000 | (c & 0xFF) << 16 | (c & 0xFF00) | (c >> 16 & 0xFF);
                 }
-            } catch (IOException | RuntimeException ex) {
-                // a half-written or vanished frame: keep the window as is
             }
+        } catch (IOException | RuntimeException ex) {
+            // a half-written or vanished frame: keep the window as is
         }
     }
 }
