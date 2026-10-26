@@ -15,3 +15,11 @@ side translates Android calls and types; everything that touches the desktop liv
 | `power`, `thermal`, `health` | optional answers for SurfaceFlinger and the framework | UPower, thermal zones | later |
 | `input` | InputFlinger inputs | evdev / the shell's Wayland input | later |
 | `audio` | `android.hardware.audio.core` | PipeWire | later (today: apklayer-media) |
+
+## `graphics/vdisplay` (not a HAL: a per-app virtual display sink)
+One process per app window: a SurfaceFlinger virtual display whose output BufferQueue it consumes, handing the finished dmabufs to
+apklayer-shell through the host display HAL. Written new because nothing local fits: the composer is the primary display's HWC (a
+service SurfaceFlinger calls, client composition only, no virtual displays by design), `servicetool` is a one-shot client, and AOSP's
+`screenrecord` (the same virtual display + consumer pattern) is built around a video encoder. It is a `cc_library_shared` exporting
+`main` only because that is how every Android-side process here is run (`btload --main`).
+
