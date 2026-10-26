@@ -9,6 +9,7 @@ cc_library_shared {
         "libdrm_headers",
         "libEGL_headers",
         "libnativebase_headers",
+        "libsystem_headers",
     ],
     shared_libs: ["libcutils", "liblog", "libnativewindow"],
     compile_multilib: "64",

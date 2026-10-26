@@ -14,3 +14,12 @@ cc_library_shared {
     cflags: ["-Wall", "-Werror", "-Wno-main"],
 }
 
+
+// EGL window-surface smoke test: GL ES rendering into a BufferQueue layer through libapklayer_egl.
+cc_library_shared {
+    name: "libapklayer_gltest",
+    srcs: ["gltest.cpp"],
+    shared_libs: ["libgui", "libui", "libutils", "libbinder", "liblog", "libcutils", "libEGL"],
+    header_libs: ["libEGL_headers"],
+    cflags: ["-Wall", "-Werror", "-Wno-main"],
+}
