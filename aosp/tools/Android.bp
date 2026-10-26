@@ -4,3 +4,12 @@ cc_library_shared {
     shared_libs: ["libbinder", "libutils", "liblog"],
     cflags: ["-Wall", "-Werror"],
 }
+
+// Whole-stack smoke test: a layer with GraphicBuffers shown through SurfaceFlinger.
+cc_library_shared {
+    name: "libapklayer_sftest",
+    srcs: ["sftest.cpp"],
+    shared_libs: ["libgui", "libui", "libutils", "libbinder", "liblog", "libcutils"],
+    cflags: ["-Wall", "-Werror"],
+}
+

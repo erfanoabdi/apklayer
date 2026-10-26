@@ -13,7 +13,10 @@
 #include <log/log.h>
 #include <nativebase/nativebase.h>
 
+#include <cstring>
+#include <initializer_list>
 #include <string>
+#include <vector>
 
 #include "gralloc_handle.h"
 #include "apklayer/graphics.h"

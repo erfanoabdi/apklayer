@@ -1,0 +1,24 @@
+// apklayer's HWC (composer3): one display = a window of apklayer-shell, client composition only (PLAN P7.1).
+cc_library_shared {
+    name: "libapklayer_composer",
+    srcs: ["Composer.cpp"],
+    header_libs: [
+        "libapklayer_gralloc_common_headers",
+        "libapklayer_graphics_host_headers",
+        "libdrm_headers",
+    ],
+    shared_libs: [
+        "android.hardware.graphics.composer3-V5-ndk",
+        "android.hardware.graphics.common-V7-ndk",
+        "android.hardware.common-V2-ndk",
+        "android.hardware.drm-V2-ndk",
+        "android.hardware.drm.common-V1-ndk",
+        "libbase",
+        "libbinder_ndk",
+        "libcutils",
+        "liblog",
+    ],
+    static_libs: ["libaidlcommonsupport"],
+    allow_undefined_symbols: true,
+    cflags: ["-Wall", "-Werror", "-Wno-unused-parameter", "-Wno-deprecated-declarations"],
+}
