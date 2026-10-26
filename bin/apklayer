@@ -25,9 +25,16 @@ TMP=""
 trap 'rm -rf "$TMP"' EXIT
 die() { echo "apklayer: $*" >&2; exit 1; }
 prop() { sed -n "s/^$2=//p" "$1" | head -1; }
-# An arm64 native runtime (PLAN P7) is a directory with resources/native/linux/x86_64/libandroid_runtime.so (the shim, found by
+# An arm64 native runtime (PLAN P7) is a directory with native-runtime.jar holding native/linux/x86_64/libandroid_runtime.so (the shim, found by
 # Robolectric's loader before its own x86_64 library) and android-libs/ (Android's libraries, loaded by bionic_translation).
-host_cp() { local n="${APKLAYER_NATIVE:-$ROOT/native}"; echo "$([ -d "$n/resources" ] && echo "$n/resources:")$DEPS/libs/*:$DEPS/android-stub.jar:$HOST_JAR:$1"; }
+host_cp() {
+    local n="${APKLAYER_NATIVE:-$ROOT/native}"
+    if [ -f "$n/native-runtime.jar" ]; then # our native runtime replaces Robolectric's prebuilt (x86_64 only): leave that jar out
+        echo "$n/native-runtime.jar:$(ls "$DEPS"/libs/*.jar | grep -v 'nativeruntime-dist-compat' | tr '\n' ':')$DEPS/android-stub.jar:$HOST_JAR:$1"
+    else
+        echo "$DEPS/libs/*:$DEPS/android-stub.jar:$HOST_JAR:$1"
+    fi
+}
 # The cache key of a conversion: same APK, same framework, same converter -> same classes.
 cache_key() {
     { sha256sum "$1" | cut -c1-64; echo "post-processing v5: guava relocation, native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke"; ls "$DEPS/android-all"; cat "$ROOT/runtime/dex2jvm/com.macapk.dex/.dex2jvm-commit" 2>/dev/null; } \
@@ -36,7 +43,7 @@ cache_key() {
 host() {
     # shellcheck disable=SC2086
     $JAVA @"$ROOT/runtime/host/jvm.args" -Drobolectric.offline=true \
-        -Drobolectric.dependency.dir="$DEPS/android-all" "$@"
+        -Drobolectric.dependency.dir="$([ -d "${APKLAYER_NATIVE:-$ROOT/native}/android-all" ] && echo "${APKLAYER_NATIVE:-$ROOT/native}/android-all" || echo "$DEPS/android-all")" "$@"
 }
 
 cmd_install() {
@@ -130,7 +137,7 @@ cmd_run() {
     export APKLAYER_APK="$dir/base.apk"  # NDK libandroid shim reads assets from it
     export LD_LIBRARY_PATH="${APKLAYER_NATIVE:-$ROOT/native}:${APKLAYER_NATIVE:-$ROOT/native}/glibc${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"  # bionic linker + its libs (P4)
     export XDG_DATA_DIRS="${APKLAYER_NATIVE:-$ROOT/native}/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"  # bionic_translation cfg.d
-    host -Dapklayer.data="$dir/data" -Dapklayer.package="$pkg" -Dapklayer.libdir="$dir/lib" -Dapklayer.native="${APKLAYER_NATIVE:-$ROOT/native}" -Dapklayer.androidlibs="${APKLAYER_NATIVE:-$ROOT/native}/android-libs" -Dapklayer.apps="$APPS" -Dapklayer.cli="$ROOT/bin/apklayer" -Dapklayer.webview="$ROOT/bridge/webview/apklayer-webview.py" -Dapklayer.media="$ROOT/bridge/media/apklayer-media.py" -Dapklayer.codec="$ROOT/bridge/media/apklayer-codec.py" ${APKLAYER_JOPTS:-} \
+    host -Dapklayer.data="$dir/data" -Dapklayer.package="$pkg" -Dapklayer.libdir="$dir/lib" -Dapklayer.native="${APKLAYER_NATIVE:-$ROOT/native}" -Dapklayer.androidlibs="${APKLAYER_NATIVE:-$ROOT/native}/android-libs" $([ -f "${APKLAYER_NATIVE:-$ROOT/native}/native-runtime.jar" ] && echo "-Dapklayer.nativejar=${APKLAYER_NATIVE:-$ROOT/native}/native-runtime.jar") -Dapklayer.apps="$APPS" -Dapklayer.cli="$ROOT/bin/apklayer" -Dapklayer.webview="$ROOT/bridge/webview/apklayer-webview.py" -Dapklayer.media="$ROOT/bridge/media/apklayer-media.py" -Dapklayer.codec="$ROOT/bridge/media/apklayer-codec.py" ${APKLAYER_JOPTS:-} \
         -cp "$(host_cp "$dir/classes.jar")" apklayer.host.Main "$dir/base.apk" "$dir/classes.jar"
 }
 

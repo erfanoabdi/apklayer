@@ -15,6 +15,12 @@ import org.robolectric.simulator.SandboxBuilder;
  * the app is not run: its metadata and launcher icon are written to out-dir (install time).
  */
 public final class Main {
+    /** The APK and its converted classes, plus the arm64 native runtime jar (bin/apklayer, PLAN P7) whose library Robolectric's loader extracts. */
+    private static List<Path> sandboxJars(Path apk, Path classes) {
+        String nativeJar = System.getProperty("apklayer.nativejar");
+        return nativeJar == null ? List.of(apk, classes) : List.of(apk, classes, Path.of(nativeJar));
+    }
+
     public static void main(String[] args) {
         Path describe = null;
         if (args.length == 4 && args[0].equals("--describe")) {
@@ -30,7 +36,7 @@ public final class Main {
         Path out = describe;
         // The APK is on the classpath so its resources.arsc can be opened as a resource.
         AndroidSandbox sandbox = SandboxBuilder.newBuilder()
-                .addClasspathEntries(List.of(apk, classes))
+                .addClasspathEntries(sandboxJars(apk, classes))
                 .setSdkVersion(Integer.getInteger("apklayer.sdk", 36))
                 .build();
         try {
