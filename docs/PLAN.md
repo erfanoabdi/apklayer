@@ -316,15 +316,15 @@ location or SafetyNet-free APIs runs.
 > libgui/libbinder through bionic_translation):
 > **Refined (2026-10-26, after finding the real pieces in `out/` and the tree): run the tree's REAL SurfaceFlinger** (built:
 > `system/bin/surfaceflinger`, an executable; rebuilt as a library the same way as the service manager so bionic_translation can
-> run its `main`) **with apklayer's own backends underneath**: SF's `RenderEngine` composites on the GPU (Mesa; the VM has a
-> virtio-gpu render node), transactions/BLAST/display events/screenshots (PixelCopy) are all real code. We write only what
+> run its `main`) **with apklayer's own backends underneath**: SF's `RenderEngine` composites on the GPU through the host's EGL/GLES (the VM happens to run Mesa on a
+> virtio-gpu render node; nothing is Mesa-specific), transactions/BLAST/display events/screenshots (PixelCopy) are all real code. We write only what
 > a desktop lacks: (a) the HWC (`android.hardware.graphics.composer3` AIDL service, all layers client-composited; the client
-> target's dmabuf and the real `wl_surface.frame` pacing go to the shell), (b) gralloc (the tree's `external/minigbm`
-> allocator/mapper, real code, on the render node) and (c) the launcher. Per app first (an SF + HWC per app process, each on
+> target's dmabuf and the real `wl_surface.frame` pacing go to the shell), (b) gralloc (our own thin allocator/mapper over the HOST's `libgbm`; the tree's minigbm is NOT used: it has
+> per-driver backends and none for NVIDIA) and (c) the launcher. Per app first (an SF + HWC per app process, each on
 > its own binderfs instance), a shared one later. "apklayer-sf" = this set.
 > 1. **Service manager** (`libapklayer_servicemanager`, run by `btload --main`) on binderfs; then the SF library
 >    (`libapklayer_surfaceflinger`) with a stub HWC, until the app's `Surface` gets buffers.
-> 2. **gralloc**: minigbm allocator + mapper built from the tree.
+> 2. **gralloc**: allocator + mapper over host `libgbm` (Mesa, NVIDIA via nvidia-drm, AMD, Intel alike), dmabuf modifiers negotiated, no per-GPU code; imports as `EGL_EXT_image_dma_buf_import`. No GPU/dmabuf on the host: an explicit shm + llvmpipe mode chosen at startup.
 > 3. **HWC**: `apklayer-hwc` (composer3), vsync from the shell.
 > 4. **Window surfaces**: libhwui's EGL window surface on the SF's buffers (Mesa Android platform / our libEGL shim).
 > 5. **Presentation**: the client target's dmabuf to the shell over SCM_RIGHTS, `zwp_linux_dmabuf_v1`, zero copy.
