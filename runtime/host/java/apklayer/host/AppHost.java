@@ -410,6 +410,7 @@ public final class AppHost implements Runnable {
                 followNavigation();
                 followOrientation();
                 followTextInput();
+                HostSurfaces.follow();
             }
         } catch (Exception e) {
             throw new RuntimeException(e);

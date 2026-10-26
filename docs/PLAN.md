@@ -221,6 +221,8 @@ loop continues in the background of later phases; the 90% exit test is **not** m
 - ◐ P4.3 NDK shims (`bridge/ndk/*.c`, each built as a glibc `<name>_shim.so.0` and mapped from `<name>.so` by the bionic_translation cfg.d): **liblog ✅, libandroid ✅ (assets over the APK, ALooper, AConfiguration; ANativeWindow stubs)** (KeePassDX's `libaes.so` loads with it). EGL/GLES shim ✅ (Mesa llvmpipe surfaceless bundled, window surfaces are pbuffers; ~180 MB with LLVM). Pending: pixel delivery to the shell (eglSwapBuffers/ANativeWindow_fromSurface), audio, vulkan, mediandk and the GLES `hello-gl2` sample. Design note for ANativeWindow/GL: the app JVM is not a Wayland client (the shell is), so GL must render off-screen (Mesa surfaceless/llvmpipe, which needs x86_64 Mesa libs bundled for the Rosetta userspace) and hand pixels to the shell as a subsurface buffer.
   `libstdc++_bio` is built without `__cxa_guard` (needs libc++'s `<atomic>`).
 
+- Java GL (`GLSurfaceView`) finding (2026-10-26, CPU-Z `OGLActivity`): `HostSurfaces` now delivers `surfaceCreated/Changed` to SurfaceView callbacks (Robolectric's fake holder never does), so the GL thread starts, then fails in `EGLContext.getEGL()` = `Stub!`: Robolectric acquires only `javax.microedition.khronos.opengles.GL`, so the EGL10 classes come from the outer `android-stub.jar`, and the real `EGLImpl`/`GLImpl` natives live in `libandroid_runtime`, which we do not have. Fix options: real JNI for gles_jni over our Mesa shim (large), or shadows returning fake EGL objects + GL strings (small). Open; not on the P4 exit path (that is NDK GL).
+
 **Exit test P4:** corpus T3 apps start and render. A simple NDK GLES sample (`hello-gl2`)
 draws via Mesa in its subsurface.
 

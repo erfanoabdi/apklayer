@@ -20,5 +20,7 @@ Goal and plan: `goal.md`, `docs/PLAN.md`. Status and local reference projects: `
 ## Working style (the user's standing requests)
 - Verify everything yourself on the Parallels VM with real input; the user does not test by hand.
 - Run only the test groups for the code you changed (`tests/p2-host.sh`, `tests/vm/e2e.sh`, `tests/vm/native.sh`).
-- No long scripts, no needless sleeps, no `timeout` wrappers that background a call. Do not chase single failing corpus apps.
+- **NEVER use `sleep` or poll loops (`until ...; do sleep`) in commands, and no `timeout` wrappers.** The user has complained repeatedly. Run the command and read its output, or use run_in_background and wait for the notification. Keep scripts short.
+- **3-second rule (user, 2026-10-26):** a command that has not produced output after ~3 seconds is killed (TaskStop/pkill), then read what it left and decide. No waiting on blocked commands, no `tail -f | grep` waits.
+- No long scripts. Do not chase single failing corpus apps.
 - VM: `ssh parallels@10.211.55.4` (pw 1234). After a VM restart re-register Rosetta binfmt (see memory.md).
