@@ -123,7 +123,7 @@ cmd_run() {
     [ -f "$dir/info.properties" ] || die "not installed: $pkg (apklayer install <app.apk>)"
     ensure_shell
     cd "$dir"
-    export LD_LIBRARY_PATH="${APKLAYER_NATIVE:-$ROOT/native}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"  # bionic linker + its libs (P4)
+    export LD_LIBRARY_PATH="${APKLAYER_NATIVE:-$ROOT/native}:${APKLAYER_NATIVE:-$ROOT/native}/glibc${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"  # bionic linker + its libs (P4)
     export XDG_DATA_DIRS="${APKLAYER_NATIVE:-$ROOT/native}/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"  # bionic_translation cfg.d
     host -Dapklayer.data="$dir/data" -Dapklayer.package="$pkg" -Dapklayer.libdir="$dir/lib" -Dapklayer.native="${APKLAYER_NATIVE:-$ROOT/native}" ${APKLAYER_JOPTS:-} \
         -cp "$(host_cp "$dir/classes.jar")" apklayer.host.Main "$dir/base.apk" "$dir/classes.jar"

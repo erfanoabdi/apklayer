@@ -9,7 +9,7 @@ BT="${BIONIC_TRANSLATION:-$ROOT/../bionic_translation}"
 OUT="$ROOT/build/native/x86_64"; mkdir -p "$OUT"
 VMN="${ORB_VM:-ubuntu22-x86}"
 (cd "$ROOT/.." && tar cf - "$(basename "$BT")") | orb -m "$VMN" bash -c 'rm -rf ~/bt && mkdir -p ~/bt && tar xf - -C ~/bt 2>/dev/null'
-tar cf - -C "$ROOT/bridge" native | orb -m "$VMN" bash -c 'tar xf - -C ~/bt 2>/dev/null'
+tar cf - -C "$ROOT/bridge" native ndk | orb -m "$VMN" bash -c 'tar xf - -C ~/bt 2>/dev/null'
 orb -m "$VMN" bash -s <<'R'
 set -e
 export PATH=$HOME/.local/bin:$PATH PKG_CONFIG_PATH=$HOME/local/lib/pkgconfig
@@ -47,6 +47,13 @@ mkdir -p ~/bt/out && find b -maxdepth 1 \( -type f -o -type l \) -name 'lib*.so*
 mkdir -p ~/bt/out/share/bionic_translation/cfg.d
 cp cfg.d/bionic_translation.cfg ~/bt/out/share/bionic_translation/cfg.d/
 printf 'libm.so            libm.so.6\nlibdl.so           libdl_bio.so.0\n' >> ~/bt/out/share/bionic_translation/cfg.d/bionic_translation.cfg
+# NDK shims (bridge/ndk): glibc libraries that bionic_translation's cfg.d maps NDK names to
+mkdir -p ~/bt/out/glibc
+for shim in ~/bt/ndk/*.c; do
+  name=$(basename "$shim" .c)
+  cc -shared -fPIC -O2 -Wl,-soname,${name}_shim.so.0 -o ~/bt/out/glibc/${name}_shim.so.0 "$shim"
+  printf '%s.so  %s_shim.so.0\n' "$name" "$name" >> ~/bt/out/share/bionic_translation/cfg.d/bionic_translation.cfg
+done
 # bundle the non-glibc shared libraries these need (the dev VM's x86_64 userspace is minimal)
 cd ~/bt/out
 for l in $(LD_LIBRARY_PATH=. ldd libapklayer_native.so libdl_bio.so libc_bio.so libpthread_bio.so | awk '/=>/ {print $3}' | sort -u); do
