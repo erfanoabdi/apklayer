@@ -18,6 +18,7 @@ public final class HostShadowProvider implements ShadowProvider {
     @Override public String[] getProvidedPackageNames() { return new String[0]; }
 
     @Override public Collection<Map.Entry<String, String>> getShadows() {
-        return List.of(Map.entry("android.webkit.WebView", ShadowHostWebView.class.getName()));
+        return List.of(Map.entry("android.webkit.WebView", ShadowHostWebView.class.getName()),
+                Map.entry("android.media.MediaPlayer", ShadowHostMediaPlayer.class.getName()));
     }
 }
