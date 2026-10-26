@@ -333,6 +333,7 @@ public class ShadowWindowManagerGlobal {
       int z = type * 1000 + windowInfo.zOrder; // by window type first (base application < dialogs < sub-windows < system), then by order added
       new SurfaceControl.Transaction()
           .setPosition(layer, windowInfo.frame.left, windowInfo.frame.top)
+          .setLayerStack(layer, Integer.getInteger("apklayer.layerstack", 0)) // the app's own virtual display (bin/apklayer)
           .setLayer(layer, z)
           .show(layer)
           .apply();
