@@ -8,11 +8,12 @@ set -e
 native="$1" shards="$2" classes="$3" tmp="$(mktemp -d)"
 JH="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
 cc -shared -fPIC -O2 -Wall -I"$JH/include" -I"$JH/include/linux" -o "$tmp/libandroid_runtime.so" \
-    bridge/native/runtime_shim.c bridge/native/android_platform.c bridge/native/properties.c bridge/native/android_stubs.c \
+    bridge/native/runtime_shim.c bridge/native/android_platform.c bridge/native/properties.c bridge/native/paths.c bridge/native/android_stubs.c \
     -L"$HOME/bt-arm/bionic_translation/b" -ldl_bio -Wl,-rpath,"$HOME/bt-arm/bionic_translation/b"
 # the launcher for Android executables built as libraries (btload --main) and the property tool, in $native/bin
-mkdir -p "$native/bin"
-cc -O2 -Wall -o "$native/bin/btload" scripts/btload.c bridge/native/android_platform.c bridge/native/properties.c bridge/native/binder_compat.c bridge/native/android_stubs.c \
+mkdir -p "$native/bin" "$native/android-root"
+cp -r bridge/native/android-root/. "$native/android-root/"  # apklayer's own files of the Android root (VINTF manifest of our HALs); the tree's come from scripts/collect-android-root.sh
+cc -O2 -Wall -o "$native/bin/btload" scripts/btload.c bridge/native/android_platform.c bridge/native/properties.c bridge/native/paths.c bridge/native/binder_compat.c bridge/native/android_stubs.c \
     -rdynamic -L"$HOME/bt-arm/bionic_translation/b" -ldl_bio -Wl,-rpath,"$HOME/bt-arm/bionic_translation/b"
 [ ! -e b/bridge/hals/graphics/libapklayer-hal-graphics.so ] || cp b/bridge/hals/graphics/libapklayer-hal-graphics.so "$native/"  # the host HAL library btload loads for the Android-side HAL services
 cc -O2 -Wall -o "$native/bin/aprop" bridge/native/aprop.c bridge/native/properties.c
