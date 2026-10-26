@@ -1,7 +1,6 @@
 # Patches over upstream code
 
-**Current pipeline: zero patches** to AOSP (`android-all`), Robolectric or dex2jvm. All three
-are consumed exactly as published or copied.
+**No patches to AOSP (`android-all`) or Robolectric.** dex2jvm and the converter output get the thin adaptations in the table at the end. All three are otherwise consumed exactly as published or copied.
 
 How apklayer adapts upstream without patching it:
 
@@ -20,6 +19,7 @@ How apklayer adapts upstream without patching it:
 
 Rule: if a patch ever becomes unavoidable, keep it thin, mark it inline `apklayer patch`,
 and log it here. The M1 seed's patch log is in `archive/seed-m1/docs/PATCHES.md`.
+
 
 | `HostDefaults.REDIRECT_EXIT = null` (dex2jvm) | An app's `System.exit` really exits: apklayer runs one app per JVM, so Mac.apk's `MacApkProcessExit` (which fakes ActivityManager in a shared JVM) is not used |
 | `MacApkUnsafe.warn` (vendored from Mac.apk) | Mac.apk's `NativeLog.w` (JNI logcat) replaced by a stderr line; no other change |
