@@ -26,6 +26,7 @@ final class ShellFrameListener implements FrameListener {
         if (pixels.length != width * height) pixels = new int[width * height];
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
         bitmap.recycle();
+        HostSurfaces.compose(pixels, width, height);
         frames++;
         if (shell != null) {
             try {

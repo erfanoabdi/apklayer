@@ -21,6 +21,7 @@ struct entry { char *name; uint32_t off, csize, usize; uint16_t method; };
 static struct entry *entries; static int nentries;
 static unsigned char *apk; static size_t apklen;
 static pthread_once_t once = PTHREAD_ONCE_INIT;
+static pthread_mutex_t win_mu = PTHREAD_MUTEX_INITIALIZER;
 
 static uint32_t u32(const unsigned char *p) { return p[0] | p[1] << 8 | p[2] << 16 | (uint32_t)p[3] << 24; }
 static uint16_t u16(const unsigned char *p) { return p[0] | p[1] << 8; }
@@ -224,12 +225,32 @@ int32_t AConfiguration_getNavigation(AConfiguration *c) { (void)c; return 0; }
 int32_t AConfiguration_getKeysHidden(AConfiguration *c) { (void)c; return 0; }
 int32_t AConfiguration_getNavHidden(AConfiguration *c) { (void)c; return 0; }
 
-/* ---- ANativeWindow: the surface path is not wired yet (P4.3 GL); these report "no window" ---- */
+/* ---- ANativeWindow: one per host Surface (HostSurface: identity hash and size read over JNI) ---- */
+
+#include <jni.h>
+#include "anwindow.h"
 
 typedef struct ANativeWindow ANativeWindow;
-int32_t ANativeWindow_getWidth(ANativeWindow *w) { (void)w; return 0; }
-int32_t ANativeWindow_getHeight(ANativeWindow *w) { (void)w; return 0; }
-int32_t ANativeWindow_getFormat(ANativeWindow *w) { (void)w; return 1; }
+static ANativeWindow windows[64];
+static int nwindows;
+
+ANativeWindow *ANativeWindow_fromSurface(JNIEnv *env, jobject surface)
+{
+    jclass c = (*env)->GetObjectClass(env, surface);
+    jmethodID size = (*env)->GetMethodID(env, c, "width", "()I"), height = (*env)->GetMethodID(env, c, "height", "()I"),
+              hash = (*env)->GetMethodID(env, c, "hashCode", "()I");
+    if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); return NULL; } /* not a HostSurface */
+    int id = (*env)->CallIntMethod(env, surface, hash);
+    pthread_mutex_lock(&win_mu);
+    ANativeWindow *w = NULL;
+    for (int i = 0; i < nwindows && !w; i++) if (windows[i].id == id) w = &windows[i];
+    if (!w && nwindows < 64) w = &windows[nwindows++];
+    if (w) *w = (ANativeWindow){ id, (*env)->CallIntMethod(env, surface, size), (*env)->CallIntMethod(env, surface, height) };
+    pthread_mutex_unlock(&win_mu);
+    return w;
+}
+int32_t ANativeWindow_getWidth(ANativeWindow *w) { return w->width; }
+int32_t ANativeWindow_getHeight(ANativeWindow *w) { return w->height; }
+int32_t ANativeWindow_getFormat(ANativeWindow *w) { (void)w; return 1; /* RGBA_8888 */ }
 void ANativeWindow_acquire(ANativeWindow *w) { (void)w; }
 void ANativeWindow_release(ANativeWindow *w) { (void)w; }
-ANativeWindow *ANativeWindow_fromSurface(void *env, void *surface) { (void)env; (void)surface; return NULL; }

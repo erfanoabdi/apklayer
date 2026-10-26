@@ -28,26 +28,21 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
 - Preferred stack: C++, Java, Rust; Meson for apklayer's own native code.
 - Report actively, don't pause; commit at every step.
 
-## Current state (2026-10-25, M5 done)
-- uibench runs with full UI + mouse/keyboard on the VM's Wayland desktop (user tested it).
-- CLI (P1.7–P1.9): `bin/apklayer install|run|list|uninstall`; apps in ~/.local/share/apklayer/apps/<pkg>
-  (data/ persists via links: LazyApplication ON + pre-created `<pkg>-dataDir`/userDataDir/deviceDataDir
-  links in Robolectric's temp dir). Menu launches read `~/.config/apklayer/env` (vm-run writes the
-  Rosetta APKLAYER_JAVA there). `gtk-launch apklayer-<pkg>` from ssh works with
-  DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus. uibench's manifest declares
-  InflatingEmojiListActivity, which is NOT in its dex (the host logs it and stays on screen).
-- Test APKs: the user's `~/TestApps` (25 APKs; pure-Java single-dex: gpstest, Vibrations Test, Device
-  Info HW, drminfo, Barcode Scanner, opencamera, NewPipe, Shelter). Results + causes in
-  tests/corpus/results.md (Vibrations Test and Open Camera pass; five fail with listed causes).
-- On the VM: `./scripts/vm-run.sh [app.apk]` (default uibench). Headless on the Mac:
-  `./scripts/check.sh [apk] [script] [snapms] [runms]` → build/check/*.png (fast iteration).
-  It syncs the deps cache, runtime/host, runtime/dex2jvm and bridge/shell to the VM, rebuilds, converts
-  the DEX and runs `apklayer.host.Main <apk> <classes.jar>`. Close the window to exit.
-  Verification flags (time-based now, frames are damage-driven): `APKLAYER_JOPTS='-Dapklayer.runms=9000
-  -Dapklayer.snapms=6000 -Dapklayer.script=2500:tap:100,80+4500:back'` (snapshots →
-  /tmp/apklayer-frame-<ms>ms.png on the VM); `-Dapklayer.debugwindows=true` dumps the window list.
-- Architecture: docs/ARCHITECTURE.md. **Plan of record: docs/PLAN.md** (all decisions made;
-  follow its phase order and "Immediate next tasks").
+## Current state (2026-10-26)
+- P1 (CLI, install cache, shell protocol) and P2 (desktop window/input: decorations, keyboard/D-pad,
+  wheel, resize, HiDPI plumbing, lifecycle, clipboard, orientation, IME, touch) are done; details and
+  the open caveats (2x output, real IME not exercised) are in docs/PLAN.md. P3 corpus: 7/17 T1 pass.
+  P4 native libs: apps' `.so` load through bionic_translation (NativeLoader + JNI helper); NDK shims
+  in `bridge/ndk` (log, android, EGL over bundled Mesa llvmpipe); SurfaceView surfaces via
+  `HostSurfaces` (native GL frames are composited into the window); sample `tests/native/hello-gl2`.
+  Java GLSurfaceView does not render (EGL10 classes are stubs in the sandbox; see PLAN P4.3).
+- Session rules are in `CLAUDE.md` (no sleeps, 3-second rule, reuse local sources first).
+- Commands: `bin/apklayer install|run|list|uninstall`; apps in ~/.local/share/apklayer/apps/<pkg>
+  (data/ persists via links). On the VM: `scripts/vm-run.sh [app.apk]`; headless on the Mac:
+  `scripts/check.sh`; tests: `tests/p2-host.sh`, `tests/vm/e2e.sh`, `tests/vm/native.sh [apk]`,
+  `scripts/corpus.sh`. Test APKs: the user's `~/TestApps`. Never `pkill -f` a pattern that appears in your
+  own command line (it kills itself).
+- Architecture: docs/ARCHITECTURE.md. **Plan of record: docs/PLAN.md.**
 
 ## Key technical facts learned (don't re-discover)
 - Robolectric reads `android_resource_apk` ONLY from classpath
