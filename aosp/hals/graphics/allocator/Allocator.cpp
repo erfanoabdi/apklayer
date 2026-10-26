@@ -9,6 +9,7 @@
 #include <android-base/logging.h>
 #include <android/binder_manager.h>
 #include <android/binder_process.h>
+#include <log/log.h>
 
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -65,15 +66,6 @@ class Allocator : public BnAllocator {
     ndk::ScopedAStatus getIMapperLibrarySuffix(std::string* out) override {
         *out = "apklayer";  // libui loads mapper.apklayer.so
         return ndk::ScopedAStatus::ok();
-    }
-
-    ndk::ScopedAStatus isMultiViewSupported(const std::vector<BufferDescriptorInfo>&, int32_t, bool* out) override {
-        *out = false;
-        return ndk::ScopedAStatus::ok();
-    }
-
-    ndk::ScopedAStatus allocateMultiView(const std::vector<BufferDescriptorInfo>&, int32_t, AllocationResult*) override {
-        return error(AllocationError::UNSUPPORTED);
     }
 
   private:
