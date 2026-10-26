@@ -245,7 +245,10 @@ class Client : public BnComposerClient {
     void present(std::vector<CommandResultPayload>* out, Fail&& fail) {
         HandleData d;
         native_handle_t* h = mClientSlot >= 0 ? mClientTargets[mClientSlot].get() : nullptr;
-        if (h == nullptr || !decode(h, &d)) return fail(IComposerClient::EX_BAD_PARAMETER);
+        if (h == nullptr || !decode(h, &d)) {
+            ALOGE("presentDisplay: no usable client target (slot %d, handle %p): nothing to show", mClientSlot, h);
+            return fail(IComposerClient::EX_BAD_PARAMETER);
+        }
         if (mClientFence >= 0) {  // wait for the GPU to finish the composition
             pollfd p = {mClientFence, POLLIN, 0};
             poll(&p, 1, 1000);

@@ -230,7 +230,9 @@ public final class AppHost implements Runnable {
         ShellFrameListener frames = new ShellFrameListener(shell);
         this.shell = shell;
         app.getSystemService(android.content.ClipboardManager.class).addPrimaryClipChangedListener(this::onAppClipboardChanged);
-        ScreenUpdateHandler.create(frames).requestStartUi();
+        // GPU route (-Dapklayer.gpu, the tree flavor): the window is a real SurfaceFlinger layer shown by the HWC; the simulator's CPU
+        // screenshots (ImageReader-backed surfaces) do not exist there
+        if (!Boolean.getBoolean("apklayer.gpu")) ScreenUpdateHandler.create(frames).requestStartUi();
 
         if (java.security.Security.getProvider("AndroidKeyStore") == null) java.security.Security.addProvider(new HostKeyStoreProvider());
         installSystemPackage(app);

@@ -80,3 +80,31 @@ size_t AChoreographerFrameCallbackData_getPreferredFrameTimelineIndex(const void
 int64_t AChoreographerFrameCallbackData_getFrameTimelineVsyncId(const struct frame_data *d, size_t i) { (void)i; return d->frame_time_ns / d->interval_ns; }
 int64_t AChoreographerFrameCallbackData_getFrameTimelineExpectedPresentationTimeNanos(const struct frame_data *d, size_t i) { (void)i; return d->frame_time_ns + d->interval_ns; }
 int64_t AChoreographerFrameCallbackData_getFrameTimelineDeadlineNanos(const struct frame_data *d, size_t i) { (void)i; return d->frame_time_ns + d->interval_ns; }
+
+/* ---- ADisplay: HWUI's DeviceInfo needs one internal physical display and its preferred wide colour format at startup. The
+ * instance has exactly one display (the shell window, our HWC's display 0), sRGB 8888 like the composer's client target. ---- */
+struct adisplay { int unused; };
+static struct adisplay the_display;
+static struct adisplay *the_displays[1] = { &the_display };
+
+/* the device library exports them from namespace android (C++ names), so those are the names HWUI's references resolve to */
+int acquire_displays(struct adisplay ***out) __asm__("_ZN7android32ADisplay_acquirePhysicalDisplaysEPPPNS_8ADisplayE");
+void release_displays(struct adisplay **displays) __asm__("_ZN7android16ADisplay_releaseEPPNS_8ADisplayE");
+int display_type(struct adisplay *d) __asm__("_ZN7android23ADisplay_getDisplayTypeEPNS_8ADisplayE");
+int wide_color_format(struct adisplay *d, int32_t *dataspace, int32_t *format)
+    __asm__("_ZN7android36ADisplay_getPreferredWideColorFormatEPNS_8ADisplayEP10ADataSpaceP22AHardwareBuffer_Format");
+
+int acquire_displays(struct adisplay ***out)
+{
+    *out = the_displays;
+    return 1;
+}
+void release_displays(struct adisplay **displays) { (void)displays; }
+int display_type(struct adisplay *d) { (void)d; return 0; /* DISPLAY_TYPE_INTERNAL */ }
+int wide_color_format(struct adisplay *d, int32_t *dataspace, int32_t *format)
+{
+    (void)d;
+    *dataspace = 142671872; /* ADATASPACE_SRGB */
+    *format = 1;            /* AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM */
+    return 0;
+}

@@ -68,6 +68,9 @@ public class ShadowSurfaceControl {
   @Implementation(minSdk = Q)
   protected static long nativeCreate(
       SurfaceSession session, String name, int w, int h, int format, int flags, long parentObject, Parcel metadata) {
+    // The window manager would parent an app window's layer under its task and display; there is none here, so the layer joins the
+    // root of the layer stack instead (NOT_ADD_TO_ROOT would leave it in no stack at all)
+    flags &= ~SurfaceControl.NOT_ADD_TO_ROOT;
     long handle = 0;
     for (int attempt = 0; attempt < 3 && handle == 0; attempt++) {
       if (attempt > 0) {
