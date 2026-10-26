@@ -4,6 +4,9 @@
 #   apklayer run <package|app.apk> run an installed app (an .apk path is installed first)
 #   apklayer list                  installed apps
 #   apklayer uninstall <package>   remove an app and its data
+#   apklayer stop                  stop running apps and, on the device-library route, the instance's Android services
+#   Device-library route (GPU, real Android libraries): APKLAYER_NATIVE=<native dir with aosp/> apklayer run <installed package>;
+#   its environment is scripts/native-env.sh, the services start on demand (scripts/arm64-stack.sh none)
 # Environment (also read from ~/.config/apklayer/env, so menu launches get it too):
 #   APKLAYER_JAVA (java command + flags for the app JVM, default "java"),
 #   APKLAYER_BUILD (Meson build dir, default <repo>/b), APKLAYER_DEPS (~/.cache/apklayer/deps).
@@ -130,6 +133,17 @@ ensure_shell() {
     die "apklayer-shell did not start (see $XDG_RUNTIME_DIR/apklayer-shell.log)"
 }
 
+# The device-library route (the tree flavor, APKLAYER_NATIVE with an aosp/ dir): Android's own services run as processes of the
+# instance (scripts/arm64-stack.sh) and the app JVM loads the same libraries, so both get the environment of scripts/native-env.sh.
+tree_flavor() { [ -d "${APKLAYER_NATIVE:-$ROOT/native}/aosp" ]; }
+ensure_stack() {
+    local logs="${APKLAYER_LOGS:-/tmp/apklayer-stack}"
+    if [ -f "$logs/ready" ] && [ -f "$logs/stack.pid" ] && kill -0 "$(cat "$logs/stack.pid")" 2>/dev/null; then return; fi
+    setsid "$ROOT/scripts/arm64-stack.sh" none > "${XDG_RUNTIME_DIR}/apklayer-stack.log" 2>&1 < /dev/null &
+    for _ in $(seq 1 600); do [ -f "$logs/ready" ] && return; sleep 0.2; done
+    die "the Android services did not come up (see $XDG_RUNTIME_DIR/apklayer-stack.log and $logs/*.log)"
+}
+
 cmd_run() {
     local target="$1" pkg="$1"
     if [ -f "$target" ]; then
@@ -138,7 +152,14 @@ cmd_run() {
     fi
     local dir="$APPS/$pkg"
     [ -f "$dir/info.properties" ] || die "not installed: $pkg (apklayer install <app.apk>)"
-    ensure_shell
+    if tree_flavor; then
+        # shellcheck disable=SC1091
+        . "$ROOT/scripts/native-env.sh"
+        JAVA="$(native_java) -XX:TieredStopAtLevel=1 -XX:+UseSerialGC"
+        ensure_stack
+    else
+        ensure_shell
+    fi
     cd "$dir"
     # bundled software Mesa (GLES, P4.3) for the Rosetta/x86 flavors; the tree flavor (device libraries, P7) uses the host's own GPU driver
     if [ ! -d "${APKLAYER_NATIVE:-$ROOT/native}/aosp" ]; then
@@ -181,6 +202,10 @@ cmd_uninstall() {
 
 case "${1:-}" in
     install) shift; [ $# -eq 1 ] || die "usage: apklayer install <app.apk>"; cmd_install "$1" ;;
+    stop) # the device-library route: the app JVMs and the instance's Android services
+        pkill -f '[a]pklayer.host.Main' || true
+        [ -f "${APKLAYER_LOGS:-/tmp/apklayer-stack}/stack.pid" ] && kill "$(cat "${APKLAYER_LOGS:-/tmp/apklayer-stack}/stack.pid")" 2>/dev/null || true
+        pkill -x apklayer-shell || true ;;
     run) shift; [ $# -eq 1 ] || die "usage: apklayer run <package|app.apk>"; cmd_run "$1" ;;
     list) cmd_list ;;
     uninstall) shift; [ $# -eq 1 ] || die "usage: apklayer uninstall <package>"; cmd_uninstall "$1" ;;

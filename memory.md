@@ -166,3 +166,9 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
 - The bionic linker needs `_r_debug_ptr` set by the host (done in the JNI helper's constructor), or it crashes in
   `apkenv_notify_gdb_of_load`. gdb cannot ptrace under Rosetta: debug with a SIGSEGV handler + `addr2line` on a debug build.
 - Test: `tests/vm/native.sh` (CPU-Z). Corpus apps with native libs mostly also need NDK shims (liblog etc.) next.
+
+## Running the GPU route (device-library flavor), 2026-10-27
+On the arm64 VM: `XDG_RUNTIME_DIR=/run/user/1000 APKLAYER_NATIVE=~/arm64-native ~/apklayer-m1/bin/apklayer run <installed package>`; `bin/apklayer stop` ends it.
+That alone starts the services (`scripts/arm64-stack.sh none`, ready marker `/tmp/apklayer-stack/ready`), uses the arm64 JDK, and sets the environment from `scripts/native-env.sh`.
+Install apps first with the default flavor (the tree flavor's describe step is not wired). Logs: `/tmp/apklayer-stack/*.log` (services), the app's stdout. `servicetool list|check|dump NAME` (btload --main) inspects services (SurfaceFlinger dump shows layers).
+Capture caveat: `prlctl capture` is reliable for the GPU window now (it showed the UiBench list); Robolectric patches live in `runtime/patches/` (compiled into native-runtime.jar by `scripts/build-native-arm64.sh`).

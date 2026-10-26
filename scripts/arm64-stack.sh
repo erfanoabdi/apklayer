@@ -4,11 +4,9 @@
 # finishing) and stops everything it started. Usage (on the VM): scripts/arm64-stack.sh [tool-lib [args...]]
 # env: APKLAYER_NATIVE (~/arm64-native), APKLAYER_INSTANCE (default), APKLAYER_START_SHELL (1), APKLAYER_LOGS (/tmp/apklayer-stack)
 set -u
-N="${APKLAYER_NATIVE:-$HOME/arm64-native}"; L="$HOME/android-arm64/lib64"; LOGS="${APKLAYER_LOGS:-/tmp/apklayer-stack}"
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}" APKLAYER_INSTANCE="${APKLAYER_INSTANCE:-default}"
-export LD_LIBRARY_PATH="$HOME/bt-arm/bionic_translation/b:$N" XDG_DATA_DIRS="$N/share" LD_PRELOAD="$N/libapklayer-preload.so:libgcc_s.so.1" BIONIC_LD_LIBRARY_PATH="$L"
-export APKLAYER_NATIVE="$N" APKLAYER_CRASH_TRACE=1 APKLAYER_HOST_LIBS="$N/libapklayer-hal-graphics.so"
-mkdir -p "$LOGS"; rm -f "$LOGS"/*.log
+. "$(dirname "$(readlink -f "$0")")/native-env.sh"   # N, L and the environment of Android's processes
+LOGS="${APKLAYER_LOGS:-/tmp/apklayer-stack}"
+mkdir -p "$LOGS"; rm -f "$LOGS"/*.log "$LOGS/ready"
 declare -A name_of
 start() { # start <name> <command...>: background, logged, remembered
     n="$1"; shift; "$@" > "$LOGS/$n.log" 2>&1 & name_of[$!]="$n"
@@ -37,6 +35,11 @@ svc surfaceflinger libapklayer_surfaceflinger.so
 tool="${1:-libapklayer_sftest.so}"; [ $# -gt 0 ] && shift
 if [ "$tool" = none ]; then start keepalive tail -f /dev/null; else svc tool "$tool" "$@"; fi  # "none": only the services (an app brings its own windows); stop the stack with its pid file
 echo "$$" > "$LOGS/stack.pid"
+# ready when SurfaceFlinger has registered (what an app needs before its first window): bin/apklayer waits for this file
+for _ in $(seq 1 240); do
+    "$N/bin/btload" "$L" libapklayer_servicetool.so --main check SurfaceFlingerAIDL 2>/dev/null | grep -q "SurfaceFlingerAIDL: found" && { touch "$LOGS/ready"; break; }
+    sleep 0.5
+done
 
 wait -n; status=$?   # the first process to exit ends the run
 for pid in "${!name_of[@]}"; do kill -0 "$pid" 2>/dev/null || echo "exited: ${name_of[$pid]} (status $status)"; done
