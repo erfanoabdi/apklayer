@@ -15,6 +15,6 @@ for hal in bridge/hals/*/include; do
     orb -m ubuntu22-x86 mkdir -p "$dest/hals/$d/host-include"
     tar cf - -C "$hal" . | orb -m ubuntu22-x86 tar xf - -C "$dest/hals/$d/host-include"
 done
-orb -m ubuntu22-x86 sh -c "cd $dest && { [ -d .git ] || git init -q; } && git add -A && { git diff --cached --quiet || git commit -q -m '$msg
-
-Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>'; } && git log --oneline | head -1"
+# the message travels through stdin into a file (any character is safe in it), then git commit -F
+printf '%s\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\n' "$msg" | orb -m ubuntu22-x86 sh -c "cat > /tmp/apklayer-sync-msg"
+orb -m ubuntu22-x86 sh -c "cd $dest && { [ -d .git ] || git init -q; } && git add -A && { git diff --cached --quiet || git commit -q -F /tmp/apklayer-sync-msg; } && git log --oneline | head -1"
