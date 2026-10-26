@@ -565,7 +565,7 @@ rate with every remaining failure explained. This also feeds P3: every gap found
 **Fallback (done):** Robolectric 4.17's own native runtime for arm64 (third party, `scripts/fetch-robolectric-arm64.sh`, THIRD_PARTY.md) as a selectable flavor
 of `bin/apklayer` (`APKLAYER_NATIVE` directory holding `robolectric-nativeruntime-linux-aarch64.jar`, Maven Robolectric and its android-all as in the
 default flavor): uibench runs on the arm64 JVM with no Rosetta, 19 frames, same output size as the x86 baseline. It is CPU rendering (no GPU zero-copy)
-and stays as the fallback while the device-library route is finished. **x86_64 counterpart (queued):** the tree's own `libandroid_runtime` for the
+and stays as the fallback while the device-library route is finished. **x86_64 counterpart (deferred: the very last thing, after the tool has been published; user, 2026-10-26):** the tree's own `libandroid_runtime` for the
 Linux x86_64 host (the tree-consistent Robolectric native runtime for x86 hosts), built in ~/los24 (docs/AOSP-BUILDS.md), to replace the
 Rosetta-era x86 library where the tree's framework jar is used.
 
