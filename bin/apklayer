@@ -28,7 +28,7 @@ prop() { sed -n "s/^$2=//p" "$1" | head -1; }
 host_cp() { echo "$DEPS/libs/*:$DEPS/android-stub.jar:$HOST_JAR:$1"; }
 # The cache key of a conversion: same APK, same framework, same converter -> same classes.
 cache_key() {
-    { sha256sum "$1" | cut -c1-64; echo "post-processing v3: guava relocation, native loader"; ls "$DEPS/android-all"; cat "$ROOT/runtime/dex2jvm/com.macapk.dex/.dex2jvm-commit" 2>/dev/null; } \
+    { sha256sum "$1" | cut -c1-64; echo "post-processing v5: guava relocation, native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke"; ls "$DEPS/android-all"; cat "$ROOT/runtime/dex2jvm/com.macapk.dex/.dex2jvm-commit" 2>/dev/null; } \
         | sha256sum | cut -c1-64
 }
 host() {

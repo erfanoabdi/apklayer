@@ -8,9 +8,11 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIR="${CORPUS_CACHE:-$HOME/.cache/apklayer/corpus}"; LOCK="$ROOT/tests/corpus/corpus.lock"
 mkdir -p "$DIR"; touch "$LOCK"
 TIERS=("${@:-T1}")
+ONLY="${CORPUS_ONLY:-}"   # optional regex of package names to fetch
 while read -r tier pkg _; do
   [[ "$tier" =~ ^T[123]$ ]] || continue
   [[ " ${TIERS[*]} " == *" $tier "* ]] || continue
+  [ -z "$ONLY" ] || [[ "$pkg" =~ $ONLY ]] || continue
   pinned=$(awk -v p="$pkg" '$2==p {print $3, $4}' "$LOCK")
   if [ -n "$pinned" ]; then vc=${pinned% *}; want=${pinned#* }; else
     vc=$(curl -s -m 20 "https://f-droid.org/api/v1/packages/$pkg" | python3 -c "import sys,json; print(json.load(sys.stdin).get('suggestedVersionCode',''))" 2>/dev/null); want=""

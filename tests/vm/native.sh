@@ -19,4 +19,5 @@ check "the app's native library loads through the bionic linker" 'grep -q "\[apk
 check "the app starts its launcher activity after loading it" 'grep -q "started .*depth=1" "$LOG"'
 check "no UnsatisfiedLinkError / JVM crash" '! grep -qE "UnsatisfiedLinkError|Aborted" "$LOG"'
 sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" 'pkill -f apklayer.host; true'
+[ $fail -ne 0 ] && { echo '--- log tail:'; grep -vE '^[0-9]+: \[' "$LOG" | tail -15 | cut -c1-200; }
 exit $fail

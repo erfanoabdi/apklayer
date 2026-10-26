@@ -25,6 +25,11 @@ import java.util.jar.JarOutputStream;
  * Also relocates an app's bundled Guava into a private package: an older or shrunk copy would
  * otherwise mix with the host's Guava 33 in the same class loader (NoSuchMethodError).
  *
+ * Routes the app's startService/stopService/bindService/unbindService calls to
+ * apklayer.host.Services, which runs the app's own services in-process.
+ * Sends Unsafe.getUnsafe() (also through Method.invoke) to apklayer.host.UnsafeAccess.
+ * And turns MultiDex.install(Context) into a no-op (all dex files are merged into one jar already).
+ *
  * Usage: java -cp <asm>:... apklayer.tools.DenyInstrument <in.jar> <out.jar>
  */
 public final class DenyInstrument {
@@ -48,7 +53,50 @@ public final class DenyInstrument {
         }
     };
 
+    /** class -> super class, and the "name+desc" methods each jar class declares (for service call routing). */
+    private static final java.util.Map<String, String> SUPER = new java.util.HashMap<>();
+    private static final java.util.Map<String, java.util.Set<String>> DECLARED = new java.util.HashMap<>();
+    private static final java.util.Map<String, String> SERVICE_CALLS = java.util.Map.of(
+            "bindService(Landroid/content/Intent;Landroid/content/ServiceConnection;I)Z",
+            "(Landroid/content/Context;Landroid/content/Intent;Landroid/content/ServiceConnection;I)Z",
+            "unbindService(Landroid/content/ServiceConnection;)V",
+            "(Landroid/content/Context;Landroid/content/ServiceConnection;)V",
+            "startService(Landroid/content/Intent;)Landroid/content/ComponentName;",
+            "(Landroid/content/Context;Landroid/content/Intent;)Landroid/content/ComponentName;",
+            "startForegroundService(Landroid/content/Intent;)Landroid/content/ComponentName;",
+            "(Landroid/content/Context;Landroid/content/Intent;)Landroid/content/ComponentName;",
+            "stopService(Landroid/content/Intent;)Z",
+            "(Landroid/content/Context;Landroid/content/Intent;)Z");
+
+    /** True if the call lands on the framework's Context method (not on a method the app declares). */
+    private static boolean isFrameworkContextCall(String owner, String name, String desc) {
+        String c = owner;
+        while (DECLARED.containsKey(c)) {
+            if (DECLARED.get(c).contains(name + desc)) return false;
+            c = SUPER.get(c);
+        }
+        return c != null && c.startsWith("android/");
+    }
+
     public static void main(String[] args) throws Exception {
+        try (JarFile scan = new JarFile(args[0])) {
+            for (JarEntry e : Collections.list(scan.entries())) {
+                if (!e.getName().endsWith(".class")) continue;
+                try (InputStream is = scan.getInputStream(e)) {
+                    ClassReader r = new ClassReader(is.readAllBytes());
+                    java.util.Set<String> methods = new java.util.HashSet<>();
+                    SUPER.put(r.getClassName(), r.getSuperName());
+                    DECLARED.put(r.getClassName(), methods);
+                    r.accept(new ClassVisitor(Opcodes.ASM9) {
+                        @Override
+                        public org.objectweb.asm.MethodVisitor visitMethod(int a, String n, String d, String sg, String[] ex) {
+                            methods.add(n + d);
+                            return null;
+                        }
+                    }, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+                }
+            }
+        }
         try (JarFile probe = new JarFile(args[0])) {
             for (String[] library : LIBRARIES) {
                 boolean bundled = Collections.list(probe.entries()).stream()
@@ -78,6 +126,31 @@ public final class DenyInstrument {
                             @Override
                             public void visitMethodInsn(int opcode, String owner, String mname, String mdesc,
                                                         boolean itf) {
+                                // MultiDex.install(Context): the converter already merged every dex into one jar
+                                if (opcode == Opcodes.INVOKESTATIC && mname.equals("install") && mdesc.equals("(Landroid/content/Context;)V")
+                                        && (owner.equals("androidx/multidex/MultiDex") || owner.equals("android/support/multidex/MultiDex"))) {
+                                    super.visitInsn(Opcodes.POP);
+                                    return;
+                                }
+                                // Unsafe.getUnsafe(): ART allows any caller, HotSpot only boot classes
+                                if (opcode == Opcodes.INVOKESTATIC && owner.equals("sun/misc/Unsafe") && mname.equals("getUnsafe")) {
+                                    super.visitMethodInsn(opcode, "apklayer/host/UnsafeAccess", mname, mdesc, false);
+                                    return;
+                                }
+                                // reflective Unsafe.getUnsafe() (HiddenApiBypass and friends)
+                                if (opcode == Opcodes.INVOKEVIRTUAL && owner.equals("java/lang/reflect/Method") && mname.equals("invoke")
+                                        && mdesc.equals("(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;")) {
+                                    super.visitMethodInsn(Opcodes.INVOKESTATIC, "apklayer/host/Reflect", "invoke",
+                                            "(Ljava/lang/reflect/Method;Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
+                                    return;
+                                }
+                                // the app's own services run in-process (apklayer.host.Services)
+                                if (opcode == Opcodes.INVOKEVIRTUAL && SERVICE_CALLS.containsKey(mname + mdesc)
+                                        && isFrameworkContextCall(owner, mname, mdesc)) {
+                                    super.visitMethodInsn(Opcodes.INVOKESTATIC, "apklayer/host/Services", mname,
+                                            SERVICE_CALLS.get(mname + mdesc), false);
+                                    return;
+                                }
                                 // the app's System/Runtime loadLibrary/load -> apklayer.host.NativeLoader (P4)
                                 if (opcode == Opcodes.INVOKESTATIC && owner.equals("java/lang/System")
                                         && (mname.equals("loadLibrary") || mname.equals("load"))
