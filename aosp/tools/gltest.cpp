@@ -1,6 +1,6 @@
 // gltest: the EGL window-surface smoke test (PLAN P7.1 step 3b). A BufferQueue layer shown through SurfaceFlinger; the app side
 // renders GL ES into it with a plain EGL window surface (libapklayer_egl copies each frame on the GPU into the window's buffer).
-// Clears to a colour that changes every frame. Usage: gltest [frames]
+// Clears to a colour that changes every frame; halfway through the layer is resized. Usage: gltest [frames]
 #include <EGL/egl.h>
 #include <gui/Surface.h>
 #include <gui/SurfaceComposerClient.h>
@@ -40,6 +40,10 @@ extern "C" int main(int argc, char** argv) {
     auto clear = reinterpret_cast<void (*)(unsigned)>(eglGetProcAddress("glClear"));
     printf("gltest: window surface %p on a %ux%u layer\n", win, w, h);
     for (int f = 0; f < frames; f++) {
+        if (f == frames / 2) {  // the layer's size changes: the window surface must follow (a new surface pair behind the same EGLSurface)
+            SurfaceComposerClient::Transaction().setBufferSize(sc, 640, 400).apply();
+            printf("gltest: layer resized to 640x400 at frame %d\n", f);
+        }
         clearColor((f % 60) / 60.0f, 1.0f - (f % 60) / 60.0f, 0.5f, 1.0f);
         clear(0x4000 /* GL_COLOR_BUFFER_BIT */);
         eglSwapBuffers(dpy, win);
