@@ -56,6 +56,7 @@ import org.robolectric.annotation.experimental.LazyApplication;
 import org.robolectric.internal.AndroidSandbox;
 import org.robolectric.manifest.AndroidManifest;
 import org.robolectric.shadow.api.Shadow;
+import org.robolectric.shadows.ShadowActivity;
 import org.robolectric.shadows.ShadowApplication;
 import org.robolectric.shadows.ShadowChoreographer;
 import org.robolectric.shadows.ShadowLog;
@@ -83,6 +84,8 @@ public final class AppHost implements Runnable {
     private final Path apk;
     private final Path describe;
     private final Deque<ActivityController<? extends Activity>> stack = new ArrayDeque<>();
+    /** Activities started with startActivityForResult -> the request intent, to return their setResult. */
+    private final java.util.Map<Activity, Intent> resultFor = new java.util.IdentityHashMap<>();
     private final Set<Activity> stopped = new HashSet<>();
     private Handler main;
     private boolean pausedByFocus, stoppedByMinimize; // lifecycle driven by the window state
@@ -159,6 +162,8 @@ public final class AppHost implements Runnable {
                 },
                 "view", u -> RuntimeEnvironment.getApplication().startActivity( // view:<uri>: as if the app fired ACTION_VIEW
                         new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(u)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)),
+                "pick", a -> stack.peek().get().startActivityForResult( // pick:<ACTION_*>: as if the app opened a document picker
+                        new Intent(a).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"), 7),
                 "notify", t -> { // notify:<title>: as if the app posted a notification
                     android.app.Application ctx = RuntimeEnvironment.getApplication();
                     android.app.NotificationManager nm = ctx.getSystemService(android.app.NotificationManager.class);
@@ -430,6 +435,10 @@ public final class AppHost implements Runnable {
 
     /** Builds and fully starts the activity, as the simulator does (Robolectric.setupActivity). */
     private void launch(Intent intent) {
+        // startActivityForResult: Robolectric only records it; the host delivers the result (PLAN P5.3)
+        ShadowActivity.IntentForResult request = stack.isEmpty() ? null
+                : ((ShadowActivity) Shadow.extract(stack.peek().get())).getNextStartedActivityForResult();
+        boolean wantsResult = request != null && request.requestCode >= 0;
         Class<? extends Activity> cls;
         try {
             ActivityInfo info = intent.getComponent() != null
@@ -440,6 +449,12 @@ public final class AppHost implements Runnable {
                     .asSubclass(Activity.class);
         } catch (ClassNotFoundException | NullPointerException | android.content.pm.PackageManager.NameNotFoundException e) {
             if (HostPortals.open(intent)) return;
+            Intent picked = HostPortals.pick(intent);
+            if (picked != null || HostPortals.isPicker(intent)) { // a desktop file dialog answers the document picker
+                if (wantsResult) ((ShadowActivity) Shadow.extract(stack.peek().get()))
+                        .receiveResult(intent, picked != null ? Activity.RESULT_OK : Activity.RESULT_CANCELED, picked);
+                return;
+            }
             // Android would crash the app here; on the desktop the app stays on its current screen.
             System.out.println("[apklayer] cannot start " + intent + ": " + e);
             return;
@@ -454,6 +469,7 @@ public final class AppHost implements Runnable {
             stopped.add(previous.get());
         }
         stack.push(c);
+        if (wantsResult) resultFor.put(c.get(), intent);
         // An activity that adds a window in onCreate (e.g. a dialog) otherwise never records its
         // own decor's first draw, and the composed screen would show nothing behind the dialog.
         c.get().getWindow().getDecorView().invalidate();
@@ -517,6 +533,11 @@ public final class AppHost implements Runnable {
         Activity top = stack.peek().get();
         if (top.isFinishing()) {
             stack.pop().pause().stop().destroy();
+            Intent request = resultFor.remove(top);
+            if (request != null && !stack.isEmpty()) {
+                ShadowActivity child = Shadow.extract(top);
+                ((ShadowActivity) Shadow.extract(stack.peek().get())).receiveResult(request, child.getResultCode(), child.getResultIntent());
+            }
             System.out.println("[apklayer] finished " + top.getClass().getName() + " depth=" + stack.size());
             if (!stack.isEmpty()) {
                 ActivityController<? extends Activity> c = stack.peek();
