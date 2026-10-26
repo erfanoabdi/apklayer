@@ -271,6 +271,11 @@ location or SafetyNet-free APIs runs.
 
 ### P7 — Own native runtime: native arm64 + GPU HWUI (M11)
 
+> **Revised 2026-10-26 (user decision): no Meson/retargeting build.** Use the arm64 **bionic** (Android) libraries
+> already built in `~/los24/out/target/product/generic_arm64/system/lib64` (`libandroid_runtime.so`, `libhwui.so`, …)
+> and load them into the arm64 JVM with bionic_translation, as P4 does for apps' native libraries. Steps and open
+> questions are in "P7.0 experiment" below; the original compdb→Meson plan (items 1-3) is kept as the fallback.
+
 1. **Soong host build, x86_64 (necessary: D24).** In OrbStack, with
    `SOONG_GEN_COMPDB=1` (in ~/los24 after `breakfast gsi_arm64 userdebug`, using its `out/`), build only the host variant of
    `libandroid_runtime` (`host_supported` in frameworks/base/core/jni/Android.bp; the same
