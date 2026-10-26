@@ -52,12 +52,19 @@ mkdir -p ~/bt/out/glibc
 for shim in ~/bt/ndk/*.c; do
   name=$(basename "$shim" .c)
   sed -i "/^$name\\.so[[:space:]]/d" ~/bt/out/share/bionic_translation/cfg.d/bionic_translation.cfg  # replace upstream's mapping
-  cc -shared -fPIC -O2 -Wl,-soname,${name}_shim.so.0 -o ~/bt/out/glibc/${name}_shim.so.0 "$shim" -lz
+  cc -shared -fPIC -O2 -Wl,-soname,${name}_shim.so.0 -o ~/bt/out/glibc/${name}_shim.so.0 "$shim" -lz -ldl
   printf '%s.so  %s_shim.so.0\n' "$name" "$name" >> ~/bt/out/share/bionic_translation/cfg.d/bionic_translation.cfg
 done
+# GLES: Mesa (llvmpipe, surfaceless) from the build VM's x86_64 userspace, bundled with its DRI driver and EGL vendor file
+printf 'libGLESv2.so  libGLESv2.so.2\nlibGLESv3.so  libGLESv2.so.2\nlibGLESv1_CM.so  libGLESv1_CM.so.1\n' >> ~/bt/out/share/bionic_translation/cfg.d/bionic_translation.cfg
+M=/usr/lib/x86_64-linux-gnu
+mkdir -p ~/bt/out/dri ~/bt/out/glvnd
+cp -L $M/libEGL.so.1 $M/libGLESv2.so.2 $M/libGLESv1_CM.so.1 $M/libEGL_mesa.so.0 ~/bt/out/
+cp -L $M/dri/swrast_dri.so ~/bt/out/dri/
+printf '{"file_format_version":"1.0.0","ICD":{"library_path":"libEGL_mesa.so.0"}}\n' > ~/bt/out/glvnd/50_mesa.json
 # bundle the non-glibc shared libraries these need (the dev VM's x86_64 userspace is minimal)
 cd ~/bt/out
-for l in $(LD_LIBRARY_PATH=. ldd libapklayer_native.so libdl_bio.so libc_bio.so libpthread_bio.so | awk '/=>/ {print $3}' | sort -u); do
+for l in $(LD_LIBRARY_PATH=. ldd libapklayer_native.so libdl_bio.so libc_bio.so libpthread_bio.so libEGL.so.1 libGLESv2.so.2 libEGL_mesa.so.0 dri/swrast_dri.so | awk '/=>/ {print $3}' | sort -u); do
   case "$(basename "$l")" in libc.so.*|libm.so.*|libdl.so.*|libpthread.so.*|librt.so.*|ld-linux*) ;; *) [ -e "$(basename "$l")" ] || cp -L "$l" . ;; esac
 done
 R

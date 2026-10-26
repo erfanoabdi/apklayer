@@ -2,6 +2,7 @@
  * The APK path comes from $APKLAYER_APK (set by bin/apklayer); the JNI AssetManager object is ignored. */
 #define _GNU_SOURCE
 #include <errno.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <pthread.h>
 #include <stdint.h>
