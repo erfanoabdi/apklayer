@@ -218,6 +218,7 @@ public final class AppHost implements Runnable {
         app.getSystemService(android.content.ClipboardManager.class).addPrimaryClipChangedListener(this::onAppClipboardChanged);
         ScreenUpdateHandler.create(frames).requestStartUi();
 
+        installProviders(app);
         launch(launcherIntent(app));
         // Like Simulator.postMotionEvent: an off-screen move so the first frame is drawn.
         input.inject(MotionEvent.obtain(0, SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE, width, height, 0));
@@ -289,6 +290,28 @@ public final class AppHost implements Runnable {
         List<ResolveInfo> found = app.getPackageManager().queryIntentActivities(query, 0);
         if (found.isEmpty()) throw new IllegalStateException("no launcher activity in " + app.getPackageName());
         return found.get(0);
+    }
+
+    /**
+     * Android creates every ContentProvider the manifest declares (highest initOrder first) before the first
+     * activity; libraries like androidx.startup (WorkManager, emoji2, ProcessLifecycleOwner) initialise through them.
+     */
+    private static void installProviders(Application app) {
+        try {
+            android.content.pm.ProviderInfo[] providers = app.getPackageManager()
+                    .getPackageInfo(app.getPackageName(), android.content.pm.PackageManager.GET_PROVIDERS).providers;
+            if (providers == null) return;
+            java.util.Arrays.sort(providers, java.util.Comparator.comparingInt((android.content.pm.ProviderInfo p) -> p.initOrder).reversed());
+            for (android.content.pm.ProviderInfo info : providers) {
+                try {
+                    Robolectric.buildContentProvider(Class.forName(info.name).asSubclass(android.content.ContentProvider.class)).create(info);
+                } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+                    System.out.println("[apklayer] provider " + info.name + " not started: " + e);
+                }
+            }
+        } catch (android.content.pm.PackageManager.NameNotFoundException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private static Intent launcherIntent(Application app) {
