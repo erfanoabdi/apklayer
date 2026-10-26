@@ -38,6 +38,9 @@ ANativeWindowBuffer* AHardwareBuffer_to_ANativeWindowBuffer(AHardwareBuffer*);
 #define EGL_CONTEXT_PRIORITY_LEVEL_IMG 0x3100
 #define EGL_RECORDABLE_ANDROID 0x3142
 #define EGL_PROTECTED_CONTENT_EXT 0x32C0
+#ifndef EGL_TELEMETRY_HINT_ANDROID
+#define EGL_TELEMETRY_HINT_ANDROID 0x3570
+#endif
 
 namespace {
 
@@ -397,8 +400,8 @@ EGLImage eglCreateImage(EGLDisplay dpy, EGLContext ctx, EGLenum target, EGLClien
 }
 
 EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig cfg, EGLContext share, const EGLint* attribs) {
-    // priority and protected content are Android-only context attributes
-    auto a = filtered(attribs, {EGL_CONTEXT_PRIORITY_LEVEL_IMG, EGL_PROTECTED_CONTENT_EXT});
+    // priority, protected content and the telemetry hint are Android-only context attributes
+    auto a = filtered(attribs, {EGL_CONTEXT_PRIORITY_LEVEL_IMG, EGL_PROTECTED_CONTENT_EXT, EGL_TELEMETRY_HINT_ANDROID});
     return host<PFNEGLCREATECONTEXTPROC>("eglCreateContext")(dpy, cfg, share, a.data());
 }
 
