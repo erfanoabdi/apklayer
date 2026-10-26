@@ -381,9 +381,12 @@ location or SafetyNet-free APIs runs.
 > Yes, in two levels. (1) **The display follows the shell window**: the HWC's size is the window's size; the shell's CONFIGURE message
 > (already used for P2 resize/HiDPI) makes the HWC announce a new display configuration (or a hotplug re-announce) to SurfaceFlinger, which
 > re-lays out, and apps get a configuration change like a resized emulator window. To verify: how smoothly SurfaceFlinger takes a live
-> size change; rotation is the same mechanism. (2) **One shell window per Android top-level window**: SurfaceFlinger hands the HWC every
-> layer with its buffer and frame; the HWC maps each app's top-level layer to its own `xdg_toplevel` (the overlay/subsurface mechanism with
-> a toplevel), so windows resize, move, minimise and close individually and a resize resizes that Android window. Status bar, dialogs and
+> size change; rotation is the same mechanism. (2) **One shell window per Android top-level window, built as one Android display per window** (user: "can we do multi window?"; the HWC only
+> sees a flat layer list without names or parents, so mapping layers to windows by rectangles would be fragile): each window is a virtual
+> display with its own layer stack, the HWC announces/removes displays by hotplug, each display is one `xdg_toplevel`, and a resize is level 1
+> per display. Needs: an N-display HWC (display id and shell window id are parameters), and a window-manager shadow doing what system_server
+> does for surfaces (attach each app's SurfaceControl to its display's layer stack, z-order, visibility; choose the display a new activity
+> launches on; Robolectric already has multi-display shadows). Windows then resize, move, minimise and close individually. Status bar, dialogs and
 > popups stay inside their window. Needs the shadow layer to expose per-window size and accept resizes from the shell. Rule for the code:
 > the display size and the window ids are always parameters, never constants.
 > 4. **Window surfaces**: libhwui's EGL window surface on the SF's buffers (Mesa Android platform / our libEGL shim).
