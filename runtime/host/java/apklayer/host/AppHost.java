@@ -502,8 +502,9 @@ public final class AppHost implements Runnable {
                 : ((ShadowActivity) Shadow.extract(stack.peek().get())).getNextStartedActivityForResult();
         boolean wantsResult = request != null && request.requestCode >= 0;
         Class<? extends Activity> cls;
+        ActivityInfo info;
         try {
-            ActivityInfo info = intent.getComponent() != null
+            info = intent.getComponent() != null
                     ? RuntimeEnvironment.getApplication().getPackageManager().getActivityInfo(intent.getComponent(), 0)
                     : RuntimeEnvironment.getApplication().getPackageManager().resolveActivity(intent, 0).activityInfo;
             // an <activity-alias> names its real class in targetActivity
@@ -522,6 +523,22 @@ public final class AppHost implements Runnable {
             System.out.println("[apklayer] cannot start " + intent + ": " + e);
             return;
         }
+        // task rules: reuse an instance already on the stack, clear what is above it, or clear everything
+        LaunchRules.Plan plan = LaunchRules.plan(stack.stream().<Class<?>>map(a -> a.get().getClass()).toList(), cls, intent.getFlags(), info.launchMode);
+        if (plan.clearAll()) {
+            while (!stack.isEmpty()) destroyTop();
+        } else if (plan.above() >= 0) {
+            for (int i = 0; i < plan.above(); i++) destroyTop();
+            if (plan.reuse()) {
+                ActivityController<? extends Activity> target = stack.peek();
+                target.newIntent(intent);
+                if (stopped.remove(target.get())) setVisible(target.restart().resume().visible(), true);
+                else target.resume();
+                System.out.println("[apklayer] reused " + cls.getName() + " depth=" + stack.size());
+                return;
+            }
+            destroyTop(); // CLEAR_TOP on a standard activity: it is recreated
+        }
         ActivityController<? extends Activity> previous = stack.peek();
         if (previous != null) previous.pause();
         ActivityController<? extends Activity> c = Robolectric.buildActivity(cls, intent).setup();
@@ -537,6 +554,14 @@ public final class AppHost implements Runnable {
         // own decor's first draw, and the composed screen would show nothing behind the dialog.
         c.get().getWindow().getDecorView().invalidate();
         System.out.println("[apklayer] started " + c.get().getClass().getName() + " depth=" + stack.size());
+    }
+
+    /** Destroys the top activity (the paused/stopped state it is in decides which lifecycle calls remain). */
+    private void destroyTop() {
+        ActivityController<? extends Activity> top = stack.pop();
+        resultFor.remove(top.get());
+        if (stopped.remove(top.get())) top.destroy();
+        else top.pause().stop().destroy();
     }
 
     /** Follows the app's startActivity() calls and finish() of the top activity. */
