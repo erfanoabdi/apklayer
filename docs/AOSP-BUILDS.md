@@ -9,7 +9,7 @@ product than `gsi_arm64 userdebug`):
 `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m <target>`.
 Every build gets an entry here **before** it runs.
 
-**Faster iteration (user, 2026-10-26: a fresh shell redoes `breakfast`, 45 s, and `m` redoes make analysis, ~6 min):** `scripts/aosp-build.sh` caches the `breakfast` environment and builds with `--soong-only`; `scripts/aosp-build.sh --ninja <output>` rebuilds source-only edits with ninja directly (no analysis, every error at once). Still one Soong build at a time.
+**Persistent terminal (user, 2026-10-26: "open a terminal and run breakfast on it once and keep building there"):** `scripts/aosp-term.sh start` opens a `screen` session in OrbStack and runs `breakfast` once; `scripts/aosp-term.sh run <command>` (e.g. `m libapklayer_egl`) runs a command in it, waits for it without polling and prints the errors and result. This replaces a fresh shell per build (45 s of `breakfast` each time). Still one Soong build at a time.
 
 | Date | Target(s) | Why it is necessary | Command | Result |
 |---|---|---|---|---|
