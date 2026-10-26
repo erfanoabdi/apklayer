@@ -345,6 +345,14 @@ location or SafetyNet-free APIs runs.
 >   (`servicemanager.ready`, `ro.hardware.*`, `debug.sf.*`) need a real store: a shared mmap'd property area written by an
 >   `apklayer-init` that sets the product's properties (from `build.prop` files in out/), readable by every process.
 >
+> **SurfaceView (user, 2026-10-26: "if you keep SurfaceFlinger zero-copy it is fast for SurfaceView as well"): no separate shortcut
+> (Mac.apk's direct-to-native-window path is not needed).** A SurfaceView/video layer is its own SF layer with its own buffer
+> queue; with dmabuf buffers and DEVICE composition it reaches the compositor as a `wl_subsurface` (overlay), otherwise
+> RenderEngine samples it on the GPU: zero-copy both ways. Must hold: apps/decoders render into gralloc buffers (EGLImage on the
+> dmabuf), `sync_file` fences both ways, damage/release through the shell, pacing from the real frame callbacks, per-layer
+> DEVICE/CLIENT from what the compositor offers. **Acceptance test for P7.1:** a GL SurfaceView plus a video layer, copies and CPU
+> use measured (target: zero CPU copies of pixels).
+>
 > 4. **Window surfaces**: libhwui's EGL window surface on the SF's buffers (Mesa Android platform / our libEGL shim).
 > 5. **Presentation**: the client target's dmabuf to the shell over SCM_RIGHTS, `zwp_linux_dmabuf_v1`, zero copy.
 > 6. Same service later answers input (InputFlinger), camera, and the userspace binder (design above) replaces the kernel one.
