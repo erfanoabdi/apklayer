@@ -58,24 +58,34 @@ int main(void)
         apklayer_gfx_buffer_close(&b);
     }
 
-    /* YUV: native if the driver has it, else split into per-plane buffers */
+    /* YUV: native if the driver has it, else packed into one allocation. Each plane gets a marker; all must read back. */
     static const struct { uint32_t fourcc; const char *name; } yuv[] = {
-        { DRM_FORMAT_NV12, "NV12" }, { DRM_FORMAT_YVU420, "YV12" }, { DRM_FORMAT_P010, "P010" } };
+        { DRM_FORMAT_NV12, "NV12" }, { DRM_FORMAT_NV21, "NV21" }, { DRM_FORMAT_NV16, "NV16" },
+        { DRM_FORMAT_YUV420, "I420" }, { DRM_FORMAT_YVU420, "YV12" }, { DRM_FORMAT_P010, "P010" } };
     for (size_t i = 0; i < sizeof yuv / sizeof *yuv; i++) {
-        int r2 = apklayer_gfx_alloc(gfx, 64, 64, yuv[i].fourcc, APKLAYER_GFX_SAMPLE | APKLAYER_GFX_CPU_WRITE, &b);
-        char what[64];
-        snprintf(what, sizeof what, "%s allocates (planes=%d)", yuv[i].name, r2 == 0 ? b.num_planes : 0);
+        int r2 = apklayer_gfx_alloc(gfx, 64, 64, yuv[i].fourcc, APKLAYER_GFX_SAMPLE | APKLAYER_GFX_CPU_WRITE | APKLAYER_GFX_CPU_READ, &b);
+        char what[96];
+        snprintf(what, sizeof what, "%s allocates (planes=%d, packed=%d)", yuv[i].name, r2 == 0 ? b.num_planes : 0, r2 == 0 ? b.packed : 0);
         CHECK(r2 == 0, what);
-        if (r2 == 0) {
-            uint32_t st; struct apklayer_gfx_mapping *mm = NULL;
-            for (int p = 0; p < b.num_planes; p++) {
-                uint8_t *px = apklayer_gfx_map(gfx, &b, p, true, &st, &mm);
-                snprintf(what, sizeof what, "%s plane %d maps (%ux%u, stride %u)", yuv[i].name, p, b.plane_width[p], b.plane_height[p], st);
-                CHECK(px != NULL, what);
-                if (px) { px[0] = (uint8_t)(0x80 + p); apklayer_gfx_unmap(mm); }
-            }
-            apklayer_gfx_buffer_close(&b);
+        if (r2 != 0) continue;
+        uint32_t st[4]; struct apklayer_gfx_mapping *mm[4] = { 0 }; uint8_t *px[4];
+        int mapped = 1;
+        for (int p = 0; p < b.num_planes; p++) {
+            px[p] = apklayer_gfx_map(gfx, &b, p, true, &st[p], &mm[p]);
+            if (!px[p]) mapped = 0;
         }
+        snprintf(what, sizeof what, "%s planes map (strides %u/%u/%u, offsets %u/%u/%u)", yuv[i].name, st[0], st[1], st[2],
+                 b.offset[0], b.offset[1], b.offset[2]);
+        CHECK(mapped, what);
+        if (mapped) {
+            for (int p = 0; p < b.num_planes; p++) { px[p][0] = (uint8_t)(0x10 + p); px[p][8] = (uint8_t)(0x20 + p); }
+            int ok = 1;
+            for (int p = 0; p < b.num_planes; p++) ok &= px[p][0] == 0x10 + p && px[p][8] == 0x20 + p;
+            snprintf(what, sizeof what, "%s plane markers do not overlap", yuv[i].name);
+            CHECK(ok, what);
+        }
+        for (int p = 0; p < b.num_planes; p++) apklayer_gfx_unmap(mm[p]);
+        apklayer_gfx_buffer_close(&b);
     }
 
     r = apklayer_gfx_alloc_blob(gfx, 4096, &b);

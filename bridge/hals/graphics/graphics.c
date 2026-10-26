@@ -63,50 +63,40 @@ static uint32_t gbm_flags(uint32_t usage)
     return f;
 }
 
-/* Multi-planar formats built from single-plane allocations, for drivers whose GBM has no YUV (virtio-gpu, llvmpipe). */
-static const struct split_spec {
-    uint32_t fourcc;
+/* Multi-planar formats packed into one linear R8/R16 allocation, for drivers whose GBM has no YUV. chroma_rows: rows of the
+ * allocation (in luma-stride units) per plane after the first, as {numerator, denominator} of the luma height. */
+static const struct pack_spec {
+    uint32_t fourcc, base;  /* base: DRM_FORMAT_R8 or DRM_FORMAT_R16 */
     int planes;
-    struct { uint32_t fourcc; int sub_x, sub_y; } plane[3]; /* sub: width / sub_x, height / sub_y */
-} splits[] = {
-    { DRM_FORMAT_NV12, 2, { { DRM_FORMAT_R8, 1, 1 }, { DRM_FORMAT_GR88, 2, 2 } } },
-    { DRM_FORMAT_NV21, 2, { { DRM_FORMAT_R8, 1, 1 }, { DRM_FORMAT_GR88, 2, 2 } } },
-    { DRM_FORMAT_NV16, 2, { { DRM_FORMAT_R8, 1, 1 }, { DRM_FORMAT_GR88, 2, 1 } } },
-    { DRM_FORMAT_YUV420, 3, { { DRM_FORMAT_R8, 1, 1 }, { DRM_FORMAT_R8, 2, 2 }, { DRM_FORMAT_R8, 2, 2 } } },
-    { DRM_FORMAT_YVU420, 3, { { DRM_FORMAT_R8, 1, 1 }, { DRM_FORMAT_R8, 2, 2 }, { DRM_FORMAT_R8, 2, 2 } } },
-    { DRM_FORMAT_P010, 2, { { DRM_FORMAT_R16, 1, 1 }, { DRM_FORMAT_GR1616, 2, 2 } } },
+    struct { int num, den; int stride_div; } plane[3]; /* plane height = h * num / den; stride = luma stride / stride_div */
+} packs[] = {
+    { DRM_FORMAT_NV12, DRM_FORMAT_R8, 2, { { 1, 1, 1 }, { 1, 2, 1 } } },
+    { DRM_FORMAT_NV21, DRM_FORMAT_R8, 2, { { 1, 1, 1 }, { 1, 2, 1 } } },
+    { DRM_FORMAT_NV16, DRM_FORMAT_R8, 2, { { 1, 1, 1 }, { 1, 1, 1 } } },
+    { DRM_FORMAT_YUV420, DRM_FORMAT_R8, 3, { { 1, 1, 1 }, { 1, 2, 2 }, { 1, 2, 2 } } },
+    { DRM_FORMAT_YVU420, DRM_FORMAT_R8, 3, { { 1, 1, 1 }, { 1, 2, 2 }, { 1, 2, 2 } } },
+    { DRM_FORMAT_P010, DRM_FORMAT_R16, 2, { { 1, 1, 1 }, { 1, 2, 1 } } },
 };
 
-static const struct split_spec *find_split(uint32_t fourcc)
+static const struct pack_spec *find_pack(uint32_t fourcc)
 {
-    for (size_t i = 0; i < sizeof splits / sizeof *splits; i++) if (splits[i].fourcc == fourcc) return &splits[i];
+    for (size_t i = 0; i < sizeof packs / sizeof *packs; i++) if (packs[i].fourcc == fourcc) return &packs[i];
     return NULL;
+}
+
+/* Rows of the packed allocation: each plane's bytes (stride/stride_div * height*num/den) expressed in luma-stride rows. */
+static uint32_t packed_rows(const struct pack_spec *sp, uint32_t h)
+{
+    uint32_t rows = 0;
+    for (int i = 0; i < sp->planes; i++) rows += (h * sp->plane[i].num / sp->plane[i].den) / sp->plane[i].stride_div;
+    return rows;
 }
 
 bool apklayer_gfx_supports(struct apklayer_gfx *gfx, uint32_t fourcc, uint32_t usage)
 {
     if (gbm_device_is_format_supported(gfx->gbm, fourcc, gbm_flags(usage)) != 0) return true;
-    const struct split_spec *sp = find_split(fourcc);
-    for (int i = 0; sp && i < sp->planes; i++)
-        if (!gbm_device_is_format_supported(gfx->gbm, sp->plane[i].fourcc, gbm_flags(usage))) return false;
-    return sp != NULL;
-}
-
-/* One GBM allocation as plane `plane` of out (a dmabuf fd, stride, offset). */
-static int alloc_plane(struct apklayer_gfx *gfx, struct apklayer_gfx_buffer *out, int plane, uint32_t w, uint32_t h,
-                       uint32_t fourcc, uint32_t usage)
-{
-    struct gbm_bo *bo = gbm_bo_create(gfx->gbm, w, h, fourcc, gbm_flags(usage));
-    if (!bo) return errno ? -errno : -ENOMEM;
-    out->fd[plane] = gbm_bo_get_fd_for_plane(bo, 0);
-    out->stride[plane] = gbm_bo_get_stride_for_plane(bo, 0);
-    out->offset[plane] = gbm_bo_get_offset(bo, 0);
-    out->plane_fourcc[plane] = fourcc;
-    out->plane_width[plane] = w;
-    out->plane_height[plane] = h;
-    if (plane == 0) out->modifier = gbm_bo_get_modifier(bo);
-    gbm_bo_destroy(bo); /* the dmabuf fd keeps the memory alive */
-    return out->fd[plane] < 0 ? -EIO : 0;
+    const struct pack_spec *sp = find_pack(fourcc);
+    return sp && gbm_device_is_format_supported(gfx->gbm, sp->base, gbm_flags(usage)) != 0;
 }
 
 static void buffer_init(struct apklayer_gfx_buffer *out, uint32_t w, uint32_t h, uint32_t fourcc)
@@ -116,6 +106,36 @@ static void buffer_init(struct apklayer_gfx_buffer *out, uint32_t w, uint32_t h,
     out->width = w;
     out->height = h;
     out->fourcc = fourcc;
+    out->alloc_fourcc = fourcc;
+    out->alloc_width = w;
+    out->alloc_height = h;
+}
+
+static int alloc_packed(struct apklayer_gfx *gfx, struct apklayer_gfx_buffer *out, const struct pack_spec *sp, uint32_t usage)
+{
+    uint32_t w = out->width, h = out->height;
+    uint32_t rows = packed_rows(sp, h);
+    struct gbm_bo *bo = gbm_bo_create(gfx->gbm, w, rows, sp->base, gbm_flags(usage) | GBM_BO_USE_LINEAR);
+    if (!bo) return errno ? -errno : -ENOMEM;
+    uint32_t stride = gbm_bo_get_stride_for_plane(bo, 0);
+    int fd = gbm_bo_get_fd_for_plane(bo, 0);
+    out->modifier = gbm_bo_get_modifier(bo);
+    out->alloc_fourcc = sp->base;
+    out->alloc_width = w;
+    out->alloc_height = rows;
+    gbm_bo_destroy(bo); /* the dmabuf fd keeps the memory alive */
+    if (fd < 0) return -EIO;
+    out->packed = 1;
+    out->num_planes = sp->planes;
+    uint32_t off = 0;
+    for (int i = 0; i < sp->planes; i++) {
+        out->fd[i] = i == 0 ? fd : fcntl(fd, F_DUPFD_CLOEXEC, 3);
+        out->stride[i] = stride / sp->plane[i].stride_div;
+        out->offset[i] = off;
+        off += out->stride[i] * (h * sp->plane[i].num / sp->plane[i].den);
+        if (out->fd[i] < 0) return -errno;
+    }
+    return 0;
 }
 
 int apklayer_gfx_alloc(struct apklayer_gfx *gfx, uint32_t width, uint32_t height, uint32_t fourcc, uint32_t usage,
@@ -123,7 +143,7 @@ int apklayer_gfx_alloc(struct apklayer_gfx *gfx, uint32_t width, uint32_t height
 {
     if (!apklayer_gfx_supports(gfx, fourcc, usage)) return -ENOTSUP;
     buffer_init(out, width, height, fourcc);
-    int r;
+    int r = 0;
     if (gbm_device_is_format_supported(gfx->gbm, fourcc, gbm_flags(usage))) {
         struct gbm_bo *bo = gbm_bo_create(gfx->gbm, width, height, fourcc, gbm_flags(usage));
         if (!bo) return errno ? -errno : -ENOMEM;
@@ -134,18 +154,11 @@ int apklayer_gfx_alloc(struct apklayer_gfx *gfx, uint32_t width, uint32_t height
             out->fd[i] = gbm_bo_get_fd_for_plane(bo, i);
             out->stride[i] = gbm_bo_get_stride_for_plane(bo, i);
             out->offset[i] = gbm_bo_get_offset(bo, i);
-            out->plane_fourcc[i] = out->num_planes == 1 ? fourcc : 0; /* a real multi-plane buffer is mapped as a whole by the driver */
-            out->plane_width[i] = width;
-            out->plane_height[i] = height;
             if (out->fd[i] < 0) r = errno ? -errno : -EIO;
         }
         gbm_bo_destroy(bo);
     } else {
-        const struct split_spec *sp = find_split(fourcc);
-        out->num_planes = sp->planes;
-        r = 0;
-        for (int i = 0; !r && i < sp->planes; i++)
-            r = alloc_plane(gfx, out, i, width / sp->plane[i].sub_x, height / sp->plane[i].sub_y, sp->plane[i].fourcc, usage);
+        r = alloc_packed(gfx, out, find_pack(fourcc), usage);
     }
     if (r) apklayer_gfx_buffer_close(out);
     return r;
@@ -161,8 +174,6 @@ int apklayer_gfx_alloc_blob(struct apklayer_gfx *gfx, uint64_t size, struct apkl
     out->num_planes = 1;
     out->fd[0] = fd;
     out->stride[0] = (uint32_t)size;
-    out->plane_width[0] = (uint32_t)size;
-    out->plane_height[0] = 1;
     return 0;
 }
 
@@ -187,31 +198,32 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
                        uint32_t *stride, struct apklayer_gfx_mapping **mapping)
 {
     if (plane < 0 || plane >= buf->num_planes) { errno = EINVAL; return NULL; }
+    if (buf->fourcc != 0 && !buf->packed && buf->num_planes > 1) { errno = ENOTSUP; return NULL; }
     struct apklayer_gfx_mapping *m = calloc(1, sizeof *m);
     if (!m) { errno = ENOMEM; return NULL; }
-    void *addr = NULL;
-    if (buf->plane_fourcc[plane] == 0 && buf->fourcc == 0) { /* plain memory */
-        m->blob_len = buf->plane_width[plane];
-        addr = mmap(NULL, m->blob_len, PROT_READ | (write ? PROT_WRITE : 0), MAP_SHARED, buf->fd[plane], 0);
-        if (addr == MAP_FAILED) addr = NULL; else m->blob = addr;
-        *stride = buf->stride[plane];
-    } else if (buf->plane_fourcc[plane] == 0) { /* a real multi-plane buffer: not mappable through GBM */
-        errno = ENOTSUP;
+    uint8_t *addr = NULL;
+    if (buf->fourcc == 0) { /* plain memory */
+        m->blob_len = buf->width;
+        void *p = mmap(NULL, m->blob_len, PROT_READ | (write ? PROT_WRITE : 0), MAP_SHARED, buf->fd[0], 0);
+        if (p != MAP_FAILED) { addr = p; m->blob = p; }
     } else {
         struct gbm_import_fd_data fd_data = {
-            .fd = buf->fd[plane], .width = buf->plane_width[plane], .height = buf->plane_height[plane],
-            .stride = buf->stride[plane], .format = buf->plane_fourcc[plane],
+            .fd = buf->fd[0], .width = buf->alloc_width, .height = buf->alloc_height,
+            .stride = buf->packed ? buf->stride[0] : buf->stride[plane], .format = buf->alloc_fourcc,
         };
         m->bo = gbm_bo_import(gfx->gbm, GBM_BO_IMPORT_FD, &fd_data, GBM_BO_USE_LINEAR);
+        uint32_t map_stride = 0;
         if (m->bo) {
             addr = gbm_bo_map(m->bo, 0, 0, fd_data.width, fd_data.height,
-                              write ? GBM_BO_TRANSFER_READ_WRITE : GBM_BO_TRANSFER_READ, stride, &m->map_data);
+                              write ? GBM_BO_TRANSFER_READ_WRITE : GBM_BO_TRANSFER_READ, &map_stride, &m->map_data);
             if (!addr) gbm_bo_destroy(m->bo);
         }
+        (void)map_stride; /* the buffer's own strides apply: for a packed buffer the allocation and the map agree */
     }
     if (!addr) { free(m); return NULL; }
+    *stride = buf->stride[plane];
     *mapping = m;
-    return addr;
+    return addr + (buf->fourcc == 0 ? 0 : buf->offset[plane]);
 }
 
 void apklayer_gfx_unmap(struct apklayer_gfx_mapping *m)

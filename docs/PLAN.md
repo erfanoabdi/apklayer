@@ -354,8 +354,9 @@ location or SafetyNet-free APIs runs.
 > use measured (target: zero CPU copies of pixels).
 >
 > **Measured on the VM's virtio-gpu (2026-10-26, `tests/hals/graphics-test.c`): GBM allocates ARGB/ABGR/XRGB8888, RGB565, RGBA_F16 and
-> RGBA_1010102, but NOT NV12, I420, YV12 or P010**, so YUV needs the fallback decided earlier: one GBM buffer per plane (R8 for
-> luma, GR88 for chroma; the HAL struct already carries a dmabuf per plane), imported to EGL as a multi-plane dmabuf image, with
+> RGBA_1010102, but NOT NV12, I420, YV12 or P010**, so YUV needs a fallback: ONE linear R8/R16 allocation holding all planes back to back
+> (what a real NV12 buffer is; the Android side must report one base pointer with plane offsets, so separate per-plane buffers
+> do not work), imported to EGL as a multi-plane dmabuf image with per-plane offsets, with
 > `eglQueryDmaBufFormatsEXT` deciding at startup whether the driver accepts it; otherwise the GPU-shader conversion to RGBA. Also
 > measured: `mmap` of a virtio-gpu dmabuf is refused (EACCES), so CPU access always goes through the driver (`gbm_bo_import` +
 > `gbm_bo_map`), which is coherent on every driver.

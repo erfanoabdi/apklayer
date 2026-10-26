@@ -101,15 +101,16 @@ class Allocator : public BnAllocator {
         data.numPlanes = buf.num_planes;
         data.usage = static_cast<uint64_t>(d.usage);
         data.modifier = buf.modifier;
+        data.packed = buf.packed;
+        data.allocFourcc = buf.alloc_fourcc;
+        data.allocWidth = buf.alloc_width;
+        data.allocHeight = buf.alloc_height;
         data.id = (static_cast<uint64_t>(getpid()) << 32) | gNextId++;
         data.reservedSize = d.reservedSize;
         for (int i = 0; i < buf.num_planes; i++) {
             h->data[i] = fcntl(buf.fd[i], F_DUPFD_CLOEXEC, 3);
             data.stride[i] = buf.stride[i];
             data.offset[i] = buf.offset[i];
-            data.planeFourcc[i] = buf.plane_fourcc[i];
-            data.planeWidth[i] = buf.plane_width[i];
-            data.planeHeight[i] = buf.plane_height[i];
             if (h->data[i] < 0) { native_handle_close(h); native_handle_delete(h); return nullptr; }
         }
         encode(h, data);
