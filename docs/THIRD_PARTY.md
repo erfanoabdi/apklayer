@@ -28,3 +28,9 @@ apklayer itself is AGPL-3.0-or-later (PLAN D5), compatible with all of the above
 - Mesa (llvmpipe, EGL, GLES) and LLVM 15 from the build VM's Ubuntu x86_64 userspace, bundled into `build/native/x86_64` by `scripts/build-native.sh` (MIT / Apache-2.0 with LLVM exception). Not committed.
 | `aosp/hals/graphics/mapper/Mapper.cpp` | structure and the metadata-provider pattern follow `external/minigbm/cros_gralloc/mapper_stablec/Mapper.cpp` (Apache-2.0, The Android Open Source Project / ChromiumOS); the buffer model and all implementations are our own |
 
+## Third-party binary used as a fallback (not vendored; fetched by scripts/fetch-robolectric-arm64.sh, pinned by sha256)
+
+| What | Origin | Notes |
+|---|---|---|
+| `robolectric-nativeruntime-linux-aarch64-4.17-16-robolectric-13921718-2.jar` (sha256 `bc04263c...6ed85`, 6.7 MB): Robolectric's native runtime `libandroid_runtime.so` for Linux arm64 plus a small `NativeRuntimeLoader` (`robolectricarm64.LinuxArm64NativeRuntimeLoader`) | github.com/LavishSonbhurra/robolectric-native-arm64, release `v4.17-16-robolectric-13921718-2` (the user pointed to it, 2026-10-26); built by its author from AOSP `android-16.0.0_r1` (build-info: clang 21.1.8, commit `bba2e238`); licences: Apache-2.0 / MIT, notices in the release | A binary built by an individual: integrity is pinned by hash, authenticity is not verifiable. Inspected: the loader only reflects into Robolectric's `DefaultNativeRuntimeLoader` and extracts the library from its own jar (no network, no process execution). Used only as the fallback flavor of `bin/apklayer` (`$APKLAYER_NATIVE/robolectric-nativeruntime-linux-aarch64.jar`); the default arm64 route is the tree-built device libraries (PLAN P7). Verified 2026-10-26: uibench runs on the arm64 JVM without Rosetta, 19 frames, snapshot identical in size to the x86 baseline |
+

@@ -31,6 +31,10 @@ host_cp() {
     local n="${APKLAYER_NATIVE:-$ROOT/native}"
     if [ -d "$n/aosp" ]; then # everything from one AOSP tree (PLAN P7): its Robolectric_all.jar, simulator and framework jar, apklayer's host built against them
         echo "$n/native-runtime.jar:$n/aosp/host-classes:$n/aosp/sim-classes:$n/aosp/Robolectric_all.jar:$DEPS/android-stub.jar:$1"
+    elif [ -f "$n/robolectric-nativeruntime-linux-aarch64.jar" ]; then
+        # FALLBACK flavor (PLAN P7): Robolectric 4.17's own native runtime built for Linux arm64 by a third party
+        # (docs/THIRD_PARTY.md); Maven Robolectric and its android-all as in the default flavor, no apklayer shim, no device libraries
+        echo "$n/robolectric-nativeruntime-linux-aarch64.jar:$DEPS/libs/*:$DEPS/android-stub.jar:$HOST_JAR:$1"
     elif [ -f "$n/native-runtime.jar" ]; then
         # our native runtime jar first. Robolectric's nativeruntime-dist-compat is left out: its fonts and x86 library belong to
         # an older Android build; the fonts of the build the native libraries come from are used instead (-Drobolectric.nativeruntime.fontdir)
