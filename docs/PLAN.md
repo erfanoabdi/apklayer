@@ -332,6 +332,19 @@ location or SafetyNet-free APIs runs.
 > dmabuf goes to the Wayland compositor as a `wl_subsurface` (overlay/scanout, colour metadata kept); `apklayer-codec` writes
 > decoded frames into BufferQueue buffers (zero-copy with VA-API/NVDEC/V4L2 dmabuf output, one CPU write for software
 > decoders, never a readback). Fallback: GPU shader to RGBA, then the explicit CPU mode.
+> **What the real system services need from a desktop (found by reading `servicemanager`, 2026-10-26; items 0.x come before 1):**
+> - 0.1 **SELinux**: `Access.cpp` insists on `getcon()` and `selinux_check_access` (service_contexts). No Android policy exists on a
+>   desktop; a `libselinux.so` replacement (cfg.d mapped, generated from the real library's exports) answers "allowed" and a fixed
+>   context. The host's own isolation (bwrap/AppArmor, P6) is the real security boundary.
+> - 0.2 **VINTF**: `isDeclared()` for the HALs (`composer3`, `allocator`, `mapper`) reads `/vendor/etc/vintf/*.xml`; there is no
+>   such directory. Needs the path layer below, with manifests apklayer ships.
+> - 0.3 **Path layer**: `/system`, `/vendor`, `/apex`, `/data`, `/dev/binder` as seen by the bionic libraries map to
+>   `$APKLAYER_NATIVE/android-root` (bionic_translation has no remapping, `bionic_getenv("ANDROID_ROOT")` is hardwired to `/system`).
+>   Candidate: wrap `open/openat/stat/access/opendir/readlink` in the libc_bio wrappers (a small, reusable patch, PATCHES.md).
+> - 0.4 **Properties**: the `__system_property_*` functions in libc_bio print "not handled yet" and return nothing; services
+>   (`servicemanager.ready`, `ro.hardware.*`, `debug.sf.*`) need a real store: a shared mmap'd property area written by an
+>   `apklayer-init` that sets the product's properties (from `build.prop` files in out/), readable by every process.
+>
 > 4. **Window surfaces**: libhwui's EGL window surface on the SF's buffers (Mesa Android platform / our libEGL shim).
 > 5. **Presentation**: the client target's dmabuf to the shell over SCM_RIGHTS, `zwp_linux_dmabuf_v1`, zero copy.
 > 6. Same service later answers input (InputFlinger), camera, and the userspace binder (design above) replaces the kernel one.
