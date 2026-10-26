@@ -282,6 +282,20 @@ location or SafetyNet-free APIs runs.
 > Robolectric's shadows call its own `org.robolectric.nativeruntime.*Natives` classes; intercept `RegisterNatives` and
 > bind the same functions to the Robolectric class, then run the sandbox with this native runtime on the arm64 JVM.
 >
+> **Why the full device library (user, 2026-10-26): "in future if we want full support of apps we need all input, GPU, camera
+> and even userspace binder too".** Google's *host* variant leaves exactly those out; the device library contains them, so this
+> route grows into them without rebuilding anything. What each needs from the desktop (all later, in this order of value):
+> - **Binder**: `libbinder` talks to `/dev/binder`. The VM's kernel (6.8, Ubuntu) ships `binder_linux` and `binderfs` as modules
+>   (`CONFIG_ANDROID_BINDER_IPC=m`), not loaded by default: `modprobe binder_linux` + a binderfs mount gives a real binder; a
+>   service manager and the few system services apps call (activity, package, window, display, input, notification, …) would
+>   be apklayer's own, answering over it. Fallback with no kernel module: libbinder's RPC binder over a Unix socket
+>   (`libbinder_rpc_unstable.so` is in `out/`). Ships as a requirement for Flatpak users (kernel module) or the RPC path.
+> - **Input**: libinput-style `InputChannel` (socketpair, no binder needed) fed from the shell's events instead of Robolectric's
+>   UiAutomation injection.
+> - **GPU**: HWUI's GL pipeline over libgui `BufferQueue` (in-process) with buffers as dmabufs to the shell; Mesa on `/dev/dri`,
+>   `/dev/dma_heap` present.
+> - **Camera**: `CameraService` replacement behind binder, fed by PipeWire/V4L2 (`/dev/video*` exist).
+>
 > **Revised 2026-10-26 (user decision): no Meson/retargeting build.** Use the arm64 **bionic** (Android) libraries
 > already built in `~/los24/out/target/product/generic_arm64/system/lib64` (`libandroid_runtime.so`, `libhwui.so`, …)
 > and load them into the arm64 JVM with bionic_translation, as P4 does for apps' native libraries. Steps and open
