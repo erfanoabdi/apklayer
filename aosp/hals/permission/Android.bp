@@ -1,0 +1,8 @@
+// The allow-all "permission" binder service (see Permission.cpp), run by btload --main like the other services.
+cc_library_shared {
+    name: "libapklayer_permission",
+    srcs: ["Permission.cpp"],
+    shared_libs: ["libbinder", "libutils", "liblog"],
+    compile_multilib: "64",
+    cflags: ["-Wall", "-Werror", "-Wno-main", "-Wno-unused-parameter"],
+}

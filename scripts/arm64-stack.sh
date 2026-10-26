@@ -30,6 +30,7 @@ svc() { # svc <name> <lib> [args]; APKLAYER_GDB=<name> runs that one under gdb (
     fi
 }
 svc servicemanager libapklayer_servicemanager.so /dev/binder
+svc permission libapklayer_permission.so  # libbinder's checkPermission() asks this service (system_server's PermissionController is not run)
 svc allocator libapklayer_allocator.so
 svc composer libapklayer_composer.so
 svc surfaceflinger libapklayer_surfaceflinger.so

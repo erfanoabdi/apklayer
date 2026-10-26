@@ -50,8 +50,15 @@ public class ShadowSurfaceControl {
   @Implementation(minSdk = Q)
   protected static long nativeCreate(
       SurfaceSession session, String name, int w, int h, int format, int flags, long parentObject, Parcel metadata) {
-    long handle = reflector(SurfaceControlReflector.class)
-        .nativeCreate(session, name, w, h, format, flags, parentObject, null);
+    long handle = 0;
+    for (int attempt = 0; attempt < 12 && handle == 0; attempt++) {
+      if (attempt > 0) {
+        System.err.println("[apklayer] SurfaceControl.nativeCreate returned 0, retrying (" + attempt + ")");
+        try { Thread.sleep(1000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+      }
+      handle = reflector(SurfaceControlReflector.class)
+          .nativeCreate(session, name, w, h, format, flags, parentObject, null);
+    }
     System.err.println("[apklayer] SurfaceControl.nativeCreate(" + name + ", " + w + "x" + h + ", format " + format + ", flags 0x" + Integer.toHexString(flags) + ", session " + (session != null) + ", parent " + parentObject + ") = " + handle);
     return handle;
   }
