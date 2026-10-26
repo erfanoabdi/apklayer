@@ -268,6 +268,14 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
         gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA6, dstFbo);
         gl<void (*)(int, int, int, int, int, int, int, int, unsigned, unsigned)>("glBlitFramebuffer")(
                 0, 0, w.width, w.height, 0, 0, dst->width, dst->height, 0x4000 /* GL_COLOR_BUFFER_BIT */, 0x2600 /* GL_NEAREST */);
+        if (getenv("APKLAYER_RUNTIME_DEBUG")) {
+            static int checked;
+            if (checked++ < 4) {
+                auto status = gl<unsigned (*)(unsigned)>("glCheckFramebufferStatus");
+                ALOGI("window blit %ux%u -> %dx%d: read fbo status 0x%x, draw fbo status 0x%x, glError 0x%x", w.width, w.height, dst->width, dst->height,
+                      status(0x8CA8), status(0x8CA9), gl<unsigned (*)()>("glGetError")());
+            }
+        }
         if (getenv("APKLAYER_RUNTIME_DEBUG")) {  // what the blit copied: a pixel of the app's frame and of the window buffer
             static int logged;
             if (logged++ < 6) {
