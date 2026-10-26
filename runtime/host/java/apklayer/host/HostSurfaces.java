@@ -34,11 +34,12 @@ final class HostSurfaces {
         int seen; // seq of the last GL frame picked up
 
         HostSurface(SurfaceView view) { this.view = view; }
+        @Override public boolean isValid() { return true; }
         public int width() { return view.getWidth(); }
         public int height() { return view.getHeight(); }
     }
 
-    private static final class HostHolder extends ShadowSurfaceView.FakeSurfaceHolder {
+    static final class HostHolder extends ShadowSurfaceView.FakeSurfaceHolder {
         final HostSurface surface;
         HostHolder(HostSurface surface) { this.surface = surface; }
         @Override public Surface getSurface() { return surface; }
@@ -58,11 +59,10 @@ final class HostSurfaces {
             if (sv.getWidth() <= 0 || sv.getHeight() <= 0) return;
             HostSurface s = surfaces.get(sv);
             if (s == null) {
-                surfaces.put(sv, s = new HostSurface(sv));
-                ShadowSurfaceView.FakeSurfaceHolder fake = ((ShadowSurfaceView) Shadow.extract(sv)).getFakeSurfaceHolder();
-                HostHolder holder = new HostHolder(s);
-                System.out.println("[apklayer] surface " + s.hashCode() + " " + sv.getWidth() + "x" + sv.getHeight() + " -> " + fake.getCallbacks().size() + " callbacks");
-                for (SurfaceHolder.Callback c : fake.getCallbacks().toArray(new SurfaceHolder.Callback[0])) {
+                HostHolder holder = ((ShadowHostSurfaceView) Shadow.extract(sv)).hostHolder();
+                surfaces.put(sv, s = holder.surface);
+                System.out.println("[apklayer] surface " + s.hashCode() + " " + sv.getWidth() + "x" + sv.getHeight() + " -> " + holder.getCallbacks().size() + " callbacks");
+                for (SurfaceHolder.Callback c : holder.getCallbacks().toArray(new SurfaceHolder.Callback[0])) {
                     c.surfaceCreated(holder);
                     c.surfaceChanged(holder, PixelFormat.RGBA_8888, sv.getWidth(), sv.getHeight());
                 }
