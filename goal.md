@@ -4,6 +4,19 @@
 First target app: **`tests/uibench/uibench.apk`, full UI**, rendered to a real Wayland window
 and interactive (reached: M5).
 
+## Long-term vision (user, 2026-10-26)
+
+1. **Real Android underneath, no emulator.** Android's own userspace (framework, native libraries, SurfaceFlinger, binder,
+   system services) runs on the Linux desktop; the hardware layer is apklayer's: HALs for graphics, camera, GNSS, vibrator,
+   sensors and more, backed by the host's standard interfaces (GBM/EGL/Wayland, PipeWire/V4L2, GeoClue, evdev, IIO) and never
+   tied to one GPU vendor. Rendering is GPU zero-copy (dmabuf end to end), paced by the real display's refresh rate.
+2. **Whole phones as instances.** An instance is a complete virtual phone: its own service manager, SurfaceFlinger, HALs,
+   system properties, storage and accounts, running as ordinary processes (no VM, no container image). Several instances run
+   side by side and are isolated from each other and from the host, so the same app can run twice, each copy with its own data
+   and login. A single-app instance (today's `apklayer run <apk>`) is the small case; a full phone is the large one.
+3. **The full system one day.** With real binder, real SurfaceFlinger and the HAL set in place, the aim is to run the whole
+   SystemUI APK and the system services it needs, as an instance's home screen.
+
 ## Method (user directive, 2026-10-25)
 
 **The Robolectric method.** Do NOT build on Mac.apk's hand-patched framework snapshot,
@@ -48,8 +61,9 @@ Instead:
 | M8 | P4: native `.so` in APKs (bionic_translation + NDK shims → Mesa/PipeWire) | **in progress**: CPU-Z loads its real native library (bionic linker + JNI loader, x86_64 under Rosetta); NDK shims log ✅, android ✅, EGL/GLES ✅ (bundled Mesa llvmpipe); pixel delivery to the shell, audio, vulkan pending |
 | M9 | P5: platform services (WebView→WPE, media→GStreamer, portals, microG) | pending |
 | M10 | P6: multiple apps (apklayerd, cross-app intents/binder-lite, bwrap) | pending |
-| M11 | P7: own native runtime (one Soong host build in OrbStack → compdb → Meson for x86_64 + arm64) → native arm64 + GPU HWUI | pending |
-| M12 | P8: ship (Flatpak for x86_64 + arm64, desktop integration, performance budget) | pending |
+| M11 | P7: device-library route: the tree's arm64 Android libraries on bionic_translation (no Rosetta), own SurfaceFlinger stack with GPU zero-copy rendering (PLAN P7.1) | **in progress**: native runtime loads, app starts on arm64 (P7.0); servicemanager runs on kernel binder (P7.1); SurfaceFlinger, gralloc and HWC next |
+| M12 | P8 (ship): Flatpak for x86_64 + arm64, desktop integration, performance budget | pending |
+| M13 | Vision phases (PLAN P8: SystemUI and system services; P9: several phone instances at once) | not scheduled |
 
 Decisions, phases, exit tests and the immediate task list: **docs/PLAN.md** (plan of record).
 

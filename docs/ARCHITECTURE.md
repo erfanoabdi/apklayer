@@ -120,3 +120,6 @@ side; buffers cross as dmabuf fds and fences as sync_file fds; one directory per
 Long-term goal (user, 2026-10-26): with real binder, real SurfaceFlinger and these HALs the stack should one day run the whole
 SystemUI APK (and the system services it needs) as ordinary apps; every design choice here keeps that open.
 
+Multiple instances (user, 2026-10-26): every piece above is per instance, parameterised by an instance root (data, properties,
+binder device, sockets). One instance = one full phone (or a single app). See PLAN P9.
+

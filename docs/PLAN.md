@@ -502,3 +502,13 @@ display, input managers) on HotSpot over the real binder (`services.jar` from th
 (camera, gnss, vibrator, sensors, power, input, audio), a real property service and init, and the userspace-binder driver so none of
 it needs kernel modules. Every P7 interface is chosen so this stays possible: real SurfaceFlinger, real binder, per-domain HALs.
 
+### P9 — Vision: several phone instances at once (user, 2026-10-26)
+Each instance is a full virtual phone made of ordinary host processes: **its own binder domain** (a separate binderfs device
+from `binder-control`, later a separate userspace-binder context), its own servicemanager, SurfaceFlinger and HALs, its own
+system-property area, its own `/data` (the path layer, step 0.3, maps the Android paths per instance), its own runtime directory
+for the shell and vsync sockets, and one process group (cgroup/systemd scope) that can be stopped as a unit. Windows from an
+instance are Wayland windows tagged with the instance (title/app-id). The same app can run in two instances with separate
+accounts and storage. Isolation between instances and from the host is the P6 sandbox (bwrap/namespaces) applied per instance.
+Design rule from now on: nothing in P7 may assume a single instance (no fixed `/dev/binder`, fixed socket names or global
+property store; take an instance id/root as a parameter).
+
