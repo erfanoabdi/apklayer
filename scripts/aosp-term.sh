@@ -19,11 +19,13 @@ start)
 run)
     shift
     cmd="$*"
+    # screen's `stuff` truncates long input: the command goes into a script file and only a short line is typed
     $ORB bash -c '
-        fifo=/tmp/aosp.fifo.$$; rm -f $fifo; mkfifo $fifo
+        id=$$; fifo=/tmp/aosp.fifo.$id; script=/tmp/aosp.cmd.$id.sh; rm -f $fifo; mkfifo $fifo
         log=~/apklayer-aosp-build.last.log
-        screen -S aosp -X stuff "( $1 ) > $log 2>&1; echo \$? > $fifo\n"
-        rc=$(cat $fifo); rm -f $fifo
+        printf "%s\n" "$1" > $script
+        screen -S aosp -X stuff "bash $script > $log 2>&1; echo \$? > $fifo\n"
+        rc=$(cat $fifo); rm -f $fifo $script
         grep -a "error:\|FAILED\|build completed\|Build Succeeded" $log | head -25 | cut -c1-500
         echo "exit=$rc (log: $log)"' _ "$cmd"
     ;;
