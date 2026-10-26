@@ -42,6 +42,21 @@ int envInt(const char* name, int fallback) {
     return v ? atoi(v) : fallback;
 }
 
+// debug (APKLAYER_RUNTIME_DEBUG): every 30th presented frame, its pixels at three points, read back through the driver
+void logPixels(const apklayer_gfx_buffer& b) {
+    static apklayer_gfx* gfx = apklayer_gfx_open(nullptr);
+    static unsigned n;
+    if (!gfx || (n++ % 30) != 0) return;
+    uint32_t stride = 0;
+    apklayer_gfx_mapping* map = nullptr;
+    auto* p = static_cast<uint8_t*>(apklayer_gfx_map(gfx, &b, 0, false, &stride, &map));
+    if (!p) { ALOGI("present %u: cannot map the frame", n); return; }
+    auto px = [&](uint32_t x, uint32_t y) { const uint8_t* q = p + y * stride + x * 4; return (q[0] << 24) | (q[1] << 16) | (q[2] << 8) | q[3]; };
+    ALOGI("present %u: %ux%u pixels(bytes 0..3) (10,10)=%08x (center)=%08x (corner)=%08x", n, b.width, b.height,
+          px(10, 10), px(b.width / 2, b.height / 2), px(b.width - 10, b.height - 10));
+    apklayer_gfx_unmap(map);
+}
+
 class Client : public BnComposerClient {
   public:
     Client() {
@@ -243,6 +258,7 @@ class Client : public BnComposerClient {
         b.num_planes = d.numPlanes;
         for (int i = 0; i < kMaxPlanes; i++) b.fd[i] = i < static_cast<int>(d.numPlanes) ? h->data[i] : -1;
         for (uint32_t i = 0; i < d.numPlanes; i++) { b.stride[i] = d.stride[i]; b.offset[i] = d.offset[i]; }
+        if (getenv("APKLAYER_RUNTIME_DEBUG")) logPixels(b);
         int32_t damage[4] = {0, 0, 0, 0};
         if (!mClientDamage.empty()) {
             const auto& r = mClientDamage[0];
