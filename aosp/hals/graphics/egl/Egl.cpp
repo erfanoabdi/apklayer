@@ -213,8 +213,8 @@ struct GlState {
         if (scissor) gl<void (*)(unsigned)>("glDisable")(0xC11);
     }
     ~GlState() {
-        gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CAA, read);
-        gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA6, draw);
+        gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA8 /* GL_READ_FRAMEBUFFER */, read);
+        gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA9 /* GL_DRAW_FRAMEBUFFER */, draw);
         gl<void (*)(unsigned, unsigned)>("glBindTexture")(0xDE1, tex);
         if (scissor) gl<void (*)(unsigned)>("glEnable")(0xC11);
     }
@@ -264,8 +264,8 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
         GlState saved;
         unsigned srcTex = 0, dstTex = 0;
         unsigned srcFbo = fboForImage(src, &srcTex), dstFbo = fboForImage(out, &dstTex);
-        gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CAA, srcFbo);
-        gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA6, dstFbo);
+        gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA8 /* GL_READ_FRAMEBUFFER */, srcFbo);
+        gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA9 /* GL_DRAW_FRAMEBUFFER */, dstFbo);
         gl<void (*)(int, int, int, int, int, int, int, int, unsigned, unsigned)>("glBlitFramebuffer")(
                 0, 0, w.width, w.height, 0, 0, dst->width, dst->height, 0x4000 /* GL_COLOR_BUFFER_BIT */, 0x2600 /* GL_NEAREST */);
         if (getenv("APKLAYER_RUNTIME_DEBUG")) {
