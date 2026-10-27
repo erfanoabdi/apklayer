@@ -666,3 +666,5 @@ default flavor): uibench runs on the arm64 JVM with no Rosetta, 19 frames, same 
 and stays as the fallback while the device-library route is finished. **x86_64 counterpart (deferred: the very last thing, after the tool has been published; user, 2026-10-26):** the tree's own `libandroid_runtime` for the
 Linux x86_64 host (the tree-consistent Robolectric native runtime for x86 hosts), built in ~/los24 (docs/AOSP-BUILDS.md), to replace the
 Rosetta-era x86 library where the tree's framework jar is used.
+
+- [ ] NewPipe: the loading spinner (ProgressBar in the middle while content loads) is not shown; revisit (user, 2026-10-27).
