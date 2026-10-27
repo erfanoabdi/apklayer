@@ -313,7 +313,7 @@ public final class AppHost implements Runnable {
                 followNavigation();
                 followOrientation();
                 followTextInput();
-                if (!Boolean.getBoolean("apklayer.nativemedia") || !Boolean.getBoolean("apklayer.gpu")) HostSurfaces.follow();
+                if (!Boolean.getBoolean("apklayer.gpu")) HostSurfaces.follow(); // the GPU route has real SurfaceViews (ShadowHostNativeSurfaceView)
                 HostWebViews.follow();
                 deliverCrossAppResults();
                 HostPortals.followNotifications();

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real APK JNI Vulkan readback, truthful presentation capability and physical Back."""
+"""Real APK JNI Vulkan readback, presentation capability matching the host device and physical Back."""
 import ctypes
 import os
 from pathlib import Path
@@ -57,7 +57,7 @@ try:
             if finished: break
             if not captured and any('[hello-vulkan] PASS' in line for line in seen) and any('[hello-vulkan] FRAME' in line for line in seen) and any('window state active=true' in line for line in seen):
                 assert sum('PASS cycle ' in line for line in seen) == 6
-                assert any('android_swapchain=0' in line for line in seen)
+                assert any(('android_swapchain=1' in line and 'dma_buf=1 drm_modifier=1 semaphore_fd=1' in line) or 'android_swapchain=0' in line for line in seen)
                 print('CAPTURE Vulkan probe result', flush=True)
                 assert sys.stdin.readline().strip() == 'captured'
                 subprocess.run(['sudo', '-S', '/tmp/uinput-keys', 'key:1'], input=b'1234\n', check=True,

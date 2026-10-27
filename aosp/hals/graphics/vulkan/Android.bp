@@ -2,8 +2,8 @@
 cc_library_shared {
     name: "vulkan.apklayer",
     srcs: ["Driver.cpp"],
-    header_libs: ["hwvulkan_headers", "vulkan_headers"],
-    shared_libs: ["liblog", "libdl"],
+    header_libs: ["hwvulkan_headers", "vulkan_headers", "libapklayer_gralloc_common_headers"],
+    shared_libs: ["libcutils", "liblog", "libdl"],
     compile_multilib: "64",
     cflags: ["-Wall", "-Werror", "-Wno-missing-field-initializers"],
 }

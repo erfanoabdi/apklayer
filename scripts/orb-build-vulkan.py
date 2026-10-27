@@ -61,7 +61,7 @@ for name, source in [('vulkan.apklayer', 'hals/graphics/vulkan/Driver.cpp'), ('l
     c = re.sub(r' -o \S+', ' -o ' + obj, compile_template)
     c = re.sub(r' -MF \S+', ' -MF ' + obj + '.d', c)
     c = c.rsplit(' ', 1)[0] + ' vendor/apklayer/' + source
-    c = c.replace(' -c ', ' -Iexternal/vulkan-headers/include -Ilibnativehelper/include_jni -Iframeworks/native/vulkan/include -Ihardware/libhardware/include_all -Wno-main -Wno-missing-field-initializers -c ')
+    c = c.replace(' -c ', ' -Iexternal/vulkan-headers/include -Ilibnativehelper/include_jni -Iframeworks/native/vulkan/include -Ihardware/libhardware/include_all -Ivendor/apklayer/hals/graphics/common -Wno-main -Wno-missing-field-initializers -c ')
     print('compile', source, flush=True)
     subprocess.run(c, shell=True, check=True)
     target = root + 'unstripped/' + name + '.so'

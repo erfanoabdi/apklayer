@@ -165,3 +165,7 @@ Remote Codec2 verification: libcodec2_client dependency linked from the selected
 
 ### 2026-10-28 — libapklayer_egl: eglSetDamageRegionKHR answered locally (incremental, authorized)
 - HWUI aborts when eglSetDamageRegionKHR fails; the forwarded call returned EGL_BAD_SURFACE on the zink host driver (the handle is ours, not the host's). Every swap presents the whole buffer, so it returns EGL_TRUE. `orb-build-module.py libapklayer_egl hals/graphics/egl Egl.cpp` (existing commands, no graph change, no clean).
+
+### 2026-10-28 — vulkan.apklayer: VK_ANDROID_native_buffer over the host driver (incremental, authorized)
+- Implements the Android swapchain path in the Vulkan HAL frontend (Driver.cpp): dma-buf image import from our gralloc handles (explicit DRM layout), vkAcquireImageANDROID/vkQueueSignalReleaseImageANDROID through sync-fd semaphores, gralloc usage queries, device creation with the host extensions that carry it. Only vulkan.apklayer is recompiled/relinked with `scripts/orb-build-vulkan.py` (existing commands; libvulkan and libapklayer_vktest unchanged or rebuilt the same way, no graph change, no clean).
+- Presentation test added: tests/vm/vulkan-present.sh (hello-vulkan's Present activity). libapklayer_vktest rebuilt for it with the same script.

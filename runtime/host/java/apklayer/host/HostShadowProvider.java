@@ -43,12 +43,11 @@ public final class HostShadowProvider implements ShadowProvider {
             entries.add(Map.entry("android.media.MediaCodec", ShadowHostNativeMediaCodec.class.getName()));
             entries.add(Map.entry("android.media.MediaCodecList", ShadowHostNativeMediaCodecList.class.getName()));
             entries.add(Map.entry("android.media.MediaExtractor", ShadowHostNativeMediaExtractor.class.getName()));
-            if (Boolean.getBoolean("apklayer.gpu")) {
-                entries.removeIf(entry -> entry.getKey().equals("android.view.SurfaceView"));
-                entries.add(Map.entry("android.view.SurfaceView", ShadowHostNativeSurfaceView.class.getName()));
-            }
         }
         if (Boolean.getBoolean("apklayer.gpu")) {
+            // a SurfaceView on the GPU route owns a real BLAST-backed window: native code (NDK, Vulkan, EGL) needs an ANativeWindow
+            entries.removeIf(entry -> entry.getKey().equals("android.view.SurfaceView"));
+            entries.add(Map.entry("android.view.SurfaceView", ShadowHostNativeSurfaceView.class.getName()));
             entries.add(Map.entry("android.view.TextureView", ShadowHostRealTextureView.class.getName()));
             entries.add(Map.entry("android.graphics.SurfaceTexture", HostGLShadows.SurfaceTexture.class.getName()));
             entries.add(Map.entry("android.graphics.TextureLayer", HostGLShadows.TextureLayer.class.getName()));
