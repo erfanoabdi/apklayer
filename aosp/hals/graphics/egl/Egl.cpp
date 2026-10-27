@@ -111,6 +111,9 @@ static unsigned displayRefs;  // initialize/terminate count, below
 
 // An ANativeWindowBuffer of our gralloc as a dmabuf EGLImage on the host.
 EGLImage imageFromNativeBuffer(EGLDisplay dpy, ANativeWindowBuffer* buf) {
+    // apklayer patch: Skia asks eglGetCurrentDisplay() on threads with no context (Bitmap.copy of a hardware bitmap on the main thread):
+    // EGL_NO_DISPLAY, which the host rejects with EGL_BAD_DISPLAY. There is one display.
+    if (dpy == EGL_NO_DISPLAY) dpy = gbmDisplay();
     HandleData d;
     if (buf == nullptr || !decode(buf->handle, &d)) {
         ALOGE("eglCreateImageKHR(native buffer): not one of our gralloc handles (buffer %p, handle %p, fds %d, ints %d)", buf,
