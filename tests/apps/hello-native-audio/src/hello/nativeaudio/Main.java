@@ -94,6 +94,7 @@ public class Main extends Activity {
                 ParcelCheck.run();
                 TrackCheck.run(this);
                 if (System.getProperty("hello.rate") != null) RateCheck.run();
+                if (System.getProperty("hello.record") != null) RecordCheck.run();
                 require(((Number) active.invoke(null)).intValue() == 0, "AudioTrack attribution scope released");
             }
             runOnUiThread(() -> {

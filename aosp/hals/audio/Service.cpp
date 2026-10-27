@@ -16,11 +16,13 @@ class PipeWireModule final : public Module {
     explicit PipeWireModule(std::unique_ptr<Configuration>&& config)
         : Module(Type::DEFAULT, std::move(config)) {}
   private:
-    ndk::ScopedAStatus createInputStream(StreamContext&&,
-        const ::aidl::android::hardware::audio::common::SinkMetadata&,
-        const std::vector<::aidl::android::media::audio::common::MicrophoneInfo>&,
-        std::shared_ptr<StreamIn>*) override {
-        return ndk::ScopedAStatus::fromExceptionCode(EX_UNSUPPORTED_OPERATION);
+    ndk::ScopedAStatus createInputStream(StreamContext&& context,
+        const ::aidl::android::hardware::audio::common::SinkMetadata& metadata,
+        const std::vector<::aidl::android::media::audio::common::MicrophoneInfo>& microphones,
+        std::shared_ptr<StreamIn>* result) override {
+        if (context.getAsyncCallback() || context.isMmap())
+            return ndk::ScopedAStatus::fromExceptionCode(EX_UNSUPPORTED_OPERATION);
+        return createStreamInstance<PipeWireInput>(result, std::move(context), metadata, microphones);
     }
     ndk::ScopedAStatus createOutputStream(StreamContext&& context,
         const ::aidl::android::hardware::audio::common::SourceMetadata& metadata,

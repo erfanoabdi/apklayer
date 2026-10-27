@@ -16,7 +16,8 @@ from pathlib import Path
 os.chdir(Path.home() / 'los24')
 module, mdir, sources = (sys.argv[1], sys.argv[2], sys.argv[3:]) if len(sys.argv) > 3 else (
     'libapklayer_codec2', 'hals/media/codec2', ['AudioDecoder.cpp', 'ComponentStore.cpp', 'Service.cpp'])
-root = f'out/soong/.intermediates/vendor/apklayer/{mdir}/{module}/android_arm64_armv8-a_shared/'
+variant = os.environ.get('APKLAYER_VARIANT', 'android_arm64_armv8-a_shared')  # vendor modules: android_vendor_arm64_armv8-a_shared
+root = f'out/soong/.intermediates/vendor/apklayer/{mdir}/{module}/{variant}/'
 final, target = root + module + '.so', root + 'unstripped/' + module + '.so'
 cmds_file = Path(f'/tmp/apklayer-{module}-commands')
 if not cmds_file.exists():  # the module's commands from the regenerated graph (a query, nothing is built)

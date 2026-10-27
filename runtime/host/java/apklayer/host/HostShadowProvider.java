@@ -49,6 +49,7 @@ public final class HostShadowProvider implements ShadowProvider {
             entries.removeIf(entry -> entry.getKey().equals("android.media.AudioTrack"));
             entries.add(Map.entry("android.media.AudioTrack", ShadowHostNativeAudioTrack.class.getName()));
             entries.add(Map.entry("android.media.AudioSystem", ShadowHostNativeAudioSystem.class.getName()));
+            entries.add(Map.entry("android.media.AudioRecord", ShadowHostNativeAudioRecord.class.getName()));
             entries.add(Map.entry("android.media.AudioManager", ShadowHostNativeAudioManager.class.getName()));
         }
         if (Boolean.getBoolean("apklayer.nativeparcels")) {

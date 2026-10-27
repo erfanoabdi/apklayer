@@ -59,4 +59,43 @@ using ::aidl::android::hardware::audio::common::getChannelCount;
     return status;
 }
 void PipeWireStream::shutdown() { apklayer_audio_close(audio_); audio_ = nullptr; }
+::android::status_t PipeWireInStream::init(DriverCallbackInterface*) {
+    const auto format = context_.getFormat();
+    if (context_.getAsyncCallback() || context_.isMmap() || format.type != AudioFormatType::PCM ||
+        (format.pcm != PcmType::INT_16_BIT && format.pcm != PcmType::FLOAT_32_BIT))
+        return ::android::INVALID_OPERATION;
+    apklayer_audio_config config{static_cast<uint32_t>(context_.getSampleRate()),
+        static_cast<uint32_t>(getChannelCount(context_.getChannelLayout())),
+        format.pcm == PcmType::INT_16_BIT ? APKLAYER_AUDIO_S16 : APKLAYER_AUDIO_F32,
+        std::getenv("APKLAYER_AUDIO_TARGET_IN")};
+    int status = apklayer_capture_open(&config, &capture_);
+    if (status == 0) status = apklayer_capture_pause(capture_);
+    return status;
+}
+::android::status_t PipeWireInStream::flush() { return apklayer_capture_flush(capture_); }
+::android::status_t PipeWireInStream::pause() { return apklayer_capture_pause(capture_); }
+::android::status_t PipeWireInStream::standby() {
+    int status = pause();
+    if (!status) status = apklayer_capture_flush(capture_);
+    return status;
+}
+::android::status_t PipeWireInStream::start() { return apklayer_capture_start(capture_); }
+::android::status_t PipeWireInStream::transfer(void* buffer, size_t frames, size_t* actual, int32_t* latency) {
+    *actual = 0;
+    ssize_t read = apklayer_capture_read(capture_, buffer, frames, 100000000);  // 100 ms: the worker's cycle must not stall
+    if (read == -EAGAIN) return ::android::OK;
+    if (read < 0) return read;
+    *actual = read;
+    struct apklayer_audio_position position;
+    if (!apklayer_capture_position(capture_, &position))
+        *latency = std::min<uint64_t>(std::numeric_limits<int32_t>::max(), (position.pending_frames * 1000) / context_.getSampleRate());
+    return ::android::OK;
+}
+::android::status_t PipeWireInStream::refinePosition(StreamDescriptor::Position* out) {
+    struct apklayer_audio_position position;
+    int status = apklayer_capture_position(capture_, &position);
+    if (!status) { out->frames = epoch_ + position.frames; out->timeNs = position.timestamp_ns; }
+    return status;
+}
+void PipeWireInStream::shutdown() { apklayer_capture_close(capture_); capture_ = nullptr; }
 }

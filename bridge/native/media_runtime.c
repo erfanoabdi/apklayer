@@ -60,11 +60,12 @@ int apklayer_register_audio(JNIEnv *env, void *runtime)
 {
     const char *names[] = {"register_android_media_AudioDeviceAttributes",
         "register_android_media_AudioEffectDescriptor", "register_android_media_AudioSystem",
-        "register_android_media_AudioTrack", "register_android_media_AudioAttributes"};
+        "register_android_media_AudioTrack", "register_android_media_AudioRecord", "register_android_media_AudioAttributes"};
     for (size_t i = 0; i < sizeof names / sizeof *names; i++) {
         char symbol[160];
         snprintf(symbol, sizeof symbol, "_Z%zu%sP7_JNIEnv", strlen(names[i]), names[i]);
         int (*reg)(JNIEnv *) = bionic_dlsym(runtime, symbol);
+        fprintf(stderr, "[runtime] audio JNI %s: %s\n", names[i], reg ? "found" : "MISSING");
         if (!reg || reg(env) < 0 || (*env)->ExceptionCheck(env)) {
             fprintf(stderr, "[runtime] cannot register %s\n", names[i]);
             if ((*env)->ExceptionCheck(env)) (*env)->ExceptionDescribe(env);

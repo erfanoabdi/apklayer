@@ -130,7 +130,11 @@ static jint JNICALL renaming_register_natives(JNIEnv *env, jclass cls, const JNI
         void *fn = methods[i].fnPtr;
         if (is_critical(env, critical, &methods[i])) { fn = critical_thunk(fn); critical_count++; if (runtime_debug()) fprintf(stderr, "[runtime] critical %s\n", methods[i].name); }
         JNINativeMethod one = { name, methods[i].signature, fn };
-        if (real_table->RegisterNatives(env, cls, &one, 1) != 0) (*env)->ExceptionClear(env); /* not a method Robolectric instruments */
+        if (runtime_debug() && !strcmp(methods[i].name, "native_setup")) fprintf(stderr, "[runtime] registering %s %s\n", name, methods[i].signature);
+        if (real_table->RegisterNatives(env, cls, &one, 1) != 0) {
+            if (runtime_debug()) fprintf(stderr, "[runtime] not registered (no such native binding): %s %s\n", name, methods[i].signature);
+            (*env)->ExceptionClear(env); /* not a method Robolectric instruments */
+        }
     }
     /* AudioSystem registers these three capabilities first specifically so its
      * initializer runs before AudioFormat caches their values. Finish the saved

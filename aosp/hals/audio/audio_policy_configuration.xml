@@ -3,12 +3,16 @@
     <globalConfiguration speaker_drc_enabled="false"/>
     <modules>
         <module name="primary" halVersion="3.0">
-            <attachedDevices><item>Host Output</item></attachedDevices>
+            <attachedDevices><item>Host Output</item><item>Host Microphone</item></attachedDevices>
             <defaultOutputDevice>Host Output</defaultOutputDevice>
             <mixPorts>
                 <mixPort name="primary output" role="source" flags="AUDIO_OUTPUT_FLAG_PRIMARY">
                     <profile format="AUDIO_FORMAT_PCM_16_BIT" samplingRates="48000" channelMasks="AUDIO_CHANNEL_OUT_STEREO AUDIO_CHANNEL_OUT_MONO"/>
                     <profile format="AUDIO_FORMAT_PCM_FLOAT" samplingRates="48000" channelMasks="AUDIO_CHANNEL_OUT_STEREO AUDIO_CHANNEL_OUT_MONO"/>
+                </mixPort>
+                <mixPort name="primary input" role="sink">
+                    <profile format="AUDIO_FORMAT_PCM_16_BIT" samplingRates="48000 44100 16000 8000" channelMasks="AUDIO_CHANNEL_IN_MONO AUDIO_CHANNEL_IN_STEREO"/>
+                    <profile format="AUDIO_FORMAT_PCM_FLOAT" samplingRates="48000" channelMasks="AUDIO_CHANNEL_IN_MONO AUDIO_CHANNEL_IN_STEREO"/>
                 </mixPort>
             </mixPorts>
             <devicePorts>
@@ -16,8 +20,15 @@
                     <profile format="AUDIO_FORMAT_PCM_16_BIT" samplingRates="48000" channelMasks="AUDIO_CHANNEL_OUT_STEREO AUDIO_CHANNEL_OUT_MONO"/>
                     <profile format="AUDIO_FORMAT_PCM_FLOAT" samplingRates="48000" channelMasks="AUDIO_CHANNEL_OUT_STEREO AUDIO_CHANNEL_OUT_MONO"/>
                 </devicePort>
+                <devicePort tagName="Host Microphone" type="AUDIO_DEVICE_IN_BUILTIN_MIC" role="source">
+                    <profile format="AUDIO_FORMAT_PCM_16_BIT" samplingRates="48000 44100 16000 8000" channelMasks="AUDIO_CHANNEL_IN_MONO AUDIO_CHANNEL_IN_STEREO"/>
+                    <profile format="AUDIO_FORMAT_PCM_FLOAT" samplingRates="48000" channelMasks="AUDIO_CHANNEL_IN_MONO AUDIO_CHANNEL_IN_STEREO"/>
+                </devicePort>
             </devicePorts>
-            <routes><route type="mix" sink="Host Output" sources="primary output"/></routes>
+            <routes>
+                <route type="mix" sink="Host Output" sources="primary output"/>
+                <route type="mix" sink="primary input" sources="Host Microphone"/>
+            </routes>
         </module>
     </modules>
     <xi:include href="/vendor/etc/audio_policy_volumes.xml"/>

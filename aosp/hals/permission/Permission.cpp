@@ -59,6 +59,50 @@ class PackageNative : public BBinder {
     }
 };
 
+// "scheduling_policy": system_server's ISchedulingPolicyService, which audioserver asks to give its threads real-time priority when it may not do
+// so itself. Without it requestPriority() sleeps and retries forever (the input thread of a record stream, FastCapture, never started, and
+// closing the stream blocked the audio policy's startup). Granted without changing anything: the threads run at normal priority here.
+class SchedulingPolicy : public BBinder {
+  public:
+    const String16& getInterfaceDescriptor() const override {
+        static const String16 descriptor("android.os.ISchedulingPolicyService");
+        return descriptor;
+    }
+    status_t onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags) override {
+        if (code == FIRST_CALL_TRANSACTION || code == FIRST_CALL_TRANSACTION + 1) {  // requestPriority, requestCpusetBoost
+            if (!data.enforceInterface(getInterfaceDescriptor())) return PERMISSION_DENIED;
+            reply->writeNoException();
+            reply->writeInt32(0);
+            return OK;
+        }
+        return BBinder::onTransact(code, data, reply, flags);
+    }
+};
+
+// "appops": system_server's AppOpsService. libpermission's AppOpsManager (used by AudioFlinger for every record stream) waits ten seconds for it and then
+// misbehaves; every op is allowed here (the Java side owns the app's permissions). Reply layouts are those the C++ client in libpermission reads.
+class AppOps : public BBinder {
+  public:
+    const String16& getInterfaceDescriptor() const override {
+        static const String16 descriptor("com.android.internal.app.IAppOpsService");
+        return descriptor;
+    }
+    status_t onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags) override {
+        const uint32_t base = FIRST_CALL_TRANSACTION;
+        if (code < base || code > base + 11) return BBinder::onTransact(code, data, reply, flags);
+        if (!data.enforceInterface(getInterfaceDescriptor())) return PERMISSION_DENIED;
+        reply->writeNoException();
+        switch (code - base) {
+            case 0: case 7: case 11: reply->writeInt32(0); break;                    // checkOperation, checkAudioOperation, checkOperationForDevice: MODE_ALLOWED
+            case 1: case 2: reply->writeInt32(1); reply->writeByte(0); reply->writeInt32(0); break;  // noteOperation, startOperation: SyncNotedAppOp, mode ALLOWED
+            case 6: reply->writeInt32(-1); break;                                      // permissionToOpCode: none
+            case 8: reply->writeInt32(0); break;                                       // shouldCollectNotes: false
+            default: break;                                                            // finish/watch/restrictions: nothing to return
+        }
+        return OK;
+    }
+};
+
 }  // namespace
 
 extern "C" int main(int, char**) {
@@ -67,6 +111,10 @@ extern "C" int main(int, char**) {
     if (sm == nullptr) { fprintf(stderr, "permission: no service manager\n"); return 1; }
     status_t st = sm->addService(String16("permission"), sp<AllowAll>::make());
     if (st != OK) { fprintf(stderr, "permission: addService failed (%d)\n", st); return 1; }
+    st = sm->addService(String16("appops"), sp<AppOps>::make());
+    if (st != OK) { fprintf(stderr, "permission: addService appops failed (%d)\n", st); return 1; }
+    st = sm->addService(String16("scheduling_policy"), sp<SchedulingPolicy>::make());
+    if (st != OK) { fprintf(stderr, "permission: addService scheduling_policy failed (%d)\n", st); return 1; }
     st = sm->addService(String16("package_native"), sp<PackageNative>::make());
     if (st != OK) { fprintf(stderr, "permission: addService package_native failed (%d)\n", st); return 1; }
     IPCThreadState::self()->joinThreadPool();

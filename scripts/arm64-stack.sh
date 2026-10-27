@@ -81,9 +81,15 @@ if [ "$tool" != none ] && [ -f "$L/libapklayer_vdisplay.so" ]; then
 fi
 if [ "$tool" != none ]; then svc tool "$tool" "$@"; fi  # "none": only the services (an app brings its own windows); stop the stack with its pid file
 echo "$$" > "$LOGS/stack.pid"
-# ready when SurfaceFlinger has registered (what an app needs before its first window): bin/apklayer waits for this file
+# ready when SurfaceFlinger has registered (what an app needs before its first window), and the audio policy service when audio services run (an app
+# creating an AudioTrack or AudioRecord before it exists gets "server died"): bin/apklayer waits for this file
 for _ in $(seq 1 240); do
-    "$N/bin/btload" "$L" libapklayer_servicetool.so --main check SurfaceFlingerAIDL 2>/dev/null | grep -q "SurfaceFlingerAIDL: found" && { touch "$LOGS/ready"; break; }
+    ok=1
+    "$N/bin/btload" "$L" libapklayer_servicetool.so --main check SurfaceFlingerAIDL 2>/dev/null | grep -q "SurfaceFlingerAIDL: found" || ok=0
+    if [ "${APKLAYER_AUDIO_SERVICES:-0}" = 1 ]; then
+        "$N/bin/btload" "$L" libapklayer_servicetool.so --main check media.audio_policy 2>/dev/null | grep -q "media.audio_policy: found" || ok=0
+    fi
+    [ "$ok" = 1 ] && { touch "$LOGS/ready"; break; }
     sleep 0.5
 done
 
