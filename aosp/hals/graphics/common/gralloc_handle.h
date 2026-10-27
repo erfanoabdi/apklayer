@@ -26,7 +26,7 @@ struct HandleData {
     uint32_t numPlanes;
     uint32_t stride[kMaxPlanes];  // bytes
     uint32_t offset[kMaxPlanes];  // bytes
-    uint32_t packed;  // planes share one linear allocation (all fds are the same dmabuf)
+    uint32_t packed;  // 0 native, 1 legacy shared R8/R16 allocation, 2 separate R/RG plane resources
     uint32_t allocFourcc, allocWidth, allocHeight;  // the underlying allocation (R8/R16 and total rows when packed)
     uint64_t usage;     // aidl BufferUsage
     uint64_t modifier;  // DRM format modifier

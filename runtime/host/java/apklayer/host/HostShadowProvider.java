@@ -33,6 +33,10 @@ public final class HostShadowProvider implements ShadowProvider {
             entries.removeIf(entry -> entry.getKey().equals("android.media.MediaCodec"));
             entries.add(Map.entry("android.media.MediaCodec", ShadowHostNativeMediaCodec.class.getName()));
             entries.add(Map.entry("android.media.MediaCodecList", ShadowHostNativeMediaCodecList.class.getName()));
+            if (Boolean.getBoolean("apklayer.gpu")) {
+                entries.removeIf(entry -> entry.getKey().equals("android.view.SurfaceView"));
+                entries.add(Map.entry("android.view.SurfaceView", ShadowHostNativeSurfaceView.class.getName()));
+            }
         }
         return entries;
     }

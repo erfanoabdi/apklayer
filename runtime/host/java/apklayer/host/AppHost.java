@@ -285,7 +285,7 @@ public final class AppHost implements Runnable {
                 followNavigation();
                 followOrientation();
                 followTextInput();
-                HostSurfaces.follow();
+                if (!Boolean.getBoolean("apklayer.nativemedia") || !Boolean.getBoolean("apklayer.gpu")) HostSurfaces.follow();
                 HostWebViews.follow();
                 deliverCrossAppResults();
                 HostPortals.followNotifications();

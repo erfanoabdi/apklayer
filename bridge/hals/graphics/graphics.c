@@ -65,8 +65,8 @@ static uint32_t gbm_flags(uint32_t usage)
     return f;
 }
 
-/* Multi-planar formats packed into one linear R8/R16 allocation, for drivers whose GBM has no YUV. chroma_rows: rows of the
- * allocation (in luma-stride units) per plane after the first, as {numerator, denominator} of the luma height. */
+/* YUV plane geometry when GBM lacks native multi-planar allocation. Each
+ * plane has its own correctly typed R/RG resource; no format reinterpretation. */
 static const struct pack_spec {
     uint32_t fourcc, base;  /* base: DRM_FORMAT_R8 or DRM_FORMAT_R16 */
     int planes;
@@ -86,19 +86,17 @@ static const struct pack_spec *find_pack(uint32_t fourcc)
     return NULL;
 }
 
-/* Rows of the packed allocation: each plane's bytes (stride/stride_div * height*num/den) expressed in luma-stride rows. */
-static uint32_t packed_rows(const struct pack_spec *sp, uint32_t h)
-{
-    uint32_t rows = 0;
-    for (int i = 0; i < sp->planes; i++) rows += (h * sp->plane[i].num / sp->plane[i].den) / sp->plane[i].stride_div;
-    return rows;
-}
-
 bool apklayer_gfx_supports(struct apklayer_gfx *gfx, uint32_t fourcc, uint32_t usage)
 {
     if (gbm_device_is_format_supported(gfx->gbm, fourcc, gbm_flags(usage)) != 0) return true;
     const struct pack_spec *sp = find_pack(fourcc);
-    return sp && gbm_device_is_format_supported(gfx->gbm, sp->base, gbm_flags(usage)) != 0;
+    if (!sp) return false;
+    for (int p = 0; p < sp->planes; p++) {
+        uint32_t fmt = !p || sp->plane[p].stride_div == 2 ? sp->base :
+            sp->base == DRM_FORMAT_R16 ? DRM_FORMAT_GR1616 : DRM_FORMAT_GR88;
+        if (!gbm_device_is_format_supported(gfx->gbm, fmt, gbm_flags(usage) | GBM_BO_USE_LINEAR)) return false;
+    }
+    return true;
 }
 
 static void buffer_init(struct apklayer_gfx_buffer *out, uint32_t w, uint32_t h, uint32_t fourcc)
@@ -113,29 +111,30 @@ static void buffer_init(struct apklayer_gfx_buffer *out, uint32_t w, uint32_t h,
     out->alloc_height = h;
 }
 
+/* apklayer patch: keep GPU plane resources typed correctly. Reinterpreting a
+ * tall R8 resource as NV12 imports on virgl but samples the wrong texels. */
+static uint32_t plane_format(const struct pack_spec *sp, int p)
+{
+    if (!p || sp->plane[p].stride_div == 2) return sp->base;
+    return sp->base == DRM_FORMAT_R16 ? DRM_FORMAT_GR1616 : DRM_FORMAT_GR88;
+}
+
 static int alloc_packed(struct apklayer_gfx *gfx, struct apklayer_gfx_buffer *out, const struct pack_spec *sp, uint32_t usage)
 {
-    uint32_t w = out->width, h = out->height;
-    uint32_t rows = packed_rows(sp, h);
-    struct gbm_bo *bo = gbm_bo_create(gfx->gbm, w, rows, sp->base, gbm_flags(usage) | GBM_BO_USE_LINEAR);
-    if (!bo) return errno ? -errno : -ENOMEM;
-    uint32_t stride = gbm_bo_get_stride_for_plane(bo, 0);
-    int fd = gbm_bo_get_fd_for_plane(bo, 0);
-    out->modifier = gbm_bo_get_modifier(bo);
-    out->alloc_fourcc = sp->base;
-    out->alloc_width = w;
-    out->alloc_height = rows;
-    gbm_bo_destroy(bo); /* the dmabuf fd keeps the memory alive */
-    if (fd < 0) return -EIO;
-    out->packed = 1;
+    out->packed = 2; /* separate GPU plane resources; CPU linear mapping stages YUV */
     out->num_planes = sp->planes;
-    uint32_t off = 0;
-    for (int i = 0; i < sp->planes; i++) {
-        out->fd[i] = i == 0 ? fd : fcntl(fd, F_DUPFD_CLOEXEC, 3);
-        out->stride[i] = stride / sp->plane[i].stride_div;
-        out->offset[i] = off;
-        off += out->stride[i] * (h * sp->plane[i].num / sp->plane[i].den);
-        if (out->fd[i] < 0) return -errno;
+    out->modifier = DRM_FORMAT_MOD_LINEAR;
+    for (int p = 0; p < sp->planes; p++) {
+        uint32_t width = out->width / (p ? 2 : 1);
+        uint32_t height = out->height * sp->plane[p].num / sp->plane[p].den;
+        struct gbm_bo *bo = gbm_bo_create(gfx->gbm, width, height, plane_format(sp, p), gbm_flags(usage) | GBM_BO_USE_LINEAR);
+        if (!bo) return errno ? -errno : -ENOMEM;
+        out->fd[p] = gbm_bo_get_fd(bo);
+        out->stride[p] = gbm_bo_get_stride(bo);
+        uint64_t modifier = gbm_bo_get_modifier(bo);
+        gbm_bo_destroy(bo);
+        if (out->fd[p] < 0) return -EIO;
+        if (modifier != DRM_FORMAT_MOD_LINEAR) return -ENOTSUP;
     }
     return 0;
 }
@@ -194,6 +193,12 @@ struct apklayer_gfx_mapping {
     void *map_data;
     void *blob;      /* plain memory (fourcc 0): the mmap, or NULL */
     size_t blob_len;
+    void *stage;
+    size_t stage_offset[4], plane_size[4];
+    void *plane_addr[4];
+    struct apklayer_gfx_mapping *plane_map[4];
+    int planes;
+    bool write;
 };
 
 void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffer *buf, int plane, bool write,
@@ -213,6 +218,15 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
             .fd = buf->fd[0], .width = buf->alloc_width, .height = buf->alloc_height,
             .stride = buf->packed ? buf->stride[0] : buf->stride[plane], .format = buf->alloc_fourcc,
         };
+        if (buf->packed == 2) {
+            const struct pack_spec *sp = find_pack(buf->fourcc);
+            if (!sp) { free(m); errno = ENOTSUP; return NULL; }
+            fd_data.fd = buf->fd[plane];
+            fd_data.width = buf->width / (plane ? 2 : 1);
+            fd_data.height = buf->height * sp->plane[plane].num / sp->plane[plane].den;
+            fd_data.stride = buf->stride[plane];
+            fd_data.format = plane_format(sp, plane);
+        }
         /* a buffer made for rendering (framebuffers) can refuse the linear usage on import; the same dmabuf imports with the usage it was made for */
         static const uint32_t import_usage[] = { GBM_BO_USE_LINEAR, GBM_BO_USE_RENDERING, GBM_BO_USE_RENDERING | GBM_BO_USE_SCANOUT, 0 };
         for (size_t u = 0; u < sizeof import_usage / sizeof *import_usage && !m->bo; u++)
@@ -233,9 +247,48 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
     return addr + (buf->fourcc == 0 ? 0 : buf->offset[plane]);
 }
 
+/* Android's mapper lock API exposes one base pointer. Separate GPU resources
+ * need a temporary contiguous YUV view; presentation still imports the planes
+ * directly, with no RGB conversion or CPU readback. */
+void *apklayer_gfx_map_linear(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffer *buf, bool write,
+                             uint32_t *stride, struct apklayer_gfx_mapping **mapping)
+{
+    if (buf->packed != 2) return apklayer_gfx_map(gfx, buf, 0, write, stride, mapping);
+    const struct pack_spec *sp = find_pack(buf->fourcc);
+    if (!sp) { errno = ENOTSUP; return NULL; }
+    struct apklayer_gfx_mapping *m = calloc(1, sizeof *m);
+    if (!m) return NULL;
+    size_t size = 0;
+    for (int p = 0; p < buf->num_planes; p++) {
+        m->stage_offset[p] = size;
+        m->plane_size[p] = (size_t)buf->stride[p] * (buf->height * sp->plane[p].num / sp->plane[p].den);
+        size += m->plane_size[p];
+    }
+    m->stage = malloc(size);
+    if (!m->stage) { free(m); return NULL; }
+    m->planes = buf->num_planes;
+    for (int p = 0; p < m->planes; p++) {
+        uint32_t mapped_stride;
+        m->plane_addr[p] = apklayer_gfx_map(gfx, buf, p, write, &mapped_stride, &m->plane_map[p]);
+        if (!m->plane_addr[p] || mapped_stride != buf->stride[p]) { apklayer_gfx_unmap(m); errno = EIO; return NULL; }
+        memcpy((char *)m->stage + m->stage_offset[p], m->plane_addr[p], m->plane_size[p]);
+    }
+    m->write = write;
+    *stride = buf->stride[0];
+    *mapping = m;
+    return m->stage;
+}
+
 void apklayer_gfx_unmap(struct apklayer_gfx_mapping *m)
 {
     if (!m) return;
+    if (m->stage) {
+        for (int p = 0; p < m->planes; p++) {
+            if (m->write) memcpy(m->plane_addr[p], (char *)m->stage + m->stage_offset[p], m->plane_size[p]);
+            apklayer_gfx_unmap(m->plane_map[p]);
+        }
+        free(m->stage);
+    }
     if (m->blob) munmap(m->blob, m->blob_len);
     if (m->bo) { gbm_bo_unmap(m->bo, m->map_data); gbm_bo_destroy(m->bo); }
     free(m);

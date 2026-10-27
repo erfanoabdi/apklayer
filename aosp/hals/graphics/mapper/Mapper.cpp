@@ -166,7 +166,7 @@ class ApklayerMapper final : public vendor::mapper::IMapperV5Impl {
         uint32_t stride = 0;
         apklayer_gfx_mapping* mapping = nullptr;
         bool write = cpuUsage & bit(BufferUsage::CPU_WRITE_MASK);
-        void* base = apklayer_gfx_map(mGfx, &b, 0, write, &stride, &mapping);
+        void* base = apklayer_gfx_map_linear(mGfx, &b, write, &stride, &mapping);
         if (base == nullptr) return AIMAPPER_ERROR_BAD_VALUE;
         {
             std::lock_guard<std::mutex> l(mMutex);
@@ -295,8 +295,8 @@ class ApklayerMapper final : public vendor::mapper::IMapperV5Impl {
         if constexpr (T == StandardMetadataType::PIXEL_FORMAT_MODIFIER) return provide(static_cast<uint64_t>(d.modifier));
         if constexpr (T == StandardMetadataType::USAGE) return provide(static_cast<BufferUsage>(d.usage));
         if constexpr (T == StandardMetadataType::ALLOCATION_SIZE) {
-            uint64_t total = d.packed ? static_cast<uint64_t>(d.stride[0]) * d.allocHeight : 0;
-            for (uint32_t i = 0; !d.packed && i < d.numPlanes; i++) total += static_cast<uint64_t>(d.stride[i]) * d.height;
+            uint64_t total = d.packed == 1 ? static_cast<uint64_t>(d.stride[0]) * d.allocHeight : 0;
+            for (uint32_t i = 0; d.packed != 1 && i < d.numPlanes; i++) total += static_cast<uint64_t>(d.stride[i]) * d.height / (i && d.fourcc != DRM_FORMAT_NV16 ? 2 : 1);
             return provide(total);
         }
         if constexpr (T == StandardMetadataType::PROTECTED_CONTENT) return provide(static_cast<uint64_t>(d.usage & bit(BufferUsage::PROTECTED) ? 1 : 0));
@@ -308,7 +308,9 @@ class ApklayerMapper final : public vendor::mapper::IMapperV5Impl {
             std::vector<PlaneLayout> layouts = componentsFor(d);
             if (layouts.size() != d.numPlanes) return -AIMAPPER_ERROR_UNSUPPORTED;
             for (size_t i = 0; i < layouts.size(); i++) {
-                layouts[i].offsetInBytes = d.offset[i];
+                // apklayer patch: CPU lock stages separate GPU planes contiguously.
+                layouts[i].offsetInBytes = d.packed == 2 && i ?
+                    layouts[i - 1].offsetInBytes + layouts[i - 1].totalSizeInBytes : d.offset[i];
                 layouts[i].strideInBytes = d.stride[i];
                 layouts[i].widthInSamples = d.width / layouts[i].horizontalSubsampling;
                 layouts[i].heightInSamples = d.height / layouts[i].verticalSubsampling;

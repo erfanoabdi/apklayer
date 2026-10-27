@@ -29,9 +29,8 @@ struct apklayer_gfx_buffer {
     uint64_t modifier;                            /* DRM_FORMAT_MOD_*, DRM_FORMAT_MOD_INVALID if the driver did not say */
     int num_planes;
     int fd[APKLAYER_GFX_MAX_PLANES];              /* dmabuf per plane (the same fd may repeat); owned by the caller, close() them */
-    /* A multi-planar format the driver cannot allocate natively (YUV on virtio-gpu, llvmpipe) is one linear allocation holding
-     * all planes back to back (what a real NV12 buffer is): every fd[] is the same dmabuf and offset[] says where each plane
-     * starts, so it maps as one region and imports to EGL as a multi-plane dmabuf with per-plane offsets. packed != 0 then. */
+    /* 0: native driver layout; 1: legacy single packed resource; 2: separate
+     * R/RG plane resources, with a staged contiguous CPU view for mapper lock. */
     int packed;
     uint32_t alloc_fourcc, alloc_width, alloc_height; /* the underlying allocation (for a packed buffer: R8/R16 and the total rows) */
     uint32_t stride[APKLAYER_GFX_MAX_PLANES];     /* bytes */
@@ -61,11 +60,14 @@ void apklayer_gfx_buffer_close(struct apklayer_gfx_buffer *buf); /* closes its f
 
 /* CPU access to a plane (this process's mapping of any dmabuf, ours or imported): the buffer is imported into the driver and
  * mapped through it, which is coherent and works on every driver (mmap of the dmabuf itself is not guaranteed: virtio-gpu
- * refuses it). For a packed buffer every plane is a pointer into the same region. A real multi-plane buffer from the driver
- * is not mappable through GBM (-ENOTSUP). */
+ * refuses it). Legacy packed resources map one region; separate-plane fallback resources map
+ * each R/RG plane independently. Native multi-plane GBM mapping remains unsupported (-ENOTSUP). */
 struct apklayer_gfx_mapping;
 void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffer *buf, int plane, bool write,
                        uint32_t *stride, struct apklayer_gfx_mapping **mapping);
+/* Whole-buffer CPU view for Android's one-base-pointer mapper lock API. */
+void *apklayer_gfx_map_linear(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffer *buf, bool write,
+                             uint32_t *stride, struct apklayer_gfx_mapping **mapping);
 void apklayer_gfx_unmap(struct apklayer_gfx_mapping *mapping);
 
 #ifdef __cplusplus

@@ -85,6 +85,29 @@ int main(void)
             CHECK(ok, what);
         }
         for (int p = 0; p < b.num_planes; p++) apklayer_gfx_unmap(mm[p]);
+        /* Mapper's one-base-pointer view must preserve every plane at unlock. */
+        struct apklayer_gfx_mapping *linear = NULL;
+        uint32_t linear_stride;
+        uint8_t *base = apklayer_gfx_map_linear(gfx, &b, true, &linear_stride, &linear);
+        CHECK(base != NULL, "contiguous YUV CPU view maps");
+        if (base) {
+            size_t offset = 0;
+            int preserved = 1;
+            for (int p = 0; p < b.num_planes; p++) {
+                preserved &= base[offset] == 0x10 + p && base[offset + 8] == 0x20 + p;
+                base[offset + 1] = 0x80 + p;
+                offset += b.stride[p] * (p && b.fourcc != DRM_FORMAT_NV16 ? b.height / 2 : b.height);
+            }
+            CHECK(preserved, "plane markers survive unmap and contiguous remap");
+            apklayer_gfx_unmap(linear);
+            preserved = 1;
+            for (int p = 0; p < b.num_planes; p++) {
+                px[p] = apklayer_gfx_map(gfx, &b, p, false, &st[p], &mm[p]);
+                preserved &= px[p] && px[p][0] == 0x10 + p && px[p][1] == 0x80 + p;
+                apklayer_gfx_unmap(mm[p]);
+            }
+            CHECK(preserved, "contiguous YUV writes reach each GPU plane");
+        }
         apklayer_gfx_buffer_close(&b);
     }
 
