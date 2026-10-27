@@ -90,7 +90,10 @@ host() {
 cmd_install() {
     local apk="$1"
     [ -f "$apk" ] || die "no such file: $apk"
-    [ -f "$HOST_JAR" ] && [ -f "$DEX2JVM_JAR" ] || die "not built: run 'meson setup b && ninja -C b' in $ROOT"
+    # the device-library flavor's host classes (scripts/build-tree-host.sh) stand in for the Meson host jar, which does not build against the tree's Robolectric
+    local tools="$HOST_JAR"
+    if tree_flavor && [ -d "$APKLAYER_NATIVE/aosp/host-classes" ]; then tools="$APKLAYER_NATIVE/aosp/host-classes"; fi
+    [ -e "$tools" ] && [ -f "$DEX2JVM_JAR" ] || die "not built: run 'meson setup b && ninja -C b' in $ROOT"
     mkdir -p "$APPS"
     local key tmp classes=""
     key="$(cache_key "$apk")"
@@ -109,7 +112,7 @@ cmd_install() {
         # away from any installed Android SDK, which it would otherwise prefer.
         ANDROID_HOME="$tmp" ANDROID_SDK_ROOT="$tmp" java -Duser.home="$tmp" \
             -cp "$DEX2JVM_JAR:$(framework_dir)/*" io.github.kksimp.dex2jvm.Main "$tmp/base.apk" "$tmp/raw.jar" >/dev/null
-        java -cp "$DEPS/libs/*:$HOST_JAR" apklayer.tools.DenyInstrument "$tmp/raw.jar" "$tmp/classes.jar" >/dev/null
+        java -cp "$DEPS/libs/*:$tools" apklayer.tools.DenyInstrument "$tmp/raw.jar" "$tmp/classes.jar" >/dev/null
         rm -f "$tmp/raw.jar"
     fi
     echo "$key" > "$tmp/key"

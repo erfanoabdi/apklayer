@@ -483,6 +483,9 @@ EGLSurface eglCreateWindowSurface(EGLDisplay dpy, EGLConfig cfg, EGLNativeWindow
 EGLBoolean eglSwapBuffers(EGLDisplay dpy, EGLSurface surface) { return swapWindow(dpy, surface); }
 
 EGLBoolean eglSwapBuffersWithDamageKHR(EGLDisplay dpy, EGLSurface surface, const EGLint*, EGLint) { return swapWindow(dpy, surface); }
+// HWUI announces the frame's damage with it before drawing; every swap here presents the whole buffer, so there is nothing to tell the host
+// (forwarding failed with EGL_BAD_SURFACE: the handle is ours, not the host's, and HWUI aborts on the failure)
+EGLBoolean eglSetDamageRegionKHR(EGLDisplay, EGLSurface, EGLint*, EGLint) { return EGL_TRUE; }
 
 EGLBoolean eglDestroySurface(EGLDisplay dpy, EGLSurface surface) {
     {
@@ -594,7 +597,7 @@ EGLBoolean eglPresentationTimeANDROID(EGLDisplay, EGLSurface, EGLnsecsANDROID) {
     X(eglDestroySync) X(eglDestroySyncKHR) X(eglDupNativeFenceFDANDROID) X(eglGetConfigs) \
     X(eglGetCurrentContext) X(eglGetCurrentDisplay) X(eglGetSyncAttrib) X(eglGetSyncAttribKHR) \
     X(eglQueryAPI) X(eglQueryContext) X(eglReleaseTexImage) \
-    X(eglReleaseThread) X(eglSetDamageRegionKHR) X(eglSignalSyncKHR) \
+    X(eglReleaseThread) X(eglSignalSyncKHR) \
     X(eglSwapInterval) X(eglWaitClient) X(eglWaitGL) X(eglWaitNative) \
     X(eglWaitSync) X(eglWaitSyncKHR) X(eglLockSurfaceKHR) X(eglUnlockSurfaceKHR)
 
@@ -613,7 +616,7 @@ __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char* name) {
         {"eglInitialize", (void*)eglInitialize}, {"eglTerminate", (void*)eglTerminate},
         {"eglCreateImageKHR", (void*)eglCreateImageKHR}, {"eglCreateImage", (void*)eglCreateImage},
         {"eglGetNativeClientBufferANDROID", (void*)eglGetNativeClientBufferANDROID},
-        {"eglSwapBuffersWithDamageKHR", (void*)eglSwapBuffersWithDamageKHR}, {"eglSwapBuffers", (void*)eglSwapBuffers},
+        {"eglSwapBuffersWithDamageKHR", (void*)eglSwapBuffersWithDamageKHR}, {"eglSetDamageRegionKHR", (void*)eglSetDamageRegionKHR}, {"eglSwapBuffers", (void*)eglSwapBuffers},
         {"eglQueryStringImplementationANDROID", (void*)eglQueryStringImplementationANDROID},
         {"eglSetBlobCacheFuncsANDROID", (void*)eglSetBlobCacheFuncsANDROID},
         {"eglGetFrameTimestampsANDROID", (void*)eglGetFrameTimestampsANDROID},

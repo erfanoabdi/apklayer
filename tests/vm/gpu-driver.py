@@ -4,6 +4,9 @@ import os
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(__file__))
+from vmcapture import capture
+
 proc = subprocess.Popen(['sshpass', '-p', sys.argv[2], 'ssh', sys.argv[1],
     'cd ~/apklayer-m1; python3 -u tests/vm/gpu-run.py'], stdin=subprocess.PIPE,
     stdout=subprocess.PIPE, text=True)
@@ -14,8 +17,7 @@ try:
         if line.startswith('CAPTURE '):
             count += 1
             image = f'/tmp/apklayer-gpu-{count}.png'
-            subprocess.run(['prlctl', 'capture', os.environ.get('APKLAYER_VM_NAME',
-                'Ubuntu 24.04 (with Rosetta)'), '--file', image], check=True)
+            capture(image, sys.argv[1], sys.argv[2])
             subprocess.run([sys.executable, 'tests/vm/gpu-check-image.py', image], check=True)
             proc.stdin.write('captured\n')
             proc.stdin.flush()
