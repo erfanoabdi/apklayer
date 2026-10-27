@@ -6,6 +6,7 @@
 #include <cerrno>
 #include <deque>
 #include <map>
+#include <chrono>
 #include <optional>
 #include <vector>
 
@@ -19,6 +20,13 @@ class ReorderedDecoder final : public SimpleC2Component {
     std::map<int64_t, std::deque<uint64_t>> mByPts;
     std::optional<uint64_t> mEosIndex;
     bool mEosQueued = false;
+    // The codec-config buffers (H.264 SPS/PPS) of the stream: a real decoder keeps them across flush and ExoPlayer does not send them again
+    // after a seek, so a pipeline reopened by flush must be fed them first.
+    std::vector<uint8_t> mConfig;
+    int64_t mConfigPts = 0;
+    uint64_t mFrames = 0;
+    int64_t mCopyUs = 0;
+    std::chrono::steady_clock::time_point mWindow = std::chrono::steady_clock::now();
     static void ready(void *opaque) {
         // The queued handler runs after process() has returned and the base
         // component has inserted the work into its pending map.
@@ -30,9 +38,9 @@ class ReorderedDecoder final : public SimpleC2Component {
         mPending.clear(); mByPts.clear(); mEosIndex.reset(); mEosQueued = false;
         return C2_OK;
     }
-    void onReset() override { (void)onStop(); }
-    void onRelease() override { (void)onStop(); }
-    c2_status_t onFlush_sm() override { return onStop(); }
+    void onReset() override { (void)onStop(); mConfig.clear(); }
+    void onRelease() override { (void)onStop(); mConfig.clear(); }
+    c2_status_t onFlush_sm() override { return onStop(); }  // mConfig survives
     void finishRemaining(c2_status_t status) {
         std::vector<uint64_t> indices;
         for (const auto& [index, pending] : mPending) {
@@ -68,6 +76,9 @@ class ReorderedDecoder final : public SimpleC2Component {
             if (apklayer_codec_open(&setup, &mCodec) || apklayer_codec_set_notify(mCodec, ready, this)) {
                 work->result = C2_CANNOT_DO; return;
             }
+            if (!mConfig.empty() && apklayer_codec_queue(mCodec, mConfig.data(), mConfig.size(), mConfigPts * 1000)) {
+                work->result = C2_CORRUPTED; return;
+            }
         }
         if (input) {
             const auto& blocks = work->input.buffers[0]->data().linearBlocks();
@@ -78,6 +89,10 @@ class ReorderedDecoder final : public SimpleC2Component {
                 work->result = C2_CORRUPTED; return;
             }
             input = view.capacity() != 0;
+            if (config && input) {
+                mConfig.insert(mConfig.end(), view.data(), view.data() + view.capacity());
+                mConfigPts = pts;
+            }
         }
         if ((!config && input) || eos) {
             uint64_t index = work->input.ordinal.frameIndex.peekull();
@@ -117,7 +132,14 @@ class ReorderedDecoder final : public SimpleC2Component {
             found->second.pop_front();
             if (found->second.empty()) mByPts.erase(found);
             DecodedGraphic graphic;
+            auto t0 = std::chrono::steady_clock::now();
             c2_status_t result = copyGraphic(raw, pool, mParams, &graphic);
+            // timing line every 60 decoded frames: milliseconds in the copy into the graphic block, and the wall time of the 60
+            mCopyUs += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
+            if (++mFrames % 60 == 0) {
+                fprintf(stderr, "codec2: 60 frames in %lld ms, graphic copy %lld ms total\n", (long long)std::chrono::duration_cast<std::chrono::milliseconds>(t0 - mWindow).count(), (long long)(mCopyUs / 1000));
+                mCopyUs = 0; mWindow = t0;
+            }
             if (result != C2_OK) { finishRemaining(result); return result; }
             bool intermediate = mEosIndex && index == *mEosIndex;
             auto buffer = createGraphicBuffer(graphic.block, C2Rect(graphic.width, graphic.height));
