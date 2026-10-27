@@ -50,7 +50,7 @@ final class HostPortals {
     private static final Set<String> PICKERS = Set.of(Intent.ACTION_OPEN_DOCUMENT, Intent.ACTION_GET_CONTENT,
             Intent.ACTION_CREATE_DOCUMENT, Intent.ACTION_OPEN_DOCUMENT_TREE);
 
-    static boolean isPicker(Intent intent) { return PICKERS.contains(intent.getAction()); }
+    static boolean isPicker(Intent intent) { return intent.getAction() != null && PICKERS.contains(intent.getAction()); }
 
     /**
      * The Storage Access Framework pickers become a desktop file dialog (zenity; the file chooser portal

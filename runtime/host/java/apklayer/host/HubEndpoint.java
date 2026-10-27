@@ -56,6 +56,11 @@ final class HubEndpoint extends Binder {
             });
             reply.writeNoException(); return true;
         }
+        if (code == HubProtocol.ENDPOINT_START_ACTIVITY) {
+            Intent intent = request.readTypedObject(Intent.CREATOR); android.os.ResultReceiver resultTo = request.readTypedObject(android.os.ResultReceiver.CREATOR); request.enforceNoDataAvail();
+            main.post(() -> HubActivityClient.deliver(intent, resultTo));
+            reply.writeNoException(); return true;
+        }
         if (code == HubProtocol.ENDPOINT_NOTIFY) {
             android.net.Uri uri = request.readTypedObject(android.net.Uri.CREATOR); int changeFlags = request.readInt(); request.enforceNoDataAvail();
             main.post(() -> ShadowHostContentResolver.deliver(context, uri, changeFlags));

@@ -53,6 +53,29 @@ final class HubPackages {
         return found;
     }
 
+    /**
+     * The activity an intent starts for the caller: the named component, or the first (by package name) whose intent filter matches the intent (as startActivity
+     * resolves it, with CATEGORY_DEFAULT). Not exported ones are for their own package only. Null when nothing matches.
+     */
+    android.content.pm.ActivityInfo activity(android.content.Intent intent, String callerPackage) {
+        android.content.Intent probe = new android.content.Intent(intent).addCategory(android.content.Intent.CATEGORY_DEFAULT);
+        for (String name : installed().stream().sorted().toList()) {
+            if (intent.getComponent() != null && !intent.getComponent().getPackageName().equals(name)) continue;
+            PackageParser.Package pkg;
+            try { pkg = get(name); } catch (RuntimeException unreadable) { continue; }
+            if (pkg == null) continue;
+            for (PackageParser.Activity activity : pkg.activities) {
+                android.content.pm.ActivityInfo info = activity.info;
+                if (intent.getComponent() != null) { if (!info.name.equals(intent.getComponent().getClassName())) continue; }
+                else if (activity.intents.stream().noneMatch(filter -> filter.match(null, probe, false, "apklayer") >= 0)) continue;
+                if (!info.exported && !name.equals(callerPackage)) continue;
+                if (info.permission != null && !name.equals(callerPackage) && !holds(callerPackage, info.permission)) continue;
+                return info;
+            }
+        }
+        return null;
+    }
+
     android.content.pm.ProviderInfo provider(String authority) {
         for (android.content.pm.ProviderInfo info : providers())
             for (String one : info.authority.split(";")) if (one.equals(authority)) return info;

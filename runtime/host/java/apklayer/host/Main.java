@@ -36,7 +36,7 @@ public final class Main {
             return;
         }
         boolean componentHost = args.length == 3 && args[0].equals("--component-host");
-        if (componentHost) args = new String[]{args[1], args[2]};
+        if (componentHost) { args = new String[]{args[1], args[2]}; System.setProperty("apklayer.componenthost", "true"); }
         Path describe = null;
         if (args.length == 4 && args[0].equals("--describe")) {
             describe = Path.of(args[1]);

@@ -64,6 +64,8 @@ public final class AppHost implements Runnable {
     /** Activities started with startActivityForResult -> the request intent, to return their setResult. */
     private final java.util.Map<Activity, Intent> resultFor = new java.util.IdentityHashMap<>();
     private final Set<Activity> stopped = new HashSet<>();
+    /** Activities another app started through the hub for a result -> where their result goes. */
+    private final java.util.Map<Activity, android.os.ResultReceiver> hubResults = new java.util.IdentityHashMap<>();
     private Handler main;
     private boolean pausedByFocus, stoppedByMinimize; // lifecycle driven by the window state
     private int logicalW, logicalH, logicalScale = 100; // current window size in dp and scale %
@@ -185,9 +187,11 @@ public final class AppHost implements Runnable {
         AppEnvironment.installSystemPackage(app);
         AppEnvironment.installNetwork(app);
         AppEnvironment.installProviders(app);
-        Intent incoming = HostApps.incoming(); // another app started this one with an intent (PLAN P6)
+        HubActivityClient.starter = this::startForHub;
+        Intent incoming = HubActivityClient.incoming(); // another app started this one with an intent, through the hub
+        if (incoming == null) incoming = HostApps.incoming(); // ... or through the older intent file (PLAN P6)
         launch(incoming != null ? incoming : AppMetadata.launcherIntent(app));
-        if (incoming != null) incomingActivity = stack.peek().get();
+        if (incoming != null) { incomingActivity = stack.peek().get(); android.os.ResultReceiver answerTo = HubActivityClient.takeReceiver(); if (answerTo != null) hubResults.put(incomingActivity, answerTo); }
         // Like Simulator.postMotionEvent: an off-screen move so the first frame is drawn.
         input.inject(MotionEvent.obtain(0, SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE, width, height, 0));
         loop(shell, frames);
@@ -353,6 +357,12 @@ public final class AppHost implements Runnable {
         }
     }
 
+    /** An intent another app sent here through the hub: started like one of our own, its result goes to the sender's receiver. */
+    private void startForHub(Intent intent, android.os.ResultReceiver resultTo) {
+        launch(intent);
+        if (resultTo != null && !stack.isEmpty()) hubResults.put(stack.peek().get(), resultTo);
+    }
+
     /** Builds and fully starts the activity, as the simulator does (Robolectric.setupActivity). */
     private void launch(Intent intent) {
         // startActivityForResult: Robolectric only records it; the host delivers the result (PLAN P5.3)
@@ -377,7 +387,8 @@ public final class AppHost implements Runnable {
                         .receiveResult(intent, picked != null ? Activity.RESULT_OK : Activity.RESULT_CANCELED, picked);
                 return;
             }
-            HostApps.Routed routed = HostApps.route(intent, wantsResult); // another installed app handles it
+            if (HubActivityClient.route(intent, wantsResult ? stack.peek().get() : null, intent)) return; // through the hub
+            HostApps.Routed routed = HubActivityClient.enabled() ? null : HostApps.route(intent, wantsResult); // another installed app handles it
             if (routed != null) {
                 if (wantsResult) crossApp.put(routed, new Object[] {stack.peek().get(), intent});
                 return;
@@ -437,6 +448,8 @@ public final class AppHost implements Runnable {
     private void destroyTop() {
         ActivityController<? extends Activity> top = stack.pop();
         resultFor.remove(top.get());
+        android.os.ResultReceiver abandoned = hubResults.remove(top.get());
+        if (abandoned != null) HubActivityClient.answer(abandoned, Activity.RESULT_CANCELED, null);
         if (stopped.remove(top.get())) top.destroy();
         else top.pause().stop().destroy();
     }
@@ -502,6 +515,8 @@ public final class AppHost implements Runnable {
                 ShadowActivity answered = Shadow.extract(top);
                 HostApps.writeResult(answered.getResultCode(), answered.getResultIntent());
             }
+            android.os.ResultReceiver answerTo = hubResults.remove(top);
+            if (answerTo != null) HubActivityClient.answer(answerTo, ((ShadowActivity) Shadow.extract(top)).getResultCode(), ((ShadowActivity) Shadow.extract(top)).getResultIntent());
             Intent request = resultFor.remove(top);
             if (request != null && !stack.isEmpty()) {
                 ShadowActivity child = Shadow.extract(top);
