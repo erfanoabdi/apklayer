@@ -27,11 +27,13 @@ final class HubDirectory extends Binder {
     private final Map<String, Process> appProcesses = new HashMap<>();
     private final Map<String, Process> hosts = new HashMap<>();
     private final Map<String, Integer> failures = new HashMap<>();
+    private static final long IDLE_EXIT_MS = 10_000;
     private volatile boolean stopping;
     HubDirectory(Path apps) {
         packages = new HubPackages(apps); bindings = new HubServiceBindings(this, packages); broadcasts = new HubBroadcasts(this, packages); providers = new HubProviders(this, packages, broadcasts); activities = new HubActivities(this, packages); startedServices = new HubStartedServices(this, packages, broadcasts); pendingIntents = new HubPendingIntents(this, broadcasts, activities, startedServices);
         notifications = new HubNotifications(packages, pendingIntents);
         attachInterface(null, HubProtocol.DESCRIPTOR);
+        exitWhenIdle(60_000); // nobody ever connected
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             stopping = true;
             synchronized (hosts) {
@@ -40,6 +42,20 @@ final class HubDirectory extends Binder {
                 }
             }
         }, "hub-component-cleanup"));
+    }
+    /** The hub ends once nothing is connected or being started (an auto-started hub belongs to the apps that use it). */
+    private void exitWhenIdle(long delayMs) {
+        Thread timer = new Thread(() -> {
+            try { Thread.sleep(delayMs); } catch (InterruptedException interrupted) { return; }
+            boolean busy;
+            synchronized (peers) { busy = !peers.isEmpty(); }
+            synchronized (hosts) { busy |= hosts.values().stream().anyMatch(Process::isAlive); }
+            synchronized (appProcesses) { busy |= appProcesses.values().stream().anyMatch(Process::isAlive); }
+            if (busy) return;
+            System.out.println("[apklayer-hub] idle, exiting");
+            System.exit(0);
+        }, "hub-idle");
+        timer.setDaemon(true); timer.start();
     }
     java.util.List<Peer> peersExcept(Peer one) { synchronized (peers) { return peers.values().stream().filter(peer -> peer != one).toList(); } }
     Peer peerByPid(int pid) { synchronized (peers) { return peers.get(pid); } }
@@ -270,5 +286,6 @@ final class HubDirectory extends Binder {
         bindings.died(peer);
         broadcasts.died(peer);
         startedServices.died(peer);
+        exitWhenIdle(IDLE_EXIT_MS);
     }
 }

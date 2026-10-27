@@ -109,5 +109,6 @@ finally:
     os.close(notify)
     for manifest in ('apklayer-media.xml', 'apklayer-audio.xml', 'apklayer-audio-effects.xml'):
         (Path(ENV['APKLAYER_NATIVE']) / 'android-root/vendor/etc/vintf/manifest' / manifest).unlink(missing_ok=True)
+    subprocess.run(['pkill', '-9', '-f', '[a]pklayer.host.Main --hub'], check=False)  # the instance hub (auto-started with the hub flags) also ends by itself when idle
     left = subprocess.run(['pgrep', '-af', '[a]pklayer.host.Main|[b]tload|[a]pklayer-shell'], capture_output=True, text=True)
     assert left.returncode != 0, left.stdout
