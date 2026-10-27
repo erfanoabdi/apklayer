@@ -10,6 +10,7 @@ OUT="$ROOT/build/native/x86_64"; mkdir -p "$OUT"
 VMN="${ORB_VM:-ubuntu22-x86}"
 (cd "$ROOT/.." && tar cf - "$(basename "$BT")") | orb -m "$VMN" bash -c 'rm -rf ~/bt && mkdir -p ~/bt && tar xf - -C ~/bt 2>/dev/null'
 tar cf - -C "$ROOT/bridge" native ndk | orb -m "$VMN" bash -c 'tar xf - -C ~/bt 2>/dev/null'
+tar cf - -C "$ROOT/scripts" patch-bionic-translation.sh | orb -m "$VMN" bash -c 'tar xf - -C ~/bt'
 orb -m "$VMN" bash -s <<'R'
 set -e
 export PATH=$HOME/.local/bin:$PATH PKG_CONFIG_PATH=$HOME/local/lib/pkgconfig
@@ -25,6 +26,7 @@ typedef Elf64_Xword Elf64_Relr;
 #endif
 EOF
 cd "$(ls -d bionic_translation* | head -1)"
+sh ../patch-bionic-translation.sh "$PWD"
 rm -rf b && CFLAGS="-include $HOME/bt/relr-compat.h" meson setup b -Dbuildtype=release >/dev/null
 ninja -C b -k 0 >/dev/null 2>&1 || true   # libstdc++_bio needs a newer compiler and is not needed yet
 test -e b/libdl_bio.so && test -e b/libc_bio.so && test -e b/libpthread_bio.so

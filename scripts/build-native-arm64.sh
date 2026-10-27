@@ -6,6 +6,9 @@
 #   the shim comes from bridge/native/runtime_shim.c + android_platform.c + android_stubs.c (see scripts/android-stubs.py)
 set -e
 native="$1" shards="$2" classes="$3" tmp="$(mktemp -d)"
+bt="${APKLAYER_BT:-$HOME/bt-arm/bionic_translation/b}"
+scripts/patch-bionic-translation.sh "$(dirname "$bt")"
+ninja -C "$bt" libpthread_bio.so.0
 JH="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
 cc -shared -fPIC -O2 -Wall -I"$JH/include" -I"$JH/include/linux" -o "$tmp/libandroid_runtime.so" \
     bridge/native/runtime_shim.c bridge/native/android_platform.c bridge/native/properties.c bridge/native/paths.c bridge/native/android_stubs.c \

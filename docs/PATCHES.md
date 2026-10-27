@@ -73,3 +73,6 @@ virtual display sink). `W_TARGET`/`W_ID` route those messages; `window_attach_in
 - `scripts/arm64-stack.sh`: create the actual RenderEngine cache files and set Android init’s cache-ready property.
 - `bridge/shell/window.c`: reuse the decoration memfd/shm pattern to map an initial blank display frame, so focus and real compositor vsync do not depend on the first Android frame. The buffer is freed on compositor release or window destruction.
 - `aosp/hals/graphics/vdisplay/VirtualDisplay.cpp`: return acquired buffers when Wayland releases them; drop old-size queued frames after configure.
+
+## bionic_translation timed mutex locking (2026-10-27)
+`scripts/patch-bionic-translation.sh` adds `bionic_pthread_mutex_timedlock` by reusing the existing lock wrappers’ lazy initialization and native-pointer unwrap. Without it the loader falls back to glibc’s timed lock, which overwrites the pointer inside an Android mutex. Android `Mutex::timedLock` is used by SurfaceFlinger dumps and buffer-queue paths. `tests/vm/pthread-timedlock.c` verifies static initialization, contention timeout and reuse against the actual wrapper library. Both native build scripts apply this patch.

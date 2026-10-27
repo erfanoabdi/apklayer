@@ -1,5 +1,5 @@
 #!/bin/sh
-# patch-bionic-translation: the two apklayer patches to a bionic_translation checkout (docs/PATCHES.md), idempotent.
+# patch-bionic-translation: apklayer compatibility patches (docs/PATCHES.md), idempotent.
 #  1. SO_MAX 128 -> 512: Android's libandroid_runtime closure is 237 libraries (the soinfo pool was 128)
 #  2. remove its three system-property stubs (they print "not handled yet" and return nothing): bionic libraries then
 #     resolve __system_property_* to apklayer's real store (bridge/native/properties.c) through the glibc-namespace fallback
@@ -95,3 +95,24 @@ int bionic___openat_2(int dirfd, const char *path, int oflag)
 edit(bt + '/libc/libc-open-overrides.c', overrides)
 PY
 
+# 5. Timed locking must unwrap the same mutex as normal locking. Falling back
+#    to glibc passes it a bionic object and overwrites its stored native pointer.
+python3 - "$bt" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1]) / 'pthread_wrapper/libpthread.c'
+s = p.read_text()
+if 'bionic_pthread_mutex_timedlock(' not in s:
+    anchor = 'int bionic_pthread_mutex_unlock(bionic_mutex_t *mutex)'
+    assert s.count(anchor) == 1
+    s = s.replace(anchor, '''/* apklayer patch: Android Mutex::timedLock and libc++ timed_mutex. */
+int bionic_pthread_mutex_timedlock(bionic_mutex_t *mutex, const struct timespec *abstime)
+{
+\tassert(mutex);
+\tINIT_IF_NOT_MAPPED(mutex, default_pthread_mutex_init);
+\treturn pthread_mutex_timedlock(mutex->glibc, abstime);
+}
+
+''' + anchor)
+    p.write_text(s)
+PY
