@@ -140,7 +140,11 @@ EGLImage imageFromNativeBuffer(EGLDisplay dpy, ANativeWindowBuffer* buf) {
         d.fourcc == DRM_FORMAT_NV16 || d.fourcc == DRM_FORMAT_P010) {
         // colour hints from the buffer's dataspace (standard and range bits); unknown means BT.601 limited, Android's default
         int32_t standard = dataspace & 0x003F0000, range = dataspace & 0x38000000;
-        EGLint space = standard == (1 << 16) ? EGL_ITU_REC709_EXT : standard == (6 << 16) ? EGL_ITU_REC2020_EXT : EGL_ITU_REC601_EXT;
+        // unspecified standard: what Android's ColorUtils assumes, BT.709 for HD (taller than 576 or wider than 1024), else BT.601;
+        // always reading 601 desaturated HD video
+        bool hd = d.height > 576 || d.width > 1024;
+        EGLint space = standard == (1 << 16) ? EGL_ITU_REC709_EXT : standard == (6 << 16) ? EGL_ITU_REC2020_EXT
+                     : standard == 0 && hd ? EGL_ITU_REC709_EXT : EGL_ITU_REC601_EXT;
         a.insert(a.end(), {EGL_YUV_COLOR_SPACE_HINT_EXT, space,
                            EGL_SAMPLE_RANGE_HINT_EXT, range == (1 << 27) ? EGL_YUV_FULL_RANGE_EXT : EGL_YUV_NARROW_RANGE_EXT});
     }
