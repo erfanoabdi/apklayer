@@ -116,3 +116,15 @@ int bionic_pthread_mutex_timedlock(bionic_mutex_t *mutex, const struct timespec 
 ''' + anchor)
     p.write_text(s)
 PY
+
+# 6. Packed relocations use the linker's existing trace facility, like other
+#    relocation diagnostics; unconditional output produces megabytes per launch.
+python3 - "$bt" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1]) / 'linker/linker.c'
+s = p.read_text()
+s = s.replace('fprintf(stderr, "calling apkenv_reloc_library with packed reloc:',
+              'TRACE(/* apklayer patch: relocation tracing */ "calling apkenv_reloc_library with packed reloc:')
+p.write_text(s)
+PY

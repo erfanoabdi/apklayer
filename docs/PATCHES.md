@@ -61,7 +61,7 @@ Copies of the tree's shadows (external/robolectric) with thin changes marked "ap
 Loads `APKLAYER_HOST_LIBS` (the host graphics HAL) globally; installs the path layer once libc_bio is loaded; hooks libutils thread creation
 (`androidSetCreateThreadFunc`) so binder-pool and callback threads attach to the JVM (what `AndroidRuntime::startReg` does on a device); adapts
 `@CriticalNative` natives with a thunk that moves the 7th to 12th arguments; logs the classes it registered under `APKLAYER_RUNTIME_DEBUG`.
-`bridge/native/properties.c`: `ro.hyphen.data.dir` may be replaced (the natives extract the hyphenation data to a fresh directory every start).
+`bridge/native/properties.c`: all ro.* values are write-once per instance. The tree loader uses staged `/system/usr/hyphen-data` and skips temporary extraction/property mutation; instance startup sets the path.
 `bridge/ndk/libnativedisplay.c`: `ADisplay_*` for HWUI's DeviceInfo (one internal display, sRGB 8888).
 
 ## Shell: input proxy (`bridge/shell`)
@@ -96,3 +96,6 @@ The composer uses `apklayer_display_open_headless`: HELLO/output-refresh/vsync m
 Shell text-input enable resolves proxy ids and keeps per-window state; compositor enter/leave controls the active field and W_TARGET/W_ID route preedit and commit. Clipboard pipes join the existing poll loop, keeping source text snapshots and echo caches per client; this avoids deadlocking when two JVMs share the shell. ShellClient fills its ByteBuffer before sending clipboard text. The tree ShadowKeyCharacterMap overlay reuses upstream code and suppresses characters under Ctrl/Alt/Meta, matching AOSP modifier matching so Android shortcuts reach EditText. Real Wayland/IBus/uinput coverage lives in tests/vm/input.sh.
 
 Runtime overlay packaging uses scripts/build-runtime-overlay.sh: compile every Java patch against the staged tree runtime, preserve or stage the native shim, and atomically publish after success. Compiler failures leave the working jar intact; build-native-arm64 no longer swallows javac errors.
+
+## Tree host and launcher cleanup (2026-10-27)
+`build-tree-host.sh` adapts only ShadowProvider.reset’s signature in temporary source for the older tree API. Its missing simulator callback classes come unchanged from the pinned 4.17 artifact. Install and run share native JVM/environment/options; conversion and its cache identity use the selected framework. Tracewindows uses Boolean.getBoolean and shell/native debug flags accept 1 explicitly. The bionic_translation patch moves unconditional packed-relocation prints to its existing TRACE facility. No Android semantics change.

@@ -28,6 +28,12 @@ extern char *bionic_dlerror(void);
 extern struct r_debug *_r_debug_ptr;
 void apklayer_log_to_stderr(void), apklayer_crash_trace(void); /* android_platform.c */
 
+static int runtime_debug(void)
+{
+    const char *value = getenv("APKLAYER_RUNTIME_DEBUG");
+    return value && !strcmp(value, "1");
+}
+
 static jclass class_class;
 static char binding_prefix[64] = "", binding_suffix[64] = "";
 static jniNativeInterface *real_table;
@@ -120,7 +126,7 @@ static jint JNICALL renaming_register_natives(JNIEnv *env, jclass cls, const JNI
         char name[256];
         snprintf(name, sizeof name, "%s%s%s", binding_prefix, methods[i].name, binding_suffix);
         void *fn = methods[i].fnPtr;
-        if (is_critical(env, critical, &methods[i])) { fn = critical_thunk(fn); critical_count++; if (getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[runtime] critical %s\n", methods[i].name); }
+        if (is_critical(env, critical, &methods[i])) { fn = critical_thunk(fn); critical_count++; if (runtime_debug()) fprintf(stderr, "[runtime] critical %s\n", methods[i].name); }
         JNINativeMethod one = { name, methods[i].signature, fn };
         if (real_table->RegisterNatives(env, cls, &one, 1) != 0) (*env)->ExceptionClear(env); /* not a method Robolectric instruments */
     }
@@ -201,7 +207,7 @@ static int register_classes(JNIEnv *env, JavaVM *vm, void *rt)
         int (*fn)(JNIEnv *) = name ? find_register_function(rt, hwui, name) : NULL;
         if (!fn) { fprintf(stderr, "[runtime] no registration function for %s\n", c); failed++; continue; }
         if (fn(env) < 0) { fprintf(stderr, "[runtime] registering %s failed\n", c); failed++; }
-        else if (getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[runtime] registered %s\n", c);
+        else if (runtime_debug()) fprintf(stderr, "[runtime] registered %s\n", c);
     }
 
     JNINativeMethod registry = { "applyFreeFunction", "(JJ)V", (void *)apply_free_function };

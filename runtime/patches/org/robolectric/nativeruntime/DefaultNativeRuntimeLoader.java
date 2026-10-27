@@ -226,7 +226,8 @@ public class DefaultNativeRuntimeLoader implements NativeRuntimeLoader {
                 if (VERSION.SDK_INT >= O) {
                   // Only copy fonts if graphics is supported, not just SQLite.
                   maybeCopyFonts(extractDirectory);
-                  maybeCopyHyphenData(extractDirectory);
+                  // apklayer patch: the device flavor uses the instance's real system data.
+                  if (!Boolean.getBoolean("apklayer.gpu")) maybeCopyHyphenData(extractDirectory);
                 }
                 Map<String, String> originalProperties = new HashMap<>();
                 maybeCopyIcuData(extractDirectory);
@@ -253,7 +254,10 @@ public class DefaultNativeRuntimeLoader implements NativeRuntimeLoader {
                         .getAbsolutePath();
                 if (isAndroidVOrGreater()) {
                   invokeDeferredStaticInitializers();
-                  setNativeSystemProperty("ro.hyphen.data.dir", hyphenDataDir);
+                  // apklayer patch: set once by instance startup, shared by all app JVMs.
+                  if (!Boolean.getBoolean("apklayer.gpu")) {
+                    setNativeSystemProperty("ro.hyphen.data.dir", hyphenDataDir);
+                  }
                   Typeface.loadPreinstalledSystemFontMap();
                 } else {
                   System.setProperty("hyphen.data.dir", hyphenDataDir);

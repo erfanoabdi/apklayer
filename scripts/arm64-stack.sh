@@ -44,7 +44,7 @@ if [ "$tool" != none ] && [ -f "$L/libapklayer_vdisplay.so" ]; then
     # real virtual-display sink an app uses, and a mapped source for vsync.
     svc test-display libapklayer_vdisplay.so apklayer:test 0 "${APKLAYER_DISPLAY_WIDTH:-720}" "${APKLAYER_DISPLAY_HEIGHT:-1280}"
 fi
-if [ "$tool" = none ]; then start keepalive tail -f /dev/null; else svc tool "$tool" "$@"; fi  # "none": only the services (an app brings its own windows); stop the stack with its pid file
+if [ "$tool" != none ]; then svc tool "$tool" "$@"; fi  # "none": only the services (an app brings its own windows); stop the stack with its pid file
 echo "$$" > "$LOGS/stack.pid"
 # ready when SurfaceFlinger has registered (what an app needs before its first window): bin/apklayer waits for this file
 for _ in $(seq 1 240); do

@@ -48,13 +48,32 @@ host_cp() {
 }
 # The cache key of a conversion: same APK, same framework, same converter -> same classes.
 cache_key() {
-    { sha256sum "$1" | cut -c1-64; echo "post-processing v5: guava relocation, native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke"; ls "$DEPS/android-all"; cat "$ROOT/runtime/dex2jvm/com.macapk.dex/.dex2jvm-commit" 2>/dev/null; } \
+    { sha256sum "$1" | cut -c1-64; echo "post-processing v5: guava relocation, native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke"; sha256sum "$(framework_dir)"/*.jar; cat "$ROOT/runtime/dex2jvm/com.macapk.dex/.dex2jvm-commit" 2>/dev/null; } \
         | sha256sum | cut -c1-64
 }
+framework_dir() {
+    local n="${APKLAYER_NATIVE:-$ROOT/native}"
+    if [ -d "$n/aosp/android-all" ]; then echo "$n/aosp/android-all"
+    elif [ -d "$n/android-all" ]; then echo "$n/android-all"
+    else echo "$DEPS/android-all"; fi
+}
 host() {
+    local n="${APKLAYER_NATIVE:-$ROOT/native}" nr="${APKLAYER_NATIVE:-$ROOT/native}/android-root"
+    local -a opts=("-Dapklayer.native=$n" "-Dapklayer.androidlibs=$n/android-libs")
+    if tree_flavor; then
+        . "$ROOT/scripts/native-env.sh"
+        JAVA="$(native_java) -XX:TieredStopAtLevel=1 -XX:+UseSerialGC"
+        opts+=(-Dapklayer.gpu=true -Drobolectric.windowManager.useRequestedSize=true)
+    fi
+    [ ! -d "$nr/system/fonts" ] || opts+=("-Drobolectric.nativeruntime.fontdir=$nr/system/fonts/")
+    [ ! -f "$nr/system/framework/org.lineageos.platform-res.apk" ] || opts+=("-Dapklayer.platformres=$nr/system/framework/org.lineageos.platform-res.apk")
+    [ ! -f "$n/native-runtime.jar" ] || opts+=("-Dapklayer.nativejar=$n/native-runtime.jar")
+    if [ -d "$nr/apex" ]; then
+        export ANDROID_ROOT="$nr/system" ANDROID_DATA="$nr/data" ANDROID_I18N_ROOT="$nr/apex/com.android.i18n" ANDROID_TZDATA_ROOT="$nr/apex/com.android.tzdata"
+    fi
     # shellcheck disable=SC2086
     $JAVA @"$ROOT/runtime/host/jvm.args" -Drobolectric.offline=true \
-        -Drobolectric.dependency.dir="$(n="${APKLAYER_NATIVE:-$ROOT/native}"; if [ -d "$n/aosp/android-all" ]; then echo "$n/aosp/android-all"; elif [ -d "$n/android-all" ]; then echo "$n/android-all"; else echo "$DEPS/android-all"; fi)" "$@"
+        -Drobolectric.dependency.dir="$(framework_dir)" "${opts[@]}" "$@"
 }
 
 cmd_install() {
@@ -78,13 +97,18 @@ cmd_install() {
         # dex2jvm reads the class hierarchy from its classpath (the framework we run on); keep it
         # away from any installed Android SDK, which it would otherwise prefer.
         ANDROID_HOME="$tmp" ANDROID_SDK_ROOT="$tmp" java -Duser.home="$tmp" \
-            -cp "$DEX2JVM_JAR:$DEPS/android-all/*" com.macapk.dex.Main "$tmp/base.apk" "$tmp/raw.jar" >/dev/null
+            -cp "$DEX2JVM_JAR:$(framework_dir)/*" com.macapk.dex.Main "$tmp/base.apk" "$tmp/raw.jar" >/dev/null
         java -cp "$DEPS/libs/*:$HOST_JAR" apklayer.tools.DenyInstrument "$tmp/raw.jar" "$tmp/classes.jar" >/dev/null
         rm -f "$tmp/raw.jar"
     fi
     echo "$key" > "$tmp/key"
+    if tree_flavor; then
+        # Describe renders the icon with device natives; initialize its shared properties too.
+        . "$ROOT/scripts/native-env.sh"
+        ensure_stack
+    fi
     host -Djava.awt.headless=true -cp "$(host_cp "$tmp/classes.jar")" \
-        apklayer.host.Main --describe "$tmp" "$tmp/base.apk" "$tmp/classes.jar" | grep -v '^\[apklayer\] described' || true
+        apklayer.host.Main --describe "$tmp" "$tmp/base.apk" "$tmp/classes.jar" | sed '/^\[apklayer\] described/d'
     [ -f "$tmp/info.properties" ] || die "could not read $(basename "$apk")"
 
     local pkg label dir
@@ -192,10 +216,8 @@ cmd_run() {
     export APKLAYER_GLDIR="${XDG_RUNTIME_DIR:-/tmp}/apklayer/gl-$pkg"; rm -rf "$APKLAYER_GLDIR"; mkdir -p "$APKLAYER_GLDIR"  # GL frames of native SurfaceViews (P4.3)
     export APKLAYER_APK="$dir/base.apk"  # NDK libandroid shim reads assets from it
     export LD_LIBRARY_PATH="${APKLAYER_NATIVE:-$ROOT/native}:${APKLAYER_NATIVE:-$ROOT/native}/glibc${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"  # bionic linker + its libs (P4)
-    local nr="${APKLAYER_NATIVE:-$ROOT/native}/android-root" # data of Android's APEX modules (ICU, time zones) for the arm64 native runtime
-    if [ -d "$nr/apex" ]; then export ANDROID_ROOT="$nr/system" ANDROID_DATA="$nr/data" ANDROID_I18N_ROOT="$nr/apex/com.android.i18n" ANDROID_TZDATA_ROOT="$nr/apex/com.android.tzdata"; fi
-    export XDG_DATA_DIRS="${APKLAYER_NATIVE:-$ROOT/native}/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"  # bionic_translation cfg.d
-    host -Dapklayer.data="$dir/data" -Dapklayer.package="$pkg" -Dapklayer.libdir="$dir/lib" -Dapklayer.native="${APKLAYER_NATIVE:-$ROOT/native}" -Dapklayer.androidlibs="${APKLAYER_NATIVE:-$ROOT/native}/android-libs" $([ -d "$nr/system/fonts" ] && echo "-Drobolectric.nativeruntime.fontdir=$nr/system/fonts/") $([ -f "$nr/system/framework/org.lineageos.platform-res.apk" ] && echo "-Dapklayer.platformres=$nr/system/framework/org.lineageos.platform-res.apk") $([ -f "${APKLAYER_NATIVE:-$ROOT/native}/native-runtime.jar" ] && echo "-Dapklayer.nativejar=${APKLAYER_NATIVE:-$ROOT/native}/native-runtime.jar") $([ -d "${APKLAYER_NATIVE:-$ROOT/native}/aosp" ] && echo "-Dapklayer.gpu=true -Drobolectric.windowManager.useRequestedSize=true") -Dapklayer.apps="$APPS" -Dapklayer.cli="$ROOT/bin/apklayer" -Dapklayer.webview="$ROOT/bridge/webview/apklayer-webview.py" -Dapklayer.media="$ROOT/bridge/media/apklayer-media.py" -Dapklayer.codec="$ROOT/bridge/media/apklayer-codec.py" ${APKLAYER_JOPTS:-} \
+    export XDG_DATA_DIRS="${APKLAYER_NATIVE:-$ROOT/native}/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+    host -Dapklayer.data="$dir/data" -Dapklayer.package="$pkg" -Dapklayer.libdir="$dir/lib" -Dapklayer.apps="$APPS" -Dapklayer.cli="$ROOT/bin/apklayer" -Dapklayer.webview="$ROOT/bridge/webview/apklayer-webview.py" -Dapklayer.media="$ROOT/bridge/media/apklayer-media.py" -Dapklayer.codec="$ROOT/bridge/media/apklayer-codec.py" ${APKLAYER_JOPTS:-} \
         -cp "$(host_cp "$dir/classes.jar")" apklayer.host.Main "$dir/base.apk" "$dir/classes.jar"
 }
 

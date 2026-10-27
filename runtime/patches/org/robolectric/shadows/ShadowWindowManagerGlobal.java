@@ -380,7 +380,7 @@ public class ShadowWindowManagerGlobal {
                     : findFirst(InsetsState.class, args))
                 : null);
         windowInfo.surface.place(layer, windowInfo);
-        if (System.getProperty("apklayer.tracewindows") != null) {
+        if (Boolean.getBoolean("apklayer.tracewindows")) {
           System.err.println(
               "[apklayer] window "
                   + windowInfo.attrs.getTitle()

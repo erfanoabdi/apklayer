@@ -48,7 +48,7 @@ int main(void)
 
     signal(SIGPIPE, SIG_IGN);
     const char *dbg = getenv("APKLAYER_DEBUG_INPUT");
-    debug_input = dbg && *dbg;
+    debug_input = dbg && !strcmp(dbg, "1");
     display = wl_display_connect(NULL);
     if (!display) { fprintf(stderr, "[shell] no Wayland compositor\n"); return 1; }
     struct wl_registry *reg = wl_display_get_registry(display);

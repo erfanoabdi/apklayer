@@ -8,7 +8,7 @@ staging="${2:-}"
 work="$(mktemp -d "$native/.overlay.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 mkdir "$work/classes"
-mapfile -t sources < <(find runtime/patches -name '*.java' -print | sort)
+mapfile -t sources < <(find runtime/patches -name '*.java' ! -name '._*' -print | sort)
 echo "Compiling ${#sources[@]} runtime overlay sources"
 javac -nowarn -d "$work/classes" -cp "$native/aosp/Robolectric_all.jar:$native/android-all/*" "${sources[@]}"
 if [ -n "$staging" ]; then

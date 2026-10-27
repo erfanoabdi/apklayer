@@ -12,3 +12,4 @@ ro.product.cpu.abilist=arm64-v8a
 # render target on the VM's virtio-gpu (Skia: "WrapBackendTexture failed to wrap the texture into a renderable target"). An optimisation
 # only: shaders compile at first use instead. To revisit when the failing format is known.
 service.sf.prime_shader_cache=0
+ro.hyphen.data.dir=/system/usr/hyphen-data
