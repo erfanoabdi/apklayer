@@ -63,6 +63,14 @@ public final class HostShadowProvider implements ShadowProvider {
             entries.removeIf(entry -> entry.getKey().equals("android.media.MediaPlayer"));
             entries.add(Map.entry("android.media.MediaPlayer", ShadowHostNativeMediaPlayer.class.getName()));
         }
+        if (Boolean.getBoolean("apklayer.realbinder")) {
+            entries.removeIf(entry -> entry.getKey().equals("android.os.Parcel"));
+            entries.add(Map.entry("android.os.Parcel", ShadowHostRealParcel.class.getName()));
+            entries.add(Map.entry("android.os.Binder", ShadowHostRealBinder.class.getName()));
+            entries.add(Map.entry("android.os.BinderProxy", ShadowHostRealBinderProxy.class.getName()));
+            entries.add(Map.entry("com.android.internal.os.BinderInternal", ShadowHostRealBinderInternal.class.getName()));
+            entries.add(Map.entry("android.os.Process", ShadowHostProcess.class.getName()));
+        }
         return entries;
     }
 

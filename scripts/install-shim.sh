@@ -8,9 +8,9 @@ native="$(realpath "$1")"
 JH="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
-(cd "$stage" && unzip -q -o "$native/native-runtime.jar")
+(cd "$stage" && unzip -q -o "$native/native-runtime.jar" -x "*.class")  # not the old overlay classes: they would overwrite the freshly compiled ones
 cc -shared -fPIC -O2 -Wall -I"$JH/include" -I"$JH/include/linux" -o "$stage/native/linux/aarch64/libandroid_runtime.so" \
-    bridge/native/runtime_shim.c bridge/native/media_runtime.c bridge/native/android_platform.c bridge/native/properties.c bridge/native/paths.c bridge/native/android_stubs.c \
+    bridge/native/runtime_shim.c bridge/native/media_runtime.c bridge/native/binder_runtime.c bridge/native/android_platform.c bridge/native/properties.c bridge/native/paths.c bridge/native/android_stubs.c \
     -L"$HOME/bt-arm/bionic_translation/b" -ldl_bio -Wl,-rpath,"$HOME/bt-arm/bionic_translation/b"
 cp "$stage/native/linux/aarch64/libandroid_runtime.so" "$stage/native/linux/x86_64/libandroid_runtime.so"
 scripts/build-runtime-overlay.sh "$native" "$stage"

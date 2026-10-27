@@ -362,6 +362,13 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
         early_audio_capabilities = 0;
     }
     free(native_audio);
+    char *real_binder = system_property(env, "apklayer.realbinder");
+    int binder_failed = 0;
+    if (real_binder && !strcmp(real_binder, "true")) {
+        extern int apklayer_register_binder(JNIEnv *, void *);
+        binder_failed = apklayer_register_binder(env, rt);
+    }
+    if (binder_failed) audio_failed = 1;
     if (audio_failed) { (*ti)->SetJNIFunctionTable(ti, orig); return -1; }
     char *media = system_property(env, "apklayer.nativemedia");
     int media_failed = audio_failed;
@@ -382,6 +389,13 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
         attribution_failed = !helper || apklayer_register_attribution(env, helper);
         if (helper) (*env)->DeleteLocalRef(env, helper);
     }
+    if (real_binder && !strcmp(real_binder, "true") && !attribution_failed) {
+        extern int apklayer_register_binderhelper(JNIEnv *, jclass);
+        jclass helper = lazy_find_class(env, "apklayer/host/RealBinder");
+        attribution_failed = !helper || apklayer_register_binderhelper(env, helper);
+        if (helper) (*env)->DeleteLocalRef(env, helper);
+    }
+    free(real_binder);
     free(attribution); free(audio);
     if (attribution_failed) media_failed = 1;
     if (media_failed) return -1;
