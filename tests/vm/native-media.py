@@ -77,6 +77,8 @@ try:
     assert '[hello-native-codec] codec=c2.apklayer.vp9.decoder' in text
     assert text.count('[hello-native-codec] PASS native MediaCodec decoded 3 YUV frames with PTS/EOS') == 2
     assert '[hello-native-codec] PASS native MediaCodec decoded 4 YUV frames with PTS/EOS' in text
+    assert '[hello-native-codec] AVC flush PASS' in text
+    assert '[hello-native-codec] AVC PASS reordered 12 YUV pictures, exact PTS/EOS/release' in text
     assert committed and captured
     assert 'finished hello.nativecodec.Main depth=0' in text and 'depth=0' in text
     assert (logs / 'shell.log').read_text(errors='replace').count('dmabuf frame') > 0

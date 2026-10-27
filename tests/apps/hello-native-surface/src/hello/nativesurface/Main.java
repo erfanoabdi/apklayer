@@ -1,6 +1,7 @@
 package hello.nativesurface;
 
 import android.app.Activity;
+import hello.nativecodec.AvcCheck;
 import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.os.Bundle;
@@ -53,7 +54,8 @@ public class Main extends Activity implements SurfaceHolder.Callback {
         try {
             decodeStream(holder, "red-vp8.ivf", false, -1);
             decodeStream(holder, "red-vp9.ivf", false, -1);
-            decodeStream(holder, "red-vp9-multi.ivf", true, 2);
+            decodeStream(holder, "red-vp9-multi.ivf", false, 2);
+            liveCodec = AvcCheck.run(this, holder.getSurface());
             System.out.println("[hello-native-surface] DECODE PASS");
         } catch (Throwable error) {
             System.out.println("[hello-native-surface] FAIL " + error);

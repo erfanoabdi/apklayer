@@ -7,7 +7,7 @@ You continue a long-running project. Read, in this order: `CLAUDE.md` (rules, bi
 Then do the milestones below **in this order**, one at a time, committing at every step, updating `docs/PLAN.md` status and `memory.md` as you go. Do not stop between
 milestones; stop only for something only the user can do (an Android build in `~/los24`, see below) and say exactly what to build, then continue with other work meanwhile.
 
-Current progress (2026-10-27): A1–A7 are verified and committed; B media now has native host decode, real Codec2 AIDL transport and APK MediaCodec JNI verified; native SurfaceView YUV presentation also passes; VP9 profile 0 also passes native/AIDL/app buffer/Surface tests; multi-picture VP9 work also passes AIDL and app buffer/Surface tests; host H.264 B-frame decode/notifications pass; next is reordered Codec2/app integration, other codecs and native MediaPlayer/audio. See PLAN and memory for the timed-mutex, EGL lifetime, shared real-vsync and window-container fixes.
+Current progress (2026-10-27): A1–A7 are verified and committed. B media now has real native JNI/Codec2/AIDL and SurfaceView YUV presentation for VP8, VP9 profile 0 (including hidden/multi-picture work), and H.264 with B-frame reorder. Native buffer/Surface pixels, timestamps/EOS, flush/replay and physical Back cleanup pass. Next: other codecs and native MediaPlayer/extractor/audio; see memory for the required real attribution Parcel bridge. Hardware decoder dmabuf import remains unverified on this VM.
 
 ## What this is
 apklayer runs Android apps on a Linux desktop with real Android userspace and no emulator. The route that matters is the device-library route: the LineageOS 24 tree's

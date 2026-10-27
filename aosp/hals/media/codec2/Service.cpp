@@ -2,6 +2,7 @@
  * init/minijail: the normal Linux launcher owns this process. */
 #include "HostDecoder.h"
 #include "DecodeProbe.h"
+#include "ReorderProbe.h"
 #include <android/binder_manager.h>
 #include <android/binder_process.h>
 #include <codec2/aidl/ComponentStore.h>
@@ -9,6 +10,11 @@
 #include <cstring>
 #include <C2Config.h>
 extern "C" int main(int argc, char** argv) {
+    if (argc == 3 && !strcmp(argv[1], "--reorder-probe")) {
+        ABinderProcess_setThreadPoolMaxThreadCount(2);
+        ABinderProcess_startThreadPool();
+        return apklayer::reorderProbe(argv[2]);
+    }
     if (argc >= 2 && !strcmp(argv[1], "--remote-probe")) {
         using namespace aidl::android::hardware::media::c2;
         ABinderProcess_setThreadPoolMaxThreadCount(2);

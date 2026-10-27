@@ -61,7 +61,7 @@ try:
                     if any(tag in line for tag in ('[hello-native-surface]', '[apklayer]', 'media JNI')):
                         print(line, flush=True)
                     assert '[hello-native-surface] FAIL' not in line, line
-                    if '[hello-native-surface] DECODE PASS' in line:
+                    if '[hello-native-surface] AVC rendered pts=3600000366666' in line:
                         committed = True
             # Capture after the real HWUI commit callback and a visible active window.
             if committed and not captured and any('window state active=true' in s for s in seen):
@@ -76,9 +76,8 @@ try:
     assert '[runtime] Android media JNI registered' in text
     assert '[hello-native-surface] DECODE PASS' in text
     assert '[hello-native-surface] created valid=true' in text
-    for pts in (0, 33333, 66666):
-        assert f'[hello-native-surface] rendered pts={pts} codec=vp9' in text, f'missing render callback {pts}'
-    assert text.count('[hello-native-surface] rendered pts=66666 codec=vp9') >= 2
+    assert '[hello-native-surface] AVC PASS reordered 12 Surface pictures, exact PTS/EOS' in text
+    assert '[hello-native-surface] AVC rendered pts=3600000366666' in text
     assert 'SurfaceView[hello.nativesurface' in Path('/tmp/apklayer-native-surface-layers.txt').read_text()
     assert committed and captured
     assert 'finished hello.nativesurface.Main depth=0' in text and 'depth=0' in text

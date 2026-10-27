@@ -1,0 +1,52 @@
+/* Shared software-YUV to mapper-described gralloc copy, published before callbacks. */
+#pragma once
+#include "DecoderParams.h"
+#include <apklayer/codec.h>
+#include <C2PlatformSupport.h>
+#include <cstdio>
+#include <cstring>
+namespace apklayer {
+struct DecodedGraphic {
+    std::shared_ptr<C2GraphicBlock> block;
+    uint32_t width, height;
+    bool changed;
+};
+inline c2_status_t copyGraphic(apklayer_codec_frame *raw, const std::shared_ptr<C2BlockPool>& pool,
+        const std::shared_ptr<DecoderParams>& params, DecodedGraphic *out) {
+    apklayer_codec_frame_info info;
+    apklayer_codec_frame_describe(raw, &info);
+    const void *planes[4];
+    c2_status_t status = C2_OK;
+    if (strcmp(info.format, "I420") || apklayer_codec_frame_map(raw, planes)) {
+        status = C2_CANNOT_DO; return status;
+    }
+    auto& block = out->block;
+    status = pool->fetchGraphicBlock((info.width + 15) & ~15u, (info.height + 1) & ~1u,
+        HAL_PIXEL_FORMAT_YCBCR_420_888, {C2MemoryUsage::CPU_READ, C2MemoryUsage::CPU_WRITE}, &block);
+    if (status != C2_OK) { fprintf(stderr, "codec2: fetch graphic block %d\n", status); return status; }
+    { // Publish CPU plane writes before notifying any cloned output work.
+        C2GraphicView target = block->map().get();
+        if (target.error()) { fprintf(stderr, "codec2: output map %d\n", target.error()); status = target.error(); return status; }
+        auto layout = target.layout();
+        for (unsigned p = 0; p < 3; p++) {
+            unsigned width = p ? (info.width + 1) / 2 : info.width;
+            unsigned height = p ? (info.height + 1) / 2 : info.height;
+            const auto& plane = layout.planes[p];
+            for (unsigned y = 0; y < height; y++) {
+                auto *dst = target.data()[p] + y * plane.rowInc;
+                auto *src = static_cast<const uint8_t *>(planes[p]) + y * info.stride[p];
+                for (unsigned x = 0; x < width; x++) dst[x * plane.colInc] = src[x];
+            }
+        }
+    }
+    C2StreamPictureSizeInfo::output size(0u, info.width, info.height);
+    bool changed = info.width != params->width() || info.height != params->height();
+    if (changed) {
+        std::vector<std::unique_ptr<C2SettingResult>> failures;
+        status = params->config({&size}, C2_MAY_BLOCK, &failures);
+        if (status != C2_OK) return status;
+    }
+    out->width = info.width; out->height = info.height; out->changed = changed;
+    return C2_OK;
+}
+}

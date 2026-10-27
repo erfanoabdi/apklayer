@@ -73,3 +73,5 @@ Remote Codec2 verification: libcodec2_client dependency linked from the selected
 | 2026-10-27 | `libapklayer_codec2` | Add VP9 profile-0 decoder using the existing host backend and shared Vpx adapter; test visible/hidden reference frames through actual AIDL | existing generated module-only commands, no graph change | built; VP9 native, AIDL hidden/visible/superframe and app buffer/Surface tests pass |
 
 | 2026-10-27 | `libapklayer_codec2` | Split indexed VP9 packets and use existing SimpleC2Component cloneAndSend for multiple displayed pictures, preserving all output and final EOS | existing generated module-only commands | built; AIDL multi-picture first/final work, app buffer and Surface callbacks/pixels/EOS pass |
+
+| 2026-10-27 | `libapklayer_codec2` | Add asynchronous reordered AVC adapter, sharing existing interface/gralloc code; streaming notifications enqueue the AOSP component's own drain handler, finishing real pending work by PTS | graph-only regeneration for added source, then exact module-only commands against existing dependencies | built, SHA verified; 12-picture AIDL reorder/EOS, app buffer flush/replay and Surface pixels/render callback pass |

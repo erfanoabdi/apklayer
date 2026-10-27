@@ -35,11 +35,12 @@ public class Main extends Activity {
             decodeStream("red-vp8.ivf", -1);
             decodeStream("red-vp9.ivf", -1);
             decodeStream("red-vp9-multi.ivf", 2);
+            AvcCheck.run(this, null);
             runOnUiThread(() -> {
                 Runnable show = () -> {
                     result.getViewTreeObserver().registerFrameCommitCallback(
                             () -> System.out.println("[hello-native-codec] FRAME PASS"));
-                    result.setText("PASS: Android MediaCodec decoded VP8 + VP9 frames\nYUV 81 / 90 / 240");
+                    result.setText("PASS: native VP8 / VP9 / H.264\nYUV 81 / 90 / 240");
                     result.invalidate();
                 };
                 if (result.isAttachedToWindow()) show.run();

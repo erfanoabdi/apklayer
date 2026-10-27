@@ -37,8 +37,12 @@ def progress():
         except FileNotFoundError:
             positions.pop(name, None)
 
-proc = subprocess.Popen(['scripts/arm64-stack.sh', 'libapklayer_codec2.so',
-    '--remote-probe', sys.argv[1] if len(sys.argv) > 1 else '/tmp/apklayer-vp8.ivf', *sys.argv[2:]], stdout=subprocess.PIPE,
+fixture = sys.argv[1] if len(sys.argv) > 1 else '/tmp/apklayer-vp8.ivf'
+mode = sys.argv[2:]
+probe = '--reorder-probe' if mode == ['reorder'] else '--remote-probe'
+if probe == '--reorder-probe': mode = []
+proc = subprocess.Popen(['scripts/arm64-stack.sh', 'libapklayer_codec2.so', probe,
+    fixture, *mode], stdout=subprocess.PIPE,
     stderr=subprocess.STDOUT, start_new_session=True)
 try:
     with selectors.DefaultSelector() as events:
