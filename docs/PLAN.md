@@ -635,6 +635,9 @@ rendering end to end, real input through the shell's input proxy, dialogs stacke
    notification; (2) broadcasts (manifest and dynamic receivers, ordered, sticky, permissions); (3) content providers (Settings first, then Contacts/Calendar) with
    observers; (4) cross-app `startActivity`/`startActivityForResult`, `startService`, pending intents; (5) notifications and the rest. Behaviour is checked against Android's
    documented semantics and, later, CTS's app-framework modules.
+8d. **Revisit all of the user's test apps** (`/Users/erfanabdi/TestApps`, user 2026-10-27: some fail) on the GPU route once media is done: install each, launch through
+   `bin/apklayer run`, record what fails (converter, classpath conflicts such as NewPipe's R8-merged `kotlin.math.MathKt` vs the platform jar's Kotlin, missing services/natives),
+   fix by cause not by app, and keep a table of app, status, cause in `docs/APPS.md`. Corpus tooling: `tests/vm/corpus.sh`.
 9. Vulkan (P7.5) after the HALs.
 10. **CTS (P10) stays last**: not before media, camera and the other HALs work.
 

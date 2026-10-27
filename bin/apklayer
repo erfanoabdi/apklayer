@@ -33,7 +33,9 @@ prop() { sed -n "s/^$2=//p" "$1" | head -1; }
 host_cp() {
     local n="${APKLAYER_NATIVE:-$ROOT/native}"
     if [ -d "$n/aosp" ]; then # everything from one AOSP tree (PLAN P7): its Robolectric_all.jar, simulator and framework jar, apklayer's host built against them
-        echo "$n/native-runtime.jar:$n/aosp/host-classes:$n/aosp/sim-classes:$n/aosp/Robolectric_all.jar:$DEPS/android-stub.jar:$1"
+        # the app's own classes come before the platform jars: an app ships its own Kotlin runtime and libraries (a shrunk copy can differ from
+        # the one Robolectric_all.jar carries: NewPipe's R8-merged kotlin.math.MathKt), and the platform has no business shadowing them
+        echo "$n/native-runtime.jar:$n/aosp/host-classes:$n/aosp/sim-classes:$1:$n/aosp/Robolectric_all.jar:$DEPS/android-stub.jar"
     elif [ -f "$n/robolectric-nativeruntime-linux-aarch64.jar" ]; then
         # FALLBACK flavor (PLAN P7): Robolectric 4.17's own native runtime built for Linux arm64 by a third party
         # (docs/THIRD_PARTY.md); Maven Robolectric and its android-all as in the default flavor, no apklayer shim, no device libraries
