@@ -76,7 +76,7 @@ class ReorderedDecoder final : public SimpleC2Component {
             if (apklayer_codec_open(&setup, &mCodec) || apklayer_codec_set_notify(mCodec, ready, this)) {
                 work->result = C2_CANNOT_DO; return;
             }
-            if (!mConfig.empty() && apklayer_codec_queue(mCodec, mConfig.data(), mConfig.size(), mConfigPts * 1000)) {
+            if (!mConfig.empty() && apklayer_codec_queue(mCodec, mConfig.data(), mConfig.size(), -1)) {
                 work->result = C2_CORRUPTED; return;
             }
         }
@@ -85,7 +85,7 @@ class ReorderedDecoder final : public SimpleC2Component {
             if (blocks.empty()) { work->result = C2_BAD_VALUE; return; }
             C2ReadView view = blocks[0].map().get();
             if (view.error()) { work->result = view.error(); return; }
-            if (view.capacity() && apklayer_codec_queue(mCodec, view.data(), view.capacity(), pts * 1000)) {
+            if (view.capacity() && apklayer_codec_queue(mCodec, view.data(), view.capacity(), config ? -1 : pts * 1000)) {
                 work->result = C2_CORRUPTED; return;
             }
             input = view.capacity() != 0;
@@ -125,7 +125,8 @@ class ReorderedDecoder final : public SimpleC2Component {
             apklayer_codec_frame_describe(raw, &info);
             auto found = mByPts.find(info.pts_ns / 1000);
             if (info.pts_ns < 0 || found == mByPts.end() || found->second.empty()) {
-                fprintf(stderr, "codec2: unmatched reordered output PTS %lld\n", (long long)info.pts_ns);
+                fprintf(stderr, "codec2: unmatched reordered output PTS %lld (%zu pending pts, first %lld)\n", (long long)info.pts_ns, mByPts.size(),
+                        mByPts.empty() ? -1LL : (long long)mByPts.begin()->first);
                 finishRemaining(C2_CORRUPTED); return C2_CORRUPTED;
             }
             uint64_t index = found->second.front();

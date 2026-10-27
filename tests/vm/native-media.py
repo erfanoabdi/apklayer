@@ -13,7 +13,7 @@ os.chdir(Path.home() / 'apklayer-m1')
 ENV = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000', APKLAYER_NATIVE=str(Path.home() / 'arm64-native'),
     APKLAYER_CODEC2='1', APKLAYER_MEDIA_SERVICES='1', APKLAYER_DEBUG_INPUT='1', APKLAYER_RUNTIME_DEBUG='1',
     APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400',
-    APKLAYER_JOPTS='-Dapklayer.nativemedia=true -Dapklayer.runms=20000')
+    APKLAYER_JOPTS='-Dapklayer.nativemedia=true -Dapklayer.runms=90000')
 ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-media.so'
 
 def stop():
@@ -37,7 +37,7 @@ try:
         events.register(app.stdout, selectors.EVENT_READ)
         events.register(notify, selectors.EVENT_READ)
         pending = b''
-        end = time.monotonic() + 70
+        end = time.monotonic() + 100
         done = False
         while not done:
             ready = events.select(3)
@@ -90,6 +90,8 @@ try:
         assert '[hello-native-codec] AUDIO PASS ' + asset in text, asset
     for asset in ('red-hevc.mp4', 'red-mpeg4.mp4', 'red-av1.webm'):
         assert '[hello-native-codec] VIDEO PASS ' + asset in text, asset
+    for kind in ('audio/mp4a-latm', 'audio/opus', 'audio/flac', 'video/avc'):
+        assert '[hello-native-codec] ENCODER PASS ' + kind in text, kind
     for asset in ('tone-mulaw.wav', 'tone-alaw.wav'):
         assert '[hello-native-codec] AUDIO PASS ' + asset in text, asset
     print('PASS APK MediaCodec JNI, real YUV/PTS/EOS, frame commit and physical Back', flush=True)
