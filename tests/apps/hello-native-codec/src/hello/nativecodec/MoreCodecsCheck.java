@@ -24,10 +24,14 @@ final class MoreCodecsCheck {
         {"red-hevc.mp4", "video/hevc", "c2.android.hevc.decoder"},
         {"red-mpeg4.mp4", "video/mp4v-es", "c2.android.mpeg4.decoder"},
         {"red-av1.webm", "video/av01", "c2.android.av1-dav1d.decoder"},
+        {"red-h263.3gp", "video/3gpp", "c2.android.h263.decoder"},
+        {"red-mpeg2.ts", "video/mpeg2", "c2.android.mpeg2.decoder"},
     };
     private static final String[][] AUDIO = {
         {"tone-mulaw.wav", "audio/g711-mlaw", "c2.android.g711.mlaw.decoder"},
         {"tone-alaw.wav", "audio/g711-alaw", "c2.android.g711.alaw.decoder"},
+        {"tone-amrwb.awb", "audio/amr-wb", "c2.android.amrwb.decoder"},  // 16 kHz
+        {"zeros-amrnb.amr", "audio/3gpp", "c2.android.amrnb.decoder"},  // no AMR-NB encoder here: 50 all-zero 12.2 kbit/s frames, only the sample count is checked
     };
 
     static void run(Context context) throws Exception {
@@ -97,7 +101,7 @@ final class MoreCodecsCheck {
             }
             luma /= Math.max(frames, 1);
             // solid red (255,0,0): Y = 81 limited range
-            require(frames >= 8 && frames <= 12, asset + ": " + frames + " frames");
+            require(frames >= (asset.endsWith(".ts") ? 5 : 8) && frames <= 12, asset + ": " + frames + " frames"); // the TS extractor holds back the last access units of a tiny stream
             require(luma > 70 && luma < 95, asset + ": mean luma " + luma);
             System.out.println("[hello-native-codec] VIDEO PASS " + asset + " via " + codecName + ": " + frames + " frames, mean luma " + (int) luma + ", EOS");
         } finally {
@@ -120,7 +124,8 @@ final class MoreCodecsCheck {
             codec.configure(format, null, null, 0);
             codec.start();
             MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
-            short[] pcm = new short[8000 * 3];
+            int rate = format.containsKey(MediaFormat.KEY_SAMPLE_RATE) ? format.getInteger(MediaFormat.KEY_SAMPLE_RATE) : 8000;
+            short[] pcm = new short[rate * 3];
             int samples = 0;
             boolean inputDone = false, eos = false;
             long deadline = System.nanoTime() + 15_000_000_000L;
@@ -145,12 +150,17 @@ final class MoreCodecsCheck {
                     codec.releaseOutputBuffer(out, false);
                 }
             }
-            require(samples >= 15000 && samples <= 17000, asset + ": " + samples + " samples");
+            if (asset.startsWith("zeros-")) {
+                require(samples == 50 * 160, asset + ": " + samples + " samples");
+                System.out.println("[hello-native-codec] AUDIO PASS " + asset + " via " + codecName + ": " + samples + " samples, EOS");
+                return;
+            }
+            require(samples >= 2 * rate - 1000 && samples <= 2 * rate + 1000, asset + ": " + samples + " samples at " + rate + " Hz");
             int from = samples / 2 - 2000, to = from + 4000, crossings = 0;
             double sum = 0;
             for (int n = from; n < to; n++) { sum += (double) pcm[n] * pcm[n]; if (n > from && (pcm[n - 1] < 0) != (pcm[n] < 0)) crossings++; }
-            double rms = Math.sqrt(sum / (to - from)), hertz = crossings / 2.0 / (4000 / 8000.0);
-            require(rms > 8000 && rms < 15000, asset + ": rms " + rms);
+            double rms = Math.sqrt(sum / (to - from)), hertz = crossings / 2.0 / (4000.0 / rate);
+            require(rms > 6000 && rms < 15000, asset + ": rms " + rms); // AMR-WB loses some level
             require(hertz > 425 && hertz < 455, asset + ": " + hertz + " Hz");
             System.out.println("[hello-native-codec] AUDIO PASS " + asset + " via " + codecName + ": " + samples + " samples, rms=" + (int) rms + ", " + (int) hertz + " Hz, EOS");
         } finally {

@@ -88,11 +88,11 @@ try:
     assert '[hello-native-codec] AAC PASS' in text
     for asset in ('tone.mp3', 'tone-vorbis.ogg', 'tone-opus.ogg', 'tone.flac', 'tone.wav'):
         assert '[hello-native-codec] AUDIO PASS ' + asset in text, asset
-    for asset in ('red-hevc.mp4', 'red-mpeg4.mp4', 'red-av1.webm'):
+    for asset in ('red-hevc.mp4', 'red-mpeg4.mp4', 'red-av1.webm', 'red-h263.3gp', 'red-mpeg2.ts'):
         assert '[hello-native-codec] VIDEO PASS ' + asset in text, asset
     for kind in ('audio/mp4a-latm', 'audio/opus', 'audio/flac', 'video/avc'):
         assert '[hello-native-codec] ENCODER PASS ' + kind in text, kind
-    for asset in ('tone-mulaw.wav', 'tone-alaw.wav'):
+    for asset in ('tone-mulaw.wav', 'tone-alaw.wav', 'tone-amrwb.awb', 'zeros-amrnb.amr'):
         assert '[hello-native-codec] AUDIO PASS ' + asset in text, asset
     print('PASS APK MediaCodec JNI, real YUV/PTS/EOS, frame commit and physical Back', flush=True)
 finally:

@@ -18,7 +18,7 @@
     <Settings>
         <!-- disable TV and telephony domains by default. These must be opted in by OEMs -->
         <Domain name="telephony" enabled="false" />
-        <Domain name="tv" enabled="false" />
+        <Domain name="tv" enabled="true" />
         <Variant name="slow-cpu" enabled="false" />
     </Settings>
     <Decoders>
