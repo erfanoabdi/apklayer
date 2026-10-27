@@ -14,6 +14,7 @@
 #include <android/binder_process.h>
 #include <log/log.h>
 #include <poll.h>
+#include <sys/eventfd.h>
 
 #include <atomic>
 #include <map>
@@ -226,6 +227,11 @@ class Client : public BnComposerClient {
         out->push_back(CommandResultPayload::make<CommandResultPayload::Tag::clientTargetProperty>(p));
     }
 
+    // PresentFence.fence is not nullable in the AIDL: an empty one made every command result fail to parse in SurfaceFlinger
+    // ("executeCommands failed UNEXPECTED_NULL", "Invalid present fence" each frame), so it never saw the release fences of the
+    // frame. The frame is shown as soon as the compositor takes it, so the fence is one that is always signaled (readable).
+    static ScopedFileDescriptor signaledFence() { return ScopedFileDescriptor(eventfd(1, EFD_CLOEXEC)); }
+
     template <typename Fail>
     void present(std::vector<CommandResultPayload>* out, Fail&& fail) {
         HandleData d;
@@ -235,6 +241,7 @@ class Client : public BnComposerClient {
             ALOGV("presentDisplay: no client target (slot %d): nothing to show", mClientSlot);
             PresentFence pf;
             pf.display = kDisplay;
+            pf.fence = signaledFence();
             out->push_back(CommandResultPayload::make<CommandResultPayload::Tag::presentFence>(std::move(pf)));
             ReleaseFences rf;
             rf.display = kDisplay;
@@ -266,7 +273,8 @@ class Client : public BnComposerClient {
         }
         if (apklayer_display_present(mDisplay, mClientSlot, &b, damage) != 0) return fail(IComposerClient::EX_NO_RESOURCES);
         PresentFence pf;
-        pf.display = kDisplay;  // an invalid fence: shown as soon as the compositor takes it
+        pf.display = kDisplay;
+        pf.fence = signaledFence();
         out->push_back(CommandResultPayload::make<CommandResultPayload::Tag::presentFence>(std::move(pf)));
         ReleaseFences rf;
         rf.display = kDisplay;
