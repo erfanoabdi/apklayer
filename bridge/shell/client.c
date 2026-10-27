@@ -41,6 +41,7 @@ void send_input(struct window *w, int32_t type, int32_t a, int32_t b)
 
 static void client_drop(struct client *c)
 {
+    client_vsync_forget(c);
     window_drop_proxy(c);
     for (int i = 0; i < MAX_WINDOWS; i++)
         if (windows[i].client == c) window_destroy(&windows[i]);
@@ -95,8 +96,7 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         break;
     }
     case MSG_VSYNC_REQUEST: {
-        struct window *w = len >= 4 ? window_find(c, v[0]) : NULL;
-        if (w) window_vsync_request(w);
+        if (len >= 4) client_vsync_request(c, v[0]);
         break;
     }
     case MSG_CLIPBOARD_SET:

@@ -115,7 +115,7 @@ try:
                     if 'VRI-' + PKG not in after:
                         raise RuntimeError('app layer disappeared after resize')
                     print('CAPTURE dialog after resize', flush=True)
-                    input_steps('key:1')  # real Esc/Back must dismiss the dialog
+                    input_steps('abs:260,300', 'click', 'key:1')  # real Esc/Back must dismiss the dialog
                 elif 'script: hover:0,0' in line and 'clipboard to the system (16 chars)' in '\n'.join(seen):
                     final_layers = dump('after-back')
                     print('LAYERS after resize=' + str(after.count('VRI-')) + ' after Back=' + str(final_layers.count('VRI-')), flush=True)

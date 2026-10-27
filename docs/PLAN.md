@@ -578,12 +578,13 @@ rendering end to end, real input through the shell's input proxy, dialogs stacke
 
 **2026-10-27 investigation:** fixed stale stack readiness before relaunch; initialized the real RenderEngine cache files and readiness property (avoids its five-second Android-init wait); display windows now map a blank shm frame before GPU output so Wayland can deliver focus/vsync. Cold launches and real clicks into Dialog List verified. Sink buffer release and stale-size frame rejection built and installed; one complete resize/Back/new-size-frame run passed, but repeated runs expose an intermittent bionic_translation mutex assertion and input focus sensitivity. A1 remains open. The dump mutex assertion was traced to missing translated pthread_mutex_timedlock and fixed; static-init/contention/reuse tests and a full dump pass. A separate EGL initialization lifetime bug remains under resize; fix in progress.
 
-1. **Crash: resizing the window while a dialog is open** (user, 2026-10-27). Repro: General, Dialog List, drag the window edge. Seen: the window disappears, the
+1. **✅ Fixed: crash/stall resizing with a dialog open** (user, 2026-10-27). Repro: General, Dialog List, drag the window edge. Seen: the window disappears, the
    JVM stays alive and idle, its main thread is stuck inside HWUI (`HardwareRenderer.nSetStopped`, native). Not yet diagnosed; leads: (a) the render thread
    blocked in `eglSwapBuffers` (our window blit) in `dequeueBuffer` because no buffer comes back after the size change (BLAST queue resized, SurfaceFlinger
    not releasing); (b) the virtual display sink (`aosp/hals/graphics/vdisplay`) holds up to 3 acquired buffers and starves the producer when frames stop or the size
    changes, so release/drop its held items on resize and size mismatch; (c) a window stopped/paused by the shell state (see 3). First step: `jcmd Thread.print` of
    the JVM plus gdb on the render thread at the stall, and the sink's log with `APKLAYER_RUNTIME_DEBUG=1`.
+   **Verified 2026-10-27:** sink releases acquired buffers on compositor release and rejects stale-size frames; translated timed mutex locking is implemented; EGL preserves Android initialization references; actual Wayland timing follows the active mapped surface rather than a covered primary. `tests/vm/gpu.sh` passes real input, resize, layer survival, Back dismissal and final-size GPU frames, with before/after screenshots.
 2. **Dialog right margin out of bounds** (user). The dialog window's frame is wider than the display (a 784-wide layer on a 720 display); the window manager must
    clamp a window's frame to its display like WMS does (`Gravity.applyDisplay` runs, but the layer size comes from the app's measured request), and the app must
    re-measure to the clamped frame. Also symmetric margins as on a device. Part of `runtime/patches/.../ShadowWindowManagerGlobal`.

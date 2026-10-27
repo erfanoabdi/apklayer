@@ -109,7 +109,6 @@ struct window {
     struct wl_buffer *buffers[NBUF];
     struct wl_buffer *initial_buffer; /* blank display frame, freed on release */
     struct wl_buffer *dbufs[DBUF_MAX]; /* imported dmabuf buffers of a dmabuf window */
-    struct wl_callback *vsync_cb;   /* frame callback in flight for MSG_VSYNC_REQUEST */
     int pending_buf;            /* frame received before the first configure */
     int32_t pending_damage[4];
     int pending_dbuf;           /* dmabuf frame received before the first configure (committing a buffer earlier is an xdg-shell error) */
@@ -165,7 +164,9 @@ void window_layout(struct window *w);  /* window.c */
 void window_create(struct client *c, int id, int width, int height, const char *path, const char *title);  /* window.c */
 void window_destroy(struct window *w);  /* window.c */
 void window_frame(struct window *w, int buf, const int32_t *damage);  /* window.c */
-void window_vsync_request(struct window *w);  /* window.c */
+void client_vsync_request(struct client *c, int id); /* vsync.c */
+void client_vsync_forget(struct client *c);
+void vsync_source_changed(void);
 #define DMABUF_LINEAR_MAX 64
 extern uint32_t dmabuf_linear[DMABUF_LINEAR_MAX]; /* formats the compositor takes with the linear modifier (registry.c) */
 extern int dmabuf_linear_n;

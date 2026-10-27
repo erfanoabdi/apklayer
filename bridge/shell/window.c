@@ -74,6 +74,7 @@ void send_state(struct window *w)
 {
     int32_t v[2] = { W_ID(w), (w->activated ? 1 : 0) | (w->minimized ? 2 : 0) };
     send_msg(W_TARGET(w), MSG_STATE, v, 2);
+    vsync_source_changed();
 }
 
 /* Window geometry = content + title bar; the bar follows the content width and scale. */
@@ -102,6 +103,7 @@ static void xs_configure(void *data, struct xdg_surface *xs, uint32_t serial)
         else if (w->pending_dbuf >= 0) window_dmabuf_show(w, w->pending_dbuf, w->pending_ddamage);
         else if (!w->buffers[0]) show_initial(w);
         else wl_surface_commit(w->surface);
+        vsync_source_changed();
     }
 }
 static const struct xdg_surface_listener xs_listener = { xs_configure };
@@ -273,25 +275,7 @@ void window_destroy(struct window *w)
     xdg_surface_destroy(w->xdg_surface);
     wl_surface_destroy(w->surface);
     memset(w, 0, sizeof *w);
-}
-
-static void vsync_done(void *data, struct wl_callback *cb, uint32_t ms)
-{
-    struct window *w = data;
-    wl_callback_destroy(cb);
-    w->vsync_cb = NULL;
-    send_msg(w->client, MSG_VSYNC, (int32_t[]){ w->id, (int32_t)ms }, 2);
-}
-static const struct wl_callback_listener vsync_listener = { .done = vsync_done };
-
-/* The app wants to know when the compositor shows the next frame (Android's requestNextVsync): ask for a frame
- * callback; an empty commit makes the compositor schedule one even if the app has nothing new to draw. */
-void window_vsync_request(struct window *w)
-{
-    if (w->vsync_cb || !w->surface || !w->configured) return;
-    w->vsync_cb = wl_surface_frame(w->surface);
-    wl_callback_add_listener(w->vsync_cb, &vsync_listener, w);
-    wl_surface_commit(w->surface);
+    vsync_source_changed();
 }
 
 void window_frame(struct window *w, int buf, const int32_t *damage)
