@@ -308,7 +308,8 @@ public class ShadowWindowManagerGlobal {
 
     protected void remove(Object[] args) {
       IWindow window = (IWindow) args[0];
-      windows.remove(window);
+      WindowInfo removed = windows.remove(window);
+      if (removed != null) removed.surface.close();
       // TODO: This transfers control to the last window, should there be another heuristic here?
       // TODO: Streams.findLast is not available in Android Guava yet.
       transferWindowInsetsControlTo(windows.values().stream().reduce((a, b) -> b).orElse(null));
@@ -321,20 +322,6 @@ public class ShadowWindowManagerGlobal {
         t.printStackTrace();
         throw t;
       }
-    }
-
-    // The window manager's job for the compositor: the window's layer at its frame, stacked by type and order of adding
-    // (base application windows below dialogs below sub-windows below system windows), visible.
-    private void placeLayer(SurfaceControl layer, WindowInfo windowInfo) {
-      if (layer == null || !layer.isValid()) return;
-      int type = windowInfo.attrs.type;
-      int z = type * 1000 + windowInfo.zOrder; // by window type first (base application < dialogs < sub-windows < system), then by order added
-      new SurfaceControl.Transaction()
-          .setPosition(layer, windowInfo.frame.left, windowInfo.frame.top)
-          .setLayerStack(layer, Integer.getInteger("apklayer.layerstack", 0)) // the app's own virtual display (bin/apklayer)
-          .setLayer(layer, z)
-          .show(layer)
-          .apply();
     }
 
     private int relayoutImpl(Object[] args) {
@@ -392,7 +379,7 @@ public class ShadowWindowManagerGlobal {
                     ? windowLayoutResult.insetsState
                     : findFirst(InsetsState.class, args))
                 : null);
-        placeLayer(layer, windowInfo);
+        windowInfo.surface.place(layer, windowInfo);
         if (System.getProperty("apklayer.tracewindows") != null) {
           System.err.println(
               "[apklayer] window "
@@ -411,6 +398,8 @@ public class ShadowWindowManagerGlobal {
                   + args[requestedSizeIdx + 1]
                   + " -> frame "
                   + windowInfo.frame.toShortString()
+                  + " surfaceInsets "
+                  + windowInfo.attrs.surfaceInsets.toShortString()
                   + " z "
                   + windowInfo.zOrder);
         }
@@ -449,6 +438,12 @@ public class ShadowWindowManagerGlobal {
           useRequestedSize && requestedSize != null && attrs.height != LayoutParams.MATCH_PARENT
               ? requestedSize.y
               : (attrs.height > 0 ? attrs.height : contentFrame.height());
+      // apklayer patch: return bounded frames so ViewRootImpl remeasures an
+      // oversized requested window against its display, including on resize.
+      if (useRequestedSize) {
+        width = Math.min(width, contentFrame.width());
+        height = Math.min(height, contentFrame.height());
+      }
       // TODO: Take account of parent frame for child windows.
       Gravity.apply(
           attrs.gravity,
@@ -709,6 +704,7 @@ public class ShadowWindowManagerGlobal {
   static int nextZOrder;
 
   static final class WindowInfo {
+    final WindowSurface surface = new WindowSurface();
     int zOrder;
     final Rect displayFrame = new Rect();
     final ClientWindowFrames frames;

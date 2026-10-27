@@ -82,3 +82,6 @@ virtual display sink). `W_TARGET`/`W_ID` route those messages; `window_attach_in
 
 ## Shared compositor vsync (2026-10-27)
 `bridge/shell/vsync.c` retains the existing Wayland frame callback method but serves pending clients from the active mapped window. A covered primary surface is not a clock: the compositor may withhold its callbacks indefinitely. Requests survive source changes, map/configure changes and client teardown; clients such as the native Choreographer need not own a separate toplevel. No timer or synthetic refresh is used.
+
+## Window container placement (2026-10-27)
+`runtime/patches/.../WindowSurface.java` supplies the window container that WMS normally parents a client-managed BLAST layer under. Position and stacking belong to that parent, because BLAST sets the child’s destination frame on every buffer. Position subtracts `LayoutParams.surfaceInsets`, following AOSP `WindowState.transformFrameToSurfacePosition`; removal destroys the container. `ShadowWindowManagerGlobal` clamps requested frames to the display so ViewRootImpl remeasures oversized windows. UiBench screenshot checks measure 16px margins on each side before/after resize.

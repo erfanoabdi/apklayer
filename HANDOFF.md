@@ -7,6 +7,8 @@ You continue a long-running project. Read, in this order: `CLAUDE.md` (rules, bi
 Then do the milestones below **in this order**, one at a time, committing at every step, updating `docs/PLAN.md` status and `memory.md` as you go. Do not stop between
 milestones; stop only for something only the user can do (an Android build in `~/los24`, see below) and say exactly what to build, then continue with other work meanwhile.
 
+Current progress (2026-10-27): A1 and A2 are verified and committed; continue with A3. See PLAN and memory for the timed-mutex, EGL lifetime, shared real-vsync and window-container fixes.
+
 ## What this is
 apklayer runs Android apps on a Linux desktop with real Android userspace and no emulator. The route that matters is the device-library route: the LineageOS 24 tree's
 arm64 libraries run under bionic_translation on kernel binderfs; real SurfaceFlinger, servicemanager, our own HALs (gralloc, HWC, permission, virtual display sink) and
