@@ -270,3 +270,20 @@ int bionic_pthread_mutexattr_getprotocol(const bionic_mutexattr_t *attr, int *pr
 ''' + anchor, 1)
     p.write_text(s)
 PY
+
+# 11. Android's fortified fread argument order differs from glibc. Reuse the
+#     existing Android fwrite wrapper with its overflow and buffer-size checks.
+python3 - "$bt" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1]) / 'libc/libc-chk.c'
+s = p.read_text()
+if 'bionic___fread_chk(' not in s:
+    a = s.index('size_t bionic___fwrite_chk(')
+    b = s.index('\n}\n', a) + 3
+    body = s[a:b].replace('bionic___fwrite_chk(const void *__restrict buf',
+                          'bionic___fread_chk(void *__restrict buf')
+    body = body.replace('fwrite', 'fread').replace('fread read overflow', 'fread write overflow')
+    s += '\n/* apklayer patch: Android fread fortify argument order. */\n' + body
+    p.write_text(s)
+PY

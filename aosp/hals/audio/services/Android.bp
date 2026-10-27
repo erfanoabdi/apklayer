@@ -1,0 +1,16 @@
+// Reuse original service implementations and the audioserver's startup ordering.
+cc_library_shared {
+    name: "libapklayer_audioserver",
+    defaults: [
+        "latest_android_hardware_audio_core_sounddose_ndk_shared",
+        "latest_android_media_audio_common_types_cpp_shared",
+        "libaudioflinger_dependencies",
+        "libaudiopolicyservice_dependencies",
+    ],
+    srcs: ["Service.cpp"],
+    static_libs: ["libaudioflinger", "libaudiopolicyservice"],
+    version_script: "exports.map",
+    allow_undefined_symbols: true,
+    compile_multilib: "64",
+    cflags: ["-Wall", "-Werror", "-Wno-main"],
+}

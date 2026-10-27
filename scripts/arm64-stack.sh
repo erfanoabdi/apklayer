@@ -28,6 +28,13 @@ if [ "${APKLAYER_AUDIO:-0}" = 1 ]; then
 else
     rm -f "$audio_manifest"
 fi
+effects_manifest="$N/android-root/vendor/etc/vintf/manifest/apklayer-audio-effects.xml"
+if [ "${APKLAYER_AUDIO_SERVICES:-0}" = 1 ]; then
+    mkdir -p "$(dirname "$effects_manifest")"
+    cp "$(dirname "$(readlink -f "$0")")/../aosp/hals/audio/effects-manifest.xml" "$effects_manifest"
+else
+    rm -f "$effects_manifest"
+fi
 rm -rf "$XDG_RUNTIME_DIR/apklayer/$APKLAYER_INSTANCE"
 "$N/bin/aprop" load "$HOME/apklayer-m1/bridge/native/apklayer.prop" "$N/android-root/props/system_build.prop" 2> "$LOGS/aprop.log"
 # Android init normally creates this directory and announces it to RenderEngine.
@@ -60,6 +67,10 @@ if [ "${APKLAYER_MEDIA_SERVICES:-0}" = 1 ]; then
 fi
 if [ "${APKLAYER_AUDIO:-0}" = 1 ]; then
     svc audio libapklayer_audio.so "$HOME/apklayer-m1/aosp/hals/audio/audio_policy_configuration.xml"
+fi
+if [ "${APKLAYER_AUDIO_SERVICES:-0}" = 1 ]; then
+    svc audio-effects libapklayer_audio.so --effects "$HOME/apklayer-m1/aosp/hals/audio/audio_effects_config.xml"
+    svc audio-services libapklayer_audioserver.so
 fi
 svc surfaceflinger libapklayer_surfaceflinger.so
 tool="${1:-libapklayer_sftest.so}"; [ $# -gt 0 ] && shift

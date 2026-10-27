@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- No effect plugins are staged yet. Original Factory reports an empty catalog. -->
+<audio_effects_conf version="2.0">
+    <libraries/>
+    <effects/>
+</audio_effects_conf>

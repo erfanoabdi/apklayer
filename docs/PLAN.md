@@ -593,6 +593,8 @@ rendering end to end, real input through the shell's input proxy, dialogs stacke
 
    Native AIDL audio output verified (2026-10-27): original AOSP Module/Config/Stream/FMQ worker with own PipeWire driver, real binder port/patch/stream setup and monitor-captured stereo PCM. Presentation/drain, standby/close and pause/flush/replay (lifetime epoch 50880) pass tests/vm/audio-aidl.sh. Hardware master controls and unsupported modes return errors. Unprivileged transfer worker uses normal priority while PipeWire schedules audio. BT translates genuine mutex priority-inheritance attributes. Opt-in only; actual AudioFlinger/AudioPolicy and app native audio/MediaPlayer remain next.
 
+   Original AudioFlinger/AudioPolicy startup verified (2026-10-27): reuse original service archives, AIDL adapter, default policy engine, effect factory with no staged effect plugins, and original volume XML. Native binder route probe returns 48k/960 frames/45ms. Standalone native activity/privacy clients return actual service absence instead of waiting for system_server. Checked fread ABI fixed for real XML parsing. AudioTrack sample playback and app JNI remain next.
+
    **Bluetooth** after camera: Robolectric-style shadows of `android.bluetooth.*` over a host daemon speaking D-Bus to BlueZ (not Android's own stack: it needs
    system_server's services and an exclusive controller), scoped by what the corpus apps actually call (BLE scan, GATT client/server and advertising first; then RFCOMM/L2CAP
    sockets; audio profiles through PipeWire), with a compatibility table of every API and its status; unimplemented calls return real errors. Developed against

@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstring>
 int audioProbe();
+int audioEffects(const char*);
 
 namespace aidl::android::hardware::audio::core {
 class PipeWireModule final : public Module {
@@ -40,6 +41,7 @@ class PipeWireModule final : public Module {
 }
 extern "C" int main(int argc, char** argv) {
     using namespace aidl::android::hardware::audio::core;
+    if (argc == 3 && !std::strcmp(argv[1], "--effects")) return audioEffects(argv[2]);
     if (argc == 2 && !std::strcmp(argv[1], "--probe")) return audioProbe();
     if (argc != 2) { fprintf(stderr, "usage: audio-hal policy.xml\n"); return 2; }
     internal::AudioPolicyConfigXmlConverter converter(argv[1]);

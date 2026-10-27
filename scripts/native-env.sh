@@ -19,3 +19,6 @@ native_java() {
     done
     command -v java
 }
+
+# system_server services remain in the JVM; native clients use their existing unavailable-service fallbacks.
+export APKLAYER_NO_SYSTEM_SERVER="${APKLAYER_NO_SYSTEM_SERVER:-1}"

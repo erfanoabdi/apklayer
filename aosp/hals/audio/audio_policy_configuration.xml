@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<audioPolicyConfiguration version="7.0">
+<audioPolicyConfiguration version="7.0" xmlns:xi="http://www.w3.org/2001/XInclude">
     <globalConfiguration speaker_drc_enabled="false"/>
     <modules>
         <module name="primary" halVersion="3.0">
@@ -20,4 +20,6 @@
             <routes><route type="mix" sink="Host Output" sources="primary output"/></routes>
         </module>
     </modules>
+    <xi:include href="/vendor/etc/audio_policy_volumes.xml"/>
+    <xi:include href="/vendor/etc/default_volume_tables.xml"/>
 </audioPolicyConfiguration>
