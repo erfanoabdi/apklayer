@@ -595,6 +595,8 @@ rendering end to end, real input through the shell's input proxy, dialogs stacke
 
    Original AudioFlinger/AudioPolicy startup verified (2026-10-27): reuse original service archives, AIDL adapter, default policy engine, effect factory with no staged effect plugins, and original volume XML. Native binder route probe returns 48k/960 frames/45ms. Standalone native activity/privacy clients return actual service absence instead of waiting for system_server. Checked fread ABI fixed for real XML parsing. AudioTrack sample playback and app JNI remain next.
 
+   Native AudioTrack playback verified (2026-10-27): real PID/UID/Binder attribution, original AudioFlinger mixed track, stream volume setup, blocking PCM writes, marker callback, presentation timestamp and stop/flush/release. Isolated PipeWire monitor verifies both channel frequencies and all 48k tone frames (47760 nonzero including zero crossings). Actual silence frames retain the graph through presentation; completion uses the callback, no delay. tests/vm/audio-track.sh passes. Java AudioTrack/MediaPlayer JNI and attribution Parcel integration remain next.
+
    **Bluetooth** after camera: Robolectric-style shadows of `android.bluetooth.*` over a host daemon speaking D-Bus to BlueZ (not Android's own stack: it needs
    system_server's services and an exclusive controller), scoped by what the corpus apps actually call (BLE scan, GATT client/server and advertising first; then RFCOMM/L2CAP
    sockets; audio profiles through PipeWire), with a compatibility table of every API and its status; unimplemented calls return real errors. Developed against

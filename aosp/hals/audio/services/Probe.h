@@ -3,8 +3,9 @@
 #include <binder/IServiceManager.h>
 #include <media/AudioSystem.h>
 #include <cstdio>
+#include "TrackProbe.h"
 
-inline int audioServicesProbe() {
+inline int audioServicesProbe(bool playback = false) {
     using namespace android;
     setvbuf(stdout, nullptr, _IOLBF, 0);
     auto manager = defaultServiceManager();
@@ -17,5 +18,5 @@ inline int audioServicesProbe() {
     CHECK(AudioSystem::getOutputLatency(&latency, AUDIO_STREAM_MUSIC) == OK);
     CHECK(rate == 48000 && frames > 0);
     printf("PASS original audio services route rate=%u frames=%zu latency=%u\n", rate, frames, latency);
-    return 0;
+    return playback ? audioTrackProbe() : 0;
 }

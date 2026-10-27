@@ -12,7 +12,8 @@ import time
 
 os.chdir(Path.home() / 'apklayer-m1')
 env = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000')
-aidl = sys.argv[1:] == ['aidl']
+system = sys.argv[1:] == ['system']
+aidl = system or sys.argv[1:] == ['aidl']
 mono = sys.argv[1:] == ['mono']
 name = 'apklayer_audio_test_' + str(os.getpid())
 module = subprocess.check_output(['pactl', 'load-module', 'module-null-sink',
@@ -45,6 +46,9 @@ try:
                         if aidl:
                             env.update(APKLAYER_AUDIO_TARGET=name, APKLAYER_AUDIO='1')
                             producer_command = ['scripts/arm64-stack.sh', 'libapklayer_audio.so', '--probe']
+                            if system:
+                                env['APKLAYER_AUDIO_SERVICES'] = '1'
+                                producer_command = ['scripts/arm64-stack.sh', 'libapklayer_audioserver.so', '--track']
                         producer = subprocess.Popen(producer_command, env=env,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
                         events.register(producer.stdout, selectors.EVENT_READ)
@@ -75,8 +79,8 @@ try:
     active = sum(abs(l) + abs(r) > 100 for l, r in zip(left, right))
     if aidl:
         log = Path('/tmp/apklayer-stack/tool.log').read_text(errors='replace')
-        print('\n'.join(line for line in log.splitlines() if line.startswith(('audio:', 'PASS audio'))), flush=True)
-        assert 'PASS audio remote AIDL/FMQ' in log, 'AIDL PCM probe did not finish'
+        print('\n'.join(line for line in log.splitlines() if line.startswith(('audio:', 'PASS audio', 'PASS original'))), flush=True)
+        assert ('PASS original AudioTrack' if system else 'PASS audio remote AIDL/FMQ') in log, 'native PCM probe did not finish'
     assert active > (47500 if aidl else 52000), f'PCM missing: {active} non-silent frames'
     print(f'PASS monitor captured {"F32 mono 440" if mono else "S16 stereo 440/880"} Hz PCM, {active} non-silent frames', flush=True)
 finally:
@@ -90,6 +94,6 @@ finally:
             if stream is not None: stream.close()
     if aidl:
         subprocess.run(['bin/apklayer', 'stop'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for manifest in ('apklayer-audio.xml',):
+        for manifest in ('apklayer-audio.xml', 'apklayer-audio-effects.xml'):
             (Path.home() / 'arm64-native/android-root/vendor/etc/vintf/manifest' / manifest).unlink(missing_ok=True)
     subprocess.run(['pactl', 'unload-module', module], env=env, check=True)
