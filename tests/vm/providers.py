@@ -25,7 +25,7 @@ stop()
 proc = None
 lines = []
 try:
-    package = {'basic': 'hello.cpclient', 'death': 'hello.cpclient', 'denied': 'hello.cpdenied'}[PHASE]
+    package = {'basic': 'hello.cpclient', 'death': 'hello.cpclient', 'observe': 'hello.cpclient', 'denied': 'hello.cpdenied'}[PHASE]
     env = dict(ENV, APKLAYER_JOPTS=BASE + ' -Dhello.cp=' + PHASE)
     proc = subprocess.Popen(['bin/apklayer', 'run', package], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
     end = time.monotonic() + 45

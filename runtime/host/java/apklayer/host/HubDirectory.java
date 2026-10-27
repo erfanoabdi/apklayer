@@ -35,6 +35,7 @@ final class HubDirectory extends Binder {
             }
         }, "hub-component-cleanup"));
     }
+    java.util.List<Peer> peersExcept(Peer one) { synchronized (peers) { return peers.values().stream().filter(peer -> peer != one).toList(); } }
     Peer peerByPid(int pid) { synchronized (peers) { return peers.get(pid); } }
     Peer peer(String name) {
         synchronized (peers) { return peers.values().stream().filter(peer -> peer.name.equals(name)).findFirst().orElse(null); }
@@ -148,6 +149,11 @@ final class HubDirectory extends Binder {
                 for (var info : list) { reply.writeString(info.authority); reply.writeString(info.packageName);
                     reply.writeString(info.readPermission); reply.writeString(info.writePermission); }
                 return true;
+            }
+            case HubProtocol.NOTIFY_CHANGE -> {
+                Peer caller = caller(); android.net.Uri uri = request.readTypedObject(android.net.Uri.CREATOR); int changeFlags = request.readInt(); request.enforceNoDataAvail();
+                providers.notifyChange(caller, uri, changeFlags);
+                reply.writeNoException(); return true;
             }
             case HubProtocol.GET_PROVIDER -> {
                 Peer caller = caller(); String authority = request.readString(); request.enforceNoDataAvail();

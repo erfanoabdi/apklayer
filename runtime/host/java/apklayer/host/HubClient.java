@@ -45,6 +45,9 @@ public final class HubClient {
     }
 
     /** What the hub says about a process (a caller's pid): whether its package holds the permission. */
+    void notifyChange(android.net.Uri uri, int flags) {
+        HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.NOTIFY_CHANGE, request -> { request.writeTypedObject(uri, 0); request.writeInt(flags); }, reply -> null);
+    }
     int checkPermission(int pid, String permission) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CHECK_PERMISSION, request -> { request.writeInt(pid); request.writeString(permission); }, reply -> reply.readInt());
     }

@@ -56,6 +56,11 @@ final class HubEndpoint extends Binder {
             });
             reply.writeNoException(); return true;
         }
+        if (code == HubProtocol.ENDPOINT_NOTIFY) {
+            android.net.Uri uri = request.readTypedObject(android.net.Uri.CREATOR); int changeFlags = request.readInt(); request.enforceNoDataAvail();
+            main.post(() -> ShadowHostContentResolver.deliver(context, uri, changeFlags));
+            reply.writeNoException(); return true;
+        }
         if (code == HubProtocol.ENDPOINT_GET_PROVIDER) {
             String authority = request.readString(); request.enforceNoDataAvail();
             android.content.ContentProvider provider = org.robolectric.shadows.ShadowContentResolver.getProvider(android.net.Uri.parse("content://" + authority));

@@ -77,6 +77,17 @@ public class Main extends Activity {
                 catch (SecurityException expected) { System.out.println("[cpc] write refused: " + expected.getMessage()); }
                 System.out.println("[cpc] PASS denied: read and write permissions enforced by the provider");
             }
+            case "observe" -> {
+                java.util.concurrent.CountDownLatch changed = new java.util.concurrent.CountDownLatch(1);
+                resolver.registerContentObserver(ITEMS, true, new android.database.ContentObserver(new android.os.Handler(android.os.Looper.getMainLooper())) {
+                    @Override public void onChange(boolean self, Uri uri) { System.out.println("[cpc] observer " + uri); changed.countDown(); }
+                });
+                ContentValues values = new ContentValues();
+                values.put("name", "delta");
+                new Thread(() -> resolver.insert(ITEMS, values)).start();
+                require(changed.await(10, java.util.concurrent.TimeUnit.SECONDS), "no change notification from the provider's app");
+                System.out.println("[cpc] PASS observe: notifyChange in the provider's app reached this app's observer");
+            }
             case "death" -> {
                 Bundle first = resolver.call(ITEMS, "ping", "a", null);
                 int pid = first.getInt("pid");

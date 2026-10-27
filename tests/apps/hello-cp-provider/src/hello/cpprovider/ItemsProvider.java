@@ -28,7 +28,10 @@ public class ItemsProvider extends ContentProvider {
     @Override public String getType(Uri uri) { return "vnd.android.cursor.dir/vnd.hello.item"; }
 
     @Override public Uri insert(Uri uri, ContentValues values) {
-        synchronized (ITEMS) { ITEMS.add(values.getAsString("name")); return ContentUris.withAppendedId(uri, ITEMS.size()); }
+        Uri added;
+        synchronized (ITEMS) { ITEMS.add(values.getAsString("name")); added = ContentUris.withAppendedId(uri, ITEMS.size()); }
+        getContext().getContentResolver().notifyChange(uri, null);
+        return added;
     }
 
     @Override public int delete(Uri uri, String selection, String[] args) {

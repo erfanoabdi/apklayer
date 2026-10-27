@@ -27,6 +27,15 @@ final class HubProviders {
                 reply -> reply.readStrongBinder());
     }
 
+    /** A content change, told to every other app that is running: each has its own observers, registered in its ContentResolver. */
+    void notifyChange(HubDirectory.Peer caller, android.net.Uri uri, int flags) {
+        for (HubDirectory.Peer peer : directory.peersExcept(caller)) {
+            try {
+                HubProtocol.call(peer.endpoint(), HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_NOTIFY, request -> { request.writeTypedObject(uri, 0); request.writeInt(flags); }, reply -> null);
+            } catch (RuntimeException gone) { System.out.println("[apklayer-hub] cannot notify " + peer.name() + ": " + gone); }
+        }
+    }
+
     /** Whether the process (a pid that registered with the hub) holds the permission: what a provider in another app asks about its caller. */
     int check(int pid, String permission) {
         HubDirectory.Peer peer = directory.peerByPid(pid);
