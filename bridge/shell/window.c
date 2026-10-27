@@ -21,6 +21,15 @@ struct window *window_find(struct client *c, int id)
     return NULL;
 }
 
+struct window *window_find_input(struct client *c, int id)
+{
+    struct window *own = window_find(c, id);
+    if (own) return own;
+    for (int i = 0; i < MAX_WINDOWS; i++)
+        if (windows[i].proxy == c && windows[i].proxy_id == id) return &windows[i];
+    return NULL;
+}
+
 static void buffer_release(void *data, struct wl_buffer *b)
 {
     struct window *w = data;
@@ -245,6 +254,7 @@ void window_attach_input(struct client *c, int own_id, const char *title)
         if (!w->client || w->client == c || strcmp(w->title, title) != 0) continue;
         w->proxy = c;
         w->proxy_id = own_id;
+        clipboard_push(w);
         fprintf(stderr, "[shell] %s takes the input of window \"%s\" (as its window %d)\n", c->pkg, title, own_id);
         if (w->configured) {  // its size, scale and state, now that someone listens
             int32_t v[4] = { own_id, w->w * 100 / w->scale, w->h * 100 / w->scale, output_scale };
@@ -260,12 +270,16 @@ void window_attach_input(struct client *c, int own_id, const char *title)
 void window_drop_proxy(struct client *c)
 {
     for (int i = 0; i < MAX_WINDOWS; i++)
-        if (windows[i].proxy == c) { windows[i].proxy = NULL; windows[i].proxy_id = 0; }
+        if (windows[i].proxy == c) {
+            text_input_forget_window(&windows[i]);
+            windows[i].proxy = NULL; windows[i].proxy_id = 0;
+        }
 }
 
 void window_destroy(struct window *w)
 {
     pointer_forget_window(w);
+    text_input_forget_window(w);
     if (keyboard_focus == w) keyboard_focus = NULL;
     for (int i = 0; i < NBUF; i++) if (w->buffers[i]) wl_buffer_destroy(w->buffers[i]);
     if (w->initial_buffer) wl_buffer_destroy(w->initial_buffer);

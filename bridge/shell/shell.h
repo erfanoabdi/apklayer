@@ -83,6 +83,8 @@ enum { EV_DOWN = 0, EV_UP = 1, EV_MOVE = 2, EV_HOVER = 3, EV_SECONDARY = 4, EV_K
 struct client {
     int fd, pid;
     char pkg[128];
+    size_t last_clipboard_len;
+    char *last_clipboard; /* per receiving JVM; focus changes must not suppress delivery */
     uint8_t rx[65536];
     size_t rx_len;
     int fds[CLIENT_MAX_FDS];   /* fds received with SCM_RIGHTS, consumed in order by the messages that declare them */
@@ -97,6 +99,7 @@ struct window {
     int told_scale;             /* scale last announced to the app */
     int cfg_w, cfg_h;           /* latest logical content size requested by the compositor, 0 = none */
     int maximized, activated;   /* xdg toplevel states */
+    int text_input_enabled;
     int minimized;              /* set by our Minimize button, cleared when the window is activated again */
     struct decor decor;         /* title bar subsurface */
     int last_click_ms;          /* double click on the title bar = maximize */
@@ -147,11 +150,16 @@ extern long long repeat_next_ms;
 /* ---- functions shared between the modules ---- */
 void send_state(struct window *w);  /* window.c */
 void send_bytes(struct client *c, uint32_t type, const char *data, size_t len);  /* client.c */
-void text_input_enable(struct window *w, int enable);  /* textinput.c */
+void text_input_enable(struct window *w, int enable);
+void text_input_forget_window(struct window *w);  /* textinput.c */
 void clipboard_init(void);
 extern const struct wl_touch_listener touch_listener;  /* touch.c */  /* clipboard.c */
 void clipboard_push(struct window *w);  /* clipboard.c */
-void clipboard_set(const char *text, size_t len);  /* clipboard.c */
+#define CLIPBOARD_FDS 9 /* one incoming transfer, up to eight outgoing readers */
+void clipboard_set(struct client *c, const char *text, size_t len);
+void clipboard_client_drop(struct client *c);
+void clipboard_pollfds(struct pollfd *p);
+void clipboard_dispatch(struct pollfd *p);  /* clipboard.c */
 void send_msg(struct client *c, uint32_t type, const int32_t *v, int n);  /* client.c */
 void send_input(struct window *w, int32_t type, int32_t a, int32_t b);  /* client.c */
 void client_read(struct client *c);  /* client.c */
@@ -159,7 +167,8 @@ uint32_t kb_android_meta(void);  /* keyboard.c */
 long long now_ms(void);  /* keyboard.c */
 void key_event(uint32_t evdev, int down);  /* keyboard.c */
 struct window *window_for_surface(struct wl_surface *s);  /* window.c */
-struct window *window_find(struct client *c, int id);  /* window.c */
+struct window *window_find(struct client *c, int id);
+struct window *window_find_input(struct client *c, int id);  /* window.c */
 void window_layout(struct window *w);  /* window.c */
 void pointer_forget_window(struct window *w); /* pointer.c: also clear title-bar hover on destroy */
 void window_create(struct client *c, int id, int width, int height, const char *path, const char *title);  /* window.c */

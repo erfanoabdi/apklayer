@@ -6,7 +6,7 @@ import sys
 from PIL import Image
 
 
-def headers(filename, count=2, maximize=False):
+def headers(filename, count=2, maximize=False, content_y=None):
     im = Image.open(filename).convert('RGB')
     px = im.load()
     found = []
@@ -26,26 +26,27 @@ def headers(filename, count=2, maximize=False):
     # avoids relying on Alt-Tab state or fixed desktop window coordinates.
     found.sort(key=lambda r: r[1], reverse=True)
     return [[round((right - 60 if maximize else (left + right) / 2) * 1000 / im.width),
-             round((top + 16) * 1000 / im.height)] for left, top, right in found]
+             round((top + 16 if content_y is None else top + 32 + content_y) * 1000 / im.height)] for left, top, right in found]
 
 
-proc = subprocess.Popen(['sshpass', '-p', sys.argv[2], 'ssh', '-o', 'StrictHostKeyChecking=no',
-                         sys.argv[1], 'cd ~/apklayer-m1; python3 -u tests/vm/multi-app.py'],
-                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
-capture = 0
-try:
-    for line in proc.stdout:
-        print(line, end='', flush=True)
-        if line.startswith(('LOCATE ', 'CAPTURE ', 'RESIZE ')):
-            capture += 1
-            path = f'/tmp/apklayer-multi-app-{capture}.png'
-            subprocess.run(['prlctl', 'capture', 'Ubuntu 24.04 (with Rosetta)', '--file', path], check=True)
-            if line.startswith(('LOCATE ', 'RESIZE ')):
-                points = headers(path, 1, True) if line.startswith('RESIZE ') else headers(path)
-                proc.stdin.write(json.dumps(points) + '\n')
-                proc.stdin.flush()
-    sys.exit(proc.wait())
-finally:
-    proc.stdin.close()
-    if proc.poll() is None:
-        proc.wait(timeout=3)
+if __name__ == '__main__':
+    proc = subprocess.Popen(['sshpass', '-p', sys.argv[2], 'ssh', '-o', 'StrictHostKeyChecking=no',
+                             sys.argv[1], 'cd ~/apklayer-m1; python3 -u tests/vm/multi-app.py'],
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    capture = 0
+    try:
+        for line in proc.stdout:
+            print(line, end='', flush=True)
+            if line.startswith(('LOCATE ', 'CAPTURE ', 'RESIZE ')):
+                capture += 1
+                path = f'/tmp/apklayer-multi-app-{capture}.png'
+                subprocess.run(['prlctl', 'capture', 'Ubuntu 24.04 (with Rosetta)', '--file', path], check=True)
+                if line.startswith(('LOCATE ', 'RESIZE ')):
+                    points = headers(path, 1, True) if line.startswith('RESIZE ') else headers(path)
+                    proc.stdin.write(json.dumps(points) + '\n')
+                    proc.stdin.flush()
+        sys.exit(proc.wait())
+    finally:
+        proc.stdin.close()
+        if proc.poll() is None:
+            proc.wait(timeout=3)

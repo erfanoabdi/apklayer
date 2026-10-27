@@ -42,6 +42,7 @@ void send_input(struct window *w, int32_t type, int32_t a, int32_t b)
 static void client_drop(struct client *c)
 {
     client_vsync_forget(c);
+    clipboard_client_drop(c);
     window_drop_proxy(c);
     for (int i = 0; i < MAX_WINDOWS; i++)
         if (windows[i].client == c) window_destroy(&windows[i]);
@@ -81,7 +82,7 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         }
         break;
     case MSG_TEXT_INPUT: {
-        struct window *w = len >= 8 ? window_find(c, v[0]) : NULL;
+        struct window *w = len >= 8 ? window_find_input(c, v[0]) : NULL;
         if (w) text_input_enable(w, v[1]);
         break;
     }
@@ -100,7 +101,7 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         break;
     }
     case MSG_CLIPBOARD_SET:
-        clipboard_set((const char *)p, len);
+        clipboard_set(c, (const char *)p, len);
         break;
     case MSG_FRAME: {
         struct window *w = len >= 24 ? window_find(c, v[0]) : NULL;

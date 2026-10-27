@@ -91,3 +91,6 @@ The composer uses `apklayer_display_open_headless`: HELLO/output-refresh/vsync m
 
 ## Concurrent app windows (2026-10-27)
 `bin/apklayer` serializes service startup with flock and uses `scripts/wait-ready.py` (inotify + pidfd) instead of readiness polling. Per-launch PID ids replace truncated package hashes for layer stacks; display names include launch and instance before the package, and logs are distinct per sink. `pointer_forget_window` clears title hover before teardown so a queued leave cannot redraw a destroyed surface. Two GPU JVMs, focus, independent close and survivor resize are covered by the multi-app VM regression.
+
+## Proxied IME and clipboard (2026-10-27)
+Shell text-input enable resolves proxy ids and keeps per-window state; compositor enter/leave controls the active field and W_TARGET/W_ID route preedit and commit. Clipboard pipes join the existing poll loop, keeping source text snapshots and echo caches per client; this avoids deadlocking when two JVMs share the shell. ShellClient fills its ByteBuffer before sending clipboard text. The tree ShadowKeyCharacterMap overlay reuses upstream code and suppresses characters under Ctrl/Alt/Meta, matching AOSP modifier matching so Android shortcuts reach EditText. Real Wayland/IBus/uinput coverage lives in tests/vm/input.sh.

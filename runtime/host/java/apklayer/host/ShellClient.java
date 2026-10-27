@@ -150,7 +150,8 @@ final class ShellClient {
     /** The app copied text: the shell becomes the selection owner. */
     void sendClipboard(String text) {
         try {
-            send(CLIPBOARD_SET, ByteBuffer.wrap(text.getBytes(StandardCharsets.UTF_8)));
+            byte[] utf8 = text.getBytes(StandardCharsets.UTF_8);
+            send(CLIPBOARD_SET, buf(utf8.length).put(utf8));
         } catch (IOException e) {
             System.out.println("[apklayer] clipboard send failed: " + e);
         }

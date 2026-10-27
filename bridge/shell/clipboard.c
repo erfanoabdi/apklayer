@@ -9,8 +9,10 @@ uint32_t last_input_serial;     /* serial of the last key/button event, needed f
 static struct wl_data_device *data_dev;
 static struct wl_data_offer *cur_offer;      /* current selection of another client, or NULL */
 static struct wl_data_source *our_source;    /* our selection (the app copied something) */
-static char *our_text;
-static char *last_pushed;                    /* last text sent to an app, to avoid echo loops */
+struct source_text { char *text; size_t len; };
+static struct { int fd; struct client *target; int pid; size_t len; char text[MAX_CLIP + 1]; }
+    incoming = { .fd = -1 };
+static struct { int fd; char *text; size_t len, offset; } outgoing[CLIPBOARD_FDS - 1];
 
 struct offer_info { int text; };             /* user data of every wl_data_offer */
 
@@ -30,49 +32,94 @@ static void dd_data_offer(void *d, struct wl_data_device *dev, struct wl_data_of
     wl_data_offer_add_listener(o, &offer_listener, info);
 }
 
-/* Reads the offered text through a pipe (bounded wait: the other client writes asynchronously). */
-static char *read_offer(struct wl_data_offer *offer, size_t *len)
-{
-    int fds[2];
-    if (pipe2(fds, O_CLOEXEC) < 0) return NULL;
-    wl_data_offer_receive(offer, "text/plain;charset=utf-8", fds[1]);
-    wl_display_flush(display);
-    close(fds[1]);
-    char *buf = malloc(MAX_CLIP + 1);
-    size_t n = 0;
-    if (buf) {
-        for (;;) {
-            struct pollfd p = { .fd = fds[0], .events = POLLIN };
-            if (poll(&p, 1, 300) <= 0) break;
-            ssize_t r = read(fds[0], buf + n, MAX_CLIP - n);
-            if (r <= 0) break;
-            n += (size_t)r;
-            if (n >= MAX_CLIP) break;
-        }
-        buf[n] = 0;
-    }
-    close(fds[0]);
-    *len = n;
-    return buf;
+/* Selection reads and writes share the main event loop. Blocking here would
+ * deadlock when the offered text is owned by another app in this same shell. */
+static void cancel_read(void) {
+    if (incoming.fd >= 0) close(incoming.fd);
+    incoming.fd = -1;
+    incoming.target = NULL;
 }
 
-/* Sends the current selection to the app that owns w, unless it is what we sent last. */
+static void remember(struct client *c, const char *text, size_t len)
+{
+    free(c->last_clipboard);
+    c->last_clipboard = malloc(len + 1);
+    c->last_clipboard_len = len;
+    if (c->last_clipboard) {
+        memcpy(c->last_clipboard, text, len);
+        c->last_clipboard[len] = 0;
+    }
+}
+
+void clipboard_client_drop(struct client *c)
+{
+    if (incoming.target == c) cancel_read();
+    free(c->last_clipboard);
+    c->last_clipboard = NULL;
+}
+
 void clipboard_push(struct window *w)
 {
-    if (!w || !cur_offer || !((struct offer_info *)wl_data_offer_get_user_data(cur_offer))->text) return;
-    size_t n;
-    char *text = read_offer(cur_offer, &n);
-    if (text && n > 0 && (!last_pushed || strcmp(last_pushed, text))) {
-        send_bytes(w->client, MSG_CLIPBOARD, text, n);
-        free(last_pushed);
-        last_pushed = strdup(text);
+    if (!w || !cur_offer) return;
+    struct offer_info *info = wl_data_offer_get_user_data(cur_offer);
+    if (!info || !info->text) return;
+    int fds[2];
+    if (pipe2(fds, O_CLOEXEC) < 0) return;
+    fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL) | O_NONBLOCK);
+    cancel_read();
+    incoming.fd = fds[0];
+    incoming.target = W_TARGET(w);
+    incoming.pid = incoming.target->pid;
+    incoming.len = 0;
+    wl_data_offer_receive(cur_offer, "text/plain;charset=utf-8", fds[1]);
+    close(fds[1]);
+    wl_display_flush(display);
+}
+
+void clipboard_pollfds(struct pollfd *p)
+{
+    p[0] = (struct pollfd){ .fd = incoming.fd, .events = POLLIN };
+    for (int i = 0; i < CLIPBOARD_FDS - 1; i++)
+        p[i + 1] = (struct pollfd){ .fd = outgoing[i].text ? outgoing[i].fd : -1, .events = POLLOUT };
+}
+
+void clipboard_dispatch(struct pollfd *p)
+{
+    if (incoming.fd >= 0 && p[0].fd == incoming.fd && p[0].revents) {
+        ssize_t n = read(incoming.fd, incoming.text + incoming.len,
+                         incoming.len < MAX_CLIP ? MAX_CLIP - incoming.len : 0);
+        if (n > 0) incoming.len += (size_t)n;
+        if (n == 0 || incoming.len == MAX_CLIP) {
+            struct client *c = incoming.target;
+            incoming.text[incoming.len] = 0;
+            if (c && c->fd >= 0 && c->pid == incoming.pid &&
+                (!c->last_clipboard || c->last_clipboard_len != incoming.len ||
+                 memcmp(c->last_clipboard, incoming.text, incoming.len))) {
+                send_bytes(c, MSG_CLIPBOARD, incoming.text, incoming.len);
+                remember(c, incoming.text, incoming.len);
+            }
+            cancel_read();
+        } else if (n < 0 && errno != EAGAIN && errno != EINTR) cancel_read();
     }
-    free(text);
+    for (int i = 0; i < CLIPBOARD_FDS - 1; i++) {
+        if (!outgoing[i].text || p[i + 1].fd != outgoing[i].fd || !p[i + 1].revents) continue;
+        ssize_t n = write(outgoing[i].fd, outgoing[i].text + outgoing[i].offset,
+                          outgoing[i].len - outgoing[i].offset);
+        if (n > 0) outgoing[i].offset += (size_t)n;
+        if (outgoing[i].offset == outgoing[i].len ||
+            (n < 0 && errno != EAGAIN && errno != EINTR)) {
+            close(outgoing[i].fd);
+            free(outgoing[i].text);
+            outgoing[i].text = NULL;
+        }
+    }
 }
 
 static void dd_selection(void *d, struct wl_data_device *dev, struct wl_data_offer *o)
 {
     (void)d; (void)dev;
+    if (o == cur_offer) return;
+    cancel_read();
     if (cur_offer) {
         free(wl_data_offer_get_user_data(cur_offer));
         wl_data_offer_destroy(cur_offer);
@@ -98,23 +145,33 @@ static const struct wl_data_device_listener dd_listener = {
 static void src_target(void *d, struct wl_data_source *s, const char *m) { (void)d; (void)s; (void)m; }
 static void src_send(void *d, struct wl_data_source *s, const char *mime, int32_t fd)
 {
-    (void)d; (void)s; (void)mime;
-    if (our_text) {
-        size_t left = strlen(our_text), off = 0;
-        while (left > 0) {
-            ssize_t w = write(fd, our_text + off, left);
-            if (w <= 0) break;
-            off += (size_t)w;
-            left -= (size_t)w;
-        }
+    (void)s; (void)mime;
+    struct source_text *text = d;
+    for (int i = 0; i < CLIPBOARD_FDS - 1; i++) {
+        if (outgoing[i].text) continue;
+        outgoing[i].text = malloc(text->len);
+        if (!outgoing[i].text) { close(fd); return; }
+        memcpy(outgoing[i].text, text->text, text->len);
+        outgoing[i].len = text->len;
+        outgoing[i].offset = 0;
+        outgoing[i].fd = fd;
+        fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+        return;
     }
     close(fd);
+}
+static void source_destroy(struct wl_data_source *s)
+{
+    struct source_text *text = wl_data_source_get_user_data(s);
+    free(text->text);
+    free(text);
+    wl_data_source_destroy(s);
 }
 static void src_cancelled(void *d, struct wl_data_source *s)
 {
     (void)d;
     if (s == our_source) our_source = NULL;
-    wl_data_source_destroy(s);
+    source_destroy(s);
 }
 static void src_dnd_drop(void *d, struct wl_data_source *s) { (void)d; (void)s; }
 static void src_dnd_finished(void *d, struct wl_data_source *s) { (void)d; (void)s; }
@@ -124,21 +181,26 @@ static const struct wl_data_source_listener src_listener = {
     .dnd_drop_performed = src_dnd_drop, .dnd_finished = src_dnd_finished, .action = src_action };
 
 /* The app copied text: become the selection owner. */
-void clipboard_set(const char *text, size_t len)
+void clipboard_set(struct client *c, const char *text, size_t len)
 {
     if (!data_dev || !data_mgr || len == 0) return;
-    if (our_text && strlen(our_text) == len && !memcmp(our_text, text, len)) return;
-    free(our_text);
-    our_text = strndup(text, len);
-    free(last_pushed);
-    last_pushed = strdup(our_text); /* the compositor may echo our own selection back */
+    remember(c, text, len); /* suppress an echo to the source JVM only */
+    struct source_text *old = our_source ? wl_data_source_get_user_data(our_source) : NULL;
+    if (old && old->len == len && !memcmp(old->text, text, len)) return;
+    struct source_text *snapshot = calloc(1, sizeof *snapshot);
+    if (!snapshot) return;
+    snapshot->text = malloc(len + 1);
+    if (!snapshot->text) { free(snapshot); return; }
+    memcpy(snapshot->text, text, len);
+    snapshot->text[len] = 0;
+    snapshot->len = len;
     struct wl_data_source *src = wl_data_device_manager_create_data_source(data_mgr);
-    wl_data_source_add_listener(src, &src_listener, NULL);
+    wl_data_source_add_listener(src, &src_listener, snapshot);
     wl_data_source_offer(src, "text/plain;charset=utf-8");
     wl_data_source_offer(src, "text/plain");
     wl_data_source_offer(src, "UTF8_STRING");
     wl_data_device_set_selection(data_dev, src, last_input_serial);
-    if (our_source) wl_data_source_destroy(our_source);
+    if (our_source) source_destroy(our_source);
     our_source = src;
     if (debug_input) fprintf(stderr, "[shell] clipboard set from app (%zu bytes)\n", len);
 }
