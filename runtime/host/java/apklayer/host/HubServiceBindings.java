@@ -17,11 +17,12 @@ final class HubServiceBindings {
     private static final class Binding {
         final HubDirectory.Peer caller;
         final Intent intent;
+        final String key;
         final IServiceConnection connection;
         final int flags;
         HubDirectory.Peer target;
-        Binding(HubDirectory.Peer caller, Intent intent, IServiceConnection connection, int flags) {
-            this.caller = caller; this.intent = intent; this.connection = connection; this.flags = flags;
+        Binding(HubDirectory.Peer caller, Intent intent, IServiceConnection connection, int flags, String key) {
+            this.key = key; this.caller = caller; this.intent = intent; this.connection = connection; this.flags = flags;
         }
     }
     private final HubDirectory directory;
@@ -31,25 +32,28 @@ final class HubServiceBindings {
         Thread thread = new Thread(task, "hub-service-dispatch"); thread.setDaemon(true); return thread;
     });
     HubServiceBindings(HubDirectory directory, HubPackages packages) { this.directory = directory; this.packages = packages; }
-    boolean bind(HubDirectory.Peer caller, Intent intent, IServiceConnection connection, int flags) {
+    boolean bind(HubDirectory.Peer caller, Intent intent, IServiceConnection connection, int flags, String instance) {
         if (intent == null || connection == null) throw new IllegalArgumentException("Missing binding arguments");
         ServiceInfo info = packages.service(intent);
         if (info == null) return false;
         if (!caller.name().equals(info.packageName) && !info.exported) throw new SecurityException("Service is not exported");
         packages.enforceServicePermission(caller.name(), info);
         Intent explicit = new Intent(intent).setComponent(new ComponentName(info.packageName, info.name));
-        Binding binding = new Binding(caller, explicit, connection, flags);
+        String key = HubDirectory.key(info.packageName, instance);
+        System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " bind " + key + " " + info.name + " flags=0x" + Integer.toHexString(flags) + " from " + caller.name());
+        Binding binding = new Binding(caller, explicit, connection, flags, key);
         synchronized (bindings) {
             Binding old = bindings.get(connection.asBinder());
             if (old != null) throw new IllegalArgumentException("Connection already bound");
             bindings.put(connection.asBinder(), binding);
         }
-        HubDirectory.Peer target = directory.peer(info.packageName);
+        HubDirectory.Peer target = directory.peer(key);
         if (target != null) dispatch(binding, target);
-        else if ((flags & Context.BIND_AUTO_CREATE) != 0) directory.launch(info.packageName);
+        else if ((flags & Context.BIND_AUTO_CREATE) != 0) directory.launch(key);
         return true;
     }
     void unbind(HubDirectory.Peer caller, IBinder connection) {
+        System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " unbind from " + caller.name());
         Binding binding;
         synchronized (bindings) {
             binding = bindings.get(connection);
@@ -62,14 +66,14 @@ final class HubServiceBindings {
     boolean needsHost(String name) {
         synchronized (bindings) {
             return bindings.values().stream().anyMatch(binding -> binding.target == null &&
-                    (binding.flags & Context.BIND_AUTO_CREATE) != 0 && binding.intent.getComponent().getPackageName().equals(name));
+                    (binding.flags & Context.BIND_AUTO_CREATE) != 0 && binding.key.equals(name));
         }
     }
     void launchFailed(String name) {
         List<Binding> failed;
         synchronized (bindings) {
             failed = bindings.values().stream().filter(binding -> binding.target == null &&
-                    binding.intent.getComponent().getPackageName().equals(name)).toList();
+                    binding.key.equals(name)).toList();
             for (Binding binding : failed) bindings.remove(binding.connection.asBinder());
         }
         for (Binding binding : failed) {
@@ -81,7 +85,7 @@ final class HubServiceBindings {
         List<Binding> pending;
         synchronized (bindings) {
             pending = bindings.values().stream().filter(binding -> binding.target == null &&
-                    binding.intent.getComponent().getPackageName().equals(target.name())).toList();
+                    binding.key.equals(HubDirectory.key(target))).toList();
         }
         for (Binding binding : pending) dispatch(binding, target);
     }
@@ -124,7 +128,7 @@ final class HubServiceBindings {
                 } else if (binding.target != null && binding.target.pid() == peer.pid()) {
                     binding.target = null;
                     // LoadedApk's original death monitor delivers onServiceDisconnected.
-                    if ((binding.flags & Context.BIND_AUTO_CREATE) != 0) restart.add(peer.name());
+                    if ((binding.flags & Context.BIND_AUTO_CREATE) != 0) restart.add(HubDirectory.key(peer));
                 }
             }
         }

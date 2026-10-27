@@ -14,7 +14,17 @@ import org.robolectric.util.ReflectionHelpers;
 
 /** Route cross-package service lifecycle through the hub; reuse Android's own connection dispatcher. */
 final class HubServices {
-    private record Connection(LoadedApk loaded, Context outer, IServiceConnection binder) {}
+    private record Connection(LoadedApk loaded, Context outer, IServiceConnection binder, ServiceConnection used) {}
+
+    /** -Dapklayer.logcat: prints every callback the app's ServiceConnection gets. */
+    private static final class Traced implements ServiceConnection {
+        private final ServiceConnection target;
+        Traced(ServiceConnection target) { this.target = target; }
+        @Override public void onServiceConnected(android.content.ComponentName name, android.os.IBinder service) { System.out.println("[apklayer] ServiceConnection.onServiceConnected " + target.getClass().getName() + " " + service); target.onServiceConnected(name, service); }
+        @Override public void onServiceDisconnected(android.content.ComponentName name) { System.out.println("[apklayer] ServiceConnection.onServiceDisconnected " + target.getClass().getName()); target.onServiceDisconnected(name); }
+        @Override public void onBindingDied(android.content.ComponentName name) { System.out.println("[apklayer] ServiceConnection.onBindingDied " + target.getClass().getName()); target.onBindingDied(name); }
+        @Override public void onNullBinding(android.content.ComponentName name) { System.out.println("[apklayer] ServiceConnection.onNullBinding " + target.getClass().getName()); target.onNullBinding(name); }
+    }
     private static final Map<ServiceConnection, Connection> connections = new IdentityHashMap<>();
     private HubServices() {}
     static boolean external(Context context, Intent intent) {
@@ -22,28 +32,36 @@ final class HubServices {
         String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
         return target != null && !target.equals(context.getPackageName());
     }
-    static boolean bind(Context context, Intent intent, int flags, Executor executor, ServiceConnection connection) {
+    static boolean bind(Context context, Intent intent, int flags, Executor executor, ServiceConnection connection) { return bind(context, intent, flags, executor, connection, null); }
+    static boolean bind(Context context, Intent intent, int flags, Executor executor, ServiceConnection connection, String instance) {
         java.util.Objects.requireNonNull(connection);
         LoadedApk loaded = ReflectionHelpers.getField(context, "mPackageInfo");
         if (loaded == null) throw new IllegalStateException("No package dispatcher in this context");
         Context outer = ReflectionHelpers.callInstanceMethod(context, "getOuterContext");
+        ServiceConnection used = connection;
+        synchronized (connections) {
+            Connection existing = connections.get(connection);
+            if (existing != null) used = existing.used();
+            else if (Boolean.getBoolean("apklayer.logcat")) used = new Traced(connection);
+        }
         IServiceConnection dispatcher = executor == null
-                ? loaded.getServiceDispatcher(connection, outer, new Handler(Looper.getMainLooper()), flags)
-                : loaded.getServiceDispatcher(connection, outer, executor, flags);
+                ? loaded.getServiceDispatcher(used, outer, new Handler(Looper.getMainLooper()), flags)
+                : loaded.getServiceDispatcher(used, outer, executor, flags);
         HubClient client = HubClient.attach(context);
         boolean known;
         synchronized (connections) { known = connections.containsKey(connection); }
         boolean accepted;
         try {
             accepted = HubProtocol.call(client.binder(), HubProtocol.DESCRIPTOR, HubProtocol.BIND, request -> {
-                request.writeTypedObject(intent, 0); request.writeStrongBinder(dispatcher.asBinder()); request.writeInt(flags);
+                request.writeTypedObject(intent, 0); request.writeStrongBinder(dispatcher.asBinder()); request.writeInt(flags); request.writeString(instance);
             }, reply -> reply.readBoolean());
         } catch (RuntimeException failure) {
-            if (!known) loaded.forgetServiceDispatcher(outer, connection);
+            if (!known) loaded.forgetServiceDispatcher(outer, used);
             throw failure;
         }
-        if (!accepted && !known) loaded.forgetServiceDispatcher(outer, connection);
-        if (accepted) synchronized (connections) { connections.put(connection, new Connection(loaded, outer, dispatcher)); }
+        if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] bindService " + intent.getComponent() + " flags=0x" + Integer.toHexString(flags) + " instance=" + instance + " -> " + accepted + " known=" + known);
+        if (!accepted && !known) loaded.forgetServiceDispatcher(outer, used);
+        if (accepted) synchronized (connections) { connections.put(connection, new Connection(loaded, outer, dispatcher, used)); }
         return accepted;
     }
     static android.content.ComponentName start(Context context, Intent intent) {
@@ -63,7 +81,7 @@ final class HubServices {
         Connection old;
         synchronized (connections) { old = connections.remove(connection); }
         if (old == null) return false;
-        IServiceConnection dispatcher = old.loaded.forgetServiceDispatcher(old.outer, connection);
+        IServiceConnection dispatcher = old.loaded.forgetServiceDispatcher(old.outer, old.used());
         HubProtocol.call(HubClient.current().binder(), HubProtocol.DESCRIPTOR, HubProtocol.UNBIND,
                 request -> request.writeStrongBinder(dispatcher.asBinder()), reply -> null);
         return true;

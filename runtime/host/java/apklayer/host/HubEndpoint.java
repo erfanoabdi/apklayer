@@ -35,8 +35,9 @@ final class HubEndpoint extends Binder {
                 ServiceConnection local = new ServiceConnection() {
                     @Override public void onServiceConnected(ComponentName name, IBinder binder) { connected(name, binder); }
                     @Override public void onNullBinding(ComponentName name) { connected(name, null); }
-                    @Override public void onServiceDisconnected(ComponentName name) { }
+                    @Override public void onServiceDisconnected(ComponentName name) { if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] bind: service disconnected " + name); }
                     private void connected(ComponentName name, IBinder binder) {
+                        if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] bind: delivering connection of " + name + " binder=" + binder);
                         try { remote.connected(name, binder, null, false); }
                         catch (RemoteException failure) { System.out.println("[apklayer] service client disconnected: " + name); }
                     }

@@ -429,6 +429,18 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
         attribution_failed = !loader || apklayer_register_nativeloader(env, loader);
         if (loader) (*env)->DeleteLocalRef(env, loader);
     }
+    if (!attribution_failed) {
+        extern int apklayer_register_nativelooper(JNIEnv *, jclass);
+        jclass looper = lazy_find_class(env, "apklayer/host/NativeLooper");
+        attribution_failed = !looper || apklayer_register_nativelooper(env, looper);
+        if (looper) (*env)->DeleteLocalRef(env, looper);
+    }
+    if (!attribution_failed) { /* libcore's descriptor natives, for Parcels that carry file descriptors (Chromium's renderer gets its IPC channel and ICU data that way) */
+        extern int apklayer_register_linux(JNIEnv *, jclass);
+        jclass libcore_linux = lazy_find_class(env, "libcore/io/Linux");
+        if (libcore_linux) { if (apklayer_register_linux(env, libcore_linux) != 0) (*env)->ExceptionClear(env); (*env)->DeleteLocalRef(env, libcore_linux); }
+        else (*env)->ExceptionClear(env);
+    }
     free(real_binder);
     free(attribution); free(audio);
     if (attribution_failed) media_failed = 1;

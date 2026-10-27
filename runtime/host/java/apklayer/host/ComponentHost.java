@@ -26,6 +26,7 @@ public final class ComponentHost implements Runnable {
         while (client.alive()) {
             long before = System.nanoTime();
             looper.poll(8);
+            if (Boolean.getBoolean("apklayer.nativelooper") && NativeLooper.forThread() != 0) NativeLooper.pollOnce(0);
             ShadowSystemClock.advanceBy(Duration.ofNanos(System.nanoTime() - before));
             looper.idle();
         }

@@ -42,6 +42,21 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
     @Implementation @Override protected boolean stopService(Intent intent) {
         return HubServices.external(real, intent) ? HubServices.stop(real, intent) : super.stopService(intent);
     }
+    @Implementation public boolean bindIsolatedService(Intent intent, int flags, String instanceName, Executor executor, ServiceConnection connection) {
+        if (HubServices.external(real, intent)) return HubServices.bind(real, intent, flags, executor, connection, instanceName);
+        return real("bindIsolatedService", ClassParameter.from(Intent.class, intent), ClassParameter.from(int.class, flags), ClassParameter.from(String.class, instanceName),
+                ClassParameter.from(Executor.class, executor), ClassParameter.from(ServiceConnection.class, connection));
+    }
+    @Implementation public boolean bindIsolatedService(Intent intent, Context.BindServiceFlags flags, String instanceName, Executor executor, ServiceConnection connection) {
+        if (HubServices.external(real, intent)) return HubServices.bind(real, intent, (int) flags.getValue(), executor, connection, instanceName);
+        return real("bindIsolatedService", ClassParameter.from(Intent.class, intent), ClassParameter.from(Context.BindServiceFlags.class, flags), ClassParameter.from(String.class, instanceName),
+                ClassParameter.from(Executor.class, executor), ClassParameter.from(ServiceConnection.class, connection));
+    }
+    @Implementation public boolean bindService(Intent intent, Context.BindServiceFlags flags, Executor executor, ServiceConnection connection) {
+        if (HubServices.external(real, intent)) return HubServices.bind(real, intent, (int) flags.getValue(), executor, connection);
+        return real("bindService", ClassParameter.from(Intent.class, intent), ClassParameter.from(Context.BindServiceFlags.class, flags), ClassParameter.from(Executor.class, executor),
+                ClassParameter.from(ServiceConnection.class, connection));
+    }
     @Implementation @Override protected void unbindService(ServiceConnection connection) {
         if (!HubServices.unbind(connection)) super.unbindService(connection);
     }

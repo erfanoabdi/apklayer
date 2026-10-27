@@ -26,9 +26,9 @@ proc = None
 lines = []
 try:
     package = 'hello.wvprobe'
-    env = dict(ENV, APKLAYER_JOPTS=BASE, APKLAYER_WEBVIEW_PROVIDER='com.android.webview', **({'APKLAYER_RUNTIME_DEBUG': '1'} if os.environ.get('WV_RTDEBUG') else {}))
+    env = dict(ENV, APKLAYER_JOPTS=BASE, APKLAYER_WEBVIEW_PROVIDER='com.android.webview', APKLAYER_LOGCAT='1',  **({'APKLAYER_RUNTIME_DEBUG': '1'} if os.environ.get('WV_RTDEBUG') else {}))
     proc = subprocess.Popen(['bin/apklayer', 'run', package], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
-    end = time.monotonic() + 80
+    end = time.monotonic() + 25
     pending = b''
     killed = False
     with selectors.DefaultSelector() as events:
@@ -51,10 +51,18 @@ try:
                     killed = True
                     os.kill(int(line.split()[2]), signal.SIGKILL)
                 if '[wv] PASS' in line:
+                    time.sleep(8)  # the window stays up a moment: webview-capture.py takes a screenshot of it
                     print('PASS webview ' + PHASE, flush=True)
                     raise SystemExit(0)
+    if os.environ.get('WV_DUMP'):
+        for pid in subprocess.run(['pgrep', '-f', '[a]pklayer.host.Main'], capture_output=True, text=True).stdout.split():
+            dump = subprocess.run(['jcmd', pid, 'Thread.print'], capture_output=True, text=True).stdout.split('\n\n')
+            print('=== threads of ' + pid, *[b[:1400] for b in dump if any(k in b for k in ('Chrome_', 'ChildProcess', 'ThreadPool', 'Main Thread', 'WV.', 'org.chromium'))][:40], sep='\n', flush=True)
     raise AssertionError('timed out\n' + '\n'.join(lines[-25:]))
 finally:
+    for log in [Path('/tmp/apklayer-stack/hub.log')] + sorted(Path('/tmp/apklayer-stack').glob('component-com.android.webview*.log')):
+        name = log.name
+        if log.exists(): print('--- ' + name + ' (tail)', *[l[:200] for l in log.read_text(errors='replace').split('\n') if 'symbol may' not in l][-25:], sep='\n', flush=True)
     if proc is not None and proc.poll() is None: os.killpg(proc.pid, signal.SIGTERM)
     stop()
     subprocess.run(['pkill', '-f', '[a]pklayer.host.Main --hub'], check=False)

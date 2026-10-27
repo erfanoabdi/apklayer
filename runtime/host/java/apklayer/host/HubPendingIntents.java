@@ -82,7 +82,7 @@ final class HubPendingIntents {
         }
         Intent intent = new Intent(record.last());
         if (fillIn != null && (record.flags & IMMUTABLE) == 0) intent.fillIn(fillIn, 0);
-        HubDirectory.Peer creator = new HubDirectory.Peer(-1, record.uid, record.creator, null, null, true, record.uid);
+        HubDirectory.Peer creator = new HubDirectory.Peer(-1, record.uid, record.creator, null, null, true, record.uid, null);
         System.out.println("[apklayer-hub] PendingIntent of " + record.creator + " type " + record.type + " sent: " + intent.getAction() + " " + intent.getComponent());
         switch (record.type) {
             case ACTIVITY -> activities.start(creator, intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), null);

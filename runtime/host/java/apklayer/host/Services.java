@@ -32,6 +32,7 @@ public final class Services {
         IBinder binder;
         boolean bound, started;
         int lastStartId, startResult;
+        IBinder traced;
         int connections;
         Intent intent;
     }
@@ -39,6 +40,9 @@ public final class Services {
     private static final Map<String, Running> RUNNING = new HashMap<>();
     private static final Map<ServiceConnection, String> CONNECTIONS = new IdentityHashMap<>();
     private static int startId;
+    /** ServiceController.create idles the main looper: a bind queued behind the one that creates a service would run inside it and create the service again. */
+    private static boolean creating;
+    private static final java.util.ArrayDeque<Runnable> DEFERRED = new java.util.ArrayDeque<>();
 
     private Services() {}
 
@@ -72,8 +76,10 @@ public final class Services {
             r = new Running();
             r.intent = intent;
             Class<? extends Service> cls = (Class<? extends Service>) Class.forName(key, true, Services.class.getClassLoader());
+            if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] creating service " + cls.getName() + " on " + Thread.currentThread().getName());
             r.controller = Robolectric.buildService(cls, intent);
-            r.controller.create();
+            creating = true;
+            try { r.controller.create(); } finally { creating = false; }
             r.service = r.controller.get();
             RUNNING.put(key, r);
             System.out.println("[apklayer] service created: " + cls.getSimpleName());
@@ -173,21 +179,41 @@ public final class Services {
         ComponentName cn = resolve(ctx, intent);
         if (cn == null) return ctx.bindService(intent, conn, flags);
         return onMain(() -> {
+            if (creating) { DEFERRED.add(() -> bindService(ctx, intent, conn, flags)); return true; }
             try {
                 Running r = instance(cn, intent);
+                r.connections++; // before onBind: a service that calls stopSelf() there (Chromium's ChildProcessService) stays while it is bound
                 if (!r.bound) {
-                    r.binder = r.service.onBind(intent);
+                    try { r.binder = r.service.onBind(intent); }
+                    catch (RuntimeException failure) { r.connections--; throw failure; }
                     r.bound = true;
                 }
-                r.connections++;
                 CONNECTIONS.put(conn, className(cn));
-                IBinder binder = r.binder;
+                IBinder shown = r.binder;
+                if (Boolean.getBoolean("apklayer.logcat") && shown != null) { if (r.traced == null) r.traced = traced(shown); shown = r.traced; } // one IBinder for every connection, as on Android
+                IBinder binder = shown;
                 new Handler(Looper.getMainLooper()).post(() -> conn.onServiceConnected(cn, binder));
+                for (Runnable next; (next = DEFERRED.poll()) != null; ) next.run();
                 return true;
             } catch (ClassNotFoundException e) {
                 return false;
             }
         });
+    }
+
+    /** Debugging (-Dapklayer.logcat): a Binder in front of the service's that prints every transaction it gets and how it ended. */
+    private static IBinder traced(IBinder original) {
+        if (original == null) return null;
+        return new android.os.Binder() {
+            @Override public String getInterfaceDescriptor() { try { return original.getInterfaceDescriptor(); } catch (RuntimeException | android.os.RemoteException e) { return null; } }
+            @Override protected boolean onTransact(int code, android.os.Parcel data, android.os.Parcel reply, int flags) throws android.os.RemoteException {
+                System.out.println("[apklayer] binder " + original.getClass().getSimpleName() + " transaction " + code + " from pid " + android.os.Binder.getCallingPid());
+                try { boolean ok = original.transact(code, data, reply, flags); String note = "";
+                    if (reply != null && reply.dataSize() > 0) { int at = reply.dataPosition(); reply.setDataPosition(0); int status = reply.readInt(); note = " exception code " + status + (status != 0 ? " " + reply.readString() : " string? " + (code == 2 ? reply.readString() : "")); reply.setDataPosition(at); }
+                    System.out.println("[apklayer] binder transaction " + code + " -> " + ok + " reply " + (reply == null ? -1 : reply.dataSize()) + " bytes" + note); return ok; }
+                catch (RuntimeException | android.os.RemoteException failure) { failure.printStackTrace(System.out); throw failure; }
+            }
+        };
     }
 
     public static void unbindService(Context ctx, ServiceConnection conn) {
@@ -198,6 +224,7 @@ public final class Services {
         }
         onMain(() -> {
             Running r = RUNNING.get(key);
+            if (r != null && Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] unbind: " + (r.connections - 1) + " connections left of " + key);
             if (r != null && --r.connections == 0) {
                 r.service.onUnbind(r.intent);
                 r.bound = false;

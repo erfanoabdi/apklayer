@@ -14,7 +14,7 @@ import android.app.IServiceConnection;
 
 /** Instance-owned process directory. Identities come from the kernel Binder caller. */
 final class HubDirectory extends Binder {
-    record Peer(int pid, int uid, String name, IBinder endpoint, IBinder appThread, boolean headless, int appUid) {}
+    record Peer(int pid, int uid, String name, IBinder endpoint, IBinder appThread, boolean headless, int appUid, String instance) {}
     private final HubPackages packages;
     private final Map<Integer, Peer> peers = new HashMap<>();
     private final HubServiceBindings bindings;
@@ -59,8 +59,11 @@ final class HubDirectory extends Binder {
     }
     java.util.List<Peer> peersExcept(Peer one) { synchronized (peers) { return peers.values().stream().filter(peer -> peer != one).toList(); } }
     Peer peerByPid(int pid) { synchronized (peers) { return peers.get(pid); } }
-    Peer peer(String name) {
-        synchronized (peers) { return peers.values().stream().filter(peer -> peer.name.equals(name)).findFirst().orElse(null); }
+    /** The key of a process: the package, plus "#instance" for an isolated service instance (bindIsolatedService), which runs in a process of its own. */
+    static String key(String pkg, String instance) { return instance == null ? pkg : pkg + "#" + instance; }
+    static String key(Peer peer) { return key(peer.name, peer.instance); }
+    Peer peer(String key) {
+        synchronized (peers) { return peers.values().stream().filter(peer -> key(peer).equals(key)).findFirst().orElse(null); }
     }
     private Peer caller() {
         synchronized (peers) {
@@ -92,18 +95,22 @@ final class HubDirectory extends Binder {
     }
     void launch(String name) {
         if (stopping || peer(name) != null) return;
+        int hash = name.indexOf('#');
+        String pkg = hash < 0 ? name : name.substring(0, hash), instance = hash < 0 ? null : name.substring(hash + 1);
         synchronized (hosts) {
             Process old = hosts.get(name);
             if (old != null && old.isAlive()) return;
             try {
-                Path log = Path.of(System.getenv().getOrDefault("APKLAYER_LOGS", "/tmp/apklayer-stack"), "component-" + name + ".log");
+                Path log = Path.of(System.getenv().getOrDefault("APKLAYER_LOGS", "/tmp/apklayer-stack"), "component-" + name.replace('#', '-') + ".log");
                 Files.createDirectories(log.getParent());
-                ProcessBuilder command = new ProcessBuilder(System.getProperty("apklayer.cli"), "component-host", name)
-                        .redirectErrorStream(true).redirectOutput(log.toFile());
-                command.environment().put("APKLAYER_JOPTS", "-Dapklayer.realbinder=true -Dapklayer.instancehub=true");
+                ProcessBuilder command = new ProcessBuilder(System.getProperty("apklayer.cli"), "component-host", pkg)
+                        .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(log.toFile()));
+                if (instance != null) command.environment().put("APKLAYER_ISOLATED", instance);
+                command.environment().put("APKLAYER_JOPTS", "-Dapklayer.realbinder=true -Dapklayer.instancehub=true" + (System.getenv("APKLAYER_WEBVIEW_PROVIDER") != null ? " -Dapklayer.nativelooper=true" : ""));
                 Process process = command.start(); hosts.put(name, process);
-                System.out.println("[apklayer-hub] starting " + name + " launcherPid=" + process.pid());
+                System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " starting " + name + " launcherPid=" + process.pid());
                 process.onExit().thenAccept(exited -> {
+                    System.out.println("[apklayer-hub] host " + name + " exited with " + exited.exitValue());
                     synchronized (hosts) { hosts.remove(name, process); }
                     if (!stopping && peer(name) == null && bindings.needsHost(name)) {
                         int failed;
@@ -121,11 +128,11 @@ final class HubDirectory extends Binder {
         if ((flags & FLAG_ONEWAY) != 0 || reply == null) throw new IllegalArgumentException("Hub requests must be synchronous");
         switch (code) {
             case HubProtocol.REGISTER -> {
-                String name = request.readString(); IBinder endpoint = request.readStrongBinder(); boolean headless = request.readBoolean(); IBinder appThread = request.readStrongBinder(); int appUid = request.readInt(); request.enforceNoDataAvail();
+                String name = request.readString(); IBinder endpoint = request.readStrongBinder(); boolean headless = request.readBoolean(); IBinder appThread = request.readStrongBinder(); int appUid = request.readInt(); String instance = request.readString(); request.enforceNoDataAvail();
                 if (packages.get(name) == null || endpoint == null || appThread == null || !HubProtocol.ENDPOINT.equals(endpoint.getInterfaceDescriptor()))
                     throw new SecurityException("Unknown app endpoint");
                 int pid = Binder.getCallingPid(), uid = Binder.getCallingUid();
-                Peer peer = new Peer(pid, uid, name, endpoint, appThread, headless, appUid);
+                Peer peer = new Peer(pid, uid, name, endpoint, appThread, headless, appUid, instance);
                 synchronized (peers) {
                     Peer old = peers.get(pid);
                     if (old != null) {
@@ -135,7 +142,7 @@ final class HubDirectory extends Binder {
                     endpoint.linkToDeath(() -> remove(peer), 0);
                     peers.put(pid, peer);
                 }
-                System.out.println("[apklayer-hub] registered " + name + " pid=" + pid + " uid=" + uid);
+                System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " registered " + name + " pid=" + pid + " uid=" + uid);
                 synchronized (failures) { failures.remove(name); }
                 bindings.registered(peer);
                 broadcasts.registered(peer);
@@ -149,8 +156,8 @@ final class HubDirectory extends Binder {
             case HubProtocol.BIND -> {
                 Peer caller = caller(); Intent intent = request.readTypedObject(Intent.CREATOR);
                 IServiceConnection connection = IServiceConnection.Stub.asInterface(request.readStrongBinder());
-                int bindFlags = request.readInt(); request.enforceNoDataAvail();
-                boolean accepted = bindings.bind(caller, intent, connection, bindFlags);
+                int bindFlags = request.readInt(); String instance = request.readString(); request.enforceNoDataAvail();
+                boolean accepted = bindings.bind(caller, intent, connection, bindFlags, instance);
                 reply.writeNoException(); reply.writeBoolean(accepted); return true;
             }
             case HubProtocol.UNBIND -> {

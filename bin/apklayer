@@ -199,6 +199,14 @@ cmd_run() {
     local dir="$APPS/$pkg"
     [ -f "$dir/info.properties" ] || die "not installed: $pkg (apklayer install <app.apk>)"
     ensure_uid "$dir"
+    # the Chromium WebView provider is the default WebView once it is installed (apklayer install webview.apk) and scripts/webview-setup.sh ran; APKLAYER_WEBVIEW_PROVIDER=none keeps the WebKitGTK stand-in
+    if [ -z "${APKLAYER_WEBVIEW_PROVIDER+x}" ] && [ -f "$APPS/com.android.webview/classes.jar" ] && grep -q -- "--no-sandbox" /data/local/tmp/webview-command-line 2>/dev/null; then
+        export APKLAYER_WEBVIEW_PROVIDER=com.android.webview
+    fi
+    [ "${APKLAYER_WEBVIEW_PROVIDER:-}" != none ] || unset APKLAYER_WEBVIEW_PROVIDER
+    if [ -n "${APKLAYER_WEBVIEW_PROVIDER:-}" ] && ! grep -q -- "--no-sandbox" /data/local/tmp/webview-command-line 2>/dev/null; then
+        die "the WebView provider route needs scripts/webview-setup.sh once (Chromium's seccomp sandbox cannot run inside an app JVM and is switched off; needs sudo)"
+    fi
     if tree_flavor; then
         # shellcheck disable=SC1091
         . "$ROOT/scripts/native-env.sh"
@@ -236,7 +244,7 @@ cmd_run() {
     export XDG_DATA_DIRS="${APKLAYER_NATIVE:-$ROOT/native}/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
     local -a entry=("$dir/base.apk" "$dir/classes.jar")
     if [ "$mode" = component ]; then entry=(--component-host "${entry[@]}"); fi
-    host -Dapklayer.data="$dir/data" -Dapklayer.package="$pkg" -Dapklayer.uid="$(prop "$dir/info.properties" uid)" -Dapklayer.libdir="$dir/lib" -Dapklayer.apps="$APPS" -Dapklayer.cli="$ROOT/bin/apklayer" -Dapklayer.webview="$ROOT/bridge/webview/apklayer-webview.py" -Dapklayer.media="$ROOT/bridge/media/apklayer-media.py" -Dapklayer.codec="$ROOT/bridge/media/apklayer-codec.py" ${APKLAYER_JOPTS:-} ${APKLAYER_WEBVIEW_PROVIDER:+-Dapklayer.webviewprovider=$APPS/$APKLAYER_WEBVIEW_PROVIDER} \
+    host -Dapklayer.data="$dir/data" -Dapklayer.package="$pkg" -Dapklayer.uid="$(prop "$dir/info.properties" uid)" -Dapklayer.libdir="$dir/lib" -Dapklayer.apps="$APPS" -Dapklayer.cli="$ROOT/bin/apklayer" -Dapklayer.webview="$ROOT/bridge/webview/apklayer-webview.py" -Dapklayer.media="$ROOT/bridge/media/apklayer-media.py" -Dapklayer.codec="$ROOT/bridge/media/apklayer-codec.py" ${APKLAYER_JOPTS:-} ${APKLAYER_WEBVIEW_PROVIDER:+-Dapklayer.webviewprovider=$APPS/$APKLAYER_WEBVIEW_PROVIDER -Dapklayer.nativelooper=true} ${APKLAYER_ISOLATED:+-Dapklayer.isolated=$APKLAYER_ISOLATED} ${APKLAYER_LOGCAT:+-Dapklayer.logcat=true} \
         -cp "$(host_cp "$dir/classes.jar${APKLAYER_WEBVIEW_PROVIDER:+:$APPS/$APKLAYER_WEBVIEW_PROVIDER/classes.jar}")" apklayer.host.Main "${entry[@]}"
 }
 

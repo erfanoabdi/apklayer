@@ -188,6 +188,7 @@ public final class AppHost implements Runnable {
         AppEnvironment.installNetwork(app);
         AppEnvironment.installProviders(app);
         if (System.getProperty("apklayer.webviewprovider") != null) { // Android's RuntimeInit installs a handler that logs and kills the process; Chromium's JniAndroid calls it
+            org.robolectric.shadows.ShadowBuild.setType("userdebug"); // a debuggable build: WebView then reads /data/local/tmp/webview-command-line
             Thread.setDefaultUncaughtExceptionHandler((thread, failure) -> { System.out.println("FATAL EXCEPTION: " + thread.getName()); failure.printStackTrace(System.out); System.out.flush(); Runtime.getRuntime().halt(10); });
         }
         if (System.getProperty("apklayer.webviewprovider") != null) org.robolectric.Shadows.shadowOf(app.getPackageManager()).setSystemFeature(android.content.pm.PackageManager.FEATURE_WEBVIEW, true);
@@ -289,6 +290,7 @@ public final class AppHost implements Runnable {
                     // so host input and scripted steps are serviced while idle.
                     long wait = timeout == 0 ? 8 : max(1, min(8, timeout - SystemClock.uptimeMillis()));
                     looper.poll(wait);
+                    if (Boolean.getBoolean("apklayer.nativelooper")) pollNativeLooper();
                     // Wall time since the previous advance, not since the top of this iteration: the time spent running the looper and
                     // the follow-ups below was dropped, so the app's clock ran at a third of real time under load (ExoPlayer played
                     // video at 8 fps and starved the audio, its clock being SystemClock).
@@ -359,6 +361,15 @@ public final class AppHost implements Runnable {
                 System.out.println("[apklayer] root trace failed: " + e);
             }
         }
+    }
+
+    private boolean nativeLooperSeen;
+    /** Native code (Chromium) that runs a message pump on the main thread waits on the thread's native looper: run what is ready. */
+    private void pollNativeLooper() {
+        long looper = NativeLooper.forThread();
+        if (looper == 0) return;
+        if (!nativeLooperSeen) { nativeLooperSeen = true; System.out.println("[apklayer] the main thread has a native looper: polling it"); }
+        NativeLooper.pollOnce(0);
     }
 
     /** An intent another app sent here through the hub: started like one of our own, its result goes to the sender's receiver. */

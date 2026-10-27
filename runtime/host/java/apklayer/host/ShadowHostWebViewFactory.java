@@ -19,11 +19,11 @@ public class ShadowHostWebViewFactory {
         String apk = new File(dir, "base.apk").getPath();
         android.content.pm.PackageInfo info = pm.getPackageArchiveInfo(apk, android.content.pm.PackageManager.GET_META_DATA | android.content.pm.PackageManager.GET_SERVICES);
         if (info == null) throw new IllegalStateException("Cannot read the WebView provider's manifest: " + apk);
+        org.robolectric.shadows.ShadowPackageManager shadow = org.robolectric.Shadows.shadowOf(pm); // the provider is an installed package here too: its renderer services resolve
+        shadow.installPackage(info);
         info.applicationInfo.sourceDir = info.applicationInfo.publicSourceDir = apk;
         info.applicationInfo.nativeLibraryDir = new File(dir, "lib").getPath();
         info.applicationInfo.dataDir = new File(dir, "data").getPath();
-        org.robolectric.shadows.ShadowPackageManager shadow = org.robolectric.Shadows.shadowOf(pm); // the provider is an installed package here too: its renderer services resolve
-        shadow.installPackage(info);
         org.robolectric.util.ReflectionHelpers.setStaticField(android.webkit.WebViewFactory.class, "sPackageInfo", info);
         System.out.println("[apklayer] WebView provider " + info.packageName + " " + info.versionName + " (" + info.getLongVersionCode() + ")");
     }

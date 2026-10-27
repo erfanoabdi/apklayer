@@ -20,7 +20,7 @@ public final class HubClient {
         int pid = HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.REGISTER, request -> {
             request.writeString(context.getPackageName()); request.writeStrongBinder(endpoint); request.writeBoolean(Boolean.getBoolean("apklayer.componenthost"));
             request.writeStrongBinder(((android.app.IApplicationThread) android.app.ActivityThread.currentActivityThread().getApplicationThread()).asBinder());
-            request.writeInt(android.os.Process.myUid());
+            request.writeInt(android.os.Process.myUid()); request.writeString(System.getProperty("apklayer.isolated"));
         }, reply -> reply.readInt());
         if (pid != android.os.Process.myPid()) throw new IllegalStateException("Hub caller identity mismatch");
         HubPermissionChecker.install();

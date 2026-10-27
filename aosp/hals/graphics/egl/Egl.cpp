@@ -355,6 +355,7 @@ EGLBoolean swapWindow(EGLDisplay dpy, EGLSurface surface) {
     std::lock_guard<std::recursive_mutex> lock(windowsLock);
     Window* win = windowOf(surface);
     if (!win) return host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglSwapBuffers")(dpy, surface);
+    if (!win->native) return EGL_TRUE;  // a pbuffer is never presented
     EGLBoolean ok = host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglSwapBuffers")(dpy, win->host);
     if (!ok) return ok;
     presentToWindow(dpy, *win);
@@ -439,7 +440,17 @@ EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig cfg, EGLContext share, con
 
 EGLBoolean eglChooseConfig(EGLDisplay dpy, const EGLint* attribs, EGLConfig* cfgs, EGLint size, EGLint* num) {
     auto a = filtered(attribs, {EGL_RECORDABLE_ANDROID, EGL_PROTECTED_CONTENT_EXT});
-    return host<PFNEGLCHOOSECONFIGPROC>("eglChooseConfig")(dpy, a.data(), cfgs, size, num);
+    // The host's configs are for window surfaces (its display is a GBM device): a request for pbuffer-capable configs (Chromium's offscreen GL) is matched with the
+    // window ones, and eglCreatePbufferSurface makes the pbuffer from a GBM surface of the asked size.
+    for (size_t i = 0; i + 1 < a.size(); i += 2)
+        if (a[i] == EGL_SURFACE_TYPE && (a[i + 1] & EGL_PBUFFER_BIT)) a[i + 1] = (a[i + 1] & ~EGL_PBUFFER_BIT) | EGL_WINDOW_BIT;
+    EGLBoolean ok = host<PFNEGLCHOOSECONFIGPROC>("eglChooseConfig")(dpy, a.data(), cfgs, size, num);
+    if (!ok || (num && *num == 0)) {  // diagnosis: what was asked for when the host has nothing that matches
+        std::string list;
+        for (size_t i = 0; i + 1 < a.size(); i += 2) list += " 0x" + std::to_string(a[i]) + "=" + std::to_string(a[i + 1]);
+        ALOGW("eglChooseConfig found no config for:%s", list.c_str());
+    }
+    return ok;
 }
 
 EGLSurface eglCreateWindowSurface(EGLDisplay dpy, EGLConfig cfg, EGLNativeWindowType native, const EGLint*) {
@@ -466,7 +477,7 @@ EGLBoolean eglDestroySurface(EGLDisplay dpy, EGLSurface surface) {
     {
         std::lock_guard<std::recursive_mutex> lock(windowsLock);
         if (Window* w = windowOf(surface)) {
-            native_window_api_disconnect(w->native, kApiEgl);
+            if (w->native) native_window_api_disconnect(w->native, kApiEgl);
             windows.erase(w);
             EGLBoolean ok = host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglDestroySurface")(dpy, w->host);
             gbmFn<void (*)(void*)>("gbm_surface_destroy")(w->gbmSurface);
@@ -508,6 +519,36 @@ EGLBoolean eglSurfaceAttrib(EGLDisplay dpy, EGLSurface surface, EGLint attribute
     return host<EGLBoolean (*)(EGLDisplay, EGLSurface, EGLint, EGLint)>("eglSurfaceAttrib")(dpy, hostSurface(surface), attribute, value);
 }
 
+EGLBoolean eglGetConfigAttrib(EGLDisplay dpy, EGLConfig cfg, EGLint attribute, EGLint* value) {
+    EGLBoolean ok = host<EGLBoolean (*)(EGLDisplay, EGLConfig, EGLint, EGLint*)>("eglGetConfigAttrib")(dpy, cfg, attribute, value);
+    if (ok && attribute == EGL_SURFACE_TYPE && value) *value |= EGL_PBUFFER_BIT;  // eglCreatePbufferSurface below works on every config
+    return ok;
+}
+
+EGLSurface eglCreatePbufferSurface(EGLDisplay dpy, EGLConfig cfg, const EGLint* attribs) {
+    uint32_t w = 1, h = 1;
+    for (; attribs && *attribs != EGL_NONE; attribs += 2) {
+        if (attribs[0] == EGL_WIDTH) w = attribs[1];
+        if (attribs[0] == EGL_HEIGHT) h = attribs[1];
+    }
+    auto* win = new Window{dpy, cfg, nullptr, nullptr, EGL_NO_SURFACE, 0, 0, 0};
+    host<EGLBoolean (*)(EGLDisplay, EGLConfig, EGLint, EGLint*)>("eglGetConfigAttrib")(dpy, cfg, EGL_NATIVE_VISUAL_ID, &win->visual);
+    void* gs = gbmFn<void* (*)(void*, uint32_t, uint32_t, uint32_t, uint32_t)>("gbm_surface_create")(
+            apklayer_gfx_gbm_device(gfx()), w, h, (uint32_t)win->visual, 1u << 2 /* GBM_BO_USE_RENDERING */);
+    EGLSurface surface = gs ? host<PFNEGLCREATEPLATFORMWINDOWSURFACEPROC>("eglCreatePlatformWindowSurface")(dpy, cfg, gs, nullptr) : EGL_NO_SURFACE;
+    if (surface == EGL_NO_SURFACE) {
+        ALOGE("pbuffer %ux%u format 0x%x: host surface failed", w, h, win->visual);
+        if (gs) gbmFn<void (*)(void*)>("gbm_surface_destroy")(gs);
+        delete win;
+        tError = EGL_BAD_ALLOC;
+        return EGL_NO_SURFACE;
+    }
+    win->gbmSurface = gs; win->host = surface; win->width = w; win->height = h;
+    std::lock_guard<std::recursive_mutex> lock(windowsLock);
+    windows.insert(win);
+    return win;
+}
+
 EGLSurface eglCreatePlatformWindowSurface(EGLDisplay d, EGLConfig c, void* w, const EGLAttrib*) {
     return eglCreateWindowSurface(d, c, reinterpret_cast<EGLNativeWindowType>(w), nullptr);
 }
@@ -525,9 +566,9 @@ EGLBoolean eglPresentationTimeANDROID(EGLDisplay, EGLSurface, EGLnsecsANDROID) {
 // A tail call through a pointer resolved at load: no signature needed.
 #define FORWARDED(X) \
     X(eglBindAPI) X(eglBindTexImage) X(eglClientWaitSync) X(eglClientWaitSyncKHR) X(eglCopyBuffers) \
-    X(eglCreatePbufferFromClientBuffer) X(eglCreatePbufferSurface) X(eglCreatePixmapSurface) X(eglCreatePlatformPixmapSurface) \
+    X(eglCreatePbufferFromClientBuffer) X(eglCreatePixmapSurface) X(eglCreatePlatformPixmapSurface) \
     X(eglCreateSync) X(eglCreateSyncKHR) X(eglDestroyContext) X(eglDestroyImage) X(eglDestroyImageKHR) \
-    X(eglDestroySync) X(eglDestroySyncKHR) X(eglDupNativeFenceFDANDROID) X(eglGetConfigAttrib) X(eglGetConfigs) \
+    X(eglDestroySync) X(eglDestroySyncKHR) X(eglDupNativeFenceFDANDROID) X(eglGetConfigs) \
     X(eglGetCurrentContext) X(eglGetCurrentDisplay) X(eglGetSyncAttrib) X(eglGetSyncAttribKHR) \
     X(eglQueryAPI) X(eglQueryContext) X(eglReleaseTexImage) \
     X(eglReleaseThread) X(eglSetDamageRegionKHR) X(eglSignalSyncKHR) \

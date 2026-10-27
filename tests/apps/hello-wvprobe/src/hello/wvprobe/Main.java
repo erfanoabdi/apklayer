@@ -14,6 +14,10 @@ public class Main extends Activity {
             System.out.println("[wv] created " + view.getClass().getName() + " userAgent=" + view.getSettings().getUserAgentString());
             view.getSettings().setJavaScriptEnabled(true);
             view.setWebViewClient(new WebViewClient() {
+                @Override public boolean onRenderProcessGone(WebView v, android.webkit.RenderProcessGoneDetail detail) {
+                    System.out.println("[wv] render process gone: didCrash=" + detail.didCrash() + " priorityAtExit=" + detail.rendererPriorityAtExit());
+                    return true;
+                }
                 @Override public void onPageFinished(WebView v, String url) {
                     System.out.println("[wv] page finished " + url);
                     v.evaluateJavascript("1+1", value -> System.out.println("[wv] PASS js=" + value));
