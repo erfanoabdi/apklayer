@@ -9,5 +9,5 @@ sshpass -p "$PASS" scp build/hello-bc-receiver.apk build/hello-bc-sender.apk bui
 COPYFILE_DISABLE=1 tar cf - tests/vm/broadcasts.py bin/apklayer scripts | sshpass -p "$PASS" ssh "$VM" 'tar xf - -C ~/apklayer-m1'
 sshpass -p "$PASS" ssh "$VM" 'set -e; cd ~/apklayer-m1; export XDG_RUNTIME_DIR=/run/user/1000 APKLAYER_NATIVE="$HOME/arm64-native"; for a in receiver sender denied; do bin/apklayer install /tmp/hello-bc-$a.apk 2>&1 | grep -a installed; done'
 for phase in ${@:-manifest basic ordered sticky}; do
-    sshpass -p "$PASS" ssh "$VM" "cd ~/apklayer-m1; python3 -u tests/vm/broadcasts.py $phase"
+    sshpass -p "$PASS" ssh "$VM" "cd ~/apklayer-m1; BC_TRACE=${BC_TRACE:-} python3 -u tests/vm/broadcasts.py $phase"
 done

@@ -101,6 +101,7 @@ final class HubBroadcasts {
     void finish(HubDirectory.Peer caller, IBinder who, int code, String data, Bundle extras, boolean abort) {
         CompletableFuture<Result> waiting;
         synchronized (this) { waiting = pending.remove(who); }
+        System.out.println("[apklayer-hub] finish from " + caller.name() + " code=" + code + " data=" + data + " abort=" + abort + " matched=" + (waiting != null));
         if (waiting != null) waiting.complete(new Result(code, data, extras, abort));
     }
 
@@ -185,7 +186,7 @@ final class HubBroadcasts {
     private Result deliver(Target target, Intent intent, int code, String data, Bundle extras, boolean ordered, boolean isSticky, int userId, boolean wait) {
         IBinder who;
         HubDirectory.Peer peer = null;
-        if (target.dynamic != null) who = target.dynamic.binder;
+        if (target.dynamic != null) who = target.dynamic.peer.appThread();  // an app's receivers finish through its application thread token
         else {
             peer = process(target.manifest.packageName);
             if (peer == null) { System.out.println("[apklayer-hub] could not start " + target.manifest.packageName + " for " + intent.getAction()); return null; }

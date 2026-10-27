@@ -11,7 +11,7 @@ import time
 
 os.chdir(Path.home() / 'apklayer-m1')
 PHASE = sys.argv[1]
-BASE = '-Dapklayer.realbinder=true -Dapklayer.instancehub=true -Dapklayer.runms=60000'
+BASE = '-Dapklayer.realbinder=true -Dapklayer.instancehub=true -Dapklayer.runms=60000' + (' -Dhello.trace=1' if os.environ.get('BC_TRACE') else '')
 ENV = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000', APKLAYER_NATIVE=str(Path.home() / 'arm64-native'),
     APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400', APKLAYER_JOPTS=BASE)
 ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-media.so'
@@ -51,11 +51,11 @@ class Apps:
             for raw in parts:
                 line = raw.decode(errors='replace')
                 self.lines[name].append(line)
-                if '[bc' in line or '[apklayer-hub]' in line: print(name + ': ' + line, flush=True)
+                if '[bc' in line or '[apklayer-hub]' in line or '[apklayer] activity manager' in line or 'PendingResult' in line or '[bcr] trace' in line or ('\tat ' in line and 'android.app' in line): print(name + ': ' + line, flush=True)
                 assert not ('[bcs]' in line and 'FAIL' in line), line
         return bool(ready)
 
-    def wait_for(self, name, needle, seconds=40):
+    def wait_for(self, name, needle, seconds=12):
         end = time.monotonic() + seconds
         while time.monotonic() < end:
             if any(needle in line for line in self.lines[name]): return next(line for line in self.lines[name] if needle in line)
@@ -93,7 +93,7 @@ try:
         apps.start('sender', 'hello.bcsender', 'manifest')
         apps.wait_for('sender', '[bcs] done')
         # the receiver's package was not running: the hub started it headless and delivered
-        wait_file(LOGS / 'component-hello.bcreceiver.log', '[bcr] manifest hello.bc.MANIFEST', 40)
+        wait_file(LOGS / "component-hello.bcreceiver.log", "[bcr] manifest hello.bc.MANIFEST", 15)
         print('PASS manifest receiver of a package that was not running', flush=True)
     elif PHASE == 'basic':
         apps.start('receiver', 'hello.bcreceiver')

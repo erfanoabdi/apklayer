@@ -20,6 +20,7 @@ public class Main extends Activity {
             @Override public void onReceive(Context context, Intent intent) {
                 System.out.println("[bcr] dynamic " + intent.getAction() + " pid=" + Process.myPid() + " ordered=" + isOrderedBroadcast()
                         + " extra=" + intent.getStringExtra("note") + " sticky=" + isInitialStickyBroadcast());
+                if (isOrderedBroadcast() && System.getProperty("hello.trace") != null) new Throwable("[bcr] trace").printStackTrace(System.out);
                 if (isOrderedBroadcast()) {
                     if ("hello.bc.ABORT".equals(intent.getAction())) { System.out.println("[bcr] ABORT reached the dynamic receiver (it must not)"); return; }
                     setResultData(getResultData() + "|D");

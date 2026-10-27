@@ -72,6 +72,33 @@ final class HubPackages {
         return found;
     }
 
+    private Map<String, PermissionInfo> framework;
+
+    /** The framework's permission definitions (name, base protection level), generated from the tree's manifest (scripts/gen-framework-permissions.py). */
+    private synchronized PermissionInfo frameworkPermission(String name) {
+        if (framework == null) {
+            framework = new HashMap<>();
+            try (java.io.InputStream in = HubPackages.class.getClassLoader().getResourceAsStream("framework-permissions.txt")) {
+                if (in != null) {
+                    for (String line : new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).split("\n")) {
+                        String[] parts = line.trim().split(" ");
+                        if (parts.length != 2 || parts[0].startsWith("#")) continue;
+                        PermissionInfo info = new PermissionInfo();
+                        info.name = parts[0];
+                        info.protectionLevel = switch (parts[1]) {
+                            case "dangerous" -> PermissionInfo.PROTECTION_DANGEROUS;
+                            case "signature" -> PermissionInfo.PROTECTION_SIGNATURE;
+                            case "internal" -> PermissionInfo.PROTECTION_INTERNAL;
+                            default -> PermissionInfo.PROTECTION_NORMAL;
+                        };
+                        framework.put(info.name, info);
+                    }
+                }
+            } catch (IOException failure) { System.out.println("[apklayer-hub] cannot read the framework's permissions: " + failure); }
+        }
+        return framework.get(name);
+    }
+
     /** Whether the package holds the permission: it declares it itself, or requests a permission whose protection is normal (other grants are not modelled yet). */
     boolean holds(String name, String permission) {
         if (permission == null || permission.isEmpty()) return true;
@@ -86,9 +113,10 @@ final class HubPackages {
             definition = owner.permissions.stream().map(declared -> declared.info).filter(info -> permission.equals(info.name)).findFirst().orElse(null);
             if (definition != null) break;
         }
+        if (definition == null) definition = frameworkPermission(permission);
         if (definition == null) {
             try { definition = RuntimeEnvironment.getApplication().getPackageManager().getPermissionInfo(permission, 0); }
-            catch (PackageManager.NameNotFoundException missing) { return false; }
+            catch (PackageManager.NameNotFoundException missing) { System.out.println("[apklayer-hub] permission " + permission + " has no definition"); return false; }
         }
         return (definition.protectionLevel & PermissionInfo.PROTECTION_MASK_BASE) == PermissionInfo.PROTECTION_NORMAL;
     }

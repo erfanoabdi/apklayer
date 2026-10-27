@@ -7,7 +7,15 @@ separately, each app keeps its own cookies and storage.
 ## Status
 - **E1 (done, step 1a)**: real `android.os.Binder`/`BinderProxy`/`Parcel` JNI in the app JVM behind `-Dapklayer.realbinder=true`; `RealBinder.publish/lookup`; two-JVM test
   `tests/vm/binder.sh` (published binder, call, callback, caller identities, death on `kill -9`). media, player, audio and gpu regressions pass with the flag on.
-- Next: step 1b (the hub process in Java, headless AppHost mode, `bindService` across packages), then the list below.
+- **E1 services via the hub (done by the other session)**: `tests/vm/hub-services.sh [bound|auto]`.
+- **E2 broadcasts, first part (done 2026-10-27)**: `tests/vm/broadcasts.sh [manifest|basic|ordered|sticky]`: the hub plays the activity manager's part (`HubBroadcasts`); Android's own ContextImpl,
+  LoadedApk.ReceiverDispatcher, ActivityThread.handleReceiver and BroadcastReceiver.PendingResult run in the apps, ending in a hub-backed `IActivityManager` (registerReceiver,
+  broadcastIntent, finishReceiver, unbroadcastIntent). Verified: manifest receiver of a package that was not running (hub starts it headless), dynamic receivers across apps,
+  exported / not-exported rules, receiver and sender permissions, ordered delivery by priority across manifest and dynamic receivers with result propagation, abort and the final
+  result receiver, sticky intents (BROADCAST_STICKY, delivered to a later registration). Patches: `ShadowBroadcastPendingResult` and `ShadowBroadcastReceiver` overlays (Robolectric's
+  stand-ins never reached the activity manager / dropped the abort). Open in E2: goAsync across apps, cleanup tests for unregister and receiver-process death, the sender's own
+  receivers through the hub for ordered broadcasts (they are registered with it already), system sticky seeds (battery) for apps on the hub route.
+- Next: finish E2's open items, then E3 content providers.
 
 ## Work list
 1. **Package and identity model of the hub**: installed packages, components, signatures, permissions, enabled state; install/update/removal and stale metadata; process
