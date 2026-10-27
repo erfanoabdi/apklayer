@@ -613,6 +613,18 @@ rendering end to end, real input through the shell's input proxy, dialogs stacke
    `ContentProvider`s through `IContentProvider` binder calls. Plan: an instance "system JVM" hosts the providers; app JVMs reach them over real Binder (the kernel binder
    already runs on the instance; the Java `Binder`/`BinderProxy` JNI has to be registered and un-shadowed for this one path, per PLAN P6's "real binder where a
    process boundary exists"); the rest of the system services stay shadows. Start with Settings and Contacts/Calendar, then Media/Documents.
+8c. **Apps talk to each other like on Android** (user, 2026-10-27: "intents, broadcasts, binder AIDLs... should work like native Android"). Decision: **an instance
+   hub next to the Robolectric shadows** (option 1 of three: hub; our own thin system_server with the real framework client code (ActivityThread/ContextImpl instead of
+   Robolectric's ActivityController); the tree's real system_server). Hub = one process per instance owning the package registry (what `apklayer install` records), receiver
+   registrations (manifest and dynamic), the directory of running services and providers, app process lifecycle, and the pid-to-package table that gives
+   `Binder.getCallingUid` and permission checks their answers (all JVMs run as one host user). Each app JVM keeps its shadows; whatever targets another package is
+   forwarded to the hub. `IBinder`s cross JVMs over the real kernel binder: the real `android.os.Binder`/`BinderProxy`/`Parcel` JNI is registered and Robolectric's
+   shadows for them are removed, so AIDL stubs, `linkToDeath` and Parcelables behave as on a device. The hub speaks the real AIDL interfaces where they exist
+   (IContentProvider, IIntentSender, IServiceConnection...), so a later move to our own system_server (option 2) does not change the apps.
+   Order of work, each step with an automated cross-app test on the VM: (1) two tiny test apps, one with a bound AIDL service, one binding to it across two JVMs, with a death
+   notification; (2) broadcasts (manifest and dynamic receivers, ordered, sticky, permissions); (3) content providers (Settings first, then Contacts/Calendar) with
+   observers; (4) cross-app `startActivity`/`startActivityForResult`, `startService`, pending intents; (5) notifications and the rest. Behaviour is checked against Android's
+   documented semantics and, later, CTS's app-framework modules.
 9. Vulkan (P7.5) after the HALs.
 10. **CTS (P10) stays last**: not before media, camera and the other HALs work.
 
