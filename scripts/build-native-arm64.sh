@@ -6,6 +6,7 @@
 #   the shim comes from bridge/native/runtime_shim.c + android_platform.c + android_stubs.c (see scripts/android-stubs.py)
 set -e
 native="$1" shards="$2" classes="$3" tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
 bt="${APKLAYER_BT:-$HOME/bt-arm/bionic_translation/b}"
 scripts/patch-bionic-translation.sh "$(dirname "$bt")"
 ninja -C "$bt" libpthread_bio.so.0
@@ -40,8 +41,7 @@ ndk_lib libnativedisplay.so libnativedisplay.so.1
 ndk_lib libselinux.so libapklayer_selinux.so  # still needed by the libraries that link it (the service manager no longer uses it)
 mkdir -p "$tmp/jar/native/linux/x86_64" "$tmp/jar/native/linux/aarch64" && cp "$tmp/libandroid_runtime.so" "$tmp/jar/native/linux/x86_64/" && cp "$tmp/libandroid_runtime.so" "$tmp/jar/native/linux/aarch64/" && cp "$tmp/critical-natives.txt" "$tmp/jar/"
 # apklayer patch (docs/PATCHES.md): Robolectric's loader refuses Linux aarch64; the patched class comes first in the jar
-javac -nowarn -d "$tmp/jar" -cp "$native/aosp/Robolectric_all.jar:$native/android-all/*" $(find runtime/patches -name '*.java') 2>&1 | grep -v '^Note' || true
-rm -f "$native/native-runtime.jar" && (cd "$tmp/jar" && jar cf "$native/native-runtime.jar" .)
+scripts/build-runtime-overlay.sh "$native" "$tmp/jar"
 # Robolectric loads the library from the framework jar's own native/ first: keep the same copy there
 (cd "$tmp/jar" && for j in "$native"/aosp/android-all/*.jar "$native"/android-all/*.jar; do zip -q "$j" native/linux/x86_64/libandroid_runtime.so native/linux/aarch64/libandroid_runtime.so; done)
 # the patched bionic_translation libraries (property functions removed, SO_MAX, path hook): a stale copy in $native made the JVM spin in the property reader

@@ -94,3 +94,5 @@ The composer uses `apklayer_display_open_headless`: HELLO/output-refresh/vsync m
 
 ## Proxied IME and clipboard (2026-10-27)
 Shell text-input enable resolves proxy ids and keeps per-window state; compositor enter/leave controls the active field and W_TARGET/W_ID route preedit and commit. Clipboard pipes join the existing poll loop, keeping source text snapshots and echo caches per client; this avoids deadlocking when two JVMs share the shell. ShellClient fills its ByteBuffer before sending clipboard text. The tree ShadowKeyCharacterMap overlay reuses upstream code and suppresses characters under Ctrl/Alt/Meta, matching AOSP modifier matching so Android shortcuts reach EditText. Real Wayland/IBus/uinput coverage lives in tests/vm/input.sh.
+
+Runtime overlay packaging uses scripts/build-runtime-overlay.sh: compile every Java patch against the staged tree runtime, preserve or stage the native shim, and atomically publish after success. Compiler failures leave the working jar intact; build-native-arm64 no longer swallows javac errors.
