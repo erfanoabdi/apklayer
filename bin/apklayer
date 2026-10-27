@@ -139,6 +139,8 @@ tree_flavor() { [ -d "${APKLAYER_NATIVE:-$ROOT/native}/aosp" ]; }
 ensure_stack() {
     local logs="${APKLAYER_LOGS:-/tmp/apklayer-stack}"
     if [ -f "$logs/ready" ] && [ -f "$logs/stack.pid" ] && kill -0 "$(cat "$logs/stack.pid")" 2>/dev/null; then return; fi
+    # Clear the previous stack's marker before spawning its replacement.
+    rm -f "$logs/ready"
     setsid "$ROOT/scripts/arm64-stack.sh" none > "${XDG_RUNTIME_DIR}/apklayer-stack.log" 2>&1 < /dev/null &
     for _ in $(seq 1 600); do [ -f "$logs/ready" ] && return; sleep 0.2; done
     die "the Android services did not come up (see $XDG_RUNTIME_DIR/apklayer-stack.log and $logs/*.log)"

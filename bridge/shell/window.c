@@ -1,5 +1,7 @@
 /* App windows: xdg toplevels, shm buffers (rebuffered in place on resize), geometry. */
+#define _GNU_SOURCE
 #include "shell.h"
+#include <sys/mman.h>
 
 /* ---- windows ---- */
 
@@ -30,6 +32,35 @@ static void buffer_release(void *data, struct wl_buffer *b)
     }
 }
 static const struct wl_buffer_listener buffer_listener = { buffer_release };
+
+/* Map display windows before their producer's first frame, so the compositor
+ * can focus them and deliver the frame callbacks that start Android's vsync. */
+static void initial_release(void *data, struct wl_buffer *buffer)
+{
+    struct window *w = data;
+    wl_buffer_destroy(buffer);
+    w->initial_buffer = NULL;
+}
+static const struct wl_buffer_listener initial_listener = { initial_release };
+
+static void show_initial(struct window *w)
+{
+    int width = w->cfg_w > 0 ? w->cfg_w * w->scale / 100 : w->w;
+    int height = w->cfg_h > 0 ? w->cfg_h * w->scale / 100 : w->h;
+    int fd = memfd_create("apklayer-initial", MFD_CLOEXEC);
+    if (fd < 0) return;
+    int size = width * height * 4;
+    if (ftruncate(fd, size) < 0) { close(fd); return; }
+    struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, size);
+    w->initial_buffer = wl_shm_pool_create_buffer(pool, 0, width, height,
+                                                width * 4, WL_SHM_FORMAT_XRGB8888);
+    wl_shm_pool_destroy(pool);
+    close(fd);
+    wl_buffer_add_listener(w->initial_buffer, &initial_listener, w);
+    wl_surface_attach(w->surface, w->initial_buffer, 0, 0);
+    wl_surface_damage_buffer(w->surface, 0, 0, width, height);
+    wl_surface_commit(w->surface);
+}
 
 static void show(struct window *w, int buf, const int32_t *d)
 {
@@ -69,6 +100,7 @@ static void xs_configure(void *data, struct xdg_surface *xs, uint32_t serial)
         if (w->proxy) send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, lw, lh, output_scale }, 4);
         if (w->pending_buf >= 0) show(w, w->pending_buf, w->pending_damage);
         else if (w->pending_dbuf >= 0) window_dmabuf_show(w, w->pending_dbuf, w->pending_ddamage);
+        else if (!w->buffers[0]) show_initial(w);
         else wl_surface_commit(w->surface);
     }
 }
@@ -234,6 +266,7 @@ void window_destroy(struct window *w)
     if (pointer_focus == w) pointer_focus = NULL;
     if (keyboard_focus == w) keyboard_focus = NULL;
     for (int i = 0; i < NBUF; i++) if (w->buffers[i]) wl_buffer_destroy(w->buffers[i]);
+    if (w->initial_buffer) wl_buffer_destroy(w->initial_buffer);
     window_dmabuf_destroy(w);
     decor_destroy(&w->decor);
     xdg_toplevel_destroy(w->toplevel);

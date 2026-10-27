@@ -107,6 +107,7 @@ struct window {
     void *map;
     size_t map_len;
     struct wl_buffer *buffers[NBUF];
+    struct wl_buffer *initial_buffer; /* blank display frame, freed on release */
     struct wl_buffer *dbufs[DBUF_MAX]; /* imported dmabuf buffers of a dmabuf window */
     struct wl_callback *vsync_cb;   /* frame callback in flight for MSG_VSYNC_REQUEST */
     int pending_buf;            /* frame received before the first configure */

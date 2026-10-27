@@ -576,6 +576,8 @@ rate with every remaining failure explained. This also feeds P3: every gap found
 State: UiBench runs on the device-library route through `bin/apklayer run` (services on demand, one SurfaceFlinger virtual display per app, GPU
 rendering end to end, real input through the shell's input proxy, dialogs stacked on top). Test: `tests/vm/gpu.sh` (needs the VM and the libs built from `~/los24`).
 
+**2026-10-27 investigation:** fixed stale stack readiness before relaunch; initialized the real RenderEngine cache files and readiness property (avoids its five-second Android-init wait); display windows now map a blank shm frame before GPU output so Wayland can deliver focus/vsync. Cold launches and real clicks into Dialog List verified. Sink buffer release and stale-size frame rejection built and installed; one complete resize/Back/new-size-frame run passed, but repeated runs expose an intermittent bionic_translation mutex assertion and input focus sensitivity. A1 remains open. Full `dump SurfaceFlinger` currently hits a bionic_translation mutex assertion; `--list` works and is used by the regression.
+
 1. **Crash: resizing the window while a dialog is open** (user, 2026-10-27). Repro: General, Dialog List, drag the window edge. Seen: the window disappears, the
    JVM stays alive and idle, its main thread is stuck inside HWUI (`HardwareRenderer.nSetStopped`, native). Not yet diagnosed; leads: (a) the render thread
    blocked in `eglSwapBuffers` (our window blit) in `dequeueBuffer` because no buffer comes back after the size change (BLAST queue resized, SurfaceFlinger

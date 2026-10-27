@@ -1,5 +1,7 @@
 # apklayer — Project Memory
 
+> Current authorization (2026-10-27): the user asked the assistant to build anything needed in OrbStack `~/los24` autonomously while they sleep. This supersedes older instructions below to ask them to build. Only incremental builds of `gsi_arm64 userdebug`; never clean or wipe `out/`.
+
 Living document of facts and decisions told by the user. Keep this up to date.
 The full chronological log up to the first Wayland frames is in `archive/HISTORY.md`.
 
@@ -174,3 +176,12 @@ Install apps first with the default flavor (the tree flavor's describe step is n
 Capture caveat: `prlctl capture` is reliable for the GPU window now (it showed the UiBench list); Robolectric patches live in `runtime/patches/` (compiled into native-runtime.jar by `scripts/build-native-arm64.sh`).
 
 ## Open problems on the GPU route (2026-10-27): see docs/PLAN.md "P7.1 GPU route: next steps" (crash on resize with a dialog open, dialog margin, mapping/focus, headless primary, multi-app, text input/clipboard, cleanup).
+
+## GPU follow-up (2026-10-27)
+- User authorized autonomous incremental los24 builds this session, superseding the older ask-to-build rule. Never clean out/.
+- Found stale /tmp/apklayer-stack/ready race: ensure_stack must clear it before starting a replacement.
+- RenderEngine waits five seconds for service.sf.cache_dir_available without Android init. arm64-stack now creates real cache files under android-root/data/misc/surfaceflinger and announces readiness. Files must exist for the current path overlay to redirect them.
+- An unmapped dmabuf-only primary cannot deliver Wayland frame callbacks; shell maps an initial blank shm frame (same memfd pattern as decorations), enabling cold-start focus/vsync. Verified cold startup and real menu clicks into Dialog List.
+- Full SurfaceFlinger dumps abort at default_pthread_mutex_init in bionic_translation; --list works. Regression uses --list.
+- libapklayer_vdisplay rebuilt using its four generated ninja compile/link/strip/copy commands against existing dependencies: normal ninja traversal hit unrelated ABI-dump Duplicate root dir errors. No cleaning.
+- Resize regression status: one complete pass (real resize to 615x823, real Back removed the dialog layer, clipboard step and new-size dmabufs verified). Other runs exposed a bionic_translation default_pthread_mutex_init assertion and coordinate/focus sensitivity; A1 is not complete. Temporary diagnostic instrumentation is installed in VM ~/bt-arm/bionic_translation/pthread_wrapper/libpthread.c and rebuilt libpthread_bio.so.0 (also copied into ~/arm64-native); its original source is unchanged on the Mac. Remove the diagnostic or retain a reproducible patch when diagnosis is complete.

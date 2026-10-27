@@ -67,3 +67,9 @@ Loads `APKLAYER_HOST_LIBS` (the host graphics HAL) globally; installs the path l
 ## Shell: input proxy (`bridge/shell`)
 `MSG_ATTACH_INPUT`: an app takes over the input, state and size of the window with a given title (the display's window, owned by the composer or the
 virtual display sink). `W_TARGET`/`W_ID` route those messages; `window_attach_input`, `window_drop_proxy`.
+
+## Display startup and sink ownership (2026-10-27)
+- `bin/apklayer`: clear stale stack-ready marker before spawning replacement services.
+- `scripts/arm64-stack.sh`: create the actual RenderEngine cache files and set Android init’s cache-ready property.
+- `bridge/shell/window.c`: reuse the decoration memfd/shm pattern to map an initial blank display frame, so focus and real compositor vsync do not depend on the first Android frame. The buffer is freed on compositor release or window destruction.
+- `aosp/hals/graphics/vdisplay/VirtualDisplay.cpp`: return acquired buffers when Wayland releases them; drop old-size queued frames after configure.

@@ -81,6 +81,12 @@ class Sink : public ConsumerBase::FrameAvailableListener {
             mConsumer->releaseBuffer(item);
             return;
         }
+        // An old-size frame can arrive after configure. Never let it change the
+        // shell's geometry back to the size we just left.
+        if (d.width != mWidth || d.height != mHeight) {
+            mConsumer->releaseBuffer(item);
+            return;
+        }
         int slot = slotFor(d.id);
         if (slot < 0) { mConsumer->releaseBuffer(item); return; }  // every slot is still on screen: drop this frame
         const native_handle_t* h = item.mGraphicBuffer->handle;
@@ -125,7 +131,14 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         auto* self = static_cast<Sink*>(user);
         std::lock_guard<std::mutex> lock(self->mLock);
         if (slot < 0 || slot >= kSlots) return;
-        self->mBusy[slot] = false;  // the buffer stays acquired until the next frame replaces it on this slot, or is dropped
+        // apklayer patch: wl_buffer.release ends the consumer's ownership too.
+        // Keeping old buffers acquired until their slot is replaced prevents the
+        // producer from recycling them, especially when a resize reallocates them.
+        if (self->mHeld[slot].mGraphicBuffer != nullptr) {
+            self->mConsumer->releaseBuffer(self->mHeld[slot]);
+            self->mHeld[slot] = BufferItem();
+        }
+        self->mBusy[slot] = false;
     }
 
     // the window changed size: the display follows

@@ -15,6 +15,12 @@ trap 'kill "${!name_of[@]}" 2>/dev/null; pkill -x apklayer-shell 2>/dev/null' EX
 
 rm -rf "$XDG_RUNTIME_DIR/apklayer/$APKLAYER_INSTANCE"
 "$N/bin/aprop" load "$HOME/apklayer-m1/bridge/native/apklayer.prop" "$N/android-root/props/system_build.prop" 2> "$LOGS/aprop.log"
+# Android init normally creates this directory and announces it to RenderEngine.
+# Pre-create the cache files too: the path overlay resolves existing files only.
+cache="${APKLAYER_ANDROID_ROOT:-$N/android-root}/data/misc/surfaceflinger"
+if mkdir -p "$cache" && touch "$cache/egl_shaders" "$cache/skia_shaders" "$cache/skia_graphite_pipelines"; then
+    "$N/bin/aprop" set service.sf.cache_dir_available 1
+fi
 if [ "${APKLAYER_START_SHELL:-1}" = 1 ]; then
     pkill -x apklayer-shell 2>/dev/null; rm -f "$XDG_RUNTIME_DIR/apklayer/shell.sock"
     start shell "$HOME/apklayer-m1/b/bridge/shell/apklayer-shell"
