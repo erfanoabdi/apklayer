@@ -16,20 +16,12 @@ HWUI render on the host GPU; the app is a Robolectric JVM (shadows for system se
 shown as a Wayland window by `apklayer-shell`. UiBench runs today with GPU rendering, real input, dialogs. The older x86/Rosetta CPU route and a third-party arm64
 Robolectric jar are kept as fallbacks. Hosts are not Mesa-specific (no minigbm/Mesa dependency); real refresh rate; no fake stand-ins for hardware.
 
-## Hard rules (the user's, repeated complaints: obey them)
-- **Never build in `~/los24`** (OrbStack VM `ubuntu22-x86`, tree `~/los24`, read it via `/Users/erfanabdi/OrbStack/ubuntu22-x86/home/erfanabdi/los24`). Never touch/clean its `out/`.
-  Edit `aosp/` here, run `scripts/sync-aosp.sh "message"` (mirrors into `~/los24/vendor/apklayer` and commits there), then **ask the user to build the named modules** and wait. Take outputs
-  from `out/target/product/generic_arm64/system/lib64/` read-only and install them on the VM (`~/android-arm64/lib64`). Log each requested build in `docs/AOSP-BUILDS.md`.
-  New modules need a reason in the commit message and `aosp/hals/README.md` (reuse local code first: `memory.md` "Reference projects").
-- **3-second rule:** no `sleep`/poll loops/`timeout` wrappers in your own commands, no `run_in_background` to dodge waiting, nothing left running: end every test with `bin/apklayer stop`
-  (+`pkill -9 -x tail`) and check `ps` on the VM. Never `pkill -f` a pattern contained in your own command line (use `[x]pattern`). Never leave a stalled command.
-- The user does not test by hand and does not want to be asked to. Verify on the VM with real input (`/tmp/uinput-keys`, compiled from `tests/vm/uinput-keys.c`), SurfaceFlinger
-  dumps (`servicetool dump SurfaceFlinger`), logs and `prlctl capture "Ubuntu 24.04 (with Rosetta)" --file x.png` on the Mac (look at the image).
-- Smallest change, reuse local code, no redoing finished work. One responsibility per file, no file past ~600 lines. Every deviation from upstream is a thin "apklayer patch" listed in `docs/PATCHES.md`.
-- Commit every step. Trailer: `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`. Use they/them for people whose pronouns you do not know.
-- The user likes short honest status; they get frustrated by silence, by long stalls, by claims without verification. Say what is verified and what is not.
-- Decisions already made (do not reopen): system services stay Robolectric shadows (no system_server) except where a process boundary exists, where real binder is used (hub, PLAN 8c); backlight and
-  thermal belong to the host; accounts the Android way; system providers/apps ship on every instance; Bluetooth through a BlueZ bridge scoped by app usage; **CTS strictly last**; x86_64 host libandroid_runtime build deferred until after the tool is public.
+## Rules
+Binding rules (builds in `~/los24`, no waiting/background, cleanup, no manual testing, reuse local code, patches, commits) are in `CLAUDE.md`; do not restate them here.
+- Verify on the VM with real input (`/tmp/uinput-keys`, compiled from `tests/vm/uinput-keys.c`), SurfaceFlinger dumps (`servicetool dump SurfaceFlinger`), logs and `prlctl capture "Ubuntu 24.04 (with Rosetta)" --file x.png` on the Mac (look at the image).
+- Android-side edits: edit `aosp/`, `scripts/sync-aosp.sh "message"`, build the named modules, install outputs from `out/target/product/generic_arm64/system/lib64/` on the VM. New modules need a reason in the commit message and `aosp/hals/README.md`.
+- The user likes short honest status; they get frustrated by silence, long stalls, claims without verification. Say what is verified and what is not.
+- Decisions already made (do not reopen): system services stay Robolectric shadows (no system_server) except where a process boundary exists, where real binder is used (hub, PLAN 8c); backlight and thermal belong to the host; accounts the Android way; system providers/apps ship on every instance; Bluetooth through a BlueZ bridge scoped by app usage; **CTS strictly last**; x86_64 host libandroid_runtime build deferred until after the tool is public.
 
 ## Environment
 - VM: `ssh parallels@10.211.55.4` (password `1234`, use `sshpass -p 1234 ssh ...`), Ubuntu arm64 on Parallels, GNOME Wayland, virtio-gpu (virgl; no Vulkan hardware, no Bluetooth). Repo copy `~/apklayer-m1` (sync files by `tar -cf - … | ssh … tar -xf -`). Build host-side C with `ninja -C b <target>` there (the Java host jar target fails on an old unrelated error: compile single classes with javac against `~/arm64-native/aosp/host-classes:sim-classes:Robolectric_all.jar` and copy into `aosp/host-classes`).

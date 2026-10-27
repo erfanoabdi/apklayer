@@ -21,8 +21,7 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
   `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m <target>`.
   **Never wipe/clean `~/los24/out`** (user: "it's gonna take very long time"): no rm -rf out, m clean, installclean, other products.
   Earlier (now void): separate OUT_DIR and "never touch los24's out/".
-- The AOSP tree is a **read-only reference**: read source to copy/understand, and use its
-  prebuilts (e.g. JDK) locally; don't compile it.
+- The AOSP tree is a reference for source and prebuilts (e.g. JDK); builds in it follow `CLAUDE.md` (incremental only).
 - **Write as little code as possible; copy from AOSP/Robolectric as much as possible.**
 - **Robolectric method** (2026-10-25): unmodified `android-all` + shadows. No hand-patched
   framework copies ("manually patched files … won't be good to replicate by the android
