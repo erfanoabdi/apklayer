@@ -1,0 +1,82 @@
+/* Real libvpx encoding/decoding, PTS/EOS and retained frame lifetime. */
+#include <apklayer/codec.h>
+#include <assert.h>
+#include <errno.h>
+#include <gst/app/gstappsink.h>
+#include <gst/gst.h>
+#include <stdio.h>
+
+static void decode(unsigned width, unsigned height)
+{
+    struct apklayer_codec_config cfg = { .mime = "video/x-vnd.on2.vp8", .width = width, .height = height };
+    struct apklayer_codec *codec = NULL;
+    assert(apklayer_codec_open(&cfg, &codec) == 0);
+    struct apklayer_codec_frame *empty = NULL;
+    assert(apklayer_codec_pull(codec, 0, &empty) == -EAGAIN && !empty);
+    char *desc = g_strdup_printf("videotestsrc num-buffers=3 pattern=red ! "
+        "video/x-raw,width=%u,height=%u,framerate=30/1 ! vp8enc deadline=1 ! "
+        "appsink name=encoded sync=false", width, height);
+    GError *error = NULL;
+    GstElement *encoder = gst_parse_launch(desc, &error);
+    g_free(desc);
+    assert(encoder && !error);
+    GstAppSink *encoded = GST_APP_SINK(gst_bin_get_by_name(GST_BIN(encoder), "encoded"));
+    assert(gst_element_set_state(encoder, GST_STATE_PLAYING) != GST_STATE_CHANGE_FAILURE);
+    int64_t pts[3];
+    for (unsigned n = 0; n < 3; n++) {
+        GstSample *sample = gst_app_sink_try_pull_sample(encoded, GST_SECOND);
+        assert(sample);
+        GstBuffer *buffer = gst_sample_get_buffer(sample);
+        GstMapInfo map;
+        assert(gst_buffer_map(buffer, &map, GST_MAP_READ));
+        pts[n] = GST_BUFFER_PTS(buffer);
+        assert(apklayer_codec_queue(codec, map.data, map.size, pts[n]) == 0);
+        gst_buffer_unmap(buffer, &map);
+        gst_sample_unref(sample);
+    }
+    assert(apklayer_codec_end(codec) == 0);
+    struct apklayer_codec_frame *retained = NULL;
+    for (unsigned n = 0; n < 3; n++) {
+        struct apklayer_codec_frame *frame = NULL;
+        int result = apklayer_codec_pull(codec, GST_SECOND, &frame);
+        if (result) fprintf(stderr, "pull frame %u: %d\n", n, result);
+        assert(result == 0);
+        struct apklayer_codec_frame_info info;
+        apklayer_codec_frame_describe(frame, &info);
+        assert(info.width == width && info.height == height && info.planes == 3);
+        assert(!strcmp(info.format, "I420") && info.pts_ns == pts[n]);
+        const void *planes[4];
+        assert(apklayer_codec_frame_map(frame, planes) == 0);
+        unsigned y = *(const unsigned char *)planes[0];
+        unsigned u = *(const unsigned char *)planes[1];
+        unsigned v = *(const unsigned char *)planes[2];
+        assert(y > 50 && y < 110 && u < 130 && v > 180);
+        printf("PASS VP8 %ux%u frame %u pts=%ld YUV=%u,%u,%u\n", width, height, n, (long)info.pts_ns, y, u, v);
+        if (!n) retained = frame; else apklayer_codec_frame_release(frame);
+    }
+    struct apklayer_codec_frame *none = NULL;
+    assert(apklayer_codec_pull(codec, GST_SECOND, &none) == -ENODATA && !none);
+    apklayer_codec_close(codec);
+    /* Samples stay owned even after stopping/releasing the decoder. */
+    const void *planes[4];
+    assert(apklayer_codec_frame_map(retained, planes) == 0);
+    assert(*(const unsigned char *)planes[2] > 180);
+    apklayer_codec_frame_release(retained);
+    gst_element_set_state(encoder, GST_STATE_NULL);
+    gst_object_unref(encoded);
+    gst_object_unref(encoder);
+    puts("PASS EOS and frame ownership after decoder teardown");
+}
+
+int main(void)
+{
+    gst_init(NULL, NULL);
+    assert(!apklayer_codec_supports("video/not-a-codec"));
+    assert(apklayer_codec_supports("video/x-vnd.on2.vp8"));
+    struct apklayer_codec *bad = NULL;
+    struct apklayer_codec_config cfg = { .mime = "video/not-a-codec", .width = 64, .height = 48 };
+    assert(apklayer_codec_open(&cfg, &bad) == -ENOTSUP && !bad);
+    decode(64, 48);
+    decode(80, 60);
+    return 0;
+}

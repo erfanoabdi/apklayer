@@ -20,3 +20,5 @@ subdir('runtime/dex2jvm')
 subdir('runtime/host')
 subdir('bridge/shell')
 subdir('bridge/hals/graphics')
+
+subdir('bridge/hals/media')
