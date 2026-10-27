@@ -6,4 +6,6 @@ the GNU Affero General Public License as published by the Free Software Foundati
 version 3 of the License, or (at your option) any later version (see LICENSE).
 
 Third-party components keep their own licenses: see docs/THIRD_PARTY.md
-(dex2jvm from Mac.apk: AGPL-3.0; AOSP: Apache-2.0; Robolectric: MIT).
+(dex2jvm: Apache-2.0, its own NOTICE is in runtime/dex2jvm; AOSP: Apache-2.0; Robolectric: MIT).
+
+A commercial license is available for companies that do not want the AGPL terms: see COMMERCIAL.md.

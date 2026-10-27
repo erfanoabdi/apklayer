@@ -36,7 +36,7 @@ Instead:
 1. **Unmodified AOSP compiled to JVM**: `org.robolectric:android-all-instrumented`.
 2. **Robolectric shadows + sandbox** (MIT) for the parts that need host bindings, plus
    Robolectric's NATIVE graphics runtime (real HWUI/Skia).
-3. **dex2jvm** (`runtime/dex2jvm`, from Mac.apk, AGPL) converts app DEX → JVM classes,
+3. **dex2jvm** (`runtime/dex2jvm`, upstream kksimp/dex2jvm, Apache-2.0) converts app DEX → JVM classes,
    against the android-all class hierarchy; app classes stamped `@DoNotInstrument`.
 4. **apklayer's own host layer**: `bridge/shell/` (Wayland presenter + input). Driver: `runtime/host/`.
 5. Earlier stacks (hand-grown seed, Mac.apk `java_mac`) were removed from the tree; see git tag `archive-last` (`archive/` there).

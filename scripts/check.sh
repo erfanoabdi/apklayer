@@ -27,7 +27,7 @@ cp -R "$ROOT/runtime/host/resources/." "$OUT/host/"
 # dex2jvm takes the class hierarchy from its classpath (android-all); keep it away from any
 # installed Android SDK, which it would otherwise prefer.
 ANDROID_HOME="$OUT/home" ANDROID_SDK_ROOT="$OUT/home" "${J}java" -Duser.home="$OUT/home" \
-  -cp "$OUT/d2j:$DEPS/android-all/*" com.macapk.dex.Main "$APK" "$OUT/$NAME-classes.jar"
+  -cp "$OUT/d2j:$DEPS/android-all/*" io.github.kksimp.dex2jvm.Main "$APK" "$OUT/$NAME-classes.jar"
 "${J}java" -cp "$DEPS/libs/*:$OUT/host" apklayer.tools.DenyInstrument "$OUT/$NAME-classes.jar" "$OUT/$NAME-dni.jar"
 
 cd "$OUT"

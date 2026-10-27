@@ -1,6 +1,6 @@
 package apklayer.host;
 
-import com.macapk.dex.DexConverter;
+import io.github.kksimp.dex2jvm.DexConverter;
 import dalvik.system.BaseDexClassLoader;
 import java.nio.ByteBuffer;
 import org.robolectric.annotation.Implementation;

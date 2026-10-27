@@ -90,7 +90,7 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
   product path, only the dev-VM stopgap until PLAN P7.
 - P1.3 build: top-level Meson (`meson setup b && ninja -C b`) on Linux; jars are custom_targets via
   scripts/javac-jar.sh (Meson's jar() compiles per file and can't resolve dex2jvm's flat
-  `com.macapk.dex/` dir). The Mac has no meson/ninja (not installed: avoid downloads), so check.sh
+  `io/github/kksimp/dex2jvm/` dir). The Mac has no meson/ninja (not installed: avoid downloads), so check.sh
   uses javac directly. Exclude macOS `._*` AppleDouble files (COPYFILE_DISABLE=1 for tar).
 - P1.6 shell: `apklayer-shell` daemon (bridge/shell/, see docs/ARCHITECTURE.md) on `$XDG_RUNTIME_DIR/apklayer/shell.sock`;
   vm-run (re)starts it detached, log /tmp/apklayer-shell.log. App side = pure Java ShellClient.

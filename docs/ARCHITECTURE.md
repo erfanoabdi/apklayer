@@ -37,7 +37,7 @@ result to the Linux desktop through a thin host layer (Wayland today).
 
 | Path | Role |
 |---|---|
-| `runtime/dex2jvm/` | DEX → JVM bytecode (from Mac.apk, AGPL). Reads class hierarchy from its own classpath, so it must be run with the target `android-all` on it. |
+| `runtime/dex2jvm/` | DEX → JVM bytecode (upstream kksimp/dex2jvm, Apache-2.0). Reads class hierarchy from its own classpath, so it must be run with the target `android-all` on it. |
 | `runtime/host/java/apklayer/tools/DenyInstrument.java` | Stamps a runtime-visible `@DoNotInstrument` on the app classes. dex2jvm's `<init>` lowering conflicts with Robolectric's constructor renaming. |
 | `runtime/host/java/apklayer/host/Main.java` | Entry point: builds the sandbox with Robolectric's simulator `SandboxBuilder` (no JUnit) and runs `AppHost` in it. |
 | `runtime/host/java/apklayer/host/AppHost.java` | App setup as in the simulator's `AppLoader` (manifest = the APK), the simulator's event loop, launcher resolution, back stack (`Robolectric.setupActivity`-style launches; previous activity stopped and hidden unless the new one is translucent, as `ActivityThread` does), resize/DPI (`hostResize`). |

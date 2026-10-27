@@ -58,7 +58,7 @@ host_cp() {
 }
 # The cache key of a conversion: same APK, same framework, same converter -> same classes.
 cache_key() {
-    { sha256sum "$1" | cut -c1-64; echo "post-processing v6: Android classloader adapter, guava relocation, native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke"; sha256sum "$(framework_dir)"/*.jar; cat "$ROOT/runtime/dex2jvm/com.macapk.dex/.dex2jvm-commit" 2>/dev/null; } \
+    { sha256sum "$1" | cut -c1-64; echo "post-processing v6: Android classloader adapter, guava relocation, native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke"; sha256sum "$(framework_dir)"/*.jar; cat "$ROOT/runtime/dex2jvm/.dex2jvm-commit" 2>/dev/null; } \
         | sha256sum | cut -c1-64
 }
 framework_dir() {
@@ -108,7 +108,7 @@ cmd_install() {
         # dex2jvm reads the class hierarchy from its classpath (the framework we run on); keep it
         # away from any installed Android SDK, which it would otherwise prefer.
         ANDROID_HOME="$tmp" ANDROID_SDK_ROOT="$tmp" java -Duser.home="$tmp" \
-            -cp "$DEX2JVM_JAR:$(framework_dir)/*" com.macapk.dex.Main "$tmp/base.apk" "$tmp/raw.jar" >/dev/null
+            -cp "$DEX2JVM_JAR:$(framework_dir)/*" io.github.kksimp.dex2jvm.Main "$tmp/base.apk" "$tmp/raw.jar" >/dev/null
         java -cp "$DEPS/libs/*:$HOST_JAR" apklayer.tools.DenyInstrument "$tmp/raw.jar" "$tmp/classes.jar" >/dev/null
         rm -f "$tmp/raw.jar"
     fi
