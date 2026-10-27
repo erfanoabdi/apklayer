@@ -603,6 +603,16 @@ rendering end to end, real input through the shell's input proxy, dialogs stacke
    system_server's services and an exclusive controller), scoped by what the corpus apps actually call (BLE scan, GATT client/server and advertising first; then RFCOMM/L2CAP
    sockets; audio profiles through PipeWire), with a compatibility table of every API and its status; unimplemented calls return real errors. Developed against
    BlueZ's `btvirt`/vhci virtual controllers (the VM has no Bluetooth hardware).
+   **Decided with the user (2026-10-27):** display backlight and thermal are the host's business (not ours); accounts are the Android way (the account apps' own
+   authenticators through `AccountManager`, no host account bridge). Connectivity reports the host's real state (NetworkManager for Wi-Fi/Ethernet, ModemManager for
+   cellular if the host has a modem, otherwise "no SIM"; a clearly labelled virtual-SIM test mode is the only exception); also battery/power (UPower, logind), sensors
+   (IIO), game controllers and haptics (evdev), USB (udev), biometrics (fprintd), NFC (PC/SC), file/screen-capture portals.
+8b. **System apps and providers on every instance by default** (user, 2026-10-27): the tree's own ContactsProvider, CalendarProvider, DownloadProvider, SettingsProvider,
+   TelephonyProvider, UserDictionaryProvider, DocumentsUI (+ContactsPicker), MediaProvider and friends (APKs are in the build's `system/priv-app`), each with its data in the
+   instance's storage. They are apps like any other (converted and run by apklayer), but their consumers are other apps, so this is the cross-process case: apps reach
+   `ContentProvider`s through `IContentProvider` binder calls. Plan: an instance "system JVM" hosts the providers; app JVMs reach them over real Binder (the kernel binder
+   already runs on the instance; the Java `Binder`/`BinderProxy` JNI has to be registered and un-shadowed for this one path, per PLAN P6's "real binder where a
+   process boundary exists"); the rest of the system services stay shadows. Start with Settings and Contacts/Calendar, then Media/Documents.
 9. Vulkan (P7.5) after the HALs.
 10. **CTS (P10) stays last**: not before media, camera and the other HALs work.
 
