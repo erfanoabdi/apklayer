@@ -22,8 +22,33 @@ public final class HubClient {
             request.writeStrongBinder(((android.app.IApplicationThread) android.app.ActivityThread.currentActivityThread().getApplicationThread()).asBinder());
         }, reply -> reply.readInt());
         if (pid != android.os.Process.myPid()) throw new IllegalStateException("Hub caller identity mismatch");
+        HubPermissionChecker.install();
+        HubProviders_registerRemote(context);
         System.out.println("[apklayer] hub registered " + context.getPackageName() + " pid=" + pid);
     }
+    /** Providers of the other installed apps, registered under their authorities in this app's ContentResolver. */
+    private void HubProviders_registerRemote(Context context) {
+        java.util.List<String[]> providers = HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.LIST_PROVIDERS, request -> {}, reply -> {
+            java.util.List<String[]> list = new java.util.ArrayList<>();
+            for (int n = reply.readInt(); n > 0; n--) list.add(new String[] {reply.readString(), reply.readString(), reply.readString(), reply.readString()});
+            return list;
+        });
+        int count = 0;
+        for (String[] provider : providers) {
+            if (provider[1].equals(context.getPackageName())) continue;
+            for (String authority : provider[0].split(";")) {
+                org.robolectric.shadows.ShadowContentResolver.registerProviderInternal(authority, new RemoteProvider(context, authority, provider[2], provider[3]));
+                count++;
+            }
+        }
+        System.out.println("[apklayer] remote providers registered: " + count);
+    }
+
+    /** What the hub says about a process (a caller's pid): whether its package holds the permission. */
+    int checkPermission(int pid, String permission) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CHECK_PERMISSION, request -> { request.writeInt(pid); request.writeString(permission); }, reply -> reply.readInt());
+    }
+
     static synchronized HubClient attach(Context context) {
         if (current == null) current = new HubClient(context.getApplicationContext());
         return current;

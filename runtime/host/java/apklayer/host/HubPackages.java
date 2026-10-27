@@ -41,6 +41,24 @@ final class HubPackages {
     }
     record Receiver(ActivityInfo info, IntentFilter filter) {}
 
+    /** Every provider of every installed package (the manifest's authorities, split on ';'). */
+    List<android.content.pm.ProviderInfo> providers() {
+        List<android.content.pm.ProviderInfo> found = new ArrayList<>();
+        for (String name : installed()) {
+            PackageParser.Package pkg;
+            try { pkg = get(name); } catch (RuntimeException unreadable) { continue; }
+            if (pkg == null) continue;
+            for (PackageParser.Provider provider : pkg.providers) if (provider.info.authority != null && provider.info.enabled) found.add(provider.info);
+        }
+        return found;
+    }
+
+    android.content.pm.ProviderInfo provider(String authority) {
+        for (android.content.pm.ProviderInfo info : providers())
+            for (String one : info.authority.split(";")) if (one.equals(authority)) return info;
+        return null;
+    }
+
     /** Installed package names (every directory with an APK). */
     List<String> installed() {
         List<String> names = new ArrayList<>();

@@ -48,6 +48,12 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
         }
     }
 
+    // A provider (or any service) in this process asking about its caller: with the hub the caller's package decides, not this app's own grants.
+    @Implementation @Override protected int checkPermission(String permission, int pid, int uid) {
+        if (hub() && HubClient.connected() && pid != android.os.Process.myPid()) return HubClient.current().checkPermission(pid, permission);
+        return super.checkPermission(permission, pid, uid);
+    }
+
     // With the instance hub, broadcasts and receiver registrations run Android's own ContextImpl code (LoadedApk.ReceiverDispatcher, PendingResult...), which ends
     // in the hub-backed activity manager (HubActivityManager): Robolectric's in-process queue would only reach this app's own receivers.
     private static boolean hub() { return Boolean.getBoolean("apklayer.instancehub"); }

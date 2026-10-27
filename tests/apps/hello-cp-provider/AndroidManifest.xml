@@ -1,0 +1,11 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="hello.cpprovider">
+  <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="34"/>
+  <permission android:name="hello.cpprovider.permission.READ" android:protectionLevel="normal"/>
+  <permission android:name="hello.cpprovider.permission.WRITE" android:protectionLevel="normal"/>
+  <application android:label="cp-provider">
+    <provider android:name=".ItemsProvider" android:authorities="hello.cpprovider.items" android:exported="true"
+        android:readPermission="hello.cpprovider.permission.READ" android:writePermission="hello.cpprovider.permission.WRITE"/>
+    <provider android:name=".OpenProvider" android:authorities="hello.cpprovider.open" android:exported="true"/>
+    <provider android:name=".PrivateProvider" android:authorities="hello.cpprovider.private" android:exported="false"/>
+  </application>
+</manifest>

@@ -19,11 +19,12 @@ final class HubDirectory extends Binder {
     private final Map<Integer, Peer> peers = new HashMap<>();
     private final HubServiceBindings bindings;
     private final HubBroadcasts broadcasts;
+    private final HubProviders providers;
     private final Map<String, Process> hosts = new HashMap<>();
     private final Map<String, Integer> failures = new HashMap<>();
     private volatile boolean stopping;
     HubDirectory(Path apps) {
-        packages = new HubPackages(apps); bindings = new HubServiceBindings(this, packages); broadcasts = new HubBroadcasts(this, packages);
+        packages = new HubPackages(apps); bindings = new HubServiceBindings(this, packages); broadcasts = new HubBroadcasts(this, packages); providers = new HubProviders(this, packages, broadcasts);
         attachInterface(null, HubProtocol.DESCRIPTOR);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             stopping = true;
@@ -34,6 +35,7 @@ final class HubDirectory extends Binder {
             }
         }, "hub-component-cleanup"));
     }
+    Peer peerByPid(int pid) { synchronized (peers) { return peers.get(pid); } }
     Peer peer(String name) {
         synchronized (peers) { return peers.values().stream().filter(peer -> peer.name.equals(name)).findFirst().orElse(null); }
     }
@@ -138,6 +140,23 @@ final class HubDirectory extends Binder {
             case HubProtocol.UNBROADCAST -> {
                 Peer caller = caller(); Intent intent = request.readTypedObject(Intent.CREATOR); request.enforceNoDataAvail();
                 broadcasts.removeSticky(caller, intent); reply.writeNoException(); return true;
+            }
+            case HubProtocol.LIST_PROVIDERS -> {
+                caller(); request.enforceNoDataAvail();
+                var list = providers.list();
+                reply.writeNoException(); reply.writeInt(list.size());
+                for (var info : list) { reply.writeString(info.authority); reply.writeString(info.packageName);
+                    reply.writeString(info.readPermission); reply.writeString(info.writePermission); }
+                return true;
+            }
+            case HubProtocol.GET_PROVIDER -> {
+                Peer caller = caller(); String authority = request.readString(); request.enforceNoDataAvail();
+                IBinder provider = providers.get(caller, authority);
+                reply.writeNoException(); reply.writeStrongBinder(provider); return true;
+            }
+            case HubProtocol.CHECK_PERMISSION -> {
+                caller(); int pid = request.readInt(); String permission = request.readString(); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeInt(providers.check(pid, permission)); return true;
             }
             default -> { return super.onTransact(code, request, reply, flags); }
         }

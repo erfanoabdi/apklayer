@@ -56,6 +56,13 @@ final class HubEndpoint extends Binder {
             });
             reply.writeNoException(); return true;
         }
+        if (code == HubProtocol.ENDPOINT_GET_PROVIDER) {
+            String authority = request.readString(); request.enforceNoDataAvail();
+            android.content.ContentProvider provider = org.robolectric.shadows.ShadowContentResolver.getProvider(android.net.Uri.parse("content://" + authority));
+            reply.writeNoException();
+            reply.writeStrongBinder(provider == null ? null : provider.getIContentProvider().asBinder());
+            return true;
+        }
         return super.onTransact(code, request, reply, flags);
     }
 }

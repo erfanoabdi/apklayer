@@ -80,6 +80,12 @@ int apklayer_register_binder(JNIEnv *env, void *runtime)
         if ((*env)->ExceptionCheck(env)) (*env)->ExceptionDescribe(env);
         return -1;
     }
+    int (*window)(JNIEnv *) = bionic_dlsym(runtime, "_ZN7android38register_android_database_CursorWindowEP7_JNIEnv");
+    if (!window || window(env) < 0 || (*env)->ExceptionCheck(env)) {
+        fprintf(stderr, "[runtime] cannot register android.database.CursorWindow natives\n");
+        if ((*env)->ExceptionCheck(env)) (*env)->ExceptionDescribe(env);
+        return -1;
+    }
     fprintf(stderr, "[runtime] real android.os.Binder natives registered\n");
     return 0;
 }

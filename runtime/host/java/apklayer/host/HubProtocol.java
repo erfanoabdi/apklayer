@@ -11,8 +11,9 @@ final class HubProtocol {
     static final String SERVICE = "apklayer.instance", DESCRIPTOR = "apklayer.IInstanceHub";
     static final String ENDPOINT = "apklayer.IAppEndpoint";
     static final int REGISTER = 1, STATUS = 2, BIND = 3, UNBIND = 4, START = 5, STOP = 6;
-    static final int REGISTER_RECEIVER = 7, UNREGISTER_RECEIVER = 8, BROADCAST = 9, FINISH_RECEIVER = 10, UNBROADCAST = 11;
-    static final int ENDPOINT_BIND = 1, ENDPOINT_UNBIND = 2, ENDPOINT_START = 3, ENDPOINT_STOP = 4;
+    static final int REGISTER_RECEIVER = 7, UNREGISTER_RECEIVER = 8, BROADCAST = 9, FINISH_RECEIVER = 10, UNBROADCAST = 11,
+            LIST_PROVIDERS = 12, GET_PROVIDER = 13, CHECK_PERMISSION = 14;
+    static final int ENDPOINT_BIND = 1, ENDPOINT_UNBIND = 2, ENDPOINT_START = 3, ENDPOINT_STOP = 4, ENDPOINT_GET_PROVIDER = 5;
     private HubProtocol() {}
     static <T> T call(IBinder target, String descriptor, int code, Consumer<Parcel> write, Function<Parcel, T> read) {
         Parcel request = Parcel.obtain(), reply = Parcel.obtain();

@@ -211,7 +211,7 @@ final class HubBroadcasts {
     }
 
     /** The running process of a package, started when needed. */
-    private HubDirectory.Peer process(String name) {
+    HubDirectory.Peer process(String name) {
         HubDirectory.Peer peer = directory.peer(name);
         if (peer != null) return peer;
         CompletableFuture<HubDirectory.Peer> waiting;

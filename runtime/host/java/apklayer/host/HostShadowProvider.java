@@ -71,12 +71,19 @@ public final class HostShadowProvider implements ShadowProvider {
             entries.add(Map.entry("android.os.BinderProxy", ShadowHostRealBinderProxy.class.getName()));
             entries.add(Map.entry("com.android.internal.os.BinderInternal", ShadowHostRealBinderInternal.class.getName()));
             entries.add(Map.entry("android.os.Process", ShadowHostProcess.class.getName()));
+            entries.add(Map.entry("android.database.CursorWindow", ShadowHostRealCursorWindow.class.getName()));
         }
         return entries;
     }
 
     /** Classes that Robolectric picks the shadow for by a ShadowPicker: ours must be listed here to take part. */
     @Override public Map<String, String> getShadowPickerMap() {
+        if (Boolean.getBoolean("apklayer.realbinder"))
+            return Map.of("android.content.res.ApkAssets", ShadowHostApkAssets.Picker.class.getName(),
+                    "android.os.MessageQueue", ShadowHostMessageQueue.Picker.class.getName(),
+                    "android.graphics.BitmapFactory", ShadowHostBitmapFactory.Picker.class.getName(),
+                    "android.graphics.ImageDecoder", ShadowHostImageDecoder.Picker.class.getName(),
+                    "android.database.CursorWindow", ShadowHostRealCursorWindow.Picker.class.getName());
         return Map.of("android.content.res.ApkAssets", ShadowHostApkAssets.Picker.class.getName(),
                 "android.os.MessageQueue", ShadowHostMessageQueue.Picker.class.getName(),
                 "android.graphics.BitmapFactory", ShadowHostBitmapFactory.Picker.class.getName(),

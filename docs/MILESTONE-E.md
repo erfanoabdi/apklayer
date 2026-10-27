@@ -60,3 +60,8 @@ separately, each app keeps its own cookies and storage.
 
 Execution order: finish E2-E5 and the service gaps while doing the early WebView feasibility check; then provider loading, isolated renderers, graphics and WebView
 compatibility. Installing the APK alone does not provide the missing runtime integration.
+
+## E3 status (2026-10-27)
+- Content providers across apps: tests/vm/providers.sh basic|denied|death pass (query/insert/update/delete/getType/call over the provider's real IContentProvider, cursor windows over the framework's real CursorWindow natives, lazy provider start, private provider refused, read/write permissions, restart after SIGKILL).
+- Known limitation: every app JVM has the same Linux uid (no zygote setuid), so Binder.getCallingUid() cannot tell apps apart; permission checks use the hub's pid-to-package map (RemoteProvider enforces read/write, HubPermissionChecker serves "permission_checker"). Real fix: a distinct Linux uid per package (userns/subuid or privileged launcher + data dir ownership). TODO.
+- Still open in E3: observers/notifyChange across apps, URI permission grants, batches/FDs.
