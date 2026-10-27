@@ -46,6 +46,19 @@ final class HubServices {
         if (accepted) synchronized (connections) { connections.put(connection, new Connection(loaded, outer, dispatcher)); }
         return accepted;
     }
+    static android.content.ComponentName start(Context context, Intent intent) {
+        return HubProtocol.call(HubClient.attach(context).binder(), HubProtocol.DESCRIPTOR, HubProtocol.START_SERVICE, request -> request.writeTypedObject(intent, 0),
+                reply -> reply.readTypedObject(android.content.ComponentName.CREATOR));
+    }
+    static boolean stop(Context context, Intent intent) {
+        return HubProtocol.call(HubClient.attach(context).binder(), HubProtocol.DESCRIPTOR, HubProtocol.STOP_SERVICE, request -> request.writeTypedObject(intent, 0), reply -> reply.readBoolean());
+    }
+    /** Service.stopSelf in this process: the service stops here, the hub forgets it. */
+    static boolean stopSelf(android.content.ComponentName name, int startId) {
+        boolean stopped = Services.stopSelf(name, startId);
+        if (stopped) HubProtocol.call(HubClient.current().binder(), HubProtocol.DESCRIPTOR, HubProtocol.SERVICE_STOPPED, request -> request.writeTypedObject(name, 0), reply -> null);
+        return stopped;
+    }
     static boolean unbind(ServiceConnection connection) {
         Connection old;
         synchronized (connections) { old = connections.remove(connection); }

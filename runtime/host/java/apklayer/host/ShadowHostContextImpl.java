@@ -33,6 +33,15 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
         if (HubServices.external(real, intent)) return HubServices.bind(real, intent, flags, executor, connection);
         return super.bindService(intent, flags, executor, connection);
     }
+    @Implementation @Override protected android.content.ComponentName startService(Intent intent) {
+        return HubServices.external(real, intent) ? HubServices.start(real, intent) : super.startService(intent);
+    }
+    @Implementation @Override protected android.content.ComponentName startForegroundService(Intent intent) {
+        return HubServices.external(real, intent) ? HubServices.start(real, intent) : super.startForegroundService(intent);
+    }
+    @Implementation @Override protected boolean stopService(Intent intent) {
+        return HubServices.external(real, intent) ? HubServices.stop(real, intent) : super.stopService(intent);
+    }
     @Implementation @Override protected void unbindService(ServiceConnection connection) {
         if (!HubServices.unbind(connection)) super.unbindService(connection);
     }

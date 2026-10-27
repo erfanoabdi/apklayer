@@ -61,6 +61,16 @@ final class HubEndpoint extends Binder {
             main.post(() -> HubActivityClient.deliver(intent, resultTo));
             reply.writeNoException(); return true;
         }
+        if (code == HubProtocol.ENDPOINT_START || code == HubProtocol.ENDPOINT_STOP) {
+            Intent explicit = request.readTypedObject(Intent.CREATOR); Intent delivered = code == HubProtocol.ENDPOINT_START ? request.readTypedObject(Intent.CREATOR) : null;
+            request.enforceNoDataAvail();
+            if (explicit == null || explicit.getComponent() == null || !context.getPackageName().equals(explicit.getComponent().getPackageName())) throw new SecurityException("Wrong endpoint target");
+            if (code == HubProtocol.ENDPOINT_START) {
+                int[] result = Services.startFromHub(context, explicit, delivered);
+                reply.writeNoException(); reply.writeInt(result == null ? -1 : result[0]); reply.writeInt(result == null ? 0 : result[1]);
+            } else { reply.writeNoException(); reply.writeBoolean(Services.stopService(context, explicit)); }
+            return true;
+        }
         if (code == HubProtocol.ENDPOINT_NOTIFY) {
             android.net.Uri uri = request.readTypedObject(android.net.Uri.CREATOR); int changeFlags = request.readInt(); request.enforceNoDataAvail();
             main.post(() -> ShadowHostContentResolver.deliver(context, uri, changeFlags));

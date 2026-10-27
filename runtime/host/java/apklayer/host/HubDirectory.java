@@ -21,12 +21,13 @@ final class HubDirectory extends Binder {
     private final HubBroadcasts broadcasts;
     private final HubProviders providers;
     private final HubActivities activities;
+    private final HubStartedServices startedServices;
     private final Map<String, Process> appProcesses = new HashMap<>();
     private final Map<String, Process> hosts = new HashMap<>();
     private final Map<String, Integer> failures = new HashMap<>();
     private volatile boolean stopping;
     HubDirectory(Path apps) {
-        packages = new HubPackages(apps); bindings = new HubServiceBindings(this, packages); broadcasts = new HubBroadcasts(this, packages); providers = new HubProviders(this, packages, broadcasts); activities = new HubActivities(this, packages);
+        packages = new HubPackages(apps); bindings = new HubServiceBindings(this, packages); broadcasts = new HubBroadcasts(this, packages); providers = new HubProviders(this, packages, broadcasts); activities = new HubActivities(this, packages); startedServices = new HubStartedServices(this, packages, broadcasts);
         attachInterface(null, HubProtocol.DESCRIPTOR);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             stopping = true;
@@ -194,6 +195,21 @@ final class HubDirectory extends Binder {
                 boolean found = activities.start(caller, intent, resultTo);
                 reply.writeNoException(); reply.writeInt(found ? 0 : -1); return true;
             }
+            case HubProtocol.START_SERVICE -> {
+                Peer caller = caller(); Intent intent = request.readTypedObject(Intent.CREATOR); request.enforceNoDataAvail();
+                android.content.ComponentName name = startedServices.start(caller, intent);
+                reply.writeNoException(); reply.writeTypedObject(name, 0); return true;
+            }
+            case HubProtocol.STOP_SERVICE -> {
+                Peer caller = caller(); Intent intent = request.readTypedObject(Intent.CREATOR); request.enforceNoDataAvail();
+                boolean stopped = startedServices.stop(caller, intent);
+                reply.writeNoException(); reply.writeBoolean(stopped); return true;
+            }
+            case HubProtocol.SERVICE_STOPPED -> {
+                Peer caller = caller(); android.content.ComponentName name = request.readTypedObject(android.content.ComponentName.CREATOR); request.enforceNoDataAvail();
+                startedServices.stoppedSelf(caller, name);
+                reply.writeNoException(); return true;
+            }
             case HubProtocol.TAKE_LAUNCH -> {
                 Peer caller = caller(); request.enforceNoDataAvail();
                 HubActivities.Launch launch = activities.take(caller.name());
@@ -216,5 +232,6 @@ final class HubDirectory extends Binder {
         System.out.println("[apklayer-hub] died " + peer.name + " pid=" + peer.pid);
         bindings.died(peer);
         broadcasts.died(peer);
+        startedServices.died(peer);
     }
 }

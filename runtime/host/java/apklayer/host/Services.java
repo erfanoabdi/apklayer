@@ -31,6 +31,7 @@ public final class Services {
         Service service;
         IBinder binder;
         boolean bound, started;
+        int lastStartId, startResult;
         int connections;
         Intent intent;
     }
@@ -112,13 +113,40 @@ public final class Services {
         if (cn == null) return ctx.startService(intent);
         return onMain(() -> {
             try {
-                Running r = instance(cn, intent);
-                r.started = true;
-                r.service.onStartCommand(intent, 0, ++startId); // this call's intent (the controller would resend the creation one)
+                deliver(cn, intent, intent);
                 return cn;
             } catch (ClassNotFoundException e) {
                 return null;
             }
+        });
+    }
+
+    /** Creates the service when needed and delivers one start command (this call's intent: the controller would resend the creation one); {start id, onStartCommand's result}. */
+    private static int[] deliver(ComponentName cn, Intent created, Intent delivered) throws ClassNotFoundException {
+        Running r = instance(cn, created);
+        r.started = true;
+        r.lastStartId = ++startId;
+        r.startResult = r.service.onStartCommand(delivered, 0, r.lastStartId);
+        return new int[] {r.lastStartId, r.startResult};
+    }
+
+    /** The hub starts one of this app's services on behalf of another app (a null delivered intent is the redelivery after a restart); null when it is not ours. */
+    static int[] startFromHub(Context ctx, Intent explicit, Intent delivered) {
+        if (resolve(ctx, explicit) == null) return null;
+        return onMain(() -> {
+            try { return deliver(explicit.getComponent(), explicit, delivered); }
+            catch (ClassNotFoundException e) { return null; }
+        });
+    }
+
+    /** Service.stopSelf / stopSelfResult: stops when no newer start command arrived (start id -1 always stops) and nothing is bound. */
+    static boolean stopSelf(ComponentName cn, int id) {
+        return onMain(() -> {
+            Running r = RUNNING.get(className(cn));
+            if (r == null || (id >= 0 && id != r.lastStartId)) return false;
+            r.started = false;
+            if (r.connections == 0) { r.controller.destroy(); RUNNING.remove(className(cn)); }
+            return true;
         });
     }
 

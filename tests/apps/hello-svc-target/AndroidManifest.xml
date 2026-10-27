@@ -1,0 +1,10 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="hello.svctarget">
+  <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="34"/>
+  <application android:label="svc-target">
+    <activity android:name=".Main" android:exported="true">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+    </activity>
+    <service android:name=".CounterService" android:exported="true"/>
+    <service android:name=".PrivateService" android:exported="false"/>
+  </application>
+</manifest>
