@@ -13,7 +13,7 @@ os.chdir(Path.home() / 'apklayer-m1')
 ENV = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000', APKLAYER_NATIVE=str(Path.home() / 'arm64-native'),
     APKLAYER_CODEC2='1', APKLAYER_MEDIA_SERVICES='1', APKLAYER_AUDIO='1', APKLAYER_AUDIO_SERVICES='1', APKLAYER_NATIVE_MEDIA_PARCELS='1', APKLAYER_DEBUG_INPUT='1', APKLAYER_RUNTIME_DEBUG='1',
     APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400',
-    APKLAYER_JOPTS='-Dapklayer.nativemedia=true -Dapklayer.nativeaudio=true -Dapklayer.nativeparcels=true -Dapklayer.nativeplayer=true -Dapklayer.runms=20000')
+    APKLAYER_JOPTS='-Dapklayer.nativemedia=true -Dapklayer.nativeaudio=true -Dapklayer.nativeparcels=true -Dapklayer.nativeplayer=true -Dhello.asset=' + os.environ.get('PLAYER_ASSET', 'red-h264.mp4') + ' -Dapklayer.runms=20000')
 ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-media.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-audio.so'
 
 def stop():
@@ -74,7 +74,16 @@ try:
                 captured = True
     text = '\n'.join(seen)
     assert '[runtime] Android media JNI registered' in text
-    assert '[hello-native-player] prepared tracks=1 duration=400' in text
+    asset = os.environ.get('PLAYER_ASSET', 'red-h264.mp4')
+    expected_tracks = 2 if asset == 'red-tone.mp4' else 1
+    import re
+    assert re.search(r'\[hello-native-player\] prepared tracks=%d duration=4\d\d' % expected_tracks, text)
+    if expected_tracks == 2:  # audio really reached the audio stack: the player's AudioTrack delivered the decoded PCM
+        import re as _re
+        delivered = [int(n) for n in _re.findall(r'AudioTrack: stop\(\d+\): called with (\d+) frames delivered', Path('/tmp/apklayer-stack/media.log').read_text(errors='replace'))]
+        assert delivered and max(delivered) >= 15000, 'audio frames delivered ' + str(delivered)
+        assert 'audio.codec=c2.apklayer.aac.decoder' in text
+        print('PASS native MediaPlayer audio: AAC decoded and %d frames delivered to AudioFlinger' % max(delivered), flush=True)
     assert '[hello-native-player] completion=2' in text
     assert '[hello-native-player] seek complete' in text
     assert '[hello-native-player] time=' in text

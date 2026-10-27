@@ -35,8 +35,10 @@ public class Main extends Activity implements SurfaceHolder.Callback {
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
         if (player != null) return;
         try {
-            File source = new File(getCacheDir(), "red-h264.mp4");
-            try (var input = getAssets().open("red-h264.mp4"); var output = new FileOutputStream(source)) {
+            final String asset = System.getProperty("hello.asset", "red-h264.mp4"); // red-tone.mp4: H.264 plus AAC
+            final boolean withAudio = asset.equals("red-tone.mp4") || asset.startsWith("tone-"), withVideo = !asset.startsWith("tone-");
+            File source = new File(getCacheDir(), asset);
+            try (var input = getAssets().open(asset); var output = new FileOutputStream(source)) {
                 input.transferTo(output);
             }
             player = new MediaPlayer();
@@ -47,11 +49,13 @@ public class Main extends Activity implements SurfaceHolder.Callback {
             player.setOnInfoListener((p, what, extra) -> { System.out.println("[hello-native-player] info=" + what + "/" + extra); return false; });
             player.setOnPreparedListener(p -> {
                 try {
-                    require(p.getVideoWidth() == 64 && p.getVideoHeight() == 48, "native dimensions");
-                    require(p.getDuration() >= 390 && p.getDuration() <= 410, "native duration " + p.getDuration());
+                    require(!withVideo || (p.getVideoWidth() == 64 && p.getVideoHeight() == 48), "native dimensions");
+                    require(p.getDuration() >= 390 && p.getDuration() <= (withAudio ? 450 : 410), "native duration " + p.getDuration());
                     require(p.getAudioSessionId() > 0, "native session");
                     MediaPlayer.TrackInfo[] tracks = p.getTrackInfo();
-                    require(tracks.length == 1 && tracks[0].getTrackType() == MediaPlayer.TrackInfo.MEDIA_TRACK_TYPE_VIDEO,
+                    require(tracks.length == (withAudio ? 1 : 0) + (withVideo ? 1 : 0)
+                            && (!withVideo || tracks[0].getTrackType() == MediaPlayer.TrackInfo.MEDIA_TRACK_TYPE_VIDEO)
+                            && (!withAudio || tracks[tracks.length - 1].getTrackType() == MediaPlayer.TrackInfo.MEDIA_TRACK_TYPE_AUDIO),
                             "original track metadata");
                     p.setVideoScalingMode(MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT);
                     System.out.println("[hello-native-player] prepared tracks=" + tracks.length + " duration=" + p.getDuration());

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
+import os
 import subprocess
 import sys
 proc = subprocess.Popen(['sshpass', '-p', sys.argv[2], 'ssh', sys.argv[1],
-    'cd ~/apklayer-m1; python3 -u tests/vm/native-player.py'], stdin=subprocess.PIPE,
+    'cd ~/apklayer-m1; PLAYER_ASSET=%s python3 -u tests/vm/native-player.py' % os.environ.get('PLAYER_ASSET', 'red-h264.mp4') + ''], stdin=subprocess.PIPE,
     stdout=subprocess.PIPE, text=True)
 try:
     for line in proc.stdout:
