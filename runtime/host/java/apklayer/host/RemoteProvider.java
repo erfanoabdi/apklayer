@@ -39,6 +39,10 @@ final class RemoteProvider extends ContentProvider {
 
     RemoteProvider(Context context, String authority, String readPermission, String writePermission) {
         this.context = context; this.authority = authority; this.readPermission = readPermission; this.writePermission = writePermission;
+        ReflectionHelpers.setField(ContentProvider.class, this, "mContext", context);
+        ReflectionHelpers.setField(ContentProvider.class, this, "mCallingAttributionSource", new ThreadLocal<AttributionSource>());
+        ReflectionHelpers.setField(ContentProvider.class, this, "mAuthority", authority);
+        ReflectionHelpers.setField(ContentProvider.class, this, "mAuthorities", new String[] {authority});  // the Transport of the resolver's side validates uris against it
     }
 
     /**

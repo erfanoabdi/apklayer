@@ -88,6 +88,20 @@ public class Main extends Activity {
                 require(changed.await(10, java.util.concurrent.TimeUnit.SECONDS), "no change notification from the provider's app");
                 System.out.println("[cpc] PASS observe: notifyChange in the provider's app reached this app's observer");
             }
+            case "files" -> {
+                try (java.io.InputStream in = resolver.openInputStream(OPEN)) {
+                    String text = new String(in.readAllBytes());
+                    require(text.startsWith("file from provider pid ") && !text.endsWith("pid " + Process.myPid()), "file contents: " + text);
+                    System.out.println("[cpc] file descriptor from the provider's app: " + text);
+                }
+                java.util.ArrayList<android.content.ContentProviderOperation> batch = new java.util.ArrayList<>();
+                for (String name : new String[] {"b1", "b2"})
+                    batch.add(android.content.ContentProviderOperation.newInsert(ITEMS).withValue("name", name).build());
+                android.content.ContentProviderResult[] results = resolver.applyBatch("hello.cpprovider.items", batch);
+                require(results.length == 2 && results[1].uri != null, "batch results " + results.length);
+                require(names(resolver, ITEMS).endsWith("b1,b2,"), "after batch " + names(resolver, ITEMS));
+                System.out.println("[cpc] PASS files: openInputStream over a file descriptor and applyBatch across apps");
+            }
             case "death" -> {
                 Bundle first = resolver.call(ITEMS, "ping", "a", null);
                 int pid = first.getInt("pid");

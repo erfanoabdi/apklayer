@@ -13,6 +13,13 @@ public class OpenProvider extends ContentProvider {
         cursor.addRow(new Object[] {"open"});
         return cursor;
     }
+    @Override public android.os.ParcelFileDescriptor openFile(Uri uri, String mode) throws java.io.FileNotFoundException {
+        try {
+            java.io.File file = new java.io.File(getContext().getCacheDir(), "shared.txt");
+            try (java.io.FileOutputStream out = new java.io.FileOutputStream(file)) { out.write(("file from provider pid " + android.os.Process.myPid()).getBytes()); }
+            return android.os.ParcelFileDescriptor.open(file, android.os.ParcelFileDescriptor.MODE_READ_ONLY);
+        } catch (java.io.IOException failure) { throw new java.io.FileNotFoundException(failure.toString()); }
+    }
     @Override public String getType(Uri uri) { return "text/plain"; }
     @Override public Uri insert(Uri uri, ContentValues values) { return null; }
     @Override public int delete(Uri uri, String selection, String[] args) { return 0; }
