@@ -15,6 +15,14 @@ static int ptr_x, ptr_y, ptr_down;   /* surface-local logical coordinates */
 
 static struct window *pointer_decor_win; /* window whose title bar the pointer is over, if any */
 
+void pointer_forget_window(struct window *w)
+{
+    if (pointer_focus != w && pointer_decor_win != w) return;
+    pointer_focus = pointer_decor_win = NULL;
+    ptr_down = 0;
+    cursor_name_cur = NULL;
+}
+
 static void bar_set_hover(struct window *w, int hover)
 {
     if (!w || w->bar_hover == hover) return;

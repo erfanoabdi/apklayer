@@ -265,7 +265,7 @@ void window_drop_proxy(struct client *c)
 
 void window_destroy(struct window *w)
 {
-    if (pointer_focus == w) pointer_focus = NULL;
+    pointer_forget_window(w);
     if (keyboard_focus == w) keyboard_focus = NULL;
     for (int i = 0; i < NBUF; i++) if (w->buffers[i]) wl_buffer_destroy(w->buffers[i]);
     if (w->initial_buffer) wl_buffer_destroy(w->initial_buffer);

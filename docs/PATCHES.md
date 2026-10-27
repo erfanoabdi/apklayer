@@ -88,3 +88,6 @@ virtual display sink). `W_TARGET`/`W_ID` route those messages; `window_attach_in
 
 ## Headless primary (2026-10-27)
 The composer uses `apklayer_display_open_headless`: HELLO/output-refresh/vsync messages with no WINDOW_CREATE and no retained presentation buffers. Callback struct ABI is unchanged. App virtual displays are the only toplevels. `onRefreshStatic` derives the period from the real output mode; variable gaps between requested frame callbacks do not change display refresh. Smoke tools get a stack-0 virtual display in `arm64-stack.sh`.
+
+## Concurrent app windows (2026-10-27)
+`bin/apklayer` serializes service startup with flock and uses `scripts/wait-ready.py` (inotify + pidfd) instead of readiness polling. Per-launch PID ids replace truncated package hashes for layer stacks; display names include launch and instance before the package, and logs are distinct per sink. `pointer_forget_window` clears title hover before teardown so a queued leave cannot redraw a destroyed surface. Two GPU JVMs, focus, independent close and survivor resize are covered by the multi-app VM regression.

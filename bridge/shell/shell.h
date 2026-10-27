@@ -161,6 +161,7 @@ void key_event(uint32_t evdev, int down);  /* keyboard.c */
 struct window *window_for_surface(struct wl_surface *s);  /* window.c */
 struct window *window_find(struct client *c, int id);  /* window.c */
 void window_layout(struct window *w);  /* window.c */
+void pointer_forget_window(struct window *w); /* pointer.c: also clear title-bar hover on destroy */
 void window_create(struct client *c, int id, int width, int height, const char *path, const char *title);  /* window.c */
 void window_destroy(struct window *w);  /* window.c */
 void window_frame(struct window *w, int buf, const int32_t *damage);  /* window.c */
