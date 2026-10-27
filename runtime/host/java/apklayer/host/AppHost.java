@@ -230,7 +230,8 @@ public final class AppHost implements Runnable {
         // Schedule clock: in headless (PAUSED) mode the sandbox clock is stepped by the loop
         // below, so schedule script/snapshot times on it — a "6 s" run then completes in well
         // under a second of real time. In shell mode real time drives everything.
-        clockNanos = System.nanoTime();
+        clockNanos = perfAt = System.nanoTime();
+        perfUptime = SystemClock.uptimeMillis();
         long start = pausedMode ? SystemClock.uptimeMillis() : System.nanoTime() / 1_000_000;
         long lastSnapshotAt = -1; // dedupe snapshot times that land in the same loop iteration
 
@@ -285,6 +286,11 @@ public final class AppHost implements Runnable {
                     long clockNow = System.nanoTime();
                     ShadowSystemClock.advanceBy(Duration.ofNanos(clockNow - clockNanos));
                     clockNanos = clockNow;
+                    if (Boolean.getBoolean("apklayer.perf") && clockNow - perfAt > 2_000_000_000L) { // app clock against wall time, and the loop's pace
+                        System.out.println("[apklayer] clock: app " + (SystemClock.uptimeMillis() - perfUptime) + " ms, wall " + (clockNow - perfAt) / 1_000_000 + " ms, loops " + perfLoops);
+                        perfAt = clockNow; perfUptime = SystemClock.uptimeMillis(); perfLoops = 0;
+                    }
+                    perfLoops++;
                     looper.idle();
                 }
                 if (TRACE_ROOTS && now - lastRootTrace > 1_000_000_000L) { lastRootTrace = now; traceRoots(); }
@@ -309,7 +315,8 @@ public final class AppHost implements Runnable {
         }
     }
 
-    private long clockNanos = System.nanoTime();
+    private long clockNanos = System.nanoTime(), perfAt = System.nanoTime(), perfUptime;
+    private int perfLoops;
 
     private static final boolean TRACE_ROOTS = Boolean.getBoolean("apklayer.traceroots");
     private long lastRootTrace;

@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 struct apklayer_audio {
     struct pw_thread_loop *loop;
@@ -123,6 +124,18 @@ ssize_t apklayer_audio_write(struct apklayer_audio *audio, const void *pcm, size
         status = pw_stream_queue_buffer(audio->stream, buffer);
         if (status < 0) break;
         done += count; audio->written += count; audio->drained = false;
+    }
+    if (getenv("APKLAYER_AUDIO_STATS")) { // frames written per wall second, and how long the writes blocked
+        static uint64_t frames, blocked_ns, since;
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        uint64_t now = (uint64_t)ts.tv_sec * 1000000000ull + ts.tv_nsec;
+        if (!since) since = now;
+        frames += done;
+        if (now - since >= 2000000000ull) {
+            fprintf(stderr, "audio: %llu frames written in %llu ms (48000 per second is real time)\n", (unsigned long long)frames, (unsigned long long)((now - since) / 1000000));
+            frames = 0; since = now; (void)blocked_ns;
+        }
     }
     pw_thread_loop_unlock(audio->loop);
     return done ? (ssize_t)done : status;
