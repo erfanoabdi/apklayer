@@ -13,11 +13,26 @@ import org.robolectric.annotation.Implements;
  */
 @Implements(className = "android.webkit.WebViewDelegate", isInAndroidSdk = false)
 public class ShadowHostWebViewDelegate {
+    private static void forgetCached(String path) {
+        java.util.Map<Object, Long> cache = org.robolectric.util.ReflectionHelpers.getStaticField(org.robolectric.res.android.ApkAssetsCache.class, "cachedApkAssetsPtrs");
+        synchronized (cache) {
+            cache.keySet().removeIf(key -> {
+                for (java.lang.reflect.Field field : key.getClass().getDeclaredFields()) {
+                    if (field.getType() != String.class) continue;
+                    field.setAccessible(true);
+                    try { if (path.equals(field.get(key))) return true; } catch (IllegalAccessException ignored) { }
+                }
+                return false;
+            });
+        }
+    }
+
     @Implementation public void addWebViewAssetPath(Context context) {
         String path = android.webkit.WebViewFactory.getLoadedPackageInfo().applicationInfo.sourceDir;
         AssetManager assets = context.getAssets();
         ApkAssets[] current = assets.getApkAssets();
         for (ApkAssets loaded : current) if (path.equals(loaded.getAssetPath())) return;
+        forgetCached(path); // Robolectric caches an ApkAssets by path: the plain one made when the provider's manifest was read would be returned instead of a dynamic one
         try {
             ApkAssets[] next = java.util.Arrays.copyOf(current, current.length + 1);
             next[current.length] = ApkAssets.loadFromPath(path, ApkAssets.PROPERTY_DYNAMIC);

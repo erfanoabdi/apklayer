@@ -22,8 +22,10 @@ if [ -f aidl.list ]; then
 fi
 javac -nowarn -d "$W/cls" -cp "$AJ" $(find src "$W/aidl" -name '*.java')
 "$BT"/d8 --min-api 26 --lib "$AJ" --output "$W" $(find "$W/cls" -name '*.class')
+RES=()
+if [ -d res ]; then "$BT"/aapt2 compile --dir res -o "$W/res.zip"; RES=("$W/res.zip"); fi  # an app with resources (its own 0x7f package)
 ASSETS=()
 [ ! -d assets ] || ASSETS=(-A "$PWD/assets")
-"$BT"/aapt2 link ${ASSETS[@]+"${ASSETS[@]}"} -o "$W/base.apk" -I "$AJ" --manifest AndroidManifest.xml
+"$BT"/aapt2 link ${ASSETS[@]+"${ASSETS[@]}"} -o "$W/base.apk" -I "$AJ" ${RES[@]+"${RES[@]}"} --manifest AndroidManifest.xml
 (cd "$W" && zip -q base.apk classes.dex $LIBS) && cp "$W/base.apk" "$OUT"
 echo "$OUT"
