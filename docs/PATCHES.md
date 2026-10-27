@@ -180,3 +180,9 @@ The existing GStreamer backend now shares pipeline creation, bounded input, noti
 
 ## bionic_translation: atomic lazy init of static pthread objects (2026-10-27, scripts/patch-bionic-translation.sh step 8)
 An all-zero (statically initialised) condition, semaphore, rwlock or mutex gets its native object on first use; two threads arriving together each made one and overwrote the other's, so one waited on a condition the other signalled never. libhwui's WorkQueue (a std::condition_variable first used by the main and render threads at once) hung NewPipe's startup now and then: black window, main thread parked in `HardwareRenderer.nSetStopped`, the render thread idle in a cond wait (gdb). The object is installed with a compare-and-swap; the loser frees its own.
+
+## Milestone E: real Binder/media integration (2026-10-27)
+
+Original Binder/BinderProxy/Parcel JNI remains opt-in through realbinder. NativeParcel promotion becomes a no-op only for a live real Parcel; selective ownership is not applied to framework-owned native peers. The complete scalar/Unicode/array/marshalling/append test runs in both modes. Real mode additionally verifies original interface enforcement and local Binder token identity/null; scoped attribution retains its strict normal/error lifetime checks.
+
+The publication helper releases its AIBinder_fromJavaBinder reference after addService; lookup releases its checked-service reference. Pool startup uses the actual bool ABI, reports failures and marks Java startup complete only after success. Actual process UID comes from UnixSystem, with no invented fallback. The two-JVM test uses real interface descriptors, callback identities, abrupt server death and graceful client completion. Event-driven byte reads avoid buffered-readline readiness races; owned groups are killed/reaped during cleanup. Generated Python caches are ignored.

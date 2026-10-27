@@ -10,12 +10,13 @@ final class ParcelCheck {
         if (!value) throw new AssertionError(detail);
     }
     static void run() throws Exception {
+        boolean real = Boolean.getBoolean("apklayer.realbinder");
         Class<?> helper = Class.forName("apklayer.host.NativeParcel");
         Method obtain = helper.getMethod("obtain"), active = helper.getMethod("activeParcels");
         for (int cycle = 0; cycle < 3; cycle++) {
             Parcel p = (Parcel) obtain.invoke(null), copy = (Parcel) obtain.invoke(null);
             try {
-                require(((Number) active.invoke(null)).intValue() == 2, "native payload ownership");
+                require(real || ((Number) active.invoke(null)).intValue() == 2, "native payload ownership");
                 p.writeInt(0x12345678); p.writeLong(0x123456789abcdef0L);
                 p.writeFloat(1.25f); p.writeDouble(-3.5);
                 p.writeString("تست-😀"); p.writeString(null);
@@ -38,21 +39,40 @@ final class ParcelCheck {
                 copy.writeInterfaceToken("hello.nativeaudio.ParcelCheck"); copy.writeInt(42);
                 require(copy.dataSize() > 16, "native interface header serialized");
                 copy.setDataPosition(0);
-                try { copy.enforceInterface("hello.nativeaudio.ParcelCheck"); throw new AssertionError("unsupported Java policy accepted"); }
-                catch (UnsupportedOperationException expected) { }
+                if (real) {
+                    copy.enforceInterface("hello.nativeaudio.ParcelCheck");
+                    require(copy.readInt() == 42, "native interface enforcement");
+                    copy.setDataPosition(0);
+                    try { copy.enforceInterface("wrong.interface"); throw new AssertionError("wrong interface accepted"); }
+                    catch (SecurityException expected) { }
+                } else {
+                    try { copy.enforceInterface("hello.nativeaudio.ParcelCheck"); throw new AssertionError("unsupported Java policy accepted"); }
+                    catch (UnsupportedOperationException expected) { }
+                }
                 Parcel ordinary = Parcel.obtain();
                 try {
                     ordinary.writeInt(66); ordinary.setDataPosition(0);
                     require(ordinary.readInt() == 66, "Java Parcel coexistence");
-                    try { copy.appendFrom(ordinary, 0, 4); throw new AssertionError("mixed append accepted"); }
-                    catch (IllegalArgumentException expected) { }
+                    if (real) {
+                        copy.setDataSize(0); copy.setDataPosition(0); copy.appendFrom(ordinary, 0, 4); copy.setDataPosition(0);
+                        require(copy.readInt() == 66, "all-native Parcel append");
+                    } else {
+                        try { copy.appendFrom(ordinary, 0, 4); throw new AssertionError("mixed append accepted"); }
+                        catch (IllegalArgumentException expected) { }
+                    }
                 } finally { ordinary.recycle(); }
-                try { p.writeStrongBinder(new Binder()); throw new AssertionError("unsupported Binder accepted"); }
-                catch (UnsupportedOperationException expected) { }
+                if (real) {
+                    Binder token = new Binder(); p.setDataSize(0); p.setDataPosition(0);
+                    p.writeStrongBinder(token); p.writeStrongBinder(null); p.setDataPosition(0);
+                    require(p.readStrongBinder() == token && p.readStrongBinder() == null, "native Binder token identity/null");
+                } else {
+                    try { p.writeStrongBinder(new Binder()); throw new AssertionError("unsupported Binder accepted"); }
+                    catch (UnsupportedOperationException expected) { }
+                }
                 try { p.writeByteArray(new byte[1], 1, 1); throw new AssertionError("array bounds accepted"); }
                 catch (ArrayIndexOutOfBoundsException expected) { }
             } finally { p.recycle(); copy.recycle(); }
-            require(((Number) active.invoke(null)).intValue() == 0, "native payload recycle");
+            require(real || ((Number) active.invoke(null)).intValue() == 0, "native payload recycle");
         }
         System.out.println("[hello-native-audio] native Parcel PASS bytes/scalars/Unicode/arrays/append/coexistence/recycle");
     }

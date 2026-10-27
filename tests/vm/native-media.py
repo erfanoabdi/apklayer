@@ -14,6 +14,8 @@ ENV = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000', APKLAYER_NATIVE=str(Pat
     APKLAYER_CODEC2='1', APKLAYER_MEDIA_SERVICES='1', APKLAYER_DEBUG_INPUT='1', APKLAYER_RUNTIME_DEBUG='1',
     APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400',
     APKLAYER_JOPTS='-Dapklayer.nativemedia=true -Dapklayer.runms=90000')
+extra = Path.home() / '.apklayer-extra-jopts'  # regression runs with a feature flag (e.g. -Dapklayer.realbinder=true): the file holds the extra options
+if extra.exists(): ENV['APKLAYER_JOPTS'] += ' ' + extra.read_text().strip()
 ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-media.so'
 
 def stop():

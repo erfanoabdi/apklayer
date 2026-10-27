@@ -16,17 +16,24 @@ public final class RealBinder {
     /** Starts the binder thread pool of this JVM (once): incoming transactions run on its threads. */
     public static synchronized void init() {
         if (started) return;
-        started = true;
+        if (!Boolean.getBoolean("apklayer.realbinder")) throw new IllegalStateException("Real Binder mode is required");
+        NativeMedia.ensureInitialized();
         startPool();
+        started = true;
     }
 
     /** Registers the binder under the name in the instance's service manager. */
-    public static boolean publish(String name, IBinder binder) { init(); return publishNative(name, binder); }
+    public static boolean publish(String name, IBinder binder) {
+        java.util.Objects.requireNonNull(name); java.util.Objects.requireNonNull(binder);
+        init(); return publishNative(name, binder);
+    }
 
     /** The binder registered under the name, or null: a BinderProxy when it lives in another JVM. */
-    public static IBinder lookup(String name) { init(); return lookupNative(name); }
+    public static IBinder lookup(String name) {
+        java.util.Objects.requireNonNull(name); init(); return lookupNative(name);
+    }
 
-    // The shim registers these three under the plain names publish/lookup/startPool; the public methods above add the pool start.
+    // The shim registers these uninstrumented native names; the public methods above initialize the pool.
     private static native boolean publish0(String name, IBinder binder);
     private static native IBinder lookup0(String name);
     private static native void startPool();

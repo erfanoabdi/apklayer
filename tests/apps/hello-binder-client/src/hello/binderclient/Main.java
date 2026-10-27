@@ -33,19 +33,10 @@ public class Main extends Activity {
 
     private void run() throws Exception {
         Class<?> real = Class.forName("apklayer.host.RealBinder");
-        IBinder echo = null;
-        long deadline = System.nanoTime() + 30_000_000_000L;
-        while (echo == null && System.nanoTime() < deadline) {
-            echo = (IBinder) real.getMethod("lookup", String.class).invoke(null, "hello.echo");
-            if (echo == null) Thread.sleep(250);
-        }
+        IBinder echo = (IBinder) real.getMethod("lookup", String.class).invoke(null, "hello.echo");
         require(echo != null, "service hello.echo not found");
         System.out.println("[hello-binder-client] found " + echo.getClass().getName() + " ping=" + echo.pingBinder() + " alive=" + echo.isBinderAlive());
-        try {
-            System.out.println("[hello-binder-client] descriptor=" + echo.getInterfaceDescriptor());
-        } catch (Throwable e) {
-            System.out.println("[hello-binder-client] descriptor failed: " + e);
-        }
+        require(DESCRIPTOR.equals(echo.getInterfaceDescriptor()), "remote interface descriptor");
         require(echo.pingBinder() && echo.isBinderAlive(), "server alive");
         require(echo.queryLocalInterface(DESCRIPTOR) == null, "the binder is a remote proxy");
 
@@ -60,7 +51,9 @@ public class Main extends Activity {
 
         final int[] callerPid = {-1};
         Binder callback = new Binder() {
-            @Override protected boolean onTransact(int code, Parcel data, Parcel out, int flags) {
+            { attachInterface(null, CALLBACK); }
+            @Override protected boolean onTransact(int code, Parcel data, Parcel out, int flags) throws android.os.RemoteException {
+                if (code < IBinder.FIRST_CALL_TRANSACTION || code > IBinder.LAST_CALL_TRANSACTION) return super.onTransact(code, data, out, flags);
                 data.enforceInterface(CALLBACK);
                 callerPid[0] = Binder.getCallingPid();
                 out.writeNoException();
@@ -91,8 +84,10 @@ public class Main extends Activity {
         require(callerPid[0] == serverPid, "the callback was called by the server's process");
         require(called.startsWith("server got cb:hi from pid " + Process.myPid()), "callback round trip: " + called);
 
-        echo.linkToDeath(() -> System.out.println("[hello-binder-client] binderDied"), 0);
+        java.util.concurrent.CountDownLatch death = new java.util.concurrent.CountDownLatch(1);
+        echo.linkToDeath(() -> { System.out.println("[hello-binder-client] binderDied"); death.countDown(); }, 0);
         System.out.println("[hello-binder-client] PASS echo, callback, identities; waiting for the server to die");
-        Thread.sleep(60_000);
+        require(death.await(30, java.util.concurrent.TimeUnit.SECONDS), "real death notification");
+        runOnUiThread(this::finish);
     }
 }

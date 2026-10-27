@@ -14,6 +14,8 @@ ENV = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000', APKLAYER_NATIVE=str(Pat
     APKLAYER_CODEC2='1', APKLAYER_MEDIA_SERVICES='1', APKLAYER_AUDIO='1', APKLAYER_AUDIO_SERVICES='1', APKLAYER_NATIVE_MEDIA_PARCELS='1', APKLAYER_DEBUG_INPUT='1', APKLAYER_RUNTIME_DEBUG='1',
     APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400',
     APKLAYER_JOPTS='-Dapklayer.nativemedia=true -Dapklayer.nativeaudio=true -Dapklayer.nativeparcels=true -Dapklayer.nativeplayer=true -Dhello.asset=' + os.environ.get('PLAYER_ASSET', 'red-h264.mp4') + ' -Dapklayer.runms=20000')
+extra = Path.home() / '.apklayer-extra-jopts'  # regression runs with a feature flag (e.g. -Dapklayer.realbinder=true): the file holds the extra options
+if extra.exists(): ENV['APKLAYER_JOPTS'] += ' ' + extra.read_text().strip()
 ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-media.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-audio.so'
 
 def stop():

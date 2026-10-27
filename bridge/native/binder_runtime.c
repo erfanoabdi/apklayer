@@ -3,6 +3,7 @@
  * JVMs of an instance can call each other over the kernel binder like two processes on a phone. */
 #include <jni.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -36,7 +37,9 @@ static jboolean publish(JNIEnv *env, jclass cls, jstring name, jobject binder)
     AIBinder *ai = p_from_java(env, binder);
     if (!ai) return JNI_FALSE;
     const char *n = (*env)->GetStringUTFChars(env, name, NULL);
+    if (!n) { p_dec_strong(ai); return JNI_FALSE; }
     int32_t status = p_add_service(ai, n);
+    p_dec_strong(ai);
     (*env)->ReleaseStringUTFChars(env, name, n);
     fprintf(stderr, "[runtime] publish: addService -> %d\n", status);
     return status == 0;
@@ -46,12 +49,10 @@ static jobject lookup(JNIEnv *env, jclass cls, jstring name)
 {
     (void)cls;
     const char *n = (*env)->GetStringUTFChars(env, name, NULL);
+    if (!n) return NULL;
     AIBinder *ai = p_check_service(n);
     (*env)->ReleaseStringUTFChars(env, name, n);
     if (!ai) return NULL;
-    { void *ndk = bionic_dlopen("libbinder_ndk.so", 2);
-      int32_t (*ping)(AIBinder *) = ndk ? bionic_dlsym(ndk, "AIBinder_ping") : NULL;
-      fprintf(stderr, "[runtime] lookup: AIBinder_ping -> %d\n", ping ? ping(ai) : -9999); }
     jobject result = p_to_java(env, ai);
     p_dec_strong(ai);
     return result;
@@ -61,11 +62,13 @@ static void start_pool(JNIEnv *env, jclass cls)
 {
     (void)env; (void)cls;
     void *ndk = bionic_dlopen("libbinder_ndk.so", 2);
-    int (*set_max)(uint32_t) = ndk ? bionic_dlsym(ndk, "ABinderProcess_setThreadPoolMaxThreadCount") : NULL;
+    bool (*set_max)(uint32_t) = ndk ? bionic_dlsym(ndk, "ABinderProcess_setThreadPoolMaxThreadCount") : NULL;
     void (*start)(void) = ndk ? bionic_dlsym(ndk, "ABinderProcess_startThreadPool") : NULL;
-    fprintf(stderr, "[runtime] binder pool: set_max=%p start=%p\n", (void *)set_max, (void *)start);
-    if (set_max) fprintf(stderr, "[runtime] binder pool: set_max(8) -> %d\n", set_max(8));
-    if (start) start();
+    if (!set_max || !start || !set_max(8)) {
+        (*env)->ThrowNew(env, (*env)->FindClass(env, "java/lang/IllegalStateException"), "Cannot start native Binder pool");
+        return;
+    }
+    start();
 }
 
 /* The helper class apklayer.host.RealBinder (an uninstrumented host class; natives registered under their plain names). */

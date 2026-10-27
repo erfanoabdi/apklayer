@@ -13,9 +13,10 @@ public class Main extends Activity {
     static final String DESCRIPTOR = "hello.IEcho", CALLBACK = "hello.ICallback";
 
     static final class Echo extends Binder {
+        Echo() { attachInterface(null, DESCRIPTOR); }
         @Override protected boolean onTransact(int code, Parcel data, Parcel reply, int flags) {
             try {
-                data.enforceInterface(DESCRIPTOR);
+                if (code >= IBinder.FIRST_CALL_TRANSACTION && code <= IBinder.LAST_CALL_TRANSACTION) data.enforceInterface(DESCRIPTOR);
                 switch (code) {
                     case 1: { // echo(String): String
                         String s = data.readString();

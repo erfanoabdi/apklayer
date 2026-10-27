@@ -13,6 +13,8 @@ public final class NativeParcel {
     private static final ConcurrentHashMap<Long, Long> originals = new ConcurrentHashMap<>();
     private static final ThreadLocal<Integer> allocationDepth = ThreadLocal.withInitial(() -> 0);
     private static volatile boolean callbackFactoryReady;
+    // -Dapklayer.realbinder=true: every Parcel is the framework's own native Parcel (ShadowHostRealParcel), nothing needs promoting
+    private static final boolean REAL = Boolean.getBoolean("apklayer.realbinder");
     private NativeParcel() {}
     public static void markCallbackFactoryReady() { callbackFactoryReady = true; }
     static void requireCallbackFactory() {
@@ -33,6 +35,10 @@ public final class NativeParcel {
         catch (RuntimeException | Error failure) { parcel.recycle(); throw failure; }
     }
     static void promote(Parcel parcel) {
+        if (REAL) {
+            if (pointer(parcel) == 0) throw new IllegalArgumentException("Native Parcel has been destroyed");
+            return;
+        }
         long original = pointer(parcel);
         if (owns(original)) return;
         if (!(Shadow.extract(parcel) instanceof ShadowHostNativeParcel))
@@ -44,7 +50,7 @@ public final class NativeParcel {
         ReflectionHelpers.setField(parcel, "mNativePtr", nativePeer);
     }
     static long pointer(Parcel parcel) { return ReflectionHelpers.getField(parcel, "mNativePtr"); }
-    static boolean owns(long peer) { return originals.containsKey(peer); }
+    static boolean owns(long peer) { return peer != 0 && (REAL || originals.containsKey(peer)); }
     public static int activeParcels() { return originals.size(); }
     static void restore(Parcel parcel) {
         long peer = pointer(parcel);

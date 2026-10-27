@@ -631,6 +631,7 @@ rendering end to end, real input through the shell's input proxy, dialogs stacke
    forwarded to the hub. `IBinder`s cross JVMs over the real kernel binder: the real `android.os.Binder`/`BinderProxy`/`Parcel` JNI is registered and Robolectric's
    shadows for them are removed, so AIDL stubs, `linkToDeath` and Parcelables behave as on a device. The hub speaks the real AIDL interfaces where they exist
    (IContentProvider, IIntentSender, IServiceConnection...), so a later move to our own system_server (option 2) does not change the apps.
+   **Active milestone (latest user instruction):** E1a real Binder/BinderProxy/Parcel JNI and two-JVM call/callback/caller/death tests pass. The WIP real-Parcel/media integration now passes full Parcel/attribution checks plus native audio in/out/recorder, codec/extractor/encoder and MediaPlayer regressions. Native helper references, startup errors and test cleanup are fixed. E1b hub + actual Context.bindService across packages is next; no hub/framework cross-app completion claim yet.
    Order of work, each step with an automated cross-app test on the VM: (1) two tiny test apps, one with a bound AIDL service, one binding to it across two JVMs, with a death
    notification; (2) broadcasts (manifest and dynamic receivers, ordered, sticky, permissions); (3) content providers (Settings first, then Contacts/Calendar) with
    observers; (4) cross-app `startActivity`/`startActivityForResult`, `startService`, pending intents; (5) notifications and the rest. Behaviour is checked against Android's

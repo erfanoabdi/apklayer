@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Server and client app JVMs over the real binder: the client finds the server's binder, calls it, is called back, and sees it die (kill -9)."""
+"""Own two JVMs, observe actual Binder calls/death, and reap every child."""
 import os
 from pathlib import Path
 import selectors
@@ -19,45 +19,69 @@ def stop():
     subprocess.run(['pkill', '-9', '-x', 'tail'], check=False)
 
 
-def start(package):
-    return subprocess.Popen(['bin/apklayer', 'run', package], env=ENV, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
-
-
-def wait_for(proc, needle, log, seconds):
-    """Read the app's output until a line contains the needle."""
-    end = time.monotonic() + seconds
-    with selectors.DefaultSelector() as events:
-        events.register(proc.stdout, selectors.EVENT_READ)
-        while time.monotonic() < end:
-            for _ in events.select(1):
-                line = proc.stdout.readline()
-                if not line:
-                    raise AssertionError('process ended before: ' + needle + '\n' + '\n'.join(log[-25:]))
-                text = line.decode(errors='replace').rstrip()
-                log.append(text)
-                if '[hello-binder' in text and 'FAIL' in text:
-                    raise AssertionError(text + '\n' + '\n'.join(log[-30:]))
-                if needle in text:
-                    return text
-    raise AssertionError('timed out waiting for: ' + needle + '\n' + '\n'.join(log[-15:]))
-
-
 stop()
-server = client = None
-logs = []
-try:
-    server = start('hello.binderserver')
-    published = wait_for(server, '[hello-binder-server] published=true', logs, 60)
-    server_pid = int(published.split('pid=')[1])
-    client = start('hello.binderclient')
-    server_log = []
-    passed = wait_for(client, '[hello-binder-client] PASS', logs, 60)
-    print(passed, flush=True)
-    os.kill(server_pid, signal.SIGKILL)  # the server JVM dies without any goodbye
-    wait_for(client, '[hello-binder-client] binderDied', logs, 15)
-    print('PASS two JVMs over the real binder: published service, call, callback, caller identities, death notification', flush=True)
-finally:
-    for proc in (client, server):
-        if proc is not None and proc.poll() is None:
-            os.killpg(proc.pid, signal.SIGTERM)
-    stop()
+children, logs, pending = {}, {}, {}
+with selectors.DefaultSelector() as events:
+    def start(name, package):
+        proc = subprocess.Popen(['bin/apklayer', 'run', package], env=ENV, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, start_new_session=True)
+        children[name] = proc
+        logs[name], pending[name] = [], b''
+        events.register(proc.stdout, selectors.EVENT_READ, name)
+        return proc
+
+    def wait_for(name, needle, seconds=30):
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            found = next((line for line in logs[name] if needle in line), None)
+            if found is not None:
+                return found
+            ready = events.select(min(3, max(0, end - time.monotonic())))
+            assert ready, 'Binder test stalled before ' + needle + '\n' + '\n'.join(logs[name][-25:])
+            for key, _ in ready:
+                source = key.data
+                data = os.read(key.fd, 65536)
+                if not data:
+                    events.unregister(key.fileobj)
+                    if source == name:
+                        raise AssertionError('JVM ended before ' + needle + '\n' + '\n'.join(logs[name][-25:]))
+                    continue
+                parts = (pending[source] + data).split(b'\n')
+                pending[source] = parts.pop()
+                for raw in parts:
+                    line = raw.decode(errors='replace')
+                    logs[source].append(line)
+                    if '[hello-binder' in line or '[runtime]' in line:
+                        print(line, flush=True)
+                    assert '[hello-binder' not in line or 'FAIL' not in line, line
+        raise AssertionError('Binder deadline before ' + needle)
+
+    try:
+        start('server', 'hello.binderserver')
+        published = wait_for('server', '[hello-binder-server] published=true')
+        server_pid = int(published.split('pid=')[1])
+        start('client', 'hello.binderclient')
+        wait_for('client', '[hello-binder-client] PASS')
+        os.kill(server_pid, signal.SIGKILL)
+        wait_for('client', '[hello-binder-client] binderDied')
+        wait_for('client', 'finished hello.binderclient.Main depth=0')
+        print('PASS two JVMs: real Binder call/callback, caller identities and death notification', flush=True)
+    finally:
+        for proc in children.values():
+            if proc.poll() is None:
+                os.killpg(proc.pid, signal.SIGTERM)
+        stop()
+        for name, proc in children.items():
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                os.killpg(proc.pid, signal.SIGKILL)
+                proc.wait()
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            proc.stdout.close()
+            Path('/tmp/apklayer-binder-' + name + '.out').write_text('\n'.join(logs[name]))
+        left = subprocess.run(['pgrep', '-af', '[a]pklayer.host.Main|[b]tload|[a]pklayer-shell'], capture_output=True, text=True)
+        assert left.returncode != 0, left.stdout
