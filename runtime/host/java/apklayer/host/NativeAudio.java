@@ -25,9 +25,8 @@ final class NativeAudio {
                 // Preserve the shared policy's index when another JVM already initialized this group.
                 if (AudioSystem.getMaxVolumeIndexForAttributes(attributes) >= 0) continue;
                 check(AudioSystem.initStreamVolume(stream, min, max));
-                // AudioService starts every stream at its default index (music 11 of 15); Robolectric's manager says 0, which is silence
-                int index = Math.max(min, Math.min(max, AudioSystem.DEFAULT_STREAM_VOLUME[stream]));
-                check(AudioSystem.setStreamVolumeIndexAS(stream, index, false, AudioSystem.DEVICE_OUT_SPEAKER));
+                // Robolectric's manager says 0, which is silence; every stream sits at its maximum and the host's volume control is the volume
+                check(AudioSystem.setStreamVolumeIndexAS(stream, max, false, AudioSystem.DEVICE_OUT_SPEAKER));
             }
             initialized = true;
         } finally { initializing = false; }

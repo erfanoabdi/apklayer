@@ -16,20 +16,16 @@ final class TrackCheck {
     }
     static void run(android.content.Context context) throws Exception {
         AudioManager manager = context.getSystemService(AudioManager.class);
-        // what an app finds before it touches the volume: audible (a phone starts at a mid index, not 0 or muted)
-        int initial = manager.getStreamVolume(AudioManager.STREAM_MUSIC);
-        System.out.println("[hello-native-audio] default music volume " + initial + "/" + manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                + " muted=" + manager.isStreamMute(AudioManager.STREAM_MUSIC));
-        require(initial > 0 && !manager.isStreamMute(AudioManager.STREAM_MUSIC), "default music volume is audible");
-        manager.setStreamVolume(AudioManager.STREAM_MUSIC,
-                manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC), 0);
-        require(manager.getStreamVolume(AudioManager.STREAM_MUSIC)
-                == manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC), "real volume policy");
+        // the Android volume is pinned at the maximum (the host's volume control is the one volume): audible before the app touches anything,
+        // and its own volume changes do not lower it
         int maximum = manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        System.out.println("[hello-native-audio] default music volume " + manager.getStreamVolume(AudioManager.STREAM_MUSIC) + "/" + maximum
+                + " muted=" + manager.isStreamMute(AudioManager.STREAM_MUSIC));
+        require(manager.getStreamVolume(AudioManager.STREAM_MUSIC) == maximum && !manager.isStreamMute(AudioManager.STREAM_MUSIC), "music volume starts at the maximum");
+        manager.setStreamVolume(AudioManager.STREAM_MUSIC, 1, 0);
         manager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, 0);
-        require(manager.getStreamVolume(AudioManager.STREAM_MUSIC) == maximum - 1, "native volume lower");
-        manager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, 0);
-        require(manager.getStreamVolume(AudioManager.STREAM_MUSIC) == maximum, "native volume raise");
+        manager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0);
+        require(manager.getStreamVolume(AudioManager.STREAM_MUSIC) == maximum && !manager.isStreamMute(AudioManager.STREAM_MUSIC), "app volume changes are ignored");
         int session = manager.generateAudioSessionId();
         require(session > 0, "real global audio session");
         AudioTrack track = new AudioTrack.Builder()

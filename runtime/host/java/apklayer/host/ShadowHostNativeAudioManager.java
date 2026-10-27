@@ -17,21 +17,13 @@ public class ShadowHostNativeAudioManager extends ShadowAudioManager {
         int index = AudioSystem.getStreamVolumeIndex(stream, AudioSystem.DEVICE_OUT_SPEAKER);
         return index >= 0 ? index : super.getStreamVolume(stream);
     }
+    // The Android volume stays at its maximum for every stream: the host's volume control (the PipeWire sink) is the one volume of the
+    // machine, so an app's own volume keys, sliders and mutes change nothing here (the request is accepted and ignored).
     @Implementation @Override protected void setStreamVolume(int stream, int index, int flags) {
         NativeAudio.ensureInitialized();
-        super.setStreamVolume(stream, index, flags);
-        NativeAudio.check(AudioSystem.setStreamVolumeIndexAS(stream, super.getStreamVolume(stream),
-                real.isStreamMute(stream), AudioSystem.DEVICE_OUT_SPEAKER));
     }
     @Implementation @Override protected void adjustStreamVolume(int stream, int direction, int flags) {
-        if (direction == AudioManager.ADJUST_RAISE || direction == AudioManager.ADJUST_LOWER) {
-            setStreamVolume(stream, getStreamVolume(stream) + (direction == AudioManager.ADJUST_RAISE ? 1 : -1), flags);
-        } else {
-            if (direction == AudioManager.ADJUST_TOGGLE_MUTE)
-                direction = real.isStreamMute(stream) ? AudioManager.ADJUST_UNMUTE : AudioManager.ADJUST_MUTE;
-            super.adjustStreamVolume(stream, direction, flags);
-            NativeAudio.apply(real, stream);
-        }
+        NativeAudio.ensureInitialized();
     }
     @Implementation @Override protected int generateAudioSessionId() {
         NativeAudio.ensureInitialized();

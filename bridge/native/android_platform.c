@@ -10,6 +10,7 @@ int __system_property_area_init(void); /* properties.c */
 #include <signal.h>
 #include <ucontext.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -133,45 +134,65 @@ void apklayer_log_to_stderr(void)
 /* Debug aid (-Dapklayer.runtimetrace=true, or APKLAYER_CRASH_TRACE=1 in btload): on SIGABRT/SIGSEGV print the frame-pointer chain of the faulting thread and the
  * memory map lines of the Android libraries, so addresses can be resolved with readelf/nm (gdb cannot unwind libraries
  * that the bionic linker loaded). Android's arm64 code keeps frame pointers. */
-/* name the library of an address (any library, host ones too): "[runtime-trace] where <addr> <path>+<file offset>" */
+/* Async-signal-safe: a crash can hold the allocator's lock, and fopen/fprintf in the handler then hangs after the first line (the old handler
+ * printed only "signal 11 pc=" for the SurfaceFlinger crash). Raw open/read/write and snprintf into stack buffers only. */
+static char trace_maps[1 << 19];
+static size_t trace_maps_len;
+static void trace_write(const char *s, size_t n) { while (n) { ssize_t w = write(2, s, n); if (w <= 0) return; s += w; n -= w; } }
+static void trace_line(const char *fmt, unsigned long long a, unsigned long long b, const char *path, size_t pathlen)
+{
+    char out[512];
+    int n = snprintf(out, sizeof out, fmt, a, b);
+    if (n > 0) trace_write(out, (size_t)n < sizeof out ? (size_t)n : sizeof out - 1);
+    if (path) trace_write(path, pathlen);
+    trace_write("\n", 1);
+}
+/* name the library of an address: "[runtime-trace] where <addr> <path>+<file offset>" (anonymous memory: "anonymous") */
 static void where(uint64_t addr)
 {
-    FILE *mf = fopen("/proc/self/maps", "r");
-    char line[512];
-    while (mf && fgets(line, sizeof line, mf)) {
-        unsigned long long lo, hi, off;
-        if (sscanf(line, "%llx-%llx %*s %llx", &lo, &hi, &off) != 3 || addr < lo || addr >= hi) continue;
-        char *path = strchr(line, '/');
-        if (path) {
-            path[strcspn(path, "\n")] = 0;
-            fprintf(stderr, "[runtime-trace] where 0x%llx %s+0x%llx\n", (unsigned long long)addr, path, (unsigned long long)(addr - lo + off));
+    for (size_t i = 0; i < trace_maps_len;) {
+        size_t eol = i;
+        while (eol < trace_maps_len && trace_maps[eol] != '\n') eol++;
+        unsigned long long lo = 0, hi = 0, off = 0;
+        size_t j = i;
+        for (; j < eol && trace_maps[j] != '-'; j++) lo = lo * 16 + (trace_maps[j] <= '9' ? trace_maps[j] - '0' : trace_maps[j] - 'a' + 10);
+        for (j++; j < eol && trace_maps[j] != ' '; j++) hi = hi * 16 + (trace_maps[j] <= '9' ? trace_maps[j] - '0' : trace_maps[j] - 'a' + 10);
+        if (addr >= lo && addr < hi) {
+            int spaces = 0;
+            for (; j < eol && spaces < 3; j++) if (trace_maps[j] == ' ') spaces++;
+            for (; j < eol; j++) if (trace_maps[j] != ' ') break;
+            for (size_t k = j - 1; k > i && spaces == 3 && trace_maps[k] != ' ' ; k--) {}
+            size_t o = i; /* the offset is the third field */
+            int field = 0;
+            for (; o < eol && field < 2; o++) if (trace_maps[o] == ' ') field++;
+            for (; o < eol && trace_maps[o] != ' '; o++) off = off * 16 + (trace_maps[o] <= '9' ? trace_maps[o] - '0' : trace_maps[o] - 'a' + 10);
+            const char *path = memchr(trace_maps + i, '/', eol - i);
+            if (path) { trace_line("[runtime-trace] where 0x%llx +0x%llx ", (unsigned long long)addr, addr - lo + off, path, (size_t)(trace_maps + eol - path)); }
+            else trace_line("[runtime-trace] where 0x%llx anonymous (%llx)", (unsigned long long)addr, lo, NULL, 0);
+            return;
         }
-        break;
+        i = eol + 1;
     }
-    if (mf) fclose(mf);
 }
 
 static void crash_trace_handler(int sig, siginfo_t *info, void *ctx)
 {
-    (void)info;
-    fflush(NULL); /* bionic_translation prints abort messages with printf: block-buffered into a file, they would be lost */
     ucontext_t *uc = ctx;
     uint64_t pc = uc->uc_mcontext.pc, *fp = (uint64_t *)uc->uc_mcontext.regs[29];
-    fprintf(stderr, "[runtime-trace] signal %d pc=0x%llx\n", sig, (unsigned long long)pc);
+    int fd = open("/proc/self/maps", O_RDONLY);
+    if (fd >= 0) { ssize_t n; while (trace_maps_len < sizeof trace_maps && (n = read(fd, trace_maps + trace_maps_len, sizeof trace_maps - trace_maps_len)) > 0) trace_maps_len += n; close(fd); }
+    trace_line("[runtime-trace] signal %llu pc=0x%llx", (unsigned long long)sig, (unsigned long long)pc, NULL, 0);
+    trace_line("[runtime-trace] fault address 0x%llx x0=0x%llx", (unsigned long long)(uintptr_t)info->si_addr, (unsigned long long)uc->uc_mcontext.regs[0], NULL, 0);
     where(pc);
-    fprintf(stderr, "[runtime-trace] lr=0x%llx\n", (unsigned long long)uc->uc_mcontext.regs[30]);
+    trace_line("[runtime-trace] lr=0x%llx sp=0x%llx", (unsigned long long)uc->uc_mcontext.regs[30], (unsigned long long)uc->uc_mcontext.sp, NULL, 0);
     where(uc->uc_mcontext.regs[30]);
-    for (int i = 0; i < 32 && fp && ((uintptr_t)fp & 7) == 0; i++) {
-        fprintf(stderr, "[runtime-trace] #%d lr=0x%llx\n", i, (unsigned long long)fp[1]);
-        if (i < 6) where(fp[1]);
+    for (int i = 0; i < 24 && fp && ((uintptr_t)fp & 7) == 0; i++) {
+        trace_line("[runtime-trace] #%llu lr=0x%llx", (unsigned long long)i, (unsigned long long)fp[1], NULL, 0);
+        where(fp[1]);
         uint64_t *next = (uint64_t *)fp[0];
         if (next <= fp) break;
         fp = next;
     }
-    FILE *maps = fopen("/proc/self/maps", "r");
-    char line[512];
-    while (maps && fgets(line, sizeof line, maps)) if (strstr(line, "android-arm64") || strstr(line, "android-libs")) fputs(line, stderr);
-    fflush(stderr);
     signal(sig, SIG_DFL);
     raise(sig);
 }
