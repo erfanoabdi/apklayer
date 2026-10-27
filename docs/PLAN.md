@@ -599,6 +599,10 @@ rendering end to end, real input through the shell's input proxy, dialogs stacke
    on the real stack (video buffers through our gralloc, YUV zero-copy into SurfaceFlinger layers, the codec2 HAL over the host's decoders), audio. Camera: the camera
    provider HAL over PipeWire/V4L2 into BufferQueue surfaces. Then gnss, sensors, vibrator and the rest of `aosp/hals/README.md`. Each follows the domain layout
    (`aosp/hals/<domain>` Android side, `bridge/hals/<domain>` host side).
+   **Bluetooth** after camera: Robolectric-style shadows of `android.bluetooth.*` over a host daemon speaking D-Bus to BlueZ (not Android's own stack: it needs
+   system_server's services and an exclusive controller), scoped by what the corpus apps actually call (BLE scan, GATT client/server and advertising first; then RFCOMM/L2CAP
+   sockets; audio profiles through PipeWire), with a compatibility table of every API and its status; unimplemented calls return real errors. Developed against
+   BlueZ's `btvirt`/vhci virtual controllers (the VM has no Bluetooth hardware).
 9. Vulkan (P7.5) after the HALs.
 10. **CTS (P10) stays last**: not before media, camera and the other HALs work.
 
