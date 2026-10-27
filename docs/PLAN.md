@@ -595,7 +595,12 @@ rendering end to end, real input through the shell's input proxy, dialogs stacke
 7. **Cleanup that remains:** the Robolectric patches should become a proper overlay with a regression test (`tests/vm/gpu.sh` has to pass on a clean VM); the stack's
    write-once properties per launch (`ro.*`); the describe step of `apklayer install` for the tree flavor; `AppHost` trace options; a vsync request from an app
    without a window of its own (the native Choreographer asks for window id 1); debug logging flags; docs/ARCHITECTURE.md for the virtual display and input proxy.
-8. Then Vulkan (P7.5) and CTS (P10) as before.
+8. **HALs before anything else after that (user, 2026-10-27): media and camera first, then the other hardware.** Media: decoders/encoders and `MediaCodec`/`MediaPlayer`
+   on the real stack (video buffers through our gralloc, YUV zero-copy into SurfaceFlinger layers, the codec2 HAL over the host's decoders), audio. Camera: the camera
+   provider HAL over PipeWire/V4L2 into BufferQueue surfaces. Then gnss, sensors, vibrator and the rest of `aosp/hals/README.md`. Each follows the domain layout
+   (`aosp/hals/<domain>` Android side, `bridge/hals/<domain>` host side).
+9. Vulkan (P7.5) after the HALs.
+10. **CTS (P10) stays last**: not before media, camera and the other HALs work.
 
 ### P7.5 — Vulkan (user goal, 2026-10-26)
 
