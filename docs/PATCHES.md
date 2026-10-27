@@ -171,3 +171,9 @@ Opt-in nativeplayer retains the original MediaPlayer Java state machine/JNI and 
 ## Native AAC PCM samples (2026-10-27)
 
 The existing GStreamer backend now shares pipeline creation, bounded input, notifications, errors, EOS and sample ownership between video and audio. A separate audio C API preserves existing video struct layouts and exposes actual decoded rate/channels/interleaved S16LE samples. Raw AAC receives real AudioSpecificConfig; no player process or fake timing. Mapping rejects the wrong sample domain. tests/vm/codec-audio-host.sh generates actual AAC and verifies mono/stereo frequency, timestamps, EOS, malformed configuration rejection and retained PCM after decoder close. Existing VP8/VP9 and reordered AVC tests and original MediaPlayer video pass. Codec2 audio integration follows; this step does not advertise audio components yet.
+
+## Media: the tree's software codecs and extractors (2026-10-27)
+- `aosp/hals/media/codec2/SoftCodecs.{h,cpp}` (included by ComponentStore.cpp): loads the installed `libcodec2_soft_*` libraries one by one and serves them beside the host decoders. The platform store's fixed library list aborts on a missing library and crashed after xheaacenc declined to create a factory; this loader takes what is installed. Host decoders (`c2.apklayer.*`, rank 128) stay first; the tree's are rank 256.
+- `bridge/native/android_platform.c`: `__memchr_chk`, `__memrchr_chk` (the Ogg extractor's fortified calls; bionic only).
+- `bridge/native/android-root/vendor/etc/media_codecs.xml`: the swcodec APEX's list minus the codecs the host decoders serve, plus ours.
+- `scripts/install-media-libs.py` stages the codecs, extractors and their libraries from the swcodec/media APEX build outputs onto the VM.

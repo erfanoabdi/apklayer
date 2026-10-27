@@ -25,6 +25,9 @@ int __system_property_area_init(void); /* properties.c */
 ssize_t __pwrite_chk(int fd, const void *buf, size_t n, off_t off, size_t buflen) { (void)buflen; return pwrite(fd, buf, n, off); }
 ssize_t __sendto_chk(int fd, const void *buf, size_t n, size_t buflen, int flags, const struct sockaddr *a, socklen_t l)
 { (void)buflen; return sendto(fd, buf, n, flags, a, l); }
+/* the Ogg extractor's fortified memchr/memrchr (bionic only) */
+void *__memchr_chk(const void *s, int c, size_t n, size_t buflen) { if (n > buflen) abort(); return memchr(s, c, n); }
+void *__memrchr_chk(const void *s, int c, size_t n, size_t buflen) { if (n > buflen) abort(); return memrchr(s, c, n); }
 void __cfi_slowpath(uint64_t type, void *ptr, void *diag) { (void)type; (void)ptr; (void)diag; } /* no CFI enforcement */
 void __cfi_slowpath_diag(uint64_t type, void *ptr, void *diag) { __cfi_slowpath(type, ptr, diag); }
 

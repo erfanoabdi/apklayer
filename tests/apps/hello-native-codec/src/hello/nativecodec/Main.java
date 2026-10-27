@@ -39,6 +39,7 @@ public class Main extends Activity {
             ExtractorCheck.run(this);
             ExtractorFdCheck.run(this);
             AacCheck.run(this);
+            AudioFormatsCheck.run(this);
             runOnUiThread(() -> {
                 Runnable show = () -> {
                     result.getViewTreeObserver().registerFrameCommitCallback(

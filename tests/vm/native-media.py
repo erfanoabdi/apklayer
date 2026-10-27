@@ -37,7 +37,7 @@ try:
         events.register(app.stdout, selectors.EVENT_READ)
         events.register(notify, selectors.EVENT_READ)
         pending = b''
-        end = time.monotonic() + 25
+        end = time.monotonic() + 45
         done = False
         while not done:
             ready = events.select(3)
@@ -86,6 +86,8 @@ try:
     assert 'finished hello.nativecodec.Main depth=0' in text and 'depth=0' in text
     assert (logs / 'shell.log').read_text(errors='replace').count('dmabuf frame') > 0
     assert '[hello-native-codec] AAC PASS' in text
+    for asset in ('tone.mp3', 'tone-vorbis.ogg', 'tone-opus.ogg', 'tone.flac', 'tone.wav'):
+        assert '[hello-native-codec] AUDIO PASS ' + asset in text, asset
     print('PASS APK MediaCodec JNI, real YUV/PTS/EOS, frame commit and physical Back', flush=True)
 finally:
     stop()
