@@ -41,3 +41,20 @@ if [ -f "$L/libOpenSLES.so" ] && [ -f "$L/libapklayer_audioserver.so" ] && [ -f 
         esac
     fi
 fi
+
+# apklayer patch: Android apps ask for the GLES level a device gives (3.2; Off The Road 2 needs 3.1). A host driver that stops lower (virgl: ES 3.0)
+# makes eglCreateContext fail with EGL_BAD_MATCH. The driver's own version override then claims the Android level: what the driver truly lacks
+# (compute shaders...) fails when used, as on a device without it. Probed once per session; APKLAYER_GLES_OVERRIDE=off disables it, or set
+# MESA_GLES_VERSION_OVERRIDE yourself.
+if [ -z "${MESA_GLES_VERSION_OVERRIDE:-}" ] && [ "${APKLAYER_GLES_OVERRIDE:-auto}" != off ] && command -v eglinfo >/dev/null 2>&1; then
+    _es_cache="$XDG_RUNTIME_DIR/apklayer-host-gles"
+    if [ -s "$_es_cache" ]; then
+        _es="$(cat "$_es_cache")"
+    else
+        _es="$(eglinfo -p gbm 2>/dev/null | sed -n 's/^OpenGL ES profile version: OpenGL ES \([0-9.]*\).*/\1/p' | head -1)"
+        [ -z "$_es" ] || echo "$_es" > "$_es_cache"
+        case "$_es" in 2.*|3.0) echo "apklayer: the host GLES is $_es; apps get a 3.2 claim (APKLAYER_GLES_OVERRIDE=off to disable)" >&2 ;; esac
+    fi
+    case "$_es" in 2.*|3.0) export MESA_GLES_VERSION_OVERRIDE=3.2 ;; esac
+    unset _es _es_cache
+fi
