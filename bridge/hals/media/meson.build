@@ -8,4 +8,6 @@ if gst_app.found() and gst_video.found() and gst_alloc.found()
     include_directories: codec_inc, dependencies: [gst_app, gst_video, gst_alloc], install: true)
   executable('codec-test', '../../../tests/hals/codec-test.c',
     include_directories: codec_inc, dependencies: [gst_app, gst_video], link_with: libcodec)
+  executable('codec-reorder-test', '../../../tests/hals/codec-reorder-test.c',
+    include_directories: codec_inc, dependencies: [gst_app, gst_video], link_with: libcodec)
 endif

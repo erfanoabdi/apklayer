@@ -11,11 +11,16 @@ static void le(FILE *out, uint64_t value, unsigned bytes)
     for (unsigned n = 0; n < bytes; n++) fputc(value >> (n * 8), out);
 }
 
+static void ready(void *opaque) { g_atomic_int_inc((gint *)opaque); }
+
 static void decode(unsigned width, unsigned height, const char *fixture, int vp9)
 {
     struct apklayer_codec_config cfg = { .mime = vp9 ? "video/x-vnd.on2.vp9" : "video/x-vnd.on2.vp8", .width = width, .height = height };
     struct apklayer_codec *codec = NULL;
     assert(apklayer_codec_open(&cfg, &codec) == 0);
+    gint notifications = 0;
+    assert(apklayer_codec_set_notify(codec, ready, &notifications) == 0);
+    assert(apklayer_codec_set_notify(codec, ready, &notifications) == -EALREADY);
     struct apklayer_codec_frame *empty = NULL;
     assert(apklayer_codec_pull(codec, 0, &empty) == -EAGAIN && !empty);
     char *desc = g_strdup_printf("videotestsrc num-buffers=3 pattern=red ! "
@@ -73,6 +78,8 @@ static void decode(unsigned width, unsigned height, const char *fixture, int vp9
     }
     struct apklayer_codec_frame *none = NULL;
     assert(apklayer_codec_pull(codec, GST_SECOND, &none) == -ENODATA && !none);
+    assert(g_atomic_int_get(&notifications) >= 3);
+    assert(apklayer_codec_set_notify(codec, NULL, NULL) == 0);
     apklayer_codec_close(codec);
     /* Samples stay owned even after stopping/releasing the decoder. */
     const void *planes[4];

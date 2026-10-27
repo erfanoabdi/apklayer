@@ -10,7 +10,63 @@
 #include <stdio.h>
 #include <string.h>
 
-struct apklayer_codec { GstElement *pipe; GstAppSrc *src; GstAppSink *sink; int failed; };
+struct codec_notify { void (*ready)(void *); void *opaque; };
+struct apklayer_codec {
+    GstElement *pipe;
+    GstAppSrc *src;
+    GstAppSink *sink;
+    int failed, notify_enabled;
+    struct codec_notify *notify;
+};
+static void notify_ready(struct apklayer_codec *c)
+{
+    struct codec_notify *notify = g_atomic_pointer_get(&c->notify);
+    if (notify && g_atomic_int_get(&c->notify_enabled)) notify->ready(notify->opaque);
+}
+static GstFlowReturn sample_ready(GstAppSink *sink, gpointer opaque)
+{
+    (void)sink;
+    notify_ready(opaque);
+    return GST_FLOW_OK;
+}
+static void eos_ready(GstAppSink *sink, gpointer opaque)
+{
+    (void)sink;
+    notify_ready(opaque);
+}
+static void report_error(struct apklayer_codec *c, GstMessage *message)
+{
+    if (!g_atomic_int_compare_and_exchange(&c->failed, 0, 1)) return;
+    GError *error = NULL;
+    gchar *detail = NULL;
+    gst_message_parse_error(message, &error, &detail);
+    fprintf(stderr, "[codec] %s: %s\n", GST_OBJECT_NAME(message->src), error->message);
+    g_clear_error(&error);
+    g_free(detail);
+}
+static GstBusSyncReply message_ready(GstBus *bus, GstMessage *message, gpointer opaque)
+{
+    (void)bus;
+    if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_ERROR) {
+        // The bus sync hook runs before enqueue: publish failure before waking
+        // the component, so its nonblocking pull cannot miss the error.
+        report_error(opaque, message);
+        notify_ready(opaque);
+    }
+    return GST_BUS_PASS; /* retain errors for the normal pull/check_error path */
+}
+int apklayer_codec_set_notify(struct apklayer_codec *c, void (*ready)(void *), void *opaque)
+{
+    if (!c) return -EINVAL;
+    if (!ready) { g_atomic_int_set(&c->notify_enabled, 0); return 0; }
+    if (g_atomic_pointer_get(&c->notify)) return -EALREADY;
+    struct codec_notify *notify = g_new0(struct codec_notify, 1);
+    notify->ready = ready;
+    notify->opaque = opaque;
+    g_atomic_pointer_set(&c->notify, notify);
+    g_atomic_int_set(&c->notify_enabled, 1);
+    return 0;
+}
 struct apklayer_codec_frame {
     GstSample *sample;
     GstVideoInfo video;
@@ -47,19 +103,13 @@ int apklayer_codec_supports(const char *mime)
 
 static int check_error(struct apklayer_codec *c)
 {
-    if (c->failed) return -EIO;
+    if (g_atomic_int_get(&c->failed)) return -EIO;
     GstBus *bus = gst_element_get_bus(c->pipe);
     GstMessage *msg = gst_bus_pop_filtered(bus, GST_MESSAGE_ERROR);
     gst_object_unref(bus);
-    if (!msg) return 0;
-    GError *error = NULL;
-    gchar *detail = NULL;
-    gst_message_parse_error(msg, &error, &detail);
-    fprintf(stderr, "[codec] %s: %s\n", GST_OBJECT_NAME(msg->src), error->message);
-    g_clear_error(&error);
-    g_free(detail);
+    if (!msg) return g_atomic_int_get(&c->failed) ? -EIO : 0;
+    report_error(c, msg);
     gst_message_unref(msg);
-    c->failed = 1;
     return -EIO;
 }
 
@@ -82,6 +132,11 @@ int apklayer_codec_open(const struct apklayer_codec_config *cfg, struct apklayer
     }
     c->src = GST_APP_SRC(gst_bin_get_by_name(GST_BIN(c->pipe), "input"));
     c->sink = GST_APP_SINK(gst_bin_get_by_name(GST_BIN(c->pipe), "output"));
+    GstAppSinkCallbacks callbacks = {.eos = eos_ready, .new_sample = sample_ready};
+    gst_app_sink_set_callbacks(c->sink, &callbacks, c, NULL);
+    GstBus *bus = gst_element_get_bus(c->pipe);
+    gst_bus_set_sync_handler(bus, message_ready, c, NULL);
+    gst_object_unref(bus);
     GstCaps *caps = input_caps(cfg->mime);
     gst_caps_set_simple(caps, "width", G_TYPE_INT, (int)cfg->width,
                         "height", G_TYPE_INT, (int)cfg->height, NULL);
@@ -208,9 +263,11 @@ void apklayer_codec_frame_release(struct apklayer_codec_frame *f)
 void apklayer_codec_close(struct apklayer_codec *c)
 {
     if (!c) return;
+    g_atomic_int_set(&c->notify_enabled, 0);
     if (c->pipe) gst_element_set_state(c->pipe, GST_STATE_NULL);
     if (c->src) gst_object_unref(c->src);
     if (c->sink) gst_object_unref(c->sink);
     if (c->pipe) gst_object_unref(c->pipe);
+    g_free(c->notify);
     g_free(c);
 }

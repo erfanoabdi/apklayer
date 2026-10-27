@@ -28,6 +28,10 @@ struct apklayer_codec_frame_info {
 /* Availability reflects the installed decoder registry; 0 means unsupported. */
 int apklayer_codec_supports(const char *mime);
 int apklayer_codec_open(const struct apklayer_codec_config *, struct apklayer_codec **);
+/* Install once before queueing input. Streaming-thread notifications signal
+ * sample/EOS/error availability; schedule work and return promptly, never pull
+ * or close from the callback. Passing NULL disables it. close joins callbacks. */
+int apklayer_codec_set_notify(struct apklayer_codec *, void (*ready)(void *), void *opaque);
 /* Copies compressed input only. Timestamps are nanoseconds; -1 means unknown.
  * -EAGAIN means the bounded input queue is full: drain output before retrying. */
 int apklayer_codec_queue(struct apklayer_codec *, const void *, size_t, int64_t pts_ns);
