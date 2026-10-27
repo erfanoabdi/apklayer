@@ -338,3 +338,27 @@ static pthread_mutex_t apklayer_install_lock = PTHREAD_MUTEX_INITIALIZER;
 \t\tmemcpy(mutex->glibc, &bionic_mutex_init_map[i].glibc, sizeof(bionic_mutex_init_map[i].glibc));''', '''\t\tAPKLAYER_INSTALL(mutex->glibc, sizeof(*mutex->glibc), memcpy(native, &bionic_mutex_init_map[i].glibc, sizeof(bionic_mutex_init_map[i].glibc)));''', 1)
     p.write_text(s)
 PY
+
+# 9. R_AARCH64_IRELATIVE (ifunc) relocations: the linker rejected them ("unknown reloc type 1032"). Chromium's libwebviewchromium.so has hundreds. As in
+#    bionic's linker, the resolver at base+addend is called with the hwcap (plus the _IFUNC_ARG_HWCAP bit) and an __ifunc_arg_t, and its result stored.
+python3 - "$bt" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1]) / 'linker/linker.c'
+s = p.read_text()
+if 'apklayer patch: IRELATIVE' not in s:
+    s = s.replace('#include <', '#include <sys/auxv.h>\n#include <', 1)
+    anchor = '#if defined(__aarch64__)\n\t\tcase R_AARCH64_ABS64:'
+    assert anchor in s
+    s = s.replace(anchor, '''#if defined(__aarch64__)
+\t\tcase R_AARCH64_IRELATIVE: { /* apklayer patch: IRELATIVE (ifunc), see scripts/patch-bionic-translation.sh step 9 */
+\t\t\tstruct { unsigned long size, hwcap, hwcap2; } ifunc_arg = { sizeof(ifunc_arg), getauxval(AT_HWCAP), getauxval(AT_HWCAP2) };
+\t\t\tElfW(Addr) (*resolver)(unsigned long, void *) = (void *)(si->base + get_addend(rel));
+\t\t\tCOUNT_RELOC(RELOC_RELATIVE);
+\t\t\tMARK(rel->r_offset);
+\t\t\t*((ElfW(Addr) *)reloc) = resolver(ifunc_arg.hwcap | (1UL << 62), &ifunc_arg);
+\t\t\tbreak;
+\t\t}
+\t\tcase R_AARCH64_ABS64:''', 1)
+    p.write_text(s)
+PY
