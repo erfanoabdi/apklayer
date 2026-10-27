@@ -50,6 +50,7 @@ public final class HostShadowProvider implements ShadowProvider {
             entries.add(Map.entry("android.media.AudioTrack", ShadowHostNativeAudioTrack.class.getName()));
             entries.add(Map.entry("android.media.AudioSystem", ShadowHostNativeAudioSystem.class.getName()));
             entries.add(Map.entry("android.media.AudioRecord", ShadowHostNativeAudioRecord.class.getName()));
+            entries.add(Map.entry("android.media.MediaRecorder", ShadowHostNativeMediaRecorder.class.getName()));
             entries.add(Map.entry("android.media.AudioManager", ShadowHostNativeAudioManager.class.getName()));
         }
         if (Boolean.getBoolean("apklayer.nativeparcels")) {

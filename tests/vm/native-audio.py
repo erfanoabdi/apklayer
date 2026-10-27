@@ -14,13 +14,13 @@ os.chdir(Path.home() / 'apklayer-m1')
 ENV = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000', APKLAYER_NATIVE=str(Path.home() / 'arm64-native'),
     APKLAYER_CODEC2='0', APKLAYER_MEDIA_SERVICES='0', APKLAYER_DEBUG_INPUT='1', APKLAYER_RUNTIME_DEBUG='1',
     APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400',
-    APKLAYER_JOPTS='-Dapklayer.nativeattribution=true -Dapklayer.runms=60000')
+    APKLAYER_JOPTS='-Dapklayer.nativeattribution=true -Dapklayer.runms=90000')
 ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-media.so'
 
 audio_mode = sys.argv[1:] == ['audio']
 capture = None
 if audio_mode:
-    ENV.update(APKLAYER_AUDIO='1', APKLAYER_AUDIO_SERVICES='1', APKLAYER_MEDIA_SERVICES='1')
+    ENV.update(APKLAYER_AUDIO='1', APKLAYER_AUDIO_SERVICES='1', APKLAYER_MEDIA_SERVICES='1', APKLAYER_CODEC2='1')  # the recorder's encoder is a Codec2 component
     ENV['APKLAYER_JOPTS'] += ' -Dapklayer.nativemedia=true -Dapklayer.nativeaudio=true -Dapklayer.nativeparcels=true -Dhello.rate=1 -Dhello.record=1'
     ENV['APKLAYER_HOST_LIBS'] += ':' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-audio.so'
 
@@ -51,7 +51,7 @@ try:
         events.register(notify, selectors.EVENT_READ)
         if capture: capture.register(events)
         pending = b''
-        end = time.monotonic() + 70
+        end = time.monotonic() + 100
         done = False
         while not done:
             ready = events.select(3)
@@ -97,6 +97,7 @@ try:
         assert '[hello-native-audio] AudioTrack PASS PCM/marker/timestamp=' in text
         assert '[hello-native-audio] RATE PASS' in text
         assert '[hello-native-audio] RECORD PASS' in text
+        assert '[hello-native-audio] RECORDER PASS' in text
         capture.verify()
     assert committed and captured
     assert 'finished hello.nativeaudio.Main depth=0' in text and 'depth=0' in text
