@@ -177,3 +177,6 @@ The existing GStreamer backend now shares pipeline creation, bounded input, noti
 - `bridge/native/android_platform.c`: `__memchr_chk`, `__memrchr_chk` (the Ogg extractor's fortified calls; bionic only).
 - `bridge/native/android-root/vendor/etc/media_codecs.xml`: the swcodec APEX's list minus the codecs the host decoders serve, plus ours.
 - `scripts/install-media-libs.py` stages the codecs, extractors and their libraries from the swcodec/media APEX build outputs onto the VM.
+
+## bionic_translation: atomic lazy init of static pthread objects (2026-10-27, scripts/patch-bionic-translation.sh step 8)
+An all-zero (statically initialised) condition, semaphore, rwlock or mutex gets its native object on first use; two threads arriving together each made one and overwrote the other's, so one waited on a condition the other signalled never. libhwui's WorkQueue (a std::condition_variable first used by the main and render threads at once) hung NewPipe's startup now and then: black window, main thread parked in `HardwareRenderer.nSetStopped`, the render thread idle in a cond wait (gdb). The object is installed with a compare-and-swap; the loser frees its own.

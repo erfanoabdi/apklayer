@@ -301,3 +301,34 @@ if 'apklayer patch: explicit monotonic deadlines' not in s:
     s = s[:a] + '/* apklayer patch: explicit monotonic deadlines, matching bionic pthread_cond.cpp. */\nint bionic_pthread_cond_timedwait_relative_np(bionic_cond_t *cond, bionic_mutex_t *mutex, const struct timespec *reltime)\n{\n    assert(cond && mutex && reltime);\n    struct timespec tv;\n    clock_gettime(CLOCK_MONOTONIC, &tv);\n    tv.tv_sec += reltime->tv_sec;\n    tv.tv_nsec += reltime->tv_nsec;\n    if (tv.tv_nsec >= 1000000000) { ++tv.tv_sec; tv.tv_nsec -= 1000000000; }\n    return bionic_pthread_cond_clockwait(cond, mutex, CLOCK_MONOTONIC, &tv);\n}\n\nint bionic_pthread_cond_timedwait_monotonic_np(bionic_cond_t *cond, bionic_mutex_t *mutex, const struct timespec *abstime)\n{\n    assert(cond && mutex && abstime);\n    return bionic_pthread_cond_clockwait(cond, mutex, CLOCK_MONOTONIC, abstime);\n}\n\n' + s[b:]
     p.write_text(s)
 PYCOND
+
+# 8. Statically initialised (all-zero) conditions, semaphores, rwlocks and mutexes get their native object on first use, and two threads
+#    arriving together each made one and overwrote the other's: one waited on a condition the other signalled never (lost wakeup). libhwui's
+#    WorkQueue, a std::condition_variable first used by the main and the render thread at once, hung the whole app at startup (black window,
+#    main thread in HardwareRenderer.nSetStopped). The native object is now installed with a compare-and-swap; the loser frees its own.
+python3 - "$bt" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1]) / 'pthread_wrapper/libpthread.c'
+s = p.read_text()
+if 'apklayer patch: atomic lazy init' not in s:
+    helper = '''/* apklayer patch: atomic lazy init. Install a fresh native object only if the field is still what the caller saw; otherwise another thread won. */
+#define APKLAYER_INSTALL(field, size, init_stmt) do { \\
+\ttypeof(field) seen = __atomic_load_n(&(field), __ATOMIC_ACQUIRE); \\
+\ttypeof(field) fresh = mmap(NULL, (size), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0); \\
+\t{ typeof(field) native = fresh; init_stmt; } \\
+\tif (!__atomic_compare_exchange_n(&(field), &seen, fresh, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) munmap(fresh, (size)); \\
+} while (0)
+
+'''
+    s = s.replace('// For handling static initialization.', helper + '// For handling static initialization.', 1)
+    s = s.replace('''\tsem->glibc = mmap(NULL, sizeof(*sem->glibc), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+\tmemset(sem->glibc, 0, sizeof(*sem->glibc));''', '''\tAPKLAYER_INSTALL(sem->glibc, sizeof(*sem->glibc), memset(native, 0, sizeof(*native)));''', 1)
+    s = s.replace('''\trwlock->glibc = mmap(NULL, sizeof(*rwlock->glibc), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+\tmemset(rwlock->glibc, 0, sizeof(*rwlock->glibc));''', '''\tAPKLAYER_INSTALL(rwlock->glibc, sizeof(*rwlock->glibc), memset(native, 0, sizeof(*native)));''', 1)
+    s = s.replace('''\tcond->glibc = mmap(NULL, sizeof(struct apklayer_cond), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+\tmemset(cond->glibc, 0, sizeof(struct apklayer_cond));''', '''\tAPKLAYER_INSTALL(cond->glibc, sizeof(struct apklayer_cond), memset((void *)native, 0, sizeof(struct apklayer_cond)));''', 1)
+    s = s.replace('''\t\tmutex->glibc = mmap(NULL, sizeof(*mutex->glibc), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+\t\tmemcpy(mutex->glibc, &bionic_mutex_init_map[i].glibc, sizeof(bionic_mutex_init_map[i].glibc));''', '''\t\tAPKLAYER_INSTALL(mutex->glibc, sizeof(*mutex->glibc), memcpy(native, &bionic_mutex_init_map[i].glibc, sizeof(bionic_mutex_init_map[i].glibc)));''', 1)
+    p.write_text(s)
+PY
