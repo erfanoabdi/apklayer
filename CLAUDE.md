@@ -1,6 +1,6 @@
 # apklayer: rules for every session (read first, also after a context reset)
 
-Goal and plan: `goal.md`, `docs/PLAN.md`. Status and local reference projects: `memory.md`.
+Goal and plan: `goal.md`, `docs/PLAN.md`. Status and local reference projects: `memory.md`. **A new session starts from `HANDOFF.md`** (ordered milestones to the end).
 
 ## NEVER (user rules, repeated complaints; re-read at the start of every turn)
 1. No `sleep`, poll loops, `timeout` wrappers or `tail -f` waits. A command silent for ~3 s is killed, then inspect.
