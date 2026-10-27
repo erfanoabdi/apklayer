@@ -534,6 +534,17 @@ EGLBoolean eglSurfaceAttrib(EGLDisplay dpy, EGLSurface surface, EGLint attribute
 EGLBoolean eglGetConfigAttrib(EGLDisplay dpy, EGLConfig cfg, EGLint attribute, EGLint* value) {
     EGLBoolean ok = host<EGLBoolean (*)(EGLDisplay, EGLConfig, EGLint, EGLint*)>("eglGetConfigAttrib")(dpy, cfg, attribute, value);
     if (ok && attribute == EGL_SURFACE_TYPE && value) *value |= EGL_PBUFFER_BIT;  // eglCreatePbufferSurface below works on every config
+    // Android's native visual id is a HAL pixel format (engines hand it to ANativeWindow_setBuffersGeometry: bgfx, SDL, Unity); the host's is a DRM fourcc
+    if (ok && attribute == EGL_NATIVE_VISUAL_ID && value) {
+        switch (static_cast<uint32_t>(*value)) {
+            case DRM_FORMAT_ARGB8888: case DRM_FORMAT_ABGR8888: *value = 1; break;      // HAL_PIXEL_FORMAT_RGBA_8888 (every window buffer is allocated as it)
+            case DRM_FORMAT_XRGB8888: case DRM_FORMAT_XBGR8888: *value = 2; break;      // RGBX_8888
+            case DRM_FORMAT_RGB565: *value = 4; break;                                  // RGB_565
+            case DRM_FORMAT_ARGB2101010: case DRM_FORMAT_ABGR2101010: *value = 0x2b; break;  // RGBA_1010102
+            case DRM_FORMAT_ABGR16161616F: *value = 0x16; break;                        // RGBA_FP16
+            default: break;
+        }
+    }
     return ok;
 }
 

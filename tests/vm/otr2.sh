@@ -1,0 +1,13 @@
+#!/bin/bash
+# Off The Road 2 (user-supplied APK, not in the repo) on the GPU route: installs it, runs it with native resources, checks real frames.
+# Usage: OTR2_APK=/path/to/OTR-2.apk tests/vm/otr2.sh
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+VM="${APKLY_VM:-parallels@10.211.55.4}"
+PASS="${APKLY_VM_PASS:-1234}"
+APK="${OTR2_APK:?set OTR2_APK to the OTR2 APK}"
+vm() { sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" "$@"; }
+sshpass -p "$PASS" scp -q "$APK" "$VM:/tmp/otr2.apk"
+COPYFILE_DISABLE=1 tar cf - tests/vm/otr2-run.py tests/vm/uinput-keys.c | vm 'tar xf - -C ~/apklayer-m1 2>/dev/null'
+vm 'cd ~/apklayer-m1; export XDG_RUNTIME_DIR=/run/user/1000 APKLAYER_NATIVE="$HOME/arm64-native"; bin/apklayer install /tmp/otr2.apk 2>&1 | grep -a installed'
+python3 tests/vm/otr2-driver.py "$VM" "$PASS" "${TMPDIR:-/tmp}"

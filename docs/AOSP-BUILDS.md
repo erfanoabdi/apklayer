@@ -158,3 +158,7 @@ Remote Codec2 verification: libcodec2_client dependency linked from the selected
 ### 2026-10-28 — libapklayer_egl: log eglCreateContext failures (incremental, authorized)
 - OTR2's bgfx reports "Failed to create context"; log the attributes and EGL error of a failed eglCreateContext. `orb-build-module.py libapklayer_egl hals/graphics/egl Egl.cpp` (existing compile/link/strip/copy commands, no graph change, no clean).
 - Result: built and installed on the VM (sha256 426b674df529d9ef...). It shows OTR2's request: ES 3.1 context with EGL_CONTEXT_FLAGS_KHR (BAD_ATTRIBUTE), then ES 3.1 alone (BAD_MATCH on the ES 3.0 virgl host).
+
+### 2026-10-28 — libapklayer_egl: native visual id as a HAL pixel format (incremental, authorized)
+- eglGetConfigAttrib(EGL_NATIVE_VISUAL_ID) returned the host's DRM fourcc; engines pass it to ANativeWindow_setBuffersGeometry, so OTR2's bgfx window buffers were requested with format 0x34324241 and every allocation failed. Map the fourcc to the HAL pixel format. `orb-build-module.py libapklayer_egl hals/graphics/egl Egl.cpp` (existing commands, no graph change, no clean).
+- Result: built and installed on the VM (sha256 81ad2df1221f4545...). OTR2's SurfaceView buffers allocate; tests/vm/gpu.sh and tests/vm/texture-view.sh pass.
