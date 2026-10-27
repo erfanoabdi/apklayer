@@ -317,3 +317,5 @@ Rosetta-era x86 library where the tree's framework jar is used.
 - **E2 broadcasts (2026-10-27), first part verified**: `tests/vm/broadcasts.sh` (manifest receiver of a not-running package, dynamic/manifest delivery across apps, exported rules, permissions, ordered with priorities/result/abort, sticky). Details and the open items in `docs/MILESTONE-E.md`.
 
 (UiBench GL TextureView and Modern Combat 3 notes: `docs/history/PLAN-gl-textureview-mc3.md`.)
+
+- Native-game coverage gap (OTR2 1.3.2, 2026-10-28): provide and verify OpenSL ES slCreateEngine/native audio path. Current VM has legacy libOpenSLES.so.1 mapping and no staged original Android OpenSLES library; game fails before graphics. Test evidence in tests/corpus/results.md.
