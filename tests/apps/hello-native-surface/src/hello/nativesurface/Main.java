@@ -51,15 +51,16 @@ public class Main extends Activity implements SurfaceHolder.Callback {
     }
     private void decode(SurfaceHolder holder) {
         try {
-            decodeStream(holder, "red-vp8.ivf", false);
-            decodeStream(holder, "red-vp9.ivf", true);
+            decodeStream(holder, "red-vp8.ivf", false, -1);
+            decodeStream(holder, "red-vp9.ivf", false, -1);
+            decodeStream(holder, "red-vp9-multi.ivf", true, 2);
             System.out.println("[hello-native-surface] DECODE PASS");
         } catch (Throwable error) {
             System.out.println("[hello-native-surface] FAIL " + error);
             error.printStackTrace();
         }
     }
-    private void decodeStream(SurfaceHolder holder, String asset, boolean keep) throws Exception {
+    private void decodeStream(SurfaceHolder holder, String asset, boolean keep, int duplicatedIndex) throws Exception {
         MediaCodec codec = null;
         try (InputStream input = getAssets().open(asset)) {
             byte[] header = input.readNBytes(32);
@@ -90,17 +91,20 @@ public class Main extends Activity implements SurfaceHolder.Callback {
                 buffer.put(data);
                 codec.queueInputBuffer(index, 0, size, pts,
                         frame + 1 == count ? MediaCodec.BUFFER_FLAG_END_OF_STREAM : 0);
-                int output = -1;
-                for (int event = 0; event < 4; event++) {
-                    output = codec.dequeueOutputBuffer(info, 2000000);
-                    if (output >= 0) break;
-                    require(output == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED || output == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED,
-                            "output " + output);
+                int pictures = frame == duplicatedIndex ? 2 : 1;
+                for (int part = 0; part < pictures; part++) {
+                    int output = -1;
+                    for (int event = 0; event < 4; event++) {
+                        output = codec.dequeueOutputBuffer(info, 2000000);
+                        if (output >= 0) break;
+                        require(output == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED || output == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED,
+                                "output " + output);
+                    }
+                    require(output >= 0 && info.presentationTimeUs == pts, "output PTS");
+                    eos |= (info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0;
+                    codec.releaseOutputBuffer(output, true);
+                    System.out.println("[hello-native-surface] queued frame=" + frame + " pts=" + pts);
                 }
-                require(output >= 0 && info.presentationTimeUs == pts, "output PTS");
-                eos |= (info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0;
-                codec.releaseOutputBuffer(output, true);
-                System.out.println("[hello-native-surface] queued frame=" + frame + " pts=" + pts);
             }
             for (int event = 0; !eos && event < 4; event++) {
                 int output = codec.dequeueOutputBuffer(info, 2000000);

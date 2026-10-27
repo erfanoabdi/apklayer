@@ -26,7 +26,9 @@ extern "C" int main(int argc, char** argv) {
         if (!store->createInterface(traits[0].name, &interface).isOk() || !interface) return 1;
         fprintf(stderr, "codec2: PASS remote AIDL discovery/interface %s\n", traits[0].name.c_str());
         if (argc < 3) return 0;
-        int result = apklayer::decodeProbe(argv[2], true, argc == 4 && !strcmp(argv[3], "hide-first"));
+        int multiIndex = argc == 4 && !strcmp(argv[3], "multi") ? 0 :
+            argc == 4 && !strcmp(argv[3], "multi-last") ? 2 : -1;
+        int result = apklayer::decodeProbe(argv[2], true, argc == 4 && !strcmp(argv[3], "hide-first"), multiIndex);
         return result || argc == 4 ? result : apklayer::decodeProbe(argv[2], true, true);
     }
     if (argc == 3 && !strcmp(argv[1], "--decode")) return apklayer::decodeProbe(argv[2]);

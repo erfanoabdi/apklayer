@@ -32,8 +32,9 @@ public class Main extends Activity {
     }
     private void decode() {
         try {
-            decodeStream("red-vp8.ivf");
-            decodeStream("red-vp9.ivf");
+            decodeStream("red-vp8.ivf", -1);
+            decodeStream("red-vp9.ivf", -1);
+            decodeStream("red-vp9-multi.ivf", 2);
             runOnUiThread(() -> {
                 Runnable show = () -> {
                     result.getViewTreeObserver().registerFrameCommitCallback(
@@ -56,7 +57,7 @@ public class Main extends Activity {
             runOnUiThread(() -> result.setText("FAIL: " + error));
         }
     }
-    private void decodeStream(String asset) throws Exception {
+    private void decodeStream(String asset, int duplicatedIndex) throws Exception {
         MediaCodec codec = null;
         try (InputStream input = getAssets().open(asset)) {
             System.out.println("[hello-native-codec] begin");
@@ -93,27 +94,30 @@ public class Main extends Activity {
                 buffer.put(compressed);
                 codec.queueInputBuffer(index, 0, bytes, pts,
                         frame + 1 == count ? MediaCodec.BUFFER_FLAG_END_OF_STREAM : 0);
-                int output = MediaCodec.INFO_TRY_AGAIN_LATER;
-                for (int event = 0; event < 4; event++) {
-                    output = codec.dequeueOutputBuffer(info, 2000000);
-                    if (output >= 0) break;
-                    require(output == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED || output == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED,
-                            "output buffer: " + output);
-                    System.out.println("[hello-native-codec] output-format=" + codec.getOutputFormat());
+                int pictures = frame == duplicatedIndex ? 2 : 1;
+                for (int part = 0; part < pictures; part++) {
+                    int output = MediaCodec.INFO_TRY_AGAIN_LATER;
+                    for (int event = 0; event < 4; event++) {
+                        output = codec.dequeueOutputBuffer(info, 2000000);
+                        if (output >= 0) break;
+                        require(output == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED || output == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED,
+                                "output buffer: " + output);
+                        System.out.println("[hello-native-codec] output-format=" + codec.getOutputFormat());
+                    }
+                    require(output >= 0 && info.presentationTimeUs == pts, "output PTS");
+                    try (Image image = codec.getOutputImage(output)) {
+                        require(image != null && image.getWidth() == width && image.getHeight() == height, "output image");
+                        Image.Plane[] planes = image.getPlanes();
+                        require(planes.length == 3, "YUV planes");
+                        int y = planes[0].getBuffer().get(0) & 255;
+                        int u = planes[1].getBuffer().get(0) & 255;
+                        int v = planes[2].getBuffer().get(0) & 255;
+                        require(y > 50 && y < 110 && u < 130 && v > 180, "decoded red YUV");
+                        System.out.println("[hello-native-codec] frame=" + frame + " pts=" + pts + " YUV=" + y + "," + u + "," + v);
+                    }
+                    eos |= (info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0;
+                    codec.releaseOutputBuffer(output, false);
                 }
-                require(output >= 0 && info.presentationTimeUs == pts, "output PTS");
-                try (Image image = codec.getOutputImage(output)) {
-                    require(image != null && image.getWidth() == width && image.getHeight() == height, "output image");
-                    Image.Plane[] planes = image.getPlanes();
-                    require(planes.length == 3, "YUV planes");
-                    int y = planes[0].getBuffer().get(0) & 255;
-                    int u = planes[1].getBuffer().get(0) & 255;
-                    int v = planes[2].getBuffer().get(0) & 255;
-                    require(y > 50 && y < 110 && u < 130 && v > 180, "decoded red YUV");
-                    System.out.println("[hello-native-codec] frame=" + frame + " pts=" + pts + " YUV=" + y + "," + u + "," + v);
-                }
-                eos |= (info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0;
-                codec.releaseOutputBuffer(output, false);
             }
             for (int event = 0; !eos && event < 4; event++) {
                 int output = codec.dequeueOutputBuffer(info, 2000000);
@@ -126,7 +130,7 @@ public class Main extends Activity {
             codec.stop();
             codec.release();
             codec = null;
-            System.out.println("[hello-native-codec] PASS native MediaCodec decoded " + count + " YUV frames with PTS/EOS");
+            System.out.println("[hello-native-codec] PASS native MediaCodec decoded " + (count + (duplicatedIndex >= 0 ? 1 : 0)) + " YUV frames with PTS/EOS");
         } finally {
             if (codec != null) codec.release();
         }

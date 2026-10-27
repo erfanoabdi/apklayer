@@ -34,6 +34,14 @@ python3 tests/vm/vp9-superframe.py /tmp/apklayer-vp9.ivf /tmp/apklayer-vp9-super
 python3 -u tests/vm/codec2-run.py /tmp/apklayer-vp9-superframe.ivf visible
 grep -a 'codec2:' /tmp/apklayer-stack/tool.log
 test "$(grep -ac 'codec2: PASS AIDL work' /tmp/apklayer-stack/tool.log)" = 3
+python3 tests/vm/vp9-superframe.py /tmp/apklayer-vp9.ivf /tmp/apklayer-vp9-multi.ivf multi
+python3 -u tests/vm/codec2-run.py /tmp/apklayer-vp9-multi.ivf multi
+grep -a 'codec2:' /tmp/apklayer-stack/tool.log
+test "$(grep -ac 'codec2: PASS AIDL work' /tmp/apklayer-stack/tool.log)" = 4
+python3 tests/vm/vp9-superframe.py /tmp/apklayer-vp9.ivf /tmp/apklayer-vp9-multi-last.ivf multi-last
+python3 -u tests/vm/codec2-run.py /tmp/apklayer-vp9-multi-last.ivf multi-last
+grep -a 'codec2:' /tmp/apklayer-stack/tool.log
+test "$(grep -ac 'codec2: PASS AIDL work' /tmp/apklayer-stack/tool.log)" = 4
 bin/apklayer stop >/dev/null 2>&1
 if ps -eo args | grep -E '[a]pklayer.host.Main|[b]tload|[a]pklayer-shell' | grep -v grep; then exit 1; fi
 echo 'PASS native host decoder, remote VP8/VP9 Codec2 work/hidden frames, ordinals/EOS and real gralloc YUV'

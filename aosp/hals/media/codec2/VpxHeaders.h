@@ -6,7 +6,8 @@
 #include <cstdint>
 
 namespace apklayer {
-inline int vp9VisibleFrames(const uint8_t *data, size_t size) {
+struct VpxPacket { size_t offset = 0, size = 0; };
+inline int vp9Packets(const uint8_t *data, size_t size, VpxPacket packets[8], unsigned *packetCount) {
     if (!size) return -1;
     uint8_t marker = data[size - 1];
     size_t sizes[8] = {size};
@@ -24,9 +25,13 @@ inline int vp9VisibleFrames(const uint8_t *data, size_t size) {
             for (unsigned b = 0; b < magnitude; b++) sizes[i] |= size_t(*index++) << (8 * b);
         }
     }
+    *packetCount = count;
+    size_t offset = 0;
     int visible = 0;
     for (unsigned i = 0; i < count; i++) {
         if (!sizes[i] || sizes[i] > payload || (data[0] & 0xf0) != 0x80) return -1;
+        packets[i] = {offset, sizes[i]};
+        offset += sizes[i];
         // Profile 0: frame marker=10, profile=00, show_existing, frame_type, show_frame.
         if ((data[0] & 0x08) || (data[0] & 0x02)) visible++;
         data += sizes[i];

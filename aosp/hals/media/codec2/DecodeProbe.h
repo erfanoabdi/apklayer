@@ -46,7 +46,7 @@ inline uint64_t readLE(const uint8_t *p, unsigned n) {
     for (unsigned i = 0; i < n; i++) value |= uint64_t(p[i]) << (8 * i);
     return value;
 }
-inline int decodeProbe(const char *path, bool remote = false, bool hideFirst = false) {
+inline int decodeProbe(const char *path, bool remote = false, bool hideFirst = false, int multiIndex = -1) {
     std::unique_ptr<FILE, decltype(&fclose)> file(fopen(path, "rb"), fclose);
     uint8_t header[32];
     if (!file || fread(header, 1, sizeof header, file.get()) != sizeof header ||
@@ -108,31 +108,35 @@ inline int decodeProbe(const char *path, bool remote = false, bool hideFirst = f
         work->worklets.emplace_back(new C2Worklet);
         queue.push_back(std::move(work));
         if ((remote ? remoteCodec->queue(&queue) : codec->queue_nb(&queue)) != C2_OK) return 1;
-        std::unique_lock lock(listener->mutex);
-        if (!listener->ready.wait_for(lock, std::chrono::seconds(2), [&] { return listener->error || !listener->done.empty(); })) return 1;
-        if (listener->error) return 1;
-        auto output = std::move(listener->done.front()); listener->done.pop_front(); lock.unlock();
-        if (output->result != C2_OK || output->workletsProcessed != 1) {
-            fprintf(stderr, "codec2: work %u result %d processed %u\n", index, output->result, output->workletsProcessed); return 1;
+        unsigned expected = index == unsigned(multiIndex) ? 2 : 1;
+        for (unsigned part = 0; part < expected; part++) {
+            std::unique_lock lock(listener->mutex);
+            if (!listener->ready.wait_for(lock, std::chrono::seconds(2), [&] { return listener->error || !listener->done.empty(); })) return 1;
+            if (listener->error) return 1;
+            auto output = std::move(listener->done.front()); listener->done.pop_front(); lock.unlock();
+            if (output->result != C2_OK || output->workletsProcessed != 1) {
+                fprintf(stderr, "codec2: work %u result %d processed %u\n", index, output->result, output->workletsProcessed); return 1;
+            }
+            const auto& result = output->worklets.front()->output;
+            if (result.ordinal.frameIndex.peeku() != index ||
+                result.ordinal.timestamp.peekll() != int64_t(readLE(packet + 4, 8) * scale * 1000000 / rate) ||
+                bool(result.flags & C2FrameData::FLAG_END_OF_STREAM) != (index + 1 == count && part + 1 == expected) ||
+                bool(result.flags & C2FrameData::FLAG_INCOMPLETE) != (part + 1 < expected)) return 1;
+            const auto& buffers = result.buffers;
+            if (hideFirst && index == 0) {
+                if (!buffers.empty()) return 1;
+                fprintf(stderr, "codec2: PASS %shidden work 0 completed without output\n", remote ? "AIDL " : "");
+                continue;
+            }
+            if (buffers.size() != 1 || buffers[0]->data().graphicBlocks().size() != 1) return 1;
+            C2GraphicView view = buffers[0]->data().graphicBlocks()[0].map().get();
+            if (view.error() || view.width() < width || view.height() < height) return 1;
+            unsigned y = view.data()[C2PlanarLayout::PLANE_Y][0];
+            unsigned u = view.data()[C2PlanarLayout::PLANE_U][0];
+            unsigned v = view.data()[C2PlanarLayout::PLANE_V][0];
+            if (y < 50 || y > 110 || u > 130 || v < 180) return 1;
+            fprintf(stderr, "codec2: PASS %swork %u part %u gralloc %ux%u YUV=%u,%u,%u\n", remote ? "AIDL " : "", index, part, view.width(), view.height(), y, u, v);
         }
-        const auto& result = output->worklets.front()->output;
-        if (result.ordinal.frameIndex.peeku() != index ||
-            result.ordinal.timestamp.peekll() != int64_t(readLE(packet + 4, 8) * scale * 1000000 / rate) ||
-            bool(result.flags & C2FrameData::FLAG_END_OF_STREAM) != (index + 1 == count)) return 1;
-        const auto& buffers = result.buffers;
-        if (hideFirst && index == 0) {
-            if (!buffers.empty()) return 1;
-            fprintf(stderr, "codec2: PASS %shidden work 0 completed without output\n", remote ? "AIDL " : "");
-            continue;
-        }
-        if (buffers.size() != 1 || buffers[0]->data().graphicBlocks().size() != 1) return 1;
-        C2GraphicView view = buffers[0]->data().graphicBlocks()[0].map().get();
-        if (view.error() || view.width() < width || view.height() < height) return 1;
-        unsigned y = view.data()[C2PlanarLayout::PLANE_Y][0];
-        unsigned u = view.data()[C2PlanarLayout::PLANE_U][0];
-        unsigned v = view.data()[C2PlanarLayout::PLANE_V][0];
-        if (y < 50 || y > 110 || u > 130 || v < 180) return 1;
-        fprintf(stderr, "codec2: PASS %swork %u gralloc %ux%u YUV=%u,%u,%u\n", remote ? "AIDL " : "", index, view.width(), view.height(), y, u, v);
     }
     return 0;
 }

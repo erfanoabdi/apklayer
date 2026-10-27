@@ -100,7 +100,7 @@ private:
             if (apklayer_codec_open(&config, &mCodec)) { work->result = C2_CANNOT_DO; return; }
         }
         bool hasInput = !work->input.buffers.empty();
-        bool visible = true;
+        unsigned visible = 0;
         if (hasInput) {
             const auto& blocks = work->input.buffers[0]->data().linearBlocks();
             if (blocks.empty()) { work->result = C2_BAD_VALUE; return; }
@@ -109,18 +109,21 @@ private:
             if (view.capacity() < (mParams->info().vp9 ? 1u : 3u)) { work->result = C2_BAD_VALUE; return; }
             // apklayer patch: libvpx uncompressed headers (vp8 frame tag;
             // vp9 read_uncompressed_header profile 0). Hidden references produce no output.
+            VpxPacket packets[8] = {{0, view.capacity()}};
+            unsigned packetCount = 1;
             if (mParams->info().vp9) {
-                int shown = vp9VisibleFrames(view.data(), view.capacity());
+                int shown = vp9Packets(view.data(), view.capacity(), packets, &packetCount);
                 if (shown < 0) { work->result = C2_BAD_VALUE; return; }
-                // Multiple displayed pictures in one work require cloneAndSend;
-                // report that unsupported case explicitly instead of dropping output.
-                if (shown > 1) { work->result = C2_CANNOT_DO; return; }
-                visible = shown != 0;
+                visible = shown;
             } else visible = (view.data()[0] & 0x10) != 0;
             int64_t timestamp = work->input.ordinal.timestamp.peekll();
             if (timestamp < 0 || timestamp > INT64_MAX / 1000) { work->result = C2_BAD_VALUE; return; }
-            if (apklayer_codec_queue(mCodec, view.data(), view.capacity(), timestamp * 1000)) {
-                work->result = C2_CORRUPTED; return;
+            // Split indexed VP9 packets so the host decoder preserves every
+            // displayed picture, including multiple pictures with the same PTS.
+            for (unsigned p = 0; p < packetCount; p++) {
+                if (apklayer_codec_queue(mCodec, view.data() + packets[p].offset, packets[p].size, timestamp * 1000)) {
+                    work->result = C2_CORRUPTED; return;
+                }
             }
         }
         if (work->input.flags & C2FrameData::FLAG_END_OF_STREAM) {
@@ -136,6 +139,12 @@ private:
             }
             return;
         }
+        for (unsigned picture = 0; picture < visible; picture++) {
+            emitFrame(work, pool, picture + 1 == visible);
+            if (work->result != C2_OK) return;
+        }
+    }
+    void emitFrame(const std::unique_ptr<C2Work>& work, const std::shared_ptr<C2BlockPool>& pool, bool last) {
         apklayer_codec_frame *raw = nullptr;
         int status = apklayer_codec_pull(mCodec, 500000000, &raw);
         if (status) { work->result = status == -EAGAIN ? C2_TIMED_OUT : C2_CORRUPTED; return; }
@@ -150,27 +159,45 @@ private:
         work->result = pool->fetchGraphicBlock((info.width + 15) & ~15u, (info.height + 1) & ~1u,
             HAL_PIXEL_FORMAT_YCBCR_420_888, {C2MemoryUsage::CPU_READ, C2MemoryUsage::CPU_WRITE}, &block);
         if (work->result != C2_OK) { fprintf(stderr, "codec2: fetch graphic block %d\n", work->result); return; }
-        C2GraphicView target = block->map().get();
-        if (target.error()) { fprintf(stderr, "codec2: output map %d\n", target.error()); work->result = target.error(); return; }
-        auto layout = target.layout();
-        for (unsigned p = 0; p < 3; p++) {
-            unsigned width = p ? (info.width + 1) / 2 : info.width;
-            unsigned height = p ? (info.height + 1) / 2 : info.height;
-            const auto& plane = layout.planes[p];
-            for (unsigned y = 0; y < height; y++) {
-                auto *dst = target.data()[p] + y * plane.rowInc;
-                auto *src = static_cast<const uint8_t *>(planes[p]) + y * info.stride[p];
-                for (unsigned x = 0; x < width; x++) dst[x * plane.colInc] = src[x];
+        { // Publish CPU plane writes before notifying any cloned output work.
+            C2GraphicView target = block->map().get();
+            if (target.error()) { fprintf(stderr, "codec2: output map %d\n", target.error()); work->result = target.error(); return; }
+            auto layout = target.layout();
+            for (unsigned p = 0; p < 3; p++) {
+                unsigned width = p ? (info.width + 1) / 2 : info.width;
+                unsigned height = p ? (info.height + 1) / 2 : info.height;
+                const auto& plane = layout.planes[p];
+                for (unsigned y = 0; y < height; y++) {
+                    auto *dst = target.data()[p] + y * plane.rowInc;
+                    auto *src = static_cast<const uint8_t *>(planes[p]) + y * info.stride[p];
+                    for (unsigned x = 0; x < width; x++) dst[x * plane.colInc] = src[x];
+                }
             }
         }
         C2StreamPictureSizeInfo::output size(0u, info.width, info.height);
-        if (info.width != mParams->width() || info.height != mParams->height()) {
+        bool changed = info.width != mParams->width() || info.height != mParams->height();
+        if (changed) {
             std::vector<std::unique_ptr<C2SettingResult>> failures;
             work->result = mParams->config({&size}, C2_MAY_BLOCK, &failures);
             if (work->result != C2_OK) return;
-            output.configUpdate.push_back(C2Param::Copy(size));
         }
-        output.buffers.push_back(createGraphicBuffer(block, C2Rect(info.width, info.height)));
+        auto buffer = createGraphicBuffer(block, C2Rect(info.width, info.height));
+        auto fill = [buffer, width = info.width, height = info.height, changed, last](const std::unique_ptr<C2Work>& target) {
+            target->result = C2_OK;
+            target->workletsProcessed = 1;
+            auto& out = target->worklets.front()->output;
+            out.ordinal = target->input.ordinal;
+            out.flags = last ? target->input.flags : C2FrameData::FLAG_INCOMPLETE;
+            out.buffers.clear();
+            out.buffers.push_back(buffer);
+            out.configUpdate.clear();
+            if (changed) {
+                C2StreamPictureSizeInfo::output size(0u, width, height);
+                out.configUpdate.push_back(C2Param::Copy(size));
+            }
+        };
+        if (last) fill(work);
+        else cloneAndSend(work->input.ordinal.frameIndex.peekull(), work, fill);
     }
 };
 std::shared_ptr<C2Component> makeDecoder(c2_node_id_t id, const std::shared_ptr<C2ReflectorHelper>& helper, const DecoderInfo& info) {
