@@ -1,0 +1,12 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="hello.hubserver">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34"/>
+  <permission android:name="hello.hubserver.ALLOW_BIND" android:protectionLevel="normal"/>
+  <permission android:name="hello.hubserver.DENY_BIND" android:protectionLevel="normal"/>
+  <application android:label="headless-hub-service">
+    <service android:name=".EchoService" android:exported="true"/>
+    <service android:name=".EchoService$Allowed" android:exported="true" android:permission="hello.hubserver.ALLOW_BIND"/>
+    <service android:name=".EchoService$Denied" android:exported="true" android:permission="hello.hubserver.DENY_BIND"/>
+    <service android:name=".EchoService$Private" android:exported="false"/>
+    <service android:name=".EchoService$Empty" android:exported="true"/>
+  </application>
+</manifest>

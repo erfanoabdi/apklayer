@@ -179,7 +179,7 @@ ensure_stack() (
 )
 
 cmd_run() {
-    local target="$1" pkg="$1"
+    local target="$1" pkg="$1" mode="${2:-app}"
     if [ -f "$target" ]; then
         cmd_install "$target"
         pkg="$INSTALLED"
@@ -194,7 +194,9 @@ cmd_run() {
         # one virtual display per app window (resizable, composed by SurfaceFlinger on the GPU, shown by apklayer-shell): its own layer
         # stack and sink per launch. PID-based ids cannot collide like truncated package hashes, and the title identifies
         # the instance/launch before the (possibly long) package. The primary is headless, so the sink is required.
-        if [ -f "$L/libapklayer_vdisplay.so" ]; then
+        if [ "$mode" = component ]; then
+            : # Headless service/provider process; the primary display already supplies timing.
+        elif [ -f "$L/libapklayer_vdisplay.so" ]; then
             local stack=$BASHPID logs="${APKLAYER_LOGS:-/tmp/apklayer-stack}"
             local display_window="apklayer:$stack:${APKLAYER_INSTANCE:-default}:$pkg"
             display_window="${display_window:0:60}" # host display HAL's title limit
@@ -219,8 +221,10 @@ cmd_run() {
     export APKLAYER_APK="$dir/base.apk"  # NDK libandroid shim reads assets from it
     export LD_LIBRARY_PATH="${APKLAYER_NATIVE:-$ROOT/native}:${APKLAYER_NATIVE:-$ROOT/native}/glibc${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"  # bionic linker + its libs (P4)
     export XDG_DATA_DIRS="${APKLAYER_NATIVE:-$ROOT/native}/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+    local -a entry=("$dir/base.apk" "$dir/classes.jar")
+    if [ "$mode" = component ]; then entry=(--component-host "${entry[@]}"); fi
     host -Dapklayer.data="$dir/data" -Dapklayer.package="$pkg" -Dapklayer.libdir="$dir/lib" -Dapklayer.apps="$APPS" -Dapklayer.cli="$ROOT/bin/apklayer" -Dapklayer.webview="$ROOT/bridge/webview/apklayer-webview.py" -Dapklayer.media="$ROOT/bridge/media/apklayer-media.py" -Dapklayer.codec="$ROOT/bridge/media/apklayer-codec.py" ${APKLAYER_JOPTS:-} \
-        -cp "$(host_cp "$dir/classes.jar")" apklayer.host.Main "$dir/base.apk" "$dir/classes.jar"
+        -cp "$(host_cp "$dir/classes.jar")" apklayer.host.Main "${entry[@]}"
 }
 
 # The APK's native libraries for the ABI of the JVM that runs the app (PLAN P4.4); none if it has none.
@@ -269,6 +273,7 @@ case "${1:-}" in
         pkill -x apklayer-shell || true ;;
     run) shift; [ $# -eq 1 ] || die "usage: apklayer run <package|app.apk>"; cmd_run "$1" ;;
     hub) cmd_hub ;;
+    component-host) shift; [ $# -eq 1 ] || die "usage: apklayer component-host <package>"; cmd_run "$1" component ;;
     list) cmd_list ;;
     uninstall) shift; [ $# -eq 1 ] || die "usage: apklayer uninstall <package>"; cmd_uninstall "$1" ;;
     *) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;

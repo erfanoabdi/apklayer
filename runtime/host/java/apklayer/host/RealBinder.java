@@ -33,6 +33,12 @@ public final class RealBinder {
         java.util.Objects.requireNonNull(name); init(); return lookupNative(name);
     }
 
+    /** Wait for actual service publication or the monotonic deadline, without polling. */
+    public static IBinder await(String name, long timeoutMs) {
+        java.util.Objects.requireNonNull(name); init(); return wait0(name, timeoutMs);
+    }
+    private static native IBinder wait0(String name, long timeoutMs);
+
     // The shim registers these uninstrumented native names; the public methods above initialize the pool.
     private static native boolean publish0(String name, IBinder binder);
     private static native IBinder lookup0(String name);

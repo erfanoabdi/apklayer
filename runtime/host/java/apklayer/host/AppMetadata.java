@@ -23,18 +23,21 @@ final class AppMetadata {
     private static ResolveInfo launcher(Application app) {
         Intent query = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(app.getPackageName());
         List<ResolveInfo> found = app.getPackageManager().queryIntentActivities(query, 0);
-        if (found.isEmpty()) throw new IllegalStateException("no launcher activity in " + app.getPackageName());
-        return found.get(0);
+        return found.isEmpty() ? null : found.get(0);
     }
 
     static Intent launcherIntent(Application app) {
+        ResolveInfo resolved = launcher(app);
+        if (resolved == null) throw new IllegalStateException("No launcher activity in " + app.getPackageName());
         return new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-                .setClassName(app.getPackageName(), launcher(app).activityInfo.name);
+                .setClassName(app.getPackageName(), resolved.activityInfo.name);
     }
 
     /** What a launcher shows: the launcher activity's label (falls back to the app's). */
     static String label(Application app) {
-        return String.valueOf(launcher(app).loadLabel(app.getPackageManager()));
+        ResolveInfo resolved = launcher(app);
+        return String.valueOf(resolved == null ? app.getPackageManager().getApplicationLabel(app.getApplicationInfo())
+                : resolved.loadLabel(app.getPackageManager()));
     }
 
     /**
@@ -49,7 +52,7 @@ final class AppMetadata {
             Properties info = new Properties();
             info.setProperty("package", app.getPackageName());
             info.setProperty("label", label(app));
-            info.setProperty("launcher", launcher.activityInfo.name);
+            info.setProperty("launcher", launcher == null ? "" : launcher.activityInfo.name);
             info.setProperty("versionName", String.valueOf(pkg.versionName));
             info.setProperty("versionCode", String.valueOf(pkg.getLongVersionCode()));
             info.setProperty("targetSdk", String.valueOf(app.getApplicationInfo().targetSdkVersion));
@@ -61,7 +64,7 @@ final class AppMetadata {
             }
 
             int size = 256;
-            Drawable icon = launcher.loadIcon(pm);
+            Drawable icon = launcher == null ? app.getApplicationInfo().loadIcon(pm) : launcher.loadIcon(pm);
             Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
             icon.setBounds(0, 0, size, size);
             icon.draw(new Canvas(bitmap));

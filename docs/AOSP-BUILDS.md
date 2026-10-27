@@ -136,3 +136,9 @@ Remote Codec2 verification: libcodec2_client dependency linked from the selected
 | 2026-10-27 | vendor-variant audio libs: libtinyalsav2, libnbaio_mono, libmediautils_vendor, android.hardware.bluetooth.audio-V6-ndk, bluetooth.audio-impl, libbluetooth_audio_session_aidl, libalsautilsv2 | their outputs were gone from out/ when libapklayer_audio had to be relinked (input streams); rebuilt incrementally with the generated ninja graph | ninja -f out/combined-lineage_gsi_arm64.ninja <the seven .so paths> | not needed: libapklayer_audio was relinked without them (the installed library never needed them; ninja wanted to rebuild ~3400 host steps) |
 | 2026-10-27 | `libapklayer_audio` | input streams (PipeWire capture), host microphone device | /tmp/apklayer-audio-relink.py Stream Service (compile + link replay, missing vendor-variant deps dropped) | built, installed |
 | 2026-10-27 | `libapklayer_permission` | also serves appops and scheduling_policy (record streams) | orb-build-module.py libapklayer_permission hals/permission Permission.cpp | built, installed |
+
+
+### 2026-10-27 — Milestone E service-binding checkpoint (host and shim only)
+- No Android module compilation for this checkpoint. Rebuilt host Java with build-tree-host.sh and installed the updated Binder JNI shim through install-shim.sh, including runtime/framework resource copies.
+- Original NDK service-registration notifications implement bounded event-based hub startup. Keep borrowed instance-name storage alive through notification deletion, which joins in-flight callbacks. Original Binder, Parcel, IServiceConnection, LoadedApk dispatchers and ServiceController machinery are reused.
+- Verified binder.sh hub, hub-services.sh bound/auto, cancellation stress, headless service process, forced death/reconnection and lifecycle cleanup. GPU dialog/resize/input regression also passes. Dependency lock regenerated after the shim update; 757 artifacts, no unresolved origins.

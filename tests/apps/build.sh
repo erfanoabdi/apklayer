@@ -7,14 +7,20 @@ SDK="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 NDK=$(ls -d "$SDK"/ndk/* | tail -1); BT=$(ls -d "$SDK"/build-tools/* | tail -1); AJ="$SDK/platforms/android-36.1/android.jar"
 OUT="${2:-$PWD/../../../build/$NAME.apk}"; W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
-mkdir -p "$W/cls" "$(dirname "$OUT")"
+mkdir -p "$W/cls" "$W/aidl" "$(dirname "$OUT")"
 LIBS=""
 if ls *.c >/dev/null 2>&1; then
   mkdir -p "$W/lib/x86_64"
   "$(ls "$NDK"/toolchains/llvm/prebuilt/*/bin/x86_64-linux-android26-clang)" -shared -fPIC -O2 -o "$W/lib/x86_64/libhello.so" *.c -lEGL -lGLESv2 -landroid -llog
   LIBS="lib/x86_64/libhello.so"
 fi
-javac -nowarn -d "$W/cls" -cp "$AJ" $(find src -name '*.java')
+if [ -f aidl.list ]; then
+  while IFS= read -r source; do
+    [ -n "$source" ] || continue
+    "$BT/aidl" -p"$SDK/platforms/android-36.1/framework.aidl" -I"$PWD/../aidl" -o"$W/aidl" "$PWD/../aidl/$source"
+  done < aidl.list
+fi
+javac -nowarn -d "$W/cls" -cp "$AJ" $(find src "$W/aidl" -name '*.java')
 "$BT"/d8 --min-api 26 --lib "$AJ" --output "$W" $(find "$W/cls" -name '*.class')
 ASSETS=()
 [ ! -d assets ] || ASSETS=(-A "$PWD/assets")

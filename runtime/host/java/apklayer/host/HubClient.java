@@ -8,12 +8,15 @@ import android.os.IBinder;
 public final class HubClient {
     private static HubClient current;
     private final IBinder hub;
-    private final Binder endpoint;
+    private final HubEndpoint endpoint;
+    private volatile boolean alive = true;
     private HubClient(Context context) {
         if (!Boolean.getBoolean("apklayer.realbinder")) throw new IllegalStateException("Hub requires real Binder mode");
-        hub = RealBinder.lookup(HubProtocol.SERVICE);
-        if (hub == null) throw new IllegalStateException("Instance hub is not running");
-        endpoint = new Binder(); endpoint.attachInterface(null, HubProtocol.ENDPOINT);
+        hub = HubStartup.connect();
+        int hubPid = HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.STATUS, request -> {}, reply -> reply.readInt());
+        endpoint = new HubEndpoint(context, hubPid);
+        try { hub.linkToDeath(() -> alive = false, 0); }
+        catch (android.os.RemoteException failure) { throw new IllegalStateException("Hub disconnected during registration", failure); }
         int pid = HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.REGISTER, request -> {
             request.writeString(context.getPackageName()); request.writeStrongBinder(endpoint);
         }, reply -> reply.readInt());
@@ -24,6 +27,12 @@ public final class HubClient {
         if (current == null) current = new HubClient(context.getApplicationContext());
         return current;
     }
+    static HubClient current() {
+        if (current == null) throw new IllegalStateException("App has no hub connection");
+        return current;
+    }
+    boolean alive() { return alive; }
+    IBinder binder() { return hub; }
     public static int[] status() {
         if (current == null) throw new IllegalStateException("App is not registered with its hub");
         return HubProtocol.call(current.hub, HubProtocol.DESCRIPTOR, HubProtocol.STATUS, request -> {},

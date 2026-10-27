@@ -35,6 +35,8 @@ public final class Main {
             } catch (Throwable failure) { failure.printStackTrace(); System.exit(1); }
             return;
         }
+        boolean componentHost = args.length == 3 && args[0].equals("--component-host");
+        if (componentHost) args = new String[]{args[1], args[2]};
         Path describe = null;
         if (args.length == 4 && args[0].equals("--describe")) {
             describe = Path.of(args[1]);
@@ -55,7 +57,7 @@ public final class Main {
         try {
             sandbox.runOnMainThread(() -> {
                 try {
-                    Class<?> host = sandbox.bootstrappedClass(AppHost.class);
+                    Class<?> host = sandbox.bootstrappedClass(componentHost ? ComponentHost.class : AppHost.class);
                     Constructor<?> ctor = host.getConstructor(AndroidSandbox.class, Path.class, Path.class);
                     ((Runnable) ctor.newInstance(sandbox, apk, out)).run();
                 } catch (ReflectiveOperationException e) {

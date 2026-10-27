@@ -33,6 +33,10 @@ public class Main extends Activity {
 
     private void run() throws Exception {
         Class<?> real = Class.forName("apklayer.host.RealBinder");
+        long waitStarted = System.nanoTime();
+        require(real.getMethod("await", String.class, long.class).invoke(null, "hello.missing", 30L) == null, "missing service deadline");
+        long waited = System.nanoTime() - waitStarted;
+        require(waited >= 20000000L && waited < 1000000000L, "real monotonic notification deadline");
         IBinder echo = (IBinder) real.getMethod("lookup", String.class).invoke(null, "hello.echo");
         require(echo != null, "service hello.echo not found");
         System.out.println("[hello-binder-client] found " + echo.getClass().getName() + " ping=" + echo.pingBinder() + " alive=" + echo.isBinderAlive());

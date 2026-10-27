@@ -4,6 +4,9 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageParser;
 import android.content.pm.ServiceInfo;
+import android.content.pm.PermissionInfo;
+import android.content.pm.PackageManager;
+import org.robolectric.RuntimeEnvironment;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,6 +34,20 @@ final class HubPackages {
             if (!name.equals(parsed.packageName)) throw new SecurityException("Installed APK package mismatch");
             cache.put(name, new Cached(modified, size, parsed)); return parsed;
         } catch (IOException failure) { throw new IllegalStateException("Cannot read installed package " + name, failure); }
+    }
+    void enforceServicePermission(String caller, ServiceInfo service) {
+        if (caller.equals(service.packageName) || service.permission == null || service.permission.isEmpty()) return;
+        PackageParser.Package source = get(caller), owner = get(service.packageName);
+        if (source == null || !source.requestedPermissions.contains(service.permission))
+            throw new SecurityException("Service requires " + service.permission);
+        PermissionInfo definition = owner.permissions.stream().map(permission -> permission.info)
+                .filter(permission -> service.permission.equals(permission.name)).findFirst().orElse(null);
+        if (definition == null) {
+            try { definition = RuntimeEnvironment.getApplication().getPackageManager().getPermissionInfo(service.permission, 0); }
+            catch (PackageManager.NameNotFoundException missing) { throw new SecurityException("Unknown permission " + service.permission); }
+        }
+        if ((definition.protectionLevel & PermissionInfo.PROTECTION_MASK_BASE) != PermissionInfo.PROTECTION_NORMAL)
+            throw new SecurityException("Permission is not granted: " + service.permission);
     }
     ServiceInfo service(Intent intent) {
         ComponentName explicit = intent.getComponent();
