@@ -90,6 +90,7 @@ public class DefaultNativeRuntimeLoader implements NativeRuntimeLoader {
             "android.os.SystemProperties",
             "android.text.Hyphenator",
             "android.view.Surface",
+            "android.hardware.HardwareBuffer", // Bitmap.getHardwareBuffer / HardwareBuffer objects (JNI class info is set up by the registration)
             // apklayer patch: windows are real SurfaceFlinger layers fed by a real BLASTBufferQueue
             "android.view.SurfaceControl",
             "android.view.SurfaceSession",
