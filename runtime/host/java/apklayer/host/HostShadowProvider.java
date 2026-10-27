@@ -66,6 +66,8 @@ public final class HostShadowProvider implements ShadowProvider {
     /** Classes that Robolectric picks the shadow for by a ShadowPicker: ours must be listed here to take part. */
     @Override public Map<String, String> getShadowPickerMap() {
         return Map.of("android.content.res.ApkAssets", ShadowHostApkAssets.Picker.class.getName(),
-                "android.os.MessageQueue", ShadowHostMessageQueue.Picker.class.getName());
+                "android.os.MessageQueue", ShadowHostMessageQueue.Picker.class.getName(),
+                "android.graphics.BitmapFactory", ShadowHostBitmapFactory.Picker.class.getName(),
+                "android.graphics.ImageDecoder", ShadowHostImageDecoder.Picker.class.getName());
     }
 }
