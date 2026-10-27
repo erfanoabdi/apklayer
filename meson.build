@@ -22,3 +22,5 @@ subdir('bridge/shell')
 subdir('bridge/hals/graphics')
 
 subdir('bridge/hals/media')
+
+subdir('bridge/hals/audio')

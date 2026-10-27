@@ -38,3 +38,5 @@ apklayer itself is AGPL-3.0-or-later (PLAN D5), compatible with all of the above
 The tree-host build reuses unchanged `FrameListener.class` and `ScreenUpdateHandler.class` from the pinned MIT simulator-4.17.jar; the tree simulator predates that split. It stages only these classes alongside the host, with the older tree simulator providing sandbox construction.
 
 - `aosp/hals/media/codec2/VpxHeaders.h`: minimal VP9 uncompressed-header and superframe-index checks adapted from the local AOSP `external/libvpx/vp9/decoder/{vp9_decodeframe.c,vp9_decoder.c}`; libvpx, BSD-3-Clause (local `external/libvpx/LICENSE` and `PATENTS`). No decoder code vendored.
+
+- `bridge/hals/audio/audio.c`: own PipeWire adapter, checked against the installed PipeWire 1.0.5 stream/thread-loop headers and [official playback tutorial](https://docs.pipewire.org/page_tutorial4.html). Links system libpipewire (MIT); no third-party implementation vendored. Local AOSP audio worker/driver interfaces will be reused for the Android HAL; ATL has no suitable PipeWire backend.

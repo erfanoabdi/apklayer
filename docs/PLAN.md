@@ -589,6 +589,8 @@ rendering end to end, real input through the shell's input proxy, dialogs stacke
    on the real stack (video buffers through our gralloc, YUV zero-copy into SurfaceFlinger layers, the codec2 HAL over the host's decoders), audio. Camera: the camera
    provider HAL over PipeWire/V4L2 into BufferQueue surfaces. Then gnss, sensors, vibrator and the rest of `aosp/hals/README.md`. Each follows the domain layout
    (`aosp/hals/<domain>` Android side, `bridge/hals/<domain>` host side).
+   Native audio host backend verified (2026-10-27): `bridge/hals/audio` queues mapped PipeWire buffers on the owning worker and derives presentation from queued/resampler/device timing. Early process notification and full available buffer capacity avoid quantum gaps from small Android writes. S16 stereo and float mono pass actual isolated monitor PCM frequency/frame checks, delayed position, drain, pause, flush/resume, and teardown (`tests/vm/audio-host.sh`). Requires PipeWire >=1.0.4 for its monotonic clock API. Android AIDL HAL/AudioFlinger/AudioPolicy and MediaPlayer integration remain next; this does not yet replace app audio shadows.
+
    **Bluetooth** after camera: Robolectric-style shadows of `android.bluetooth.*` over a host daemon speaking D-Bus to BlueZ (not Android's own stack: it needs
    system_server's services and an exclusive controller), scoped by what the corpus apps actually call (BLE scan, GATT client/server and advertising first; then RFCOMM/L2CAP
    sockets; audio profiles through PipeWire), with a compatibility table of every API and its status; unimplemented calls return real errors. Developed against
