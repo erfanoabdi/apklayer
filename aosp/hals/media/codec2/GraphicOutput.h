@@ -4,6 +4,7 @@
 #include <apklayer/codec.h>
 #include <C2PlatformSupport.h>
 #include <cstdio>
+#include <chrono>
 #include <cstring>
 #include <vector>
 namespace apklayer {
@@ -11,6 +12,7 @@ struct DecodedGraphic {
     std::shared_ptr<C2GraphicBlock> block;
     uint32_t width, height;
     bool changed;
+    int64_t fetchUs = 0;  // time waiting for a free output buffer (the consumer releasing one)
 };
 inline c2_status_t copyGraphic(apklayer_codec_frame *raw, const std::shared_ptr<C2BlockPool>& pool,
         const std::shared_ptr<DecoderParams>& params, DecodedGraphic *out) {
@@ -22,8 +24,10 @@ inline c2_status_t copyGraphic(apklayer_codec_frame *raw, const std::shared_ptr<
         status = C2_CANNOT_DO; return status;
     }
     auto& block = out->block;
+    auto t0 = std::chrono::steady_clock::now();
     status = pool->fetchGraphicBlock((info.width + 15) & ~15u, (info.height + 1) & ~1u,
         HAL_PIXEL_FORMAT_YCBCR_420_888, {C2MemoryUsage::CPU_READ, C2MemoryUsage::CPU_WRITE}, &block);
+    out->fetchUs = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
     if (status != C2_OK) { fprintf(stderr, "codec2: fetch graphic block %d\n", status); return status; }
     { // Publish CPU plane writes before notifying any cloned output work.
         C2GraphicView target = block->map().get();

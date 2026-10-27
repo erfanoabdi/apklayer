@@ -25,7 +25,7 @@ class ReorderedDecoder final : public SimpleC2Component {
     std::vector<uint8_t> mConfig;
     int64_t mConfigPts = 0;
     uint64_t mFrames = 0;
-    int64_t mCopyUs = 0;
+    int64_t mCopyUs = 0, mFetchUs = 0;
     std::chrono::steady_clock::time_point mWindow = std::chrono::steady_clock::now();
     static void ready(void *opaque) {
         // The queued handler runs after process() has returned and the base
@@ -135,10 +135,11 @@ class ReorderedDecoder final : public SimpleC2Component {
             auto t0 = std::chrono::steady_clock::now();
             c2_status_t result = copyGraphic(raw, pool, mParams, &graphic);
             // timing line every 60 decoded frames: milliseconds in the copy into the graphic block, and the wall time of the 60
+            mFetchUs += graphic.fetchUs;
             mCopyUs += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
             if (++mFrames % 60 == 0) {
-                fprintf(stderr, "codec2: 60 frames in %lld ms, graphic copy %lld ms total\n", (long long)std::chrono::duration_cast<std::chrono::milliseconds>(t0 - mWindow).count(), (long long)(mCopyUs / 1000));
-                mCopyUs = 0; mWindow = t0;
+                fprintf(stderr, "codec2: 60 frames in %lld ms, graphic %lld ms total, of which waiting for a free buffer %lld ms\n", (long long)std::chrono::duration_cast<std::chrono::milliseconds>(t0 - mWindow).count(), (long long)(mCopyUs / 1000), (long long)(mFetchUs / 1000));
+                mCopyUs = mFetchUs = 0; mWindow = t0;
             }
             if (result != C2_OK) { finishRemaining(result); return result; }
             bool intermediate = mEosIndex && index == *mEosIndex;
