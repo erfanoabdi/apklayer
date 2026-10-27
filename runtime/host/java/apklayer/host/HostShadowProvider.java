@@ -71,6 +71,7 @@ public final class HostShadowProvider implements ShadowProvider {
             entries.add(Map.entry("android.os.BinderProxy", ShadowHostRealBinderProxy.class.getName()));
             entries.add(Map.entry("com.android.internal.os.BinderInternal", ShadowHostRealBinderInternal.class.getName()));
             entries.add(Map.entry("android.os.Process", ShadowHostProcess.class.getName()));
+            entries.add(Map.entry("android.app.NotificationManager", ShadowHostNotificationManager.class.getName()));
             entries.add(Map.entry("android.app.PendingIntent", ShadowHostRealPendingIntent.class.getName()));
             entries.add(Map.entry("android.app.Service", ShadowHostService.class.getName()));
             entries.add(Map.entry("android.os.ParcelFileDescriptor", ShadowHostRealParcelFileDescriptor.class.getName()));

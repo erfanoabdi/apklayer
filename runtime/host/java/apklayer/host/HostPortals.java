@@ -99,6 +99,7 @@ final class HostPortals {
      * unchanged notification is not shown again, and a changed one replaces its earlier popup.
      */
     static void followNotifications() {
+        if (Boolean.getBoolean("apklayer.instancehub")) return; // the hub shows them (HubNotifications)
         NotificationManager nm = RuntimeEnvironment.getApplication().getSystemService(NotificationManager.class);
         for (android.service.notification.StatusBarNotification sbn : nm.getActiveNotifications()) {
             Notification n = sbn.getNotification();

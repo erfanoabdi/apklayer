@@ -23,12 +23,14 @@ final class HubDirectory extends Binder {
     private final HubActivities activities;
     private final HubStartedServices startedServices;
     private final HubPendingIntents pendingIntents;
+    private final HubNotifications notifications;
     private final Map<String, Process> appProcesses = new HashMap<>();
     private final Map<String, Process> hosts = new HashMap<>();
     private final Map<String, Integer> failures = new HashMap<>();
     private volatile boolean stopping;
     HubDirectory(Path apps) {
         packages = new HubPackages(apps); bindings = new HubServiceBindings(this, packages); broadcasts = new HubBroadcasts(this, packages); providers = new HubProviders(this, packages, broadcasts); activities = new HubActivities(this, packages); startedServices = new HubStartedServices(this, packages, broadcasts); pendingIntents = new HubPendingIntents(this, broadcasts, activities, startedServices);
+        notifications = new HubNotifications(packages, pendingIntents);
         attachInterface(null, HubProtocol.DESCRIPTOR);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             stopping = true;
@@ -233,6 +235,17 @@ final class HubDirectory extends Binder {
                 reply.writeNoException(); reply.writeBoolean(info != null);
                 if (info != null) { reply.writeString((String) info[0]); reply.writeInt((Integer) info[1]); reply.writeBoolean((Boolean) info[2]); reply.writeInt((Integer) info[3]); }
                 return true;
+            }
+            case HubProtocol.NOTIFY_POST -> {
+                Peer caller = caller(); String pkg = request.readString(), tag = request.readString(); int id = request.readInt();
+                android.app.Notification notification = request.readTypedObject(android.app.Notification.CREATOR); int importance = request.readInt(); request.enforceNoDataAvail();
+                notifications.post(caller, pkg, tag, id, notification, importance);
+                reply.writeNoException(); return true;
+            }
+            case HubProtocol.NOTIFY_CANCEL -> {
+                Peer caller = caller(); String tag = request.readString(); int id = request.readInt(); boolean all = request.readBoolean(); request.enforceNoDataAvail();
+                notifications.cancel(caller, tag, id, all);
+                reply.writeNoException(); return true;
             }
             case HubProtocol.TAKE_LAUNCH -> {
                 Peer caller = caller(); request.enforceNoDataAvail();

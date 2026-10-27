@@ -54,6 +54,14 @@ public final class HubClient {
     boolean uriGranted(android.net.Uri uri, int mode) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CHECK_URI, request -> { request.writeTypedObject(uri, 0); request.writeInt(mode); }, reply -> reply.readInt()) == 0;
     }
+    void postNotification(String pkg, String tag, int id, android.app.Notification notification, int importance) {
+        HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.NOTIFY_POST, request -> {
+            request.writeString(pkg); request.writeString(tag); request.writeInt(id); request.writeTypedObject(notification, 0); request.writeInt(importance);
+        }, reply -> null);
+    }
+    void cancelNotification(String tag, int id, boolean all) {
+        HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.NOTIFY_CANCEL, request -> { request.writeString(tag); request.writeInt(id); request.writeBoolean(all); }, reply -> null);
+    }
     int checkPermission(int pid, String permission) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CHECK_PERMISSION, request -> { request.writeInt(pid); request.writeString(permission); }, reply -> reply.readInt());
     }
