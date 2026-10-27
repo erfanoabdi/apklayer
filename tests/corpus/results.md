@@ -60,3 +60,8 @@ Not yet tried: multi-dex apps (ASTRO, Sensors Multitool, Spic) and apps with nat
 | org.fossify.messages_25 | 1 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | no frame (rc=0, likely hang/timeout) |
 | org.fossify.notes_13 | 1 x86,armeabi-v7a,x86_64,arm64-v8a | FAIL | java.lang.RuntimeException: java.lang.NullPointerException: null cannot be cast to non-null type org.fossify.notes.adapters.NotesPagerAdapter |
 | ws.xsoh.etar_57 | 4 none | PASS | com.android.calendar.AllInOneActivity (tap diff 26%) |
+
+## Modern Combat 3 launch check (2026-10-27)
+- User supplied Modern-Combat-3-1.1.7g APK and `com.gameloft.android.ANMP.GloftM3HM` data directory. APK converted (4960 classes), installed as MC3, and launched on the ARM64 device-library route.
+- Blocked before gameplay: `UnsatisfiedLinkError: no ModernCombat3 ... (ABI not in the APK?)` from GL2JNIActivity/onResume. APK contains libgenerator.so/libModernCombat3.so for armeabi, armeabi-v7a and x86 only; no arm64-v8a or x86_64. The ARM64 JVM/bionic linker cannot load these 32-bit engines. Java/Dex conversion does not translate native instructions or pointer ABI.
+- Local data contains main.1120 and patch.11428 OBBs (1,424,225,001 bytes combined). Not copied to the VM because native engine loading fails before data use. No gameplay/render/input pass claimed; supporting this APK requires a separate 32-bit execution path (and hardware/translation support), or an ARM64 build of the engine. Full VM launch log: `/tmp/apklayer-mc3.log`. App and native stack stopped; no runtime processes left.
