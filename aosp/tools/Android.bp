@@ -23,3 +23,12 @@ cc_library_shared {
     header_libs: ["libEGL_headers"],
     cflags: ["-Wall", "-Werror", "-Wno-main"],
 }
+
+// Original Android Vulkan loader + real host command/readback regression.
+cc_library_shared {
+    name: "libapklayer_vktest",
+    srcs: ["vktest.cpp"],
+    header_libs: ["vulkan_headers", "jni_headers"],
+    shared_libs: ["libdl"],
+    cflags: ["-Wall", "-Werror", "-Wno-main", "-Wno-missing-field-initializers"],
+}

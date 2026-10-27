@@ -268,8 +268,8 @@ rendering end to end, real input through the shell's input proxy, dialogs stacke
 
 ### P7.5 — Vulkan (user goal, 2026-10-26)
 
-Android's `libvulkan.so` (the loader) is replaced, as `libEGL` is, by a layer of ours over the host's Vulkan loader (Mesa, NVIDIA,
-any vendor; no driver dependency). It adds what Android's WSI expects: `VK_KHR_android_surface` (`vkCreateAndroidSurfaceKHR` over an
+Reuse Android's `libvulkan.so` loader and WSI with our Vulkan HAL frontend over the host's Vulkan loader (Mesa, NVIDIA,
+any vendor; no driver dependency). The intended presentation path provides what Android's WSI expects: `VK_KHR_android_surface` (`vkCreateAndroidSurfaceKHR` over an
 `ANativeWindow`) and a swapchain whose images are buffers dequeued from that window: each gralloc dmabuf is imported as a `VkImage`
 (`VK_EXT_external_memory_dma_buf`, `VK_EXT_image_drm_format_modifier`), acquire is `dequeueBuffer`, present is `queueBuffer` with the
 render-complete semaphore exported as a sync fd (`VK_KHR_external_semaphore_fd`). Zero copy (better than the GL window path, which
@@ -283,6 +283,14 @@ layer, then a `vktest` tool beside `gltest`.
 (Parallels' virtio-gpu offers no Venus). The layer can be written against llvmpipe for structure (dmabuf import, dequeue/queue) but
 synchronisation and the zero-copy claim need a machine with a real GPU driver (a Mesa or NVIDIA desktop); mark such steps "needs real
 GPU" and verify there.
+
+
+## Vulkan G1 checkpoint (2026-10-28): native execution works, presentation unfinished
+- Original Android libvulkan now runs over a `vulkan.apklayer` frontend to the host libvulkan.so.1. Reuse AOSP's API/WSI implementation rather than duplicating its swapchain machinery. Host dispatchable handles retain their original vtables; Android private data lives in a guarded side table, retired on buffer/pool/device/instance destruction (`scripts/patch-vulkan.sh`).
+- `scripts/native-env.sh` preserves system XDG data paths so the host loader finds actual ICD manifests. The optional renamed loader (`libapklayer_vulkan.so`) and HAL activate the host dispatch mode. `scripts/orb-build-vulkan.py` incrementally rebuilds the original loader and two small tools with existing generated arm64 commands; `scripts/install-vulkan.sh` stages and SHA-verifies them. No clean or product change.
+- `tests/vm/vulkan.sh` runs a real APK through JNI: six Vulkan instance/device lifecycles, actual image clear/copy and 256 pixel checks per cycle, raw Android symbol and host PFN dispatch, alternating explicit command-buffer free/pool destruction, enumeration VK_INCOMPLETE handling, rejection of unsupported swapchain enablement, frame-commit screenshot, physical Back and process cleanup. Driver truthfully reports llvmpipe (CPU), Vulkan 1.4.318, dmabuf available, DRM modifiers absent, sync-fd semaphore features zero. The visible test UI uses HWUI OpenGL; it is not a Vulkan presentation demo.
+- **G2/G3 remain required:** implement VK_ANDROID_native_buffer image import from our gralloc dmabufs (format/modifier/memory-type validation and FD ownership); vkAcquireImageANDROID/vkQueueSignalReleaseImageANDROID synchronization; Android AHardwareBuffer Vulkan memory import/export; verify original WSI acquire/present/resize/abandon and multiple swapchains; then enable and test HWUI skiavk. The HAL and loader deliberately withhold Android swapchain/presentation-dependent extensions and report no surface support until native-buffer support exists. No zero-copy, Vulkan gaming or hardware presentation claim.
+- End-to-end G2/G3 verification **needs a real Vulkan GPU/driver** with compatible dmabuf/modifier import and sync-fd semaphore support. The current Parallels virgl VM cannot supply those capabilities. Do not mark P7.5/Milestone G complete. TextureView canyon pixels/animation/Back and Chromium WebView JavaScript regressions pass with the new loader installed.
 
 ### P7 fallback and x86 counterpart (user, 2026-10-26)
 **Fallback (done):** Robolectric 4.17's own native runtime for arm64 (third party, `scripts/fetch-robolectric-arm64.sh`, THIRD_PARTY.md) as a selectable flavor

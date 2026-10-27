@@ -60,3 +60,8 @@ rm -rf "$tmp"
 # slot; with our libEGL nothing fills it, so every GLES library is the host's (glvnd) instead
 map_lib libGLESv1_CM.so libGLESv1_CM.so.1
 
+
+# apklayer patch: preserve the optional original Android Vulkan loader frontend.
+if [ -f "$HOME/android-arm64/lib64/libapklayer_vulkan.so" ] && [ -f "$HOME/android-arm64/lib64/vulkan.apklayer.so" ]; then
+    map_lib libvulkan.so libapklayer_vulkan.so
+fi

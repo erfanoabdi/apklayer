@@ -8,7 +8,7 @@ BT="${APKLAYER_BT:-$HOME/bt-arm/bionic_translation/b}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
 export APKLAYER_INSTANCE="${APKLAYER_INSTANCE:-default}" APKLAYER_NATIVE="$N"
 # bionic_translation's libraries first (the patched ones), then ours; the path layer and bionic's TLS slots come first in every lookup
-export LD_LIBRARY_PATH="$BT:$N" XDG_DATA_DIRS="$N/share" LD_PRELOAD="$N/libapklayer-preload.so:libgcc_s.so.1" BIONIC_LD_LIBRARY_PATH="$L"
+export LD_LIBRARY_PATH="$BT:$N" XDG_DATA_DIRS="$N/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}" LD_PRELOAD="$N/libapklayer-preload.so:libgcc_s.so.1" BIONIC_LD_LIBRARY_PATH="$L"
 export APKLAYER_CRASH_TRACE="${APKLAYER_CRASH_TRACE:-1}" APKLAYER_HOST_LIBS="${APKLAYER_HOST_LIBS:-$N/libapklayer-hal-graphics.so}"
 
 # The arm64 JVM for the app (the Rosetta x86 JVM of the older flavors cannot load arm64 libraries).
@@ -22,3 +22,9 @@ native_java() {
 
 # system_server services remain in the JVM; native clients use their existing unavailable-service fallbacks.
 export APKLAYER_NO_SYSTEM_SERVER="${APKLAYER_NO_SYSTEM_SERVER:-1}"
+
+# apklayer patch: Android and host Vulkan loaders retain separate dispatch tables.
+# The optional frontend is installed only after its native readback regression.
+if [ -f "$L/libapklayer_vulkan.so" ] && [ -f "$L/vulkan.apklayer.so" ]; then
+    export APKLAYER_VULKAN_HOST=1
+fi

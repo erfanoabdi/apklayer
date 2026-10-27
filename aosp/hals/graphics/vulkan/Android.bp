@@ -1,0 +1,9 @@
+// Reuse the original Android loader/WSI, with a host-loader HAL frontend.
+cc_library_shared {
+    name: "vulkan.apklayer",
+    srcs: ["Driver.cpp"],
+    header_libs: ["hwvulkan_headers", "vulkan_headers"],
+    shared_libs: ["liblog", "libdl"],
+    compile_multilib: "64",
+    cflags: ["-Wall", "-Werror", "-Wno-missing-field-initializers"],
+}

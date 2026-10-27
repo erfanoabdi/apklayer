@@ -30,6 +30,7 @@ names = sorted({p.split("/")[-1] for p in sums if p.startswith("android-arm64/li
 orb = sh("cd ~/los24 && for n in %s; do f=%s/system/lib64/$n; [ -f $f ] && sha256sum $f; done; "
          "for n in %s; do for f in %s/apex/*/lib64/$n %s/apex/*/lib64/extractors/$n; do [ -f $f ] && sha256sum $f; done; done; "
          "find out/soong/.intermediates/vendor/apklayer -name '*.so' -path '*android*_arm64_armv8-a_shared/*' -not -path '*unstripped*' -not -path '*before_final*' | xargs sha256sum; "
+         "find out/apklayer-vulkan -maxdepth 2 -name '*.so' -type f 2>/dev/null | xargs -r sha256sum; "
          "sha256sum out/soong/.intermediates/hardware/interfaces/audio/aidl/default/libeffectconfig/android_vendor_arm64_armv8-a_shared/libeffectconfig.so; "
          "sha256sum frameworks/av/services/audiopolicy/config/audio_policy_volumes.xml frameworks/av/services/audiopolicy/config/default_volume_tables.xml; "
          "grep -m3 'ro.build.fingerprint=\\|ro.build.date=\\|ro.build.version.release=' %s/system/build.prop" % (" ".join(names), OUT, " ".join(names), OUT, OUT, OUT), orb=True)
@@ -37,14 +38,16 @@ tree, apk, ident = {}, {}, []
 for line in orb.splitlines():
     if line.startswith("ro."): ident.append(line); continue
     h, p = line.split("  ", 1)
-    d = apk if "vendor/apklayer" in p else tree
+    d = apk if "vendor/apklayer" in p or p.startswith("out/apklayer-vulkan/") else tree
     if p.split("/")[-1] not in d or "/system/lib64/" in p: d[p.split("/")[-1]] = (h, p)  # system/lib64 wins over a same-named APEX copy
 
 rows = []
 for p in sorted(sums):
     n, h = p.split("/")[-1], sums[p]
     if p.startswith("android-arm64/lib64/"):
-        if n in apk and apk[n][0] == h: origin, st = apk[n][1], "apklayer"
+        if n == "libapklayer_vulkan.so":
+            origin, st = tree["libvulkan.so"][1] + " (renamed; scripts/patch-vulkan.sh)", "patched"
+        elif n in apk and apk[n][0] == h: origin, st = apk[n][1], "apklayer"
         elif n in tree and tree[n][0] == h: origin, st = tree[n][1], "same"
         elif n in tree: origin, st = tree[n][1], "patched"
         elif n in apk: origin, st = apk[n][1], "patched"
