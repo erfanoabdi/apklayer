@@ -173,4 +173,4 @@ That alone starts the services (`scripts/arm64-stack.sh none`, ready marker `/tm
 Install apps first with the default flavor (the tree flavor's describe step is not wired). Logs: `/tmp/apklayer-stack/*.log` (services), the app's stdout. `servicetool list|check|dump NAME` (btload --main) inspects services (SurfaceFlinger dump shows layers).
 Capture caveat: `prlctl capture` is reliable for the GPU window now (it showed the UiBench list); Robolectric patches live in `runtime/patches/` (compiled into native-runtime.jar by `scripts/build-native-arm64.sh`).
 
-## Open problems on the GPU route (2026-10-27): see docs/PLAN.md "P7.1 GPU route: next steps" (crash on resize with a dialog open, layer not resized, dialog margin, mapping/focus, headless primary, multi-app, text input/clipboard, cleanup).
+## Open problems on the GPU route (2026-10-27): see docs/PLAN.md "P7.1 GPU route: next steps" (crash on resize with a dialog open, dialog margin, mapping/focus, headless primary, multi-app, text input/clipboard, cleanup).
