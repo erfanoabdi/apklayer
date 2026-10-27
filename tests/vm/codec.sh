@@ -3,7 +3,7 @@
 # Surface; every frame must come back and the last one must be on screen (colour bars).
 set -uo pipefail
 source "$(dirname "$0")/lib.sh"
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; VM="${APKLY_VM:-parallels@10.211.55.4}"; PASS="${APKLY_VM_PASS:-1234}"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; VM="${APKLY_VM:-utm@192.168.64.7}"; PASS="${APKLY_VM_PASS:-1234}"
 "$ROOT/tests/apps/build.sh" hello-codec >/dev/null || { echo 'FAIL  the sample app does not build'; exit 1; }
 run() { # run <mime> <min frames back> <gst encoder pipeline>: encode 60 frames to one file each, decode them with the app
   local mime="$1" min="$2" enc="$3"

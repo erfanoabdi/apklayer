@@ -2,7 +2,7 @@
 # Foreground native host + real Codec2/gralloc regression, with unconditional cleanup.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-VM="${APKLY_VM:-parallels@10.211.55.4}"
+VM="${APKLY_VM:-utm@192.168.64.7}"
 PASS="${APKLY_VM_PASS:-1234}"
 COPYFILE_DISABLE=1 tar cf - tests/vm/codec2-run.py bridge/hals/media tests/hals/codec-test.c tests/hals/codec-reorder-test.c tests/vm/vp9-superframe.py scripts/native-env.sh scripts/arm64-stack.sh bridge/native/apklayer.prop aosp/hals/media/codec2/manifest.xml |
     sshpass -p "$PASS" ssh "$VM" 'tar xf - -C ~/apklayer-m1'

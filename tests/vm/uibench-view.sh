@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 ACT="${1:?activity class name}"; SECS="${2:-12}"
-VM="${APKLY_VM:-parallels@10.211.55.4}"; PASS="${APKLY_VM_PASS:-1234}"
+VM="${APKLY_VM:-utm@192.168.64.7}"; PASS="${APKLY_VM_PASS:-1234}"
 sshpass -p "$PASS" ssh "$VM" "pkill -f '[a]pklayer.host.Main'; pkill -x apklayer-shell; cd ~/apklayer-m1 && bin/apklayer stop >/dev/null 2>&1
 printf 'component=com.android.test.uibench.$ACT\n' > /tmp/uibench-intent.properties
 export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 APKLAYER_NATIVE=\$HOME/arm64-native APKLAYER_LOGCAT=1 APKLAYER_JOPTS='-Dapklayer.realbinder=true -Dapklayer.instancehub=true' APKLAYER_INTENT_FILE=/tmp/uibench-intent.properties

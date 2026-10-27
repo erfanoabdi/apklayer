@@ -5,7 +5,7 @@ Existing files are never overwritten (the platform copies of shared libraries st
   scripts/install-media-libs.py [--dry-run]   then   scripts/gen-tree-files-lock.py"""
 import subprocess, sys, pathlib, re
 
-VM = "parallels@10.211.55.4"
+VM = "utm@192.168.64.7"
 SSH = ["sshpass", "-p", "1234", "ssh", "-o", "StrictHostKeyChecking=no", VM]
 SCP = ["sshpass", "-p", "1234", "scp", "-q", "-o", "StrictHostKeyChecking=no"]
 OUT = "/home/erfanabdi/los24/out/target/product/generic_arm64"

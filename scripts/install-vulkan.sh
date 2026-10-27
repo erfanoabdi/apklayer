@@ -3,7 +3,7 @@
 # The Android loader keeps its original SONAME; cfg.d selects the renamed copy.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-VM="${APKLY_VM:-parallels@10.211.55.4}"; PASS="${APKLY_VM_PASS:-1234}"
+VM="${APKLY_VM:-utm@192.168.64.7}"; PASS="${APKLY_VM_PASS:-1234}"
 stage="${1:-$HOME/OrbStack/ubuntu22-x86/home/erfanabdi/apklayer-vulkan-stage}"
 for name in libvulkan.so vulkan.apklayer.so libapklayer_vktest.so; do
     target="$name"; [ "$name" != libvulkan.so ] || target=libapklayer_vulkan.so

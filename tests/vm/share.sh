@@ -2,7 +2,7 @@
 # P6 exit test on the VM: app A shares text (ACTION_SEND text/plain) and the installed app B, whose manifest
 # declares that filter, is started with the intent and receives the text.
 set -uo pipefail
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; VM="${APKLY_VM:-parallels@10.211.55.4}"; PASS="${APKLY_VM_PASS:-1234}"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; VM="${APKLY_VM:-utm@192.168.64.7}"; PASS="${APKLY_VM_PASS:-1234}"
 for a in hello-share-dst hello-share-dst2 hello-share-src; do "$ROOT/tests/apps/build.sh" $a >/dev/null || { echo "FAIL  $a does not build"; exit 1; }; done
 stop() { sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" 'pkill -x apklayer-shell; pkill -f "[a]pklayer.host.Main"; true'; }
 # install both receivers (run for a few seconds, which also deploys the sources); two apps handle the intent

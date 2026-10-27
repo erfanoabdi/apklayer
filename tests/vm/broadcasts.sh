@@ -2,7 +2,7 @@
 # Cross-app broadcasts over the instance hub: manifest receivers (package not running), dynamic receivers, permissions, exported rules, ordered, sticky.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-VM="${APKLY_VM:-parallels@10.211.55.4}"
+VM="${APKLY_VM:-utm@192.168.64.7}"
 PASS="${APKLY_VM_PASS:-1234}"
 for app in hello-bc-receiver hello-bc-sender hello-bc-denied; do tests/apps/build.sh "$app" > /dev/null; done
 sshpass -p "$PASS" scp build/hello-bc-receiver.apk build/hello-bc-sender.apk build/hello-bc-denied.apk "$VM:/tmp/"

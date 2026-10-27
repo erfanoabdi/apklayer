@@ -2,7 +2,7 @@
 # Smoke test of one APK on the VM: runs it for a while, takes a window snapshot, prints the lines that matter
 # (activities started, uncaught exceptions) and closes everything. Usage: smoke.sh <app.apk> [run seconds, default 25]
 set -uo pipefail
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; VM="${APKLY_VM:-parallels@10.211.55.4}"; PASS="${APKLY_VM_PASS:-1234}"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; VM="${APKLY_VM:-utm@192.168.64.7}"; PASS="${APKLY_VM_PASS:-1234}"
 APK="$1"; SECS="${2:-25}"; NAME="$(basename "$APK" .apk)"
 LOG=$(APKLAYER_JOPTS="-Dapklayer.runms=$((SECS * 1000)) -Dapklayer.snapms=$(((SECS - 3) * 1000))" "$ROOT/scripts/vm-run.sh" "$APK" 2>&1)
 sshpass -p "$PASS" scp -q -o StrictHostKeyChecking=no "$VM:/tmp/apklayer-frame-$(((SECS - 3) * 1000))ms.png" "/tmp/smoke-$NAME.png" 2>/dev/null

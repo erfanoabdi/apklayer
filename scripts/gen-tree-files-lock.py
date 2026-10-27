@@ -6,7 +6,7 @@ Each line: <sha256> <size> <path on the VM, relative to ~> <origin in the tree> 
 status: same (identical to the tree's file), patched (differs: see the note column), apklayer (built from vendor/apklayer), unresolved."""
 import hashlib, subprocess, sys, datetime, pathlib
 
-VM = "parallels@10.211.55.4"
+VM = "utm@192.168.64.7"
 SSH = ["sshpass", "-p", "1234", "ssh", "-o", "StrictHostKeyChecking=no", VM]
 OUT = "out/target/product/generic_arm64"
 

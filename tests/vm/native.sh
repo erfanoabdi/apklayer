@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 APK="${1:-$HOME/TestApps/cpu_z.apk}"
 [ -f "$APK" ] || { echo "SKIP  $APK not found"; exit 0; }
 [ -d "$ROOT/build/native/x86_64" ] || { echo "FAIL  build/native/x86_64 missing: run scripts/build-native.sh"; exit 1; }
-VM="${APKLY_VM:-parallels@10.211.55.4}"; PASS="${APKLY_VM_PASS:-1234}"
+VM="${APKLY_VM:-utm@192.168.64.7}"; PASS="${APKLY_VM_PASS:-1234}"
 LOG="$(mktemp)"
 pkill -f "scripts/vm-run" 2>/dev/null
 sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" 'pkill -f apklayer.host; pkill -x apklayer-shell; true'

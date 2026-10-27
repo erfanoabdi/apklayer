@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-VM="${APKLY_VM:-parallels@10.211.55.4}"
+VM="${APKLY_VM:-utm@192.168.64.7}"
 PASS="${APKLY_VM_PASS:-1234}"
 tests/apps/build.sh hello-native-audio
 sshpass -p "$PASS" scp build/hello-native-audio.apk "$VM:/tmp/hello-native-audio.apk"

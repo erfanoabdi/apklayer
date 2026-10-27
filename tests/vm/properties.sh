@@ -3,8 +3,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 COPYFILE_DISABLE=1 tar cf - bridge/native/aprop.c bridge/native/properties.c |
-    sshpass -p "${APKLY_VM_PASS:-1234}" ssh "${APKLY_VM:-parallels@10.211.55.4}" 'tar xf - -C ~/apklayer-m1'
-sshpass -p "${APKLY_VM_PASS:-1234}" ssh "${APKLY_VM:-parallels@10.211.55.4}" bash -s <<'REMOTE'
+    sshpass -p "${APKLY_VM_PASS:-1234}" ssh "${APKLY_VM:-utm@192.168.64.7}" 'tar xf - -C ~/apklayer-m1'
+sshpass -p "${APKLY_VM_PASS:-1234}" ssh "${APKLY_VM:-utm@192.168.64.7}" bash -s <<'REMOTE'
 set -euo pipefail
 cd ~/apklayer-m1
 work=$(mktemp -d)

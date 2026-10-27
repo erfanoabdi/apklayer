@@ -2,7 +2,7 @@
 # Content providers of other apps through the instance hub: lazy provider start, CRUD/call/getType, identities, exported and permission rules, provider death.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-VM="${APKLY_VM:-parallels@10.211.55.4}"
+VM="${APKLY_VM:-utm@192.168.64.7}"
 PASS="${APKLY_VM_PASS:-1234}"
 for app in hello-cp-provider hello-cp-client hello-cp-denied; do tests/apps/build.sh "$app" > /dev/null; done
 sshpass -p "$PASS" scp build/hello-cp-provider.apk build/hello-cp-client.apk build/hello-cp-denied.apk "$VM:/tmp/"

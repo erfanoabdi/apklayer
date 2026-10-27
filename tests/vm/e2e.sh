@@ -9,7 +9,7 @@
 # Exit 0 = all pass.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-VM="${APKLY_VM:-parallels@10.211.55.4}"; PASS="${APKLY_VM_PASS:-1234}"
+VM="${APKLY_VM:-utm@192.168.64.7}"; PASS="${APKLY_VM_PASS:-1234}"
 VMNAME="${APKLY_VM_NAME:-Ubuntu 24.04 (with Rosetta)}"
 SW=1024; SH=768                                   # VM screen size in px (for abs pointer permille)
 vm() { sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" "$@"; }

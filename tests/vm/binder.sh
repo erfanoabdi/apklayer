@@ -2,7 +2,7 @@
 # Two app JVMs of one instance over the real kernel binder: a published binder, calls both ways, caller identities, death notification.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-VM="${APKLY_VM:-parallels@10.211.55.4}"
+VM="${APKLY_VM:-utm@192.168.64.7}"
 PASS="${APKLY_VM_PASS:-1234}"
 tests/apps/build.sh hello-binder-server
 tests/apps/build.sh hello-binder-client

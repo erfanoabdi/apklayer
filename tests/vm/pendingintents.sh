@@ -2,7 +2,7 @@
 # PendingIntents across apps: hub-owned senders, fill-in, immutable, one-shot, cancel, creator identity.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-VM="${APKLY_VM:-parallels@10.211.55.4}"
+VM="${APKLY_VM:-utm@192.168.64.7}"
 PASS="${APKLY_VM_PASS:-1234}"
 for app in hello-pi-holder hello-pi-creator hello-act-target hello-svc-target; do tests/apps/build.sh "$app" > /dev/null; done
 sshpass -p "$PASS" scp build/hello-pi-holder.apk build/hello-pi-creator.apk build/hello-act-target.apk build/hello-svc-target.apk "$VM:/tmp/"

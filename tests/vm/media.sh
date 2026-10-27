@@ -2,7 +2,7 @@
 # P5.2 MediaPlayer on the VM: tests/apps/hello-media plays a generated 2 s tone; the duration comes from the file,
 # the GStreamer engine reaches "playing", and the app's completion callback runs.
 set -uo pipefail
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; VM="${APKLY_VM:-parallels@10.211.55.4}"; PASS="${APKLY_VM_PASS:-1234}"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; VM="${APKLY_VM:-utm@192.168.64.7}"; PASS="${APKLY_VM_PASS:-1234}"
 "$ROOT/tests/apps/build.sh" hello-media >/dev/null || { echo 'FAIL  the sample app does not build'; exit 1; }
 # a local web server for the DownloadManager check (stopped below)
 sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" 'nohup python3 -m http.server 18080 --bind 127.0.0.1 --directory /etc >/dev/null 2>&1 &'

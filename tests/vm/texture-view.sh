@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-VM="${APKLY_VM:-parallels@10.211.55.4}"; PASS="${APKLY_VM_PASS:-1234}"
+VM="${APKLY_VM:-utm@192.168.64.7}"; PASS="${APKLY_VM_PASS:-1234}"
 sshpass -p "$PASS" scp tests/vm/texture-view.py "$VM:apklayer-m1/tests/vm/texture-view.py"
 python3 - "$VM" "$PASS" <<'PY'
 import subprocess, sys

@@ -5,7 +5,7 @@
 # Prints one PASS/FAIL line per app and the pass count per tier; writes tests/corpus/results-vm.md.
 # Usage: corpus.sh [tier-regex]   e.g. corpus.sh T2
 set -uo pipefail
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; VM="${APKLY_VM:-parallels@10.211.55.4}"; PASS="${APKLY_VM_PASS:-1234}"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; VM="${APKLY_VM:-utm@192.168.64.7}"; PASS="${APKLY_VM_PASS:-1234}"
 SECS="${SECS:-30}"; ONLY="${1:-.}"; OUT="$ROOT/tests/corpus/results-vm.md"
 blank_pct() { python3 - "$1" <<'E2'
 import sys, collections

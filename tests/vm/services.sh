@@ -2,7 +2,7 @@
 # Started services of other apps through the instance hub: start/stop of a service in a not-running app, stopSelf, sticky restart after a kill, exported rules.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-VM="${APKLY_VM:-parallels@10.211.55.4}"
+VM="${APKLY_VM:-utm@192.168.64.7}"
 PASS="${APKLY_VM_PASS:-1234}"
 for app in hello-svc-target hello-svc-caller; do tests/apps/build.sh "$app" > /dev/null; done
 sshpass -p "$PASS" scp build/hello-svc-target.apk build/hello-svc-caller.apk "$VM:/tmp/"

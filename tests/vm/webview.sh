@@ -2,7 +2,7 @@
 # The original WebView (Chromium provider APK) in an app: provider class and native library loaded through bionic_translation, a page loaded, JavaScript run.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-VM="${APKLY_VM:-parallels@10.211.55.4}"
+VM="${APKLY_VM:-utm@192.168.64.7}"
 PASS="${APKLY_VM_PASS:-1234}"
 tests/apps/build.sh hello-wvprobe > /dev/null
 sshpass -p "$PASS" scp build/hello-wvprobe.apk "$VM:/tmp/"
