@@ -243,3 +243,30 @@ if marker not in s:
 ''', 1)
 if s != original: p.write_text(s)
 PY
+
+# 10. Audio's real priority-inheritance mutex must translate its attribute
+#     object too; falling back to glibc writes over the mapped bionic pointer.
+python3 - "$bt" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1]) / 'pthread_wrapper/libpthread.c'
+s = p.read_text()
+if 'bionic_pthread_mutexattr_setprotocol(' not in s:
+    anchor = 'int bionic_pthread_mutexattr_destroy(bionic_mutexattr_t *attr)'
+    assert s.count(anchor) == 1
+    s = s.replace(anchor, '''/* apklayer patch: preserve the mapped attribute ABI for audio PI mutexes. */
+int bionic_pthread_mutexattr_setprotocol(bionic_mutexattr_t *attr, int protocol)
+{
+    assert(attr && IS_MAPPED(attr));
+    return pthread_mutexattr_setprotocol(attr->glibc, protocol);
+}
+
+int bionic_pthread_mutexattr_getprotocol(const bionic_mutexattr_t *attr, int *protocol)
+{
+    assert(attr && IS_MAPPED(attr));
+    return pthread_mutexattr_getprotocol(attr->glibc, protocol);
+}
+
+''' + anchor, 1)
+    p.write_text(s)
+PY

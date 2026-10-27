@@ -21,6 +21,13 @@ if [ "${APKLAYER_CODEC2:-0}" = 1 ]; then
 else
     rm -f "$media_manifest"
 fi
+audio_manifest="$N/android-root/vendor/etc/vintf/manifest/apklayer-audio.xml"
+if [ "${APKLAYER_AUDIO:-0}" = 1 ]; then
+    mkdir -p "$(dirname "$audio_manifest")"
+    cp "$(dirname "$(readlink -f "$0")")/../aosp/hals/audio/manifest.xml" "$audio_manifest"
+else
+    rm -f "$audio_manifest"
+fi
 rm -rf "$XDG_RUNTIME_DIR/apklayer/$APKLAYER_INSTANCE"
 "$N/bin/aprop" load "$HOME/apklayer-m1/bridge/native/apklayer.prop" "$N/android-root/props/system_build.prop" 2> "$LOGS/aprop.log"
 # Android init normally creates this directory and announces it to RenderEngine.
@@ -50,6 +57,9 @@ if [ "${APKLAYER_CODEC2:-0}" = 1 ]; then svc codec2 libapklayer_codec2.so; fi
 if [ "${APKLAYER_MEDIA_SERVICES:-0}" = 1 ]; then
     svc media libapklayer_mediaserver.so
     svc extractor libapklayer_mediaserver.so --extractor
+fi
+if [ "${APKLAYER_AUDIO:-0}" = 1 ]; then
+    svc audio libapklayer_audio.so "$HOME/apklayer-m1/aosp/hals/audio/audio_policy_configuration.xml"
 fi
 svc surfaceflinger libapklayer_surfaceflinger.so
 tool="${1:-libapklayer_sftest.so}"; [ $# -gt 0 ] && shift

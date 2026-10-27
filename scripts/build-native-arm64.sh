@@ -20,7 +20,7 @@ mkdir -p "$native/bin" "$native/android-root"
 cp -r bridge/native/android-root/. "$native/android-root/"  # apklayer's own files of the Android root (VINTF manifest of our HALs); the tree's come from scripts/collect-android-root.sh
 cc -O2 -Wall -o "$native/bin/btload" scripts/btload.c bridge/native/android_platform.c bridge/native/properties.c bridge/native/paths.c bridge/native/binder_compat.c bridge/native/android_stubs.c \
     -rdynamic -L"$HOME/bt-arm/bionic_translation/b" -ldl_bio -Wl,-rpath,"$HOME/bt-arm/bionic_translation/b"
-for domain in graphics media; do
+for domain in graphics media audio; do
     hal="b/bridge/hals/$domain/libapklayer-hal-$domain.so"
     [ ! -e "$hal" ] || cp "$hal" "$native/"
 done  # the host HAL library btload loads for the Android-side HAL services

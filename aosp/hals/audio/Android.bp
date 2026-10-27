@@ -1,0 +1,18 @@
+// Reuse the original AOSP FMQ worker, module and policy parser; no stub driver.
+cc_library_shared {
+    name: "libapklayer_audio",
+    defaults: [
+        "aidlaudioservice_defaults",
+        "latest_android_media_audio_common_types_ndk_shared",
+        "latest_android_hardware_audio_core_ndk_shared",
+        "latest_android_hardware_audio_core_sounddose_ndk_shared",
+        "latest_android_hardware_bluetooth_audio_ndk_static",
+    ],
+    srcs: ["Service.cpp", "Stream.cpp", "Probe.cpp"],
+    local_include_dirs: ["host-include"],
+    static_libs: ["libaudioserviceexampleimpl"],
+    version_script: "exports.map",
+    allow_undefined_symbols: true,
+    compile_multilib: "64",
+    cflags: ["-Wall", "-Werror", "-Wno-main"],
+}
