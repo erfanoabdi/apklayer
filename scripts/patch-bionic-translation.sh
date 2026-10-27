@@ -305,19 +305,25 @@ PYCOND
 # 8. Statically initialised (all-zero) conditions, semaphores, rwlocks and mutexes get their native object on first use, and two threads
 #    arriving together each made one and overwrote the other's: one waited on a condition the other signalled never (lost wakeup). libhwui's
 #    WorkQueue, a std::condition_variable first used by the main and the render thread at once, hung the whole app at startup (black window,
-#    main thread in HardwareRenderer.nSetStopped). The native object is now installed with a compare-and-swap; the loser frees its own.
+#    main thread in HardwareRenderer.nSetStopped). The native object is now made under a lock, only if no other thread already did.
 python3 - "$bt" <<'PY'
 from pathlib import Path
 import sys
 p = Path(sys.argv[1]) / 'pthread_wrapper/libpthread.c'
 s = p.read_text()
 if 'apklayer patch: atomic lazy init' not in s:
-    helper = '''/* apklayer patch: atomic lazy init. Install a fresh native object only if the field is still what the caller saw; otherwise another thread won. */
+    helper = '''/* apklayer patch: atomic lazy init. The native object is made under a lock and only if no other thread already did. (The bionic structs keep the
+ * pointer 4-byte aligned: a compare-and-swap on it is a bus error on arm64.) */
+static pthread_mutex_t apklayer_install_lock = PTHREAD_MUTEX_INITIALIZER;
 #define APKLAYER_INSTALL(field, size, init_stmt) do { \\
-\ttypeof(field) seen = __atomic_load_n(&(field), __ATOMIC_ACQUIRE); \\
-\ttypeof(field) fresh = mmap(NULL, (size), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0); \\
-\t{ typeof(field) native = fresh; init_stmt; } \\
-\tif (!__atomic_compare_exchange_n(&(field), &seen, fresh, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) munmap(fresh, (size)); \\
+\tpthread_mutex_lock(&apklayer_install_lock); \\
+\tif (!is_mapped((void *)(field), (size))) { \\
+\t\ttypeof(field) native = mmap(NULL, (size), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0); \\
+\t\tinit_stmt; \\
+\t\t__atomic_thread_fence(__ATOMIC_RELEASE); \\
+\t\t(field) = native; \\
+\t} \\
+\tpthread_mutex_unlock(&apklayer_install_lock); \\
 } while (0)
 
 '''
