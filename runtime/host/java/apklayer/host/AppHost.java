@@ -748,11 +748,18 @@ public final class AppHost implements Runnable {
      * Window state from the shell (PLAN P2.9): an inactive window pauses the top activity, a
      * minimized one stops it; becoming active again restarts/resumes it.
      */
+    private static final boolean GPU = Boolean.getBoolean("apklayer.gpu");
+    private boolean windowWasActive;
+
     private void hostState(int flags) {
         boolean active = (flags & 1) != 0, minimized = (flags & 2) != 0;
         ActivityController<? extends Activity> top = stack.peek();
         if (top == null) return;
         System.out.println("[apklayer] window state active=" + active + " minimized=" + minimized);
+        if (active) windowWasActive = true;
+        // GPU route: a display window is mapped by its first frame and focused only after that, so until it has been active once its
+        // "inactive" only means "not shown yet": pausing the app then would stop the very frames that show the window
+        if (GPU && !windowWasActive && !minimized) return;
         if (minimized && !stoppedByMinimize) {
             if (!pausedByFocus) top.pause();
             setVisible(top.stop(), false);

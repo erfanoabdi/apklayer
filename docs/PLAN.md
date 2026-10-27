@@ -572,6 +572,36 @@ to fix** or **asserts real-device behaviour** (reason listed, expected-failure f
 per module over time, run the chosen subset in CI-style scripts on the VM. Exit test: the chosen modules reach an agreed pass
 rate with every remaining failure explained. This also feeds P3: every gap found is a gap real apps can hit.
 
+### P7.1 GPU route: next steps (written 2026-10-27, in priority order)
+State: UiBench runs on the device-library route through `bin/apklayer run` (services on demand, one SurfaceFlinger virtual display per app, GPU
+rendering end to end, real input through the shell's input proxy, dialogs stacked on top). Test: `tests/vm/gpu.sh` (needs the VM and the libs built from `~/los24`).
+
+1. **Crash: resizing the window while a dialog is open** (user, 2026-10-27). Repro: General, Dialog List, drag the window edge. Seen: the window disappears, the
+   JVM stays alive and idle, its main thread is stuck inside HWUI (`HardwareRenderer.nSetStopped`, native). Not yet diagnosed; leads: (a) the render thread
+   blocked in `eglSwapBuffers` (our window blit) in `dequeueBuffer` because no buffer comes back after the size change (BLAST queue resized, SurfaceFlinger
+   not releasing); (b) the virtual display sink (`aosp/hals/graphics/vdisplay`) holds up to 3 acquired buffers and starves the producer when frames stop or the size
+   changes, so release/drop its held items on resize and size mismatch; (c) a window stopped/paused by the shell state (see 4). First step: `jcmd Thread.print` of
+   the JVM plus gdb on the render thread at the stall, and the sink's log with `APKLAYER_RUNTIME_DEBUG=1`.
+2. **Resize does not resize the Android layer itself** (user). The shell tells the app and the sink the new logical size, but the app's layers keep their size
+   and the virtual display is not seen resizing (the sink's "window resized" log never appeared). Needed end to end: the sink applies the size (default buffer
+   size + display size/projection, check `Transaction::setDisplaySize` takes effect for a virtual display), the app's `Display`/configuration changes
+   (AppHost already rebuilds the qualifiers on configure: verify it reaches Robolectric's DisplayInfo and the windows' frames), activities relayout, and the
+   BLAST layers take the new buffer size. Test with a dialog open (item 1).
+3. **Dialog right margin out of bounds** (user). The dialog window's frame is wider than the display (a 784-wide layer on a 720 display); the window manager must
+   clamp a window's frame to its display like WMS does (`Gravity.applyDisplay` runs, but the layer size comes from the app's measured request), and the app must
+   re-measure to the clamped frame. Also symmetric margins as on a device. Part of `runtime/patches/.../ShadowWindowManagerGlobal`.
+4. **Window mapping and focus.** The display window maps only after its first frame, and the shell reports "inactive" before that, which paused the app and stalled
+   everything. AppHost now ignores inactive until the window was active once (workaround): make the sink present an initial blank frame so the window maps and
+   focuses normally, then drop the workaround.
+5. **Hide the primary display window** (the composer's, empty): it needs a vsync source that does not depend on a visible window (the output's real refresh timing
+   from the shell for a headless primary), then no window for the primary display at all.
+6. **Several apps at once** (each its own virtual display and window already): per-app focus, input routing, one stack/sink per app, instance naming (PLAN P9).
+7. **Text input and clipboard** on the proxied window (`text_input_enable`, clipboard set/selection still go through the app's own window id).
+8. **Cleanup that remains:** the Robolectric patches should become a proper overlay with a regression test (`tests/vm/gpu.sh` has to pass on a clean VM); the stack's
+   write-once properties per launch (`ro.*`); the describe step of `apklayer install` for the tree flavor; `AppHost` trace options; a vsync request from an app
+   without a window of its own (the native Choreographer asks for window id 1); debug logging flags; docs/ARCHITECTURE.md for the virtual display and input proxy.
+9. Then Vulkan (P7.5) and CTS (P10) as before.
+
 ### P7.5 — Vulkan (user goal, 2026-10-26)
 
 Android's `libvulkan.so` (the loader) is replaced, as `libEGL` is, by a layer of ours over the host's Vulkan loader (Mesa, NVIDIA,
