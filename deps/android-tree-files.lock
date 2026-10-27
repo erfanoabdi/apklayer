@@ -225,7 +225,7 @@ cce358be60868101def54ef760059d8b12451e95c60c8f14d3aa17f6eda591b8 371984 android-
 4010f59f6f0a26473a768d0d2ce68ab52a71e3a3d9830ba474980f15cde71f85 266672 android-arm64/lib64/libmtp.so out/target/product/generic_arm64/system/lib64/libmtp.so same
 1abe3a5eb93f4b34ca9ff735644ddd0ebd869f52ad2b22e3f6b2c2a3d02c6219 51496 android-arm64/lib64/libnativebridge_lazy.so out/target/product/generic_arm64/system/lib64/libnativebridge_lazy.so same
 955a5660d05df378dd9ec111c399d75299b613a6a85bd3b72a094d13d5841a61 152200 android-arm64/lib64/libnativedisplay.so out/target/product/generic_arm64/system/lib64/libnativedisplay.so same
-5ca53966027b98a4a309b4c6ca3bbd5967cc59ca4d391a5ca574f01f7befff70 51496 android-arm64/lib64/libnativehelper.so out/target/product/generic_arm64/apex/com.android.art.debug/lib64/libnativehelper.so same
+e37d64bb50123a92c4bdaf94be28f2b7d9389d95c02e4cac20b04fa1f1bca0df 51496 android-arm64/lib64/libnativehelper.so out/target/product/generic_arm64/apex/com.android.art.debug/lib64/libnativehelper.so patched
 df3c6985add3ef3496591c4455c69e31dc7bdea7834e8c87eb544e19cf3da227 51584 android-arm64/lib64/libnativeloader_lazy.so out/target/product/generic_arm64/system/lib64/libnativeloader_lazy.so same
 6df20d6d8f69d33f38653489882222c664d416ad831b08c8b4e3a7842c35f9c6 68280 android-arm64/lib64/libnativewindow.so out/target/product/generic_arm64/system/lib64/libnativewindow.so same
 f3a1a919d416b98f874e42f701d6166318f1240b467ad10154816b417ed61776 52304 android-arm64/lib64/libnetd_client.so out/target/product/generic_arm64/system/lib64/libnetd_client.so same

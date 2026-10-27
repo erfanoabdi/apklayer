@@ -81,6 +81,7 @@ try:
     assert '[hello-native-codec] AVC PASS reordered 12 YUV pictures, exact PTS/EOS/release' in text
     assert '[hello-native-codec] extractor PASS MP4 tracks, seek, 12 decoded YUV pictures/PTS/EOS' in text
     assert 'media: registered extractor service' in (logs / 'extractor.log').read_text(errors='replace')
+    assert '[hello-native-codec] extractor FD PASS bounded offset, track/sample/seek, caller ownership/early close' in text
     assert committed and captured
     assert 'finished hello.nativecodec.Main depth=0' in text and 'depth=0' in text
     assert (logs / 'shell.log').read_text(errors='replace').count('dmabuf frame') > 0

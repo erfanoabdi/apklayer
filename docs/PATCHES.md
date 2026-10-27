@@ -129,3 +129,7 @@ The new host adapter reuses SimpleC2Component’s existing pending-work and drai
 ## Native container extraction and absolute plugin paths (2026-10-27)
 
 MediaExtractor uses original framework Java/JNI and an independent AOSP MediaExtractorService process. Original MP4/WebM plugins load from the staged Android root. The translation linker now preserves nested /system/lib[64] paths and resolves absolute libraries through the existing instance overlay before search; direct library aliases retain their existing translation. Repo-owned plugin links and native builder staging make the layout reproducible. Tests exercise callback-source binder reads, native track/CSD/seek/sample APIs, then actual H.264 decoding and EOS/release. FD sources and MediaPlayer are subsequent work.
+
+## JVM file descriptors (2026-10-27)
+
+`scripts/patch-nativehelper.sh` adapts public descriptor helpers in original libnativehelper/file_descriptor_jni.c. They use the actual FileDescriptor class and constructor, Android descriptor/setInt$ when available, and HotSpot fd when needed, avoiding eager initialization of unrelated Android NIO constants. Native MediaExtractor descriptor-source tests verify nonzero offset, track/sample/seek, caller ownership and safe immediate caller close after setup. Original FileSource’s shared-position lseek semantics are preserved. Only the selected existing APEX31 variant and changed C file were rebuilt; unrelated helper APIs are unchanged.
