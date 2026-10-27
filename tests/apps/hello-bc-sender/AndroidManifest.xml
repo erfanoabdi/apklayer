@@ -1,0 +1,10 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="hello.bcsender">
+  <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="34"/>
+  <uses-permission android:name="hello.bcreceiver.permission.SEND"/>
+  <uses-permission android:name="android.permission.BROADCAST_STICKY"/>
+  <application android:label="bc-sender">
+    <activity android:name=".Main" android:exported="true">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+    </activity>
+  </application>
+</manifest>

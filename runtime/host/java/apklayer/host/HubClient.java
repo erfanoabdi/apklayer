@@ -19,6 +19,7 @@ public final class HubClient {
         catch (android.os.RemoteException failure) { throw new IllegalStateException("Hub disconnected during registration", failure); }
         int pid = HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.REGISTER, request -> {
             request.writeString(context.getPackageName()); request.writeStrongBinder(endpoint);
+            request.writeStrongBinder(((android.app.IApplicationThread) android.app.ActivityThread.currentActivityThread().getApplicationThread()).asBinder());
         }, reply -> reply.readInt());
         if (pid != android.os.Process.myPid()) throw new IllegalStateException("Hub caller identity mismatch");
         System.out.println("[apklayer] hub registered " + context.getPackageName() + " pid=" + pid);
@@ -27,6 +28,7 @@ public final class HubClient {
         if (current == null) current = new HubClient(context.getApplicationContext());
         return current;
     }
+    static boolean connected() { return current != null; }
     static HubClient current() {
         if (current == null) throw new IllegalStateException("App has no hub connection");
         return current;

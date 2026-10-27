@@ -10,7 +10,11 @@ import org.robolectric.RuntimeEnvironment;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import android.content.IntentFilter;
+import android.content.pm.ActivityInfo;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.robolectric.shadows.ShadowPackageParser;
 
@@ -35,6 +39,60 @@ final class HubPackages {
             cache.put(name, new Cached(modified, size, parsed)); return parsed;
         } catch (IOException failure) { throw new IllegalStateException("Cannot read installed package " + name, failure); }
     }
+    record Receiver(ActivityInfo info, IntentFilter filter) {}
+
+    /** Installed package names (every directory with an APK). */
+    List<String> installed() {
+        List<String> names = new ArrayList<>();
+        try (var stream = Files.list(root)) {
+            stream.filter(directory -> Files.isRegularFile(directory.resolve("base.apk"))).forEach(directory -> names.add(directory.getFileName().toString()));
+        } catch (IOException failure) { throw new IllegalStateException("Cannot list installed packages", failure); }
+        return names;
+    }
+
+    /** Manifest receivers whose intent filter matches the broadcast (all packages, or the one named). */
+    List<Receiver> receivers(Intent intent, String onlyPackage) {
+        List<Receiver> found = new ArrayList<>();
+        ComponentName explicit = intent.getComponent();
+        for (String name : onlyPackage != null ? List.of(onlyPackage) : installed()) {
+            PackageParser.Package pkg;
+            try { pkg = get(name); } catch (RuntimeException unreadable) { continue; }
+            if (pkg == null) continue;
+            for (PackageParser.Activity receiver : pkg.receivers) {
+                if (explicit != null) {
+                    if (explicit.getPackageName().equals(name) && explicit.getClassName().equals(receiver.info.name))
+                        found.add(new Receiver(receiver.info, receiver.intents.isEmpty() ? null : receiver.intents.get(0)));
+                    continue;
+                }
+                for (IntentFilter filter : receiver.intents) {
+                    if (filter.match(null, intent, false, "apklayer-hub") >= 0) { found.add(new Receiver(receiver.info, filter)); break; }
+                }
+            }
+        }
+        return found;
+    }
+
+    /** Whether the package holds the permission: it declares it itself, or requests a permission whose protection is normal (other grants are not modelled yet). */
+    boolean holds(String name, String permission) {
+        if (permission == null || permission.isEmpty()) return true;
+        PackageParser.Package source = get(name);
+        if (source == null) return false;
+        if (source.permissions.stream().anyMatch(declared -> permission.equals(declared.info.name))) return true;
+        if (!source.requestedPermissions.contains(permission)) return false;
+        PermissionInfo definition = null;
+        for (String other : installed()) {
+            PackageParser.Package owner = get(other);
+            if (owner == null) continue;
+            definition = owner.permissions.stream().map(declared -> declared.info).filter(info -> permission.equals(info.name)).findFirst().orElse(null);
+            if (definition != null) break;
+        }
+        if (definition == null) {
+            try { definition = RuntimeEnvironment.getApplication().getPackageManager().getPermissionInfo(permission, 0); }
+            catch (PackageManager.NameNotFoundException missing) { return false; }
+        }
+        return (definition.protectionLevel & PermissionInfo.PROTECTION_MASK_BASE) == PermissionInfo.PROTECTION_NORMAL;
+    }
+
     void enforceServicePermission(String caller, ServiceInfo service) {
         if (caller.equals(service.packageName) || service.permission == null || service.permission.isEmpty()) return;
         PackageParser.Package source = get(caller), owner = get(service.packageName);

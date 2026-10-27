@@ -1,0 +1,22 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="hello.bcreceiver">
+  <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="34"/>
+  <permission android:name="hello.bcreceiver.permission.SEND" android:protectionLevel="normal"/>
+  <application android:label="bc-receiver">
+    <activity android:name=".Main" android:exported="true">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+    </activity>
+    <receiver android:name=".ManifestReceiver" android:exported="true">
+      <intent-filter android:priority="20">
+        <action android:name="hello.bc.MANIFEST"/>
+        <action android:name="hello.bc.ORDERED"/>
+        <action android:name="hello.bc.ABORT"/>
+      </intent-filter>
+    </receiver>
+    <receiver android:name=".ProtectedReceiver" android:exported="true" android:permission="hello.bcreceiver.permission.SEND">
+      <intent-filter><action android:name="hello.bc.PROTECTED"/></intent-filter>
+    </receiver>
+    <receiver android:name=".PrivateReceiver" android:exported="false">
+      <intent-filter><action android:name="hello.bc.PRIVATE"/></intent-filter>
+    </receiver>
+  </application>
+</manifest>

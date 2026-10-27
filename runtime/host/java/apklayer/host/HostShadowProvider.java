@@ -29,7 +29,8 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.view.SurfaceView", ShadowHostSurfaceView.class.getName()),
                 Map.entry("android.app.ContextImpl", ShadowHostContextImpl.class.getName()),
                 Map.entry("android.media.AudioTrack", ShadowHostAudioTrack.class.getName()),
-                Map.entry("android.view.Display", ShadowHostDisplay.class.getName())));
+                Map.entry("android.view.Display", ShadowHostDisplay.class.getName()),
+                Map.entry("android.app.ActivityManager", ShadowHostActivityManager.class.getName())));
         if (Boolean.getBoolean("apklayer.nativemedia")) {
             entries.removeIf(entry -> entry.getKey().equals("android.media.MediaCodec"));
             entries.add(Map.entry("android.media.MediaCodec", ShadowHostNativeMediaCodec.class.getName()));
