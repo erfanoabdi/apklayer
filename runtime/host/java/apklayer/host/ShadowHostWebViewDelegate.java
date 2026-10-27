@@ -14,6 +14,11 @@ import org.robolectric.annotation.Implements;
 @Implements(className = "android.webkit.WebViewDelegate", isInAndroidSdk = false)
 public class ShadowHostWebViewDelegate {
     private static void forgetCached(String path) {
+        // native resources: ShadowNativeApkAssets keeps its own path -> pointer cache, which would return the non-dynamic load too
+        try {
+            java.util.Map<String, Long> nativeCache = org.robolectric.util.ReflectionHelpers.getStaticField(org.robolectric.shadows.ShadowNativeApkAssets.class, "cachedApkAssetsPtrs");
+            synchronized (nativeCache) { nativeCache.remove(path); }
+        } catch (RuntimeException | LinkageError notNativeResources) { /* the legacy cache below */ }
         java.util.Map<Object, Long> cache = org.robolectric.util.ReflectionHelpers.getStaticField(org.robolectric.res.android.ApkAssetsCache.class, "cachedApkAssetsPtrs");
         synchronized (cache) {
             cache.keySet().removeIf(key -> {
