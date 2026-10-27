@@ -85,6 +85,7 @@ try:
     assert committed and captured
     assert 'finished hello.nativecodec.Main depth=0' in text and 'depth=0' in text
     assert (logs / 'shell.log').read_text(errors='replace').count('dmabuf frame') > 0
+    assert '[hello-native-codec] AAC PASS' in text
     print('PASS APK MediaCodec JNI, real YUV/PTS/EOS, frame commit and physical Back', flush=True)
 finally:
     stop()
