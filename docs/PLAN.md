@@ -603,6 +603,7 @@ rendering end to end, real input through the shell's input proxy, dialogs stacke
 
    Native media follow-up (2026-10-27): selective native payload Parcel foundation passes original JNI serialization, coexistence and ownership tests; MediaPlayer is still pending. Java Binder/FD packets and native Java interface enforcement are explicitly unsupported until Binder cache/dispatch integration. Callback timeout root cause identified in tree DeliQueue versus API36 Robolectric legacy scheduler; select AOSP's provided legacy queue mode at static initialization. Fixture confirms actual main-thread marker delivery with deli:false, PCM capture and cleanup.
 
+   Original MediaPlayer video verified (2026-10-27): actual Java/JNI/NuPlayer/Codec2 -> SurfaceView, real FD source caller-close, async prepare, video track/duration/dimensions, pause/resume and playback pacing, native time-discontinuity Parcel timestamps, seek/replay and two completion callbacks. Native callback factory uses original payload data with normal Java recycle/finalization ownership. tests/vm/native-player.sh checks131674 red pixels, real SF layer, release and physical Back. Compressed audio/A-V integration and more source/error cases remain next; exact short-clip getCurrentPosition endpoint semantics still need investigation.
 
 
    **Bluetooth** after camera: Robolectric-style shadows of `android.bluetooth.*` over a host daemon speaking D-Bus to BlueZ (not Android's own stack: it needs

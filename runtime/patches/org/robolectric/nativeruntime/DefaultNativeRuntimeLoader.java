@@ -488,6 +488,9 @@ public class DefaultNativeRuntimeLoader implements NativeRuntimeLoader {
             Shadow.class.getClassLoader(), className, "__staticInitializer__");
       }
     }
+    if (Boolean.getBoolean("apklayer.nativeplayer")) {
+      ReflectionHelpers.callStaticMethod(Shadow.class.getClassLoader(), "android.media.MediaPlayer", "__staticInitializer__");
+    }
   }
 
   private static boolean isAndroidVOrGreater() {

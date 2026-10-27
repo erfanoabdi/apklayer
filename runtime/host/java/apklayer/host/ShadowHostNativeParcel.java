@@ -15,6 +15,12 @@ import org.robolectric.util.ReflectionHelpers.ClassParameter;
 @Implements(Parcel.class)
 public class ShadowHostNativeParcel extends ShadowParcel {
     @RealObject private Parcel real;
+    @Implementation protected static Parcel obtain() {
+        Parcel parcel = ReflectionHelpers.callStaticMethod(Parcel.class,
+                Shadow.directMethodName(Parcel.class.getName(), "obtain"));
+        if (NativeParcel.allocating()) NativeParcel.promote(parcel);
+        return parcel;
+    }
     @Implementation protected void recycle() {
         NativeParcel.restore(real);
         ReflectionHelpers.callInstanceMethod(real, Shadow.directMethodName(Parcel.class.getName(), "recycle"));

@@ -11,7 +11,21 @@ import org.robolectric.util.ReflectionHelpers.ClassParameter;
 @DoNotInstrument
 public final class NativeParcel {
     private static final ConcurrentHashMap<Long, Long> originals = new ConcurrentHashMap<>();
+    private static final ThreadLocal<Integer> allocationDepth = ThreadLocal.withInitial(() -> 0);
+    private static volatile boolean callbackFactoryReady;
     private NativeParcel() {}
+    public static void markCallbackFactoryReady() { callbackFactoryReady = true; }
+    static void requireCallbackFactory() {
+        if (!callbackFactoryReady) throw new IllegalStateException("Native MediaPlayer callback Parcel adapter is not installed");
+    }
+    static Scope scope() { allocationDepth.set(allocationDepth.get() + 1); return new Scope(); }
+    static boolean allocating() { return allocationDepth.get() != 0; }
+    static final class Scope implements AutoCloseable {
+        @Override public void close() { allocationDepth.set(allocationDepth.get() - 1); }
+    }
+    static void requireNative(Parcel parcel) {
+        if (!owns(pointer(parcel))) throw new IllegalArgumentException("Native media requires an explicitly native Parcel");
+    }
     public static Parcel obtain() {
         NativeMedia.ensureInitialized();
         Parcel parcel = Parcel.obtain();

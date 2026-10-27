@@ -51,6 +51,13 @@ public final class HostShadowProvider implements ShadowProvider {
         if (Boolean.getBoolean("apklayer.nativeparcels")) {
             entries.add(Map.entry("android.os.Parcel", ShadowHostNativeParcel.class.getName()));
         }
+        if (Boolean.getBoolean("apklayer.nativeplayer")) {
+            if (!Boolean.getBoolean("apklayer.nativeaudio") || !Boolean.getBoolean("apklayer.nativeparcels")
+                    || !Boolean.getBoolean("apklayer.nativemedia"))
+                throw new IllegalStateException("Native player requires nativeaudio, nativeparcels and nativemedia");
+            entries.removeIf(entry -> entry.getKey().equals("android.media.MediaPlayer"));
+            entries.add(Map.entry("android.media.MediaPlayer", ShadowHostNativeMediaPlayer.class.getName()));
+        }
         return entries;
     }
 
