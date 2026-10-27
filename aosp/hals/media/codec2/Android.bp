@@ -1,0 +1,12 @@
+// Codec2's existing AIDL frontend and SimpleC2Component own Android plumbing;
+// host GStreamer owns decoding. The unresolved plain C API is loaded by btload.
+cc_library_shared {
+    name: "libapklayer_codec2",
+    defaults: ["libcodec2-aidl-V2-defaults"],
+    srcs: ["Service.cpp", "ComponentStore.cpp", "HostDecoder.cpp"],
+    header_libs: ["libapklayer_media_host_headers", "libcodec2_soft_common_headers", "libcodec2_internal"],
+    shared_libs: ["libcodec2", "libcodec2_vndk", "libcodec2_soft_common", "liblog", "libutils", "libstagefright_foundation"],
+    compile_multilib: "64",
+    allow_undefined_symbols: true,
+    cflags: ["-Wall", "-Werror", "-Wno-main"],
+}

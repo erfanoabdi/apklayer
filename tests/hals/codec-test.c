@@ -6,7 +6,12 @@
 #include <gst/gst.h>
 #include <stdio.h>
 
-static void decode(unsigned width, unsigned height)
+static void le(FILE *out, uint64_t value, unsigned bytes)
+{
+    for (unsigned n = 0; n < bytes; n++) fputc(value >> (n * 8), out);
+}
+
+static void decode(unsigned width, unsigned height, const char *fixture)
 {
     struct apklayer_codec_config cfg = { .mime = "video/x-vnd.on2.vp8", .width = width, .height = height };
     struct apklayer_codec *codec = NULL;
@@ -22,6 +27,13 @@ static void decode(unsigned width, unsigned height)
     assert(encoder && !error);
     GstAppSink *encoded = GST_APP_SINK(gst_bin_get_by_name(GST_BIN(encoder), "encoded"));
     assert(gst_element_set_state(encoder, GST_STATE_PLAYING) != GST_STATE_CHANGE_FAILURE);
+    FILE *ivf = fixture ? fopen(fixture, "wb") : NULL;
+    assert(!fixture || ivf);
+    if (ivf) {
+        fwrite("DKIF", 1, 4, ivf); le(ivf, 0, 2); le(ivf, 32, 2);
+        fwrite("VP80", 1, 4, ivf); le(ivf, width, 2); le(ivf, height, 2);
+        le(ivf, 30, 4); le(ivf, 1, 4); le(ivf, 3, 4); le(ivf, 0, 4);
+    }
     int64_t pts[3];
     for (unsigned n = 0; n < 3; n++) {
         GstSample *sample = gst_app_sink_try_pull_sample(encoded, GST_SECOND);
@@ -30,10 +42,15 @@ static void decode(unsigned width, unsigned height)
         GstMapInfo map;
         assert(gst_buffer_map(buffer, &map, GST_MAP_READ));
         pts[n] = GST_BUFFER_PTS(buffer);
+        if (ivf) {
+            le(ivf, map.size, 4); le(ivf, n, 8);
+            assert(fwrite(map.data, 1, map.size, ivf) == map.size);
+        }
         assert(apklayer_codec_queue(codec, map.data, map.size, pts[n]) == 0);
         gst_buffer_unmap(buffer, &map);
         gst_sample_unref(sample);
     }
+    if (ivf) assert(fclose(ivf) == 0);
     assert(apklayer_codec_end(codec) == 0);
     struct apklayer_codec_frame *retained = NULL;
     for (unsigned n = 0; n < 3; n++) {
@@ -68,7 +85,7 @@ static void decode(unsigned width, unsigned height)
     puts("PASS EOS and frame ownership after decoder teardown");
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     gst_init(NULL, NULL);
     assert(!apklayer_codec_supports("video/not-a-codec"));
@@ -76,7 +93,7 @@ int main(void)
     struct apklayer_codec *bad = NULL;
     struct apklayer_codec_config cfg = { .mime = "video/not-a-codec", .width = 64, .height = 48 };
     assert(apklayer_codec_open(&cfg, &bad) == -ENOTSUP && !bad);
-    decode(64, 48);
-    decode(80, 60);
+    decode(64, 48, argc == 2 ? argv[1] : NULL);
+    decode(80, 60, NULL);
     return 0;
 }

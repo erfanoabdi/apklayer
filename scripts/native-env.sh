@@ -9,7 +9,7 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" WAYLAND_DISPLAY=
 export APKLAYER_INSTANCE="${APKLAYER_INSTANCE:-default}" APKLAYER_NATIVE="$N"
 # bionic_translation's libraries first (the patched ones), then ours; the path layer and bionic's TLS slots come first in every lookup
 export LD_LIBRARY_PATH="$BT:$N" XDG_DATA_DIRS="$N/share" LD_PRELOAD="$N/libapklayer-preload.so:libgcc_s.so.1" BIONIC_LD_LIBRARY_PATH="$L"
-export APKLAYER_CRASH_TRACE="${APKLAYER_CRASH_TRACE:-1}" APKLAYER_HOST_LIBS="$N/libapklayer-hal-graphics.so"
+export APKLAYER_CRASH_TRACE="${APKLAYER_CRASH_TRACE:-1}" APKLAYER_HOST_LIBS="${APKLAYER_HOST_LIBS:-$N/libapklayer-hal-graphics.so}"
 
 # The arm64 JVM for the app (the Rosetta x86 JVM of the older flavors cannot load arm64 libraries).
 native_java() {

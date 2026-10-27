@@ -99,3 +99,8 @@ Runtime overlay packaging uses scripts/build-runtime-overlay.sh: compile every J
 
 ## Tree host and launcher cleanup (2026-10-27)
 `build-tree-host.sh` adapts only ShadowProvider.reset’s signature in temporary source for the older tree API. Its missing simulator callback classes come unchanged from the pinned 4.17 artifact. Install and run share native JVM/environment/options; conversion and its cache identity use the selected framework. Tracewindows uses Boolean.getBoolean and shell/native debug flags accept 1 explicitly. The bionic_translation patch moves unconditional packed-relocation prints to its existing TRACE facility. No Android semantics change.
+
+## Codec2 linear allocation mapping (2026-10-27)
+`scripts/patch-codec2.sh <los24>` patches only the two linear map methods in frameworks/av/media/codec2/vndk/C2Buffer.cpp. The newer DMA-heap path assumes every non-ION allocation is C2DmaBufAllocation, rejecting the existing C2AllocatorBlob gralloc handle. Non-DMA-heap handles now use the allocation’s virtual map, as the ION path already does; genuine DMA-heap buffers retain the custom map function path. Verified with real C2 BLOB write/read and decoded flexible-YUV output on the VM.
+
+The initial media/codec2 adapter reuses AOSP SimpleC2Component/Interface and the AIDL ComponentStore frontend. It is a VP8 software-output baseline kept out of default startup while wider codec/drain cases and MediaCodec integration are unfinished. Its internal --probe/--decode modes provide automated interface and actual gralloc checks; they do not simulate hardware.

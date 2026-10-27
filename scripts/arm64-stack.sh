@@ -55,3 +55,5 @@ done
 wait -n; status=$?   # the first process to exit ends the run
 for pid in "${!name_of[@]}"; do kill -0 "$pid" 2>/dev/null || echo "exited: ${name_of[$pid]} (status $status)"; done
 echo "logs: $LOGS/<name>.log"
+
+exit "$status"
