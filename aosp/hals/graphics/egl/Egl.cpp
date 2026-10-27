@@ -107,6 +107,8 @@ const char* kAndroidExtensions =
         " EGL_ANDROID_image_native_buffer EGL_ANDROID_get_native_client_buffer EGL_ANDROID_blob_cache EGL_IMG_context_priority"
         " EGL_ANDROID_recordable EGL_KHR_swap_buffers_with_damage";  // the last: implemented here (HWUI refuses to start without it)
 
+static unsigned displayRefs;  // initialize/terminate count, below
+
 // An ANativeWindowBuffer of our gralloc as a dmabuf EGLImage on the host.
 EGLImage imageFromNativeBuffer(EGLDisplay dpy, ANativeWindowBuffer* buf) {
     HandleData d;
@@ -143,8 +145,8 @@ EGLImage imageFromNativeBuffer(EGLDisplay dpy, ANativeWindowBuffer* buf) {
     auto create = host<PFNEGLCREATEIMAGEKHRPROC>("eglCreateImageKHR");
     EGLImage image = create(dpy, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, a.data());
     if (image == EGL_NO_IMAGE)
-        ALOGE("host eglCreateImageKHR(dmabuf %ux%u fourcc 0x%x planes %u modifier 0x%llx) failed: EGL error 0x%x", d.width, d.height, d.fourcc,
-              d.numPlanes, (unsigned long long)d.modifier, host<EGLint (*)()>("eglGetError")());
+        ALOGE("host eglCreateImageKHR(dmabuf %ux%u fourcc 0x%x planes %u modifier 0x%llx) failed: EGL error 0x%x (display refs %u)", d.width, d.height,
+              d.fourcc, d.numPlanes, (unsigned long long)d.modifier, host<EGLint (*)()>("eglGetError")(), displayRefs);
     else
         ALOGI("imported buffer id %llx: %ux%u fourcc 0x%x android format %u usage 0x%llx planes %u stride %u modifier 0x%llx", (unsigned long long)d.id,
               d.width, d.height, d.fourcc, d.androidFormat, (unsigned long long)d.usage, d.numPlanes, d.stride[0], (unsigned long long)d.modifier);
@@ -368,7 +370,6 @@ EGLDisplay eglGetPlatformDisplay(EGLenum, void*, const EGLAttrib*) { return gbmD
 // (egl_display_t). libgui's SyncFeatures temporarily borrows the same display.
 // A direct host eglTerminate would destroy RenderEngine's still-live context.
 static std::mutex displayLock;
-static unsigned displayRefs;
 static EGLint displayMajor, displayMinor;
 EGLBoolean eglInitialize(EGLDisplay dpy, EGLint* major, EGLint* minor) {
     if (dpy != gbmDisplay()) return fail(EGL_BAD_DISPLAY);
@@ -383,7 +384,9 @@ EGLBoolean eglTerminate(EGLDisplay dpy) {
     if (dpy != gbmDisplay()) return fail(EGL_BAD_DISPLAY);
     std::lock_guard<std::mutex> lock(displayLock);
     if (displayRefs == 0 || --displayRefs != 0) return EGL_TRUE;
-    return host<PFNEGLTERMINATEPROC>("eglTerminate")(dpy);
+    // apklayer patch: the host display stays initialized for the process. Skia/HWUI readbacks (Bitmap.copy of a hardware bitmap,
+    // thumbnails) end their last reference and start again; a real terminate made every later dmabuf import fail with EGL_BAD_DISPLAY.
+    return EGL_TRUE;
 }
 
 EGLint eglGetError() {
