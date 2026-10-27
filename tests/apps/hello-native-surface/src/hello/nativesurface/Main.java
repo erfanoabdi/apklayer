@@ -50,16 +50,29 @@ public class Main extends Activity implements SurfaceHolder.Callback {
         if (!yes) throw new AssertionError(message);
     }
     private void decode(SurfaceHolder holder) {
+        try {
+            decodeStream(holder, "red-vp8.ivf", false);
+            decodeStream(holder, "red-vp9.ivf", true);
+            System.out.println("[hello-native-surface] DECODE PASS");
+        } catch (Throwable error) {
+            System.out.println("[hello-native-surface] FAIL " + error);
+            error.printStackTrace();
+        }
+    }
+    private void decodeStream(SurfaceHolder holder, String asset, boolean keep) throws Exception {
         MediaCodec codec = null;
-        try (InputStream input = getAssets().open("red-vp8.ivf")) {
+        try (InputStream input = getAssets().open(asset)) {
             byte[] header = input.readNBytes(32);
             int count = (int)le(header, 24, 4);
-            codec = MediaCodec.createDecoderByType("video/x-vnd.on2.vp8");
+            String kind = header[10] == '9' ? "vp9" : "vp8";
+            String mime = "video/x-vnd.on2." + kind;
+            codec = MediaCodec.createDecoderByType(mime);
+            System.out.println("[hello-native-surface] codec=" + codec.getName());
             codec.setOnFrameRenderedListener((c, pts, time) -> {
-                System.out.println("[hello-native-surface] rendered pts=" + pts);
-                status.setText("PASS: native VP8 → SurfaceView");
+                System.out.println("[hello-native-surface] rendered pts=" + pts + " codec=" + kind);
+                status.setText("PASS: native " + kind + " → SurfaceView");
             }, new Handler(Looper.getMainLooper()));
-            codec.configure(MediaFormat.createVideoFormat("video/x-vnd.on2.vp8",
+            codec.configure(MediaFormat.createVideoFormat(mime,
                     (int)le(header, 12, 2), (int)le(header, 14, 2)), holder.getSurface(), null, 0);
             codec.start();
             MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
@@ -96,13 +109,8 @@ public class Main extends Activity implements SurfaceHolder.Callback {
                 codec.releaseOutputBuffer(output, false);
             }
             require(eos, "EOS");
-            // Keep the producer alive while the regression captures the submitted layer.
-            liveCodec = codec;
-            codec = null;
-            System.out.println("[hello-native-surface] DECODE PASS");
-        } catch (Throwable error) {
-            System.out.println("[hello-native-surface] FAIL " + error);
-            error.printStackTrace();
+            if (keep) { liveCodec = codec; codec = null; }
+            else codec.stop();
         } finally {
             if (codec != null) codec.release();
         }

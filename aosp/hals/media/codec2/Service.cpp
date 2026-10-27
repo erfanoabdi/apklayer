@@ -20,8 +20,8 @@ extern "C" int main(int argc, char** argv) {
         } else return 1;
         auto store = IComponentStore::fromBinder(binder);
         std::vector<IComponentStore::ComponentTraits> traits;
-        if (!store || !store->listComponents(&traits).isOk() || traits.size() != 1 ||
-            traits[0].name != apklayer::kDecoderName) return 1;
+        if (!store || !store->listComponents(&traits).isOk() || traits.empty() ||
+            !apklayer::findDecoder(traits[0].name)) return 1;
         std::shared_ptr<IComponentInterface> interface;
         if (!store->createInterface(traits[0].name, &interface).isOk() || !interface) return 1;
         fprintf(stderr, "codec2: PASS remote AIDL discovery/interface %s\n", traits[0].name.c_str());
@@ -33,16 +33,18 @@ extern "C" int main(int argc, char** argv) {
     if (argc == 2 && !strcmp(argv[1], "--probe")) {
         auto store = apklayer::makeStore();
         auto traits = store->listComponents();
-        if (traits.size() != 1) return 1;
-        std::shared_ptr<C2ComponentInterface> interface;
-        if (store->createInterface(traits[0]->name, &interface) != C2_OK) return 1;
-        C2StreamPictureSizeInfo::output size(0u, 64, 48);
-        std::vector<std::unique_ptr<C2SettingResult>> failures;
-        if (interface->config_vb({&size}, C2_MAY_BLOCK, &failures) != C2_OK || !failures.empty()) return 1;
-        size.width = size.height = 0;
-        std::vector<std::unique_ptr<C2Param>> heap;
-        if (interface->query_vb({&size}, {}, C2_MAY_BLOCK, &heap) != C2_OK || size.width != 64 || size.height != 48) return 1;
-        fprintf(stderr, "codec2: PASS %s interface config/query %ux%u\n", traits[0]->name.c_str(), size.width, size.height);
+        if (traits.empty()) return 1;
+        for (const auto& trait : traits) {
+            std::shared_ptr<C2ComponentInterface> interface;
+            if (store->createInterface(trait->name, &interface) != C2_OK) return 1;
+            C2StreamPictureSizeInfo::output size(0u, 64, 48);
+            std::vector<std::unique_ptr<C2SettingResult>> failures;
+            if (interface->config_vb({&size}, C2_MAY_BLOCK, &failures) != C2_OK || !failures.empty()) return 1;
+            size.width = size.height = 0;
+            std::vector<std::unique_ptr<C2Param>> heap;
+            if (interface->query_vb({&size}, {}, C2_MAY_BLOCK, &heap) != C2_OK || size.width != 64 || size.height != 48) return 1;
+            fprintf(stderr, "codec2: PASS %s interface config/query %ux%u\n", trait->name.c_str(), size.width, size.height);
+        }
         return 0;
     }
     using namespace aidl::android::hardware::media::c2;

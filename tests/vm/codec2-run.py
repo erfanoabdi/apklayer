@@ -6,6 +6,7 @@ from pathlib import Path
 import selectors
 import signal
 import subprocess
+import sys
 import time
 
 logs = Path(os.environ.get('APKLAYER_LOGS', '/tmp/apklayer-stack'))
@@ -37,7 +38,7 @@ def progress():
             positions.pop(name, None)
 
 proc = subprocess.Popen(['scripts/arm64-stack.sh', 'libapklayer_codec2.so',
-    '--remote-probe', '/tmp/apklayer-vp8.ivf'], stdout=subprocess.PIPE,
+    '--remote-probe', sys.argv[1] if len(sys.argv) > 1 else '/tmp/apklayer-vp8.ivf', *sys.argv[2:]], stdout=subprocess.PIPE,
     stderr=subprocess.STDOUT, start_new_session=True)
 try:
     with selectors.DefaultSelector() as events:

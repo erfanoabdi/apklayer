@@ -50,16 +50,19 @@ inline int decodeProbe(const char *path, bool remote = false, bool hideFirst = f
     std::unique_ptr<FILE, decltype(&fclose)> file(fopen(path, "rb"), fclose);
     uint8_t header[32];
     if (!file || fread(header, 1, sizeof header, file.get()) != sizeof header ||
-        memcmp(header, "DKIF", 4) || memcmp(header + 8, "VP80", 4)) return 1;
+        memcmp(header, "DKIF", 4) || (memcmp(header + 8, "VP80", 4) && memcmp(header + 8, "VP90", 4))) return 1;
+    const bool vp9 = !memcmp(header + 8, "VP90", 4);
+    const char *name = kDecoders[vp9 ? 1 : 0].name;
+    fprintf(stderr, "codec2: decoding %s\n", name);
     auto listener = std::make_shared<ProbeListener>();
     std::shared_ptr<C2Component> codec;
     std::shared_ptr<android::Codec2Client::Component> remoteCodec;
     std::shared_ptr<android::Codec2Client> client;
     if (remote) {
         client = android::Codec2Client::CreateFromService("apklayer");
-        if (!client || client->createComponent(kDecoderName, listener, &remoteCodec) != C2_OK) return 1;
+        if (!client || client->createComponent(name, listener, &remoteCodec) != C2_OK) return 1;
     } else {
-        if (makeStore()->createComponent(kDecoderName, &codec) != C2_OK ||
+        if (makeStore()->createComponent(name, &codec) != C2_OK ||
             codec->setListener_vb(listener, C2_MAY_BLOCK) != C2_OK) return 1;
     }
     unsigned width = readLE(header + 12, 2), height = readLE(header + 14, 2);
@@ -94,7 +97,7 @@ inline int decodeProbe(const char *path, bool remote = false, bool hideFirst = f
         {
             C2WriteView write = block->map().get();
             if (write.error() || fread(write.data(), 1, bytes, file.get()) != bytes) return 1;
-            if (hideFirst && index == 0) write.data()[0] &= ~0x10;
+            if (hideFirst && index == 0) write.data()[0] &= ~(vp9 ? 0x02 : 0x10);
         }
         std::list<std::unique_ptr<C2Work>> queue;
         auto work = std::make_unique<C2Work>();

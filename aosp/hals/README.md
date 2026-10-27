@@ -8,7 +8,7 @@ side translates Android calls and types; everything that touches the desktop liv
 |---|---|---|---|
 | `graphics/allocator`, `graphics/mapper` | `android.hardware.graphics.allocator`, stable-C `IMapper` | `graphics/` over libgbm, dmabuf | host side done and tested (`bridge/hals/graphics`); Android side next (P7.1) |
 | `graphics/composer` | `android.hardware.graphics.composer3` | `graphics/` over Wayland `zwp_linux_dmabuf_v1`, real vsync | planned (P7.1) |
-| `media` | `android.hardware.media.c2` | `media/` over native GStreamer | host and initial Codec2/gralloc VP8 probe tested; app integration next |
+| `media` | `android.hardware.media.c2` | `media/` over native GStreamer | VP8/VP9 native, AIDL, app MediaCodec and SurfaceView tested; other codecs/audio next |
 | `camera` | `android.hardware.camera.provider` | PipeWire / V4L2 | planned |
 | `gnss` | `android.hardware.gnss` | GeoClue / gpsd | planned |
 | `vibrator` | `android.hardware.vibrator` | force feedback (evdev FF), logind haptics | planned |
@@ -26,8 +26,8 @@ service SurfaceFlinger calls, client composition only, no virtual displays by de
 
 
 ## Media decoder backend (in progress)
-`bridge/hals/media` reuses the existing GStreamer decoding engine as native C because the Python/RGBA-file protocol cannot retain decoded YUV samples or dmabuf ownership across Codec2 output lifetimes. Its plain C API provides bounded compressed input, real decoder discovery, timestamps/EOS and reference-counted output samples. Hardware samples expose borrowed dmabuf planes/modifiers; software samples can be mapped for the necessary copy into gralloc. VP8 software decode is verified; Codec2, dmabuf import and app playback are not complete.
+`bridge/hals/media` reuses the existing GStreamer decoding engine as native C because the Python/RGBA-file protocol cannot retain decoded YUV samples or dmabuf ownership across Codec2 output lifetimes. Its plain C API provides bounded compressed input, real decoder discovery, timestamps/EOS and reference-counted output samples. Hardware samples expose borrowed dmabuf planes/modifiers; software samples can be mapped for the necessary copy into gralloc. VP8/VP9 software decode, Codec2 AIDL transport and app MediaCodec buffer/Surface output are verified. Hardware decoder dmabuf import and wider media/audio remain incomplete.
 
-`media/codec2` reuses AOSP’s AIDL ComponentStore and SimpleC2Component/Interface plumbing. The new adapter is necessary because the supplied vendor store is empty and the software store directly loads Android decoders. Initial integration advertises only host VP8 and copies software I420 output into the mapper’s real flexible-YUV gralloc layout. Hardware buffer import and reordered codecs follow after this baseline; the interface and three-frame real gralloc probe pass tests/vm/codec2.sh; this frontend is not yet part of default startup.
+`media/codec2` reuses AOSP’s AIDL ComponentStore and SimpleC2Component/Interface plumbing. The new adapter is necessary because the supplied vendor store is empty and the software store directly loads Android decoders. Integration advertises available host VP8 and VP9 profile 0 and copies software I420 output into the mapper’s real flexible-YUV gralloc layout. Hidden references and one-visible-picture VP9 superframes are supported. Multiple displayed pictures per work are explicitly rejected pending cloneAndSend; hardware buffer import and reordered codecs follow; the interface and three-frame real gralloc probe pass tests/vm/codec2.sh; this frontend is not yet part of default startup.
 
 `media/services` starts the existing AOSP MediaPlayerService and ResourceManagerService using the same registration calls as main_mediaserver.cpp. MediaCodec needs those process boundaries for resource ownership and codec discovery. A new btload entrypoint is required because the tree ships mediaserver as an executable; playback/policy stay in the original service libraries.

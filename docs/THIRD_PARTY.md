@@ -36,3 +36,5 @@ apklayer itself is AGPL-3.0-or-later (PLAN D5), compatible with all of the above
 
 
 The tree-host build reuses unchanged `FrameListener.class` and `ScreenUpdateHandler.class` from the pinned MIT simulator-4.17.jar; the tree simulator predates that split. It stages only these classes alongside the host, with the older tree simulator providing sandbox construction.
+
+- `aosp/hals/media/codec2/VpxHeaders.h`: minimal VP9 uncompressed-header and superframe-index checks adapted from the local AOSP `external/libvpx/vp9/decoder/{vp9_decodeframe.c,vp9_decoder.c}`; libvpx, BSD-3-Clause (local `external/libvpx/LICENSE` and `PATENTS`). No decoder code vendored.

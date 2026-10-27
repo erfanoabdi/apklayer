@@ -11,16 +11,16 @@ static void le(FILE *out, uint64_t value, unsigned bytes)
     for (unsigned n = 0; n < bytes; n++) fputc(value >> (n * 8), out);
 }
 
-static void decode(unsigned width, unsigned height, const char *fixture)
+static void decode(unsigned width, unsigned height, const char *fixture, int vp9)
 {
-    struct apklayer_codec_config cfg = { .mime = "video/x-vnd.on2.vp8", .width = width, .height = height };
+    struct apklayer_codec_config cfg = { .mime = vp9 ? "video/x-vnd.on2.vp9" : "video/x-vnd.on2.vp8", .width = width, .height = height };
     struct apklayer_codec *codec = NULL;
     assert(apklayer_codec_open(&cfg, &codec) == 0);
     struct apklayer_codec_frame *empty = NULL;
     assert(apklayer_codec_pull(codec, 0, &empty) == -EAGAIN && !empty);
     char *desc = g_strdup_printf("videotestsrc num-buffers=3 pattern=red ! "
-        "video/x-raw,width=%u,height=%u,framerate=30/1 ! vp8enc deadline=1 ! "
-        "appsink name=encoded sync=false", width, height);
+        "video/x-raw,format=I420,width=%u,height=%u,framerate=30/1 ! %s deadline=1 ! "
+        "appsink name=encoded sync=false", width, height, vp9 ? "vp9enc" : "vp8enc");
     GError *error = NULL;
     GstElement *encoder = gst_parse_launch(desc, &error);
     g_free(desc);
@@ -31,7 +31,7 @@ static void decode(unsigned width, unsigned height, const char *fixture)
     assert(!fixture || ivf);
     if (ivf) {
         fwrite("DKIF", 1, 4, ivf); le(ivf, 0, 2); le(ivf, 32, 2);
-        fwrite("VP80", 1, 4, ivf); le(ivf, width, 2); le(ivf, height, 2);
+        fwrite(vp9 ? "VP90" : "VP80", 1, 4, ivf); le(ivf, width, 2); le(ivf, height, 2);
         le(ivf, 30, 4); le(ivf, 1, 4); le(ivf, 3, 4); le(ivf, 0, 4);
     }
     int64_t pts[3];
@@ -68,7 +68,7 @@ static void decode(unsigned width, unsigned height, const char *fixture)
         unsigned u = *(const unsigned char *)planes[1];
         unsigned v = *(const unsigned char *)planes[2];
         assert(y > 50 && y < 110 && u < 130 && v > 180);
-        printf("PASS VP8 %ux%u frame %u pts=%ld YUV=%u,%u,%u\n", width, height, n, (long)info.pts_ns, y, u, v);
+        printf("PASS VP%d %ux%u frame %u pts=%ld YUV=%u,%u,%u\n", vp9 ? 9 : 8, width, height, n, (long)info.pts_ns, y, u, v);
         if (!n) retained = frame; else apklayer_codec_frame_release(frame);
     }
     struct apklayer_codec_frame *none = NULL;
@@ -93,7 +93,9 @@ int main(int argc, char **argv)
     struct apklayer_codec *bad = NULL;
     struct apklayer_codec_config cfg = { .mime = "video/not-a-codec", .width = 64, .height = 48 };
     assert(apklayer_codec_open(&cfg, &bad) == -ENOTSUP && !bad);
-    decode(64, 48, argc == 2 ? argv[1] : NULL);
-    decode(80, 60, NULL);
+    decode(64, 48, argc >= 2 ? argv[1] : NULL, 0);
+    decode(80, 60, NULL, 0);
+    decode(64, 48, argc >= 3 ? argv[2] : NULL, 1);
+    decode(80, 60, NULL, 1);
     return 0;
 }

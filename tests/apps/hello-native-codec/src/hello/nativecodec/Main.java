@@ -31,21 +31,49 @@ public class Main extends Activity {
         if (!condition) throw new AssertionError(detail);
     }
     private void decode() {
+        try {
+            decodeStream("red-vp8.ivf");
+            decodeStream("red-vp9.ivf");
+            runOnUiThread(() -> {
+                Runnable show = () -> {
+                    result.getViewTreeObserver().registerFrameCommitCallback(
+                            () -> System.out.println("[hello-native-codec] FRAME PASS"));
+                    result.setText("PASS: Android MediaCodec decoded VP8 + VP9 frames\nYUV 81 / 90 / 240");
+                    result.invalidate();
+                };
+                if (result.isAttachedToWindow()) show.run();
+                else result.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+                    public void onViewAttachedToWindow(View view) {
+                        view.removeOnAttachStateChangeListener(this);
+                        view.post(show);
+                    }
+                    public void onViewDetachedFromWindow(View view) {}
+                });
+            });
+        } catch (Throwable error) {
+            System.out.println("[hello-native-codec] FAIL " + error);
+            error.printStackTrace();
+            runOnUiThread(() -> result.setText("FAIL: " + error));
+        }
+    }
+    private void decodeStream(String asset) throws Exception {
         MediaCodec codec = null;
-        try (InputStream input = getAssets().open("red-vp8.ivf")) {
+        try (InputStream input = getAssets().open(asset)) {
             System.out.println("[hello-native-codec] begin");
             byte[] header = input.readNBytes(32);
             require(header.length == 32, "IVF header");
             int width = (int)le(header, 12, 2), height = (int)le(header, 14, 2);
             long rate = le(header, 16, 4), scale = le(header, 20, 4);
             int count = (int)le(header, 24, 4);
-            codec = MediaCodec.createDecoderByType("video/x-vnd.on2.vp8");
-            require(codec.getName().equals("c2.apklayer.vp8.decoder"), "native codec discovery");
+            String kind = header[10] == '9' ? "vp9" : "vp8";
+            String mime = "video/x-vnd.on2." + kind;
+            codec = MediaCodec.createDecoderByType(mime);
+            require(codec.getName().equals("c2.apklayer." + kind + ".decoder"), "native codec discovery");
             System.out.println("[hello-native-codec] softwareOnly=" + codec.getCodecInfo().isSoftwareOnly()
                     + " hardwareAccelerated=" + codec.getCodecInfo().isHardwareAccelerated());
             require(!codec.getCodecInfo().isHardwareAccelerated(), "decoder must not claim hardware acceleration");
             System.out.println("[hello-native-codec] codec=" + codec.getName());
-            MediaFormat format = MediaFormat.createVideoFormat("video/x-vnd.on2.vp8", width, height);
+            MediaFormat format = MediaFormat.createVideoFormat(mime, width, height);
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible);
             codec.configure(format, null, null, 0);
             codec.start();
@@ -99,26 +127,6 @@ public class Main extends Activity {
             codec.release();
             codec = null;
             System.out.println("[hello-native-codec] PASS native MediaCodec decoded " + count + " YUV frames with PTS/EOS");
-            runOnUiThread(() -> {
-                Runnable show = () -> {
-                    result.getViewTreeObserver().registerFrameCommitCallback(
-                            () -> System.out.println("[hello-native-codec] FRAME PASS"));
-                    result.setText("PASS: Android MediaCodec decoded 3 VP8 frames\nYUV 81 / 90 / 240");
-                    result.invalidate();
-                };
-                if (result.isAttachedToWindow()) show.run();
-                else result.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
-                    public void onViewAttachedToWindow(View view) {
-                        view.removeOnAttachStateChangeListener(this);
-                        view.post(show);
-                    }
-                    public void onViewDetachedFromWindow(View view) {}
-                });
-            });
-        } catch (Throwable error) {
-            System.out.println("[hello-native-codec] FAIL " + error);
-            error.printStackTrace();
-            runOnUiThread(() -> result.setText("FAIL: " + error));
         } finally {
             if (codec != null) codec.release();
         }

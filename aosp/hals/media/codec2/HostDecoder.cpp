@@ -2,6 +2,7 @@
  * apklayer patch: compressed access units go to the host decoder; software YUV
  * output is copied into actual C2 gralloc blocks with the mapper's layout. */
 #include "HostDecoder.h"
+#include "VpxHeaders.h"
 #include <apklayer/codec.h>
 #include <C2PlatformSupport.h>
 #include <SimpleC2Component.h>
@@ -15,25 +16,38 @@ namespace apklayer {
 using namespace android;
 class DecoderParams : public SimpleInterface<void>::BaseParams {
 public:
-    explicit DecoderParams(const std::shared_ptr<C2ReflectorHelper>& helper)
-        : BaseParams(helper, kDecoderName, C2Component::KIND_DECODER,
-                     C2Component::DOMAIN_VIDEO, kDecoderMime) {
+    DecoderParams(const std::shared_ptr<C2ReflectorHelper>& helper, const DecoderInfo& info)
+        : BaseParams(helper, info.name, C2Component::KIND_DECODER,
+                     C2Component::DOMAIN_VIDEO, info.mime), mInfo(info) {
         noPrivateBuffers(); noInputReferences(); noOutputReferences();
         noInputLatency(); noTimeStretch(); setDerivedInstance(this);
         addParameter(DefineParam(mSize, C2_PARAMKEY_PICTURE_SIZE)
             .withDefault(new C2StreamPictureSizeInfo::output(0u, 320, 240))
             .withFields({C2F(mSize, width).inRange(2, 4096), C2F(mSize, height).inRange(2, 4096)})
             .withSetter(SizeSetter).build());
-        addParameter(DefineParam(mProfile, C2_PARAMKEY_PROFILE_LEVEL)
-            .withDefault(new C2StreamProfileLevelInfo::input(0u, C2Config::PROFILE_VP8_0, C2Config::LEVEL_UNUSED))
-            .withFields({C2F(mProfile, profile).equalTo(C2Config::PROFILE_VP8_0),
-                         C2F(mProfile, level).equalTo(C2Config::LEVEL_UNUSED)})
-            .withSetter(ProfileSetter).build());
+        if (info.vp9) {
+            // AOSP C2SoftVpxDec profile/level vocabulary; 8-bit 4:2:0 only.
+            addParameter(DefineParam(mProfile, C2_PARAMKEY_PROFILE_LEVEL)
+                .withDefault(new C2StreamProfileLevelInfo::input(0u, C2Config::PROFILE_VP9_0, C2Config::LEVEL_VP9_5))
+                .withFields({C2F(mProfile, profile).equalTo(C2Config::PROFILE_VP9_0),
+                    C2F(mProfile, level).oneOf({C2Config::LEVEL_VP9_1, C2Config::LEVEL_VP9_1_1,
+                        C2Config::LEVEL_VP9_2, C2Config::LEVEL_VP9_2_1, C2Config::LEVEL_VP9_3,
+                        C2Config::LEVEL_VP9_3_1, C2Config::LEVEL_VP9_4, C2Config::LEVEL_VP9_4_1,
+                        C2Config::LEVEL_VP9_5})})
+                .withSetter(ProfileSetter).build());
+        } else {
+            addParameter(DefineParam(mProfile, C2_PARAMKEY_PROFILE_LEVEL)
+                .withDefault(new C2StreamProfileLevelInfo::input(0u, C2Config::PROFILE_VP8_0, C2Config::LEVEL_UNUSED))
+                .withFields({C2F(mProfile, profile).equalTo(C2Config::PROFILE_VP8_0),
+                             C2F(mProfile, level).equalTo(C2Config::LEVEL_UNUSED)})
+                .withSetter(ProfileSetter).build());
+        }
         addParameter(DefineParam(mMaxInput, C2_PARAMKEY_INPUT_MAX_BUFFER_SIZE)
             .withConstValue(new C2StreamMaxBufferSizeInfo::input(0u, 8 * 1024 * 1024)).build());
         addParameter(DefineParam(mPixelFormat, C2_PARAMKEY_PIXEL_FORMAT)
             .withConstValue(new C2StreamPixelFormatInfo::output(0u, HAL_PIXEL_FORMAT_YCBCR_420_888)).build());
     }
+    const DecoderInfo& info() const { return mInfo; }
     uint32_t width() const { return mSize->width; }
     uint32_t height() const { return mSize->height; }
 private:
@@ -45,6 +59,7 @@ private:
         C2R result = me.F(me.v.profile).validatePossible(me.v.profile);
         return result.plus(me.F(me.v.level).validatePossible(me.v.level));
     }
+    const DecoderInfo& mInfo;
     std::shared_ptr<C2StreamPictureSizeInfo::output> mSize;
     std::shared_ptr<C2StreamProfileLevelInfo::input> mProfile;
     std::shared_ptr<C2StreamMaxBufferSizeInfo::input> mMaxInput;
@@ -54,7 +69,7 @@ private:
 class HostDecoder : public SimpleC2Component {
 public:
     HostDecoder(c2_node_id_t id, std::shared_ptr<DecoderParams> params)
-        : SimpleC2Component(std::make_shared<SimpleInterface<DecoderParams>>(kDecoderName, id, params)),
+        : SimpleC2Component(std::make_shared<SimpleInterface<DecoderParams>>(params->info().name, id, params)),
           mParams(std::move(params)) {}
     ~HostDecoder() override { onRelease(); }
 private:
@@ -81,7 +96,7 @@ private:
         if (mEos) { work->result = C2_BAD_STATE; return; }
         if (work->input.flags & C2FrameData::FLAG_CODEC_CONFIG) return;
         if (!mCodec) {
-            apklayer_codec_config config = {kDecoderMime, mParams->width(), mParams->height(), nullptr, 0};
+            apklayer_codec_config config = {mParams->info().mime, mParams->width(), mParams->height(), nullptr, 0};
             if (apklayer_codec_open(&config, &mCodec)) { work->result = C2_CANNOT_DO; return; }
         }
         bool hasInput = !work->input.buffers.empty();
@@ -91,9 +106,17 @@ private:
             if (blocks.empty()) { work->result = C2_BAD_VALUE; return; }
             C2ReadView view = blocks.front().map().get();
             if (view.error()) { fprintf(stderr, "codec2: input map %d\n", view.error()); work->result = view.error(); return; }
-            if (view.capacity() < 3) { work->result = C2_BAD_VALUE; return; }
-            // VP8 frame-tag show_frame bit: invisible reference frames produce no output.
-            visible = (view.data()[0] & 0x10) != 0;
+            if (view.capacity() < (mParams->info().vp9 ? 1u : 3u)) { work->result = C2_BAD_VALUE; return; }
+            // apklayer patch: libvpx uncompressed headers (vp8 frame tag;
+            // vp9 read_uncompressed_header profile 0). Hidden references produce no output.
+            if (mParams->info().vp9) {
+                int shown = vp9VisibleFrames(view.data(), view.capacity());
+                if (shown < 0) { work->result = C2_BAD_VALUE; return; }
+                // Multiple displayed pictures in one work require cloneAndSend;
+                // report that unsupported case explicitly instead of dropping output.
+                if (shown > 1) { work->result = C2_CANNOT_DO; return; }
+                visible = shown != 0;
+            } else visible = (view.data()[0] & 0x10) != 0;
             int64_t timestamp = work->input.ordinal.timestamp.peekll();
             if (timestamp < 0 || timestamp > INT64_MAX / 1000) { work->result = C2_BAD_VALUE; return; }
             if (apklayer_codec_queue(mCodec, view.data(), view.capacity(), timestamp * 1000)) {
@@ -150,10 +173,10 @@ private:
         output.buffers.push_back(createGraphicBuffer(block, C2Rect(info.width, info.height)));
     }
 };
-std::shared_ptr<C2Component> makeDecoder(c2_node_id_t id, const std::shared_ptr<C2ReflectorHelper>& helper) {
-    return std::make_shared<HostDecoder>(id, std::make_shared<DecoderParams>(helper));
+std::shared_ptr<C2Component> makeDecoder(c2_node_id_t id, const std::shared_ptr<C2ReflectorHelper>& helper, const DecoderInfo& info) {
+    return std::make_shared<HostDecoder>(id, std::make_shared<DecoderParams>(helper, info));
 }
-std::shared_ptr<C2ComponentInterface> makeDecoderInterface(c2_node_id_t id, const std::shared_ptr<C2ReflectorHelper>& helper) {
-    return std::make_shared<SimpleInterface<DecoderParams>>(kDecoderName, id, std::make_shared<DecoderParams>(helper));
+std::shared_ptr<C2ComponentInterface> makeDecoderInterface(c2_node_id_t id, const std::shared_ptr<C2ReflectorHelper>& helper, const DecoderInfo& info) {
+    return std::make_shared<SimpleInterface<DecoderParams>>(info.name, id, std::make_shared<DecoderParams>(helper, info));
 }
 }

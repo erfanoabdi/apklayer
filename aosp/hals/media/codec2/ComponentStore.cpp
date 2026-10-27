@@ -12,21 +12,27 @@ public:
     C2String getName() const override { return "apklayer"; }
     c2_status_t createComponent(C2String name, std::shared_ptr<C2Component>* const out) override {
         out->reset();
-        if (name != kDecoderName || !apklayer_codec_supports(kDecoderMime)) return C2_NOT_FOUND;
-        *out = makeDecoder(mNext++, mHelper); return C2_OK;
+        const auto *info = findDecoder(name);
+        if (!info || !apklayer_codec_supports(info->mime)) return C2_NOT_FOUND;
+        *out = makeDecoder(mNext++, mHelper, *info); return C2_OK;
     }
     c2_status_t createInterface(C2String name, std::shared_ptr<C2ComponentInterface>* const out) override {
         out->reset();
-        if (name != kDecoderName || !apklayer_codec_supports(kDecoderMime)) return C2_NOT_FOUND;
-        *out = makeDecoderInterface(mNext++, mHelper); return C2_OK;
+        const auto *info = findDecoder(name);
+        if (!info || !apklayer_codec_supports(info->mime)) return C2_NOT_FOUND;
+        *out = makeDecoderInterface(mNext++, mHelper, *info); return C2_OK;
     }
     std::vector<std::shared_ptr<const C2Component::Traits>> listComponents() override {
-        if (!apklayer_codec_supports(kDecoderMime)) return {};
-        auto traits = std::make_shared<C2Component::Traits>();
-        traits->name = kDecoderName; traits->mediaType = kDecoderMime;
-        traits->domain = C2Component::DOMAIN_VIDEO; traits->kind = C2Component::KIND_DECODER;
-        traits->rank = 128; traits->owner = getName();
-        return {traits};
+        std::vector<std::shared_ptr<const C2Component::Traits>> result;
+        for (const auto& info : kDecoders) {
+            if (!apklayer_codec_supports(info.mime)) continue;
+            auto traits = std::make_shared<C2Component::Traits>();
+            traits->name = info.name; traits->mediaType = info.mime;
+            traits->domain = C2Component::DOMAIN_VIDEO; traits->kind = C2Component::KIND_DECODER;
+            traits->rank = 128; traits->owner = getName();
+            result.push_back(traits);
+        }
+        return result;
     }
     c2_status_t copyBuffer(std::shared_ptr<C2GraphicBuffer>, std::shared_ptr<C2GraphicBuffer>) override { return C2_OMITTED; }
     c2_status_t query_sm(const std::vector<C2Param*>& stack, const std::vector<C2Param::Index>& heap,

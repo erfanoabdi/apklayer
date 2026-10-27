@@ -77,7 +77,7 @@ try:
     assert '[hello-native-surface] DECODE PASS' in text
     assert '[hello-native-surface] created valid=true' in text
     for pts in (0, 33333, 66666):
-        assert f'[hello-native-surface] rendered pts={pts}' in text, f'missing render callback {pts}'
+        assert f'[hello-native-surface] rendered pts={pts} codec=vp9' in text, f'missing render callback {pts}'
     assert 'SurfaceView[hello.nativesurface' in Path('/tmp/apklayer-native-surface-layers.txt').read_text()
     assert committed and captured
     assert 'finished hello.nativesurface.Main depth=0' in text and 'depth=0' in text
