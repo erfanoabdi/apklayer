@@ -26,6 +26,7 @@ ssize_t __pwrite_chk(int fd, const void *buf, size_t n, off_t off, size_t buflen
 ssize_t __sendto_chk(int fd, const void *buf, size_t n, size_t buflen, int flags, const struct sockaddr *a, socklen_t l)
 { (void)buflen; return sendto(fd, buf, n, flags, a, l); }
 void __cfi_slowpath(uint64_t type, void *ptr, void *diag) { (void)type; (void)ptr; (void)diag; } /* no CFI enforcement */
+void __cfi_slowpath_diag(uint64_t type, void *ptr, void *diag) { __cfi_slowpath(type, ptr, diag); }
 
 /* resolv's base64 encoder */
 int __b64_ntop(const unsigned char *src, size_t len, char *dst, size_t size)

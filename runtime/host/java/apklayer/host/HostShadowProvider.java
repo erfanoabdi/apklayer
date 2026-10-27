@@ -1,6 +1,7 @@
 package apklayer.host;
 
 import java.util.Collection;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Priority;
@@ -18,7 +19,7 @@ public final class HostShadowProvider implements ShadowProvider {
     @Override public String[] getProvidedPackageNames() { return new String[0]; }
 
     @Override public Collection<Map.Entry<String, String>> getShadows() {
-        return List.of(Map.entry("android.webkit.WebView", ShadowHostWebView.class.getName()),
+        var entries = new ArrayList<>(List.of(Map.entry("android.webkit.WebView", ShadowHostWebView.class.getName()),
                 Map.entry("android.media.MediaPlayer", ShadowHostMediaPlayer.class.getName()),
                 Map.entry("android.media.SoundPool", ShadowHostSoundPool.class.getName()),
                 Map.entry("android.app.ApplicationPackageManager", ShadowHostPackageManager.class.getName()),
@@ -27,7 +28,13 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.media.MediaCodec", ShadowHostMediaCodec.class.getName()),
                 Map.entry("android.view.SurfaceView", ShadowHostSurfaceView.class.getName()),
                 Map.entry("android.app.ContextImpl", ShadowHostContextImpl.class.getName()),
-                Map.entry("android.media.AudioTrack", ShadowHostAudioTrack.class.getName()));
+                Map.entry("android.media.AudioTrack", ShadowHostAudioTrack.class.getName())));
+        if (Boolean.getBoolean("apklayer.nativemedia")) {
+            entries.removeIf(entry -> entry.getKey().equals("android.media.MediaCodec"));
+            entries.add(Map.entry("android.media.MediaCodec", ShadowHostNativeMediaCodec.class.getName()));
+            entries.add(Map.entry("android.media.MediaCodecList", ShadowHostNativeMediaCodecList.class.getName()));
+        }
+        return entries;
     }
 
     /** Classes that Robolectric picks the shadow for by a ShadowPicker: ours must be listed here to take part. */

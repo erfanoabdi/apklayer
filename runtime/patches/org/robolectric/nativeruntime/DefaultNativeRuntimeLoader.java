@@ -477,6 +477,14 @@ public class DefaultNativeRuntimeLoader implements NativeRuntimeLoader {
       ReflectionHelpers.callStaticMethod(
           Shadow.class.getClassLoader(), className, "__staticInitializer__");
     }
+    // apklayer patch: media classes also call their own natives during class init.
+    // Finish them before Application.onCreate can query codec capabilities.
+    if (Boolean.getBoolean("apklayer.nativemedia")) {
+      for (String className : new String[] {"android.media.MediaCodec", "android.media.MediaCodecList"}) {
+        ReflectionHelpers.callStaticMethod(
+            Shadow.class.getClassLoader(), className, "__staticInitializer__");
+      }
+    }
   }
 
   private static boolean isAndroidVOrGreater() {

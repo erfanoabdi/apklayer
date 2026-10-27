@@ -16,3 +16,5 @@ ro.hyphen.data.dir=/system/usr/hyphen-data
 # Use Android's existing gralloc-backed BLOB input and BufferQueue output pools.
 debug.stagefright.c2-poolmask=786432
 media.c2.hal.selection=aidl
+# Android shared-memory queues use the host kernel memfd backend.
+sys.use_memfd=true

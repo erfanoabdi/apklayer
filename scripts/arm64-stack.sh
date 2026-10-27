@@ -47,6 +47,7 @@ svc allocator libapklayer_allocator.so
 svc composer libapklayer_composer.so
 # Media integration remains opt-in while app/JNI playback is being completed.
 if [ "${APKLAYER_CODEC2:-0}" = 1 ]; then svc codec2 libapklayer_codec2.so; fi
+if [ "${APKLAYER_MEDIA_SERVICES:-0}" = 1 ]; then svc media libapklayer_mediaserver.so; fi
 svc surfaceflinger libapklayer_surfaceflinger.so
 tool="${1:-libapklayer_sftest.so}"; [ $# -gt 0 ] && shift
 if [ "$tool" != none ] && [ -f "$L/libapklayer_vdisplay.so" ]; then

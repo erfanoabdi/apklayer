@@ -194,8 +194,12 @@ static void *find_register_function(void *rt, void *hwui, const char *name)
 static int register_classes(JNIEnv *env, JavaVM *vm, void *rt)
 {
     int failed = 0;
-    void **java_vm_slot = bionic_dlsym(rt, "_ZN7android14AndroidRuntime8mJavaVME"); /* AndroidRuntime::mJavaVM */
-    if (java_vm_slot) *java_vm_slot = vm;
+    void **java_vm_slot = bionic_dlsym(rt, "_ZN7android14AndroidRuntime7mJavaVME"); /* AndroidRuntime::mJavaVM */
+    if (!java_vm_slot) {
+        fprintf(stderr, "[runtime] AndroidRuntime::mJavaVM is unavailable\n");
+        return -1;
+    }
+    *java_vm_slot = vm;
     void *hwui = bionic_dlopen("libhwui.so", 2);
 
     char *classes = system_property(env, "core_native_classes");
@@ -330,8 +334,16 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     }
     (*ti)->SetJNIFunctionTable(ti, &patched);
     int failed = register_classes(env, vm, rt);
+    char *media = system_property(env, "apklayer.nativemedia");
+    int media_failed = 0;
+    if (media && (!strcmp(media, "true") || !strcmp(media, "1"))) {
+        extern int apklayer_register_media(JNIEnv *, JavaVM *);
+        media_failed = apklayer_register_media(env, vm);
+    }
+    free(media);
 
     (*ti)->SetJNIFunctionTable(ti, orig);
+    if (media_failed) return -1;
     if (failed) fprintf(stderr, "[runtime] %d registrations did not run (see above)\n", failed);
     fprintf(stderr, "[runtime] Android's framework natives registered (%d critical natives adapted%s)\n", critical_count, critical_of ? "" : "; CriticalNatives unavailable");
     return JNI_VERSION_1_6;

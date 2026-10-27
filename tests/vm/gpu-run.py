@@ -6,9 +6,11 @@ import time
 from pathlib import Path
 import re
 import selectors
+import select
 import signal
 import subprocess
 import sys
+import uuid
 
 ROOT = Path.home() / 'apklayer-m1'
 os.chdir(ROOT)
@@ -18,7 +20,7 @@ ENV = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000',
 LOG = Path('/tmp/gpu-test.out')
 steps = ['1000:hover:0,0', '3000:hover:1,1', '5000:hover:0,0', '6000:hover:2,2',
          '8000:hover:0,0', '9000:hover:3,3', '12000:hover:0,0', '14000:hover:4,4',
-         '16000:clipcopy:gpu-resize-alive', '18000:hover:0,0']
+         '16000:clipcopy:' + uuid.uuid4().hex[:16], '18000:hover:0,0']
 ENV['APKLAYER_JOPTS'] = ('-Dapklayer.runms=19000 -Dapklayer.tracewindows=true -Dapklayer.debugkeys=true -Dapklayer.runtimetrace=true '
                           '-Dapklayer.script=' + '+'.join(steps))
 
@@ -37,6 +39,12 @@ def input_steps(*steps):
     print('INPUT ' + ' '.join(steps), flush=True)
     run(['sudo', '-S', '/tmp/uinput-keys', *steps], input=b'1234\n',
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def capture(label):
+    print('CAPTURE ' + label, flush=True)
+    assert select.select([sys.stdin], [], [], 3)[0], 'capture acknowledgement stalled'
+    assert sys.stdin.readline().strip() == 'captured', 'capture failed'
 
 
 def dump(name):
@@ -107,14 +115,14 @@ try:
                         raise RuntimeError('real clicks did not open Dialog List')
                     if 'VRI-' + PKG not in before:
                         raise RuntimeError('no app layer in SurfaceFlinger')
-                    print('CAPTURE dialog before resize', flush=True)
+                    capture('dialog before resize')
                     input_steps('abs:260,300', 'click', 'combo:alt+66', 'abs:650,650', 'key:28')
                     resized = True
                 elif 'script: hover:4,4' in line:
                     after = dump('after-resize')
                     if 'VRI-' + PKG not in after:
                         raise RuntimeError('app layer disappeared after resize')
-                    print('CAPTURE dialog after resize', flush=True)
+                    capture('dialog after resize')
                     input_steps('abs:260,300', 'click', 'key:1')  # real Esc/Back must dismiss the dialog
                 elif 'script: hover:0,0' in line and 'clipboard to the system (16 chars)' in '\n'.join(seen):
                     final_layers = dump('after-back')

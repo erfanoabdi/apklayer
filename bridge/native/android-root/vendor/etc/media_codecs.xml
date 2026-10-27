@@ -1,0 +1,9 @@
+<MediaCodecs>
+    <Decoders>
+        <MediaCodec name="c2.apklayer.vp8.decoder" type="video/x-vnd.on2.vp8" rank="128">
+            <Attribute name="software-codec" />
+            <Limit name="size" min="2x2" max="4096x4096" />
+            <Limit name="alignment" value="2x2" />
+        </MediaCodec>
+    </Decoders>
+</MediaCodecs>

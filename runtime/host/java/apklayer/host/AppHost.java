@@ -5,34 +5,20 @@ import static java.lang.Math.min;
 
 import android.app.Activity;
 import android.app.Application;
-import android.app.UiAutomation;
 import android.content.Intent;
-import android.content.SharedPreferences;
-import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ActivityInfo;
-import android.content.pm.ResolveInfo;
 import android.content.res.TypedArray;
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.drawable.Drawable;
 import android.hardware.display.DisplayManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.view.Choreographer;
 import android.view.Display;
-import android.view.InputEvent;
-import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import androidx.test.platform.app.InstrumentationRegistry;
-import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.io.Writer;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayDeque;
@@ -40,31 +26,18 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
-import javax.imageio.ImageIO;
 import org.robolectric.Robolectric;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.android.controller.ActivityController;
-import org.robolectric.annotation.Config;
-import org.robolectric.annotation.ConscryptMode;
-import org.robolectric.annotation.GraphicsMode;
-import org.robolectric.annotation.LooperMode;
-import org.robolectric.annotation.SQLiteMode;
-import org.robolectric.annotation.experimental.LazyApplication;
 import org.robolectric.internal.AndroidSandbox;
-import org.robolectric.manifest.AndroidManifest;
 import org.robolectric.shadow.api.Shadow;
 import org.robolectric.shadows.ShadowActivity;
 import org.robolectric.shadows.ShadowApplication;
 import org.robolectric.shadows.ShadowChoreographer;
-import org.robolectric.shadows.ShadowLog;
-import org.robolectric.shadows.ShadowMediaPlayer;
 import org.robolectric.shadows.ShadowPausedLooper;
 import org.robolectric.shadows.ShadowSystemClock;
-import org.robolectric.shadows.ShadowView;
-import org.robolectric.simulator.FixedConfiguration;
 import org.robolectric.simulator.ScreenUpdateHandler;
 
 /**
@@ -111,40 +84,13 @@ public final class AppHost implements Runnable {
     @Override
     public void run() {
         Thread.currentThread().setContextClassLoader(sandbox.getRobolectricClassLoader());
-        setUpApplication();
+        AppEnvironment.setUpApplication(sandbox, apk, describe != null);
         Application app = RuntimeEnvironment.getApplication(); // created here (lazy), on persistent dirs
         if (describe != null) {
-            describe(app, describe);
+            AppMetadata.describe(app, describe);
             return;
         }
-        if (Boolean.getBoolean("apklayer.debugdata")) {
-            SharedPreferences prefs = app.getSharedPreferences("apklayer_probe", 0);
-            int launches = prefs.getInt("launches", 0) + 1;
-            prefs.edit().putInt("launches", launches).commit();
-            System.out.println("[apklayer] data: " + app.getDataDir() + " launches=" + launches);
-        }
-
-        // Simulator.start(): real draws and animations, a paused Choreographer driven by the loop.
-        ShadowView.setUseRealViewAnimations(true);
-        ShadowView.setUseRealDrawTraversals(true);
-        ShadowChoreographer.setPaused(true);
-        ShadowChoreographer.setFrameDelay(Duration.ofMillis(15));
-        ShadowLog.setCaptureLogsEnabled(false);
-        if (Boolean.getBoolean("apklayer.logcat")) ShadowLog.stream = System.out; // debug: the app's android.util.Log lines
-        // Apps that fire a startup sound (beep, shutter, notification) must not die in
-        // Robolectric's media shadow: an unregistered data source throws from prepare().
-        // Robolectric maps any unmatched String/Uri/FD source to the "unknown" string
-        // source, so registering a do-nothing MediaInfo for it makes prepare() succeed
-        // silently until the real media backend lands (PLAN P5).
-        // A catch-all provider answers any data source with a zero-duration, event-free
-        // MediaInfo — like a codec that accepts the file but decodes nothing.
-        ShadowMediaPlayer.setMediaInfoProvider(ShadowHostMediaPlayer::mediaInfo);
-        HostAudio.install();
-        try {
-            HostCodecs.install();
-        } catch (Exception e) { // Robolectric's MediaCodecInfoBuilder sets fields a newer framework may not have
-            System.err.println("[apklayer] MediaCodec decoders not registered on this framework: " + e.getMessage());
-        }
+        AppEnvironment.startRuntime(app);
 
         Display display = app.getSystemService(DisplayManager.class).getDisplay(Display.DEFAULT_DISPLAY);
         int width = display.getWidth(), height = display.getHeight();
@@ -201,7 +147,7 @@ public final class AppHost implements Runnable {
             System.out.println("[apklayer] no apklayer-shell: headless");
         } else {
             try {
-                shell.createWindow(width, height, label(app));
+                shell.createWindow(width, height, AppMetadata.label(app));
             } catch (java.io.IOException e) {
                 throw new RuntimeException(e);
             }
@@ -235,180 +181,15 @@ public final class AppHost implements Runnable {
         if (!Boolean.getBoolean("apklayer.gpu")) ScreenUpdateHandler.create(frames).requestStartUi();
 
         if (java.security.Security.getProvider("AndroidKeyStore") == null) java.security.Security.addProvider(new HostKeyStoreProvider());
-        installSystemPackage(app);
-        installNetwork(app);
-        installProviders(app);
+        AppEnvironment.installSystemPackage(app);
+        AppEnvironment.installNetwork(app);
+        AppEnvironment.installProviders(app);
         Intent incoming = HostApps.incoming(); // another app started this one with an intent (PLAN P6)
-        launch(incoming != null ? incoming : launcherIntent(app));
+        launch(incoming != null ? incoming : AppMetadata.launcherIntent(app));
         if (incoming != null) incomingActivity = stack.peek().get();
         // Like Simulator.postMotionEvent: an off-screen move so the first frame is drawn.
         input.inject(MotionEvent.obtain(0, SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE, width, height, 0));
         loop(shell, frames);
-    }
-
-    /** Robolectric simulator AppLoader: application state straight from the APK. */
-    private void setUpApplication() {
-        AndroidManifest manifest = new AndroidManifest(null, null, null, null, "", apk);
-        Config config = new Config.Builder()
-                .setSdk(Integer.getInteger("apklayer.sdk", 36))
-                .setQualifiers(System.getProperty("apklayer.qualifiers", "w480dp-h800dp"))
-                .build();
-        FixedConfiguration configuration = FixedConfiguration.newBuilder()
-                .put(ConscryptMode.Mode.class, ConscryptMode.Mode.OFF)
-                .put(LooperMode.Mode.class, LooperMode.Mode.PAUSED)
-                // Lazy: the package and its storage are set up first, so the data dirs can be
-                // made persistent before Application.onCreate runs (persistDataDirs).
-                .put(LazyApplication.LazyLoad.class, LazyApplication.LazyLoad.ON)
-                .put(GraphicsMode.Mode.class, GraphicsMode.Mode.NATIVE)
-                .put(SQLiteMode.Mode.class, SQLiteMode.Mode.NATIVE)
-                .put(Config.class, config)
-                .build();
-        sandbox.getTestEnvironment().setUpApplicationState("apklayer", configuration, manifest);
-        persistDataDirs();
-        provideExternalStorage();
-    }
-
-    /**
-     * PLAN D20: Robolectric creates the app's data dirs ({@code <package>-dataDir}, {@code
-     * userDataDir}, {@code deviceDataDir}) in its per-run temp directory when the (lazy)
-     * Application is created, and deletes them at exit. They are pre-created here as links into
-     * the persistent per-app tree ({@code apklayer.data}); TempDirectory.createIfNotExists keeps
-     * an existing entry, and the exit cleanup does not follow links.
-     */
-    /**
-     * Android always has a primary external volume; the sandbox's current-user environment has none
-     * (apps index getExternalDirs()[0], e.g. Environment.isExternalStorageManager()).
-     */
-    private static void provideExternalStorage() {
-        android.os.Environment.UserEnvironment userEnv = new android.os.Environment.UserEnvironment(0) {
-            @Override
-            public java.io.File[] getExternalDirs() {
-                return new java.io.File[] {android.os.Environment.getExternalStorageDirectory()};
-            }
-        };
-        org.robolectric.util.ReflectionHelpers.setStaticField(android.os.Environment.class, "sCurrentUser", userEnv);
-    }
-
-    private static void persistDataDirs() {
-        String root = System.getProperty("apklayer.data");
-        String pkg = System.getProperty("apklayer.package");
-        if (root == null || pkg == null) return; // ephemeral (headless checks)
-        Path temp = RuntimeEnvironment.getTempDirectory().getBasePath();
-        String[][] links = {{pkg + "-dataDir", "app"}, {"userDataDir", "user"}, {"deviceDataDir", "device"}};
-        try {
-            for (String[] link : links) {
-                Path dir = temp.resolve(link[0]);
-                if (Files.exists(dir, LinkOption.NOFOLLOW_LINKS)) continue;
-                Files.createSymbolicLink(dir, Files.createDirectories(Path.of(root, link[1])));
-            }
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    private static ResolveInfo launcher(Application app) {
-        Intent query = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(app.getPackageName());
-        List<ResolveInfo> found = app.getPackageManager().queryIntentActivities(query, 0);
-        if (found.isEmpty()) throw new IllegalStateException("no launcher activity in " + app.getPackageName());
-        return found.get(0);
-    }
-
-    /** The desktop's connection: an unmetered Wi-Fi network (Robolectric defaults to a mobile one). */
-    private static void installNetwork(Application app) {
-        org.robolectric.shadows.ShadowConnectivityManager cm = Shadow.extract(app.getSystemService(android.net.ConnectivityManager.class));
-        cm.setActiveNetworkInfo(org.robolectric.shadows.ShadowNetworkInfo.newInstance(android.net.NetworkInfo.DetailedState.CONNECTED,
-                android.net.ConnectivityManager.TYPE_WIFI, 0, true, android.net.NetworkInfo.State.CONNECTED));
-    }
-
-    /** Every Android device has the package "android" (the framework); androidx.media and others look it up. */
-    private static void installSystemPackage(Application app) {
-        android.content.pm.PackageInfo info = new android.content.pm.PackageInfo();
-        info.packageName = "android";
-        android.content.pm.Signature[] platformCert = {new android.content.pm.Signature("3082")}; // some certificate
-        info.signatures = platformCert;
-        info.signingInfo = new android.content.pm.SigningInfo(new android.content.pm.SigningDetails(platformCert, 2, new android.util.ArraySet<>(), null));
-        info.applicationInfo = new android.content.pm.ApplicationInfo();
-        info.applicationInfo.packageName = "android";
-        info.applicationInfo.flags = android.content.pm.ApplicationInfo.FLAG_SYSTEM;
-        org.robolectric.shadows.ShadowPackageManager pm = Shadow.extract(app.getPackageManager());
-        pm.installPackage(info);
-        // the app's own package is "signed" too (apps compare their own and callers' signing certificates)
-        android.content.pm.PackageInfo own = pm.getInternalMutablePackageInfo(app.getPackageName());
-        if (own != null && own.signingInfo == null) {
-            own.signatures = platformCert;
-            own.signingInfo = info.signingInfo;
-        }
-    }
-
-    /**
-     * Android creates every ContentProvider the manifest declares (highest initOrder first) before the first
-     * activity; libraries like androidx.startup (WorkManager, emoji2, ProcessLifecycleOwner) initialise through them.
-     */
-    private static void installProviders(Application app) {
-        try {
-            android.content.pm.ProviderInfo[] providers = app.getPackageManager()
-                    .getPackageInfo(app.getPackageName(), android.content.pm.PackageManager.GET_PROVIDERS).providers;
-            if (providers == null) return;
-            java.util.Arrays.sort(providers, java.util.Comparator.comparingInt((android.content.pm.ProviderInfo p) -> p.initOrder).reversed());
-            for (android.content.pm.ProviderInfo info : providers) {
-                try {
-                    Robolectric.buildContentProvider(Class.forName(info.name).asSubclass(android.content.ContentProvider.class)).create(info);
-                } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-                    System.out.println("[apklayer] provider " + info.name + " not started: " + e);
-                }
-            }
-        } catch (android.content.pm.PackageManager.NameNotFoundException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    private static Intent launcherIntent(Application app) {
-        return new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-                .setClassName(app.getPackageName(), launcher(app).activityInfo.name);
-    }
-
-    /** What a launcher shows: the launcher activity's label (falls back to the app's). */
-    private static String label(Application app) {
-        return String.valueOf(launcher(app).loadLabel(app.getPackageManager()));
-    }
-
-    /**
-     * Install-time metadata (PLAN D19): info.properties plus the launcher icon rendered by the
-     * framework's own drawable code (adaptive icons included) as a 256 px PNG.
-     */
-    private static void describe(Application app, Path dir) {
-        try {
-            PackageManager pm = app.getPackageManager();
-            ResolveInfo launcher = launcher(app);
-            PackageInfo pkg = pm.getPackageInfo(app.getPackageName(), 0);
-            Properties info = new Properties();
-            info.setProperty("package", app.getPackageName());
-            info.setProperty("label", label(app));
-            info.setProperty("launcher", launcher.activityInfo.name);
-            info.setProperty("versionName", String.valueOf(pkg.versionName));
-            info.setProperty("versionCode", String.valueOf(pkg.getLongVersionCode()));
-            info.setProperty("targetSdk", String.valueOf(app.getApplicationInfo().targetSdkVersion));
-            List<ManifestFilters.Filter> filters = ManifestFilters.read(app);
-            for (int i = 0; i < filters.size(); i++) info.setProperty("filter." + i, filters.get(i).encode()); // for cross-app intents (PLAN P6)
-            Files.createDirectories(dir);
-            try (Writer out = Files.newBufferedWriter(dir.resolve("info.properties"))) {
-                info.store(out, "apklayer install metadata");
-            }
-
-            int size = 256;
-            Drawable icon = launcher.loadIcon(pm);
-            Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
-            icon.setBounds(0, 0, size, size);
-            icon.draw(new Canvas(bitmap));
-            int[] px = new int[size * size];
-            bitmap.getPixels(px, 0, size, 0, 0, size, size);
-            BufferedImage img = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
-            img.setRGB(0, 0, size, size, px, 0, size);
-            ImageIO.write(img, "png", dir.resolve("icon.png").toFile());
-            System.out.println("[apklayer] described " + app.getPackageName() + " (" + info.getProperty("label") + ")");
-        } catch (IOException | PackageManager.NameNotFoundException e) {
-            throw new RuntimeException(e);
-        }
     }
 
     /** Simulator.loop(), plus host input, navigation and the verification hooks. */

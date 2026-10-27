@@ -123,10 +123,11 @@ python3 - "$bt" <<'PY'
 import sys
 from pathlib import Path
 p = Path(sys.argv[1]) / 'linker/linker.c'
-s = p.read_text()
+original = p.read_text()
+s = original
 s = s.replace('fprintf(stderr, "calling apkenv_reloc_library with packed reloc:',
               'TRACE(/* apklayer patch: relocation tracing */ "calling apkenv_reloc_library with packed reloc:')
-p.write_text(s)
+if s != original: p.write_text(s)
 PY
 
 # 7. Bionic cond_destroy never waits for sleeping threads. Track translated
@@ -188,5 +189,22 @@ static void apklayer_cond_wait_done(void *opaque)
 
 '''.replace('\\t', '\t')
     s = s[:start] + helper + part + s[end:]
+    p.write_text(s)
+PY
+
+# 8. Android fortifies positional writes too (MTP in libmedia_jni). Reuse the
+#    existing checked-write implementation, preserving both bounds checks.
+python3 - "$bt" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1]) / 'libc/libc-chk.c'
+s = p.read_text()
+if 'bionic___pwrite64_chk(' not in s:
+    a = s.index('ssize_t bionic___write_chk(')
+    b = s.index('\n}\n', a) + 3
+    body = s[a:b].replace('bionic___write_chk(int fd, const void* buf, size_t count, size_t buf_size)',
+                          'bionic___pwrite64_chk(int fd, const void* buf, size_t count, off64_t offset, size_t buf_size)')
+    body = body.replace('"write:', '"pwrite64:').replace('return write(fd, buf, count);', 'return pwrite64(fd, buf, count, offset);')
+    s += '\n/* apklayer patch: Android positional-write fortify ABI. */\n' + body
     p.write_text(s)
 PY

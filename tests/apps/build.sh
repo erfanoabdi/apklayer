@@ -6,6 +6,7 @@ NAME="$1"; cd "$(dirname "$0")/$NAME"
 SDK="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 NDK=$(ls -d "$SDK"/ndk/* | tail -1); BT=$(ls -d "$SDK"/build-tools/* | tail -1); AJ="$SDK/platforms/android-36.1/android.jar"
 OUT="${2:-$PWD/../../../build/$NAME.apk}"; W=$(mktemp -d)
+trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/cls" "$(dirname "$OUT")"
 LIBS=""
 if ls *.c >/dev/null 2>&1; then
@@ -15,6 +16,8 @@ if ls *.c >/dev/null 2>&1; then
 fi
 javac -nowarn -d "$W/cls" -cp "$AJ" $(find src -name '*.java')
 "$BT"/d8 --min-api 26 --lib "$AJ" --output "$W" $(find "$W/cls" -name '*.class')
-"$BT"/aapt2 link -o "$W/base.apk" -I "$AJ" --manifest AndroidManifest.xml
+ASSETS=()
+[ ! -d assets ] || ASSETS=(-A "$PWD/assets")
+"$BT"/aapt2 link "${ASSETS[@]}" -o "$W/base.apk" -I "$AJ" --manifest AndroidManifest.xml
 (cd "$W" && zip -q base.apk classes.dex $LIBS) && cp "$W/base.apk" "$OUT"
 echo "$OUT"
