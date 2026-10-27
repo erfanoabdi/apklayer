@@ -5,6 +5,7 @@
 #include <C2PlatformSupport.h>
 #include <cstdio>
 #include <cstring>
+#include <vector>
 namespace apklayer {
 struct DecodedGraphic {
     std::shared_ptr<C2GraphicBlock> block;
@@ -28,14 +29,33 @@ inline c2_status_t copyGraphic(apklayer_codec_frame *raw, const std::shared_ptr<
         C2GraphicView target = block->map().get();
         if (target.error()) { fprintf(stderr, "codec2: output map %d\n", target.error()); status = target.error(); return status; }
         auto layout = target.layout();
-        for (unsigned p = 0; p < 3; p++) {
-            unsigned width = p ? (info.width + 1) / 2 : info.width;
-            unsigned height = p ? (info.height + 1) / 2 : info.height;
-            const auto& plane = layout.planes[p];
-            for (unsigned y = 0; y < height; y++) {
-                auto *dst = target.data()[p] + y * plane.rowInc;
-                auto *src = static_cast<const uint8_t *>(planes[p]) + y * info.stride[p];
-                for (unsigned x = 0; x < width; x++) dst[x * plane.colInc] = src[x];
+        // The block is write-combined dmabuf memory: whole rows are written at once (memcpy, or one interleaved row for semi-planar
+        // chroma). Byte stores at a stride cost ~85 ms per 720p frame here.
+        uint8_t *const *dst = target.data();
+        const unsigned cw = (info.width + 1) / 2, ch = (info.height + 1) / 2;
+        bool semiPlanar = layout.planes[1].colInc == 2 && layout.planes[2].colInc == 2 && layout.planes[1].rowInc == layout.planes[2].rowInc &&
+                (dst[1] - dst[2] == 1 || dst[2] - dst[1] == 1);
+        for (unsigned y = 0; y < info.height; y++)
+            memcpy(dst[0] + y * layout.planes[0].rowInc, static_cast<const uint8_t *>(planes[0]) + y * info.stride[0], info.width);
+        if (semiPlanar) {
+            bool uFirst = dst[1] < dst[2];
+            uint8_t *base = uFirst ? dst[1] : dst[2];
+            std::vector<uint8_t> row(cw * 2);
+            for (unsigned y = 0; y < ch; y++) {
+                auto *u = static_cast<const uint8_t *>(planes[1]) + y * info.stride[1];
+                auto *v = static_cast<const uint8_t *>(planes[2]) + y * info.stride[2];
+                for (unsigned x = 0; x < cw; x++) { row[2 * x + (uFirst ? 0 : 1)] = u[x]; row[2 * x + (uFirst ? 1 : 0)] = v[x]; }
+                memcpy(base + y * layout.planes[1].rowInc, row.data(), cw * 2);
+            }
+        } else {
+            for (unsigned p = 1; p < 3; p++) {
+                const auto& plane = layout.planes[p];
+                for (unsigned y = 0; y < ch; y++) {
+                    auto *d = dst[p] + y * plane.rowInc;
+                    auto *src = static_cast<const uint8_t *>(planes[p]) + y * info.stride[p];
+                    if (plane.colInc == 1) memcpy(d, src, cw);
+                    else for (unsigned x = 0; x < cw; x++) d[x * plane.colInc] = src[x];
+                }
             }
         }
     }
