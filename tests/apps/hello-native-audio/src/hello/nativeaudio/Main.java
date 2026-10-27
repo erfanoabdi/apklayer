@@ -93,6 +93,7 @@ public class Main extends Activity {
             if (Boolean.getBoolean("apklayer.nativeaudio")) {
                 ParcelCheck.run();
                 TrackCheck.run(this);
+                if (System.getProperty("hello.rate") != null) RateCheck.run();
                 require(((Number) active.invoke(null)).intValue() == 0, "AudioTrack attribution scope released");
             }
             runOnUiThread(() -> {

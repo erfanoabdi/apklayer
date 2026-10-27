@@ -1,6 +1,8 @@
 /* PipeWire stream setup follows its playback tutorial and installed stream API.
- * The HAL worker queues mapped buffers directly; callbacks only wake event waits.
- * No fabricated playback clock and no helper process per track. */
+ * The HAL worker appends PCM to a ring; the stream's process callback hands PipeWire one full buffer
+ * (what it requested) per graph cycle. Queueing each write as its own buffer left every cycle with
+ * a few hundred frames and the clock at a third of real time. No fabricated playback clock and no
+ * helper process per track. */
 #include <apklayer/audio.h>
 #include <errno.h>
 #include <pipewire/pipewire.h>
@@ -17,6 +19,8 @@ struct apklayer_audio {
     enum pw_stream_state state;
     uint32_t rate, channels, format, stride;
     uint64_t written, position, pending;
+    uint8_t *ring;
+    size_t ring_cap, ring_head, ring_fill; /* bytes: not yet handed to PipeWire */
     bool running, active, drained, drain_requested;
 };
 static pthread_once_t initialized = PTHREAD_ONCE_INIT;
@@ -24,6 +28,35 @@ static void initialize(void) { pw_init(NULL, NULL); }
 static void wake(void *opaque) {
     struct apklayer_audio *audio = opaque;
     pw_thread_loop_signal(audio->loop, false);
+}
+/* Runs in the loop thread, which holds the thread-loop lock: one buffer of what the graph asked for, from the ring. */
+static void process(void *opaque) {
+    struct apklayer_audio *audio = opaque;
+    if (audio->ring_fill) {
+        struct pw_buffer *buffer = pw_stream_dequeue_buffer(audio->stream);
+        if (buffer && buffer->buffer->n_datas) {
+            struct spa_data *data = &buffer->buffer->datas[0];
+            size_t max = data->maxsize / audio->stride;
+            size_t frames = buffer->requested ? buffer->requested : max;
+            if (frames > max) frames = max;
+            if (frames > audio->ring_fill / audio->stride) frames = audio->ring_fill / audio->stride;
+            if (data->data && data->chunk && frames) {
+                size_t bytes = frames * audio->stride, first = audio->ring_cap - audio->ring_head;
+                if (first > bytes) first = bytes;
+                memcpy(data->data, audio->ring + audio->ring_head, first);
+                memcpy((char *)data->data + first, audio->ring, bytes - first);
+                audio->ring_head = (audio->ring_head + bytes) % audio->ring_cap;
+                audio->ring_fill -= bytes;
+                data->chunk->offset = 0; data->chunk->stride = audio->stride; data->chunk->size = bytes;
+                buffer->size = frames;
+            } else if (data->chunk) {
+                data->chunk->offset = 0; data->chunk->stride = audio->stride; data->chunk->size = 0;
+                buffer->size = 0;
+            }
+            pw_stream_queue_buffer(audio->stream, buffer);
+        }
+    }
+    wake(audio);
 }
 static void state_changed(void *opaque, enum pw_stream_state old, enum pw_stream_state state, const char *error) {
     (void)old;
@@ -51,7 +84,7 @@ static void format_changed(void *opaque, uint32_t id, const struct spa_pod *para
     wake(audio);
 }
 static const struct pw_stream_events events = {
-    PW_VERSION_STREAM_EVENTS, .state_changed = state_changed, .process = wake, .drained = drained, .param_changed = format_changed,
+    PW_VERSION_STREAM_EVENTS, .state_changed = state_changed, .process = process, .drained = drained, .param_changed = format_changed,
 };
 static int wait_event(struct apklayer_audio *audio, const struct timespec *end) {
     if (audio->state == PW_STREAM_STATE_ERROR || audio->state == PW_STREAM_STATE_UNCONNECTED) return -EPIPE;
@@ -71,8 +104,11 @@ int apklayer_audio_open(const struct apklayer_audio_config *config, struct apkla
     audio->format = config->format == APKLAYER_AUDIO_S16 ? SPA_AUDIO_FORMAT_S16 : SPA_AUDIO_FORMAT_F32;
     audio->stride = config->channels * (config->format == APKLAYER_AUDIO_S16 ? 2 : 4);
     audio->active = true;
+    audio->ring_cap = (config->rate / 10 > 4096 ? config->rate / 10 : 4096) * audio->stride;
+    audio->ring = malloc(audio->ring_cap);
+    if (!audio->ring) { free(audio); return -ENOMEM; }
     audio->loop = pw_thread_loop_new("apklayer-audio", NULL);
-    if (!audio->loop) { free(audio); return -ENOMEM; }
+    if (!audio->loop) { free(audio->ring); free(audio); return -ENOMEM; }
     struct pw_properties *properties = pw_properties_new(PW_KEY_MEDIA_TYPE, "Audio",
         PW_KEY_MEDIA_CATEGORY, "Playback", PW_KEY_MEDIA_ROLE, "Music", PW_KEY_APP_NAME, "apklayer",
         PW_KEY_NODE_NAME, "apklayer.playback", NULL);
@@ -110,32 +146,16 @@ ssize_t apklayer_audio_write(struct apklayer_audio *audio, const void *pcm, size
     int status = !audio->active ? -EAGAIN : audio->drain_requested ? -EBUSY : 0;
     while (done < frames && status >= 0) {
         if (audio->state == PW_STREAM_STATE_ERROR || audio->state == PW_STREAM_STATE_UNCONNECTED) { status = -EPIPE; break; }
-        struct pw_buffer *buffer = pw_stream_dequeue_buffer(audio->stream);
-        if (!buffer) { status = wait_event(audio, &end); continue; }
-        if (!buffer->buffer->n_datas) { pw_stream_queue_buffer(audio->stream, buffer); status = -EIO; break; }
-        struct spa_data *data = &buffer->buffer->datas[0];
-        size_t count = SPA_MIN(frames - done, data->maxsize / audio->stride);
-        if (!data->data || !data->chunk || !count) {
-            pw_stream_queue_buffer(audio->stream, buffer); status = -EIO; break;
-        }
-        memcpy(data->data, (const char *)pcm + done * audio->stride, count * audio->stride);
-        data->chunk->offset = 0; data->chunk->stride = audio->stride; data->chunk->size = count * audio->stride;
-        buffer->size = count;
-        status = pw_stream_queue_buffer(audio->stream, buffer);
-        if (status < 0) break;
-        done += count; audio->written += count; audio->drained = false;
-    }
-    if (getenv("APKLAYER_AUDIO_STATS")) { // frames written per wall second, and how long the writes blocked
-        static uint64_t frames, blocked_ns, since;
-        struct timespec ts;
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        uint64_t now = (uint64_t)ts.tv_sec * 1000000000ull + ts.tv_nsec;
-        if (!since) since = now;
-        frames += done;
-        if (now - since >= 2000000000ull) {
-            fprintf(stderr, "audio: %llu frames written in %llu ms (48000 per second is real time)\n", (unsigned long long)frames, (unsigned long long)((now - since) / 1000000));
-            frames = 0; since = now; (void)blocked_ns;
-        }
+        size_t space = audio->ring_cap - audio->ring_fill;
+        if (space < audio->stride) { status = wait_event(audio, &end); continue; }
+        size_t bytes = (frames - done) * audio->stride;
+        if (bytes > space) bytes = space / audio->stride * audio->stride;
+        size_t tail = (audio->ring_head + audio->ring_fill) % audio->ring_cap, first = audio->ring_cap - tail;
+        if (first > bytes) first = bytes;
+        memcpy(audio->ring + tail, (const char *)pcm + done * audio->stride, first);
+        memcpy(audio->ring, (const char *)pcm + done * audio->stride + first, bytes - first);
+        audio->ring_fill += bytes;
+        done += bytes / audio->stride; audio->written += bytes / audio->stride; audio->drained = false;
     }
     pw_thread_loop_unlock(audio->loop);
     return done ? (ssize_t)done : status;
@@ -155,7 +175,7 @@ static int position_locked(struct apklayer_audio *audio, struct apklayer_audio_p
         }
         long double delay = time.rate.denom ? (long double)time.delay * time.rate.num / time.rate.denom : 0;
         if (audio->state == PW_STREAM_STATE_STREAMING && now > (uint64_t)time.now) delay -= (long double)(now - time.now) / SPA_NSEC_PER_SEC;
-        uint64_t pending = time.queued + time.buffered + (delay > 0 ? delay * audio->rate : 0);
+        uint64_t pending = audio->ring_fill / audio->stride + time.queued + time.buffered + (delay > 0 ? delay * audio->rate : 0);
         audio->pending = pending;
         uint64_t position = audio->written > pending ? audio->written - pending : 0;
         if (position > audio->position) audio->position = position;
@@ -192,7 +212,7 @@ int apklayer_audio_flush(struct apklayer_audio *audio) {
     if (!audio) return -EINVAL;
     pw_thread_loop_lock(audio->loop);
     int result = pw_stream_flush(audio->stream, false);
-    if (result >= 0) { audio->written = audio->position = audio->pending = 0; audio->drained = audio->drain_requested = false; }
+    if (result >= 0) { audio->ring_head = audio->ring_fill = 0; audio->written = audio->position = audio->pending = 0; audio->drained = audio->drain_requested = false; }
     pw_thread_loop_unlock(audio->loop);
     return result;
 }
@@ -202,6 +222,7 @@ int apklayer_audio_drain(struct apklayer_audio *audio) {
     struct timespec end;
     pw_thread_loop_get_time(audio->loop, &end, 2000000000);
     int result = !audio->active ? -EAGAIN : 0;
+    while (result >= 0 && audio->ring_fill) result = wait_event(audio, &end);
     if (result >= 0 && audio->written && !audio->drained) {
         audio->drain_requested = true;
         result = pw_stream_flush(audio->stream, true);
@@ -217,5 +238,6 @@ void apklayer_audio_close(struct apklayer_audio *audio) {
     if (audio->stream) { pw_stream_disconnect(audio->stream); pw_stream_destroy(audio->stream); }
     if (audio->running) { pw_thread_loop_unlock(audio->loop); pw_thread_loop_stop(audio->loop); }
     pw_thread_loop_destroy(audio->loop);
+    free(audio->ring);
     free(audio);
 }
