@@ -1,0 +1,11 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="hello.piholder">
+  <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="34"/>
+  <application android:label="pi-holder">
+    <activity android:name=".Main" android:exported="true">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+    </activity>
+    <receiver android:name=".GiveReceiver" android:exported="true">
+      <intent-filter><action android:name="hello.pi.GIVE"/></intent-filter>
+    </receiver>
+  </application>
+</manifest>

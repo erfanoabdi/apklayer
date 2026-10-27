@@ -31,6 +31,14 @@ final class HubActivityManager implements InvocationHandler {
         return proxy;
     }
 
+    private static android.content.IIntentSender pendingIntent(int type, String pkg, String resultWho, int requestCode, Intent[] intents, String[] types, int flags, Bundle options) {
+        IBinder sender = HubProtocol.call(binder(), HubProtocol.DESCRIPTOR, HubProtocol.PI_GET, request -> {
+            request.writeInt(type); request.writeString(pkg); request.writeString(resultWho); request.writeInt(requestCode); request.writeTypedArray(intents, 0);
+            request.writeStringArray(types); request.writeInt(flags); request.writeBundle(options);
+        }, reply -> reply.readStrongBinder());
+        return sender == null ? null : android.content.IIntentSender.Stub.asInterface(sender);
+    }
+
     private static IBinder binder() { return HubClient.current().binder(); }
 
     @Override public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
@@ -59,6 +67,27 @@ final class HubActivityManager implements InvocationHandler {
                 String target = (String) args[1]; Uri uri = (Uri) args[2]; int mode = (Integer) args[3]; boolean revoke = method.getName().startsWith("revoke");
                 HubClient.current().grantUri(target, uri, mode, revoke);
                 return null;
+            }
+            case "getIntentSenderWithFeature": // (type, package, feature, token, resultWho, requestCode, intents[], resolvedTypes[], flags, options, userId)
+                return pendingIntent((Integer) args[0], (String) args[1], (String) args[4], (Integer) args[5], (Intent[]) args[6], (String[]) args[7], (Integer) args[8], (Bundle) args[9]);
+            case "getIntentSender": // (type, package, token, resultWho, requestCode, intents[], resolvedTypes[], flags, options, userId)
+                return pendingIntent((Integer) args[0], (String) args[1], (String) args[3], (Integer) args[4], (Intent[]) args[5], (String[]) args[6], (Integer) args[7], (Bundle) args[8]);
+            case "cancelIntentSender": {
+                IBinder sender = ((android.content.IIntentSender) args[0]).asBinder();
+                HubProtocol.call(binder(), HubProtocol.DESCRIPTOR, HubProtocol.PI_CANCEL, request -> request.writeStrongBinder(sender), reply -> null);
+                return null;
+            }
+            case "sendIntentSender": { // (thread, target, whitelistToken, code, intent, resolvedType, finishedReceiver, requiredPermission, options)
+                IBinder sender = ((android.content.IIntentSender) args[1]).asBinder();
+                int code = (Integer) args[3]; Intent fillIn = (Intent) args[4]; IBinder finished = args[6] == null ? null : ((IIntentReceiver) args[6]).asBinder(); String permission = (String) args[7];
+                return HubProtocol.call(binder(), HubProtocol.DESCRIPTOR, HubProtocol.PI_SEND, request -> {
+                    request.writeStrongBinder(sender); request.writeInt(code); request.writeTypedObject(fillIn, 0); request.writeStrongBinder(finished); request.writeString(permission);
+                }, reply -> reply.readInt());
+            }
+            case "getInfoForIntentSender": {
+                IBinder sender = ((android.content.IIntentSender) args[0]).asBinder();
+                return HubProtocol.call(binder(), HubProtocol.DESCRIPTOR, HubProtocol.PI_INFO, request -> request.writeStrongBinder(sender),
+                        reply -> reply.readBoolean() ? new android.app.ActivityManager.PendingIntentInfo(reply.readString(), reply.readInt(), reply.readBoolean(), reply.readInt()) : null);
             }
             case "finishReceiver": { // (who, resultCode, resultData, extras, abort, flags)
                 IBinder who = (IBinder) args[0];

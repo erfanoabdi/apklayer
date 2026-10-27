@@ -22,12 +22,13 @@ final class HubDirectory extends Binder {
     private final HubProviders providers;
     private final HubActivities activities;
     private final HubStartedServices startedServices;
+    private final HubPendingIntents pendingIntents;
     private final Map<String, Process> appProcesses = new HashMap<>();
     private final Map<String, Process> hosts = new HashMap<>();
     private final Map<String, Integer> failures = new HashMap<>();
     private volatile boolean stopping;
     HubDirectory(Path apps) {
-        packages = new HubPackages(apps); bindings = new HubServiceBindings(this, packages); broadcasts = new HubBroadcasts(this, packages); providers = new HubProviders(this, packages, broadcasts); activities = new HubActivities(this, packages); startedServices = new HubStartedServices(this, packages, broadcasts);
+        packages = new HubPackages(apps); bindings = new HubServiceBindings(this, packages); broadcasts = new HubBroadcasts(this, packages); providers = new HubProviders(this, packages, broadcasts); activities = new HubActivities(this, packages); startedServices = new HubStartedServices(this, packages, broadcasts); pendingIntents = new HubPendingIntents(this, broadcasts, activities, startedServices);
         attachInterface(null, HubProtocol.DESCRIPTOR);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             stopping = true;
@@ -209,6 +210,29 @@ final class HubDirectory extends Binder {
                 Peer caller = caller(); android.content.ComponentName name = request.readTypedObject(android.content.ComponentName.CREATOR); request.enforceNoDataAvail();
                 startedServices.stoppedSelf(caller, name);
                 reply.writeNoException(); return true;
+            }
+            case HubProtocol.PI_GET -> {
+                Peer caller = caller(); int type = request.readInt(); String pkg = request.readString(), resultWho = request.readString(); int requestCode = request.readInt();
+                Intent[] intents = request.createTypedArray(Intent.CREATOR); String[] types = request.createStringArray(); int piFlags = request.readInt(); android.os.Bundle options = request.readBundle();
+                request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeStrongBinder(pendingIntents.get(caller, type, pkg, resultWho, requestCode, intents, types, piFlags, options)); return true;
+            }
+            case HubProtocol.PI_SEND -> {
+                caller(); IBinder sender = request.readStrongBinder(); int resultCode = request.readInt(); Intent fillIn = request.readTypedObject(Intent.CREATOR);
+                IBinder finished = request.readStrongBinder(); String permission = request.readString(); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeInt(pendingIntents.send(sender, resultCode, fillIn, finished, permission)); return true;
+            }
+            case HubProtocol.PI_CANCEL -> {
+                Peer caller = caller(); IBinder sender = request.readStrongBinder(); request.enforceNoDataAvail();
+                pendingIntents.cancel(caller, sender);
+                reply.writeNoException(); return true;
+            }
+            case HubProtocol.PI_INFO -> {
+                caller(); IBinder sender = request.readStrongBinder(); request.enforceNoDataAvail();
+                Object[] info = pendingIntents.info(sender);
+                reply.writeNoException(); reply.writeBoolean(info != null);
+                if (info != null) { reply.writeString((String) info[0]); reply.writeInt((Integer) info[1]); reply.writeBoolean((Boolean) info[2]); reply.writeInt((Integer) info[3]); }
+                return true;
             }
             case HubProtocol.TAKE_LAUNCH -> {
                 Peer caller = caller(); request.enforceNoDataAvail();
