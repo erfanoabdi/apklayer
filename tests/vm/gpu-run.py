@@ -23,6 +23,8 @@ steps = ['1000:hover:0,0', '3000:hover:1,1', '5000:hover:0,0', '6000:hover:2,2',
          '16000:clipcopy:' + uuid.uuid4().hex[:16], '18000:hover:0,0']
 ENV['APKLAYER_JOPTS'] = ('-Dapklayer.runms=19000 -Dapklayer.tracewindows=true -Dapklayer.debugkeys=true -Dapklayer.runtimetrace=true '
                           '-Dapklayer.script=' + '+'.join(steps))
+extra = Path.home() / '.apklayer-extra-jopts'  # regression runs with a feature flag: the file holds the extra options
+if extra.exists(): ENV['APKLAYER_JOPTS'] += ' ' + extra.read_text().strip()
 
 
 def run(args, **kwargs):
