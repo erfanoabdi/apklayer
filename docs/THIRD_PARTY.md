@@ -40,3 +40,30 @@ The tree-host build reuses unchanged `FrameListener.class` and `ScreenUpdateHand
 - `aosp/hals/media/codec2/VpxHeaders.h`: minimal VP9 uncompressed-header and superframe-index checks adapted from the local AOSP `external/libvpx/vp9/decoder/{vp9_decodeframe.c,vp9_decoder.c}`; libvpx, BSD-3-Clause (local `external/libvpx/LICENSE` and `PATENTS`). No decoder code vendored.
 
 - `bridge/hals/audio/audio.c`: own PipeWire adapter, checked against the installed PipeWire 1.0.5 stream/thread-loop headers and [official playback tutorial](https://docs.pipewire.org/page_tutorial4.html). Links system libpipewire (MIT); no third-party implementation vendored. Local AOSP audio worker/driver interfaces will be reused for the Android HAL; ATL has no suitable PipeWire backend.
+
+## License audit for a dual license (2026-10-28, not legal advice)
+
+Question: can apklayer be AGPL-3.0-or-later for everyone plus a commercial license (PLAN D5), distributable as deb/rpm/AUR/Flatpak/AppImage?
+A commercial license can only cover code the licensor owns or that is permissively licensed. Findings, from file headers, local clones and the GitHub API; "unverified" marks what was not read in full.
+
+| Component | License | Verdict for dual licensing |
+|---|---|---|
+| apklayer's own code (`bridge/`, `runtime/host`, `runtime/patches`, `aosp/`, `scripts/`, `tests/`) | AGPL-3.0-or-later (NOTICE: "apklayer contributors"). git: 309 commits by Erfan Abdi, 24 by an `apklayer <agent@apklayer.local>` identity; no CLA | OK if the copyright holder is one person/entity. To decide: authorship of the agent commits (a lawyer's question); a CLA before accepting outside contributions |
+| `runtime/dex2jvm/` except `HostDefaults.java` | the vendored files are kksimp/dex2jvm at commit `4c666fd` (public history); upstream LICENSE is **Apache-2.0** (LICENSE/NOTICE not read in full). Upstream has 3 newer commits (2026-10-19/22) | Permissive, OK. Row above in "In this tree" still says AGPL: relabel after updating the copy |
+| `runtime/dex2jvm/com.macapk.dex/HostDefaults.java` | "Mac.apk's own" file; Mac.apk is AGPL-3.0 with a commercial license and a CLA owned by its maintainer | **Needs the Mac.apk owner's permission, or replace** (it is a small defaults file) |
+| `runtime/host/java/com/macapk/loader/MacApkUnsafe.java` | copied verbatim from Mac.apk, AGPL-3.0 | **Same: permission or rewrite.** Check whether upstream dex2jvm ships a library-mode replacement (its `library` option) |
+| Any other file copied from Mac.apk | grep found none beyond the two above (references in docs/tests only) | OK |
+| bionic_translation (built beside this repo, patched by `scripts/patch-bionic-translation.sh`) | SPDX in sources: `MIT AND Apache-2.0` (one identifier found by grep; the repo has no LICENSE file; unverified for every file) | Permissive, OK. Keep the patch script as patches, not vendored copies |
+| android_translation_layer (ATL) | GPL-3.0 | Reference only; grep finds no copied code (one comment mentions a TLS constant "as on ATL"). Keep it that way: copying any ATL code would force GPL on that file |
+| Robolectric 4.17, shadows in `runtime/patches/org/robolectric/*` | MIT | OK. These files are modified copies of MIT code: keep the MIT notice for them (headers not checked, unverified) |
+| AOSP / LineageOS tree libraries and HAL code (Apache-2.0; bionic BSD; libc++ Apache with LLVM exception), `aosp/hals/**` derived from AOSP | Apache-2.0 / BSD | OK; ship the NOTICE files of the shipped libraries (not yet collected) |
+| libvpx parts (`VpxHeaders.h`, `LICENSE.libvpx`) | BSD-3-Clause | OK |
+| Mesa, PipeWire | MIT | OK |
+| GStreamer (media bridge) | LGPL-2.1+ | OK if dynamically linked/used as a separate process; do not statically link |
+| JDK 21 | GPLv2 + Classpath Exception | OK for running apps on it; bundling (Flatpak/AppImage) needs its legal notices |
+| Chromium WebView APK | BSD-style plus many third-party notices | OK; include the APK's own notices if redistributed (unverified) |
+| deps.lock (guava, ASM, icu4j, snakeyaml, jspecify, Conscrypt, BouncyCastle, androidx.test, Android SDK `android.jar`) | Apache-2.0 / BSD-3 / MIT / ICU / Android SDK terms (`android.jar` stubs are under the SDK license, not Apache: check before bundling) | OK except the SDK jar question |
+| Android apps users run (UiBench is AOSP, corpus F-Droid APKs, Modern Combat 3, WhatsApp) | their own | Not part of apklayer. Do not redistribute corpus or game APKs/data with the repo; `tests/corpus/shots` logs are only logs |
+
+Blocking items before a dual license: (1) Mac.apk owner's permission, or replacement, for `HostDefaults.java` and `MacApkUnsafe.java`; (2) a CLA/ownership decision, including the agent-written commits; (3) the Android SDK `android.jar` terms if it is ever bundled.
+Not blocking but open: collect NOTICE/legal files for everything shipped (AOSP libraries, JDK, WebView) before the first package.
