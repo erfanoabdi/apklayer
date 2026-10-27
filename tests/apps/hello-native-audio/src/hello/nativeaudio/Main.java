@@ -91,6 +91,7 @@ public class Main extends Activity {
             require(((Number) active.invoke(null)).intValue() == 0, "failed scope released");
             System.out.println("[hello-native-audio] attribution PASS fields/Unicode/chain/tokens/scoped release");
             if (Boolean.getBoolean("apklayer.nativeaudio")) {
+                ParcelCheck.run();
                 TrackCheck.run(this);
                 require(((Number) active.invoke(null)).intValue() == 0, "AudioTrack attribution scope released");
             }

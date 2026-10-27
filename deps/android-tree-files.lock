@@ -704,8 +704,6 @@ c76950c2751984d6edc10c892068e2dce1bfdc9ee4622a8a01a082ae3cb017b5 13583 arm64-nat
 9b865f9fe272bdd0f23357f630da21ffd73742358e7e33bfcdf6c853e9e59f79 5643 arm64-native/android-root/vendor/etc/default_volume_tables.xml frameworks/av/services/audiopolicy/config/default_volume_tables.xml same
 b1f9a3583b75da2d5f06c61a7020511a75f5393c177fc25ac9dbbd4c19756710 863 arm64-native/android-root/vendor/etc/media_codecs.xml bridge/native/android-root/vendor/etc/media_codecs.xml apklayer
 0fdbecd90b1adcbe6a5a64a8aef7d53c8b6e8e9895d9d4c5ebaf181849415ffc 559 arm64-native/android-root/vendor/etc/vintf/manifest.xml bridge/native/android-root/vendor/etc/vintf/manifest.xml apklayer
-772ce4e71e7031f9a5e58f0a387c0eae8f5387dcec00ccb48a587e37a39a1423 208 arm64-native/android-root/vendor/etc/vintf/manifest/apklayer-audio-effects.xml (staged from the tree's build outputs, see docs/AOSP-BUILDS.md) same
-fb4f5587b2370cbe918028a7e107fec281150c6c9e120434f83967ceffb1c2d0 246 arm64-native/android-root/vendor/etc/vintf/manifest/apklayer-audio.xml (staged from the tree's build outputs, see docs/AOSP-BUILDS.md) same
 0fdbecd90b1adcbe6a5a64a8aef7d53c8b6e8e9895d9d4c5ebaf181849415ffc 559 arm64-native/android-root/vendor/etc/vintf/manifest/apklayer.xml (staged from the tree's build outputs, see docs/AOSP-BUILDS.md) same
 e125e6198315e5860c39f3c07432268eb65076be123f59e0548766507076c3a0 111724552 arm64-native/aosp/Robolectric_all.jar (staged from the tree's build outputs, see docs/AOSP-BUILDS.md) same
 aca7d876c9835b2f510a67a49fb57e59601c5953c8cefea90897b71130a51da3 170070220 arm64-native/aosp/android-all/android-all-16-robolectric-13921718.jar (tree framework with apklayer JNI shim; scripts/build-native-arm64.sh) patched

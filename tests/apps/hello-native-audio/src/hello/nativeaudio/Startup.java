@@ -5,6 +5,12 @@ import android.media.AudioTrack;
 public class Startup extends Application {
     @Override public void onCreate() {
         super.onCreate();
+        try {
+            String implementation = (String) Class.forName("android.os.MessageQueue").getMethod("getImplName").invoke(null);
+            System.out.println("[hello-native-audio] MessageQueue=" + implementation);
+            if (implementation.equals("deli:true")) throw new AssertionError("queue incompatible with API36 scheduler");
+        } catch (NoSuchMethodException olderFramework) {
+        } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
         if (!Boolean.getBoolean("apklayer.nativeaudio")) return;
         int minimum = AudioTrack.getMinBufferSize(48000, AudioFormat.CHANNEL_OUT_STEREO,
                 AudioFormat.ENCODING_PCM_16BIT);

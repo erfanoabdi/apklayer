@@ -601,6 +601,9 @@ rendering end to end, real input through the shell's input proxy, dialogs stacke
 
    Java AudioTrack JNI verified (2026-10-27): original framework/native PCM, actual scoped attribution and PID/UID, early Application capability query, real policy volume/global session IDs, delayed head/marker/timestamp, stop/flush/release. Isolated monitor captures exact stereo440/880Hz47760 nonzero toneframes; UI commit and physical Back pass. BT monotonic condition deadline regression reproduces three old failures and passes all four API/default-clock combinations after patch12. AudioSystem original initializer runs immediately after initial capability JNI registration. Opt-in only; Java AudioService focus/player bookkeeping and MediaPlayer/general native Parcel packets remain next.
 
+   Native media follow-up (2026-10-27): selective native payload Parcel foundation passes original JNI serialization, coexistence and ownership tests; MediaPlayer is still pending. Java Binder/FD packets and native Java interface enforcement are explicitly unsupported until Binder cache/dispatch integration. Callback timeout root cause identified in tree DeliQueue versus API36 Robolectric legacy scheduler; select AOSP's provided legacy queue mode at static initialization. Fixture confirms actual main-thread marker delivery with deli:false, PCM capture and cleanup.
+
+
 
    **Bluetooth** after camera: Robolectric-style shadows of `android.bluetooth.*` over a host daemon speaking D-Bus to BlueZ (not Android's own stack: it needs
    system_server's services and an exclusive controller), scoped by what the corpus apps actually call (BLE scan, GATT client/server and advertising first; then RFCOMM/L2CAP
@@ -656,4 +659,3 @@ default flavor): uibench runs on the arm64 JVM with no Rosetta, 19 frames, same 
 and stays as the fallback while the device-library route is finished. **x86_64 counterpart (deferred: the very last thing, after the tool has been published; user, 2026-10-26):** the tree's own `libandroid_runtime` for the
 Linux x86_64 host (the tree-consistent Robolectric native runtime for x86 hosts), built in ~/los24 (docs/AOSP-BUILDS.md), to replace the
 Rosetta-era x86 library where the tree's framework jar is used.
-

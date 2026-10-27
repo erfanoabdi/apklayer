@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real MediaCodec APK, committed GPU frame, capture handshake and physical Back."""
+"""Native attribution/Parcel/audio APK, committed GPU frame and physical Back."""
 import ctypes
 import os
 from pathlib import Path
@@ -21,7 +21,7 @@ audio_mode = sys.argv[1:] == ['audio']
 capture = None
 if audio_mode:
     ENV.update(APKLAYER_AUDIO='1', APKLAYER_AUDIO_SERVICES='1', APKLAYER_MEDIA_SERVICES='1')
-    ENV['APKLAYER_JOPTS'] += ' -Dapklayer.nativemedia=true -Dapklayer.nativeaudio=true'
+    ENV['APKLAYER_JOPTS'] += ' -Dapklayer.nativemedia=true -Dapklayer.nativeaudio=true -Dapklayer.nativeparcels=true'
     ENV['APKLAYER_HOST_LIBS'] += ':' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-audio.so'
 
 
@@ -91,6 +91,7 @@ try:
     assert '[hello-native-audio] attribution PASS fields/Unicode/chain/tokens/scoped release' in text
     if audio_mode:
         assert '[runtime] original Android audio JNI registered' in text
+        assert '[hello-native-audio] native Parcel PASS' in text
         assert '[hello-native-audio] startup AudioTrack PASS' in text
         assert '[hello-native-audio] AudioTrack PASS PCM/marker/timestamp=' in text
         capture.verify()

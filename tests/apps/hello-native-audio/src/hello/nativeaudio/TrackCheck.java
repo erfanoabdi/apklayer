@@ -39,7 +39,7 @@ final class TrackCheck {
             require(track.getState() == AudioTrack.STATE_INITIALIZED, "native initialized");
             CountDownLatch marker = new CountDownLatch(1);
             track.setPlaybackPositionUpdateListener(new AudioTrack.OnPlaybackPositionUpdateListener() {
-                public void onMarkerReached(AudioTrack ignored) { marker.countDown(); }
+                public void onMarkerReached(AudioTrack ignored) { System.out.println("[hello-native-audio] marker delivered thread=" + Thread.currentThread().getName()); marker.countDown(); }
                 public void onPeriodicNotification(AudioTrack ignored) {}
             }, new Handler(Looper.getMainLooper()));
             require(track.setNotificationMarkerPosition(52800) == AudioTrack.SUCCESS, "marker setup");
@@ -65,7 +65,10 @@ final class TrackCheck {
                     System.out.println("[hello-native-audio] AudioTrack submitted=" + (offset + 960) + " head=" + position);
             }
             require(queued, "native playback head accounts for queued frames");
-            require(marker.await(3, TimeUnit.SECONDS), "actual marker callback");
+            if (!marker.await(3, TimeUnit.SECONDS)) {
+                Looper.getMainLooper().dump(new android.util.PrintWriterPrinter(new java.io.PrintWriter(System.out, true)), "audio marker ");
+                throw new AssertionError("actual marker callback");
+            }
             AudioTimestamp timestamp = new AudioTimestamp();
             require(track.getTimestamp(timestamp) && timestamp.framePosition > 0
                     && timestamp.framePosition <= 57600 && timestamp.nanoTime > 0, "actual presentation timestamp");
