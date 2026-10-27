@@ -13,3 +13,6 @@ ro.product.cpu.abilist=arm64-v8a
 # only: shaders compile at first use instead. To revisit when the failing format is known.
 service.sf.prime_shader_cache=0
 ro.hyphen.data.dir=/system/usr/hyphen-data
+# Use Android's existing gralloc-backed BLOB input and BufferQueue output pools.
+debug.stagefright.c2-poolmask=786432
+media.c2.hal.selection=aidl

@@ -128,3 +128,65 @@ s = s.replace('fprintf(stderr, "calling apkenv_reloc_library with packed reloc:'
               'TRACE(/* apklayer patch: relocation tracing */ "calling apkenv_reloc_library with packed reloc:')
 p.write_text(s)
 PY
+
+# 7. Bionic cond_destroy never waits for sleeping threads. Track translated
+#    waiters and defer freeing their native object; glibc destroy would block
+#    forever in process-exit destructors while Android's worker threads sleep.
+python3 - "$bt" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1]) / 'pthread_wrapper/libpthread.c'
+s = p.read_text()
+if 'struct apklayer_cond' not in s:
+    start = s.index('static void default_pthread_cond_init(')
+    end = s.index('int bionic_pthread_atfork(', start)
+    part = s[start:end]
+    part = part.replace('sizeof(*cond->glibc)', 'sizeof(struct apklayer_cond)')
+    a = part.index('int bionic_pthread_cond_destroy(')
+    b = part.index('int bionic_pthread_cond_init(', a)
+    part = part[:a] + '''int bionic_pthread_cond_destroy(bionic_cond_t *cond)
+{
+\tassert(cond);
+\tif (IS_MAPPED(cond)) {
+\t\tstruct apklayer_cond *native = (void *)cond->glibc;
+\t\tunsigned old = __atomic_fetch_or(&native->state, APKLAYER_COND_DESTROYED, __ATOMIC_ACQ_REL);
+\t\tif (old == 0) apklayer_cond_free(native);
+\t}
+\treturn 0;
+}
+
+''' + part[b:]
+    for call in ['pthread_cond_wait(cond->glibc, mutex->glibc)',
+                 'pthread_cond_clockwait(cond->glibc, mutex->glibc, clock_id, abs_timeout)',
+                 'pthread_cond_timedwait(cond->glibc, mutex->glibc, abs_timeout)']:
+        part = part.replace('return ' + call + ';',
+                            'int ret;\n\tAPKLAYER_COND_WAIT(ret, ' + call + ');\n\treturn ret;')
+    # The musl clockwait branch changes its clock field around timedwait.
+    part = part.replace('int ret = pthread_cond_timedwait(cond->glibc, mutex->glibc, abs_timeout);',
+                        'int ret;\n\tAPKLAYER_COND_WAIT(ret, pthread_cond_timedwait(cond->glibc, mutex->glibc, abs_timeout));')
+    helper = r'''/* apklayer patch: Android's non-blocking condition destruction. */
+struct apklayer_cond { pthread_cond_t cond; unsigned state; };
+#define APKLAYER_COND_DESTROYED (1u << 31)
+static void apklayer_cond_free(struct apklayer_cond *native)
+{
+\tpthread_cond_destroy(&native->cond);
+\tmunmap(native, sizeof(*native));
+}
+static void apklayer_cond_wait_done(void *opaque)
+{
+\tstruct apklayer_cond *native = opaque;
+\tunsigned old = __atomic_fetch_sub(&native->state, 1, __ATOMIC_ACQ_REL);
+\tif (old == (APKLAYER_COND_DESTROYED | 1u)) apklayer_cond_free(native);
+}
+#define APKLAYER_COND_WAIT(result, call) do { \
+\tstruct apklayer_cond *tracked = (void *)cond->glibc; \
+\t__atomic_fetch_add(&tracked->state, 1, __ATOMIC_ACQ_REL); \
+\tpthread_cleanup_push(apklayer_cond_wait_done, tracked); \
+\tresult = (call); \
+\tpthread_cleanup_pop(1); \
+} while (0)
+
+'''.replace('\\t', '\t')
+    s = s[:start] + helper + part + s[end:]
+    p.write_text(s)
+PY

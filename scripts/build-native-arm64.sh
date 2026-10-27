@@ -9,7 +9,7 @@ native="$1" shards="$2" classes="$3" tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 bt="${APKLAYER_BT:-$HOME/bt-arm/bionic_translation/b}"
 scripts/patch-bionic-translation.sh "$(dirname "$bt")"
-ninja -C "$bt" libpthread_bio.so.0.0.1 libdl_bio.so.0.0.1
+ninja -C "$bt"  # build real versioned outputs; symlink targets do not rebuild them
 JH="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
 cc -shared -fPIC -O2 -Wall -I"$JH/include" -I"$JH/include/linux" -o "$tmp/libandroid_runtime.so" \
     bridge/native/runtime_shim.c bridge/native/android_platform.c bridge/native/properties.c bridge/native/paths.c bridge/native/android_stubs.c \

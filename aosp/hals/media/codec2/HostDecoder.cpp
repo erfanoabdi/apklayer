@@ -85,11 +85,15 @@ private:
             if (apklayer_codec_open(&config, &mCodec)) { work->result = C2_CANNOT_DO; return; }
         }
         bool hasInput = !work->input.buffers.empty();
+        bool visible = true;
         if (hasInput) {
             const auto& blocks = work->input.buffers[0]->data().linearBlocks();
             if (blocks.empty()) { work->result = C2_BAD_VALUE; return; }
             C2ReadView view = blocks.front().map().get();
             if (view.error()) { fprintf(stderr, "codec2: input map %d\n", view.error()); work->result = view.error(); return; }
+            if (view.capacity() < 3) { work->result = C2_BAD_VALUE; return; }
+            // VP8 frame-tag show_frame bit: invisible reference frames produce no output.
+            visible = (view.data()[0] & 0x10) != 0;
             int64_t timestamp = work->input.ordinal.timestamp.peekll();
             if (timestamp < 0 || timestamp > INT64_MAX / 1000) { work->result = C2_BAD_VALUE; return; }
             if (apklayer_codec_queue(mCodec, view.data(), view.capacity(), timestamp * 1000)) {
@@ -100,7 +104,15 @@ private:
             if (apklayer_codec_end(mCodec)) { work->result = C2_CORRUPTED; return; }
             mEos = true;
         }
-        if (!hasInput) return;
+        if (!hasInput || !visible) {
+            if (mEos) {
+                apklayer_codec_frame *unexpected = nullptr;
+                int result = apklayer_codec_pull(mCodec, 500000000, &unexpected);
+                apklayer_codec_frame_release(unexpected);
+                if (result != -ENODATA) work->result = C2_CORRUPTED;
+            }
+            return;
+        }
         apklayer_codec_frame *raw = nullptr;
         int status = apklayer_codec_pull(mCodec, 500000000, &raw);
         if (status) { work->result = status == -EAGAIN ? C2_TIMED_OUT : C2_CORRUPTED; return; }

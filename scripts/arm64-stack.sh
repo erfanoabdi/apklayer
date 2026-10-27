@@ -13,6 +13,14 @@ start() { # start <name> <command...>: background, logged, remembered
 }
 trap 'kill "${!name_of[@]}" 2>/dev/null; pkill -x apklayer-shell 2>/dev/null' EXIT
 
+# Declare the optional media HAL only when this stack will actually provide it.
+media_manifest="$N/android-root/vendor/etc/vintf/manifest/apklayer-media.xml"
+if [ "${APKLAYER_CODEC2:-0}" = 1 ]; then
+    mkdir -p "$(dirname "$media_manifest")"
+    cp "$(dirname "$(readlink -f "$0")")/../aosp/hals/media/codec2/manifest.xml" "$media_manifest"
+else
+    rm -f "$media_manifest"
+fi
 rm -rf "$XDG_RUNTIME_DIR/apklayer/$APKLAYER_INSTANCE"
 "$N/bin/aprop" load "$HOME/apklayer-m1/bridge/native/apklayer.prop" "$N/android-root/props/system_build.prop" 2> "$LOGS/aprop.log"
 # Android init normally creates this directory and announces it to RenderEngine.
@@ -37,6 +45,8 @@ svc servicemanager libapklayer_servicemanager.so /dev/binder
 svc permission libapklayer_permission.so  # libbinder's checkPermission() asks this service (system_server's PermissionController is not run)
 svc allocator libapklayer_allocator.so
 svc composer libapklayer_composer.so
+# Media integration remains opt-in while app/JNI playback is being completed.
+if [ "${APKLAYER_CODEC2:-0}" = 1 ]; then svc codec2 libapklayer_codec2.so; fi
 svc surfaceflinger libapklayer_surfaceflinger.so
 tool="${1:-libapklayer_sftest.so}"; [ $# -gt 0 ] && shift
 if [ "$tool" != none ] && [ -f "$L/libapklayer_vdisplay.so" ]; then

@@ -9,6 +9,26 @@
 #include <cstring>
 #include <C2Config.h>
 extern "C" int main(int argc, char** argv) {
+    if (argc >= 2 && !strcmp(argv[1], "--remote-probe")) {
+        using namespace aidl::android::hardware::media::c2;
+        ABinderProcess_setThreadPoolMaxThreadCount(2);
+        ABinderProcess_startThreadPool();
+        const std::string name = std::string(IComponentStore::descriptor) + "/apklayer";
+        ndk::SpAIBinder binder;
+        if (__builtin_available(android 31, *)) {
+            binder = ndk::SpAIBinder(AServiceManager_waitForService(name.c_str()));
+        } else return 1;
+        auto store = IComponentStore::fromBinder(binder);
+        std::vector<IComponentStore::ComponentTraits> traits;
+        if (!store || !store->listComponents(&traits).isOk() || traits.size() != 1 ||
+            traits[0].name != apklayer::kDecoderName) return 1;
+        std::shared_ptr<IComponentInterface> interface;
+        if (!store->createInterface(traits[0].name, &interface).isOk() || !interface) return 1;
+        fprintf(stderr, "codec2: PASS remote AIDL discovery/interface %s\n", traits[0].name.c_str());
+        if (argc < 3) return 0;
+        int result = apklayer::decodeProbe(argv[2], true, argc == 4 && !strcmp(argv[3], "hide-first"));
+        return result || argc == 4 ? result : apklayer::decodeProbe(argv[2], true, true);
+    }
     if (argc == 3 && !strcmp(argv[1], "--decode")) return apklayer::decodeProbe(argv[2]);
     if (argc == 2 && !strcmp(argv[1], "--probe")) {
         auto store = apklayer::makeStore();
@@ -30,7 +50,8 @@ extern "C" int main(int argc, char** argv) {
     ABinderProcess_startThreadPool();
     auto service = ndk::SharedRefBase::make<utils::ComponentStore>(apklayer::makeStore());
     const std::string name = std::string(IComponentStore::descriptor) + "/apklayer";
-    if (AServiceManager_addService(service->asBinder().get(), name.c_str()) != EX_NONE) return 1;
+    auto result = AServiceManager_addService(service->asBinder().get(), name.c_str());
+    if (result != EX_NONE) { fprintf(stderr, "codec2: registration failed %d\n", result); return 1; }
     fprintf(stderr, "codec2: registered %s\n", name.c_str());
     ABinderProcess_joinThreadPool();
     return 0;
