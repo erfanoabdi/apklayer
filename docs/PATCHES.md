@@ -18,7 +18,7 @@ How apklayer adapts upstream without patching it:
 | A decor that never records its first draw when its activity adds a dialog in `onCreate` | `AppHost` invalidates each newly launched decor once |
 
 Rule: if a patch ever becomes unavoidable, keep it thin, mark it inline `apklayer patch`,
-and log it here. The M1 seed's patch log is in `archive/seed-m1/docs/PATCHES.md`.
+and log it here. The M1 seed's patch log is in `archive/seed-m1/docs/PATCHES.md` at git tag `archive-last`.
 
 
 | `HostDefaults.REDIRECT_EXIT = null` (dex2jvm) | An app's `System.exit` really exits: apklayer runs one app per JVM, so Mac.apk's `MacApkProcessExit` (which fakes ActivityManager in a shared JVM) is not used |

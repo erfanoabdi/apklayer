@@ -3,7 +3,7 @@
 > Current authorization (2026-10-27): the user asked the assistant to build anything needed in OrbStack `~/los24` autonomously while they sleep. This supersedes older instructions below to ask them to build. Only incremental builds of `gsi_arm64 userdebug`; never clean or wipe `out/`.
 
 Living document of facts and decisions told by the user. Keep this up to date.
-The full chronological log up to the first Wayland frames is in `archive/HISTORY.md`.
+The full chronological log up to the first Wayland frames is in `archive/HISTORY.md` at git tag `archive-last`.
 
 ## What apklayer is
 - Project **apklayer** (renamed 2026-10-25 from "apkly"; never use the old name), workspace

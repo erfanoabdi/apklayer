@@ -71,7 +71,7 @@ VM access: `ssh parallels@10.211.55.4` (password `1234`). Setup details are in m
 | `scripts/vm-run.sh` | sync → Meson build → `apklayer run` on the VM |
 | `tests/uibench/` | target APK |
 | `tests/corpus/results.md` | which real apps run and why the others fail |
-| `archive/` | superseded approaches (M1 seed, Mac.apk java_mac era, M0 plan), reference only |
+| (git tag `archive-last`) | superseded approaches (M1 seed, Mac.apk java_mac era, M0 plan) were removed from the tree; `git show archive-last:archive/<path>` |
 
 ## License
 

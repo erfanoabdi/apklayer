@@ -6,7 +6,7 @@
 |---|---|---|
 | `runtime/dex2jvm/` (`com.macapk.dex`) | Mac.apk (kksimp), DEX→JVM converter, copied verbatim | AGPL-3.0 |
 | `tests/uibench/uibench.apk` | AOSP UiBench test app | Apache-2.0 |
-| `archive/**` | AOSP (Apache-2.0) and Mac.apk (AGPL-3.0) code from earlier milestones; not built | as marked in each origin |
+| `archive/**` (removed; git tag `archive-last`) | AOSP (Apache-2.0) and Mac.apk (AGPL-3.0) code from earlier milestones; not built | as marked in each origin |
 
 apklayer itself is AGPL-3.0-or-later (PLAN D5), compatible with all of the above.
 
