@@ -15,5 +15,10 @@
             <Limit name="size" min="2x2" max="4096x4096" />
             <Limit name="alignment" value="2x2" />
         </MediaCodec>
+        <MediaCodec name="c2.apklayer.aac.decoder" type="audio/mp4a-latm" rank="128">
+            <Attribute name="software-codec" />
+            <Limit name="sample-rate" ranges="8000,11025,12000,16000,22050,24000,32000,44100,48000,64000,88200,96000" />
+            <Limit name="channel-count" max="2" />
+        </MediaCodec>
     </Decoders>
 </MediaCodecs>

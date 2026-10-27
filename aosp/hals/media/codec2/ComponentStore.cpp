@@ -1,5 +1,6 @@
 /* AOSP ComponentStore frontend over the host's actual available decoders. */
 #include "HostDecoder.h"
+#include "AudioDecoderParams.h"
 #include <apklayer/codec.h>
 #include <C2PlatformSupport.h>
 #include <atomic>
@@ -12,12 +13,20 @@ public:
     C2String getName() const override { return "apklayer"; }
     c2_status_t createComponent(C2String name, std::shared_ptr<C2Component>* const out) override {
         out->reset();
+        if (name == kAudioDecoderName) {
+            if (!apklayer_codec_supports(kAudioDecoderMime)) return C2_NOT_FOUND;
+            *out = makeAudioDecoder(mNext++, mHelper); return C2_OK;
+        }
         const auto *info = findDecoder(name);
         if (!info || !apklayer_codec_supports(info->mime)) return C2_NOT_FOUND;
         *out = makeDecoder(mNext++, mHelper, *info); return C2_OK;
     }
     c2_status_t createInterface(C2String name, std::shared_ptr<C2ComponentInterface>* const out) override {
         out->reset();
+        if (name == kAudioDecoderName) {
+            if (!apklayer_codec_supports(kAudioDecoderMime)) return C2_NOT_FOUND;
+            *out = makeAudioDecoderInterface(mNext++, mHelper); return C2_OK;
+        }
         const auto *info = findDecoder(name);
         if (!info || !apklayer_codec_supports(info->mime)) return C2_NOT_FOUND;
         *out = makeDecoderInterface(mNext++, mHelper, *info); return C2_OK;
@@ -31,6 +40,12 @@ public:
             traits->domain = C2Component::DOMAIN_VIDEO; traits->kind = C2Component::KIND_DECODER;
             traits->rank = 128; traits->owner = getName();
             result.push_back(traits);
+        }
+        if (apklayer_codec_supports(kAudioDecoderMime)) {
+            auto traits = std::make_shared<C2Component::Traits>();
+            traits->name = kAudioDecoderName; traits->mediaType = kAudioDecoderMime;
+            traits->domain = C2Component::DOMAIN_AUDIO; traits->kind = C2Component::KIND_DECODER;
+            traits->rank = 128; traits->owner = getName(); result.push_back(traits);
         }
         return result;
     }

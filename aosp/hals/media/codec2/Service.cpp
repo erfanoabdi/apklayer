@@ -45,6 +45,17 @@ extern "C" int main(int argc, char** argv) {
         for (const auto& trait : traits) {
             std::shared_ptr<C2ComponentInterface> interface;
             if (store->createInterface(trait->name, &interface) != C2_OK) return 1;
+            if (trait->domain == C2Component::DOMAIN_AUDIO) {
+                C2StreamSampleRateInfo::output rate(0u, 48000);
+                C2StreamChannelCountInfo::output channels(0u, 2);
+                std::vector<std::unique_ptr<C2SettingResult>> failures;
+                if (interface->config_vb({&rate, &channels}, C2_MAY_BLOCK, &failures) != C2_OK || !failures.empty()) return 1;
+                rate.value = channels.value = 0;
+                std::vector<std::unique_ptr<C2Param>> heap;
+                if (interface->query_vb({&rate, &channels}, {}, C2_MAY_BLOCK, &heap) != C2_OK || rate.value != 48000 || channels.value != 2) return 1;
+                fprintf(stderr, "codec2: PASS %s interface config/query %uHz %uch\n", trait->name.c_str(), rate.value, channels.value);
+                continue;
+            }
             C2StreamPictureSizeInfo::output size(0u, 64, 48);
             std::vector<std::unique_ptr<C2SettingResult>> failures;
             if (interface->config_vb({&size}, C2_MAY_BLOCK, &failures) != C2_OK || !failures.empty()) return 1;
