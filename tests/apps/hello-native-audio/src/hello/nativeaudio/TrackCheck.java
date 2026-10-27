@@ -16,6 +16,11 @@ final class TrackCheck {
     }
     static void run(android.content.Context context) throws Exception {
         AudioManager manager = context.getSystemService(AudioManager.class);
+        // what an app finds before it touches the volume: audible (a phone starts at a mid index, not 0 or muted)
+        int initial = manager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        System.out.println("[hello-native-audio] default music volume " + initial + "/" + manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                + " muted=" + manager.isStreamMute(AudioManager.STREAM_MUSIC));
+        require(initial > 0 && !manager.isStreamMute(AudioManager.STREAM_MUSIC), "default music volume is audible");
         manager.setStreamVolume(AudioManager.STREAM_MUSIC,
                 manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC), 0);
         require(manager.getStreamVolume(AudioManager.STREAM_MUSIC)
