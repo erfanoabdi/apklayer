@@ -208,3 +208,38 @@ if 'bionic___pwrite64_chk(' not in s:
     s += '\n/* apklayer patch: Android positional-write fortify ABI. */\n' + body
     p.write_text(s)
 PY
+
+# 9. Android plugin loaders use absolute /system or /apex paths. Resolve them
+#    through the same instance-root overlay as open/stat, before library search.
+python3 - "$bt" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1]) / 'linker/linker.c'
+s = p.read_text()
+original = s
+# Preserve nested absolute plugin paths; legacy direct /system/lib/libc.so
+# aliases still strip their prefix before the translation override map.
+s = s.replace('if(!strncmp(name, prefix, prefix_len))',
+              "if(!strncmp(name, prefix, prefix_len) && !strchr(name + prefix_len, '/'))")
+s = s.replace('else if(!strncmp(name, prefix64, prefix64_len))',
+              "else if(!strncmp(name, prefix64, prefix64_len) && !strchr(name + prefix64_len, '/'))")
+marker = '/* apklayer patch: absolute libraries use the instance path overlay. */'
+if marker not in s:
+    anchor = '\tstrcpy(fullpath, name);\n'
+    assert s.count(anchor) == 1
+    s = s.replace(anchor, anchor + '''
+\t/* apklayer patch: absolute libraries use the instance path overlay. */
+\tif (name[0] == '/') {
+\t\tbool (*override)(char **) = dlsym(RTLD_DEFAULT, "apklayer_apply_path_overrides");
+\t\tchar *mapped = (char *)name;
+\t\tif (override && override(&mapped)) {
+\t\t\tif (strlen(mapped) >= 512) { free(mapped); errno = ENAMETOOLONG; return -1; }
+\t\t\tfd = apkenv__open_lib(mapped);
+\t\t\tif (fd >= 0) strcpy(fullpath, mapped);
+\t\t\tfree(mapped);
+\t\t\treturn fd;
+\t\t}
+\t}
+''', 1)
+if s != original: p.write_text(s)
+PY

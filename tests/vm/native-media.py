@@ -79,6 +79,8 @@ try:
     assert '[hello-native-codec] PASS native MediaCodec decoded 4 YUV frames with PTS/EOS' in text
     assert '[hello-native-codec] AVC flush PASS' in text
     assert '[hello-native-codec] AVC PASS reordered 12 YUV pictures, exact PTS/EOS/release' in text
+    assert '[hello-native-codec] extractor PASS MP4 tracks, seek, 12 decoded YUV pictures/PTS/EOS' in text
+    assert 'media: registered extractor service' in (logs / 'extractor.log').read_text(errors='replace')
     assert committed and captured
     assert 'finished hello.nativecodec.Main depth=0' in text and 'depth=0' in text
     assert (logs / 'shell.log').read_text(errors='replace').count('dmabuf frame') > 0

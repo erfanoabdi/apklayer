@@ -125,3 +125,7 @@ The Vpx adapter also supports VP9 profile 0 using AOSP profile/level enums and t
 ## Reordered AVC output (2026-10-27)
 
 The new host adapter reuses SimpleC2Component’s existing pending-work and drain queue. Streaming sample/EOS/error notifications schedule the component’s handler, preventing races with base pending insertion. Frames complete their original input ordinal by PTS; the EOS input’s picture is cloned with INCOMPLETE and its original work returns empty EOS after the backend drains. Shared interface/gralloc helpers retain the Vpx path. AOSP AVC 8-bit profile/level vocabulary and output delay are used; no hardware acceleration is claimed. Real AIDL checks all twelve reordered pictures and final EOS; app buffer tests include pending B-frame flush/replay, and Surface tests check final render callbacks, pixels and Back cleanup.
+
+## Native container extraction and absolute plugin paths (2026-10-27)
+
+MediaExtractor uses original framework Java/JNI and an independent AOSP MediaExtractorService process. Original MP4/WebM plugins load from the staged Android root. The translation linker now preserves nested /system/lib[64] paths and resolves absolute libraries through the existing instance overlay before search; direct library aliases retain their existing translation. Repo-owned plugin links and native builder staging make the layout reproducible. Tests exercise callback-source binder reads, native track/CSD/seek/sample APIs, then actual H.264 decoding and EOS/release. FD sources and MediaPlayer are subsequent work.

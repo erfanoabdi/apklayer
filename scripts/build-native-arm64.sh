@@ -16,10 +16,14 @@ cc -shared -fPIC -O2 -Wall -I"$JH/include" -I"$JH/include/linux" -o "$tmp/liband
     -L"$HOME/bt-arm/bionic_translation/b" -ldl_bio -Wl,-rpath,"$HOME/bt-arm/bionic_translation/b"
 # the launcher for Android executables built as libraries (btload --main) and the property tool, in $native/bin
 mkdir -p "$native/bin" "$native/android-root"
+[ -e "$native/android-libs" ] || ln -s "${APKLAYER_ANDROID_LIBS:-$HOME/android-arm64/lib64}" "$native/android-libs"
 cp -r bridge/native/android-root/. "$native/android-root/"  # apklayer's own files of the Android root (VINTF manifest of our HALs); the tree's come from scripts/collect-android-root.sh
 cc -O2 -Wall -o "$native/bin/btload" scripts/btload.c bridge/native/android_platform.c bridge/native/properties.c bridge/native/paths.c bridge/native/binder_compat.c bridge/native/android_stubs.c \
     -rdynamic -L"$HOME/bt-arm/bionic_translation/b" -ldl_bio -Wl,-rpath,"$HOME/bt-arm/bionic_translation/b"
-[ ! -e b/bridge/hals/graphics/libapklayer-hal-graphics.so ] || cp b/bridge/hals/graphics/libapklayer-hal-graphics.so "$native/"  # the host HAL library btload loads for the Android-side HAL services
+for domain in graphics media; do
+    hal="b/bridge/hals/$domain/libapklayer-hal-$domain.so"
+    [ ! -e "$hal" ] || cp "$hal" "$native/"
+done  # the host HAL library btload loads for the Android-side HAL services
 # the LD_PRELOAD library (first in symbol lookup for every library of the process, first static TLS module): the path layer and bionic's TLS slots
 cc -shared -fPIC -O2 -Wall -o "$native/libapklayer-preload.so" bridge/native/paths.c bridge/native/paths_preload.c bridge/native/bionic_tls.c -ldl
 cc -O2 -Wall -o "$native/bin/aprop" bridge/native/aprop.c bridge/native/properties.c

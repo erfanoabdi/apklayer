@@ -2,7 +2,8 @@
 cc_library_shared {
     name: "libapklayer_mediaserver",
     srcs: ["MediaServices.cpp"],
-    shared_libs: ["libmediaplayerservice", "libresourcemanagerservice", "libbinder", "libbinder_ndk", "libutils", "liblog"],
+    include_dirs: ["frameworks/av/services/mediaextractor"],
+    shared_libs: ["libmediaextractorservice", "libmediaplayerservice", "libresourcemanagerservice", "libbinder", "libbinder_ndk", "libutils", "liblog"],
     compile_multilib: "64",
     cflags: ["-Wall", "-Werror", "-Wno-main"],
 }

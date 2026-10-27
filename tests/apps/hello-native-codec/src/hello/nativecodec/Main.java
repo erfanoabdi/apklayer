@@ -36,6 +36,7 @@ public class Main extends Activity {
             decodeStream("red-vp9.ivf", -1);
             decodeStream("red-vp9-multi.ivf", 2);
             AvcCheck.run(this, null);
+            ExtractorCheck.run(this);
             runOnUiThread(() -> {
                 Runnable show = () -> {
                     result.getViewTreeObserver().registerFrameCommitCallback(

@@ -28,9 +28,9 @@ print("Resolving build-output origins", flush=True)
 # the tree's sha256 of the candidate origins, computed once in OrbStack
 names = sorted({p.split("/")[-1] for p in sums if p.startswith("android-arm64/lib64/")})
 orb = sh("cd ~/los24 && for n in %s; do f=%s/system/lib64/$n; [ -f $f ] && sha256sum $f; done; "
-         "for n in %s; do for f in %s/apex/*/lib64/$n; do [ -f $f ] && sha256sum $f; done; done; "
+         "for n in %s; do for f in %s/apex/*/lib64/$n %s/apex/*/lib64/extractors/$n; do [ -f $f ] && sha256sum $f; done; done; "
          "find out/soong/.intermediates/vendor/apklayer -name '*.so' -path '*android_arm64_armv8-a_shared/*' -not -path '*unstripped*' -not -path '*before_final*' | xargs sha256sum; "
-         "grep -m3 'ro.build.fingerprint=\\|ro.build.date=\\|ro.build.version.release=' %s/system/build.prop" % (" ".join(names), OUT, " ".join(names), OUT, OUT), orb=True)
+         "grep -m3 'ro.build.fingerprint=\\|ro.build.date=\\|ro.build.version.release=' %s/system/build.prop" % (" ".join(names), OUT, " ".join(names), OUT, OUT, OUT), orb=True)
 tree, apk, ident = {}, {}, []
 for line in orb.splitlines():
     if line.startswith("ro."): ident.append(line); continue
