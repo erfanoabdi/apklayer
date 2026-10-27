@@ -7,6 +7,9 @@ import org.robolectric.annotation.internal.DoNotInstrument;
 public final class NativeLooper {
     private NativeLooper() {}
 
+    /** Prepare the actual native looper before GameActivity/NDK initialization. */
+    public static native long prepareForThread();
+
     /** The thread's ALooper, 0 when nothing created one (no native code runs a message pump on this thread). */
     public static native long forThread();
 

@@ -190,10 +190,14 @@ public class DefaultNativeRuntimeLoader implements NativeRuntimeLoader {
 
   /** Overridable in Android, due to changing shadows in private branches. */
   protected List<String> getCoreClassNatives() {
-    if (Boolean.getBoolean("apklayer.nativeattribution") || Boolean.getBoolean("apklayer.nativeaudio") || Boolean.getBoolean("apklayer.nativeparcels") || Boolean.getBoolean("apklayer.realbinder")) {
-      return ImmutableList.<String>builder().addAll(CORE_CLASS_NATIVES).add("android.os.Parcel").build();
-    }
-    return CORE_CLASS_NATIVES;
+    ImmutableList.Builder<String> classes = ImmutableList.<String>builder().addAll(CORE_CLASS_NATIVES);
+    if (Boolean.getBoolean("apklayer.nativeattribution") || Boolean.getBoolean("apklayer.nativeaudio") || Boolean.getBoolean("apklayer.nativeparcels") || Boolean.getBoolean("apklayer.realbinder"))
+      classes.add("android.os.Parcel");
+    // apklayer patch: NDK asset/configuration APIs require real resource pointers.
+    if (Boolean.getBoolean("apklayer.nativeresources")) classes.add(
+        "android.content.res.ApkAssets", "android.content.res.AssetManager",
+        "android.content.res.StringBlock", "android.content.res.XmlBlock");
+    return classes.build();
   }
 
   /** Overridable in Android, due to changing shadows in private branches. */

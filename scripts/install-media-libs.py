@@ -18,7 +18,7 @@ def orb(cmd):
 
 on_vm = set(subprocess.run(SSH + ["ls ~/android-arm64/lib64"], capture_output=True, text=True, check=True).stdout.split())
 soft = [n for n in orb("ls %s" % APEX[0]).split() if n.startswith("libcodec2_soft_") and n not in SKIP]
-wanted = [n for n in soft + EXTRACTORS if n not in on_vm]
+wanted = [n for n in soft + EXTRACTORS + ["libOpenSLES.so"] if n not in on_vm]
 
 def find(name):
     return orb("for d in %s; do [ -f $d/%s ] && { echo $d/%s; break; }; done; true" % (" ".join(APEX), name, name)).strip()
@@ -40,4 +40,12 @@ stage = pathlib.Path("/tmp/apklayer-media-libs"); stage.mkdir(exist_ok=True)
 for n, p in plan.items():
     subprocess.run(["cp", "/Users/erfanabdi/OrbStack/ubuntu22-x86" + p, str(stage / n)], check=True)
 subprocess.run(SCP + [str(f) for f in stage.iterdir()] + [VM + ":~/android-arm64/lib64/"], check=True)
+# apklayer patch: the real OpenSL ES engine uses the original audio services.
+# A legacy host mapping would bypass the staged Android library entirely.
+subprocess.run(SSH + ["sed -i '/^libOpenSLES.so[[:space:]]/d' ~/arm64-native/share/bionic_translation/cfg.d/bionic_translation.cfg"], check=True)
+for n in plan:
+    expected = orb("sha256sum " + plan[n]).split()[0]
+    actual = subprocess.check_output(SSH + ["sha256sum ~/android-arm64/lib64/" + n], text=True).split()[0]
+    if expected != actual: raise RuntimeError("installed hash mismatch: " + n)
+    print("verified", n, actual, flush=True)
 print("installed")

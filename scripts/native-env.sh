@@ -28,3 +28,16 @@ export APKLAYER_NO_SYSTEM_SERVER="${APKLAYER_NO_SYSTEM_SERVER:-1}"
 if [ -f "$L/libapklayer_vulkan.so" ] && [ -f "$L/vulkan.apklayer.so" ]; then
     export APKLAYER_VULKAN_HOST=1
 fi
+
+# apklayer patch: native OpenSL ES clients need the existing Android audio
+# services and PipeWire backend, including when launched from the desktop menu.
+if [ -f "$L/libOpenSLES.so" ] && [ -f "$L/libapklayer_audioserver.so" ] && [ -f "$N/libapklayer-hal-audio.so" ]; then
+    export APKLAYER_AUDIO="${APKLAYER_AUDIO:-1}"
+    export APKLAYER_AUDIO_SERVICES="${APKLAYER_AUDIO_SERVICES:-$APKLAYER_AUDIO}"
+    if [ "$APKLAYER_AUDIO" = 1 ]; then
+        case ":$APKLAYER_HOST_LIBS:" in
+            *":$N/libapklayer-hal-audio.so:"*) ;;
+            *) export APKLAYER_HOST_LIBS="$APKLAYER_HOST_LIBS:$N/libapklayer-hal-audio.so" ;;
+        esac
+    fi
+fi

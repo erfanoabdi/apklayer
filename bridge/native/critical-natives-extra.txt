@@ -1,0 +1,17 @@
+android.content.res.XmlBlock nativeNext(J)I
+android.content.res.XmlBlock nativeGetNamespace(J)I
+android.content.res.XmlBlock nativeGetName(J)I
+android.content.res.XmlBlock nativeGetText(J)I
+android.content.res.XmlBlock nativeGetLineNumber(J)I
+android.content.res.XmlBlock nativeGetAttributeCount(J)I
+android.content.res.XmlBlock nativeGetAttributeNamespace(JI)I
+android.content.res.XmlBlock nativeGetAttributeName(JI)I
+android.content.res.XmlBlock nativeGetAttributeResource(JI)I
+android.content.res.XmlBlock nativeGetAttributeDataType(JI)I
+android.content.res.XmlBlock nativeGetAttributeData(JI)I
+android.content.res.XmlBlock nativeGetAttributeStringValue(JI)I
+android.content.res.XmlBlock nativeGetIdAttribute(J)I
+android.content.res.XmlBlock nativeGetClassAttribute(J)I
+android.content.res.XmlBlock nativeGetStyleAttribute(J)I
+android.content.res.XmlBlock nativeGetSourceResId(J)I
+android.content.res.ApkAssets nativeIsUpToDate(J)I

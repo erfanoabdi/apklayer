@@ -86,7 +86,12 @@ public final class AppHost implements Runnable {
     @Override
     public void run() {
         Thread.currentThread().setContextClassLoader(sandbox.getRobolectricClassLoader());
+        if (Boolean.getBoolean("apklayer.gpu")) System.setProperty("apklayer.nativelooper", "true");
         AppEnvironment.setUpApplication(sandbox, apk, describe != null);
+        // apklayer patch: Android prepares the UI thread's native Looper before
+        // native activity initialization; the paused Java queue alone does not.
+        if (describe == null && Boolean.getBoolean("apklayer.gpu") && NativeLooper.prepareForThread() == 0)
+            throw new IllegalStateException("Cannot prepare the main native looper");
         Application app = RuntimeEnvironment.getApplication(); // created here (lazy), on persistent dirs
         if (describe != null) {
             AppMetadata.describe(app, describe);

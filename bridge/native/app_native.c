@@ -34,6 +34,7 @@ int apklayer_register_nativeloader(JNIEnv *env, jclass loader)
 extern void *bionic_dlopen(const char *filename, int flag);
 extern void *bionic_dlsym(void *handle, const char *symbol);
 static void *(*p_for_thread)(void);
+static void *(*p_prepare)(int);
 static int (*p_poll_once)(int, int *, int *, void **);
 static void (*p_wake)(void *);
 
@@ -45,9 +46,11 @@ static int looper_symbols(void)
     p_poll_once = bionic_dlsym(lib, "ALooper_pollOnce");
     p_wake = bionic_dlsym(lib, "ALooper_wake");
     p_for_thread = bionic_dlsym(lib, "ALooper_forThread");
-    return p_for_thread && p_poll_once && p_wake;
+    p_prepare = bionic_dlsym(lib, "ALooper_prepare");
+    return p_for_thread && p_prepare && p_poll_once && p_wake;
 }
 
+static jlong looper_prepare(JNIEnv *env, jclass cls) { (void)env; (void)cls; return looper_symbols() ? (jlong)(uintptr_t)p_prepare(1 /* ALLOW_NON_CALLBACKS */) : 0; }
 static jlong looper_for_thread(JNIEnv *env, jclass cls) { (void)env; (void)cls; return looper_symbols() ? (jlong)(uintptr_t)p_for_thread() : 0; }
 static jint looper_poll_once(JNIEnv *env, jclass cls, jint timeout) { (void)env; (void)cls; return looper_symbols() ? p_poll_once(timeout, NULL, NULL, NULL) : -1; }
 static void looper_wake(JNIEnv *env, jclass cls, jlong looper) { (void)env; (void)cls; if (looper_symbols() && looper) p_wake((void *)(uintptr_t)looper); }
@@ -56,6 +59,7 @@ int apklayer_register_nativelooper(JNIEnv *env, jclass looper)
 {
     JNINativeMethod methods[] = {
         {"forThread", "()J", (void *)looper_for_thread},
+        {"prepareForThread", "()J", (void *)looper_prepare},
         {"pollOnce", "(I)I", (void *)looper_poll_once},
         {"wake", "(J)V", (void *)looper_wake},
     };

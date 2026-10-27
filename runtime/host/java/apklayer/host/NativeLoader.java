@@ -42,15 +42,21 @@ public final class NativeLoader {
 
     // ---- entry points the converter routes the app's calls to ----
 
-    public static void loadLibrary(String name) {
+    public static String findLibrary(String name) {
         String dir = System.getProperty("apklayer.libdir", "");
         File f = new File(dir, "lib" + name + ".so");
         String provider = System.getProperty("apklayer.webviewprovider");
-        if (!f.exists() && provider != null) f = new File(provider + "/lib", "lib" + name + ".so"); // the WebView provider's own library
+        if (!f.isFile() && provider != null) f = new File(provider + "/lib", "lib" + name + ".so");
         String androidLibs = System.getProperty("apklayer.androidlibs");
-        if (!f.exists() && androidLibs != null) f = new File(androidLibs, "lib" + name + ".so"); // a platform library the app asks for by name (libwebviewchromium_plat_support)
-        if (!f.exists()) throw new UnsatisfiedLinkError("no " + name + " in " + dir + " (ABI not in the APK?)");
-        load(f.getPath());
+        if (!f.isFile() && androidLibs != null) f = new File(androidLibs, "lib" + name + ".so");
+        return f.isFile() ? f.getAbsolutePath() : null;
+    }
+
+    public static void loadLibrary(String name) {
+        String path = findLibrary(name);
+        if (path == null) throw new UnsatisfiedLinkError("no " + name + " in "
+                + System.getProperty("apklayer.libdir", "") + " (ABI not in the APK?)");
+        load(path);
     }
 
     public static void load(String path) {

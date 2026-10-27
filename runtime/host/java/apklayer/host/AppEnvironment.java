@@ -17,6 +17,7 @@ import org.robolectric.annotation.ConscryptMode;
 import org.robolectric.annotation.GraphicsMode;
 import org.robolectric.annotation.LooperMode;
 import org.robolectric.annotation.SQLiteMode;
+import org.robolectric.annotation.ResourcesMode;
 import org.robolectric.annotation.experimental.LazyApplication;
 import org.robolectric.internal.AndroidSandbox;
 import org.robolectric.manifest.AndroidManifest;
@@ -48,6 +49,8 @@ final class AppEnvironment {
                 .put(LazyApplication.LazyLoad.class, LazyApplication.LazyLoad.ON)
                 .put(GraphicsMode.Mode.class, GraphicsMode.Mode.NATIVE)
                 .put(SQLiteMode.Mode.class, SQLiteMode.Mode.NATIVE)
+                .put(ResourcesMode.Mode.class, Boolean.getBoolean("apklayer.nativeresources")
+                        ? ResourcesMode.Mode.NATIVE : ResourcesMode.Mode.BINARY)
                 .put(Config.class, config)
                 .build();
         sandbox.getTestEnvironment().setUpApplicationState("apklayer", configuration, manifest);

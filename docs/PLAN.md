@@ -319,3 +319,6 @@ Rosetta-era x86 library where the tree's framework jar is used.
 (UiBench GL TextureView and Modern Combat 3 notes: `docs/history/PLAN-gl-textureview-mc3.md`.)
 
 - Native-game coverage gap (OTR2 1.3.2, 2026-10-28): provide and verify OpenSL ES slCreateEngine/native audio path. Current VM has legacy libOpenSLES.so.1 mapping and no staged original Android OpenSLES library; game fails before graphics. Test evidence in tests/corpus/results.md.
+
+## Licensing (decided 2026-10-28; to do later, not blocking)
+Decision: AGPL-3.0-or-later for everyone plus a paid commercial license for companies that do not want the AGPL terms (audit table in `docs/THIRD_PARTY.md`). To do: (1) update `runtime/dex2jvm` to upstream kksimp/dex2jvm (Apache-2.0, package `io.github.kksimp.dex2jvm`), keep apklayer's own `HostDefaults`, rename Mac.apk references in our code (`com.macapk.*`, `macapk` prefixes); (2) replace `MacApkUnsafe.java` and the Mac.apk-owned `HostDefaults.java` with our own code or get the Mac.apk owner's permission; (3) CLA/ownership decision (agent-written commits); (4) collect NOTICE files of everything shipped; (5) fix the dex2jvm rows in THIRD_PARTY/NOTICE/PLAN D5.

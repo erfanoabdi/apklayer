@@ -13,7 +13,7 @@ import org.objectweb.asm.Opcodes;
 /**
  * Generator ({@code SandboxLoaderPatch outDir}), run by scripts/build-runtime-overlay.sh: Robolectric's SandboxClassLoader.loadClass cannot load array classes
  * ("[Ljava.lang.String;"), which ART's class loaders can and Chromium's JNI layer asks for. The original loadClass(String, boolean) is renamed and a new one
- * answers array names with Class.forName(name, false, this) and hands everything else to the original.
+ * answers array names with Class.forName(name, false, this) and hands everything else to the original with slashes turned into dots.
  */
 public final class SandboxLoaderPatch {
     private static final String CLASS = "org/robolectric/internal/bytecode/SandboxClassLoader";
@@ -41,7 +41,11 @@ public final class SandboxLoaderPatch {
                 m.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Class", "forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;", false);
                 m.visitInsn(Opcodes.ARETURN);
                 m.visitLabel(plain); m.visitFrame(Opcodes.F_SAME, 0, null, 0, null);
-                m.visitVarInsn(Opcodes.ALOAD, 0); m.visitVarInsn(Opcodes.ALOAD, 1); m.visitVarInsn(Opcodes.ILOAD, 2);
+                // ART's loaders also accept binary names with slashes (Paddleboat loads "com/google/.../GameControllerManager" this way)
+                m.visitVarInsn(Opcodes.ALOAD, 0);
+                m.visitVarInsn(Opcodes.ALOAD, 1); m.visitIntInsn(Opcodes.BIPUSH, '/'); m.visitIntInsn(Opcodes.BIPUSH, '.');
+                m.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "replace", "(CC)Ljava/lang/String;", false);
+                m.visitVarInsn(Opcodes.ILOAD, 2);
                 m.visitMethodInsn(Opcodes.INVOKEVIRTUAL, CLASS, "apklayerLoadClass", "(Ljava/lang/String;Z)Ljava/lang/Class;", false);
                 m.visitInsn(Opcodes.ARETURN);
                 m.visitMaxs(3, 3); m.visitEnd();
