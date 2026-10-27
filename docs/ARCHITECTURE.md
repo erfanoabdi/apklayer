@@ -123,3 +123,8 @@ shadows (no system_server). Real code is used for graphics, binder and hardware.
 Multiple instances (user, 2026-10-26): every piece above is per instance, parameterised by an instance root (data, properties,
 binder device, sockets). One instance = one full phone (or a single app). See PLAN P9.
 
+
+## GPU windows and timing (device-library route, 2026-10-27)
+Each app JVM renders into real BLAST window layers under WMS-style containers. `WindowSurface` positions the parent using frame minus surfaceInsets and stacks it by window type; BLAST keeps ownership of the child buffer geometry. One app virtual display composes its layer stack into gralloc buffers. `libapklayer_vdisplay` consumes those buffers, presents dmabufs through the host display HAL, and returns acquired buffers on Wayland release. Old-size queued frames are dropped after resize.
+
+The composer’s primary is a headless timing anchor. It connects to the shell for real output mode/refresh and vsync but creates no window. Only app sinks create toplevels; an initial blank shm frame maps each one before Android rendering. `vsync.c` routes outstanding timing requests through a mapped active surface and rewires them when the source changes. Timestamps come from Wayland frame callbacks; no timer synthesizes refresh. Native clients can request timing without owning another window. Input/state/configure messages for a display window go to its JVM through the shell’s input proxy.

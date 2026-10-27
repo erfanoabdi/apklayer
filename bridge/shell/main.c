@@ -54,6 +54,7 @@ int main(void)
     struct wl_registry *reg = wl_display_get_registry(display);
     wl_registry_add_listener(reg, &registry_listener, NULL);
     wl_display_roundtrip(display);
+    wl_display_roundtrip(display); /* bound wl_output objects deliver their initial mode/scale */
     decor_setup(compositor, subcompositor, shm);
     if (!compositor || !shm || !wm_base) { fprintf(stderr, "[shell] missing Wayland globals\n"); return 1; }
 

@@ -51,7 +51,7 @@ class Client : public BnComposerClient {
         mHeight = envInt("APKLAYER_DISPLAY_HEIGHT", 1280);
         mDpi = envInt("APKLAYER_DISPLAY_DPI", 320);
         apklayer_display_callbacks cb = {this, &Client::onVsyncStatic, &Client::onRefreshStatic, &Client::onReleasedStatic};
-        mDisplay = apklayer_display_open("apklayer", mWidth, mHeight, &cb);
+        mDisplay = apklayer_display_open_headless("apklayer", &cb);
         LOG_ALWAYS_FATAL_IF(mDisplay == nullptr, "cannot open the display (is apklayer-shell running?)");
         mPeriodNs = mRefreshMhz ? 1000000000000LL / mRefreshMhz : 16666667;
     }
@@ -275,12 +275,14 @@ class Client : public BnComposerClient {
 
     // ---- the display's callbacks (the host display HAL's reader thread) ----
     static void onVsyncStatic(void* u, int64_t ts) { static_cast<Client*>(u)->onVsync(ts); }
-    static void onRefreshStatic(void* u, uint32_t mhz) { static_cast<Client*>(u)->mRefreshMhz = mhz; }
+    static void onRefreshStatic(void* u, uint32_t mhz) {
+        auto* self = static_cast<Client*>(u);
+        self->mRefreshMhz = mhz;
+        if (mhz) self->mPeriodNs = 1000000000000LL / mhz;
+    }
     static void onReleasedStatic(void*, int) {}
 
     void onVsync(int64_t ts) {
-        int64_t last = mLastVsync.exchange(ts);
-        if (last != 0 && ts > last && ts - last < 100000000) mPeriodNs = (mPeriodNs * 7 + (ts - last)) / 8;  // measured, smoothed
         std::shared_ptr<IComposerCallback> cb;
         {
             std::lock_guard<std::mutex> l(mLock);
@@ -299,7 +301,6 @@ class Client : public BnComposerClient {
     int32_t mWidth, mHeight, mDpi;
     std::atomic<int64_t> mPeriodNs{16666667};
     std::atomic<uint32_t> mRefreshMhz{0};
-    std::atomic<int64_t> mLastVsync{0};
     std::atomic<bool> mVsyncEnabled{false};
     std::mutex mLock;
     std::shared_ptr<IComposerCallback> mCallback;

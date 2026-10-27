@@ -131,6 +131,7 @@ try:
     assert final_layers.count('VRI-') < after.count('VRI-'), 'real Back did not remove the dialog layer'
     shell = Path('/tmp/apklayer-stack/shell.log').read_text(errors='replace')
     assert shell.count('dmabuf frame') > 5, 'no GPU frame delivery'
+    assert '[shell] apklayer: window ' not in shell, 'empty primary window was created'
     assert final_size in shell, 'no GPU frame at the final resized dimensions'
     assert Path('/tmp/apklayer-stack/vdisplay-' + PKG + '.log').exists(), 'sink was not launched'
     print('PASS GPU dialog, real resize, Back and main-loop responsiveness', flush=True)

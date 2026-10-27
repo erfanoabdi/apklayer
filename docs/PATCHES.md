@@ -85,3 +85,6 @@ virtual display sink). `W_TARGET`/`W_ID` route those messages; `window_attach_in
 
 ## Window container placement (2026-10-27)
 `runtime/patches/.../WindowSurface.java` supplies the window container that WMS normally parents a client-managed BLAST layer under. Position and stacking belong to that parent, because BLAST sets the child’s destination frame on every buffer. Position subtracts `LayoutParams.surfaceInsets`, following AOSP `WindowState.transformFrameToSurfacePosition`; removal destroys the container. `ShadowWindowManagerGlobal` clamps requested frames to the display so ViewRootImpl remeasures oversized windows. UiBench screenshot checks measure 16px margins on each side before/after resize.
+
+## Headless primary (2026-10-27)
+The composer uses `apklayer_display_open_headless`: HELLO/output-refresh/vsync messages with no WINDOW_CREATE and no retained presentation buffers. Callback struct ABI is unchanged. App virtual displays are the only toplevels. `onRefreshStatic` derives the period from the real output mode; variable gaps between requested frame callbacks do not change display refresh. Smoke tools get a stack-0 virtual display in `arm64-stack.sh`.

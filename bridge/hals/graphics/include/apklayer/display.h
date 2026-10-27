@@ -25,6 +25,10 @@ struct apklayer_display;
  * NULL on failure (errno). Callbacks run on the display's reader thread. */
 struct apklayer_display *apklayer_display_open(const char *name, uint32_t width, uint32_t height,
                                                const struct apklayer_display_callbacks *callbacks);
+/* A primary timing anchor with no toplevel. Refresh comes from the output,
+ * vsync from an active mapped app surface; present retains no buffers. */
+struct apklayer_display *apklayer_display_open_headless(const char *name,
+                                                      const struct apklayer_display_callbacks *callbacks);
 void apklayer_display_close(struct apklayer_display *d);
 
 /* The window's logical size and scale (percent), as the shell reports it: once the window is up and whenever it is resized. Runs on
@@ -34,7 +38,7 @@ void apklayer_display_set_configure_callback(struct apklayer_display *d,
 
 uint32_t apklayer_display_refresh_mhz(struct apklayer_display *d);  /* 0 until the shell has said (set during open) */
 
-/* One vsync() callback at the window's next real frame. */
+/* One vsync() callback at the active mapped surface's next real compositor frame. */
 int apklayer_display_request_vsync(struct apklayer_display *d);
 
 /* Shows a buffer: slot 0..7 names it; its fds are sent the first time the slot is used (or after invalidate_slot), later

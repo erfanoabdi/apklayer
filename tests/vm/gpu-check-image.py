@@ -28,7 +28,7 @@ for filename in sys.argv[1:]:
         # screen. Its neutral content background still exposes both edges.
         top = 0
         body = list(runs([
-            sum(min(pixels[x, y]) >= 245 and
+            sum(min(pixels[x, y]) >= 190 and
                 max(pixels[x, y]) - min(pixels[x, y]) <= 3
                 for y in range(32, im.height)) > (im.height - 32) * .75
             for x in range(im.width)]))

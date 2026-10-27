@@ -39,6 +39,11 @@ svc allocator libapklayer_allocator.so
 svc composer libapklayer_composer.so
 svc surfaceflinger libapklayer_surfaceflinger.so
 tool="${1:-libapklayer_sftest.so}"; [ $# -gt 0 ] && shift
+if [ "$tool" != none ] && [ -f "$L/libapklayer_vdisplay.so" ]; then
+    # Smoke tools draw on stack 0. The primary is headless; give tools the same
+    # real virtual-display sink an app uses, and a mapped source for vsync.
+    svc test-display libapklayer_vdisplay.so apklayer:test 0 "${APKLAYER_DISPLAY_WIDTH:-720}" "${APKLAYER_DISPLAY_HEIGHT:-1280}"
+fi
 if [ "$tool" = none ]; then start keepalive tail -f /dev/null; else svc tool "$tool" "$@"; fi  # "none": only the services (an app brings its own windows); stop the stack with its pid file
 echo "$$" > "$LOGS/stack.pid"
 # ready when SurfaceFlinger has registered (what an app needs before its first window): bin/apklayer waits for this file

@@ -34,6 +34,7 @@ struct apklayer_display {
     _Atomic uint32_t refresh_mhz;
     _Atomic int closing;
     uint8_t sent[SLOTS]; /* the slot's buffer was sent to the shell */
+    int headless;
     void (*_Atomic configure_fn)(void *, int32_t, int32_t, int32_t);
     _Atomic(void *) configure_user;
 };
@@ -146,11 +147,12 @@ static int connect_shell(int fd, const struct sockaddr_un *a)
     return -1;
 }
 
-struct apklayer_display *apklayer_display_open(const char *name, uint32_t width, uint32_t height,
-                                               const struct apklayer_display_callbacks *callbacks)
+static struct apklayer_display *display_open(const char *name, uint32_t width, uint32_t height,
+                                             const struct apklayer_display_callbacks *callbacks, int headless)
 {
     struct apklayer_display *d = calloc(1, sizeof *d);
     if (!d) return NULL;
+    d->headless = headless;
     if (callbacks) d->cb = *callbacks;
     pthread_mutex_init(&d->send_lock, NULL);
     d->fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
@@ -172,9 +174,21 @@ struct apklayer_display *apklayer_display_open(const char *name, uint32_t width,
     create[12] = 0; /* empty shm path: a dmabuf-only window */
     size_t tl = strnlen(name, 60);
     memcpy(create + 13, name, tl);
-    send_msg(d, MSG_WINDOW_CREATE, create, (uint32_t)(13 + tl), NULL, 0);
+    if (!headless) send_msg(d, MSG_WINDOW_CREATE, create, (uint32_t)(13 + tl), NULL, 0);
     pthread_create(&d->reader, NULL, reader, d);
     return d;
+}
+
+struct apklayer_display *apklayer_display_open(const char *name, uint32_t width, uint32_t height,
+                                               const struct apklayer_display_callbacks *callbacks)
+{
+    return display_open(name, width, height, callbacks, 0);
+}
+
+struct apklayer_display *apklayer_display_open_headless(const char *name,
+                                                      const struct apklayer_display_callbacks *callbacks)
+{
+    return display_open(name, 0, 0, callbacks, 1);
 }
 
 void apklayer_display_close(struct apklayer_display *d)
@@ -208,6 +222,7 @@ void apklayer_display_invalidate_slot(struct apklayer_display *d, int slot)
 int apklayer_display_present(struct apklayer_display *d, int slot, const struct apklayer_gfx_buffer *buf, int32_t damage[4])
 {
     if (slot < 0 || slot >= SLOTS) return -EINVAL;
+    if (d->headless) return 0; /* no consumer takes ownership of an invisible primary's buffers */
     int32_t m[20] = { 0 };
     m[0] = WINDOW_ID;
     m[1] = slot;
