@@ -21,4 +21,19 @@ public class ShadowHostNativeMediaCodec {
                 ClassParameter.from(boolean.class, encoder), ClassParameter.from(int.class, pid),
                 ClassParameter.from(int.class, uid));
     }
+
+    private static final boolean PERF = Boolean.getBoolean("apklayer.perf");
+    private long renders, windowStart = System.nanoTime();
+
+    /** -Dapklayer.perf=true: a line per 60 rendered frames with the wall time and how far ahead of / behind the system clock the render time is. */
+    @Implementation protected void releaseOutputBuffer(int index, boolean render, boolean updatePTS, long timeNs) {
+        if (PERF && render && ++renders % 60 == 0) {
+            long now = System.nanoTime();
+            System.out.println("[apklayer] codec render: 60 frames in " + (now - windowStart) / 1_000_000 + " ms (render time " + (timeNs - now) / 1_000_000 + " ms ahead)");
+            windowStart = now;
+        }
+        ReflectionHelpers.callInstanceMethod(real, Shadow.directNativeMethodName(MediaCodec.class.getName(), "releaseOutputBuffer"),
+                ClassParameter.from(int.class, index), ClassParameter.from(boolean.class, render),
+                ClassParameter.from(boolean.class, updatePTS), ClassParameter.from(long.class, timeNs));
+    }
 }

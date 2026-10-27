@@ -230,6 +230,7 @@ public final class AppHost implements Runnable {
         // Schedule clock: in headless (PAUSED) mode the sandbox clock is stepped by the loop
         // below, so schedule script/snapshot times on it — a "6 s" run then completes in well
         // under a second of real time. In shell mode real time drives everything.
+        clockNanos = System.nanoTime();
         long start = pausedMode ? SystemClock.uptimeMillis() : System.nanoTime() / 1_000_000;
         long lastSnapshotAt = -1; // dedupe snapshot times that land in the same loop iteration
 
@@ -278,7 +279,12 @@ public final class AppHost implements Runnable {
                     // so host input and scripted steps are serviced while idle.
                     long wait = timeout == 0 ? 8 : max(1, min(8, timeout - SystemClock.uptimeMillis()));
                     looper.poll(wait);
-                    ShadowSystemClock.advanceBy(Duration.ofNanos(System.nanoTime() - now));
+                    // Wall time since the previous advance, not since the top of this iteration: the time spent running the looper and
+                    // the follow-ups below was dropped, so the app's clock ran at a third of real time under load (ExoPlayer played
+                    // video at 8 fps and starved the audio, its clock being SystemClock).
+                    long clockNow = System.nanoTime();
+                    ShadowSystemClock.advanceBy(Duration.ofNanos(clockNow - clockNanos));
+                    clockNanos = clockNow;
                     looper.idle();
                 }
                 if (TRACE_ROOTS && now - lastRootTrace > 1_000_000_000L) { lastRootTrace = now; traceRoots(); }
@@ -302,6 +308,8 @@ public final class AppHost implements Runnable {
             });
         }
     }
+
+    private long clockNanos = System.nanoTime();
 
     private static final boolean TRACE_ROOTS = Boolean.getBoolean("apklayer.traceroots");
     private long lastRootTrace;
