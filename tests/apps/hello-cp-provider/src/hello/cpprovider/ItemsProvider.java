@@ -43,6 +43,9 @@ public class ItemsProvider extends ContentProvider {
     }
 
     @Override public Bundle call(String method, String arg, Bundle extras) {
+        Uri items = Uri.parse("content://hello.cpprovider.items/items");
+        if (method.equals("grant")) getContext().grantUriPermission(arg, items, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION | android.content.Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+        if (method.equals("revoke")) getContext().revokeUriPermission(items, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
         Bundle out = new Bundle();
         out.putInt("pid", Process.myPid());
         out.putInt("callerPid", Binder.getCallingPid());

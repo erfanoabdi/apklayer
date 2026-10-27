@@ -49,8 +49,8 @@ final class RemoteProvider extends ContentProvider {
      * Every app JVM runs as the same Linux uid, so the provider's own check ("the caller has my uid") always passes: the calling app's grants are checked here, as
      * ContentProvider.Transport would for another uid (through the hub: it knows permissions other apps declare).
      */
-    private void enforce(String permission, boolean write) {
-        if (permission == null || HubClient.current().checkPermission(android.os.Process.myPid(), permission) == android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+    private void enforce(String permission, boolean write, Uri uri) {
+        if (permission == null || (uri != null && HubClient.current().uriGranted(uri, write ? 2 : 1)) || HubClient.current().checkPermission(android.os.Process.myPid(), permission) == android.content.pm.PackageManager.PERMISSION_GRANTED) return;
         throw new SecurityException("Permission Denial: " + (write ? "writing " : "reading ") + authority + " requires " + permission + ", or grantUriPermission()");
     }
 
@@ -86,29 +86,29 @@ final class RemoteProvider extends ContentProvider {
         return query(uri, projection, sql(selection, selectionArgs, sortOrder), null);
     }
     @Override public Cursor query(Uri uri, String[] projection, Bundle queryArgs, CancellationSignal signal) {
-        enforce(readPermission, false);
+        enforce(readPermission, false, uri);
         return plain((p, source) -> {
             ICancellationSignal remote = null;
             if (signal != null) { signal.throwIfCanceled(); remote = p.createCancellationSignal(); signal.setRemote(remote); }
             return p.query(source, uri, projection, queryArgs, remote);
         });
     }
-    @Override public String getType(Uri uri) { enforce(readPermission, false); return plain((p, source) -> p.getType(source, uri)); }
-    @Override public Uri insert(Uri uri, ContentValues values) { enforce(writePermission, true); return plain((p, source) -> p.insert(source, uri, values, null)); }
-    @Override public int bulkInsert(Uri uri, ContentValues[] values) { enforce(writePermission, true); return plain((p, source) -> p.bulkInsert(source, uri, values)); }
-    @Override public int delete(Uri uri, String selection, String[] selectionArgs) { enforce(writePermission, true); return plain((p, source) -> p.delete(source, uri, sql(selection, selectionArgs, null))); }
+    @Override public String getType(Uri uri) { enforce(readPermission, false, uri); return plain((p, source) -> p.getType(source, uri)); }
+    @Override public Uri insert(Uri uri, ContentValues values) { enforce(writePermission, true, uri); return plain((p, source) -> p.insert(source, uri, values, null)); }
+    @Override public int bulkInsert(Uri uri, ContentValues[] values) { enforce(writePermission, true, uri); return plain((p, source) -> p.bulkInsert(source, uri, values)); }
+    @Override public int delete(Uri uri, String selection, String[] selectionArgs) { enforce(writePermission, true, uri); return plain((p, source) -> p.delete(source, uri, sql(selection, selectionArgs, null))); }
     @Override public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
-        enforce(writePermission, true);
+        enforce(writePermission, true, uri);
         return plain((p, source) -> p.update(source, uri, values, sql(selection, selectionArgs, null)));
     }
     @Override public Bundle call(String method, String arg, Bundle extras) { return call(authority, method, arg, extras); }
     @Override public Bundle call(String authority, String method, String arg, Bundle extras) { return plain((p, source) -> p.call(source, authority, method, arg, extras)); }
     @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
-        enforce(mode.contains("w") ? writePermission : readPermission, mode.contains("w"));
+        enforce(mode.contains("w") ? writePermission : readPermission, mode.contains("w"), uri);
         try { return call((p, source) -> p.openFile(source, uri, mode, null)); } catch (OperationApplicationException impossible) { throw new IllegalStateException(impossible); }
     }
     @Override public AssetFileDescriptor openAssetFile(Uri uri, String mode) throws FileNotFoundException {
-        enforce(mode.contains("w") ? writePermission : readPermission, mode.contains("w"));
+        enforce(mode.contains("w") ? writePermission : readPermission, mode.contains("w"), uri);
         try { return call((p, source) -> p.openAssetFile(source, uri, mode, null)); } catch (OperationApplicationException impossible) { throw new IllegalStateException(impossible); }
     }
     @Override public String[] getStreamTypes(Uri uri, String mimeTypeFilter) { return plain((p, source) -> p.getStreamTypes(source, uri, mimeTypeFilter)); }

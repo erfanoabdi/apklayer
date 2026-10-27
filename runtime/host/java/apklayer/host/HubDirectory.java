@@ -155,6 +155,16 @@ final class HubDirectory extends Binder {
                 providers.notifyChange(caller, uri, changeFlags);
                 reply.writeNoException(); return true;
             }
+            case HubProtocol.GRANT_URI -> {
+                Peer caller = caller(); String target = request.readString(); android.net.Uri uri = request.readTypedObject(android.net.Uri.CREATOR); int mode = request.readInt();
+                boolean revoke = request.readBoolean(); request.enforceNoDataAvail();
+                providers.grant(caller, target, uri, mode, revoke);
+                reply.writeNoException(); return true;
+            }
+            case HubProtocol.CHECK_URI -> {
+                Peer caller = caller(); android.net.Uri uri = request.readTypedObject(android.net.Uri.CREATOR); int mode = request.readInt(); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeInt(providers.granted(caller.name(), uri, mode) ? 0 : -1); return true;
+            }
             case HubProtocol.GET_PROVIDER -> {
                 Peer caller = caller(); String authority = request.readString(); request.enforceNoDataAvail();
                 IBinder provider = providers.get(caller, authority);

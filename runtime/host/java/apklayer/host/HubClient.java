@@ -48,6 +48,12 @@ public final class HubClient {
     void notifyChange(android.net.Uri uri, int flags) {
         HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.NOTIFY_CHANGE, request -> { request.writeTypedObject(uri, 0); request.writeInt(flags); }, reply -> null);
     }
+    void grantUri(String target, android.net.Uri uri, int mode, boolean revoke) {
+        HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.GRANT_URI, request -> { request.writeString(target); request.writeTypedObject(uri, 0); request.writeInt(mode); request.writeBoolean(revoke); }, reply -> null);
+    }
+    boolean uriGranted(android.net.Uri uri, int mode) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CHECK_URI, request -> { request.writeTypedObject(uri, 0); request.writeInt(mode); }, reply -> reply.readInt()) == 0;
+    }
     int checkPermission(int pid, String permission) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CHECK_PERMISSION, request -> { request.writeInt(pid); request.writeString(permission); }, reply -> reply.readInt());
     }

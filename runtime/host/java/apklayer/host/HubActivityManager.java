@@ -4,6 +4,7 @@ import android.app.IActivityManager;
 import android.content.IIntentReceiver;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
 import java.lang.reflect.InvocationHandler;
@@ -52,6 +53,11 @@ final class HubActivityManager implements InvocationHandler {
             case "unbroadcastIntent": { // (thread, intent, userId): removeStickyBroadcast
                 Intent intent = (Intent) args[1];
                 HubProtocol.call(binder(), HubProtocol.DESCRIPTOR, HubProtocol.UNBROADCAST, request -> request.writeTypedObject(intent, 0), reply -> null);
+                return null;
+            }
+            case "grantUriPermission": case "revokeUriPermission": { // (thread, targetPackage, uri, mode, userId)
+                String target = (String) args[1]; Uri uri = (Uri) args[2]; int mode = (Integer) args[3]; boolean revoke = method.getName().startsWith("revoke");
+                HubClient.current().grantUri(target, uri, mode, revoke);
                 return null;
             }
             case "finishReceiver": { // (who, resultCode, resultData, extras, abort, flags)

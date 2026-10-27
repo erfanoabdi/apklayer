@@ -77,6 +77,17 @@ public class Main extends Activity {
                 catch (SecurityException expected) { System.out.println("[cpc] write refused: " + expected.getMessage()); }
                 System.out.println("[cpc] PASS denied: read and write permissions enforced by the provider");
             }
+            case "grant" -> {
+                try { names(resolver, ITEMS); require(false, "read without the permission was allowed"); } catch (SecurityException expected) { }
+                resolver.call(ITEMS, "grant", getPackageName(), null);
+                require("alpha,beta,".equals(names(resolver, ITEMS)) || names(resolver, ITEMS).startsWith("alpha"), "read after grant");
+                ContentValues values = new ContentValues();
+                values.put("name", "x");
+                try { resolver.insert(ITEMS, values); require(false, "a read grant allowed a write"); } catch (SecurityException expected) { }
+                resolver.call(ITEMS, "revoke", null, null);
+                try { names(resolver, ITEMS); require(false, "read after revoke was allowed"); } catch (SecurityException expected) { }
+                System.out.println("[cpc] PASS grant: grantUriPermission by the provider's app opens read (not write), revoke closes it");
+            }
             case "death" -> {
                 Bundle first = resolver.call(ITEMS, "ping", "a", null);
                 int pid = first.getInt("pid");

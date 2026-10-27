@@ -36,6 +36,27 @@ final class HubProviders {
         }
     }
 
+    private record Grant(String target, android.net.Uri uri, int mode) {}
+    private final java.util.List<Grant> grants = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** grantUriPermission / revokeUriPermission: only the app that owns the uri's provider may (the target null means every app, for revoke). */
+    void grant(HubDirectory.Peer caller, String target, android.net.Uri uri, int mode, boolean revoke) {
+        ProviderInfo info = uri.getAuthority() == null ? null : packages.provider(uri.getAuthority());
+        if (info == null || !info.packageName.equals(caller.name())) throw new SecurityException(caller.name() + " does not own the provider of " + uri);
+        if (revoke) grants.removeIf(g -> (target == null || g.target.equals(target)) && covers(uri, g.uri, true));
+        else grants.add(new Grant(target, uri, mode));
+    }
+
+    private static boolean covers(android.net.Uri granted, android.net.Uri wanted, boolean prefix) {
+        return granted.equals(wanted) || (prefix && granted.getAuthority().equals(wanted.getAuthority()) && wanted.getPath() != null && granted.getPath() != null && wanted.getPath().startsWith(granted.getPath()));
+    }
+
+    /** Whether the package holds a grant on the uri for the mode (1 read, 2 write; a grant made with FLAG_GRANT_PREFIX_URI_PERMISSION (0x80) covers the paths below it). */
+    boolean granted(String pkg, android.net.Uri uri, int mode) {
+        for (Grant g : grants) if (g.target.equals(pkg) && (g.mode & mode) == mode && covers(g.uri, uri, (g.mode & 0x80) != 0)) return true;
+        return false;
+    }
+
     /** Whether the process (a pid that registered with the hub) holds the permission: what a provider in another app asks about its caller. */
     int check(int pid, String permission) {
         HubDirectory.Peer peer = directory.peerByPid(pid);
