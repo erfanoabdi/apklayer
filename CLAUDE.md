@@ -17,7 +17,7 @@ Current authorization (2026-10-27, user): build anything needed in `~/los24` aut
 4. Never `pkill -f` a pattern contained in your own command line (use `[x]pattern`).
 5. **Never ask the user to test by hand or leave an app open for them.** Verify with automated checks on the VM (scripted input, snapshots, logs, `-Dapklayer.perf`). What only a person can judge goes into docs/PLAN.md as "needs a human check" and is not asked for.
 6. Run only the test groups for the code you changed (`tests/p2-host.sh`, `tests/vm/e2e.sh`, `tests/vm/native.sh`, `tests/vm/gpu.sh`). No long scripts; do not chase single failing corpus apps.
-7. VM: `ssh parallels@10.211.55.4` (pw 1234). After a VM restart re-register Rosetta binfmt (see memory.md).
+7. VM: `ssh utm@192.168.64.7` (pw 1234; the old Parallels VM was parallels@10.211.55.4). After a VM restart re-register Rosetta binfmt (see memory.md).
 
 ## Before writing or downloading anything
 1. Read `memory.md` "Reference projects on this machine". Robolectric, Mac.apk, android_translation_layer (ATL) and the AOSP tree are all **local**; never clone or download what is there.
