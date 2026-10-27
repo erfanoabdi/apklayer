@@ -76,3 +76,6 @@ virtual display sink). `W_TARGET`/`W_ID` route those messages; `window_attach_in
 
 ## bionic_translation timed mutex locking (2026-10-27)
 `scripts/patch-bionic-translation.sh` adds `bionic_pthread_mutex_timedlock` by reusing the existing lock wrappers’ lazy initialization and native-pointer unwrap. Without it the loader falls back to glibc’s timed lock, which overwrites the pointer inside an Android mutex. Android `Mutex::timedLock` is used by SurfaceFlinger dumps and buffer-queue paths. `tests/vm/pthread-timedlock.c` verifies static initialization, contention timeout and reuse against the actual wrapper library. Both native build scripts apply this patch.
+
+## EGL display lifetime (2026-10-27)
+`aosp/hals/graphics/egl/Egl.cpp` implements Android EGL’s initialization reference count (from `egl_display_t::initialize/terminate`) around the single host GBM display. `libgui/SyncFeatures.cpp` explicitly relies on it: its temporary initialize/terminate pair must not terminate RenderEngine’s display. The existing `gltest` borrows a display with a live context, then renders and resizes; 12 frames verified on the VM.

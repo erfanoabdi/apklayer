@@ -39,6 +39,12 @@ extern "C" int main(int argc, char** argv) {
     EGLSurface win = eglCreateWindowSurface(dpy, cfg, surface.get(), nullptr);
     if (ctx == EGL_NO_CONTEXT || win == EGL_NO_SURFACE) { fprintf(stderr, "gltest: context %p surface %p, EGL error 0x%x\n", ctx, win, eglGetError()); return 1; }
     if (!eglMakeCurrent(dpy, win, win, ctx)) { fprintf(stderr, "gltest: eglMakeCurrent failed 0x%x\n", eglGetError()); return 1; }
+    // Android's SyncFeatures borrows an initialized display this way. Its
+    // balanced terminate must preserve our current context and next frame.
+    if (!eglInitialize(dpy, nullptr, nullptr) || !eglTerminate(dpy) ||
+        eglQueryString(dpy, EGL_VERSION) == nullptr) {
+        fprintf(stderr, "gltest: borrowed display destroyed the owner's initialization\n"); return 1;
+    }
     auto clearColor = reinterpret_cast<void (*)(float, float, float, float)>(eglGetProcAddress("glClearColor"));
     auto clear = reinterpret_cast<void (*)(unsigned)>(eglGetProcAddress("glClear"));
     printf("gltest: window surface %p on a %ux%u layer\n", win, w, h);
@@ -49,10 +55,12 @@ extern "C" int main(int argc, char** argv) {
         }
         clearColor((f % 60) / 60.0f, 1.0f - (f % 60) / 60.0f, 0.5f, 1.0f);
         clear(0x4000 /* GL_COLOR_BUFFER_BIT */);
-        eglSwapBuffers(dpy, win);
+        if (!eglSwapBuffers(dpy, win)) { fprintf(stderr, "gltest: swap failed 0x%x\n", eglGetError()); return 1; }
     }
     printf("gltest: %d frames swapped\n", frames);
     eglMakeCurrent(dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     eglDestroySurface(dpy, win);
+    eglDestroyContext(dpy, ctx);
+    eglTerminate(dpy);
     return 0;
 }

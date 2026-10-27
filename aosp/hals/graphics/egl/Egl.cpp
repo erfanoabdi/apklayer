@@ -364,6 +364,28 @@ EGLDisplay eglGetDisplay(EGLNativeDisplayType) { return gbmDisplay(); }
 
 EGLDisplay eglGetPlatformDisplay(EGLenum, void*, const EGLAttrib*) { return gbmDisplay(); }
 
+// apklayer patch: Android's EGL loader reference-counts display initialization
+// (egl_display_t). libgui's SyncFeatures temporarily borrows the same display.
+// A direct host eglTerminate would destroy RenderEngine's still-live context.
+static std::mutex displayLock;
+static unsigned displayRefs;
+static EGLint displayMajor, displayMinor;
+EGLBoolean eglInitialize(EGLDisplay dpy, EGLint* major, EGLint* minor) {
+    if (dpy != gbmDisplay()) return fail(EGL_BAD_DISPLAY);
+    std::lock_guard<std::mutex> lock(displayLock);
+    if (displayRefs == 0 && !host<PFNEGLINITIALIZEPROC>("eglInitialize")(dpy, &displayMajor, &displayMinor)) return EGL_FALSE;
+    ++displayRefs;
+    if (major) *major = displayMajor;
+    if (minor) *minor = displayMinor;
+    return EGL_TRUE;
+}
+EGLBoolean eglTerminate(EGLDisplay dpy) {
+    if (dpy != gbmDisplay()) return fail(EGL_BAD_DISPLAY);
+    std::lock_guard<std::mutex> lock(displayLock);
+    if (displayRefs == 0 || --displayRefs != 0) return EGL_TRUE;
+    return host<PFNEGLTERMINATEPROC>("eglTerminate")(dpy);
+}
+
 EGLint eglGetError() {
     if (tError != EGL_SUCCESS) { EGLint e = tError; tError = EGL_SUCCESS; return e; }
     return host<EGLint (*)()>("eglGetError")();
@@ -497,9 +519,9 @@ EGLBoolean eglPresentationTimeANDROID(EGLDisplay, EGLSurface, EGLnsecsANDROID) {
     X(eglCreateSync) X(eglCreateSyncKHR) X(eglDestroyContext) X(eglDestroyImage) X(eglDestroyImageKHR) \
     X(eglDestroySync) X(eglDestroySyncKHR) X(eglDupNativeFenceFDANDROID) X(eglGetConfigAttrib) X(eglGetConfigs) \
     X(eglGetCurrentContext) X(eglGetCurrentDisplay) X(eglGetSyncAttrib) X(eglGetSyncAttribKHR) \
-    X(eglInitialize) X(eglQueryAPI) X(eglQueryContext) X(eglReleaseTexImage) \
+    X(eglQueryAPI) X(eglQueryContext) X(eglReleaseTexImage) \
     X(eglReleaseThread) X(eglSetDamageRegionKHR) X(eglSignalSyncKHR) \
-    X(eglSwapInterval) X(eglTerminate) X(eglWaitClient) X(eglWaitGL) X(eglWaitNative) \
+    X(eglSwapInterval) X(eglWaitClient) X(eglWaitGL) X(eglWaitNative) \
     X(eglWaitSync) X(eglWaitSyncKHR) X(eglLockSurfaceKHR) X(eglUnlockSurfaceKHR)
 
 #define DECLARE_SLOT(name) __attribute__((used, visibility("hidden"))) void* host_slot_##name;
@@ -514,6 +536,7 @@ FORWARDED(DEFINE_STUB)
 // extensions an app or library may ask eglGetProcAddress for: ours where we implement them, the host's otherwise
 __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char* name) {
     struct { const char* n; void* f; } ours[] = {
+        {"eglInitialize", (void*)eglInitialize}, {"eglTerminate", (void*)eglTerminate},
         {"eglCreateImageKHR", (void*)eglCreateImageKHR}, {"eglCreateImage", (void*)eglCreateImage},
         {"eglGetNativeClientBufferANDROID", (void*)eglGetNativeClientBufferANDROID},
         {"eglSwapBuffersWithDamageKHR", (void*)eglSwapBuffersWithDamageKHR}, {"eglSwapBuffers", (void*)eglSwapBuffers},
