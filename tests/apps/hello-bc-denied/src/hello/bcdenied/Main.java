@@ -63,6 +63,15 @@ public class Main extends Activity {
                     };
                     sendOrderedBroadcast(abort, null, lastAbort, null, 0, "start", null);
                 }
+                case "async" -> {
+                    BroadcastReceiver last = new BroadcastReceiver() {
+                        @Override public void onReceive(Context context, Intent i) {
+                            System.out.println("[bcs] async result code=" + getResultCode() + " data=" + getResultData());
+                        }
+                    };
+                    sendOrderedBroadcast(new Intent("hello.bc.ASYNC"), null, last, null, 0, "start", null);
+                }
+                case "once" -> { send("hello.bc.ONCE", "first"); send("hello.bc.ONCE", "second"); }
                 case "sticky" -> {
                     Intent intent = new Intent("hello.bc.STICKY").putExtra("note", "sticky before the receiver exists");
                     sendStickyBroadcast(intent);

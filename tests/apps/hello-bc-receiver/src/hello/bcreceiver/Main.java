@@ -18,6 +18,7 @@ public class Main extends Activity {
         setContentView(view);
         BroadcastReceiver plain = new BroadcastReceiver() {
             @Override public void onReceive(Context context, Intent intent) {
+                if ("hello.bc.ONCE".equals(intent.getAction())) { context.unregisterReceiver(this); System.out.println("[bcr] once: unregistered"); }
                 System.out.println("[bcr] dynamic " + intent.getAction() + " pid=" + Process.myPid() + " ordered=" + isOrderedBroadcast()
                         + " extra=" + intent.getStringExtra("note") + " sticky=" + isInitialStickyBroadcast());
                 if (isOrderedBroadcast() && System.getProperty("hello.trace") != null) new Throwable("[bcr] trace").printStackTrace(System.out);
@@ -32,6 +33,7 @@ public class Main extends Activity {
         filter.addAction("hello.bc.ORDERED");
         filter.addAction("hello.bc.ABORT");
         filter.addAction("hello.bc.STICKY");
+        filter.addAction("hello.bc.ONCE");
         filter.setPriority(5);
         registerReceiver(plain, filter, Context.RECEIVER_EXPORTED);
         BroadcastReceiver guarded = new BroadcastReceiver() {

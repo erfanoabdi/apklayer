@@ -11,6 +11,7 @@ import org.robolectric.annotation.Implements;
 import org.robolectric.annotation.RealObject;
 import org.robolectric.shadow.api.Shadow;
 import org.robolectric.util.ReflectionHelpers;
+import org.robolectric.util.reflector.Direct;
 import org.robolectric.util.reflector.ForType;
 
 /**
@@ -70,6 +71,7 @@ public class ShadowBroadcastReceiver {
 
   @ForType(BroadcastReceiver.class)
   interface BroadcastReceiverReflector {
+    @Direct
     BroadcastReceiver.PendingResult goAsync();
   }
 }

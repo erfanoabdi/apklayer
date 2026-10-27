@@ -51,7 +51,7 @@ class Apps:
             for raw in parts:
                 line = raw.decode(errors='replace')
                 self.lines[name].append(line)
-                if '[bc' in line or '[apklayer-hub]' in line or '[apklayer] activity manager' in line or 'PendingResult' in line or '[bcr] trace' in line or ('\tat ' in line and 'android.app' in line): print(name + ': ' + line, flush=True)
+                if os.environ.get('BC_VERBOSE') or '[bc' in line or '[apklayer-hub]' in line or '[apklayer] activity manager' in line or 'PendingResult' in line or '[bcr] trace' in line or ('\tat ' in line and 'android.app' in line): print(name + ': ' + line, flush=True)
                 assert not ('[bcs]' in line and 'FAIL' in line), line
         return bool(ready)
 
@@ -125,6 +125,29 @@ try:
         apps.wait_for('sender', '[bcs] abort result code=0 data=aborted by manifest')
         assert not apps.settle('receiver', 'ABORT reached the dynamic receiver', 2), 'an aborted ordered broadcast reached a lower priority receiver'
         print('PASS ordered broadcast: priority order across manifest and dynamic receivers, result propagation, abort, final result receiver', flush=True)
+    elif PHASE == 'async':
+        apps.start('receiver', 'hello.bcreceiver')
+        apps.wait_for('receiver', '[bcr] ready')
+        apps.start('sender', 'hello.bcsender', 'async')
+        apps.wait_for('sender', '[bcs] async result code=10 data=start|async')
+        print('PASS goAsync across apps: the ordered broadcast waited for the late finish() and carried its result', flush=True)
+    elif PHASE == 'once':
+        apps.start('receiver', 'hello.bcreceiver')
+        apps.wait_for('receiver', '[bcr] ready')
+        apps.start('sender', 'hello.bcsender', 'once')
+        apps.wait_for('receiver', '[bcr] once: unregistered')
+        assert not apps.settle('receiver', 'extra=second', 3), 'an unregistered receiver was called again'
+        assert apps.count('receiver', 'dynamic hello.bc.ONCE') == 1
+        print('PASS unregisterReceiver in onReceive: no later delivery', flush=True)
+    elif PHASE == 'death':
+        apps.start('receiver', 'hello.bcreceiver')
+        ready = apps.wait_for('receiver', '[bcr] ready pid=')
+        os.kill(int(ready.split('pid=')[1]), signal.SIGKILL)
+        apps.wait_for('receiver', 'never seen', 3) if False else apps.settle('receiver', 'never', 2)
+        apps.start('sender', 'hello.bcsender', 'ordered')
+        # the dead process's dynamic receiver is gone; the manifest receiver starts the package again, headless
+        apps.wait_for('sender', '[bcs] ordered result code=1 data=start|M', 25)
+        print('PASS receiver process death: its dynamic registrations are gone, the manifest receiver restarts the package', flush=True)
     elif PHASE == 'sticky':
         apps.start('sender', 'hello.bcsender', 'sticky')
         apps.wait_for('sender', '[bcs] sent sticky')

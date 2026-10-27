@@ -13,9 +13,8 @@ separately, each app keeps its own cookies and storage.
   broadcastIntent, finishReceiver, unbroadcastIntent). Verified: manifest receiver of a package that was not running (hub starts it headless), dynamic receivers across apps,
   exported / not-exported rules, receiver and sender permissions, ordered delivery by priority across manifest and dynamic receivers with result propagation, abort and the final
   result receiver, sticky intents (BROADCAST_STICKY, delivered to a later registration). Patches: `ShadowBroadcastPendingResult` and `ShadowBroadcastReceiver` overlays (Robolectric's
-  stand-ins never reached the activity manager / dropped the abort). Open in E2: goAsync across apps, cleanup tests for unregister and receiver-process death, the sender's own
-  receivers through the hub for ordered broadcasts (they are registered with it already), system sticky seeds (battery) for apps on the hub route.
-- Next: finish E2's open items, then E3 content providers.
+  stand-ins never reached the activity manager / dropped the abort). Also verified: goAsync across apps (the ordered broadcast waits for the late finish), unregisterReceiver inside onReceive, receiver-process death (registrations gone, manifest receiver restarts the package). Open in E2: system sticky seeds (battery) for apps on the hub route.
+- Next: E3 content providers.
 
 ## Work list
 1. **Package and identity model of the hub**: installed packages, components, signatures, permissions, enabled state; install/update/removal and stale metadata; process

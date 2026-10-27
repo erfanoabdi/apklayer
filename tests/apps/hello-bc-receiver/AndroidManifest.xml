@@ -12,6 +12,9 @@
         <action android:name="hello.bc.ABORT"/>
       </intent-filter>
     </receiver>
+    <receiver android:name=".AsyncReceiver" android:exported="true">
+      <intent-filter android:priority="10"><action android:name="hello.bc.ASYNC"/></intent-filter>
+    </receiver>
     <receiver android:name=".ProtectedReceiver" android:exported="true" android:permission="hello.bcreceiver.permission.SEND">
       <intent-filter><action android:name="hello.bc.PROTECTED"/></intent-filter>
     </receiver>
