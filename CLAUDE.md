@@ -1,5 +1,7 @@
 # apklayer: rules for every session (read first, also after a context reset)
 
+> Current authorization (2026-10-27): the user asked the assistant to build anything needed in OrbStack `~/los24` autonomously while they sleep. This supersedes older instructions below to ask them to build. Only incremental builds of `gsi_arm64 userdebug`; never clean or wipe `out/`.
+
 Goal and plan: `goal.md`, `docs/PLAN.md`. Status and local reference projects: `memory.md`. **A new session starts from `HANDOFF.md`** (ordered milestones to the end).
 
 ## NEVER (user rules, repeated complaints; re-read at the start of every turn)

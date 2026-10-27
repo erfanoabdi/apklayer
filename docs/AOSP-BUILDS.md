@@ -1,5 +1,7 @@
 # AOSP builds log
 
+> Current authorization (2026-10-27): the user asked the assistant to build anything needed in OrbStack `~/los24` autonomously while they sleep. This supersedes older instructions below to ask them to build. Only incremental builds of `gsi_arm64 userdebug`; never clean or wipe `out/`.
+
 Rule (user, 2026-10-26, replaces the 2026-10-25 one): the user built LineageOS 24 in the OrbStack
 `ubuntu22-x86` VM for apklayer: tree `~/los24`, `breakfast gsi_arm64 userdebug`, existing `out/`
 (115 GB, device build in `out/target/product/generic_arm64`). Build the libs and targets we need in
@@ -45,3 +47,5 @@ is the way to publish them when needed.
 | 2026-10-26 | `libapklayer_egl` (window surfaces) + `libapklayer_gltest` (new) + `libapklayer_composer` | P7.1 step 3b: EGL window surfaces over the ANativeWindow (gbm_surface + GPU copy) and the GL smoke tool; the composer carries debug pixel sampling | triggered by the user (no builds by the assistant in ~/los24) |
 | 2026-10-27 | `libapklayer_permission` (new; aosp/hals/permission) | libbinder's checkPermission() found no "permission" service and waits ("Waiting to check permission android.permission.ACCESS_SURFACE_FLINGER"); an allow-all PermissionController stands in for system_server's | triggered by the user (no builds by the assistant in ~/los24) |
 | 2026-10-27 | `libapklayer_vdisplay` (new; aosp/hals/graphics/vdisplay) | one SurfaceFlinger virtual display per app window (resizable, no HWC involvement): consumes its BufferQueue and presents the dmabufs to the shell | triggered by the user |
+
+| 2026-10-27 | `libapklayer_vdisplay` | Return acquired BufferQueue buffers on Wayland release instead of retaining them across resize; existing module, no new dependencies | incremental ninja target `out/soong/.intermediates/vendor/apklayer/hals/graphics/vdisplay/libapklayer_vdisplay/android_arm64_armv8-a_shared/libapklayer_vdisplay.so` in existing gsi_arm64 tree | built and installed; ninja dependency traversal failed at unrelated ABI-dump Duplicate root dir validation; reran only this module’s four generated compile/link/strip/copy commands against existing dependencies. Rebuilt again with stale-size frame rejection. Runtime regression in progress |

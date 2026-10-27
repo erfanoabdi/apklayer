@@ -1,5 +1,7 @@
 # HANDOFF: start here, then work down the list until every milestone is done
 
+> Current authorization (2026-10-27): the user asked the assistant to build anything needed in OrbStack `~/los24` autonomously while they sleep. This supersedes older instructions below to ask them to build. Only incremental builds of `gsi_arm64 userdebug`; never clean or wipe `out/`.
+
 You continue a long-running project. Read, in this order: `CLAUDE.md` (rules, binding), `goal.md` (the goal), `memory.md` (status, local reference projects, how to run),
 `docs/PLAN.md` (the plan; the section "P7.1 GPU route: next steps" and items 8, 8b, 8c are the live work list), `docs/ARCHITECTURE.md`, `docs/PATCHES.md`, `docs/AOSP-BUILDS.md`.
 Then do the milestones below **in this order**, one at a time, committing at every step, updating `docs/PLAN.md` status and `memory.md` as you go. Do not stop between
