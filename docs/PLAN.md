@@ -599,6 +599,9 @@ rendering end to end, real input through the shell's input proxy, dialogs stacke
 
    Scoped native attribution Parcel verified (2026-10-27): original AIDL serializer and real native Parcel, all fields/Unicode/nulls/chains, stable/distinct local Binder identity, scoped and cyclic-error release, Java Parcel reuse. tests/vm/native-audio.sh passes UI frame/physical Back, and native-media regression remains green. Native JNI gets a real pointer; general Binder/Parcel and remote proxies remain for the hub. Java AudioTrack/MediaPlayer integration is next.
 
+   Java AudioTrack JNI verified (2026-10-27): original framework/native PCM, actual scoped attribution and PID/UID, early Application capability query, real policy volume/global session IDs, delayed head/marker/timestamp, stop/flush/release. Isolated monitor captures exact stereo440/880Hz47760 nonzero toneframes; UI commit and physical Back pass. BT monotonic condition deadline regression reproduces three old failures and passes all four API/default-clock combinations after patch12. AudioSystem original initializer runs immediately after initial capability JNI registration. Opt-in only; Java AudioService focus/player bookkeeping and MediaPlayer/general native Parcel packets remain next.
+
+
    **Bluetooth** after camera: Robolectric-style shadows of `android.bluetooth.*` over a host daemon speaking D-Bus to BlueZ (not Android's own stack: it needs
    system_server's services and an exclusive controller), scoped by what the corpus apps actually call (BLE scan, GATT client/server and advertising first; then RFCOMM/L2CAP
    sockets; audio profiles through PipeWire), with a compatibility table of every API and its status; unimplemented calls return real errors. Developed against

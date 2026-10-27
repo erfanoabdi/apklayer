@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 extern void *bionic_dlopen(const char *, int);
 extern void *bionic_dlsym(void *, const char *);
 extern char *bionic_dlerror(void);
@@ -50,5 +51,26 @@ int apklayer_register_attribution(JNIEnv *env, jclass helper)
     for (size_t i = 0; i < sizeof methods / sizeof *methods; i++) if (!methods[i].fnPtr) return -1;
     if ((*env)->RegisterNatives(env, helper, methods, sizeof methods / sizeof *methods) < 0) return -1;
     fprintf(stderr, "[runtime] native attribution Parcel adapter registered\n");
+    return 0;
+}
+
+/* These device-runtime entrypoints are absent from Google's small HostRuntime
+ * table. Reuse their actual AOSP registration order and caches. */
+int apklayer_register_audio(JNIEnv *env, void *runtime)
+{
+    const char *names[] = {"register_android_media_AudioDeviceAttributes",
+        "register_android_media_AudioEffectDescriptor", "register_android_media_AudioSystem",
+        "register_android_media_AudioTrack", "register_android_media_AudioAttributes"};
+    for (size_t i = 0; i < sizeof names / sizeof *names; i++) {
+        char symbol[160];
+        snprintf(symbol, sizeof symbol, "_Z%zu%sP7_JNIEnv", strlen(names[i]), names[i]);
+        int (*reg)(JNIEnv *) = bionic_dlsym(runtime, symbol);
+        if (!reg || reg(env) < 0 || (*env)->ExceptionCheck(env)) {
+            fprintf(stderr, "[runtime] cannot register %s\n", names[i]);
+            if ((*env)->ExceptionCheck(env)) (*env)->ExceptionDescribe(env);
+            return -1;
+        }
+    }
+    fprintf(stderr, "[runtime] original Android audio JNI registered\n");
     return 0;
 }

@@ -2,7 +2,7 @@
 import subprocess
 import sys
 proc = subprocess.Popen(['sshpass', '-p', sys.argv[2], 'ssh', sys.argv[1],
-    'cd ~/apklayer-m1; python3 -u tests/vm/native-audio.py'], stdin=subprocess.PIPE,
+    'cd ~/apklayer-m1; python3 -u tests/vm/native-audio.py' + (' audio' if sys.argv[3:] == ['audio'] else '')], stdin=subprocess.PIPE,
     stdout=subprocess.PIPE, text=True)
 try:
     for line in proc.stdout:

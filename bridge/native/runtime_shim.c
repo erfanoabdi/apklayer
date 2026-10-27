@@ -119,6 +119,8 @@ static int is_critical(JNIEnv *env, jobjectArray list, const JNINativeMethod *m)
     return 0;
 }
 
+static int early_audio_capabilities;
+
 static jint JNICALL renaming_register_natives(JNIEnv *env, jclass cls, const JNINativeMethod *methods, jint n)
 {
     jobjectArray critical = critical_methods(env, cls);
@@ -129,6 +131,19 @@ static jint JNICALL renaming_register_natives(JNIEnv *env, jclass cls, const JNI
         if (is_critical(env, critical, &methods[i])) { fn = critical_thunk(fn); critical_count++; if (runtime_debug()) fprintf(stderr, "[runtime] critical %s\n", methods[i].name); }
         JNINativeMethod one = { name, methods[i].signature, fn };
         if (real_table->RegisterNatives(env, cls, &one, 1) != 0) (*env)->ExceptionClear(env); /* not a method Robolectric instruments */
+    }
+    /* AudioSystem registers these three capabilities first specifically so its
+     * initializer runs before AudioFormat caches their values. Finish the saved
+     * Java initializer here instead of deferring it past dependent JNI caches. */
+    if (early_audio_capabilities) {
+        for (jint i = 0; i < n; i++) if (!strcmp(methods[i].name, "native_getMaxChannelCount")) {
+            early_audio_capabilities = 0;
+            jmethodID init = real_table->GetStaticMethodID(env, cls, "__staticInitializer__", "()V");
+            if (!init) return -1;
+            real_table->CallStaticVoidMethod(env, cls, init);
+            if ((*env)->ExceptionCheck(env)) return -1;
+            break;
+        }
     }
     return 0; /* startReg aborts the process on failure; skipped methods are expected */
 }
@@ -334,8 +349,18 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     }
     (*ti)->SetJNIFunctionTable(ti, &patched);
     int failed = register_classes(env, vm, rt);
+    char *native_audio = system_property(env, "apklayer.nativeaudio");
+    int audio_failed = 0;
+    if (native_audio && !strcmp(native_audio, "true")) {
+        extern int apklayer_register_audio(JNIEnv *, void *);
+        early_audio_capabilities = 1;
+        audio_failed = apklayer_register_audio(env, rt);
+        early_audio_capabilities = 0;
+    }
+    free(native_audio);
+    if (audio_failed) { (*ti)->SetJNIFunctionTable(ti, orig); return -1; }
     char *media = system_property(env, "apklayer.nativemedia");
-    int media_failed = 0;
+    int media_failed = audio_failed;
     if (media && (!strcmp(media, "true") || !strcmp(media, "1"))) {
         extern int apklayer_register_media(JNIEnv *, JavaVM *);
         media_failed = apklayer_register_media(env, vm);
@@ -343,6 +368,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     free(media);
 
     (*ti)->SetJNIFunctionTable(ti, orig);
+    if (media_failed) return -1;
     char *attribution = system_property(env, "apklayer.nativeattribution");
     char *audio = system_property(env, "apklayer.nativeaudio");
     int attribution_failed = 0;

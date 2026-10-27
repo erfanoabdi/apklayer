@@ -14,7 +14,8 @@ public class ShadowHostNativeAttributionParcel {
     private Parcel parcel;
     private long original, nativePeer;
     @Implementation protected void __constructor__(AttributionSource source) {
-        NativeMedia.ensureInitialized();
+        if (Boolean.getBoolean("apklayer.nativeaudio")) NativeAudio.ensureInitialized();
+        else NativeMedia.ensureInitialized();
         parcel = Parcel.obtain();
         original = ReflectionHelpers.getField(parcel, "mNativePtr");
         try {

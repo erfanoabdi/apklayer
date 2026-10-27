@@ -90,11 +90,17 @@ public class Main extends Activity {
             } finally { nextField.set(payload, originalNext); }
             require(((Number) active.invoke(null)).intValue() == 0, "failed scope released");
             System.out.println("[hello-native-audio] attribution PASS fields/Unicode/chain/tokens/scoped release");
+            if (Boolean.getBoolean("apklayer.nativeaudio")) {
+                TrackCheck.run(this);
+                require(((Number) active.invoke(null)).intValue() == 0, "AudioTrack attribution scope released");
+            }
             runOnUiThread(() -> {
                 Runnable show = () -> {
                     result.getViewTreeObserver().registerFrameCommitCallback(
                             () -> System.out.println("[hello-native-audio] FRAME PASS"));
-                    result.setText("PASS: real attribution Parcel\nFields, Unicode, chain, Binder identity\nScoped native ownership");
+                    result.setText(Boolean.getBoolean("apklayer.nativeaudio")
+                            ? "PASS: original AudioTrack JNI\nAudioFlinger → PipeWire\nPCM, clock, marker, timestamp"
+                            : "PASS: real attribution Parcel\nFields, Unicode, chain, Binder identity\nScoped native ownership");
                     result.invalidate();
                 };
                 if (result.isAttachedToWindow()) show.run();

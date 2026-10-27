@@ -287,3 +287,17 @@ if 'bionic___fread_chk(' not in s:
     s += '\n/* apklayer patch: Android fread fortify argument order. */\n' + body
     p.write_text(s)
 PY
+
+# 12. Android's monotonic waits take an absolute deadline, regardless of the
+# condition attribute. Relative waits also use the monotonic clock.
+python3 - "$bt" <<'PYCOND'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1]) / 'pthread_wrapper/libpthread.c'
+s = p.read_text()
+if 'apklayer patch: explicit monotonic deadlines' not in s:
+    a = s.index('int bionic_pthread_cond_timedwait_relative_np(')
+    b = s.index('int bionic_pthread_cond_timedwait_monotonic(', a)
+    s = s[:a] + '/* apklayer patch: explicit monotonic deadlines, matching bionic pthread_cond.cpp. */\nint bionic_pthread_cond_timedwait_relative_np(bionic_cond_t *cond, bionic_mutex_t *mutex, const struct timespec *reltime)\n{\n    assert(cond && mutex && reltime);\n    struct timespec tv;\n    clock_gettime(CLOCK_MONOTONIC, &tv);\n    tv.tv_sec += reltime->tv_sec;\n    tv.tv_nsec += reltime->tv_nsec;\n    if (tv.tv_nsec >= 1000000000) { ++tv.tv_sec; tv.tv_nsec -= 1000000000; }\n    return bionic_pthread_cond_clockwait(cond, mutex, CLOCK_MONOTONIC, &tv);\n}\n\nint bionic_pthread_cond_timedwait_monotonic_np(bionic_cond_t *cond, bionic_mutex_t *mutex, const struct timespec *abstime)\n{\n    assert(cond && mutex && abstime);\n    return bionic_pthread_cond_clockwait(cond, mutex, CLOCK_MONOTONIC, abstime);\n}\n\n' + s[b:]
+    p.write_text(s)
+PYCOND

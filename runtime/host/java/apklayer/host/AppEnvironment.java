@@ -49,6 +49,7 @@ final class AppEnvironment {
                 .put(Config.class, config)
                 .build();
         sandbox.getTestEnvironment().setUpApplicationState("apklayer", configuration, manifest);
+        if (Boolean.getBoolean("apklayer.nativeaudio")) NativeProcess.install();
         persistDataDirs();
         provideExternalStorage();
     }
@@ -157,7 +158,7 @@ final class AppEnvironment {
         if (Boolean.getBoolean("apklayer.logcat")) ShadowLog.stream = System.out; // debug: the app's android.util.Log lines
         // Legacy MediaPlayer still uses the host backend; native MediaCodec is independent.
         ShadowMediaPlayer.setMediaInfoProvider(ShadowHostMediaPlayer::mediaInfo);
-        HostAudio.install();
+        if (!Boolean.getBoolean("apklayer.nativeaudio")) HostAudio.install();
         if (Boolean.getBoolean("apklayer.nativemedia")) {
             NativeMedia.ensureInitialized();
         } else {
