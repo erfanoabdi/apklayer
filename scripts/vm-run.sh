@@ -35,7 +35,7 @@ sshpass -p "$VM_PASS" scp -q -o StrictHostKeyChecking=no "$APK" "$VM:apklayer-ap
 vm bash -s <<EOF
 export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0
 mkdir -p \$HOME/.config/apklayer
-echo 'APKLAYER_JAVA="\$HOME/jdk21-x86/bin/java -XX:TieredStopAtLevel=1 -XX:+UseSerialGC"' > \$HOME/.config/apklayer/env
+rm -f \$HOME/.config/apklayer/env  # no x86 JVM stopgap: the VM's own arm64 java
 export APKLAYER_JOPTS="$APKLAYER_JOPTS" APKLAYER_DEBUG_INPUT="${APKLAYER_DEBUG_INPUT:-}"
 ${APKLAYER_PICKER:+export APKLAYER_PICKER='$APKLAYER_PICKER'}
 ${APKLAYER_CHOOSER:+export APKLAYER_CHOOSER='$APKLAYER_CHOOSER'}

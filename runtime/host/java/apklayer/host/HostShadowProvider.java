@@ -19,7 +19,8 @@ public final class HostShadowProvider implements ShadowProvider {
     @Override public String[] getProvidedPackageNames() { return new String[0]; }
 
     @Override public Collection<Map.Entry<String, String>> getShadows() {
-        var entries = new ArrayList<>(List.of(Map.entry("android.webkit.WebView", ShadowHostWebView.class.getName()),
+        var entries = new ArrayList<>(List.of(
+                Map.entry("android.webkit.WebView", ShadowHostWebView.class.getName()),
                 Map.entry("android.media.MediaPlayer", ShadowHostMediaPlayer.class.getName()),
                 Map.entry("android.media.SoundPool", ShadowHostSoundPool.class.getName()),
                 Map.entry("android.app.ApplicationPackageManager", ShadowHostPackageManager.class.getName()),
@@ -31,6 +32,11 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.media.AudioTrack", ShadowHostAudioTrack.class.getName()),
                 Map.entry("android.view.Display", ShadowHostDisplay.class.getName()),
                 Map.entry("android.app.ActivityManager", ShadowHostActivityManager.class.getName())));
+        if (System.getProperty("apklayer.webviewprovider") != null) { // the original WebView implementation (a provider APK) instead of the WebKitGTK stand-in
+            entries.removeIf(entry -> entry.getKey().equals("android.webkit.WebView"));
+            entries.add(Map.entry("android.webkit.WebView", ShadowHostRealWebView.class.getName()));
+            entries.add(Map.entry("android.webkit.WebViewFactory", ShadowHostWebViewFactory.class.getName()));
+        }
         if (Boolean.getBoolean("apklayer.nativemedia")) {
             entries.removeIf(entry -> entry.getKey().equals("android.media.MediaCodec"));
             entries.add(Map.entry("android.media.MediaCodec", ShadowHostNativeMediaCodec.class.getName()));

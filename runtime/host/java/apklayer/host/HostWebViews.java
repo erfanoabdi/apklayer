@@ -118,6 +118,7 @@ final class HostWebViews {
     }
 
     private static void drive(WebView wv) {
+        if (System.getProperty("apklayer.webviewprovider") != null) return; // the provider drives its own WebViews
         Engine e = engines.get(wv);
         ShadowWebView shadow = Shadow.extract(wv);
         if (!(shadow instanceof ShadowHostWebView)) {

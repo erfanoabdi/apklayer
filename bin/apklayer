@@ -223,19 +223,19 @@ cmd_run() {
     export XDG_DATA_DIRS="${APKLAYER_NATIVE:-$ROOT/native}/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
     local -a entry=("$dir/base.apk" "$dir/classes.jar")
     if [ "$mode" = component ]; then entry=(--component-host "${entry[@]}"); fi
-    host -Dapklayer.data="$dir/data" -Dapklayer.package="$pkg" -Dapklayer.libdir="$dir/lib" -Dapklayer.apps="$APPS" -Dapklayer.cli="$ROOT/bin/apklayer" -Dapklayer.webview="$ROOT/bridge/webview/apklayer-webview.py" -Dapklayer.media="$ROOT/bridge/media/apklayer-media.py" -Dapklayer.codec="$ROOT/bridge/media/apklayer-codec.py" ${APKLAYER_JOPTS:-} \
-        -cp "$(host_cp "$dir/classes.jar")" apklayer.host.Main "${entry[@]}"
+    host -Dapklayer.data="$dir/data" -Dapklayer.package="$pkg" -Dapklayer.libdir="$dir/lib" -Dapklayer.apps="$APPS" -Dapklayer.cli="$ROOT/bin/apklayer" -Dapklayer.webview="$ROOT/bridge/webview/apklayer-webview.py" -Dapklayer.media="$ROOT/bridge/media/apklayer-media.py" -Dapklayer.codec="$ROOT/bridge/media/apklayer-codec.py" ${APKLAYER_JOPTS:-} ${APKLAYER_WEBVIEW_PROVIDER:+-Dapklayer.webviewprovider=$APPS/$APKLAYER_WEBVIEW_PROVIDER} \
+        -cp "$(host_cp "$dir/classes.jar${APKLAYER_WEBVIEW_PROVIDER:+:$APPS/$APKLAYER_WEBVIEW_PROVIDER/classes.jar}")" apklayer.host.Main "${entry[@]}"
 }
 
 # The APK's native libraries for the ABI of the JVM that runs the app (PLAN P4.4); none if it has none.
 app_abi() {
-    case "$JAVA" in *jdk21-x86*) echo x86_64; return ;; esac  # the Rosetta stopgap JVM on the arm64 dev VM (D17)
+    if tree_flavor 2>/dev/null; then echo arm64-v8a; return; fi  # the device-library route runs arm64 apps whatever JVM the install itself used
     case "$(uname -m)" in x86_64|amd64) echo x86_64 ;; *) echo arm64-v8a ;; esac
 }
 extract_libs() {
     local dir="$1" abi
     abi="$(app_abi)"; rm -rf "$dir/lib"
-    unzip -Z1 "$dir/base.apk" 2>/dev/null | grep -q "^lib/$abi/" || return 0
+    unzip -Z1 "$dir/base.apk" 2>/dev/null | grep "^lib/$abi/" >/dev/null || return 0  # not -q: an early exit made unzip fail with SIGPIPE (pipefail) on APKs with thousands of entries (WebView)
     mkdir -p "$dir/lib" && unzip -o -j -q "$dir/base.apk" "lib/$abi/*.so" -d "$dir/lib" 2>/dev/null || true
 }
 
