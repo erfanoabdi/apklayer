@@ -1,0 +1,26 @@
+package apklayer.host;
+
+import android.os.IBinder;
+import android.os.Parcel;
+import android.os.RemoteException;
+import java.util.function.Consumer;
+import java.util.function.Function;
+
+/** Instance-directory protocol; framework Binder interfaces remain actual Binder objects. */
+final class HubProtocol {
+    static final String SERVICE = "apklayer.instance", DESCRIPTOR = "apklayer.IInstanceHub";
+    static final String ENDPOINT = "apklayer.IAppEndpoint";
+    static final int REGISTER = 1, STATUS = 2, BIND = 3, UNBIND = 4, START = 5, STOP = 6;
+    static final int ENDPOINT_BIND = 1, ENDPOINT_UNBIND = 2, ENDPOINT_START = 3, ENDPOINT_STOP = 4;
+    private HubProtocol() {}
+    static <T> T call(IBinder target, String descriptor, int code, Consumer<Parcel> write, Function<Parcel, T> read) {
+        Parcel request = Parcel.obtain(), reply = Parcel.obtain();
+        try {
+            request.writeInterfaceToken(descriptor); write.accept(request);
+            if (!target.transact(code, request, reply, 0)) throw new IllegalStateException("Unknown hub transaction " + code);
+            reply.readException(); return read.apply(reply);
+        } catch (RemoteException failure) {
+            throw new IllegalStateException("Instance hub disconnected", failure);
+        } finally { request.recycle(); reply.recycle(); }
+    }
+}

@@ -5,12 +5,15 @@ from pathlib import Path
 import selectors
 import signal
 import subprocess
+import sys
 import time
 
 os.chdir(Path.home() / 'apklayer-m1')
 ENV = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000', APKLAYER_NATIVE=str(Path.home() / 'arm64-native'),
     APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400',
     APKLAYER_JOPTS='-Dapklayer.realbinder=true -Dapklayer.runms=60000')
+hub_mode = sys.argv[1:] == ['hub']
+if hub_mode: ENV['APKLAYER_JOPTS'] += ' -Dapklayer.instancehub=true'
 ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-media.so'
 
 
@@ -22,8 +25,9 @@ def stop():
 stop()
 children, logs, pending = {}, {}, {}
 with selectors.DefaultSelector() as events:
-    def start(name, package):
-        proc = subprocess.Popen(['bin/apklayer', 'run', package], env=ENV, stdout=subprocess.PIPE,
+    def start(name, package=None):
+        command = ['bin/apklayer', 'hub'] if package is None else ['bin/apklayer', 'run', package]
+        proc = subprocess.Popen(command, env=ENV, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, start_new_session=True)
         children[name] = proc
         logs[name], pending[name] = [], b''
@@ -51,12 +55,15 @@ with selectors.DefaultSelector() as events:
                 for raw in parts:
                     line = raw.decode(errors='replace')
                     logs[source].append(line)
-                    if '[hello-binder' in line or '[runtime]' in line:
+                    if '[hello-binder' in line or '[runtime]' in line or '[apklayer-hub]' in line:
                         print(line, flush=True)
                     assert '[hello-binder' not in line or 'FAIL' not in line, line
         raise AssertionError('Binder deadline before ' + needle)
 
     try:
+        if hub_mode:
+            start('hub')
+            wait_for('hub', '[apklayer-hub] READY pid=')
         start('server', 'hello.binderserver')
         published = wait_for('server', '[hello-binder-server] published=true')
         server_pid = int(published.split('pid=')[1])
@@ -65,6 +72,10 @@ with selectors.DefaultSelector() as events:
         os.kill(server_pid, signal.SIGKILL)
         wait_for('client', '[hello-binder-client] binderDied')
         wait_for('client', 'finished hello.binderclient.Main depth=0')
+        if hub_mode:
+            wait_for('hub', '[apklayer-hub] died hello.binderserver')
+            wait_for('hub', '[apklayer-hub] died hello.binderclient')
+            print('PASS hub process registration, native caller identities and death cleanup', flush=True)
         print('PASS two JVMs: real Binder call/callback, caller identities and death notification', flush=True)
     finally:
         for proc in children.values():

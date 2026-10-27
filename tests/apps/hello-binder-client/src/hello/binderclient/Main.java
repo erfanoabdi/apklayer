@@ -37,6 +37,11 @@ public class Main extends Activity {
         require(echo != null, "service hello.echo not found");
         System.out.println("[hello-binder-client] found " + echo.getClass().getName() + " ping=" + echo.pingBinder() + " alive=" + echo.isBinderAlive());
         require(DESCRIPTOR.equals(echo.getInterfaceDescriptor()), "remote interface descriptor");
+        if (Boolean.getBoolean("apklayer.instancehub")) {
+            int[] status = (int[]) Class.forName("apklayer.host.HubClient").getMethod("status").invoke(null);
+            require(status[0] != Process.myPid() && status[1] == 2, "separate hub owns two registered app processes");
+            System.out.println("[hello-binder-client] hubPid=" + status[0] + " peers=" + status[1]);
+        }
         require(echo.pingBinder() && echo.isBinderAlive(), "server alive");
         require(echo.queryLocalInterface(DESCRIPTOR) == null, "the binder is a remote proxy");
 

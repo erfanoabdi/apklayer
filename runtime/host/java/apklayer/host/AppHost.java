@@ -91,6 +91,7 @@ public final class AppHost implements Runnable {
             return;
         }
         AppEnvironment.startRuntime(app);
+        if (Boolean.getBoolean("apklayer.instancehub")) HubClient.attach(app);
 
         Display display = app.getSystemService(DisplayManager.class).getDisplay(Display.DEFAULT_DISPLAY);
         int width = display.getWidth(), height = display.getHeight();

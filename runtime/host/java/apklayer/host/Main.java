@@ -22,6 +22,19 @@ public final class Main {
     }
 
     public static void main(String[] args) {
+        if (args.length == 1 && args[0].equals("--hub")) {
+            String nativeJar = System.getProperty("apklayer.nativejar");
+            AndroidSandbox sandbox = SandboxBuilder.newBuilder()
+                    .addClasspathEntries(nativeJar == null ? List.of() : List.of(Path.of(nativeJar)))
+                    .setSdkVersion(Integer.getInteger("apklayer.sdk", 36)).build();
+            try {
+                sandbox.runOnMainThread(() -> {
+                    try { sandbox.bootstrappedClass(HubHost.class).getMethod("run", AndroidSandbox.class).invoke(null, sandbox); }
+                    catch (ReflectiveOperationException failure) { throw new RuntimeException(failure); }
+                });
+            } catch (Throwable failure) { failure.printStackTrace(); System.exit(1); }
+            return;
+        }
         Path describe = null;
         if (args.length == 4 && args[0].equals("--describe")) {
             describe = Path.of(args[1]);

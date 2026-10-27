@@ -248,6 +248,18 @@ cmd_uninstall() {
     echo "apklayer: removed $1"
 }
 
+# Foreground daemon entrypoint. The lock and its JVM live for the instance lifetime.
+cmd_hub() {
+    tree_flavor || die "instance hub requires the device-library runtime"
+    . "$ROOT/scripts/native-env.sh"
+    mkdir -p "${APKLAYER_LOGS:-/tmp/apklayer-stack}"
+    exec 8>"${APKLAYER_LOGS:-/tmp/apklayer-stack}/hub.lock"
+    flock -n 8 || return 0
+    ensure_stack
+    host -Dapklayer.realbinder=true -Dapklayer.apps="$APPS" -Dapklayer.cli="$ROOT/bin/apklayer" \
+        -cp "$(host_cp '')" apklayer.host.Main --hub
+}
+
 case "${1:-}" in
     install) shift; [ $# -eq 1 ] || die "usage: apklayer install <app.apk>"; cmd_install "$1" ;;
     stop) # the device-library route: the app JVMs and the instance's Android services
@@ -256,6 +268,7 @@ case "${1:-}" in
         [ -f "${APKLAYER_LOGS:-/tmp/apklayer-stack}/stack.pid" ] && kill "$(cat "${APKLAYER_LOGS:-/tmp/apklayer-stack}/stack.pid")" 2>/dev/null || true
         pkill -x apklayer-shell || true ;;
     run) shift; [ $# -eq 1 ] || die "usage: apklayer run <package|app.apk>"; cmd_run "$1" ;;
+    hub) cmd_hub ;;
     list) cmd_list ;;
     uninstall) shift; [ $# -eq 1 ] || die "usage: apklayer uninstall <package>"; cmd_uninstall "$1" ;;
     *) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;

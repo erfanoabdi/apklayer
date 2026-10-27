@@ -31,7 +31,8 @@ import org.robolectric.simulator.FixedConfiguration;
 final class AppEnvironment {
     /** Robolectric simulator AppLoader: application state straight from the APK. */
     static void setUpApplication(AndroidSandbox sandbox, Path apk, boolean describing) {
-        AndroidManifest manifest = new AndroidManifest(null, null, null, null, "", apk);
+        AndroidManifest manifest = apk == null ? new AndroidManifest(null, null, null, "apklayer.hub")
+                : new AndroidManifest(null, null, null, null, "", apk);
         Config.Builder builder = new Config.Builder()
                 .setSdk(Integer.getInteger("apklayer.sdk", 36))
                 .setQualifiers(System.getProperty("apklayer.qualifiers", "w480dp-h800dp"));
