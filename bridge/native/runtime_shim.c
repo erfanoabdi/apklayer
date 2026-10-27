@@ -343,6 +343,17 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     free(media);
 
     (*ti)->SetJNIFunctionTable(ti, orig);
+    char *attribution = system_property(env, "apklayer.nativeattribution");
+    char *audio = system_property(env, "apklayer.nativeaudio");
+    int attribution_failed = 0;
+    if ((attribution && !strcmp(attribution, "true")) || (audio && !strcmp(audio, "true"))) {
+        extern int apklayer_register_attribution(JNIEnv *, jclass);
+        jclass helper = lazy_find_class(env, "apklayer/host/NativeAttribution");
+        attribution_failed = !helper || apklayer_register_attribution(env, helper);
+        if (helper) (*env)->DeleteLocalRef(env, helper);
+    }
+    free(attribution); free(audio);
+    if (attribution_failed) media_failed = 1;
     if (media_failed) return -1;
     if (failed) fprintf(stderr, "[runtime] %d registrations did not run (see above)\n", failed);
     fprintf(stderr, "[runtime] Android's framework natives registered (%d critical natives adapted%s)\n", critical_count, critical_of ? "" : "; CriticalNatives unavailable");

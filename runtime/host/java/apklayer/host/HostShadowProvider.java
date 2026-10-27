@@ -39,6 +39,9 @@ public final class HostShadowProvider implements ShadowProvider {
                 entries.add(Map.entry("android.view.SurfaceView", ShadowHostNativeSurfaceView.class.getName()));
             }
         }
+        if (Boolean.getBoolean("apklayer.nativeattribution") || Boolean.getBoolean("apklayer.nativeaudio")) {
+            entries.add(Map.entry("android.content.AttributionSource.ScopedParcelState", ShadowHostNativeAttributionParcel.class.getName()));
+        }
         return entries;
     }
 

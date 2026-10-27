@@ -1,0 +1,7 @@
+# Device-library runtime adapters
+
+`attribution` bridges a scoped Java attribution payload to original AOSP `AttributionSourceState` serialization in a real `Parcel`. General Binder/Parcel behavior remains in Java. The new translation is required because Robolectric Parcel buffers are Java objects and cannot be passed to original JNI as native pointers; local AOSP media JNI expects `parcelForJavaObject` rather than a direct Java-state conversion API.
+
+Every attribution field and chain node is copied. Local Java Binder identity maps weakly to real BBinder identity tokens; this supports attribution identity, not Java onTransact dispatch. Remote Binder proxies are explicitly rejected until the full instance-hub bridge is implemented. The scoped payload is for native consumers; it is not a replacement for general Java Parcel operations. Scope close restores/recycles its original Java Parcel peer and destroys the actual native Parcel. Native handle membership is validated before access; malformed/deep cyclic chains fail instead of being truncated.
+
+Native registration is opt-in (`apklayer.nativeattribution`, also requested by future native audio mode) and uses an uninstrumented helper after the JNI naming adapter is restored. Original Parcel JNI registration initializes the real field cache; global ShadowParcel behavior remains as before. `tests/vm/native-audio.sh` verifies field mutation, Unicode/null values, chains, token stability/distinction, normal/error ownership, Java Parcel reuse, a GPU frame and physical Back.

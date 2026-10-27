@@ -31,3 +31,24 @@ int apklayer_register_media(JNIEnv *env, JavaVM *vm)
     fprintf(stderr, "[runtime] Android media JNI registered\n");
     return 0;
 }
+
+/* The helper is an uninstrumented host class: called after the JNI naming adapter
+ * has been restored, so these private methods keep their original names. */
+int apklayer_register_attribution(JNIEnv *env, jclass helper)
+{
+    void *lib = bionic_dlopen("libapklayer_attribution.so", 2);
+    if (!lib) {
+        fprintf(stderr, "[runtime] cannot load attribution JNI: %s\n", bionic_dlerror());
+        return -1;
+    }
+    JNINativeMethod methods[] = {
+        {"nativeCreate", "(Ljava/lang/Object;)J", bionic_dlsym(lib, "apklayer_attribution_create")},
+        {"nativeDestroy", "(J)V", bionic_dlsym(lib, "apklayer_attribution_destroy")},
+        {"nativeMatches", "(JLjava/lang/Object;)Z", bionic_dlsym(lib, "apklayer_attribution_matches")},
+        {"nativeActive", "()I", bionic_dlsym(lib, "apklayer_attribution_active")},
+    };
+    for (size_t i = 0; i < sizeof methods / sizeof *methods; i++) if (!methods[i].fnPtr) return -1;
+    if ((*env)->RegisterNatives(env, helper, methods, sizeof methods / sizeof *methods) < 0) return -1;
+    fprintf(stderr, "[runtime] native attribution Parcel adapter registered\n");
+    return 0;
+}

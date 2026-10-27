@@ -1,0 +1,9 @@
+// Serialize the original AIDL attribution state into an actual Android Parcel.
+cc_library_shared {
+    name: "libapklayer_attribution",
+    srcs: ["Attribution.cpp"],
+    header_libs: ["jni_headers"],
+    shared_libs: ["libbinder", "libutils", "framework-permission-aidl-cpp"],
+    compile_multilib: "64",
+    cflags: ["-Wall", "-Werror"],
+}

@@ -189,6 +189,9 @@ public class DefaultNativeRuntimeLoader implements NativeRuntimeLoader {
 
   /** Overridable in Android, due to changing shadows in private branches. */
   protected List<String> getCoreClassNatives() {
+    if (Boolean.getBoolean("apklayer.nativeattribution") || Boolean.getBoolean("apklayer.nativeaudio")) {
+      return ImmutableList.<String>builder().addAll(CORE_CLASS_NATIVES).add("android.os.Parcel").build();
+    }
     return CORE_CLASS_NATIVES;
   }
 

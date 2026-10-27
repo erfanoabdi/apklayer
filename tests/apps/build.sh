@@ -18,6 +18,6 @@ javac -nowarn -d "$W/cls" -cp "$AJ" $(find src -name '*.java')
 "$BT"/d8 --min-api 26 --lib "$AJ" --output "$W" $(find "$W/cls" -name '*.class')
 ASSETS=()
 [ ! -d assets ] || ASSETS=(-A "$PWD/assets")
-"$BT"/aapt2 link "${ASSETS[@]}" -o "$W/base.apk" -I "$AJ" --manifest AndroidManifest.xml
+"$BT"/aapt2 link ${ASSETS[@]+"${ASSETS[@]}"} -o "$W/base.apk" -I "$AJ" --manifest AndroidManifest.xml
 (cd "$W" && zip -q base.apk classes.dex $LIBS) && cp "$W/base.apk" "$OUT"
 echo "$OUT"
