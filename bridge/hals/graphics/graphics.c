@@ -147,7 +147,7 @@ int apklayer_gfx_alloc(struct apklayer_gfx *gfx, uint32_t width, uint32_t height
     int r = 0;
     if (gbm_device_is_format_supported(gfx->gbm, fourcc, gbm_flags(usage))) {
         struct gbm_bo *bo = gbm_bo_create(gfx->gbm, width, height, fourcc, gbm_flags(usage));
-        if (!bo) return errno ? -errno : -ENOMEM;
+        if (!bo) { fprintf(stderr, "apklayer-gfx: gbm_bo_create %ux%u fourcc 0x%x flags 0x%x failed: %s\n", width, height, fourcc, gbm_flags(usage), strerror(errno)); return errno ? -errno : -ENOMEM; }
         out->modifier = gbm_bo_get_modifier(bo);
         out->num_planes = gbm_bo_get_plane_count(bo);
         r = out->num_planes < 1 || out->num_planes > APKLAYER_GFX_MAX_PLANES ? -ENOTSUP : 0;

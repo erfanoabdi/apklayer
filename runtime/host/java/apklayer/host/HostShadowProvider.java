@@ -57,6 +57,8 @@ public final class HostShadowProvider implements ShadowProvider {
         }
         if (Boolean.getBoolean("apklayer.gpu"))
             entries.add(Map.entry("android.hardware.HardwareBuffer", ShadowHostNativeHardwareBuffer.class.getName()));
+        if (Boolean.getBoolean("apklayer.gpu"))
+            entries.add(Map.entry("dalvik.system.BaseDexClassLoader", ShadowHostBaseDexClassLoader.class.getName()));
         if (Boolean.getBoolean("apklayer.nativeattribution") || Boolean.getBoolean("apklayer.nativeaudio")) {
             entries.add(Map.entry("android.content.AttributionSource.ScopedParcelState", ShadowHostNativeAttributionParcel.class.getName()));
         }

@@ -435,7 +435,15 @@ EGLImage eglCreateImage(EGLDisplay dpy, EGLContext ctx, EGLenum target, EGLClien
 EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig cfg, EGLContext share, const EGLint* attribs) {
     // priority, protected content and the telemetry hint are Android-only context attributes
     auto a = filtered(attribs, {EGL_CONTEXT_PRIORITY_LEVEL_IMG, EGL_PROTECTED_CONTENT_EXT, EGL_TELEMETRY_HINT_ANDROID});
-    return host<PFNEGLCREATECONTEXTPROC>("eglCreateContext")(dpy, cfg, share, a.data());
+    EGLContext ctx = host<PFNEGLCREATECONTEXTPROC>("eglCreateContext")(dpy, cfg, share, a.data());
+    if (ctx == EGL_NO_CONTEXT) {  // diagnosis: engines (bgfx) probe several versions, the last failure is the one they report
+        EGLint err = host<EGLint (*)()>("eglGetError")();
+        std::string list;
+        for (size_t i = 0; i + 1 < a.size(); i += 2) list += " " + std::to_string(a[i]) + "=" + std::to_string(a[i + 1]);
+        ALOGW("eglCreateContext failed (error 0x%x), attributes:%s", err, list.c_str());
+        tError = err;
+    }
+    return ctx;
 }
 
 EGLBoolean eglChooseConfig(EGLDisplay dpy, const EGLint* attribs, EGLConfig* cfgs, EGLint size, EGLint* num) {
