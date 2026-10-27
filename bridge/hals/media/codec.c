@@ -1,11 +1,13 @@
 /* Native host decoding: reuse the existing GStreamer backend, retaining raw
  * samples and dmabuf ownership instead of converting frames into RGBA files. */
 #include <apklayer/codec.h>
+#include <apklayer/audio_codec.h>
 #include <errno.h>
 #include <gst/app/gstappsrc.h>
 #include <gst/app/gstappsink.h>
 #include <gst/allocators/gstdmabuf.h>
 #include <gst/video/video.h>
+#include <gst/audio/audio.h>
 #include <gst/video/video-info-dma.h>
 #include <stdio.h>
 #include <string.h>
@@ -71,6 +73,9 @@ struct apklayer_codec_frame {
     GstSample *sample;
     GstVideoInfo video;
     GstVideoFrame mapping;
+    GstMapInfo pcm_mapping;
+    struct apklayer_audio_codec_frame_info audio;
+    gboolean is_audio;
     gboolean mapped;
     struct apklayer_codec_frame_info info;
 };
@@ -83,6 +88,7 @@ static GstCaps *input_caps(const char *mime)
     if (!strcmp(mime, "video/x-vnd.on2.vp9")) caps = "video/x-vp9";
     if (!strcmp(mime, "video/avc")) caps = "video/x-h264,stream-format=byte-stream,alignment=au";
     if (!strcmp(mime, "video/hevc")) caps = "video/x-h265,stream-format=byte-stream,alignment=au";
+    if (!strcmp(mime, "audio/mp4a-latm")) caps = "audio/mpeg,mpegversion=4,stream-format=raw,framed=true";
     if (!strcmp(mime, "video/av01")) caps = "video/x-av1,stream-format=obu-stream,alignment=tu";
     return caps ? gst_caps_from_string(caps) : NULL;
 }
@@ -113,17 +119,12 @@ static int check_error(struct apklayer_codec *c)
     return -EIO;
 }
 
-int apklayer_codec_open(const struct apklayer_codec_config *cfg, struct apklayer_codec **out)
+static int open_caps(GstCaps *input, const char *pipeline, const char *output, struct apklayer_codec **out)
 {
-    if (!cfg || !out || !cfg->width || !cfg->height ||
-        cfg->width > INT_MAX || cfg->height > INT_MAX ||
-        (cfg->codec_data_size && !cfg->codec_data)) return -EINVAL;
     *out = NULL;
-    if (!apklayer_codec_supports(cfg->mime)) return -ENOTSUP;
     struct apklayer_codec *c = g_new0(struct apklayer_codec, 1);
     GError *error = NULL;
-    c->pipe = gst_parse_launch("appsrc name=input format=time ! decodebin ! "
-        "appsink name=output sync=false max-buffers=8", &error);
+    c->pipe = gst_parse_launch(pipeline, &error);
     if (!c->pipe || error) {
         if (error) fprintf(stderr, "[codec] %s\n", error->message);
         g_clear_error(&error);
@@ -137,19 +138,9 @@ int apklayer_codec_open(const struct apklayer_codec_config *cfg, struct apklayer
     GstBus *bus = gst_element_get_bus(c->pipe);
     gst_bus_set_sync_handler(bus, message_ready, c, NULL);
     gst_object_unref(bus);
-    GstCaps *caps = input_caps(cfg->mime);
-    gst_caps_set_simple(caps, "width", G_TYPE_INT, (int)cfg->width,
-                        "height", G_TYPE_INT, (int)cfg->height, NULL);
-    if (cfg->codec_data_size) {
-        GstBuffer *data = gst_buffer_new_allocate(NULL, cfg->codec_data_size, NULL);
-        gst_buffer_fill(data, 0, cfg->codec_data, cfg->codec_data_size);
-        gst_caps_set_simple(caps, "codec_data", GST_TYPE_BUFFER, data, NULL);
-        gst_buffer_unref(data);
-    }
-    gst_app_src_set_caps(c->src, caps);
-    gst_caps_unref(caps);
+    gst_app_src_set_caps(c->src, input);
     gst_app_src_set_max_bytes(c->src, 8 * 1024 * 1024);
-    caps = gst_caps_from_string("video/x-raw;video/x-raw(memory:DMABuf)");
+    GstCaps *caps = gst_caps_from_string(output);
     gst_app_sink_set_caps(c->sink, caps);
     gst_caps_unref(caps);
     if (gst_element_set_state(c->pipe, GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE) {
@@ -159,6 +150,45 @@ int apklayer_codec_open(const struct apklayer_codec_config *cfg, struct apklayer
     }
     *out = c;
     return 0;
+}
+
+static void codec_data(GstCaps *caps, const void *bytes, size_t size)
+{
+    if (!size) return;
+    GstBuffer *data = gst_buffer_new_allocate(NULL, size, NULL);
+    gst_buffer_fill(data, 0, bytes, size);
+    gst_caps_set_simple(caps, "codec_data", GST_TYPE_BUFFER, data, NULL);
+    gst_buffer_unref(data);
+}
+int apklayer_codec_open(const struct apklayer_codec_config *cfg, struct apklayer_codec **out)
+{
+    if (!cfg || !out || !cfg->mime || strncmp(cfg->mime, "video/", 6) || !cfg->width || !cfg->height ||
+        cfg->width > INT_MAX || cfg->height > INT_MAX || (cfg->codec_data_size && !cfg->codec_data)) return -EINVAL;
+    *out = NULL;
+    if (!apklayer_codec_supports(cfg->mime)) return -ENOTSUP;
+    GstCaps *caps = input_caps(cfg->mime);
+    gst_caps_set_simple(caps, "width", G_TYPE_INT, (int)cfg->width, "height", G_TYPE_INT, (int)cfg->height, NULL);
+    codec_data(caps, cfg->codec_data, cfg->codec_data_size);
+    int result = open_caps(caps, "appsrc name=input format=time ! decodebin ! appsink name=output sync=false max-buffers=8",
+                           "video/x-raw;video/x-raw(memory:DMABuf)", out);
+    gst_caps_unref(caps);
+    return result;
+}
+int apklayer_audio_codec_open(const struct apklayer_audio_codec_config *cfg, struct apklayer_codec **out)
+{
+    if (!cfg || !out || !cfg->mime || strcmp(cfg->mime, "audio/mp4a-latm") ||
+        !cfg->sample_rate || cfg->sample_rate > INT_MAX || !cfg->channels || cfg->channels > 8 ||
+        !cfg->codec_data || !cfg->codec_data_size || cfg->codec_data_size > 65536) return -EINVAL;
+    *out = NULL;
+    if (!apklayer_codec_supports(cfg->mime)) return -ENOTSUP;
+    GstCaps *caps = input_caps(cfg->mime);
+    gst_caps_set_simple(caps, "rate", G_TYPE_INT, (int)cfg->sample_rate, "channels", G_TYPE_INT, (int)cfg->channels, NULL);
+    codec_data(caps, cfg->codec_data, cfg->codec_data_size);
+    int result = open_caps(caps, "appsrc name=input format=time ! decodebin ! audioconvert ! "
+                          "appsink name=output sync=false max-buffers=8",
+                          "audio/x-raw,format=S16LE,layout=interleaved", out);
+    gst_caps_unref(caps);
+    return result;
 }
 
 int apklayer_codec_queue(struct apklayer_codec *c, const void *data, size_t size, int64_t pts)
@@ -192,6 +222,23 @@ int apklayer_codec_pull(struct apklayer_codec *c, uint64_t wait, struct apklayer
     struct apklayer_codec_frame *f = g_new0(struct apklayer_codec_frame, 1);
     f->sample = sample;
     GstCaps *caps = gst_sample_get_caps(sample);
+    if (gst_structure_has_name(gst_caps_get_structure(caps, 0), "audio/x-raw")) {
+        GstAudioInfo audio;
+        GstBuffer *buffer = gst_sample_get_buffer(sample);
+        if (!gst_audio_info_from_caps(&audio, caps) || GST_AUDIO_INFO_FORMAT(&audio) != GST_AUDIO_FORMAT_S16LE ||
+            GST_AUDIO_INFO_LAYOUT(&audio) != GST_AUDIO_LAYOUT_INTERLEAVED ||
+            !GST_AUDIO_INFO_BPF(&audio) || gst_buffer_get_size(buffer) % GST_AUDIO_INFO_BPF(&audio)) {
+            apklayer_codec_frame_release(f); return -ENOTSUP;
+        }
+        f->is_audio = TRUE;
+        f->audio.sample_rate = GST_AUDIO_INFO_RATE(&audio);
+        f->audio.channels = GST_AUDIO_INFO_CHANNELS(&audio);
+        f->audio.bytes = gst_buffer_get_size(buffer);
+        f->audio.frames = f->audio.bytes / GST_AUDIO_INFO_BPF(&audio);
+        f->audio.pts_ns = GST_BUFFER_PTS_IS_VALID(buffer) ? (int64_t)GST_BUFFER_PTS(buffer) : -1;
+        g_strlcpy(f->audio.format, "S16LE", sizeof f->audio.format);
+        *out = f; return 0;
+    }
     GstVideoInfoDmaDrm drm;
     gst_video_info_dma_drm_init(&drm);
     gboolean valid;
@@ -242,7 +289,7 @@ void apklayer_codec_frame_describe(const struct apklayer_codec_frame *f, struct 
 
 int apklayer_codec_frame_map(struct apklayer_codec_frame *f, const void *planes[4])
 {
-    if (!f || !planes) return -EINVAL;
+    if (!f || !planes || f->is_audio) return -EINVAL;
     if (f->info.modifier != 0) return -ENOTSUP;
     if (!f->mapped) {
         if (!gst_video_frame_map(&f->mapping, &f->video, gst_sample_get_buffer(f->sample), GST_MAP_READ)) return -EIO;
@@ -252,10 +299,29 @@ int apklayer_codec_frame_map(struct apklayer_codec_frame *f, const void *planes[
     return 0;
 }
 
+int apklayer_audio_codec_frame_describe(const struct apklayer_codec_frame *f, struct apklayer_audio_codec_frame_info *out)
+{
+    if (!f || !out || !f->is_audio) return -EINVAL;
+    *out = f->audio; return 0;
+}
+int apklayer_audio_codec_frame_map(struct apklayer_codec_frame *f, const void **data, size_t *size)
+{
+    if (!f || !data || !size || !f->is_audio) return -EINVAL;
+    if (!f->mapped) {
+        if (!gst_buffer_map(gst_sample_get_buffer(f->sample), &f->pcm_mapping, GST_MAP_READ)) return -EIO;
+        f->mapped = TRUE;
+    }
+    *data = f->pcm_mapping.data; *size = f->pcm_mapping.size;
+    return 0;
+}
+
 void apklayer_codec_frame_release(struct apklayer_codec_frame *f)
 {
     if (!f) return;
-    if (f->mapped) gst_video_frame_unmap(&f->mapping);
+    if (f->mapped) {
+        if (f->is_audio) gst_buffer_unmap(gst_sample_get_buffer(f->sample), &f->pcm_mapping);
+        else gst_video_frame_unmap(&f->mapping);
+    }
     gst_sample_unref(f->sample);
     g_free(f);
 }

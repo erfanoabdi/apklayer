@@ -605,6 +605,9 @@ rendering end to end, real input through the shell's input proxy, dialogs stacke
 
    Original MediaPlayer video verified (2026-10-27): actual Java/JNI/NuPlayer/Codec2 -> SurfaceView, real FD source caller-close, async prepare, video track/duration/dimensions, pause/resume and playback pacing, native time-discontinuity Parcel timestamps, seek/replay and two completion callbacks. Native callback factory uses original payload data with normal Java recycle/finalization ownership. tests/vm/native-player.sh checks131674 red pixels, real SF layer, release and physical Back. Compressed audio/A-V integration and more source/error cases remain next; exact short-clip getCurrentPosition endpoint semantics still need investigation.
 
+   AAC host backend verified (2026-10-27): original GStreamer native AAC decoding returns actual interleaved PCM through a separate audio API, sharing queue/notify/EOS/ownership with video and preserving video ABI. Mono/stereo49packets ->50176 decodedframes with real440Hz, PTS/EOS and retained-buffer checks pass; video and MediaPlayer regressions pass. Codec2 audio component and A/V app capture are next; no audio component is advertised yet.
+
+
 
    **Bluetooth** after camera: Robolectric-style shadows of `android.bluetooth.*` over a host daemon speaking D-Bus to BlueZ (not Android's own stack: it needs
    system_server's services and an exclusive controller), scoped by what the corpus apps actually call (BLE scan, GATT client/server and advertising first; then RFCOMM/L2CAP
