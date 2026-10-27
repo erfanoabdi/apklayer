@@ -459,6 +459,9 @@ EGLSurface eglCreateWindowSurface(EGLDisplay dpy, EGLConfig cfg, EGLNativeWindow
     auto* win = new Window{dpy, cfg, nw, nullptr, EGL_NO_SURFACE, 0, 0, 0};
     host<EGLBoolean (*)(EGLDisplay, EGLConfig, EGLint, EGLint*)>("eglGetConfigAttrib")(dpy, cfg, EGL_NATIVE_VISUAL_ID, &win->visual);
     if (!attachHostSurface(win)) { delete win; tError = EGL_BAD_ALLOC; return EGL_NO_SURFACE; }
+    // apklayer patch: EGL owns the window until eglDestroySurface. EGL10's
+    // SurfaceTexture wrapper drops its temporary sp<Surface> after this call.
+    nw->common.incRef(&nw->common);
     // the Android side: connect as an EGL producer and ask for buffers the GPU renders to and SurfaceFlinger samples
     native_window_api_connect(nw, kApiEgl);
     native_window_set_usage(nw, kUsageRender | kUsageTexture);
@@ -479,6 +482,7 @@ EGLBoolean eglDestroySurface(EGLDisplay dpy, EGLSurface surface) {
         if (Window* w = windowOf(surface)) {
             if (w->native) native_window_api_disconnect(w->native, kApiEgl);
             windows.erase(w);
+            if (w->native) w->native->common.decRef(&w->native->common);
             EGLBoolean ok = host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglDestroySurface")(dpy, w->host);
             gbmFn<void (*)(void*)>("gbm_surface_destroy")(w->gbmSurface);
             delete w;

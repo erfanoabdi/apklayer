@@ -112,8 +112,11 @@ de4fee9ec19c4922ab82be786a9895bd65bd6d27da6ff80468afb4ac9ced0be1 117216 android-
 918fcb5c5315d441ad149e60b6ffe95c1deade70376838298a36f2676e459916 117216 android-arm64/lib64/libGLESv3.so out/target/product/generic_arm64/system/lib64/libGLESv3.so same
 8b1f6af244714a7bb0f9aee31473054c2f815b154353761c39bbd6b571dce126 52504 android-arm64/lib64/libSurfaceFlingerProp.so out/target/product/generic_arm64/system/lib64/libSurfaceFlingerProp.so same
 765cacf110f1676ff3f8d07277b32d903eb10eb67653cad87006b664380b8ff5 69920 android-arm64/lib64/libaacextractor.so out/target/product/generic_arm64/apex/com.android.media/lib64/extractors/libaacextractor.so same
+a239e50ac611fb20c06a96647750eae69b965ec41203003665f3198e869cd01c 86000 android-arm64/lib64/libaaudio.so out/target/product/generic_arm64/system/lib64/libaaudio.so same
+6c235d0e1ba7c67c58f3d67491defef203c719d39483ff575f9d579bbd004404 52272 android-arm64/lib64/libaaudio_internal_builder.so out/target/product/generic_arm64/system/lib64/libaaudio_internal_builder.so same
 a7e1ae1eacd1ae00032f361106fee7c20eb0947a8315277f78da9038ecdf1a7b 119320 android-arm64/lib64/libaaudio_internal_core.so out/target/product/generic_arm64/system/lib64/libaaudio_internal_core.so same
 f7b73ac26cffd80ea3560e3e83294207e69b8313888f7abc61e1e6e0f4f6fc21 36064 android-arm64/lib64/libaaudio_internal_fifo.so out/target/product/generic_arm64/system/lib64/libaaudio_internal_fifo.so same
+c391bd801457b9ae9a149b0ddec5e239ab7ed3930a51c9c97884918c341a1422 151496 android-arm64/lib64/libaaudio_internal_legacy.so out/target/product/generic_arm64/system/lib64/libaaudio_internal_legacy.so same
 733372da9dc13df3f918e762b66575c096d23faaa0fe1c76a44b76ed089b84dd 384760 android-arm64/lib64/libaaudio_internal_mmap.so out/target/product/generic_arm64/system/lib64/libaaudio_internal_mmap.so same
 56e20178d88f3a5d5294150c3c706424b28d1044fc7d0856d2d691b93dcda5be 53088 android-arm64/lib64/libaaudio_internal_utils.so out/target/product/generic_arm64/system/lib64/libaaudio_internal_utils.so same
 8c8736620a5095f54be71881f8f8c9f182b327cb64d1bc71ce4b2ce79f4e9876 190816 android-arm64/lib64/libaconfig_storage_read_api_cc.so out/target/product/generic_arm64/system/lib64/libaconfig_storage_read_api_cc.so same
@@ -125,6 +128,7 @@ af58eba974abdbd30ed12eef1cdfe13eb747505fb1e9874290024bd3888a78c9 35384 android-a
 ba632a2c4aa9803cce8c928e8f71177cbccd9481c92ff661eaaf32d450c5e942 51392 android-arm64/lib64/libandroid_runtime_lazy.so out/target/product/generic_arm64/system/lib64/libandroid_runtime_lazy.so same
 392ffd8165d0297a15cc04209ad17f3e527a8e062d271b3d8ce8dc6326fe2a9e 1208688 android-arm64/lib64/libandroidfw.so out/target/product/generic_arm64/system/lib64/libandroidfw.so same
 d3a933a040820f6b9674f4cd7206246f86df501156212752393fdf38accbb29e 52792 android-arm64/lib64/libandroidicu.so out/target/product/generic_arm64/apex/com.android.i18n/lib64/libandroidicu.so same
+f4ccba52a4ecd95f7c5642bd0314b60932302e916104b4085d88bc3be1809c8a 51536 android-arm64/lib64/libandroidio.so out/target/product/generic_arm64/apex/com.android.art.debug/lib64/libandroidio.so same
 23b8fa4a9b600811cd2ab015d5f9d85d3485b0c78f575e1e5b256c58fd056166 186200 android-arm64/lib64/libapexsupport.so out/target/product/generic_arm64/system/lib64/libapexsupport.so same
 35beb8e5fa63ffd4e5159e3aad595b3f543837c2321d36fbb65298112a4d16d0 52384 android-arm64/lib64/libapklayer_allocator.so out/soong/.intermediates/vendor/apklayer/hals/graphics/allocator/libapklayer_allocator/android_arm64_armv8-a_shared/libapklayer_allocator.so apklayer
 00d8464ff3d7665f40abd9955f6db003daa522fa50bc6da548d7259ea9916873 52032 android-arm64/lib64/libapklayer_attribution.so out/soong/.intermediates/vendor/apklayer/runtime/attribution/libapklayer_attribution/android_arm64_armv8-a_shared/libapklayer_attribution.so apklayer
@@ -132,7 +136,7 @@ d3a933a040820f6b9674f4cd7206246f86df501156212752393fdf38accbb29e 52792 android-a
 84eb1253a6be439c68571c64bbae2299115d7820c33330759ef5ecac2bda50a1 2615920 android-arm64/lib64/libapklayer_audioserver.so out/soong/.intermediates/vendor/apklayer/hals/audio/services/libapklayer_audioserver/android_arm64_armv8-a_shared/libapklayer_audioserver.so apklayer
 607d59ec1a0bc177eb12b0941c3c09a25b96963b2343e8db020925d26e41034d 172056 android-arm64/lib64/libapklayer_codec2.so out/soong/.intermediates/vendor/apklayer/hals/media/codec2/libapklayer_codec2/android_arm64_armv8-a_shared/libapklayer_codec2.so apklayer
 2d4a388cb3863ebcf77f4ba13faf83d1ee37ac4b8ed263910419ece516851680 70048 android-arm64/lib64/libapklayer_composer.so out/soong/.intermediates/vendor/apklayer/hals/graphics/composer/libapklayer_composer/android_arm64_armv8-a_shared/libapklayer_composer.so apklayer
-b51ea638ddcf4989c9c5baea71857d6322d152481d61d982f5f26766171a63c6 68600 android-arm64/lib64/libapklayer_egl.so out/soong/.intermediates/vendor/apklayer/hals/graphics/egl/libapklayer_egl/android_arm64_armv8-a_shared/libapklayer_egl.so apklayer
+292192759fcc9ee5aa9ff9e71984a470a66006f3d42a2047752f97015d48ba6e 68656 android-arm64/lib64/libapklayer_egl.so out/soong/.intermediates/vendor/apklayer/hals/graphics/egl/libapklayer_egl/android_arm64_armv8-a_shared/libapklayer_egl.so apklayer
 81cd4a059422d4eb5e5600d5d82e56ea9649b21896eebd6479e383884d3991ea 51640 android-arm64/lib64/libapklayer_gltest.so out/soong/.intermediates/vendor/apklayer/tools/libapklayer_gltest/android_arm64_armv8-a_shared/libapklayer_gltest.so apklayer
 6f75fb6e7d3c21cd88a26eb893e37f00e3b4d3f17b174ef9455383189b28b68b 35680 android-arm64/lib64/libapklayer_mediaserver.so out/soong/.intermediates/vendor/apklayer/hals/media/services/libapklayer_mediaserver/android_arm64_armv8-a_shared/libapklayer_mediaserver.so apklayer
 aa44b2ec1914f8db5e63d7aafa8d0a2ab3e62b57dbc11bf5dcc6f6184848348f 51928 android-arm64/lib64/libapklayer_permission.so out/soong/.intermediates/vendor/apklayer/hals/permission/libapklayer_permission/android_arm64_armv8-a_shared/libapklayer_permission.so apklayer
@@ -268,6 +272,8 @@ f01414ad70917b6038dd3731e1c32ba3bf286397fe0a4a7c3414304791fdee2b 2911880 android
 ca717cd4ad0754c71ea22f58e2a1a2e734ca78d5651645281dcc13c952162e31 151048 android-arm64/lib64/libimg_utils.so out/target/product/generic_arm64/system/lib64/libimg_utils.so same
 03e97b02d11cca661786826dc5fca9faa5c43758a33e39b911de1ef0d27ca1bf 218536 android-arm64/lib64/libincfs.so out/target/product/generic_arm64/system/lib64/libincfs.so same
 fe6d06cf847d409986e263a227178697efeb2dd2cef899534188c259591d203e 3332056 android-arm64/lib64/libinput.so out/target/product/generic_arm64/system/lib64/libinput.so same
+c465c0f173112aa676209c3c856292c5e512e3530a29c5bf77e80874e6b388df 259728 android-arm64/lib64/libjavacore.so out/target/product/generic_arm64/apex/com.android.art.debug/lib64/libjavacore.so same
+f7fd5670d21ad56bd0babaa87856026b616b882e0193ad4cf842b78f28d12fd4 51920 android-arm64/lib64/libjnigraphics.so out/target/product/generic_arm64/system/lib64/libjnigraphics.so same
 1321d10e04e822cdceadf05dab56e4ba5fd722bf0cc895b3e8b7b2f6e81d95ef 354312 android-arm64/lib64/libjpeg.so out/target/product/generic_arm64/system/lib64/libjpeg.so same
 9ae8d048e1e498c32240a63d60af138f8c93f984bb5d9b14cea8f087cc8977b0 36008 android-arm64/lib64/libjpegdecoder.so out/target/product/generic_arm64/system/lib64/libjpegdecoder.so same
 bfbf435655f8335c53e54556cba48e5ce62c54386b8bda6adaaa580f5296d899 51912 android-arm64/lib64/libjpegencoder.so out/target/product/generic_arm64/system/lib64/libjpegencoder.so same
@@ -304,7 +310,7 @@ cce358be60868101def54ef760059d8b12451e95c60c8f14d3aa17f6eda591b8 371984 android-
 4010f59f6f0a26473a768d0d2ce68ab52a71e3a3d9830ba474980f15cde71f85 266672 android-arm64/lib64/libmtp.so out/target/product/generic_arm64/system/lib64/libmtp.so same
 1abe3a5eb93f4b34ca9ff735644ddd0ebd869f52ad2b22e3f6b2c2a3d02c6219 51496 android-arm64/lib64/libnativebridge_lazy.so out/target/product/generic_arm64/system/lib64/libnativebridge_lazy.so same
 955a5660d05df378dd9ec111c399d75299b613a6a85bd3b72a094d13d5841a61 152200 android-arm64/lib64/libnativedisplay.so out/target/product/generic_arm64/system/lib64/libnativedisplay.so same
-e37d64bb50123a92c4bdaf94be28f2b7d9389d95c02e4cac20b04fa1f1bca0df 51496 android-arm64/lib64/libnativehelper.so out/target/product/generic_arm64/apex/com.android.art.debug/lib64/libnativehelper.so patched
+7efd9a0b8d0c78a35c20a66256ea6d4e434d8d13dc6f2218b10f6c84c7a7f81d 51488 android-arm64/lib64/libnativehelper.so out/target/product/generic_arm64/apex/com.android.art.debug/lib64/libnativehelper.so patched
 df3c6985add3ef3496591c4455c69e31dc7bdea7834e8c87eb544e19cf3da227 51584 android-arm64/lib64/libnativeloader_lazy.so out/target/product/generic_arm64/system/lib64/libnativeloader_lazy.so same
 6df20d6d8f69d33f38653489882222c664d416ad831b08c8b4e3a7842c35f9c6 68280 android-arm64/lib64/libnativewindow.so out/target/product/generic_arm64/system/lib64/libnativewindow.so same
 b265671857eda274bb9026841f287770283b9cc220d286f6eb392d4399610c22 84752 android-arm64/lib64/libnbaio.so out/target/product/generic_arm64/system/lib64/libnbaio.so same
@@ -378,6 +384,7 @@ f0314e001c95e893f0be0e8b1a05c4738f8af0a9f673768155fb5aef547a5499 672168 android-
 c1772cdf51eeaa200df15a72e71469e792ba9fc069b21a66a80e759b271919ac 2109096 android-arm64/lib64/libvpx.so out/target/product/generic_arm64/apex/com.android.media.swcodec/lib64/libvpx.so same
 483797961708551174a1bea3a57bfa1bfb16613574c92afb6e15c18a6a991aff 258232 android-arm64/lib64/libvulkan.so out/target/product/generic_arm64/system/lib64/libvulkan.so same
 8b238af0900fc90b48bf07ca62277da80e6cf52e7464cd2f49f99c7ec9b2e714 69496 android-arm64/lib64/libwavextractor.so out/target/product/generic_arm64/apex/com.android.media/lib64/extractors/libwavextractor.so same
+6ab89e79a72459c85cd6eae1349d2cde1359aef478a5cff0cecfe473d4a92f05 52160 android-arm64/lib64/libwebviewchromium_plat_support.so out/target/product/generic_arm64/system/lib64/libwebviewchromium_plat_support.so same
 676ca4c3e28a3102b3556899e87a55884bdfe1eef1e5733d574870655c4b3af9 1175848 android-arm64/lib64/libxml2.so out/target/product/generic_arm64/system/lib64/libxml2.so same
 185d1ed7e26fbcc39115c8151b755f867f7fd278128ffab5da1b1227949add3e 134392 android-arm64/lib64/libz.so out/target/product/generic_arm64/system/lib64/libz.so same
 9a7e6bf3811eea2d532ccf5d02fa6d6dcd6a6ca358206f61fb0a175263373546 119528 android-arm64/lib64/libziparchive.so out/target/product/generic_arm64/system/lib64/libziparchive.so same
@@ -757,5 +764,5 @@ d6e2f06e71173153d526c46c49adb9e1462cc6bbb218a4e0a1238cf2993b2170 22349 arm64-nat
 0fdbecd90b1adcbe6a5a64a8aef7d53c8b6e8e9895d9d4c5ebaf181849415ffc 559 arm64-native/android-root/vendor/etc/vintf/manifest.xml bridge/native/android-root/vendor/etc/vintf/manifest.xml apklayer
 0fdbecd90b1adcbe6a5a64a8aef7d53c8b6e8e9895d9d4c5ebaf181849415ffc 559 arm64-native/android-root/vendor/etc/vintf/manifest/apklayer.xml (staged from the tree's build outputs, see docs/AOSP-BUILDS.md) same
 e125e6198315e5860c39f3c07432268eb65076be123f59e0548766507076c3a0 111724552 arm64-native/aosp/Robolectric_all.jar (staged from the tree's build outputs, see docs/AOSP-BUILDS.md) same
-7e783c42937e973c1eab758469552ea7a76559426c45f390c9338a553e661680 170075332 arm64-native/aosp/android-all/android-all-16-robolectric-13921718.jar (tree framework with apklayer JNI shim; scripts/build-native-arm64.sh) patched
-7e783c42937e973c1eab758469552ea7a76559426c45f390c9338a553e661680 170075332 arm64-native/aosp/android-all/android-all-current-robolectric-r0.jar (tree framework with apklayer JNI shim; scripts/build-native-arm64.sh) patched
+e5832f4dd15c59b448032bf98b7d6561d00b7b54a7841cf0bad99c08bd5fe2d1 170085734 arm64-native/aosp/android-all/android-all-16-robolectric-13921718.jar (tree framework with apklayer JNI shim; scripts/build-native-arm64.sh) patched
+e5832f4dd15c59b448032bf98b7d6561d00b7b54a7841cf0bad99c08bd5fe2d1 170085734 arm64-native/aosp/android-all/android-all-current-robolectric-r0.jar (tree framework with apklayer JNI shim; scripts/build-native-arm64.sh) patched

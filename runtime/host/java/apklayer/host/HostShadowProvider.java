@@ -48,6 +48,13 @@ public final class HostShadowProvider implements ShadowProvider {
                 entries.add(Map.entry("android.view.SurfaceView", ShadowHostNativeSurfaceView.class.getName()));
             }
         }
+        if (Boolean.getBoolean("apklayer.gpu")) {
+            entries.add(Map.entry("android.view.TextureView", ShadowHostRealTextureView.class.getName()));
+            entries.add(Map.entry("android.graphics.SurfaceTexture", HostGLShadows.SurfaceTexture.class.getName()));
+            entries.add(Map.entry("android.graphics.TextureLayer", HostGLShadows.TextureLayer.class.getName()));
+            entries.add(Map.entry("android.opengl.GLES20", HostGLShadows.GLES20.class.getName()));
+            entries.add(Map.entry("android.opengl.GLUtils", HostGLShadows.GLUtils.class.getName()));
+        }
         if (Boolean.getBoolean("apklayer.gpu"))
             entries.add(Map.entry("android.hardware.HardwareBuffer", ShadowHostNativeHardwareBuffer.class.getName()));
         if (Boolean.getBoolean("apklayer.nativeattribution") || Boolean.getBoolean("apklayer.nativeaudio")) {

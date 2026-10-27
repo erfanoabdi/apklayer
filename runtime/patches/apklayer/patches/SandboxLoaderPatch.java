@@ -48,6 +48,31 @@ public final class SandboxLoaderPatch {
                 super.visitEnd();
             }
         }, 0);
+        // apklayer patch: EGL's javax classes belong to Android, not the SDK stub jar.
+        String config = "org/robolectric/internal/bytecode/InstrumentationConfiguration";
+        try (InputStream in = SandboxLoaderPatch.class.getResourceAsStream("/" + config + ".class")) {
+            ClassReader cr = new ClassReader(in.readAllBytes());
+            ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
+            cr.accept(new ClassVisitor(Opcodes.ASM9, cw) {
+                @Override public MethodVisitor visitMethod(int access, String name, String desc, String sig, String[] ex) {
+                    MethodVisitor mv = super.visitMethod(access, name, desc, sig, ex);
+                    if (!name.equals("shouldAcquire")) return mv;
+                    return new MethodVisitor(Opcodes.ASM9, mv) {
+                        @Override public void visitCode() {
+                            super.visitCode();
+                            Label original = new Label();
+                            visitVarInsn(Opcodes.ALOAD, 1); visitLdcInsn("javax.microedition.khronos.");
+                            visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "startsWith", "(Ljava/lang/String;)Z", false);
+                            visitJumpInsn(Opcodes.IFEQ, original);
+                            visitInsn(Opcodes.ICONST_1); visitInsn(Opcodes.IRETURN);
+                            visitLabel(original); visitFrame(Opcodes.F_SAME, 0, null, 0, null);
+                        }
+                    };
+                }
+            }, 0);
+            Path configOut = Path.of(args[0], config + ".class");
+            Files.createDirectories(configOut.getParent()); Files.write(configOut, cw.toByteArray());
+        }
         Path out = Path.of(args[0], CLASS + ".class");
         Files.createDirectories(out.getParent());
         Files.write(out, writer.toByteArray());

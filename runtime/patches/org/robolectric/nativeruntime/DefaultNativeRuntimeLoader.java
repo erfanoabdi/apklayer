@@ -489,6 +489,10 @@ public class DefaultNativeRuntimeLoader implements NativeRuntimeLoader {
             Shadow.class.getClassLoader(), className, "__staticInitializer__");
       }
     }
+    if (Boolean.getBoolean("apklayer.gpu")) {
+      // apklayer patch: GLES20 initializes only after original device JNI is registered.
+      ReflectionHelpers.callStaticMethod(Shadow.class.getClassLoader(), "android.opengl.GLES20", "__staticInitializer__");
+    }
     if (Boolean.getBoolean("apklayer.nativeplayer")) {
       ReflectionHelpers.callStaticMethod(Shadow.class.getClassLoader(), "android.media.MediaPlayer", "__staticInitializer__");
     }

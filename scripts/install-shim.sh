@@ -27,3 +27,7 @@ cp "$stage/native/linux/aarch64/libandroid_runtime.so" "$stage/native/linux/x86_
 scripts/build-runtime-overlay.sh "$native" "$stage"
 (cd "$stage" && for j in "$native"/aosp/android-all/*.jar "$native"/android-all/*.jar; do zip -q "$j" native/linux/x86_64/libandroid_runtime.so native/linux/aarch64/libandroid_runtime.so; done)
 echo "shim installed in the runtime jar and the framework jars"
+
+# apklayer patch: discard the obsolete whole-library SurfaceTexture stubs.
+[ -f "$HOME/android-arm64/lib64/libnativedisplay.so" ]
+sed -i '/^libnativedisplay.so[[:space:]]/d' "$native/share/bionic_translation/cfg.d/bionic_translation.cfg"

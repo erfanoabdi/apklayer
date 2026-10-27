@@ -41,7 +41,10 @@ ndk_lib() { # ndk_lib <real library name> <our file name>
     cc -shared -fPIC -O2 -Wall -o "$native/$2" "bridge/ndk/$base.c" "$tmp/$base-stubs.c"
     map_lib "$1" "$2"
 }
-ndk_lib libnativedisplay.so libnativedisplay.so.1
+# apklayer patch: original SurfaceTexture consumers live in libnativedisplay.
+# SurfaceFlinger now supplies its real Choreographer/display services as well.
+[ -f "$HOME/android-arm64/lib64/libnativedisplay.so" ]
+sed -i '/^libnativedisplay.so[[:space:]]/d' "$cfg"
 ndk_lib libselinux.so libapklayer_selinux.so  # still needed by the libraries that link it (the service manager no longer uses it)
 mkdir -p "$tmp/jar/native/linux/x86_64" "$tmp/jar/native/linux/aarch64" && cp "$tmp/libandroid_runtime.so" "$tmp/jar/native/linux/x86_64/" && cp "$tmp/libandroid_runtime.so" "$tmp/jar/native/linux/aarch64/" && cp "$tmp/critical-natives.txt" "$tmp/jar/"
 # apklayer patch (docs/PATCHES.md): Robolectric's loader refuses Linux aarch64; the patched class comes first in the jar

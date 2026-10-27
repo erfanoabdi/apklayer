@@ -261,6 +261,20 @@ static int register_classes(JNIEnv *env, JavaVM *vm, void *rt)
         else if (runtime_debug()) fprintf(stderr, "[runtime] registered %s\n", c);
     }
 
+    /* apklayer patch: device GL producers are absent from HostRuntime's core list. */
+    static const char *const device_gl[] = {
+        "register_android_graphics_SurfaceTexture", "register_android_view_TextureView",
+        "register_com_google_android_gles_jni_GLImpl", "register_com_google_android_gles_jni_EGLImpl",
+        "register_android_opengl_jni_GLES20", "register_android_opengl_classes", NULL
+    };
+    for (int i = 0; device_gl[i]; i++) {
+        int (*fn)(JNIEnv *) = find_register_function(rt, hwui, device_gl[i]);
+        if (!fn || fn(env) < 0 || (*env)->ExceptionCheck(env)) {
+            fprintf(stderr, "[runtime] registering %s failed\n", device_gl[i]); failed++;
+            if ((*env)->ExceptionCheck(env)) return failed;
+        }
+    }
+
     JNINativeMethod registry = { "applyFreeFunction", "(JJ)V", (void *)apply_free_function };
     jclass nar = (*env)->FindClass(env, "libcore/util/NativeAllocationRegistry");
     if (nar) (*env)->GetMethodID(env, nar, "<init>", "()V"), (*env)->ExceptionClear(env), (*env)->RegisterNatives(env, nar, &registry, 1);
