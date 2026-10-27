@@ -1,0 +1,392 @@
+# Plan phases P1-P7, full detail (moved from docs/PLAN.md; statuses as of 2026-10-27)
+
+### P1 — Product foundation: `apklayer run any.apk` (M6)
+
+1. ✅ (done 2026-10-25) **Restructure** per the layout above. Move `tests/rob/*` → `runtime/host/`, `tests/stubs` →
+   `runtime/host/stubs`, and `bridge/src/*` → `bridge/shell/`. Keep `tests/` for test assets only.
+2. **deps.lock + fetch-deps.sh.** Record exactly what `~/rob` holds today. Then add the SDK 36
+   android-all-instrumented jar and the pinned Robolectric release (D1, D2). This is a one-time
+   fetch into `~/.cache/apklayer/deps`; the VM copy is synced from the Mac cache, never fetched twice.
+3. **Meson build** (D18): a top-level `meson.build` with `subdir('bridge/shell')`,
+   `subdir('runtime/dex2jvm')` and `subdir('runtime/host')`. Produces `apklayer-shell`,
+   `dex2jvm.jar` and `apklayer-host.jar`.
+4. **SDK 36 switch.** Point the host at SDK 36 and re-run dex2jvm against the SDK 36
+   hierarchy. Delete the `Build` outer stub if conscrypt no longer needs it, and verify
+   `android-stub.jar` is still required (drop it if not). Exit check: uibench passes the
+   existing scripted run on SDK 36.
+5. **Vendor the Simulator** (D3). Copy `simulator/src/main/java` into
+   `runtime/host/simulator/`, add its LICENSE, and record the source commit in
+   `runtime/host/simulator/UPSTREAM`. If it needs APIs newer than the pinned jars, bump the pin
+   (D2); never edit vendored files. Write `apklayer.host.Main`, which:
+   - builds the sandbox via `SandboxBuilder` (SDK 36, our classpath),
+   - writes `test_config.properties` equivalents programmatically (`android_resource_apk`),
+   - resolves the launcher activity with the real `PackageManager`,
+   - runs the activity stack and window composition (ported from `RunUiBench`: back stack,
+     `WindowManagerGlobal` windows, input → topmost window),
+   - registers `WaylandFrameListener` (a socket and shm client of apklayer-shell).
+   Delete `RunUiBench` and the JUnit dependency.
+6. **Shell protocol v1** (D7). In `apklayer-shell`: a Unix socket at
+   `$XDG_RUNTIME_DIR/apklayer/shell.sock`. Messages are length-prefixed little-endian structs:
+   `HELLO(pkg,pid)`, `WINDOW_CREATE(id,w,h,title)`, `FRAME(id,buf,damage)`,
+   `WINDOW_DESTROY(id)` from the app; `INPUT(id,...)`, `CONFIGURE(id,w,h,scale)` and
+   `CLOSE(id)` from the shell. Two shm buffers per window, and the shell releases a buffer after
+   `wl_buffer.release`. Frames are sent only when the view tree drew something
+   (`ViewRootImpl` traversal / damage); there is no 16 ms loop.
+7. **Data dirs** (D20). Point Context data, cache, files and database dirs and external storage
+   at the per-app tree, by shadowing `ContextImpl` dir getters if Robolectric's temp-dir
+   plumbing can't be configured.
+8. **CLI + install cache** (D19, D4). `apklayer install/run/list/uninstall`. Conversion
+   happens at install. `run` starts `apklayer-shell` if it isn't running and spawns the app JVM
+   with the right flags. On the arm64 dev VM until P7: x86_64 JVM + `-XX:TieredStopAtLevel=1
+   -XX:+UseSerialGC` under Rosetta (development stopgap only, D17).
+9. **Desktop entries.** Render the launcher icon drawable to a 256 px PNG through the
+   framework. Write the `.desktop` file and register the MIME handler.
+
+**Exit test P1:** on the VM, `apklayer install uibench.apk && apklayer run
+com.android.test.uibench` works, and so do two non-uibench pure-Java APKs from the corpus
+seed list (P3.1). The headless check passes on the Mac. Closing the window exits the JVM.
+Data written by the app survives a restart.
+
+### P2 — Desktop-grade window and input (M7)
+
+1. **Resize:** `CONFIGURE` → `RuntimeEnvironment.setQualifiers("w<dp>dp-h<dp>dp")` +
+   display metrics, then relayout. A minimum size comes from the app's layout.
+2. **HiDPI:** `wl_output`/fractional-scale → `densityDpi` (160 × scale). Buffers are rendered
+   at device pixels.
+3. **Orientation:** honor `screenOrientation`: portrait apps open in a portrait-shaped window,
+   landscape apps in a landscape one. `setRequestedOrientation` resizes the window.
+4. **Pointer:** the wheel and touchpad axis (`wl_pointer.axis`, `axis_value120`) become
+   `ACTION_SCROLL`; for views that don't handle scroll, synthesize drag-fling. Hover becomes
+   `ACTION_HOVER_*`, and the right button becomes long-press.
+5. **Touch:** `wl_touch` → multi-pointer `MotionEvent`s.
+6. **Keyboard:** xkbcommon in the shell maps keys to Android `KEYCODE_*` with meta state.
+   Text goes through the focused `InputConnection` (commitText/setComposingText), with IME
+   composition via `zwp_text_input_v3`. Hardware Back = Esc; Alt+Left = Back.
+7. **Clipboard:** `wl_data_device` ⇄ `ClipboardManager` (text, URIs).
+8. **Multiple windows per app:** each `WindowManagerGlobal` top-level window that is not
+   attached to an activity (toasts, overlays) → its own `wl_subsurface`. Dialogs stay
+   composited into the activity window.
+9. **Lifecycle:** window minimized or unfocused → `onPause`/`onStop`; restored →
+   `onRestart`/`onResume`. On close: the activity finishes and the process exits when the
+   stack is empty.
+
+**Exit test P2:** a corpus app with text fields accepts typing (including Unicode), scrolls
+with the wheel, resizes without restarting, and renders sharp at 200% scale.
+
+**P2 status (2026-10-26):** all nine items implemented and tested; two caveats listed below.
+
+| Item | State |
+|---|---|
+| 1 Resize | ✅ in-place rebuffer of the toplevel; in-place configuration change (activities are not recreated yet); compositor resize, edge/corner drag and maximize verified on the VM |
+| 2 HiDPI | ✅ headless (200% → 2x pixels, `wl_output` v2, buffer scale, pointer scaling, startup scale applied before launch); ⚠ **not verified on a real 2x output** (the VM cannot do 2x) |
+| 3 Orientation | ✅ requested portrait/landscape (manifest or `setRequestedOrientation`) reshapes the window |
+| 4 Pointer | ✅ wheel → `ACTION_SCROLL` (dialogs included); wheel replayed as touch drag/fling for views without scroll support; hover and right-click (= long press) plumbed |
+| 5 Touch | ✅ `wl_touch` → multi-pointer stream (headless test; no touch hardware on the VM) |
+| 6 Keyboard | ✅ xkb, key repeat, Unicode typing, D-pad/Tab navigation, Esc/Alt+Left/Backspace = Back; IME via `zwp_text_input_v3` (headless test; ⚠ not exercised with a real input method) |
+| 7 Clipboard | ✅ text, both directions, verified on the VM with `wl-copy`/`wl-paste` |
+| 8 Multiple windows | ◐ dialogs/popups/toasts are separate windows for input and are composited into the app window; separate `wl_subsurface`s only if a real need appears |
+| 9 Lifecycle | ✅ inactive → `onPause`, minimized → `onStop`, active → `onResume`/restart |
+| Window decoration | ✅ client-side title bar: Back, Minimize, Maximize/Restore, Close, drag-to-move, double-click maximize, edge/corner resize with resize cursors |
+
+Tests: `tests/p2-host.sh [group]` (headless, Mac) and `tests/vm/e2e.sh [group]` (real uinput input +
+`prlctl capture` screenshots on the VM). Run only the groups for the code you changed.
+
+### P3 — Compatibility engine (runs continuously from here on)
+
+1. **Corpus** `tests/corpus/corpus.lock`: 30 F-Droid APKs, pinned version + sha256, fetched
+   once into the deps cache. Three tiers:
+   - **T1, pure Java/Kotlin UI** (must pass from P3 on): e.g. Markor, Simple Calculator-class
+     apps, Etar, Material Files, F-Droid client, Aegis (Java crypto), Catima, OpenTracks.
+   - **T2, WebView/media** (pass after P5): AntennaPod, NewPipe, an RSS reader with WebView.
+   - **T3, native code** (pass after P4): Termux, Organic Maps, KeePassDX.
+2. `scripts/check.sh corpus` runs every app headless: install → run → 300 frames → snapshot →
+   tap the center of the first clickable view → snapshot. A pass means no uncaught exception,
+   a non-blank frame, and a second activity or state change. Results go to
+   `tests/corpus/results.md` with snapshots.
+3. **Fix loop:** for each failure, find the missing behaviour, then fix it in this order:
+   Robolectric already has a shadow → enable or configure it; else write an apklayer shadow
+   (D22); never touch upstream. Log every shadow in docs/PATCHES.md.
+
+**Exit test P3:** ≥ 90% of T1 passes.
+
+**P3 status (2026-10-26):** corpus fetched (`scripts/fetch-corpus.sh`, `tests/corpus/corpus.lock`, 17 T1 apps from F-Droid), harness
+fixed (non-blank = >1% of pixels differ from the background). **T1: 7/17 pass (41%)**, up from 2/17 after shared fixes only:
+`MacApkUnsafe` vendored, no `System.exit` redirect, app-bundled Guava relocated, `<activity-alias>` launchers, a primary external
+volume for the sandbox user. Remaining failures are app-specific (user direction: do not chase individual apps): BouncyCastle
+class-loader clash (amaze, aegis), `WorkManager` not initialized (fossify calendar), `Display from a non-visual Context` (osmand),
+ExceptionInInitializerError (Material Files), hangs (AnkiDroid, fossify messages), and apps that end after the first frame. The fix
+loop continues in the background of later phases; the 90% exit test is **not** met yet.
+
+### P4 — Native libraries in APKs (M8)
+
+1. Vendor ATL's `bionic_translation` (Meson subproject in `subprojects/`, from the local ATL
+   checkout or its pinned upstream). Build it for the **app JVM's arch** (x86_64 on the VM:
+   `gcc-x86-64-linux-gnu` cross toolchain, one-time install).
+2. A `System.loadLibrary`/`Runtime.load` path through a host shadow: resolve
+   `lib/<abi>/lib*.so` from the APK (extracted at install), and load it via bionic_translation's
+   linker. JNI_OnLoad then runs normally under HotSpot.
+3. NDK shims `bridge/ndk/` (D9), in this order: `liblog` → `libandroid` (AAssetManager over
+   the APK, AConfiguration, ALooper, ANativeWindow backed by a shell subsurface) → `libEGL`/
+   `libGLESv2`/`libGLESv3` (re-export Mesa, with EGL native window = our ANativeWindow) →
+   `libOpenSLES`/`libaaudio` (GStreamer/PipeWire) → `libvulkan` (Mesa loader) →
+   `libmediandk` (GStreamer).
+4. ABI selection at install: the JVM arch's ABI → `armeabi-v7a`/`x86` are not supported →
+   if the APK has no matching ABI, refuse with a clear message.
+
+**P4 status (2026-10-26):**
+- ✅ P4.1 `bionic_translation` (cloned from its upstream, not vendored) is built for x86_64 by `scripts/build-native.sh` in the OrbStack
+  x86_64 VM (libunwind 1.8 from source, clang for `libstdc++_bio`, a RELR compat header for glibc 2.35); the results land in
+  `build/native/x86_64/` and `vm-run.sh` ships them to the Parallels VM.
+- ✅ P4.2 `System.loadLibrary/load` and `Runtime.loadLibrary/load` in app classes are rewritten at install (`DenyInstrument`) to
+  `apklayer.host.NativeLoader`, which loads the `.so` with the bionic linker through the JNI helper `bridge/native/native_loader.c`
+  (`libapklayer_native.so`), runs `JNI_OnLoad`, and binds the exported `Java_*` functions with `RegisterNatives`.
+- ✅ P4.4 install extracts `lib/<abi>/*.so` for the app JVM's ABI (x86_64 under the Rosetta stopgap).
+- ✅ Verified: **CPU-Z loads its real `libcpuid.so` and starts**; Termux and KeePassDX start (`tests/vm/native.sh [apk]`). Shared platform fixes found on the way: `MultiDex.install` no-op, in-process services (`apklayer.host.Services`), `Unsafe.getUnsafe()` (`UnsafeAccess`, `Reflect`).
+- ◐ P4.3 NDK shims (`bridge/ndk/*.c`, each built as a glibc `<name>_shim.so.0` and mapped from `<name>.so` by the bionic_translation cfg.d): **liblog ✅, libandroid ✅ (assets over the APK, ALooper, AConfiguration; ANativeWindow stubs)** (KeePassDX's `libaes.so` loads with it). EGL/GLES shim ✅ (Mesa llvmpipe surfaceless bundled, window surfaces are pbuffers; ~180 MB with LLVM). **Native GL → window ✅** (2026-10-26, `tests/apps/hello-gl2`, checked by `tests/vm/native.sh build/hello-gl2.apk`: `HostSurfaces` gives each SurfaceView a real `HostSurface`; libandroid's `ANativeWindow_fromSurface` reads its id/size over JNI; libEGL's `eglSwapBuffers` reads pixels back to `$APKLAYER_GLDIR/<id>.rgba`; the host composites them into the window frame; known cost: ~1 core at 30 fps under llvmpipe+Rosetta, per-pixel Java blit to optimise). Pending: audio, vulkan, mediandk and the GLES `hello-gl2` sample. Design note for ANativeWindow/GL: the app JVM is not a Wayland client (the shell is), so GL must render off-screen (Mesa surfaceless/llvmpipe, which needs x86_64 Mesa libs bundled for the Rosetta userspace) and hand pixels to the shell as a subsurface buffer.
+  `libstdc++_bio` is built without `__cxa_guard` (needs libc++'s `<atomic>`).
+
+- Java GL (`GLSurfaceView`) finding (2026-10-26, CPU-Z `OGLActivity`): `HostSurfaces` now delivers `surfaceCreated/Changed` to SurfaceView callbacks (Robolectric's fake holder never does), so the GL thread starts, then fails in `EGLContext.getEGL()` = `Stub!`: Robolectric acquires only `javax.microedition.khronos.opengles.GL`, so the EGL10 classes come from the outer `android-stub.jar`, and the real `EGLImpl`/`GLImpl` natives live in `libandroid_runtime`, which we do not have. Fix options: real JNI for gles_jni over our Mesa shim (large), or shadows returning fake EGL objects + GL strings (small). Open; not on the P4 exit path (that is NDK GL).
+
+**Exit test P4:** corpus T3 apps start and render. A simple NDK GLES sample (`hello-gl2`)
+draws via Mesa in its subsurface.
+
+### P5 — Platform services (M9)
+
+Each item is an apklayer shadow plus a host backend, with its own scripted check:
+1. **WebView → WPE WebKit** (D11) — ◐ first slice working (2026-10-26, `tests/vm/webview.sh`): `HostWebViews` drives a `bridge/webview/apklayer-webview.py` engine process per WebView (WebKitGTK 4.1 offscreen, stopgap for WPE, frames in the GL frame format composed over the view) from what Robolectric records: `loadUrl`, `loadData*` → load; `evaluateJavascript` → result callback; `WebViewClient.onPageFinished`. Input: clicks (on release) and the wheel reach the engine (`HostWebViews.pointer`). Also done: `addJavascriptInterface` (the page's synchronous XHR to the engine's `apklayer://bridge/...` scheme, answered by the host), `onPageStarted`, `onReceivedTitle`, `shouldOverrideUrlLoading`, every `evaluateJavascript` call in order (apklayer's own `ShadowHostWebView`, registered by `HostShadowProvider` through META-INF/services with higher priority than Robolectric's). Also: keyboard typing into the focused page element (characters, Backspace, Delete, Enter), history (`canGoBack`/`goBack`/`goForward`/`reload`, `getUrl`/`getTitle` from the engine). Pending: cookies/settings, load errors, drag/touch scroll, file upload/download, downloads; layout (Robolectric's WebView provider is a no-op proxy: the view is measured via a wrapped ViewDelegate but never gets a frame, so the engine rect is the parent's origin + measured size). Alternative noted for later: the real Android System WebView APK (needs binder, isolated services, a GPU process). Original item: load and run JS, `evaluateJavascript`,
+   `addJavascriptInterface`, `WebViewClient` callbacks, input forwarding, cookies in the app
+   data dir.
+2. **Media → GStreamer** (D12) — ◐ MediaPlayer audio ✅ (2026-10-26, `tests/vm/media.sh`): `ShadowHostMediaPlayer` keeps Robolectric's state machine and listener timing, takes the duration from `gst-discoverer-1.0`, and drives `bridge/media/apklayer-media.py` (GStreamer playbin) for start/pause/stop/seek/volume/loop. `AudioTrack` PCM streams to the desktop audio server (`HostAudio` listens to Robolectric's write listener, one `pw-play` per track; a full pipe blocks the writer like a real track) and `SoundPool` loads, completes and plays (`ShadowHostSoundPool`, gst-play). Video to a SurfaceView ✅ (`setDisplay`/`setSurface` → the engine's appsink writes RGBA frames that `HostSurfaces` composes; `tests/vm/video.sh`; 640 px wide, software path). **`MediaCodec` decoders ✅ for VP8/VP9/H.264/AV1 video and Opus/AAC/MP3 audio** (H.264/AAC/AV1 need `gstreamer1.0-libav` and `-plugins-bad` on the VM) (2026-10-26, `tests/vm/codec.sh`: `HostCodecs` advertises them in `MediaCodecList` and plugs into Robolectric's codec simulation; each decoder is a GStreamer engine process, `bridge/media/apklayer-codec.py`; decoded RGBA frames reach the Surface when the app releases a buffer with render, PCM goes to the app's AudioTrack). Pending: HEVC, encoders, MediaExtractor/MediaMuxer, async-mode and flush edge cases. Also pending: content:// and file-descriptor data sources, video size callbacks,  SoundPool loops/stop/rate, AudioRecord, MediaCodec, MediaExtractor. Original item: MediaPlayer (local/http), AudioTrack, SoundPool, MediaCodec
+   (decode to Surface → subsurface; decode to ByteBuffer), MediaExtractor/MediaMuxer basic.
+3. **Portals** (D13) — ✅ so far (2026-10-26, `HostPortals`): `ACTION_VIEW` of http/https/mailto/tel/geo that no app activity handles → `xdg-open`; notifications the app posts → `notify-send` ; `startActivityForResult` now works: a child activity's `setResult` is delivered to its caller, and document pickers (OPEN_DOCUMENT, GET_CONTENT, CREATE_DOCUMENT, OPEN_DOCUMENT_TREE) open a desktop file dialog (zenity; `APKLAYER_PICKER` overrides it for tests) and return `file:` URIs. Check: `APKLAYER_PICKER='echo /etc/hostname' APKLAYER_JOPTS='-Dapklayer.runms=14000 -Dapklayer.script=9000:pick:android.intent.action.OPEN_DOCUMENT' scripts/vm-run.sh` prints `picked`. Notification actions and the portal form of the chooser pending. Check: `APKLAYER_JOPTS='-Dapklayer.runms=16000 -Dapklayer.script=9000:notify:Hello+9500:view:https://example.org/' scripts/vm-run.sh` prints `notification:` and `opened`. file chooser for SAF; OpenURI for outbound `ACTION_VIEW`/`SEND`;
+   Notification → org.freedesktop.Notifications (with actions → PendingIntent); camera via
+   PipeWire camera portal → Camera2 minimal; location → GeoClue portal → LocationManager.
+4. **Connectivity** — ✅ first slice (2026-10-26, checked in `tests/vm/media.sh`): the default network is an unmetered Wi-Fi one and registered `NetworkCallback`s get `onAvailable`/`onCapabilitiesChanged` (`ShadowHostConnectivityManager`; following NetworkManager's real state is pending); `DownloadManager` downloads over HTTP into the destination or `Download/` and broadcasts `ACTION_DOWNLOAD_COMPLETE` (`ShadowHostDownloadManager`; progress, pause/retry, notifications pending). Original item: ConnectivityManager/NetworkCallback reflect NetworkManager state;
+   DownloadManager → a JVM HTTP client into the app's external dir.
+5. **Accounts/keystore** — ◐ AndroidKeyStore AES/HMAC keys ✅ (2026-10-26, `HostKeyStoreProvider`: a software JCEKS store in the app's data dir behind `KeyStore.getInstance("AndroidKeyStore")` and `KeyGenerator.getInstance("AES", "AndroidKeyStore")`; checked in `tests/vm/media.sh`). `AccountManager` is Robolectric's local in-memory store (enough for apps that keep an account list; persistence across runs pending). Pending: key pairs (RSA/EC with certificates). Original item: AndroidKeyStore backed by a per-app software keystore file
+   (BouncyCastle). AccountManager is local.
+6. **microG** (D14): bundled, auto-installed. GCM/FCM out of scope until accounts work.
+
+- **P5 performance follow-up (user, 2026-10-26: NewPipe video+audio play but are "very very laggy"; revisit):** likely causes to measure first: (a) `MediaCodec` decode is synchronous per input buffer over pipes (engine 300 ms pull timeout; frames copied through Java), (b) RGBA frames written to a file and re-read by the host for every frame (`HostSurfaces.blit`, per-pixel scaling in Java), (c) the app JVM runs under Rosetta with C1 only, (d) llvmpipe/Python engines. **Measured (2026-10-26, `-Dapklayer.perf=true`, NewPipe 360p H.264+AAC on the VM):** video decode 8.6 ms/frame (engine incl. scale+RGBA), AAC 0.6 ms/buffer, window compose 1.0 ms, render 1.1 ms, app JVM ~18% CPU: not CPU-bound. Prime suspect: playback pacing. `ShadowAudioTrack.getPlaybackHeadPosition` counts bytes *written*, so ExoPlayer's audio clock runs ahead of what is actually audible (pipe + pw-cat buffering) and frames look late/dropped; fix idea: head position from wall clock since play(), reported latency. Also earlier fixed: 300 ms per-input pull wait in the codec engine (46 frames: 4.1 s -> 0.2 s). Fix direction: shared-memory/dmabuf frame path straight to a Wayland subsurface (P5.2), async codec pipeline, native engines instead of Python.
+
+- **T2 status (2026-10-26, VM smoke runs, `tests/vm/smoke.sh`):** AntennaPod renders its home screen; NewPipe browses YouTube and plays video + audio (laggy, see above); Nextcloud shows its first-run screen. ownCloud (`org.nitri.ownCloud`) is not on F-Droid under that name, so it is not pinned. Formal T2 percentage (corpus.lock + a scripted pass criterion on the VM) is still to do.
+
+- **Revisit list (user, 2026-10-26):** (1) NewPipe video/audio lag (an audio-clock fix made no difference to the user), (2) **desktop notifications were annoying** (every app notification, including ongoing/media/progress updates, became a popup): ✅ policy done 2026-10-26 (`HostPortals.followNotifications`, `tests/vm/notify.sh`): ongoing/foreground-service notifications and channels of low importance never pop up, an unchanged notification is not shown again, a changed one replaces its popup (`notify-send --replace-id`). Still open: per-app mute, closing a popup when the app cancels it, notification actions/PendingIntents, the user's own judgement of what is still too much.
+
+**Exit test P5:** corpus T2 ≥ 80%. A video plays with sound, a WebView-based app logs in to a
+test page, and "Open link" opens the host browser.
+
+### P6 — Multiple apps and the system (M10)
+
+1. **First slice ✅ (2026-10-26, `tests/vm/share.sh`):** at install the app's activity intent filters are read from its manifest (`ManifestFilters`) into `info.properties`; a host that cannot handle an implicit intent (`HostApps.route`) matches it against every other installed app and starts the first match through the CLI, handing the intent (action, type, data, component, string extras) over in a file that the new process picks up instead of the launcher. Results go back to the caller ✅ (`startActivityForResult` across apps: the callee writes its `setResult` to a file named in `APKLAYER_RESULT_FILE` when the activity it was started for finishes; the caller's host delivers it, or RESULT_CANCELED if the callee ends without one; also in `tests/vm/share.sh`). A chooser for several matching apps ✅ (`HostApps.choose`: a zenity list, `APKLAYER_CHOOSER` overrides it for tests; cancel = RESULT_CANCELED). Pending: bindService/ContentResolver/broadcast relay, reusing a running instance, non-string extras. Original item: **`apklayerd`** (D15): starts with the shell. Holds the package registry from the install
+   cache, and resolves implicit intents across installed apps (chooser through the shell when
+   ambiguous).
+2. **Cross-process calls:** `startActivity` to another package spawns or reuses that app's JVM.
+   `bindService`/`ContentResolver` to another package is relayed as Parcel bytes; the
+   receiving JVM unmarshals with the real `Parcel`/AIDL `Stub`.
+3. `BroadcastReceiver`s from the manifest: `BOOT_COMPLETED`-style system broadcasts are not
+   sent; app-to-app explicit broadcasts are relayed.
+4. **`/data/data/<pkg>` for hardcoded paths** (found 2026-10-26 with Termux: renders its UI, then "files directory not found at /data/data/com.termux/files"): bind the app data dir there inside the `bwrap` mount namespace. On Ubuntu 24.04 unprivileged userns is blocked by AppArmor (`apparmor_restrict_unprivileged_userns=1`: `bwrap: setting up uid map: Permission denied`), so this needs a bwrap AppArmor profile (Flatpak ships one) or `sysctl` on the VM.
+4b. **Sandboxing outside Flatpak:** each app JVM runs under `bwrap`, seeing only its data dir,
+   storage, the deps cache and the shell socket.
+
+**Exit test P6:** sharing text from one installed app to another works. An app using microG's
+location or SafetyNet-free APIs runs.
+
+### P7 — Own native runtime: native arm64 + GPU HWUI (M11)
+
+> **P7.0 result (2026-10-26): ✅ the device `libandroid_runtime.so` LOADS on the arm64 VM** (no Rosetta, no recompilation): its
+> 237-library closure (91 MB, collected from `~/los24/out/target/product/generic_arm64`) is opened by bionic_translation.
+> What it took: bionic_translation built natively for arm64 (libunwind 1.8.1 from the local source, `libegl-dev`,
+> `libbsd-dev`); `SO_MAX` 128 → 512 in its linker (one line, PATCHES.md); `bridge/native/android_platform.c`
+> (30 Android libc/linker/property symbols: stubs and fortify wrappers); `scripts/android-stubs.py` (generates do-nothing
+> stubs for the ~140 GL/EGL symbols nothing provides, from the actual gap); `libgcc_s` in the process (unwinder); the cfg.d
+> mapping `libdl_android.so → libdl_bio.so.0`. Test harness: a 15-line C program (`btload`) that does what NativeLoader does.
+> **P7.0c result (2026-10-26): uibench starts on the arm64 JVM with the device natives, up to the first binder call.**
+> The font-init abort was not version skew (disproved: same abort with the tree's own Robolectric) but ART's calling
+> convention: `@CriticalNative` methods (285 of them: fonts, paint, canvas...) are called by ART *without* `JNIEnv`/`jclass`,
+> the device libraries are built that way, Robolectric's host build compiles the two parameters back in. HotSpot passes them,
+> so every argument arrived shifted (`Font_Builder_addAxis` got `env` as its builder pointer). Fix, in the shim: those methods
+> are registered through a thunk that drops the two arguments (`runtime_shim.c: critical_thunk`). The list comes from
+> `apklayer.host.CriticalNatives` (ASM over the build's own javac output, `framework.jar*` under
+> `out/soong/.intermediates/frameworks/base/framework-minus-apex/android_common/javac`, because the android-all jar has the
+> annotation stripped), written into `native-runtime.jar` by `scripts/build-native-arm64.sh`. Also: device liblog goes to
+> stderr through its own `__android_log_set_logger` (warnings and worse; all with `APKLAYER_RUNTIME_DEBUG`), so fatal HWUI
+> messages are no longer lost; the LineageOS framework hardcodes `/system/framework/org.lineageos.platform-res.apk`
+> (`ShadowHostApkAssets` redirects it to `android-root/system/framework/`, set by `-Dapklayer.platformres`); Robolectric's
+> `MediaCodecInfoBuilder` does not fit this framework (`mMime`), so codec registration is skipped with a log line. Needed
+> next: **a service manager** (libbinder waits for `servicemanager`: binder step above) and folding the aosp-flavor host
+> build (host-classes + `META-INF/services`) into the staging script.
+>
+> **P7.0d result (2026-10-26): the app STARTS on the arm64 JVM with the device natives (no Rosetta), but does not render yet.**
+> uibench's `MainActivity` starts, `frames=1`, exit code 134 at shutdown (an abort while the process tears down: not yet
+> looked at). The libbinder wait seen before came from the RenderThread (found with the shim's `APKLAYER_DUMP_ON`/
+> `APKLAYER_DUMP_ABORT` debug aid: `RenderThread::initThreadLocals` → `AChoreographer_create` → `DisplayEventReceiver` →
+> ComposerService = SurfaceFlinger over binder). Fix: `bridge/ndk/libnativedisplay.c`, our own `libnativedisplay.so` mapped by
+> cfg.d: Choreographer as a 60 Hz timerfd clock, weak stubs for the rest of the exports. So **no servicemanager was needed for
+> this**; kernel binder works on the VM (`modprobe binder_linux`, `mount -t binder binder /dev/binderfs`) and stays for later.
+> Why no pixels: the baseline (x86 Rosetta path) makes 20 frames and a real image, ours one blank frame. For SDK 36+
+> Robolectric's `ShadowNativeHardwareRenderer` does not apply (`maxSdk = UPSIDE_DOWN_CAKE`), the real `HardwareRenderer` natives
+> run; Google's host libhwui renders into something Robolectric can read back, the device libhwui renders into a BufferQueue
+> `ANativeWindow` (gralloc, SurfaceFlinger). **Next: give libhwui an `ANativeWindow` of our own** (a CPU-readable buffer; ATL's
+> `libandroid` ANativeWindow is the local reference) or draw through `HardwareBufferRenderer`/`Bitmap` canvases, then compare
+> frames with the x86 path (`tests/vm` corpus T1).
+>
+> **P7.1 design (user, 2026-10-26): our own SurfaceFlinger replacement that composites on the GPU, with the display's real
+> refresh rate; no bitmap/software stand-ins ("that was the real big deal for lags").** Why the app draws one blank frame
+> today: for SDK 36+ the simulator takes pixels from the `Surface` that `HardwareRenderer` rendered into (`ShadowPixelCopy`);
+> Google's host runtime has its own Surface/BufferQueue glue (a prebuilt in the tree, `robolectric_nativeruntime_native_prebuilt`,
+> no sources), the device libs expect SurfaceFlinger. Pieces, in order (each testable alone, all reusing the tree's real
+> libgui/libbinder through bionic_translation):
+> **Refined (2026-10-26, after finding the real pieces in `out/` and the tree): run the tree's REAL SurfaceFlinger** (built:
+> `system/bin/surfaceflinger`, an executable; rebuilt as a library the same way as the service manager so bionic_translation can
+> run its `main`) **with apklayer's own backends underneath**: SF's `RenderEngine` composites on the GPU through the host's EGL/GLES (the VM happens to run Mesa on a
+> virtio-gpu render node; nothing is Mesa-specific), transactions/BLAST/display events/screenshots (PixelCopy) are all real code. We write only what
+> a desktop lacks: (a) the HWC (`android.hardware.graphics.composer3` AIDL service, all layers client-composited; the client
+> target's dmabuf and the real `wl_surface.frame` pacing go to the shell), (b) gralloc (our own thin allocator/mapper over the HOST's `libgbm`; the tree's minigbm is NOT used: it has
+> per-driver backends and none for NVIDIA) and (c) the launcher. Per app first (an SF + HWC per app process, each on
+> its own binderfs instance), a shared one later. "apklayer-sf" = this set.
+> 1. **Service manager** (`libapklayer_servicemanager`, run by `btload --main`) on binderfs; then the SF library
+>    (`libapklayer_surfaceflinger`) with a stub HWC, until the app's `Surface` gets buffers.
+> 2. **gralloc**: allocator + mapper over host `libgbm` (Mesa, NVIDIA via nvidia-drm, AMD, Intel alike), dmabuf modifiers negotiated, no per-GPU code; imports as `EGL_EXT_image_dma_buf_import`. No GPU/dmabuf on the host: an explicit shm + llvmpipe mode chosen at startup.
+> 3. **HWC**: `apklayer-hwc` (composer3), vsync from the shell.
+> **Video (user question, 2026-10-26): the same buffers carry YUV.** The allocator offers NV12/YV12/P010 (GBM formats, per-driver
+> availability checked at startup, NVIDIA's GBM is the doubtful one); sampling is `EGL_EXT_image_dma_buf_import` +
+> `GL_OES_EGL_image_external` (the GPU converts, no CPU copy); the HWC reports video layers as DEVICE composition so the NV12
+> dmabuf goes to the Wayland compositor as a `wl_subsurface` (overlay/scanout, colour metadata kept); `apklayer-codec` writes
+> decoded frames into BufferQueue buffers (zero-copy with VA-API/NVDEC/V4L2 dmabuf output, one CPU write for software
+> decoders, never a readback). Fallback: GPU shader to RGBA, then the explicit CPU mode.
+> **What the real system services need from a desktop (found by reading `servicemanager`, 2026-10-26; items 0.x come before 1):**
+> - 0.1 **SELinux**: `Access.cpp` insists on `getcon()` and `selinux_check_access` (service_contexts). No Android policy exists on a
+>   desktop; a `libselinux.so` replacement (cfg.d mapped, generated from the real library's exports) answers "allowed" and a fixed
+>   context. The host's own isolation (bwrap/AppArmor, P6) is the real security boundary.
+> - 0.2 **VINTF**: `isDeclared()` for the HALs (`composer3`, `allocator`, `mapper`) reads `/vendor/etc/vintf/*.xml`; there is no
+>   such directory. Needs the path layer below, with manifests apklayer ships.
+> - 0.3 **Path layer**: `/system`, `/vendor`, `/apex`, `/data`, `/dev/binder` as seen by the bionic libraries map to
+>   `$APKLAYER_NATIVE/android-root` (bionic_translation has no remapping, `bionic_getenv("ANDROID_ROOT")` is hardwired to `/system`).
+>   Candidate: wrap `open/openat/stat/access/opendir/readlink` in the libc_bio wrappers (a small, reusable patch, PATCHES.md).
+> - 0.4 **Properties**: the `__system_property_*` functions in libc_bio print "not handled yet" and return nothing; services
+>   (`servicemanager.ready`, `ro.hardware.*`, `debug.sf.*`) need a real store: a shared mmap'd property area written by an
+>   `apklayer-init` that sets the product's properties (from `build.prop` files in out/), readable by every process.
+>
+> **SurfaceView (user, 2026-10-26: "if you keep SurfaceFlinger zero-copy it is fast for SurfaceView as well"): no separate shortcut
+> (Mac.apk's direct-to-native-window path is not needed).** A SurfaceView/video layer is its own SF layer with its own buffer
+> queue; with dmabuf buffers and DEVICE composition it reaches the compositor as a `wl_subsurface` (overlay), otherwise
+> RenderEngine samples it on the GPU: zero-copy both ways. Must hold: apps/decoders render into gralloc buffers (EGLImage on the
+> dmabuf), `sync_file` fences both ways, damage/release through the shell, pacing from the real frame callbacks, per-layer
+> DEVICE/CLIENT from what the compositor offers. **Acceptance test for P7.1:** a GL SurfaceView plus a video layer, copies and CPU
+> use measured (target: zero CPU copies of pixels).
+>
+> **UiBench on the GPU route (2026-10-27): the app's UI is on screen.** The tree flavor (`APKLAYER_NATIVE=~/arm64-native`, the arm64 JDK, the services-only stack `scripts/arm64-stack.sh none`) runs the real device libraries; Robolectric's windows use real SurfaceFlinger layers (relayout2, client-managed SurfaceControl, real BLASTBufferQueue), HWUI renders with Skia GL on the host GPU into our gralloc buffers through the EGL window-surface blit, SurfaceFlinger composes and our HWC shows the frame in the shell. Needs-cleanup list: runtime/patches (Robolectric shadows), the debug prints, input and window focus on the shell window, the display window versus the app window, per-launch properties, the launcher environment in bin/apklayer.
+>
+> **Status (2026-10-26): the whole path works on the VM**: servicemanager, allocator, composer and the real SurfaceFlinger run as arm64
+> bionic libraries under btload, SF's RenderEngine (Skia/GL ES 3.0 on virgl) composes `sftest`'s layer into our gralloc framebuffer and
+> the shell receives its dmabuf frames (buffers rotate, one fd set per buffer). The last blocker was a generated do-nothing stub for
+> `glEGLImageTargetTexture2DOES` in btload; GL extension stubs now forward to the host driver. Still open: window surfaces for EGL
+> present fences, Java side. **Step 3b done (2026-10-26)**: EGL window surfaces over an ANativeWindow (host gbm_surface + one GPU blit into the
+> dequeued buffer, native fence), `gltest` renders GL ES into a BufferQueue layer through SurfaceFlinger (300 frames reach the shell) and
+> follows a layer resize (new surface pair behind the same EGLSurface). Pixel check done: the composer reads a presented frame back through the driver
+> (`APKLAYER_RUNTIME_DEBUG`) and (10,10) is the expected bar colour of `sftest` (480x320 layer at the top left, black elsewhere).
+>
+> **Measured on the VM's virtio-gpu (2026-10-26, `tests/hals/graphics-test.c`): GBM allocates ARGB/ABGR/XRGB8888, RGB565, RGBA_F16 and
+> RGBA_1010102, but NOT NV12, I420, YV12 or P010**, so YUV needs a fallback: ONE linear R8/R16 allocation holding all planes back to back
+> (what a real NV12 buffer is; the Android side must report one base pointer with plane offsets, so separate per-plane buffers
+> do not work), imported to EGL as a multi-plane dmabuf image with per-plane offsets, with
+> `eglQueryDmaBufFormatsEXT` deciding at startup whether the driver accepts it; otherwise the GPU-shader conversion to RGBA. Also
+> measured: `mmap` of a virtio-gpu dmabuf is refused (EACCES), so CPU access always goes through the driver (`gbm_bo_import` +
+> `gbm_bo_map`), which is coherent on every driver.
+> **Measured (2026-10-26, `tests/hals/egl-probe.c`, VM virtio-gpu = virgl on the host GPU): the host EGL on `EGL_PLATFORM_GBM_KHR` over our
+> graphics HAL's device gives everything the Android side needs**: EGL 1.5, a GLES3 surfaceless context, `EGL_EXT_image_dma_buf_import(_modifiers)`
+> (RGBA8888 and the packed NV12/YV12 import and bind as textures), `EGL_KHR_fence_sync/wait_sync`, `EGL_ANDROID_native_fence_sync`
+> (real sync_file fds), `EGL_KHR_surfaceless_context`, `EGL_KHR_no_config_context`, `EGL_EXT_buffer_age`. Missing (to be added by
+> our EGL layer): `EGL_ANDROID_image_native_buffer` (ANativeWindowBuffer to dmabuf import), `EGL_IMG_context_priority`,
+> `EGL_KHR_partial_update`. SurfaceFlinger's RenderEngine uses about 25 EGL calls (`eglGetDisplay/Initialize/ChooseConfig/
+> CreateContext/MakeCurrent/CreatePbufferSurface/Create+DestroySyncKHR/WaitSyncKHR/DupNativeFenceFDANDROID/QueryString...`) and
+> Skia's `GrAHardwareBufferUtils` for images (`eglGetNativeClientBufferANDROID`, `eglCreateImageKHR(EGL_NATIVE_BUFFER_ANDROID)`).
+> **EGL layer (Android side, `aosp/hals/graphics/egl`): our own `libEGL`, mapped over Android's loader by cfg.d**, forwarding to
+> the host EGL (GBM platform, the HAL's gbm device), adding the Android extensions above, and later window surfaces over
+> ANativeWindow (host GBM surface or FBO, buffers attached to the BufferQueue).
+> **Display path measured (2026-10-26, `tests/hals/display-test.c`, `bridge/shell/dmabuf.c`, `bridge/hals/graphics/display.c`):** the shell imports
+> dmabufs through `zwp_linux_dmabuf_v1` (new messages DMABUF_FRAME with SCM_RIGHTS fds, DMABUF_RELEASE, an empty-path WINDOW_CREATE for
+> dmabuf-only windows; the shell now reads with recvmsg), real GPU buffers from the graphics HAL are presented, 89 of 90 released back by the
+> compositor, and vsync comes from the compositor's frame callbacks. **Finding: the VM's `wl_output` says 59.9 Hz but the frame callbacks run
+> at about 111 Hz (the Mac's ProMotion display is 120 Hz and Parallels reports the mode as 60).** "Real refresh rate" must therefore come from
+> the measured callback cadence, not the mode: the composer HAL will report `getDisplayVsyncPeriod` from measured frame callbacks.
+> **Resizing and windows (user question, 2026-10-26: "with a custom HWC apps will run full screen as the whole display, can we still resize?").**
+> Yes, in two levels. (1) **The display follows the shell window**: the HWC's size is the window's size; the shell's CONFIGURE message
+> (already used for P2 resize/HiDPI) makes the HWC announce a new display configuration (or a hotplug re-announce) to SurfaceFlinger, which
+> re-lays out, and apps get a configuration change like a resized emulator window. To verify: how smoothly SurfaceFlinger takes a live
+> size change; rotation is the same mechanism. (2) **One shell window per Android top-level window, built as one Android display per window** (user: "can we do multi window?"; the HWC only
+> sees a flat layer list without names or parents, so mapping layers to windows by rectangles would be fragile): each window is a virtual
+> display with its own layer stack, the HWC announces/removes displays by hotplug, each display is one `xdg_toplevel`, and a resize is level 1
+> per display. Needs: an N-display HWC (display id and shell window id are parameters), and a window-manager shadow doing what system_server
+> does for surfaces (attach each app's SurfaceControl to its display's layer stack, z-order, visibility; choose the display a new activity
+> launches on; Robolectric already has multi-display shadows). Windows then resize, move, minimise and close individually. Status bar, dialogs and
+> popups stay inside their window. Needs the shadow layer to expose per-window size and accept resizes from the shell. Rule for the code:
+> the display size and the window ids are always parameters, never constants.
+> 4. **Window surfaces**: libhwui's EGL window surface on the SF's buffers (Mesa Android platform / our libEGL shim).
+> 5. **Presentation**: the client target's dmabuf to the shell over SCM_RIGHTS, `zwp_linux_dmabuf_v1`, zero copy.
+> 6. Same service later answers input (InputFlinger), camera, and the userspace binder (design above) replaces the kernel one.
+>
+> **Next (P7.0b): `JNI_OnLoad` and the JNI registration**: the library registers natives under the framework's class names,
+> Robolectric's shadows call its own `org.robolectric.nativeruntime.*Natives` classes; intercept `RegisterNatives` and
+> bind the same functions to the Robolectric class, then run the sandbox with this native runtime on the arm64 JVM.
+>
+> **Why the full device library (user, 2026-10-26): "in future if we want full support of apps we need all input, GPU, camera
+> and even userspace binder too".** Google's *host* variant leaves exactly those out; the device library contains them, so this
+> route grows into them without rebuilding anything. What each needs from the desktop (all later, in this order of value):
+> - **Binder**: `libbinder` talks to `/dev/binder`. The VM's kernel (6.8, Ubuntu) ships `binder_linux` and `binderfs` as modules
+>   (`CONFIG_ANDROID_BINDER_IPC=m`), not loaded by default: `modprobe binder_linux` + a binderfs mount gives a real binder; a
+>   service manager and the few system services apps call (activity, package, window, display, input, notification, …) would
+>   be apklayer's own, answering over it. Fallback with no kernel module: libbinder's RPC binder over a Unix socket
+>   (`libbinder_rpc_unstable.so` is in `out/`). Ships as a requirement for Flatpak users (kernel module) or the RPC path.
+> - **Binder decision (user, 2026-10-26): kernel binder (`binder_linux`) for now; later apklayer writes a userspace binder so that
+>   *everyone* can run Android apps without kernel drivers** (the goal is all users, not only the dev VM).
+>   Research (2026-10-26, no mature userspace *driver* exists): Android's own **RPC binder** (`RpcServer`/`RpcSession` over Unix
+>   sockets/vsock; official, but `ProcessState` still opens /dev/binder, so libbinder would need a backend patch); `rsbinder`
+>   (Rust library, needs kernel binderfs); Waydroid (bridges the host kernel binder); **Fuchsia Starnix's
+>   `src/starnix/modules/binderfs/binder.rs`** (a Rust implementation of the driver's command protocol: the best design reference).
+>   Our design: all Android code runs on bionic_translation's libc, so `open("/dev/binder")`, `ioctl(BINDER_WRITE_READ…)` and
+>   `mmap` are answered by apklayer's own driver inside that layer (talking to `apklayerd` across processes), with unmodified
+>   libbinder/AIDL on top; semantics (nodes, refs, transactions, thread pools, buffers, death notifications, fd passing via
+>   SCM_RIGHTS) follow the kernel driver and Starnix.
+> - **Input**: libinput-style `InputChannel` (socketpair, no binder needed) fed from the shell's events instead of Robolectric's
+>   UiAutomation injection.
+> - **GPU**: HWUI's GL pipeline over libgui `BufferQueue` (in-process) with buffers as dmabufs to the shell; Mesa on `/dev/dri`,
+>   `/dev/dma_heap` present.
+> - **Camera**: `CameraService` replacement behind binder, fed by PipeWire/V4L2 (`/dev/video*` exist).
+>
+> **Revised 2026-10-26 (user decision): no Meson/retargeting build.** Use the arm64 **bionic** (Android) libraries
+> already built in `~/los24/out/target/product/generic_arm64/system/lib64` (`libandroid_runtime.so`, `libhwui.so`, …)
+> and load them into the arm64 JVM with bionic_translation, as P4 does for apps' native libraries. Steps and open
+> questions are in "P7.0 experiment" below; the original compdb→Meson plan (items 1-3) is kept as the fallback.
+
+1. **Soong host build, x86_64 (necessary: D24).** In OrbStack, with
+   `SOONG_GEN_COMPDB=1` (in ~/los24 after `breakfast gsi_arm64 userdebug`, using its `out/`), build only the host variant of
+   `libandroid_runtime` (`host_supported` in frameworks/base/core/jni/Android.bp; the same
+   module layoutlib and Robolectric ship). Outputs: the x86_64 `.so` and
+   `compile_commands.json` holding the exact sources, defines and flags of every module in
+   its graph. Validate: its exported JNI registrations match Robolectric's prebuilt and the
+   android-all SDK 36 jar's `native` methods (generated diff, must be empty).
+2. **arm64 glibc via Meson (necessary: Soong has no glibc arm64 host target).** Soong's
+   cross-host options are `linux_bionic` (bionic binaries) and musl arm/arm64, and neither
+   loads into a glibc JVM. `scripts/compdb2meson.py` turns the compdb into
+   `runtime/native/meson.build` (same sources/defines; target triple and sysroot swapped to
+   `aarch64-linux-gnu`). It is built **natively on the arm64 VM** with clang. It also
+   rebuilds x86_64, so Soong is not needed again until a source bump.
+3. **If step 1's JNI diff is not empty** (los24 differs from android-all build 13921718):
+   build android-all from the same los24 tree too (`robolectric-host-android_all`, in
+   external/robolectric). Java and natives then come from one revision. This is the only
+   other allowed Soong build.
+4. **Native arm64:** drop the generated `libandroid_runtime.so` into
+   `native/linux/aarch64/` on the classpath (where `DefaultNativeRuntimeLoader` looks), run the
+   whole stack with the arm64 JDK, and remove the Rosetta stopgap from the scripts.
+5. **GPU HWUI:** compile HWUI's device pipeline sources (`EglManager`,
+   `SkiaOpenGLPipeline`, `RenderThread`, `SkiaVulkanPipeline`, `VulkanManager`) against Mesa,
+   with a `ReliableSurface`/`ANativeWindow` backed by a shell `wl_surface` (dmabuf). Switch
+   `ThreadedRenderer` to it. The CPU path stays as a fallback.
+
+**Exit test P7:** on the arm64 VM with no Rosetta, the corpus T1 pass rate equals x86_64.
+With GPU HWUI on, a scrolling list in uibench runs at the display refresh rate with lower
+CPU than the CPU path.
+

@@ -27,5 +27,5 @@ Current authorization (2026-10-27, user): build anything needed in `~/los24` aut
 ## Architecture and maintenance
 - One responsibility per file. Shell: `bridge/shell/*.c`; host: `runtime/host/java/apklayer/host/*`; NDK shims: `bridge/ndk/<lib>.c`, built by `scripts/build-native.sh`. Do not grow a file past ~600 lines; split.
 - Every deviation from upstream is a thin patch marked "apklayer patch" and listed in `docs/PATCHES.md`; vendored code goes in `docs/THIRD_PARTY.md`.
-- Update `docs/PLAN.md` status and `memory.md` with each step; commit at every step (trailer: `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`).
+- Update `docs/PLAN.md` status and `memory.md` with each step; commit at every step.
 - Use they/them for people whose pronouns are unknown.
