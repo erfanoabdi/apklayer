@@ -668,3 +668,5 @@ Linux x86_64 host (the tree-consistent Robolectric native runtime for x86 hosts)
 Rosetta-era x86 library where the tree's framework jar is used.
 
 - [ ] NewPipe: the loading spinner (ProgressBar in the middle while content loads) is not shown; revisit (user, 2026-10-27).
+- [ ] NewPipe: one cold start stayed black (window never drew after the mapper loaded; second start drew), and every start logs "CursorWindow: Failed to read row <garbage> from a window with 0 rows" (native CursorWindow read through a shadowed Java one). Look at both (2026-10-27).
+- [ ] NewPipe: HWUI logs a "Davey!" with absurd durations for every frame; check the Choreographer frame timeline / vsync ids.
