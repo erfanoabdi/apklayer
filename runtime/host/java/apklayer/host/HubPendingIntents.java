@@ -64,7 +64,7 @@ final class HubPendingIntents {
                 }
             }
             if ((flags & NO_CREATE) != 0) return null;
-            Record record = new Record(caller.name(), caller.uid(), type, resultWho, requestCode, intents, resolvedTypes, flags, options);
+            Record record = new Record(caller.name(), caller.appUid(), type, resultWho, requestCode, intents, resolvedTypes, flags, options);
             records.add(record);
             return record;
         }
@@ -82,7 +82,7 @@ final class HubPendingIntents {
         }
         Intent intent = new Intent(record.last());
         if (fillIn != null && (record.flags & IMMUTABLE) == 0) intent.fillIn(fillIn, 0);
-        HubDirectory.Peer creator = new HubDirectory.Peer(-1, record.uid, record.creator, null, null, true);
+        HubDirectory.Peer creator = new HubDirectory.Peer(-1, record.uid, record.creator, null, null, true, record.uid);
         System.out.println("[apklayer-hub] PendingIntent of " + record.creator + " type " + record.type + " sent: " + intent.getAction() + " " + intent.getComponent());
         switch (record.type) {
             case ACTIVITY -> activities.start(creator, intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), null);

@@ -20,6 +20,7 @@ public final class HubClient {
         int pid = HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.REGISTER, request -> {
             request.writeString(context.getPackageName()); request.writeStrongBinder(endpoint); request.writeBoolean(Boolean.getBoolean("apklayer.componenthost"));
             request.writeStrongBinder(((android.app.IApplicationThread) android.app.ActivityThread.currentActivityThread().getApplicationThread()).asBinder());
+            request.writeInt(android.os.Process.myUid());
         }, reply -> reply.readInt());
         if (pid != android.os.Process.myPid()) throw new IllegalStateException("Hub caller identity mismatch");
         HubPermissionChecker.install();
@@ -61,6 +62,10 @@ public final class HubClient {
     }
     void cancelNotification(String tag, int id, boolean all) {
         HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.NOTIFY_CANCEL, request -> { request.writeString(tag); request.writeInt(id); request.writeBoolean(all); }, reply -> null);
+    }
+    /** The app uid of another app's process (-1 when the hub does not know the pid). */
+    int uidOf(int pid) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.UID_OF_PID, request -> request.writeInt(pid), reply -> reply.readInt());
     }
     int checkPermission(int pid, String permission) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CHECK_PERMISSION, request -> { request.writeInt(pid); request.writeString(permission); }, reply -> reply.readInt());

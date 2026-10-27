@@ -45,6 +45,10 @@ public final class NativeLoader {
     public static void loadLibrary(String name) {
         String dir = System.getProperty("apklayer.libdir", "");
         File f = new File(dir, "lib" + name + ".so");
+        String provider = System.getProperty("apklayer.webviewprovider");
+        if (!f.exists() && provider != null) f = new File(provider + "/lib", "lib" + name + ".so"); // the WebView provider's own library
+        String androidLibs = System.getProperty("apklayer.androidlibs");
+        if (!f.exists() && androidLibs != null) f = new File(androidLibs, "lib" + name + ".so"); // a platform library the app asks for by name (libwebviewchromium_plat_support)
         if (!f.exists()) throw new UnsatisfiedLinkError("no " + name + " in " + dir + " (ABI not in the APK?)");
         load(f.getPath());
     }
@@ -53,7 +57,7 @@ public final class NativeLoader {
         synchronized (NativeLoader.class) {
             if (LOADED.containsKey(path)) return;
             init();
-            long handle = dlopen(path);
+            long handle = dlopen(Boolean.getBoolean("apklayer.gpu") ? new File(path).getName() : path); // bionic_translation finds a library by name in its path
             if (handle == 0) throw new UnsatisfiedLinkError(path + ": " + dlerror());
             LOADED.put(path, handle);
             long onLoad = dlsym(handle, "JNI_OnLoad");
@@ -78,11 +82,15 @@ public final class NativeLoader {
     private static void init() {
         if (ready) return;
         String dir = System.getProperty("apklayer.native");
-        if (dir == null || !new File(dir, "libapklayer_native.so").exists()) {
-            throw new UnsatisfiedLinkError("native libraries are not supported here (build them with scripts/build-native.sh)");
+        if (!Boolean.getBoolean("apklayer.gpu")) { // the older x86 route: its own loader library; the device-library route has these natives in the runtime shim (bridge/native/app_native.c)
+            if (dir == null || !new File(dir, "libapklayer_native.so").exists()) {
+                throw new UnsatisfiedLinkError("native libraries are not supported here (build them with scripts/build-native.sh)");
+            }
+            System.load(new File(dir, "libapklayer_native.so").getAbsolutePath());
         }
-        System.load(new File(dir, "libapklayer_native.so").getAbsolutePath());
-        setLibraryPath(System.getProperty("apklayer.libdir", dir) + ":" + dir); // app libs, then the bionic_translation libs
+        String provider = System.getProperty("apklayer.webviewprovider");
+        String androidLibs = System.getProperty("apklayer.androidlibs"); // the device-library route: Android's own libraries stay on the path (set by the runtime shim)
+        setLibraryPath(System.getProperty("apklayer.libdir", dir) + (provider == null ? "" : ":" + provider + "/lib") + ":" + (androidLibs != null ? androidLibs + ":" : "") + dir); // app libs, the WebView provider's, then the bionic_translation libs
         ready = true;
     }
 

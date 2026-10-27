@@ -25,3 +25,6 @@ cp -R runtime/host/resources/. "$work/classes/"
 [ ! -d "$native/aosp/host-classes" ] || mv "$native/aosp/host-classes" "$work/previous"
 mv "$work/classes" "$native/aosp/host-classes"
 echo "Published $native/aosp/host-classes"
+# java.base members Android's native libraries look up (apklayer.host.JdkPatch): the JVM runs with --patch-module java.base=<native>/jdk-patch (bin/apklayer)
+rm -rf "$native/jdk-patch"
+java -cp "$native/aosp/host-classes:$native/aosp/Robolectric_all.jar" apklayer.host.JdkPatch "$native/jdk-patch"

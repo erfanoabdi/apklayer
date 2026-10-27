@@ -12,7 +12,7 @@ scripts/patch-bionic-translation.sh "$(dirname "$bt")"
 ninja -C "$bt"  # build real versioned outputs; symlink targets do not rebuild them
 JH="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
 cc -shared -fPIC -O2 -Wall -I"$JH/include" -I"$JH/include/linux" -o "$tmp/libandroid_runtime.so" \
-    bridge/native/runtime_shim.c bridge/native/media_runtime.c bridge/native/binder_runtime.c bridge/native/android_platform.c bridge/native/properties.c bridge/native/paths.c bridge/native/android_stubs.c \
+    bridge/native/runtime_shim.c bridge/native/media_runtime.c bridge/native/binder_runtime.c bridge/native/app_native.c bridge/native/native_loader.c bridge/native/android_platform.c bridge/native/properties.c bridge/native/paths.c bridge/native/android_stubs.c \
     -L"$HOME/bt-arm/bionic_translation/b" -ldl_bio -Wl,-rpath,"$HOME/bt-arm/bionic_translation/b"
 # the launcher for Android executables built as libraries (btload --main) and the property tool, in $native/bin
 mkdir -p "$native/bin" "$native/android-root"

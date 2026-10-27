@@ -133,7 +133,9 @@ static jint JNICALL renaming_register_natives(JNIEnv *env, jclass cls, const JNI
         if (runtime_debug() && !strcmp(methods[i].name, "native_setup")) fprintf(stderr, "[runtime] registering %s %s\n", name, methods[i].signature);
         if (real_table->RegisterNatives(env, cls, &one, 1) != 0) {
             if (runtime_debug()) fprintf(stderr, "[runtime] not registered (no such native binding): %s %s\n", name, methods[i].signature);
-            (*env)->ExceptionClear(env); /* not a method Robolectric instruments */
+            (*env)->ExceptionClear(env); /* not a method Robolectric instruments... */
+            JNINativeMethod plain = { methods[i].name, methods[i].signature, methods[i].fnPtr };
+            if (real_table->RegisterNatives(env, cls, &plain, 1) != 0) (*env)->ExceptionClear(env); /* ...but an uninstrumented class (an app library's, a host helper) has it under its own name */
         }
     }
     /* AudioSystem registers these three capabilities first specifically so its
@@ -168,6 +170,31 @@ static jmethodID for_name;
 
 static jclass JNICALL lazy_find_class(JNIEnv *env, const char *name)
 {
+    if (name[0] == '[') { /* an array class: the sandbox's class loader cannot load array names; find the element class (by this FindClass) and take the class of a zero-length array */
+        int dims = 0;
+        while (name[dims] == '[') dims++;
+        const char *element = name + dims;
+        jclass elementClass;
+        if (element[0] == 'L') {
+            char inner[512];
+            size_t length = strlen(element);
+            if (length < 3 || length - 2 >= sizeof inner) return NULL;
+            memcpy(inner, element + 1, length - 2); inner[length - 2] = 0;
+            elementClass = lazy_find_class(env, inner);
+        } else {
+            return real_table->FindClass(env, name); /* primitives: the JVM's own */
+        }
+        if (!elementClass) return NULL;
+        jclass array = (*env)->FindClass(env, "java/lang/reflect/Array");
+        jmethodID make = (*env)->GetStaticMethodID(env, array, "newInstance", "(Ljava/lang/Class;[I)Ljava/lang/Object;");
+        jintArray lengths = (*env)->NewIntArray(env, dims);
+        jobject instance = (*env)->CallStaticObjectMethod(env, array, make, elementClass, lengths);
+        (*env)->DeleteLocalRef(env, lengths); (*env)->DeleteLocalRef(env, elementClass);
+        if (!instance) return NULL;
+        jclass result = (*env)->GetObjectClass(env, instance);
+        (*env)->DeleteLocalRef(env, instance);
+        return result;
+    }
     char dotted[512];
     size_t i = 0;
     for (; name[i] && i < sizeof dotted - 1; i++) dotted[i] = name[i] == '/' ? '.' : name[i];
@@ -175,6 +202,7 @@ static jclass JNICALL lazy_find_class(JNIEnv *env, const char *name)
     jstring s = (*env)->NewStringUTF(env, dotted);
     jobject c = (*env)->CallStaticObjectMethod(env, class_class, for_name, s, JNI_FALSE, class_loader);
     (*env)->DeleteLocalRef(env, s);
+    if (!c && runtime_debug()) fprintf(stderr, "[runtime] FindClass(%s) failed\n", name);
     return (jclass)c; /* NULL with the pending exception, like FindClass */
 }
 
@@ -378,8 +406,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     }
     free(media);
 
-    (*ti)->SetJNIFunctionTable(ti, orig);
-    if (media_failed) return -1;
+    /* the renaming table stays: an app library's JNI_OnLoad (the WebView provider's) registers natives of Robolectric-instrumented classes later */
+    if (media_failed) { (*ti)->SetJNIFunctionTable(ti, orig); return -1; }
     char *attribution = system_property(env, "apklayer.nativeattribution");
     char *audio = system_property(env, "apklayer.nativeaudio");
     int attribution_failed = 0;
@@ -394,6 +422,12 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
         jclass helper = lazy_find_class(env, "apklayer/host/RealBinder");
         attribution_failed = !helper || apklayer_register_binderhelper(env, helper);
         if (helper) (*env)->DeleteLocalRef(env, helper);
+    }
+    if (!attribution_failed) {
+        extern int apklayer_register_nativeloader(JNIEnv *, jclass);
+        jclass loader = lazy_find_class(env, "apklayer/host/NativeLoader");
+        attribution_failed = !loader || apklayer_register_nativeloader(env, loader);
+        if (loader) (*env)->DeleteLocalRef(env, loader);
     }
     free(real_binder);
     free(attribution); free(audio);

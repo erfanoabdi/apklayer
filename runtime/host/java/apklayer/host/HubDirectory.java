@@ -14,7 +14,7 @@ import android.app.IServiceConnection;
 
 /** Instance-owned process directory. Identities come from the kernel Binder caller. */
 final class HubDirectory extends Binder {
-    record Peer(int pid, int uid, String name, IBinder endpoint, IBinder appThread, boolean headless) {}
+    record Peer(int pid, int uid, String name, IBinder endpoint, IBinder appThread, boolean headless, int appUid) {}
     private final HubPackages packages;
     private final Map<Integer, Peer> peers = new HashMap<>();
     private final HubServiceBindings bindings;
@@ -121,11 +121,11 @@ final class HubDirectory extends Binder {
         if ((flags & FLAG_ONEWAY) != 0 || reply == null) throw new IllegalArgumentException("Hub requests must be synchronous");
         switch (code) {
             case HubProtocol.REGISTER -> {
-                String name = request.readString(); IBinder endpoint = request.readStrongBinder(); boolean headless = request.readBoolean(); IBinder appThread = request.readStrongBinder(); request.enforceNoDataAvail();
+                String name = request.readString(); IBinder endpoint = request.readStrongBinder(); boolean headless = request.readBoolean(); IBinder appThread = request.readStrongBinder(); int appUid = request.readInt(); request.enforceNoDataAvail();
                 if (packages.get(name) == null || endpoint == null || appThread == null || !HubProtocol.ENDPOINT.equals(endpoint.getInterfaceDescriptor()))
                     throw new SecurityException("Unknown app endpoint");
                 int pid = Binder.getCallingPid(), uid = Binder.getCallingUid();
-                Peer peer = new Peer(pid, uid, name, endpoint, appThread, headless);
+                Peer peer = new Peer(pid, uid, name, endpoint, appThread, headless, appUid);
                 synchronized (peers) {
                     Peer old = peers.get(pid);
                     if (old != null) {
@@ -262,6 +262,11 @@ final class HubDirectory extends Binder {
                 Peer caller = caller(); String tag = request.readString(); int id = request.readInt(); boolean all = request.readBoolean(); request.enforceNoDataAvail();
                 notifications.cancel(caller, tag, id, all);
                 reply.writeNoException(); return true;
+            }
+            case HubProtocol.UID_OF_PID -> {
+                caller(); int pid = request.readInt(); request.enforceNoDataAvail();
+                Peer peer = peerByPid(pid);
+                reply.writeNoException(); reply.writeInt(peer == null ? -1 : peer.appUid()); return true;
             }
             case HubProtocol.TAKE_LAUNCH -> {
                 Peer caller = caller(); request.enforceNoDataAvail();

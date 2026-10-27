@@ -49,7 +49,11 @@ final class HubBroadcasts {
 
     /** Registers a dynamic receiver; returns the first matching sticky intent (and queues all matching ones to the receiver). */
     Intent register(HubDirectory.Peer caller, IBinder binder, IntentFilter filter, String permission, int flags) {
-        if (binder == null || filter == null) throw new IllegalArgumentException("Missing receiver registration");
+        if (filter == null) throw new IllegalArgumentException("Missing receiver registration");
+        if (binder == null) { // registerReceiver(null, filter): only the sticky broadcast that matches, nothing is registered
+            synchronized (this) { for (Intent intent : sticky) if (filter.match(null, intent, false, "apklayer-hub") >= 0) return new Intent(intent); }
+            return null;
+        }
         IIntentReceiver receiver = IIntentReceiver.Stub.asInterface(binder);
         Reg registration = new Reg(caller, binder, receiver, filter, permission, flags);
         try { binder.linkToDeath(() -> removeAll(binder), 0); }

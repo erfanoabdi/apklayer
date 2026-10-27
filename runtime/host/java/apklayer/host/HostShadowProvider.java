@@ -35,6 +35,7 @@ public final class HostShadowProvider implements ShadowProvider {
         if (System.getProperty("apklayer.webviewprovider") != null) { // the original WebView implementation (a provider APK) instead of the WebKitGTK stand-in
             entries.removeIf(entry -> entry.getKey().equals("android.webkit.WebView"));
             entries.add(Map.entry("android.webkit.WebView", ShadowHostRealWebView.class.getName()));
+            entries.add(Map.entry("android.webkit.WebViewDelegate", ShadowHostWebViewDelegate.class.getName()));
             entries.add(Map.entry("android.webkit.WebViewFactory", ShadowHostWebViewFactory.class.getName()));
         }
         if (Boolean.getBoolean("apklayer.nativemedia")) {

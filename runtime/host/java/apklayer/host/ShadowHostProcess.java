@@ -9,7 +9,10 @@ import org.robolectric.shadows.ShadowProcess;
 @Implements(value = Process.class, isInAndroidSdk = false)
 public class ShadowHostProcess extends ShadowProcess {
     private static final int PID = (int) ProcessHandle.current().pid();
-    private static final int UID = realUid();
+    private static final int REAL_UID = realUid();
+    private static final int UID = Integer.getInteger("apklayer.uid", REAL_UID); // the package's Android app uid (bin/apklayer), the desktop user's uid without one
+
+    static int realUidValue() { return REAL_UID; }
 
     private static int realUid() {
         return Math.toIntExact(new com.sun.security.auth.module.UnixSystem().getUid());

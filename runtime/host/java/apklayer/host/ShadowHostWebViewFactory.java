@@ -13,10 +13,26 @@ import org.robolectric.annotation.Implements;
 public class ShadowHostWebViewFactory {
     private static final String FACTORY = "com.android.webview.chromium.WebViewChromiumFactoryProvider";
 
+    /** What WebViewFactory.getWebViewContextAndSetProvider records about the chosen provider: its PackageInfo (read from the APK), with the paths of the installed copy. */
+    private static void providerPackage(String dir) {
+        android.content.pm.PackageManager pm = org.robolectric.RuntimeEnvironment.getApplication().getPackageManager();
+        String apk = new File(dir, "base.apk").getPath();
+        android.content.pm.PackageInfo info = pm.getPackageArchiveInfo(apk, android.content.pm.PackageManager.GET_META_DATA | android.content.pm.PackageManager.GET_SERVICES);
+        if (info == null) throw new IllegalStateException("Cannot read the WebView provider's manifest: " + apk);
+        info.applicationInfo.sourceDir = info.applicationInfo.publicSourceDir = apk;
+        info.applicationInfo.nativeLibraryDir = new File(dir, "lib").getPath();
+        info.applicationInfo.dataDir = new File(dir, "data").getPath();
+        org.robolectric.shadows.ShadowPackageManager shadow = org.robolectric.Shadows.shadowOf(pm); // the provider is an installed package here too: its renderer services resolve
+        shadow.installPackage(info);
+        org.robolectric.util.ReflectionHelpers.setStaticField(android.webkit.WebViewFactory.class, "sPackageInfo", info);
+        System.out.println("[apklayer] WebView provider " + info.packageName + " " + info.versionName + " (" + info.getLongVersionCode() + ")");
+    }
+
     @Implementation protected static Class<?> getProviderClass() {
         String dir = System.getProperty("apklayer.webviewprovider");
         File library = new File(dir, "lib/libwebviewchromium.so");
         NativeLoader.load(library.getPath());
+        providerPackage(dir);
         try { return Class.forName(FACTORY); }
         catch (ClassNotFoundException missing) { throw new IllegalStateException("The WebView provider's classes are not on the class path", missing); }
     }

@@ -11,6 +11,8 @@ mkdir "$work/classes"
 mapfile -t sources < <(find runtime/patches -name '*.java' ! -name '._*' -print | sort)
 echo "Compiling ${#sources[@]} runtime overlay sources"
 javac -nowarn -d "$work/classes" -cp "$native/aosp/Robolectric_all.jar:$native/android-all/*" "${sources[@]}"
+# classes patched in bytecode (no source to copy): the sandbox class loader answers array class names
+java -cp "$work/classes:$native/aosp/Robolectric_all.jar" apklayer.patches.SandboxLoaderPatch "$work/classes"
 if [ -n "$staging" ]; then
     cp -R "$staging/." "$work/classes/"
     jar cf "$work/runtime.jar" -C "$work/classes" .
