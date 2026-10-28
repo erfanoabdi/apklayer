@@ -12,6 +12,7 @@ final class HubProviders {
     HubProviders(HubDirectory directory, HubPackages packages, HubBroadcasts processes) { this.directory = directory; this.packages = packages; this.processes = processes; }
 
     List<ProviderInfo> list() { return packages.providers(); }
+    List<android.content.pm.PackageParser.Provider> components() { return packages.providerComponents(); }
 
     /** The provider's IContentProvider binder, the provider's process started when it is not running. Null when the authority is unknown or not for this caller. */
     IBinder get(HubDirectory.Peer caller, String authority) {

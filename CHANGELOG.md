@@ -3,6 +3,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/`.
 
+## 2026-10-28 morning: DocumentsUI shows its roots
+- DocumentsUI listed no roots: the package manager only knew its own app's providers. The hub now sends every provider's `ProviderInfo` and intent filters (`LIST_PROVIDERS`), the client adds them to the package manager (`resolveContentProvider`, `queryIntentContentProviders(DOCUMENTS_PROVIDER)`). `ContentResolver.getCache/putCache` answer without a content service. `setpriv` takes `--pdeathsig TERM` (the old spelling was rejected here, so no helper was wrapped and location was off). Open: the archives provider still refuses the legacy query form; "Recent" is empty until files are opened.
+
 ## 2026-10-28 night: hang fix, Keystore, system config, system providers, devices
 - **App hang fixed**: `HardwareRenderer.nSetStopped` blocked forever when HWUI's CommonPool left a task queued while both workers slept; `bionic_pthread_cond_signal` now broadcasts (patch step 10): 25 of 25 runs pass, 2 hangs in 11 before. Dynamic receivers are delivered through the app thread (ordering across broadcasts).
 - **Keystore**: RSA and EC key pairs with certificates next to the AES/HMAC keys, persistent (`tests/vm/keystore.sh`).

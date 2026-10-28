@@ -38,6 +38,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.app.Service", ShadowHostService.class.getName()),
                 Map.entry("android.os.ParcelFileDescriptor", ShadowHostRealParcelFileDescriptor.class.getName()),
                 Map.entry("android.content.ContentResolver", ShadowHostContentResolver.class.getName()),
+                Map.entry("android.content.ContentProviderClient", ShadowHostContentProviderClient.class.getName()),
                 Map.entry("android.database.CursorWindow", ShadowHostRealCursorWindow.class.getName()),
                 // native media, audio and the window system: Android's own services and natives behind the original classes
                 Map.entry("android.media.MediaCodec", ShadowHostNativeMediaCodec.class.getName()),

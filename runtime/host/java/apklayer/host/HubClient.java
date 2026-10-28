@@ -28,10 +28,21 @@ public final class HubClient {
     }
     /** Providers of the other installed apps, registered under their authorities in this app's ContentResolver. */
     private void HubProviders_registerRemote(Context context) {
-        java.util.List<String[]> providers = HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.LIST_PROVIDERS, request -> {}, reply -> {
-            java.util.List<String[]> list = new java.util.ArrayList<>();
-            for (int n = reply.readInt(); n > 0; n--) list.add(new String[] {reply.readString(), reply.readString(), reply.readString(), reply.readString()});
-            return list;
+        java.util.List<String[]> providers = new java.util.ArrayList<>();
+        org.robolectric.shadows.ShadowPackageManager packageManager = org.robolectric.Shadows.shadowOf(context.getPackageManager());
+        HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.LIST_PROVIDERS, request -> {}, reply -> {
+            for (int n = reply.readInt(); n > 0; n--) {
+                String[] provider = {reply.readString(), reply.readString(), reply.readString(), reply.readString()};
+                android.content.pm.ProviderInfo info = reply.readTypedObject(android.content.pm.ProviderInfo.CREATOR);
+                java.util.List<android.content.IntentFilter> filters = new java.util.ArrayList<>();
+                for (int f = reply.readInt(); f > 0; f--) filters.add(reply.readTypedObject(android.content.IntentFilter.CREATOR));
+                if (provider[1].equals(context.getPackageName())) continue;
+                providers.add(provider);
+                // the package manager answers for other apps' providers too (DocumentsUI finds document providers by their filter)
+                packageManager.addOrUpdateProvider(info);
+                for (android.content.IntentFilter filter : filters) packageManager.addIntentFilterForProvider(new android.content.ComponentName(info.packageName, info.name), filter);
+            }
+            return null;
         });
         int count = 0;
         for (String[] provider : providers) {

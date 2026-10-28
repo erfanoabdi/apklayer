@@ -11,6 +11,9 @@ import org.robolectric.shadows.ShadowContentResolver;
 /** notifyChange also reaches the observers of the other apps: the hub tells every other running app, which notifies its own observers (Robolectric's, in-process). */
 @Implements(value = ContentResolver.class, isInAndroidSdk = false)
 public class ShadowHostContentResolver extends ShadowContentResolver {
+    /** The content service's per-uri cache (DocumentsUI reads its roots through it): no service here, so nothing is cached. */
+    @Implementation protected android.os.Bundle getCache(Uri key) { return null; }
+    @Implementation protected void putCache(Uri key, android.os.Bundle value) {}
     private static boolean hub() { return HubClient.connected(); }
     private static void tell(Uri uri, int flags) { if (uri != null && hub()) HubClient.current().notifyChange(uri, flags); }
 

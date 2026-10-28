@@ -3,7 +3,7 @@ package apklayer.host;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Helper processes of an app JVM end with it, also when the JVM is killed (a shutdown hook does not run then): `setpriv --pdeath-sig` where the host has it. */
+/** Helper processes of an app JVM end with it, also when the JVM is killed (a shutdown hook does not run then): `setpriv --pdeathsig` where the host has it. */
 final class HostProcess {
     private HostProcess() {}
 
@@ -11,7 +11,7 @@ final class HostProcess {
 
     static List<String> dying(String... command) {
         List<String> out = new ArrayList<>();
-        if (SETPRIV) { out.add("setpriv"); out.add("--pdeath-sig=TERM"); }
+        if (SETPRIV) { out.add("setpriv"); out.add("--pdeathsig"); out.add("TERM"); }
         out.addAll(List.of(command));
         return out;
     }

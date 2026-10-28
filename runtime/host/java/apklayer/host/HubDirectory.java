@@ -201,10 +201,11 @@ final class HubDirectory extends Binder {
             }
             case HubProtocol.LIST_PROVIDERS -> {
                 caller(); request.enforceNoDataAvail();
-                var list = providers.list();
+                var list = providers.components();
                 reply.writeNoException(); reply.writeInt(list.size());
-                for (var info : list) { reply.writeString(info.authority); reply.writeString(info.packageName);
-                    reply.writeString(info.readPermission); reply.writeString(info.writePermission); }
+                for (var component : list) { var info = component.info; reply.writeString(info.authority); reply.writeString(info.packageName);
+                    reply.writeString(info.readPermission); reply.writeString(info.writePermission); reply.writeTypedObject(info, 0);
+                    reply.writeInt(component.intents.size()); for (var filter : component.intents) reply.writeTypedObject(new android.content.IntentFilter(filter), 0); }
                 return true;
             }
             case HubProtocol.NOTIFY_CHANGE -> {

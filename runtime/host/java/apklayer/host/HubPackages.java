@@ -53,6 +53,18 @@ final class HubPackages {
         return found;
     }
 
+    /** The same providers with their intent filters (a document provider is found by its DOCUMENTS_PROVIDER filter). */
+    List<PackageParser.Provider> providerComponents() {
+        List<PackageParser.Provider> found = new ArrayList<>();
+        for (String name : installed()) {
+            PackageParser.Package pkg;
+            try { pkg = get(name); } catch (RuntimeException unreadable) { continue; }
+            if (pkg == null) continue;
+            for (PackageParser.Provider provider : pkg.providers) if (provider.info.authority != null && provider.info.enabled) found.add(provider);
+        }
+        return found;
+    }
+
     /**
      * The activity an intent starts for the caller: the named component, or the first (by package name) whose intent filter matches the intent (as startActivity
      * resolves it, with CATEGORY_DEFAULT). Not exported ones are for their own package only. Null when nothing matches.
