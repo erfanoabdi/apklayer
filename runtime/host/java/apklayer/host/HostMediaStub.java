@@ -21,7 +21,7 @@ final class HostMediaStub extends ContentProvider {
         return new Bundle();  // no media uri for the file: callers then open the file itself
     }
     @Override public Bundle call(String method, String arg, Bundle extras) { return call("media", method, arg, extras); }
-    @Override public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) { return null; }
+    @Override public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) { return new android.database.MatrixCursor(projection != null ? projection : new String[0]); }  // nothing is indexed
     @Override public String getType(Uri uri) { return null; }
     @Override public Uri insert(Uri uri, ContentValues values) { return null; }
     @Override public int delete(Uri uri, String selection, String[] selectionArgs) { return 0; }

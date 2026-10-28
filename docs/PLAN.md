@@ -65,3 +65,4 @@ The Android root itself (system/vendor files) is already known to the runtime. O
 - COMMERCIAL.md contact and terms, a CLA and ownership of the agent-written commits, NOTICE/legal files for everything shipped, the Android SDK `android.jar` terms if bundled.
 - x86_64 build of the Android libraries (needs approval for a second out dir), Flatpak, replacing the ninja-replay build scripts, per-run test temp dirs.
 - Files over 600 lines: `ShadowWindowManagerGlobal` (patched upstream overlay), `Egl.cpp` (needs a build-graph change).
+- Robolectric's instrumentation of `android.app.AuthenticationRequiredException` crashes in ASM (`Frame.merge` NegativeArraySizeException) when DocumentsUI first loads it (after a directory load that raised any exception). Not fixed: avoid the exception; find the instrumentation failure when it matters.
