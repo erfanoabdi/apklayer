@@ -53,6 +53,11 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         jvm.push_back("-Dapklayer.displaywindow=" + title);
     }
     ne.env["LD_LIBRARY_PATH"] = l.native + ":" + join(l.native, "glibc") + ":" + ne.env["LD_LIBRARY_PATH"];  // bionic linker + its libs
+    // Gecko (Firefox) reads its application-data roots from these (an Android Gecko without them cannot select a profile: "Could not find profile folder")
+    makeDirs(join(dir, "data/app/files/mozilla"));
+    makeDirs(join(dir, "data/app/cache/mozilla"));
+    ne.env["MOZ_APP_DATA"] = join(dir, "data/app/files/mozilla");
+    ne.env["MOZ_LOCAL_APP_DATA"] = join(dir, "data/app/cache/mozilla");
     for (const std::string& o : {"-Dapklayer.data=" + join(dir, "data"), "-Dapklayer.package=" + package, "-Dapklayer.uid=" + property(join(dir, "info.properties"), "uid"),
                                  "-Dapklayer.libdir=" + join(dir, "lib"), "-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary()})
         jvm.push_back(o);

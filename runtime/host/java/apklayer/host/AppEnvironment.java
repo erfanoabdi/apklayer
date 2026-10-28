@@ -38,6 +38,7 @@ final class AppEnvironment {
         if (java.security.Security.getProvider("AndroidKeyStore") == null) java.security.Security.addProvider(new HostKeyStoreProvider());  // apps open it in Application.onCreate
         if (java.security.Security.getProvider("AndroidKeyStoreBCWorkaround") == null) java.security.Security.addProvider(new HostBcWorkaroundProvider());
         HostCompat.install();  // behavior changes by the app's target SDK (PendingIntent mutability, ...)
+        HostGeckoDiag.start();
         HostLibraryPath.install();  // before the app's own code runs: SoLoader finds the system libraries it looks up by name
         if (Boolean.getBoolean("apklayer.logcat")) org.robolectric.shadows.ShadowLog.stream = System.out; // android.util.Log output (-Dapklayer.logcat=true, APKLAYER_LOGCAT=1)
         AndroidManifest manifest = apk == null ? new AndroidManifest(null, null, null, "apklayer.hub")

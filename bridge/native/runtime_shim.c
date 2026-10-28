@@ -206,6 +206,25 @@ static jclass JNICALL lazy_find_class(JNIEnv *env, const char *name)
     return (jclass)c; /* NULL with the pending exception, like FindClass */
 }
 
+/* Diagnostic (APKLAYER_JNI_EXC=1): a Java exception left pending by a JNI call from native code is printed with its stack. Gecko aborts with "MOZ_CRASH(JNI exception)" and no
+ * message when a call it makes into Java throws; this shows what was thrown (the call is then left pending, as before). */
+static void trace_pending(JNIEnv *env, const char *where)
+{
+    jthrowable ex = real_table->ExceptionOccurred(env);
+    if (!ex) return;
+    real_table->ExceptionClear(env);
+    jclass tc = real_table->FindClass(env, "java/lang/Throwable");
+    jmethodID pst = real_table->GetMethodID(env, tc, "printStackTrace", "()V");
+    fprintf(stderr, "[jni-exc] pending after %s:\n", where);
+    if (pst) real_table->CallVoidMethod(env, ex, pst);
+    real_table->ExceptionClear(env);
+    real_table->Throw(env, ex);
+}
+static void JNICALL w_CallVoidMethodA(JNIEnv *env, jobject o, jmethodID m, const jvalue *a) { real_table->CallVoidMethodA(env, o, m, a); trace_pending(env, "CallVoidMethodA"); }
+static void JNICALL w_CallStaticVoidMethodA(JNIEnv *env, jclass c, jmethodID m, const jvalue *a) { real_table->CallStaticVoidMethodA(env, c, m, a); trace_pending(env, "CallStaticVoidMethodA"); }
+static jobject JNICALL w_CallObjectMethodA(JNIEnv *env, jobject o, jmethodID m, const jvalue *a) { jobject r = real_table->CallObjectMethodA(env, o, m, a); trace_pending(env, "CallObjectMethodA"); return r; }
+static jobject JNICALL w_CallStaticObjectMethodA(JNIEnv *env, jclass c, jmethodID m, const jvalue *a) { jobject r = real_table->CallStaticObjectMethodA(env, c, m, a); trace_pending(env, "CallStaticObjectMethodA"); return r; }
+
 static char *system_property(JNIEnv *env, const char *key)
 {
     jclass sys = (*env)->FindClass(env, "java/lang/System");
@@ -392,6 +411,10 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
             critical_of = (*env)->GetStaticMethodID(env, critical_class, "of", "(Ljava/lang/String;)[Ljava/lang/String;");
         }
         (*env)->ExceptionClear(env);
+    }
+    if (getenv("APKLAYER_JNI_EXC")) {
+        patched.CallVoidMethodA = w_CallVoidMethodA; patched.CallStaticVoidMethodA = w_CallStaticVoidMethodA;
+        patched.CallObjectMethodA = w_CallObjectMethodA; patched.CallStaticObjectMethodA = w_CallStaticObjectMethodA;
     }
     (*ti)->SetJNIFunctionTable(ti, &patched);
     int failed = register_classes(env, vm, rt);
