@@ -199,7 +199,9 @@ final class HubBroadcasts {
         CompletableFuture<Result> answer = new CompletableFuture<>();
         if (wait) synchronized (this) { pending.put(who, answer); }
         try {
-            if (target.dynamic != null) target.dynamic.receiver.performReceive(intent, code, data, extras, ordered, isSticky, userId);
+            // apklayer patch: through the app's IApplicationThread like ActivityManager does: oneway calls to one node run in order, calls to each receiver's own
+            // binder do not (a later broadcast could overtake an earlier one on another binder thread)
+            if (target.dynamic != null) IApplicationThread.Stub.asInterface(who).scheduleRegisteredReceiver(target.dynamic.receiver, intent, code, data, extras, ordered, isSticky, false, userId, 0, 0, null);
             else IApplicationThread.Stub.asInterface(who).scheduleReceiver(intent, target.manifest, null, code, data, extras, ordered, false, userId, 0, 0, null);
         } catch (RemoteException gone) {
             synchronized (this) { pending.remove(who); }

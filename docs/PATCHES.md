@@ -228,3 +228,5 @@ Opt-in with `APKLAYER_WEBVIEW_PROVIDER=com.android.webview` (provider APK instal
 - `runtime/host/java/apklayer/host/Services.java` `startFromHub`: a start command from the hub that arrives while a service is being created (the main looper runs other posted work inside `create()`) waits in DEFERRED like a bind, so one instance exists (sticky restart after a kill: `tests/vm/services.sh sticky`).
 
 - `ShadowHostRealBinderProxy.direct`: rethrows the checked RemoteException (DeadObjectException) that ReflectionHelpers wraps in a RuntimeException, so callers that catch it by type (RemoteProvider retry after a provider process died) work.
+
+- `HubBroadcasts.deliver`: dynamic receivers are reached through the app's `IApplicationThread.scheduleRegisteredReceiver` (as ActivityManager does), so one broadcast cannot overtake another across binder threads (fixed the flaky `pendingintents.sh`).
