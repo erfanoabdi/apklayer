@@ -35,6 +35,13 @@ public class ShadowHostRealLinux extends ShadowLinux {
         catch (java.io.IOException failure) { throw new android.system.ErrnoException("pread", android.system.OsConstants.EIO, failure); }
     }
 
+    /** The runtime is a 64-bit process named like Android's (SoLoader and others read /proc/self/exe to tell the bitness); other links are the host's. */
+    @Implementation protected String readlink(String path) throws android.system.ErrnoException {
+        if ("/proc/self/exe".equals(path)) return "/system/bin/app_process64";
+        try { return java.nio.file.Files.readSymbolicLink(java.nio.file.Path.of(path)).toString(); }
+        catch (java.io.IOException | RuntimeException notALink) { throw new android.system.ErrnoException("readlink", android.system.OsConstants.EINVAL, new java.io.IOException(notALink)); }
+    }
+
     @Implementation protected long lseek(FileDescriptor fd, long offset, int whence) {
         return natively("lseek", ClassParameter.from(FileDescriptor.class, fd), ClassParameter.from(long.class, offset), ClassParameter.from(int.class, whence));
     }

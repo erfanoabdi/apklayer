@@ -85,6 +85,16 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
     private <T> T real(String name, ClassParameter<?>... parameters) {
         return (T) ReflectionHelpers.callInstanceMethod(real, Shadow.directMethodName("android.app.ContextImpl", name), parameters);
     }
+    /** The app's ApplicationInfo names its extracted native libraries (SoLoader, ReLinker...): where `apklayer install` put the arm64 ones. */
+    @Implementation protected android.content.pm.ApplicationInfo getApplicationInfo() {
+        android.content.pm.ApplicationInfo info = real("getApplicationInfo");
+        String libdir = System.getProperty("apklayer.libdir");
+        if (info != null && libdir != null && info.packageName != null && info.packageName.equals(real.getPackageName()) && info.nativeLibraryDir == null) {
+            info.nativeLibraryDir = libdir;
+            info.primaryCpuAbi = "arm64-v8a";
+        }
+        return info;
+    }
     @Implementation @Override protected void sendBroadcast(Intent intent) {
         if (hub()) real("sendBroadcast", ClassParameter.from(Intent.class, intent)); else super.sendBroadcast(intent);
     }

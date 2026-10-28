@@ -35,4 +35,24 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
             throw unknown;
         }
     }
+
+
+    /** Apps read their own signing certificate in Application.onCreate (update checks, SoLoader...): every package has one from the first call. */
+    private static android.content.pm.PackageInfo signed(android.content.pm.PackageInfo info, long flags) {
+        if (info == null) return null;
+        if ((flags & PackageManager.GET_SIGNATURES) != 0 && info.signatures == null) info.signatures = HostCertificate.signatures();
+        if ((flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0 && info.signingInfo == null)
+            info.signingInfo = new android.content.pm.SigningInfo(new android.content.pm.SigningDetails(HostCertificate.signatures(), 2, new android.util.ArraySet<>(), null));
+        return info;
+    }
+
+    @Implementation
+    protected android.content.pm.PackageInfo getPackageInfo(String packageName, int flags) throws PackageManager.NameNotFoundException {
+        return signed(super.getPackageInfo(packageName, flags), flags);
+    }
+
+    @Implementation(minSdk = android.os.Build.VERSION_CODES.TIRAMISU)
+    protected android.content.pm.PackageInfo getPackageInfo(String packageName, PackageManager.PackageInfoFlags flags) throws PackageManager.NameNotFoundException {
+        return signed(super.getPackageInfo(packageName, flags), flags.getValue());
+    }
 }

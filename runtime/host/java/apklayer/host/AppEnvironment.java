@@ -56,6 +56,19 @@ final class AppEnvironment {
         NativeProcess.install();
         persistDataDirs();
         provideExternalStorage();
+        provideNativeLibraryDir();
+    }
+
+    /** The app's ApplicationInfo names the directory of its extracted native libraries (SoLoader, ReLinker and others read it): where `apklayer install` put the arm64 ones. */
+    private static void provideNativeLibraryDir() {
+        String libdir = System.getProperty("apklayer.libdir");
+        if (libdir == null) return;
+        try {
+            Object bound = org.robolectric.util.ReflectionHelpers.getField(RuntimeEnvironment.getActivityThread(), "mBoundApplication");
+            android.content.pm.ApplicationInfo info = org.robolectric.util.ReflectionHelpers.getField(bound, "appInfo");
+            info.nativeLibraryDir = libdir;
+            info.primaryCpuAbi = "arm64-v8a";
+        } catch (RuntimeException unavailable) { System.out.println("[apklayer] cannot set nativeLibraryDir: " + unavailable); }
     }
 
     /**
@@ -100,7 +113,7 @@ final class AppEnvironment {
     static void installSystemPackage(Application app) {
         android.content.pm.PackageInfo info = new android.content.pm.PackageInfo();
         info.packageName = "android";
-        android.content.pm.Signature[] platformCert = {new android.content.pm.Signature("3082")}; // some certificate
+        android.content.pm.Signature[] platformCert = HostCertificate.signatures();
         info.signatures = platformCert;
         info.signingInfo = new android.content.pm.SigningInfo(new android.content.pm.SigningDetails(platformCert, 2, new android.util.ArraySet<>(), null));
         info.applicationInfo = new android.content.pm.ApplicationInfo();
@@ -110,9 +123,9 @@ final class AppEnvironment {
         pm.installPackage(info);
         // the app's own package is "signed" too (apps compare their own and callers' signing certificates)
         android.content.pm.PackageInfo own = pm.getInternalMutablePackageInfo(app.getPackageName());
-        if (own != null && own.signingInfo == null) {
-            own.signatures = platformCert;
-            own.signingInfo = info.signingInfo;
+        if (own != null) {
+            if (own.signatures == null) own.signatures = platformCert;
+            if (own.signingInfo == null) own.signingInfo = info.signingInfo;
         }
     }
 
@@ -139,10 +152,12 @@ final class AppEnvironment {
     }
 
     static void startRuntime(Application app) {
+        HostBuild.install();
         HostSystemConfigService.install();
         HostNetwork.install(app);
         HostBattery.install(app);
         HostUsb.install(app);
+        HostStorage.install(app);
         HostLocation.install(app);
         HostSystemConfig.load().apply(app);  // features, privileged-permission allowlist and default grants of the build
         if (Boolean.getBoolean("apklayer.debugdata")) {

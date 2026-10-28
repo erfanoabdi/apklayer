@@ -1,0 +1,54 @@
+package apklayer.host;
+
+import android.app.Application;
+import android.os.Environment;
+import android.os.Process;
+import android.os.storage.StorageManager;
+import android.os.storage.StorageVolume;
+import android.view.Display;
+import java.io.File;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Parameter;
+import org.robolectric.shadow.api.Shadow;
+import org.robolectric.shadows.ShadowDisplay;
+import org.robolectric.shadows.ShadowStorageManager;
+
+/** What every Android device has and the sandbox leaves empty: the primary (emulated, mounted) storage volume, and the display's HDR capabilities object. */
+final class HostStorage {
+    private HostStorage() {}
+
+    static void install(Application app) {
+        StorageManager manager = app.getSystemService(StorageManager.class);
+        if (manager != null && manager.getStorageVolumes().isEmpty()) {
+            StorageVolume primary = primaryVolume();
+            if (primary != null) ((ShadowStorageManager) Shadow.extract(manager)).addStorageVolume(primary);
+        }
+        Display display = app.getSystemService(android.hardware.display.DisplayManager.class).getDisplay(Display.DEFAULT_DISPLAY);
+        if (display != null && display.getHdrCapabilities() == null) ((ShadowDisplay) Shadow.extract(display)).setDisplayHdrCapabilities(display.getDisplayId(), 0f, 0f, 0f);
+    }
+
+    /** StorageVolume's constructor is hidden and varies by release: parameters are filled by type and order (id, description, state; primary, removable, emulated). */
+    private static StorageVolume primaryVolume() {
+        Constructor<?> best = null;
+        for (Constructor<?> c : StorageVolume.class.getDeclaredConstructors()) if (best == null || c.getParameterCount() > best.getParameterCount()) best = c;
+        if (best == null) return null;
+        File root = Environment.getExternalStorageDirectory();
+        String[] strings = {"emulated", "Internal storage", null, Environment.MEDIA_MOUNTED};
+        boolean[] flags = {true, false, true};  // primary, removable, emulated
+        Object[] args = new Object[best.getParameterCount()];
+        int i = 0, s = 0, b = 0;
+        for (Parameter p : best.getParameters()) {
+            Class<?> t = p.getType();
+            if (t == String.class) args[i] = s < strings.length ? strings[s++] : null;
+            else if (t == File.class) args[i] = root;
+            else if (t == boolean.class) args[i] = b < flags.length && flags[b++];
+            else if (t == long.class) args[i] = 0L;
+            else if (t == int.class) args[i] = 0;
+            else if (t == android.os.UserHandle.class) args[i] = Process.myUserHandle();
+            else args[i] = null;
+            i++;
+        }
+        try { best.setAccessible(true); return (StorageVolume) best.newInstance(args); }
+        catch (ReflectiveOperationException failure) { System.out.println("[apklayer] storage: cannot build the primary volume: " + (failure.getCause() != null ? failure.getCause() : failure)); return null; }
+    }
+}

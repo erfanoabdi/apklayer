@@ -58,6 +58,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.opengl.GLES20", HostGLShadows.GLES20.class.getName()),
                 Map.entry("android.opengl.GLUtils", HostGLShadows.GLUtils.class.getName()),
                 Map.entry("android.hardware.HardwareBuffer", ShadowHostNativeHardwareBuffer.class.getName()),
+                Map.entry("dalvik.system.VMRuntime", ShadowHostVMRuntime.class.getName()),
                 Map.entry("dalvik.system.BaseDexClassLoader", ShadowHostBaseDexClassLoader.class.getName())));
         if (System.getProperty("apklayer.webviewprovider") != null) { // the original WebView implementation (a provider APK)
             entries.add(Map.entry("android.webkit.WebView", ShadowHostRealWebView.class.getName()));

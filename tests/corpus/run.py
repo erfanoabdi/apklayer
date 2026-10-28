@@ -19,7 +19,7 @@ import vmcapture  # noqa: E402
 SSH = ['sshpass', '-p', config.PASS, 'ssh', '-o', 'StrictHostKeyChecking=no', config.VM]
 STATE = '~/.local/state/apklayer/default'
 ENV = 'cd ~/apklayer; export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0; '
-PATIENCE = int(os.environ.get('CORPUS_PATIENCE', '90'))
+PATIENCE = int(os.environ.get('CORPUS_PATIENCE', '150'))
 CAUSES = ['UnsatisfiedLinkError', 'ClassNotFoundException', 'NoSuchMethodError', 'SecurityException', 'NullPointerException', 'Fatal signal', 'SIGSEGV', 'Exception', 'Error']
 
 

@@ -49,6 +49,8 @@ public final class NativeLoader {
         if (!f.isFile() && provider != null) f = new File(provider + "/lib", "lib" + name + ".so");
         String androidLibs = System.getProperty("apklayer.androidlibs");
         if (!f.isFile() && androidLibs != null) f = new File(androidLibs, "lib" + name + ".so");
+        String bionic = System.getenv("BIONIC_LD_LIBRARY_PATH");  // the device libraries (liblog, libandroid...): apps that load them by name (SoLoader)
+        if (!f.isFile() && bionic != null) for (String dir2 : bionic.split(":")) { File g = new File(dir2, "lib" + name + ".so"); if (g.isFile()) { f = g; break; } }
         return f.isFile() ? f.getAbsolutePath() : null;
     }
 

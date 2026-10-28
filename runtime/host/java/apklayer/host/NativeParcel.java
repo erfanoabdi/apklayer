@@ -12,7 +12,10 @@ public final class NativeParcel {
     private NativeParcel() {}
     public static void markCallbackFactoryReady() { callbackFactoryReady = true; }
     static void requireCallbackFactory() {
-        if (!callbackFactoryReady) throw new IllegalStateException("Native MediaPlayer callback Parcel adapter is not installed");
+        if (!callbackFactoryReady) {  // the native runtime (and with it the adapter) is loaded on first use; an app may build a MediaPlayer before any other native media call
+            NativeMedia.ensureInitialized();
+            callbackFactoryReady = true;
+        }
     }
     static Scope scope() { allocationDepth.set(allocationDepth.get() + 1); return new Scope(); }
     static boolean allocating() { return allocationDepth.get() != 0; }
