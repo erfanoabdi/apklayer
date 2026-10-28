@@ -63,6 +63,7 @@ void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int
 
 void window_dmabuf_show(struct window *w, int buf, const int32_t *damage)
 {
+    w->framed = 1;
     wl_surface_attach(w->surface, w->dbufs[buf], 0, 0);
     wl_surface_damage_buffer(w->surface, damage[0], damage[1], damage[2], damage[3]);
     wl_surface_commit(w->surface);

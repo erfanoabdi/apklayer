@@ -100,3 +100,5 @@ Open: how keystore2 learns the caller uid (point 3); gatekeeper password enrolme
 - Light/dark is read from gsettings color-scheme when a window is created (no live switch yet; the portal Settings would give that).
 - Hit testing, drag, double-click maximize and content-relative input are unchanged (DECOR_H 32 -> 46).
 - Title is the window title, or the package name when the title is the internal apklayer:pid:instance:pkg one.
+## Splash screen (shell)
+Until an app presents its first frame, `bridge/shell/splash.c` fills the window with the app logo (installed `icon.png`) on a colour derived from it. Tested with `tests/vm/splash-shot.py` (stand-in client, private XDG_RUNTIME_DIR; a second full Android stack cannot run next to another because of the single /dev/binder). Not done: fade-in/out, re-draw on resize before the first frame, a real-app run (needs the default stack free).
