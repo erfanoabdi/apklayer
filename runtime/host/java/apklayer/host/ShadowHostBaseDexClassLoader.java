@@ -56,6 +56,12 @@ public class ShadowHostBaseDexClassLoader {
                 }
             }
         }
-        return Shadow.directlyOn(real, BaseDexClassLoader.class, "findClass", ClassParameter.from(String.class, name));
+        try { return Shadow.directlyOn(real, BaseDexClassLoader.class, "findClass", ClassParameter.from(String.class, name)); }
+        catch (RuntimeException wrapped) {  // directlyOn wraps the checked exception; parent-last loaders catch ClassNotFoundException itself (Aurora Store)
+            Throwable cause = wrapped.getCause();
+            if (cause instanceof java.lang.reflect.InvocationTargetException invoked) cause = invoked.getCause();
+            if (cause instanceof ClassNotFoundException missing) throw missing;
+            throw wrapped;
+        }
     }
 }

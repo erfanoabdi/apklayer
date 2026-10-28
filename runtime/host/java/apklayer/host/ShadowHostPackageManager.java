@@ -54,6 +54,16 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
         return info;
     }
 
+    /** An app asks who installed it (F-Droid, StreetComplete in Application.onCreate): nobody, as for a sideloaded APK. */
+    @Implementation(minSdk = android.os.Build.VERSION_CODES.R)
+    protected android.content.pm.InstallSourceInfo getInstallSourceInfo(String packageName) throws PackageManager.NameNotFoundException {
+        try { return (android.content.pm.InstallSourceInfo) super.getInstallSourceInfo(packageName); }
+        catch (PackageManager.NameNotFoundException unknown) {
+            org.robolectric.Shadows.shadowOf(real).setInstallSourceInfo(packageName, null, null);
+            return (android.content.pm.InstallSourceInfo) super.getInstallSourceInfo(packageName);
+        }
+    }
+
     /** Where an installed app's APK and libraries are (Robolectric leaves them null, Chromium's crash reporter builds file paths from them in Application.onCreate). */
     private static void installedPaths(android.content.pm.ApplicationInfo app) {
         String apps = System.getProperty("apklayer.apps");
