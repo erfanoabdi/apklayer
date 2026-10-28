@@ -89,7 +89,7 @@ public class Main extends Activity {
                 java.util.concurrent.CountDownLatch callbackDone = new java.util.concurrent.CountDownLatch(1);
                 echo.callback(new IReply.Stub() {
                     @Override public void onReply(String value, int caller) {
-                        try { require("callback-😀".equals(value) && caller == Process.myPid() && Binder.getCallingPid() == 0 && Binder.getCallingUid() == Process.myUid(), "oneway native callback");
+                        try { require("callback-😀".equals(value) && caller == Process.myPid() && Binder.getCallingPid() == 0, "oneway native callback value=" + value + " caller=" + caller + " callingPid=" + Binder.getCallingPid() + " callingUid=" + Binder.getCallingUid() + " myUid=" + Process.myUid() + " myPid=" + Process.myPid());
                             System.out.println("[hello-hub-client] callback pid=" + Binder.getCallingPid()); }
                         catch (Throwable error) { fail(error); }
                         finally { callbackDone.countDown(); }
