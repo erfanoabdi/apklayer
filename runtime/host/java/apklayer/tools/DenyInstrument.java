@@ -221,9 +221,22 @@ public final class DenyInstrument {
                     }
                 };
                 ClassVisitor chain = relocate ? new ClassRemapper(target, RELOCATOR) : target;
+                // Dalvik lets a static final field be written outside <clinit> (Scala's Predef$.MODULE$ is set by the constructor); the JVM, for class files of version 53+, does not (nor a final instance field outside <init>): the final goes
+                java.util.Set<String> writtenLate = new java.util.HashSet<>();
+                cr.accept(new ClassVisitor(Opcodes.ASM9) {
+                    String self;
+                    @Override public void visit(int v, int a, String n, String sg, String sn, String[] in) { self = n; }
+                    @Override public org.objectweb.asm.MethodVisitor visitMethod(int a, String n, String d, String sg, String[] ex) {
+                        return new org.objectweb.asm.MethodVisitor(Opcodes.ASM9) {
+                            @Override public void visitFieldInsn(int op, String owner, String fname, String fdesc) {
+                                if (owner.equals(self) && ((op == Opcodes.PUTSTATIC && !n.equals("<clinit>")) || (op == Opcodes.PUTFIELD && !n.equals("<init>")))) writtenLate.add(fname);
+                            }
+                        };
+                    }
+                }, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
                 cr.accept(new ClassVisitor(Opcodes.ASM9, chain) {  // the converter writes a few malformed generic signatures: dropped (the remapper would throw on them)
                     @Override public void visit(int v, int a, String n, String sg, String sn, String[] in) { super.visit(v, a, n, wellFormed(sg), sn, in); }
-                    @Override public org.objectweb.asm.FieldVisitor visitField(int a, String n, String d, String sg, Object value) { return super.visitField(a, n, d, wellFormed(sg), value); }
+                    @Override public org.objectweb.asm.FieldVisitor visitField(int a, String n, String d, String sg, Object value) { if (writtenLate.contains(n)) a &= ~Opcodes.ACC_FINAL; return super.visitField(a, n, d, wellFormed(sg), value); }
                     @Override public org.objectweb.asm.MethodVisitor visitMethod(int a, String n, String d, String sg, String[] ex) { return super.visitMethod(a, n, d, wellFormed(sg), ex); }
                 }, 0);
                 String entryName = e.getName();

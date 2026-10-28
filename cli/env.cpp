@@ -53,6 +53,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     env["APKLAYER_LOGS"] = instance.logs();
     // bionic_translation's libraries first (the patched ones), then ours; the path layer and bionic's TLS slots come first in every lookup
     env["LD_LIBRARY_PATH"] = layout.bionic + ":" + n;
+    env["PATH"] = join(n, "bin") + ":" + getenvOr("PATH", "/usr/local/bin:/usr/bin:/bin");  // getprop for the apps that run it
     env["XDG_DATA_DIRS"] = join(n, "share") + ":" + getenvOr("XDG_DATA_DIRS", "/usr/local/share:/usr/share");
     env["LD_PRELOAD"] = join(n, "libapklayer-preload.so") + ":libgcc_s.so.1";
     env["BIONIC_LD_LIBRARY_PATH"] = l;

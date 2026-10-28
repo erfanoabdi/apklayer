@@ -481,6 +481,17 @@ EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig cfg, EGLContext share, con
     // priority, protected content and the telemetry hint are Android-only context attributes
     auto a = filtered(attribs, {EGL_CONTEXT_PRIORITY_LEVEL_IMG, EGL_PROTECTED_CONTENT_EXT, EGL_TELEMETRY_HINT_ANDROID});
     EGLContext ctx = host<PFNEGLCREATECONTEXTPROC>("eglCreateContext")(dpy, cfg, share, a.data());
+    if (ctx == EGL_NO_CONTEXT) {  // no client version means OpenGL ES 1.x, which the host's Mesa does not offer: an ES 2 context answers the queries ES 1 apps make (Device Info HW's renderer strings)
+        bool versioned = false;
+        for (size_t i = 0; i + 1 < a.size(); i += 2) if (a[i] == EGL_CONTEXT_CLIENT_VERSION) versioned = true;
+        if (!versioned) {
+            std::vector<EGLint> two(a.begin(), a.end());
+            if (!two.empty() && two.back() == EGL_NONE) two.pop_back();
+            two.push_back(EGL_CONTEXT_CLIENT_VERSION); two.push_back(2); two.push_back(EGL_NONE);
+            ctx = host<PFNEGLCREATECONTEXTPROC>("eglCreateContext")(dpy, cfg, share, two.data());
+            if (ctx != EGL_NO_CONTEXT) return ctx;
+        }
+    }
     if (ctx == EGL_NO_CONTEXT) {  // diagnosis: engines (bgfx) probe several versions, the last failure is the one they report
         EGLint err = host<EGLint (*)()>("eglGetError")();
         std::string list;

@@ -39,6 +39,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.os.ParcelFileDescriptor", ShadowHostRealParcelFileDescriptor.class.getName()),
                 Map.entry("android.content.ContentResolver", ShadowHostContentResolver.class.getName()),
                 Map.entry("android.provider.Settings", ShadowHostSettings.class.getName()),
+                Map.entry("android.os.UserManager", ShadowHostUserManager.class.getName()),
                 Map.entry("android.os.StatFs", ShadowHostStatFs.class.getName()),
                 Map.entry("android.compat.Compatibility", ShadowHostCompatibility.class.getName()),
                 Map.entry("android.os.storage.StorageManager", ShadowHostStorageManager.class.getName()),

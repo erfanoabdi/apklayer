@@ -1,0 +1,6 @@
+#!/bin/sh
+# Android's getprop for apps that run it (Device Info HW): the property store through aprop.
+d=$(dirname "$0")
+[ $# -eq 0 ] && exec "$d/aprop" dump
+v=$("$d/aprop" get "$1")
+if [ -n "$v" ]; then echo "$v"; else echo "$2"; fi
