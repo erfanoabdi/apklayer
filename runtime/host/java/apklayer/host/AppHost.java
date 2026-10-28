@@ -412,6 +412,7 @@ public final class AppHost implements Runnable {
         if (previous != null) previous.pause();
         boolean bottom = stack.isEmpty();  // the first activity of the task answers isTaskRoot() already while it is created
         taskRootBuilding = bottom;
+        HostRoles.install();
         ActivityController<? extends Activity> c = Robolectric.buildActivity(cls, intent).create();
         taskRootBuilding = false;
         if (bottom) taskRoot = c.get();
