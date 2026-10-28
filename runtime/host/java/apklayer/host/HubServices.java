@@ -38,9 +38,18 @@ final class HubServices {
             return (info.flags & android.content.pm.ServiceInfo.FLAG_ISOLATED_PROCESS) != 0 || (info.processName != null && !info.processName.equals(context.getPackageName()));
         } catch (android.content.pm.PackageManager.NameNotFoundException | RuntimeException unknown) { return false; }
     }
+    /** The process of an own-package service that has one of its own (each GeckoView child is a process): its own hub peer, as an isolated instance is. Null for the app's process. */
+    private static String ownProcess(Context context, Intent intent) {
+        if (intent.getComponent() == null || !intent.getComponent().getPackageName().equals(context.getPackageName())) return null;
+        try {
+            android.content.pm.ServiceInfo info = context.getPackageManager().getServiceInfo(intent.getComponent(), 0);
+            return (info.flags & android.content.pm.ServiceInfo.FLAG_ISOLATED_PROCESS) != 0 || (info.processName != null && !info.processName.equals(context.getPackageName())) ? info.name : null;
+        } catch (android.content.pm.PackageManager.NameNotFoundException | RuntimeException unknown) { return null; }
+    }
     static boolean bind(Context context, Intent intent, int flags, Executor executor, ServiceConnection connection) { return bind(context, intent, flags, executor, connection, null); }
     static boolean bind(Context context, Intent intent, int flags, Executor executor, ServiceConnection connection, String instance) {
         java.util.Objects.requireNonNull(connection);
+        if (instance == null) instance = ownProcess(context, intent);
         LoadedApk loaded = ReflectionHelpers.getField(context, "mPackageInfo");
         if (loaded == null) throw new IllegalStateException("No package dispatcher in this context");
         Context outer = ReflectionHelpers.callInstanceMethod(context, "getOuterContext");
