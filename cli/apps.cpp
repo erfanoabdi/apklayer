@@ -108,7 +108,8 @@ std::string installApp(const Layout& l, const Instance& inst, const std::string&
         conv.env = env;
         conv.logFile = join(inst.logs(), "convert.log");
         if (runAndWait(conv) != 0) die("conversion failed (see " + conv.logFile + ")");
-        sh({"java", "-cp", l.deps + "/libs/*:" + l.hostClasses(), "apklayer.tools.DenyInstrument", join(tmp, "raw.jar"), join(tmp, "classes.jar")});
+        if (sh({"java", "-cp", l.deps + "/libs/*:" + l.hostClasses(), "apklayer.tools.DenyInstrument", join(tmp, "raw.jar"), join(tmp, "classes.jar")}) != 0)
+            die("preparing the converted classes failed (a half-written classes.jar is not installed)");
         unlink(join(tmp, "raw.jar").c_str());
     }
     writeFile(join(tmp, "key"), key + "\n");

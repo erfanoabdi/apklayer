@@ -4,7 +4,7 @@
 set -e
 . "$(dirname "$0")/../tests/vm/config.sh"
 OUT=/home/erfanabdi/los24/out/target/product/generic_arm64
-orb -m ubuntu22-x86 tar cf - -C "$OUT" system/etc/cgroups.json system/etc/task_profiles.json system/etc/task_profiles system/usr/hyphen-data system/etc/permissions system/etc/sysconfig system/etc/default-permissions \
+orb -m ubuntu22-x86 tar cf - -C "$OUT" system/etc/cgroups.json system/etc/task_profiles.json system/etc/task_profiles system/usr/hyphen-data system/etc/permissions system/etc/compatconfig system/etc/sysconfig system/etc/default-permissions \
     | sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" 'mkdir -p ~/arm64-native/android-root && tar xf - -C ~/arm64-native/android-root && ls ~/arm64-native/android-root/system/etc | head'
 # Original audio policy tables are source XML assets, not generated libraries.
 orb -m ubuntu22-x86 tar cf - -C /home/erfanabdi/los24/frameworks/av/services/audiopolicy/config \

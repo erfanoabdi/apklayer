@@ -78,6 +78,13 @@ public final class DenyInstrument {
         return c != null && c.startsWith("android/");
     }
 
+    /** The signature if ASM can parse it, else null. */
+    private static String wellFormed(String signature) {
+        if (signature == null) return null;
+        try { new org.objectweb.asm.signature.SignatureReader(signature).accept(new org.objectweb.asm.signature.SignatureVisitor(Opcodes.ASM9) {}); return signature; }
+        catch (RuntimeException malformed) { return null; }
+    }
+
     public static void main(String[] args) throws Exception {
         try (JarFile scan = new JarFile(args[0])) {
             for (JarEntry e : Collections.list(scan.entries())) {
@@ -185,7 +192,12 @@ public final class DenyInstrument {
                         super.visitAnnotation(ANNO, true).visitEnd();
                     }
                 };
-                cr.accept(relocate ? new ClassRemapper(target, RELOCATOR) : target, 0);
+                ClassVisitor chain = relocate ? new ClassRemapper(target, RELOCATOR) : target;
+                cr.accept(new ClassVisitor(Opcodes.ASM9, chain) {  // the converter writes a few malformed generic signatures: dropped (the remapper would throw on them)
+                    @Override public void visit(int v, int a, String n, String sg, String sn, String[] in) { super.visit(v, a, n, wellFormed(sg), sn, in); }
+                    @Override public org.objectweb.asm.FieldVisitor visitField(int a, String n, String d, String sg, Object value) { return super.visitField(a, n, d, wellFormed(sg), value); }
+                    @Override public org.objectweb.asm.MethodVisitor visitMethod(int a, String n, String d, String sg, String[] ex) { return super.visitMethod(a, n, d, wellFormed(sg), ex); }
+                }, 0);
                 String entryName = e.getName();
                 if (relocate) entryName = RELOCATOR.map(entryName.substring(0, entryName.length() - 6)) + ".class";
                 JarEntry ne = new JarEntry(entryName);
