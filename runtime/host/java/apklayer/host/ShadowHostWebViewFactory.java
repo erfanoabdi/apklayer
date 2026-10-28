@@ -33,6 +33,9 @@ public class ShadowHostWebViewFactory {
     /** The loader of the provider's classes: what androidx.webkit loads Chromium's support-library glue through (it must see the framework's WebViewFactoryProvider). */
     static ClassLoader providerLoader() { return getProviderClass().getClassLoader(); }
 
+    /** Known from the start, not from the package feature the host sets once the Application exists (apps call WebView statics in Application.onCreate). */
+    @Implementation protected static boolean isWebViewSupported() { return System.getProperty("apklayer.webviewprovider") != null; }
+
     @Implementation protected static synchronized Class<?> getProviderClass() {
         if (providerClass != null) return providerClass;
         String dir = System.getProperty("apklayer.webviewprovider");

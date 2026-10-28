@@ -1,28 +1,38 @@
-# Compatibility corpus results
+# Compatibility results (2026-10-28, UTM VM, device-library route)
 
-Run 2026-10-28 10:27
+One run per app (tests/vm/appcheck.sh for errors, tests/vm/appshot.py for a screenshot). "Draws" = a screenshot shows the app's own UI.
 
-| app | kind | install | launch | first frame | note |
-|---|---|---|---|---|---|
-| uibench | AOSP views, GPU | ok | ok | ok | - |
-| otr2 | native game, bgfx, GLES 3.1 | ok | ok | FAIL | Caused by: java.lang.ClassNotFoundException: android.webkit.WebViewFactoryProvider |
-| newpipe | Java, media, WebView-less | ok | ok | ok | - |
-| nextcloud | Java, network | ok | FAIL | FAIL | java.lang.UnsatisfiedLinkError: 'void apklayer.host.NativeLoader.setLibraryPath(java.lang.String)' |
-| opencamera | camera | ok | ok | ok | - |
-| telegram | Java + native | ok | FAIL | FAIL | java.lang.ClassNotFoundException: org.telegram.messenger.AnimatedFileDrawableStream |
-| whatsapp | Java + native | ok | FAIL | FAIL | java.lang.UnsatisfiedLinkError: couldn't find DSO to load: liblog.so result: 0 |
-| cpu-z | system info | ok | ok | ok | - |
-| drminfo | DRM info | ok | FAIL | FAIL | [apklayer] cannot set nativeLibraryDir: java.lang.RuntimeException: java.lang.NullPointerException: Cannot inv |
-| gpstest | location | ok | ok | ok | - |
-| wireguard | VPN, native | ok | FAIL | FAIL | [apklayer] cannot set nativeLibraryDir: java.lang.RuntimeException: java.lang.NullPointerException: Cannot inv |
-| openvpn | VPN, native | ok | ok | ok | - |
-| shelter | device admin | ok | ok | ok | - |
-| vibrations | vibrator | ok | ok | ok | - |
-| barcode | camera | ok | ok | ok | - |
-| astro | files | ok | ok | ok | - |
-| device-info | system info | ok | ok | ok | - |
-| sensors | sensors | ok | ok | ok | - |
-| microg | Google services | ok | ok | ok | - |
-| documentsui | system app | ok | ok | ok | - |
-
-14 of 20 reach a first GPU frame.
+| App | Package | State | Notes |
+|---|---|---|---|
+| Google Meet 377 | com.google.android.apps.tachyon | draws welcome screen | account list needs the microG sign-in |
+| Telegram FOSS | org.telegram.messenger | draws login (phone number) | intro illustration blank (TextureView) |
+| WhatsApp 2.21.9 | com.whatsapp | draws, "Date is inaccurate" | too old a build for today's date; needs a newer APK |
+| CPU-Z | com.cpuid.cpu_z | draws | no cpufreq on the VM |
+| Nextcloud | com.nextcloud.client | draws login | |
+| OpenVPN for Android | de.blinkt.openvpn | draws | |
+| Shelter | net.typeblog.shelter | draws | work profile features are out of scope |
+| Sensors Multitool | com.wered.sensorsmultitool | draws, Battery page blank | |
+| NewPipe | org.schabi.newpipe | draws, Trending list empty | no error in the log; network works |
+| ASTRO | com.metago.astro | splash only after 20 s | |
+| OpenCalc | com.darkempire78.opencalculator | draws | |
+| BobBall | org.bobstuff.bobball | draws | |
+| 1010! Klooni | dev.lonami.klooni | draws | libgdx |
+| Shattered Pixel Dungeon | com.shatteredpixel.shatteredpixeldungeon | draws | libgdx |
+| Anarch RE | dev.serwin.AnarchRE | draws | |
+| Anuto TD | ch.logixisland.anuto | draws | |
+| Pekka Kana 2 | org.pgnapps.pk2 | draws | |
+| PianOli | com.nicobrailo.pianoli | draws | |
+| AntennaPod | de.danoeh.antennapod | draws | |
+| 2048 (Privacy Friendly) | org.secuso.privacyfriendly2048 | draws | |
+| Unciv | com.unciv.app | black window | starts, no error |
+| TIC-80 | com.nesbox.tic | black window | game loop runs (SDL), landscape request |
+| Super Retro Mega Wars | com.serwylo.retrowars | runs | not looked at |
+| AnkiDroid | com.ichi2.anki | no window | Chromium startup from Application.onCreate throws (WebView statics before any WebView) |
+| Puzzles (Simon Tatham) | name.boyle.chris.sgtpuzzles | exits | opens its Play Store page and finishes |
+| Open Sudoku | org.moire.opensudoku | crashes | `duplicate column name: rating_level` creating its database |
+| Rocks 'n' Diamonds | org.artsoft.rocksndiamonds | aborts | SDL_image: IMG_Load failed (asset read) |
+| WireGuard | com.wireguard.android | aborts | Go runtime/cgo `inittls: could not find pthread key` (bionic TLS slots) |
+| DRM Info | com.androidfung.drminfo | crashes | Google Ads / Firebase need Play Services |
+| Open Camera, Barcode Scanner, Motorola Camera | | no camera | no camera HAL |
+| Clash, SSR | | not supported | 32-bit (armeabi-v7a) only |
+| Aegis | com.beemdevelopment.aegis | install fails | `describe` step prints nothing |
