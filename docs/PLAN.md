@@ -47,6 +47,7 @@ If a decision changes, change it here in the same commit as the code.
 - OTR2: input and audio in the game are unchecked; `AChoreographer: No JVM provided` (harmless so far). P2: 2x HiDPI output and a real IME were never exercised.
 
 **Missing features**
+- DocumentsUI (tree APK `system/priv-app/DocumentsUI`, installs as "Files"): opens its window with `-Dapklayer.grantall=true` (grants the manifest's permissions, needed for HIDE_OVERLAY_WINDOWS), then crashes in `UserManager.getUserProperties()` (null `UserProperties`: a user-properties shadow is missing).
 - System apps and providers on every instance (Settings, Contacts, Calendar, Download, Telephony, UserDictionary, DocumentsUI, MediaProvider) hosted in an instance system JVM.
 - Hub gaps: several bindings per connection, filter-specific rebind, signature/runtime permission grants.
 - **Keystore first** (`android.security.keystore`, KeyStore/KeyGenParameterSpec, used by many apps), then the hardware domains last and one at a time (`aosp/hals/README.md`): camera, GNSS (GeoClue), sensors (IIO), vibrator/haptics and game controllers (evdev), battery/power (UPower, logind), connectivity (NetworkManager, ModemManager; honest "no SIM"), USB (udev), biometrics (fprintd), NFC (PC/SC), portals (files, screen capture), Bluetooth (BlueZ bridge). The order after Keystore is from the old plan and open to change. Decided: backlight and thermal are the host's; accounts the Android way.
