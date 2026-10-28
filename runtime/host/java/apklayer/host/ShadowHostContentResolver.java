@@ -14,6 +14,9 @@ public class ShadowHostContentResolver extends ShadowContentResolver {
     /** The content service's per-uri cache (DocumentsUI reads its roots through it): no service here, so nothing is cached. */
     @Implementation protected android.os.Bundle getCache(Uri key) { return null; }
     @Implementation protected void putCache(Uri key, android.os.Bundle value) {}
+    /** Sync status listeners belong to the content service, which does not exist here: a handle that does nothing (Tasks registers one at start). */
+    @Implementation protected static Object addStatusChangeListener(int mask, android.content.SyncStatusObserver observer) { return new Object(); }
+    @Implementation protected static void removeStatusChangeListener(Object handle) {}
     private static boolean hub() { return HubClient.connected(); }
     private static void tell(Uri uri, int flags) { if (uri != null && hub()) HubClient.current().notifyChange(uri, flags); }
 

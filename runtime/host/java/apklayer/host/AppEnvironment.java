@@ -34,6 +34,7 @@ final class AppEnvironment {
     static void setUpApplication(AndroidSandbox sandbox, Path apk, boolean describing) {
         System.setProperty("java.vm.name", "Dalvik");  // libgdx, Netty ... pick their Android code path (native libraries through System.loadLibrary) by these names
         System.setProperty("java.runtime.name", "Android Runtime");
+        if (java.security.Security.getProvider("AndroidKeyStore") == null) java.security.Security.addProvider(new HostKeyStoreProvider());  // apps open it in Application.onCreate
         HostCompat.install();  // behavior changes by the app's target SDK (PendingIntent mutability, ...)
         HostLibraryPath.install();  // before the app's own code runs: SoLoader finds the system libraries it looks up by name
         if (Boolean.getBoolean("apklayer.logcat")) org.robolectric.shadows.ShadowLog.stream = System.out; // android.util.Log output (-Dapklayer.logcat=true, APKLAYER_LOGCAT=1)
@@ -156,6 +157,7 @@ final class AppEnvironment {
     }
 
     static void startRuntime(Application app) {
+        if (Boolean.getBoolean("apklayer.logcat")) for (String name : new String[] {"alarm", "jobscheduler", "notification", "connectivity"}) System.out.println("[apklayer] service " + name + " = " + app.getSystemService(name));
         HostBuild.install();
         HostSystemConfigService.install();
         HostNetwork.install(app);

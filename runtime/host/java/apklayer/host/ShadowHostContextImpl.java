@@ -25,6 +25,11 @@ import org.robolectric.shadows.ShadowContextImpl;
 @Implements(className = "android.app.ContextImpl")
 public class ShadowHostContextImpl extends ShadowContextImpl {
     @RealObject private Context real;
+    @Implementation protected Object getSystemService(String name) {
+        Object service = (Object) Shadow.directlyOn(real, "android.app.ContextImpl", "getSystemService", ClassParameter.from(String.class, name));
+        if (service == null && Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] no system service " + name + " for " + real.getPackageName());
+        return service;
+    }
     /** An Activity's context is associated with the display; the contexts Robolectric builds for activities are not marked as such (libgdx apps ask the activity for its display). */
     @Implementation protected android.view.Display getDisplay() {
         return ((android.hardware.display.DisplayManager) real.getSystemService(Context.DISPLAY_SERVICE)).getDisplay(android.view.Display.DEFAULT_DISPLAY);
