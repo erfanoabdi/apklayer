@@ -101,7 +101,7 @@ int runHub(const Layout& l, const Instance& inst) {
     hub.argv = jvm;
     hub.env = ne.env;
     int pid = spawn(hub);
-    writeFile(join(inst.stateDir, "hub.pid"), std::to_string(pid) + "\n");
+    writeFile(join(inst.stateDir, "hub.pid"), std::to_string(pid) + "\n" + std::to_string(getpid()) + "\n");  // the JVM, then this launcher (it holds hub.lock until the JVM is gone)
     // Like init after a service registers: once the hub is published to the service manager, apklayer.hub.ready=1 (clients block on it)
     setProperty(l, ne, kHubReadyProperty, "0");
     Spawn published;

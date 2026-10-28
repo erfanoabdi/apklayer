@@ -40,17 +40,16 @@ If a decision changes, change it here in the same commit as the code.
 - `hub-services.sh auto`: "oneway native callback". TextureView renders black on the UTM VM. WebView test needs the provider set up on the VM (`scripts/webview-setup.sh`, sudo).
 - `pendingintents.sh`: "mutable PendingIntent did not take the fill-in extra" (seen once after the C++ tool; being re-checked). `activities.sh` flaked once in a full run.
 - Vulkan presentation: opt-in, Venus aborts on imported virgl dmabufs on the UTM host; needs a real-GPU host or a Venus-allocated swapchain bridge.
-- Modern Combat 3 (APK and OBB data from the user): `UnsatisfiedLinkError: no ModernCombat3` (the APK ships only armeabi/armeabi-v7a libraries).
 
 **The user asked to revisit**
-- NewPipe: video/audio lag (an audio-clock fix did not help the user) and the missing loading spinner; the user's other test apps in `~/TestApps` (some fail: converter, classpath conflicts such as NewPipe's R8-merged `kotlin.math.MathKt`): record app/status/cause in `docs/APPS.md` and fix by cause.
+- The user's other test apps in `~/TestApps` (some fail: converter, classpath conflicts such as NewPipe's R8-merged `kotlin.math.MathKt`): record app/status/cause and fix by cause.
 - Desktop notifications: popup policy is done; per-app mute, closing a popup when the app cancels, and notification actions are open.
 - OTR2: input and audio in the game are unchecked; `AChoreographer: No JVM provided` (harmless so far). P2: 2x HiDPI output and a real IME were never exercised.
 
 **Missing features**
 - System apps and providers on every instance (Settings, Contacts, Calendar, Download, Telephony, UserDictionary, DocumentsUI, MediaProvider) hosted in an instance system JVM.
 - Hub gaps: several bindings per connection, filter-specific rebind, signature/runtime permission grants.
-- Hardware domains, one at a time (`aosp/hals/README.md`): camera first, then GNSS, sensors, vibrator, battery, connectivity (host's real state), USB, biometrics, NFC, portals; Bluetooth through a BlueZ bridge. Decided: backlight and thermal are the host's; accounts the Android way.
+- Hardware domains, one at a time (`aosp/hals/README.md`), in this order: camera, GNSS (GeoClue), sensors (IIO), vibrator/haptics and game controllers (evdev), battery/power (UPower, logind), connectivity (NetworkManager, ModemManager; honest "no SIM"), USB (udev), biometrics (fprintd), NFC (PC/SC), portals (files, screen capture), Bluetooth (BlueZ bridge, scoped by app usage). Only "media and camera first, then the rest" was stated by the user; the rest of the order is from the old plan and open to change. Decided: backlight and thermal are the host's; accounts the Android way.
 - microG; per-app/instance sandbox (bwrap is blocked by Ubuntu's userns restriction); other codecs, higher-bit-depth VP9, hardware decoder dmabuf import.
 - Compatibility corpus (P3), the proposed next task in `STATUS.md`.
 

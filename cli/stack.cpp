@@ -278,7 +278,8 @@ void stopStack(const Layout& l, const Instance& inst) {
         unlink(join(inst.stateDir, f).c_str());
     }
     // the hub lives on the stack's binder: it ends with it (a stale one would hold the lock for the next stack)
-    if (auto hub = readFile(join(inst.stateDir, "hub.pid"))) terminate(atoi(hub->c_str()));
+    if (auto hub = readFile(join(inst.stateDir, "hub.pid")))  // the hub JVM, then its launcher: the next hub can take hub.lock as soon as stop returns
+        for (const std::string& pid : split(*hub, '\n')) terminate(atoi(pid.c_str()));
     auto pid = readFile(inst.pidFile());
     if (pid) terminate(atoi(pid->c_str()));
 }
