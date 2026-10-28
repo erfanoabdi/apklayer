@@ -199,7 +199,7 @@ public final class Services {
                 }
                 CONNECTIONS.put(conn, className(cn));
                 IBinder shown = r.binder;
-                if (Boolean.getBoolean("apklayer.logcat") && shown != null) { if (r.traced == null) r.traced = traced(shown); shown = r.traced; } // one IBinder for every connection, as on Android
+                if (Boolean.getBoolean("apklayer.tracebind") && shown != null) { if (r.traced == null) r.traced = traced(shown); shown = r.traced; } // one IBinder for every connection, as on Android
                 IBinder binder = shown;
                 new Handler(Looper.getMainLooper()).post(() -> conn.onServiceConnected(cn, binder));
                 for (Runnable next; (next = DEFERRED.poll()) != null; ) next.run();
