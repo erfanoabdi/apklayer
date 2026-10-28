@@ -47,9 +47,9 @@ final class HubServices {
         } catch (android.content.pm.PackageManager.NameNotFoundException | RuntimeException unknown) { return null; }
     }
     static boolean bind(Context context, Intent intent, int flags, Executor executor, ServiceConnection connection) { return bind(context, intent, flags, executor, connection, null); }
-    static boolean bind(Context context, Intent intent, int flags, Executor executor, ServiceConnection connection, String instance) {
+    static boolean bind(Context context, Intent intent, int flags, Executor executor, ServiceConnection connection, String requested) {
         java.util.Objects.requireNonNull(connection);
-        if (instance == null) instance = ownProcess(context, intent);
+        final String instance = requested != null ? requested : ownProcess(context, intent);
         LoadedApk loaded = ReflectionHelpers.getField(context, "mPackageInfo");
         if (loaded == null) throw new IllegalStateException("No package dispatcher in this context");
         Context outer = ReflectionHelpers.callInstanceMethod(context, "getOuterContext");
