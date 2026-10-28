@@ -38,6 +38,10 @@ Older dated notes (GPU follow-up, TextureView, MC3, Vulkan checkpoints, OTR2, ro
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 
+### 2026-10-28 — libapklayer_egl: CPU copy experiment for the window present (incremental, authorized)
+- Same TextureView question: `APKLAYER_EGL_CPUCOPY` reads the frame back and writes it into the dequeued buffer through an mmap of its dmabuf (instead of relying on the GPU blit being visible to the consumer's context). `scripts/orb-build-module.py libapklayer_egl hals/graphics/egl Egl.cpp`, no graph change, no clean. Env-guarded, temporary.
+- Result: the CPU copy cannot be done: the buffer\'s dmabuf refuses mmap (EACCES). `dmabuf-share.c` with a proper texture filter passes for 2D and external targets (the first run\'s 2D failures were an incomplete texture of my own). `APKLAYER_EGL_PROBE` was extended in three more builds (the image-to-texture call, which never fired; the thread of each buffer import; each swap): details in `docs/PLAN.md`.
+
 ### 2026-10-28 — libapklayer_egl: temporary probe of the window copy (incremental, authorized)
 - TextureView draws black on the UTM VM although dmabuf sharing between two host contexts works (tests/vm/dmabuf-share.c). To tell a black producer frame from a black consumer sampling, `APKLAYER_EGL_PROBE` logs the centre pixel of the frame before and after the copy in `presentToWindow`. `scripts/orb-build-module.py libapklayer_egl hals/graphics/egl Egl.cpp` (no graph change, no clean). To be removed again.
 - Result: built (three times: probe at info level, at warning level, and an `APKLAYER_EGL_NOFENCE` switch that finishes the GPU work and queues no fence) and installed on the VM; the previous library is `~/libapklayer_egl.so.before-probe` there. Findings are in `docs/PLAN.md` (TextureView). The probe and the switch are env-guarded and stay until the cause is found.

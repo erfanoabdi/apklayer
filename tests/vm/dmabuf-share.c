@@ -68,6 +68,7 @@ static void variant(struct gbm_device* gbm, unsigned usage, const char* name, in
     if (img2 == EGL_NO_IMAGE) { printf("FAIL %s: consumer import 0x%x\n", name, eglGetError()); return; }
     GLenum target = external ? GL_TEXTURE_EXTERNAL_OES : GL_TEXTURE_2D;
     GLuint ctex; glGenTextures(1, &ctex); glBindTexture(target, ctex); targetTexture(target, img2);
+    glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_LINEAR); glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);  /* a 2D texture without mipmaps is incomplete with the default filter */
     GLuint outTex, outFbo;
     glGenTextures(1, &outTex); glBindTexture(GL_TEXTURE_2D, outTex);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);

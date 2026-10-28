@@ -13,9 +13,13 @@
 #include <log/log.h>
 #include <nativebase/nativebase.h>
 #include <poll.h>
+#include <sys/prctl.h>
+#include <sys/mman.h>
 #include <system/window.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <cerrno>
 #include <cstring>
 #include <initializer_list>
 #include <mutex>
@@ -154,9 +158,15 @@ EGLImage imageFromNativeBuffer(EGLDisplay dpy, ANativeWindowBuffer* buf) {
     if (image == EGL_NO_IMAGE)
         ALOGE("host eglCreateImageKHR(dmabuf %ux%u fourcc 0x%x planes %u modifier 0x%llx) failed: EGL error 0x%x (display refs %u)", d.width, d.height,
               d.fourcc, d.numPlanes, (unsigned long long)d.modifier, host<EGLint (*)()>("eglGetError")(), displayRefs);
-    else
+    else {
+        if (getenv("APKLAYER_EGL_PROBE")) {  // temporary: who imports which buffer
+            char name[32] = {0};
+            prctl(PR_GET_NAME, name);
+            ALOGW("probe: image of buffer %llx (%ux%u usage 0x%llx) created on thread %s", (unsigned long long)d.id, d.width, d.height, (unsigned long long)d.usage, name);
+        }
         ALOGI("imported buffer id %llx: %ux%u fourcc 0x%x android format %u usage 0x%llx planes %u stride %u modifier 0x%llx", (unsigned long long)d.id,
               d.width, d.height, d.fourcc, d.androidFormat, (unsigned long long)d.usage, d.numPlanes, d.stride[0], (unsigned long long)d.modifier);
+    }
     return image;
 }
 
@@ -287,6 +297,23 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
             ALOGW("probe: window %ux%u center src %d,%d,%d,%d dst %d,%d,%d,%d (buffer %ux%u fourcc 0x%x)", w.width, w.height, before[0], before[1], before[2], before[3],
                   after[0], after[1], after[2], after[3], dst->width, dst->height, format);
         }
+        if (getenv("APKLAYER_EGL_CPUCOPY")) {  // temporary experiment: the frame into the buffer through the CPU (read back, mmap the dmabuf)
+            HandleData dd;
+            if (decode(dst->handle, &dd)) {
+                std::vector<unsigned char> rows((size_t)w.width * w.height * 4);
+                gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8D40, srcFbo);
+                gl<void (*)(int, int, int, int, unsigned, unsigned, void*)>("glReadPixels")(0, 0, w.width, w.height, 0x1908, 0x1401, rows.data());
+                size_t length = (size_t)dd.stride[0] * dd.height;
+                void* map = mmap(nullptr, length, PROT_READ | PROT_WRITE, MAP_SHARED, dst->handle->data[0], 0);
+                if (map == MAP_FAILED) ALOGW("cpucopy: mmap of the buffer failed (errno %d)", errno);
+                else {
+                    for (uint32_t y = 0; y < dd.height && y < w.height; y++)
+                        memcpy((char*)map + (size_t)y * dd.stride[0], rows.data() + (size_t)y * w.width * 4, std::min<size_t>(dd.stride[0], (size_t)w.width * 4));
+                    munmap(map, length);
+                    ALOGW("cpucopy: wrote %ux%u into the buffer", w.width, w.height);
+                }
+            }
+        }
         gl<void (*)()>("glFlush")();
         auto createSync = host<PFNEGLCREATESYNCKHRPROC>("eglCreateSyncKHR");
         auto dupFence = host<PFNEGLDUPNATIVEFENCEFDANDROIDPROC>("eglDupNativeFenceFDANDROID");
@@ -367,6 +394,11 @@ void resizeWindow(Window* win) {
 EGLBoolean swapWindow(EGLDisplay dpy, EGLSurface surface) {
     std::lock_guard<std::recursive_mutex> lock(windowsLock);
     Window* win = windowOf(surface);
+    if (getenv("APKLAYER_EGL_PROBE")) {
+        char name[32] = {0};
+        prctl(PR_GET_NAME, name);
+        ALOGW("probe: eglSwapBuffers surface %p on %s: %s", surface, name, win ? (win->native ? "window" : "no native window") : "not ours");
+    }
     if (!win) return host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglSwapBuffers")(dpy, surface);
     if (!win->native) return EGL_TRUE;  // a pbuffer is never presented
     EGLBoolean ok = host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglSwapBuffers")(dpy, win->host);
@@ -623,6 +655,19 @@ FORWARDED(DECLARE_SLOT)
             "\n\tldr x16, [x16, :lo12:host_slot_" #name "]\n\tbr x16\n");
 FORWARDED(DEFINE_STUB)
 
+// temporary (APKLAYER_EGL_PROBE): the image-to-texture call with its target and the GL error it leaves
+static void probeImageTarget(unsigned target, void* image) {
+    auto call = host<void (*)(unsigned, void*)>("glEGLImageTargetTexture2DOES");
+    auto getError = host<unsigned (*)()>("glGetError");
+    auto getInt = host<void (*)(unsigned, int*)>("glGetIntegerv");
+    while (getError() != 0) {}
+    call(target, image);
+    unsigned error = getError();
+    int bound = 0;
+    getInt(target == 0x8D65 ? 0x8D67 : 0x8069, &bound);  // GL_TEXTURE_BINDING_EXTERNAL_OES / _2D
+    ALOGW("probe: glEGLImageTargetTexture2DOES target 0x%x image %p -> GL error 0x%x (texture %d bound)", target, image, error, bound);
+}
+
 // extensions an app or library may ask eglGetProcAddress for: ours where we implement them, the host's otherwise
 __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char* name) {
     struct { const char* n; void* f; } ours[] = {
@@ -640,6 +685,7 @@ __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char* name) {
         {"eglPresentationTimeANDROID", (void*)eglPresentationTimeANDROID},
         {"eglCreatePlatformWindowSurface", (void*)eglCreatePlatformWindowSurface},
     };
+    if (getenv("APKLAYER_EGL_PROBE") && !strcmp(name, "glEGLImageTargetTexture2DOES")) return reinterpret_cast<__eglMustCastToProperFunctionPointerType>(probeImageTarget);
     for (auto& o : ours) if (!strcmp(name, o.n)) return reinterpret_cast<__eglMustCastToProperFunctionPointerType>(o.f);
     auto proc = host<__eglMustCastToProperFunctionPointerType (*)(const char*)>("eglGetProcAddress");
     return host<__eglMustCastToProperFunctionPointerType (*)(const char*)>("eglGetProcAddress")(name);
