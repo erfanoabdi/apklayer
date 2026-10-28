@@ -2,17 +2,20 @@
 
 Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan: `docs/PLAN.md`. History: `CHANGELOG.md`.
 
-## NEXT TASK (proposed, waiting for the user's OK)
-**Build the compatibility corpus on the current route.** Everything else is done, blocked or deferred, and "works" is only anecdotal today.
-1. A small APK set in `tests/corpus/`: UiBench, OTR2, one app per game engine (Unity, UE4, Godot, cocos2d-x, Flutter), a few F-Droid apps, WebView and media samples.
-2. A runner (`tests/corpus/run.sh`): install, launch on the test VM, wait for the first frame (property or log marker, no timers), screenshot, record pass/fail in `tests/corpus/results.md`.
-3. Triage each failure into a gap to fix; fix the most common first.
-Alternatives, if the user prefers: ship path (x86_64 Android build, Flatpak: needs approval for a second `out/`), audio HAL stream failure on the UTM VM, one hardware domain (camera/sensors/GNSS).
+## NEXT TASKS (in order; item 1 is proposed, the user confirms)
+1. **Fix the intermittent app hang** in `HardwareRenderer.nSetStopped` when a window goes inactive (another app's window appears). It makes the multi-app hub tests flaky and would hit real use.
+2. **Compatibility corpus** (`tests/corpus/`): UiBench, OTR2, one app per engine (Unity, UE4, Godot, cocos2d-x, Flutter), F-Droid apps, WebView and media samples; a runner that installs, launches, waits for the first frame (marker, no timers), screenshots and records pass/fail in `tests/corpus/results.md`; triage failures into gaps.
+3. **Android Keystore** (many apps need it): `KeyStore`/`KeyGenParameterSpec` backed by a host key store, with a test app.
+4. **The failures we already know**: audio HAL stream open on the UTM VM, TextureView black on the UTM VM, `hub-services.sh auto` ("oneway native callback"), WebView setup on the VM.
+5. **System apps and providers on every instance** (Settings, Contacts, Calendar, Download, DocumentsUI, MediaProvider).
+6. **Hardware domains, last**: camera, GNSS, sensors, vibrator, battery, connectivity, USB, biometrics, NFC, portals, Bluetooth.
+7. **Before release**: COMMERCIAL.md terms, CLA, NOTICE files, per-app sandbox, x86_64 Android libraries (needs approval for a second `out/`), Flatpak.
+Everything parked is listed in `docs/PLAN.md`.
 
 ## State (2026-10-28)
 - Works: UiBench (GPU, input, dialogs, resize), WebView, TextureView/SurfaceView, native games (OTR2 renders), media and audio through the real services, the instance hub
   (services, broadcasts, providers, activities, notifications, pending intents). Verified on the UTM VM this session: gpu smoke, native-surface, native-media, codec2, binder,
-  services, broadcasts, providers; activities, notifications, pending intents and hub-services are being re-run after the C++ tool change.
+  services, broadcasts, providers; activities, notifications and pending intents pass phase by phase but flake when run back to back (the hang in item 1).
 - Known failing, not from this work: native-player (audio HAL stream open), texture-view (black on the UTM VM), webview (no provider on the VM), `hub-services.sh auto`.
 - CLI: C++ tool in `cli/` (`bin/apklayer` execs it): `install | run | list | uninstall | stop | hub | component-host | wait hub | env`; test helpers `stack <lib>` and `exec <lib>`.
   State and logs: `~/.local/state/apklayer/<instance>/`. Apps: `~/.local/share/apklayer/apps/<pkg>`.

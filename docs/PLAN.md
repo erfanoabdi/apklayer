@@ -38,7 +38,7 @@ If a decision changes, change it here in the same commit as the code.
 **Broken or failing today**
 - Audio HAL: the first output stream fails on the UTM VM (PipeWire 1.6.2, `Failed to initialize the driver: -5`), so `native-player.sh` fails.
 - `hub-services.sh auto`: "oneway native callback". TextureView renders black on the UTM VM. WebView test needs the provider set up on the VM (`scripts/webview-setup.sh`, sudo).
-- `pendingintents.sh`: "mutable PendingIntent did not take the fill-in extra" (seen once after the C++ tool; being re-checked). `activities.sh` flaked once in a full run.
+- **Intermittent app hang**: the app's main thread blocks in `HardwareRenderer.nSetStopped` (thread dump 2026-10-28) when its window goes inactive/stopped, e.g. when another app's window appears. It makes the multi-app hub tests (`pendingintents`, `activities`, `broadcasts`) flaky; each phase passes alone. Same family as the old resize-with-dialog hang. Needs a root-cause fix (render thread waiting on a buffer that the sink does not release for an unmapped window).
 - Vulkan presentation: opt-in, Venus aborts on imported virgl dmabufs on the UTM host; needs a real-GPU host or a Venus-allocated swapchain bridge.
 
 **The user asked to revisit**
@@ -49,7 +49,7 @@ If a decision changes, change it here in the same commit as the code.
 **Missing features**
 - System apps and providers on every instance (Settings, Contacts, Calendar, Download, Telephony, UserDictionary, DocumentsUI, MediaProvider) hosted in an instance system JVM.
 - Hub gaps: several bindings per connection, filter-specific rebind, signature/runtime permission grants.
-- Hardware domains, one at a time (`aosp/hals/README.md`), in this order: camera, GNSS (GeoClue), sensors (IIO), vibrator/haptics and game controllers (evdev), battery/power (UPower, logind), connectivity (NetworkManager, ModemManager; honest "no SIM"), USB (udev), biometrics (fprintd), NFC (PC/SC), portals (files, screen capture), Bluetooth (BlueZ bridge, scoped by app usage). Only "media and camera first, then the rest" was stated by the user; the rest of the order is from the old plan and open to change. Decided: backlight and thermal are the host's; accounts the Android way.
+- **Keystore first** (`android.security.keystore`, KeyStore/KeyGenParameterSpec, used by many apps), then the hardware domains last and one at a time (`aosp/hals/README.md`): camera, GNSS (GeoClue), sensors (IIO), vibrator/haptics and game controllers (evdev), battery/power (UPower, logind), connectivity (NetworkManager, ModemManager; honest "no SIM"), USB (udev), biometrics (fprintd), NFC (PC/SC), portals (files, screen capture), Bluetooth (BlueZ bridge). The order after Keystore is from the old plan and open to change. Decided: backlight and thermal are the host's; accounts the Android way.
 - microG; per-app/instance sandbox (bwrap is blocked by Ubuntu's userns restriction); other codecs, higher-bit-depth VP9, hardware decoder dmabuf import.
 - Compatibility corpus (P3), the proposed next task in `STATUS.md`.
 
