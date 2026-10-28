@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check UiBench's rendered dialog margins in a Parallels capture (100% scale)."""
+"""Check UiBench's rendered dialog margins in a VM capture (100% scale)."""
 import sys
 from PIL import Image
 

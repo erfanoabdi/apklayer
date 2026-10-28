@@ -65,7 +65,7 @@ try:
             if not captured and any('started com.dogbytegames.otrnext.OTRNext' in line for line in seen) and shell.count('dmabuf frame') >= 5 + captures * 45:
                 captures += 1
                 pid = int(next(s.rsplit('pid=', 1)[1] for s in seen if 'hub registered com.dogbytegames.otrnext pid=' in s))
-                # Stop submissions while Parallels reads the virgl scanout; otherwise
+                # Stop submissions while the host reads the virgl scanout; otherwise
                 # its capture can contain partially black rows during animation.
                 os.kill(pid, signal.SIGSTOP)
                 try:
