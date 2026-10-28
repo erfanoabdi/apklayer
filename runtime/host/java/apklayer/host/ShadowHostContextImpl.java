@@ -25,6 +25,10 @@ import org.robolectric.shadows.ShadowContextImpl;
 @Implements(className = "android.app.ContextImpl")
 public class ShadowHostContextImpl extends ShadowContextImpl {
     @RealObject private Context real;
+    /** An Activity's context is associated with the display; the contexts Robolectric builds for activities are not marked as such (libgdx apps ask the activity for its display). */
+    @Implementation protected android.view.Display getDisplay() {
+        return ((android.hardware.display.DisplayManager) real.getSystemService(Context.DISPLAY_SERVICE)).getDisplay(android.view.Display.DEFAULT_DISPLAY);
+    }
     @Implementation @Override protected boolean bindService(Intent intent, ServiceConnection connection, int flags) {
         if (HubServices.external(real, intent)) return HubServices.bind(real, intent, flags, null, connection);
         return super.bindService(intent, connection, flags);

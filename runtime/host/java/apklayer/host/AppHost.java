@@ -54,6 +54,11 @@ public final class AppHost implements Runnable {
     private final AndroidSandbox sandbox;
     private final Path apk;
     private final Path describe;
+    private long graceUntilMs;
+    private static volatile Activity taskRoot;
+    private static volatile boolean taskRootBuilding;
+    /** Activity.isTaskRoot(): launcher activities that finish themselves when they are not the root (AnkiDroid's IntentHandler) must see the task start here. */
+    static boolean isTaskRoot(Activity activity) { return activity == taskRoot || (taskRootBuilding && taskRoot == null) || taskRootBuilding; }
     private final Deque<ActivityController<? extends Activity>> stack = new ArrayDeque<>();
     /** Intents handed to other apps that will answer: routed handle -> {requesting activity, request intent}. */
     private final java.util.Map<HostApps.Routed, Object[]> crossApp = new java.util.HashMap<>();
@@ -235,7 +240,7 @@ public final class AppHost implements Runnable {
         long start = pausedMode ? SystemClock.uptimeMillis() : System.nanoTime() / 1_000_000;
 
         try {
-            while (!stack.isEmpty()) {
+            while (!stack.isEmpty() || System.nanoTime() / 1_000_000 < graceUntilMs) {
                 long now = System.nanoTime();
                 long elapsed = (pausedMode ? SystemClock.uptimeMillis() : System.nanoTime() / 1_000_000) - start;
                 // exit when the run time is up (or the window closed) and every scheduled script step has fired
@@ -281,6 +286,7 @@ public final class AppHost implements Runnable {
                     looper.idle();
                 }
                 if (TRACE_ROOTS && now - lastRootTrace > 1_000_000_000L) { lastRootTrace = now; traceRoots(); }
+                if (stack.isEmpty()) { followNavigation(); continue; }  // the grace period after a launcher activity finished itself
                 followNavigation();
                 followOrientation();
                 text.followTextInput();
@@ -403,13 +409,19 @@ public final class AppHost implements Runnable {
         }
         ActivityController<? extends Activity> previous = stack.peek();
         if (previous != null) previous.pause();
+        boolean bottom = stack.isEmpty();  // the first activity of the task answers isTaskRoot() already while it is created
+        taskRootBuilding = bottom;
         ActivityController<? extends Activity> c = Robolectric.buildActivity(cls, intent).create();
+        taskRootBuilding = false;
+        if (bottom) taskRoot = c.get();
         if (c.get().isFinishing()) {  // finish() in onCreate (Telegram starts its intro screen so): Android destroys it without start or resume
             c.destroy();
             System.out.println("[apklayer] finished in onCreate: " + c.get().getClass().getName());
             Intent next = ((ShadowApplication) Shadow.extract(RuntimeEnvironment.getApplication())).getNextStartedActivity();  // what it started before (the intro screen)
+            if (next == null) next = ((org.robolectric.shadows.ShadowActivity) Shadow.extract(c.get())).getNextStartedActivity();  // started through the activity itself
             if (next != null) launch(next);
             else if (previous != null) previous.resume();
+            else graceUntilMs = System.nanoTime() / 1_000_000 + 3000;  // a trampoline that starts the real screen from a coroutine (AnkiDroid's IntentHandler)
             return;
         }
         c.start().postCreate(null).resume().visible().topActivityResumed(true);  // the rest of ActivityController.setup()
@@ -475,6 +487,7 @@ public final class AppHost implements Runnable {
             launch(next);
             return;
         }
+        if (stack.isEmpty()) return;
         Activity top = stack.peek().get();
         if (top.isFinishing()) {
             stack.pop().pause().stop().destroy();

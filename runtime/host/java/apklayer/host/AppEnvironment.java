@@ -32,6 +32,8 @@ import org.robolectric.simulator.FixedConfiguration;
 final class AppEnvironment {
     /** Robolectric simulator AppLoader: application state straight from the APK. */
     static void setUpApplication(AndroidSandbox sandbox, Path apk, boolean describing) {
+        System.setProperty("java.vm.name", "Dalvik");  // libgdx, Netty ... pick their Android code path (native libraries through System.loadLibrary) by these names
+        System.setProperty("java.runtime.name", "Android Runtime");
         HostCompat.install();  // behavior changes by the app's target SDK (PendingIntent mutability, ...)
         HostLibraryPath.install();  // before the app's own code runs: SoLoader finds the system libraries it looks up by name
         if (Boolean.getBoolean("apklayer.logcat")) org.robolectric.shadows.ShadowLog.stream = System.out; // android.util.Log output (-Dapklayer.logcat=true, APKLAYER_LOGCAT=1)
