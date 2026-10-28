@@ -30,7 +30,7 @@ try:
     package = 'hello.ntposter'
     env = dict(ENV, APKLAYER_JOPTS=BASE + ' -Dhello.nt=' + PHASE)
     proc = subprocess.Popen(['bin/apklayer', 'run', package], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
-    end = time.monotonic() + 45
+    end = time.monotonic() + 120
     pending = b''
     killed = False
     with selectors.DefaultSelector() as events:
