@@ -101,6 +101,12 @@ static void xs_configure(void *data, struct xdg_surface *xs, uint32_t serial)
     xdg_surface_ack_configure(xs, serial);
     if (!w->configured) {
         w->configured = 1;
+        if (!w->fit_sent && output_mode_h > 0) {  /* a window taller than 85% of the screen (the compositor only clamps it or maximizes it): a phone shape well inside the screen */
+            int fit = output_mode_h * 100 / output_scale - 32 - DECOR_H;  /* the output less the top bar and the title bar */
+            int th = fit * 85 / 100, tw = th * 9 / 16, cw0 = w->w * 100 / w->scale, ch0 = w->h * 100 / w->scale;
+            w->fit_sent = 1;
+            if (th > 0 && th < ch0) { w->cfg_h = th; w->cfg_w = tw < cw0 ? tw : cw0; }
+        }
         /* Tell the app its size and the output scale (P2 HiDPI: density = 160*scale). */
         int32_t lw = w->cfg_w > 0 ? w->cfg_w : w->w * 100 / w->scale;
         int32_t lh = w->cfg_h > 0 ? w->cfg_h : w->h * 100 / w->scale;
@@ -119,7 +125,6 @@ static const struct xdg_surface_listener xs_listener = { xs_configure };
 static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t ch,
                           struct wl_array *st)
 {
-    (void)t;
     struct window *w = d;
     int maximized = 0, activated = 0;
     uint32_t *state;
@@ -127,6 +132,11 @@ static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t c
         if (*state == XDG_TOPLEVEL_STATE_MAXIMIZED || *state == XDG_TOPLEVEL_STATE_FULLSCREEN)
             maximized = 1;
         if (*state == XDG_TOPLEVEL_STATE_ACTIVATED) activated = 1;
+    }
+    if (maximized && !w->unmaximized_once) {  // windows open in their own size: only the first (automatic) maximize is undone, the user's own later ones stay
+        w->unmaximized_once = 1;
+        xdg_toplevel_unset_maximized(t);
+        maximized = 0;
     }
     int changed = maximized != w->maximized || activated != w->activated;
     int active_changed = activated != w->activated;

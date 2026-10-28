@@ -58,7 +58,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     std::string classes = join(dir, "classes.jar") + ":" + join(dir, "base.apk");  // the APK too: Class.getResourceAsStream finds an APK's java resources (conscrypt.properties, META-INF/services), the converted jar has none
     if (!provider.empty()) {
         jvm.push_back("-Dapklayer.webviewprovider=" + join(l.appsDir, provider));
-        classes += ":" + join(l.appsDir, provider + "/classes.jar");
+        classes = join(l.appsDir, provider + "/classes.jar") + ":" + classes;  // first: an app bundling Chromium's base classes (microG's Cronet) would otherwise shadow the provider's own, differently obfuscated copies (NoSuchFieldError in ThreadUtils)
     }
     if (!getenvOr("APKLAYER_ISOLATED", "").empty()) jvm.push_back("-Dapklayer.isolated=" + getenvOr("APKLAYER_ISOLATED", ""));
     if (!getenvOr("APKLAYER_LOGCAT", "").empty()) jvm.push_back("-Dapklayer.logcat=true");

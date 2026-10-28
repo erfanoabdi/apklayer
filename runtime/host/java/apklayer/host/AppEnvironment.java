@@ -156,6 +156,8 @@ final class AppEnvironment {
         HostSystemConfigService.install();
         HostNetwork.install(app);
         HostBattery.install(app);
+        // no doze on the desktop: an app is never held back by battery optimization
+        org.robolectric.Shadows.shadowOf((android.os.PowerManager) app.getSystemService(android.content.Context.POWER_SERVICE)).setIgnoringBatteryOptimizations(app.getPackageName(), true);
         HostUsb.install(app);
         HostStorage.install(app);
         HostCompat.install();

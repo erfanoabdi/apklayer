@@ -25,7 +25,7 @@ final class HostSystemConfig {
     final Map<String, Set<String>> privileged = new HashMap<>();
     final Map<String, Set<String>> denied = new HashMap<>();
     final Map<String, Set<String>> defaultGrants = new HashMap<>();
-    final Map<String, String> levels = new HashMap<>();  // permission -> normal | dangerous | signature
+    final Map<String, String> levels = new HashMap<>();  // permission -> normal | dangerous | appop | signature
 
     static HostSystemConfig load() {
         HostSystemConfig config = new HostSystemConfig();
@@ -95,6 +95,7 @@ final class HostSystemConfig {
             info.name = known.getKey();
             info.packageName = "android";
             info.protectionLevel = "dangerous".equals(known.getValue()) ? android.content.pm.PermissionInfo.PROTECTION_DANGEROUS
+                    : "appop".equals(known.getValue()) ? android.content.pm.PermissionInfo.PROTECTION_SIGNATURE | android.content.pm.PermissionInfo.PROTECTION_FLAG_APPOP
                     : "signature".equals(known.getValue()) ? android.content.pm.PermissionInfo.PROTECTION_SIGNATURE : android.content.pm.PermissionInfo.PROTECTION_NORMAL;
             shadow.addPermissionInfo(info);
         }
@@ -109,7 +110,7 @@ final class HostSystemConfig {
         Set<String> grant = new HashSet<>();
         for (String permission : asked) {
             String level = levels.getOrDefault(permission, "");
-            boolean ok = "normal".equals(level) || "dangerous".equals(level)  // normal and dangerous permissions are granted at install: the desktop has no prompts
+            boolean ok = "normal".equals(level) || "dangerous".equals(level) || "appop".equals(level)  // normal, dangerous and "appop" (draw over other apps, write settings...) are granted at install: the desktop has no prompts
                     || (system && ("signature".equals(level) || allowed.contains(permission)))  // platform-signed system apps hold signature permissions
                     || defaultGrants.getOrDefault(pkg, Set.of()).contains(permission);
             if (ok && !blocked.contains(permission)) grant.add(permission);

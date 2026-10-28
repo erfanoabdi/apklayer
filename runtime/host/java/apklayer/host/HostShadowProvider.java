@@ -38,6 +38,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.app.Service", ShadowHostService.class.getName()),
                 Map.entry("android.os.ParcelFileDescriptor", ShadowHostRealParcelFileDescriptor.class.getName()),
                 Map.entry("android.content.ContentResolver", ShadowHostContentResolver.class.getName()),
+                Map.entry("android.provider.Settings", ShadowHostSettings.class.getName()),
                 Map.entry("android.os.storage.StorageManager", ShadowHostStorageManager.class.getName()),
                 Map.entry("android.content.ContentProviderClient", ShadowHostContentProviderClient.class.getName()),
                 Map.entry("android.database.CursorWindow", ShadowHostRealCursorWindow.class.getName()),

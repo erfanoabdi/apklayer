@@ -45,8 +45,9 @@ static void out_geometry(void *d, struct wl_output *o, int32_t x, int32_t y, int
 static void out_mode(void *d, struct wl_output *o, uint32_t f, int32_t w, int32_t h,
                      int32_t refresh)
 {
-    (void)d; (void)o; (void)w; (void)h;
+    (void)d; (void)o; (void)w;
     if ((f & WL_OUTPUT_MODE_CURRENT) && refresh > 0) output_refresh_mhz = refresh;
+    if (f & WL_OUTPUT_MODE_CURRENT) output_mode_h = h;
 }
 static void out_scale(void *d, struct wl_output *o, int32_t s)
 { (void)d; (void)o; output_scale = s * 100; }

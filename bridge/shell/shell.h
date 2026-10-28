@@ -99,6 +99,8 @@ struct window {
     int told_scale;             /* scale last announced to the app */
     int cfg_w, cfg_h;           /* latest logical content size requested by the compositor, 0 = none */
     int maximized, activated;   /* xdg toplevel states */
+    int fit_sent;               /* the first configure already fitted the window to the screen */
+    int unmaximized_once;       /* the compositor's automatic maximize of a new window (GNOME does it for one taller than the screen) was undone */
     int text_input_enabled;
     int minimized;              /* set by our Minimize button, cleared when the window is activated again */
     struct decor decor;         /* title bar subsurface */
@@ -138,6 +140,7 @@ extern struct xdg_wm_base *wm_base;
 extern struct wl_seat *seat;
 extern struct wl_output *output;
 extern int output_refresh_mhz;       /* the output's current mode (wl_output.mode), 60000 until known */
+extern int output_mode_h;           /* the output's current mode height in pixels, 0 until known */
 extern int output_scale;            /* percent: 100 = 1x, 200 = 2x (P2 HiDPI) */
 extern struct window windows[MAX_WINDOWS];
 extern struct window *pointer_focus, *keyboard_focus;

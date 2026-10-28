@@ -28,12 +28,18 @@ public class ShadowHostWebViewFactory {
         System.out.println("[apklayer] WebView provider " + info.packageName + " " + info.versionName + " (" + info.getLongVersionCode() + ")");
     }
 
-    @Implementation protected static Class<?> getProviderClass() {
+    private static Class<?> providerClass;
+
+    /** The loader of the provider's classes: what androidx.webkit loads Chromium's support-library glue through (it must see the framework's WebViewFactoryProvider). */
+    static ClassLoader providerLoader() { return getProviderClass().getClassLoader(); }
+
+    @Implementation protected static synchronized Class<?> getProviderClass() {
+        if (providerClass != null) return providerClass;
         String dir = System.getProperty("apklayer.webviewprovider");
         File library = new File(dir, "lib/libwebviewchromium.so");
         NativeLoader.load(library.getPath());
         providerPackage(dir);
-        try { return Class.forName(FACTORY); }
+        try { return providerClass = Class.forName(FACTORY); }
         catch (ClassNotFoundException missing) { throw new IllegalStateException("The WebView provider's classes are not on the class path", missing); }
     }
 }
