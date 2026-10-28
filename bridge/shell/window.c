@@ -1,5 +1,6 @@
 /* App windows: xdg toplevels, shm buffers (rebuffered in place on resize), geometry. */
 #define _GNU_SOURCE
+#include "appinfo.h"
 #include "shell.h"
 #include <sys/mman.h>
 #include "splash.h"
@@ -246,12 +247,15 @@ void window_create(struct client *c, int id, int width, int height, const char *
     xdg_surface_add_listener(w->xdg_surface, &xs_listener, w);
     decor_create(&w->decor, w->surface);
     w->bar_hover = DECOR_NONE;
-    decor_set_title(&w->decor, title[0] ? title : c->pkg); /* apklayer patch: Adwaita title */
+    const char *package = appinfo_package(title[0] ? title : c->pkg);
+    char label[256];
+    appinfo_label(package, label, sizeof label);   /* apklayer patch: the window carries the app's real name, and the app id is its package (the desktop entry's StartupWMClass) */
+    decor_set_title(&w->decor, label);
     w->toplevel = xdg_surface_get_toplevel(w->xdg_surface);
     xdg_toplevel_add_listener(w->toplevel, &top_listener, w);
     snprintf(w->title, sizeof w->title, "%s", title);
-    xdg_toplevel_set_title(w->toplevel, title[0] ? title : c->pkg);
-    xdg_toplevel_set_app_id(w->toplevel, c->pkg);
+    xdg_toplevel_set_title(w->toplevel, label);
+    xdg_toplevel_set_app_id(w->toplevel, package);
     xdg_toplevel_set_min_size(w->toplevel, 240, 240 + DECOR_H);
     if (output_mode_h > 0) {   /* apklayer patch: open at a size that fits the screen, so the compositor has nothing to clamp (a clamp is a configure that disagrees with the app) */
         fit_size(width * 100 / w->scale, height * 100 / w->scale, &w->cfg_w, &w->cfg_h);
