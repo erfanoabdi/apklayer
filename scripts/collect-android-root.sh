@@ -4,9 +4,12 @@
 set -e
 . "$(dirname "$0")/../tests/vm/config.sh"
 OUT=/home/erfanabdi/los24/out/target/product/generic_arm64
-orb -m ubuntu22-x86 tar cf - -C "$OUT" system/etc/cgroups.json system/etc/task_profiles.json system/etc/task_profiles system/usr/hyphen-data \
+orb -m ubuntu22-x86 tar cf - -C "$OUT" system/etc/cgroups.json system/etc/task_profiles.json system/etc/task_profiles system/usr/hyphen-data system/etc/permissions system/etc/sysconfig system/etc/default-permissions \
     | sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" 'mkdir -p ~/arm64-native/android-root && tar xf - -C ~/arm64-native/android-root && ls ~/arm64-native/android-root/system/etc | head'
 # Original audio policy tables are source XML assets, not generated libraries.
 orb -m ubuntu22-x86 tar cf - -C /home/erfanabdi/los24/frameworks/av/services/audiopolicy/config \
     --transform='s,^,vendor/etc/,' audio_policy_volumes.xml default_volume_tables.xml \
+    | sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" 'tar xf - -C ~/arm64-native/android-root'
+# apklayer's own half of the device configuration (features the host layers provide).
+COPYFILE_DISABLE=1 tar cf - -C "$(dirname "$0")/../bridge/native/android-root" vendor/etc/permissions \
     | sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" 'tar xf - -C ~/arm64-native/android-root'

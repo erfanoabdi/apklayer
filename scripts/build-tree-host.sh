@@ -18,7 +18,7 @@ simulator="${APKLAYER_DEPS:-$HOME/.cache/apklayer/deps}/libs/simulator-4.17.jar"
 (cd "$work/classes" && jar xf "$simulator" org/robolectric/simulator/FrameListener.class org/robolectric/simulator/ScreenUpdateHandler.class)
 mapfile -t sources < <(find "$work/src" -name '*.java' ! -name '._*' -print | sort)
 echo "Compiling ${#sources[@]} tree host sources"
-javac -nowarn -d "$work/classes" \
+javac -nowarn --add-exports java.base/sun.security.tools.keytool=ALL-UNNAMED --add-exports java.base/sun.security.x509=ALL-UNNAMED -d "$work/classes" \
     -cp "$work/classes:$native/aosp/sim-classes:$native/aosp/Robolectric_all.jar:$native/aosp/android-all/*:b/runtime/dex2jvm/dex2jvm.jar" "${sources[@]}"
 cp -R runtime/host/resources/. "$work/classes/"
 # Call only while app JVMs are stopped; preserve the previous build on compiler failure.

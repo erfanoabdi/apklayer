@@ -232,3 +232,6 @@ Opt-in with `APKLAYER_WEBVIEW_PROVIDER=com.android.webview` (provider APK instal
 - `HubBroadcasts.deliver`: dynamic receivers are reached through the app's `IApplicationThread.scheduleRegisteredReceiver` (as ActivityManager does), so one broadcast cannot overtake another across binder threads (fixed the flaky `pendingintents.sh`).
 
 - bionic_translation `pthread_wrapper/libpthread.c` (`scripts/patch-bionic-translation.sh` step 10): `bionic_pthread_cond_signal` calls `pthread_cond_broadcast`. Fixes the intermittent hang of the app's main thread in `HardwareRenderer.nSetStopped` (the render thread waited for a CommonPool task while both workers slept): 2 hangs in 11 runs before, 0 in 25 after.
+
+- `HostKeyStoreProvider` (Keystore): AES/HMAC keys and RSA/EC key pairs (JDK-generated, self-signed certificate, stored in the app's JCEKS) under `AndroidKeyStore`, aliases, certificates, deletion, persistence: `tests/vm/keystore.sh`. Gaps: `KeyInfo`, attestation, user-authentication-bound keys, hardware-backed claims.
+- `HostSystemConfig`: the build's `etc/permissions`, `etc/sysconfig`, `vendor/etc/permissions` (features, privapp allowlist) and `etc/default-permissions` feed the package manager (replaces the `apklayer.grantall` try).

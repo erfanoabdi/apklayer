@@ -9,3 +9,5 @@
 --add-opens=java.base/java.util=ALL-UNNAMED
 --add-opens=java.base/jdk.internal.access=ALL-UNNAMED
 --add-opens=java.desktop/java.awt.font=ALL-UNNAMED
+--add-exports=java.base/sun.security.tools.keytool=ALL-UNNAMED
+--add-exports=java.base/sun.security.x509=ALL-UNNAMED

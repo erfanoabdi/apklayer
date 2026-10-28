@@ -179,12 +179,7 @@ public final class AppHost implements Runnable {
         }
         this.shell = shell;
         text.shell = shell;
-        if (Boolean.getBoolean("apklayer.grantall")) {  // privileged/system apps (DocumentsUI...): everything their manifest asks for, as a platform-signed priv-app holds it
-            try {
-                String[] asked = app.getPackageManager().getPackageInfo(app.getPackageName(), android.content.pm.PackageManager.GET_PERMISSIONS).requestedPermissions;
-                if (asked != null) ((org.robolectric.shadows.ShadowApplication) Shadow.extract(app)).grantPermissions(asked);
-            } catch (android.content.pm.PackageManager.NameNotFoundException e) { System.out.println("[apklayer] grantall: " + e); }
-        }
+        HostSystemConfig.load().apply(app);  // features, privileged-permission allowlist and default grants of the build
         app.getSystemService(android.content.ClipboardManager.class).addPrimaryClipChangedListener(text::onAppClipboardChanged);
         if (java.security.Security.getProvider("AndroidKeyStore") == null) java.security.Security.addProvider(new HostKeyStoreProvider());
         AppEnvironment.installSystemPackage(app);
