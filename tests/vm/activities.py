@@ -38,7 +38,7 @@ try:
         while time.monotonic() < end:
             if not events.select(2): continue
             data = os.read(proc.stdout.fileno(), 65536)
-            if not data: raise AssertionError('client ended\n' + '\n'.join(lines[-20:]))
+            if not data: raise AssertionError('client ended (exit status %s)\n' % proc.wait() + '\n'.join(lines[-20:]))
             parts = (pending + data).split(b'\n')
             pending = parts.pop()
             for raw in parts:
