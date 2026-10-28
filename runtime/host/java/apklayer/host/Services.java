@@ -87,6 +87,13 @@ public final class Services {
         return r;
     }
 
+    /** A service in a process of its own (GeckoView children) dies with its last service, as Android kills that process: the next bind starts a fresh one (their static state forbids reuse). */
+    private static void destroy(String key, Running r) {
+        r.controller.destroy();
+        RUNNING.remove(key);
+        if (Boolean.getBoolean("apklayer.componenthost") && RUNNING.isEmpty()) { System.out.println("[apklayer] last service of this process destroyed: exiting"); System.out.flush(); Runtime.getRuntime().halt(0); }
+    }
+
     /** Runs a task on the main thread and waits for it (services are created and called there). */
     private static <T> T onMain(java.util.function.Supplier<T> task) {
         if (Looper.myLooper() == Looper.getMainLooper()) return task.get();
@@ -160,7 +167,7 @@ public final class Services {
             Running r = RUNNING.get(className(cn));
             if (r == null || (id >= 0 && id != r.lastStartId)) return false;
             r.started = false;
-            if (r.connections == 0) { r.controller.destroy(); RUNNING.remove(className(cn)); }
+            if (r.connections == 0) { destroy(className(cn), r); }
             return true;
         });
     }
@@ -177,8 +184,7 @@ public final class Services {
             if (r == null) return false;
             r.started = false;
             if (r.connections == 0) {
-                r.controller.destroy();
-                RUNNING.remove(className(cn));
+                destroy(className(cn), r);
             }
             return true;
         });
@@ -238,8 +244,7 @@ public final class Services {
                 r.service.onUnbind(r.intent);
                 r.bound = false;
                 if (!r.started) {
-                    r.controller.destroy();
-                    RUNNING.remove(key);
+                    destroy(key, r);
                 }
             }
             return null;
