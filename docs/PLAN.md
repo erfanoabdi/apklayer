@@ -111,3 +111,9 @@ Until an app presents its first frame, `bridge/shell/splash.c` fills the window 
 4. **Test the Google apps again** (microG sign-in, Meet accounts, Device Attestation) once the keystore exists.
 5. **Proper tests of the preinstalled system apps and services** (providers, DocumentsUI, Downloads, Contacts, Settings, Calendar, Telephony, UserDictionary, MediaProvider): scripted checks per provider and per app, including after the provider-ordering change (hub test groups `pendingintents.sh`, `providers.sh`, `activities.sh`, `broadcasts.py` have not been rerun since).
 6. Finish the shell work: first-run check of the merged header bar, window size and splash with real apps; Alt-Tab/overview names; light/dark live switching; `rename-bundled-system-libs.py` into `install`; the VM-only files (android-system-stubs symlinks, libc_bio/libdl_bio deployments) into the build scripts.
+
+### Additions from the user (2026-10-29, final)
+- **x86_64 readiness**: take Robolectric (android-all jars) and the native libraries from the user's OrbStack tree `~/los24/` (x86_64 GSI and Robolectric builds) and make the x86_64 route as ready as the arm64 one (scripts, staging dir layout, bionic_translation for x86_64, the EGL/graphics HAL modules built for x86_64 from the arm64 sources minus arm assembly), so the user can try it on a real x86 PC later. Nothing can be run on x86 hardware here; verify by building, by file/ELF checks and by the staging scripts.
+- **Leftover "check header bar, window size and splash with real apps"**: counted as done.
+- **System apps and services**: instead of only scripts, write small test APPS (under tests/apps/) that use the providers and services (contacts, calendar, downloads, settings, media, documents, user dictionary, telephony, notifications, alarms, jobs) and a runner that installs and runs them.
+- Order otherwise unchanged: Fennec first, other apps, keystore, Google apps, system-service test apps, x86_64.
