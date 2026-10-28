@@ -19,13 +19,15 @@ final class HostCompat {
 
     private record Change(boolean disabled, int after, int since) {}
 
+    private static final Map<Long, Change> changes = new HashMap<>();
+
     static void install() {
         String root = System.getenv("ANDROID_ROOT");
+        if (root == null && System.getProperty("apklayer.native") != null) root = System.getProperty("apklayer.native") + "/android-root/system";
         if (root == null) return;
         File dir = new File(root, "etc/compatconfig");
         File[] files = dir.listFiles((d, name) -> name.endsWith(".xml"));
         if (files == null) return;
-        Map<Long, Change> changes = new HashMap<>();
         for (File file : files) {
             try {
                 NodeList list = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file).getElementsByTagName("compat-change");
@@ -36,17 +38,32 @@ final class HostCompat {
                 }
             } catch (Exception unreadable) { System.out.println("[apklayer] compat config " + file + ": " + unreadable); }
         }
-        Compatibility.setBehaviorChangeDelegate(new Compatibility.BehaviorChangeDelegate() {
-            @Override public boolean isChangeEnabled(long id) {
-                Change change = changes.get(id);
-                if (change == null) return true;
-                if (change.disabled) return false;
-                int target = RuntimeEnvironment.getApplication().getApplicationInfo().targetSdkVersion;
-                if (change.after >= 0) return target > change.after;
-                if (change.since >= 0) return target >= change.since;
-                return true;
+    }
+
+    /** Reached through ShadowHostCompatibility (the framework installs its own delegate when the application is bound). */
+    static boolean enabled(long id) {
+        Change change = changes.get(id);
+        if (change == null) return true;
+        if (change.disabled) return false;
+        int target = targetSdk();
+        if (change.after >= 0) return target > change.after;
+        if (change.since >= 0) return target >= change.since;
+        return true;
+    }
+
+    private static int declaredTarget = -2;
+    /** The app's target SDK from its install record: the Application itself may be under construction (getApplication would recurse into its creation). */
+    private static int targetSdk() {
+        if (declaredTarget == -2) {
+            declaredTarget = -1;
+            String apps = System.getProperty("apklayer.apps"), pkg = System.getProperty("apklayer.package");
+            if (apps != null && pkg != null) {
+                try (java.io.BufferedReader in = new java.io.BufferedReader(new java.io.FileReader(new File(new File(apps, pkg), "info.properties")))) {
+                    for (String line; (line = in.readLine()) != null; ) if (line.startsWith("targetSdk=")) declaredTarget = Integer.parseInt(line.substring(10).trim());
+                } catch (java.io.IOException | NumberFormatException none) { /* falls back below */ }
             }
-        });
+        }
+        return declaredTarget >= 0 ? declaredTarget : RuntimeEnvironment.getApplication().getApplicationInfo().targetSdkVersion;
     }
 
     private static int number(Element e, String attribute) { return e.hasAttribute(attribute) ? Integer.parseInt(e.getAttribute(attribute)) : -1; }

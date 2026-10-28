@@ -79,7 +79,7 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
         if (result != android.content.pm.PackageManager.PERMISSION_GRANTED && permission != null && pid == android.os.Process.myPid()) {
             // an app holds the permissions it declares itself (microG's UnifiedNlp checks its own SERVICE_ADMIN for a call from its own client)
             try {
-                if (real.getPackageManager().getPermissionInfo(permission, 0).packageName.equals(real.getPackageName())) return android.content.pm.PackageManager.PERMISSION_GRANTED;
+                if (real.getPackageManager().getPermissionInfo(permission, 0).packageName != null && real.getPackageManager().getPermissionInfo(permission, 0).packageName.equals(real.getPackageName())) return android.content.pm.PackageManager.PERMISSION_GRANTED;
             } catch (android.content.pm.PackageManager.NameNotFoundException undeclared) { /* not a declared permission */ }
         }
         return result;

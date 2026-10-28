@@ -32,6 +32,8 @@ import org.robolectric.simulator.FixedConfiguration;
 final class AppEnvironment {
     /** Robolectric simulator AppLoader: application state straight from the APK. */
     static void setUpApplication(AndroidSandbox sandbox, Path apk, boolean describing) {
+        HostCompat.install();  // behavior changes by the app's target SDK (PendingIntent mutability, ...)
+        HostLibraryPath.install();  // before the app's own code runs: SoLoader finds the system libraries it looks up by name
         if (Boolean.getBoolean("apklayer.logcat")) org.robolectric.shadows.ShadowLog.stream = System.out; // android.util.Log output (-Dapklayer.logcat=true, APKLAYER_LOGCAT=1)
         AndroidManifest manifest = apk == null ? new AndroidManifest(null, null, null, "apklayer.hub")
                 : new AndroidManifest(null, null, null, null, "", apk);

@@ -41,11 +41,14 @@ public final class DenyInstrument {
     // not BouncyCastle: it registers its providers by class-name strings, which relocation cannot follow
     private static final java.util.List<String> RELOCATED = new java.util.ArrayList<>(); // active prefixes
     private static final String RELOCATED_TO = "apklayer/relocated/";
+    // classes an app defines in a java.* package (WhatsApp's java.lang.RunnableEBaseShape*): the JVM refuses to define them outside the boot loader
+    private static final java.util.Set<String> JAVA_OWN = new java.util.HashSet<>();
 
     /** Maps the bundled Guava's internal names into the private package. */
     private static final Remapper RELOCATOR = new Remapper() {
         @Override
         public String map(String name) {
+            if (JAVA_OWN.contains(name)) return RELOCATED_TO + name;
             for (String prefix : RELOCATED) {
                 if (name.startsWith(prefix)) return RELOCATED_TO + name;
             }
@@ -129,9 +132,14 @@ public final class DenyInstrument {
                         .anyMatch(en -> en.getName().startsWith(library[0]));
                 if (bundled) RELOCATED.addAll(java.util.Arrays.asList(library));
             }
+            for (JarEntry e : Collections.list(probe.entries())) {
+                String n = e.getName();
+                if (n.startsWith("java/") && n.endsWith(".class") && ClassLoader.getPlatformClassLoader().getResource(n) == null) JAVA_OWN.add(n.substring(0, n.length() - 6));
+            }
         }
         // an app whose native libraries name Guava classes in JNI signatures (Meet's TaclFutureCallback.attachToFuture) keeps them unrelocated: relocation would break the lookup
-        boolean relocate = !RELOCATED.isEmpty() && !(args.length > 2 && nativeNamesGuava(args[2]));
+        if (args.length > 2 && nativeNamesGuava(args[2])) RELOCATED.clear();
+        boolean relocate = !RELOCATED.isEmpty() || !JAVA_OWN.isEmpty();
         try (JarFile in = new JarFile(args[0]);
              JarOutputStream out = new JarOutputStream(
                      new BufferedOutputStream(new FileOutputStream(args[1])))) {

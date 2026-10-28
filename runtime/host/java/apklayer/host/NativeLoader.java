@@ -25,6 +25,7 @@ import org.robolectric.annotation.internal.DoNotInstrument;
 public final class NativeLoader {
     private static final Map<String, Long> LOADED = new HashMap<>();
     private static boolean ready;
+    private static String searchPath = "";
 
     private NativeLoader() {}
 
@@ -66,6 +67,10 @@ public final class NativeLoader {
             if (LOADED.containsKey(path)) return;
             init();
             long handle = dlopen(new File(path).getName()); // bionic_translation finds a library by name in its path
+            if (handle == 0 && path.startsWith("/")) {  // a library elsewhere (SoLoader's decompressed SuperPack libraries in the app's data): its directory joins the search path
+                try { searchPath += ":" + new File(path).getParentFile().getCanonicalPath(); setLibraryPath(searchPath); } catch (java.io.IOException unreadable) { /* the error below says so */ }
+                handle = dlopen(new File(path).getName());
+            }
             if (handle == 0) throw new UnsatisfiedLinkError(path + ": " + dlerror());
             LOADED.put(path, handle);
             long onLoad = dlsym(handle, "JNI_OnLoad");
@@ -92,7 +97,8 @@ public final class NativeLoader {
         String dir = System.getProperty("apklayer.native");
         String provider = System.getProperty("apklayer.webviewprovider");
         String androidLibs = System.getProperty("apklayer.androidlibs"); // the device-library route: Android's own libraries stay on the path (set by the runtime shim)
-        setLibraryPath(System.getProperty("apklayer.libdir", dir) + (provider == null ? "" : ":" + provider + "/lib") + ":" + (androidLibs != null ? androidLibs + ":" : "") + dir); // app libs, the WebView provider's, then the bionic_translation libs
+        searchPath = (System.getProperty("apklayer.libdir", dir) + (provider == null ? "" : ":" + provider + "/lib") + ":" + (androidLibs != null ? androidLibs + ":" : "") + dir);
+        setLibraryPath(searchPath); // app libs, the WebView provider's, then the bionic_translation libs
         ready = true;
     }
 
