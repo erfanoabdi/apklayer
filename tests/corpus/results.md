@@ -39,3 +39,23 @@ One run per app (tests/vm/appcheck.sh for errors, tests/vm/appshot.py for a scre
 | Mindustry | io.anuke.mindustry | draws its map | libgdx |
 | Lemuroid | com.swordfish.lemuroid | runs, black window after 40 s | |
 | OpenTTD | org.openttd.fdroid | aborts | `*** buffer overflow detected ***` (fortified libc call under the bionic translation) |
+
+
+## linux.apk's 31-app corpus, run on this route (2026-10-28, arm64 builds of the same packages)
+
+| App | State |
+|---|---|
+| OpenCalc, SudoQ, Unit Converter Ultimate, Simple Solitaire, Mastodon, Floating Mute | run |
+| Wikipedia (Views + Compose), Thunderbird, Aurora Store, F-Droid, Read You, Droid-ify, VLC | draw their UI (Read You: a Regex group index error in one SVG helper) |
+| Tomato (org.nsh07.pomodoro), StreetComplete, FlorisBoard, Jellyfin for Android TV | run, not looked at |
+| AntennaPod, Mindustry, Shattered Pixel Dungeon | draw |
+| Saber, Ente Auth (Flutter) | draw |
+| Open Sudoku | crashes: its CREATE TABLE has `rating_level` twice |
+| Joplin (React Native) | blank white window; libQuickCrypto.so does not link (its OpenSSL libssl against the device's BoringSSL libcrypto) |
+| Logseq (Capacitor, WebView) | black window |
+| Pomodorot (Godot 4) | loads, then stops: VK_KHR_android_surface not found (Vulkan presentation is not available on this host stack) |
+| Unciv | black window |
+| NewPipe | Trending list stays empty |
+| OpenTTD | past the libc fortify abort, then "Couldn't find any suitable video driver" |
+| Fennec F-Droid (GeckoView) | SIGSEGV in libmozglue (GeckoLoader.putenv) |
+| Rethink DNS | SIGSEGV in its Go runtime (like WireGuard) |
