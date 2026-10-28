@@ -167,6 +167,7 @@ static int position_locked(struct apklayer_audio *audio, struct apklayer_audio_p
     if (audio->active && !audio->drained) {
         struct pw_time time = {0};
         int result = pw_stream_get_time_n(audio->stream, &time, sizeof time);
+        if (result == -EIO) result = 0;  // PipeWire 1.6: no timing before the stream runs (the zeroed time takes the branch below)
         if (result < 0) return result;
         if (audio->state != PW_STREAM_STATE_STREAMING || time.now <= 0 || !time.rate.num || !time.rate.denom) {
             audio->pending = audio->written - audio->position;
