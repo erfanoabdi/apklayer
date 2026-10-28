@@ -422,7 +422,7 @@ public final class AppHost implements Runnable {
             if (next == null) next = ((org.robolectric.shadows.ShadowActivity) Shadow.extract(c.get())).getNextStartedActivity();  // started through the activity itself
             if (next != null) launch(next);
             else if (previous != null) previous.resume();
-            else graceUntilMs = System.nanoTime() / 1_000_000 + 3000;  // a trampoline that starts the real screen from a coroutine (AnkiDroid's IntentHandler)
+            else graceUntilMs = System.nanoTime() / 1_000_000 + 20000;  // a trampoline that starts the real screen from a coroutine (AnkiDroid's IntentHandler)
             return;
         }
         c.start().postCreate(null).resume().visible().topActivityResumed(true);  // the rest of ActivityController.setup()
