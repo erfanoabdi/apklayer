@@ -359,6 +359,7 @@ public final class AppHost implements Runnable {
 
     /** Builds and fully starts the activity, as the simulator does (Robolectric.setupActivity). */
     private void launch(Intent intent) {
+        if (Boolean.getBoolean("apklayer.tracestart")) System.out.println("[apklayer] launch " + intent + " flags=0x" + Integer.toHexString(intent.getFlags()));
         // startActivityForResult: Robolectric only records it; the host delivers the result (PLAN P5.3)
         ShadowActivity.IntentForResult request = stack.isEmpty() ? null
                 : ((ShadowActivity) Shadow.extract(stack.peek().get())).getNextStartedActivityForResult();

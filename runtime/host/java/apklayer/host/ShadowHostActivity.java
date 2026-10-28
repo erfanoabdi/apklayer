@@ -9,5 +9,5 @@ import org.robolectric.shadows.ShadowActivity;
 @Implements(value = android.app.Activity.class, isInAndroidSdk = false)
 public class ShadowHostActivity extends ShadowActivity {
     @RealObject private android.app.Activity real;
-    @Implementation protected boolean isTaskRoot() { return AppHost.isTaskRoot(real); }
+    @Implementation protected boolean isTaskRoot() { return !Boolean.getBoolean("apklayer.notaskroot") && AppHost.isTaskRoot(real); }
 }

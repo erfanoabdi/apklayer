@@ -11,7 +11,7 @@ One run per app (tests/vm/appcheck.sh for errors, tests/vm/appshot.py for a scre
 | Nextcloud | com.nextcloud.client | draws login | |
 | OpenVPN for Android | de.blinkt.openvpn | draws | |
 | Shelter | net.typeblog.shelter | draws | work profile features are out of scope |
-| Sensors Multitool | com.wered.sensorsmultitool | draws, Battery page blank | |
+| Sensors Multitool | com.wered.sensorsmultitool | restarts its MainActivity over and over | its launch intent (`xflg=0x4`) is fired again by the app on every start (`-Dapklayer.tracestart=true` prints it); Battery page blank |
 | NewPipe | org.schabi.newpipe | draws, Trending list empty | no error in the log; network works |
 | ASTRO | com.metago.astro | splash only after 20 s | |
 | OpenCalc | com.darkempire78.opencalculator | draws | |
