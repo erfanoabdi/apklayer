@@ -251,6 +251,7 @@ void window_create(struct client *c, int id, int width, int height, const char *
     xdg_surface_add_listener(w->xdg_surface, &xs_listener, w);
     decor_create(&w->decor, w->surface);
     w->bar_hover = DECOR_NONE;
+    decor_set_title(&w->decor, title[0] ? title : c->pkg); /* apklayer patch: Adwaita title */
     w->toplevel = xdg_surface_get_toplevel(w->xdg_surface);
     xdg_toplevel_add_listener(w->toplevel, &top_listener, w);
     snprintf(w->title, sizeof w->title, "%s", title);
