@@ -40,6 +40,7 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
     /** Apps read their own signing certificate in Application.onCreate (update checks, SoLoader...): every package has one from the first call. */
     private android.content.pm.PackageInfo signed(android.content.pm.PackageInfo info, long flags) {
         if (info == null) return null;
+        installedPaths(info.applicationInfo);
         android.content.pm.Signature[] signatures = HostCertificate.signatures();
         android.content.pm.Signature fake = fakeSignature(info.packageName);
         if (fake != null) signatures = new android.content.pm.Signature[] {fake};
@@ -51,6 +52,17 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
             info.signingInfo = signing;
         }
         return info;
+    }
+
+    /** Where an installed app's APK and libraries are (Robolectric leaves them null, Chromium's crash reporter builds file paths from them in Application.onCreate). */
+    private static void installedPaths(android.content.pm.ApplicationInfo app) {
+        String apps = System.getProperty("apklayer.apps");
+        if (app == null || apps == null || app.sourceDir != null) return;
+        java.io.File dir = new java.io.File(apps, app.packageName);
+        java.io.File apk = new java.io.File(dir, "base.apk");
+        if (!apk.isFile()) return;
+        app.sourceDir = app.publicSourceDir = apk.getPath();
+        if (app.nativeLibraryDir == null) app.nativeLibraryDir = new java.io.File(dir, "lib").getPath();
     }
 
     /**
