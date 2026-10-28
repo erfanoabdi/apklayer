@@ -19,6 +19,13 @@ If a decision changes, change it here in the same commit as the code.
 | Verification | Every feature has a scripted check on the test VM with real input and a screenshot (`tests/vm/`); run only the groups for the code you changed. |
 | Builds in `~/los24` | Incremental only, never clean `out/`; rules in `docs/AOSP-BUILDS.md`. |
 
+## Storage volumes (user's design, 2026-10-28; DocumentsUI shows the home today as one stub volume)
+Per instance an Android-sdcard-like tree in the XDG data dir: `$XDG_DATA_HOME/apklayer/<instance>/` (instance 0, 1 for a second one), the `/sdcard` of that phone. Volumes the storage service lists:
+1. **Internal storage**: that tree (the emulated primary volume; what `Environment.getExternalStorageDirectory()` returns).
+2. **Home**: the Linux user's home.
+3. **Linux root** (`/`): read mostly; apklayer cannot write all of it, which is fine.
+The Android root itself (system/vendor files) is already known to the runtime. Open: move `ShadowHostStorageManager` from one stub to these three, point `HostStorage`/`Environment` at the tree, per-instance paths in `cli/layout`, and decide which volume apps (not DocumentsUI) may see.
+
 ## Roadmap
 | Phase | State |
 |---|---|
