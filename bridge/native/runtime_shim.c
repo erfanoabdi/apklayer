@@ -435,6 +435,18 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
         extern int apklayer_register_nativeloader(JNIEnv *, jclass);
         jclass loader = lazy_find_class(env, "apklayer/host/NativeLoader");
         attribution_failed = !loader || apklayer_register_nativeloader(env, loader);
+        /* Classes the sandbox does not acquire (org.conscrypt: an app's own Conscrypt) see the JVM's own copy of NativeLoader, a different class: its natives too */
+        jclass system = NULL;
+        if (!attribution_failed) {
+            jclass cl = (*env)->FindClass(env, "java/lang/ClassLoader");
+            jmethodID getter = (*env)->GetStaticMethodID(env, cl, "getSystemClassLoader", "()Ljava/lang/ClassLoader;");
+            jobject app = getter ? (*env)->CallStaticObjectMethod(env, cl, getter) : NULL;
+            jstring dotted = (*env)->NewStringUTF(env, "apklayer.host.NativeLoader");
+            system = app ? (jclass)(*env)->CallStaticObjectMethod(env, class_class, for_name, dotted, JNI_FALSE, app) : NULL;
+            if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+            if (system && !(*env)->IsSameObject(env, system, loader)) attribution_failed = apklayer_register_nativeloader(env, system);
+        }
+        if (system) (*env)->DeleteLocalRef(env, system);
         if (loader) (*env)->DeleteLocalRef(env, loader);
     }
     if (!attribution_failed) {

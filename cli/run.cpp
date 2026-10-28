@@ -55,7 +55,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     for (const std::string& o : {"-Dapklayer.data=" + join(dir, "data"), "-Dapklayer.package=" + package, "-Dapklayer.uid=" + property(join(dir, "info.properties"), "uid"),
                                  "-Dapklayer.libdir=" + join(dir, "lib"), "-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary()})
         jvm.push_back(o);
-    std::string classes = join(dir, "classes.jar");
+    std::string classes = join(dir, "classes.jar") + ":" + join(dir, "base.apk");  // the APK too: Class.getResourceAsStream finds an APK's java resources (conscrypt.properties, META-INF/services), the converted jar has none
     if (!provider.empty()) {
         jvm.push_back("-Dapklayer.webviewprovider=" + join(l.appsDir, provider));
         classes += ":" + join(l.appsDir, provider + "/classes.jar");
