@@ -37,8 +37,10 @@ public final class DenyInstrument {
 
     /** Libraries the host itself runs (Guava 33) whose app copy is relocated. */
     private static final String[][] LIBRARIES = {
-        {"com/google/common/", "com/google/thirdparty/"}};
-    // not BouncyCastle: it registers its providers by class-name strings, which relocation cannot follow
+        {"com/google/common/", "com/google/thirdparty/"},
+        {"org/bouncycastle/"}};
+    // BouncyCastle (an R8-shrunk app copy mixed with the host's complete one fails: Aegis, Strings.toLowerCase) is relocated too; it names its provider classes in strings, which
+    // the remapper follows (mapValue below)
     private static final java.util.List<String> RELOCATED = new java.util.ArrayList<>(); // active prefixes
     private static final String RELOCATED_TO = "apklayer/relocated/";
     // classes an app defines in a java.* package (WhatsApp's java.lang.RunnableEBaseShape*): the JVM refuses to define them outside the boot loader
@@ -46,6 +48,11 @@ public final class DenyInstrument {
 
     /** Maps the bundled Guava's internal names into the private package. */
     private static final Remapper RELOCATOR = new Remapper() {
+        @Override
+        public Object mapValue(Object value) {
+            if (value instanceof String str && str.startsWith("org.bouncycastle.") && RELOCATED.contains("org/bouncycastle/")) return "apklayer.relocated." + str;
+            return super.mapValue(value);
+        }
         @Override
         public String map(String name) {
             if (JAVA_OWN.contains(name)) return RELOCATED_TO + name;
@@ -138,7 +145,7 @@ public final class DenyInstrument {
             }
         }
         // an app whose native libraries name Guava classes in JNI signatures (Meet's TaclFutureCallback.attachToFuture) keeps them unrelocated: relocation would break the lookup
-        if (args.length > 2 && nativeNamesGuava(args[2])) RELOCATED.clear();
+        if (args.length > 2 && nativeNamesGuava(args[2])) { RELOCATED.remove("com/google/common/"); RELOCATED.remove("com/google/thirdparty/"); }
         boolean relocate = !RELOCATED.isEmpty() || !JAVA_OWN.isEmpty();
         try (JarFile in = new JarFile(args[0]);
              JarOutputStream out = new JarOutputStream(
