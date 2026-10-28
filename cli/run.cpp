@@ -90,6 +90,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     Spawn app;
     app.argv = jvm;
     app.env = ne.env;
+    if (mode == RunMode::Component) app.env["APKLAYER_COMPONENT_HOST"] = "1";
     app.cwd = dir;
     if (mode == RunMode::Component) {
         // a service host has no window sink to clean up: become the JVM, so the launcher dies exactly when the host does (the hub restarts

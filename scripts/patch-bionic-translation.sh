@@ -432,3 +432,24 @@ new = '''	struct sigaction goact = {0}, gact = {0};
 if 'step 13' not in s and old in s:
     p.write_text(s.replace(old, new, 1))
 PY
+# 14. kill(): a service host (APKLAYER_COMPONENT_HOST, e.g. a GeckoView content process) cannot signal any process but itself. On Android its isolated uid makes that an EPERM; here every process shares
+#     one uid, and a Gecko child ended the app by SIGKILL (AppShutdown/IPC teardown) a few seconds after a page load began.
+python3 - "$bt" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1]) / 'libc/libc.c'
+s = p.read_text()
+old = 'int tgkill(int tgid, int tid, int sig)'
+new = '''int bionic_kill(pid_t pid, int sig) /* apklayer patch: see scripts/patch-bionic-translation.sh step 14 */
+{
+	if (pid != getpid() && getenv("APKLAYER_COMPONENT_HOST")) {
+		errno = EPERM;
+		return -1;
+	}
+	return kill(pid, sig);
+}
+
+''' + old
+if 'step 14' not in s and old in s:
+    p.write_text(s.replace(old, new, 1))
+PY
