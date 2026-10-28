@@ -36,10 +36,10 @@ If a decision changes, change it here in the same commit as the code.
 
 ## Parked: things to revisit (collected from the old plan and notes; details in `docs/history/`)
 **Broken or failing today**
-- Audio HAL: the first output stream fails on the UTM VM (PipeWire 1.6.2, `Failed to initialize the driver: -5`), so `native-player.sh` fails.
-- `hub-services.sh auto`: "oneway native callback". TextureView renders black on the UTM VM. WebView test needs the provider set up on the VM (`scripts/webview-setup.sh`, sudo).
-- **Intermittent app hang**: the app's main thread blocks in `HardwareRenderer.nSetStopped` (thread dump 2026-10-28) when its window goes inactive/stopped, e.g. when another app's window appears. It makes the multi-app hub tests (`pendingintents`, `activities`, `broadcasts`) flaky; each phase passes alone. Same family as the old resize-with-dialog hang. Needs a root-cause fix (render thread waiting on a buffer that the sink does not release for an unmapped window).
+- TextureView renders black on the UTM VM (`texture-view.sh`; the quad is drawn, its texture is black; the host has the external-image extensions; not caused by the ES claim). `audio-aidl.sh`: the isolated monitor finds no clean left channel tone.
+- SettingsProvider: starts and migrates since the system-config fixes, then fails reading its own ABX settings files on the second start; `Settings.*` therefore stay Robolectric's in-memory fakes (`-Dapklayer.realsettings=true` is the opt-in). UserDictionaryProvider inserts return null.
 - Vulkan presentation: opt-in, Venus aborts on imported virgl dmabufs on the UTM host; needs a real-GPU host or a Venus-allocated swapchain bridge.
+- Camera: not implemented (no camera HAL; apps see no camera).
 
 **The user asked to revisit**
 - The user's other test apps in `~/TestApps` (some fail: converter, classpath conflicts such as NewPipe's R8-merged `kotlin.math.MathKt`): record app/status/cause and fix by cause.
@@ -47,13 +47,11 @@ If a decision changes, change it here in the same commit as the code.
 - OTR2: input and audio in the game are unchecked; `AChoreographer: No JVM provided` (harmless so far). P2: 2x HiDPI output and a real IME were never exercised.
 
 **Missing features**
-- **Permissions and system features must match real Android**: read the build's `system/etc/permissions/*.xml` (features, privapp-permissions), `sysconfig` and default-permissions into `PackageManager` (features, which packages hold signature/privileged permissions, default grants) instead of ad hoc grants; replaces `-Dapklayer.grantall`. Comes before system apps, hardware and release work.
-- DocumentsUI (tree APK `system/priv-app/DocumentsUI`, installs as "Files"): opens its window with `-Dapklayer.grantall=true` (grants the manifest's permissions, needed for HIDE_OVERLAY_WINDOWS), then crashes in `UserManager.getUserProperties()` (null `UserProperties`: a user-properties shadow is missing).
 - System apps and providers on every instance (Settings, Contacts, Calendar, Download, Telephony, UserDictionary, DocumentsUI, MediaProvider) hosted in an instance system JVM.
 - Hub gaps: several bindings per connection, filter-specific rebind, signature/runtime permission grants.
-- **Keystore first** (`android.security.keystore`, used by many apps). Then hardware domains, last and one at a time (`aosp/hals/README.md`): camera, GNSS (GeoClue), battery/power (UPower, logind), connectivity (NetworkManager, ModemManager; honest "no SIM"), USB (udev), portals (files, screen capture). **Not this round** (user, 2026-10-28): Bluetooth (BlueZ bridge), NFC, biometrics, sensors, vibrator/haptics and game controllers. Decided: backlight and thermal are the host's; accounts the Android way.
+- Keystore: key pairs exist; attestation, `KeyInfo` and user-authentication-bound keys do not. Hardware domains (`aosp/hals/README.md`): network, battery, USB, location (GeoClue) and the file chooser portal are host-backed Java shims now (`tests/vm/devices.sh`, `portal.sh`); camera, a real GNSS receiver, ModemManager ("no SIM" is the honest answer today), screen capture portal are open. **Not this round** (user, 2026-10-28): Bluetooth (BlueZ bridge), NFC, biometrics, sensors, vibrator/haptics and game controllers. Decided: backlight and thermal are the host's; accounts the Android way.
 - microG; per-app/instance sandbox (bwrap is blocked by Ubuntu's userns restriction); other codecs, higher-bit-depth VP9, hardware decoder dmabuf import.
-- Compatibility corpus (P3), the proposed next task in `STATUS.md`.
+- Compatibility corpus (P3): runner and first results exist (`tests/corpus/`); triage and more apps are the next task in `STATUS.md`.
 
 **Before a public release**
 - COMMERCIAL.md contact and terms, a CLA and ownership of the agent-written commits, NOTICE/legal files for everything shipped, the Android SDK `android.jar` terms if bundled.
