@@ -75,10 +75,9 @@ final class HostNetwork {
 
     private static synchronized void apply(Application app, State next) {
         State previous = current;
-        if (java.util.Objects.equals(previous, next) && previous != null) return;
-        if (previous == null && next == null && current == null && announcedOffline) return;
+        if (initialized && java.util.Objects.equals(previous, next)) return;
+        initialized = true;
         current = next;
-        announcedOffline = next == null;
         ConnectivityManager manager = app.getSystemService(ConnectivityManager.class);
         ShadowConnectivityManager shadow = Shadow.extract(manager);
         if (next == null) {
@@ -98,5 +97,5 @@ final class HostNetwork {
         }
     }
 
-    private static boolean announcedOffline;
+    private static boolean initialized;
 }
