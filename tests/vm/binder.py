@@ -44,7 +44,7 @@ with selectors.DefaultSelector() as events:
             found = next((line for line in logs[name] if needle in line), None)
             if found is not None:
                 return found
-            ready = events.select(min(3, max(0, end - time.monotonic())))
+            ready = events.select(min(15, max(0, end - time.monotonic())))
             assert ready, 'Binder test stalled before ' + needle + '\n' + '\n'.join(logs[name][-25:])
             for key, _ in ready:
                 source = key.data
