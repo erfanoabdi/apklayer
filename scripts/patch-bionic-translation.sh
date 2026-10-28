@@ -386,3 +386,26 @@ if 'bionic_android_get_device_api_level' not in s:
     s += '\n/* apklayer patch: see scripts/patch-bionic-translation.sh step 11 */\nint bionic_android_get_device_api_level(void)\n{\n\treturn 36;\n}\n'
     p.write_text(s)
 PY
+# 12. dlsym(RTLD_NEXT, name) falls back to the host's symbol when no later bionic library has it: Gecko's mozglue interposes putenv/setenv and crashes ("interposition failed")
+#     when RTLD_NEXT finds nothing, because the real libc is the host's glibc here.
+python3 - "$bt" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1]) / 'linker/dlfcn.c'
+s = p.read_text()
+old = '''		sym = NULL;
+		if (si && si->next) {
+			sym = apkenv_lookup(symbol, &found, si->next);
+		}
+'''
+new = old + '''		if (!sym) { /* apklayer patch: see scripts/patch-bionic-translation.sh step 12 */
+			void *host = dlsym(RTLD_DEFAULT, symbol);
+			if (host) {
+				pthread_mutex_unlock(&apkenv_dl_lock);
+				return wrapper_create(symbol, host);
+			}
+		}
+'''
+if 'step 12' not in s and old in s:
+    p.write_text(s.replace(old, new, 1))
+PY
