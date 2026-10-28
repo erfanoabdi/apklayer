@@ -86,7 +86,6 @@ final class HubDirectory extends Binder {
                 Path log = Path.of(System.getenv().getOrDefault("APKLAYER_LOGS", "/tmp/apklayer-stack"), "app-" + name + ".log");
                 Files.createDirectories(log.getParent());
                 ProcessBuilder command = new ProcessBuilder(System.getProperty("apklayer.cli"), "run", name).redirectErrorStream(true).redirectOutput(log.toFile());
-                command.environment().put("APKLAYER_JOPTS", "-Dapklayer.realbinder=true -Dapklayer.instancehub=true");
                 Process process = command.start(); appProcesses.put(name, process);
                 System.out.println("[apklayer-hub] starting app " + name + " launcherPid=" + process.pid());
                 process.onExit().thenAccept(exited -> { synchronized (appProcesses) { appProcesses.remove(name, process); } });
@@ -106,7 +105,6 @@ final class HubDirectory extends Binder {
                 ProcessBuilder command = new ProcessBuilder(System.getProperty("apklayer.cli"), "component-host", pkg)
                         .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(log.toFile()));
                 if (instance != null) command.environment().put("APKLAYER_ISOLATED", instance);
-                command.environment().put("APKLAYER_JOPTS", "-Dapklayer.realbinder=true -Dapklayer.instancehub=true" + (System.getenv("APKLAYER_WEBVIEW_PROVIDER") != null ? " -Dapklayer.nativelooper=true" : ""));
                 Process process = command.start(); hosts.put(name, process);
                 System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " starting " + name + " launcherPid=" + process.pid());
                 process.onExit().thenAccept(exited -> {

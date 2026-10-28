@@ -5,6 +5,8 @@ VM="${APKLY_VM:-utm@192.168.64.7}"; PASS="${APKLY_VM_PASS:-1234}"
 sshpass -p "$PASS" scp tests/vm/texture-view.py "$VM:apklayer-m1/tests/vm/texture-view.py"
 python3 - "$VM" "$PASS" <<'PY'
 import subprocess, sys
+sys.path.insert(0, 'tests/vm')
+from vmcapture import capture
 from PIL import Image, ImageChops
 images = []
 p = subprocess.Popen(['sshpass', '-p', sys.argv[2], 'ssh', sys.argv[1], 'cd ~/apklayer-m1; python3 -u tests/vm/texture-view.py'],
@@ -14,7 +16,7 @@ try:
         print(line, end='', flush=True)
         if line.startswith('CAPTURE '):
             path = '/tmp/apklayer-texture-' + line.split()[-1] + '.png'
-            subprocess.run(['prlctl', 'capture', 'Ubuntu 24.04 (with Rosetta)', '--file', path], check=True)
+            capture(path)
             im = Image.open(path).convert('RGB')
             orange = sum(r > 80 and r > g * 1.2 and g > b * 1.2 for r,g,b in im.getdata())
             assert orange > 60000, ('missing canyon texture', path, orange)

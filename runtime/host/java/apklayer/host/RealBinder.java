@@ -16,7 +16,6 @@ public final class RealBinder {
     /** Starts the binder thread pool of this JVM (once): incoming transactions run on its threads. */
     public static synchronized void init() {
         if (started) return;
-        if (!Boolean.getBoolean("apklayer.realbinder")) throw new IllegalStateException("Real Binder mode is required");
         NativeMedia.ensureInitialized();
         startPool();
         started = true;

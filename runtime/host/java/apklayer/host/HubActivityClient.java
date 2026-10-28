@@ -18,7 +18,7 @@ final class HubActivityClient {
     static volatile BiConsumer<Intent, ResultReceiver> starter;
     private static ResultReceiver launchReceiver;
 
-    static boolean enabled() { return Boolean.getBoolean("apklayer.instancehub") && HubClient.connected(); }
+    static boolean enabled() { return HubClient.connected(); }
 
     /** Sends the intent to the hub; false when the hub is not used or no installed app handles it. */
     static boolean route(Intent intent, Activity requester, Intent request) {

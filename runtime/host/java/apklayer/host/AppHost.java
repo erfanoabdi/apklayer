@@ -84,11 +84,10 @@ public final class AppHost implements Runnable {
     @Override
     public void run() {
         Thread.currentThread().setContextClassLoader(sandbox.getRobolectricClassLoader());
-        if (Boolean.getBoolean("apklayer.gpu")) System.setProperty("apklayer.nativelooper", "true");
         AppEnvironment.setUpApplication(sandbox, apk, describe != null);
         // apklayer patch: Android prepares the UI thread's native Looper before
         // native activity initialization; the paused Java queue alone does not.
-        if (describe == null && Boolean.getBoolean("apklayer.gpu") && NativeLooper.prepareForThread() == 0)
+        if (describe == null && NativeLooper.prepareForThread() == 0)
             throw new IllegalStateException("Cannot prepare the main native looper");
         Application app = RuntimeEnvironment.getApplication(); // created here (lazy), on persistent dirs
         if (describe != null) {
@@ -96,7 +95,7 @@ public final class AppHost implements Runnable {
             return;
         }
         AppEnvironment.startRuntime(app);
-        if (Boolean.getBoolean("apklayer.instancehub")) HubClient.attach(app);
+        HubClient.attach(app);
 
         Display display = app.getSystemService(DisplayManager.class).getDisplay(Display.DEFAULT_DISPLAY);
         int width = display.getWidth(), height = display.getHeight();
@@ -268,7 +267,7 @@ public final class AppHost implements Runnable {
                     // so host input and scripted steps are serviced while idle.
                     long wait = timeout == 0 ? 8 : max(1, min(8, timeout - SystemClock.uptimeMillis()));
                     looper.poll(wait);
-                    if (Boolean.getBoolean("apklayer.nativelooper")) pollNativeLooper();
+                    pollNativeLooper();
                     // Wall time since the previous advance, not since the top of this iteration: the time spent running the looper and
                     // the follow-ups below was dropped, so the app's clock ran at a third of real time under load (ExoPlayer played
                     // video at 8 fps and starved the audio, its clock being SystemClock).
@@ -287,7 +286,6 @@ public final class AppHost implements Runnable {
                 followOrientation();
                 followTextInput();
                 deliverCrossAppResults();
-                HostPortals.followNotifications();
             }
         } catch (Exception e) {
             throw new RuntimeException(e);

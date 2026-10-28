@@ -11,7 +11,6 @@ public final class HubClient {
     private final HubEndpoint endpoint;
     private volatile boolean alive = true;
     private HubClient(Context context) {
-        if (!Boolean.getBoolean("apklayer.realbinder")) throw new IllegalStateException("Hub requires real Binder mode");
         hub = HubStartup.connect();
         int hubPid = HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.STATUS, request -> {}, reply -> reply.readInt());
         endpoint = new HubEndpoint(context, hubPid);

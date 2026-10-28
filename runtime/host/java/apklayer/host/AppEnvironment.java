@@ -49,12 +49,11 @@ final class AppEnvironment {
                 .put(LazyApplication.LazyLoad.class, LazyApplication.LazyLoad.ON)
                 .put(GraphicsMode.Mode.class, GraphicsMode.Mode.NATIVE)
                 .put(SQLiteMode.Mode.class, SQLiteMode.Mode.NATIVE)
-                .put(ResourcesMode.Mode.class, Boolean.getBoolean("apklayer.nativeresources")
-                        ? ResourcesMode.Mode.NATIVE : ResourcesMode.Mode.BINARY)
+                .put(ResourcesMode.Mode.class, ResourcesMode.Mode.NATIVE)
                 .put(Config.class, config)
                 .build();
         sandbox.getTestEnvironment().setUpApplicationState("apklayer", configuration, manifest);
-        if (Boolean.getBoolean("apklayer.nativeaudio")) NativeProcess.install();
+        NativeProcess.install();
         persistDataDirs();
         provideExternalStorage();
     }
@@ -161,7 +160,7 @@ final class AppEnvironment {
         ShadowChoreographer.setFrameDelay(Duration.ofMillis(15));
         ShadowLog.setCaptureLogsEnabled(false);
         if (Boolean.getBoolean("apklayer.logcat")) ShadowLog.stream = System.out; // debug: the app's android.util.Log lines
-        if (Boolean.getBoolean("apklayer.nativemedia")) NativeMedia.ensureInitialized();
+        NativeMedia.ensureInitialized();
     }
 
     private AppEnvironment() {}

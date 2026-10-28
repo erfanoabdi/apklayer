@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """Locate the two real Wayland decorations in a capture, then let uinput focus them."""
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ''))
+from vmcapture import capture
 import json
 import subprocess
 import sys
@@ -40,7 +43,7 @@ if __name__ == '__main__':
             if line.startswith(('LOCATE ', 'CAPTURE ', 'RESIZE ')):
                 capture += 1
                 path = f'/tmp/apklayer-multi-app-{capture}.png'
-                subprocess.run(['prlctl', 'capture', 'Ubuntu 24.04 (with Rosetta)', '--file', path], check=True)
+                capture(path)
                 if line.startswith(('LOCATE ', 'RESIZE ')):
                     points = headers(path, 1, True) if line.startswith('RESIZE ') else headers(path)
                     proc.stdin.write(json.dumps(points) + '\n')

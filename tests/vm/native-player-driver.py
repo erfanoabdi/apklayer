@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ''))
+from vmcapture import capture
 import os
 import subprocess
 import sys
@@ -9,8 +12,7 @@ try:
     for line in proc.stdout:
         print(line, end='', flush=True)
         if line.startswith('CAPTURE '):
-            subprocess.run(['prlctl', 'capture', 'Ubuntu 24.04 (with Rosetta)',
-                '--file', '/tmp/apklayer-native-player.png'], check=True)
+            capture('/tmp/apklayer-native-player.png')
             from PIL import Image
             im = Image.open('/tmp/apklayer-native-player.png').convert('RGB')
             asset = os.environ.get('PLAYER_ASSET', 'red-h264.mp4')

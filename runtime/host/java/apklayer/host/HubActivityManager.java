@@ -25,7 +25,7 @@ final class HubActivityManager implements InvocationHandler {
 
     /** The activity manager an app sees: the hub-backed proxy around Robolectric's stand-in once the app is connected to the hub, the stand-in before. */
     static synchronized IActivityManager service(IActivityManager standIn) {
-        if (!Boolean.getBoolean("apklayer.instancehub") || !HubClient.connected()) return standIn;
+        if (!HubClient.connected()) return standIn;
         if (proxy == null)
             proxy = (IActivityManager) Proxy.newProxyInstance(IActivityManager.class.getClassLoader(), new Class<?>[] {IActivityManager.class}, new HubActivityManager(standIn));
         return proxy;

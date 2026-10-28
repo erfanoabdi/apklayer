@@ -89,44 +89,4 @@ final class HostPortals {
             return null;
         }
     }
-
-    /** (notification id) -> {content seen, desktop popup id or null}, so repeats are ignored and changes replace. */
-    private static final Map<Integer, String[]> shown = new java.util.HashMap<>();
-
-    /**
-     * Shows the app's notifications as desktop notifications, politely (user: they were annoying): ongoing ones
-     * (foreground services, media playback, progress) and channels of low importance stay out of the way, an
-     * unchanged notification is not shown again, and a changed one replaces its earlier popup.
-     */
-    static void followNotifications() {
-        if (Boolean.getBoolean("apklayer.instancehub")) return; // the hub shows them (HubNotifications)
-        NotificationManager nm = RuntimeEnvironment.getApplication().getSystemService(NotificationManager.class);
-        for (android.service.notification.StatusBarNotification sbn : nm.getActiveNotifications()) {
-            Notification n = sbn.getNotification();
-            CharSequence title = n.extras.getCharSequence(Notification.EXTRA_TITLE), text = n.extras.getCharSequence(Notification.EXTRA_TEXT);
-            String content = title + "\n" + text;
-            String[] before = shown.get(sbn.getId());
-            if (before != null && before[0].equals(content)) continue;
-            boolean quiet = (n.flags & (Notification.FLAG_ONGOING_EVENT | Notification.FLAG_FOREGROUND_SERVICE)) != 0;
-            android.app.NotificationChannel channel = n.getChannelId() == null ? null : nm.getNotificationChannel(n.getChannelId());
-            if (channel != null && channel.getImportance() <= NotificationManager.IMPORTANCE_LOW) quiet = true;
-            if (quiet) {
-                shown.put(sbn.getId(), new String[] {content, null});
-                continue;
-            }
-            java.util.List<String> cmd = new java.util.ArrayList<>(java.util.List.of("notify-send", "--print-id",
-                    "--app-name=" + RuntimeEnvironment.getApplication().getPackageName()));
-            if (before != null && before[1] != null) cmd.add("--replace-id=" + before[1]);
-            cmd.add(String.valueOf(title));
-            cmd.add(String.valueOf(text == null ? "" : text));
-            try {
-                Process p = new ProcessBuilder(cmd).redirectError(ProcessBuilder.Redirect.INHERIT).start();
-                String popupId = new String(p.getInputStream().readAllBytes()).trim();
-                shown.put(sbn.getId(), new String[] {content, popupId.isEmpty() ? null : popupId});
-                System.out.println("[apklayer] notification " + (before != null ? "updated" : "shown") + ": " + title + " / " + text);
-            } catch (IOException e) {
-                System.out.println("[apklayer] cannot show notification: " + e.getMessage());
-            }
-        }
-    }
 }

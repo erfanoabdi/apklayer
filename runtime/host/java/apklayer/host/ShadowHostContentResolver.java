@@ -11,7 +11,7 @@ import org.robolectric.shadows.ShadowContentResolver;
 /** notifyChange also reaches the observers of the other apps: the hub tells every other running app, which notifies its own observers (Robolectric's, in-process). */
 @Implements(value = ContentResolver.class, isInAndroidSdk = false)
 public class ShadowHostContentResolver extends ShadowContentResolver {
-    private static boolean hub() { return Boolean.getBoolean("apklayer.instancehub") && HubClient.connected(); }
+    private static boolean hub() { return HubClient.connected(); }
     private static void tell(Uri uri, int flags) { if (uri != null && hub()) HubClient.current().notifyChange(uri, flags); }
 
     @Implementation @Override protected void notifyChange(Uri uri, ContentObserver observer, boolean syncToNetwork) { super.notifyChange(uri, observer, syncToNetwork); tell(uri, 0); }

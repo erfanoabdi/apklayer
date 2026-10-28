@@ -63,7 +63,7 @@ public final class NativeLoader {
         synchronized (NativeLoader.class) {
             if (LOADED.containsKey(path)) return;
             init();
-            long handle = dlopen(Boolean.getBoolean("apklayer.gpu") ? new File(path).getName() : path); // bionic_translation finds a library by name in its path
+            long handle = dlopen(new File(path).getName()); // bionic_translation finds a library by name in its path
             if (handle == 0) throw new UnsatisfiedLinkError(path + ": " + dlerror());
             LOADED.put(path, handle);
             long onLoad = dlsym(handle, "JNI_OnLoad");
@@ -88,12 +88,6 @@ public final class NativeLoader {
     private static void init() {
         if (ready) return;
         String dir = System.getProperty("apklayer.native");
-        if (!Boolean.getBoolean("apklayer.gpu")) { // the older x86 route: its own loader library; the device-library route has these natives in the runtime shim (bridge/native/app_native.c)
-            if (dir == null || !new File(dir, "libapklayer_native.so").exists()) {
-                throw new UnsatisfiedLinkError("native libraries are not supported here (stage the native runtime with scripts/build-native-arm64.sh)");
-            }
-            System.load(new File(dir, "libapklayer_native.so").getAbsolutePath());
-        }
         String provider = System.getProperty("apklayer.webviewprovider");
         String androidLibs = System.getProperty("apklayer.androidlibs"); // the device-library route: Android's own libraries stay on the path (set by the runtime shim)
         setLibraryPath(System.getProperty("apklayer.libdir", dir) + (provider == null ? "" : ":" + provider + "/lib") + ":" + (androidLibs != null ? androidLibs + ":" : "") + dir); // app libs, the WebView provider's, then the bionic_translation libs

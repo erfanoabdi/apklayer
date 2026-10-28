@@ -11,9 +11,12 @@ export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 APKLAYER_NATIVE=
 setsid nohup bin/apklayer run com.android.test.uibench > /tmp/uibench-view.log 2>&1 < /dev/null &
 echo launched"
 python3 - "$SECS" <<'PY'
-import subprocess, sys, time
+import subprocess, sys
+sys.path.insert(0, 'tests/vm')
+from vmcapture import capture
+import time
 time.sleep(int(sys.argv[1]))
-subprocess.run(['prlctl', 'capture', 'Ubuntu 24.04 (with Rosetta)', '--file', '/tmp/apklayer-uibench.png'], check=False)
+capture('/tmp/apklayer-uibench.png')
 PY
 sshpass -p "$PASS" ssh "$VM" "grep -a 'FATAL\|Exception\|SIGSEGV\|Problematic\|started com.android' /tmp/uibench-view.log | grep -v '^\s*at ' | head -8 | cut -c1-200; pkill -f '[a]pklayer.host.Main'; pkill -x apklayer-shell; cd ~/apklayer-m1 && bin/apklayer stop >/dev/null 2>&1; ps -eo pid,args | grep -cE '[a]pklayer.host.Main' || true"
 echo "screenshot: /tmp/apklayer-uibench.png"

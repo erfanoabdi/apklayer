@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ''))
+from vmcapture import capture
 import subprocess
 import sys
 proc = subprocess.Popen(['sshpass', '-p', sys.argv[2], 'ssh', sys.argv[1],
@@ -8,8 +11,7 @@ try:
     for line in proc.stdout:
         print(line, end='', flush=True)
         if line.startswith('CAPTURE '):
-            subprocess.run(['prlctl', 'capture', 'Ubuntu 24.04 (with Rosetta)',
-                '--file', '/tmp/apklayer-native-surface.png'], check=True)
+            capture('/tmp/apklayer-native-surface.png')
             from PIL import Image
             im = Image.open('/tmp/apklayer-native-surface.png').convert('RGB')
             red = sum(r > 180 and g < 70 and b < 70 for r, g, b in im.get_flattened_data())

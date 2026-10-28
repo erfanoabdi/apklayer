@@ -5,7 +5,9 @@ import subprocess
 PARALLELS_NAME = os.environ.get('APKLAYER_VM_NAME', 'Ubuntu 24.04 (with Rosetta)')
 
 
-def capture(image, vm, password):
+def capture(image, vm=None, password=None):
+    vm = vm or os.environ.get('APKLY_VM', 'utm@192.168.64.7')
+    password = password or os.environ.get('APKLY_VM_PASS', '1234')
     if vm.startswith('parallels@'):
         subprocess.run(['prlctl', 'capture', PARALLELS_NAME, '--file', image], check=True)
         return

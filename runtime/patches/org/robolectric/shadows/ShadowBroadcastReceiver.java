@@ -28,11 +28,7 @@ public class ShadowBroadcastReceiver {
 
   @Implementation
   protected void abortBroadcast() {
-    if (Boolean.getBoolean("apklayer.instancehub")) {
-      ReflectionHelpers.callInstanceMethod(receiver, Shadow.directMethodName("android.content.BroadcastReceiver", "abortBroadcast"));
-      return;
-    }
-    abort.set(true);
+    ReflectionHelpers.callInstanceMethod(receiver, Shadow.directMethodName("android.content.BroadcastReceiver", "abortBroadcast"));
   }
 
   @Implementation

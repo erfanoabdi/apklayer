@@ -191,11 +191,8 @@ public class DefaultNativeRuntimeLoader implements NativeRuntimeLoader {
   /** Overridable in Android, due to changing shadows in private branches. */
   protected List<String> getCoreClassNatives() {
     ImmutableList.Builder<String> classes = ImmutableList.<String>builder().addAll(CORE_CLASS_NATIVES);
-    if (Boolean.getBoolean("apklayer.nativeattribution") || Boolean.getBoolean("apklayer.nativeaudio") || Boolean.getBoolean("apklayer.nativeparcels") || Boolean.getBoolean("apklayer.realbinder"))
-      classes.add("android.os.Parcel");
-    // apklayer patch: NDK asset/configuration APIs require real resource pointers.
-    if (Boolean.getBoolean("apklayer.nativeresources")) classes.add(
-        "android.content.res.ApkAssets", "android.content.res.AssetManager",
+    // apklayer patch: Parcel, the resource classes (NDK asset/configuration APIs need real resource pointers) and the media natives are always real
+    classes.add("android.os.Parcel", "android.content.res.ApkAssets", "android.content.res.AssetManager",
         "android.content.res.StringBlock", "android.content.res.XmlBlock");
     return classes.build();
   }
@@ -235,7 +232,6 @@ public class DefaultNativeRuntimeLoader implements NativeRuntimeLoader {
                   // Only copy fonts if graphics is supported, not just SQLite.
                   maybeCopyFonts(extractDirectory);
                   // apklayer patch: the device flavor uses the instance's real system data.
-                  if (!Boolean.getBoolean("apklayer.gpu")) maybeCopyHyphenData(extractDirectory);
                 }
                 Map<String, String> originalProperties = new HashMap<>();
                 maybeCopyIcuData(extractDirectory);
@@ -263,9 +259,6 @@ public class DefaultNativeRuntimeLoader implements NativeRuntimeLoader {
                 if (isAndroidVOrGreater()) {
                   invokeDeferredStaticInitializers();
                   // apklayer patch: set once by instance startup, shared by all app JVMs.
-                  if (!Boolean.getBoolean("apklayer.gpu")) {
-                    setNativeSystemProperty("ro.hyphen.data.dir", hyphenDataDir);
-                  }
                   Typeface.loadPreinstalledSystemFontMap();
                 } else {
                   System.setProperty("hyphen.data.dir", hyphenDataDir);
@@ -487,19 +480,13 @@ public class DefaultNativeRuntimeLoader implements NativeRuntimeLoader {
     }
     // apklayer patch: media classes also call their own natives during class init.
     // Finish them before Application.onCreate can query codec capabilities.
-    if (Boolean.getBoolean("apklayer.nativemedia")) {
-      for (String className : new String[] {"android.media.MediaCodec", "android.media.MediaCodecList", "android.media.MediaExtractor"}) {
-        ReflectionHelpers.callStaticMethod(
-            Shadow.class.getClassLoader(), className, "__staticInitializer__");
-      }
+    for (String className : new String[] {"android.media.MediaCodec", "android.media.MediaCodecList", "android.media.MediaExtractor"}) {
+      ReflectionHelpers.callStaticMethod(
+          Shadow.class.getClassLoader(), className, "__staticInitializer__");
     }
-    if (Boolean.getBoolean("apklayer.gpu")) {
-      // apklayer patch: GLES20 initializes only after original device JNI is registered.
-      ReflectionHelpers.callStaticMethod(Shadow.class.getClassLoader(), "android.opengl.GLES20", "__staticInitializer__");
-    }
-    if (Boolean.getBoolean("apklayer.nativeplayer")) {
-      ReflectionHelpers.callStaticMethod(Shadow.class.getClassLoader(), "android.media.MediaPlayer", "__staticInitializer__");
-    }
+    // apklayer patch: GLES20 initializes only after original device JNI is registered.
+    ReflectionHelpers.callStaticMethod(Shadow.class.getClassLoader(), "android.opengl.GLES20", "__staticInitializer__");
+    ReflectionHelpers.callStaticMethod(Shadow.class.getClassLoader(), "android.media.MediaPlayer", "__staticInitializer__");
   }
 
   private static boolean isAndroidVOrGreater() {

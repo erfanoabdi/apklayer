@@ -12,7 +12,7 @@ import org.robolectric.shadows.ShadowNotificationManager;
 /** With the hub, the app's notifications also go to the hub, which owns them for every app and shows them on the desktop. The in-process state stays for the app's own queries. */
 @Implements(value = NotificationManager.class, isInAndroidSdk = false)
 public class ShadowHostNotificationManager extends ShadowNotificationManager {
-    private static boolean hub() { return Boolean.getBoolean("apklayer.instancehub") && HubClient.connected(); }
+    private static boolean hub() { return HubClient.connected(); }
 
     @Implementation @Override protected void notify(int id, Notification notification) { notify(null, id, notification); }
 

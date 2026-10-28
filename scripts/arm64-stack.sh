@@ -15,21 +15,21 @@ trap 'kill "${!name_of[@]}" 2>/dev/null; pkill -x apklayer-shell 2>/dev/null' EX
 
 # Declare the optional media HAL only when this stack will actually provide it.
 media_manifest="$N/android-root/vendor/etc/vintf/manifest/apklayer-media.xml"
-if [ "${APKLAYER_CODEC2:-0}" = 1 ]; then
+if [ -f "$L/libapklayer_codec2.so" ]; then
     mkdir -p "$(dirname "$media_manifest")"
     cp "$(dirname "$(readlink -f "$0")")/../aosp/hals/media/codec2/manifest.xml" "$media_manifest"
 else
     rm -f "$media_manifest"
 fi
 audio_manifest="$N/android-root/vendor/etc/vintf/manifest/apklayer-audio.xml"
-if [ "${APKLAYER_AUDIO:-0}" = 1 ]; then
+if [ -f "$L/libapklayer_audio.so" ]; then
     mkdir -p "$(dirname "$audio_manifest")"
     cp "$(dirname "$(readlink -f "$0")")/../aosp/hals/audio/manifest.xml" "$audio_manifest"
 else
     rm -f "$audio_manifest"
 fi
 effects_manifest="$N/android-root/vendor/etc/vintf/manifest/apklayer-audio-effects.xml"
-if [ "${APKLAYER_AUDIO_SERVICES:-0}" = 1 ]; then
+if [ -f "$L/libapklayer_audioserver.so" ]; then
     mkdir -p "$(dirname "$effects_manifest")"
     cp "$(dirname "$(readlink -f "$0")")/../aosp/hals/audio/effects-manifest.xml" "$effects_manifest"
 else
@@ -59,16 +59,16 @@ svc servicemanager libapklayer_servicemanager.so /dev/binder
 svc permission libapklayer_permission.so  # libbinder's checkPermission() asks this service (system_server's PermissionController is not run)
 svc allocator libapklayer_allocator.so
 svc composer libapklayer_composer.so
-# Media integration remains opt-in while app/JNI playback is being completed.
-if [ "${APKLAYER_CODEC2:-0}" = 1 ]; then svc codec2 libapklayer_codec2.so; fi
-if [ "${APKLAYER_MEDIA_SERVICES:-0}" = 1 ]; then
+# Media and audio: every staged service runs.
+if [ -f "$L/libapklayer_codec2.so" ]; then svc codec2 libapklayer_codec2.so; fi
+if [ -f "$L/libapklayer_mediaserver.so" ]; then
     svc media libapklayer_mediaserver.so
     svc extractor libapklayer_mediaserver.so --extractor
 fi
-if [ "${APKLAYER_AUDIO:-0}" = 1 ]; then
+if [ -f "$L/libapklayer_audio.so" ]; then
     svc audio libapklayer_audio.so "$HOME/apklayer-m1/aosp/hals/audio/audio_policy_configuration.xml"
 fi
-if [ "${APKLAYER_AUDIO_SERVICES:-0}" = 1 ]; then
+if [ -f "$L/libapklayer_audioserver.so" ]; then
     svc audio-effects libapklayer_audio.so --effects "$HOME/apklayer-m1/aosp/hals/audio/audio_effects_config.xml"
     svc audio-services libapklayer_audioserver.so
 fi
@@ -86,7 +86,7 @@ echo "$$" > "$LOGS/stack.pid"
 for _ in $(seq 1 240); do
     ok=1
     "$N/bin/btload" "$L" libapklayer_servicetool.so --main check SurfaceFlingerAIDL 2>/dev/null | grep -q "SurfaceFlingerAIDL: found" || ok=0
-    if [ "${APKLAYER_AUDIO_SERVICES:-0}" = 1 ]; then
+    if [ -f "$L/libapklayer_audioserver.so" ]; then
         "$N/bin/btload" "$L" libapklayer_servicetool.so --main check media.audio_policy 2>/dev/null | grep -q "media.audio_policy: found" || ok=0
     fi
     [ "$ok" = 1 ] && { touch "$LOGS/ready"; break; }

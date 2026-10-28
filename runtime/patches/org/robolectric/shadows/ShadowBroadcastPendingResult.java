@@ -42,13 +42,9 @@ public final class ShadowBroadcastPendingResult {
 
   @Implementation
   protected void finish() {
-    if (Boolean.getBoolean("apklayer.instancehub")) {
-      org.robolectric.util.ReflectionHelpers.callInstanceMethod(
-          pendingResult, Shadow.directMethodName("android.content.BroadcastReceiver$PendingResult", "finish"));
-      finished.set(pendingResult);
-      return;
-    }
-    Preconditions.checkState(finished.set(pendingResult), "Broadcast already finished");
+    org.robolectric.util.ReflectionHelpers.callInstanceMethod(
+        pendingResult, Shadow.directMethodName("android.content.BroadcastReceiver$PendingResult", "finish"));
+    finished.set(pendingResult);
   }
 
   public ListenableFuture<BroadcastReceiver.PendingResult> getFuture() {

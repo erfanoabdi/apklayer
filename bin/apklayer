@@ -48,7 +48,7 @@ cache_key() {
 framework_dir() { echo "$NATIVE/aosp/android-all"; }
 host() {
     local nr="$NATIVE/android-root"
-    local -a opts=("-Dapklayer.native=$NATIVE" "-Dapklayer.androidlibs=$NATIVE/android-libs" -Dapklayer.gpu=true -Drobolectric.windowManager.useRequestedSize=true)
+    local -a opts=("-Dapklayer.native=$NATIVE" "-Dapklayer.androidlibs=$NATIVE/android-libs" -Drobolectric.windowManager.useRequestedSize=true)
     # shellcheck disable=SC1091
     . "$ROOT/scripts/native-env.sh"
     local java
@@ -233,7 +233,7 @@ cmd_hub() {
     exec 8>"${APKLAYER_LOGS:-/tmp/apklayer-stack}/hub.lock"
     flock -n 8 || return 0
     ensure_stack
-    host -Dapklayer.realbinder=true -Dapklayer.apps="$APPS" -Dapklayer.cli="$ROOT/bin/apklayer" \
+    host -Dapklayer.apps="$APPS" -Dapklayer.cli="$ROOT/bin/apklayer" \
         -cp "$(host_cp '')" apklayer.host.Main --hub
 }
 

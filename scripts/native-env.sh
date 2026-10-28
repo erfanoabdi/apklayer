@@ -9,7 +9,7 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" WAYLAND_DISPLAY=
 export APKLAYER_INSTANCE="${APKLAYER_INSTANCE:-default}" APKLAYER_NATIVE="$N"
 # bionic_translation's libraries first (the patched ones), then ours; the path layer and bionic's TLS slots come first in every lookup
 export LD_LIBRARY_PATH="$BT:$N" XDG_DATA_DIRS="$N/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}" LD_PRELOAD="$N/libapklayer-preload.so:libgcc_s.so.1" BIONIC_LD_LIBRARY_PATH="$L"
-export APKLAYER_CRASH_TRACE="${APKLAYER_CRASH_TRACE:-1}" APKLAYER_HOST_LIBS="${APKLAYER_HOST_LIBS:-$N/libapklayer-hal-graphics.so}"
+export APKLAYER_CRASH_TRACE="${APKLAYER_CRASH_TRACE:-1}"
 
 # The arm64 JVM for the app (an x86 JVM cannot load the arm64 device libraries).
 native_java() {
@@ -29,18 +29,16 @@ if [ -f "$L/libapklayer_vulkan.so" ] && [ -f "$L/vulkan.apklayer.so" ]; then
     export APKLAYER_VULKAN_HOST=1
 fi
 
-# apklayer patch: native OpenSL ES clients need the existing Android audio
-# services and PipeWire backend, including when launched from the desktop menu.
-if [ -f "$L/libOpenSLES.so" ] && [ -f "$L/libapklayer_audioserver.so" ] && [ -f "$N/libapklayer-hal-audio.so" ]; then
-    export APKLAYER_AUDIO="${APKLAYER_AUDIO:-1}"
-    export APKLAYER_AUDIO_SERVICES="${APKLAYER_AUDIO_SERVICES:-$APKLAYER_AUDIO}"
-    if [ "$APKLAYER_AUDIO" = 1 ]; then
-        case ":$APKLAYER_HOST_LIBS:" in
-            *":$N/libapklayer-hal-audio.so:"*) ;;
-            *) export APKLAYER_HOST_LIBS="$APKLAYER_HOST_LIBS:$N/libapklayer-hal-audio.so" ;;
-        esac
-    fi
-fi
+# The host side of the graphics, media and audio HALs: every staged library is loaded (the services and apps use all of them).
+APKLAYER_HOST_LIBS="${APKLAYER_HOST_LIBS:-}"
+for _hal in graphics media audio; do
+    [ -f "$N/libapklayer-hal-$_hal.so" ] && case ":$APKLAYER_HOST_LIBS:" in
+        *":$N/libapklayer-hal-$_hal.so:"*) ;;
+        *) APKLAYER_HOST_LIBS="${APKLAYER_HOST_LIBS:+$APKLAYER_HOST_LIBS:}$N/libapklayer-hal-$_hal.so" ;;
+    esac
+done
+export APKLAYER_HOST_LIBS
+unset _hal
 
 # apklayer patch: Android apps ask for the GLES level a device gives (3.2; Off The Road 2 needs 3.1). A host driver that stops lower (virgl: ES 3.0)
 # makes eglCreateContext fail with EGL_BAD_MATCH. The driver's own version override then claims the Android level: what the driver truly lacks

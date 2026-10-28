@@ -395,43 +395,37 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     }
     (*ti)->SetJNIFunctionTable(ti, &patched);
     int failed = register_classes(env, vm, rt);
-    char *native_audio = system_property(env, "apklayer.nativeaudio");
+    /* the native audio, binder, media and attribution registrations are always on: apps run on Android's own services */
     int audio_failed = 0;
-    if (native_audio && !strcmp(native_audio, "true")) {
+    {
         extern int apklayer_register_audio(JNIEnv *, void *);
         early_audio_capabilities = 1;
         audio_failed = apklayer_register_audio(env, rt);
         early_audio_capabilities = 0;
     }
-    free(native_audio);
-    char *real_binder = system_property(env, "apklayer.realbinder");
     int binder_failed = 0;
-    if (real_binder && !strcmp(real_binder, "true")) {
+    {
         extern int apklayer_register_binder(JNIEnv *, void *);
         binder_failed = apklayer_register_binder(env, rt);
     }
     if (binder_failed) audio_failed = 1;
     if (audio_failed) { (*ti)->SetJNIFunctionTable(ti, orig); return -1; }
-    char *media = system_property(env, "apklayer.nativemedia");
     int media_failed = audio_failed;
-    if (media && (!strcmp(media, "true") || !strcmp(media, "1"))) {
+    {
         extern int apklayer_register_media(JNIEnv *, JavaVM *);
         media_failed = apklayer_register_media(env, vm);
     }
-    free(media);
 
     /* the renaming table stays: an app library's JNI_OnLoad (the WebView provider's) registers natives of Robolectric-instrumented classes later */
     if (media_failed) { (*ti)->SetJNIFunctionTable(ti, orig); return -1; }
-    char *attribution = system_property(env, "apklayer.nativeattribution");
-    char *audio = system_property(env, "apklayer.nativeaudio");
     int attribution_failed = 0;
-    if ((attribution && !strcmp(attribution, "true")) || (audio && !strcmp(audio, "true"))) {
+    {
         extern int apklayer_register_attribution(JNIEnv *, jclass);
         jclass helper = lazy_find_class(env, "apklayer/host/NativeAttribution");
         attribution_failed = !helper || apklayer_register_attribution(env, helper);
         if (helper) (*env)->DeleteLocalRef(env, helper);
     }
-    if (real_binder && !strcmp(real_binder, "true") && !attribution_failed) {
+    if (!attribution_failed) {
         extern int apklayer_register_binderhelper(JNIEnv *, jclass);
         jclass helper = lazy_find_class(env, "apklayer/host/RealBinder");
         attribution_failed = !helper || apklayer_register_binderhelper(env, helper);
@@ -455,8 +449,6 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
         if (libcore_linux) { if (apklayer_register_linux(env, libcore_linux) != 0) (*env)->ExceptionClear(env); (*env)->DeleteLocalRef(env, libcore_linux); }
         else (*env)->ExceptionClear(env);
     }
-    free(real_binder);
-    free(attribution); free(audio);
     if (attribution_failed) media_failed = 1;
     if (media_failed) return -1;
     if (failed) fprintf(stderr, "[runtime] %d registrations did not run (see above)\n", failed);

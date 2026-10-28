@@ -28,7 +28,6 @@ final class HubServices {
     private static final Map<ServiceConnection, Connection> connections = new IdentityHashMap<>();
     private HubServices() {}
     static boolean external(Context context, Intent intent) {
-        if (!Boolean.getBoolean("apklayer.instancehub")) return false;
         String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
         return target != null && !target.equals(context.getPackageName());
     }

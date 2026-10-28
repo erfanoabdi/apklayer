@@ -1,3 +1,4 @@
+#define _GNU_SOURCE  /* pipe2 */
 /* Registers the natives of apklayer.host.NativeLoader on the device-library route: the functions are native_loader.c's (the older route builds them into its own
  * libapklayer_native.so, where HotSpot finds them by name; here they are bound with RegisterNatives from the runtime shim). */
 #include <jni.h>

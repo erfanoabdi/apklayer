@@ -80,7 +80,7 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
 
     // With the instance hub, broadcasts and receiver registrations run Android's own ContextImpl code (LoadedApk.ReceiverDispatcher, PendingResult...), which ends
     // in the hub-backed activity manager (HubActivityManager): Robolectric's in-process queue would only reach this app's own receivers.
-    private static boolean hub() { return Boolean.getBoolean("apklayer.instancehub"); }
+    private static boolean hub() { return true; }
     @SuppressWarnings("unchecked")
     private <T> T real(String name, ClassParameter<?>... parameters) {
         return (T) ReflectionHelpers.callInstanceMethod(real, Shadow.directMethodName("android.app.ContextImpl", name), parameters);

@@ -1,20 +1,14 @@
 package apklayer.host;
 
 import android.os.Parcel;
-import java.util.concurrent.ConcurrentHashMap;
 import org.robolectric.annotation.internal.DoNotInstrument;
-import org.robolectric.shadow.api.Shadow;
 import org.robolectric.util.ReflectionHelpers;
-import org.robolectric.util.ReflectionHelpers.ClassParameter;
 
-/** Explicit native payloads; ordinary framework/shadow service Parcels retain Java peers. */
+/** Explicit native payloads for the native media shadows: every Parcel is the framework's own native Parcel (ShadowHostRealParcel). */
 @DoNotInstrument
 public final class NativeParcel {
-    private static final ConcurrentHashMap<Long, Long> originals = new ConcurrentHashMap<>();
     private static final ThreadLocal<Integer> allocationDepth = ThreadLocal.withInitial(() -> 0);
     private static volatile boolean callbackFactoryReady;
-    // -Dapklayer.realbinder=true: every Parcel is the framework's own native Parcel (ShadowHostRealParcel), nothing needs promoting
-    private static final boolean REAL = Boolean.getBoolean("apklayer.realbinder");
     private NativeParcel() {}
     public static void markCallbackFactoryReady() { callbackFactoryReady = true; }
     static void requireCallbackFactory() {
@@ -26,42 +20,12 @@ public final class NativeParcel {
         @Override public void close() { allocationDepth.set(allocationDepth.get() - 1); }
     }
     static void requireNative(Parcel parcel) {
-        if (!owns(pointer(parcel))) throw new IllegalArgumentException("Native media requires an explicitly native Parcel");
+        if (pointer(parcel) == 0) throw new IllegalArgumentException("Native media requires a live native Parcel");
     }
     public static Parcel obtain() {
         NativeMedia.ensureInitialized();
-        Parcel parcel = Parcel.obtain();
-        try { promote(parcel); return parcel; }
-        catch (RuntimeException | Error failure) { parcel.recycle(); throw failure; }
+        return Parcel.obtain();
     }
-    static void promote(Parcel parcel) {
-        if (REAL) {
-            if (pointer(parcel) == 0) throw new IllegalArgumentException("Native Parcel has been destroyed");
-            return;
-        }
-        long original = pointer(parcel);
-        if (owns(original)) return;
-        if (!(Shadow.extract(parcel) instanceof ShadowHostNativeParcel))
-            throw new IllegalStateException("Selective native Parcel shadow is not enabled");
-        if (parcel.dataSize() != 0) throw new IllegalArgumentException("Native Parcel requires an empty payload");
-        long nativePeer = call("nativeCreate");
-        if (nativePeer == 0) throw new OutOfMemoryError("Native Parcel allocation");
-        originals.put(nativePeer, original);
-        ReflectionHelpers.setField(parcel, "mNativePtr", nativePeer);
-    }
+    static void promote(Parcel parcel) { requireNative(parcel); }
     static long pointer(Parcel parcel) { return ReflectionHelpers.getField(parcel, "mNativePtr"); }
-    static boolean owns(long peer) { return peer != 0 && (REAL || originals.containsKey(peer)); }
-    public static int activeParcels() { return originals.size(); }
-    static void restore(Parcel parcel) {
-        long peer = pointer(parcel);
-        Long original = originals.remove(peer);
-        if (original == null) return;
-        ReflectionHelpers.setField(parcel, "mNativePtr", original);
-        call("nativeDestroy", ClassParameter.from(long.class, peer));
-    }
-    static Long remove(long peer) { return originals.remove(peer); }
-    static <T> T call(String method, ClassParameter<?>... parameters) {
-        return ReflectionHelpers.callStaticMethod(Parcel.class,
-                Shadow.directNativeMethodName(Parcel.class.getName(), method), parameters);
-    }
 }

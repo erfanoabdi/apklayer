@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ''))
+from vmcapture import capture
 import importlib.util
 import json
 from pathlib import Path
@@ -21,7 +24,7 @@ try:
         if line.startswith(('LOCATE ', 'CAPTURE ')):
             capture += 1
             image = f'/tmp/apklayer-input-{capture}.png'
-            subprocess.run(['prlctl', 'capture', 'Ubuntu 24.04 (with Rosetta)', '--file', image], check=True)
+            capture(image)
             if line.startswith('LOCATE '):
                 proc.stdin.write(json.dumps(geometry.headers(image, 1, content_y=int(line.split()[1]))) + '\n')
                 proc.stdin.flush()

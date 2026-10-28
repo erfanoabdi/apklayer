@@ -12,7 +12,7 @@ import org.robolectric.shadows.ShadowService;
 public class ShadowHostService extends ShadowService {
     @RealObject private Service service;
 
-    private static boolean hub() { return Boolean.getBoolean("apklayer.instancehub") && HubClient.connected(); }
+    private static boolean hub() { return HubClient.connected(); }
     private boolean stop(int startId) { return HubServices.stopSelf(new ComponentName(service, service.getClass().getName()), startId); }
 
     @Implementation @Override protected void stopSelf() { if (hub()) stop(-1); else super.stopSelf(); }
