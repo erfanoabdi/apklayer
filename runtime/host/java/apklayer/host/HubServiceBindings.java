@@ -44,6 +44,8 @@ final class HubServiceBindings {
         Binding binding = new Binding(caller, explicit, connection, flags, key);
         synchronized (bindings) {
             Binding old = bindings.get(connection.asBinder());
+            // binding the same connection to the same service again only changes its flags on Android (GeckoView does it to move a child process between priorities); the hub keeps the first ones
+            if (old != null && old.caller.pid() == caller.pid() && old.intent.getComponent().equals(explicit.getComponent())) return true;
             if (old != null) throw new IllegalArgumentException("Connection already bound");
             bindings.put(connection.asBinder(), binding);
         }
