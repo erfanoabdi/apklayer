@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Own two JVMs, observe actual Binder calls/death, and reap every child."""
+import os as _os
+LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import os
 from pathlib import Path
 import selectors
@@ -77,7 +79,7 @@ with selectors.DefaultSelector() as events:
             wait_for('client', 'finished hello.hubclient.Main depth=0')
             if not auto_mode:
                 wait_for('hub', '[apklayer-hub] died hello.hubclient')
-            target_log = Path('/tmp/apklayer-stack/component-hello.hubserver.log').read_text(errors='replace')
+            target_log = Path(LOGDIR + '/component-hello.hubserver.log').read_text(errors='replace')
             assert '[hello-hub-server] destroy hello.hubserver.EchoService' in target_log, target_log[-4000:]
             assert not any('displaywindow=' in line for line in target_log.splitlines()), 'service host created an app display'
             print('PASS Context.bindService: generated AIDL/Bundle/callback, permissions, null binding, process restart and unbind', flush=True)

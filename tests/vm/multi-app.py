@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Two native app JVMs, one cold-started stack; real focus and close routing."""
+import os as _os
+LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import os
 import json
 from pathlib import Path
@@ -39,8 +41,7 @@ def keys(*steps):
 
 
 def layers():
-    r = subprocess.run(['bash', '-c', '. scripts/native-env.sh; exec "$N/bin/btload" "$L" '
-                        'libapklayer_servicetool.so --main dump SurfaceFlinger --list'],
+    r = subprocess.run(['b/cli/apklayer', 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger', '--list'],
                        env=ENV, capture_output=True, text=True, check=True)
     return r.stdout
 
@@ -112,14 +113,14 @@ try:
                     assert processes[package].poll() is None
                     print('PASS surviving app main loop remains responsive', flush=True)
     assert focus_checked and closed, 'real close did not reach either app'
-    shell = Path('/tmp/apklayer-stack/shell.log').read_text(errors='replace')
+    shell = Path(LOGDIR + '/shell.log').read_text(errors='replace')
     assert shell.count('[shell] listening on ') == 1, 'concurrent launches restarted the shell'
     service = subprocess.run(['pgrep', '-af', '[l]ibapklayer_servicemanager.so'], capture_output=True, text=True)
     assert len(service.stdout.splitlines()) == 1, 'more than one service stack'
     assert '[shell] apklayer: window ' not in shell, 'primary window exists'
     assert all('[shell] ' + p + ' takes the input of window' in shell for p in PACKAGES)
     displays = [re.search(r'virtual display \"([^\"]+)\": layer stack (\d+)',
-        Path('/tmp/apklayer-stack/vdisplay-' + p + '.log').read_text(errors='replace')).groups() for p in PACKAGES]
+        Path(LOGDIR + '/vdisplay-' + p + '.log').read_text(errors='replace')).groups() for p in PACKAGES]
     assert len({d[0] for d in displays}) == len({d[1] for d in displays}) == 2, displays
     assert any('configure 420x600' not in s and 'configure ' in s for s in lines[survivor]), 'survivor did not resize'
     final_size = re.findall(r'configure (\d+x\d+)', '\n'.join(lines[survivor]))[-1]

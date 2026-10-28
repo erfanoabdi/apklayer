@@ -6,7 +6,7 @@ cd "$(dirname "$0")/../.."
 VM="${APKLY_VM:-utm@192.168.64.7}"; PASS="${APKLY_VM_PASS:-1234}"
 tests/apps/build.sh hello-vulkan
 sshpass -p "$PASS" scp -q build/hello-vulkan.apk "$VM:/tmp/hello-vulkan.apk"
-COPYFILE_DISABLE=1 tar cf - tests/vm/vulkan-present.py scripts/native-env.sh bridge/native/apklayer.prop 2>/dev/null | sshpass -p "$PASS" ssh "$VM" 'tar xf - -C ~/apklayer-m1 2>/dev/null'
+COPYFILE_DISABLE=1 tar cf - tests/vm/vulkan-present.py bridge/native/apklayer.prop 2>/dev/null | sshpass -p "$PASS" ssh "$VM" 'tar xf - -C ~/apklayer-m1 2>/dev/null'
 sshpass -p "$PASS" ssh "$VM" 'cd ~/apklayer-m1; export XDG_RUNTIME_DIR=/run/user/1000 APKLAYER_NATIVE="$HOME/arm64-native"; bin/apklayer install /tmp/hello-vulkan.apk 2>&1 | grep -a installed; bin/apklayer stop >/dev/null 2>&1; pkill -f "[b]in/apklayer hub"; true'
 python3 - "$VM" "$PASS" <<'PY'
 import os, subprocess, sys

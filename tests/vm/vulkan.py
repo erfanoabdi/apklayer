@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Real APK JNI Vulkan readback, presentation capability matching the host device and physical Back."""
+import os as _os
+LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import ctypes
 import os
 from pathlib import Path
@@ -22,7 +24,7 @@ def stop():
     subprocess.run(['pkill', '-9', '-x', 'tail'], check=False)
 
 stop()
-logs = Path('/tmp/apklayer-stack'); logs.mkdir(exist_ok=True)
+logs = Path(LOGDIR); logs.mkdir(exist_ok=True)
 libc = ctypes.CDLL(None, use_errno=True)
 notify = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
 assert notify >= 0 and libc.inotify_add_watch(notify, os.fsencode(logs), 0x102) >= 0

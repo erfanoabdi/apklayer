@@ -13,6 +13,6 @@ for name in libvulkan.so vulkan.apklayer.so libapklayer_vktest.so; do
     [ "$actual" = "$expected" ]
     echo "Verified $target $actual"
 done
-COPYFILE_DISABLE=1 tar cf - scripts/native-env.sh bridge/native/apklayer.prop |
+COPYFILE_DISABLE=1 tar cf - bridge/native/apklayer.prop |
     sshpass -p "$PASS" ssh "$VM" 'tar xf - -C ~/apklayer-m1'
 sshpass -p "$PASS" ssh "$VM" 'cfg="$HOME/arm64-native/share/bionic_translation/cfg.d/bionic_translation.cfg"; sed -i "/^libvulkan.so[[:space:]]/d" "$cfg"; echo "libvulkan.so libapklayer_vulkan.so" >> "$cfg"'

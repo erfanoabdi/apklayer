@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Cross-app broadcasts through the instance hub: one phase per run (manifest | basic | ordered | sticky), every JVM owned, drained and reaped."""
+import os as _os
+LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import ctypes
 import os
 from pathlib import Path
@@ -15,7 +17,7 @@ BASE = '-Dapklayer.realbinder=true -Dapklayer.instancehub=true -Dapklayer.runms=
 ENV = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000', APKLAYER_NATIVE=str(Path.home() / 'arm64-native'),
     APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400', APKLAYER_JOPTS=BASE)
 ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-media.so'
-LOGS = Path('/tmp/apklayer-stack')
+LOGS = Path(LOGDIR)
 libc = ctypes.CDLL(None, use_errno=True)
 
 

@@ -52,7 +52,7 @@ std::string Layout::cliBinary() const { return realPath("/proc/self/exe"); }
 Instance Instance::open(const Layout& layout, const std::string& id) {
     Instance i;
     i.id = id;
-    i.stateDir = join(layout.stateHome, "apklayer/" + id);
+    i.stateDir = getenvOr("APKLAYER_LOGS", join(layout.stateHome, "apklayer/" + id));  // tests may point the logs elsewhere
     i.runtimeDir = join(layout.runtimeHome, "apklayer/" + id);
     makeDirs(i.stateDir);
     makeDirs(i.runtimeDir);

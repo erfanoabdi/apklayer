@@ -42,6 +42,9 @@ int main(int argc, char** argv) {
     if (cmd == "uninstall" && n == 2) { uninstallApp(layout, args[1]); return 0; }
     if (cmd == "stop") { stopStack(layout, inst); return 0; }
     if (cmd == "stack-daemon") return runStackDaemon(layout, inst);
+    // test harness: the services plus one tool in the foreground (ends with the tool); exec: one library under the environment
+    if (cmd == "stack" && n >= 2) return runStackDaemon(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
+    if (cmd == "exec" && n >= 2) return execTool(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "env") {
         NativeEnv ne = nativeEnv(layout, inst);
         hostJvmArgs(layout, ne);

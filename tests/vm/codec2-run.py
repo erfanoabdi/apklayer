@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Own the complete media stack; actual log events expose progress and stalls."""
+import os as _os
+LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import ctypes
 import os
 from pathlib import Path
@@ -9,7 +11,7 @@ import subprocess
 import sys
 import time
 
-logs = Path(os.environ.get('APKLAYER_LOGS', '/tmp/apklayer-stack'))
+logs = Path(os.environ.get('APKLAYER_LOGS', LOGDIR))
 logs.mkdir(parents=True, exist_ok=True)
 libc = ctypes.CDLL(None, use_errno=True)
 fd = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
@@ -41,7 +43,7 @@ fixture = sys.argv[1] if len(sys.argv) > 1 else '/tmp/apklayer-vp8.ivf'
 mode = sys.argv[2:]
 probe = '--reorder-probe' if mode == ['reorder'] else '--remote-probe'
 if probe == '--reorder-probe': mode = []
-proc = subprocess.Popen(['scripts/arm64-stack.sh', 'libapklayer_codec2.so', probe,
+proc = subprocess.Popen(['b/cli/apklayer', 'stack', 'libapklayer_codec2.so', probe,
     fixture, *mode], stdout=subprocess.PIPE,
     stderr=subprocess.STDOUT, start_new_session=True)
 try:

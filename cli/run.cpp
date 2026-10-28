@@ -31,7 +31,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
 
     NativeEnv ne = nativeEnv(l, inst);
     if (!ensureStack(l, inst)) return 1;
-    ensureShell(l, ne);
+    ensureShell(l, inst, ne);
 
     std::vector<std::string> jvm = hostJvmArgs(l, ne);
     int vdisplay = 0;

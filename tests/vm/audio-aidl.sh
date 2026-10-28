@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 VM="${APKLY_VM:-utm@192.168.64.7}"
 PASS="${APKLY_VM_PASS:-1234}"
-COPYFILE_DISABLE=1 tar cf - aosp/hals/audio/manifest.xml aosp/hals/audio/audio_policy_configuration.xml scripts/arm64-stack.sh scripts/native-env.sh tests/vm/audio-host.py |
+COPYFILE_DISABLE=1 tar cf - aosp/hals/audio/manifest.xml aosp/hals/audio/audio_policy_configuration.xml tests/vm/audio-host.py |
     sshpass -p "$PASS" ssh "$VM" 'tar xf - -C ~/apklayer-m1'
 sshpass -p "$PASS" ssh "$VM" bash -s <<'REMOTE'
 set -euo pipefail

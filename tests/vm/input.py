@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Real widget typing, clipboard and IBus -> Mutter -> proxied text-input-v3."""
+import os as _os
+LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import gi
 gi.require_version('IBus', '1.0')
 from gi.repository import IBus, Gio
@@ -137,7 +139,7 @@ try:
                 elif 'script: hover:9,0' in line:
                     print('CAPTURE verified input', flush=True)
     assert len(checks) == 5, checks
-    shell = Path('/tmp/apklayer-stack/shell.log').read_text(errors='replace')
+    shell = Path(LOGDIR + '/shell.log').read_text(errors='replace')
     assert '[shell] text input enabled' in shell, 'proxied field did not enable text-input-v3'
     print('PASS real typing, host/app clipboard, 20KB transfer and IBus preedit/commit through proxy', flush=True)
 finally:

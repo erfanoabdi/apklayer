@@ -83,7 +83,7 @@ final class HubDirectory extends Binder {
             Process old = appProcesses.get(name);
             if (old != null && old.isAlive()) return;
             try {
-                Path log = Path.of(System.getenv().getOrDefault("APKLAYER_LOGS", "/tmp/apklayer-stack"), "app-" + name + ".log");
+                Path log = Path.of(System.getenv().getOrDefault("APKLAYER_LOGS", System.getProperty("user.home") + "/.local/state/apklayer/default"), "app-" + name + ".log");
                 Files.createDirectories(log.getParent());
                 ProcessBuilder command = new ProcessBuilder(System.getProperty("apklayer.cli"), "run", name).redirectErrorStream(true).redirectOutput(log.toFile());
                 Process process = command.start(); appProcesses.put(name, process);
@@ -100,7 +100,7 @@ final class HubDirectory extends Binder {
             Process old = hosts.get(name);
             if (old != null && old.isAlive()) return;
             try {
-                Path log = Path.of(System.getenv().getOrDefault("APKLAYER_LOGS", "/tmp/apklayer-stack"), "component-" + name.replace('#', '-') + ".log");
+                Path log = Path.of(System.getenv().getOrDefault("APKLAYER_LOGS", System.getProperty("user.home") + "/.local/state/apklayer/default"), "component-" + name.replace('#', '-') + ".log");
                 Files.createDirectories(log.getParent());
                 ProcessBuilder command = new ProcessBuilder(System.getProperty("apklayer.cli"), "component-host", pkg)
                         .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(log.toFile()));

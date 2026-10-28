@@ -43,7 +43,7 @@ meson setup b && ninja -C b                        # apklayer-shell, the dex2jvm
 scripts/build-tree-host.sh ~/arm64-native          # apklayer's host classes against the staged Robolectric
 sudo scripts/vm-binder-setup.sh                    # kernel binderfs (binder_linux module)
 
-bin/apklayer install app.apk                       # convert once (cached), menu entry + icon, .apk file handler
+apklayer install app.apk                       # convert once (cached), menu entry + icon, .apk file handler
 bin/apklayer run <package|app.apk>                 # starts the instance's Android services on demand
 bin/apklayer list | uninstall <package> | stop
 ```
@@ -63,7 +63,8 @@ Apps live in `~/.local/share/apklayer/apps/<package>/`. Settings for menu launch
 | `bridge/hals/` | host side of the graphics, audio and media HALs |
 | `bridge/shell/` | `apklayer-shell`: Wayland windows for the virtual displays, input, clipboard |
 | `aosp/` | Android-side modules built in the LineageOS tree (HALs, services, tools) |
-| `scripts/` | staging, builds, the services stack (`arm64-stack.sh`), patches to the tree |
+| `cli/` | the `apklayer` tool (C++): install, run, stack daemon, environment |
+| `scripts/` | staging, builds, the build and staging scripts, patches to the tree |
 | `tests/` | `tests/vm/` runs on a test VM or device with real input and screenshots; `tests/apps/` sample APKs; `tests/uibench/` |
 
 ## License

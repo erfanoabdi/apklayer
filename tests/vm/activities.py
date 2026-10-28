@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Content activities across apps through the instance hub: one phase per run (basic | denied | death), every JVM owned and reaped."""
+import os as _os
+LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import os
 from pathlib import Path
 import selectors
@@ -51,7 +53,7 @@ try:
                     killed = True
                     os.kill(int(line.split()[2]), signal.SIGKILL)
                 if '[act] PASS' in line:
-                    if PHASE == 'private': assert 'PRIVATE STARTED' not in Path('/tmp/apklayer-stack/app-hello.acttarget.log').read_text(errors='replace') if Path('/tmp/apklayer-stack/app-hello.acttarget.log').exists() else True, 'private activity started'
+                    if PHASE == 'private': assert 'PRIVATE STARTED' not in Path(LOGDIR + '/app-hello.acttarget.log').read_text(errors='replace') if Path(LOGDIR + '/app-hello.acttarget.log').exists() else True, 'private activity started'
                     print('PASS activities ' + PHASE, flush=True)
                     raise SystemExit(0)
     raise AssertionError('timed out\n' + '\n'.join(lines[-25:]))

@@ -43,23 +43,35 @@ bool shellListening(const Layout& l) {
 }
 
 bool alive(int pid) { return pid > 0 && kill(pid, 0) == 0; }
+
+// SIGTERM, then wait for the exit on a pidfd (SIGKILL after 5 s): `stop` returns with the processes gone.
+void terminate(int pid) {
+    if (!alive(pid)) return;
+    int fd = pidfdOpen(pid);
+    kill(pid, SIGTERM);
+    pollfd p{fd, POLLIN, 0};
+    if (fd >= 0 && poll(&p, 1, 5000) == 0) {
+        kill(pid, SIGKILL);
+        poll(&p, 1, 2000);
+    }
+    if (fd >= 0) close(fd);
+}
 }  // namespace
 
-void ensureShell(const Layout& l, const NativeEnv& env) {
+void ensureShell(const Layout& l, const Instance& inst, const NativeEnv& env) {
     if (shellListening(l)) return;
     makeDirs(join(l.runtimeHome, "apklayer"));
     unlink(l.shellSocket().c_str());
     Spawn shell;
     shell.argv = {l.shellBinary()};
     shell.env = env.env;
-    shell.logFile = join(l.stateHome, "apklayer/shell.log");
-    makeDirs(dirName(shell.logFile));
+    shell.logFile = join(inst.logs(), "shell.log");
     shell.newSession = true;  // outlives any instance; instances never stop it
     shell.detach = true;
     spawn(shell);
 }
 
-int runStackDaemon(const Layout& l, const Instance& inst) {
+int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std::string>& tool) {
     NativeEnv ne = nativeEnv(l, inst);
     const std::string& n = l.native;
     for (const std::string& f : listDir(inst.logs()))
@@ -84,7 +96,7 @@ int runStackDaemon(const Layout& l, const Instance& inst) {
     prop.argv = {join(n, "bin/aprop"), "set", "service.sf.cache_dir_available", "1"};
     runAndWait(prop);
 
-    if (getenvOr("APKLAYER_START_SHELL", "1") == "1") ensureShell(l, ne);
+    if (getenvOr("APKLAYER_START_SHELL", "1") == "1") ensureShell(l, inst, ne);
 
     std::vector<Service> running;
     auto start = [&](const std::string& name, const std::string& lib, std::vector<std::string> args) {
@@ -112,6 +124,12 @@ int runStackDaemon(const Layout& l, const Instance& inst) {
         start("audio-services", "libapklayer_audioserver.so", {});
     }
     start("surfaceflinger", "libapklayer_surfaceflinger.so", {});
+    if (!tool.empty()) {
+        // smoke tools draw on stack 0: give them the same virtual-display sink an app uses
+        if (staged(l, "libapklayer_vdisplay.so"))
+            start("test-display", "libapklayer_vdisplay.so", {"apklayer:test", "0", getenvOr("APKLAYER_DISPLAY_WIDTH", "720"), getenvOr("APKLAYER_DISPLAY_HEIGHT", "1280")});
+        start("tool", tool[0], std::vector<std::string>(tool.begin() + 1, tool.end()));
+    }
     writeFile(inst.pidFile(), std::to_string(getpid()) + "\n");
 
     // Ready when SurfaceFlinger has registered, and the audio policy when audio services run (an AudioTrack created before it exists gets
@@ -147,7 +165,7 @@ int runStackDaemon(const Layout& l, const Instance& inst) {
             if (!(fds[i].revents & POLLIN)) continue;
             if (i < nServices) {
                 fprintf(stderr, "exited: %s\n", running[i].name.c_str());
-                status = 1;
+                status = running[i].name == "tool" ? 0 : 1;  // the tool finishing is the normal end of a test run; its verdict is in its log
                 run = false;
             } else if (i < nServices + waiters.size()) {
                 int st = 0;
@@ -166,6 +184,10 @@ int runStackDaemon(const Layout& l, const Instance& inst) {
     for (const Service& s : running) waitpid(s.pid, nullptr, 0);
     unlink(inst.readyFile().c_str());
     unlink(inst.pidFile().c_str());
+    Spawn shell;  // the window shell ends with the stack (one instance per session today)
+    shell.argv = {"pkill", "-x", "apklayer-shell"};
+    shell.env = currentEnv();
+    runAndWait(shell);
     return status;
 }
 
@@ -191,17 +213,32 @@ bool ensureStack(const Layout& l, const Instance& inst) {
     return waitForFile(inst.readyFile(), -1);
 }
 
-void stopStack(const Layout&, const Instance& inst) {
+int execTool(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {
+    if (args.empty()) die("exec <library> [args...]");
+    NativeEnv ne = nativeEnv(l, inst);
+    Spawn s;
+    s.argv = {l.btload(), l.androidLibs, args[0], "--main"};
+    s.argv.insert(s.argv.end(), args.begin() + 1, args.end());
+    s.env = ne.env;
+    return runAndWait(s);
+}
+
+void stopStack(const Layout& l, const Instance& inst) {
+    Spawn shell;  // one instance per session today: the window shell goes with it
+    shell.argv = {"pkill", "-x", "apklayer-shell"};
+    shell.env = currentEnv();
+    runAndWait(shell);
+    (void)l;
     for (const std::string& f : listDir(inst.stateDir)) {  // launches of this instance: their JVM and window sink
         if (f.rfind("run.", 0) != 0) continue;
         auto record = readFile(join(inst.stateDir, f));
-        if (record) for (const std::string& pid : split(*record, '\n')) if (alive(atoi(pid.c_str()))) kill(atoi(pid.c_str()), SIGTERM);
+        if (record) for (const std::string& pid : split(*record, '\n')) terminate(atoi(pid.c_str()));
         unlink(join(inst.stateDir, f).c_str());
     }
     // the hub lives on the stack's binder: it ends with it (a stale one would hold the lock for the next stack)
-    if (auto hub = readFile(join(inst.stateDir, "hub.pid")); hub && alive(atoi(hub->c_str()))) kill(atoi(hub->c_str()), SIGTERM);
+    if (auto hub = readFile(join(inst.stateDir, "hub.pid"))) terminate(atoi(hub->c_str()));
     auto pid = readFile(inst.pidFile());
-    if (pid && alive(atoi(pid->c_str()))) kill(atoi(pid->c_str()), SIGTERM);
+    if (pid) terminate(atoi(pid->c_str()));
 }
 
 }  // namespace apklayer

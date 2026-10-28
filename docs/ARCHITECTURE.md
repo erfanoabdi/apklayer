@@ -16,7 +16,7 @@ apps and games see real Android, shown as Wayland windows. Details of that route
    apklayer.host: Main → AppHost (lifecycle, back stack, host input, windows), the hub client
    Android's native libraries (libandroid_runtime, HWUI, media, binder) loaded by bionic_translation; the app's own .so too
         │ kernel binder (binderfs)
- Instance services, host processes (scripts/arm64-stack.sh): servicemanager, SurfaceFlinger, gralloc, HWC, audio, media, vdisplay sink
+ Instance services, host processes (the stack daemon of `cli/stack.cpp`): servicemanager, SurfaceFlinger, gralloc, HWC, audio, media, vdisplay sink
         │ dmabuf frames, real vsync
  apklayer-shell (one per session): one xdg_toplevel per virtual display, pointer/keyboard/touch/clipboard/IME → the focused app
         │

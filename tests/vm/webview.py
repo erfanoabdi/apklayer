@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Content webview across apps through the instance hub: one phase per run (basic | denied | death), every JVM owned and reaped."""
+import os as _os
+LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import os
 from pathlib import Path
 import selectors
@@ -60,7 +62,7 @@ try:
             print('=== threads of ' + pid, *[b[:1400] for b in dump if any(k in b for k in ('Chrome_', 'ChildProcess', 'ThreadPool', 'Main Thread', 'WV.', 'org.chromium'))][:40], sep='\n', flush=True)
     raise AssertionError('timed out\n' + '\n'.join(lines[-25:]))
 finally:
-    for log in [Path('/tmp/apklayer-stack/hub.log')] + sorted(Path('/tmp/apklayer-stack').glob('component-com.android.webview*.log')):
+    for log in [Path(LOGDIR + '/hub.log')] + sorted(Path(LOGDIR).glob('component-com.android.webview*.log')):
         name = log.name
         if log.exists(): print('--- ' + name + ' (tail)', *[l[:200] for l in log.read_text(errors='replace').split('\n') if 'symbol may' not in l][-25:], sep='\n', flush=True)
     if proc is not None and proc.poll() is None: os.killpg(proc.pid, signal.SIGTERM)

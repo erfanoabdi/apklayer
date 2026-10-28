@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Own a real PipeWire test sink, monitor PCM, native producer and cleanup."""
+import os as _os
+LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import array
 import math
 import os
@@ -45,10 +47,10 @@ try:
                         producer_command = ['b/bridge/hals/audio/audio-test', name] + (['mono'] if mono else [])
                         if aidl:
                             env.update(APKLAYER_AUDIO_TARGET=name, APKLAYER_AUDIO='1')
-                            producer_command = ['scripts/arm64-stack.sh', 'libapklayer_audio.so', '--probe']
+                            producer_command = ['b/cli/apklayer', 'stack', 'libapklayer_audio.so', '--probe']
                             if system:
                                 env['APKLAYER_AUDIO_SERVICES'] = '1'
-                                producer_command = ['scripts/arm64-stack.sh', 'libapklayer_audioserver.so', '--track']
+                                producer_command = ['b/cli/apklayer', 'stack', 'libapklayer_audioserver.so', '--track']
                         producer = subprocess.Popen(producer_command, env=env,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
                         events.register(producer.stdout, selectors.EVENT_READ)
@@ -57,7 +59,7 @@ try:
                         status = producer.wait()
                         if status and aidl:
                             for logname in ('audio.log', 'tool.log'):
-                                print((Path('/tmp/apklayer-stack') / logname).read_text(errors='replace')[-6000:], flush=True)
+                                print((Path(LOGDIR) / logname).read_text(errors='replace')[-6000:], flush=True)
                         assert status == 0, 'native audio probe failed'
                         done = True
                         break
@@ -78,7 +80,7 @@ try:
     assert power(right, 440 if mono else 880) > power(right, 880 if mono else 440) * 50, 'right channel tone lost/swapped'
     active = sum(abs(l) + abs(r) > 100 for l, r in zip(left, right))
     if aidl:
-        log = Path('/tmp/apklayer-stack/tool.log').read_text(errors='replace')
+        log = Path(LOGDIR + '/tool.log').read_text(errors='replace')
         print('\n'.join(line for line in log.splitlines() if line.startswith(('audio:', 'PASS audio', 'PASS original'))), flush=True)
         assert ('PASS original AudioTrack' if system else 'PASS audio remote AIDL/FMQ') in log, 'native PCM probe did not finish'
     assert active > (47500 if aidl else 52000), f'PCM missing: {active} non-silent frames'

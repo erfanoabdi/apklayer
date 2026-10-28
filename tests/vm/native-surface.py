@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Real MediaCodec Surface output, SurfaceFlinger layer, pixels and physical Back."""
+import os as _os
+LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import ctypes
 import os
 from pathlib import Path
@@ -21,7 +23,7 @@ def stop():
     subprocess.run(['pkill', '-9', '-x', 'tail'], check=False)
 
 stop()
-logs = Path('/tmp/apklayer-stack')
+logs = Path(LOGDIR)
 logs.mkdir(exist_ok=True)
 libc = ctypes.CDLL(None, use_errno=True)
 notify = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
@@ -66,7 +68,7 @@ try:
             # Capture after the real HWUI commit callback and a visible active window.
             if committed and not captured and any('window state active=true' in s for s in seen):
                 with open('/tmp/apklayer-native-surface-layers.txt', 'wb') as dump:
-                    subprocess.run(['bash', '-c', '. scripts/native-env.sh; exec "$N/bin/btload" "$L" libapklayer_servicetool.so --main dump SurfaceFlinger'], env=ENV, stdout=dump, stderr=subprocess.STDOUT, check=True)
+                    subprocess.run(['b/cli/apklayer', 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger'], env=ENV, stdout=dump, stderr=subprocess.STDOUT, check=True)
                 print('CAPTURE native SurfaceView result', flush=True)
                 assert sys.stdin.readline().strip() == 'captured', 'capture not acknowledged'
                 subprocess.run(['sudo', '-S', '/tmp/uinput-keys', 'key:1'], input=b'1234\n',

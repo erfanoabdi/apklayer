@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Content notifications across apps through the instance hub: one phase per run (basic | denied | death), every JVM owned and reaped."""
+import os as _os
+LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import os
 from pathlib import Path
 import selectors
@@ -50,7 +52,7 @@ try:
                 if line.startswith('[nt] POSTED'):
                     popup = None
                     for _ in range(15):
-                        text = Path('/tmp/apklayer-stack/hub.log').read_text(errors='replace') if Path('/tmp/apklayer-stack/hub.log').exists() else ''
+                        text = Path(LOGDIR + '/hub.log').read_text(errors='replace') if Path(LOGDIR + '/hub.log').exists() else ''
                         found = [l for l in text.split('\n') if 'notification popup=' in l]
                         if found: popup = found[-1].split('popup=')[1].strip(); break
                         time.sleep(1)

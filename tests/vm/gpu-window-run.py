@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Foreground GPU regression on the VM; log events drive real compositor input."""
+import os as _os
+LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import os
 import ctypes
 import time
@@ -51,8 +53,7 @@ def capture(label):
 
 def dump(name):
     with open('/tmp/gpu-' + name + '.txt', 'wb') as out:
-        run(['bash', '-c', '. scripts/native-env.sh; exec "$N/bin/btload" "$L" '
-             'libapklayer_servicetool.so --main dump SurfaceFlinger --list'],
+        run(['b/cli/apklayer', 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger', '--list'],
             stdout=out, stderr=subprocess.STDOUT)
     return Path('/tmp/gpu-' + name + '.txt').read_text(errors='replace')
 
@@ -72,7 +73,7 @@ try:
     libc = ctypes.CDLL(None, use_errno=True)
     notify = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
     assert notify >= 0
-    logs = Path('/tmp/apklayer-stack')
+    logs = Path(LOGDIR)
     logs.mkdir(exist_ok=True)
     assert libc.inotify_add_watch(notify, bytes(logs), 0x102) >= 0
     selector.register(notify, selectors.EVENT_READ)
@@ -139,11 +140,11 @@ try:
     assert final_size != sizes[0], 'resize returned to the original dimensions'
     assert 'clipboard to the system (16 chars)' in text, 'main loop stalled after resize'
     assert final_layers.count('VRI-') < after.count('VRI-'), 'real Back did not remove the dialog layer'
-    shell = Path('/tmp/apklayer-stack/shell.log').read_text(errors='replace')
+    shell = Path(LOGDIR + '/shell.log').read_text(errors='replace')
     assert shell.count('dmabuf frame') > 5, 'no GPU frame delivery'
     assert '[shell] apklayer: window ' not in shell, 'empty primary window was created'
     assert final_size in shell, 'no GPU frame at the final resized dimensions'
-    assert Path('/tmp/apklayer-stack/vdisplay-' + PKG + '.log').exists(), 'sink was not launched'
+    assert Path(LOGDIR + '/vdisplay-' + PKG + '.log').exists(), 'sink was not launched'
     print('PASS GPU dialog, real resize, Back and main-loop responsiveness', flush=True)
 except BaseException:
     services = subprocess.run(['pgrep', '-f', '[b]tload.*libapklayer_(surfaceflinger|composer)'], capture_output=True, text=True)
