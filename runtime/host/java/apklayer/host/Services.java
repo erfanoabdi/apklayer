@@ -133,16 +133,25 @@ public final class Services {
         r.started = true;
         r.lastStartId = ++startId;
         r.startResult = r.service.onStartCommand(delivered, 0, r.lastStartId);
+        for (Runnable next; (next = DEFERRED.poll()) != null; ) next.run();  // binds that arrived while the service was being created
         return new int[] {r.lastStartId, r.startResult};
     }
 
     /** The hub starts one of this app's services on behalf of another app (a null delivered intent is the redelivery after a restart); null when it is not ours. */
     static int[] startFromHub(Context ctx, Intent explicit, Intent delivered) {
         if (resolve(ctx, explicit) == null) return null;
-        return onMain(() -> {
-            try { return deliver(explicit.getComponent(), explicit, delivered); }
-            catch (ClassNotFoundException e) { return null; }
-        });
+        // apklayer patch: creating a service lets the main looper run other posted work; a start that arrives meanwhile would create a second
+        // instance (the first is not in RUNNING yet), so it waits like a bind does (DEFERRED) and runs when the creation is done
+        java.util.concurrent.CompletableFuture<int[]> result = new java.util.concurrent.CompletableFuture<>();
+        Runnable start = () -> {
+            try { result.complete(deliver(explicit.getComponent(), explicit, delivered)); }
+            catch (ClassNotFoundException e) { result.complete(null); }
+            catch (RuntimeException failure) { result.completeExceptionally(failure); }
+        };
+        new Handler(Looper.getMainLooper()).post(() -> { if (creating) DEFERRED.add(start); else start.run(); });
+        try { return result.get(); }
+        catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new IllegalStateException(interrupted); }
+        catch (java.util.concurrent.ExecutionException failure) { throw failure.getCause() instanceof RuntimeException r ? r : new IllegalStateException(failure.getCause()); }
     }
 
     /** Service.stopSelf / stopSelfResult: stops when no newer start command arrived (start id -1 always stops) and nothing is bound. */
