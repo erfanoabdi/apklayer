@@ -36,4 +36,5 @@ Mac.apk, Robolectric, android_translation_layer (all in `~/GitHub`), Husk (GPL, 
 - dex2jvm needs `android-all` on its own classpath; its output needs `@DoNotInstrument` (`DenyInstrument`).
 - `ro.*` properties are write-once: every stack start gets a fresh store.
 - `pkill -f` can kill your own shell: use `pkill -x` or `[x]pattern`. macOS tar: `COPYFILE_DISABLE=1`.
+- The VM's bionic_translation build (`~/bt-arm/bionic_translation/b`): `scripts/patch-bionic-translation.sh` first; the linker (`libdl_bio`) build needs `~/local/lib/libunwind.so` (symlink to the system one); copy the result over `~/arm64-native/libdl_bio*` (a stale copy there made WebView fail with an unknown IRELATIVE relocation).
 - `scripts/install-shim.sh` needs the untracked `bridge/native/android_stubs.c` (copy `~/bt-arm/android_stubs.c`); gcc 15 makes implicit declarations errors.
