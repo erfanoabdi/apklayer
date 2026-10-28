@@ -14,4 +14,10 @@ public class ShadowHostDisplay extends ShadowDisplay {
     protected List getFrameRateVelocityMapping() {
         return Collections.emptyList();
     }
+
+    /** A display without HDR has an HdrCapabilities object with no types, not null (apps call methods on it). */
+    @Implementation
+    protected Display.HdrCapabilities getHdrCapabilities() {
+        return new Display.HdrCapabilities(new int[0], 0f, 0f, 0f);
+    }
 }

@@ -68,7 +68,7 @@ final class AppEnvironment {
             android.content.pm.ApplicationInfo info = org.robolectric.util.ReflectionHelpers.getField(bound, "appInfo");
             info.nativeLibraryDir = libdir;
             info.primaryCpuAbi = "arm64-v8a";
-        } catch (RuntimeException unavailable) { System.out.println("[apklayer] cannot set nativeLibraryDir: " + unavailable); }
+        } catch (RuntimeException notBoundYet) { /* the context path (ShadowHostContextImpl.getApplicationInfo) covers it */ }
     }
 
     /**

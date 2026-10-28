@@ -5,15 +5,13 @@ import android.os.Environment;
 import android.os.Process;
 import android.os.storage.StorageManager;
 import android.os.storage.StorageVolume;
-import android.view.Display;
 import java.io.File;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Parameter;
 import org.robolectric.shadow.api.Shadow;
-import org.robolectric.shadows.ShadowDisplay;
 import org.robolectric.shadows.ShadowStorageManager;
 
-/** What every Android device has and the sandbox leaves empty: the primary (emulated, mounted) storage volume, and the display's HDR capabilities object. */
+/** What every Android device has and the sandbox leaves empty: the primary (emulated, mounted) storage volume. */
 final class HostStorage {
     private HostStorage() {}
 
@@ -23,8 +21,6 @@ final class HostStorage {
             StorageVolume primary = primaryVolume();
             if (primary != null) ((ShadowStorageManager) Shadow.extract(manager)).addStorageVolume(primary);
         }
-        Display display = app.getSystemService(android.hardware.display.DisplayManager.class).getDisplay(Display.DEFAULT_DISPLAY);
-        if (display != null && display.getHdrCapabilities() == null) ((ShadowDisplay) Shadow.extract(display)).setDisplayHdrCapabilities(display.getDisplayId(), 0f, 0f, 0f);
     }
 
     /** StorageVolume's constructor is hidden and varies by release: parameters are filled by type and order (id, description, state; primary, removable, emulated). */
