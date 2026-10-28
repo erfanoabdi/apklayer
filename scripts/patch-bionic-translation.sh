@@ -362,3 +362,16 @@ if 'apklayer patch: IRELATIVE' not in s:
 \t\tcase R_AARCH64_ABS64:''', 1)
     p.write_text(s)
 PY
+# 10. pthread_cond_signal wakes every waiter: with one woken waiter an HWUI CommonPool task could be left queued while both workers slept, and the
+#     render thread then waited for its future forever (hang in HardwareRenderer.nSetStopped, 1 run in 10 of tests/vm/pendingintents.sh; 0 in 25 after).
+#     Spurious wakeups are allowed by POSIX, so waking all is always correct.
+python3 - "$bt" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1]) / 'pthread_wrapper/libpthread.c'
+s = p.read_text()
+old = '\treturn pthread_cond_signal(cond->glibc);'
+if old in s:
+    s = s.replace(old, '\treturn pthread_cond_broadcast(cond->glibc); /* apklayer patch: see scripts/patch-bionic-translation.sh step 10 */', 1)
+    p.write_text(s)
+PY

@@ -28,7 +28,7 @@ try:
     package = 'hello.picreator'
     env = dict(ENV, APKLAYER_JOPTS=BASE + ' -Dhello.pi=' + PHASE)
     proc = subprocess.Popen(['bin/apklayer', 'run', package], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
-    end = time.monotonic() + 120
+    end = time.monotonic() + int(os.environ.get('APKLY_PATIENCE', '120'))
     pending = b''
     killed = False
     with selectors.DefaultSelector() as events:
@@ -53,6 +53,7 @@ try:
                 if '[pi] PASS' in line:
                     print('PASS pendingintents ' + PHASE, flush=True)
                     raise SystemExit(0)
+    import hangdump; hangdump.dump()
     raise AssertionError('timed out\n' + '\n'.join(lines[-25:]))
 finally:
     if proc is not None and proc.poll() is None: os.killpg(proc.pid, signal.SIGTERM)

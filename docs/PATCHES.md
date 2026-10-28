@@ -230,3 +230,5 @@ Opt-in with `APKLAYER_WEBVIEW_PROVIDER=com.android.webview` (provider APK instal
 - `ShadowHostRealBinderProxy.direct`: rethrows the checked RemoteException (DeadObjectException) that ReflectionHelpers wraps in a RuntimeException, so callers that catch it by type (RemoteProvider retry after a provider process died) work.
 
 - `HubBroadcasts.deliver`: dynamic receivers are reached through the app's `IApplicationThread.scheduleRegisteredReceiver` (as ActivityManager does), so one broadcast cannot overtake another across binder threads (fixed the flaky `pendingintents.sh`).
+
+- bionic_translation `pthread_wrapper/libpthread.c` (`scripts/patch-bionic-translation.sh` step 10): `bionic_pthread_cond_signal` calls `pthread_cond_broadcast`. Fixes the intermittent hang of the app's main thread in `HardwareRenderer.nSetStopped` (the render thread waited for a CommonPool task while both workers slept): 2 hangs in 11 runs before, 0 in 25 after.

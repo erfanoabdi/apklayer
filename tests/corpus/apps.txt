@@ -1,0 +1,21 @@
+# name | apk path on the Mac (checked at run time; missing files are reported as "no apk") | engine/kind
+uibench | tests/uibench/uibench.apk | AOSP views, GPU
+otr2 | ~/Downloads/OTR-2-1.3.2-Mod(www.Farsroid.com).apk | native game, bgfx, GLES 3.1
+newpipe | ~/TestApps/org.schabi.newpipe_955.apk | Java, media, WebView-less
+nextcloud | ~/TestApps/nextcloud-release-30270000-signed.apk | Java, network
+opencamera | ~/TestApps/opencamera.apk | camera
+telegram | ~/TestApps/org.telegram.messenger_22275.apk | Java + native
+whatsapp | ~/TestApps/whatsapp.apk | Java + native
+cpu-z | ~/TestApps/cpu_z.apk | system info
+drminfo | ~/TestApps/drminfo.apk | DRM info
+gpstest | ~/TestApps/gpstest.apk | location
+wireguard | ~/TestApps/com.wireguard.android-1.0.20260102.apk | VPN, native
+openvpn | ~/TestApps/de.blinkt.openvpn_196.apk | VPN, native
+shelter | ~/TestApps/net.typeblog.shelter_20.apk | device admin
+vibrations | ~/TestApps/Vibrations Test_v1.1.0_apkpure.com.apk | vibrator
+barcode | ~/TestApps/Barcode Scanner_v4.7.8_apkpure.com.apk | camera
+astro | ~/TestApps/ASTRO_File_Manager_v8.10.1_Softgozar.com.apk | files
+device-info | ~/TestApps/Device Info HW_v4.26.5_apkpure.com.apk | system info
+sensors | ~/TestApps/sensorsmultitoo.apk | sensors
+microg | ~/TestApps/microg.apk | Google services
+documentsui | tree:system/priv-app/DocumentsUI/DocumentsUI.apk | system app
