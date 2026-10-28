@@ -160,7 +160,7 @@ final class AppEnvironment {
         org.robolectric.Shadows.shadowOf((android.os.PowerManager) app.getSystemService(android.content.Context.POWER_SERVICE)).setIgnoringBatteryOptimizations(app.getPackageName(), true);
         HostUsb.install(app);
         HostStorage.install(app);
-        HostCompat.install();
+        HostTrust.install();  // the default trust manager with the host-aware check Android's callers (Chromium, X509TrustManagerExtensions) need
         org.robolectric.shadows.ShadowContentResolver.registerProviderInternal("media", new HostMediaStub());  // replaced by the installed MediaProvider's remote provider when there is one
         HostLocation.install(app);
         HostSystemConfig.load().apply(app);  // features, privileged-permission allowlist and default grants of the build
