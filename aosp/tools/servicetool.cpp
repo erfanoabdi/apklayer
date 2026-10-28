@@ -1,4 +1,4 @@
-// servicetool list | check NAME | add NAME: talks to the service manager like Android's `service` tool. `add` registers a
+// servicetool list | check NAME | wait NAME | add NAME: talks to the service manager like Android's `service` tool. `add` registers a
 // local do-nothing binder under NAME and stays alive (checks that registration and lookup work end to end).
 #include <binder/Binder.h>
 #include <binder/IPCThreadState.h>
@@ -19,6 +19,10 @@ extern "C" int main(int argc, char** argv) {
     const char* cmd = argc > 1 ? argv[1] : "list";
     if (!strcmp(cmd, "list")) {
         for (const auto& name : sm->listServices()) printf("%s\n", String8(name).c_str());
+    } else if (!strcmp(cmd, "wait") && argc > 2) {  // blocks until the service registers (the stack supervisor's readiness, no polling)
+        sp<IBinder> b = sm->waitForService(String16(argv[2]));
+        printf("%s: %s\n", argv[2], b ? "found" : "not found");
+        return b ? 0 : 1;
     } else if (!strcmp(cmd, "check") && argc > 2) {
         sp<IBinder> b = sm->checkService(String16(argv[2]));
         printf("%s: %s\n", argv[2], b ? "found" : "not found");
@@ -37,7 +41,7 @@ extern "C" int main(int argc, char** argv) {
         if (st != OK) return 1;
         if (argc > 3 && !strcmp(argv[3], "--stay")) IPCThreadState::self()->joinThreadPool();
     } else {
-        fprintf(stderr, "usage: servicetool list | check NAME | dump NAME [args] | add NAME [--stay]\n");
+        fprintf(stderr, "usage: servicetool list | check NAME | wait NAME | dump NAME [args] | add NAME [--stay]\n");
         return 2;
     }
     return 0;
