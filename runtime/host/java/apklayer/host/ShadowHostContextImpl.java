@@ -57,6 +57,11 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
     @Implementation @Override protected boolean stopService(Intent intent) {
         return HubServices.external(real, intent) ? HubServices.stop(real, intent) : super.stopService(intent);
     }
+    /** The hub does not rank processes: a binding it holds has nothing to update (the dispatcher lookup of ContextImpl does not know those bindings, and Gecko's priority changes must not throw). */
+    @Implementation public void updateServiceGroup(ServiceConnection connection, int group, int importance) {
+        if (HubServices.known(connection)) return;
+        real("updateServiceGroup", ClassParameter.from(ServiceConnection.class, connection), ClassParameter.from(int.class, group), ClassParameter.from(int.class, importance));
+    }
     @Implementation public boolean bindIsolatedService(Intent intent, int flags, String instanceName, Executor executor, ServiceConnection connection) {
         if (HubServices.external(real, intent)) return HubServices.bind(real, intent, flags, executor, connection, instanceName);
         return real("bindIsolatedService", ClassParameter.from(Intent.class, intent), ClassParameter.from(int.class, flags), ClassParameter.from(String.class, instanceName),

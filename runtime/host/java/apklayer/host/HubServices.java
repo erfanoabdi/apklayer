@@ -92,6 +92,7 @@ final class HubServices {
         if (stopped) HubProtocol.call(HubClient.current().binder(), HubProtocol.DESCRIPTOR, HubProtocol.SERVICE_STOPPED, request -> request.writeTypedObject(name, 0), reply -> null);
         return stopped;
     }
+    static boolean known(ServiceConnection connection) { synchronized (connections) { return connections.containsKey(connection); } }
     static boolean unbind(ServiceConnection connection) {
         Connection old;
         synchronized (connections) { old = connections.remove(connection); }
