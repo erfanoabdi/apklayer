@@ -32,7 +32,16 @@ public class ShadowHostRealBinderProxy {
     }
 
     private boolean direct(int code, Parcel data, Parcel reply, int flags) {
-        return ReflectionHelpers.callInstanceMethod(real, Shadow.directMethodName("android.os.BinderProxy", "transact"), ClassParameter.from(int.class, code),
-                ClassParameter.from(Parcel.class, data), ClassParameter.from(Parcel.class, reply), ClassParameter.from(int.class, flags));
+        try {
+            return ReflectionHelpers.callInstanceMethod(real, Shadow.directMethodName("android.os.BinderProxy", "transact"), ClassParameter.from(int.class, code),
+                    ClassParameter.from(Parcel.class, data), ClassParameter.from(Parcel.class, reply), ClassParameter.from(int.class, flags));
+        } catch (RuntimeException wrapped) {
+            // ReflectionHelpers wraps the checked RemoteException (DeadObjectException) that BinderProxy.transact declares; callers catch it by type
+            if (wrapped.getCause() instanceof android.os.RemoteException remote) throw ShadowHostRealBinderProxy.<RuntimeException>sneaky(remote);
+            throw wrapped;
+        }
     }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> T sneaky(Throwable failure) throws T { throw (T) failure; }
 }

@@ -226,3 +226,5 @@ Opt-in with `APKLAYER_WEBVIEW_PROVIDER=com.android.webview` (provider APK instal
 - End-to-end G2/G3 verification **needs a real Vulkan GPU/driver** with compatible dmabuf/modifier import and sync-fd semaphore support. The current Parallels virgl VM cannot supply those capabilities. Do not mark P7.5/Milestone G complete. TextureView canyon pixels/animation/Back and Chromium WebView JavaScript regressions pass with the new loader installed.
 
 - `runtime/host/java/apklayer/host/Services.java` `startFromHub`: a start command from the hub that arrives while a service is being created (the main looper runs other posted work inside `create()`) waits in DEFERRED like a bind, so one instance exists (sticky restart after a kill: `tests/vm/services.sh sticky`).
+
+- `ShadowHostRealBinderProxy.direct`: rethrows the checked RemoteException (DeadObjectException) that ReflectionHelpers wraps in a RuntimeException, so callers that catch it by type (RemoteProvider retry after a provider process died) work.
