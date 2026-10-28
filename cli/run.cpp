@@ -5,6 +5,7 @@
 #include <poll.h>
 #include <signal.h>
 #include <sys/file.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -58,14 +59,22 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     std::string classes = join(dir, "classes.jar") + ":" + join(dir, "base.apk");  // the APK too: Class.getResourceAsStream finds an APK's java resources (conscrypt.properties, META-INF/services), the converted jar has none
     if (!provider.empty()) {
         jvm.push_back("-Dapklayer.webviewprovider=" + join(l.appsDir, provider));
-        // An app bundling Chromium's base classes (microG's Cronet) would shadow the provider's own, differently obfuscated copies (NoSuchFieldError in ThreadUtils):
-        // for such an app the provider goes first. Other apps keep their own org.chromium / org.jni_zero classes first (Meet's JniZero is not the provider's).
+        // The provider's jar is split by package (once, next to it): "core" is Chromium's own (org.chromium, org.jni_zero, WV, com.android.webview), "rest" its bundled copies of
+        // other libraries (com.google Play Services client classes, androidx, kotlin) which must never shadow the app's. An app bundling Chromium's base classes (microG's
+        // Cronet) gets core first (else NoSuchFieldError in ThreadUtils); other apps keep their own org.chromium / org.jni_zero first (Meet's JniZero is not the provider's).
+        std::string pdir = join(l.appsDir, provider), full = join(pdir, "classes.jar"), core = join(pdir, "classes-core.jar"), rest = join(pdir, "classes-rest.jar");
+        auto run = [](std::vector<std::string> argv) { Spawn x; x.argv = std::move(argv); x.env = currentEnv(); x.logFile = "/dev/null"; return runAndWait(x); };
+        struct stat a {}, b {};
+        if (::stat(core.c_str(), &b) != 0 || ::stat(full.c_str(), &a) != 0 || b.st_mtime < a.st_mtime) {
+            run({"cp", "-f", full, core}); run({"zip", "-q", "-d", core, "com/google/*", "androidx/*", "kotlin/*", "android/*"});
+            run({"cp", "-f", full, rest}); run({"zip", "-q", "-d", rest, "org/chromium/*", "org/jni_zero/*", "WV/*", "com/android/*", "J/*"});
+        }
         Spawn probe;
         probe.argv = {"unzip", "-l", join(dir, "classes.jar"), "org/chromium/base/ThreadUtils.class"};
         probe.env = currentEnv();
         probe.logFile = "/dev/null";
-        if (runAndWait(probe) == 0) classes = join(l.appsDir, provider + "/classes.jar") + ":" + classes;
-        else classes += ":" + join(l.appsDir, provider + "/classes.jar");
+        if (runAndWait(probe) == 0) classes = core + ":" + classes + ":" + rest;
+        else classes = classes + ":" + core + ":" + rest;
     }
     if (!getenvOr("APKLAYER_ISOLATED", "").empty()) jvm.push_back("-Dapklayer.isolated=" + getenvOr("APKLAYER_ISOLATED", ""));
     if (!getenvOr("APKLAYER_LOGCAT", "").empty()) jvm.push_back("-Dapklayer.logcat=true");

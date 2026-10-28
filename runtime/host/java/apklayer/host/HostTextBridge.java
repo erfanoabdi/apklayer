@@ -29,12 +29,22 @@ final class HostTextBridge {
         if (f == null) return;
         android.view.inputmethod.InputConnection ic = f.onCreateInputConnection(new android.view.inputmethod.EditorInfo());
         if (ic == null) return;
-        ic.beginBatchEdit();
-        if (before > 0 || after > 0) ic.deleteSurroundingText(before, after);
-        if (!commit.isEmpty()) ic.commitText(commit, 1);
-        if (!preedit.isEmpty()) ic.setComposingText(preedit, 1);
-        else if (commit.isEmpty()) ic.setComposingText("", 1); // preedit cancelled
-        ic.endBatchEdit();
+        Runnable edit = () -> {
+            ic.beginBatchEdit();
+            if (before > 0 || after > 0) ic.deleteSurroundingText(before, after);
+            if (!commit.isEmpty()) ic.commitText(commit, 1);
+            if (!preedit.isEmpty()) ic.setComposingText(preedit, 1);
+            else if (commit.isEmpty()) ic.setComposingText("", 1); // preedit cancelled
+            ic.endBatchEdit();
+        };
+        // an InputConnection names the thread its methods must run on (getHandler): Chromium's (a WebView text field) asserts it
+        android.os.Handler handler = ic.getHandler();
+        if (handler == null || handler.getLooper() == android.os.Looper.myLooper()) edit.run();
+        else {
+            java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+            handler.post(() -> { try { edit.run(); } finally { done.countDown(); } });
+            try { done.await(2, java.util.concurrent.TimeUnit.SECONDS); } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+        }
         if (Boolean.getBoolean("apklayer.debugkeys") && f instanceof android.widget.TextView tv)
             System.out.println("[apklayer] ime applied, field text: " + tv.getText());
     }

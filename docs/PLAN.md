@@ -26,6 +26,15 @@ Each instance has its own `/storage`: `$XDG_DATA_HOME/apklayer/<n>/storage` (n =
 3. **Linux root**: `/` (stub volume `linux-root`); apklayer reads what its user may read and writes what it may.
 The Android root is known to the runtime already. Open: which volumes ordinary apps (not DocumentsUI) get through the file APIs (today no app path reaches Home or `/` except through DocumentsUI and the grants it hands out); runtime-permission rules for storage (`READ_EXTERNAL_STORAGE`, `MANAGE_EXTERNAL_STORAGE`); the real MediaProvider (today `HostMediaStub` answers "nothing indexed").
 
+## Plan: the real Android keystore (decided 2026-10-28, not started)
+Replace `HostKeyStoreProvider` (software JCE keys; no attestation, no `KeyInfo`, no enforcement of purposes/digests, no auth-bound keys) with Android's own stack on the device libraries:
+1. **HAL services from AOSP, not rewritten**: build the reference software KeyMint (`hardware/interfaces/security/keymint/aidl/default`, backed by `libkeymint_fake_latest` / libkeymaster, already in the tree) and the software Gatekeeper (`hardware/interfaces/gatekeeper/aidl/default`) as vendor modules (`aosp/hals/security/`, thin Android.bp that points at those sources and the tree\'s libraries, like the other HALs). The tree already has `system/bin/keystore2` and `gatekeeperd`. Needs one build-graph regeneration (new modules): ask the user first.
+2. **Stack**: the stack daemon starts `keystore2` (its database under the instance state dir through the path layer: `/data/misc/keystore`), the KeyMint HAL and the Gatekeeper HAL next to the other services; their VINTF fragments go in `bridge/native/android-root/vendor/etc/vintf`; `servicemanager` registers `android.system.keystore2.IKeystoreService/default`.
+3. **Framework side**: drop the host KeyStore provider; Android\'s own `AndroidKeyStoreProvider` (keystore2 client in the framework jar) talks to the real service through the real Binder already used by the other services. Per-app uid: keys are owned by the calling Android uid (the work-source uid fix gives oneway calls an identity; keystore2 reads the kernel uid, which is one Linux uid for all apps, so keystore2 needs the hub\'s uid-of-pid mapping or one keystore2 namespace per app JVM).
+4. **Attestation**: software KeyMint attests with its built-in test key: a real chain of the right structure and software security level, not Google-rooted (apps that need a Google-rooted chain stay out of reach).
+5. **Tests**: `tests/vm/keystore.sh` keeps its AES/HMAC/RSA/EC checks; add `KeyInfo`, purpose enforcement, attestation chain, auth-bound key with the software Gatekeeper.
+Open: how keystore2 learns the caller uid (point 3); gatekeeper password enrolment on a desktop (no lock screen: an empty-credential enrolment).
+
 ## Roadmap
 | Phase | State |
 |---|---|
