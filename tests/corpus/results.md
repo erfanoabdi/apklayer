@@ -35,4 +35,7 @@ One run per app (tests/vm/appcheck.sh for errors, tests/vm/appshot.py for a scre
 | DRM Info | com.androidfung.drminfo | crashes | Google Ads / Firebase need Play Services |
 | Open Camera, Barcode Scanner, Motorola Camera | | no camera | no camera HAL |
 | Clash, SSR | | not supported | 32-bit (armeabi-v7a) only |
-| Aegis | com.beemdevelopment.aegis | install fails | `describe` step prints nothing |
+| Aegis | com.beemdevelopment.aegis | draws welcome | needed the app's BouncyCastle relocated |
+| Mindustry | io.anuke.mindustry | draws its map | libgdx |
+| Lemuroid | com.swordfish.lemuroid | runs, black window after 40 s | |
+| OpenTTD | org.openttd.fdroid | aborts | `*** buffer overflow detected ***` (fortified libc call under the bionic translation) |
