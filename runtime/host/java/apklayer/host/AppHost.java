@@ -67,9 +67,8 @@ public final class AppHost implements Runnable {
     private Handler main;
     private boolean pausedByFocus, stoppedByMinimize; // lifecycle driven by the window state
     private int logicalW, logicalH, logicalScale = 100; // current window size in dp and scale %
-    private boolean imeEnabled;                          // text input enabled in the shell for the focused field
     private int lastOrientation = -2;                    // top activity's requested orientation last applied
-    private String lastClipboard = ""; // last text exchanged with the shell, to avoid echo loops
+    private final HostTextBridge text = new HostTextBridge();
     private ShellClient shell;
     private HostInput input;
     private ScriptRunner scriptRunner;
@@ -116,11 +115,11 @@ public final class AppHost implements Runnable {
             }
         });
         scriptRunner = new ScriptRunner(input, java.util.Map.of(
-                "clipin", this::hostClipboardIn, // the system selection changed
-                "clipcopy", this::hostClipboardCopy, // the app copies text itself
+                "clipin", text::clipboardIn, // the system selection changed
+                "clipcopy", text::clipboardCopy, // the app copies text itself
                 "ime", arg -> { // ime:<commit>|<preedit>: as the compositor's input method would
                     String[] parts = arg.split("\\|", -1);
-                    hostIme(0, 0, parts[0], parts.length > 1 ? parts[1] : "");
+                    text.ime(0, 0, parts[0], parts.length > 1 ? parts[1] : "");
                 },
                 "view", u -> RuntimeEnvironment.getApplication().startActivity( // view:<uri>: as if the app fired ACTION_VIEW
                         new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(u)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)),
@@ -179,7 +178,8 @@ public final class AppHost implements Runnable {
             }
         }
         this.shell = shell;
-        app.getSystemService(android.content.ClipboardManager.class).addPrimaryClipChangedListener(this::onAppClipboardChanged);
+        text.shell = shell;
+        app.getSystemService(android.content.ClipboardManager.class).addPrimaryClipChangedListener(text::onAppClipboardChanged);
         if (java.security.Security.getProvider("AndroidKeyStore") == null) java.security.Security.addProvider(new HostKeyStoreProvider());
         AppEnvironment.installSystemPackage(app);
         AppEnvironment.installNetwork(app);
@@ -244,8 +244,8 @@ public final class AppHost implements Runnable {
                     break;
 
                 for (int[] ev; shell != null && (ev = shell.poll()) != null; ) input.onHostEvent(ev);
-                for (Object[] ime; shell != null && (ime = shell.pollIme()) != null; ) hostIme((int) ime[0], (int) ime[1], (String) ime[2], (String) ime[3]);
-                for (String clip; shell != null && (clip = shell.pollClipboard()) != null; ) hostClipboardIn(clip);
+                for (Object[] ime; shell != null && (ime = shell.pollIme()) != null; ) text.ime((int) ime[0], (int) ime[1], (String) ime[2], (String) ime[3]);
+                for (String clip; shell != null && (clip = shell.pollClipboard()) != null; ) text.clipboardIn(clip);
                 while (!script.isEmpty() && script.firstKey() <= elapsed) scriptRunner.runStep(script.pollFirstEntry().getValue());
 
                 long nextTask = looper.getNextScheduledTaskTime().toMillis();
@@ -284,7 +284,7 @@ public final class AppHost implements Runnable {
                 if (TRACE_ROOTS && now - lastRootTrace > 1_000_000_000L) { lastRootTrace = now; traceRoots(); }
                 followNavigation();
                 followOrientation();
-                followTextInput();
+                text.followTextInput();
                 deliverCrossAppResults();
             }
         } catch (Exception e) {
@@ -460,36 +460,6 @@ public final class AppHost implements Runnable {
         }
     }
 
-    /** Tells the shell when a text field gets or loses focus, so the IME turns on and off. */
-    private void followTextInput() {
-        if (shell == null) return;
-        boolean editor = HostWindows.focusedEditor() != null;
-        if (editor != imeEnabled) {
-            imeEnabled = editor;
-            shell.sendTextInput(editor);
-            if (Boolean.getBoolean("apklayer.debugkeys")) System.out.println("[apklayer] text input " + (editor ? "on" : "off"));
-        }
-    }
-
-    /**
-     * IME event (zwp_text_input_v3 done): delete surrounding text, commit, then the new preedit,
-     * through the focused field's InputConnection (PLAN P2.6).
-     */
-    private void hostIme(int before, int after, String commit, String preedit) {
-        View f = HostWindows.focusedEditor();
-        if (f == null) return;
-        android.view.inputmethod.InputConnection ic = f.onCreateInputConnection(new android.view.inputmethod.EditorInfo());
-        if (ic == null) return;
-        ic.beginBatchEdit();
-        if (before > 0 || after > 0) ic.deleteSurroundingText(before, after);
-        if (!commit.isEmpty()) ic.commitText(commit, 1);
-        if (!preedit.isEmpty()) ic.setComposingText(preedit, 1);
-        else if (commit.isEmpty()) ic.setComposingText("", 1); // preedit cancelled
-        ic.endBatchEdit();
-        if (Boolean.getBoolean("apklayer.debugkeys") && f instanceof android.widget.TextView tv)
-            System.out.println("[apklayer] ime applied, field text: " + tv.getText());
-    }
-
     private void followNavigation() {
         ShadowApplication shadowApp = Shadow.extract(RuntimeEnvironment.getApplication());
         Intent next = shadowApp.getNextStartedActivity();
@@ -571,35 +541,6 @@ public final class AppHost implements Runnable {
             stoppedByMinimize = false;
             System.out.println("[apklayer] lifecycle: resumed");
         }
-    }
-
-    /** The system selection changed (from the shell): make it the app's primary clip. */
-    private void hostClipboardIn(String text) {
-        if (text.equals(lastClipboard)) return;
-        lastClipboard = text;
-        System.out.println("[apklayer] clipboard from the system (" + text.length() + " chars)");
-        android.content.ClipboardManager cm =
-                RuntimeEnvironment.getApplication().getSystemService(android.content.ClipboardManager.class);
-        cm.setPrimaryClip(android.content.ClipData.newPlainText("apklayer", text));
-    }
-
-    /** The app changed its primary clip: hand the text to the system selection. */
-    private void onAppClipboardChanged() {
-        android.content.ClipboardManager cm =
-                RuntimeEnvironment.getApplication().getSystemService(android.content.ClipboardManager.class);
-        android.content.ClipData clip = cm.getPrimaryClip();
-        if (clip == null || clip.getItemCount() == 0) return;
-        CharSequence text = clip.getItemAt(0).coerceToText(RuntimeEnvironment.getApplication());
-        if (text == null || text.length() == 0 || text.toString().equals(lastClipboard)) return;
-        lastClipboard = text.toString();
-        System.out.println("[apklayer] clipboard to the system (" + text.length() + " chars)");
-        if (shell != null) shell.sendClipboard(lastClipboard);
-    }
-
-    /** Script step: the app itself copies text. */
-    private void hostClipboardCopy(String text) {
-        RuntimeEnvironment.getApplication().getSystemService(android.content.ClipboardManager.class)
-                .setPrimaryClip(android.content.ClipData.newPlainText("apklayer", text));
     }
 
     private void hostResize(int w, int h, int scalePct) {
