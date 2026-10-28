@@ -70,11 +70,21 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
 
     @Implementation
     protected android.content.pm.PackageInfo getPackageInfo(String packageName, int flags) throws PackageManager.NameNotFoundException {
-        return signed(super.getPackageInfo(packageName, flags), flags);
+        try { return signed(super.getPackageInfo(packageName, flags), flags); }
+        catch (PackageManager.NameNotFoundException unknown) { if (!registerInstalled(packageName)) throw unknown; return signed(super.getPackageInfo(packageName, flags), flags); }
+    }
+
+    /** The other installed apps register with this JVM when it first meets the hub, which can be late (Play Services clients ask for com.android.vending at start): an installed package not known yet attaches now. */
+    private boolean registerInstalled(String packageName) {
+        String apps = System.getProperty("apklayer.apps");
+        if (apps == null || HubClient.connected() || !new java.io.File(new java.io.File(apps, packageName), "info.properties").exists()) return false;
+        HubClient.attach(org.robolectric.RuntimeEnvironment.getApplication());
+        return true;
     }
 
     @Implementation(minSdk = android.os.Build.VERSION_CODES.TIRAMISU)
     protected android.content.pm.PackageInfo getPackageInfo(String packageName, PackageManager.PackageInfoFlags flags) throws PackageManager.NameNotFoundException {
-        return signed(super.getPackageInfo(packageName, flags), flags.getValue());
+        try { return signed(super.getPackageInfo(packageName, flags), flags.getValue()); }
+        catch (PackageManager.NameNotFoundException unknown) { if (!registerInstalled(packageName)) throw unknown; return signed(super.getPackageInfo(packageName, flags), flags.getValue()); }
     }
 }

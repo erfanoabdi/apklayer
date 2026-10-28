@@ -35,3 +35,5 @@ Mac.apk, Robolectric, android_translation_layer (all in `~/GitHub`), Husk (GPL, 
 - `pkill -f` can kill your own shell: use `pkill -x` or `[x]pattern`. macOS tar: `COPYFILE_DISABLE=1`.
 - The VM's bionic_translation build (`~/bt-arm/bionic_translation/b`): `scripts/patch-bionic-translation.sh` first; the linker (`libdl_bio`) build needs `~/local/lib/libunwind.so` (symlink to the system one); copy the result over `~/arm64-native/libdl_bio*` (a stale copy there made WebView fail with an unknown IRELATIVE relocation).
 - `scripts/install-shim.sh` needs the untracked `bridge/native/android_stubs.c` (copy `~/bt-arm/android_stubs.c`); gcc 15 makes implicit declarations errors.
+
+- Meet (com.google.android.apps.tachyon) reaches its welcome screen (Guava kept unrelocated when native libs name it; other installed packages register on a missed getPackageInfo). Next: microG Device Attestation for sign-in, then the app-by-app pass.

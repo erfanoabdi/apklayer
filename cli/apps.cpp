@@ -17,7 +17,7 @@ int sh(std::vector<std::string> argv, const Env& env = currentEnv(), const std::
 
 // The cache key of a conversion: same APK, same framework, same converter -> same classes.
 std::string cacheKey(const Layout& l, const std::string& apk) {
-    std::string text = sha256File(apk) + "\npost-processing v6: Android classloader adapter, guava relocation, native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke\n";
+    std::string text = sha256File(apk) + "\npost-processing v7: Android classloader adapter, guava relocation (not for native Guava names), native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke\n";
     std::vector<std::string> jars = listDir(l.frameworkDir());
     std::sort(jars.begin(), jars.end());
     for (const std::string& j : jars)
