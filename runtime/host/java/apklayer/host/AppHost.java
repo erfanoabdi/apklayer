@@ -198,15 +198,6 @@ public final class AppHost implements Runnable {
         loop(shell);
     }
 
-    /**
-     * DocumentsUI removes a listener while iterating its one-element list (BaseActivity.notifyDirectoryLoaded), which Android's ArrayList iterator allows and the
-     * JVM's refuses: that message is lost and the app goes on (a crash of the whole app otherwise).
-     */
-    private static void tolerant(Runnable step) {
-        try { step.run(); }
-        catch (java.util.ConcurrentModificationException lost) { System.out.println("[apklayer] message failed with " + lost + " at " + lost.getStackTrace()[Math.min(1, lost.getStackTrace().length - 1)]); }
-    }
-
     /** Simulator.loop(), plus host input, navigation and the verification hooks. */
     private void loop(ShellClient shell) {
         ShadowPausedLooper looper = Shadow.extract(Looper.myLooper());
@@ -274,7 +265,7 @@ public final class AppHost implements Runnable {
                     // Shell mode: a live window; real time drives everything. Bounded poll
                     // so host input and scripted steps are serviced while idle.
                     long wait = timeout == 0 ? 8 : max(1, min(8, timeout - SystemClock.uptimeMillis()));
-                    tolerant(() -> looper.poll(wait));
+                    looper.poll(wait);
                     pollNativeLooper();
                     // Wall time since the previous advance, not since the top of this iteration: the time spent running the looper and
                     // the follow-ups below was dropped, so the app's clock ran at a third of real time under load (ExoPlayer played
@@ -287,7 +278,7 @@ public final class AppHost implements Runnable {
                         perfAt = clockNow; perfUptime = SystemClock.uptimeMillis(); perfLoops = 0;
                     }
                     perfLoops++;
-                    tolerant(looper::idle);
+                    looper.idle();
                 }
                 if (TRACE_ROOTS && now - lastRootTrace > 1_000_000_000L) { lastRootTrace = now; traceRoots(); }
                 followNavigation();
