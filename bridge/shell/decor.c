@@ -2,6 +2,7 @@
 #include "decor.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -22,38 +23,12 @@ void decor_create(struct decor *d, struct wl_surface *parent)
 {
     memset(d, 0, sizeof *d);
     d->hover = DECOR_NONE;
+    d->dark = decor_dark();
     if (!subcompositor) return;
     d->surface = wl_compositor_create_surface(compositor);
     d->sub = wl_subcompositor_get_subsurface(subcompositor, d->surface, parent);
     wl_subsurface_set_position(d->sub, 0, -DECOR_H);
     wl_subsurface_set_desync(d->sub); /* the bar redraws independently of app frames */
-}
-
-/* ---- software drawing into an ARGB8888 buffer (physical pixels) ---- */
-
-struct canvas {
-    uint32_t *px;
-    int w, h;
-};
-
-static void rect(struct canvas *c, int x, int y, int w, int h, uint32_t color)
-{
-    for (int j = y < 0 ? 0 : y; j < y + h && j < c->h; j++)
-        for (int i = x < 0 ? 0 : x; i < x + w && i < c->w; i++) c->px[j * c->w + i] = color;
-}
-
-/* Line with a square brush of t pixels (Bresenham). */
-static void line(struct canvas *c, int x0, int y0, int x1, int y1, int t, uint32_t color)
-{
-    int dx = abs(x1 - x0), dy = -abs(y1 - y0);
-    int sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy;
-    for (;;) {
-        rect(c, x0 - t / 2, y0 - t / 2, t, t, color);
-        if (x0 == x1 && y0 == y1) break;
-        int e2 = 2 * err;
-        if (e2 >= dy) { err += dy; x0 += sx; }
-        if (e2 <= dx) { err += dx; y0 += sy; }
-    }
 }
 
 static int button_x(int lw, int which)
@@ -66,43 +41,12 @@ static int button_x(int lw, int which)
     }
 }
 
-static void draw(struct canvas *c, int lw, int s, int maximized, int hover, int focused)
+void decor_set_title(struct decor *d, const char *title)
 {
-    const uint32_t bg = focused ? 0xFF2B2B2B : 0xFF3A3A3A, fg = focused ? 0xFFEDEDED : 0xFF9A9A9A;
-    rect(c, 0, 0, c->w, c->h, bg);
-    int u = s / 100 > 0 ? s / 100 : 1;          /* one logical pixel in buffer pixels */
-    rect(c, 0, c->h - u, c->w, u, 0xFF1A1A1A);  /* separator to the content */
-    int t = 2 * u;                               /* stroke: 2 logical px */
-    for (int b = DECOR_BACK; b <= DECOR_CLOSE; b++) {
-        int bx = button_x(lw, b) * s / 100, bw = DECOR_BTN_W * s / 100;
-        if (b == hover) rect(c, bx, 0, bw, c->h - u, b == DECOR_CLOSE ? 0xFFC42B1C : 0xFF4A4A4A);
-        int cx = bx + bw / 2, cy = (c->h - u) / 2;
-        switch (b) {
-        case DECOR_BACK: /* chevron */
-            line(c, cx + 4 * u, cy - 8 * u, cx - 4 * u, cy, t, fg);
-            line(c, cx - 4 * u, cy, cx + 4 * u, cy + 8 * u, t, fg);
-            break;
-        case DECOR_MIN:
-            rect(c, cx - 6 * u, cy + 4 * u, 12 * u, t, fg);
-            break;
-        case DECOR_MAX: {
-            int o = maximized ? 2 * u : 0, n = 11 * u;
-            rect(c, cx - 5 * u + o, cy - 6 * u - o, n, t, fg);
-            rect(c, cx - 5 * u + o, cy - 6 * u - o + n - t, n, t, fg);
-            rect(c, cx - 5 * u + o, cy - 6 * u - o, t, n, fg);
-            rect(c, cx - 5 * u + o + n - t, cy - 6 * u - o, t, n, fg);
-            if (maximized) { /* second square behind */
-                rect(c, cx - 5 * u, cy - 6 * u, t, n - 2 * u, fg);
-                rect(c, cx - 5 * u, cy + 4 * u, n - 2 * u, t, fg);
-            }
-            break;
-        }
-        case DECOR_CLOSE:
-            line(c, cx - 5 * u, cy - 5 * u, cx + 5 * u, cy + 5 * u, t, fg);
-            line(c, cx - 5 * u, cy + 5 * u, cx + 5 * u, cy - 5 * u, t, fg);
-            break;
-        }
-    }
+    const char *colon = title ? strrchr(title, 0x3a) : NULL; /* instance windows are "apklayer:<pid>:<instance>:<package>" */
+    if (colon && !strncmp(title, "apklayer:", 9)) title = colon + 1;
+    snprintf(d->title, sizeof d->title, "%s", title ? title : "");
+    d->focused = -1; /* force a redraw on the next update */
 }
 
 void decor_update(struct decor *d, int logical_w, int scale, int maximized, int hover, int focused)
@@ -135,8 +79,7 @@ void decor_update(struct decor *d, int logical_w, int scale, int maximized, int 
     d->maximized = maximized;
     d->hover = hover;
     d->focused = focused;
-    struct canvas c = { d->map, pw, ph };
-    draw(&c, logical_w, s, maximized, hover, focused);
+    decor_draw(d->map, pw, ph, logical_w, s, maximized, hover, focused, d->title, d->dark, button_x);
     wl_surface_attach(d->surface, d->buffer, 0, 0);
     wl_surface_damage_buffer(d->surface, 0, 0, pw, ph);
     wl_surface_commit(d->surface);

@@ -93,3 +93,10 @@ Open: how keystore2 learns the caller uid (point 3); gatekeeper password enrolme
 - **Fennec** (2026-10-28): past mozglue's putenv interposer (dlsym RTLD_NEXT fallback in the translated linker). GeckoThread runs, loads sqlite and nss, then "Could not find profile folder" and the runtime shuts down; no native message reaches the log. Next: Gecko's stderr/android log, its child-process services through the hub, the profile directory.
 - **Joplin**: with the bundled OpenSSL libraries renamed (`scripts/rename-bundled-system-libs.py`, not yet run by `install`) the JS bundle runs, then the process aborts: `libc++abi: Fatal error: glibc detected an invalid stdio handle` (a C++ terminate message written through a bionic FILE).
 - **Conversations**: aborts at start; `NativeCrypto: could not find field descriptor` (a Conscrypt JNI lookup of `FileDescriptor.descriptor`, which is `fd` in the JDK).
+
+## Adwaita window decoration (decision)
+- libadwaita and GTK4 are not on the VM and a GTK window cannot take our dmabuf subsurface path without reworking it, so option (a): the shell draws the header bar itself.
+- bridge/shell/decor_draw.c draws it with cairo (new dependency libcairo2-dev): 46 px bar, Adwaita colours, round buttons (Back left; minimize, maximize, close right), bold centred title, rounded top corners.
+- Light/dark is read from gsettings color-scheme when a window is created (no live switch yet; the portal Settings would give that).
+- Hit testing, drag, double-click maximize and content-relative input are unchanged (DECOR_H 32 -> 46).
+- Title is the window title, or the package name when the title is the internal apklayer:pid:instance:pkg one.
