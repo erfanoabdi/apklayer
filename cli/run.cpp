@@ -61,7 +61,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         jvm.push_back("-Dapklayer.webviewprovider=" + join(l.appsDir, provider));
         // The provider's jar is split by package (once, next to it): "core" is Chromium's own (org.chromium, org.jni_zero, WV, com.android.webview), "rest" its bundled copies of
         // other libraries (com.google Play Services client classes, androidx, kotlin) which must never shadow the app's. An app bundling Chromium's base classes (microG's
-        // Cronet) gets core first (else NoSuchFieldError in ThreadUtils); other apps keep their own org.chromium / org.jni_zero first (Meet's JniZero is not the provider's).
+        // Cronet) needs core first (else NoSuchFieldError in ThreadUtils); other apps keep their own org.chromium / org.jni_zero first (Meet's JniZero is not the provider's).
         std::string pdir = join(l.appsDir, provider), full = join(pdir, "classes.jar"), core = join(pdir, "classes-core.jar"), rest = join(pdir, "classes-rest.jar");
         auto run = [](std::vector<std::string> argv) { Spawn x; x.argv = std::move(argv); x.env = currentEnv(); x.logFile = "/dev/null"; return runAndWait(x); };
         struct stat a {}, b {};
@@ -69,11 +69,9 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
             run({"cp", "-f", full, core}); run({"zip", "-q", "-d", core, "com/google/*", "androidx/*", "kotlin/*", "android/*"});
             run({"cp", "-f", full, rest}); run({"zip", "-q", "-d", rest, "org/chromium/*", "org/jni_zero/*", "WV/*", "com/android/*", "J/*"});
         }
-        Spawn probe;
-        probe.argv = {"unzip", "-l", join(dir, "classes.jar"), "org/chromium/base/ThreadUtils.class"};
-        probe.env = currentEnv();
-        probe.logFile = "/dev/null";
-        if (runAndWait(probe) == 0) classes = core + ":" + classes + ":" + rest;
+        // Only microG (which signs users in through a WebView and bundles Cronet) is known to need core first; any app can be forced with APKLAYER_PROVIDER_FIRST=1.
+        // The real fix is a class loader of its own for the provider (its natives find classes through the sandbox loader today): docs/PLAN.md.
+        if (package == "com.google.android.gms" || !getenvOr("APKLAYER_PROVIDER_FIRST", "").empty()) classes = core + ":" + classes + ":" + rest;
         else classes = classes + ":" + core + ":" + rest;
     }
     if (!getenvOr("APKLAYER_ISOLATED", "").empty()) jvm.push_back("-Dapklayer.isolated=" + getenvOr("APKLAYER_ISOLATED", ""));

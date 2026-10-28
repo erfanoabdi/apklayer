@@ -85,6 +85,25 @@ public final class DenyInstrument {
         catch (RuntimeException malformed) { return null; }
     }
 
+    private static boolean nativeNamesGuava(String apk) throws java.io.IOException {
+        byte[] needle = "com/google/common/util/concurrent/".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        try (JarFile jar = new JarFile(apk)) {
+            for (JarEntry e : Collections.list(jar.entries())) {
+                if (!e.getName().endsWith(".so")) continue;
+                try (InputStream is = jar.getInputStream(e)) {
+                    byte[] data = is.readAllBytes();
+                    outer:
+                    for (int i = 0; i + needle.length <= data.length; i++) {
+                        if (data[i] != needle[0]) continue;
+                        for (int j = 1; j < needle.length; j++) if (data[i + j] != needle[j]) continue outer;
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     public static void main(String[] args) throws Exception {
         try (JarFile scan = new JarFile(args[0])) {
             for (JarEntry e : Collections.list(scan.entries())) {
@@ -111,7 +130,8 @@ public final class DenyInstrument {
                 if (bundled) RELOCATED.addAll(java.util.Arrays.asList(library));
             }
         }
-        boolean relocate = !RELOCATED.isEmpty();
+        // an app whose native libraries name Guava classes in JNI signatures (Meet's TaclFutureCallback.attachToFuture) keeps them unrelocated: relocation would break the lookup
+        boolean relocate = !RELOCATED.isEmpty() && !(args.length > 2 && nativeNamesGuava(args[2]));
         try (JarFile in = new JarFile(args[0]);
              JarOutputStream out = new JarOutputStream(
                      new BufferedOutputStream(new FileOutputStream(args[1])))) {
