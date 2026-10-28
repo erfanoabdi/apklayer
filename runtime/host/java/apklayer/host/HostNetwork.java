@@ -58,7 +58,7 @@ final class HostNetwork {
     static void install(Application app) {
         apply(app, read());
         try {
-            Process monitor = new ProcessBuilder("ip", "monitor", "route").redirectErrorStream(true).start();
+            Process monitor = new ProcessBuilder(HostProcess.dying("ip", "monitor", "route")).redirectErrorStream(true).start();
             Thread thread = new Thread(() -> {
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(monitor.getInputStream()))) {
                     while (in.readLine() != null) {

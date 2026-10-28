@@ -67,7 +67,7 @@ final class HostBattery {
 
     private static void watch(Runnable changed, String name) {
         try {
-            Process monitor = new ProcessBuilder("udevadm", "monitor", "--udev", "--subsystem-match=power_supply").redirectErrorStream(true).start();
+            Process monitor = new ProcessBuilder(HostProcess.dying("udevadm", "monitor", "--udev", "--subsystem-match=power_supply")).redirectErrorStream(true).start();
             Thread thread = new Thread(() -> {
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(monitor.getInputStream()))) {
                     for (String line; (line = in.readLine()) != null; ) if (line.contains("power_supply")) changed.run();

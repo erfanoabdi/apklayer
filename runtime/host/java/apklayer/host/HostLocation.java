@@ -24,7 +24,7 @@ final class HostLocation {
         for (String provider : new String[] {LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) shadow.setProviderEnabled(provider, false);
         shadow.setLocationEnabled(false);
         try {
-            Process helper = new ProcessBuilder("python3", script()).redirectError(ProcessBuilder.Redirect.INHERIT).start();
+            Process helper = new ProcessBuilder(HostProcess.dying("python3", script())).redirectError(ProcessBuilder.Redirect.INHERIT).start();
             Runtime.getRuntime().addShutdownHook(new Thread(helper::destroy));
             BufferedReader in = new BufferedReader(new InputStreamReader(helper.getInputStream()));
             String first = in.readLine();  // `ready`, or why GeoClue is not usable
