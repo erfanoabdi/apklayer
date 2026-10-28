@@ -89,3 +89,7 @@ Open: how keystore2 learns the caller uid (point 3); gatekeeper password enrolme
 - **OpenTTD**: after the libc fortify fix, "Couldn't find any suitable video driver" from its SDL 1.2 Android port.
 - **AnkiDroid**: crash after launch hidden by ACRA; **Puzzles**: anti-piracy redirect; **NewPipe**: empty Trending; **Sensors Multitool**: relaunches its MainActivity.
 - Keystore, Google accounts: still waiting for the real keystore2 + software KeyMint plan above.
+
+- **Fennec** (2026-10-28): past mozglue's putenv interposer (dlsym RTLD_NEXT fallback in the translated linker). GeckoThread runs, loads sqlite and nss, then "Could not find profile folder" and the runtime shuts down; no native message reaches the log. Next: Gecko's stderr/android log, its child-process services through the hub, the profile directory.
+- **Joplin**: with the bundled OpenSSL libraries renamed (`scripts/rename-bundled-system-libs.py`, not yet run by `install`) the JS bundle runs, then the process aborts: `libc++abi: Fatal error: glibc detected an invalid stdio handle` (a C++ terminate message written through a bionic FILE).
+- **Conversations**: aborts at start; `NativeCrypto: could not find field descriptor` (a Conscrypt JNI lookup of `FileDescriptor.descriptor`, which is `fd` in the JDK).

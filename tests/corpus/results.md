@@ -27,9 +27,9 @@ One run per app (tests/vm/appcheck.sh for errors, tests/vm/appshot.py for a scre
 | Unciv | com.unciv.app | black window | starts, no error |
 | TIC-80 | com.nesbox.tic | draws its console | |
 | Super Retro Mega Wars | com.serwylo.retrowars | runs | not looked at |
-| AnkiDroid | com.ichi2.anki | no window | Chromium startup from Application.onCreate throws (WebView statics before any WebView) |
+| AnkiDroid | com.ichi2.anki | works (deck screen, Rust backend) | fixed by: startActivityIfNeeded, grace for the launcher trampoline, `Build.FINGERPRINT` no longer "robolectric" (Anki skipped its native library on it) |
 | Puzzles (Simon Tatham) | name.boyle.chris.sgtpuzzles | exits | opens its Play Store page and finishes |
-| Open Sudoku | org.moire.opensudoku | crashes | `duplicate column name: rating_level` creating its database |
+| Open Sudoku | org.moire.opensudoku | crashes | the app's own dex builds `CREATE TABLE puzzles` with `rating_level` twice (checked in the original classes.dex: the converter is faithful), so this F-Droid build fails on a fresh install on any SQLite |
 | Rocks 'n' Diamonds | org.artsoft.rocksndiamonds | aborts | SDL_image: IMG_Load failed (asset read) |
 | WireGuard | com.wireguard.android | draws | fixed by `android_get_device_api_level` in the translated libc (Go takes the Android Q TLS path) |
 | DRM Info | com.androidfung.drminfo | crashes | Google Ads / Firebase need Play Services |
