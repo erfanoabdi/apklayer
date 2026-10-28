@@ -85,7 +85,8 @@ std::vector<std::string> hostJvmArgs(const Layout& l, const Instance& inst, Nati
                                   "-Drobolectric.windowManager.useRequestedSize=true",
                                   "-Drobolectric.allowPlatformPermissions=true",  // system apps (ContactsProvider...) declare platform permissions of their own
                                   // Robolectric extracts ~120 MB of native runtime per JVM: into the instance's state directory (disk), emptied when its stack stops
-                                  "-Djava.io.tmpdir=" + inst.tmpDir()};
+                                  "-Djava.io.tmpdir=" + inst.tmpDir(),
+                                  "-Dapklayer.storage=" + inst.storageDir};  // volumes: Internal storage (emulated/0 below), Home, Linux root
     if (isDir(join(n, "jdk-patch"))) { a.push_back("--patch-module"); a.push_back("java.base=" + join(n, "jdk-patch")); }  // libcore-only members Android's natives look up
     if (isDir(join(nr, "system/fonts"))) a.push_back("-Drobolectric.nativeruntime.fontdir=" + join(nr, "system/fonts/"));
     std::string res = join(nr, "system/framework/org.lineageos.platform-res.apk");

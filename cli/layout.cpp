@@ -54,6 +54,8 @@ Instance Instance::open(const Layout& layout, const std::string& id) {
     i.id = id;
     i.stateDir = getenvOr("APKLAYER_LOGS", join(layout.stateHome, "apklayer/" + id));  // tests may point the logs elsewhere
     i.runtimeDir = join(layout.runtimeHome, "apklayer/" + id);
+    i.storageDir = join(layout.dataHome, "apklayer/" + (id == "default" ? std::string("0") : id) + "/storage");
+    makeDirs(join(i.storageDir, "emulated/0"));
     makeDirs(i.stateDir);
     makeDirs(i.runtimeDir);
     return i;

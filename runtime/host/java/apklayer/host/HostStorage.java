@@ -11,11 +11,13 @@ import java.lang.reflect.Parameter;
 import org.robolectric.shadow.api.Shadow;
 import org.robolectric.shadows.ShadowStorageManager;
 
-/** What every Android device has and the sandbox leaves empty: the primary (emulated, mounted) storage volume. */
+/** What every Android device has and the sandbox leaves empty: the primary (emulated, mounted) storage volume, in the instance's storage directory. */
 final class HostStorage {
     private HostStorage() {}
 
     static void install(Application app) {
+        java.io.File internal = HostVolumes.internal();  // the instance's own sdcard, not a temp directory
+        if (internal != null) { internal.mkdirs(); org.robolectric.shadows.ShadowEnvironment.setExternalStorageDirectory(internal.toPath()); }
         StorageManager manager = app.getSystemService(StorageManager.class);
         if (manager != null && manager.getStorageVolumes().isEmpty()) {
             StorageVolume primary = primaryVolume();

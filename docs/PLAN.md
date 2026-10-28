@@ -19,12 +19,12 @@ If a decision changes, change it here in the same commit as the code.
 | Verification | Every feature has a scripted check on the test VM with real input and a screenshot (`tests/vm/`); run only the groups for the code you changed. |
 | Builds in `~/los24` | Incremental only, never clean `out/`; rules in `docs/AOSP-BUILDS.md`. |
 
-## Storage volumes (user's design, 2026-10-28; DocumentsUI shows the home today as one stub volume)
-Per instance an Android-sdcard-like tree in the XDG data dir: `$XDG_DATA_HOME/apklayer/<instance>/` (instance 0, 1 for a second one), the `/sdcard` of that phone. Volumes the storage service lists:
-1. **Internal storage**: that tree (the emulated primary volume; what `Environment.getExternalStorageDirectory()` returns).
-2. **Home**: the Linux user's home.
-3. **Linux root** (`/`): read mostly; apklayer cannot write all of it, which is fine.
-The Android root itself (system/vendor files) is already known to the runtime. Open: move `ShadowHostStorageManager` from one stub to these three, point `HostStorage`/`Environment` at the tree, per-instance paths in `cli/layout`, and decide which volume apps (not DocumentsUI) may see.
+## Storage volumes (done 2026-10-28; user's design)
+Each instance has its own `/storage`: `$XDG_DATA_HOME/apklayer/<n>/storage` (n = 0 for the default instance, 1 for a second one; `Instance::storageDir`, passed to every JVM as `-Dapklayer.storage`). The storage service (`ShadowHostStorageManager`, `HostVolumes`) lists three volumes:
+1. **Internal storage**: the emulated primary volume `<storage>/emulated/0` (the instance's `/sdcard`; `Environment.getExternalStorageDirectory()` returns it). DocumentsUI root id `primary`.
+2. **Home**: the Linux user's home (stub volume `linux-home`; `home` is DocumentsUI's own Documents-folder id).
+3. **Linux root**: `/` (stub volume `linux-root`); apklayer reads what its user may read and writes what it may.
+The Android root is known to the runtime already. Open: which volumes ordinary apps (not DocumentsUI) get through the file APIs (today no app path reaches Home or `/` except through DocumentsUI and the grants it hands out); runtime-permission rules for storage (`READ_EXTERNAL_STORAGE`, `MANAGE_EXTERNAL_STORAGE`); the real MediaProvider (today `HostMediaStub` answers "nothing indexed").
 
 ## Roadmap
 | Phase | State |
