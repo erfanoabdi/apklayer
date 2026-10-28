@@ -1,0 +1,3 @@
+# Copy to tests/vm/local.conf (untracked). The test VM: an arm64 Linux with a GNOME Wayland session, the staged runtime, and a copy of this repo in ~/apklayer.
+APKLY_VM=user@host
+APKLY_VM_PASS=secret

@@ -1,13 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-VM="${APKLY_VM:-utm@192.168.64.7}"
-PASS="${APKLY_VM_PASS:-1234}"
+. tests/vm/config.sh
 COPYFILE_DISABLE=1 tar cf - aosp/hals/audio/manifest.xml aosp/hals/audio/audio_policy_configuration.xml tests/vm/audio-host.py |
-    sshpass -p "$PASS" ssh "$VM" 'tar xf - -C ~/apklayer-m1'
+    sshpass -p "$PASS" ssh "$VM" 'tar xf - -C ~/apklayer'
 sshpass -p "$PASS" ssh "$VM" bash -s <<'REMOTE'
 set -euo pipefail
-cd ~/apklayer-m1
+cd ~/apklayer
 export XDG_RUNTIME_DIR=/run/user/1000 APKLAYER_NATIVE="$HOME/arm64-native"
 export APKLAYER_HOST_LIBS="$APKLAYER_NATIVE/libapklayer-hal-graphics.so:$APKLAYER_NATIVE/libapklayer-hal-audio.so"
 cp b/bridge/hals/audio/libapklayer-hal-audio.so "$APKLAYER_NATIVE/"

@@ -11,9 +11,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 from vmcapture import capture
 
 ssh = ['sshpass', '-p', password, 'ssh', '-o', 'StrictHostKeyChecking=no', vm]
-ENV = ('cd ~/apklayer-m1; export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 APKLAYER_NATIVE=$HOME/arm64-native '
+ENV = ('cd ~/apklayer; export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 APKLAYER_NATIVE=$HOME/arm64-native '
        'APKLAYER_RUNTIME_DEBUG=1 APKLAYER_JOPTS="-Dapklayer.runms=12000 $APKLAYER_EXTRA_JOPTS"; ')
-CLEANUP = 'cd ~/apklayer-m1; bin/apklayer stop >/dev/null 2>&1; pkill -f "[b]in/apklayer hub"; pkill -9 -x tail; true'
+CLEANUP = 'cd ~/apklayer; bin/apklayer stop >/dev/null 2>&1; pkill -f "[b]in/apklayer hub"; pkill -9 -x tail; true'
 tmp = os.environ.get('TMPDIR', '/tmp')
 proc = None
 try:

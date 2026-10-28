@@ -5,9 +5,12 @@ Existing files are never overwritten (the platform copies of shared libraries st
   scripts/install-media-libs.py [--dry-run]   then   scripts/gen-tree-files-lock.py"""
 import subprocess, sys, pathlib, re
 
-VM = "utm@192.168.64.7"
-SSH = ["sshpass", "-p", "1234", "ssh", "-o", "StrictHostKeyChecking=no", VM]
-SCP = ["sshpass", "-p", "1234", "scp", "-q", "-o", "StrictHostKeyChecking=no"]
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests", "vm"))
+import config
+VM = config.VM
+SSH = ["sshpass", "-p", config.PASS, "ssh", "-o", "StrictHostKeyChecking=no", VM]
+SCP = ["sshpass", "-p", config.PASS, "scp", "-q", "-o", "StrictHostKeyChecking=no"]
 OUT = "/home/erfanabdi/los24/out/target/product/generic_arm64"
 APEX = [OUT + "/apex/com.android.media.swcodec/lib64", OUT + "/apex/com.android.media/lib64/extractors", OUT + "/apex/com.android.media/lib64", OUT + "/system/lib64"]
 SKIP = set()  # the platform store aborts at listing when a library of its fixed list is missing, so all of them are installed; the host decoders still come first (rank)

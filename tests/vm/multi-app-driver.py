@@ -34,7 +34,7 @@ def headers(filename, count=2, maximize=False, content_y=None):
 
 if __name__ == '__main__':
     proc = subprocess.Popen(['sshpass', '-p', sys.argv[2], 'ssh', '-o', 'StrictHostKeyChecking=no',
-                             sys.argv[1], 'cd ~/apklayer-m1; python3 -u tests/vm/multi-app.py'],
+                             sys.argv[1], 'cd ~/apklayer; python3 -u tests/vm/multi-app.py'],
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     capture = 0
     try:

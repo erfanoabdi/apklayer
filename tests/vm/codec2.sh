@@ -2,13 +2,12 @@
 # Foreground native host + real Codec2/gralloc regression, with unconditional cleanup.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-VM="${APKLY_VM:-utm@192.168.64.7}"
-PASS="${APKLY_VM_PASS:-1234}"
+. tests/vm/config.sh
 COPYFILE_DISABLE=1 tar cf - tests/vm/codec2-run.py bridge/hals/media tests/hals/codec-test.c tests/hals/codec-reorder-test.c tests/vm/vp9-superframe.py bridge/native/apklayer.prop aosp/hals/media/codec2/manifest.xml |
-    sshpass -p "$PASS" ssh "$VM" 'tar xf - -C ~/apklayer-m1'
+    sshpass -p "$PASS" ssh "$VM" 'tar xf - -C ~/apklayer'
 sshpass -p "$PASS" ssh "$VM" bash -s <<'REMOTE'
 set -euo pipefail
-cd ~/apklayer-m1
+cd ~/apklayer
 export XDG_RUNTIME_DIR=/run/user/1000 APKLAYER_NATIVE="$HOME/arm64-native" APKLAYER_CODEC2=1
 export APKLAYER_HOST_LIBS="$APKLAYER_NATIVE/libapklayer-hal-graphics.so:$APKLAYER_NATIVE/libapklayer-hal-media.so"
 trap 'bin/apklayer stop >/dev/null 2>&1; pkill -9 -x tail || true; rm -f "$APKLAYER_NATIVE/android-root/vendor/etc/vintf/manifest/apklayer-media.xml"' EXIT

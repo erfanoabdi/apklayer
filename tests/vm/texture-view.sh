@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-VM="${APKLY_VM:-utm@192.168.64.7}"; PASS="${APKLY_VM_PASS:-1234}"
+. tests/vm/config.sh
 sshpass -p "$PASS" scp tests/vm/texture-view.py "$VM:apklayer-m1/tests/vm/texture-view.py"
 python3 - "$VM" "$PASS" <<'PY'
 import subprocess, sys
@@ -9,7 +9,7 @@ sys.path.insert(0, 'tests/vm')
 from vmcapture import capture
 from PIL import Image, ImageChops
 images = []
-p = subprocess.Popen(['sshpass', '-p', sys.argv[2], 'ssh', sys.argv[1], 'cd ~/apklayer-m1; python3 -u tests/vm/texture-view.py'],
+p = subprocess.Popen(['sshpass', '-p', sys.argv[2], 'ssh', sys.argv[1], 'cd ~/apklayer; python3 -u tests/vm/texture-view.py'],
     stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
 try:
     for line in p.stdout:

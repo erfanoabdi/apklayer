@@ -6,8 +6,11 @@ Each line: <sha256> <size> <path on the VM, relative to ~> <origin in the tree> 
 status: same (identical to the tree's file), patched (differs: see the note column), apklayer (built from vendor/apklayer), unresolved."""
 import hashlib, subprocess, sys, datetime, pathlib
 
-VM = "utm@192.168.64.7"
-SSH = ["sshpass", "-p", "1234", "ssh", "-o", "StrictHostKeyChecking=no", VM]
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests", "vm"))
+import config
+VM = config.VM
+SSH = ["sshpass", "-p", config.PASS, "ssh", "-o", "StrictHostKeyChecking=no", VM]
 OUT = "out/target/product/generic_arm64"
 
 def sh(cmd, orb=False):

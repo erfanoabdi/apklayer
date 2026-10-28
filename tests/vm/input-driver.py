@@ -15,7 +15,7 @@ spec = importlib.util.spec_from_file_location('geometry', path)
 geometry = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(geometry)
 proc = subprocess.Popen(['sshpass', '-p', sys.argv[2], 'ssh', '-o', 'StrictHostKeyChecking=no',
-    sys.argv[1], 'cd ~/apklayer-m1; python3 -u tests/vm/input.py'],
+    sys.argv[1], 'cd ~/apklayer; python3 -u tests/vm/input.py'],
     stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
 capture = 0
 try:

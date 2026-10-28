@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from vmcapture import capture
 
 proc = subprocess.Popen(['sshpass', '-p', sys.argv[2], 'ssh', sys.argv[1],
-    'cd ~/apklayer-m1; python3 -u tests/vm/gpu-window-run.py'], stdin=subprocess.PIPE,
+    'cd ~/apklayer; python3 -u tests/vm/gpu-window-run.py'], stdin=subprocess.PIPE,
     stdout=subprocess.PIPE, text=True)
 count = 0
 try:

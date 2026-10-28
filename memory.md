@@ -44,12 +44,12 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
 - `pkill -f <pattern>` over ssh can kill the ssh shell itself; use `pkill -x` or a `[x]yz` pattern. macOS `._*` AppleDouble files: `COPYFILE_DISABLE=1 tar`.
 
 ## Test VM (UTM on this Mac, since 2026-10-28)
-- `ssh utm@192.168.64.7` (password in CLAUDE.md), Ubuntu 26.04 arm64, 6 CPUs, 9 GB, GNOME Wayland (`wayland-0`, `XDG_RUNTIME_DIR=/run/user/1000`), kernel 7.0.
+- `ssh utm@192.168.64.7` (host and password: `tests/vm/local.conf`), Ubuntu 26.04 arm64, 6 CPUs, 9 GB, GNOME Wayland (`wayland-0`, `XDG_RUNTIME_DIR=/run/user/1000`), kernel 7.0.
   GPU: Venus Vulkan 1.4 on the Apple M5 Max, virgl ES 3.0 (zink gives ES 3.1 but aborts in Venus). `binder_linux` is a module that cannot be unloaded and
   ignores `devices=` once loaded: create the binderfs nodes with the `binder-control` ioctl (see `scripts/vm-binder-setup.sh`).
 - `/tmp` is tmpfs (RAM): Robolectric leaves ~120 MB per aborted JVM; clean `/tmp/robolectric-nativeruntime*` and never put big APKs there.
 - Screenshots: `tests/vm/vmcapture.py` (flameshot in the guest session). Real input: `tests/vm/uinput-keys.c` (gcc on the VM, run with sudo).
-- Layout on the VM: `~/apklayer-m1` (synced repo, build in `b/`), `~/arm64-native`, `~/android-arm64`, `~/bt-arm`, `~/.cache/apklayer/deps`.
+- Layout on the VM: `~/apklayer` (synced repo, build in `b/`), `~/arm64-native`, `~/android-arm64`, `~/bt-arm`, `~/.cache/apklayer/deps`.
 
 
 ## Reference projects on this machine
@@ -70,7 +70,7 @@ The full chronological log up to the first Wayland frames is in `archive/HISTORY
   arm/arm64, with **no glibc arm64 host target**, hence PLAN P7's compdb → Meson step.
 
 ## Running the GPU route (device-library flavor), 2026-10-27
-On the arm64 VM: `XDG_RUNTIME_DIR=/run/user/1000 APKLAYER_NATIVE=~/arm64-native ~/apklayer-m1/bin/apklayer run <installed package>`; `bin/apklayer stop` ends it.
+On the arm64 VM: `XDG_RUNTIME_DIR=/run/user/1000 APKLAYER_NATIVE=~/arm64-native ~/apklayer/bin/apklayer run <installed package>`; `bin/apklayer stop` ends it.
 That alone starts the services (the C++ tool's stack daemon, ready marker `~/.local/state/apklayer/default/ready`), uses the arm64 JDK, and sets the environment from `scripts/native-env.sh`.
 Tree-flavor install now converts against its own framework and renders metadata/icons using its arm64 runtime. Logs: `/tmp/apklayer-stack/*.log` (services), the app's stdout. `servicetool list|check|dump NAME` (btload --main) inspects services (SurfaceFlinger dump shows layers).
 Capture caveat: `prlctl capture` is reliable for the GPU window now (it showed the UiBench list); Robolectric patches live in `runtime/patches/` (compiled into native-runtime.jar by `scripts/build-native-arm64.sh`).

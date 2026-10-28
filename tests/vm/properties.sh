@@ -2,11 +2,12 @@
 # Verify Android write-once semantics across separate host processes.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+. tests/vm/config.sh
 COPYFILE_DISABLE=1 tar cf - bridge/native/aprop.c bridge/native/properties.c |
-    sshpass -p "${APKLY_VM_PASS:-1234}" ssh "${APKLY_VM:-utm@192.168.64.7}" 'tar xf - -C ~/apklayer-m1'
-sshpass -p "${APKLY_VM_PASS:-1234}" ssh "${APKLY_VM:-utm@192.168.64.7}" bash -s <<'REMOTE'
+    sshpass -p "$PASS" ssh "$VM" 'tar xf - -C ~/apklayer'
+sshpass -p "$PASS" ssh "$VM" bash -s <<'REMOTE'
 set -euo pipefail
-cd ~/apklayer-m1
+cd ~/apklayer
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 cc -O2 -Wall -o "$work/aprop" bridge/native/aprop.c bridge/native/properties.c

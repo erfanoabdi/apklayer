@@ -3,18 +3,18 @@
 # frames on a SurfaceView; the screenshot must show them. Needs a host Vulkan device that imports dma-bufs and shares sync fds.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-VM="${APKLY_VM:-utm@192.168.64.7}"; PASS="${APKLY_VM_PASS:-1234}"
+. tests/vm/config.sh
 tests/apps/build.sh hello-vulkan
 sshpass -p "$PASS" scp -q build/hello-vulkan.apk "$VM:/tmp/hello-vulkan.apk"
-COPYFILE_DISABLE=1 tar cf - tests/vm/vulkan-present.py bridge/native/apklayer.prop 2>/dev/null | sshpass -p "$PASS" ssh "$VM" 'tar xf - -C ~/apklayer-m1 2>/dev/null'
-sshpass -p "$PASS" ssh "$VM" 'cd ~/apklayer-m1; export XDG_RUNTIME_DIR=/run/user/1000 APKLAYER_NATIVE="$HOME/arm64-native"; bin/apklayer install /tmp/hello-vulkan.apk 2>&1 | grep -a installed; bin/apklayer stop >/dev/null 2>&1; pkill -f "[b]in/apklayer hub"; true'
+COPYFILE_DISABLE=1 tar cf - tests/vm/vulkan-present.py bridge/native/apklayer.prop 2>/dev/null | sshpass -p "$PASS" ssh "$VM" 'tar xf - -C ~/apklayer 2>/dev/null'
+sshpass -p "$PASS" ssh "$VM" 'cd ~/apklayer; export XDG_RUNTIME_DIR=/run/user/1000 APKLAYER_NATIVE="$HOME/arm64-native"; bin/apklayer install /tmp/hello-vulkan.apk 2>&1 | grep -a installed; bin/apklayer stop >/dev/null 2>&1; pkill -f "[b]in/apklayer hub"; true'
 python3 - "$VM" "$PASS" <<'PY'
 import os, subprocess, sys
 sys.path.insert(0, 'tests/vm')
 from vmcapture import capture
 from PIL import Image
 vm, password = sys.argv[1], sys.argv[2]
-p = subprocess.Popen(['sshpass', '-p', password, 'ssh', vm, 'cd ~/apklayer-m1; python3 -u tests/vm/vulkan-present.py'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+p = subprocess.Popen(['sshpass', '-p', password, 'ssh', vm, 'cd ~/apklayer; python3 -u tests/vm/vulkan-present.py'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
 magenta = 0.0
 try:
     for line in p.stdout:

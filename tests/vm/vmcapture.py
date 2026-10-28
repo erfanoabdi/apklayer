@@ -1,13 +1,17 @@
 """Screenshot of the test VM's desktop into a local PNG: Parallels through prlctl, any other VM (UTM) through flameshot in its GNOME session."""
 import os
 import subprocess
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import config
 
 PARALLELS_NAME = os.environ.get('APKLAYER_VM_NAME', 'Ubuntu 24.04 (with Rosetta)')
 
 
 def capture(image, vm=None, password=None):
-    vm = vm or os.environ.get('APKLY_VM', 'utm@192.168.64.7')
-    password = password or os.environ.get('APKLY_VM_PASS', '1234')
+    vm = vm or config.VM
+    password = password or config.PASS
     if vm.startswith('parallels@'):
         subprocess.run(['prlctl', 'capture', PARALLELS_NAME, '--file', image], check=True)
         return

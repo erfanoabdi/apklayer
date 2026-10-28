@@ -1,9 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-VM="${APKLY_VM:-utm@192.168.64.7}"
-PASS="${APKLY_VM_PASS:-1234}"
+. tests/vm/config.sh
 vm() { sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" "$@"; }
 COPYFILE_DISABLE=1 tar cf - tests/vm/multi-app.py tests/vm/uinput-keys.c |
-    vm 'tar xf - -C ~/apklayer-m1'
+    vm 'tar xf - -C ~/apklayer'
 python3 tests/vm/multi-app-driver.py "$VM" "$PASS"
