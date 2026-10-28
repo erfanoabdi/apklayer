@@ -63,6 +63,11 @@ public final class NativeLoader {
     }
 
     public static void load(String path) {
+        File asked = new File(path);
+        if (!asked.isFile()) {  // the app extracted its libraries to a path that does not exist here (OpenTTD: files/../lib): the same name in the app's lib dir is the library
+            File alt = new File(System.getProperty("apklayer.libdir", ""), asked.getName());
+            if (alt.isFile()) path = alt.getPath();
+        }
         synchronized (NativeLoader.class) {
             if (LOADED.containsKey(path)) return;
             init();
