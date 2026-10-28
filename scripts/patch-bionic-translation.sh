@@ -375,3 +375,14 @@ if old in s:
     s = s.replace(old, '\treturn pthread_cond_broadcast(cond->glibc); /* apklayer patch: see scripts/patch-bionic-translation.sh step 10 */', 1)
     p.write_text(s)
 PY
+# 11. android_get_device_api_level in libc.so: Go's cgo runtime (WireGuard, Rethink DNS) looks it up with dlsym on libc.so; its presence selects the Android Q path that uses
+#     the free TLS_SLOT_APP (slot 2, which bridge/native/bionic_tls.c keeps at tp+16) instead of scanning pthread keys for a slot, which finds nothing here.
+python3 - "$bt" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1]) / 'libc/libc-misc.c'
+s = p.read_text()
+if 'bionic_android_get_device_api_level' not in s:
+    s += '\n/* apklayer patch: see scripts/patch-bionic-translation.sh step 11 */\nint bionic_android_get_device_api_level(void)\n{\n\treturn 36;\n}\n'
+    p.write_text(s)
+PY
