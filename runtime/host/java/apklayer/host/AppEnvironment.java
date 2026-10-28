@@ -32,6 +32,7 @@ import org.robolectric.simulator.FixedConfiguration;
 final class AppEnvironment {
     /** Robolectric simulator AppLoader: application state straight from the APK. */
     static void setUpApplication(AndroidSandbox sandbox, Path apk, boolean describing) {
+        if (Thread.getDefaultUncaughtExceptionHandler() == null) Thread.setDefaultUncaughtExceptionHandler((thread, failure) -> { System.out.println("FATAL EXCEPTION: " + thread.getName()); failure.printStackTrace(System.out); });  // like Android's RuntimeInit: an app's own handlers (ACRA, Gecko) still chain to it
         System.setProperty("java.vm.name", "Dalvik");  // libgdx, Netty ... pick their Android code path (native libraries through System.loadLibrary) by these names
         System.setProperty("java.runtime.name", "Android Runtime");
         if (java.security.Security.getProvider("AndroidKeyStore") == null) java.security.Security.addProvider(new HostKeyStoreProvider());  // apps open it in Application.onCreate
