@@ -34,7 +34,7 @@ final class HostUsb {
             int bus = number(attribute(entry, "busnum"), 10), device = number(attribute(entry, "devnum"), 10);
             UsbDevice usb = create(String.format("/dev/bus/usb/%03d/%03d", bus, device), number(vendor, 16), number(attribute(entry, "idProduct"), 16),
                     number(attribute(entry, "bDeviceClass"), 16), number(attribute(entry, "bDeviceSubClass"), 16), number(attribute(entry, "bDeviceProtocol"), 16),
-                    attribute(entry, "manufacturer"), attribute(entry, "product"), attribute(entry, "version"));
+                    attribute(entry, "manufacturer"), attribute(entry, "product"), attribute(entry, "version"), attribute(entry, "serial"));
             if (usb == null) return;
             Shadows.shadowOf(manager).addOrUpdateUsbDevice(usb, true);
             count++;
@@ -43,7 +43,7 @@ final class HostUsb {
     }
 
     /** UsbDevice's constructor is hidden and differs between releases: fill its parameters by type and order (name, ids, class, strings, flags). */
-    private static UsbDevice create(String name, int vendor, int product, int clazz, int subclass, int protocol, String manufacturer, String productName, String version) {
+    private static UsbDevice create(String name, int vendor, int product, int clazz, int subclass, int protocol, String manufacturer, String productName, String version, String serial) {
         Constructor<?> best = null;
         for (Constructor<?> c : UsbDevice.class.getDeclaredConstructors()) if (best == null || c.getParameterCount() > best.getParameterCount()) best = c;
         if (best == null) return null;
@@ -57,10 +57,13 @@ final class HostUsb {
             else if (t == int.class) args[i] = n < ints.length ? ints[n++] : 0;
             else if (t == boolean.class) args[i] = false;
             else if (t.isArray()) args[i] = java.lang.reflect.Array.newInstance(t.getComponentType(), 0);
+            else if (t == android.hardware.usb.IUsbSerialReader.class) args[i] = new android.hardware.usb.IUsbSerialReader.Stub() {  // the serial number, read on demand
+                @Override public String getSerial(String packageName) { return serial == null ? "" : serial; }
+            };
             else args[i] = null;
             i++;
         }
         try { best.setAccessible(true); return (UsbDevice) best.newInstance(args); }
-        catch (ReflectiveOperationException failure) { System.out.println("[apklayer] usb: cannot build a UsbDevice: " + failure); return null; }
+        catch (ReflectiveOperationException failure) { System.out.println("[apklayer] usb: cannot build a UsbDevice: " + (failure.getCause() != null ? failure.getCause() : failure)); return null; }
     }
 }

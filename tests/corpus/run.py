@@ -64,16 +64,19 @@ def run_one(name, spec, kind):
     lines = []
     reader = threading.Thread(target=lambda: [lines.append(l) for l in app.stdout], daemon=True)
     reader.start()
-    frame = ssh('python3 ~/apklayer/tests/corpus/first-frame.py ' + STATE + '/shell.log ' + str(offset) + ' ' + str(PATIENCE))
+    # a steady picture, not a flash: 20 frames, and the app must still be running when they arrived
+    frame = ssh('python3 ~/apklayer/tests/corpus/first-frame.py ' + STATE + '/shell.log ' + str(offset) + ' ' + str(PATIENCE) + ' 20')
     row['launch'] = 'ok' if any('started ' in l and 'depth=1' in l for l in lines) else 'FAIL'
-    if 'FRAME' in frame.stdout:
+    if 'FRAME' in frame.stdout and app.poll() is None:
         row['frame'] = 'ok'
         shot = HERE / 'shots' / (name + '.png')
         shot.parent.mkdir(exist_ok=True)
         vmcapture.capture(str(shot))
     else:
         row['frame'] = 'FAIL'
+        if 'FRAME' in frame.stdout: lines.append('exited after its first frames (status %s)' % app.poll())
     row['note'] = cause(lines) if row['frame'] != 'ok' or row['launch'] != 'ok' else '-'
+    if row['frame'] != 'ok' and row['note'] == '-': row['note'] = lines[-1].strip()[:110].replace('|', '/') if lines else 'no output'
     app.terminate()
     ssh(ENV + 'b/cli/apklayer stop >/dev/null 2>&1')
     return row

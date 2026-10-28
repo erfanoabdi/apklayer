@@ -9,11 +9,12 @@ sshpass -p "$PASS" ssh "$VM" 'cd ~/apklayer; export XDG_RUNTIME_DIR=/run/user/10
 gcc -O1 -o /tmp/uinput-keys ~/uinput-keys.c
 b/cli/apklayer stop >/dev/null 2>&1
 b/cli/apklayer install ~/hello-portal.apk | grep -a installed
+# nothing tells the test when the dialog has appeared and can take a key (GNOME does not give an app that event): once the request is made, Esc goes out once a
+# second until the app has its answer
 APKLAYER_JOPTS="-Dapklayer.runms=40000" b/cli/apklayer run hello.portal 2>&1 | while IFS= read -r line; do
     case "$line" in
-        *"[apklayer] portal request"*) echo "$line"; sudo -n /tmp/uinput-keys key:1 ;;
-        *"[portal]"*) echo "$line"; break ;;
-        *"file chooser portal unavailable"*) echo "$line"; break ;;
+        *"[apklayer] portal request"*) echo "$line"; ( for i in $(seq 1 25); do sleep 1; sudo -n /tmp/uinput-keys key:1; done ) & sender=$! ;;
+        *"[portal]"*|*"file chooser portal unavailable"*) echo "$line"; kill ${sender:-0} 2>/dev/null; break ;;
     esac
 done > /tmp/portal.out
 cat /tmp/portal.out

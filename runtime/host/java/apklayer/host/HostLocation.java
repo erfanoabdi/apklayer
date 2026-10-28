@@ -12,78 +12,54 @@ import org.robolectric.Shadows;
 import org.robolectric.shadows.ShadowLocationManager;
 
 /**
- * LocationManager from the host's location service (GeoClue over D-Bus, through `gdbus`): with GeoClue the network provider reports its location and follows its
+ * LocationManager from the host's location service (GeoClue over D-Bus, bridge/portal/geoclue.py): with GeoClue the network provider reports its location and follows its
  * updates; without it location is off and no provider is enabled (a machine without a GNSS receiver says so instead of inventing a position).
  */
 final class HostLocation {
     private HostLocation() {}
 
-    private static final String GEOCLUE = "org.freedesktop.GeoClue2";
-
-    private static String gdbus(String... args) {
-        String[] command = new String[args.length + 3];
-        command[0] = "gdbus"; command[1] = "call"; command[2] = "--system";
-        System.arraycopy(args, 0, command, 3, args.length);
-        try {
-            Process p = new ProcessBuilder(command).redirectErrorStream(true).start();
-            String out = new String(p.getInputStream().readAllBytes());
-            return p.waitFor() == 0 ? out : null;
-        } catch (IOException | InterruptedException failure) { return null; }
-    }
-
     static void install(Application app) {
         LocationManager manager = app.getSystemService(LocationManager.class);
         ShadowLocationManager shadow = Shadows.shadowOf(manager);
-        String client = clientPath();
-        shadow.setLocationEnabled(client != null);
         for (String provider : new String[] {LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) shadow.setProviderEnabled(provider, false);
-        if (client == null) { System.out.println("[apklayer] location: no GeoClue, location is off"); return; }
-        shadow.setProviderEnabled(LocationManager.NETWORK_PROVIDER, true);
-        Thread follower = new Thread(() -> follow(app, shadow, client), "apklayer-location");
-        follower.setDaemon(true);
-        follower.start();
-    }
-
-    private static String clientPath() {
-        String made = gdbus("--dest", GEOCLUE, "--object-path", "/org/freedesktop/GeoClue2/Manager", "--method", "org.freedesktop.GeoClue2.Manager.GetClient");
-        if (made == null) return null;
-        Matcher m = Pattern.compile("'(/[^']+)'").matcher(made);
-        if (!m.find()) return null;
-        String client = m.group(1);
-        gdbus("--dest", GEOCLUE, "--object-path", client, "--method", "org.freedesktop.DBus.Properties.Set", "org.freedesktop.GeoClue2.Client", "DesktopId", "<'apklayer'>");
-        gdbus("--dest", GEOCLUE, "--object-path", client, "--method", "org.freedesktop.DBus.Properties.Set", "org.freedesktop.GeoClue2.Client", "RequestedAccuracyLevel", "<uint32 8>");
-        return client;
-    }
-
-    private static void follow(Application app, ShadowLocationManager shadow, String client) {
+        shadow.setLocationEnabled(false);
         try {
-            Process monitor = new ProcessBuilder("gdbus", "monitor", "--system", "--dest", GEOCLUE, "--object-path", client).redirectErrorStream(true).start();
-            Runtime.getRuntime().addShutdownHook(new Thread(monitor::destroy));
-            gdbus("--dest", GEOCLUE, "--object-path", client, "--method", "org.freedesktop.GeoClue2.Client.Start");
-            Pattern updated = Pattern.compile("LocationUpdated \\('[^']*', '(/[^']+)'\\)");
-            try (BufferedReader in = new BufferedReader(new InputStreamReader(monitor.getInputStream()))) {
-                for (String line; (line = in.readLine()) != null; ) {
-                    Matcher m = updated.matcher(line);
-                    if (m.find()) publish(shadow, m.group(1));
-                }
+            Process helper = new ProcessBuilder("python3", script()).redirectError(ProcessBuilder.Redirect.INHERIT).start();
+            Runtime.getRuntime().addShutdownHook(new Thread(helper::destroy));
+            BufferedReader in = new BufferedReader(new InputStreamReader(helper.getInputStream()));
+            String first = in.readLine();  // `ready`, or why GeoClue is not usable
+            if (first == null || !first.equals("ready")) { System.out.println("[apklayer] location: " + (first == null ? "no helper" : first) + ", location is off"); helper.destroy(); return; }
+            shadow.setLocationEnabled(true);
+            shadow.setProviderEnabled(LocationManager.NETWORK_PROVIDER, true);
+            Thread follower = new Thread(() -> follow(in, shadow), "apklayer-location");
+            follower.setDaemon(true);
+            follower.start();
+        } catch (IOException noPython) { System.out.println("[apklayer] location: " + noPython.getMessage() + ", location is off"); }
+    }
+
+    private static void follow(BufferedReader in, ShadowLocationManager shadow) {
+        Pattern update = Pattern.compile("location (\\S+) (\\S+) (\\S+)");
+        try {
+            for (String line; (line = in.readLine()) != null; ) {
+                Matcher m = update.matcher(line);
+                if (!m.matches()) continue;
+                Location location = new Location(LocationManager.NETWORK_PROVIDER);
+                location.setLatitude(Double.parseDouble(m.group(1)));
+                location.setLongitude(Double.parseDouble(m.group(2)));
+                location.setAccuracy((float) Double.parseDouble(m.group(3)));
+                location.setTime(System.currentTimeMillis());
+                location.setElapsedRealtimeNanos(android.os.SystemClock.elapsedRealtimeNanos());
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> shadow.simulateLocation(location));
             }
         } catch (IOException ended) { /* GeoClue went away */ }
     }
 
-    private static void publish(ShadowLocationManager shadow, String path) {
-        String all = gdbus("--dest", GEOCLUE, "--object-path", path, "--method", "org.freedesktop.DBus.Properties.GetAll", "org.freedesktop.GeoClue2.Location");
-        if (all == null) return;
-        Location location = new Location(LocationManager.NETWORK_PROVIDER);
-        location.setLatitude(value(all, "Latitude"));
-        location.setLongitude(value(all, "Longitude"));
-        location.setAccuracy((float) value(all, "Accuracy"));
-        location.setTime(System.currentTimeMillis());
-        location.setElapsedRealtimeNanos(android.os.SystemClock.elapsedRealtimeNanos());
-        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> shadow.simulateLocation(location));
-    }
-
-    private static double value(String text, String key) {
-        Matcher m = Pattern.compile("'" + key + "': <(-?[0-9.eE+-]+)>").matcher(text);
-        return m.find() ? Double.parseDouble(m.group(1)) : 0;
+    private static String script() {
+        java.io.File cli = new java.io.File(System.getProperty("apklayer.cli", ""));
+        for (java.io.File dir = cli.getAbsoluteFile().getParentFile(); dir != null; dir = dir.getParentFile()) {
+            java.io.File candidate = new java.io.File(dir, "bridge/portal/geoclue.py");
+            if (candidate.exists()) return candidate.getPath();
+        }
+        return "bridge/portal/geoclue.py";
     }
 }
