@@ -77,3 +77,15 @@ Open: how keystore2 learns the caller uid (point 3); gatekeeper password enrolme
 - Robolectric's instrumentation of `android.app.AuthenticationRequiredException` crashes in ASM (`Frame.merge` NegativeArraySizeException) when DocumentsUI first loads it (after a directory load that raised any exception). Not fixed: avoid the exception; find the instrumentation failure when it matters.
 - Window size at open: new windows are un-maximized now (the shell undoes the compositor's automatic maximize once), but a 720x1280 phone window is taller than a laptop screen and its bottom is off-screen. The shell's first configure computes a phone shape at 85% of the output height (`xs_configure`, `fit_sent`) but the app still receives 720x1280: the configure at that moment does not take (the sink or the app is not connected yet); resending it with the first frame is the next try. Until then drag/scroll can miss and bottom buttons are off-screen on small screens.
 - WebView provider class clash: an app that bundles Chromium/Cronet base classes (microG, Meet) and uses the WebView needs the provider in its own class loader (child-first for `org.chromium`, `org.jni_zero`, `WV`, `J`, `com.android.webview`; the shim's FindClass must try that loader first for those names). Today the provider's core classes come first for microG only (`APKLAYER_PROVIDER_FIRST=1` forces it for another app) and last for every other app.
+
+
+## Open after the compatibility pass of 2026-10-28 (details per app in `tests/corpus/results.md`)
+- **Black or half-drawn windows** (Unciv, TIC-80, Lemuroid, Logseq): the content rectangle is smaller than the window (Logseq: 460x816 inside a 720-wide frame) or never drawn; Klooni, Mindustry and Shattered Pixel Dungeon (also GLSurfaceView) draw. Look at the surface/window size handshake (`hostResize`, orientation requests) before anything app-specific.
+- **Open Sudoku**: its `CREATE TABLE puzzles` string comes out with `rating_level` twice. The statement is built by `StringBuilder.append(Object)` of column enum values held in locals; suspected miscompiled register reuse in the vendored dex2jvm converter (not confirmed).
+- **Go runtime apps** (WireGuard, Rethink DNS): cgo `inittls` cannot find the pthread key under the bionic TLS emulation.
+- **Joplin**: React Native QuickCrypto bundles OpenSSL `libssl`/`libcrypto`, which clash with the device's BoringSSL `libcrypto.so` in the single linker namespace.
+- **Fennec**: crash in `libmozglue` `GeckoLoader.putenv` (mozglue replaces libc symbols).
+- **Godot 4 (Pomodorot)**: needs Vulkan presentation (`VK_KHR_android_surface`), blocked on the UTM host stack.
+- **OpenTTD**: after the libc fortify fix, "Couldn't find any suitable video driver" from its SDL 1.2 Android port.
+- **AnkiDroid**: crash after launch hidden by ACRA; **Puzzles**: anti-piracy redirect; **NewPipe**: empty Trending; **Sensors Multitool**: relaunches its MainActivity.
+- Keystore, Google accounts: still waiting for the real keystore2 + software KeyMint plan above.
