@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * display window (the frames are SurfaceFlinger's, shown by the shell from dmabufs), and relays input, clipboard, IME and vsync.
  */
 final class ShellClient {
-    private static final int HELLO = 1, ATTACH_INPUT = 9;
+    private static final int HELLO = 1, ATTACH_INPUT = 9, WINDOW_SIZE = 10;
     /** The title the display HAL gives its window (bridge/hals/graphics display, opened by the composer). */
     private static final byte[] DISPLAY_WINDOW = System.getProperty("apklayer.displaywindow", "apklayer").getBytes(StandardCharsets.UTF_8);
     private static final int INPUT = 101, CLOSE = 103, KEY = 105, SCROLL = 106,
@@ -90,6 +90,15 @@ final class ShellClient {
     /** IME event {delete_before, delete_after, commit, preedit}, or null. */
     Object[] pollIme() {
         return imeIn.poll();
+    }
+
+    /** The app wants its window this logical shape (orientation request): the shell fits it to the screen and answers with a configure. */
+    void sendWindowSize(int w, int h) {
+        try {
+            send(WINDOW_SIZE, buf(12).putInt(WINDOW_ID).putInt(w).putInt(h));
+        } catch (IOException e) {
+            // shell gone: the read loop notices
+        }
     }
 
     /** A text field gained or lost focus: enable or disable the compositor's input method. */

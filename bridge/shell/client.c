@@ -81,6 +81,11 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
             window_attach_input(c, v[0], title);
         }
         break;
+    case MSG_WINDOW_SIZE: {
+        struct window *w = len >= 12 ? window_find_input(c, v[0]) : NULL;
+        if (w) window_request_size(w, v[1], v[2]);
+        break;
+    }
     case MSG_TEXT_INPUT: {
         struct window *w = len >= 8 ? window_find_input(c, v[0]) : NULL;
         if (w) text_input_enable(w, v[1]);

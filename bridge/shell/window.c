@@ -87,9 +87,22 @@ void send_state(struct window *w)
 }
 
 /* Window geometry = content + title bar; the bar follows the content width and scale. */
+/* The size (logical) a window of w x h opens at: at most 85% of the output (less top bar and title bar), same aspect. */
+static void fit_size(int w, int h, int *fw, int *fh)
+{
+    int maxh = (output_mode_h * 100 / output_scale - 32 - DECOR_H) * 85 / 100, maxw = output_mode_w * 100 / output_scale * 85 / 100;
+    *fw = w; *fh = h;
+    if (maxh > 0 && *fh > maxh) { *fw = *fw * maxh / *fh; *fh = maxh; }
+    if (maxw > 0 && *fw > maxw) { *fh = *fh * maxw / *fw; *fw = maxw; }
+}
+
 void window_layout(struct window *w)
 {
     int lw = w->w * 100 / w->scale, lh = w->h * 100 / w->scale;
+    if (w->fit_sent && w->cfg_w > 0 && w->cfg_h > 0) {  /* apklayer patch: the window is never bigger than what the app was configured to (its buffers may still be the display's size) */
+        if (w->cfg_w < lw) lw = w->cfg_w;
+        if (w->cfg_h < lh) lh = w->cfg_h;
+    }
     decor_update(&w->decor, lw, w->scale, w->maximized,
                  w->bar_hover, w->activated);
     xdg_surface_set_window_geometry(w->xdg_surface, 0, -DECOR_H, lw, lh + DECOR_H);
@@ -101,12 +114,11 @@ static void xs_configure(void *data, struct xdg_surface *xs, uint32_t serial)
     xdg_surface_ack_configure(xs, serial);
     if (!w->configured) {
         w->configured = 1;
-        if (!w->fit_sent && output_mode_h > 0) {  /* a window taller than 85% of the screen (the compositor only clamps it or maximizes it): a phone shape well inside the screen */
-            int fit = output_mode_h * 100 / output_scale - 32 - DECOR_H;  /* the output less the top bar and the title bar */
-            int th = fit * 85 / 100, tw = th * 9 / 16, cw0 = w->w * 100 / w->scale, ch0 = w->h * 100 / w->scale;
+        if (output_mode_h > 0) {  /* apklayer patch: the first size is the fitted one, not the compositor's clamp of the display's size */
             w->fit_sent = 1;
-            if (th > 0 && th < ch0) { w->cfg_h = th; w->cfg_w = tw < cw0 ? tw : cw0; }
+            fit_size(w->w * 100 / w->scale, w->h * 100 / w->scale, &w->cfg_w, &w->cfg_h);
         }
+        fprintf(stderr, "[shell] first configure: window %dx%d, compositor %dx%d, output %dx%d @%d%%\n", w->w, w->h, w->cfg_w, w->cfg_h, output_mode_w, output_mode_h, output_scale);
         /* Tell the app its size and the output scale (P2 HiDPI: density = 160*scale). */
         int32_t lw = w->cfg_w > 0 ? w->cfg_w : w->w * 100 / w->scale;
         int32_t lh = w->cfg_h > 0 ? w->cfg_h : w->h * 100 / w->scale;
@@ -245,6 +257,10 @@ void window_create(struct client *c, int id, int width, int height, const char *
     xdg_toplevel_set_title(w->toplevel, title[0] ? title : c->pkg);
     xdg_toplevel_set_app_id(w->toplevel, c->pkg);
     xdg_toplevel_set_min_size(w->toplevel, 240, 240 + DECOR_H);
+    if (output_mode_h > 0) {   /* apklayer patch: open at a size that fits the screen, so the compositor has nothing to clamp (a clamp is a configure that disagrees with the app) */
+        fit_size(width * 100 / w->scale, height * 100 / w->scale, &w->cfg_w, &w->cfg_h);
+        w->fit_sent = 1;
+    }
     window_layout(w); /* geometry needs the toplevel role */ /* desktop-resizable (P2) */
     wl_surface_commit(w->surface);
     fprintf(stderr, "[shell] %s: window %d %dx%d \"%s\"\n", c->pkg, id, width, height, title);
@@ -267,7 +283,7 @@ void window_attach_input(struct client *c, int own_id, const char *title)
         clipboard_push(w);
         fprintf(stderr, "[shell] %s takes the input of window \"%s\" (as its window %d)\n", c->pkg, title, own_id);
         if (w->configured) {  // its size, scale and state, now that someone listens
-            int32_t v[4] = { own_id, w->w * 100 / w->scale, w->h * 100 / w->scale, output_scale };
+            int32_t v[4] = { own_id, w->cfg_w > 0 ? w->cfg_w : w->w * 100 / w->scale, w->cfg_h > 0 ? w->cfg_h : w->h * 100 / w->scale, output_scale };  /* apklayer patch: the fitted size, not the display's */
             w->told_scale = output_scale;
             send_msg(c, MSG_CONFIGURE, v, 4);
             send_state(w);
@@ -275,6 +291,19 @@ void window_attach_input(struct client *c, int own_id, const char *title)
         }
         return;
     }
+}
+
+/* apklayer patch: the app asks for another shape (portrait <-> landscape): fitted to the screen, sent to the app and to the display's owner. */
+void window_request_size(struct window *w, int lw, int lh)
+{
+    int fw, fh;
+    if (!w->configured) return;
+    fit_size(lw, lh, &fw, &fh);
+    if (fw == w->w * 100 / w->scale && fh == w->h * 100 / w->scale) return;
+    w->cfg_w = fw; w->cfg_h = fh;
+    int32_t v[4] = { W_ID(w), fw, fh, output_scale };
+    send_msg(W_TARGET(w), MSG_CONFIGURE, v, 4);
+    if (w->proxy) send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, fw, fh, output_scale }, 4);
 }
 
 void window_drop_proxy(struct client *c)

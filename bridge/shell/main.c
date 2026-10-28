@@ -12,7 +12,7 @@ struct xdg_wm_base *wm_base;
 struct wl_seat *seat;
 struct wl_output *output;
 int output_refresh_mhz = 60000;
-int output_mode_h;                /* the output's current mode height in pixels, 0 until known */
+int output_mode_w, output_mode_h;                /* the output's current mode height in pixels, 0 until known */
 int output_scale = 100;            /* percent: 100 = 1x, 200 = 2x (P2 HiDPI) */
 struct window windows[MAX_WINDOWS];
 struct window *pointer_focus, *keyboard_focus;

@@ -37,6 +37,7 @@ struct apklayer_display {
     int headless;
     void (*_Atomic configure_fn)(void *, int32_t, int32_t, int32_t);
     _Atomic(void *) configure_user;
+    _Atomic int64_t pending_cfg[3];   /* a configure that arrived before the callback was set (w, h, scale; w = 0: none) */
 };
 
 static int send_msg(struct apklayer_display *d, uint32_t type, const void *payload, uint32_t len, const int *fds, int nfds)
@@ -108,6 +109,7 @@ static void *reader(void *arg)
         } else if (head[0] == MSG_CONFIGURE && len >= 16) {
             void (*fn)(void *, int32_t, int32_t, int32_t) = atomic_load(&d->configure_fn);
             if (fn) fn(atomic_load(&d->configure_user), body[1], body[2], body[3]);
+            else { atomic_store(&d->pending_cfg[1], body[2]); atomic_store(&d->pending_cfg[2], body[3]); atomic_store(&d->pending_cfg[0], body[1]); }  /* apklayer patch: replayed by set_configure_callback */
         } else if (head[0] == MSG_DMABUF_RELEASE && len >= 8) {
             if (d->cb.released) d->cb.released(d->cb.user, body[1]);
         }
@@ -204,6 +206,8 @@ void apklayer_display_set_configure_callback(struct apklayer_display *d, void (*
 {
     atomic_store(&d->configure_user, user);
     atomic_store(&d->configure_fn, configure);
+    int64_t pw = atomic_exchange(&d->pending_cfg[0], 0);
+    if (pw > 0 && configure) configure(user, (int32_t)pw, (int32_t)atomic_load(&d->pending_cfg[1]), (int32_t)atomic_load(&d->pending_cfg[2]));
 }
 
 uint32_t apklayer_display_refresh_mhz(struct apklayer_display *d) { return atomic_load(&d->refresh_mhz); }

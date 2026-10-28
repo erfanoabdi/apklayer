@@ -477,7 +477,8 @@ public final class AppHost implements Runnable {
         boolean landscape = req == 0 || req == 6 || req == 11, portrait = req == 1 || req == 7 || req == 12;
         if ((landscape && logicalW < logicalH) || (portrait && logicalW > logicalH)) {
             System.out.println("[apklayer] orientation " + (landscape ? "landscape" : "portrait") + " requested");
-            hostResize(logicalH, logicalW, logicalScale);
+            if (shell != null) shell.sendWindowSize(logicalH, logicalW);  // the shell fits it to the screen and answers with a configure
+            else hostResize(logicalH, logicalW, logicalScale);
         }
     }
 

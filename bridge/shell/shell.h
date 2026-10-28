@@ -72,6 +72,7 @@ enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
 #define MSG_ATTACH_INPUT 9   /* app -> shell: {own window id, title of the window whose input, state and size this app takes over} */
 #define DBUF_MAX 8
 #define CLIENT_MAX_FDS 16
+#define MSG_WINDOW_SIZE 10   /* app -> shell: {own window id, logical w, h}: the app wants its window this shape (orientation); the shell fits it to the screen and answers with CONFIGURE */
 #define MSG_VSYNC_REQUEST 7
 #define MSG_TEXT_INPUT 6
 /* app -> shell uses type 5 for MSG_CLIPBOARD_SET (text); shell -> app 109 pushes the selection */
@@ -140,7 +141,7 @@ extern struct xdg_wm_base *wm_base;
 extern struct wl_seat *seat;
 extern struct wl_output *output;
 extern int output_refresh_mhz;       /* the output's current mode (wl_output.mode), 60000 until known */
-extern int output_mode_h;           /* the output's current mode height in pixels, 0 until known */
+extern int output_mode_w, output_mode_h;           /* the output's current mode height in pixels, 0 until known */
 extern int output_scale;            /* percent: 100 = 1x, 200 = 2x (P2 HiDPI) */
 extern struct window windows[MAX_WINDOWS];
 extern struct window *pointer_focus, *keyboard_focus;
@@ -183,6 +184,7 @@ void vsync_source_changed(void);
 #define DMABUF_LINEAR_MAX 64
 extern uint32_t dmabuf_linear[DMABUF_LINEAR_MAX]; /* formats the compositor takes with the linear modifier (registry.c) */
 extern int dmabuf_linear_n;
+void window_request_size(struct window *w, int lw, int lh);
 void window_attach_input(struct client *c, int own_id, const char *title);  /* window.c */
 void window_drop_proxy(struct client *c);  /* window.c */
 void window_dmabuf_show(struct window *w, int buf, const int32_t *damage);
