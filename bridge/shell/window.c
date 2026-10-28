@@ -2,6 +2,7 @@
 #define _GNU_SOURCE
 #include "shell.h"
 #include <sys/mman.h>
+#include "splash.h"
 
 /* ---- windows ---- */
 
@@ -56,15 +57,8 @@ static void show_initial(struct window *w)
 {
     int width = w->cfg_w > 0 ? w->cfg_w * w->scale / 100 : w->w;
     int height = w->cfg_h > 0 ? w->cfg_h * w->scale / 100 : w->h;
-    int fd = memfd_create("apklayer-initial", MFD_CLOEXEC);
-    if (fd < 0) return;
-    int size = width * height * 4;
-    if (ftruncate(fd, size) < 0) { close(fd); return; }
-    struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, size);
-    w->initial_buffer = wl_shm_pool_create_buffer(pool, 0, width, height,
-                                                width * 4, WL_SHM_FORMAT_XRGB8888);
-    wl_shm_pool_destroy(pool);
-    close(fd);
+    w->initial_buffer = splash_buffer(w, width, height);  /* the logo on its colour until the first frame */
+    if (!w->initial_buffer) return;
     wl_buffer_add_listener(w->initial_buffer, &initial_listener, w);
     wl_surface_attach(w->surface, w->initial_buffer, 0, 0);
     wl_surface_damage_buffer(w->surface, 0, 0, width, height);
@@ -73,6 +67,7 @@ static void show_initial(struct window *w)
 
 static void show(struct window *w, int buf, const int32_t *d)
 {
+    w->framed = 1;
     wl_surface_attach(w->surface, w->buffers[buf], 0, 0);
     wl_surface_damage_buffer(w->surface, d[0], d[1], d[2], d[3]);
     wl_surface_commit(w->surface);
@@ -116,7 +111,7 @@ static void xs_configure(void *data, struct xdg_surface *xs, uint32_t serial)
         if (w->proxy) send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, lw, lh, output_scale }, 4);
         if (w->pending_buf >= 0) show(w, w->pending_buf, w->pending_damage);
         else if (w->pending_dbuf >= 0) window_dmabuf_show(w, w->pending_dbuf, w->pending_ddamage);
-        else if (!w->buffers[0]) show_initial(w);
+        else if (!w->framed) show_initial(w);
         else wl_surface_commit(w->surface);
         vsync_source_changed();
     }

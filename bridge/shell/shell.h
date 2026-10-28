@@ -99,6 +99,7 @@ struct window {
     int told_scale;             /* scale last announced to the app */
     int cfg_w, cfg_h;           /* latest logical content size requested by the compositor, 0 = none */
     int maximized, activated;   /* xdg toplevel states */
+    int framed;                 /* the app has presented a frame (the splash is gone) */
     int fit_sent;               /* the first configure already fitted the window to the screen */
     int unmaximized_once;       /* the compositor's automatic maximize of a new window (GNOME does it for one taller than the screen) was undone */
     int text_input_enabled;
