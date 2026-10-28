@@ -83,7 +83,10 @@ final class HubEndpoint extends Binder {
         }
         if (code == HubProtocol.ENDPOINT_GET_PROVIDER) {
             String authority = request.readString(); request.enforceNoDataAvail();
-            android.content.ContentProvider provider = org.robolectric.shadows.ShadowContentResolver.getProvider(android.net.Uri.parse("content://" + authority));
+            // the provider is created on first use, and its onCreate may need a looper: on the main thread, not on this binder thread
+            java.util.concurrent.CompletableFuture<android.content.ContentProvider> created = new java.util.concurrent.CompletableFuture<>();
+            main.post(() -> { try { created.complete(org.robolectric.shadows.ShadowContentResolver.getProvider(android.net.Uri.parse("content://" + authority))); } catch (Throwable failure) { created.completeExceptionally(failure); } });
+            android.content.ContentProvider provider = created.join();
             reply.writeNoException();
             reply.writeStrongBinder(provider == null ? null : provider.getIContentProvider().asBinder());
             return true;
