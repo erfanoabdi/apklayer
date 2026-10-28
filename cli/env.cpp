@@ -56,6 +56,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     env["PATH"] = join(n, "bin") + ":" + getenvOr("PATH", "/usr/local/bin:/usr/bin:/bin");  // getprop for the apps that run it
     env["XDG_DATA_DIRS"] = join(n, "share") + ":" + getenvOr("XDG_DATA_DIRS", "/usr/local/share:/usr/share");
     env["LD_PRELOAD"] = join(n, "libapklayer-preload.so") + ":libgcc_s.so.1";
+    if (const char* extra = getenv("APKLAYER_PRELOAD_EXTRA")) env["LD_PRELOAD"] += std::string(":") + extra;  // e.g. the JVM's libjsig.so for apps whose native code installs signal handlers
     env["BIONIC_LD_LIBRARY_PATH"] = l;
     if (!env.count("APKLAYER_CRASH_TRACE")) env["APKLAYER_CRASH_TRACE"] = "1";
     // system_server's services stay in the JVM; native clients use their existing unavailable-service fallbacks
