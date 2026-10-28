@@ -10,7 +10,8 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - **System providers**: the tree's Contacts, Calendar, Download, UserDictionary, ExternalStorage, TelephonyProvider, SettingsProvider and DocumentsUI install (`scripts/install-system-apps.sh`); ContactsProvider answers another app (`tests/vm/sysprov.sh contacts`).
 - **Known failures fixed**: audio HAL (PipeWire 1.6 `get_time_n` -EIO) so `native-player.sh` passes; WebView (rebuilt linker with IRELATIVE, setup script) so `webview.sh` passes; `hub-services.sh` passes.
 - **Devices** (`tests/vm/devices.sh`): network from the default route (`ip monitor`), battery and power from sysfs and udev (published by the hub), USB from sysfs, location from GeoClue, the file chooser portal for document pickers (`tests/vm/portal.sh`).
-- **Corpus**: `tests/corpus/run.py` installs, launches and screenshots each app in `apps.txt`; first results in `tests/corpus/results.md`.
+- **Corpus**: `tests/corpus/run.py` installs, launches and screenshots each app in `apps.txt` (20 apps; a pass is 20 GPU frames and the app still running). First run 11/20, after the fixes it found (package certificate, native library dir, primary storage volume, HDR capabilities, ABIs, `/proc/self/exe`, MediaPlayer adapter) 14/20: `tests/corpus/results.md`, the first run in `results-first-run.md`.
+- Per-instance JVM temp directory on disk; helper processes (ip/udevadm/GeoClue) end with their JVM.
 
 ## 2026-10-28: C++ tool, property readiness, test config
 - `bin/apklayer` is a wrapper around the C++ tool in `cli/` (install/run/stop/hub/env, stack daemon with pidfd supervision; `stack` and `exec` for tests). `scripts/native-env.sh` and

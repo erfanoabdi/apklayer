@@ -3,7 +3,7 @@
 Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan: `docs/PLAN.md`. History: `CHANGELOG.md`.
 
 ## NEXT TASKS (2026-10-28 night: items 1-7 of the previous list were worked through; what is left is below)
-1. **Read `tests/corpus/results.md`** (the first full corpus run) and fix the most common failure causes; add one app per engine (Unity, UE4, Godot, cocos2d-x, Flutter) when APKs are available.
+1. **Corpus** (`tests/corpus/results.md`: 14 of 20 apps reach a steady GPU picture, up from 11): fix the remaining causes listed in `docs/PLAN.md` (Nextcloud, Telegram, WhatsApp, OTR2 under the WebView route, WireGuard, drminfo); add one app per engine (Unity, UE4, Godot, cocos2d-x, Flutter) when APKs are available.
 2. **Settings provider**: the tree's SettingsProvider starts but `Settings.*` still use Robolectric's in-memory fakes (`-Dapklayer.realsettings=true` switches them off; the provider then fails in its settings migration). UserDictionaryProvider inserts return null. Calendar/Download providers untested.
 3. **Camera** is not implemented (no camera HAL; apps see no camera). Also not done: attestation/KeyInfo for the Keystore, `GeoClue` accuracy (needs an agent), `tests/vm/texture-view.sh` (black on the UTM VM), `tests/vm/audio-aidl.sh` (left channel check).
 4. **Before release**: COMMERCIAL.md terms, CLA, NOTICE files, per-app sandbox, x86_64 Android libraries (needs approval for a second `out/`), Flatpak.

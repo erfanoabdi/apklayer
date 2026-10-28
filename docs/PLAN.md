@@ -40,6 +40,7 @@ If a decision changes, change it here in the same commit as the code.
 - SettingsProvider: starts and migrates since the system-config fixes, then fails reading its own ABX settings files on the second start; `Settings.*` therefore stay Robolectric's in-memory fakes (`-Dapklayer.realsettings=true` is the opt-in). UserDictionaryProvider inserts return null.
 - Vulkan presentation: opt-in, Venus aborts on imported virgl dmabufs on the UTM host; needs a real-GPU host or a Venus-allocated swapchain bridge.
 - Camera: not implemented (no camera HAL; apps see no camera).
+- `codec2.sh` passes its decoding checks but its last greps fail (`tool.log` is gone by then); `activities.sh` fails now and then in the `again` phase (the caller JVM exits at once with status 0, nothing printed); WireGuard aborts (SIGABRT) in its native code; OTR2 hits the app-side WebView glue (`android.webkit.WebViewFactoryProvider` not visible to the provider's classes) and takes longer than the corpus patience; Nextcloud: `NativeLoader.setLibraryPath` is not bound when the app's own Conscrypt loads in `Application.onCreate`; Telegram: converted jar lacks `ConnectionsManager` (a class dropped by the converter); WhatsApp: SoLoader cannot find `liblog.so`; drminfo: Firebase init throws.
 
 **The user asked to revisit**
 - The user's other test apps in `~/TestApps` (some fail: converter, classpath conflicts such as NewPipe's R8-merged `kotlin.math.MathKt`): record app/status/cause and fix by cause.
