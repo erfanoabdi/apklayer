@@ -35,6 +35,7 @@ public final class HostKeyStoreProvider extends Provider {
     public HostKeyStoreProvider() {
         super("AndroidKeyStore", "1.0", "apklayer software keystore");
         put("KeyStore.AndroidKeyStore", Store.class.getName());
+        put("KeyStore.AndroidCAStore", HostCaStore.class.getName());
         put("KeyGenerator.AES", AesGenerator.class.getName());
         put("KeyGenerator.HmacSHA256", HmacGenerator.class.getName());
         put("KeyPairGenerator.RSA", RsaPairGenerator.class.getName());
