@@ -19,6 +19,11 @@ public class ShadowHostRealBinder {
     @Implementation protected static int getCallingUid() {
         int pid = Binder.getCallingPid();
         if (pid == Process.myPid()) return Process.myUid();
+        if (HubClient.connected() && pid == HubClient.current().hubPid()) return android.os.Process.SYSTEM_UID;  // the hub JVM stands for system_server
+        if (pid == 0) {  // oneway: the kernel gives no calling pid; the sender's uid came in the transaction header (ShadowHostRealBinderProxy.direct)
+            int sender = Binder.getCallingWorkSourceUid();
+            if (sender >= 0) return sender;
+        }
         Integer known = APP_UIDS.get(pid);
         if (known != null) return known;
         int uid = HubClient.connected() ? HubClient.current().uidOf(pid) : -1;

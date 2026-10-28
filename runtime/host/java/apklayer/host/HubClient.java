@@ -10,9 +10,12 @@ public final class HubClient {
     private final IBinder hub;
     private final HubEndpoint endpoint;
     private volatile boolean alive = true;
+    private final int hubPid;
+    /** The hub JVM is the system: its pid is how a call from it (a oneway callback, a lifecycle command) is recognised as uid 1000. */
+    int hubPid() { return hubPid; }
     private HubClient(Context context) {
         hub = HubStartup.connect();
-        int hubPid = HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.STATUS, request -> {}, reply -> reply.readInt());
+        hubPid = HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.STATUS, request -> {}, reply -> reply.readInt());
         endpoint = new HubEndpoint(context, hubPid);
         try { hub.linkToDeath(() -> alive = false, 0); }
         catch (android.os.RemoteException failure) { throw new IllegalStateException("Hub disconnected during registration", failure); }
