@@ -158,6 +158,7 @@ final class AppEnvironment {
         HostBattery.install(app);
         HostUsb.install(app);
         HostStorage.install(app);
+        org.robolectric.shadows.ShadowContentResolver.registerProviderInternal("media", new HostMediaStub());  // replaced by the installed MediaProvider's remote provider when there is one
         HostLocation.install(app);
         HostSystemConfig.load().apply(app);  // features, privileged-permission allowlist and default grants of the build
         if (Boolean.getBoolean("apklayer.debugdata")) {

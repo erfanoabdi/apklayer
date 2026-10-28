@@ -37,6 +37,11 @@ public final class Main extends Activity {
                         System.out.println("[files] entry " + list.getString(list.getColumnIndex("_display_name")) + " " + list.getString(list.getColumnIndex("mime_type")));
                     }
                 }
+                String file = System.getProperty("hello.read");
+                if (file != null) {
+                    Uri uri = DocumentsContract.buildDocumentUri(authority, file);
+                    try (java.io.InputStream in = cr.openInputStream(uri)) { byte[] head = in.readNBytes(60); System.out.println("[files] read " + file + ": " + new String(head).replace('\n', ' ')); }
+                }
                 System.out.println("[files] DONE");
             } catch (Throwable failure) {
                 System.out.println("[files] FAIL " + failure);
