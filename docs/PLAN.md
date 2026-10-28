@@ -47,6 +47,7 @@ If a decision changes, change it here in the same commit as the code.
 - OTR2: input and audio in the game are unchecked; `AChoreographer: No JVM provided` (harmless so far). P2: 2x HiDPI output and a real IME were never exercised.
 
 **Missing features**
+- **Permissions and system features must match real Android**: read the build's `system/etc/permissions/*.xml` (features, privapp-permissions), `sysconfig` and default-permissions into `PackageManager` (features, which packages hold signature/privileged permissions, default grants) instead of ad hoc grants; replaces `-Dapklayer.grantall`. Comes before system apps, hardware and release work.
 - DocumentsUI (tree APK `system/priv-app/DocumentsUI`, installs as "Files"): opens its window with `-Dapklayer.grantall=true` (grants the manifest's permissions, needed for HIDE_OVERLAY_WINDOWS), then crashes in `UserManager.getUserProperties()` (null `UserProperties`: a user-properties shadow is missing).
 - System apps and providers on every instance (Settings, Contacts, Calendar, Download, Telephony, UserDictionary, DocumentsUI, MediaProvider) hosted in an instance system JVM.
 - Hub gaps: several bindings per connection, filter-specific rebind, signature/runtime permission grants.

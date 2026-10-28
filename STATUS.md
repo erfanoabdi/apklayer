@@ -7,9 +7,10 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan: `docs/PLAN.md`. His
 2. **Compatibility corpus** (`tests/corpus/`): UiBench, OTR2, one app per engine (Unity, UE4, Godot, cocos2d-x, Flutter), F-Droid apps, WebView and media samples; a runner that installs, launches, waits for the first frame (marker, no timers), screenshots and records pass/fail in `tests/corpus/results.md`; triage failures into gaps.
 3. **Android Keystore** (many apps need it): `KeyStore`/`KeyGenParameterSpec` backed by a host key store, with a test app.
 4. **The failures we already know**: audio HAL stream open on the UTM VM, TextureView black on the UTM VM, `hub-services.sh auto` ("oneway native callback"), WebView setup on the VM.
-5. **System apps and providers on every instance** (Settings, Contacts, Calendar, Download, DocumentsUI, MediaProvider).
-6. **Hardware domains, last**: camera, GNSS, sensors, vibrator, battery, connectivity, USB, biometrics, NFC, portals, Bluetooth.
-7. **Before release**: COMMERCIAL.md terms, CLA, NOTICE files, per-app sandbox, x86_64 Android libraries (needs approval for a second `out/`), Flatpak.
+5. **Default permissions and system features that match real Android**: the build's own `system/etc/permissions` (features, privapp-permissions), `sysconfig` and default-grant lists feed `PackageManager` (`hasSystemFeature`, `checkPermission`, who holds signature/privileged permissions) instead of ad hoc grants like `-Dapklayer.grantall`; DocumentsUI is the first test.
+6. **System apps and providers on every instance** (Settings, Contacts, Calendar, Download, DocumentsUI, MediaProvider).
+7. **Hardware domains, last**: camera, GNSS, sensors, vibrator, battery, connectivity, USB, biometrics, NFC, portals, Bluetooth.
+8. **Before release**: COMMERCIAL.md terms, CLA, NOTICE files, per-app sandbox, x86_64 Android libraries (needs approval for a second `out/`), Flatpak.
 Everything parked is listed in `docs/PLAN.md`.
 
 ## State (2026-10-28)
