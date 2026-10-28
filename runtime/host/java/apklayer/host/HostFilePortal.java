@@ -39,6 +39,7 @@ final class HostFilePortal {
             if (call.waitFor() != 0) throw new IOException("portal: " + reply.trim());
             Matcher handle = Pattern.compile("'(/org/freedesktop/portal/desktop/request/[^']+)'").matcher(reply);
             if (!handle.find()) throw new IOException("portal: no request handle in " + reply.trim());
+            System.out.println("[apklayer] portal request " + handle.group(1));
             try (BufferedReader in = new BufferedReader(new InputStreamReader(monitor.getInputStream()))) {
                 for (String line; (line = in.readLine()) != null; ) {
                     if (!line.contains(handle.group(1)) || !line.contains("Request.Response")) continue;

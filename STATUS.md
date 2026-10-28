@@ -2,15 +2,11 @@
 
 Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan: `docs/PLAN.md`. History: `CHANGELOG.md`.
 
-## NEXT TASKS (in order; item 1 is proposed, the user confirms)
-1. **Fix the intermittent app hang** in `HardwareRenderer.nSetStopped` when a window goes inactive (another app's window appears). It makes the multi-app hub tests flaky and would hit real use.
-2. **Compatibility corpus** (`tests/corpus/`): UiBench, OTR2, one app per engine (Unity, UE4, Godot, cocos2d-x, Flutter), F-Droid apps, WebView and media samples; a runner that installs, launches, waits for the first frame (marker, no timers), screenshots and records pass/fail in `tests/corpus/results.md`; triage failures into gaps.
-3. **Android Keystore** (many apps need it): `KeyStore`/`KeyGenParameterSpec` backed by a host key store, with a test app.
-4. **The failures we already know**: audio HAL stream open on the UTM VM, TextureView black on the UTM VM, `hub-services.sh auto` ("oneway native callback"), WebView setup on the VM.
-5. **Default permissions and system features that match real Android**: the build's own `system/etc/permissions` (features, privapp-permissions), `sysconfig` and default-grant lists feed `PackageManager` (`hasSystemFeature`, `checkPermission`, who holds signature/privileged permissions) instead of ad hoc grants like `-Dapklayer.grantall`; DocumentsUI is the first test.
-6. **System apps and providers on every instance**: Settings, Contacts, Calendar, Download, DocumentsUI, MediaProvider.
-7. **Hardware domains, last**: camera, GNSS, battery, connectivity, USB, portals. Not this round: Bluetooth, NFC, biometrics, sensors, vibrator.
-8. **Before release**: COMMERCIAL.md terms, CLA, NOTICE files, per-app sandbox, x86_64 Android libraries (needs approval for a second `out/`), Flatpak.
+## NEXT TASKS (2026-10-28 night: items 1-7 of the previous list were worked through; what is left is below)
+1. **Read `tests/corpus/results.md`** (the first full corpus run) and fix the most common failure causes; add one app per engine (Unity, UE4, Godot, cocos2d-x, Flutter) when APKs are available.
+2. **Settings provider**: the tree's SettingsProvider starts but `Settings.*` still use Robolectric's in-memory fakes (`-Dapklayer.realsettings=true` switches them off; the provider then fails in its settings migration). UserDictionaryProvider inserts return null. Calendar/Download providers untested.
+3. **Camera** is not implemented (no camera HAL; apps see no camera). Also not done: attestation/KeyInfo for the Keystore, `GeoClue` accuracy (needs an agent), `tests/vm/texture-view.sh` (black on the UTM VM), `tests/vm/audio-aidl.sh` (left channel check).
+4. **Before release**: COMMERCIAL.md terms, CLA, NOTICE files, per-app sandbox, x86_64 Android libraries (needs approval for a second `out/`), Flatpak.
 Everything parked is listed in `docs/PLAN.md`.
 
 ## State (2026-10-28)
