@@ -482,3 +482,15 @@ int bionic_sigprocmask(int how, const unsigned long *set, unsigned long *oset) {
 if 'step 15' not in s and old in s:
     p.write_text(s.replace(old, new, 1))
 PY
+# 16. readdir: the entry it returns lives in a buffer per thread, not one for the process. Gecko lists directories on several threads at once; the shared buffer let one thread see another's
+#     entry between its readdir and its test for "." and "..", and a recursive removal of the safebrowsing directory followed "./././..." until the stack was gone.
+python3 - "$bt" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1]) / 'libc/libc.c'
+s = p.read_text()
+old = '	static struct bionic_dirent bde;\n	struct dirent *de;\n	if (!(de = readdir(dirp)))'
+new = '	static __thread struct bionic_dirent bde; /* apklayer patch: see scripts/patch-bionic-translation.sh step 16 */\n	struct dirent *de;\n	if (!(de = readdir(dirp)))'
+if 'step 16' not in s and old in s:
+    p.write_text(s.replace(old, new, 1))
+PY
