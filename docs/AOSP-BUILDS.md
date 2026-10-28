@@ -172,4 +172,4 @@ Remote Codec2 verification: libcodec2_client dependency linked from the selected
 
 ### 2026-10-28 — libapklayer_servicetool: `wait NAME` (incremental, authorized)
 - The C++ `apklayer` tool's stack supervisor needs event-driven readiness (no `sleep` loops): `wait NAME` blocks in `waitForService` until the service registers. `orb-build-module.py libapklayer_servicetool tools servicetool.cpp` (existing commands, no graph change, no clean).
-- Result: pending build.
+- Result: built and installed on the UTM VM; `wait NAME` prints "found" (btload exit status is not the tool's, so the supervisor reads the printed line).
