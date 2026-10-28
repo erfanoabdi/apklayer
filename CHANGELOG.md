@@ -3,6 +3,15 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/`.
 
+## 2026-10-28 night: hang fix, Keystore, system config, system providers, devices
+- **App hang fixed**: `HardwareRenderer.nSetStopped` blocked forever when HWUI's CommonPool left a task queued while both workers slept; `bionic_pthread_cond_signal` now broadcasts (patch step 10): 25 of 25 runs pass, 2 hangs in 11 before. Dynamic receivers are delivered through the app thread (ordering across broadcasts).
+- **Keystore**: RSA and EC key pairs with certificates next to the AES/HMAC keys, persistent (`tests/vm/keystore.sh`).
+- **Permissions and system features from the build** (`HostSystemConfig`): framework permission levels, the privapp allowlist, default grants, the vendor feature file; DocumentsUI runs (`tests/corpus`).
+- **System providers**: the tree's Contacts, Calendar, Download, UserDictionary, ExternalStorage, TelephonyProvider, SettingsProvider and DocumentsUI install (`scripts/install-system-apps.sh`); ContactsProvider answers another app (`tests/vm/sysprov.sh contacts`).
+- **Known failures fixed**: audio HAL (PipeWire 1.6 `get_time_n` -EIO) so `native-player.sh` passes; WebView (rebuilt linker with IRELATIVE, setup script) so `webview.sh` passes; `hub-services.sh` passes.
+- **Devices** (`tests/vm/devices.sh`): network from the default route (`ip monitor`), battery and power from sysfs and udev (published by the hub), USB from sysfs, location from GeoClue, the file chooser portal for document pickers (`tests/vm/portal.sh`).
+- **Corpus**: `tests/corpus/run.py` installs, launches and screenshots each app in `apps.txt`; first results in `tests/corpus/results.md`.
+
 ## 2026-10-28: C++ tool, property readiness, test config
 - `bin/apklayer` is a wrapper around the C++ tool in `cli/` (install/run/stop/hub/env, stack daemon with pidfd supervision; `stack` and `exec` for tests). `scripts/native-env.sh` and
   `scripts/arm64-stack.sh` are gone. Readiness is a system property of the instance (`apklayer.stack.ready`, `apklayer.hub.ready`) waited on with `aprop wait`; component hosts exec the JVM.
