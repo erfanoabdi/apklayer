@@ -139,6 +139,8 @@ public final class NativeLoader {
         String rest = symbol.substring("Java_".length());
         String params = null;
         int longName = rest.indexOf("__");
+        // "Native__1getPointer" is class Native, method _getPointer ("_1" escapes an underscore): the overload separator is not followed by an escape digit
+        while (longName >= 0 && longName + 2 < rest.length() && rest.charAt(longName + 2) >= '0' && rest.charAt(longName + 2) <= '3') longName = rest.indexOf("__", longName + 1);
         if (longName >= 0) {
             params = unmangle(rest.substring(longName + 2), '/').get(0);
             rest = rest.substring(0, longName);

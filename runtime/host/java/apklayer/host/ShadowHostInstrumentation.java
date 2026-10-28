@@ -18,6 +18,7 @@ public class ShadowHostInstrumentation extends ShadowInstrumentation {
     protected void callApplicationOnCreate(Application app) {
         if (!providersInstalled && System.getProperty("apklayer.package") != null) {
             providersInstalled = true;
+            AppEnvironment.androidId(app);
             AppEnvironment.installProviders(app);
         }
         Shadow.directlyOn(real, "android.app.Instrumentation", "callApplicationOnCreate", org.robolectric.util.ReflectionHelpers.ClassParameter.from(Application.class, app));

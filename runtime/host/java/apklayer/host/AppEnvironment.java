@@ -157,6 +157,14 @@ final class AppEnvironment {
         }
     }
 
+    /** Settings.Secure.ANDROID_ID: a stable 64-bit id per app and desktop user (Jellyfin's SDK asserts it is there). */
+    static void androidId(Application app) {
+        android.content.ContentResolver resolver = app.getContentResolver();
+        if (android.provider.Settings.Secure.getString(resolver, android.provider.Settings.Secure.ANDROID_ID) != null) return;
+        String seed = app.getPackageName() + System.getProperty("user.name", "") + System.getProperty("user.home", "");
+        android.provider.Settings.Secure.putString(resolver, android.provider.Settings.Secure.ANDROID_ID, String.format("%016x", seed.hashCode() * 0x9E3779B97F4A7C15L));
+    }
+
     static void startRuntime(Application app) {
         if (Boolean.getBoolean("apklayer.logcat")) for (String name : new String[] {"alarm", "jobscheduler", "notification", "connectivity"}) System.out.println("[apklayer] service " + name + " = " + app.getSystemService(name));
         HostBuild.install();
