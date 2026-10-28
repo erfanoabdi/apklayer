@@ -182,7 +182,6 @@ public final class AppHost implements Runnable {
         app.getSystemService(android.content.ClipboardManager.class).addPrimaryClipChangedListener(text::onAppClipboardChanged);
         if (java.security.Security.getProvider("AndroidKeyStore") == null) java.security.Security.addProvider(new HostKeyStoreProvider());
         AppEnvironment.installSystemPackage(app);
-        AppEnvironment.installNetwork(app);
         AppEnvironment.installProviders(app);
         if (System.getProperty("apklayer.webviewprovider") != null) { // Android's RuntimeInit installs a handler that logs and kills the process; Chromium's JniAndroid calls it
             org.robolectric.shadows.ShadowBuild.setType("userdebug"); // a debuggable build: WebView then reads /data/local/tmp/webview-command-line

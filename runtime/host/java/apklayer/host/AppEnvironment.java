@@ -96,13 +96,6 @@ final class AppEnvironment {
         }
     }
 
-    /** The desktop's connection: an unmetered Wi-Fi network (Robolectric defaults to a mobile one). */
-    static void installNetwork(Application app) {
-        org.robolectric.shadows.ShadowConnectivityManager cm = Shadow.extract(app.getSystemService(android.net.ConnectivityManager.class));
-        cm.setActiveNetworkInfo(org.robolectric.shadows.ShadowNetworkInfo.newInstance(android.net.NetworkInfo.DetailedState.CONNECTED,
-                android.net.ConnectivityManager.TYPE_WIFI, 0, true, android.net.NetworkInfo.State.CONNECTED));
-    }
-
     /** Every Android device has the package "android" (the framework); androidx.media and others look it up. */
     static void installSystemPackage(Application app) {
         android.content.pm.PackageInfo info = new android.content.pm.PackageInfo();
@@ -147,6 +140,10 @@ final class AppEnvironment {
 
     static void startRuntime(Application app) {
         HostSystemConfigService.install();
+        HostNetwork.install(app);
+        HostBattery.install(app);
+        HostUsb.install(app);
+        HostLocation.install(app);
         HostSystemConfig.load().apply(app);  // features, privileged-permission allowlist and default grants of the build
         if (Boolean.getBoolean("apklayer.debugdata")) {
             SharedPreferences prefs = app.getSharedPreferences("apklayer_probe", 0);

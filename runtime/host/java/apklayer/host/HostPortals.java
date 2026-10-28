@@ -53,13 +53,18 @@ final class HostPortals {
     static boolean isPicker(Intent intent) { return intent.getAction() != null && PICKERS.contains(intent.getAction()); }
 
     /**
-     * The Storage Access Framework pickers become a desktop file dialog (zenity; the file chooser portal
-     * is the later, sandbox-friendly form). Returns the result intent (file: URIs) or null if cancelled
+     * The Storage Access Framework pickers become a desktop file dialog (the file chooser portal, zenity without one). Returns the result intent (file: URIs) or null if cancelled
      * or not a picker.
      */
     static Intent pick(Intent intent) {
         if (!isPicker(intent)) return null;
         String action = intent.getAction();
+        if (System.getenv("APKLAYER_PICKER") == null) {  // the desktop's file chooser portal first; zenity when there is no portal
+            try {
+                Intent portal = HostFilePortal.pick(intent);
+                return portal;
+            } catch (IOException noPortal) { System.out.println("[apklayer] file chooser portal unavailable (" + noPortal.getMessage() + "): zenity"); }
+        }
         java.util.List<String> cmd = new java.util.ArrayList<>(java.util.List.of("zenity", "--file-selection", "--separator=\n"));
         if (Intent.ACTION_CREATE_DOCUMENT.equals(action)) {
             cmd.add("--save");

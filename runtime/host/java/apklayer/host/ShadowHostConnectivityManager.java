@@ -14,7 +14,7 @@ import org.robolectric.shadows.ShadowConnectivityManager;
 /**
  * Network callbacks that fire (PLAN P5.4). Robolectric registers a NetworkCallback and never calls it, so an app that
  * waits for onAvailable believes it is offline. The desktop's connection is announced to every new callback as
- * an available, validated, unmetered network; following NetworkManager's real state is the later step.
+ * the host's real connection (HostNetwork); changes reach registered callbacks from there.
  */
 @Implements(ConnectivityManager.class)
 public class ShadowHostConnectivityManager extends ShadowConnectivityManager {
@@ -23,12 +23,9 @@ public class ShadowHostConnectivityManager extends ShadowConnectivityManager {
     private void announce(ConnectivityManager.NetworkCallback callback) {
         new Handler(Looper.getMainLooper()).post(() -> {
             Network network = real.getActiveNetwork();
-            if (network == null) return;
-            NetworkCapabilities caps = new NetworkCapabilities();
-            caps.addTransportType(NetworkCapabilities.TRANSPORT_WIFI);
-            for (int c : new int[] {NetworkCapabilities.NET_CAPABILITY_INTERNET, NetworkCapabilities.NET_CAPABILITY_VALIDATED,
-                    NetworkCapabilities.NET_CAPABILITY_NOT_METERED, NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED})
-                caps.addCapability(c);
+            HostNetwork.State state = HostNetwork.current();
+            if (network == null || state == null) return;
+            NetworkCapabilities caps = HostNetwork.capabilities(state);
             callback.onAvailable(network);
             callback.onCapabilitiesChanged(network, caps);
         });
