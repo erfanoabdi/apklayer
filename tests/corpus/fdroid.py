@@ -3,6 +3,7 @@
 Usage: fdroid.py INDEX.json OUTDIR package..."""
 import hashlib
 import json
+import os
 import sys
 import urllib.request
 
@@ -24,7 +25,18 @@ for pkg in packages:
         continue
     f = best[1]['file']
     url = 'https://f-droid.org/repo' + f['name']
-    blob = urllib.request.urlopen(url, timeout=120).read()
+    if os.path.exists('%s/%s.apk' % (out, pkg)):
+        print('have', pkg)
+        continue
+    blob = None
+    for attempt in range(3):
+        try:
+            blob = urllib.request.urlopen(url, timeout=120).read()
+            break
+        except OSError as failure:
+            print('retry', pkg, failure)
+    if blob is None:
+        continue
     if hashlib.sha256(blob).hexdigest() != f['sha256']:
         print('HASH MISMATCH', pkg)
         continue
