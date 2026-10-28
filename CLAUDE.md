@@ -1,6 +1,6 @@
 # apklayer: rules for every session (read first, also after a context reset)
 
-Goal and plan: `goal.md`, `docs/PLAN.md`. Status and local reference projects: `STATUS.md`. **A new session starts from `HANDOFF.md`** (ordered milestones to the end).
+Goal and plan: `goal.md`, `docs/PLAN.md`. Status and local reference projects: `STATUS.md`. **A new session starts from `STATUS.md`** (state and the next task).
 This file is the single home of the binding rules; other docs point here instead of repeating them.
 
 ## Builds in `~/los24` (OrbStack VM `ubuntu22-x86`)

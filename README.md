@@ -1,73 +1,37 @@
 # apklayer
 
-Run Android APKs natively on Linux: real Android userspace, no emulator, no VM, no Linux-inside-Linux.
+Run Android APKs natively on Linux: real Android userspace, no emulator, no VM.
 
-apklayer runs the apps on **Android's own native libraries** (the device build of LineageOS: SurfaceFlinger, HWUI, libandroid_runtime, the media
-stack, binder), loaded on the host by bionic_translation, with apklayer's own hardware layer underneath (graphics, audio, media, GPU) backed by
-the host's standard interfaces (GBM/EGL/Wayland, PipeWire, GStreamer). The framework itself runs on the JVM as unmodified AOSP (`android-all`)
-with Robolectric shadows for the system services.
+apklayer runs apps on **Android's own native libraries** (a LineageOS 24 `gsi_arm64` build: SurfaceFlinger, HWUI, libandroid_runtime, media, binder), loaded on the host by
+bionic_translation, with apklayer's own hardware layer underneath (graphics, audio, media, GPU) on the host's standard interfaces (GBM/EGL/Wayland, PipeWire, GStreamer).
+The framework runs on the JVM as unmodified AOSP (`android-all`) with Robolectric shadows.
 
 ```
-app.apk ──dex2jvm──> JVM classes ┐
-        └─ manifest/resources ───┤ (AOSP PackageParser, native resources)
-                                 ▼
-  android-all (unmodified AOSP) + Robolectric shadows        host: lifecycle, windows, input   (runtime/host)
-  + Android's native libraries on bionic_translation         apps' own .so run here too
+app.apk ──dex2jvm──> JVM classes ─> android-all + Robolectric shadows, Android's native libraries   (runtime/host, bridge/native)
         │ binder (kernel binderfs)
         ▼
-  Android services as host processes: servicemanager, SurfaceFlinger, gralloc, HWC, audio, media   (aosp/, bridge/hals)
+Android services as host processes: servicemanager, SurfaceFlinger, gralloc, HWC, audio, media     (aosp/, bridge/hals)
         │ dmabuf, real vsync
         ▼
-  apklayer-shell ──> Wayland windows (one virtual display per app)                                  (bridge/shell)
+apklayer-shell ──> one Wayland window per app                                                       (bridge/shell)
 ```
 
-## Status
-
-- **Host:** Linux on arm64 (needs the staged arm64 Android libraries, see below). An x86_64 build of the Android libraries is the next step toward
-  a universal runtime.
-- **Works:** UiBench with GPU rendering, input, dialogs and resize; WebView (Chromium provider APK); TextureView/SurfaceView; native games
-  (Off The Road 2 renders); media codecs and audio through the real Android services; bound services and the first broadcast cases across apps
-  through the instance hub (the rest of that milestone is open).
-- **Opt-in / in progress:** Vulkan presentation (`APKLAYER_VULKAN_PRESENT=1`, needs a host driver that can use imported dmabufs), system
-  apps and providers on every instance, camera, the other hardware domains. See `docs/PLAN.md`.
+**Works:** UiBench with GPU rendering and input, WebView, SurfaceView/TextureView, native games (Off The Road 2), media and audio, apps talking to each other through the instance hub.
+**Host:** arm64 Linux (needs the staged Android libraries); x86_64 is the next step. **In progress:** Vulkan presentation (opt-in), more hardware domains. Status: `STATUS.md`.
 
 ## Build and run
-
-The Android side comes from a LineageOS tree built once (`gsi_arm64 userdebug`); `CHANGELOG.md` logs the incremental builds (rules in `docs/AOSP-BUILDS.md`) and
-`aosp/hals/README.md` the modules. The staged native runtime (`~/arm64-native`, `~/android-arm64`) is produced by
-`scripts/collect-android-libs.sh`, `scripts/collect-android-root.sh` and `scripts/build-native-arm64.sh`.
-
+The Android side comes from a LineageOS tree built once; `CHANGELOG.md` logs the incremental builds, rules in `docs/AOSP-BUILDS.md`.
 ```sh
-scripts/fetch-deps.sh                              # pinned Java deps (deps/deps.lock) -> ~/.cache/apklayer/deps
-meson setup b && ninja -C b                        # apklayer-shell, the dex2jvm converter, the host HAL libraries
-scripts/build-tree-host.sh ~/arm64-native          # apklayer's host classes against the staged Robolectric
-sudo scripts/vm-binder-setup.sh                    # kernel binderfs (binder_linux module)
-
-apklayer install app.apk                       # convert once (cached), menu entry + icon, .apk file handler
-bin/apklayer run <package|app.apk>                 # starts the instance's Android services on demand
-bin/apklayer list | uninstall <package> | stop
+scripts/fetch-deps.sh                        # pinned Java deps -> ~/.cache/apklayer/deps
+meson setup b && ninja -C b                  # apklayer tool, shell, converter, host HAL libraries
+scripts/build-tree-host.sh ~/arm64-native    # host classes against the staged Robolectric
+sudo scripts/vm-binder-setup.sh              # kernel binderfs
+bin/apklayer install app.apk | run <package|app.apk> | list | uninstall <package> | stop
 ```
 
-Apps live in `~/.local/share/apklayer/apps/<package>/`. Settings for menu launches go in `~/.config/apklayer/env`.
-
 ## Layout
-
-| Path | What |
-|---|---|
-| `goal.md` / `STATUS.md` / `HANDOFF.md` / `CLAUDE.md` | mission, short status, ordered work, the rules for contributors and agents |
-| `docs/PLAN.md` | plan of record: decisions, phases, open work |
-| `docs/ARCHITECTURE.md`, `docs/PATCHES.md`, `docs/THIRD_PARTY.md` | how it works, deviations from upstream, licenses |
-| `runtime/dex2jvm/` | DEX → JVM converter (kksimp/dex2jvm, Apache-2.0, plus our `HostDefaults.java`) |
-| `runtime/host/` | the app host (`apklayer.host`), the hub, native shadows; `runtime/patches/` Robolectric overlays |
-| `bridge/native/` | the JNI shim that registers Android's natives, properties, paths, binder glue |
-| `bridge/hals/` | host side of the graphics, audio and media HALs |
-| `bridge/shell/` | `apklayer-shell`: Wayland windows for the virtual displays, input, clipboard |
-| `aosp/` | Android-side modules built in the LineageOS tree (HALs, services, tools) |
-| `cli/` | the `apklayer` tool (C++): install, run, stack daemon, environment |
-| `scripts/` | staging, builds, the build and staging scripts, patches to the tree |
-| `tests/` | `tests/vm/` runs on a test VM or device with real input and screenshots; `tests/apps/` sample APKs; `tests/uibench/` |
+`cli/` the tool · `runtime/` app host, dex2jvm, Robolectric overlays · `bridge/` JNI shim, shell, host HALs · `aosp/` Android-side modules · `scripts/` staging and builds ·
+`tests/` VM tests, sample apps · `docs/` plan, architecture, patches, licenses · `STATUS.md`, `goal.md`, `CLAUDE.md` (agent rules).
 
 ## License
-
-AGPL-3.0-or-later for everyone (`LICENSE`, `NOTICE`); a paid commercial license is available for companies that do not want the AGPL terms
-(`COMMERCIAL.md`). Third-party parts keep their own licenses (dex2jvm Apache-2.0, AOSP Apache-2.0, Robolectric MIT); see `docs/THIRD_PARTY.md`.
+AGPL-3.0-or-later for everyone (`LICENSE`, `NOTICE`); a paid commercial license is available (`COMMERCIAL.md`). Third-party parts keep their licenses (`docs/THIRD_PARTY.md`).
