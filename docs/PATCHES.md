@@ -235,3 +235,6 @@ Opt-in with `APKLAYER_WEBVIEW_PROVIDER=com.android.webview` (provider APK instal
 
 - `HostKeyStoreProvider` (Keystore): AES/HMAC keys and RSA/EC key pairs (JDK-generated, self-signed certificate, stored in the app's JCEKS) under `AndroidKeyStore`, aliases, certificates, deletion, persistence: `tests/vm/keystore.sh`. Gaps: `KeyInfo`, attestation, user-authentication-bound keys, hardware-backed claims.
 - `HostSystemConfig`: the build's `etc/permissions`, `etc/sysconfig`, `vendor/etc/permissions` (features, privapp allowlist) and `etc/default-permissions` feed the package manager (replaces the `apklayer.grantall` try).
+
+- `runtime/patches/.../ShadowUserManager.java` (copy of the tree's external/robolectric file): `getUserProperties(UserHandle)` returns a default `UserProperties` (the fake user service has none; DocumentsUI reads it).
+- Permissions at app start (`HostSystemConfig`): normal permissions are granted (levels from the framework manifest, `scripts/gen-permission-levels.py`), packages in the build's privapp allowlist are privileged system apps (allowlist plus signature permissions), default-permission lists apply.

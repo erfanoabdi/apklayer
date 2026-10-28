@@ -13,3 +13,6 @@ orb -m ubuntu22-x86 tar cf - -C /home/erfanabdi/los24/frameworks/av/services/aud
 # apklayer's own half of the device configuration (features the host layers provide).
 COPYFILE_DISABLE=1 tar cf - -C "$(dirname "$0")/../bridge/native/android-root" vendor/etc/permissions \
     | sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" 'tar xf - -C ~/arm64-native/android-root'
+# Protection levels of the framework's permissions (normal ones are granted at install, signature ones to platform-signed system apps).
+orb -m ubuntu22-x86 cat /home/erfanabdi/los24/frameworks/base/core/res/AndroidManifest.xml | python3 "$(dirname "$0")/gen-permission-levels.py" \
+    | sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" 'cat > ~/arm64-native/android-root/system/etc/apklayer-permission-levels.tsv'

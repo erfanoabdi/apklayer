@@ -25,6 +25,7 @@ final class HostSystemConfig {
     final Map<String, Set<String>> privileged = new HashMap<>();
     final Map<String, Set<String>> denied = new HashMap<>();
     final Map<String, Set<String>> defaultGrants = new HashMap<>();
+    final Map<String, String> levels = new HashMap<>();  // permission -> normal | dangerous | signature
 
     static HostSystemConfig load() {
         HostSystemConfig config = new HostSystemConfig();
@@ -33,6 +34,12 @@ final class HostSystemConfig {
         for (String dir : new String[] {"etc/permissions", "etc/sysconfig"}) config.readDir(new File(root, dir), false);
         config.readDir(new File(new File(root).getParentFile(), "vendor/etc/permissions"), false);  // the vendor half: what this device's host layers provide
         config.readDir(new File(root, "etc/default-permissions"), true);
+        try {
+            for (String line : java.nio.file.Files.readAllLines(new File(root, "etc/apklayer-permission-levels.tsv").toPath())) {
+                String[] parts = line.split("\t");
+                if (parts.length == 2) config.levels.put(parts[0], parts[1]);
+            }
+        } catch (java.io.IOException missing) { /* no levels staged: only the allowlists apply */ }
         return config;
     }
 
@@ -76,19 +83,22 @@ final class HostSystemConfig {
         for (String feature : features) shadow.setSystemFeature(feature, true);
         for (String feature : unavailable) shadow.setSystemFeature(feature, false);
         String pkg = app.getPackageName();
+        String[] asked;
+        try { asked = app.getPackageManager().getPackageInfo(pkg, PackageManager.GET_PERMISSIONS).requestedPermissions; }
+        catch (PackageManager.NameNotFoundException e) { System.out.println("[apklayer] system config: " + e); return; }
+        if (asked == null) return;
+        boolean system = privileged.containsKey(pkg);  // a package in the privileged allowlist is a platform-signed system app
+        Set<String> allowed = privileged.getOrDefault(pkg, Set.of());
+        Set<String> blocked = denied.getOrDefault(pkg, Set.of());
         Set<String> grant = new HashSet<>();
-        if (privileged.containsKey(pkg)) {
-            grant.addAll(privileged.get(pkg));
-            grant.removeAll(denied.getOrDefault(pkg, Set.of()));
-            System.out.println("[apklayer] privileged system app " + pkg + ": " + grant.size() + " privileged permissions");
+        for (String permission : asked) {
+            String level = levels.getOrDefault(permission, "");
+            boolean ok = "normal".equals(level)                                  // normal permissions are granted at install
+                    || (system && ("signature".equals(level) || allowed.contains(permission)))  // platform-signed system apps hold signature permissions
+                    || defaultGrants.getOrDefault(pkg, Set.of()).contains(permission);
+            if (ok && !blocked.contains(permission)) grant.add(permission);
         }
-        grant.addAll(defaultGrants.getOrDefault(pkg, Set.of()));
-        if (grant.isEmpty()) return;
-        try {
-            String[] asked = app.getPackageManager().getPackageInfo(pkg, PackageManager.GET_PERMISSIONS).requestedPermissions;
-            Set<String> requested = asked == null ? Set.of() : Set.of(asked);
-            grant.retainAll(requested);
-            ((org.robolectric.shadows.ShadowApplication) org.robolectric.shadow.api.Shadow.extract(app)).grantPermissions(grant.toArray(new String[0]));
-        } catch (PackageManager.NameNotFoundException e) { System.out.println("[apklayer] system config: " + e); }
+        if (system) System.out.println("[apklayer] privileged system app " + pkg);
+        if (!grant.isEmpty()) ((org.robolectric.shadows.ShadowApplication) org.robolectric.shadow.api.Shadow.extract(app)).grantPermissions(grant.toArray(new String[0]));
     }
 }
