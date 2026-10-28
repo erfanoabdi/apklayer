@@ -1,6 +1,7 @@
 #include "stack.h"
 
 #include <fcntl.h>
+#include <cerrno>
 #include <poll.h>
 #include <signal.h>
 #include <sys/file.h>
@@ -42,6 +43,33 @@ bool shellListening(const Layout& l) {
     return ok;
 }
 
+// Android's way: readiness is a system property of the instance (apklayer.stack.ready=1), waited on with the property store's own wait.
+const char* kReadyProperty = "apklayer.stack.ready";
+
+bool propertyIs(const Layout& l, const NativeEnv& ne, const char* value) {
+    Spawn get;
+    get.argv = {join(l.native, "bin/aprop"), "get", kReadyProperty};
+    get.env = ne.env;
+    return trim(runCapture(get)) == value;
+}
+
+// True when the property reached the value; false if the process behind it (deathPidfd) ended first.
+bool waitReady(const Layout& l, const NativeEnv& ne, int deathPidfd) {
+    Spawn wait;
+    wait.argv = {join(l.native, "bin/aprop"), "wait", kReadyProperty, "1"};
+    wait.env = ne.env;
+    int pid = spawn(wait);
+    int fd = pidfdOpen(pid);
+    pollfd fds[2] = {{fd, POLLIN, 0}, {deathPidfd, POLLIN, 0}};
+    int ready;
+    while ((ready = poll(fds, deathPidfd >= 0 ? 2 : 1, -1)) < 0 && errno == EINTR) {}
+    bool ok = fds[0].revents & POLLIN;
+    if (!ok) kill(pid, SIGTERM);
+    waitpid(pid, nullptr, 0);
+    close(fd);
+    return ok;
+}
+
 bool alive(int pid) { return pid > 0 && kill(pid, 0) == 0; }
 
 // SIGTERM, then wait for the exit on a pidfd (SIGKILL after 5 s): `stop` returns with the processes gone.
@@ -76,14 +104,16 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     const std::string& n = l.native;
     for (const std::string& f : listDir(inst.logs()))
         if (f.size() > 4 && f.substr(f.size() - 4) == ".log") unlink(join(inst.logs(), f).c_str());
-    unlink(inst.readyFile().c_str());
 
     stageManifest(l, staged(l, "libapklayer_codec2.so"), "apklayer-media.xml", "aosp/hals/media/codec2/manifest.xml");
     stageManifest(l, staged(l, "libapklayer_audio.so"), "apklayer-audio.xml", "aosp/hals/audio/manifest.xml");
     stageManifest(l, staged(l, "libapklayer_audioserver.so"), "apklayer-audio-effects.xml", "aosp/hals/audio/effects-manifest.xml");
 
-    removeTree(inst.runtimeDir);
-    makeDirs(inst.runtimeDir);
+    // a fresh property store per stack (ro.* is write-once); ensureStack already made it when a client waits on the ready property
+    if (getenvOr("APKLAYER_STACK_PREPARED", "").empty()) {
+        removeTree(inst.runtimeDir);
+        makeDirs(inst.runtimeDir);
+    }
     Spawn prop;
     prop.argv = {join(n, "bin/aprop"), "load", join(l.root, "bridge/native/apklayer.prop"), join(n, "android-root/props/system_build.prop")};
     prop.env = ne.env;
@@ -133,7 +163,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     writeFile(inst.pidFile(), std::to_string(getpid()) + "\n");
 
     // Ready when SurfaceFlinger has registered, and the audio policy when audio services run (an AudioTrack created before it exists gets
-    // "server died"). One waiter per service blocks in waitForService; the daemon touches `ready` after all of them returned.
+    // "server died"). One waiter per service blocks in waitForService; the daemon sets the ready property after all of them returned.
     std::vector<std::string> waitFor = {"SurfaceFlingerAIDL"};
     if (staged(l, "libapklayer_audioserver.so")) waitFor.push_back("media.audio_policy");
     std::vector<int> waiters;
@@ -173,7 +203,12 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
                 fds[i].fd = -1;  // done: poll ignores negative descriptors
                 // btload's exit status is not the tool's: the printed "NAME: found" is the result (as the old script grepped it)
                 auto out = readFile(join(inst.logs(), "ready-" + waitFor[i - nServices] + ".log"));
-                if (out && out->find(": found") != std::string::npos && --pending == 0) writeFile(inst.readyFile(), "");
+                if (out && out->find(": found") != std::string::npos && --pending == 0) {
+                    Spawn set;
+                    set.argv = {join(n, "bin/aprop"), "set", kReadyProperty, "1"};
+                    set.env = ne.env;
+                    runAndWait(set);
+                }
             } else {
                 run = false;  // asked to stop
             }
@@ -182,7 +217,6 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     for (const Service& s : running) kill(s.pid, SIGTERM);
     for (int pid : waiters) kill(pid, SIGTERM);
     for (const Service& s : running) waitpid(s.pid, nullptr, 0);
-    unlink(inst.readyFile().c_str());
     unlink(inst.pidFile().c_str());
     Spawn shell;  // the window shell ends with the stack (one instance per session today)
     shell.argv = {"pkill", "-x", "apklayer-shell"};
@@ -196,9 +230,12 @@ bool ensureStack(const Layout& l, const Instance& inst) {
     struct Unlock { int fd; ~Unlock() { close(fd); } } unlock{lock};  // closing releases the flock: the hub JVM asks for the stack itself
     flock(lock, LOCK_EX);  // concurrent launches share one start
     auto pid = readFile(inst.pidFile());
-    if (pid && alive(atoi(pid->c_str())) && exists(inst.readyFile())) return true;
+    NativeEnv ne = nativeEnv(l, inst);
+    if (pid && alive(atoi(pid->c_str())) && propertyIs(l, ne, "1")) return true;
     if (!(pid && alive(atoi(pid->c_str())))) {
-        NativeEnv ne = nativeEnv(l, inst);
+        removeTree(inst.runtimeDir);  // the new stack's property store: made before the waiter opens it, so both see the same file
+        makeDirs(inst.runtimeDir);
+        ne.env["APKLAYER_STACK_PREPARED"] = "1";
         Spawn d;
         d.argv = {l.cliBinary(), "stack-daemon", inst.id};
         d.env = ne.env;
@@ -206,11 +243,11 @@ bool ensureStack(const Layout& l, const Instance& inst) {
         d.newSession = true;
         int child = spawn(d);
         int death = pidfdOpen(child);
-        bool ok = waitForFile(inst.readyFile(), death);
+        bool ok = waitReady(l, ne, death);
         if (!ok) fprintf(stderr, "apklayer: the Android services did not come up; logs in %s\n", inst.logs().c_str());
         return ok;
     }
-    return waitForFile(inst.readyFile(), -1);
+    return waitReady(l, ne, -1);
 }
 
 int execTool(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {

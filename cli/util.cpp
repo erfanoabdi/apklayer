@@ -6,7 +6,6 @@
 #include <poll.h>
 #include <pwd.h>
 #include <signal.h>
-#include <sys/inotify.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
@@ -299,24 +298,5 @@ std::string runCapture(const Spawn& spec, int* statusOut) {
 }
 
 int pidfdOpen(int pid) { return static_cast<int>(syscall(SYS_pidfd_open, pid, 0)); }
-
-bool waitForFile(const std::string& path, int deathPidfd) {
-    int notify = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
-    if (notify < 0) die("inotify failed");
-    inotify_add_watch(notify, dirName(path).c_str(), IN_CREATE | IN_MOVED_TO);
-    bool found = exists(path);  // after the watch exists: nothing can slip between the check and the wait
-    while (!found) {
-        pollfd fds[2] = {{notify, POLLIN, 0}, {deathPidfd, POLLIN, 0}};
-        if (poll(fds, deathPidfd >= 0 ? 2 : 1, -1) < 0 && errno != EINTR) break;
-        if (fds[1].revents & POLLIN) break;
-        if (fds[0].revents & POLLIN) {
-            char buffer[4096];
-            while (read(notify, buffer, sizeof buffer) > 0) {}
-            found = exists(path);
-        }
-    }
-    close(notify);
-    return found;
-}
 
 }  // namespace apklayer

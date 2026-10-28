@@ -35,7 +35,6 @@ struct Instance {
     std::string runtimeDir;  // properties store and sockets of this instance
     static Instance open(const Layout& layout, const std::string& id);
     std::string logs() const { return stateDir; }
-    std::string readyFile() const { return join(stateDir, "ready"); }
     std::string pidFile() const { return join(stateDir, "stack.pid"); }
 };
 

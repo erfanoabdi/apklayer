@@ -52,8 +52,6 @@ int runAndWait(const Spawn& spec);
 std::string runCapture(const Spawn& spec, int* status = nullptr);
 // pidfd for a child: readable when it exits (no polling).
 int pidfdOpen(int pid);
-// Blocks until the file exists, using inotify on its directory, or until the pidfd becomes readable. Returns true if the file exists.
-bool waitForFile(const std::string& path, int deathPidfd);
 
 char** toEnvp(const Env& env, std::vector<std::string>& storage, std::vector<char*>& pointers);
 Env currentEnv();
