@@ -42,6 +42,12 @@ public final class Main extends Activity {
                     Uri uri = DocumentsContract.buildDocumentUri(authority, file);
                     try (java.io.InputStream in = cr.openInputStream(uri)) { byte[] head = in.readNBytes(60); System.out.println("[files] read " + file + ": " + new String(head).replace('\n', ' ')); }
                 }
+                String view = System.getProperty("hello.view");
+                if (view != null) {  // what DocumentsUI does to open a file: ACTION_VIEW with the uri and a read grant
+                    startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(DocumentsContract.buildDocumentUri(authority, view), "text/x-apklayer").setClassName("hello.reader", "hello.reader.Main")
+                            .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION));
+                    Thread.sleep(15000);
+                }
                 System.out.println("[files] DONE");
             } catch (Throwable failure) {
                 System.out.println("[files] FAIL " + failure);

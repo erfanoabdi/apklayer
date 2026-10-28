@@ -35,7 +35,7 @@ final class HubDirectory extends Binder {
     private static final long IDLE_EXIT_MS = 10_000;
     private volatile boolean stopping;
     HubDirectory(Path apps) {
-        packages = new HubPackages(apps); bindings = new HubServiceBindings(this, packages); broadcasts = new HubBroadcasts(this, packages); providers = new HubProviders(this, packages, broadcasts); activities = new HubActivities(this, packages); startedServices = new HubStartedServices(this, packages, broadcasts); pendingIntents = new HubPendingIntents(this, broadcasts, activities, startedServices);
+        packages = new HubPackages(apps); bindings = new HubServiceBindings(this, packages); broadcasts = new HubBroadcasts(this, packages); providers = new HubProviders(this, packages, broadcasts); activities = new HubActivities(this, packages, providers); startedServices = new HubStartedServices(this, packages, broadcasts); pendingIntents = new HubPendingIntents(this, broadcasts, activities, startedServices);
         notifications = new HubNotifications(packages, pendingIntents);
         attachInterface(null, HubProtocol.DESCRIPTOR);
         exitWhenIdle(60_000); // nobody ever connected

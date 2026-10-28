@@ -48,6 +48,30 @@ final class HubProviders {
         else grants.add(new Grant(target, uri, mode));
     }
 
+    /**
+     * What the activity manager does when an intent carries FLAG_GRANT_READ/WRITE_URI_PERMISSION: the target app gets a grant on each content uri of the data and the
+     * clip, if the sender may hand it out (it owns the provider, holds the permission the provider asks for, or holds a grant itself) and the provider allows grants.
+     */
+    void grantFromIntent(HubDirectory.Peer caller, android.content.Intent intent, String targetPackage) {
+        int mode = intent.getFlags() & (android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION | android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+        if (mode == 0 || targetPackage.equals(caller.name())) return;
+        java.util.List<android.net.Uri> uris = new java.util.ArrayList<>();
+        if (intent.getData() != null) uris.add(intent.getData());
+        android.content.ClipData clip = intent.getClipData();
+        for (int i = 0; clip != null && i < clip.getItemCount(); i++) if (clip.getItemAt(i).getUri() != null) uris.add(clip.getItemAt(i).getUri());
+        for (android.net.Uri uri : uris) {
+            ProviderInfo info = "content".equals(uri.getScheme()) && uri.getAuthority() != null ? packages.provider(uri.getAuthority()) : null;
+            if (info == null || !info.grantUriPermissions) continue;
+            boolean read = (mode & 1) != 0, write = (mode & 2) != 0;
+            boolean allowed = info.packageName.equals(caller.name())
+                    || ((!read || granted(caller.name(), uri, 1) || info.readPermission == null || packages.holds(caller.name(), info.readPermission))
+                    && (!write || granted(caller.name(), uri, 2) || info.writePermission == null || packages.holds(caller.name(), info.writePermission)));
+            if (!allowed) { System.out.println("[apklayer-hub] " + caller.name() + " may not grant " + uri); continue; }
+            int bits = (read ? 1 : 0) | (write ? 2 : 0) | ((intent.getFlags() & android.content.Intent.FLAG_GRANT_PREFIX_URI_PERMISSION) != 0 ? 0x80 : 0);
+            grants.add(new Grant(targetPackage, uri, bits));
+        }
+    }
+
     private static boolean covers(android.net.Uri granted, android.net.Uri wanted, boolean prefix) {
         return granted.equals(wanted) || (prefix && granted.getAuthority().equals(wanted.getAuthority()) && wanted.getPath() != null && granted.getPath() != null && wanted.getPath().startsWith(granted.getPath()));
     }

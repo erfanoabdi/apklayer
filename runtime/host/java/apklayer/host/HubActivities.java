@@ -20,12 +20,15 @@ final class HubActivities {
     private final HubPackages packages;
     private final Map<String, Deque<Launch>> pending = new HashMap<>();
 
-    HubActivities(HubDirectory directory, HubPackages packages) { this.directory = directory; this.packages = packages; }
+    private final HubProviders providers;
+
+    HubActivities(HubDirectory directory, HubPackages packages, HubProviders providers) { this.directory = directory; this.packages = packages; this.providers = providers; }
 
     /** False when no activity can handle the intent. */
     boolean start(HubDirectory.Peer caller, Intent intent, ResultReceiver resultTo) {
         ActivityInfo info = packages.activity(intent, caller.name());
         if (info == null) return false;
+        providers.grantFromIntent(caller, intent, info.packageName);
         Intent resolved = new Intent(intent).setComponent(new ComponentName(info.packageName, info.name));
         HubDirectory.Peer target = directory.appPeer(info.packageName);
         if (target != null) {
