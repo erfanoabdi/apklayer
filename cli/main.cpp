@@ -38,6 +38,7 @@ int main(int argc, char** argv) {
     }
     if (cmd == "component-host" && n == 2) return runApp(layout, inst, args[1], RunMode::Component);
     if (cmd == "hub") return runHub(layout, inst);
+    if (cmd == "wait" && n == 2 && args[1] == "hub") return waitHub(layout, inst);
     if (cmd == "list") { listApps(layout); return 0; }
     if (cmd == "uninstall" && n == 2) { uninstallApp(layout, args[1]); return 0; }
     if (cmd == "stop") { stopStack(layout, inst); return 0; }

@@ -108,7 +108,7 @@ final class HubDirectory extends Binder {
                 Process process = command.start(); hosts.put(name, process);
                 System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " starting " + name + " launcherPid=" + process.pid());
                 process.onExit().thenAccept(exited -> {
-                    System.out.println("[apklayer-hub] host " + name + " exited with " + exited.exitValue());
+                    System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " host " + name + " exited with " + exited.exitValue());
                     synchronized (hosts) { hosts.remove(name, process); }
                     if (!stopping && peer(name) == null && bindings.needsHost(name)) {
                         int failed;
@@ -292,7 +292,7 @@ final class HubDirectory extends Binder {
     }
     private void remove(Peer peer) {
         synchronized (peers) { if (!peers.remove(peer.pid, peer)) return; }
-        System.out.println("[apklayer-hub] died " + peer.name + " pid=" + peer.pid);
+        System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " died " + peer.name + " pid=" + peer.pid);
         bindings.died(peer);
         broadcasts.died(peer);
         startedServices.died(peer);

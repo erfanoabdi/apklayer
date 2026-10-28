@@ -14,6 +14,9 @@ int runStackDaemon(const Layout& layout, const Instance& instance, const std::ve
 int execTool(const Layout& layout, const Instance& instance, const std::vector<std::string>& args);
 // Stops the instance's stack (its daemon stops its own services).
 void stopStack(const Layout& layout, const Instance& instance);
+// The instance's property store (Android's readiness mechanism): set a property, or block until it has a value (false if deathPidfd became readable first).
+void setProperty(const Layout& layout, const NativeEnv& env, const char* name, const char* value);
+bool waitForProperty(const Layout& layout, const NativeEnv& env, const char* name, const char* value, int deathPidfd);
 // Starts the session's window shell when none listens on its socket.
 void ensureShell(const Layout& layout, const Instance& instance, const NativeEnv& env);
 

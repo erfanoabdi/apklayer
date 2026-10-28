@@ -2,6 +2,7 @@
 
 #include <cerrno>
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <sys/file.h>
 #include <sys/wait.h>
@@ -10,6 +11,7 @@
 namespace apklayer {
 
 namespace {
+const char* kHubReadyProperty = "apklayer.hub.ready";
 const char* kWebviewCommandLine = "/data/local/tmp/webview-command-line";
 
 bool webviewSandboxOff() {
@@ -70,6 +72,12 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     app.argv = jvm;
     app.env = ne.env;
     app.cwd = dir;
+    if (mode == RunMode::Component) {
+        // a service host has no window sink to clean up: become the JVM, so the launcher dies exactly when the host does (the hub restarts
+        // a killed host as soon as its launcher is gone)
+        writeFile(join(inst.stateDir, "run." + std::to_string(self)), std::to_string(self) + "\n");
+        execReplace(app);
+    }
     int jvmPid = spawn(app);
     // `apklayer stop` ends what this launch started: the JVM and its window sink
     std::string record = join(inst.stateDir, "run." + std::to_string(self));
@@ -94,9 +102,37 @@ int runHub(const Layout& l, const Instance& inst) {
     hub.env = ne.env;
     int pid = spawn(hub);
     writeFile(join(inst.stateDir, "hub.pid"), std::to_string(pid) + "\n");
+    // Like init after a service registers: once the hub is published to the service manager, apklayer.hub.ready=1 (clients block on it)
+    setProperty(l, ne, kHubReadyProperty, "0");
+    Spawn published;
+    published.argv = {l.btload(), l.androidLibs, "libapklayer_servicetool.so", "--main", "wait", "apklayer.instance"};
+    published.env = ne.env;
+    published.logFile = join(inst.logs(), "ready-hub.log");
+    int waiter = spawn(published);
+    int jvmFd = pidfdOpen(pid), waiterFd = pidfdOpen(waiter);
+    pollfd fds[2] = {{jvmFd, POLLIN, 0}, {waiterFd, POLLIN, 0}};
     int status = 0;
-    waitpid(pid, &status, 0);  // keeps the lock until the JVM ends
+    for (bool ended = false; !ended;) {
+        if (poll(fds, 2, -1) < 0) continue;
+        if (fds[1].revents & POLLIN) {
+            waitpid(waiter, nullptr, 0);
+            fds[1].fd = -1;
+            auto out = readFile(join(inst.logs(), "ready-hub.log"));
+            if (out && out->find(": found") != std::string::npos) setProperty(l, ne, kHubReadyProperty, "1");
+        }
+        if (fds[0].revents & POLLIN) {
+            waitpid(pid, &status, 0);  // keeps the lock until the JVM ends
+            ended = true;
+        }
+    }
+    kill(waiter, SIGTERM);
     return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+}
+
+// `apklayer wait hub`: blocks until the hub is published (what a client does after launching `apklayer hub`).
+int waitHub(const Layout& l, const Instance& inst) {
+    NativeEnv ne = nativeEnv(l, inst);
+    return waitForProperty(l, ne, kHubReadyProperty, "1", -1) ? 0 : 1;
 }
 
 }  // namespace apklayer

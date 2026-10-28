@@ -46,35 +46,21 @@ bool shellListening(const Layout& l) {
 // Android's way: readiness is a system property of the instance (apklayer.stack.ready=1), waited on with the property store's own wait.
 const char* kReadyProperty = "apklayer.stack.ready";
 
-bool propertyIs(const Layout& l, const NativeEnv& ne, const char* value) {
+bool propertyIs(const Layout& l, const NativeEnv& ne, const char* name, const char* value) {
     Spawn get;
-    get.argv = {join(l.native, "bin/aprop"), "get", kReadyProperty};
+    get.argv = {join(l.native, "bin/aprop"), "get", name};
     get.env = ne.env;
     return trim(runCapture(get)) == value;
 }
 
-// True when the property reached the value; false if the process behind it (deathPidfd) ended first.
-bool waitReady(const Layout& l, const NativeEnv& ne, int deathPidfd) {
-    Spawn wait;
-    wait.argv = {join(l.native, "bin/aprop"), "wait", kReadyProperty, "1"};
-    wait.env = ne.env;
-    int pid = spawn(wait);
-    int fd = pidfdOpen(pid);
-    pollfd fds[2] = {{fd, POLLIN, 0}, {deathPidfd, POLLIN, 0}};
-    int ready;
-    while ((ready = poll(fds, deathPidfd >= 0 ? 2 : 1, -1)) < 0 && errno == EINTR) {}
-    bool ok = fds[0].revents & POLLIN;
-    if (!ok) kill(pid, SIGTERM);
-    waitpid(pid, nullptr, 0);
-    close(fd);
-    return ok;
-}
+bool waitReady(const Layout& l, const NativeEnv& ne, int deathPidfd) { return waitForProperty(l, ne, kReadyProperty, "1", deathPidfd); }
 
 bool alive(int pid) { return pid > 0 && kill(pid, 0) == 0; }
 
 // SIGTERM, then wait for the exit on a pidfd (SIGKILL after 5 s): `stop` returns with the processes gone.
 void terminate(int pid) {
     if (!alive(pid)) return;
+    if (auto cmd = readFile("/proc/" + std::to_string(pid) + "/cmdline"); !cmd || cmd->find("apklayer") == std::string::npos) return;  // a recycled pid is not ours
     int fd = pidfdOpen(pid);
     kill(pid, SIGTERM);
     pollfd p{fd, POLLIN, 0};
@@ -85,6 +71,28 @@ void terminate(int pid) {
     if (fd >= 0) close(fd);
 }
 }  // namespace
+
+void setProperty(const Layout& l, const NativeEnv& ne, const char* name, const char* value) {
+    Spawn set;
+    set.argv = {join(l.native, "bin/aprop"), "set", name, value};
+    set.env = ne.env;
+    runAndWait(set);
+}
+
+bool waitForProperty(const Layout& l, const NativeEnv& ne, const char* name, const char* value, int deathPidfd) {
+    Spawn wait;
+    wait.argv = {join(l.native, "bin/aprop"), "wait", name, value};
+    wait.env = ne.env;
+    int pid = spawn(wait);
+    int fd = pidfdOpen(pid);
+    pollfd fds[2] = {{fd, POLLIN, 0}, {deathPidfd, POLLIN, 0}};
+    while (poll(fds, deathPidfd >= 0 ? 2 : 1, -1) < 0 && errno == EINTR) {}
+    bool ok = fds[0].revents & POLLIN;
+    if (!ok) kill(pid, SIGTERM);
+    waitpid(pid, nullptr, 0);
+    close(fd);
+    return ok;
+}
 
 void ensureShell(const Layout& l, const Instance& inst, const NativeEnv& env) {
     if (shellListening(l)) return;
@@ -204,10 +212,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
                 // btload's exit status is not the tool's: the printed "NAME: found" is the result (as the old script grepped it)
                 auto out = readFile(join(inst.logs(), "ready-" + waitFor[i - nServices] + ".log"));
                 if (out && out->find(": found") != std::string::npos && --pending == 0) {
-                    Spawn set;
-                    set.argv = {join(n, "bin/aprop"), "set", kReadyProperty, "1"};
-                    set.env = ne.env;
-                    runAndWait(set);
+                    setProperty(l, ne, kReadyProperty, "1");
                 }
             } else {
                 run = false;  // asked to stop
@@ -231,7 +236,7 @@ bool ensureStack(const Layout& l, const Instance& inst) {
     flock(lock, LOCK_EX);  // concurrent launches share one start
     auto pid = readFile(inst.pidFile());
     NativeEnv ne = nativeEnv(l, inst);
-    if (pid && alive(atoi(pid->c_str())) && propertyIs(l, ne, "1")) return true;
+    if (pid && alive(atoi(pid->c_str())) && propertyIs(l, ne, kReadyProperty, "1")) return true;
     if (!(pid && alive(atoi(pid->c_str())))) {
         removeTree(inst.runtimeDir);  // the new stack's property store: made before the waiter opens it, so both see the same file
         makeDirs(inst.runtimeDir);

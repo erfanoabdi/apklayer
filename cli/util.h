@@ -46,6 +46,8 @@ struct Spawn {
 
 // Starts a process; returns its pid (0 for a detached one). The caller owns waiting for it.
 int spawn(const Spawn& spec);
+// Replaces this process by the command (no return): the launcher's pid is then the program's.
+[[noreturn]] void execReplace(const Spawn& spec);
 // Runs to completion; returns the exit status (128+signal when killed).
 int runAndWait(const Spawn& spec);
 // Runs and returns what it printed on stdout.

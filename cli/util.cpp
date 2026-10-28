@@ -249,6 +249,8 @@ namespace {
 }
 }  // namespace
 
+void execReplace(const Spawn& spec) { execChild(spec); }
+
 int spawn(const Spawn& spec) {
     if (spec.detach) {
         pid_t first = fork();
