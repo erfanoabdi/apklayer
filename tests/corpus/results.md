@@ -25,13 +25,13 @@ One run per app (tests/vm/appcheck.sh for errors, tests/vm/appshot.py for a scre
 | AntennaPod | de.danoeh.antennapod | draws | |
 | 2048 (Privacy Friendly) | org.secuso.privacyfriendly2048 | draws | |
 | Unciv | com.unciv.app | black window | starts, no error |
-| TIC-80 | com.nesbox.tic | black window | game loop runs (SDL), landscape request |
+| TIC-80 | com.nesbox.tic | draws its console | |
 | Super Retro Mega Wars | com.serwylo.retrowars | runs | not looked at |
 | AnkiDroid | com.ichi2.anki | no window | Chromium startup from Application.onCreate throws (WebView statics before any WebView) |
 | Puzzles (Simon Tatham) | name.boyle.chris.sgtpuzzles | exits | opens its Play Store page and finishes |
 | Open Sudoku | org.moire.opensudoku | crashes | `duplicate column name: rating_level` creating its database |
 | Rocks 'n' Diamonds | org.artsoft.rocksndiamonds | aborts | SDL_image: IMG_Load failed (asset read) |
-| WireGuard | com.wireguard.android | aborts | Go runtime/cgo `inittls: could not find pthread key` (bionic TLS slots) |
+| WireGuard | com.wireguard.android | draws | fixed by `android_get_device_api_level` in the translated libc (Go takes the Android Q TLS path) |
 | DRM Info | com.androidfung.drminfo | crashes | Google Ads / Firebase need Play Services |
 | Open Camera, Barcode Scanner, Motorola Camera | | no camera | no camera HAL |
 | Clash, SSR | | not supported | 32-bit (armeabi-v7a) only |
@@ -52,7 +52,7 @@ One run per app (tests/vm/appcheck.sh for errors, tests/vm/appshot.py for a scre
 | Saber, Ente Auth (Flutter) | draw |
 | Open Sudoku | crashes: its CREATE TABLE has `rating_level` twice |
 | Joplin (React Native) | blank white window; libQuickCrypto.so does not link (its OpenSSL libssl against the device's BoringSSL libcrypto) |
-| Logseq (Capacitor, WebView) | black window |
+| Logseq (Capacitor, WebView) | draws its welcome page (it was our own regression: manifest providers in the WebView renderer host) |
 | Pomodorot (Godot 4) | loads, then stops: VK_KHR_android_surface not found (Vulkan presentation is not available on this host stack) |
 | Unciv | black window |
 | NewPipe | Trending list stays empty |
