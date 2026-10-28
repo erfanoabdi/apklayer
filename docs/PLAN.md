@@ -93,3 +93,6 @@ Open: how keystore2 learns the caller uid (point 3); gatekeeper password enrolme
 - **Fennec** (2026-10-28): past mozglue's putenv interposer (dlsym RTLD_NEXT fallback in the translated linker). GeckoThread runs, loads sqlite and nss, then "Could not find profile folder" and the runtime shuts down; no native message reaches the log. Next: Gecko's stderr/android log, its child-process services through the hub, the profile directory.
 - **Joplin**: with the bundled OpenSSL libraries renamed (`scripts/rename-bundled-system-libs.py`, not yet run by `install`) the JS bundle runs, then the process aborts: `libc++abi: Fatal error: glibc detected an invalid stdio handle` (a C++ terminate message written through a bionic FILE).
 - **Conversations**: aborts at start; `NativeCrypto: could not find field descriptor` (a Conscrypt JNI lookup of `FileDescriptor.descriptor`, which is `fd` in the JDK).
+
+## Splash screen (shell)
+Until an app presents its first frame, `bridge/shell/splash.c` fills the window with the app logo (installed `icon.png`) on a colour derived from it. Tested with `tests/vm/splash-shot.py` (stand-in client, private XDG_RUNTIME_DIR; a second full Android stack cannot run next to another because of the single /dev/binder). Not done: fade-in/out, re-draw on resize before the first frame, a real-app run (needs the default stack free).
