@@ -11,7 +11,7 @@ export APKLAYER_INSTANCE="${APKLAYER_INSTANCE:-default}" APKLAYER_NATIVE="$N"
 export LD_LIBRARY_PATH="$BT:$N" XDG_DATA_DIRS="$N/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}" LD_PRELOAD="$N/libapklayer-preload.so:libgcc_s.so.1" BIONIC_LD_LIBRARY_PATH="$L"
 export APKLAYER_CRASH_TRACE="${APKLAYER_CRASH_TRACE:-1}" APKLAYER_HOST_LIBS="${APKLAYER_HOST_LIBS:-$N/libapklayer-hal-graphics.so}"
 
-# The arm64 JVM for the app (the Rosetta x86 JVM of the older flavors cannot load arm64 libraries).
+# The arm64 JVM for the app (an x86 JVM cannot load the arm64 device libraries).
 native_java() {
     local j
     for j in "${APKLAYER_NATIVE_JAVA:-}" /usr/lib/jvm/java-21-openjdk-arm64/bin/java /usr/lib/jvm/*arm64*/bin/java; do

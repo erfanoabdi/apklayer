@@ -94,7 +94,6 @@ final class HostInput {
     /** Shell input {type, a, b, 0} (bridge/shell/shell.c): pointer -> MotionEvent, Esc/Backspace -> Back. */
     void onHostEvent(int[] ev) {
         long now = SystemClock.uptimeMillis();
-        if (HostWebViews.pointer(ev)) return; // over a WebView: its engine takes the pointer
         if (ev[0] == 3) { // hover: {3, x, y}
             MotionEvent hover = MotionEvent.obtain(now, now, MotionEvent.ACTION_HOVER_MOVE, ev[1], ev[2], 0);
             hover.setSource(android.view.InputDevice.SOURCE_MOUSE);
@@ -136,7 +135,6 @@ final class HostInput {
     void hostKey(long now, int action, int code, int unicode, int meta) {
         if (Boolean.getBoolean("apklayer.debugkeys"))
             System.out.println("[apklayer] key action=" + action + " code=" + code + " uni=" + unicode + " meta=" + meta);
-        if (HostWebViews.key(action, code, unicode, meta)) return; // a focused WebView takes typing itself
         int act = action == 0 ? KeyEvent.ACTION_DOWN : KeyEvent.ACTION_UP;
         if (code == KeyEvent.KEYCODE_DEL) {
             // Desktop Backspace is also "go back" when nothing is being edited.

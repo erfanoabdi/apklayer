@@ -20,33 +20,24 @@ public final class HostShadowProvider implements ShadowProvider {
 
     @Override public Collection<Map.Entry<String, String>> getShadows() {
         var entries = new ArrayList<>(List.of(
-                Map.entry("android.webkit.WebView", ShadowHostWebView.class.getName()),
-                Map.entry("android.media.MediaPlayer", ShadowHostMediaPlayer.class.getName()),
-                Map.entry("android.media.SoundPool", ShadowHostSoundPool.class.getName()),
                 Map.entry("android.app.ApplicationPackageManager", ShadowHostPackageManager.class.getName()),
                 Map.entry("android.net.ConnectivityManager", ShadowHostConnectivityManager.class.getName()),
                 Map.entry("android.app.DownloadManager", ShadowHostDownloadManager.class.getName()),
-                Map.entry("android.media.MediaCodec", ShadowHostMediaCodec.class.getName()),
-                Map.entry("android.view.SurfaceView", ShadowHostSurfaceView.class.getName()),
                 Map.entry("android.app.ContextImpl", ShadowHostContextImpl.class.getName()),
-                Map.entry("android.media.AudioTrack", ShadowHostAudioTrack.class.getName()),
                 Map.entry("android.view.Display", ShadowHostDisplay.class.getName()),
                 Map.entry("android.app.ActivityManager", ShadowHostActivityManager.class.getName())));
-        if (System.getProperty("apklayer.webviewprovider") != null) { // the original WebView implementation (a provider APK) instead of the WebKitGTK stand-in
-            entries.removeIf(entry -> entry.getKey().equals("android.webkit.WebView"));
+        if (System.getProperty("apklayer.webviewprovider") != null) { // the original WebView implementation (a provider APK)
             entries.add(Map.entry("android.webkit.WebView", ShadowHostRealWebView.class.getName()));
             entries.add(Map.entry("android.webkit.WebViewDelegate", ShadowHostWebViewDelegate.class.getName()));
             entries.add(Map.entry("android.webkit.WebViewFactory", ShadowHostWebViewFactory.class.getName()));
         }
         if (Boolean.getBoolean("apklayer.nativemedia")) {
-            entries.removeIf(entry -> entry.getKey().equals("android.media.MediaCodec"));
             entries.add(Map.entry("android.media.MediaCodec", ShadowHostNativeMediaCodec.class.getName()));
             entries.add(Map.entry("android.media.MediaCodecList", ShadowHostNativeMediaCodecList.class.getName()));
             entries.add(Map.entry("android.media.MediaExtractor", ShadowHostNativeMediaExtractor.class.getName()));
         }
         if (Boolean.getBoolean("apklayer.gpu")) {
             // a SurfaceView on the GPU route owns a real BLAST-backed window: native code (NDK, Vulkan, EGL) needs an ANativeWindow
-            entries.removeIf(entry -> entry.getKey().equals("android.view.SurfaceView"));
             entries.add(Map.entry("android.view.SurfaceView", ShadowHostNativeSurfaceView.class.getName()));
             entries.add(Map.entry("android.view.TextureView", ShadowHostRealTextureView.class.getName()));
             entries.add(Map.entry("android.graphics.SurfaceTexture", HostGLShadows.SurfaceTexture.class.getName()));
@@ -62,7 +53,6 @@ public final class HostShadowProvider implements ShadowProvider {
             entries.add(Map.entry("android.content.AttributionSource.ScopedParcelState", ShadowHostNativeAttributionParcel.class.getName()));
         }
         if (Boolean.getBoolean("apklayer.nativeaudio")) {
-            entries.removeIf(entry -> entry.getKey().equals("android.media.AudioTrack"));
             entries.add(Map.entry("android.media.AudioTrack", ShadowHostNativeAudioTrack.class.getName()));
             entries.add(Map.entry("android.media.AudioSystem", ShadowHostNativeAudioSystem.class.getName()));
             entries.add(Map.entry("android.media.AudioRecord", ShadowHostNativeAudioRecord.class.getName()));

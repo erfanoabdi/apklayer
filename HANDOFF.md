@@ -13,12 +13,12 @@ Current progress: **Milestone E is active by the user's latest instruction; medi
 apklayer runs Android apps on a Linux desktop with real Android userspace and no emulator. The route that matters is the device-library route: the LineageOS 24 tree's
 arm64 libraries run under bionic_translation on kernel binderfs; real SurfaceFlinger, servicemanager, our own HALs (gralloc, HWC, permission, virtual display sink) and
 HWUI render on the host GPU; the app is a Robolectric JVM (shadows for system services) loading the real native libraries. One SurfaceFlinger virtual display per app,
-shown as a Wayland window by `apklayer-shell`. UiBench runs today with GPU rendering, real input, dialogs. The older x86/Rosetta CPU route and a third-party arm64
-Robolectric jar are kept as fallbacks. Hosts are not Mesa-specific (no minigbm/Mesa dependency); real refresh rate; no fake stand-ins for hardware.
+shown as a Wayland window by `apklayer-shell`. UiBench runs today with GPU rendering, real input, dialogs. The older CPU-only route (x86/Rosetta, bundled Mesa, GStreamer and
+WebKitGTK stand-ins) was removed (2026-10-28): everything runs on the device libraries. Hosts are not Mesa-specific (no minigbm/Mesa dependency); real refresh rate; no fake stand-ins for hardware.
 
 ## Rules
 Binding rules (builds in `~/los24`, no waiting/background, cleanup, no manual testing, reuse local code, patches, commits) are in `CLAUDE.md`; do not restate them here.
-- Verify on the VM with real input (`/tmp/uinput-keys`, compiled from `tests/vm/uinput-keys.c`), SurfaceFlinger dumps (`servicetool dump SurfaceFlinger`), logs and `prlctl capture "Ubuntu 24.04 (with Rosetta)" --file x.png` on the Mac (look at the image).
+- Verify on the VM with real input (`/tmp/uinput-keys`, compiled from `tests/vm/uinput-keys.c`), SurfaceFlinger dumps (`servicetool dump SurfaceFlinger`), logs and screenshots through `tests/vm/vmcapture.py` (flameshot on the UTM VM, `prlctl` on Parallels) on the Mac (look at the image).
 - Android-side edits: edit `aosp/`, `scripts/sync-aosp.sh "message"`, build the named modules, install outputs from `out/target/product/generic_arm64/system/lib64/` on the VM. New modules need a reason in the commit message and `aosp/hals/README.md`.
 - The user likes short honest status; they get frustrated by silence, long stalls, claims without verification. Say what is verified and what is not.
 - Decisions already made (do not reopen): system services stay Robolectric shadows (no system_server) except where a process boundary exists, where real binder is used (hub, PLAN 8c); backlight and thermal belong to the host; accounts the Android way; system providers/apps ship on every instance; Bluetooth through a BlueZ bridge scoped by app usage; **CTS strictly last**; x86_64 host libandroid_runtime build deferred until after the tool is public.

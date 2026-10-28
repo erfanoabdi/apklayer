@@ -4,12 +4,12 @@
 #   apklayer run <package|app.apk> run an installed app (an .apk path is installed first)
 #   apklayer list                  installed apps
 #   apklayer uninstall <package>   remove an app and its data
-#   apklayer stop                  stop running apps and, on the device-library route, the instance's Android services
-#   Device-library route (GPU, real Android libraries): APKLAYER_NATIVE=<native dir with aosp/> apklayer run <installed package>;
-#   its environment is scripts/native-env.sh, the services start on demand (scripts/arm64-stack.sh none)
+#   apklayer stop                  stop running apps and the instance's Android services
+# Apps run on Android's own libraries (device-library route): the services start on demand (scripts/arm64-stack.sh none), the environment is
+# scripts/native-env.sh.
 # Environment (also read from ~/.config/apklayer/env, so menu launches get it too):
-#   APKLAYER_JAVA (java command + flags for the app JVM, default "java"),
-#   APKLAYER_BUILD (Meson build dir, default <repo>/b), APKLAYER_DEPS (~/.cache/apklayer/deps).
+#   APKLAYER_NATIVE (the staged native runtime, default ~/arm64-native), APKLAYER_BUILD (Meson build dir, default <repo>/b),
+#   APKLAYER_DEPS (~/.cache/apklayer/deps).
 set -euo pipefail
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/apklayer/env"
 # shellcheck disable=SC1090
@@ -17,12 +17,10 @@ CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/apklayer/env"
 ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 BUILD="${APKLAYER_BUILD:-$ROOT/b}"
 DEPS="${APKLAYER_DEPS:-$HOME/.cache/apklayer/deps}"
-JAVA="${APKLAYER_JAVA:-java}"
+NATIVE="${APKLAYER_NATIVE:-$HOME/arm64-native}"
 DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 APPS="$DATA_HOME/apklayer/apps"
-HOST_JAR="$BUILD/runtime/host/apklayer-host.jar"
 DEX2JVM_JAR="$BUILD/runtime/dex2jvm/dex2jvm.jar"
-SHELL_BIN="$BUILD/bridge/shell/apklayer-shell"
 
 TMP=""
 trap 'rm -rf "$TMP"' EXIT
@@ -36,64 +34,42 @@ ensure_uid() {
     echo "uid=$((max + 1))" >> "$f"
 }
 prop() { sed -n "s/^$2=//p" "$1" | head -1; }
-# An arm64 native runtime (PLAN P7) is a directory with native-runtime.jar holding native/linux/x86_64/libandroid_runtime.so (the shim, found by
-# Robolectric's loader before its own x86_64 library) and android-libs/ (Android's libraries, loaded by bionic_translation).
+# The classpath of an app JVM: the staged native runtime (native-runtime.jar: the shim and apklayer's runtime patches), apklayer's host classes
+# (scripts/build-tree-host.sh) and the tree's Robolectric. The app's own classes come before the platform jars: an app ships its own Kotlin runtime
+# and libraries (a shrunk copy can differ from the one Robolectric_all.jar carries: NewPipe's R8-merged kotlin.math.MathKt).
 host_cp() {
-    local n="${APKLAYER_NATIVE:-$ROOT/native}"
-    if [ -d "$n/aosp" ]; then # everything from one AOSP tree (PLAN P7): its Robolectric_all.jar, simulator and framework jar, apklayer's host built against them
-        # the app's own classes come before the platform jars: an app ships its own Kotlin runtime and libraries (a shrunk copy can differ from
-        # the one Robolectric_all.jar carries: NewPipe's R8-merged kotlin.math.MathKt), and the platform has no business shadowing them
-        echo "$n/native-runtime.jar:$n/aosp/host-classes:$n/aosp/sim-classes:$1:$n/aosp/Robolectric_all.jar:$DEPS/android-stub.jar:$DEX2JVM_JAR"
-    elif [ -f "$n/robolectric-nativeruntime-linux-aarch64.jar" ]; then
-        # FALLBACK flavor (PLAN P7): Robolectric 4.17's own native runtime built for Linux arm64 by a third party
-        # (docs/THIRD_PARTY.md); Maven Robolectric and its android-all as in the default flavor, no apklayer shim, no device libraries
-        echo "$n/robolectric-nativeruntime-linux-aarch64.jar:$DEPS/libs/*:$DEPS/android-stub.jar:$HOST_JAR:$1"
-    elif [ -f "$n/native-runtime.jar" ]; then
-        # our native runtime jar first. Robolectric's nativeruntime-dist-compat is left out: its fonts and x86 library belong to
-        # an older Android build; the fonts of the build the native libraries come from are used instead (-Drobolectric.nativeruntime.fontdir)
-        echo "$n/native-runtime.jar:$(ls "$DEPS"/libs/*.jar | grep -v 'nativeruntime-dist-compat' | tr '\n' ':')$DEPS/android-stub.jar:$HOST_JAR:$1"
-    else
-        echo "$DEPS/libs/*:$DEPS/android-stub.jar:$HOST_JAR:$1"
-    fi
+    echo "$NATIVE/native-runtime.jar:$NATIVE/aosp/host-classes:$NATIVE/aosp/sim-classes:$1:$NATIVE/aosp/Robolectric_all.jar:$DEPS/android-stub.jar:$DEX2JVM_JAR"
 }
 # The cache key of a conversion: same APK, same framework, same converter -> same classes.
 cache_key() {
     { sha256sum "$1" | cut -c1-64; echo "post-processing v6: Android classloader adapter, guava relocation, native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke"; sha256sum "$(framework_dir)"/*.jar; cat "$ROOT/runtime/dex2jvm/.dex2jvm-commit" 2>/dev/null; } \
         | sha256sum | cut -c1-64
 }
-framework_dir() {
-    local n="${APKLAYER_NATIVE:-$ROOT/native}"
-    if [ -d "$n/aosp/android-all" ]; then echo "$n/aosp/android-all"
-    elif [ -d "$n/android-all" ]; then echo "$n/android-all"
-    else echo "$DEPS/android-all"; fi
-}
+framework_dir() { echo "$NATIVE/aosp/android-all"; }
 host() {
-    local n="${APKLAYER_NATIVE:-$ROOT/native}" nr="${APKLAYER_NATIVE:-$ROOT/native}/android-root"
-    local -a opts=("-Dapklayer.native=$n" "-Dapklayer.androidlibs=$n/android-libs")
-    if tree_flavor; then
-        . "$ROOT/scripts/native-env.sh"
-        JAVA="$(native_java) -XX:TieredStopAtLevel=1 -XX:+UseSerialGC"
-        opts+=(-Dapklayer.gpu=true -Drobolectric.windowManager.useRequestedSize=true)
-    fi
-    [ ! -d "$n/jdk-patch" ] || opts+=(--patch-module "java.base=$n/jdk-patch") # libcore-only members Android's native libraries look up (JdkPatch)
+    local nr="$NATIVE/android-root"
+    local -a opts=("-Dapklayer.native=$NATIVE" "-Dapklayer.androidlibs=$NATIVE/android-libs" -Dapklayer.gpu=true -Drobolectric.windowManager.useRequestedSize=true)
+    # shellcheck disable=SC1091
+    . "$ROOT/scripts/native-env.sh"
+    local java
+    java="$(native_java) -XX:TieredStopAtLevel=1 -XX:+UseSerialGC"
+    [ ! -d "$NATIVE/jdk-patch" ] || opts+=(--patch-module "java.base=$NATIVE/jdk-patch") # libcore-only members Android's native libraries look up (JdkPatch)
     [ ! -d "$nr/system/fonts" ] || opts+=("-Drobolectric.nativeruntime.fontdir=$nr/system/fonts/")
     [ ! -f "$nr/system/framework/org.lineageos.platform-res.apk" ] || opts+=("-Dapklayer.platformres=$nr/system/framework/org.lineageos.platform-res.apk")
-    [ ! -f "$n/native-runtime.jar" ] || opts+=("-Dapklayer.nativejar=$n/native-runtime.jar")
+    [ ! -f "$NATIVE/native-runtime.jar" ] || opts+=("-Dapklayer.nativejar=$NATIVE/native-runtime.jar")
     if [ -d "$nr/apex" ]; then
         export ANDROID_ROOT="$nr/system" ANDROID_DATA="$nr/data" ANDROID_I18N_ROOT="$nr/apex/com.android.i18n" ANDROID_TZDATA_ROOT="$nr/apex/com.android.tzdata"
     fi
     # shellcheck disable=SC2086
-    $JAVA @"$ROOT/runtime/host/jvm.args" -Drobolectric.offline=true \
+    $java @"$ROOT/runtime/host/jvm.args" -Drobolectric.offline=true \
         -Drobolectric.dependency.dir="$(framework_dir)" "${opts[@]}" "$@"
 }
 
 cmd_install() {
     local apk="$1"
     [ -f "$apk" ] || die "no such file: $apk"
-    # the device-library flavor's host classes (scripts/build-tree-host.sh) stand in for the Meson host jar, which does not build against the tree's Robolectric
-    local tools="$HOST_JAR"
-    if tree_flavor && [ -d "$APKLAYER_NATIVE/aosp/host-classes" ]; then tools="$APKLAYER_NATIVE/aosp/host-classes"; fi
-    [ -e "$tools" ] && [ -f "$DEX2JVM_JAR" ] || die "not built: run 'meson setup b && ninja -C b' in $ROOT"
+    local tools="$NATIVE/aosp/host-classes"  # apklayer's host classes, built against the tree's Robolectric (scripts/build-tree-host.sh)
+    [ -d "$tools" ] && [ -f "$DEX2JVM_JAR" ] || die "not built: run 'meson setup b && ninja -C b' (the converter) and scripts/build-tree-host.sh $NATIVE in $ROOT"
     mkdir -p "$APPS"
     local key tmp classes=""
     key="$(cache_key "$apk")"
@@ -116,11 +92,9 @@ cmd_install() {
         rm -f "$tmp/raw.jar"
     fi
     echo "$key" > "$tmp/key"
-    if tree_flavor; then
-        # Describe renders the icon with device natives; initialize its shared properties too.
-        . "$ROOT/scripts/native-env.sh"
-        ensure_stack
-    fi
+    # Describe renders the icon with device natives; initialize its shared properties too.
+    . "$ROOT/scripts/native-env.sh"
+    ensure_stack
     host -Djava.awt.headless=true -cp "$(host_cp "$tmp/classes.jar")" \
         apklayer.host.Main --describe "$tmp" "$tmp/base.apk" "$tmp/classes.jar" | sed '/^\[apklayer\] described/d'
     [ -f "$tmp/info.properties" ] || die "could not read $(basename "$apk")"
@@ -165,18 +139,8 @@ EOF
     command -v xdg-mime >/dev/null && xdg-mime default apklayer-open-apk.desktop application/vnd.android.package-archive 2>/dev/null || true
 }
 
-ensure_shell() {
-    local sock="${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR is not set}/apklayer/shell.sock"
-    if [ -S "$sock" ] && pgrep -x apklayer-shell >/dev/null; then return; fi
-    [ -x "$SHELL_BIN" ] || die "apklayer-shell not built ($SHELL_BIN)"
-    setsid "$SHELL_BIN" > "${XDG_RUNTIME_DIR}/apklayer-shell.log" 2>&1 < /dev/null &
-    for _ in $(seq 1 50); do [ -S "$sock" ] && return; sleep 0.1; done
-    die "apklayer-shell did not start (see $XDG_RUNTIME_DIR/apklayer-shell.log)"
-}
-
-# The device-library route (the tree flavor, APKLAYER_NATIVE with an aosp/ dir): Android's own services run as processes of the
-# instance (scripts/arm64-stack.sh) and the app JVM loads the same libraries, so both get the environment of scripts/native-env.sh.
-tree_flavor() { [ -d "${APKLAYER_NATIVE:-$ROOT/native}/aosp" ]; }
+# Android's own services run as processes of the instance (scripts/arm64-stack.sh) and the app JVM loads the same libraries, so both get the
+# environment of scripts/native-env.sh.
 ensure_stack() (
     local logs="${APKLAYER_LOGS:-/tmp/apklayer-stack}"
     mkdir -p "$logs"
@@ -202,7 +166,7 @@ cmd_run() {
     local dir="$APPS/$pkg"
     [ -f "$dir/info.properties" ] || die "not installed: $pkg (apklayer install <app.apk>)"
     ensure_uid "$dir"
-    # the Chromium WebView provider is the default WebView once it is installed (apklayer install webview.apk) and scripts/webview-setup.sh ran; APKLAYER_WEBVIEW_PROVIDER=none keeps the WebKitGTK stand-in
+    # the Chromium WebView provider is the default WebView once it is installed (apklayer install webview.apk) and scripts/webview-setup.sh ran; APKLAYER_WEBVIEW_PROVIDER=none disables itd-in
     if [ -z "${APKLAYER_WEBVIEW_PROVIDER+x}" ] && [ -f "$APPS/com.android.webview/classes.jar" ] && grep -q -- "--no-sandbox" /data/local/tmp/webview-command-line 2>/dev/null; then
         export APKLAYER_WEBVIEW_PROVIDER=com.android.webview
     fi
@@ -210,52 +174,38 @@ cmd_run() {
     if [ -n "${APKLAYER_WEBVIEW_PROVIDER:-}" ] && ! grep -q -- "--no-sandbox" /data/local/tmp/webview-command-line 2>/dev/null; then
         die "the WebView provider route needs scripts/webview-setup.sh once (Chromium's seccomp sandbox cannot run inside an app JVM and is switched off; needs sudo)"
     fi
-    if tree_flavor; then
-        # shellcheck disable=SC1091
-        . "$ROOT/scripts/native-env.sh"
-        JAVA="$(native_java) -XX:TieredStopAtLevel=1 -XX:+UseSerialGC"
-        ensure_stack
-        # one virtual display per app window (resizable, composed by SurfaceFlinger on the GPU, shown by apklayer-shell): its own layer
-        # stack and sink per launch. PID-based ids cannot collide like truncated package hashes, and the title identifies
-        # the instance/launch before the (possibly long) package. The primary is headless, so the sink is required.
-        if [ "$mode" = component ]; then
-            : # Headless service/provider process; the primary display already supplies timing.
-        elif [ -f "$L/libapklayer_vdisplay.so" ]; then
-            local stack=$BASHPID logs="${APKLAYER_LOGS:-/tmp/apklayer-stack}"
-            local display_window="apklayer:$stack:${APKLAYER_INSTANCE:-default}:$pkg"
-            display_window="${display_window:0:60}" # host display HAL's title limit
-            ln -sfn "vdisplay-$pkg-$stack.log" "$logs/vdisplay-$pkg.log"
-            "$N/bin/btload" "$L" libapklayer_vdisplay.so --main "$display_window" "$stack" "${APKLAYER_DISPLAY_WIDTH:-720}" "${APKLAYER_DISPLAY_HEIGHT:-1280}" \
-                > "$logs/vdisplay-$pkg-$stack.log" 2>&1 &
-            VDISPLAY_PID=$!
-            trap 'kill "$VDISPLAY_PID" 2>/dev/null; rm -rf "$TMP"' EXIT
-            APKLAYER_JOPTS="${APKLAYER_JOPTS:-} -Dapklayer.layerstack=$stack -Dapklayer.displaywindow=$display_window"
-        else
-            die "GPU runtime needs libapklayer_vdisplay.so (the primary is headless)"
-        fi
+    # shellcheck disable=SC1091
+    . "$ROOT/scripts/native-env.sh"
+    ensure_stack
+    # one virtual display per app window (resizable, composed by SurfaceFlinger on the GPU, shown by apklayer-shell): its own layer
+    # stack and sink per launch. PID-based ids cannot collide like truncated package hashes, and the title identifies
+    # the instance/launch before the (possibly long) package. The primary is headless, so the sink is required.
+    if [ "$mode" = component ]; then
+        : # Headless service/provider process; the primary display already supplies timing.
+    elif [ -f "$L/libapklayer_vdisplay.so" ]; then
+        local stack=$BASHPID logs="${APKLAYER_LOGS:-/tmp/apklayer-stack}"
+        local display_window="apklayer:$stack:${APKLAYER_INSTANCE:-default}:$pkg"
+        display_window="${display_window:0:60}" # host display HAL's title limit
+        ln -sfn "vdisplay-$pkg-$stack.log" "$logs/vdisplay-$pkg.log"
+        "$N/bin/btload" "$L" libapklayer_vdisplay.so --main "$display_window" "$stack" "${APKLAYER_DISPLAY_WIDTH:-720}" "${APKLAYER_DISPLAY_HEIGHT:-1280}" \
+            > "$logs/vdisplay-$pkg-$stack.log" 2>&1 &
+        VDISPLAY_PID=$!
+        trap 'kill "$VDISPLAY_PID" 2>/dev/null; rm -rf "$TMP"' EXIT
+        APKLAYER_JOPTS="${APKLAYER_JOPTS:-} -Dapklayer.layerstack=$stack -Dapklayer.displaywindow=$display_window"
     else
-        ensure_shell
+        die "the runtime needs libapklayer_vdisplay.so (the primary display is headless)"
     fi
     cd "$dir"
-    # bundled software Mesa (GLES, P4.3) for the Rosetta/x86 flavors; the tree flavor (device libraries, P7) uses the host's own GPU driver
-    if [ ! -d "${APKLAYER_NATIVE:-$ROOT/native}/aosp" ]; then
-        export LIBGL_DRIVERS_PATH="${APKLAYER_NATIVE:-$ROOT/native}/dri" __EGL_VENDOR_LIBRARY_FILENAMES="${APKLAYER_NATIVE:-$ROOT/native}/glvnd/50_mesa.json" LIBGL_ALWAYS_SOFTWARE=1
-    fi
-    export APKLAYER_GLDIR="${XDG_RUNTIME_DIR:-/tmp}/apklayer/gl-$pkg"; rm -rf "$APKLAYER_GLDIR"; mkdir -p "$APKLAYER_GLDIR"  # GL frames of native SurfaceViews (P4.3)
-    export APKLAYER_APK="$dir/base.apk"  # NDK libandroid shim reads assets from it
-    export LD_LIBRARY_PATH="${APKLAYER_NATIVE:-$ROOT/native}:${APKLAYER_NATIVE:-$ROOT/native}/glibc${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"  # bionic linker + its libs (P4)
-    export XDG_DATA_DIRS="${APKLAYER_NATIVE:-$ROOT/native}/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+    export LD_LIBRARY_PATH="$NATIVE:$NATIVE/glibc${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"  # bionic linker + its libs
+    export XDG_DATA_DIRS="$NATIVE/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
     local -a entry=("$dir/base.apk" "$dir/classes.jar")
     if [ "$mode" = component ]; then entry=(--component-host "${entry[@]}"); fi
-    host -Dapklayer.data="$dir/data" -Dapklayer.package="$pkg" -Dapklayer.uid="$(prop "$dir/info.properties" uid)" -Dapklayer.libdir="$dir/lib" -Dapklayer.apps="$APPS" -Dapklayer.cli="$ROOT/bin/apklayer" -Dapklayer.webview="$ROOT/bridge/webview/apklayer-webview.py" -Dapklayer.media="$ROOT/bridge/media/apklayer-media.py" -Dapklayer.codec="$ROOT/bridge/media/apklayer-codec.py" ${APKLAYER_JOPTS:-} ${APKLAYER_WEBVIEW_PROVIDER:+-Dapklayer.webviewprovider=$APPS/$APKLAYER_WEBVIEW_PROVIDER -Dapklayer.nativelooper=true} ${APKLAYER_ISOLATED:+-Dapklayer.isolated=$APKLAYER_ISOLATED} ${APKLAYER_LOGCAT:+-Dapklayer.logcat=true} \
+    host -Dapklayer.data="$dir/data" -Dapklayer.package="$pkg" -Dapklayer.uid="$(prop "$dir/info.properties" uid)" -Dapklayer.libdir="$dir/lib" -Dapklayer.apps="$APPS" -Dapklayer.cli="$ROOT/bin/apklayer" ${APKLAYER_JOPTS:-} ${APKLAYER_WEBVIEW_PROVIDER:+-Dapklayer.webviewprovider=$APPS/$APKLAYER_WEBVIEW_PROVIDER -Dapklayer.nativelooper=true} ${APKLAYER_ISOLATED:+-Dapklayer.isolated=$APKLAYER_ISOLATED} ${APKLAYER_LOGCAT:+-Dapklayer.logcat=true} \
         -cp "$(host_cp "$dir/classes.jar${APKLAYER_WEBVIEW_PROVIDER:+:$APPS/$APKLAYER_WEBVIEW_PROVIDER/classes.jar}")" apklayer.host.Main "${entry[@]}"
 }
 
-# The APK's native libraries for the ABI of the JVM that runs the app (PLAN P4.4); none if it has none.
-app_abi() {
-    if tree_flavor 2>/dev/null; then echo arm64-v8a; return; fi  # the device-library route runs arm64 apps whatever JVM the install itself used
-    case "$(uname -m)" in x86_64|amd64) echo x86_64 ;; *) echo arm64-v8a ;; esac
-}
+# The APK's native libraries: the device libraries are arm64, so apps run their arm64-v8a code.
+app_abi() { echo arm64-v8a; }
 extract_libs() {
     local dir="$1" abi
     abi="$(app_abi)"; rm -rf "$dir/lib"
@@ -278,7 +228,6 @@ cmd_uninstall() {
 
 # Foreground daemon entrypoint. The lock and its JVM live for the instance lifetime.
 cmd_hub() {
-    tree_flavor || die "instance hub requires the device-library runtime"
     . "$ROOT/scripts/native-env.sh"
     mkdir -p "${APKLAYER_LOGS:-/tmp/apklayer-stack}"
     exec 8>"${APKLAYER_LOGS:-/tmp/apklayer-stack}/hub.lock"
@@ -290,7 +239,7 @@ cmd_hub() {
 
 case "${1:-}" in
     install) shift; [ $# -eq 1 ] || die "usage: apklayer install <app.apk>"; cmd_install "$1" ;;
-    stop) # the device-library route: the app JVMs and the instance's Android services
+    stop) # the app JVMs and the instance's Android services
         pkill -f '[a]pklayer.host.Main' || true
         pkill -f '[l]ibapklayer_vdisplay' || true
         [ -f "${APKLAYER_LOGS:-/tmp/apklayer-stack}/stack.pid" ] && kill "$(cat "${APKLAYER_LOGS:-/tmp/apklayer-stack}/stack.pid")" 2>/dev/null || true

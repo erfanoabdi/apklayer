@@ -1,73 +1,42 @@
-# apklayer — Architecture (Robolectric method)
+# apklayer — Architecture
 
 ## One sentence
-Run the **unmodified AOSP framework compiled for the JVM** (Robolectric's `android-all`), load
-the APK's DEX as JVM classes (dex2jvm), drive the real Activity lifecycle, and connect the
-result to the Linux desktop through a thin host layer (Wayland today).
+Run the Android framework on the JVM (unmodified AOSP `android-all` + Robolectric shadows), load the APK's DEX as JVM classes (dex2jvm), and
+underneath run **Android's own native libraries and services** on the host (bionic_translation, kernel binder, SurfaceFlinger, apklayer's HALs), so
+apps and games see real Android, shown as Wayland windows. Details of that route follow in "Android side and host side".
 
 ## Pipeline
 
 ```
  app.apk ─┬─ classes*.dex ──dex2jvm──> app classes (.jar) ──DenyInstrument──> @DoNotInstrument
           │                 (hierarchy from android-all)
-          └─ manifest + resources.arsc ──AOSP PackageParser / AssetManager (APK passed as the manifest)
+          └─ manifest + resources.arsc ──AOSP PackageParser / native AssetManager
 
- App JVM, one per app (x86_64 under Rosetta on the arm64 VM until PLAN P7; native on x86_64)
- ┌──────────────────────────────────────────────────────────────────────────────┐
- │ Robolectric sandbox: android-all-instrumented 16 (SDK 36) + shadows 4.17     │
- │ NATIVE graphics: libandroid_runtime (in android-all) = real HWUI/Skia        │
- │                                                                              │
- │ apklayer.host (Simulator method, no JUnit): Main → SandboxBuilder → AppHost  │
- │   activity back stack ← startActivity()/finish() (recorded by Robolectric)   │
- │   event loop: Looper + paused Choreographer; real draw traversals            │
- │   on draw: ScreenUpdateHandler → takeScreenshot (all windows) → int[]        │
- │   shell INPUT → MotionEvent/KeyEvent → UiAutomation.injectInputEvent         │
- │   ShellClient (pure Java): Unix socket + 2-buffer shm file per window        │
- └───────────────┬──────────────────────────────────────────────▲───────────────┘
-   FRAME(buf, damage) │ $XDG_RUNTIME_DIR/apklayer/shell.sock     │ INPUT / RELEASE / CLOSE
- ┌───────────────▼──────────────────────────────────────────────┴───────────────┐
- │ apklayer-shell (native, host arch, one per session, many apps):              │
- │   xdg_toplevel per window; the app's shm file is the wl_shm pool (zero copy) │
- │   wl_seat pointer/keyboard → focused window's app                            │
- └──────────────────────────────────────────────────────────────────────────────┘
-                                   Wayland compositor
+ App JVM, one per app: Robolectric sandbox (android-all 16, SDK 36) + apklayer shadows
+   apklayer.host: Main → AppHost (lifecycle, back stack, host input, windows), the hub client
+   Android's native libraries (libandroid_runtime, HWUI, media, binder) loaded by bionic_translation; the app's own .so too
+        │ kernel binder (binderfs)
+ Instance services, host processes (scripts/arm64-stack.sh): servicemanager, SurfaceFlinger, gralloc, HWC, audio, media, vdisplay sink
+        │ dmabuf frames, real vsync
+ apklayer-shell (one per session): one xdg_toplevel per virtual display, pointer/keyboard/touch/clipboard/IME → the focused app
+        │
+   Wayland compositor
 ```
 
 ## Components
 
 | Path | Role |
 |---|---|
-| `runtime/dex2jvm/` | DEX → JVM bytecode (upstream kksimp/dex2jvm, Apache-2.0). Reads class hierarchy from its own classpath, so it must be run with the target `android-all` on it. |
-| `runtime/host/java/apklayer/tools/DenyInstrument.java` | Stamps a runtime-visible `@DoNotInstrument` on the app classes. dex2jvm's `<init>` lowering conflicts with Robolectric's constructor renaming. |
-| `runtime/host/java/apklayer/host/Main.java` | Entry point: builds the sandbox with Robolectric's simulator `SandboxBuilder` (no JUnit) and runs `AppHost` in it. |
-| `runtime/host/java/apklayer/host/AppHost.java` | App setup as in the simulator's `AppLoader` (manifest = the APK), the simulator's event loop, launcher resolution, back stack (`Robolectric.setupActivity`-style launches; previous activity stopped and hidden unless the new one is translucent, as `ActivityThread` does), resize/DPI (`hostResize`). |
-| `runtime/host/java/apklayer/host/HostInput.java` | What the shell sends (pointer, xkb keys, wheel, configure) → Android events. Keys go through the topmost window's `ViewRootImpl` (focus navigation, touch mode); Backspace = Back outside text fields. |
-| `runtime/host/java/apklayer/host/HostWindows.java` | Which window/view gets input: topmost window by type (dialogs above activity windows), hit-testing, wheel routing, debug dumps. |
-| `runtime/host/java/apklayer/host/ScriptRunner.java` | Verification steps (`-Dapklayer.script`): tap, key, keydown/keyup, wheel, configure, back. |
-| `runtime/host/java/apklayer/host/ShellFrameListener.java` | `FrameListener` for Robolectric's `ScreenUpdateHandler`: receives the composed screen (`UiAutomation.takeScreenshot`) only when something drew, and presents it. |
-| `runtime/host/java/apklayer/host/ShellClient.java` | Pure-Java client of apklayer-shell: Unix socket, the window's two-buffer shm file, damage rect vs. the shown frame, buffer release tracking (latest frame wins). |
-| `runtime/host/jvm.args` | JDK `--add-opens` flags Robolectric needs on modern SDKs (copied from Robolectric's own test configuration). |
-| `bridge/ndk/*.c` | NDK shim libraries (P4.3), each a glibc `<name>_shim.so.0` mapped from `<name>.so` by the bionic_translation cfg.d. So far: `liblog`. |
-| `runtime/host/java/apklayer/host/Services.java` | Runs the app's own services in-process (`startService/bindService/...` routed here by `DenyInstrument`). |
-| `runtime/host/java/apklayer/host/UnsafeAccess.java`, `Reflect.java` | `Unsafe.getUnsafe()` for app code (also via reflection), as on ART. |
-| `bridge/native/native_loader.c` | `libapklayer_native.so`: JNI helper that maps an app's bionic-linked `.so` with bionic_translation's linker (`bionic_dlopen`), runs `JNI_OnLoad` and binds natives (P4). Built by `scripts/build-native.sh`. |
-| `runtime/host/java/apklayer/host/NativeLoader.java` | Receives the app's `System.loadLibrary/load` (rewritten by `DenyInstrument`), loads through the JNI helper, binds `Java_*` exports by name (ELF `.dynsym` parse + JNI demangling + `RegisterNatives`). |
-| `bridge/shell/` | `apklayer-shell`: the session's Wayland side for all apps. `shell.h` (protocol doc, shared state), `main.c` (event loop), `client.c` (app sockets), `window.c` (xdg toplevels, zero-copy buffers, in-place rebuffer), `decor.c` (client-side title bar: Back/Minimize/Maximize/Close), `pointer.c` (title bar clicks, edge resize, wheel, cursors), `keyboard.c` (xkb → Android keys, repeat), `registry.c` (globals, seat, output scale). |
-| `bin/apklayer` | CLI (PLAN D19). `install`: dex2jvm (cached by APK sha256 + android-all + dex2jvm commit) → DenyInstrument → `Main --describe` (package, label, launcher, version, launcher icon drawn by the framework) → `~/.local/share/apklayer/apps/<pkg>/` + `.desktop` entry (StartupWMClass = app_id) + `.apk` MIME handler. `run`: starts the shell if needed, runs the host with persistent data. Config: `~/.config/apklayer/env`. |
-| `scripts/vm-run.sh` | Syncs to the VM, builds with Meson, restarts the shell and runs `bin/apklayer run <apk>`. |
-| `scripts/check.sh` | Headless scripted run with snapshots (fast check on the Mac). |
-
-## Shell protocol v1 (Unix socket, little-endian `{u32 type, u32 len, payload}`)
-
-| Dir | Type | Payload |
-|---|---|---|
-| app → shell | 1 HELLO | `i32 pid`, utf8 package |
-| app → shell | 2 WINDOW_CREATE | `i32 id, w, h`, utf8 `"<shm path>\0<title>"` (file = 2 × w·h ARGB buffers) |
-| app → shell | 3 FRAME | `i32 id, buf, x, y, w, h` (damage rectangle) |
-| app → shell | 4 WINDOW_DESTROY | `i32 id` |
-| shell → app | 101 INPUT | `i32 id, type, a, b`: type 0/1/2 = touch DOWN/UP/MOVE at (a, b); 100 = key (evdev a, pressed b) |
-| shell → app | 103 CLOSE | `i32 id` (window closed by the user) |
-| shell → app | 104 RELEASE | `i32 id, buf` (compositor released that buffer) |
+| `runtime/dex2jvm/` | DEX → JVM bytecode (upstream kksimp/dex2jvm, Apache-2.0, plus our `HostDefaults.java`). Reads the class hierarchy from its own classpath, so it runs with the target `android-all` on it. |
+| `runtime/host/java/apklayer/tools/DenyInstrument.java` | Stamps `@DoNotInstrument` on the app classes (dex2jvm's `<init>` lowering conflicts with Robolectric's constructor renaming) and rewrites a few app calls (native loading, services). |
+| `runtime/host/java/apklayer/host/` | `Main` builds the sandbox, `AppHost` runs the app (setup as in Robolectric's simulator `AppLoader`), `HostInput`/`HostWindows`/`ScriptRunner` input and verification steps, `ShellClient` the shell connection, `Native*`/`ShadowHost*` the native shadows, `Hub*` the instance hub, `HostShadowProvider` registers the shadows. |
+| `runtime/patches/` | Robolectric overlay classes (thin, marked "apklayer patch", listed in docs/PATCHES.md). |
+| `bridge/native/` | The JNI shim that registers Android's natives, system properties, the path layer, TLS and binder glue, `NativeLoader` support for apps' `.so`. |
+| `bridge/hals/` | Host side of the graphics, audio and media HALs (GBM/EGL, PipeWire, GStreamer). |
+| `bridge/shell/` | `apklayer-shell`: the session's Wayland side (protocol documented in `shell.h`). |
+| `aosp/` | Android-side modules built in the LineageOS tree: HALs (gralloc, composer, mapper, EGL, Vulkan, audio, media), services, tools. |
+| `runtime/host/jvm.args` | JDK `--add-opens` flags Robolectric needs on modern SDKs. |
+| `bin/apklayer` | CLI. `install`: dex2jvm (cached by APK sha256 + android-all + dex2jvm commit) → DenyInstrument → `Main --describe`. `run`: starts the services on demand and the app JVM. |
 
 ## App data (PLAN D20)
 
@@ -79,20 +48,12 @@ Application exists. Robolectric keeps an existing entry and its exit cleanup doe
 links, so SharedPreferences, databases, files and caches persist across launches.
 
 ## Why these choices
-- **Unmodified framework.** Android version bumps mean switching the `android-all` jar, not
-  re-applying patches. There are no hand patches to AOSP or Robolectric (see docs/PATCHES.md).
-- **NATIVE graphics.** LEGACY mode is a recording fake: it draws no text and doesn't compose
-  `translate`. NATIVE mode runs AOSP's own HWUI/Skia.
-- **Separate shell process.** Crash isolation, one component owning Wayland for every app,
-  and no native code inside app JVMs, so an app JVM's architecture can differ from the host's.
-- **Rosetta (development stopgap until PLAN P7).** Robolectric publishes its native runtime
-  for linux-x86_64, mac and windows only. The arm64 VM therefore runs the app JVM as x86_64
-  under Rosetta (C1 JIT + Serial GC, because C2 and G1 crash there; Robolectric's temp-dir
-  cleanup at exit occasionally segfaults too). P7 builds the runtime for native arm64.
-
-## Known limits
-See docs/PLAN.md: the plan of record, with the target architecture (apklayer-shell + one JVM
-per app + apklayerd) and phases P1–P7.
+- **Unmodified framework.** Android version bumps mean switching the `android-all` jar, not re-applying patches. Deviations from upstream are thin
+  and listed in docs/PATCHES.md.
+- **Android's own native libraries.** Real HWUI/Skia, SurfaceFlinger, the media stack and binder behave like a device, including for native games;
+  the hardware layer is apklayer's, backed by the host's standard interfaces and never tied to one GPU vendor.
+- **Separate shell process.** One component owns Wayland for every app, with crash isolation from the app JVMs.
+- **Arm64 only for now.** The device libraries come from an arm64 LineageOS build; an x86_64 build is the step toward a universal runtime.
 
 ## Android side and host side (device-library route, PLAN P7)
 

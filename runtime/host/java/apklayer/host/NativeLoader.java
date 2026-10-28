@@ -18,7 +18,7 @@ import org.robolectric.annotation.internal.DoNotInstrument;
  * glibc), its JNI_OnLoad runs, and every exported {@code Java_...} function is bound to its native
  * method with JNI RegisterNatives (HotSpot's own lookup cannot see libraries it did not load).
  *
- * <p>Needs the host libraries built by scripts/build-native.sh ({@code -Dapklayer.native=<dir>}) and
+ * <p>Needs the staged native runtime (scripts/build-native-arm64.sh) ({@code -Dapklayer.native=<dir>}) and
  * the app's extracted libs ({@code -Dapklayer.libdir=<dir>}).
  */
 @DoNotInstrument
@@ -90,7 +90,7 @@ public final class NativeLoader {
         String dir = System.getProperty("apklayer.native");
         if (!Boolean.getBoolean("apklayer.gpu")) { // the older x86 route: its own loader library; the device-library route has these natives in the runtime shim (bridge/native/app_native.c)
             if (dir == null || !new File(dir, "libapklayer_native.so").exists()) {
-                throw new UnsatisfiedLinkError("native libraries are not supported here (build them with scripts/build-native.sh)");
+                throw new UnsatisfiedLinkError("native libraries are not supported here (stage the native runtime with scripts/build-native-arm64.sh)");
             }
             System.load(new File(dir, "libapklayer_native.so").getAbsolutePath());
         }

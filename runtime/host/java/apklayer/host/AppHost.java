@@ -38,7 +38,6 @@ import org.robolectric.shadows.ShadowApplication;
 import org.robolectric.shadows.ShadowChoreographer;
 import org.robolectric.shadows.ShadowPausedLooper;
 import org.robolectric.shadows.ShadowSystemClock;
-import org.robolectric.simulator.ScreenUpdateHandler;
 
 /**
  * Runs an APK inside the sandbox (PLAN P1.5). Setup follows Robolectric's simulator
@@ -47,8 +46,7 @@ import org.robolectric.simulator.ScreenUpdateHandler;
  * the simulator launches its first one ({@code Robolectric.setupActivity}), on a back stack.
  *
  * <p>Debug/verification properties: {@code apklayer.script} ("ms:tap:x,y+ms:back+..."),
- * {@code apklayer.snapms} (snapshot times in ms), {@code apklayer.runms} (exit after),
- * {@code apklayer.snapshot} (PNG path prefix). {@code apklayer.data} + {@code apklayer.package}:
+ * {@code apklayer.runms} (exit after). {@code apklayer.data} + {@code apklayer.package}:
  * persistent app data root for that package.
  */
 public final class AppHost implements Runnable {
@@ -181,13 +179,8 @@ public final class AppHost implements Runnable {
                 }
             }
         }
-        ShellFrameListener frames = new ShellFrameListener(shell);
         this.shell = shell;
         app.getSystemService(android.content.ClipboardManager.class).addPrimaryClipChangedListener(this::onAppClipboardChanged);
-        // GPU route (-Dapklayer.gpu, the tree flavor): the window is a real SurfaceFlinger layer shown by the HWC; the simulator's CPU
-        // screenshots (ImageReader-backed surfaces) do not exist there
-        if (!Boolean.getBoolean("apklayer.gpu")) ScreenUpdateHandler.create(frames).requestStartUi();
-
         if (java.security.Security.getProvider("AndroidKeyStore") == null) java.security.Security.addProvider(new HostKeyStoreProvider());
         AppEnvironment.installSystemPackage(app);
         AppEnvironment.installNetwork(app);
@@ -204,11 +197,11 @@ public final class AppHost implements Runnable {
         if (incoming != null) { incomingActivity = stack.peek().get(); android.os.ResultReceiver answerTo = HubActivityClient.takeReceiver(); if (answerTo != null) hubResults.put(incomingActivity, answerTo); }
         // Like Simulator.postMotionEvent: an off-screen move so the first frame is drawn.
         input.inject(MotionEvent.obtain(0, SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE, width, height, 0));
-        loop(shell, frames);
+        loop(shell);
     }
 
     /** Simulator.loop(), plus host input, navigation and the verification hooks. */
-    private void loop(ShellClient shell, ShellFrameListener frames) {
+    private void loop(ShellClient shell) {
         ShadowPausedLooper looper = Shadow.extract(Looper.myLooper());
         looper.idle();
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
@@ -230,51 +223,31 @@ public final class AppHost implements Runnable {
             long t = Long.getLong("apklayer.autotap.ms", 4500);
             script.put(t, "tap:first");
         }
-        TreeMap<Long, String> snaps = new TreeMap<>();
-        for (String ms : System.getProperty("apklayer.snapms", "").split(",")) {
-            if (!ms.isEmpty()) snaps.put(Long.parseLong(ms), ms);
-        }
-        // runms must be honoured in headless mode too (corpus harness schedules snapshots
-        // and taps at absolute times and relies on the run ending on schedule).
+        // runms must be honoured in headless mode too (tests schedule taps at absolute times and rely on the run ending on schedule).
         // Headless runs must advance PAUSED clocks by the scheduled deadline (Simulator
         // does this with ShadowSystemClock::advanceTo + idleFor); wall-clock waiting only
         // works with a live window (shell mode), where real time drives the frame clock.
         boolean pausedMode = shell == null;
         long runMs = Long.getLong("apklayer.runms", pausedMode ? 3000 : Long.MAX_VALUE);
-        String snapPrefix = System.getProperty("apklayer.snapshot", "/tmp/apklayer-frame");
         // Schedule clock: in headless (PAUSED) mode the sandbox clock is stepped by the loop
-        // below, so schedule script/snapshot times on it — a "6 s" run then completes in well
+        // below, so schedule script times on it — a "6 s" run then completes in well
         // under a second of real time. In shell mode real time drives everything.
         clockNanos = perfAt = System.nanoTime();
         perfUptime = SystemClock.uptimeMillis();
         long start = pausedMode ? SystemClock.uptimeMillis() : System.nanoTime() / 1_000_000;
-        long lastSnapshotAt = -1; // dedupe snapshot times that land in the same loop iteration
 
         try {
             while (!stack.isEmpty()) {
                 long now = System.nanoTime();
                 long elapsed = (pausedMode ? SystemClock.uptimeMillis() : System.nanoTime() / 1_000_000) - start;
-                // exit when the run time is up (or the window closed) and every scheduled
-                // snapshot/script step has fired — the corpus harness relies on the final
-                // snapshot at runms actually being taken.
-                if (script.isEmpty() && snaps.isEmpty()
-                        && (elapsed >= runMs || (shell != null && shell.closed())))
+                // exit when the run time is up (or the window closed) and every scheduled script step has fired
+                if (script.isEmpty() && (elapsed >= runMs || (shell != null && shell.closed())))
                     break;
 
                 for (int[] ev; shell != null && (ev = shell.poll()) != null; ) input.onHostEvent(ev);
                 for (Object[] ime; shell != null && (ime = shell.pollIme()) != null; ) hostIme((int) ime[0], (int) ime[1], (String) ime[2], (String) ime[3]);
                 for (String clip; shell != null && (clip = shell.pollClipboard()) != null; ) hostClipboardIn(clip);
                 while (!script.isEmpty() && script.firstKey() <= elapsed) scriptRunner.runStep(script.pollFirstEntry().getValue());
-                while (!snaps.isEmpty() && snaps.firstKey() <= elapsed) {
-                    long sMs = snaps.firstKey();
-                    if (sMs == lastSnapshotAt) { // same instant already captured this iteration
-                        snaps.pollFirstEntry();
-                        continue;
-                    }
-                    lastSnapshotAt = sMs;
-                    frames.snapshot(snapPrefix + "-" + snaps.pollFirstEntry().getValue() + "ms.png");
-                    if (Boolean.getBoolean("apklayer.debugwindows")) HostWindows.dumpWindows();
-                }
 
                 long nextTask = looper.getNextScheduledTaskTime().toMillis();
                 long nextVsync = ShadowChoreographer.getNextVsyncTime();
@@ -313,15 +286,13 @@ public final class AppHost implements Runnable {
                 followNavigation();
                 followOrientation();
                 followTextInput();
-                if (!Boolean.getBoolean("apklayer.gpu")) HostSurfaces.follow(); // the GPU route has real SurfaceViews (ShadowHostNativeSurfaceView)
-                HostWebViews.follow();
                 deliverCrossAppResults();
                 HostPortals.followNotifications();
             }
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        System.out.println("[apklayer] exit: frames=" + frames.frames() + " depth=" + stack.size());
+        System.out.println("[apklayer] exit: depth=" + stack.size());
         if (Boolean.getBoolean("apklayer.threads")) { // -Dapklayer.threads=true: what every thread is doing at the end (stalls)
             Thread.getAllStackTraces().forEach((t, st) -> {
                 if (st.length == 0 || t.isDaemon() && !t.getName().contains("Main") && !t.getName().contains("Render")) return;

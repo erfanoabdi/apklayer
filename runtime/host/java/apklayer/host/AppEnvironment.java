@@ -161,19 +161,7 @@ final class AppEnvironment {
         ShadowChoreographer.setFrameDelay(Duration.ofMillis(15));
         ShadowLog.setCaptureLogsEnabled(false);
         if (Boolean.getBoolean("apklayer.logcat")) ShadowLog.stream = System.out; // debug: the app's android.util.Log lines
-        // Legacy MediaPlayer still uses the host backend; native MediaCodec is independent.
-        ShadowMediaPlayer.setMediaInfoProvider(ShadowHostMediaPlayer::mediaInfo);
-        if (!Boolean.getBoolean("apklayer.nativeaudio")) HostAudio.install();
-        if (Boolean.getBoolean("apklayer.nativemedia")) {
-            NativeMedia.ensureInitialized();
-        } else {
-            try {
-                HostCodecs.install();
-            } catch (Exception e) { // a newer framework may differ from the fallback builder
-                System.err.println("[apklayer] MediaCodec decoders not registered on this framework: " + e.getMessage());
-            }
-        }
-
+        if (Boolean.getBoolean("apklayer.nativemedia")) NativeMedia.ensureInitialized();
     }
 
     private AppEnvironment() {}

@@ -67,15 +67,15 @@ Instead:
 | M5 | Interactive: pointer/keyboard, activity back stack, dialogs | done: clicks, drag, Esc/Backspace = Back, dialogs composited |
 | M6 | P1: product foundation: `apklayer run any.apk` on SDK 36, Simulator host (no JUnit), shell protocol, CLI, install cache | **in progress**: SDK 36 ✅, deps lock ✅, Simulator host ✅, shell protocol ✅, Meson ✅, CLI + install + persistent data + menu entries ✅; exit test: 2 extra apps pass headless (Mac), VM run pending |
 | M7 | P2: desktop-grade window and input (resize, HiDPI, wheel, touch, IME, clipboard) | **done** (2026-10-26): see docs/PLAN.md P2 status; open caveats: 2x output and a real IME not exercised |
-| — | P3: compatibility corpus (30 F-Droid APKs), continuous from here | **in progress**: 17 T1 apps pinned, 7/17 pass; exit test (90% T1) not met, fix loop continues in the background |
-| M8 | P4: native `.so` in APKs (bionic_translation + NDK shims → Mesa/PipeWire) | **in progress**: CPU-Z loads its real native library (bionic linker + JNI loader, x86_64 under Rosetta); NDK shims log ✅, android ✅, EGL/GLES ✅ (bundled Mesa llvmpipe); pixel delivery to the shell, audio, vulkan pending |
-| M9 | P5: platform services (WebView→WPE, media→GStreamer, portals, microG) | pending |
-| M10 | P6: multiple apps (apklayerd, cross-app intents/binder-lite, bwrap) | pending |
-| M11 | P7: device-library route: the tree's arm64 Android libraries on bionic_translation (no Rosetta), own SurfaceFlinger stack with GPU zero-copy rendering (PLAN P7.1) | **in progress**: native runtime loads, app starts on arm64 (P7.0); servicemanager runs on kernel binder (P7.1); SurfaceFlinger, gralloc and HWC next |
-| M11b | P7.5: Vulkan (our libvulkan layer over the host driver, dmabuf swapchain) | not started |
-| M12 | P8 (ship): Flatpak for x86_64 + arm64, desktop integration, performance budget | pending |
-| M13 | Vision phases (PLAN P8: SystemUI as a yardstick; P9: several phone instances at once) | not scheduled |
-| M14 | P10: relevant CTS tests run and tracked (the compatibility proof) | not scheduled |
+| — | P3: compatibility corpus (F-Droid APKs) | the old harness was removed with the CPU-only route; to be rebuilt on the device-library route (list: tests/corpus/packages.txt) |
+| M8 | P4: native `.so` in APKs | **done on the device-library route**: apps' arm64 libraries load through bionic_translation on the real Android libraries (OTR2 renders) |
+| M9 | P5: platform services | **in progress on real Android**: WebView through the Chromium provider APK, media and audio through the real services; portals, microG pending |
+| M10 | P6: multiple apps | **in progress**: the instance hub (bound services, first broadcast cases); providers, activities/results, notifications next (docs/MILESTONE-E.md) |
+| M11 | P7: device-library route (own SurfaceFlinger stack, GPU zero-copy rendering) | **done for GL**; Vulkan presentation opt-in, blocked on the UTM VM's host stack (PLAN P7.5) |
+| M11b | P7.5: Vulkan | implemented (`VK_ANDROID_native_buffer`), needs a host driver that can use imported dmabufs |
+| M12 | P8 (ship): Flatpak for x86_64 + arm64, desktop integration | pending; needs the x86_64 build of the Android libraries |
+| M13 | Vision phases (SystemUI yardstick, several phone instances) | not scheduled |
+| M14 | P10: relevant CTS tests run and tracked | not scheduled |
 
 Decisions, phases, exit tests and the immediate task list: **docs/PLAN.md** (plan of record).
 

@@ -5,6 +5,8 @@ input in a Wayland window (docs/ARCHITECTURE.md). This document is the single pl
 here to a full Android APK opener on Linux. Every decision below is final unless new
 evidence breaks it. If that happens, change this file in the same commit as the code.
 
+> 2026-10-28: the CPU-only route (x86/Rosetta, bundled Mesa llvmpipe, GStreamer MediaPlayer, WPE/WebKitGTK WebView, simulator CPU frames, the corpus harness) was removed. Phase text below that describes it is history (`docs/history/PLAN-phases-P1-P7.md`).
+
 ---
 
 ## 1. Decisions
@@ -20,21 +22,21 @@ evidence breaks it. If that happens, change this file in the same commit as the 
 | D7 | Frame transport | Per window: a pixel file in `/dev/shm` (double-buffered, damage rect in header). Control, input and wakeups go over a **Unix domain socket** (pure-Java `SocketChannel` on the app side, no polling). | Removes busy polling and tearing. Pure Java in the app process. |
 | D8 | Rendering | **Now:** CPU HWUI/Skia from the Robolectric prebuilt; present only damaged regions. **Later (P7):** apklayer's **own Meson build of AOSP's native runtime** (HWUI, Skia, minikin, androidfw, the `libandroid_runtime` JNI subset) from los24 sources, with HWUI's GPU pipelines enabled (`EglManager` + `SkiaOpenGLPipeline` on Mesa EGL/Wayland; `SkiaVulkanPipeline` on Mesa Vulkan). Its source/flag lists come from **one Soong host build in OrbStack** (see P7). | The prebuilt is AOSP's *host* HWUI variant, which compiles only `platform/host` stubs and excludes `SkiaOpenGLPipeline`, `SkiaVulkanPipeline`, `EglManager` and `VulkanManager` (frameworks/base/libs/hwui/Android.bp). GPU HWUI on Linux therefore means compiling HWUI's device sources for Linux ourselves. The same build gives native linux-arm64 (D17). User rule (2026-10-25): AOSP builds are OK **only when absolutely necessary**, run locally on the OrbStack VM. |
 | D9 | Native `.so` in APKs | **ATL's `bionic_translation`**, not libhybris. It loads bionic-linked app `.so` files into a glibc process without an Android system image, builds with Meson, supports x86_64 and aarch64, and is used daily by ATL on real apps. libhybris solves the reverse problem: glibc userlands using Android *vendor HAL/GPU blobs* on Android-kernel phones (Halium: Sailfish, Ubuntu Touch, Droidian). It expects the device's Android `/system`+`/vendor` libraries and focuses on HAL wrappers (gralloc, hwcomposer, camera, sensors). We have no system image, and app NDK libs only need the stable NDK ABI. Alongside it go apklayer **NDK shims** in `bridge/ndk/`: `liblog`, `libandroid` (AAsset*, ANativeWindow*, AConfiguration*), `libEGL`/`libGLESv*` → Mesa, `libOpenSLES`/`libaaudio` → PipeWire. Load the APK's ABI that matches the **app JVM's arch**. No ISA translation. | The proven approach, already built with Meson. JNI is the same standard ABI under HotSpot. APKs almost always ship both arm64-v8a and x86_64. |
-| D10 | GL/Vulkan in apps | `GLSurfaceView`, `SurfaceView` and `TextureView` get a real **EGL surface on a `wl_subsurface`** placed at the view's screen rect, rendered by **Mesa** directly. Vulkan goes the same way via the Mesa Vulkan WSI. | Games and video need real GPU output. Mesa speaks the same GLES/EGL/Vulkan as Android drivers. |
-| D11 | WebView | **WPE WebKit** (`wpe-webkit-2.0` + `wpebackend-fdo` SHM export), rendered into the `WebView`'s canvas by an apklayer shadow of `android.webkit.WebView`. | WPE is built for embedding into a custom renderer, which matches our bitmap composition. WebKitGTK (ATL's choice) is a GTK widget, which doesn't. |
+| D10 | GL/Vulkan in apps | Android's own HWUI/EGL/Vulkan loaders run on the host GPU: our `libapklayer_egl` forwards to the host EGL (GBM platform) with Android's driver extensions, `vulkan.apklayer` to the host Vulkan loader, buffers are our gralloc dmabufs composed by SurfaceFlinger. | Games and video need real GPU output with the same GLES/EGL/Vulkan API as on a device; zero copy where the host driver allows. |
+| D11 | WebView | The original **Chromium WebView provider APK** (`apklayer install webview.apk`, `scripts/webview-setup.sh` once), created through `WebViewFactory` like on a device. | The real implementation, updateable as an APK; the WPE/WebKitGTK stand-in was removed. |
 | D12 | Media / audio | **GStreamer** for everything: `MediaPlayer`, `MediaCodec`/`MediaExtractor` (codec bins), `AudioTrack`/`SoundPool` (appsrc → `pipewiresink`). `ExoPlayer` works through MediaCodec. | One dependency, already on the VM, covers codecs and PipeWire. |
 | D13 | Host services | **xdg-desktop-portal** for everything sandbox-relevant: file chooser (SAF `ACTION_OPEN_DOCUMENT`), `ACTION_VIEW` links (OpenURI), camera, notifications, location. Clipboard via `wl_data_device` in the shell. | Works inside Flatpak (D16) and on every desktop. |
 | D14 | Google services | **microG** (GmsCore + GsfProxy) as a preinstalled, bundled APK running under apklayer itself. | The only redistributable option. Apps bind to it like on a degoogled phone. |
 | D15 | Cross-app | A tiny **`apklayerd`** session daemon (Java, same Robolectric stack) holds the installed-package registry. It routes implicit intents, `bindService` and `ContentResolver` calls between app JVMs over Unix sockets, carrying real **`Parcel` bytes**. No kernel binder. | User-approved "userspace binder-lite". Parcel bytes keep AIDL stubs unmodified. |
 | D16 | Distribution | **Flatpak** (`org.freedesktop.Platform` 24.08, openjdk21 extension; android-all and Robolectric jars inside). A `.deb` later. | Portals and sandboxing for free, and the runtime is the same on every distro. |
-| D17 | Host platforms | **Both x86_64 and arm64 Linux are first-class, fully native targets.** x86_64 works natively from P1, using Robolectric's prebuilt native runtime. Native arm64 arrives in **P7** with apklayer's own native-runtime build (D8). Rosetta/FEX are **not** a product path: the x86_64-JVM-under-Rosetta setup on the Parallels VM is only a development stopgap until P7, and is removed after. | Robolectric publishes no linux-arm64 native runtime, so arm64 needs our own build of the same AOSP native libs. That is one piece of work shared with GPU HWUI (D8). |
+| D17 | Host platforms | **Linux on arm64 today**, on the device build's arm64 libraries; x86_64 follows with an x86_64 build of the same libraries (the universal-runtime step). The CPU-only x86/Rosetta route was removed (2026-10-28): no Rosetta/FEX, no software GL stand-ins. | One real-Android route instead of two. |
 | D18 | Build | **Meson for everything.** C targets (shell, NDK shims) plus Java via Meson `jar()` targets (host, dex2jvm, stubs). Dependencies come from `deps/deps.lock`, fetched once by `scripts/fetch-deps.sh` into `~/.cache/apklayer/deps`. Nothing large goes in git. | User preference (Meson). One build. Reproducible, offline after the first fetch. |
 | D19 | CLI | `apklayer install <apk\|apks\|xapk>`, `apklayer run <pkg\|apk>`, `apklayer list`, `apklayer uninstall <pkg>`. Install converts and caches the DEX, extracts the icon by rendering the launcher icon drawable with the framework, and writes a `.desktop` entry plus an `application/vnd.android.package-archive` MIME handler. | It behaves like a native app installer. |
 | D20 | App data | Per app `~/.local/share/apklayer/apps/<pkg>/` holding `data/` (Context data, cache and files dirs, databases, shared_prefs), `apk/` and `classes.jar`. External storage is `~/.local/share/apklayer/storage/emulated/0` (Android/data scoped). | Survives restarts. Matches Android's layout. |
 | D21 | Split APKs | Accept `.apks`/`.xapk`/`.apkm`. Use the base APK for resources, merge DEX from all splits, and pick ABI/density/locale config splits that match the host. | Most store downloads are splits today. |
 | D22 | Fixes to framework behaviour | Only as **apklayer shadows** (`runtime/host/shadows`, Robolectric's own extension mechanism). Never edit android-all, Robolectric or dex2jvm. Every shadow is listed in docs/PATCHES.md. | This keeps the "no hand patches" principle. Shadows are how Robolectric itself adapts AOSP. |
 | D24 | AOSP builds | **On the OrbStack `ubuntu22-x86` VM, in the user's LineageOS 24 build tree `~/los24` (`breakfast gsi_arm64 userdebug`, its existing `out/`; user, 2026-10-26: "you can also build libs and targets if you need")**. Each build is listed with its justification in docs/AOSP-BUILDS.md before it runs; build only what is needed. Planned: P7.1 (plus P7.3 if JNI signatures mismatch). | User rule. Soong is the only authoritative resolver of AOSP's native module graph (Skia, HWUI, minikin, ICU, HarfBuzz…); re-deriving it by hand would be thousands of lines of guesswork. |
-| D23 | Verification | Every feature lands with a **scripted headless check**: the existing `-Dapklayer.script`/snapshot mechanism, run by `scripts/check.sh` on the Mac (fast) and on the VM (real Wayland). The corpus (P3) gates releases. | The user tests by hand; we must catch regressions first. |
+| D23 | Verification | Every feature lands with a scripted check on a test VM or device with real input and a screenshot (`tests/vm/`, `-Dapklayer.script`), run for the code that changed. | The user tests by hand; we must catch regressions first. |
 
 ---
 
@@ -48,7 +50,7 @@ evidence breaks it. If that happens, change this file in the same commit as the 
                          │ shm frames + socket (D7)                      │
  ┌───────────────────────┴───── app JVM (one per app, D6) ─────┐  ┌──────┴──────── apklayerd (D15) ─────┐
  │ android-all SDK 36 (unmodified) + Robolectric shadows        │  │ package registry · intent routing   │
- │ + apklayer shadows (WebView/WPE, media/GStreamer, portals)   │◄►│ bindService / ContentResolver relay │
+ │ + apklayer shadows (native media/audio/binder, portals)     │◄►│ bindService / ContentResolver relay │
  │ Simulator host: lifecycle, activity stack, windows, input    │  │ (Parcel bytes over Unix sockets)    │
  │ app classes (dex2jvm, cached) · APK .so via bionic_translation│  └─────────────────────────────────────┘
  └──────────────────────────────────────────────────────────────┘
@@ -64,8 +66,8 @@ runtime/host/        Java: simulator/ (vendored, MIT), apklayer/host/ (launcher,
                      input, activity stack, data dirs), apklayer/shadows/, apklayer/cli/, stubs/
 runtime/apklayerd/   Java session daemon                            (P6)
 deps/deps.lock       pinned Maven coordinates + sha256
-scripts/             fetch-deps.sh, check.sh, vm-run.sh
-tests/corpus/        corpus.lock (APK names, versions, sha256), expected snapshots
+scripts/             fetch-deps.sh, staging and build scripts, the services stack
+tests/corpus/        corpus.lock, packages.txt (the F-Droid list; the harness was removed with the CPU route)
 packaging/flatpak/   manifest                                       (P7)
 ```
 
@@ -293,12 +295,7 @@ GPU" and verify there.
 - End-to-end G2/G3 verification **needs a real Vulkan GPU/driver** with compatible dmabuf/modifier import and sync-fd semaphore support. The current Parallels virgl VM cannot supply those capabilities. Do not mark P7.5/Milestone G complete. TextureView canyon pixels/animation/Back and Chromium WebView JavaScript regressions pass with the new loader installed.
 
 ### P7 fallback and x86 counterpart (user, 2026-10-26)
-**Fallback (done):** Robolectric 4.17's own native runtime for arm64 (third party, `scripts/fetch-robolectric-arm64.sh`, THIRD_PARTY.md) as a selectable flavor
-of `bin/apklayer` (`APKLAYER_NATIVE` directory holding `robolectric-nativeruntime-linux-aarch64.jar`, Maven Robolectric and its android-all as in the
-default flavor): uibench runs on the arm64 JVM with no Rosetta, 19 frames, same output size as the x86 baseline. It is CPU rendering (no GPU zero-copy)
-and stays as the fallback while the device-library route is finished. **x86_64 counterpart (deferred: the very last thing, after the tool has been published; user, 2026-10-26):** the tree's own `libandroid_runtime` for the
-Linux x86_64 host (the tree-consistent Robolectric native runtime for x86 hosts), built in ~/los24 (docs/AOSP-BUILDS.md), to replace the
-Rosetta-era x86 library where the tree's framework jar is used.
+**x86_64 counterpart (deferred, user 2026-10-26; now the universal-runtime step):** the tree's own Android libraries built for x86_64 (a second product/output directory in the LineageOS tree, docs/AOSP-BUILDS.md) so x86_64 hosts can run the same route. The earlier arm64-Robolectric fallback flavor and the Rosetta x86 library are gone.
 
 - [ ] NewPipe: the loading spinner (ProgressBar in the middle while content loads) is not shown; revisit (user, 2026-10-27).
 - [ ] NewPipe: one cold start stayed black (window never drew after the mapper loaded; second start drew), and every start logs "CursorWindow: Failed to read row <garbage> from a window with 0 rows" (native CursorWindow read through a shadowed Java one). Look at both (2026-10-27).

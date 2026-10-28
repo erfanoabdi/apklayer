@@ -11,7 +11,7 @@ import java.nio.file.Path;
 
 /**
  * The display's real vsync for the native runtime's Choreographer (PLAN P7). The shell owns the Wayland connection; this
- * relays between it and libnativedisplay (bridge/ndk/libnativedisplay.c), which connects to {@code
+ * relays between it and libnativedisplay, which connects to {@code
  * $XDG_RUNTIME_DIR/apklayer/vsync-<pid>.sock}. Native to Java: a 4-byte request per frame wanted. Java to native: 8-byte
  * records {u32 kind, u32 value}, kind 1 = the output's refresh rate in mHz, 2 = a frame callback of the compositor (ms).
  */
