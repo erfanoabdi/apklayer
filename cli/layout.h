@@ -36,6 +36,7 @@ struct Instance {
     static Instance open(const Layout& layout, const std::string& id);
     std::string logs() const { return stateDir; }
     std::string pidFile() const { return join(stateDir, "stack.pid"); }
+    std::string tmpDir() const { return join(stateDir, "tmp"); }  // java.io.tmpdir of the instance's JVMs
 };
 
 }  // namespace apklayer

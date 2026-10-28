@@ -48,7 +48,7 @@ int main(int argc, char** argv) {
     if (cmd == "exec" && n >= 2) return execTool(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "env") {
         NativeEnv ne = nativeEnv(layout, inst);
-        hostJvmArgs(layout, ne);
+        hostJvmArgs(layout, inst, ne);
         for (const auto& [k, v] : ne.env) printf("%s=%s\n", k.c_str(), v.c_str());
         return 0;
     }

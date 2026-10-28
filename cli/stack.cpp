@@ -223,6 +223,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     for (int pid : waiters) kill(pid, SIGTERM);
     for (const Service& s : running) waitpid(s.pid, nullptr, 0);
     unlink(inst.pidFile().c_str());
+    removeTree(inst.tmpDir());  // the JVMs of this stack are gone: their extracted native runtimes too
     Spawn shell;  // the window shell ends with the stack (one instance per session today)
     shell.argv = {"pkill", "-x", "apklayer-shell"};
     shell.env = currentEnv();

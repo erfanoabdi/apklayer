@@ -115,7 +115,7 @@ std::string installApp(const Layout& l, const Instance& inst, const std::string&
     // describe renders the icon with the device natives, so the services must be up
     NativeEnv ne = nativeEnv(l, inst);
     if (!ensureStack(l, inst)) die("the Android services are not available");
-    std::vector<std::string> argv = hostJvmArgs(l, ne);
+    std::vector<std::string> argv = hostJvmArgs(l, inst, ne);
     argv.insert(argv.end(), {"-Djava.awt.headless=true", "-cp", hostClasspath(l, join(tmp, "classes.jar")), "apklayer.host.Main", "--describe", tmp, join(tmp, "base.apk"), join(tmp, "classes.jar")});
     Spawn d;
     d.argv = argv;

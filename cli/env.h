@@ -14,7 +14,7 @@ struct NativeEnv {
 };
 
 // The JVM command line up to (not including) the app's own options: java, tuning flags, jvm.args, runtime properties. Also sets ANDROID_ROOT & co in env.
-std::vector<std::string> hostJvmArgs(const Layout& layout, NativeEnv& env);
+std::vector<std::string> hostJvmArgs(const Layout& layout, const Instance& instance, NativeEnv& env);
 
 NativeEnv nativeEnv(const Layout& layout, const Instance& instance);
 

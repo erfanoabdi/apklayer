@@ -76,13 +76,16 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     return result;
 }
 
-std::vector<std::string> hostJvmArgs(const Layout& l, NativeEnv& ne) {
+std::vector<std::string> hostJvmArgs(const Layout& l, const Instance& inst, NativeEnv& ne) {
     const std::string& n = l.native;
     std::string nr = join(n, "android-root");
+    makeDirs(inst.tmpDir());
     std::vector<std::string> a = {ne.java, "-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC", "@" + join(l.root, "runtime/host/jvm.args"), "-Drobolectric.offline=true",
                                   "-Drobolectric.dependency.dir=" + l.frameworkDir(), "-Dapklayer.native=" + n, "-Dapklayer.androidlibs=" + join(n, "android-libs"),
                                   "-Drobolectric.windowManager.useRequestedSize=true",
-                                  "-Drobolectric.allowPlatformPermissions=true"};  // system apps (ContactsProvider...) declare platform permissions of their own
+                                  "-Drobolectric.allowPlatformPermissions=true",  // system apps (ContactsProvider...) declare platform permissions of their own
+                                  // Robolectric extracts ~120 MB of native runtime per JVM: into the instance's state directory (disk), emptied when its stack stops
+                                  "-Djava.io.tmpdir=" + inst.tmpDir()};
     if (isDir(join(n, "jdk-patch"))) { a.push_back("--patch-module"); a.push_back("java.base=" + join(n, "jdk-patch")); }  // libcore-only members Android's natives look up
     if (isDir(join(nr, "system/fonts"))) a.push_back("-Drobolectric.nativeruntime.fontdir=" + join(nr, "system/fonts/"));
     std::string res = join(nr, "system/framework/org.lineageos.platform-res.apk");

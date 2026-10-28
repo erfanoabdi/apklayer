@@ -35,7 +35,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     if (!ensureStack(l, inst)) return 1;
     ensureShell(l, inst, ne);
 
-    std::vector<std::string> jvm = hostJvmArgs(l, ne);
+    std::vector<std::string> jvm = hostJvmArgs(l, inst, ne);
     int vdisplay = 0;
     int self = getpid();
     // one virtual display per app window (its own layer stack and sink per launch); pid-based ids cannot collide, and the title identifies instance and
@@ -95,7 +95,7 @@ int runHub(const Layout& l, const Instance& inst) {
     if (flock(lock, LOCK_EX | LOCK_NB) != 0) return 0;
     NativeEnv ne = nativeEnv(l, inst);
     if (!ensureStack(l, inst)) return 1;
-    std::vector<std::string> jvm = hostJvmArgs(l, ne);
+    std::vector<std::string> jvm = hostJvmArgs(l, inst, ne);
     jvm.insert(jvm.end(), {"-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary(), "-cp", hostClasspath(l, ""), "apklayer.host.Main", "--hub"});
     Spawn hub;
     hub.argv = jvm;
