@@ -1,13 +1,13 @@
 # apklayer: rules for every session (read first, also after a context reset)
 
-Goal and plan: `goal.md`, `docs/PLAN.md`. Status and local reference projects: `memory.md`. **A new session starts from `HANDOFF.md`** (ordered milestones to the end).
+Goal and plan: `goal.md`, `docs/PLAN.md`. Status and local reference projects: `STATUS.md`. **A new session starts from `HANDOFF.md`** (ordered milestones to the end).
 This file is the single home of the binding rules; other docs point here instead of repeating them.
 
 ## Builds in `~/los24` (OrbStack VM `ubuntu22-x86`)
 Current authorization (2026-10-27, user): build anything needed in `~/los24` autonomously. This replaces the earlier rule (2026-10-26) to only edit and ask the user to trigger builds.
 - Only incremental builds of `gsi_arm64 userdebug`: `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m <target>`.
 - **NEVER wipe or clean `~/los24/out`** (it took very long to build): no `rm -rf out`, `m clean`/`make clean`/`installclean`/`clobber`, no other product (`lunch`/`breakfast` of anything else), no `OUT_DIR` games, no `git clean`/`repo sync -d` that could remove it.
-- Log each build in `docs/AOSP-BUILDS.md` first. Edit `aosp/` here and run `scripts/sync-aosp.sh "message"` (mirrors into `~/los24/vendor/apklayer`). Install outputs on the VM (`~/android-arm64/lib64`).
+- Log each build in `CHANGELOG.md` ("Build log") first; how-to in `docs/AOSP-BUILDS.md`. Edit `aosp/` here and run `scripts/sync-aosp.sh "message"` (mirrors into `~/los24/vendor/apklayer`). Install outputs on the VM (`~/android-arm64/lib64`).
 - If the authorization is withdrawn: edit and sync only, ask the user to build the named modules, take outputs from `out/` read-only.
 
 ## Running and testing (user rules, repeated complaints)
@@ -20,12 +20,12 @@ Current authorization (2026-10-27, user): build anything needed in `~/los24` aut
 7. VM: host and password live in `tests/vm/local.conf` (untracked; `local.conf.example`), read by `tests/vm/config.sh` / `config.py`; the repo copy on the VM is `~/apklayer`. Use `ssh utm@192.168.64.7` with that password (the VM user has passwordless sudo, `/etc/sudoers.d/90-apklayer-tests`; the tests use `sudo -n`).
 
 ## Before writing or downloading anything
-1. Read `memory.md` "Reference projects on this machine". Robolectric, Mac.apk, android_translation_layer (ATL) and the AOSP tree are all **local**; never clone or download what is there.
+1. Read `STATUS.md` "Reference projects on this machine". Robolectric, Mac.apk, android_translation_layer (ATL) and the AOSP tree are all **local**; never clone or download what is there.
 2. Look for real code to copy or reuse first (those projects, Mesa, AOSP). Write new code only if nothing fits, and say why in the commit message.
 3. Smallest change that works: few edits, small files. Do not redo finished work.
 
 ## Architecture and maintenance
 - One responsibility per file. Shell: `bridge/shell/*.c`; host: `runtime/host/java/apklayer/host/*`; the one device-library stub `bridge/ndk/libselinux.c`, built by `scripts/build-native-arm64.sh`. Do not grow a file past ~600 lines; split.
 - Every deviation from upstream is a thin patch marked "apklayer patch" and listed in `docs/PATCHES.md`; vendored code goes in `docs/THIRD_PARTY.md`.
-- Update `docs/PLAN.md` status and `memory.md` with each step; commit at every step.
+- Keep `STATUS.md` short (current state only); dated entries go to `CHANGELOG.md`, decisions and open work to `docs/PLAN.md`; commit at every step.
 - Use they/them for people whose pronouns are unknown.

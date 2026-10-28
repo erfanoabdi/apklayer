@@ -2,12 +2,12 @@
 
 > Current authorization (2026-10-27): the user asked the assistant to build anything needed in OrbStack `~/los24` autonomously while they sleep. This supersedes older instructions below to ask them to build. Only incremental builds of `gsi_arm64 userdebug`; never clean or wipe `out/`.
 
-You continue a long-running project. Read, in this order: `CLAUDE.md` (rules, binding), `goal.md` (the goal), `memory.md` (status, local reference projects, how to run),
+You continue a long-running project. Read, in this order: `CLAUDE.md` (rules, binding), `goal.md` (the goal), `STATUS.md` (status, local reference projects, how to run),
 `docs/PLAN.md` (the plan; the section "P7.1 GPU route: next steps" and items 8, 8b, 8c are the live work list), `docs/ARCHITECTURE.md`, `docs/PATCHES.md`, `docs/AOSP-BUILDS.md`.
-Then do the milestones below **in this order**, one at a time, committing at every step, updating `docs/PLAN.md` status and `memory.md` as you go. Do not stop between
+Then do the milestones below **in this order**, one at a time, committing at every step, updating `docs/PLAN.md` status and `STATUS.md` as you go. Do not stop between
 milestones; stop only for something only the user can do (an Android build in `~/los24`, see below) and say exactly what to build, then continue with other work meanwhile.
 
-Tool state (2026-10-28): the CLI is the C++ `apklayer` tool (`cli/`, see memory.md); multi-instance (P9) is deferred by the user; stack readiness is the property `apklayer.stack.ready`. Remaining cleanups: files over 600 lines (`ShadowWindowManagerGlobal` is a patched upstream overlay, `Egl.cpp` 656 needs a build-graph change to split), the ninja-replay build scripts, per-run test temp dirs, sandbox before a public release, COMMERCIAL.md terms/CLA/NOTICE.
+Tool state (2026-10-28): the CLI is the C++ `apklayer` tool (`cli/`, see STATUS.md); multi-instance (P9) is deferred by the user; stack readiness is the property `apklayer.stack.ready`. Remaining cleanups: files over 600 lines (`ShadowWindowManagerGlobal` is a patched upstream overlay, `Egl.cpp` 656 needs a build-graph change to split), the ninja-replay build scripts, per-run test temp dirs, sandbox before a public release, COMMERCIAL.md terms/CLA/NOTICE.
 
 Current progress: **Milestone E is active by the user's latest instruction; media B is closed.** Real Binder/media integration is committed in `d72bb04`, and the headless hub/process directory in `8aedf5e`. E1 framework service binding now passes: generated AIDL, native Parcel/Bundle payloads, exported/normal-permission checks, null binding, 20 canceled binds, native death and automatic restart/reconnection, unbind/onDestroy, automatic hub startup, and headless service-only APKs. Native media and GPU regressions pass. **Next: E2 broadcasts**, then E3 providers/observers, E4 activities/results/started services/pending intents, and E5 notifications. Track service breadth gaps in PLAN 8c; do not mark E complete. C/D are outside the current requested scope.
 
@@ -50,4 +50,4 @@ Binding rules (builds in `~/los24`, no waiting/background, cleanup, no manual te
 Deferred beyond H: the x86_64 host libandroid_runtime build and the public release (Flatpak, PLAN P8), instance multiplication for full phones (PLAN P9), SystemUI as a yardstick.
 
 ## Working loop
-Pick the next unfinished milestone item, state the plan in two lines, implement the smallest change, sync Android-side edits and request the exact modules to build (batch several fixes per build), install, run on the VM, verify with real input and an image/log, commit, update `docs/PLAN.md` + `memory.md`, continue. Keep the user informed in short messages when something is verified or blocked, never silently.
+Pick the next unfinished milestone item, state the plan in two lines, implement the smallest change, sync Android-side edits and request the exact modules to build (batch several fixes per build), install, run on the VM, verify with real input and an image/log, commit, update `docs/PLAN.md` + `STATUS.md`, continue. Keep the user informed in short messages when something is verified or blocked, never silently.

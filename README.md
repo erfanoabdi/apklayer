@@ -33,7 +33,7 @@ app.apk ──dex2jvm──> JVM classes ┐
 
 ## Build and run
 
-The Android side comes from a LineageOS tree built once (`gsi_arm64 userdebug`); `docs/AOSP-BUILDS.md` lists the incremental builds and
+The Android side comes from a LineageOS tree built once (`gsi_arm64 userdebug`); `CHANGELOG.md` logs the incremental builds (rules in `docs/AOSP-BUILDS.md`) and
 `aosp/hals/README.md` the modules. The staged native runtime (`~/arm64-native`, `~/android-arm64`) is produced by
 `scripts/collect-android-libs.sh`, `scripts/collect-android-root.sh` and `scripts/build-native-arm64.sh`.
 
@@ -54,7 +54,7 @@ Apps live in `~/.local/share/apklayer/apps/<package>/`. Settings for menu launch
 
 | Path | What |
 |---|---|
-| `goal.md` / `memory.md` / `HANDOFF.md` / `CLAUDE.md` | mission, status and facts, ordered work, the rules for contributors and agents |
+| `goal.md` / `STATUS.md` / `HANDOFF.md` / `CLAUDE.md` | mission, short status, ordered work, the rules for contributors and agents |
 | `docs/PLAN.md` | plan of record: decisions, phases, open work |
 | `docs/ARCHITECTURE.md`, `docs/PATCHES.md`, `docs/THIRD_PARTY.md` | how it works, deviations from upstream, licenses |
 | `runtime/dex2jvm/` | DEX → JVM converter (kksimp/dex2jvm, Apache-2.0, plus our `HostDefaults.java`) |

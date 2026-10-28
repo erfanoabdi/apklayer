@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from vmcapture import capture
 
 vm, password, image_dir = sys.argv[1], sys.argv[2], sys.argv[3]
-# OTR2 asks for an OpenGL ES 3.1 context; a virgl host without compute reports ES 3.0 (`apklayer env` claims 3.2 on such hosts, see memory.md)
+# OTR2 asks for an OpenGL ES 3.1 context; a virgl host without compute reports ES 3.0 (`apklayer env` claims 3.2 on such hosts, see STATUS.md)
 command = 'cd ~/apklayer; ' + ('MESA_GLES_VERSION_OVERRIDE=%s ' % os.environ['MESA_GLES_VERSION_OVERRIDE'] if os.environ.get('MESA_GLES_VERSION_OVERRIDE') else '') + 'python3 -u tests/vm/otr2-run.py'
 proc = subprocess.Popen(['sshpass', '-p', password, 'ssh', vm, command], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
 count, best = 0, 0.0

@@ -56,7 +56,7 @@ for p in sorted(sums):
         elif n in apk: origin, st = apk[n][1], "patched"
         else: origin, st = "-", "unresolved"
     else:
-        origin, st = "(staged from the tree's build outputs, see docs/AOSP-BUILDS.md)", "same"
+        origin, st = "(staged from the tree's build outputs, see CHANGELOG.md)", "same"
         if "/android-all/" in p and p.endswith(".jar"):
             origin, st = "(tree framework with apklayer JNI shim; scripts/build-native-arm64.sh)", "patched"
         if p.startswith("arm64-native/android-root/vendor/etc/") and n in ("audio_policy_volumes.xml", "default_volume_tables.xml"):

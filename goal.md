@@ -50,7 +50,7 @@ Instead:
 - Binder: a userspace driver-like component is acceptable.
 - GUI target: Wayland; test in the Parallels Ubuntu VM (ssh parallels@10.211.55.4).
 - AOSP: the user built LineageOS 24 for apklayer in OrbStack (`~/los24`, `breakfast gsi_arm64 userdebug`,
-  its own `out/`). Build the libs/targets we need there (log each in docs/AOSP-BUILDS.md); do not rebuild
+  its own `out/`). Build the libs/targets we need there (log each in CHANGELOG.md); do not rebuild
   what `out/` already has. Otherwise los24 is the source/prebuilt reference.
 - Prefer local artifacts over network downloads.
 - Git: commit at every step.
