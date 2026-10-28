@@ -38,6 +38,10 @@ Older dated notes (GPU follow-up, TextureView, MC3, Vulkan checkpoints, OTR2, ro
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 
+### 2026-10-28 — libapklayer_egl: temporary probe of the window copy (incremental, authorized)
+- TextureView draws black on the UTM VM although dmabuf sharing between two host contexts works (tests/vm/dmabuf-share.c). To tell a black producer frame from a black consumer sampling, `APKLAYER_EGL_PROBE` logs the centre pixel of the frame before and after the copy in `presentToWindow`. `scripts/orb-build-module.py libapklayer_egl hals/graphics/egl Egl.cpp` (no graph change, no clean). To be removed again.
+- Result: built (three times: probe at info level, at warning level, and an `APKLAYER_EGL_NOFENCE` switch that finishes the GPU work and queues no fence) and installed on the VM; the previous library is `~/libapklayer_egl.so.before-probe` there. Findings are in `docs/PLAN.md` (TextureView). The probe and the switch are env-guarded and stay until the cause is found.
+
 ### 2026-10-28 — Vulkan host-loader frontend (incremental, authorized)
 - Reuse original Android libvulkan and its WSI, adding vulkan.apklayer HAL which delegates device commands to host libvulkan.so.1. Keep both loaders' dispatch state separate through a host-only side table; preserve host handles/vtables. No new Vulkan renderer.
 - Compile existing libvulkan sources affected by driver.h and relink its existing arm64 variant; compile the new HAL with the existing generated EGL toolchain flags (new Android.bp records its reproducible module). No graph regeneration, full dependency rebuild or cleaning. Test original loader enumeration, actual device commands/readback, repeated destruction and truthful lack of Android swapchain support on the current CPU-only driver. Android native-buffer import/sync and hardware presentation remain separate required steps, not claimed by this checkpoint.

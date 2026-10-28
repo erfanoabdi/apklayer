@@ -9,7 +9,7 @@ sys.path.insert(0, 'tests/vm')
 from vmcapture import capture
 from PIL import Image, ImageChops
 images = []
-p = subprocess.Popen(['sshpass', '-p', sys.argv[2], 'ssh', sys.argv[1], 'cd ~/apklayer; python3 -u tests/vm/texture-view.py'],
+p = subprocess.Popen(['sshpass', '-p', sys.argv[2], 'ssh', sys.argv[1], 'cd ~/apklayer; ' + __import__('os').environ.get('TV_ENV', '') + ' python3 -u tests/vm/texture-view.py'],
     stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
 try:
     for line in p.stdout:

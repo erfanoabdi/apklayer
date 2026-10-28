@@ -403,7 +403,16 @@ public final class AppHost implements Runnable {
         }
         ActivityController<? extends Activity> previous = stack.peek();
         if (previous != null) previous.pause();
-        ActivityController<? extends Activity> c = Robolectric.buildActivity(cls, intent).setup();
+        ActivityController<? extends Activity> c = Robolectric.buildActivity(cls, intent).create();
+        if (c.get().isFinishing()) {  // finish() in onCreate (Telegram starts its intro screen so): Android destroys it without start or resume
+            c.destroy();
+            System.out.println("[apklayer] finished in onCreate: " + c.get().getClass().getName());
+            Intent next = ((ShadowApplication) Shadow.extract(RuntimeEnvironment.getApplication())).getNextStartedActivity();  // what it started before (the intro screen)
+            if (next != null) launch(next);
+            else if (previous != null) previous.resume();
+            return;
+        }
+        c.start().postCreate(null).resume().visible().topActivityResumed(true);  // the rest of ActivityController.setup()
         // As in Android, the previous activity is stopped only once an opaque activity covers it;
         // behind a translucent one (dialog-style) it stays paused and visible.
         if (previous != null && !isTranslucent(c.get())) {

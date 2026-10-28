@@ -277,6 +277,16 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
         gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA9 /* GL_DRAW_FRAMEBUFFER */, dstFbo);
         gl<void (*)(int, int, int, int, int, int, int, int, unsigned, unsigned)>("glBlitFramebuffer")(
                 0, 0, w.width, w.height, 0, 0, dst->width, dst->height, 0x4000 /* GL_COLOR_BUFFER_BIT */, 0x2600 /* GL_NEAREST */);
+        if (getenv("APKLAYER_EGL_PROBE")) {  // temporary: what the frame holds before and after the copy
+            gl<void (*)()>("glFinish")();
+            unsigned char before[4] = {0}, after[4] = {0};
+            gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8D40, srcFbo);
+            gl<void (*)(int, int, int, int, unsigned, unsigned, void*)>("glReadPixels")(w.width / 2, w.height / 2, 1, 1, 0x1908, 0x1401, before);
+            gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8D40, dstFbo);
+            gl<void (*)(int, int, int, int, unsigned, unsigned, void*)>("glReadPixels")(dst->width / 2, dst->height / 2, 1, 1, 0x1908, 0x1401, after);
+            ALOGW("probe: window %ux%u center src %d,%d,%d,%d dst %d,%d,%d,%d (buffer %ux%u fourcc 0x%x)", w.width, w.height, before[0], before[1], before[2], before[3],
+                  after[0], after[1], after[2], after[3], dst->width, dst->height, format);
+        }
         gl<void (*)()>("glFlush")();
         auto createSync = host<PFNEGLCREATESYNCKHRPROC>("eglCreateSyncKHR");
         auto dupFence = host<PFNEGLDUPNATIVEFENCEFDANDROIDPROC>("eglDupNativeFenceFDANDROID");
@@ -286,7 +296,10 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
             outFence = dupFence(dpy, sync);
             host<PFNEGLDESTROYSYNCKHRPROC>("eglDestroySyncKHR")(dpy, sync);
         }
-        if (outFence < 0) gl<void (*)()>("glFinish")();
+        if (outFence < 0 || getenv("APKLAYER_EGL_NOFENCE")) {  // (the env test: finish the work here and queue no fence)
+            gl<void (*)()>("glFinish")();
+            if (outFence >= 0) { close(outFence); outFence = -1; }
+        }
         gl<void (*)(int, unsigned*)>("glDeleteFramebuffers")(1, &srcFbo);
         gl<void (*)(int, unsigned*)>("glDeleteFramebuffers")(1, &dstFbo);
         gl<void (*)(int, unsigned*)>("glDeleteTextures")(1, &srcTex);
