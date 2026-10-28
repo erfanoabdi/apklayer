@@ -8,7 +8,7 @@
 #include <stdio.h>
 
 _Thread_local uintptr_t apklayer_bionic_tls[] = {
-    0x5555555555555555, /* tp+2  TLS_SLOT_APP */
+    0,                  /* tp+2  TLS_SLOT_APP: free for apps; Go's runtime keeps its g here and takes any other value for a goroutine (a Go signal handler on a JVM thread then crashed on 0x5555...) */
     0x5555555555555555, /* tp+3  TLS_SLOT_OPENGL */
     0x5555555555555555, /* tp+4  TLS_SLOT_OPENGL_API */
     0x5555555555555555, /* tp+5  TLS_SLOT_STACK_GUARD (constant, as on ATL) */

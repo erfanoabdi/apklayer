@@ -220,7 +220,7 @@ static void trace_pending(JNIEnv *env, const char *where)
     real_table->ExceptionClear(env);
     real_table->Throw(env, ex);
 }
-static void JNICALL w_CallVoidMethodA(JNIEnv *env, jobject o, jmethodID m, const jvalue *a) { real_table->CallVoidMethodA(env, o, m, a); trace_pending(env, "CallVoidMethodA"); }
+static void JNICALL w_CallVoidMethodA(JNIEnv *env, jobject o, jmethodID m, const jvalue *a) { static int first = 1; if (first) { first = 0; fprintf(stderr, "[jni-exc] tracing active\n"); } real_table->CallVoidMethodA(env, o, m, a); trace_pending(env, "CallVoidMethodA"); }
 static void JNICALL w_CallStaticVoidMethodA(JNIEnv *env, jclass c, jmethodID m, const jvalue *a) { real_table->CallStaticVoidMethodA(env, c, m, a); trace_pending(env, "CallStaticVoidMethodA"); }
 static jobject JNICALL w_CallObjectMethodA(JNIEnv *env, jobject o, jmethodID m, const jvalue *a) { jobject r = real_table->CallObjectMethodA(env, o, m, a); trace_pending(env, "CallObjectMethodA"); return r; }
 static jobject JNICALL w_CallStaticObjectMethodA(JNIEnv *env, jclass c, jmethodID m, const jvalue *a) { jobject r = real_table->CallStaticObjectMethodA(env, c, m, a); trace_pending(env, "CallStaticObjectMethodA"); return r; }
