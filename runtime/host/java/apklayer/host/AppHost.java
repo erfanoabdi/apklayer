@@ -187,7 +187,7 @@ public final class AppHost implements Runnable {
         app.getSystemService(android.content.ClipboardManager.class).addPrimaryClipChangedListener(text::onAppClipboardChanged);
         if (java.security.Security.getProvider("AndroidKeyStore") == null) java.security.Security.addProvider(new HostKeyStoreProvider());
         AppEnvironment.installSystemPackage(app);
-        AppEnvironment.installProviders(app);
+        // the manifest providers were created before Application.onCreate (ShadowHostInstrumentation)
         if (System.getProperty("apklayer.webviewprovider") != null) { // Android's RuntimeInit installs a handler that logs and kills the process; Chromium's JniAndroid calls it
             org.robolectric.shadows.ShadowBuild.setType("userdebug"); // a debuggable build: WebView then reads /data/local/tmp/webview-command-line
             Thread.setDefaultUncaughtExceptionHandler((thread, failure) -> { System.out.println("FATAL EXCEPTION: " + thread.getName()); failure.printStackTrace(System.out); System.out.flush(); Runtime.getRuntime().halt(10); });

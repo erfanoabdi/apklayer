@@ -91,9 +91,10 @@ final class HostNetwork {
         WifiManager wifi = app.getSystemService(WifiManager.class);
         if (wifi != null) wifi.setWifiEnabled(next != null && next.wifi());  // deprecated for apps, the shadow still takes it
         Network network = manager.getActiveNetwork();
+        // callbacks arrive from the connectivity service's binder thread after the app has started, never inside registerNetworkCallback or startup: posted, as the app's own code expects
         for (ConnectivityManager.NetworkCallback callback : shadow.getNetworkCallbacks()) {
-            if (next != null && network != null) { callback.onAvailable(network); callback.onCapabilitiesChanged(network, capabilities(next)); }
-            else if (previous != null) callback.onLost(new Network(0));
+            if (next != null && network != null) new Handler(Looper.getMainLooper()).post(() -> { callback.onAvailable(network); callback.onCapabilitiesChanged(network, capabilities(next)); });
+            else if (previous != null) new Handler(Looper.getMainLooper()).post(() -> callback.onLost(new Network(0)));
         }
     }
 

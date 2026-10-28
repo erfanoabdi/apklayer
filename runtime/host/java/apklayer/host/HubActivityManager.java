@@ -24,7 +24,19 @@ final class HubActivityManager implements InvocationHandler {
     private static IActivityManager proxy;
 
     /** The activity manager an app sees: the hub-backed proxy around Robolectric's stand-in once the app is connected to the hub, the stand-in before. */
+    private static boolean attaching;
+
     static synchronized IActivityManager service(IActivityManager standIn) {
+        if (!HubClient.connected() && !attaching && System.getProperty("apklayer.apps") != null && System.getProperty("apklayer.package") != null) {
+            // the stand-in cannot make a PendingIntent (null: Wikipedia and Thunderbird need one in Application.onCreate): the app joins the hub at its first use of the activity manager
+            android.app.Application app = android.app.ActivityThread.currentApplication();
+            if (app != null) {
+                attaching = true;
+                try { HubClient.attach(app); }
+                catch (RuntimeException failure) { System.out.println("[apklayer] hub not available for the activity manager: " + failure); }
+                finally { attaching = false; }
+            }
+        }
         if (!HubClient.connected()) return standIn;
         if (proxy == null)
             proxy = (IActivityManager) Proxy.newProxyInstance(IActivityManager.class.getClassLoader(), new Class<?>[] {IActivityManager.class}, new HubActivityManager(standIn));
@@ -36,6 +48,7 @@ final class HubActivityManager implements InvocationHandler {
             request.writeInt(type); request.writeString(pkg); request.writeString(resultWho); request.writeInt(requestCode); request.writeTypedArray(intents, 0);
             request.writeStringArray(types); request.writeInt(flags); request.writeBundle(options);
         }, reply -> reply.readStrongBinder());
+        if (sender == null && Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] no PendingIntent: type=" + type + " pkg=" + pkg + " requestCode=" + requestCode + " flags=0x" + Integer.toHexString(flags));
         return sender == null ? null : android.content.IIntentSender.Stub.asInterface(sender);
     }
 

@@ -25,8 +25,14 @@ import org.robolectric.shadows.ShadowContextImpl;
 @Implements(className = "android.app.ContextImpl")
 public class ShadowHostContextImpl extends ShadowContextImpl {
     @RealObject private Context real;
+    /** Application.getApplicationContext() is the application from the first line of its onCreate on Android; here the loaded package learns of it later (Wikipedia, Thunderbird pass it on and get null). */
+    @Implementation protected Context getApplicationContext() {
+        Context app = Shadow.directlyOn(real, "android.app.ContextImpl", "getApplicationContext");
+        return app != null ? app : android.app.ActivityThread.currentApplication();
+    }
     @Implementation protected Object getSystemService(String name) {
         Object service = (Object) Shadow.directlyOn(real, "android.app.ContextImpl", "getSystemService", ClassParameter.from(String.class, name));
+        if (Boolean.getBoolean("apklayer.tracesvc")) System.out.println("[apklayer] getSystemService " + name + " -> " + service + " (" + real.getClass().getSimpleName() + ", " + Thread.currentThread().getName() + ")");
         if (service == null && Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] no system service " + name + " for " + real.getPackageName());
         return service;
     }
