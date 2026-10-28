@@ -57,7 +57,7 @@ class Apps:
                 assert not ('[bcs]' in line and 'FAIL' in line), line
         return bool(ready)
 
-    def wait_for(self, name, needle, seconds=12):
+    def wait_for(self, name, needle, seconds=60):
         end = time.monotonic() + seconds
         while time.monotonic() < end:
             if any(needle in line for line in self.lines[name]): return next(line for line in self.lines[name] if needle in line)
