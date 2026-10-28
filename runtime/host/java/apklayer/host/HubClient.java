@@ -26,9 +26,40 @@ public final class HubClient {
         }, reply -> reply.readInt());
         if (pid != android.os.Process.myPid()) throw new IllegalStateException("Hub caller identity mismatch");
         HubPermissionChecker.install();
+        registerPackages(context);
         HubProviders_registerRemote(context);
         System.out.println("[apklayer] hub registered " + context.getPackageName() + " pid=" + pid);
     }
+    /**
+     * The other installed apps as this app's package manager sees them: their package info (components, metadata, permissions) and the intent filters of their
+     * activities and services, so getPackageInfo, getInstalledPackages and resolveActivity answer for them as on a device.
+     */
+    private void registerPackages(Context context) {
+        org.robolectric.shadows.ShadowPackageManager packageManager = org.robolectric.Shadows.shadowOf(context.getPackageManager());
+        java.util.List<String> names = HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.LIST_PACKAGES, request -> {}, reply -> reply.createStringArrayList());
+        int count = 0;
+        for (String name : names) {
+            if (name.equals(context.getPackageName())) continue;
+            try {
+                HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.GET_PACKAGE, request -> request.writeString(name), reply -> {
+                    android.content.pm.PackageInfo info = reply.readTypedObject(android.content.pm.PackageInfo.CREATOR);
+                    if (info == null) return null;
+                    packageManager.installPackage(info);
+                    for (boolean services : new boolean[] {false, true}) for (int n = reply.readInt(); n > 0; n--) {
+                        android.content.ComponentName component = new android.content.ComponentName(name, reply.readString());
+                        for (android.content.IntentFilter filter : reply.createTypedArrayList(android.content.IntentFilter.CREATOR)) {
+                            try { if (services) packageManager.addIntentFilterForService(component, filter); else packageManager.addIntentFilterForActivity(component, filter); }
+                            catch (IllegalArgumentException disabled) { /* a disabled component is not in the package info */ }
+                        }
+                    }
+                    return null;
+                });
+                count++;
+            } catch (RuntimeException failure) { System.out.println("[apklayer] package " + name + " not registered: " + failure); }
+        }
+        System.out.println("[apklayer] packages registered: " + count);
+    }
+
     /** Providers of the other installed apps, registered under their authorities in this app's ContentResolver. */
     private void HubProviders_registerRemote(Context context) {
         java.util.List<String[]> providers = new java.util.ArrayList<>();

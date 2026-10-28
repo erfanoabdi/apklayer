@@ -38,12 +38,34 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
 
 
     /** Apps read their own signing certificate in Application.onCreate (update checks, SoLoader...): every package has one from the first call. */
-    private static android.content.pm.PackageInfo signed(android.content.pm.PackageInfo info, long flags) {
+    private android.content.pm.PackageInfo signed(android.content.pm.PackageInfo info, long flags) {
         if (info == null) return null;
-        if ((flags & PackageManager.GET_SIGNATURES) != 0 && info.signatures == null) info.signatures = HostCertificate.signatures();
-        if ((flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0 && info.signingInfo == null)
-            info.signingInfo = new android.content.pm.SigningInfo(new android.content.pm.SigningDetails(HostCertificate.signatures(), 2, new android.util.ArraySet<>(), null));
+        android.content.pm.Signature[] signatures = HostCertificate.signatures();
+        android.content.pm.Signature fake = fakeSignature(info.packageName);
+        if (fake != null) signatures = new android.content.pm.Signature[] {fake};
+        if ((flags & PackageManager.GET_SIGNATURES) != 0 && (info.signatures == null || info.signatures.length == 0 || fake != null)) info.signatures = signatures;
+        if ((flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0 && (info.signingInfo == null || info.signingInfo.getApkContentsSigners() == null || fake != null))
+        {
+            android.content.pm.SigningInfo signing = new android.content.pm.SigningInfo();  // Robolectric's shadow of SigningInfo keeps the signers itself
+            org.robolectric.Shadows.shadowOf(signing).setSignatures(signatures);
+            info.signingInfo = signing;
+        }
         return info;
+    }
+
+    /**
+     * Signature spoofing for microG, the policy of the LineageOS patches (ComputerEngine.generateFakeSignature): only microG Services (com.google.android.gms) and its
+     * Companion (com.android.vending) are spoofed, with the certificate their manifest names in the "fake-signature" meta-data (Google's, which Google apps and Play
+     * Services clients check). Signatures of installed apps are not verified here, so the meta-data is the only condition.
+     */
+    private android.content.pm.Signature fakeSignature(String packageName) {
+        if (!"com.google.android.gms".equals(packageName) && !"com.android.vending".equals(packageName)) return null;
+        try {
+            android.content.pm.PackageInfo full = super.getPackageInfo(packageName, PackageManager.GET_META_DATA);
+            android.os.Bundle metaData = full == null || full.applicationInfo == null ? null : full.applicationInfo.metaData;
+            String hex = metaData == null ? null : metaData.getString("fake-signature");
+            return hex == null || hex.isEmpty() ? null : new android.content.pm.Signature(hex);
+        } catch (PackageManager.NameNotFoundException | RuntimeException none) { return null; }
     }
 
     @Implementation

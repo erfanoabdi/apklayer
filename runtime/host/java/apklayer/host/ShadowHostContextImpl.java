@@ -75,7 +75,14 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
     // A provider (or any service) in this process asking about its caller: with the hub the caller's package decides, not this app's own grants.
     @Implementation @Override protected int checkPermission(String permission, int pid, int uid) {
         if (hub() && HubClient.connected() && pid != android.os.Process.myPid()) return HubClient.current().checkPermission(pid, permission);
-        return super.checkPermission(permission, pid, uid);
+        int result = super.checkPermission(permission, pid, uid);
+        if (result != android.content.pm.PackageManager.PERMISSION_GRANTED && permission != null && pid == android.os.Process.myPid()) {
+            // an app holds the permissions it declares itself (microG's UnifiedNlp checks its own SERVICE_ADMIN for a call from its own client)
+            try {
+                if (real.getPackageManager().getPermissionInfo(permission, 0).packageName.equals(real.getPackageName())) return android.content.pm.PackageManager.PERMISSION_GRANTED;
+            } catch (android.content.pm.PackageManager.NameNotFoundException undeclared) { /* not a declared permission */ }
+        }
+        return result;
     }
 
     // With the instance hub, broadcasts and receiver registrations run Android's own ContextImpl code (LoadedApk.ReceiverDispatcher, PendingResult...), which ends

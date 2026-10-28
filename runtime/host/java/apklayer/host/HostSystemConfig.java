@@ -82,6 +82,22 @@ final class HostSystemConfig {
         org.robolectric.shadows.ShadowPackageManager shadow = Shadows.shadowOf(app.getPackageManager());
         for (String feature : features) shadow.setSystemFeature(feature, true);
         for (String feature : unavailable) shadow.setSystemFeature(feature, false);
+        // signature spoofing support (the permission microG Services asks for; the spoofing itself is ShadowHostPackageManager.fakeSignature): known to the system and granted at install
+        android.content.pm.PermissionInfo spoofing = new android.content.pm.PermissionInfo();
+        spoofing.name = "android.permission.FAKE_PACKAGE_SIGNATURE";
+        spoofing.packageName = "android";
+        spoofing.protectionLevel = android.content.pm.PermissionInfo.PROTECTION_NORMAL;
+        shadow.addPermissionInfo(spoofing);
+        levels.putIfAbsent(spoofing.name, "normal");
+        for (Map.Entry<String, String> known : levels.entrySet()) {  // the framework's permissions exist for getPermissionInfo (microG's self-check asks for each)
+            if (known.getKey().equals(spoofing.name)) continue;
+            android.content.pm.PermissionInfo info = new android.content.pm.PermissionInfo();
+            info.name = known.getKey();
+            info.packageName = "android";
+            info.protectionLevel = "dangerous".equals(known.getValue()) ? android.content.pm.PermissionInfo.PROTECTION_DANGEROUS
+                    : "signature".equals(known.getValue()) ? android.content.pm.PermissionInfo.PROTECTION_SIGNATURE : android.content.pm.PermissionInfo.PROTECTION_NORMAL;
+            shadow.addPermissionInfo(info);
+        }
         String pkg = app.getPackageName();
         String[] asked;
         try { asked = app.getPackageManager().getPackageInfo(pkg, PackageManager.GET_PERMISSIONS).requestedPermissions; }
@@ -93,7 +109,7 @@ final class HostSystemConfig {
         Set<String> grant = new HashSet<>();
         for (String permission : asked) {
             String level = levels.getOrDefault(permission, "");
-            boolean ok = "normal".equals(level)                                  // normal permissions are granted at install
+            boolean ok = "normal".equals(level) || "dangerous".equals(level)  // normal and dangerous permissions are granted at install: the desktop has no prompts
                     || (system && ("signature".equals(level) || allowed.contains(permission)))  // platform-signed system apps hold signature permissions
                     || defaultGrants.getOrDefault(pkg, Set.of()).contains(permission);
             if (ok && !blocked.contains(permission)) grant.add(permission);

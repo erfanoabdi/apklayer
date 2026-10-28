@@ -278,6 +278,22 @@ final class HubDirectory extends Binder {
                 notifications.cancel(caller, tag, id, all);
                 reply.writeNoException(); return true;
             }
+            case HubProtocol.LIST_PACKAGES -> {
+                caller(); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeStringList(packages.packageNames()); return true;
+            }
+            case HubProtocol.GET_PACKAGE -> {
+                caller(); String name = request.readString(); request.enforceNoDataAvail();
+                reply.writeNoException();
+                android.content.pm.PackageInfo info = packages.packageInfo(name);
+                reply.writeTypedObject(info, 0);
+                if (info != null) for (boolean services : new boolean[] {false, true}) {
+                    var filters = packages.filters(name, services);
+                    reply.writeInt(filters.size());
+                    for (var component : filters.entrySet()) { reply.writeString(component.getKey()); reply.writeTypedList(component.getValue()); }
+                }
+                return true;
+            }
             case HubProtocol.UID_OF_PID -> {
                 caller(); int pid = request.readInt(); request.enforceNoDataAvail();
                 Peer peer = peerByPid(pid);

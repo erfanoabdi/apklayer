@@ -28,9 +28,10 @@ static EGLContext makeContext(void) {
     return c;
 }
 
+static int forceModifier;  /* import with an explicit DRM_FORMAT_MOD_LINEAR (what apklayer's buffers carry) */
 static EGLImage importBo(struct gbm_bo* bo, int* fdOut) {
     int fd = gbm_bo_get_fd(bo);
-    uint64_t mod = gbm_bo_get_modifier(bo);
+    uint64_t mod = forceModifier ? 0 : gbm_bo_get_modifier(bo);
     EGLint a[] = {EGL_WIDTH, W, EGL_HEIGHT, H, EGL_LINUX_DRM_FOURCC_EXT, (EGLint)gbm_bo_get_format(bo), EGL_DMA_BUF_PLANE0_FD_EXT, fd,
                   EGL_DMA_BUF_PLANE0_OFFSET_EXT, 0, EGL_DMA_BUF_PLANE0_PITCH_EXT, (EGLint)gbm_bo_get_stride(bo),
                   EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, (EGLint)(mod & 0xffffffff), EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, (EGLint)(mod >> 32), EGL_NONE};
@@ -94,6 +95,52 @@ static void variant(struct gbm_device* gbm, unsigned usage, const char* name, in
     gbm_bo_destroy(bo);
 }
 
+/* The window present of apklayer: a frame in an ARGB8888 buffer is blitted into an ABGR8888 buffer (glBlitFramebuffer between two imported images), which another
+ * context then samples. */
+static void variantBlit(struct gbm_device* gbm, int external) {
+    struct gbm_bo* srcBo = gbm_bo_create(gbm, W, H, GBM_FORMAT_ARGB8888, GBM_BO_USE_RENDERING);
+    struct gbm_bo* dstBo = gbm_bo_create(gbm, W, H, GBM_FORMAT_ABGR8888, GBM_BO_USE_RENDERING | GBM_BO_USE_LINEAR);
+    if (!srcBo || !dstBo) { printf("SKIP blit: gbm_bo_create failed\n"); return; }
+    EGLContext producer = makeContext(), consumer = makeContext();
+    int f1, f2, f3;
+    eglMakeCurrent(dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, producer);
+    EGLImage srcImg = importBo(srcBo, &f1), dstImg = importBo(dstBo, &f2);
+    GLuint tex[2], fbo[2];
+    glGenTextures(2, tex); glGenFramebuffers(2, fbo);
+    EGLImage imgs[2] = {srcImg, dstImg};
+    for (int i = 0; i < 2; i++) {
+        glBindTexture(GL_TEXTURE_2D, tex[i]); targetTexture(GL_TEXTURE_2D, imgs[i]);
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo[i]);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex[i], 0);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo[0]); glClearColor(0.f, 1.f, 0.f, 1.f); glClear(GL_COLOR_BUFFER_BIT);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo[0]); glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo[1]);
+    glBlitFramebuffer(0, 0, W, H, 0, 0, W, H, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glFlush(); glFinish();
+    unsigned char after[4] = {0}; readCenter(fbo[1], after);
+    eglMakeCurrent(dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, consumer);
+    EGLImage img3 = importBo(dstBo, &f3);
+    GLenum target = external ? GL_TEXTURE_EXTERNAL_OES : GL_TEXTURE_2D;
+    GLuint ctex; glGenTextures(1, &ctex); glBindTexture(target, ctex); targetTexture(target, img3);
+    glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_LINEAR); glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    GLuint outTex, outFbo; glGenTextures(1, &outTex); glBindTexture(GL_TEXTURE_2D, outTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glGenFramebuffers(1, &outFbo); glBindFramebuffer(GL_FRAMEBUFFER, outFbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, outTex, 0);
+    const char* vs = "#version 300 es\nvoid main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(p*2.-1.,0,1);}";
+    const char* fsExt = "#version 300 es\n#extension GL_OES_EGL_image_external_essl3 : require\nprecision mediump float;uniform samplerExternalOES s;out vec4 c;void main(){c=texture(s,gl_FragCoord.xy/256.);}";
+    const char* fs2d = "#version 300 es\nprecision mediump float;uniform sampler2D s;out vec4 c;void main(){c=texture(s,gl_FragCoord.xy/256.);}";
+    GLuint v = glCreateShader(GL_VERTEX_SHADER), f = glCreateShader(GL_FRAGMENT_SHADER), prog = glCreateProgram();
+    glShaderSource(v, 1, &vs, NULL); glCompileShader(v);
+    const char* fsrc = external ? fsExt : fs2d; glShaderSource(f, 1, &fsrc, NULL); glCompileShader(f);
+    glAttachShader(prog, v); glAttachShader(prog, f); glLinkProgram(prog); glUseProgram(prog);
+    glViewport(0, 0, W, H); glActiveTexture(GL_TEXTURE0); glBindTexture(target, ctex);
+    glDrawArrays(GL_TRIANGLES, 0, 3); glFinish();
+    unsigned char got[4] = {0}; readCenter(outFbo, got);
+    printf("%s blit ARGB->ABGR, %s: dst after blit %d,%d,%d,%d; consumer samples %d,%d,%d,%d\n", got[1] > 200 ? "PASS" : "FAIL", external ? "external" : "2D",
+           after[0], after[1], after[2], after[3], got[0], got[1], got[2], got[3]);
+}
+
 int main(void) {
     int drm = open("/dev/dri/renderD128", O_RDWR);
     struct gbm_device* gbm = gbm_create_device(drm);
@@ -110,5 +157,12 @@ int main(void) {
     variant(gbm, GBM_BO_USE_RENDERING | GBM_BO_USE_LINEAR, "linear render buffer, 2D texture", 0, 1);
     variant(gbm, GBM_BO_USE_RENDERING | GBM_BO_USE_LINEAR, "linear render buffer, external texture", 1, 1);
     variant(gbm, GBM_BO_USE_RENDERING | GBM_BO_USE_LINEAR, "linear render buffer, external texture, glFlush only", 1, 0);
+    variantBlit(gbm, 0);
+    variantBlit(gbm, 1);
+    forceModifier = 1;
+    variantBlit(gbm, 0);
+    variantBlit(gbm, 1);
+    variant(gbm, GBM_BO_USE_RENDERING | GBM_BO_USE_LINEAR, "explicit LINEAR modifier, 2D texture", 0, 1);
+    variant(gbm, GBM_BO_USE_RENDERING | GBM_BO_USE_LINEAR, "explicit LINEAR modifier, external texture", 1, 1);
     return 0;
 }

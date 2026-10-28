@@ -41,6 +41,33 @@ final class HubPackages {
     }
     record Receiver(ActivityInfo info, IntentFilter filter) {}
 
+    /** Every installed package's name (what an app's PackageManager is told about). */
+    List<String> packageNames() { return installed().stream().sorted().toList(); }
+
+    /**
+     * The package as the package manager reports it to another app: components, metadata and permissions (signatures are the host's business, ShadowHostPackageManager).
+     * Null when the package cannot be read.
+     */
+    android.content.pm.PackageInfo packageInfo(String name) {
+        PackageParser.Package pkg;
+        try { pkg = get(name); } catch (RuntimeException unreadable) { return null; }
+        if (pkg == null) return null;
+        int flags = PackageManager.GET_ACTIVITIES | PackageManager.GET_SERVICES | PackageManager.GET_RECEIVERS | PackageManager.GET_PROVIDERS
+                | PackageManager.GET_META_DATA | PackageManager.GET_PERMISSIONS | PackageManager.GET_CONFIGURATIONS;
+        return PackageParser.generatePackageInfo(pkg, new int[0], flags, 0L, 0L, null, android.content.pm.pkg.FrameworkPackageUserState.DEFAULT);
+    }
+
+    /** The intent filters of the package's activities (services: {@code services}), by component class name. */
+    java.util.Map<String, List<IntentFilter>> filters(String name, boolean services) {
+        java.util.Map<String, List<IntentFilter>> found = new java.util.LinkedHashMap<>();
+        PackageParser.Package pkg;
+        try { pkg = get(name); } catch (RuntimeException unreadable) { return found; }
+        if (pkg == null) return found;
+        if (services) for (PackageParser.Service service : pkg.services) found.put(service.info.name, service.intents.stream().map(IntentFilter::new).toList());
+        else for (PackageParser.Activity activity : pkg.activities) found.put(activity.info.name, activity.intents.stream().map(IntentFilter::new).toList());
+        return found;
+    }
+
     /** Every provider of every installed package (the manifest's authorities, split on ';'). */
     List<android.content.pm.ProviderInfo> providers() {
         List<android.content.pm.ProviderInfo> found = new ArrayList<>();
