@@ -29,6 +29,12 @@ public class ShadowHostRealLinux extends ShadowLinux {
         return natively("fcntlInt", ClassParameter.from(FileDescriptor.class, fd), ClassParameter.from(int.class, cmd), ClassParameter.from(int.class, arg));
     }
     @Implementation protected int fcntlVoid(FileDescriptor fd, int cmd) { return natively("fcntlVoid", ClassParameter.from(FileDescriptor.class, fd), ClassParameter.from(int.class, cmd)); }
+    /** Robolectric's pread reads the files its own open() made; descriptors here are real: read through a channel at the offset (what Xml.resolvePullParser needs to tell ABX from text). */
+    @Implementation protected int pread(FileDescriptor fd, byte[] bytes, int byteOffset, int byteCount, long offset) throws android.system.ErrnoException {
+        try { return Math.max(0, new java.io.FileInputStream(fd).getChannel().read(java.nio.ByteBuffer.wrap(bytes, byteOffset, byteCount), offset)); }
+        catch (java.io.IOException failure) { throw new android.system.ErrnoException("pread", android.system.OsConstants.EIO, failure); }
+    }
+
     @Implementation protected long lseek(FileDescriptor fd, long offset, int whence) {
         return natively("lseek", ClassParameter.from(FileDescriptor.class, fd), ClassParameter.from(long.class, offset), ClassParameter.from(int.class, whence));
     }

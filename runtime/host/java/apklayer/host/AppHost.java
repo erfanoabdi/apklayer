@@ -179,7 +179,6 @@ public final class AppHost implements Runnable {
         }
         this.shell = shell;
         text.shell = shell;
-        HostSystemConfig.load().apply(app);  // features, privileged-permission allowlist and default grants of the build
         app.getSystemService(android.content.ClipboardManager.class).addPrimaryClipChangedListener(text::onAppClipboardChanged);
         if (java.security.Security.getProvider("AndroidKeyStore") == null) java.security.Security.addProvider(new HostKeyStoreProvider());
         AppEnvironment.installSystemPackage(app);

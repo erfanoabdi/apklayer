@@ -120,6 +120,10 @@ final class HubDirectory extends Binder {
         }
     }
     @Override protected boolean onTransact(int code, Parcel request, Parcel reply, int flags) throws RemoteException {
+        try { return handle(code, request, reply, flags); }
+        catch (RuntimeException failure) { System.out.println("[apklayer-hub] request " + code + " failed: " + failure); throw failure; }
+    }
+    private boolean handle(int code, Parcel request, Parcel reply, int flags) throws RemoteException {
         if (code < FIRST_CALL_TRANSACTION || code > LAST_CALL_TRANSACTION) return super.onTransact(code, request, reply, flags);
         Thread.currentThread().setContextClassLoader(HubDirectory.class.getClassLoader());
         request.enforceInterface(HubProtocol.DESCRIPTOR);

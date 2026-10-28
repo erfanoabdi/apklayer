@@ -146,6 +146,8 @@ final class AppEnvironment {
     }
 
     static void startRuntime(Application app) {
+        HostSystemConfigService.install();
+        HostSystemConfig.load().apply(app);  // features, privileged-permission allowlist and default grants of the build
         if (Boolean.getBoolean("apklayer.debugdata")) {
             SharedPreferences prefs = app.getSharedPreferences("apklayer_probe", 0);
             int launches = prefs.getInt("launches", 0) + 1;

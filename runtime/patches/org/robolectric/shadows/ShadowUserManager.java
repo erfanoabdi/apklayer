@@ -203,6 +203,12 @@ public class ShadowUserManager {
     return userManagerState.userSerialNumbers.get(userHandle.getIdentifier());
   }
 
+  // apklayer patch: the users that exist (the settings provider migrates its settings for each of them at start)
+  @Implementation
+  protected List<UserInfo> getAliveUsers() {
+    return new ArrayList<>(userManagerState.userInfoMap.values());
+  }
+
   // apklayer patch: UserManager.getUserProperties() answers the properties of a full user (the fake user service has none, apps read a profile's properties)
   @Implementation(minSdk = UPSIDE_DOWN_CAKE)
   protected android.content.pm.UserProperties getUserProperties(UserHandle userHandle) {

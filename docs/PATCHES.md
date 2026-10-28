@@ -238,3 +238,5 @@ Opt-in with `APKLAYER_WEBVIEW_PROVIDER=com.android.webview` (provider APK instal
 
 - `runtime/patches/.../ShadowUserManager.java` (copy of the tree's external/robolectric file): `getUserProperties(UserHandle)` returns a default `UserProperties` (the fake user service has none; DocumentsUI reads it).
 - Permissions at app start (`HostSystemConfig`): normal permissions are granted (levels from the framework manifest, `scripts/gen-permission-levels.py`), packages in the build's privapp allowlist are privileged system apps (allowlist plus signature permissions), default-permission lists apply.
+
+- `runtime/patches/.../ShadowActivityThread.java` (copy of the tree file): IPackageManager methods the fake does not know answer a default (null/false/0/empty list) instead of throwing; `ShadowUserManager.getAliveUsers()`; `ShadowHostPackageManager.getPackageUid` reads other apps' uids from info.properties; `ShadowHostRealLinux.pread` reads through a channel; `HostSystemConfigService` registers `system_config` and null proxies for services system apps look up; the hub treats dangerous permissions in a manifest as granted (no prompts on the desktop).

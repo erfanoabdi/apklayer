@@ -16,6 +16,12 @@ public final class Main extends Activity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        // dangerous permissions are asked for at run time, as on a device (the desktop grants what is asked)
+        requestPermissions(new String[] {"android.permission.READ_CONTACTS", "android.permission.WRITE_CONTACTS", "android.permission.READ_USER_DICTIONARY",
+                "android.permission.WRITE_USER_DICTIONARY"}, 1);
+    }
+
+    @Override public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
         new Thread(() -> {
             String what = System.getProperty("hello.sys", "settings");
             try {
@@ -27,6 +33,15 @@ public final class Main extends Activity {
                         Settings.Global.putString(cr, "apklayer_global", "yes");
                         require("yes".equals(Settings.Global.getString(cr, "apklayer_global")), "Settings.Global round trip");
                         require(Settings.Secure.getString(cr, Settings.Secure.ANDROID_ID) != null, "Settings.Secure.ANDROID_ID");
+                    }
+                    case "rawsettings" -> {
+                        Bundle extras = new Bundle();
+                        extras.putString("value", "7");
+                        Bundle put = cr.call(Uri.parse("content://settings"), "PUT_system", "apklayer_raw", extras);
+                        System.out.println("[sys] raw put -> " + put);
+                        Bundle got = cr.call(Uri.parse("content://settings"), "GET_system", "apklayer_raw", null);
+                        System.out.println("[sys] raw get -> " + got);
+                        require(got != null && "7".equals(got.getString("value")), "raw settings call");
                     }
                     case "contacts" -> {
                         ContentValues raw = new ContentValues();
@@ -44,8 +59,16 @@ public final class Main extends Activity {
                         }
                     }
                     case "dictionary" -> {
-                        UserDictionary.Words.addWord(this, "apklayerword", 250, null, null);
+                        ContentValues word = new ContentValues();
+                        word.put(UserDictionary.Words.WORD, "apklayerword");
+                        word.put(UserDictionary.Words.FREQUENCY, 250);
+                        word.put(UserDictionary.Words.LOCALE, "en_US");
+                        word.put(UserDictionary.Words.APP_ID, 0);
+                        Uri inserted = cr.insert(UserDictionary.Words.CONTENT_URI, word);
+                        System.out.println("[sys] word inserted at " + inserted);
+                        require(inserted != null, "word insert");
                         try (Cursor c = cr.query(UserDictionary.Words.CONTENT_URI, new String[] {UserDictionary.Words.WORD}, null, null, null)) {
+                            System.out.println("[sys] words: " + (c == null ? -1 : c.getCount()));
                             boolean found = false;
                             while (c != null && c.moveToNext()) found |= "apklayerword".equals(c.getString(0));
                             require(found, "word found");

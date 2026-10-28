@@ -35,7 +35,7 @@ final class HubPackages {
             Cached old = cache.get(name);
             if (old != null && old.modified == modified && old.size == size) return old.parsed;
             PackageParser.Package parsed = ShadowPackageParser.callParsePackage(apk);
-            if (!name.equals(parsed.packageName)) throw new SecurityException("Installed APK package mismatch");
+            if (!name.equals(parsed.packageName)) throw new SecurityException("Installed APK package mismatch: " + name + " holds " + parsed.packageName);
             cache.put(name, new Cached(modified, size, parsed)); return parsed;
         } catch (IOException failure) { throw new IllegalStateException("Cannot read installed package " + name, failure); }
     }
@@ -159,8 +159,15 @@ final class HubPackages {
             try { definition = RuntimeEnvironment.getApplication().getPackageManager().getPermissionInfo(permission, 0); }
             catch (PackageManager.NameNotFoundException missing) { System.out.println("[apklayer-hub] permission " + permission + " has no definition"); return false; }
         }
-        return (definition.protectionLevel & PermissionInfo.PROTECTION_MASK_BASE) == PermissionInfo.PROTECTION_NORMAL;
+        switch (definition.protectionLevel & PermissionInfo.PROTECTION_MASK_BASE) {
+            case PermissionInfo.PROTECTION_NORMAL: return true;
+            case PermissionInfo.PROTECTION_DANGEROUS: return true;  // the desktop has no permission prompts: what the manifest asks for is granted (HostPortals.requestPermissions)
+            case PermissionInfo.PROTECTION_SIGNATURE: return SYSTEM.privileged.containsKey(name);  // platform-signed system apps (the privileged allowlist)
+            default: return false;
+        }
     }
+
+    private static final HostSystemConfig SYSTEM = HostSystemConfig.load();
 
     void enforceServicePermission(String caller, ServiceInfo service) {
         if (caller.equals(service.packageName) || service.permission == null || service.permission.isEmpty()) return;

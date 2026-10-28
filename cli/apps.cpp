@@ -85,7 +85,9 @@ std::string installApp(const Layout& l, const Instance& inst, const std::string&
     snprintf(pattern, sizeof pattern, "%s/.install.XXXXXX", l.appsDir.c_str());
     if (!mkdtemp(pattern)) die("cannot create a temporary directory in " + l.appsDir);
     std::string tmp = pattern;
-    struct Cleanup { std::string dir; ~Cleanup() { removeTree(dir); } } cleanup{tmp};
+    static std::string pending;  // die() exits without running destructors: the temporary directory goes at exit
+    pending = tmp;
+    std::atexit([] { removeTree(pending); });
 
     std::string reuse;
     for (const std::string& app : listDir(l.appsDir)) {

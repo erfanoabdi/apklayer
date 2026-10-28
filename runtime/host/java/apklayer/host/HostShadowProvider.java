@@ -64,7 +64,19 @@ public final class HostShadowProvider implements ShadowProvider {
             entries.add(Map.entry("android.webkit.WebViewDelegate", ShadowHostWebViewDelegate.class.getName()));
             entries.add(Map.entry("android.webkit.WebViewFactory", ShadowHostWebViewFactory.class.getName()));
         }
+        if (Boolean.getBoolean("apklayer.realsettings") && systemApp("com.android.providers.settings")) {  // opt-in: the provider still fails to start (PLAN)
+ // the tree's SettingsProvider is installed: Settings.* talk to it through the hub like on a device
+            entries.add(Map.entry("android.provider.Settings$System", HostPlainShadows.SettingsSystem.class.getName()));
+            entries.add(Map.entry("android.provider.Settings$Secure", HostPlainShadows.SettingsSecure.class.getName()));
+            entries.add(Map.entry("android.provider.Settings$Global", HostPlainShadows.SettingsGlobal.class.getName()));
+            entries.add(Map.entry("android.provider.Settings$Config", HostPlainShadows.SettingsConfig.class.getName()));
+        }
         return entries;
+    }
+
+    private static boolean systemApp(String packageName) {
+        String apps = System.getProperty("apklayer.apps");
+        return apps != null && new java.io.File(apps, packageName + "/classes.jar").exists();
     }
 
     /** Classes that Robolectric picks the shadow for by a ShadowPicker: ours must be listed here to take part. */

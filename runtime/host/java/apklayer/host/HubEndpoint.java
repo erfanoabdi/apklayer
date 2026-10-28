@@ -22,6 +22,10 @@ final class HubEndpoint extends Binder {
     private final Map<IBinder, ServiceConnection> connections = new HashMap<>();
     HubEndpoint(Context context, int hubPid) { this.context = context; this.hubPid = hubPid; attachInterface(null, HubProtocol.ENDPOINT); }
     @Override protected boolean onTransact(int code, Parcel request, Parcel reply, int flags) throws RemoteException {
+        try { return handle(code, request, reply, flags); }
+        catch (RuntimeException failure) { System.out.println("[apklayer] endpoint request " + code + " failed: " + failure); failure.printStackTrace(System.out); throw failure; }
+    }
+    private boolean handle(int code, Parcel request, Parcel reply, int flags) throws RemoteException {
         if (code < FIRST_CALL_TRANSACTION || code > LAST_CALL_TRANSACTION) return super.onTransact(code, request, reply, flags);
         if (Binder.getCallingPid() != hubPid) throw new SecurityException("Lifecycle caller is not the instance hub");
         request.enforceInterface(HubProtocol.ENDPOINT);
