@@ -73,7 +73,7 @@ try:
                     assert sys.stdin.readline().strip() == 'captured'
                 finally: os.kill(pid, signal.SIGCONT)
                 if captures < 2: continue
-                subprocess.run(['sudo', '-S', '/tmp/uinput-keys', 'key:1'], input=b'1234\n', check=True,
+                subprocess.run(['sudo', '-n', '/tmp/uinput-keys', 'key:1'], check=True,
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 captured = True
     print('OTR2 captured stages:', captures, 'Back returned to depth 0:', any('finished com.dogbytegames.otrnext.OTRNext depth=0' in line for line in seen), flush=True)

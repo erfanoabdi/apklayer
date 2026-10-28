@@ -71,7 +71,7 @@ try:
             if committed and not captured and any('window state active=true' in s for s in seen):
                 print('CAPTURE native MediaCodec result', flush=True)
                 assert sys.stdin.readline().strip() == 'captured', 'capture not acknowledged'
-                subprocess.run(['sudo', '-S', '/tmp/uinput-keys', 'key:1'], input=b'1234\n',
+                subprocess.run(['sudo', '-n', '/tmp/uinput-keys', 'key:1'],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                 captured = True
     text = '\n'.join(seen)

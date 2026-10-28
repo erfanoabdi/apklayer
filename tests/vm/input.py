@@ -54,7 +54,7 @@ def stop():
 
 def keys(*steps):
     print('INPUT ' + ' '.join(steps), flush=True)
-    subprocess.run(['sudo', '-S', '/tmp/uinput-keys', *steps], input=b'1234\n',
+    subprocess.run(['sudo', '-n', '/tmp/uinput-keys', *steps],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
 

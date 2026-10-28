@@ -41,7 +41,7 @@ def stop():
 
 def input_steps(*steps):
     print('INPUT ' + ' '.join(steps), flush=True)
-    run(['sudo', '-S', '/tmp/uinput-keys', *steps], input=b'1234\n',
+    run(['sudo', '-n', '/tmp/uinput-keys', *steps],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
@@ -151,7 +151,7 @@ except BaseException:
     for pid in services.stdout.split():
         Path('/tmp/gpu-maps-' + pid + '.txt').write_text(Path('/proc/' + pid + '/maps').read_text())
         with open('/tmp/gpu-native-' + pid + '.txt', 'wb') as out:
-            subprocess.run(['sudo', '-S', 'gdb', '-batch', '-p', pid, '-ex', 'set pagination off', '-ex', 'thread apply all bt 8', '-ex', 'info sharedlibrary'], input=b'1234\n', stdout=out, stderr=subprocess.STDOUT)
+            subprocess.run(['sudo', '-n', 'gdb', '-batch', '-p', pid, '-ex', 'set pagination off', '-ex', 'thread apply all bt 8', '-ex', 'info sharedlibrary'], stdout=out, stderr=subprocess.STDOUT)
     if proc is not None and proc.poll() is None:
         pids = subprocess.run(['pgrep', '-f', '[a]pklayer.host.Main'], capture_output=True, text=True)
         for pid in pids.stdout.split():

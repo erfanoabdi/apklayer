@@ -62,7 +62,7 @@ try:
                 assert any(('android_swapchain=1' in line and 'dma_buf=1 drm_modifier=1 semaphore_fd=1' in line) or 'android_swapchain=0' in line for line in seen)
                 print('CAPTURE Vulkan probe result', flush=True)
                 assert sys.stdin.readline().strip() == 'captured'
-                subprocess.run(['sudo', '-S', '/tmp/uinput-keys', 'key:1'], input=b'1234\n', check=True,
+                subprocess.run(['sudo', '-n', '/tmp/uinput-keys', 'key:1'], check=True,
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 captured = True
     assert captured and any('finished hello.vulkan.Main depth=0' in line for line in seen)
