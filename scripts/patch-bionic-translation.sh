@@ -453,3 +453,32 @@ new = '''int bionic_kill(pid_t pid, int sig) /* apklayer patch: see scripts/patc
 if 'step 14' not in s and old in s:
     p.write_text(s.replace(old, new, 1))
 PY
+# 15. pthread_sigmask / sigprocmask: a bionic thread cannot block SIGSEGV, SIGBUS, SIGILL or SIGFPE (the JVM answers those; blocked, the kernel kills the whole process on a null access in a Gecko
+#     thread that blocks every signal, with no JVM report). bionic's sigset_t is the kernel's 64-bit mask.
+python3 - "$bt" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1]) / 'libc/libc.c'
+s = p.read_text()
+old = 'int bionic_kill(pid_t pid, int sig)'
+new = '''#define APK_SYNC_SIGNALS ((1UL << (SIGSEGV - 1)) | (1UL << (SIGBUS - 1)) | (1UL << (SIGILL - 1)) | (1UL << (SIGFPE - 1)))
+static int apk_sigmask(int thread, int how, const unsigned long *set, unsigned long *oset) /* apklayer patch: see scripts/patch-bionic-translation.sh step 15 */
+{
+	sigset_t in, out;
+	unsigned long bits;
+	sigemptyset(&in);
+	if (set) {
+		bits = *set & ~APK_SYNC_SIGNALS;
+		memcpy(&in, &bits, sizeof bits);
+	}
+	int r = thread ? pthread_sigmask(how, set ? &in : NULL, oset ? &out : NULL) : sigprocmask(how, set ? &in : NULL, oset ? &out : NULL);
+	if (oset) memcpy(oset, &out, sizeof *oset);
+	return r;
+}
+int bionic_pthread_sigmask(int how, const unsigned long *set, unsigned long *oset) { return apk_sigmask(1, how, set, oset); }
+int bionic_sigprocmask(int how, const unsigned long *set, unsigned long *oset) { return apk_sigmask(0, how, set, oset); }
+
+''' + old
+if 'step 15' not in s and old in s:
+    p.write_text(s.replace(old, new, 1))
+PY
