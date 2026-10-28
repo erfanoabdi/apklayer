@@ -53,36 +53,48 @@ final class HostBattery {
 
     private static State current;
 
+    /** Per app JVM: BatteryManager's properties follow the host (the sticky broadcast is the hub's, see installHub). */
     static void install(Application app) {
-        apply(app, read());
+        applyProperties(app, read());
+        watch(() -> applyProperties(app, read()), "apklayer-battery");
+    }
+
+    /** In the hub: the sticky ACTION_BATTERY_CHANGED every app's registerReceiver(null, filter) gets, and the power connected / disconnected broadcasts. */
+    static void installHub(java.util.function.BiConsumer<Intent, Boolean> send) {
+        publish(send, read());
+        watch(() -> publish(send, read()), "apklayer-hub-battery");
+    }
+
+    private static void watch(Runnable changed, String name) {
         try {
             Process monitor = new ProcessBuilder("udevadm", "monitor", "--udev", "--subsystem-match=power_supply").redirectErrorStream(true).start();
             Thread thread = new Thread(() -> {
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(monitor.getInputStream()))) {
-                    for (String line; (line = in.readLine()) != null; )
-                        if (line.contains("power_supply")) new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> apply(app, read()));
+                    for (String line; (line = in.readLine()) != null; ) if (line.contains("power_supply")) changed.run();
                 } catch (IOException ended) { /* stopped with the JVM */ }
-            }, "apklayer-battery");
+            }, name);
             thread.setDaemon(true);
             thread.start();
             Runtime.getRuntime().addShutdownHook(new Thread(monitor::destroy));
         } catch (IOException noUdev) { System.out.println("[apklayer] battery: no udevadm, the state is read once"); }
     }
 
-    private static synchronized void apply(Application app, State next) {
-        State previous = current;
-        if (next.equals(previous)) return;
-        current = next;
+    private static synchronized void applyProperties(Application app, State next) {
         BatteryManager manager = app.getSystemService(BatteryManager.class);
         org.robolectric.shadows.ShadowBatteryManager shadow = Shadows.shadowOf(manager);
         shadow.setIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY, next.level());
         shadow.setIsCharging(next.status() == BatteryManager.BATTERY_STATUS_CHARGING);
-        Intent sticky = new Intent(Intent.ACTION_BATTERY_CHANGED).putExtra(BatteryManager.EXTRA_PRESENT, next.present()).putExtra(BatteryManager.EXTRA_LEVEL, next.level())
+    }
+
+    private static synchronized void publish(java.util.function.BiConsumer<Intent, Boolean> send, State next) {
+        State previous = current;
+        if (next.equals(previous)) return;
+        current = next;
+        send.accept(new Intent(Intent.ACTION_BATTERY_CHANGED).putExtra(BatteryManager.EXTRA_PRESENT, next.present()).putExtra(BatteryManager.EXTRA_LEVEL, next.level())
                 .putExtra(BatteryManager.EXTRA_SCALE, 100).putExtra(BatteryManager.EXTRA_STATUS, next.status()).putExtra(BatteryManager.EXTRA_PLUGGED, next.plugged())
                 .putExtra(BatteryManager.EXTRA_VOLTAGE, next.voltageMv()).putExtra(BatteryManager.EXTRA_TEMPERATURE, next.tempTenthsC())
-                .putExtra(BatteryManager.EXTRA_HEALTH, BatteryManager.BATTERY_HEALTH_GOOD).putExtra(BatteryManager.EXTRA_TECHNOLOGY, "Li-ion");
-        app.sendStickyBroadcast(sticky);
-        if (previous != null && previous.plugged() == 0 && next.plugged() != 0) app.sendBroadcast(new Intent(Intent.ACTION_POWER_CONNECTED));
-        if (previous != null && previous.plugged() != 0 && next.plugged() == 0) app.sendBroadcast(new Intent(Intent.ACTION_POWER_DISCONNECTED));
+                .putExtra(BatteryManager.EXTRA_HEALTH, BatteryManager.BATTERY_HEALTH_GOOD).putExtra(BatteryManager.EXTRA_TECHNOLOGY, "Li-ion"), true);
+        if (previous != null && previous.plugged() == 0 && next.plugged() != 0) send.accept(new Intent(Intent.ACTION_POWER_CONNECTED), false);
+        if (previous != null && previous.plugged() != 0 && next.plugged() == 0) send.accept(new Intent(Intent.ACTION_POWER_DISCONNECTED), false);
     }
 }

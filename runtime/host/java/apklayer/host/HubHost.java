@@ -14,8 +14,10 @@ public final class HubHost {
         RuntimeEnvironment.getApplication();
         RealBinder.init();
         Path apps = Path.of(System.getProperty("apklayer.apps"));
-        if (!RealBinder.publish(HubProtocol.SERVICE, new HubDirectory(apps)))
+        HubDirectory directory = new HubDirectory(apps);
+        if (!RealBinder.publish(HubProtocol.SERVICE, directory))
             throw new IllegalStateException("Cannot publish instance hub");
+        HostBattery.installHub(directory::sendSystem);
         System.out.println("[apklayer-hub] READY pid=" + android.os.Process.myPid());
         try { new CountDownLatch(1).await(); }
         catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }

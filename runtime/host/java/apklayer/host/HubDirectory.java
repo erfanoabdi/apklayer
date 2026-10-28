@@ -14,6 +14,11 @@ import android.app.IServiceConnection;
 
 /** Instance-owned process directory. Identities come from the kernel Binder caller. */
 final class HubDirectory extends Binder {
+    /** A broadcast from the system itself (battery, power): no sender permissions apply. */
+    void sendSystem(Intent intent, boolean sticky) {
+        Peer system = new Peer(-1, 1000, "android", null, null, true, 1000, null);
+        broadcasts.send(system, intent, null, 0, null, null, null, false, sticky, 0);
+    }
     record Peer(int pid, int uid, String name, IBinder endpoint, IBinder appThread, boolean headless, int appUid, String instance) {}
     private final HubPackages packages;
     private final Map<Integer, Peer> peers = new HashMap<>();

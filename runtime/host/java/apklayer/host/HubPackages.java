@@ -142,7 +142,7 @@ final class HubPackages {
 
     /** Whether the package holds the permission: it declares it itself, or requests a permission whose protection is normal (other grants are not modelled yet). */
     boolean holds(String name, String permission) {
-        if (permission == null || permission.isEmpty()) return true;
+        if (permission == null || permission.isEmpty() || "android".equals(name)) return true;  // the system holds every permission
         PackageParser.Package source = get(name);
         if (source == null) return false;
         if (source.permissions.stream().anyMatch(declared -> permission.equals(declared.info.name))) return true;
