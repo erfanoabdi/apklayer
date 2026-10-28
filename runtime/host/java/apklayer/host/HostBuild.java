@@ -13,6 +13,16 @@ final class HostBuild {
         set("SUPPORTED_32_BIT_ABIS", new String[] {"armeabi-v7a", "armeabi"});
         set("CPU_ABI", "arm64-v8a");
         set("CPU_ABI2", "armeabi-v7a");
+        // not Robolectric's "robolectric": apps detect a test environment by it and skip their native code (AnkiDroid loads its Rust backend only when FINGERPRINT differs)
+        set("MANUFACTURER", "LineageOS");
+        set("BRAND", "lineage");
+        set("MODEL", "Linux desktop");
+        set("DEVICE", "gsi_arm64");
+        set("PRODUCT", "gsi_arm64");
+        set("HARDWARE", "apklayer");
+        set("BOARD", "apklayer");
+        set("FINGERPRINT", "lineage/gsi_arm64/gsi_arm64:16/BP2A.250805.005/apklayer:userdebug/test-keys");
+        set("DISPLAY", "gsi_arm64-userdebug");
     }
 
     private static void set(String field, Object value) {

@@ -18,6 +18,7 @@ public class ShadowHostInstrumentation extends ShadowInstrumentation {
     protected void callApplicationOnCreate(Application app) {
         if (!providersInstalled && System.getProperty("apklayer.package") != null && !Boolean.getBoolean("apklayer.componenthost")) {  // not in the service hosts (the WebView package's own providers abort the renderer host)
             providersInstalled = true;
+            HostBuild.install();  // before the app's own code: it reads Build in Application.onCreate
             AppEnvironment.androidId(app);
             AppEnvironment.installProviders(app);
         }
