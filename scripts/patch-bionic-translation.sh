@@ -409,3 +409,26 @@ new = old + '''		if (!sym) { /* apklayer patch: see scripts/patch-bionic-transla
 if 'step 12' not in s and old in s:
     p.write_text(s.replace(old, new, 1))
 PY
+# 13. A bionic library does not take over SIGSEGV, SIGBUS, SIGILL and SIGFPE: the JVM owns them (implicit null checks, safepoint polls). Gecko's crash handler installed over the JVM's
+#     treated every one of them as a crash and exited with status 11 a few seconds after start. The call succeeds and reports the current action; a crash then ends in the JVM's own report.
+python3 - "$bt" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1]) / 'libc/libc.c'
+s = p.read_text()
+old = '''	struct sigaction goact = {0}, gact = {0};
+	if (act) {'''
+new = '''	struct sigaction goact = {0}, gact = {0};
+	if (act && (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL || sig == SIGFPE)) { /* apklayer patch: see scripts/patch-bionic-translation.sh step 13 */
+		if (oact) {
+			sigaction(sig, NULL, &goact);
+			*oact = (struct bionic_sigaction){0};
+			oact->bsa_handler = goact.sa_handler;
+			oact->sa_flags = goact.sa_flags;
+		}
+		return 0;
+	}
+	if (act) {'''
+if 'step 13' not in s and old in s:
+    p.write_text(s.replace(old, new, 1))
+PY

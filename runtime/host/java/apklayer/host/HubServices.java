@@ -29,7 +29,14 @@ final class HubServices {
     private HubServices() {}
     static boolean external(Context context, Intent intent) {
         String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
-        return target != null && !target.equals(context.getPackageName());
+        if (target == null) return false;
+        if (!target.equals(context.getPackageName())) return true;
+        // a service of the app's own package that runs in its own process (android:process, isolatedProcess: GeckoView's child processes) gets that process, hosted through the hub
+        if (intent.getComponent() == null || Boolean.getBoolean("apklayer.componenthost")) return false;
+        try {
+            android.content.pm.ServiceInfo info = context.getPackageManager().getServiceInfo(intent.getComponent(), 0);
+            return (info.flags & android.content.pm.ServiceInfo.FLAG_ISOLATED_PROCESS) != 0 || (info.processName != null && !info.processName.equals(context.getPackageName()));
+        } catch (android.content.pm.PackageManager.NameNotFoundException | RuntimeException unknown) { return false; }
     }
     static boolean bind(Context context, Intent intent, int flags, Executor executor, ServiceConnection connection) { return bind(context, intent, flags, executor, connection, null); }
     static boolean bind(Context context, Intent intent, int flags, Executor executor, ServiceConnection connection, String instance) {
