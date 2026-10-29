@@ -14,7 +14,9 @@ final class DocumentsCheck implements Check {
             android.content.pm.PackageInfo ui = context.getPackageManager().getPackageInfo("com.android.documentsui", android.content.pm.PackageManager.GET_ACTIVITIES);
             StringBuilder names = new StringBuilder();
             if (ui.activities != null) for (android.content.pm.ActivityInfo a : ui.activities) names.append(a.name.substring(a.name.lastIndexOf('.') + 1)).append(a.exported ? "+" : "-").append(' ');
-            System.out.println("[sys] documentsui activities: " + names);
+            System.out.println("[sys] documentsui activities: " + names + " (array " + (ui.activities == null ? "null" : String.valueOf(ui.activities.length)) + ")");
+            try { System.out.println("[sys] PickActivity info: " + context.getPackageManager().getActivityInfo(new android.content.ComponentName("com.android.documentsui", "com.android.documentsui.picker.PickActivity"), 0).exported); }
+            catch (Exception e) { System.out.println("[sys] PickActivity: " + e); }
         } catch (Exception e) { System.out.println("[sys] documentsui not known: " + e); }
         for (String action : new String[] {Intent.ACTION_OPEN_DOCUMENT, Intent.ACTION_OPEN_DOCUMENT_TREE, Intent.ACTION_CREATE_DOCUMENT}) {
             Intent intent = new Intent(action).setType("*/*");
