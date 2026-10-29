@@ -5,6 +5,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 native="$(realpath "$1")"
+bt="${APKLAYER_BT:-$HOME/bt-arm/bionic_translation/b}"  # an x86_64 machine sets APKLAYER_BT and APKLAYER_ANDROID_LIBS (docs/X86_64.md)
+libs="${APKLAYER_ANDROID_LIBS:-$HOME/android-arm64/lib64}"
 JH="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
@@ -22,12 +24,12 @@ android.database.CursorWindow nativePutNull(JII)Z
 LIST
 cc -shared -fPIC -O2 -Wall -I"$JH/include" -I"$JH/include/linux" -o "$stage/native/linux/aarch64/libandroid_runtime.so" \
     bridge/native/runtime_shim.c bridge/native/media_runtime.c bridge/native/binder_runtime.c bridge/native/app_native.c bridge/native/native_loader.c bridge/native/android_platform.c bridge/native/properties.c bridge/native/paths.c bridge/native/android_stubs.c \
-    -L"$HOME/bt-arm/bionic_translation/b" -ldl_bio -Wl,-rpath,"$HOME/bt-arm/bionic_translation/b"
+    -L"$bt" -ldl_bio -Wl,-rpath,"$bt"
 cp "$stage/native/linux/aarch64/libandroid_runtime.so" "$stage/native/linux/x86_64/libandroid_runtime.so"
 scripts/build-runtime-overlay.sh "$native" "$stage"
 (cd "$stage" && for j in "$native"/aosp/android-all/*.jar "$native"/android-all/*.jar; do zip -q "$j" native/linux/x86_64/libandroid_runtime.so native/linux/aarch64/libandroid_runtime.so; done)
 echo "shim installed in the runtime jar and the framework jars"
 
 # apklayer patch: discard the obsolete whole-library SurfaceTexture stubs.
-[ -f "$HOME/android-arm64/lib64/libnativedisplay.so" ]
+[ -f "$libs/libnativedisplay.so" ]
 sed -i '/^libnativedisplay.so[[:space:]]/d' "$native/share/bionic_translation/cfg.d/bionic_translation.cfg"
