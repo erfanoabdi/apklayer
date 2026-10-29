@@ -58,7 +58,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     makeDirs(join(dir, "data/app/files/mozilla"));
     makeDirs(join(dir, "data/app/cache/mozilla"));
     if (exists(join(dir, "lib/libxul.so"))) {
-        // GeckoView: no GPU process. Its WebRender window is a Surface that has to reach that process, and one that crossed to another JVM is no window (ANativeWindow_fromSurface
+        // GeckoView: layout.frame_rate=60 gives Gecko a software vsync (the Java Choreographer's never reached the compositor: it composed once and the page stayed white). No GPU process. Its WebRender window is a Surface that has to reach that process, and one that crossed to another JVM is no window (ANativeWindow_fromSurface
         // gives null: "Failed to obtain native window from Surface", then MOZ_CRASH(Fallback configurations exhausted)). Gecko reads user.js from the profile, which is made here
         // so that the first start has it too.
         const std::string mozilla = join(dir, "data/app/files/mozilla"), profile = join(mozilla, "apklayer.default");
@@ -68,7 +68,23 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         if (DIR* d = opendir(mozilla.c_str())) {  // every profile there (one made by an earlier start included)
             while (dirent* e = readdir(d)) {
                 const std::string name = e->d_name;
-                if (name.size() > 8 && name.compare(name.size() - 8, 8, ".default") == 0) writeFile(join(join(mozilla, name), "user.js"), "user_pref(\"layers.gpu-process.enabled\", false);\n" + getenvOr("APKLAYER_GECKO_PREFS", ""));
+                if (name.size() > 8 && name.compare(name.size() - 8, 8, ".default") == 0) {
+                    // Gecko writes user.js prefs back into prefs.js on exit: drop the ones this launcher owns so an earlier run's cannot linger
+                    const std::string prefs = join(join(mozilla, name), "prefs.js");
+                    if (auto text = readFile(prefs)) {
+                        std::string kept;
+                        size_t at = 0;
+                        while (at < text->size()) {
+                            size_t eol = text->find('\n', at); if (eol == std::string::npos) eol = text->size();
+                            std::string line = text->substr(at, eol - at);
+                            bool own = false;
+                            for (const char* k : {"\"gfx.", "\"layers.", "\"layout.frame_rate", "\"logging.", "\"webgl."}) if (line.find(k) != std::string::npos) own = true;
+                            if (!own) kept += line + "\n";
+                            at = eol + 1;
+                        }
+                        writeFile(prefs, kept);
+                    }
+                    writeFile(join(join(mozilla, name), "user.js"), "user_pref(\"layers.gpu-process.enabled\", false);\nuser_pref(\"layout.frame_rate\", 60);\n" + getenvOr("APKLAYER_GECKO_PREFS", "")); }
             }
             closedir(d);
         }
