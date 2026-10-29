@@ -376,6 +376,8 @@ public final class AppHost implements Runnable {
         } catch (ClassNotFoundException | NullPointerException | android.content.pm.PackageManager.NameNotFoundException e) {
             if (HostPortals.open(intent)) return;
             if (HostPortals.requestPermissions(intent, request == null ? -1 : request.requestCode, stack.peek().get())) return;
+            // the Storage Access Framework pickers belong to the installed DocumentsUI (through the hub); the desktop's file dialog answers only when no installed app does
+            if (HostPortals.isPicker(intent) && HubActivityClient.route(intent, wantsResult ? stack.peek().get() : null, intent)) return;
             Intent picked = HostPortals.pick(intent);
             if (picked != null || HostPortals.isPicker(intent)) { // a desktop file dialog answers the document picker
                 if (wantsResult) ((ShadowActivity) Shadow.extract(stack.peek().get()))
@@ -414,7 +416,10 @@ public final class AppHost implements Runnable {
         taskRootBuilding = bottom;
         HostRoles.install();
         HostGeckoDiag.probeNetwork();
-        ActivityController<? extends Activity> c = Robolectric.buildActivity(cls, intent).create();
+        ActivityController<? extends Activity> built = Robolectric.buildActivity(cls, intent);
+        String caller = intent.getStringExtra(HubActivityClient.CALLER);  // the app that started it for a result (Activity.getCallingPackage)
+        if (caller != null) ((ShadowActivity) Shadow.extract(built.get())).setCallingPackage(caller);
+        ActivityController<? extends Activity> c = built.create();
         HostGeckoDiag.dumpSurfaces(c.get());
         taskRootBuilding = false;
         if (bottom) taskRoot = c.get();

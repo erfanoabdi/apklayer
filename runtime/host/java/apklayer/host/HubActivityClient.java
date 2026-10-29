@@ -18,6 +18,9 @@ final class HubActivityClient {
     static volatile BiConsumer<Intent, ResultReceiver> starter;
     private static ResultReceiver launchReceiver;
 
+    /** Intent extra naming the app that started an activity for a result (AppHost sets it as the activity's calling package). */
+    static final String CALLER = "apklayer.callingPackage";
+
     static boolean enabled() { return HubClient.connected(); }
 
     /** Sends the intent to the hub; false when the hub is not used or no installed app handles it. */
@@ -25,6 +28,7 @@ final class HubActivityClient {
         if (!enabled()) return false;
         ResultReceiver receiver = null;
         if (requester != null) {
+            intent.putExtra(CALLER, requester.getPackageName());
             ShadowActivity shadow = Shadow.extract(requester);
             receiver = new ResultReceiver(new Handler(Looper.getMainLooper())) {
                 @Override protected void onReceiveResult(int code, Bundle data) {
