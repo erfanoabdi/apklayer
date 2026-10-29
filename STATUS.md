@@ -2,6 +2,13 @@
 
 Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan: `docs/PLAN.md`. History: `CHANGELOG.md`.
 
+## 2026-10-29 night summary
+- Fennec starts, loads pages, content processes run; page area still white (WebRender gets no transaction): see docs/PLAN.md item 1 and the tools in tests/vm (fennec-view.sh, egl-trace.bt).
+- tests/apps/hello-system + tests/vm/system-apps.sh: 10 of 11 system-service checks pass (media open). Hub groups rerun: pass.
+- Conversations starts; Device Info HW and Puzzles are licence/anti-piracy gated; Joplin: JS idle, white window (the exit abort was a red herring, fixed anyway, bt step 17).
+- x86_64: docs/X86_64.md, scripts/stage-x86_64.sh (libs, root, bt, shards); natives compile for x86_64. The x86_64 build of vendor/apklayer modules was still running in ~/los24 (log ~/apklayer-x86-build.log in OrbStack); when done rerun scripts/stage-x86_64.sh, then `m libeffectconfig libcodec2_hidl_plugin_stub` for x86_64. Afterwards check arm64 with a no-op `m libapklayer_egl`.
+- Not started: real keystore2/KeyMint, Google apps retest, OpenTTD, Unciv/Lemuroid/Rocks black windows.
+
 ## NEXT TASKS (2026-10-28 night: items 1-7 of the previous list were worked through; what is left is below)
 0. **Done this morning, not in the list below**: DocumentsUI works (volumes: Internal storage = primary, Home, Linux root per instance; opening a file in another app with its grant; `tests/vm/files.sh`, `tests/vm/view.sh`). Open from it: which volumes ordinary apps reach, storage permission rules, the real MediaProvider (`docs/PLAN.md` "Storage volumes").
 1. **Corpus** (`tests/corpus/results.md`: 14 of 20 apps reach a steady GPU picture, up from 11): fix the remaining causes listed in `docs/PLAN.md` (Nextcloud, Telegram, WhatsApp, OTR2 under the WebView route, WireGuard, drminfo); add one app per engine (Unity, UE4, Godot, cocos2d-x, Flutter) when APKs are available.
