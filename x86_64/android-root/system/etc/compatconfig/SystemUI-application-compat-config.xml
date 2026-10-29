@@ -1,0 +1,2 @@
+<?xml version='1.0' encoding='utf-8'?>
+<config><compat-change enableAfterTargetSdk="36" id="270553691" name="CHECK_SIZE_OF_INFLATED_CUSTOM_VIEWS" /></config>

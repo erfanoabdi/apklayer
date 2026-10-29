@@ -6,9 +6,13 @@ Binary inputs apklayer needs on a new machine, taken from the working arm64 setu
 |---|---|---|
 | `arm64/android-libs/lib64/` | Android's own arm64 libraries (the closure of `deps/android-libs.list`) and apklayer's HAL modules (`libapklayer_*.so`, incl. keymint/keystore2, patched libbinder with no kernel security context) | `~/android-arm64/lib64` (`APKLAYER_ANDROID_LIBS`) |
 | `arm64/android-root/` | the files Android reads at fixed paths: `system/etc` (permissions, sysconfig, compat config, vintf manifest), fonts, `apex/` i18n and tzdata, `props/system_build.prop`, apklayer's vendor manifests | `<native>/android-root` |
+| `x86_64/android-libs/lib64/` | the same set built for x86_64 from the user's `gsi_x86_64` tree (438 libraries, all x86-64 ELF; `libs-copied.txt` lists them) with the apklayer modules, patched libbinder/libnativehelper/libmedia_jni/..., keymint and keystore2 | `APKLAYER_ANDROID_LIBS` on an x86_64 machine |
+| `x86_64/android-root/` | the same Android root for the x86_64 product (the x86 build's `props/system_build.prop`) | `<native>/android-root` |
 | `common/Robolectric_all.jar` | Robolectric with the apklayer-tree framework natives (Java, same for every CPU) | `<native>/aosp/Robolectric_all.jar` |
 | `common/android-all-16-robolectric-13921718.jar` | Robolectric's instrumented Android framework | `<native>/aosp/android-all/` (also as `android-all-current-robolectric-r0.jar`) |
 | `common/javac-shards/` | `framework.jar0..N` javac outputs of the framework: `scripts/build-native.sh` lists the `@CriticalNative` methods from them | `build-native.sh <native> <shards> ...` |
+
+`system/lib64/extractors/*` are relative symlinks to `../../../../android-libs/<lib>`: they resolve when `<native>/android-libs` links to the libraries directory (`build-native.sh` makes that link).
 
 Files over 50 MB are split into 45 MB parts: run `sh join-parts.sh` once after cloning (it verifies `SHA256SUMS-split`).
 

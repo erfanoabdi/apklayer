@@ -1,0 +1,2 @@
+<?xml version='1.0' encoding='utf-8'?>
+<config><compat-change enableAfterTargetSdk="29" id="141600225" name="RESTRICT_STORAGE_ACCESS_FRAMEWORK" /></config>

@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2022 The Android Open Source Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+-->
+<!-- System packages to preinstall on all devices with handheld_system, per user type.
+     Documentation at frameworks/base/data/etc/preinstalled-packages-platform.xml
+
+     The packages below are added to $PRODUCT_PACKAGES in
+     build/make/target/product/handheld_system.mk.
+-->
+<config>
+    <!-- Files (DocumentsUI) -->
+    <install-in-user-type package="com.android.documentsui">
+        <install-in user-type="SYSTEM" />
+        <install-in user-type="FULL" />
+        <install-in user-type="PROFILE" />
+        <do-not-install-in user-type="android.os.usertype.profile.CLONE" />
+    </install-in-user-type>
+
+    <!--  Printer (BuiltInPrintService) (Does not show on launcher but shows on the share sheet) -->
+    <install-in-user-type package="com.android.bips">
+        <install-in user-type="FULL" />
+        <install-in user-type="android.os.usertype.profile.CLONE" />
+        <install-in user-type="android.os.usertype.profile.MANAGED" />
+        <install-in user-type="android.os.usertype.profile.PRIVATE" />
+    </install-in-user-type>
+
+    <!--  Print Spooler (PrintSpooler), part of the print framework -->
+    <install-in-user-type package="com.android.printspooler">
+        <install-in user-type="FULL" />
+        <install-in user-type="android.os.usertype.profile.CLONE" />
+        <install-in user-type="android.os.usertype.profile.MANAGED" />
+        <install-in user-type="android.os.usertype.profile.PRIVATE" />
+    </install-in-user-type>
+
+    <!--  Print Recommendation Service (PrintRecommendationService), part of the print framework -->
+    <install-in-user-type package="com.android.printservice.recommendation">
+        <install-in user-type="FULL" />
+        <install-in user-type="android.os.usertype.profile.CLONE" />
+        <install-in user-type="android.os.usertype.profile.MANAGED" />
+        <install-in user-type="android.os.usertype.profile.PRIVATE" />
+    </install-in-user-type>
+
+    <!--  Blocked Number Provider (BlockedNumberProvider) -->
+    <install-in-user-type package="com.android.providers.blockednumber">
+        <install-in user-type="FULL" />
+        <install-in user-type="android.os.usertype.profile.MANAGED" />
+    </install-in-user-type>
+
+    <!-- Contactspicker App (ContactsPicker), install in full users, and profiles, except clone profile,
+    as the parent profile's contact picker will be used in clone profile. -->
+    <install-in-user-type package="com.android.contactspicker">
+        <install-in user-type="FULL" />
+        <install-in user-type="android.os.usertype.profile.MANAGED" />
+        <install-in user-type="android.os.usertype.profile.PRIVATE" />
+        <do-not-install-in user-type="android.os.usertype.profile.CLONE" />
+    </install-in-user-type>
+
+    <!-- Certificate Installer (CertInstaller) -->
+    <install-in-user-type package="com.android.certinstaller">
+        <install-in user-type="FULL" />
+        <install-in user-type="android.os.usertype.profile.MANAGED" />
+    </install-in-user-type>
+
+    <!-- EyeDropper App that implements a public API in the form of an intent action. -->
+    <install-in-user-type package="com.android.eyedropper">
+        <install-in user-type="FULL" />
+        <install-in user-type="android.os.usertype.profile.CLONE" />
+        <install-in user-type="android.os.usertype.profile.MANAGED" />
+        <install-in user-type="android.os.usertype.profile.PRIVATE" />
+    </install-in-user-type>
+
+    <!-- Telecom runs as a singleton in system_server but needs to be installed in other users as
+    well so that other users can access to manage calling. -->
+    <install-in-user-type package="com.android.server.telecom">
+        <install-in user-type="SYSTEM" />
+        <install-in user-type="FULL" />
+        <install-in user-type="PROFILE" />
+    </install-in-user-type>
+
+    <!-- VpnDialogs App, install in full users, and profiles -->
+    <install-in-user-type package="com.android.vpndialogs">
+        <install-in user-type="FULL" />
+        <install-in user-type="android.os.usertype.profile.CLONE" />
+        <install-in user-type="android.os.usertype.profile.MANAGED" />
+        <install-in user-type="android.os.usertype.profile.PRIVATE" />
+    </install-in-user-type>
+
+    <!-- Bluetooth MIDI Service (BluetoothMidiService) -->
+   <install-in-user-type package="com.android.bluetoothmidiservice">
+        <install-in user-type="FULL" />
+        <install-in user-type="android.os.usertype.profile.CLONE" />
+        <install-in user-type="android.os.usertype.profile.MANAGED" />
+        <install-in user-type="android.os.usertype.profile.PRIVATE" />
+    </install-in-user-type>
+
+    <!-- ExternalStorageProvider implements DocumentsProvider for external storage. -->
+    <install-in-user-type package="com.android.externalstorage">
+        <install-in user-type="SYSTEM" />
+        <install-in user-type="FULL" />
+        <install-in user-type="android.os.usertype.profile.MANAGED" />
+        <install-in user-type="android.os.usertype.profile.PRIVATE" />
+    </install-in-user-type>
+
+    <!-- Telephony -->
+    <install-in-user-type package="com.android.phone">
+        <install-in user-type="SYSTEM" />
+        <install-in user-type="FULL" />
+        <install-in user-type="android.os.usertype.profile.MANAGED" />
+        <install-in user-type="android.os.usertype.profile.SUPERVISING" />
+        <install-in user-type="android.os.usertype.profile.PRIVATE" />
+        <install-in user-type="android.os.usertype.profile.CLONE" />
+    </install-in-user-type>
+
+    <!-- Telephony Provider (TelephonyProvider) -->
+    <install-in-user-type package="com.android.providers.telephony">
+        <install-in user-type="SYSTEM" />
+        <install-in user-type="FULL" />
+        <install-in user-type="PROFILE" />
+    </install-in-user-type>
+
+    <!-- Manages CBRS and other opportunistic networks (OpportunisticNetworkService) -->
+    <install-in-user-type package="com.android.ons">
+        <!-- Needed for system services -->
+        <install-in user-type="SYSTEM" />
+        <!-- Needed for all interactive users -->
+        <install-in user-type="FULL" />
+        <!-- Needed for profiles that manage their own network connections -->
+        <install-in user-type="android.os.usertype.profile.MANAGED" />
+        <install-in user-type="android.os.usertype.profile.PRIVATE" />
+    </install-in-user-type>
+
+    <!-- Shared storage backup agent used by adb backup (SharedStorageBackup) -->
+    <install-in-user-type package="com.android.sharedstoragebackup">
+        <install-in user-type="FULL" />
+        <install-in user-type="android.os.usertype.profile.MANAGED" />
+    </install-in-user-type>
+
+    <!-- Fused location service (FusedLocation) -->
+    <install-in-user-type package="com.android.location.fused">
+        <install-in user-type="SYSTEM" />
+        <install-in user-type="FULL" />
+        <install-in user-type="android.os.usertype.profile.MANAGED" />
+        <install-in user-type="android.os.usertype.profile.PRIVATE" />
+        <install-in user-type="android.os.usertype.profile.CLONE" />
+    </install-in-user-type>
+
+    <!-- Local HTTP proxy server (ProxyHandler) -->
+    <install-in-user-type package="com.android.proxyhandler">
+        <install-in user-type="SYSTEM" />
+    </install-in-user-type>
+
+    <!-- PAC Processor (PacProcessor) -->
+    <install-in-user-type package="com.android.pacprocessor">
+        <install-in user-type="SYSTEM" />
+    </install-in-user-type>
+
+    <!-- Basic Dreams (BasicDreams) -->
+    <install-in-user-type package="com.android.dreams.basic">
+        <install-in user-type="FULL" />
+    </install-in-user-type>
+
+    <!-- Credential Manager (CredentialManager) -->
+    <install-in-user-type package="com.android.credentialmanager">
+        <install-in user-type="FULL" />
+        <install-in user-type="android.os.usertype.profile.MANAGED" />
+        <install-in user-type="android.os.usertype.profile.PRIVATE" />
+        <install-in user-type="android.os.usertype.profile.CLONE" />
+    </install-in-user-type>
+
+    <!-- Managed Provisioning (ManagedProvisioning) -->
+    <install-in-user-type package="com.android.managedprovisioning">
+        <install-in user-type="SYSTEM" />
+        <install-in user-type="FULL" />
+        <install-in user-type="android.os.usertype.profile.MANAGED" />
+    </install-in-user-type>
+
+    <!-- Download Provider UI(DownloadProviderUi) -->
+    <install-in-user-type package="com.android.providers.downloads.ui">
+        <install-in user-type="FULL" />
+        <install-in user-type="android.os.usertype.profile.MANAGED" />
+        <install-in user-type="android.os.usertype.profile.PRIVATE" />
+    </install-in-user-type>
+
+    <!-- Key Chain app (KeyChain) -->
+    <install-in-user-type package="com.android.keychain">
+        <install-in user-type="SYSTEM" />
+        <install-in user-type="FULL" />
+        <install-in user-type="PROFILE" />
+    </install-in-user-type>
+
+    <!-- System Tracing (Traceur) -->
+    <install-in-user-type package="com.android.traceur">
+        <install-in user-type="FULL" />
+    </install-in-user-type>
+
+    <!-- Trade-in Mode (DeviceDiagnostics), installed in FULL and SYSTEM to ensure that it is
+         available in any potential scenario where an operator may need to assess hardware
+         health. -->
+    <install-in-user-type package="com.android.devicediagnostics">
+        <install-in user-type="SYSTEM" />
+        <install-in user-type="FULL" />
+    </install-in-user-type>
+
+    <!-- MtpDocumentsProvider (MtpService) -->
+    <install-in-user-type package="com.android.mtp">
+        <install-in user-type="SYSTEM" />
+        <install-in user-type="FULL" />
+        <install-in user-type="android.os.usertype.profile.MANAGED" />
+    </install-in-user-type>
+
+    <!-- Camera extensions proxy service (CameraExtensionsProxy)  -->
+    <install-in-user-type package="com.android.cameraextensions">
+        <install-in user-type="SYSTEM" />
+        <install-in user-type="FULL" />
+        <install-in user-type="PROFILE" />
+    </install-in-user-type>
+
+    <!-- Calendar Provider (CalendarProvider) -->
+    <install-in-user-type package="com.android.providers.calendar">
+        <install-in user-type="FULL" />
+        <install-in user-type="PROFILE" />
+    </install-in-user-type>
+
+    <!-- EasterEgg. Everyone (except the headless system user) loves the easter egg. -->
+    <install-in-user-type package="com.android.egg">
+        <install-in user-type="FULL" />
+    </install-in-user-type>
+
+    <!-- DeviceAsWebcam allows the user to use a device camera as USB webcam.
+         Currently it only supports full system users. Non-system users and HSUM
+         devices are currently not supported. -->
+    <!-- TODO(b/382417919): Make DeviceAsWebcam work well with non-system users. -->
+    <install-in-user-type package="com.android.DeviceAsWebcam">
+        <install-in user-type="android.os.usertype.full.SYSTEM" />
+    </install-in-user-type>
+</config>

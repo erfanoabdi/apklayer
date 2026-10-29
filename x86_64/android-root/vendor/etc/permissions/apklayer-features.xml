@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What an apklayer device declares (the vendor half of Android's feature list); only what the host layers really provide. -->
+<permissions>
+    <feature name="android.hardware.touchscreen" />
+    <feature name="android.hardware.faketouch" />
+    <feature name="android.hardware.screen.landscape" />
+    <feature name="android.hardware.screen.portrait" />
+    <feature name="android.hardware.audio.output" />
+</permissions>
