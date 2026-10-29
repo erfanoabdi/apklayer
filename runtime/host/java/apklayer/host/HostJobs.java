@@ -72,7 +72,7 @@ final class HostJobs {
                 try {
                     if (IJobService.Stub.asInterface(binder) == null) { System.out.println("[apklayer] job " + job.getId() + ": the service gave " + binder + " (" + (binder == null ? null : binder.getClass()) + "), not an IJobService"); return; }
                     JobParameters parameters = new JobParameters(callback, null, job.getId(), job.getExtras(), job.getTransientExtras(), job.getClipData(), job.getClipGrantFlags(),
-                            false, job.isExpedited(), job.isUserInitiated(), null, null, null);
+                            false, job.isExpedited(), job.isUserInitiated(), null, null, job.getRequiredNetwork() != null ? app.getSystemService(android.net.ConnectivityManager.class).getActiveNetwork() : null);  // the network that meets the constraint (DownloadProvider fetches through it)
                     IJobService.Stub.asInterface(binder).startJob(parameters);
                     if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] job " + job.getId() + " started on " + service.flattenToShortString());
                 } catch (android.os.RemoteException | RuntimeException failure) { System.out.println("[apklayer] job " + job.getId() + " could not start: " + failure); }
