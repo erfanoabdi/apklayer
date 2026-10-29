@@ -23,17 +23,20 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
     /** The other installed apps' Android uids (info.properties of every installed app): services of another app check a caller's package against its uid. */
     @Implementation
     public int getPackageUid(String packageName, int flags) throws PackageManager.NameNotFoundException {
-        try { return super.getPackageUid(packageName, flags); }
-        catch (PackageManager.NameNotFoundException unknown) {
-            String apps = System.getProperty("apklayer.apps");
-            if (apps != null) {
-                java.io.File info = new java.io.File(new java.io.File(apps, packageName), "info.properties");
-                try (java.io.BufferedReader in = new java.io.BufferedReader(new java.io.FileReader(info))) {
-                    for (String line; (line = in.readLine()) != null; ) if (line.startsWith("uid=")) return Integer.parseInt(line.substring(4).trim());
-                } catch (java.io.IOException | NumberFormatException none) { /* not installed */ }
-            }
-            throw unknown;
+        PackageManager.NameNotFoundException unknown = null;
+        int known = -1;
+        try { known = super.getPackageUid(packageName, flags); }
+        catch (PackageManager.NameNotFoundException notFound) { unknown = notFound; }
+        if (known >= 0) return known;  // a package registered from the hub carries no uid (-1): its info.properties has it
+        String apps = System.getProperty("apklayer.apps");
+        if (apps != null) {
+            java.io.File info = new java.io.File(new java.io.File(apps, packageName), "info.properties");
+            try (java.io.BufferedReader in = new java.io.BufferedReader(new java.io.FileReader(info))) {
+                for (String line; (line = in.readLine()) != null; ) if (line.startsWith("uid=")) return Integer.parseInt(line.substring(4).trim());
+            } catch (java.io.IOException | NumberFormatException none) { /* not installed */ }
         }
+        if (unknown != null) throw unknown;
+        return known;
     }
 
 
