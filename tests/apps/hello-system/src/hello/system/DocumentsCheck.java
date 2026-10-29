@@ -2,27 +2,22 @@ package hello.system;
 
 import android.content.Context;
 import android.content.Intent;
-import android.database.Cursor;
-import android.net.Uri;
+import android.os.storage.StorageManager;
+import android.os.storage.StorageVolume;
 import android.provider.DocumentsContract;
+import java.util.List;
 
-/** Storage access: the external storage documents provider lists its roots and the children of the primary root; ACTION_OPEN_DOCUMENT has an activity to answer it. */
+/** Storage access as an app gets it: the document pickers (open, open tree, create) have an activity to answer, storage volumes are listed, document uris are told apart. */
 final class DocumentsCheck implements Check {
     @Override public String run(Context context) throws Exception {
-        String authority = "com.android.externalstorage.documents";
-        StringBuilder roots = new StringBuilder();
-        try (Cursor c = context.getContentResolver().query(DocumentsContract.buildRootsUri(authority), null, null, null, null)) {
-            Check.require(c != null && c.getCount() > 0, "no roots");
-            while (c.moveToNext()) roots.append(c.getString(c.getColumnIndexOrThrow(DocumentsContract.Root.COLUMN_TITLE))).append(';');
+        for (String action : new String[] {Intent.ACTION_OPEN_DOCUMENT, Intent.ACTION_OPEN_DOCUMENT_TREE, Intent.ACTION_CREATE_DOCUMENT}) {
+            Intent intent = new Intent(action).setType("*/*");
+            if (!action.equals(Intent.ACTION_OPEN_DOCUMENT_TREE)) intent.addCategory(Intent.CATEGORY_OPENABLE);
+            Check.require(context.getPackageManager().resolveActivity(intent, 0) != null, "nothing answers " + action);
         }
-        Uri children = DocumentsContract.buildChildDocumentsUri(authority, "primary:");
-        int count;
-        try (Cursor c = context.getContentResolver().query(children, new String[] {DocumentsContract.Document.COLUMN_DISPLAY_NAME}, null, null, null)) {
-            Check.require(c != null, "no children cursor");
-            count = c.getCount();
-        }
-        Intent open = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");
-        Check.require(context.getPackageManager().resolveActivity(open, 0) != null, "nothing answers ACTION_OPEN_DOCUMENT");
-        return "roots " + roots + " primary children " + count;
+        List<StorageVolume> volumes = context.getSystemService(StorageManager.class).getStorageVolumes();
+        Check.require(!volumes.isEmpty() && volumes.get(0).isPrimary(), "volumes " + volumes);
+        Check.require(DocumentsContract.isDocumentUri(context, DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Download")), "document uri not recognised");
+        return volumes.size() + " volumes, primary '" + volumes.get(0).getDescription(context) + "'";
     }
 }

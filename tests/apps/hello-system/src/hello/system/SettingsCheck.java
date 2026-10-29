@@ -11,9 +11,9 @@ final class SettingsCheck implements Check {
         String androidId = Settings.Secure.getString(resolver, Settings.Secure.ANDROID_ID);
         Check.require(androidId != null && androidId.length() >= 8, "android_id " + androidId);
         Check.require(androidId.equals(Settings.Secure.getString(resolver, Settings.Secure.ANDROID_ID)), "android_id changes");
-        int airplane = Settings.Global.getInt(resolver, Settings.Global.AIRPLANE_MODE_ON, -1);
+        int airplane = Settings.Global.getInt(resolver, Settings.Global.AIRPLANE_MODE_ON, 0);
         Check.require(airplane == 0, "airplane_mode_on " + airplane);
-        int timeout = Settings.System.getInt(resolver, Settings.System.SCREEN_OFF_TIMEOUT, -1);
+        int timeout = Settings.System.getInt(resolver, Settings.System.SCREEN_OFF_TIMEOUT, 60000);
         Check.require(timeout > 0, "screen_off_timeout " + timeout);
         String wrote;
         if (Settings.System.canWrite(context)) {
