@@ -27,7 +27,7 @@ public final class ComponentHost implements Runnable {
             long before = System.nanoTime();
             looper.poll(8);
             if (NativeLooper.forThread() != 0) NativeLooper.pollOnce(0);
-            ShadowSystemClock.advanceBy(Duration.ofNanos(System.nanoTime() - before));
+            ShadowSystemClock.advanceBy(Duration.ofNanos(Math.max(0, System.nanoTime() - org.robolectric.shadows.ShadowSystem.nanoTime())));
             looper.idle();
         }
     }

@@ -58,7 +58,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     makeDirs(join(dir, "data/app/files/mozilla"));
     makeDirs(join(dir, "data/app/cache/mozilla"));
     if (exists(join(dir, "lib/libxul.so"))) {
-        // GeckoView: layout.frame_rate=60 gives Gecko a software vsync (the Java Choreographer's never reached the compositor: it composed once and the page stayed white). No GPU process. Its WebRender window is a Surface that has to reach that process, and one that crossed to another JVM is no window (ANativeWindow_fromSurface
+        // GeckoView: no GPU process. Its WebRender window is a Surface that has to reach that process, and one that crossed to another JVM is no window (ANativeWindow_fromSurface
         // gives null: "Failed to obtain native window from Surface", then MOZ_CRASH(Fallback configurations exhausted)). Gecko reads user.js from the profile, which is made here
         // so that the first start has it too.
         const std::string mozilla = join(dir, "data/app/files/mozilla"), profile = join(mozilla, "apklayer.default");
@@ -84,7 +84,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
                         }
                         writeFile(prefs, kept);
                     }
-                    writeFile(join(join(mozilla, name), "user.js"), "user_pref(\"layers.gpu-process.enabled\", false);\nuser_pref(\"layout.frame_rate\", 60);\n" + getenvOr("APKLAYER_GECKO_PREFS", "")); }
+                    writeFile(join(join(mozilla, name), "user.js"), "user_pref(\"layers.gpu-process.enabled\", false);\n" + getenvOr("APKLAYER_GECKO_PREFS", "")); }
             }
             closedir(d);
         }

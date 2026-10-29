@@ -276,7 +276,7 @@ public final class AppHost implements Runnable {
                     // the follow-ups below was dropped, so the app's clock ran at a third of real time under load (ExoPlayer played
                     // video at 8 fps and starved the audio, its clock being SystemClock).
                     long clockNow = System.nanoTime();
-                    ShadowSystemClock.advanceBy(Duration.ofNanos(clockNow - clockNanos));
+                    ShadowSystemClock.advanceBy(Duration.ofNanos(Math.max(0, clockNow - org.robolectric.shadows.ShadowSystem.nanoTime())));  // to the monotonic clock, which native code (Gecko's vsync) reads too
                     clockNanos = clockNow;
                     if (Boolean.getBoolean("apklayer.perf") && clockNow - perfAt > 2_000_000_000L) { // app clock against wall time, and the loop's pace
                         System.out.println("[apklayer] clock: app " + (SystemClock.uptimeMillis() - perfUptime) + " ms, wall " + (clockNow - perfAt) / 1_000_000 + " ms, loops " + perfLoops);
