@@ -45,3 +45,5 @@ Mac.apk, Robolectric, android_translation_layer (all in `~/GitHub`), Husk (GPL, 
 
 - Compatibility pass (2026-10-28): results per app in `tests/corpus/results.md` (tools: `tests/vm/appcheck.sh`, `tests/vm/appshot.py`, `tests/corpus/fdroid.py` for hash-verified F-Droid downloads). About 25 apps draw their UI; open: AnkiDroid (crash behind ACRA), Puzzles (anti-piracy redirect), Open Sudoku (database), SDL games with assets (Rocks 'n' Diamonds, TIC-80 black), WireGuard (Go TLS), Unciv black, NewPipe/Sensors content, camera apps. Meet reaches its welcome screen; its accounts and the Google sign-in wait for the microG Device Attestation / real keystore (planned, not started).
 - VM: `~/arm64-native/libc_bio.so(.0)` must be the newest `~/bt-arm/bionic_translation/b/libc_bio.so.0` (has the Android `__fread_chk` argument order, the patched libc-chk.c); the older copy made OpenTTD abort with glibc "buffer overflow detected". Backups: `~/libc_bio.so*.before-fread`.
+
+- Fennec: page background now renders (user.js layout.frame_rate=60 = software vsync). Open: page text (h1) not yet visible in the screenshot; investigate fonts/second paint.
