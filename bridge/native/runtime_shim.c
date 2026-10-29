@@ -53,6 +53,7 @@ static void parse_binding_format(const char *fmt)
  * callee) from the stack and moves the stack arguments (the 9th on, up to the 12th) down two slots. Floats travel in their own
  * registers and need no change. The thunk template is copied per target; its last word holds the target's address. */
 #include <sys/mman.h>
+#if defined(__aarch64__)
 __asm__(
     ".text\n.balign 4\n.globl apklayer_critical_tpl_start\n.globl apklayer_critical_tpl_end\n"
     "apklayer_critical_tpl_start:\n"
@@ -72,6 +73,32 @@ __asm__(
     "  ret\n"
     ".balign 8\n1: .quad 0\n"
     "apklayer_critical_tpl_end:\n");
+#elif defined(__x86_64__)
+/* System V x86_64: the JVM's call is (env, clazz, a1 ... an) in rdi, rsi, rdx, rcx, r8, r9 and then the stack (a5 at [rsp+8] at entry); the library wants (a1 ... an): the registers shift by two,
+ * a5 and a6 come off the stack into r8 and r9, and the stack arguments (a7 on) move down two slots (up to a12). The thunk template is copied per target, its last word holds the target's address. */
+__asm__(
+    ".text\n.balign 16\n.globl apklayer_critical_tpl_start\n.globl apklayer_critical_tpl_end\n"
+    "apklayer_critical_tpl_start:\n"
+    "  pushq %rbp\n"
+    "  movq %rsp, %rbp\n"
+    "  subq $48, %rsp\n"
+    "  movq 32(%rbp), %rax\n  movq %rax, 0(%rsp)\n"    /* a7 */
+    "  movq 40(%rbp), %rax\n  movq %rax, 8(%rsp)\n"    /* a8 */
+    "  movq 48(%rbp), %rax\n  movq %rax, 16(%rsp)\n"   /* a9 */
+    "  movq 56(%rbp), %rax\n  movq %rax, 24(%rsp)\n"   /* a10 */
+    "  movq 64(%rbp), %rax\n  movq %rax, 32(%rsp)\n"   /* a11 */
+    "  movq 72(%rbp), %rax\n  movq %rax, 40(%rsp)\n"   /* a12 */
+    "  movq %rdx, %rdi\n  movq %rcx, %rsi\n  movq %r8, %rdx\n  movq %r9, %rcx\n"
+    "  movq 16(%rbp), %r8\n  movq 24(%rbp), %r9\n"      /* a5, a6 */
+    "  movq 1f(%rip), %r11\n"
+    "  callq *%r11\n"
+    "  leave\n"
+    "  ret\n"
+    ".balign 8\n1: .quad 0\n"
+    "apklayer_critical_tpl_end:\n");
+#else
+#error "no @CriticalNative thunk for this architecture"
+#endif
 extern char apklayer_critical_tpl_start[], apklayer_critical_tpl_end[];
 static char *thunk_page; static size_t thunk_used;
 

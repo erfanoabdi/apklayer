@@ -52,9 +52,13 @@ with open(out, "w") as f:
     gl = [s for s in missing if s.startswith("gl")]
     for s in missing:
         if s in gl:  # GL extension entry points go to the host driver (a do-nothing stub made glEGLImageTargetTexture2DOES a no-op)
-            f.write('__attribute__((used, visibility("hidden"))) void *stubslot_%s;\n'
+            f.write('__attribute__((used, visibility("hidden"))) void *stubslot_%s;\n' % s)
+            f.write('#if defined(__aarch64__)\n'
                     '__asm__(".text\\n.globl %s\\n.type %s,%%function\\n%s:\\n\\tadrp x16, stubslot_%s\\n'
-                    '\\tldr x16, [x16, :lo12:stubslot_%s]\\n\\tcbz x16, 1f\\n\\tbr x16\\n1:\\tmov x0, #0\\n\\tret\\n");\n' % ((s,) * 6))
+                    '\\tldr x16, [x16, :lo12:stubslot_%s]\\n\\tcbz x16, 1f\\n\\tbr x16\\n1:\\tmov x0, #0\\n\\tret\\n");\n' % ((s,) * 5))
+            f.write('#elif defined(__x86_64__)\n'
+                    '__asm__(".text\\n.globl %s\\n.type %s,@function\\n%s:\\n\\tmovq stubslot_%s(%%rip), %%r11\\n'
+                    '\\ttestq %%r11, %%r11\\n\\tjz 1f\\n\\tjmp *%%r11\\n1:\\txorl %%eax, %%eax\\n\\tret\\n");\n#endif\n' % ((s,) * 4))
         else:
             f.write("long %s(void) { return 0; }\n" % s)
     f.write("#include <dlfcn.h>\nstatic void __attribute__((constructor)) resolve_gl_stubs(void) {\n"

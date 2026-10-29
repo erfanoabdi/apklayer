@@ -175,17 +175,32 @@ static void where(uint64_t addr)
     }
 }
 
+/* the registers the crash tracer prints, per architecture (the frame chain is x29 on arm64 and rbp on x86_64: [fp] = caller's fp, [fp+8] = return address) */
+#if defined(__aarch64__)
+#define CTX_PC(uc) ((uint64_t)(uc)->uc_mcontext.pc)
+#define CTX_FP(uc) ((uint64_t)(uc)->uc_mcontext.regs[29])
+#define CTX_ARG0(uc) ((uint64_t)(uc)->uc_mcontext.regs[0])
+#define CTX_LR(uc) ((uint64_t)(uc)->uc_mcontext.regs[30])
+#define CTX_SP(uc) ((uint64_t)(uc)->uc_mcontext.sp)
+#elif defined(__x86_64__)
+#define CTX_PC(uc) ((uint64_t)(uc)->uc_mcontext.gregs[REG_RIP])
+#define CTX_FP(uc) ((uint64_t)(uc)->uc_mcontext.gregs[REG_RBP])
+#define CTX_ARG0(uc) ((uint64_t)(uc)->uc_mcontext.gregs[REG_RDI])
+#define CTX_LR(uc) (*(uint64_t *)(uintptr_t)(uc)->uc_mcontext.gregs[REG_RSP])  /* a call pushed the return address (valid in a leaf function, a hint elsewhere) */
+#define CTX_SP(uc) ((uint64_t)(uc)->uc_mcontext.gregs[REG_RSP])
+#endif
+
 static void crash_trace_handler(int sig, siginfo_t *info, void *ctx)
 {
     ucontext_t *uc = ctx;
-    uint64_t pc = uc->uc_mcontext.pc, *fp = (uint64_t *)uc->uc_mcontext.regs[29];
+    uint64_t pc = CTX_PC(uc), *fp = (uint64_t *)CTX_FP(uc);
     int fd = open("/proc/self/maps", O_RDONLY);
     if (fd >= 0) { ssize_t n; while (trace_maps_len < sizeof trace_maps && (n = read(fd, trace_maps + trace_maps_len, sizeof trace_maps - trace_maps_len)) > 0) trace_maps_len += n; close(fd); }
     trace_line("[runtime-trace] signal %llu pc=0x%llx", (unsigned long long)sig, (unsigned long long)pc, NULL, 0);
-    trace_line("[runtime-trace] fault address 0x%llx x0=0x%llx", (unsigned long long)(uintptr_t)info->si_addr, (unsigned long long)uc->uc_mcontext.regs[0], NULL, 0);
+    trace_line("[runtime-trace] fault address 0x%llx x0=0x%llx", (unsigned long long)(uintptr_t)info->si_addr, (unsigned long long)CTX_ARG0(uc), NULL, 0);
     where(pc);
-    trace_line("[runtime-trace] lr=0x%llx sp=0x%llx", (unsigned long long)uc->uc_mcontext.regs[30], (unsigned long long)uc->uc_mcontext.sp, NULL, 0);
-    where(uc->uc_mcontext.regs[30]);
+    trace_line("[runtime-trace] lr=0x%llx sp=0x%llx", (unsigned long long)CTX_LR(uc), (unsigned long long)CTX_SP(uc), NULL, 0);
+    where(CTX_LR(uc));
     for (int i = 0; i < 24 && fp && ((uintptr_t)fp & 7) == 0; i++) {
         trace_line("[runtime-trace] #%llu lr=0x%llx", (unsigned long long)i, (unsigned long long)fp[1], NULL, 0);
         where(fp[1]);
