@@ -505,7 +505,6 @@ s = chk.read_text()
 if 'step 17' not in s:
     if '#include "libc-stdio.h"' not in s:
         s = s.replace('#include <stdio.h>', '#include <stdio.h>\n#include <stdarg.h>\n#include "libc-stdio.h"', 1)
-    s = s.replace('fread(buf, size, count, stream)', 'fread(buf, size, count, bionic_file_to_glibc_file(stream))')
     s = s.replace('return fgets(dest, supplied_size, stream);', 'return fgets(dest, supplied_size, bionic_file_to_glibc_file(stream)); /* apklayer patch: see scripts/patch-bionic-translation.sh step 17 */')
     s += '''
 /* apklayer patch: see scripts/patch-bionic-translation.sh step 17 */
@@ -524,4 +523,5 @@ int bionic___fprintf_chk(FILE *stream, int flag, const char *format, ...)
 }
 '''
     chk.write_text(s)
+chk.write_text(chk.read_text().replace('fread(buf, size, count, stream)', 'fread(buf, size, count, bionic_file_to_glibc_file(stream))'))  # idempotent: the replaced text no longer matches
 PY
