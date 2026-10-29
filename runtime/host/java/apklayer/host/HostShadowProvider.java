@@ -35,6 +35,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.os.Process", ShadowHostProcess.class.getName()),
                 Map.entry("android.app.NotificationManager", ShadowHostNotificationManager.class.getName()),
                 Map.entry("android.app.JobSchedulerImpl", ShadowHostJobScheduler.class.getName()),
+                Map.entry("android.drm.DrmManagerClient", ShadowHostDrmManagerClient.class.getName()),
                 Map.entry("android.app.PendingIntent", ShadowHostRealPendingIntent.class.getName()),
                 Map.entry("android.app.Service", ShadowHostService.class.getName()),
                 Map.entry("android.os.ParcelFileDescriptor", ShadowHostRealParcelFileDescriptor.class.getName()),
