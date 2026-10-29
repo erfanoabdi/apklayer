@@ -168,6 +168,16 @@ static void JNICALL apply_free_function(JNIEnv *env, jclass cls, jlong free_func
 static jobject class_loader;
 static jmethodID for_name;
 
+/* apklayer patch: Android's FileDescriptor keeps its number in `descriptor`, OpenJDK's in `fd`; native libraries (Conscrypt) look the Android name up. */
+static jfieldID JNICALL w_GetFieldID(JNIEnv *env, jclass c, const char *name, const char *sig) {
+    if (!strcmp(name, "descriptor") && !strcmp(sig, "I")) {
+        jclass fd = real_table->FindClass(env, "java/io/FileDescriptor");
+        if (fd && real_table->IsSameObject(env, c, fd)) name = "fd";
+        (*env)->DeleteLocalRef(env, fd);
+    }
+    return real_table->GetFieldID(env, c, name, sig);
+}
+
 static jclass JNICALL lazy_find_class(JNIEnv *env, const char *name)
 {
     if (name[0] == '[') { /* an array class: the sandbox's class loader cannot load array names; find the element class (by this FindClass) and take the class of a zero-length array */
@@ -396,6 +406,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     patched = *orig;
     real_table = orig;
     patched.RegisterNatives = renaming_register_natives;
+    patched.GetFieldID = w_GetFieldID;
     {   /* the loader the sandbox's classes come from: the thread's context class loader */
         jclass thread = (*env)->FindClass(env, "java/lang/Thread");
         jobject cur = (*env)->CallStaticObjectMethod(env, thread, (*env)->GetStaticMethodID(env, thread, "currentThread", "()Ljava/lang/Thread;"));

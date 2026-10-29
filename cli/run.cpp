@@ -68,7 +68,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         if (DIR* d = opendir(mozilla.c_str())) {  // every profile there (one made by an earlier start included)
             while (dirent* e = readdir(d)) {
                 const std::string name = e->d_name;
-                if (name.size() > 8 && name.compare(name.size() - 8, 8, ".default") == 0) writeFile(join(join(mozilla, name), "user.js"), "user_pref(\"layers.gpu-process.enabled\", false);\n");
+                if (name.size() > 8 && name.compare(name.size() - 8, 8, ".default") == 0) writeFile(join(join(mozilla, name), "user.js"), "user_pref(\"layers.gpu-process.enabled\", false);\n" + getenvOr("APKLAYER_GECKO_PREFS", ""));
             }
             closedir(d);
         }
