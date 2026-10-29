@@ -87,6 +87,7 @@ final class HostSystemConfig {
             shadow.addSystemAvailableFeature(info);
         }
         for (String feature : unavailable) shadow.setSystemFeature(feature, false);
+        if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] system features: " + features.size() + " available, " + unavailable.size() + " unavailable (ANDROID_ROOT=" + System.getenv("ANDROID_ROOT") + ")");
         // signature spoofing support (the permission microG Services asks for; the spoofing itself is ShadowHostPackageManager.fakeSignature): known to the system and granted at install
         android.content.pm.PermissionInfo spoofing = new android.content.pm.PermissionInfo();
         spoofing.name = "android.permission.FAKE_PACKAGE_SIGNATURE";
