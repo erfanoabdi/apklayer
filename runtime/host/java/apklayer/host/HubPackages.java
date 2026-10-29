@@ -55,7 +55,22 @@ final class HubPackages {
         int flags = PackageManager.GET_ACTIVITIES | PackageManager.GET_SERVICES | PackageManager.GET_RECEIVERS | PackageManager.GET_PROVIDERS
                 | PackageManager.GET_META_DATA | PackageManager.GET_PERMISSIONS | PackageManager.GET_CONFIGURATIONS
                 | PackageManager.MATCH_DIRECT_BOOT_AWARE | PackageManager.MATCH_DIRECT_BOOT_UNAWARE;  // without these (the package manager service adds them) no component matches the user state
-        return PackageParser.generatePackageInfo(pkg, new int[0], flags, 0L, 0L, null, android.content.pm.pkg.FrameworkPackageUserState.DEFAULT);
+        android.content.pm.PackageInfo info = PackageParser.generatePackageInfo(pkg, new int[0], flags, 0L, 0L, null, android.content.pm.pkg.FrameworkPackageUserState.DEFAULT);
+        int uid = uid(name);
+        if (info != null && uid >= 0) {  // the Android app uid every installed package has (info.properties); the parser leaves -1
+            info.applicationInfo.uid = uid;
+            for (android.content.pm.ComponentInfo[] components : new android.content.pm.ComponentInfo[][] {info.activities, info.services, info.receivers, info.providers})
+                if (components != null) for (android.content.pm.ComponentInfo component : components) if (component != null && component.applicationInfo != null) component.applicationInfo.uid = uid;
+        }
+        return info;
+    }
+
+    /** The Android app uid of an installed package (info.properties), or -1. */
+    int uid(String name) {
+        try {
+            for (String line : Files.readAllLines(root.resolve(name).resolve("info.properties"))) if (line.startsWith("uid=")) return Integer.parseInt(line.substring(4).trim());
+        } catch (IOException | RuntimeException none) { /* not an app directory */ }
+        return -1;
     }
 
     /** The intent filters of the package's activities (services: {@code services}), by component class name. */
