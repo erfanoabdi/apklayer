@@ -13,7 +13,11 @@ else
     . "$here/../tests/vm/config.sh"
     sink() { sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" 'mkdir -p ~/arm64-native/android-root && tar xf - -C ~/arm64-native/android-root'; }
 fi
-$ORB tar cf - -C "$OUT" system/etc/cgroups.json system/etc/task_profiles.json system/etc/task_profiles system/usr/hyphen-data system/etc/permissions system/etc/compatconfig system/etc/sysconfig system/etc/default-permissions system/etc/vintf/manifest.xml | sink
+$ORB tar cf - -C "$OUT" system/etc/cgroups.json system/etc/task_profiles.json system/etc/task_profiles system/usr/hyphen-data system/etc/permissions system/etc/compatconfig system/etc/sysconfig system/etc/default-permissions system/etc/vintf/manifest.xml \
+    system/fonts system/etc/fonts.xml system/etc/font_fallback.xml system/framework/org.lineageos.platform-res.apk apex/com.android.i18n/etc apex/com.android.tzdata/etc | sink
+# the build properties the stack's property store loads (stack.cpp: android-root/props/system_build.prop)
+if [ -n "$STAGE_DEST" ]; then mkdir -p "$STAGE_DEST/props" && $ORB cat "$OUT/system/build.prop" > "$STAGE_DEST/props/system_build.prop"
+else $ORB cat "$OUT/system/build.prop" | sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" 'mkdir -p ~/arm64-native/android-root/props && cat > ~/arm64-native/android-root/props/system_build.prop'; fi
 # Original audio policy tables are source XML assets, not generated libraries.
 $ORB tar cf - -C /home/erfanabdi/los24/frameworks/av/services/audiopolicy/config \
     --transform='s,^,vendor/etc/,' audio_policy_volumes.xml default_volume_tables.xml | sink
