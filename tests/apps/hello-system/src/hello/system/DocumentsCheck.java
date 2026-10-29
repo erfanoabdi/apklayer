@@ -10,18 +10,18 @@ import java.util.List;
 /** Storage access as an app gets it: the document pickers (open, open tree, create) have an activity to answer, storage volumes are listed, document uris are told apart. */
 final class DocumentsCheck implements Check {
     @Override public String run(Context context) throws Exception {
-        for (String action : new String[] {Intent.ACTION_OPEN_DOCUMENT, Intent.ACTION_OPEN_DOCUMENT_TREE, Intent.ACTION_CREATE_DOCUMENT}) {
-            Intent intent = new Intent(action).setType("*/*");
-            if (!action.equals(Intent.ACTION_OPEN_DOCUMENT_TREE)) intent.addCategory(Intent.CATEGORY_OPENABLE);
-            Check.require(context.getPackageManager().resolveActivity(intent, 0) != null, "nothing answers " + action + " (" + context.getPackageManager().queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_ALL).size() + " by query, "
-                    + context.getPackageManager().queryIntentActivities(new Intent(action).setType("*/*"), android.content.pm.PackageManager.MATCH_ALL).size() + " without the category)");
-        }
         try {
             android.content.pm.PackageInfo ui = context.getPackageManager().getPackageInfo("com.android.documentsui", android.content.pm.PackageManager.GET_ACTIVITIES);
             StringBuilder names = new StringBuilder();
             if (ui.activities != null) for (android.content.pm.ActivityInfo a : ui.activities) names.append(a.name.substring(a.name.lastIndexOf('.') + 1)).append(a.exported ? "+" : "-").append(' ');
             System.out.println("[sys] documentsui activities: " + names);
         } catch (Exception e) { System.out.println("[sys] documentsui not known: " + e); }
+        for (String action : new String[] {Intent.ACTION_OPEN_DOCUMENT, Intent.ACTION_OPEN_DOCUMENT_TREE, Intent.ACTION_CREATE_DOCUMENT}) {
+            Intent intent = new Intent(action).setType("*/*");
+            if (!action.equals(Intent.ACTION_OPEN_DOCUMENT_TREE)) intent.addCategory(Intent.CATEGORY_OPENABLE);
+            Check.require(context.getPackageManager().resolveActivity(intent, 0) != null, "nothing answers " + action + " (" + context.getPackageManager().queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_ALL).size() + " by query, "
+                    + context.getPackageManager().queryIntentActivities(new Intent(action).setType("*/*"), android.content.pm.PackageManager.MATCH_ALL).size() + " without the category)");
+        }
         List<StorageVolume> volumes = context.getSystemService(StorageManager.class).getStorageVolumes();
         Check.require(!volumes.isEmpty() && volumes.get(0).isPrimary(), "volumes " + volumes);
         Check.require(DocumentsContract.isDocumentUri(context, DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Download")), "document uri not recognised");
