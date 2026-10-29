@@ -23,4 +23,11 @@ public class ShadowHostStorageManager extends ShadowStorageManager {
             return volumes;
         }
     }
+
+    /** Every path is on the one default volume; the file systems here do not preallocate through the storage service (DownloadProvider writes the file as it comes). */
+    @Implementation
+    protected java.util.UUID getUuidForPath(java.io.File path) { return StorageManager.UUID_DEFAULT; }
+
+    @Implementation
+    protected boolean isAllocationSupported(java.io.FileDescriptor fd) { return false; }
 }
