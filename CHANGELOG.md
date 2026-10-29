@@ -40,6 +40,10 @@ Older dated notes (GPU follow-up, TextureView, MC3, Vulkan checkpoints, OTR2, ro
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 
+### 2026-10-29 — apklayer's own modules for x86_64 (incremental in the user's existing x86_64 out, authorized by the user for this: "build your stuffs")
+- x86_64 readiness: the x86_64 GSI the user built has the stock libraries but not apklayer's Android-side modules (EGL, gralloc allocator/mapper, composer, vdisplay, servicemanager, SurfaceFlinger launcher, audio/media services, attribution, permission, tools). They are built here for `gsi_x86_64 userdebug` from `vendor/apklayer` with `m <modules>` (no wipe, no clean, `out/` kept; the arm64 product is checked again afterwards with a no-op `m libapklayer_egl`).
+- Command: `cd ~/los24 && source build/envsetup.sh && breakfast gsi_x86_64 userdebug && m libapklayer_allocator libapklayer_attribution libapklayer_audio libapklayer_audioserver libapklayer_codec2 libapklayer_composer libapklayer_egl libapklayer_gltest libapklayer_mediaserver libapklayer_permission libapklayer_servicemanager libapklayer_servicetool libapklayer_sftest libapklayer_surfaceflinger libapklayer_vdisplay mapper.apklayer`
+
 ### 2026-10-29 — libapklayer_egl: eglSwapBuffersWithDamageEXT is ours (incremental, authorized)
 - GeckoView (Fennec) draws with WebRender through `eglSwapBuffersWithDamageEXT`; eglGetProcAddress knew only the KHR name, so the EXT lookup fell through to the host's Mesa and the frames were swapped on the host surface, never reaching the window's buffer queue (white page). The EXT name now maps to the same present as the KHR one. `scripts/orb-build-module.py libapklayer_egl hals/graphics/egl Egl.cpp` (existing commands, no graph change, no clean).
 
