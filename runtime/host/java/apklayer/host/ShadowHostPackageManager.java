@@ -40,6 +40,33 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
     }
 
 
+    /** The installed apps by uid (their info.properties): a provider asks which package a caller's uid belongs to. */
+    private static String packageOfUid(int uid) {
+        String apps = System.getProperty("apklayer.apps");
+        java.io.File[] dirs = apps == null ? null : new java.io.File(apps).listFiles();
+        if (dirs == null) return null;
+        for (java.io.File dir : dirs) {
+            try (java.io.BufferedReader in = new java.io.BufferedReader(new java.io.FileReader(new java.io.File(dir, "info.properties")))) {
+                for (String line; (line = in.readLine()) != null; ) if (line.equals("uid=" + uid)) return dir.getName();
+            } catch (java.io.IOException | RuntimeException none) { /* not an app directory */ }
+        }
+        return null;
+    }
+
+    @Implementation
+    protected String[] getPackagesForUid(int uid) {
+        String[] known = super.getPackagesForUid(uid);
+        if (known != null && known.length > 0) return known;
+        String found = packageOfUid(uid);
+        return found == null ? known : new String[] {found};
+    }
+
+    @Implementation
+    protected String getNameForUid(int uid) {
+        String known = super.getNameForUid(uid);
+        return known != null ? known : packageOfUid(uid);
+    }
+
     /** Apps read their own signing certificate in Application.onCreate (update checks, SoLoader...): every package has one from the first call. */
     private android.content.pm.PackageInfo signed(android.content.pm.PackageInfo info, long flags) {
         if (info == null) return null;
