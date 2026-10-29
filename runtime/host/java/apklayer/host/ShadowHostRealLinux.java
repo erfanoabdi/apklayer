@@ -54,4 +54,29 @@ public class ShadowHostRealLinux extends ShadowLinux {
         natively("socketpair", ClassParameter.from(int.class, domain), ClassParameter.from(int.class, type), ClassParameter.from(int.class, protocol),
                 ClassParameter.from(FileDescriptor.class, one), ClassParameter.from(FileDescriptor.class, two));
     }
+
+    // extended attributes (MediaProvider keeps a database's uuid in "user.uuid"): the user.* namespace through NIO, kept in memory where the file system has none
+    private static final java.util.Map<String, byte[]> XATTR_FALLBACK = new java.util.concurrent.ConcurrentHashMap<>();
+    private static java.nio.file.attribute.UserDefinedFileAttributeView xattrs(String path) {
+        return java.nio.file.Files.getFileAttributeView(java.nio.file.Path.of(path), java.nio.file.attribute.UserDefinedFileAttributeView.class);
+    }
+    private static String xattrName(String name) { return name.startsWith("user.") ? name.substring(5) : name; }
+    @Implementation protected byte[] getxattr(String path, String name) throws android.system.ErrnoException {
+        byte[] kept = XATTR_FALLBACK.get(path + '\0' + name);
+        if (kept != null) return kept.clone();
+        try {
+            java.nio.file.attribute.UserDefinedFileAttributeView view = xattrs(path);
+            java.nio.ByteBuffer buffer = java.nio.ByteBuffer.allocate(view.size(xattrName(name)));
+            view.read(xattrName(name), buffer);
+            return buffer.array();
+        } catch (java.io.IOException | UnsupportedOperationException none) { throw new android.system.ErrnoException("getxattr", android.system.OsConstants.ENODATA, none instanceof java.io.IOException io ? io : null); }
+    }
+    @Implementation protected void setxattr(String path, String name, byte[] value, int flags) throws android.system.ErrnoException {
+        try { xattrs(path).write(xattrName(name), java.nio.ByteBuffer.wrap(value)); XATTR_FALLBACK.remove(path + '\0' + name); }
+        catch (java.io.IOException | UnsupportedOperationException unsupported) { XATTR_FALLBACK.put(path + '\0' + name, value.clone()); }
+    }
+    @Implementation protected void removexattr(String path, String name) throws android.system.ErrnoException {
+        XATTR_FALLBACK.remove(path + '\0' + name);
+        try { xattrs(path).delete(xattrName(name)); } catch (java.io.IOException | UnsupportedOperationException none) { /* not there */ }
+    }
 }
