@@ -28,6 +28,7 @@ final class CalendarCheck implements Check {
         calendar.put(Calendars.OWNER_ACCOUNT, "apklayer");
         calendar.put(Calendars.VISIBLE, 1);
         calendar.put(Calendars.SYNC_EVENTS, 1);
+        System.out.println("[sys] calendar uri " + asSyncAdapter(Calendars.CONTENT_URI));
         Uri calendarUri = resolver.insert(asSyncAdapter(Calendars.CONTENT_URI), calendar);
         Check.require(calendarUri != null, "no calendar uri");
         long calendarId = ContentUris.parseId(calendarUri);

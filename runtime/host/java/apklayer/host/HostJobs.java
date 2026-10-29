@@ -70,6 +70,7 @@ final class HostJobs {
         connection[0] = new ServiceConnection() {
             @Override public void onServiceConnected(ComponentName name, IBinder binder) {
                 try {
+                    if (IJobService.Stub.asInterface(binder) == null) { System.out.println("[apklayer] job " + job.getId() + ": the service gave " + binder + " (" + (binder == null ? null : binder.getClass()) + "), not an IJobService"); return; }
                     JobParameters parameters = new JobParameters(callback, null, job.getId(), job.getExtras(), job.getTransientExtras(), job.getClipData(), job.getClipGrantFlags(),
                             false, job.isExpedited(), job.isUserInitiated(), null, null, null);
                     IJobService.Stub.asInterface(binder).startJob(parameters);
