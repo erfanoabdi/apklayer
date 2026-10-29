@@ -120,6 +120,13 @@ public class ShadowActivityThread {
     return RuntimeEnvironment.getActivityThread();
   }
 
+  // apklayer patch: the process's name (Application.getProcessName): the package, or the name of a secondary process (HostProcessName); null made MediaProvider's static initialiser fail
+  @Implementation
+  protected static String currentProcessName() {
+    String name = System.getProperty("apklayer.processname");
+    return name != null ? name : System.getProperty("apklayer.package");
+  }
+
   @Implementation
   protected static Application currentApplication() {
     return ((ActivityThread) currentActivityThread()).getApplication();

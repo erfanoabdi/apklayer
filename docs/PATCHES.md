@@ -47,6 +47,7 @@ and log it here. The M1 seed's patch log is in `archive/seed-m1/docs/PATCHES.md`
 ## Robolectric shadows for the device-library (GPU) route — `runtime/patches/org/robolectric/shadows/`
 Copies of the tree's shadows (external/robolectric) with thin changes marked "apklayer patch", compiled into `native-runtime.jar` ahead of
 `Robolectric_all.jar` by `scripts/build-native-arm64.sh`. They make an app's window a real SurfaceFlinger layer instead of a simulated surface.
+- `ShadowActivityThread`: `currentProcessName()` answers the package (or `-Dapklayer.processname`, a secondary process's name): the stock shadow gave null.
 - `ShadowAlarmManager`: `schedule()` (auto schedule) takes an RTC alarm's delay from the wall clock; upstream subtracts elapsed realtime from a wall-clock time, so an RTC alarm waited for years.
 - `ShadowSurfaceControl`: no fake `nativeCreate`; the JNI binding (`$$robo$$nativeCreate$nativeBinding`) runs against SurfaceFlinger, without
   the Java metadata Parcel (no native peer here) and without `NOT_ADD_TO_ROOT` (no window manager parents the layer). `initializeNativeObject`

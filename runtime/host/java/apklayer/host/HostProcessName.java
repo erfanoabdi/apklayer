@@ -3,7 +3,6 @@ package apklayer.host;
 import android.app.Application;
 import android.content.ComponentName;
 import android.content.pm.ServiceInfo;
-import org.robolectric.util.ReflectionHelpers;
 
 /**
  * The name of the process (Application.getProcessName): a service host of an own-package service in a process of its own (GeckoView's child processes) reports that process's name ("package:tab0"), as Android does: apps tell their main
@@ -31,11 +30,5 @@ final class HostProcessName {
         return false;
     }
 
-    private static void set(String name) {
-        try {
-            Object thread = ReflectionHelpers.callStaticMethod(Class.forName("android.app.ActivityThread"), "currentActivityThread");
-            Object bound = ReflectionHelpers.getField(thread, "mBoundApplication");
-            ReflectionHelpers.setField(bound, "processName", name);
-        } catch (ReflectiveOperationException | RuntimeException unknown) { System.out.println("[apklayer] process name not set: " + unknown); }
-    }
+    private static void set(String name) { System.setProperty("apklayer.processname", name); }  // ShadowActivityThread.currentProcessName answers it
 }
