@@ -40,6 +40,9 @@ Older dated notes (GPU follow-up, TextureView, MC3, Vulkan checkpoints, OTR2, ro
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 
+### 2026-10-29 — real keystore: libapklayer_keystore2 and libapklayer_keymint (new modules, authorized by the user: "finish keystore"; gsi_arm64)
+- keystore2 and the AOSP software KeyMint run as libraries whose `main` btload calls (the tree's binaries have no exported main). New `vendor/apklayer/hals/security` (graph regeneration). `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_keystore2 libapklayer_keymint`
+
 ### 2026-10-29 — apklayer's own modules for x86_64 (incremental in the user's existing x86_64 out, authorized by the user for this: "build your stuffs")
 - x86_64 readiness: the x86_64 GSI the user built has the stock libraries but not apklayer's Android-side modules (EGL, gralloc allocator/mapper, composer, vdisplay, servicemanager, SurfaceFlinger launcher, audio/media services, attribution, permission, tools). They are built here for `gsi_x86_64 userdebug` from `vendor/apklayer` with `m <modules>` (no wipe, no clean, `out/` kept; the arm64 product is checked again afterwards with a no-op `m libapklayer_egl`).
 - First run (27 min, 4734 of 5151 steps): only `libapklayer_egl` failed, its forwarding stubs were aarch64 assembly (the user's "asm failed"); `Egl.cpp` now has an x86_64 variant, same command again.

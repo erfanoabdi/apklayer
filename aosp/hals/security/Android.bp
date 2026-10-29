@@ -1,0 +1,41 @@
+// The real Android keystore on the device libraries: keystore2 (the tree's Rust source, copied as keystore2_main.rs plus an exported `main`) and the
+// reference software KeyMint (service.cpp of hardware/interfaces/security/keymint/aidl/default), each as a library whose main btload calls.
+rust_ffi_shared {
+    name: "libapklayer_keystore2",
+    crate_name: "apklayer_keystore2",
+    srcs: ["keystore2_main.rs"],
+    rustlibs: [
+        "libandroid_logger",
+        "libandroid_security_flags_rust",
+        "libbinder_rs",
+        "liblog_rust",
+        "libkeystore2",
+        "liblegacykeystore-rust",
+        "librusqlite",
+    ],
+    prefer_rlib: true,
+}
+
+cc_library_shared {
+    name: "libapklayer_keymint",
+    vendor: true,
+    cflags: ["-Wall", "-Wextra"],
+    defaults: ["keymint_cpp_impl_hal_aidl_ndk_shared"],
+    shared_libs: [
+        "android.hardware.security.rkp-V3-ndk",
+        "android.hardware.security.sharedsecret-V1-ndk",
+        "android.hardware.security.secureclock-V1-ndk",
+        "libbase",
+        "libbinder_ndk",
+        "libcppbor",
+        "libcrypto",
+        "libkeymaster_portable",
+        "libkeymint",
+        "liblog",
+        "libpuresoftkeymasterdevice",
+        "libutils",
+    ],
+    srcs: ["keymint_service.cpp"],
+    compile_multilib: "64",
+    allow_undefined_symbols: true,
+}
