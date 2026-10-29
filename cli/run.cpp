@@ -1,6 +1,7 @@
 #include "run.h"
 
 #include <cerrno>
+#include <dirent.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
@@ -56,6 +57,22 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     // Gecko (Firefox) reads its application-data roots from these (an Android Gecko without them cannot select a profile: "Could not find profile folder")
     makeDirs(join(dir, "data/app/files/mozilla"));
     makeDirs(join(dir, "data/app/cache/mozilla"));
+    if (exists(join(dir, "lib/libxul.so"))) {
+        // GeckoView: no GPU process. Its WebRender window is a Surface that has to reach that process, and one that crossed to another JVM is no window (ANativeWindow_fromSurface
+        // gives null: "Failed to obtain native window from Surface", then MOZ_CRASH(Fallback configurations exhausted)). Gecko reads user.js from the profile, which is made here
+        // so that the first start has it too.
+        const std::string mozilla = join(dir, "data/app/files/mozilla"), profile = join(mozilla, "apklayer.default");
+        if (!exists(join(mozilla, "profiles.ini")))
+            writeFile(join(mozilla, "profiles.ini"), "[General]\nStartWithLastProfile=1\nVersion=2\n\n[Profile0]\nName=default\nIsRelative=1\nPath=apklayer.default\nDefault=1\n");
+        makeDirs(profile);
+        if (DIR* d = opendir(mozilla.c_str())) {  // every profile there (one made by an earlier start included)
+            while (dirent* e = readdir(d)) {
+                const std::string name = e->d_name;
+                if (name.size() > 8 && name.compare(name.size() - 8, 8, ".default") == 0) writeFile(join(join(mozilla, name), "user.js"), "user_pref(\"layers.gpu-process.enabled\", false);\n");
+            }
+            closedir(d);
+        }
+    }
     ne.env["MOZ_APP_DATA"] = join(dir, "data/app/files/mozilla");
     ne.env["MOZ_LOCAL_APP_DATA"] = join(dir, "data/app/cache/mozilla");
     for (const std::string& o : {"-Dapklayer.data=" + join(dir, "data"), "-Dapklayer.package=" + package, "-Dapklayer.uid=" + property(join(dir, "info.properties"), "uid"),
