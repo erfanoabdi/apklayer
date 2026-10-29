@@ -15,6 +15,12 @@ final class DocumentsCheck implements Check {
             StringBuilder names = new StringBuilder();
             if (ui.activities != null) for (android.content.pm.ActivityInfo a : ui.activities) names.append(a.name.substring(a.name.lastIndexOf('.') + 1)).append(a.exported ? "+" : "-").append(' ');
             System.out.println("[sys] documentsui activities: " + names + " (array " + (ui.activities == null ? "null" : String.valueOf(ui.activities.length)) + ")");
+            for (String other : new String[] {"org.mozilla.fennec_fdroid", "com.android.providers.downloads", "de.danoeh.antennapod"}) {
+                try { android.content.pm.PackageInfo i = context.getPackageManager().getPackageInfo(other, android.content.pm.PackageManager.GET_ACTIVITIES | android.content.pm.PackageManager.GET_PROVIDERS | android.content.pm.PackageManager.GET_SERVICES);
+                    System.out.println("[sys] " + other + ": activities " + (i.activities == null ? "null" : i.activities.length) + ", providers " + (i.providers == null ? "null" : i.providers.length) + ", services " + (i.services == null ? "null" : i.services.length) + " enabled=" + i.applicationInfo.enabled); }
+                catch (Exception e) { System.out.println("[sys] " + other + ": " + e); }
+            }
+            System.out.println("[sys] documentsui enabled=" + ui.applicationInfo.enabled + " flags=0x" + Integer.toHexString(ui.applicationInfo.flags) + " providers " + (ui.providers == null ? "null" : ui.providers.length));
             try { System.out.println("[sys] PickActivity info: " + context.getPackageManager().getActivityInfo(new android.content.ComponentName("com.android.documentsui", "com.android.documentsui.picker.PickActivity"), 0).exported); }
             catch (Exception e) { System.out.println("[sys] PickActivity: " + e); }
         } catch (Exception e) { System.out.println("[sys] documentsui not known: " + e); }
