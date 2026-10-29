@@ -39,6 +39,7 @@ final class AppEnvironment {
         if (java.security.Security.getProvider("AndroidKeyStoreBCWorkaround") == null) java.security.Security.addProvider(new HostBcWorkaroundProvider());
         HostCompat.install();  // behavior changes by the app's target SDK (PendingIntent mutability, ...)
         HostGeckoDiag.start();
+        org.robolectric.shadows.ShadowAlarmManager.setAutoSchedule(true);  // an alarm fires its PendingIntent or listener when its time comes (Robolectric only records it otherwise)
         HostLibraryPath.install();  // before the app's own code runs: SoLoader finds the system libraries it looks up by name
         if (Boolean.getBoolean("apklayer.logcat")) org.robolectric.shadows.ShadowLog.stream = System.out; // android.util.Log output (-Dapklayer.logcat=true, APKLAYER_LOGCAT=1)
         AndroidManifest manifest = apk == null ? new AndroidManifest(null, null, null, "apklayer.hub")
