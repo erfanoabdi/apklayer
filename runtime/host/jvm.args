@@ -11,3 +11,4 @@
 --add-opens=java.desktop/java.awt.font=ALL-UNNAMED
 --add-exports=java.base/sun.security.tools.keytool=ALL-UNNAMED
 --add-exports=java.base/sun.security.x509=ALL-UNNAMED
+--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED
