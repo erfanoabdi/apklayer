@@ -203,7 +203,6 @@ public class ShadowDisplayEventReceiver {
     }
 
     public void scheduleVsync() {
-      if (Boolean.getBoolean("apklayer.vsynctrace")) System.out.println("[vsync] schedule on " + Thread.currentThread().getName() + " paused=" + ShadowChoreographer.isPaused());
       Duration frameDelay = ShadowChoreographer.getFrameDelay();
       if (ShadowChoreographer.isPaused()) {
         if (ShadowChoreographer.getNextVsyncTimeNanos() < ShadowPausedSystemClock.uptimeNanos()) {
@@ -218,13 +217,6 @@ public class ShadowDisplayEventReceiver {
     }
 
     private void doVsync() {
-      if (Boolean.getBoolean("apklayer.vsynctrace")) { StringBuilder sb = new StringBuilder("[vsync] doVsync queued:");
-        try { Object ch = org.robolectric.util.ReflectionHelpers.callStaticMethod(android.view.Choreographer.class, "getInstance");
-          Object[] qs = org.robolectric.util.ReflectionHelpers.getField(ch, "mCallbackQueues");
-          for (int i = 0; i < qs.length; i++) { Object r = org.robolectric.util.ReflectionHelpers.getField(qs[i], "mHead");
-            while (r != null) { Object a = org.robolectric.util.ReflectionHelpers.getField(r, "action"); if (a == null) a = org.robolectric.util.ReflectionHelpers.getField(r, "token"); Object cb = org.robolectric.util.ReflectionHelpers.getField(r, "token"); sb.append(" q").append(i).append(':').append(a == null ? null : a.getClass().getName()).append('/').append(cb == null ? null : cb.getClass().getName()); r = org.robolectric.util.ReflectionHelpers.getField(r, "next"); } }
-        } catch (Throwable t) { sb.append(" err ").append(t); }
-        System.out.println(sb); }
       DisplayEventReceiver receiver = receiverRef.get();
       if (receiver != null) {
         ShadowDisplayEventReceiver shadowReceiver = Shadow.extract(receiver);
