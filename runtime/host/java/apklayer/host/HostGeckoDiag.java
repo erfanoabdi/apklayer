@@ -35,6 +35,16 @@ final class HostGeckoDiag {
         if (v instanceof android.view.SurfaceView sv)
             sb.append("\n    ").append(v.getClass().getName()).append(' ').append(v.getWidth()).append('x').append(v.getHeight()).append(" vis=").append(v.getVisibility()).append(" shown=").append(v.isShown())
               .append(" valid=").append(sv.getHolder().getSurface().isValid()).append(" attached=").append(v.isAttachedToWindow());
+        if (v instanceof android.opengl.GLSurfaceView gl) {  // why a GLThread waits: the fields guardedRun's readyToDraw reads
+            try {
+                Object t = org.robolectric.util.ReflectionHelpers.getField(gl, "mGLThread");
+                StringBuilder f = new StringBuilder("\n      GLThread:");
+                for (String n : new String[] {"mHasSurface", "mWaitingForSurface", "mPaused", "mRenderMode", "mWidth", "mHeight", "mRequestRender", "mSizeChanged", "mShouldExit", "mExited", "mHaveEglContext", "mHaveEglSurface", "mFinishedCreatingEglSurface", "mSurfaceIsBad"})
+                    f.append(' ').append(n).append('=').append(String.valueOf((Object) org.robolectric.util.ReflectionHelpers.getField(t, n)));
+                sb.append(f);
+            } catch (RuntimeException e) { sb.append("\n      GLThread: ").append(e); }
+        }
+        if (v instanceof android.view.SurfaceView sv0) { /* above */ }
         else if (v instanceof android.view.TextureView tv) sb.append("\n    TextureView ").append(v.getWidth()).append('x').append(v.getHeight()).append(" available=").append(tv.isAvailable());
         if (v instanceof android.view.ViewGroup g) for (int i = 0; i < g.getChildCount(); i++) walk(g.getChildAt(i), sb, depth + 1);
     }

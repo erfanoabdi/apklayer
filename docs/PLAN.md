@@ -132,3 +132,10 @@ Until an app presents its first frame, `bridge/shell/splash.c` fills the window 
 - Keystore (later, 2026-10-29): DONE for the Java side. Apps get Android's own AndroidKeyStore provider over keystore2 and the software KeyMint (`HostKeyStore`, `RealBinder.await`, patched libbinder without kernel security contexts, bt steps 18-19, rebuilt btload/preload); `tests/vm/keystore.sh` phases pass with `AndroidKeyStore: keystore2`. Left: the shared-uid key namespace (above); the hub launch retries when the previous hub is going down (`HubStartup`).
 
 - Document pickers (2026-10-29): ACTION_OPEN_DOCUMENT/_TREE/GET_CONTENT/CREATE_DOCUMENT go to the installed DocumentsUI through the hub (`AppHost`), the desktop's file chooser portal answers only when no installed app does; the launched activity gets the requester as its calling package (`HubActivityClient.CALLER`). Logseq: choose a folder -> DocumentsUI -> Allow -> its journal opens.
+
+### Other apps re-checked (2026-10-29, after the clock/vsync fix)
+- Fixed by it: Joplin (notes list), Lemuroid (splash), Rocks 'n' Diamonds (menu, SDL), microG add account (sign-in page; the crash was my provider-first detection, fixed).
+- Unciv: libgdx in RENDERMODE_WHEN_DIRTY: 5 frames (clear only), then the GLThread waits forever (`mRequestRender=false`, surface valid, 804x452); the log stops after "Loaded 2 rulesets". Nothing asks for a redraw: find what Unciv's loading waits on (diag: `-Dapklayer.geckodiag=true` now prints the GLThread's fields).
+- OpenTTD: pelya's libSDL, `SDL: Couldn't allocate a window to draw on` (Rocks 'n' Diamonds uses the same SDL and works): check the requested video mode.
+- Sensors Multitool: opens on an empty "Battery" screen (no list); relaunch loop not reproduced.
+- Fennec: page text still missing (above).
