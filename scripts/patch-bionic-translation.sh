@@ -494,3 +494,34 @@ new = '	static __thread struct bionic_dirent bde; /* apklayer patch: see scripts
 if 'step 16' not in s and old in s:
     p.write_text(s.replace(old, new, 1))
 PY
+# 17. Fortified stdio: __fprintf_chk, __vfprintf_chk, __fgets_chk and __fread_chk got bionic's FILE* (stderr is &__sF[2]) and passed it to glibc, which aborts with "glibc detected an invalid stdio
+#     handle". libc++abi's abort_message prints through __vfprintf_chk, so every uncaught C++ exception ended there instead of showing its message (Joplin).
+python3 - "$bt" <<'PY'
+import sys
+from pathlib import Path
+d = Path(sys.argv[1]) / 'libc'
+chk = d / 'libc-chk.c'
+s = chk.read_text()
+if 'step 17' not in s:
+    if '#include "libc-stdio.h"' not in s:
+        s = s.replace('#include <stdio.h>', '#include <stdio.h>\n#include <stdarg.h>\n#include "libc-stdio.h"', 1)
+    s = s.replace('fread(buf, size, count, stream)', 'fread(buf, size, count, bionic_file_to_glibc_file(stream))')
+    s = s.replace('return fgets(dest, supplied_size, stream);', 'return fgets(dest, supplied_size, bionic_file_to_glibc_file(stream)); /* apklayer patch: see scripts/patch-bionic-translation.sh step 17 */')
+    s += '''
+/* apklayer patch: see scripts/patch-bionic-translation.sh step 17 */
+int bionic___vfprintf_chk(FILE *stream, int flag, const char *format, va_list ap)
+{
+	return __vfprintf_chk(bionic_file_to_glibc_file(stream), flag, format, ap);
+}
+
+int bionic___fprintf_chk(FILE *stream, int flag, const char *format, ...)
+{
+	va_list ap;
+	va_start(ap, format);
+	int r = __vfprintf_chk(bionic_file_to_glibc_file(stream), flag, format, ap);
+	va_end(ap);
+	return r;
+}
+'''
+    chk.write_text(s)
+PY
