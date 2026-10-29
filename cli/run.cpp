@@ -107,13 +107,13 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
             run({"cp", "-f", full, core}); run({"zip", "-q", "-d", core, "com/google/*", "androidx/*", "kotlin/*", "android/*"});
             run({"cp", "-f", full, rest}); run({"zip", "-q", "-d", rest, "org/chromium/*", "org/jni_zero/*", "WV/*", "com/android/*", "J/*"});
         }
-        // Only microG (which signs users in through a WebView and bundles Cronet) is known to need core first; any app can be forced with APKLAYER_PROVIDER_FIRST=1.
+        // The provider's classes go first for an app that bundles Chromium's base classes without Chromium's own jni_zero (an embedded Cronet); any app can be forced with APKLAYER_PROVIDER_FIRST=1.
         // The real fix is a class loader of its own for the provider (its natives find classes through the sandbox loader today): docs/PLAN.md.
-        if (package == "com.google.android.gms" || !getenvOr("APKLAYER_PROVIDER_FIRST", "").empty()) classes = core + ":" + classes + ":" + rest;
+        auto bundles = [&](const char* entry) { Spawn x; x.argv = {"unzip", "-Z1", join(dir, "classes.jar"), entry}; x.env = currentEnv(); x.logFile = "/dev/null"; return !runCapture(x).empty(); };
+        if ((bundles("org/chromium/base/ThreadUtils.class") && !bundles("org/jni_zero/*")) || !getenvOr("APKLAYER_PROVIDER_FIRST", "").empty()) classes = core + ":" + classes + ":" + rest;
         else classes = classes + ":" + core + ":" + rest;
     }
     if (!getenvOr("APKLAYER_ISOLATED", "").empty()) jvm.push_back("-Dapklayer.isolated=" + getenvOr("APKLAYER_ISOLATED", ""));
-    if (package == "com.android.providers.media.module") jvm.push_back("-Drobolectric.installFakeMediaProvider=false");  // Robolectric's fake MediaStore would answer for the real MediaProvider
     if (!getenvOr("APKLAYER_LOGCAT", "").empty()) jvm.push_back("-Dapklayer.logcat=true");
     for (const std::string& o : split(getenvOr("APKLAYER_JOPTS", ""), ' ')) if (!o.empty()) jvm.push_back(o);
     jvm.insert(jvm.end(), {"-cp", hostClasspath(l, classes), "apklayer.host.Main"});

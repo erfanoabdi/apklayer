@@ -35,6 +35,8 @@ static USER_MANAGER_SERVICE_NAME: &str = "android.security.maintenance";
 static LEGACY_KEYSTORE_SERVICE_NAME: &str = "android.security.legacykeystore";
 
 /// Keystore 2.0 takes one argument which is a path indicating its designated working directory.
+static ARGS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+
 fn main() {
     // Initialize android logging.
     android_logger::init_once(
@@ -60,8 +62,9 @@ fn main() {
     // Saying hi.
     info!("Keystore2 is starting.");
 
-    let mut args = std::env::args();
-    args.next().expect("That's odd. How is there not even a first argument?");
+    // apklayer: a library entered through `main(argc, argv)`: Rust's std::env::args() is empty there (it reads the C runtime's init-array arguments).
+    let mut args = ARGS.get().cloned().unwrap_or_default().into_iter();
+    args.next();
 
     // This must happen early before any other sqlite operations.
     info!("Setting up sqlite logging for keystore2");
@@ -166,7 +169,11 @@ fn main() {
 
 // apklayer: the daemon runs as a library whose `main` btload calls (like every Android-side process here).
 #[export_name = "main"]
-pub extern "C" fn apklayer_keystore2_main(_argc: i32, _argv: *const *const u8) -> i32 {
+pub extern "C" fn apklayer_keystore2_main(argc: i32, argv: *const *const std::os::raw::c_char) -> i32 {
+    let args = (0..argc.max(0) as usize)
+        .map(|i| unsafe { std::ffi::CStr::from_ptr(*argv.add(i)) }.to_string_lossy().into_owned())
+        .collect::<Vec<String>>();
+    let _ = ARGS.set(args);
     main();
     0
 }

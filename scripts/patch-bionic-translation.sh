@@ -525,3 +525,64 @@ int bionic___fprintf_chk(FILE *stream, int flag, const char *format, ...)
     chk.write_text(s)
 chk.write_text(chk.read_text().replace('fread(buf, size, count, stream)', 'fread(buf, size, count, bionic_file_to_glibc_file(stream))'))  # idempotent: the replaced text no longer matches
 PY
+
+# 18. Regular expressions: bionic's regex_t (32 bytes), regmatch_t (64-bit offsets) and REG_* flag values differ from glibc's, and nothing wrapped regcomp/regexec/regfree, so a bionic caller's
+#     regex_t was overrun by glibc's (64 bytes): keymaster's GetOsPatchlevel (regcomp on the stack) crashed the software KeyMint. The wrappers keep the glibc regex_t behind bionic's re_g.
+python3 - "$bt" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1]) / 'libc/libc.c'
+s = p.read_text()
+if 'step 18' not in s:
+    s += '''
+/* apklayer patch: see scripts/patch-bionic-translation.sh step 18 */
+#include <regex.h>
+#include <stdint.h>
+struct bionic_regex { int re_magic; size_t re_nsub; const char *re_endp; void *re_g; };
+struct bionic_regmatch { int64_t rm_so; int64_t rm_eo; };
+
+int bionic_regcomp(struct bionic_regex *preg, const char *pattern, int cflags)
+{
+	int gf = (cflags & 1 ? REG_EXTENDED : 0) | (cflags & 2 ? REG_ICASE : 0) | (cflags & 4 ? REG_NOSUB : 0) | (cflags & 8 ? REG_NEWLINE : 0);
+	regex_t *g = calloc(1, sizeof(*g));
+	int r = g ? regcomp(g, pattern, gf) : REG_ESPACE;
+	if (r) {
+		free(g);
+		return r;
+	}
+	preg->re_magic = 0x62726567;
+	preg->re_nsub = g->re_nsub;
+	preg->re_endp = NULL;
+	preg->re_g = g;
+	return 0;
+}
+
+int bionic_regexec(const struct bionic_regex *preg, const char *string, size_t nmatch, struct bionic_regmatch pmatch[], int eflags)
+{
+	regmatch_t gm[32];
+	size_t n = nmatch > 32 ? 32 : nmatch;
+	int r = regexec(preg->re_g, string, n, gm, eflags & 3);
+	if (!r)
+		for (size_t i = 0; i < nmatch; i++) {
+			pmatch[i].rm_so = i < n ? gm[i].rm_so : -1;
+			pmatch[i].rm_eo = i < n ? gm[i].rm_eo : -1;
+		}
+	return r;
+}
+
+void bionic_regfree(struct bionic_regex *preg)
+{
+	if (preg->re_g) {
+		regfree(preg->re_g);
+		free(preg->re_g);
+		preg->re_g = NULL;
+	}
+}
+
+size_t bionic_regerror(int errcode, const struct bionic_regex *preg, char *errbuf, size_t errbuf_size)
+{
+	return regerror(errcode, preg ? preg->re_g : NULL, errbuf, errbuf_size);
+}
+'''
+    p.write_text(s)
+PY

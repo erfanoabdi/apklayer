@@ -63,7 +63,8 @@ final class HostCompat {
                 } catch (java.io.IOException | NumberFormatException none) { /* falls back below */ }
             }
         }
-        return declaredTarget >= 0 ? declaredTarget : RuntimeEnvironment.getApplication().getApplicationInfo().targetSdkVersion;
+        // no install record yet (`apklayer install` parses the APK while its Application is being created: getApplication would recurse into that creation)
+        return declaredTarget >= 0 ? declaredTarget : Integer.getInteger("apklayer.sdk", 36);
     }
 
     private static int number(Element e, String attribute) { return e.hasAttribute(attribute) ? Integer.parseInt(e.getAttribute(attribute)) : -1; }

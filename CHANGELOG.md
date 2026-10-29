@@ -40,6 +40,9 @@ Older dated notes (GPU follow-up, TextureView, MC3, Vulkan checkpoints, OTR2, ro
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 
+### 2026-10-29 — libapklayer_keystore2 (arguments of the library main; incremental `m`, gsi_arm64)
+- Why: keystore2 panicked at start (`std::env::args()` is empty when btload calls `main`); the exported main now passes argc/argv. Command: `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_keystore2`. Result: below.
+
 ### 2026-10-29 — libapklayer_egl probe (gsi_arm64, incremental replay of one module)
 - Why: Fennec's WebRender draws no text on the GL path (same page in desktop Firefox on the same virgl GPU does), so eglGetProcAddress now logs, under `APKLAYER_EGL_PROBE`, every function the host does not have. Command: `scripts/orb-build-module.py libapklayer_egl hals/graphics/egl Egl.cpp` after `scripts/sync-aosp.sh`. Result: see the entry below it once done.
 
