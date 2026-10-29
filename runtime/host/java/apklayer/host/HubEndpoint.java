@@ -87,6 +87,7 @@ final class HubEndpoint extends Binder {
             java.util.concurrent.CompletableFuture<android.content.ContentProvider> created = new java.util.concurrent.CompletableFuture<>();
             main.post(() -> { try { created.complete(org.robolectric.shadows.ShadowContentResolver.getProvider(android.net.Uri.parse("content://" + authority))); } catch (Throwable failure) { created.completeExceptionally(failure); } });
             android.content.ContentProvider provider = created.join();
+            if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] provider " + authority + " -> " + provider + " (context " + (provider == null ? null : provider.getContext()) + ")");
             reply.writeNoException();
             reply.writeStrongBinder(provider == null ? null : provider.getIContentProvider().asBinder());
             return true;
