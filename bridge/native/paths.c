@@ -43,6 +43,13 @@ bool apklayer_apply_path_overrides(char **path)
             char *mapped;
             if (asprintf(&mapped, "%s%s%s", r, tries[t], p) < 0) return false;
             if (access(mapped, F_OK) == 0) { *path = mapped; return true; }
+            if (!strcmp(prefixes[i], "/data/")) {  /* a file that is yet to be created (keystore2's database and its journal): served when its directory is in the root */
+                char *dir = strdup(mapped), *slash = strrchr(dir, '/');
+                if (slash) *slash = 0;
+                int there = slash && access(dir, F_OK) == 0;
+                free(dir);
+                if (there) { *path = mapped; return true; }
+            }
             free(mapped); /* not in the instance's root: try the next spelling, then the host's own file */
         }
         return false;

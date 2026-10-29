@@ -107,6 +107,13 @@ void ensureShell(const Layout& l, const Instance& inst, const NativeEnv& env) {
     spawn(shell);
 }
 
+// keystore2 keeps its database in /data/misc/keystore, which the path layer serves from the Android root
+static std::string keystoreDir(const Layout& l) {
+    std::string dir = join(getenvOr("APKLAYER_ANDROID_ROOT", join(l.native, "android-root")), "data/misc/keystore");
+    makeDirs(dir);
+    return dir;
+}
+
 int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std::string>& tool) {
     NativeEnv ne = nativeEnv(l, inst);
     const std::string& n = l.native;
@@ -116,6 +123,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     stageManifest(l, staged(l, "libapklayer_codec2.so"), "apklayer-media.xml", "aosp/hals/media/codec2/manifest.xml");
     stageManifest(l, staged(l, "libapklayer_audio.so"), "apklayer-audio.xml", "aosp/hals/audio/manifest.xml");
     stageManifest(l, staged(l, "libapklayer_audioserver.so"), "apklayer-audio-effects.xml", "aosp/hals/audio/effects-manifest.xml");
+    stageManifest(l, staged(l, "libapklayer_keymint.so"), "apklayer-keymint.xml", "aosp/hals/security/manifest.xml");
 
     // a fresh property store per stack (ro.* is write-once); ensureStack already made it when a client waits on the ready property
     if (getenvOr("APKLAYER_STACK_PREPARED", "").empty()) {
@@ -160,6 +168,11 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     if (staged(l, "libapklayer_audioserver.so")) {
         start("audio-effects", "libapklayer_audio.so", {"--effects", join(hals, "audio_effects_config.xml")});
         start("audio-services", "libapklayer_audioserver.so", {});
+    }
+    if (staged(l, "libapklayer_keymint.so") && staged(l, "libapklayer_keystore2.so")) {  // the real Android keystore: software KeyMint, then keystore2 over it
+        start("keymint", "libapklayer_keymint.so", {});
+        keystoreDir(l);
+        start("keystore2", "libapklayer_keystore2.so", {});
     }
     start("surfaceflinger", "libapklayer_surfaceflinger.so", {});
     if (!tool.empty()) {
