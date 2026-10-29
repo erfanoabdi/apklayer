@@ -204,6 +204,7 @@ public final class Services {
                     r.bound = true;
                 }
                 CONNECTIONS.put(conn, className(cn));
+                if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] bind " + className(cn) + ": onBind gave " + r.binder + " (service " + r.service.getClass().getName() + ")");
                 IBinder shown = r.binder;
                 if (Boolean.getBoolean("apklayer.tracebind") && shown != null) { if (r.traced == null) r.traced = traced(shown); shown = r.traced; } // one IBinder for every connection, as on Android
                 IBinder binder = shown;

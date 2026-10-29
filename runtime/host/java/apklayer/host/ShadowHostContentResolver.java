@@ -17,6 +17,11 @@ public class ShadowHostContentResolver extends ShadowContentResolver {
     /** Sync status listeners belong to the content service, which does not exist here: a handle that does nothing (Tasks registers one at start). */
     @Implementation protected static Object addStatusChangeListener(int mask, android.content.SyncStatusObserver observer) { return new Object(); }
     @Implementation protected static void removeStatusChangeListener(Object handle) {}
+    /** Android's ContentResolver.getType answers null when the provider throws (an Intent whose data is a provider's root uri asks it while it is sent: the calendar's PROVIDER_CHANGED). */
+    @Implementation @Override protected String getType(Uri uri) {
+        try { return super.getType(uri); }
+        catch (RuntimeException failure) { System.out.println("[apklayer] getType(" + uri + ") failed: " + failure.getMessage()); return null; }
+    }
     private static boolean hub() { return HubClient.connected(); }
     private static void tell(Uri uri, int flags) { if (uri != null && hub()) HubClient.current().notifyChange(uri, flags); }
 
