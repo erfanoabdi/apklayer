@@ -40,6 +40,9 @@ Older dated notes (GPU follow-up, TextureView, MC3, Vulkan checkpoints, OTR2, ro
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 
+### 2026-10-29 — libapklayer_egl probe (gsi_arm64, incremental replay of one module)
+- Why: Fennec's WebRender draws no text on the GL path (same page in desktop Firefox on the same virgl GPU does), so eglGetProcAddress now logs, under `APKLAYER_EGL_PROBE`, every function the host does not have. Command: `scripts/orb-build-module.py libapklayer_egl hals/graphics/egl Egl.cpp` after `scripts/sync-aosp.sh`. Result: see the entry below it once done.
+
 ### 2026-10-29 — real keystore: libapklayer_keystore2 and libapklayer_keymint (new modules, authorized by the user: "finish keystore"; gsi_arm64)
 - keystore2 and the AOSP software KeyMint run as libraries whose `main` btload calls (the tree's binaries have no exported main). New `vendor/apklayer/hals/security` (graph regeneration). `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_keystore2 libapklayer_keymint`
 

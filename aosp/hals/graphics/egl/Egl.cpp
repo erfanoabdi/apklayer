@@ -705,7 +705,9 @@ __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char* name) {
     if (getenv("APKLAYER_EGL_PROBE") && !strcmp(name, "glEGLImageTargetTexture2DOES")) return reinterpret_cast<__eglMustCastToProperFunctionPointerType>(probeImageTarget);
     for (auto& o : ours) if (!strcmp(name, o.n)) return reinterpret_cast<__eglMustCastToProperFunctionPointerType>(o.f);
     auto proc = host<__eglMustCastToProperFunctionPointerType (*)(const char*)>("eglGetProcAddress");
-    return host<__eglMustCastToProperFunctionPointerType (*)(const char*)>("eglGetProcAddress")(name);
+    auto found = proc(name);
+    if (!found && getenv("APKLAYER_EGL_PROBE")) ALOGW("probe: eglGetProcAddress(%s): the host has no such function", name);  // a null here is a crash or a silent no-op in the caller
+    return found;
 }
 
 // A forwarded function the host does not have: fails instead of crashing on a null call.
