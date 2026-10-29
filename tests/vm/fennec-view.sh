@@ -7,6 +7,6 @@ mkdir -p /tmp/www; echo '<html><body style="background:#fc6"><h1 style="font-siz
 (cd /tmp/www && sudo -n setsid python3 -m http.server 80 --bind 127.0.0.1 > /tmp/www.log 2>&1 &)
 printf 'action=android.intent.action.VIEW\ndata=%s\ncomponent=org.mozilla.fenix.IntentReceiverActivity\n' "$url" > /tmp/fx-intent.properties
 [ -n "$TRACE_EGL" ] && (sudo -n bpftrace tests/vm/egl-trace.bt > /tmp/egl-trace.txt 2>&1 &)
-(APKLAYER_GECKO_PREFS="$GECKO_PREFS" APKLAYER_EGL_PROBE="${EGL_PROBE:-}" MOZ_LOG="$MOZ_LOG_SPEC" MOZ_LOG_FILE=${MOZ_LOG_TO:-} APKLAYER_INTENT_FILE=/tmp/fx-intent.properties APKLAYER_JNI_EXC=1 APKLAYER_JOPTS="-Dapklayer.logcat=true" setsid bin/apklayer run $pkg; echo "exit=$?") > $out 2>&1 &
+(APKLAYER_GECKO_PREFS="$GECKO_PREFS" APKLAYER_EGL_PROBE="${EGL_PROBE:-}" MOZ_LOG="$MOZ_LOG_SPEC" MOZ_LOG_FILE=${MOZ_LOG_TO:-} APKLAYER_INTENT_FILE=/tmp/fx-intent.properties APKLAYER_JNI_EXC=1 APKLAYER_JOPTS="-Dapklayer.logcat=true -Dapklayer.geckodiag=true" setsid bin/apklayer run $pkg; echo "exit=$?") > $out 2>&1 &
 sudo -n /tmp/uinput-keys sleep:${VIEW_WAIT:-70000}
 echo "alive: $(pgrep -f "[a]pklayer.package=$pkg" | wc -l); web log:"; tail -3 /tmp/www.log | cut -c1-120; grep -a "^exit=" $out

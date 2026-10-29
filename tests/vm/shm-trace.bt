@@ -1,0 +1,3 @@
+uretprobe:/home/utm/android-arm64/lib64/libandroid.so:ASharedMemory_create { printf("%d %s ASharedMemory_create -> %d\n", pid, comm, retval); }
+uprobe:/home/utm/android-arm64/lib64/libandroid.so:ASharedMemory_setProt { printf("%d %s setProt\n", pid, comm); }
+uretprobe:/home/utm/android-arm64/lib64/libandroid.so:ASharedMemory_setProt { printf("%d %s setProt -> %d\n", pid, comm, retval); }
