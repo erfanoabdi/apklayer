@@ -67,6 +67,14 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
         return known != null ? known : packageOfUid(uid);
     }
 
+    /** The features the build declares, as a list (Robolectric answers null while its own list is empty; apps read .length). */
+    @Implementation
+    protected android.content.pm.FeatureInfo[] getSystemAvailableFeatures() {
+        android.content.pm.FeatureInfo[] known = super.getSystemAvailableFeatures();
+        if (known != null) return known;
+        return HostSystemConfig.loadedFeatures.stream().sorted().map(name -> { android.content.pm.FeatureInfo info = new android.content.pm.FeatureInfo(); info.name = name; return info; }).toArray(android.content.pm.FeatureInfo[]::new);
+    }
+
     /** Apps read their own signing certificate in Application.onCreate (update checks, SoLoader...): every package has one from the first call. */
     private android.content.pm.PackageInfo signed(android.content.pm.PackageInfo info, long flags) {
         if (info == null) return null;

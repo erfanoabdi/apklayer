@@ -27,6 +27,9 @@ final class HostSystemConfig {
     final Map<String, Set<String>> defaultGrants = new HashMap<>();
     final Map<String, String> levels = new HashMap<>();  // permission -> normal | dangerous | appop | signature
 
+    /** The features of the last configuration applied (ShadowHostPackageManager lists them). */
+    static volatile java.util.Set<String> loadedFeatures = java.util.Set.of();
+
     static HostSystemConfig load() {
         HostSystemConfig config = new HostSystemConfig();
         String root = System.getenv("ANDROID_ROOT");
@@ -79,6 +82,7 @@ final class HostSystemConfig {
 
     /** Declares the features and grants this package what the build gives it. */
     void apply(Context app) {
+        loadedFeatures = java.util.Set.copyOf(features);
         org.robolectric.shadows.ShadowPackageManager shadow = Shadows.shadowOf(app.getPackageManager());
         for (String feature : features) {
             shadow.setSystemFeature(feature, true);
