@@ -1,0 +1,1 @@
+<permissions><privapp-permissions package="hello.files"><permission name="android.permission.MANAGE_DOCUMENTS"/></privapp-permissions></permissions>

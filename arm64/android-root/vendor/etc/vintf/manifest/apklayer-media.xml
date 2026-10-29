@@ -1,0 +1,7 @@
+<manifest version="2.0" type="device">
+    <hal format="aidl">
+        <name>android.hardware.media.c2</name>
+        <version>2</version>
+        <fqname>IComponentStore/apklayer</fqname>
+    </hal>
+</manifest>

@@ -1,0 +1,2 @@
+<?xml version='1.0' encoding='utf-8'?>
+<config><compat-change enableSinceTargetSdk="36" id="352312780" name="RESTRICT_CONTACTS_CREATION_IN_ACCOUNTS" /><compat-change enableAfterTargetSdk="36" id="437318646" name="RESTRICT_DATA_URI_COLUMNS" /><compat-change enableAfterTargetSdk="36" id="157720069" name="REQUIRE_PERMISSIONS_FOR_DIRECTORY_QUERIES" /><compat-change enableAfterTargetSdk="36" id="484953293" name="ENFORCE_STRICT_SQL_CHECKS" /></config>
