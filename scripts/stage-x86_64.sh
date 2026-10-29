@@ -3,6 +3,7 @@
 #   android-x86_64/lib64   the Android libraries (the closure of deps/android-libs.list: system/lib64, the APEX and module directories, vendor/apklayer's modules)
 #   android-root           the tree's files Android reads at fixed paths (scripts/collect-android-root.sh with the x86_64 product)
 #   aosp/Robolectric_all.jar   the tree's Robolectric
+#   javac-shards           the framework's javac output (scripts/build-native.sh lists the @CriticalNative methods from it)
 #   bt-libs                bionic_translation (patched, scripts/build-bionic-translation.sh) built for x86_64 as a check and as a convenience
 # and verified: every ELF is checked to be x86-64. Usage on the Mac: scripts/stage-x86_64.sh   (it re-runs itself inside the OrbStack machine "ubuntu22-x86").
 # The tar file lands in build/x86_64/apklayer-x86_64-stage.tar (docs/X86_64.md says what to do with it on the PC).
@@ -30,6 +31,11 @@ APKLAYER_ORB=env ANDROID_PRODUCT=generic_x86_64 STAGE_DEST="$stage/android-root"
 echo "== Robolectric"
 mkdir -p "$stage/aosp" && cp "$tree/out/host/linux-x86/framework/Robolectric_all.jar" "$stage/aosp/"
 
+echo "== framework javac shards (the list of @CriticalNative methods is generated from them)"
+rm -rf "$stage/javac-shards"; mkdir -p "$stage/javac-shards"
+cp "$tree"/out/soong/.intermediates/frameworks/base/framework-minus-apex/android_common/javac/framework.jar[0-9]* "$stage/javac-shards/" 2>/dev/null || true
+rm -f "$stage"/javac-shards/*.rsp "$stage"/javac-shards/*.pc_state
+
 echo "== bionic_translation"
 if [ ! -d "$stage/bt" ]; then cp -r "$HOME/bt/bionic_translation" "$stage/bt" && (cd "$stage/bt" && rm -rf b b2 && git checkout meson.build); fi
 sh "$here/build-bionic-translation.sh" "$stage/bt" > "$stage/bt-build.log" 2>&1 && echo "built, log $stage/bt-build.log"
@@ -45,5 +51,5 @@ echo "$bad foreign ELF files"
 echo "== tar"
 rm -rf "$stage/bt-libs"; mkdir -p "$stage/bt-libs" && cp -L "$stage"/bt/b/lib*_bio.so* "$stage/bt-libs/"
 mkdir -p "$repo/build/x86_64"
-tar cf "$repo/build/x86_64/apklayer-x86_64-stage.tar" -C "$stage" android-x86_64 android-root aosp bt-libs libs-copied.txt libs-missing.txt
+tar cf "$repo/build/x86_64/apklayer-x86_64-stage.tar" -C "$stage" android-x86_64 android-root aosp javac-shards bt-libs libs-copied.txt libs-missing.txt
 ls -la "$repo/build/x86_64/apklayer-x86_64-stage.tar"
