@@ -17,7 +17,7 @@ final class HostStorage {
 
     static void install(Application app) {
         java.io.File internal = HostVolumes.internal();  // the instance's own sdcard, not a temp directory
-        if (internal != null) { internal.mkdirs(); org.robolectric.shadows.ShadowEnvironment.setExternalStorageDirectory(internal.toPath()); }
+        if (internal != null) { internal.mkdirs(); org.robolectric.shadows.ShadowEnvironment.setExternalStorageDirectory(internal.toPath()); org.robolectric.shadows.ShadowEnvironment.setExternalStoragePublicDirectory(internal.toPath()); }  // getExternalFilesDir and the public directories are below it
         StorageManager manager = app.getSystemService(StorageManager.class);
         if (manager != null && manager.getStorageVolumes().isEmpty()) {
             StorageVolume primary = primaryVolume();
