@@ -40,6 +40,9 @@ Older dated notes (GPU follow-up, TextureView, MC3, Vulkan checkpoints, OTR2, ro
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 
+### 2026-10-29 — x86_64: the patched tree libraries and the keystore modules (gsi_x86_64, incremental in the user's x86_64 out; for the prebuilts branch)
+- Why: the x86_64 stage had the tree's unpatched libbinder, libnativehelper, libmedia_jni, libstatspull, libactivitymanager_aidl, libsensorprivacy and no keymint/keystore2. The tree sources are patched already (shared with the arm64 build). Command: `cd ~/los24 && source build/envsetup.sh && breakfast gsi_x86_64 userdebug && m libbinder libnativehelper libmedia_jni libstatspull libactivitymanager_aidl libsensorprivacy libapklayer_keystore2 libapklayer_keymint`. Result: below.
+
 ### 2026-10-29 — libbinder patched (scripts/patch-libbinder.sh; gsi_arm64, incremental `m libbinder`)
 - Why: transactions to keystore2 failed in the kernel (security context requested, none available). Command: `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libbinder`. Result: below.
 
