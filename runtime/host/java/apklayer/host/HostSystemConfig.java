@@ -80,7 +80,12 @@ final class HostSystemConfig {
     /** Declares the features and grants this package what the build gives it. */
     void apply(Context app) {
         org.robolectric.shadows.ShadowPackageManager shadow = Shadows.shadowOf(app.getPackageManager());
-        for (String feature : features) shadow.setSystemFeature(feature, true);
+        for (String feature : features) {
+            shadow.setSystemFeature(feature, true);
+            android.content.pm.FeatureInfo info = new android.content.pm.FeatureInfo();  // getSystemAvailableFeatures lists them too (Device Info HW counts them; null there is a crash)
+            info.name = feature;
+            shadow.addSystemAvailableFeature(info);
+        }
         for (String feature : unavailable) shadow.setSystemFeature(feature, false);
         // signature spoofing support (the permission microG Services asks for; the spoofing itself is ShadowHostPackageManager.fakeSignature): known to the system and granted at install
         android.content.pm.PermissionInfo spoofing = new android.content.pm.PermissionInfo();
