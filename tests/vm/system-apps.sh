@@ -18,7 +18,7 @@ mkdir -p /tmp/sys-www && head -c 40000 /dev/urandom > /tmp/sys-www/check.bin
 status=0
 for scenario in "$@"; do
     out=/tmp/sys-$scenario.out
-    APKLAYER_JOPTS="-Dhello.sys=$scenario -Dapklayer.runms=90000 -Dhello.url=http://127.0.0.1:8099/check.bin" $CLI run hello.system > $out 2>&1 &
+    APKLAYER_JOPTS="-Dhello.sys=$scenario -Dapklayer.runms=90000 -Dapklayer.logcat=true -Dhello.url=http://127.0.0.1:8099/check.bin" $CLI run hello.system > $out 2>&1 &
     run=$!
     until grep -aq "^\[sys\] DONE" $out 2>/dev/null; do kill -0 $run 2>/dev/null || break; read -t 1 <> <(:) || true; done
     kill $run 2>/dev/null; $CLI stop >/dev/null 2>&1; wait $run 2>/dev/null

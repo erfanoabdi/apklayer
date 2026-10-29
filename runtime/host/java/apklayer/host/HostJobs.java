@@ -17,7 +17,7 @@ import java.util.Map;
 import org.robolectric.RuntimeEnvironment;
 
 /**
- * Runs the jobs an app schedules: after its minimum latency (or its period) the job's service is bound and started the way the system's JobSchedulerService does
+ * Runs the jobs an app schedules (the service is bound through Services, as converted app code is; Robolectric's own bindService hands out no binder): after its minimum latency (or its period) the job's service is bound and started the way the system's JobSchedulerService does
  * (IJobService.startJob with parameters whose callback is ours; jobFinished unbinds, reschedules a periodic job or one that asked for it). Constraints count as met, the
  * desktop has power and network; jobs live as long as the process (persisted jobs are not restored).
  */
@@ -50,7 +50,7 @@ final class HostJobs {
         IJobCallback.Stub callback = new IJobCallback.Stub() {
             @Override public void jobFinished(int jobId, boolean reschedule) {
                 MAIN.post(() -> {
-                    try { app.unbindService(connection[0]); } catch (RuntimeException gone) { /* already unbound */ }
+                    try { Services.unbindService(app, connection[0]); } catch (RuntimeException gone) { /* already unbound */ }
                     if (job.isPeriodic()) plan(job);
                     else if (reschedule) plan(job, BACKOFF_MS);
                     else app.getSystemService(JobScheduler.class).cancel(jobId);
@@ -79,6 +79,6 @@ final class HostJobs {
             }
             @Override public void onServiceDisconnected(ComponentName name) {}
         };
-        if (!app.bindService(new Intent().setComponent(service), connection[0], Context.BIND_AUTO_CREATE)) System.out.println("[apklayer] job " + job.getId() + ": no service " + service.flattenToShortString());
+        if (!Services.bindService(app, new Intent().setComponent(service), connection[0], Context.BIND_AUTO_CREATE)) System.out.println("[apklayer] job " + job.getId() + ": no service " + service.flattenToShortString());
     }
 }
