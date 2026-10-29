@@ -27,8 +27,16 @@ final class HostKeyStore {
                             android.system.keystore2.IKeystoreService.Stub.asInterface(real));
                     org.robolectric.shadows.ShadowServiceManager.setServiceDeclaredOrNot("android.system.keystore2.IKeystoreService/default", true);
                     android.security.keystore2.AndroidKeyStoreProvider.install();
-                    System.out.println("[apklayer] AndroidKeyStore: keystore2");
-                    return;
+                    try {  // a first call tells whether keystore2 answers this process at all
+                        java.security.KeyStore probe = java.security.KeyStore.getInstance("AndroidKeyStore");
+                        probe.load(null);
+                        probe.aliases();
+                        System.out.println("[apklayer] AndroidKeyStore: keystore2");
+                        return;
+                    } catch (Exception unanswered) {
+                        System.out.println("[apklayer] keystore2 does not answer, software keystore: " + unanswered);
+                        Security.removeProvider("AndroidKeyStore");
+                    }
                 }
             } catch (Throwable unavailable) { System.out.println("[apklayer] keystore2 not usable, software keystore: " + unavailable); }
         }
