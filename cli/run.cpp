@@ -97,6 +97,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         else classes = classes + ":" + core + ":" + rest;
     }
     if (!getenvOr("APKLAYER_ISOLATED", "").empty()) jvm.push_back("-Dapklayer.isolated=" + getenvOr("APKLAYER_ISOLATED", ""));
+    if (package == "com.android.providers.media.module") jvm.push_back("-Drobolectric.installFakeMediaProvider=false");  // Robolectric's fake MediaStore would answer for the real MediaProvider
     if (!getenvOr("APKLAYER_LOGCAT", "").empty()) jvm.push_back("-Dapklayer.logcat=true");
     for (const std::string& o : split(getenvOr("APKLAYER_JOPTS", ""), ' ')) if (!o.empty()) jvm.push_back(o);
     jvm.insert(jvm.end(), {"-cp", hostClasspath(l, classes), "apklayer.host.Main"});
