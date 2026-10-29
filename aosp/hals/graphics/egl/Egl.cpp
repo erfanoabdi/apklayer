@@ -662,9 +662,14 @@ EGLBoolean eglPresentationTimeANDROID(EGLDisplay, EGLSurface, EGLnsecsANDROID) {
 FORWARDED(DECLARE_SLOT)
 
 // file-scope assembly: no C declaration to clash with the EGL headers' signatures
+#if defined(__aarch64__)
 #define DEFINE_STUB(name) \
     __asm__(".text\n.globl " #name "\n.type " #name ",%function\n" #name ":\n\tadrp x16, host_slot_" #name \
             "\n\tldr x16, [x16, :lo12:host_slot_" #name "]\n\tbr x16\n");
+#elif defined(__x86_64__)
+#define DEFINE_STUB(name) \
+    __asm__(".text\n.globl " #name "\n.type " #name ",@function\n" #name ":\n\tmovq host_slot_" #name "(%rip), %r11\n\tjmp *%r11\n");
+#endif
 FORWARDED(DEFINE_STUB)
 
 // temporary (APKLAYER_EGL_PROBE): the image-to-texture call with its target and the GL error it leaves
