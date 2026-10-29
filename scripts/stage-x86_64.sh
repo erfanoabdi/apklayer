@@ -49,7 +49,8 @@ done
 echo "$bad foreign ELF files"
 
 echo "== tar"
-rm -rf "$stage/bt-libs"; mkdir -p "$stage/bt-libs" && cp -L "$stage"/bt/b/lib*_bio.so* "$stage/bt-libs/"
+rm -rf "$stage/bt-libs"; mkdir -p "$stage/bt-libs"
+for f in "$stage"/bt/b/lib*_bio.so*; do [ -f "$f" ] && cp -L "$f" "$stage/bt-libs/"; done
 mkdir -p "$repo/build/x86_64"
 tar cf "$repo/build/x86_64/apklayer-x86_64-stage.tar" -C "$stage" android-x86_64 android-root aosp javac-shards bt-libs libs-copied.txt libs-missing.txt
 ls -la "$repo/build/x86_64/apklayer-x86_64-stage.tar"
