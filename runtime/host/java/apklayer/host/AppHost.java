@@ -185,7 +185,7 @@ public final class AppHost implements Runnable {
         this.shell = shell;
         text.shell = shell;
         app.getSystemService(android.content.ClipboardManager.class).addPrimaryClipChangedListener(text::onAppClipboardChanged);
-        if (java.security.Security.getProvider("AndroidKeyStore") == null) java.security.Security.addProvider(new HostKeyStoreProvider());
+        HostKeyStore.install();
         AppEnvironment.installSystemPackage(app);
         // the manifest providers were created before Application.onCreate (ShadowHostInstrumentation)
         if (System.getProperty("apklayer.webviewprovider") != null) { // Android's RuntimeInit installs a handler that logs and kills the process; Chromium's JniAndroid calls it
