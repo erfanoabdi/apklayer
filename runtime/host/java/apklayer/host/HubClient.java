@@ -46,11 +46,11 @@ public final class HubClient {
                     if (info == null) return null;
                     // the components go in one by one: installPackage keeps an array of them without the intent filter entries that addIntentFilterFor... needs
                     android.content.pm.ActivityInfo[] activities = info.activities, receivers = info.receivers;
-                    android.content.pm.ServiceInfo[] services = info.services;
+                    android.content.pm.ServiceInfo[] serviceInfos = info.services;
                     info.activities = null; info.services = null; info.receivers = null; info.providers = null;
                     packageManager.installPackage(info);
                     if (activities != null) for (android.content.pm.ActivityInfo a : activities) packageManager.addOrUpdateActivity(a);
-                    if (services != null) for (android.content.pm.ServiceInfo a : services) packageManager.addOrUpdateService(a);
+                    if (serviceInfos != null) for (android.content.pm.ServiceInfo a : serviceInfos) packageManager.addOrUpdateService(a);
                     if (receivers != null) for (android.content.pm.ActivityInfo a : receivers) packageManager.addOrUpdateReceiver(a);
                     for (boolean services : new boolean[] {false, true}) for (int n = reply.readInt(); n > 0; n--) {
                         android.content.ComponentName component = new android.content.ComponentName(name, reply.readString());
