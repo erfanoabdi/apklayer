@@ -20,3 +20,6 @@ uprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglGetProcAddress { printf("%d
 uprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglGetDisplay { printf("%d %s eglGetDisplay\n", pid, comm); }
 uprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglGetPlatformDisplay { printf("%d %s eglGetPlatformDisplay\n", pid, comm); }
 uprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglQueryString { printf("%d %s eglQueryString\n", pid, comm); }
+uprobe:/home/utm/android-arm64/lib64/libandroid.so:ASurface*, uprobe:/home/utm/android-arm64/lib64/libandroid.so:ANativeWindow_* { printf("%d %s %s\n", pid, comm, probe); }
+uretprobe:/home/utm/android-arm64/lib64/libandroid.so:ANativeWindow_getWidth, uretprobe:/home/utm/android-arm64/lib64/libandroid.so:ANativeWindow_getHeight, uretprobe:/home/utm/android-arm64/lib64/libandroid.so:ANativeWindow_getFormat { printf("%d %s %s -> %d\n", pid, comm, probe, retval); }
+uretprobe:/home/utm/android-arm64/lib64/libandroid.so:ANativeWindow_fromSurface { printf("%d %s fromSurface -> %lx\n", pid, comm, retval); }

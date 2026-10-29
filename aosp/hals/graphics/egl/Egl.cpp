@@ -539,6 +539,7 @@ EGLSurface eglCreateWindowSurface(EGLDisplay dpy, EGLConfig cfg, EGLNativeWindow
 EGLBoolean eglSwapBuffers(EGLDisplay dpy, EGLSurface surface) { return swapWindow(dpy, surface); }
 
 EGLBoolean eglSwapBuffersWithDamageKHR(EGLDisplay dpy, EGLSurface surface, const EGLint*, EGLint) { return swapWindow(dpy, surface); }
+EGLBoolean eglSwapBuffersWithDamageEXT(EGLDisplay dpy, EGLSurface surface, const EGLint* rects, EGLint n) { return eglSwapBuffersWithDamageKHR(dpy, surface, rects, n); }  // GeckoView asks for the EXT name
 // HWUI announces the frame's damage with it before drawing; every swap here presents the whole buffer, so there is nothing to tell the host
 // (forwarding failed with EGL_BAD_SURFACE: the handle is ours, not the host's, and HWUI aborts on the failure)
 EGLBoolean eglSetDamageRegionKHR(EGLDisplay, EGLSurface, EGLint*, EGLint) { return EGL_TRUE; }
@@ -685,7 +686,7 @@ __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char* name) {
         {"eglInitialize", (void*)eglInitialize}, {"eglTerminate", (void*)eglTerminate},
         {"eglCreateImageKHR", (void*)eglCreateImageKHR}, {"eglCreateImage", (void*)eglCreateImage},
         {"eglGetNativeClientBufferANDROID", (void*)eglGetNativeClientBufferANDROID},
-        {"eglSwapBuffersWithDamageKHR", (void*)eglSwapBuffersWithDamageKHR}, {"eglSetDamageRegionKHR", (void*)eglSetDamageRegionKHR}, {"eglSwapBuffers", (void*)eglSwapBuffers},
+        {"eglSwapBuffersWithDamageKHR", (void*)eglSwapBuffersWithDamageKHR}, {"eglSwapBuffersWithDamageEXT", (void*)eglSwapBuffersWithDamageEXT}, {"eglSetDamageRegionKHR", (void*)eglSetDamageRegionKHR}, {"eglSwapBuffers", (void*)eglSwapBuffers},
         {"eglQueryStringImplementationANDROID", (void*)eglQueryStringImplementationANDROID},
         {"eglSetBlobCacheFuncsANDROID", (void*)eglSetBlobCacheFuncsANDROID},
         {"eglGetFrameTimestampsANDROID", (void*)eglGetFrameTimestampsANDROID},

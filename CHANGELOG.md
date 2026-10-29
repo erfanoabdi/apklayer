@@ -40,6 +40,9 @@ Older dated notes (GPU follow-up, TextureView, MC3, Vulkan checkpoints, OTR2, ro
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 
+### 2026-10-29 — libapklayer_egl: eglSwapBuffersWithDamageEXT is ours (incremental, authorized)
+- GeckoView (Fennec) draws with WebRender through `eglSwapBuffersWithDamageEXT`; eglGetProcAddress knew only the KHR name, so the EXT lookup fell through to the host's Mesa and the frames were swapped on the host surface, never reaching the window's buffer queue (white page). The EXT name now maps to the same present as the KHR one. `scripts/orb-build-module.py libapklayer_egl hals/graphics/egl Egl.cpp` (existing commands, no graph change, no clean).
+
 ### 2026-10-28 — libapklayer_egl: ES 1 context requests get an ES 2 context (incremental, authorized)
 - A context request without a client version (OpenGL ES 1.x: Device Info HW's GLSurfaceView) failed on the host's Mesa with EGL_BAD_ALLOC; the wrapper retries with client version 2.
 
