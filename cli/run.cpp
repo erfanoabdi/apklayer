@@ -109,7 +109,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         }
         // The provider's classes go first for an app that bundles Chromium's base classes without Chromium's own jni_zero (an embedded Cronet); any app can be forced with APKLAYER_PROVIDER_FIRST=1.
         // The real fix is a class loader of its own for the provider (its natives find classes through the sandbox loader today): docs/PLAN.md.
-        auto bundles = [&](const char* entry) { Spawn x; x.argv = {"unzip", "-Z1", join(dir, "classes.jar"), entry}; x.env = currentEnv(); x.logFile = "/dev/null"; return !runCapture(x).empty(); };
+        auto bundles = [&](const char* entry) { Spawn x; x.argv = {"unzip", "-Z1", join(dir, "classes.jar"), entry}; x.env = currentEnv(); return !runCapture(x).empty(); };
         if ((bundles("org/chromium/base/ThreadUtils.class") && !bundles("org/jni_zero/*")) || !getenvOr("APKLAYER_PROVIDER_FIRST", "").empty()) classes = core + ":" + classes + ":" + rest;
         else classes = classes + ":" + core + ":" + rest;
     }
