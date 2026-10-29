@@ -42,5 +42,6 @@ final class HostKeyStore {
         }
         System.out.println("[apklayer] AndroidKeyStore: software provider (keystore2 service not registered)");
         Security.addProvider(new HostKeyStoreProvider());
+        if (Security.getProvider("AndroidKeyStoreBCWorkaround") == null) Security.addProvider(new HostBcWorkaroundProvider());  // (keystore2's install() brings Android's own)
     }
 }

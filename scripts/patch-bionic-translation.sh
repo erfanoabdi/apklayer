@@ -586,3 +586,38 @@ size_t bionic_regerror(int errcode, const struct bionic_regex *preg, char *errbu
 '''
     p.write_text(s)
 PY
+
+# 19. The path layer also serves the calls that remove or move what open created: unlink, unlinkat, rename, mkdir, rmdir. keystore2's sqlite created its journal under /data/misc/keystore (served from the
+#     Android root) and then unlinked the plain /data path: SQLITE_IOERR_DELETE_NOENT, the database could not commit.
+python3 - "$bt" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1]) / 'libc/libc.c'
+s = p.read_text()
+if 'step 19' not in s:
+    s += '''
+/* apklayer patch: see scripts/patch-bionic-translation.sh step 19 */
+#include <unistd.h>
+#include <sys/stat.h>
+#include <stdio.h>
+static char *apk_map(const char *path, bool *owned)
+{
+	char *m = (char *)path;
+	*owned = path && path[0] == '/' && libc_bio_apply_path_overrides(&m);
+	return m;
+}
+int bionic_unlink(const char *path) { bool o; char *m = apk_map(path, &o); int r = unlink(m); if (o) free(m); return r; }
+int bionic_unlinkat(int dirfd, const char *path, int flags) { bool o; char *m = apk_map(path, &o); int r = unlinkat(dirfd, m, flags); if (o) free(m); return r; }
+int bionic_rmdir(const char *path) { bool o; char *m = apk_map(path, &o); int r = rmdir(m); if (o) free(m); return r; }
+int bionic_mkdir(const char *path, mode_t mode) { bool o; char *m = apk_map(path, &o); int r = mkdir(m, mode); if (o) free(m); return r; }
+int bionic_rename(const char *from, const char *to)
+{
+	bool of, ot; char *a = apk_map(from, &of), *b = apk_map(to, &ot);
+	int r = rename(a, b);
+	if (of) free(a);
+	if (ot) free(b);
+	return r;
+}
+'''
+    p.write_text(s)
+PY

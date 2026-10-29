@@ -37,7 +37,6 @@ final class AppEnvironment {
         if (Thread.getDefaultUncaughtExceptionHandler() == null) Thread.setDefaultUncaughtExceptionHandler((thread, failure) -> { System.out.println("FATAL EXCEPTION: " + thread.getName()); failure.printStackTrace(System.out); });  // like Android's RuntimeInit: an app's own handlers (ACRA, Gecko) still chain to it
         System.setProperty("java.vm.name", "Dalvik");  // libgdx, Netty ... pick their Android code path (native libraries through System.loadLibrary) by these names
         System.setProperty("java.runtime.name", "Android Runtime");
-        if (java.security.Security.getProvider("AndroidKeyStoreBCWorkaround") == null) java.security.Security.addProvider(new HostBcWorkaroundProvider());
         HostCompat.install();  // behavior changes by the app's target SDK (PendingIntent mutability, ...)
         HostGeckoDiag.start();
         org.robolectric.shadows.ShadowAlarmManager.setAutoSchedule(true);  // an alarm fires its PendingIntent or listener when its time comes (Robolectric only records it otherwise)
@@ -67,11 +66,11 @@ final class AppEnvironment {
                 .build();
         sandbox.getTestEnvironment().setUpApplicationState("apklayer", configuration, manifest);
         HostClock.alignToMonotonic();  // after the clock's reset by the state setup
-        HostKeyStore.install();  // apps open it in Application.onCreate (the application is lazy: not created yet); needs the sandbox's shadows
         NativeProcess.install();
         persistDataDirs();
         provideExternalStorage();
         provideNativeLibraryDir();
+        HostKeyStore.install();  // apps open it in Application.onCreate (a call into keystore2 may create the lazy application: after its data dirs are persistent); needs the sandbox's shadows
     }
 
     /** The app's ApplicationInfo names the directory of its extracted native libraries (SoLoader, ReLinker and others read it): where `apklayer install` put the arm64 ones. */
