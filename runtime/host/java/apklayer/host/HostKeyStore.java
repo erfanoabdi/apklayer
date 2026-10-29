@@ -9,16 +9,11 @@ import java.security.Security;
 final class HostKeyStore {
     private HostKeyStore() {}
 
-    /** A service of the device's own (binderfs) service manager, waited for only when the build declares it (the stack stages the declaration with the service). */
-    private static android.os.IBinder nativeService(String name) throws android.os.RemoteException {
-        android.os.IServiceManager sm = android.os.ServiceManagerNative.asInterface(com.android.internal.os.BinderInternal.getContextObject());
-        if (sm == null || !sm.isDeclared(name)) return null;
-        for (int i = 0; i < 100; i++) {  // keystore2 registers once it has met KeyMint and negotiated the shared secret
-            android.os.IBinder b = sm.checkService(name);
-            if (b != null) return b;
-            try { Thread.sleep(50); } catch (InterruptedException e) { return null; }
-        }
-        return null;
+    /** keystore2 of the device's own service manager, waited for only when the stack declares it (it stages the declaration together with the service). */
+    private static android.os.IBinder nativeService(String name) {
+        String native_ = System.getProperty("apklayer.native");
+        if (native_ == null || !new java.io.File(native_, "android-root/system/etc/vintf/manifest/apklayer-keystore2.xml").exists()) return null;
+        return RealBinder.await(name, 5000);  // it registers once it has met KeyMint and negotiated the shared secret
     }
 
     static void install() {

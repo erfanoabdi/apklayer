@@ -40,6 +40,9 @@ Older dated notes (GPU follow-up, TextureView, MC3, Vulkan checkpoints, OTR2, ro
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 
+### 2026-10-29 — libbinder patched (scripts/patch-libbinder.sh; gsi_arm64, incremental `m libbinder`)
+- Why: transactions to keystore2 failed in the kernel (security context requested, none available). Command: `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libbinder`. Result: below.
+
 ### 2026-10-29 — libapklayer_keystore2 (arguments of the library main; incremental `m`, gsi_arm64)
 - Why: keystore2 panicked at start (`std::env::args()` is empty when btload calls `main`); the exported main now passes argc/argv. Command: `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_keystore2`. Result: below.
 

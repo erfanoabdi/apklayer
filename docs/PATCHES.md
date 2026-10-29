@@ -252,3 +252,6 @@ Opt-in with `APKLAYER_WEBVIEW_PROVIDER=com.android.webview` (provider APK instal
 
 ## JNI shim (`bridge/native/runtime_shim.c`)
 - `GetFieldID(FileDescriptor, "descriptor", "I")` answers OpenJDK's `fd`: Android's FileDescriptor keeps its number in `descriptor`, and Conscrypt's native library looks that name up (Conversations).
+
+## libbinder without kernel security contexts (scripts/patch-libbinder.sh)
+`Parcel.cpp` no longer sets `FLAT_BINDER_FLAG_TXN_SECURITY_CTX` and `IPCThreadState::getCallingSid()` answers `u:r:apklayer:s0` when the kernel gave none. Why: keystore2's binders request the caller's SELinux context; this kernel has none (AppArmor only) and failed every transaction ("failed to get security context", EINVAL). `bridge/ndk/libselinux.c` allows every check.
