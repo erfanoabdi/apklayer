@@ -1,0 +1,4 @@
+// bpftrace: file lookups of Gecko's main threads (child and parent), to see which file the last stat before a crash was on.
+tracepoint:syscalls:sys_enter_newfstatat /comm == "Gecko"/ { printf("%d stat %s\n", pid, str(args->filename)); }
+tracepoint:syscalls:sys_enter_openat /comm == "Gecko"/ { printf("%d open %s\n", pid, str(args->filename)); }
+tracepoint:syscalls:sys_enter_statx /comm == "Gecko"/ { printf("%d statx %s\n", pid, str(args->filename)); }

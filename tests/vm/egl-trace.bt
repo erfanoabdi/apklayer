@@ -1,0 +1,22 @@
+// bpftrace: EGL and native-window calls of every process (filter by comm/pid afterwards). Usage: sudo bpftrace tests/vm/egl-trace.bt
+uprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglInitialize { printf("%d %s eglInitialize\n", pid, comm); }
+uprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglChooseConfig { printf("%d %s eglChooseConfig\n", pid, comm); }
+uretprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglChooseConfig { printf("%d %s   -> %d\n", pid, comm, retval); }
+uprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglCreateContext { printf("%d %s eglCreateContext\n", pid, comm); }
+uretprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglCreateContext { printf("%d %s   -> %lx\n", pid, comm, retval); }
+uprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglCreateWindowSurface { printf("%d %s eglCreateWindowSurface\n", pid, comm); }
+uretprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglCreateWindowSurface { printf("%d %s   -> %lx\n", pid, comm, retval); }
+uprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglMakeCurrent { printf("%d %s eglMakeCurrent\n", pid, comm); }
+uretprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglMakeCurrent { printf("%d %s   -> %d\n", pid, comm, retval); }
+uprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglSwapBuffers { printf("%d %s eglSwapBuffers\n", pid, comm); }
+uprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglGetError { printf("%d %s eglGetError\n", pid, comm); }
+uretprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglGetError { printf("%d %s   -> %x\n", pid, comm, retval); }
+uprobe:/home/utm/android-arm64/lib64/libandroid.so:ANativeWindow_lock { printf("%d %s ANativeWindow_lock\n", pid, comm); }
+uretprobe:/home/utm/android-arm64/lib64/libandroid.so:ANativeWindow_lock { printf("%d %s   -> %d\n", pid, comm, retval); }
+uprobe:/home/utm/android-arm64/lib64/libandroid.so:ANativeWindow_fromSurface { printf("%d %s ANativeWindow_fromSurface\n", pid, comm); }
+uprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglCreatePbufferSurface { printf("%d %s eglCreatePbufferSurface\n", pid, comm); }
+uprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglCreatePlatformWindowSurface { printf("%d %s eglCreatePlatformWindowSurface\n", pid, comm); }
+uprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglGetProcAddress { printf("%d %s eglGetProcAddress %s\n", pid, comm, str(arg0)); }
+uprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglGetDisplay { printf("%d %s eglGetDisplay\n", pid, comm); }
+uprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglGetPlatformDisplay { printf("%d %s eglGetPlatformDisplay\n", pid, comm); }
+uprobe:/usr/lib/aarch64-linux-gnu/libEGL.so.1.1.0:eglQueryString { printf("%d %s eglQueryString\n", pid, comm); }
