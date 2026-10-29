@@ -18,10 +18,10 @@ mkdir -p "$stage"
 
 echo "== libraries"
 srcs="$out/system/lib64"
-for d in "$out"/apex/*/lib64 "$out/system_ext/lib64" "$out/vendor/lib64"; do [ -d "$d" ] && srcs="$srcs:$d"; done
+for d in "$out"/apex/*/lib64 "$out"/apex/*/lib64/extractors "$out/system_ext/lib64" "$out/vendor/lib64"; do [ -d "$d" ] && srcs="$srcs:$d"; done
 for d in $(ls -d "$tree"/out/soong/.intermediates/vendor/apklayer/*/*/android_x86_64_*shared "$tree"/out/soong/.intermediates/vendor/apklayer/*/*/*/android_x86_64_*shared 2>/dev/null); do srcs="$srcs:$d"; done
 rm -rf "$stage/android-x86_64"; mkdir -p "$stage/android-x86_64/lib64"
-ANDROID_LIBS_SRC="$srcs" sh "$here/collect-android-libs.sh" "$stage/android-x86_64/lib64" $(grep -v 'vktest\|vulkan.apklayer\|libapklayer_vulkan' "$repo/deps/android-libs.list") > "$stage/libs-copied.txt" 2> "$stage/libs-missing.txt"
+ANDROID_LIBS_SRC="$srcs" sh "$here/collect-android-libs.sh" "$stage/android-x86_64/lib64" $(grep -v 'vktest\|vulkan.apklayer\|libapklayer_vulkan' "$repo/deps/android-libs.list" | sed 's/aarch64/x86_64/') > "$stage/libs-copied.txt" 2> "$stage/libs-missing.txt"
 echo "$(wc -l < "$stage/libs-copied.txt") libraries copied; missing (see $stage/libs-missing.txt): $(sed 's/.*: //' "$stage/libs-missing.txt" | sort -u | wc -l)"
 
 echo "== Android root"
