@@ -27,10 +27,13 @@ final class MediaCheck implements Check {
         Uri uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
         Check.require(uri != null, "no uri");
         try (OutputStream out = resolver.openOutputStream(uri)) { out.write(PNG); }
-        long size;
-        try (Cursor c = resolver.query(uri, new String[] {MediaStore.Images.Media.SIZE, MediaStore.Images.Media.DISPLAY_NAME}, null, null, null)) {
-            Check.require(c != null && c.moveToFirst(), "the row is not there");
-            size = c.getLong(0);
+        long size = -1;
+        for (int i = 0; i < 40 && size != PNG.length; i++) {  // the provider scans the file after the writer closed it
+            try (Cursor c = resolver.query(uri, new String[] {MediaStore.Images.Media.SIZE, MediaStore.Images.Media.DISPLAY_NAME}, null, null, null)) {
+                Check.require(c != null && c.moveToFirst(), "the row is not there");
+                size = c.getLong(0);
+            }
+            if (size != PNG.length) Thread.sleep(250);
         }
         Check.require(size == PNG.length, "size " + size + " instead of " + PNG.length);
         int count;
