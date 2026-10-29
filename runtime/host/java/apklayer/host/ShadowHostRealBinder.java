@@ -14,6 +14,7 @@ import org.robolectric.annotation.Implements;
  */
 @Implements(value = Binder.class, callNativeMethodsByDefault = true, isInAndroidSdk = false)
 public class ShadowHostRealBinder {
+    private static final ThreadLocal<Boolean> RESOLVING = new ThreadLocal<>();
     private static final Map<Integer, Integer> APP_UIDS = new ConcurrentHashMap<>();
 
     @Implementation protected static int getCallingUid() {
@@ -26,7 +27,11 @@ public class ShadowHostRealBinder {
         }
         Integer known = APP_UIDS.get(pid);
         if (known != null) return known;
-        int uid = HubClient.connected() ? HubClient.current().uidOf(pid) : -1;
+        if (Boolean.TRUE.equals(RESOLVING.get())) return ShadowHostProcess.realUidValue();  // the hub call below went through a proxy transaction listener (MediaProvider's) that asks the calling uid again
+        RESOLVING.set(true);
+        int uid;
+        try { uid = HubClient.connected() ? HubClient.current().uidOf(pid) : -1; }
+        finally { RESOLVING.remove(); }
         if (uid < 0) return ShadowHostProcess.realUidValue();
         APP_UIDS.put(pid, uid);
         return uid;
