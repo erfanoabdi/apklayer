@@ -53,7 +53,8 @@ final class HubPackages {
         try { pkg = get(name); } catch (RuntimeException unreadable) { return null; }
         if (pkg == null) return null;
         int flags = PackageManager.GET_ACTIVITIES | PackageManager.GET_SERVICES | PackageManager.GET_RECEIVERS | PackageManager.GET_PROVIDERS
-                | PackageManager.GET_META_DATA | PackageManager.GET_PERMISSIONS | PackageManager.GET_CONFIGURATIONS;
+                | PackageManager.GET_META_DATA | PackageManager.GET_PERMISSIONS | PackageManager.GET_CONFIGURATIONS
+                | PackageManager.MATCH_DIRECT_BOOT_AWARE | PackageManager.MATCH_DIRECT_BOOT_UNAWARE;  // without these (the package manager service adds them) no component matches the user state
         return PackageParser.generatePackageInfo(pkg, new int[0], flags, 0L, 0L, null, android.content.pm.pkg.FrameworkPackageUserState.DEFAULT);
     }
 
