@@ -19,3 +19,6 @@ debug.stagefright.c2-poolmask=786432
 media.c2.hal.selection=aidl
 # Android shared-memory queues use the host kernel memfd backend.
 sys.use_memfd=true
+
+# keymint (keymaster_configuration.cpp) waits for this property to exist before it registers its services; a build without a vendor image has none of its own: the system patch level
+ro.vendor.build.security_patch=2026-10-01

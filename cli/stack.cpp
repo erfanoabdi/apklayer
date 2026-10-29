@@ -23,8 +23,8 @@ struct Service {
 bool staged(const Layout& l, const char* lib) { return exists(join(l.androidLibs, lib)); }
 
 // A vintf manifest is declared only when this stack provides the service behind it.
-void stageManifest(const Layout& l, bool provided, const std::string& name, const std::string& source) {
-    std::string target = join(l.native, "android-root/vendor/etc/vintf/manifest/" + name);
+void stageManifest(const Layout& l, bool provided, const std::string& name, const std::string& source, const char* partition = "vendor") {
+    std::string target = join(l.native, std::string("android-root/") + partition + "/etc/vintf/manifest/" + name);
     if (provided) {
         makeDirs(dirName(target));
         if (auto text = readFile(join(l.root, source))) writeFile(target, *text);
@@ -124,6 +124,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     stageManifest(l, staged(l, "libapklayer_audio.so"), "apklayer-audio.xml", "aosp/hals/audio/manifest.xml");
     stageManifest(l, staged(l, "libapklayer_audioserver.so"), "apklayer-audio-effects.xml", "aosp/hals/audio/effects-manifest.xml");
     stageManifest(l, staged(l, "libapklayer_keymint.so"), "apklayer-keymint.xml", "aosp/hals/security/manifest.xml");
+    stageManifest(l, staged(l, "libapklayer_keystore2.so"), "apklayer-keystore2.xml", "aosp/hals/security/keystore2-manifest.xml", "system");  // a framework HAL: keystore2 may register its service
 
     // a fresh property store per stack (ro.* is write-once); ensureStack already made it when a client waits on the ready property
     if (getenvOr("APKLAYER_STACK_PREPARED", "").empty()) {
@@ -172,7 +173,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     if (staged(l, "libapklayer_keymint.so") && staged(l, "libapklayer_keystore2.so")) {  // the real Android keystore: software KeyMint, then keystore2 over it
         start("keymint", "libapklayer_keymint.so", {});
         keystoreDir(l);
-        start("keystore2", "libapklayer_keystore2.so", {});
+        start("keystore2", "libapklayer_keystore2.so", {"/data/misc/keystore"});  // as keystore2.rc: the database directory, through the path layer
     }
     start("surfaceflinger", "libapklayer_surfaceflinger.so", {});
     if (!tool.empty()) {
@@ -236,7 +237,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     for (int pid : waiters) kill(pid, SIGTERM);
     for (const Service& s : running) waitpid(s.pid, nullptr, 0);
     unlink(inst.pidFile().c_str());
-    removeTree(inst.tmpDir());  // the JVMs of this stack are gone: their extracted native runtimes too
+    for (const std::string& name : listDir(inst.tmpDir())) removeTree(join(inst.tmpDir(), name));  // the JVMs of this stack are gone: their extracted native runtimes too (the directory stays: a JVM about to start has it as java.io.tmpdir)
     Spawn shell;  // the window shell ends with the stack (one instance per session today)
     shell.argv = {"pkill", "-x", "apklayer-shell"};
     shell.env = currentEnv();

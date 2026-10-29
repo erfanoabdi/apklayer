@@ -13,7 +13,7 @@ else
     . "$here/../tests/vm/config.sh"
     sink() { sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" 'mkdir -p ~/arm64-native/android-root && tar xf - -C ~/arm64-native/android-root'; }
 fi
-$ORB tar cf - -C "$OUT" system/etc/cgroups.json system/etc/task_profiles.json system/etc/task_profiles system/usr/hyphen-data system/etc/permissions system/etc/compatconfig system/etc/sysconfig system/etc/default-permissions | sink
+$ORB tar cf - -C "$OUT" system/etc/cgroups.json system/etc/task_profiles.json system/etc/task_profiles system/usr/hyphen-data system/etc/permissions system/etc/compatconfig system/etc/sysconfig system/etc/default-permissions system/etc/vintf/manifest.xml | sink
 # Original audio policy tables are source XML assets, not generated libraries.
 $ORB tar cf - -C /home/erfanabdi/los24/frameworks/av/services/audiopolicy/config \
     --transform='s,^,vendor/etc/,' audio_policy_volumes.xml default_volume_tables.xml | sink
