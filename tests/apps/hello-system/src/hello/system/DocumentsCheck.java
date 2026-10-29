@@ -10,23 +10,9 @@ import java.util.List;
 /** Storage access as an app gets it: the document pickers (open, open tree, create) have an activity to answer, storage volumes are listed, document uris are told apart. */
 final class DocumentsCheck implements Check {
     @Override public String run(Context context) throws Exception {
-        try {
-            android.content.pm.PackageInfo ui = context.getPackageManager().getPackageInfo("com.android.documentsui", android.content.pm.PackageManager.GET_ACTIVITIES);
-            StringBuilder names = new StringBuilder();
-            if (ui.activities != null) for (android.content.pm.ActivityInfo a : ui.activities) names.append(a.name.substring(a.name.lastIndexOf('.') + 1)).append(a.exported ? "+" : "-").append(' ');
-            System.out.println("[sys] documentsui activities: " + names + " (array " + (ui.activities == null ? "null" : String.valueOf(ui.activities.length)) + ")");
-            for (String other : new String[] {"org.mozilla.fennec_fdroid", "com.android.providers.downloads", "de.danoeh.antennapod"}) {
-                try { android.content.pm.PackageInfo i = context.getPackageManager().getPackageInfo(other, android.content.pm.PackageManager.GET_ACTIVITIES | android.content.pm.PackageManager.GET_PROVIDERS | android.content.pm.PackageManager.GET_SERVICES);
-                    System.out.println("[sys] " + other + ": activities " + (i.activities == null ? "null" : i.activities.length) + ", providers " + (i.providers == null ? "null" : i.providers.length) + ", services " + (i.services == null ? "null" : i.services.length) + " enabled=" + i.applicationInfo.enabled); }
-                catch (Exception e) { System.out.println("[sys] " + other + ": " + e); }
-            }
-            System.out.println("[sys] documentsui enabled=" + ui.applicationInfo.enabled + " flags=0x" + Integer.toHexString(ui.applicationInfo.flags) + " providers " + (ui.providers == null ? "null" : ui.providers.length));
-            try { System.out.println("[sys] PickActivity info: " + context.getPackageManager().getActivityInfo(new android.content.ComponentName("com.android.documentsui", "com.android.documentsui.picker.PickActivity"), 0).exported); }
-            catch (Exception e) { System.out.println("[sys] PickActivity: " + e); }
-        } catch (Exception e) { System.out.println("[sys] documentsui not known: " + e); }
         for (String action : new String[] {Intent.ACTION_OPEN_DOCUMENT, Intent.ACTION_OPEN_DOCUMENT_TREE, Intent.ACTION_CREATE_DOCUMENT}) {
-            Intent intent = new Intent(action).setType("*/*");
-            if (!action.equals(Intent.ACTION_OPEN_DOCUMENT_TREE)) intent.addCategory(Intent.CATEGORY_OPENABLE);
+            Intent intent = new Intent(action);
+            if (!action.equals(Intent.ACTION_OPEN_DOCUMENT_TREE)) intent.setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);
             Check.require(context.getPackageManager().resolveActivity(intent, 0) != null, "nothing answers " + action + " (" + context.getPackageManager().queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_ALL).size() + " by query, "
                     + context.getPackageManager().queryIntentActivities(new Intent(action).setType("*/*"), android.content.pm.PackageManager.MATCH_ALL).size() + " without the category)");
         }
