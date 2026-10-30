@@ -30,7 +30,9 @@ get_maven() {
     local rel="${g//.//}/$a/$v/$a-$v.$ext"
     if [ -f "$M2/$rel" ]; then cp "$M2/$rel" "$2"; echo "    from ~/.m2"; return; fi
     echo "    downloading $MAVEN/$rel"
-    curl -fsSL -o "$2" "$MAVEN/$rel"
+    curl -fsSL -o "$2" "$MAVEN/$rel" && return
+    echo "    not on Maven Central: Google's Maven"  # androidx.test.* and other Google artifacts
+    curl -fsSL -o "$2" "https://maven.google.com/$rel"
 }
 
 fetched=0 local=0 ok=0
