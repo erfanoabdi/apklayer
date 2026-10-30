@@ -38,7 +38,11 @@ final class HostKeyStore {
                         Security.removeProvider("AndroidKeyStore");
                     }
                 }
-            } catch (Throwable unavailable) { System.out.println("[apklayer] keystore2 not usable, software keystore: " + unavailable); }
+            } catch (Throwable unavailable) {
+                Throwable root = unavailable;
+                while (root.getCause() != null) root = root.getCause();
+                System.out.println("[apklayer] keystore2 not usable, software keystore: " + unavailable + (root == unavailable ? "" : " (root cause " + root + ")"));
+            }
         }
         System.out.println("[apklayer] AndroidKeyStore: software provider (keystore2 service not registered)");
         Security.addProvider(new HostKeyStoreProvider());
