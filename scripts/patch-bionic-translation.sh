@@ -621,3 +621,20 @@ int bionic_rename(const char *from, const char *to)
 '''
     p.write_text(s)
 PY
+
+# 20. R_*_DTPOFF (the offset of a thread-local variable in its module's TLS block) stored sym_addr, which includes the library's load address: ELF TLS through __tls_get_addr
+#     (x86_64; arm64 code uses TLS descriptors) then returned base + (load address + offset), a doubled pointer (ApkAssets.nativeLoad crashed in zip_archive::Inflate on a PC).
+python3 - "$bt" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1]) / 'linker/linker.c'
+s = p.read_text()
+old = '''		case R_GENERIC_TLS_DTPREL:
+			*((ElfW(Addr) *)reloc) = sym_addr + get_addend(rel);
+			break;'''
+new = '''		case R_GENERIC_TLS_DTPREL: /* apklayer patch: see scripts/patch-bionic-translation.sh step 20 */
+			*((ElfW(Addr) *)reloc) = (s ? s->st_value : sym ? si->symtab[sym].st_value : 0) + get_addend(rel);
+			break;'''
+if 'step 20' not in s and old in s:
+    p.write_text(s.replace(old, new, 1))
+PY
