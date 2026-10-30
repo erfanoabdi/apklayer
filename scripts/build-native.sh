@@ -38,6 +38,7 @@ cat bridge/native/critical-natives-extra.txt >> "$tmp/critical-natives.txt"
 # Our own versions of device libraries that need a service the desktop does not have (bridge/ndk/<name>.c): the source's
 # functions plus weak do-nothing stubs for every other export of the real library, mapped by bionic_translation's cfg.d.
 cfg="$native/share/bionic_translation/cfg.d/bionic_translation.cfg"
+mkdir -p "$(dirname "$cfg")" && cp "$(dirname "$bt")/cfg.d/bionic_translation.cfg" "$cfg"  # bionic_translation's own mappings; the lines below add apklayer's
 map_lib() { # map_lib <name Android code asks for> <file that answers>: replaces any earlier mapping of the name
     sed -i "/^$1[[:space:]]/d" "$cfg"
     echo "$1 $2" >> "$cfg"
