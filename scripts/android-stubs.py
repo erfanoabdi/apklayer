@@ -37,8 +37,8 @@ for lib in glob.glob(os.path.join(libdir, "*.so")):
                 undefined.setdefault(sym, set()).add(name)
         elif name not in REPLACED:
             defined.add(sym)
-for lib in glob.glob(os.path.join(btdir, "lib*_bio.so.0")) + [platform, "/lib/aarch64-linux-gnu/libc.so.6", "/lib/aarch64-linux-gnu/libm.so.6",
-                                                              "/lib/aarch64-linux-gnu/libgcc_s.so.1"] + system:
+multiarch = subprocess.run(["cc", "-print-multiarch"], capture_output=True, text=True).stdout.strip() or "aarch64-linux-gnu"  # x86_64-linux-gnu on a PC
+for lib in glob.glob(os.path.join(btdir, "lib*_bio.so.0")) + [platform] + ["/lib/%s/%s" % (multiarch, n) for n in ("libc.so.6", "libm.so.6", "libgcc_s.so.1")] + system:
     if os.path.exists(lib):
         for sym, ndx, bind in symbols(lib):
             if ndx != "UND":
