@@ -29,7 +29,7 @@ if wl_client_dep.found() and wl_protos_dep.found() and xkb_dep.found() and cairo
   endforeach
   executable('apklayer-shell',
     ['main.c', 'client.c', 'window.c', 'pointer.c', 'keyboard.c', 'registry.c', 'clipboard.c', 'textinput.c', 'touch.c', 'decor.c', 'decor_draw.c', 'appinfo.c', 'dmabuf.c', 'splash.c', 'vsync.c', generated],
-    dependencies: [cairo_dep, wl_client_dep, wl_cursor_dep, xkb_dep],
+    dependencies: [cairo_dep, wl_client_dep, wl_cursor_dep, xkb_dep, meson.get_compiler('c').find_library('m')],  # hypot (splash.c): glibc 2.39 (Ubuntu 24.04) does not pull libm in by itself
     c_args: ['-Werror=incompatible-pointer-types', '-Werror=implicit-function-declaration'],
     install: false)
 endif
