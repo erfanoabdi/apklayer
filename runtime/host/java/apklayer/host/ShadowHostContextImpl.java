@@ -118,7 +118,7 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
         String libdir = System.getProperty("apklayer.libdir");
         if (info != null && libdir != null && info.packageName != null && info.packageName.equals(real.getPackageName()) && info.nativeLibraryDir == null) {
             info.nativeLibraryDir = libdir;
-            info.primaryCpuAbi = "arm64-v8a";
+            info.primaryCpuAbi = HostBuild.ABI;
         }
         return info;
     }

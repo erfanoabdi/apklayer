@@ -81,7 +81,7 @@ final class AppEnvironment {
             Object bound = org.robolectric.util.ReflectionHelpers.getField(RuntimeEnvironment.getActivityThread(), "mBoundApplication");
             android.content.pm.ApplicationInfo info = org.robolectric.util.ReflectionHelpers.getField(bound, "appInfo");
             info.nativeLibraryDir = libdir;
-            info.primaryCpuAbi = "arm64-v8a";
+            info.primaryCpuAbi = HostBuild.ABI;
         } catch (RuntimeException notBoundYet) { /* the context path (ShadowHostContextImpl.getApplicationInfo) covers it */ }
     }
 

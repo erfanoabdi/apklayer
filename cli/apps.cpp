@@ -39,7 +39,12 @@ void writeDesktop(const Layout& l, const std::string& pkg, const std::string& la
     sh({"xdg-mime", "default", "apklayer-open-apk.desktop", "application/vnd.android.package-archive"});
 }
 
-// The device libraries are arm64: apps run their arm64-v8a code.
+// The device libraries are those of this machine's CPU: apps run the code of that ABI.
+#if defined(__x86_64__)
+constexpr const char* kAbi = "x86_64";
+#else
+constexpr const char* kAbi = "arm64-v8a";
+#endif
 void extractLibs(const std::string& dir) {
     removeTree(join(dir, "lib"));
     Spawn list;
@@ -47,9 +52,10 @@ void extractLibs(const std::string& dir) {
     list.env = currentEnv();
     int st = 0;
     std::string names = runCapture(list, &st);
-    if (names.find("\nlib/arm64-v8a/") == std::string::npos && names.rfind("lib/arm64-v8a/", 0) != 0) return;
+    const std::string prefix = std::string("lib/") + kAbi + "/";
+    if (names.find("\n" + prefix) == std::string::npos && names.rfind(prefix, 0) != 0) return;
     makeDirs(join(dir, "lib"));
-    sh({"unzip", "-o", "-j", "-q", join(dir, "base.apk"), "lib/arm64-v8a/*.so", "-d", join(dir, "lib")});
+    sh({"unzip", "-o", "-j", "-q", join(dir, "base.apk"), prefix + "*.so", "-d", join(dir, "lib")});
 }
 }  // namespace
 
