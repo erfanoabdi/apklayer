@@ -67,7 +67,7 @@ final class AppEnvironment {
         sandbox.getTestEnvironment().setUpApplicationState("apklayer", configuration, manifest);
         StartTrace.mark("robolectric application state set up");
         HostClock.alignToMonotonic();  // after the clock's reset by the state setup
-        HostProcessName.install();  // before the Application is attached: Application.onCreate runs in every process, and apps check which one they are in
+        HostProcessName.install(apk);  // before the Application is attached: Application.onCreate runs in every process, and apps check which one they are in
         NativeProcess.install();
         StartTrace.mark("native process installed");
         persistDataDirs();
