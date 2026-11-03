@@ -435,8 +435,7 @@ public final class AppHost implements Runnable {
             c.destroy();
             System.out.println("[apklayer] finished in onCreate: " + c.get().getClass().getName());
             Intent next = ((ShadowApplication) Shadow.extract(RuntimeEnvironment.getApplication())).getNextStartedActivity();  // what it started before (the intro screen)
-            if (next == null) next = ((org.robolectric.shadows.ShadowActivity) Shadow.extract(c.get())).getNextStartedActivity();  // started through the activity itself
-            if (next != null) launch(next);
+            if (next != null) launchStarted(next);
             else if (previous != null) previous.resume();
             else graceUntilMs = System.nanoTime() / 1_000_000 + 20000;  // a trampoline that starts the real screen from a coroutine (AnkiDroid's IntentHandler)
             return;
@@ -458,6 +457,14 @@ public final class AppHost implements Runnable {
         c.get().getWindow().getDecorView().invalidate();
         System.out.println("[apklayer] started " + c.get().getClass().getName() + " depth=" + stack.size());
         StartTrace.mark("activity resumed " + c.get().getClass().getName());
+    }
+
+    /** Robolectric hands started activities back newest first; Android starts them in call order (startActivities: the last one ends on top). */
+    private void launchStarted(Intent newest) {
+        ShadowApplication shadowApp = Shadow.extract(RuntimeEnvironment.getApplication());
+        java.util.ArrayDeque<Intent> started = new java.util.ArrayDeque<>();
+        for (Intent i = newest; i != null; i = shadowApp.getNextStartedActivity()) started.push(i);
+        while (!started.isEmpty()) launch(started.pop());
     }
 
     /** Hands an answer from another app (or its disappearance, as RESULT_CANCELED) to the activity that asked. */
@@ -506,7 +513,7 @@ public final class AppHost implements Runnable {
         ShadowApplication shadowApp = Shadow.extract(RuntimeEnvironment.getApplication());
         Intent next = shadowApp.getNextStartedActivity();
         if (next != null) {
-            launch(next);
+            launchStarted(next);
             return;
         }
         if (stack.isEmpty()) return;

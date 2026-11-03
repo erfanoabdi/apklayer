@@ -15,6 +15,6 @@ endif
 executable('btload', ['btload.c', 'android_platform.c', 'properties.c', 'paths.c', 'binder_compat.c', 'android_stubs.c'],
   export_dynamic: true, link_args: bt_link, build_rpath: bt_dir, c_args: native_cargs, override_options: native_opts)
 # the LD_PRELOAD library (first in symbol lookup for every library of the process, first static TLS module): the path layer and bionic's TLS slots
-shared_module('apklayer-preload', ['paths.c', 'paths_preload.c', 'bionic_tls.c'],
+shared_module('apklayer-preload', ['paths.c', 'paths_preload.c', 'exec_preload.c', 'bionic_tls.c'],
   link_args: ['-ldl'], c_args: native_cargs, override_options: native_opts)
 executable('aprop', ['aprop.c', 'properties.c'], c_args: native_cargs, override_options: native_opts)
