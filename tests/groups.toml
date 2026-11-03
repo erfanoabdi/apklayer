@@ -7,6 +7,7 @@
 #   alone  true: runs with no other group of the runner, after the parallel ones. Real keys go to the focused window and screenshots show the
 #          whole desktop (pixel checks), and stacks that declare HAL services write their vintf manifests into the shared APKLAYER_NATIVE.
 #   optional  true: only when named on the command line
+# (the stacks of the HAL groups write their vintf manifests anew: removed first so that a hardlinked copy of APKLAYER_NATIVE gets new files)
 
 [native]
 run = ["meson test -C b --suite bionic --print-errorlogs"]
@@ -135,41 +136,46 @@ alone = true
 run = ["tests/vm/portal.sh"]
 
 [codec2]
+setup = ["rm -f ${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/vendor/etc/vintf/manifest/apklayer-*.xml"]
 alone = true
 run = ["tests/vm/codec2.sh"]
 
 [native-surface]
 apps = ["hello-native-surface"]
-setup = ["N=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root; mkdir -p $N/vendor/etc $N/system/lib64 && cp -a --remove-destination bridge/native/android-root/system/lib64/extractors $N/system/lib64/ && cp --remove-destination bridge/native/android-root/vendor/etc/media_codecs.xml $N/vendor/etc/"]
+setup = ["rm -f ${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/vendor/etc/vintf/manifest/apklayer-*.xml", "N=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root; mkdir -p $N/vendor/etc $N/system/lib64 && cp -a --remove-destination bridge/native/android-root/system/lib64/extractors $N/system/lib64/ && cp --remove-destination bridge/native/android-root/vendor/etc/media_codecs.xml $N/vendor/etc/"]
 alone = true
 run = ["python3 -u tests/vm/native-surface.py"]
 
 [native-media]
 apps = ["hello-native-codec"]
-setup = ["N=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root; mkdir -p $N/vendor/etc $N/system/lib64 && cp -a --remove-destination bridge/native/android-root/system/lib64/extractors $N/system/lib64/ && cp --remove-destination bridge/native/android-root/vendor/etc/media_codecs.xml $N/vendor/etc/"]
+setup = ["rm -f ${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/vendor/etc/vintf/manifest/apklayer-*.xml", "N=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root; mkdir -p $N/vendor/etc $N/system/lib64 && cp -a --remove-destination bridge/native/android-root/system/lib64/extractors $N/system/lib64/ && cp --remove-destination bridge/native/android-root/vendor/etc/media_codecs.xml $N/vendor/etc/"]
 alone = true
 run = ["python3 -u tests/vm/native-media.py"]
 
 [native-player]
 apps = ["hello-native-player"]
-setup = ["N=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root; mkdir -p $N/vendor/etc $N/system/lib64 && cp -a --remove-destination bridge/native/android-root/system/lib64/extractors $N/system/lib64/ && cp --remove-destination bridge/native/android-root/vendor/etc/media_codecs.xml $N/vendor/etc/"]
+setup = ["rm -f ${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/vendor/etc/vintf/manifest/apklayer-*.xml", "N=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root; mkdir -p $N/vendor/etc $N/system/lib64 && cp -a --remove-destination bridge/native/android-root/system/lib64/extractors $N/system/lib64/ && cp --remove-destination bridge/native/android-root/vendor/etc/media_codecs.xml $N/vendor/etc/"]
 alone = true
 run = ["python3 -u tests/vm/native-player.py"]
 
 [native-audio]
+setup = ["rm -f ${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/vendor/etc/vintf/manifest/apklayer-*.xml"]
 apps = ["hello-native-audio"]
 alone = true
 run = ["python3 -u tests/vm/native-audio.py"]
 
 [audio-aidl]
+setup = ["rm -f ${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/vendor/etc/vintf/manifest/apklayer-*.xml"]
 alone = true
 run = ["tests/vm/audio-host.sh aidl"]
 
 [audio-track]
+setup = ["rm -f ${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/vendor/etc/vintf/manifest/apklayer-*.xml"]
 alone = true
 run = ["tests/vm/audio-host.sh system"]
 
 [audio-system]
+setup = ["rm -f ${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/vendor/etc/vintf/manifest/apklayer-*.xml"]
 alone = true
 run = ["tests/vm/audio-system.sh"]
 
