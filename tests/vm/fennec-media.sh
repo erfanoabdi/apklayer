@@ -19,6 +19,8 @@ prof=$(ls -d "${XDG_DATA_HOME:-$HOME/.local/share}/apklayer/$inst/app-data/$pkg/
   for p in "\"logging.config.LOG_FILE\", \"$work/gecko.log\"" '"logging.config.sync", true' \
       '"logging.PlatformDecoderModule", 5' '"logging.MediaFormatReader", 4' '"logging.AndroidDecoderModule", 5' '"logging.FFmpegVideo", 5' \
       '"logging.FFmpegAudio", 5'; do echo "user_pref($p); // fennec-media.sh"; done; } > "$work/user.js" && cp "$work/user.js" "$prof/user.js"
+# afterwards the profile logs no more: these lines go from user.js and the values Gecko saved from them from prefs.js
+trap 'sed -i "/fennec-media.sh/d" "$prof/user.js"; sed -i "/\"logging\.\(config\.\|PlatformDecoderModule\|MediaFormatReader\|AndroidDecoderModule\|FFmpeg\)/d" "$prof/prefs.js"; rm -rf "$work"' EXIT
 v="videotestsrc num-buffers=150 pattern=smpte horizontal-speed=4 ! video/x-raw,format=I420,width=320,height=240,framerate=30/1"
 a="audiotestsrc num-buffers=250 freq=440 ! audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=2"
 gst-launch-1.0 -q $v ! vp9enc deadline=1 cpu-used=8 ! webmmux name=m ! filesink location="$work/t.webm" $a ! opusenc ! m. &&

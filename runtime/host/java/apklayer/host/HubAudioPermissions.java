@@ -15,7 +15,9 @@ import java.util.Map;
  * system_server's part in audioserver's permission controller (AudioService.initializeAudioServerPermissionProvider, with the framework's own
  * AudioServerPermissionProvider): which app id is which package and which uids hold the audio permissions. Unfed, AudioPolicyService refused every app's
  * track (getOutputForAttr's permission checks: "NPC::checkPermission: controller never populated by system_server", -38 to AudioTrack).
- * shortcut: an app installed while the hub runs is fed at the next stack start (AudioService follows ACTION_PACKAGE_ADDED); fine while installs restart it.
+ * shortcut: fed once at the hub's start. An app installed while the hub runs is missing from the package map until the next stack start (its tracks
+ * pass the permission lists, package checks say "uid not found"), and a restarted audioserver starts unfed; AudioService follows ACTION_PACKAGE_ADDED
+ * and audioserver's start. Upgrade when the hub learns of installs as events.
  */
 final class HubAudioPermissions {
     private HubAudioPermissions() {}
