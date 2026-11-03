@@ -146,7 +146,7 @@ final class HubBroadcasts {
                 targets.add(new Target(reg.filter, reg, null));
             }
         }
-        for (HubPackages.Receiver receiver : packages.receivers(intent, onlyPackage)) {
+        if ((intent.getFlags() & Intent.FLAG_RECEIVER_REGISTERED_ONLY) == 0) for (HubPackages.Receiver receiver : packages.receivers(intent, onlyPackage)) {
             ActivityInfo info = receiver.info();
             if (!info.enabled || !info.applicationInfo.enabled) continue;
             boolean same = info.packageName.equals(sender.name());

@@ -5,8 +5,10 @@
 
 namespace apklayer {
 
-// Converts (cached), describes and installs; returns the package name.
-std::string installApp(const Layout& layout, const Instance& instance, const std::string& apk);
+// Converts (cached), describes and installs one package (an APK, a base APK and its splits, or an .apks/.xapk/.apkm); returns the package name.
+// An update keeps the app's data; another signer exits kInstallIncompatible, a lower versionCode kInstallDowngrade unless allowDowngrade.
+inline constexpr int kInstallIncompatible = 3, kInstallDowngrade = 4;
+std::string installApp(const Layout& layout, const Instance& instance, const std::vector<std::string>& apks, bool allowDowngrade = false);
 void listApps(const Layout& layout);
 void uninstallApp(const Layout& layout, const std::string& package);
 std::string appDir(const Layout& layout, const std::string& package);

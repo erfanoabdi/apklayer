@@ -81,8 +81,26 @@ public final class HubClient {
         });
     }
 
-    /** Providers of the other installed apps, registered under their authorities in this app's ContentResolver. */
-    private void HubProviders_registerRemote(Context context) {
+    /**
+     * The hub installed, updated or removed another package (HubInstaller): this app's package manager and content resolver follow before the package
+     * broadcast arrives, as both read PackageManagerService's state on a phone.
+     */
+    void packageChanged(Context context, String name, boolean removed) {
+        org.robolectric.shadows.ShadowPackageManager packageManager = org.robolectric.Shadows.shadowOf(context.getPackageManager());
+        packageManager.removePackage(name);
+        for (String authority : remoteAuthorities.getOrDefault(name, java.util.List.of())) org.robolectric.shadows.ShadowContentResolver.registerProviderInternal(authority, null);
+        remoteAuthorities.remove(name);
+        if (!removed) { registerPackage(packageManager, name); HubProviders_registerRemote(context, name); }
+        System.out.println("[apklayer] package " + name + (removed ? " removed" : " (re)installed"));
+    }
+
+    /** The authorities registered for each other package (packageChanged replaces them). */
+    private final java.util.Map<String, java.util.List<String>> remoteAuthorities = new java.util.HashMap<>();
+
+    private void HubProviders_registerRemote(Context context) { HubProviders_registerRemote(context, null); }
+
+    /** Providers of the other installed apps (or of the one named), registered under their authorities in this app's ContentResolver. */
+    private void HubProviders_registerRemote(Context context, String only) {
         java.util.List<String[]> providers = new java.util.ArrayList<>();
         org.robolectric.shadows.ShadowPackageManager packageManager = org.robolectric.Shadows.shadowOf(context.getPackageManager());
         HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.LIST_PROVIDERS, request -> {}, reply -> {
@@ -91,7 +109,7 @@ public final class HubClient {
                 android.content.pm.ProviderInfo info = reply.readTypedObject(android.content.pm.ProviderInfo.CREATOR);
                 java.util.List<android.content.IntentFilter> filters = new java.util.ArrayList<>();
                 for (int f = reply.readInt(); f > 0; f--) filters.add(reply.readTypedObject(android.content.IntentFilter.CREATOR));
-                if (provider[1].equals(context.getPackageName())) continue;
+                if (provider[1].equals(context.getPackageName()) || (only != null && !only.equals(provider[1]))) continue;
                 providers.add(provider);
                 // the package manager answers for other apps' providers too (DocumentsUI finds document providers by their filter)
                 packageManager.addOrUpdateProvider(info);
@@ -104,6 +122,7 @@ public final class HubClient {
             if (provider[1].equals(context.getPackageName())) continue;
             for (String authority : provider[0].split(";")) {
                 org.robolectric.shadows.ShadowContentResolver.registerProviderInternal(authority, new RemoteProvider(context, authority, provider[2], provider[3]));
+                remoteAuthorities.computeIfAbsent(provider[1], key -> new java.util.ArrayList<>()).add(authority);
                 count++;
             }
         }
@@ -138,6 +157,29 @@ public final class HubClient {
     /** Whether another app's caller holds the permission: the kernel's pid of a synchronous call names it, the uid its header carried a oneway one (pid 0 or -1). */
     int checkPermission(int pid, int uid, String permission) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CHECK_PERMISSION, request -> { request.writeInt(pid); request.writeInt(uid); request.writeString(permission); }, reply -> reply.readInt());
+    }
+
+    /** A committed install session (ShadowHostPackageInstaller) or a legacy install intent ({@code now}): the APKs go to the hub's installer as file descriptors. */
+    void commitInstall(int sessionId, String expected, String label, java.util.List<String> names, java.util.List<android.os.ParcelFileDescriptor> files, android.content.IntentSender status, boolean now) {
+        HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.INSTALL_COMMIT, request -> {
+            request.writeInt(sessionId); request.writeString(expected); request.writeString(label); request.writeInt(files.size());
+            for (int i = 0; i < files.size(); i++) { request.writeString(names.get(i)); request.writeFileDescriptor(files.get(i).getFileDescriptor()); }
+            request.writeStrongBinder(status == null ? null : status.getTarget().asBinder()); request.writeBoolean(now);
+        }, reply -> null);
+    }
+    void preapproveInstall(int sessionId, String pkg, String label, android.content.IntentSender status) {
+        HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.INSTALL_PREAPPROVE, request -> {
+            request.writeInt(sessionId); request.writeString(pkg); request.writeString(label); request.writeStrongBinder(status.getTarget().asBinder());
+        }, reply -> null);
+    }
+    void uninstall(String pkg, android.content.IntentSender status, boolean now) {
+        HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.UNINSTALL, request -> {
+            request.writeString(pkg); request.writeStrongBinder(status == null ? null : status.getTarget().asBinder()); request.writeBoolean(now);
+        }, reply -> null);
+    }
+    /** canRequestPackageInstalls; {@code ask}: let the person decide now (ACTION_MANAGE_UNKNOWN_APP_SOURCES). */
+    boolean installSource(boolean ask) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.INSTALL_SOURCE, request -> request.writeBoolean(ask), reply -> reply.readBoolean());
     }
 
     static synchronized HubClient attach(Context context) {

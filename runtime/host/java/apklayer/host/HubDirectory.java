@@ -30,6 +30,7 @@ final class HubDirectory extends Binder {
     private final HubPendingIntents pendingIntents;
     private final HubNotifications notifications;
     private final HubAccounts accounts;
+    private final HubInstaller installer;
     private final Map<String, Process> appProcesses = new HashMap<>();
     private final Map<String, Process> hosts = new HashMap<>();
     private final Map<String, Integer> failures = new HashMap<>();
@@ -40,6 +41,7 @@ final class HubDirectory extends Binder {
         notifications = new HubNotifications(packages, pendingIntents);
         // the instance's own data directory (the volumes' parent): accounts belong to the instance, as /data/system_ce does to a device
         accounts = new HubAccounts(this, bindings, packages, new HubAuthenticators(apps, packages), Path.of(System.getProperty("apklayer.storage")).getParent().resolve("accounts.json"));
+        installer = new HubInstaller(this, packages, pendingIntents, Path.of(System.getProperty("apklayer.storage")).getParent());
         attachInterface(null, HubProtocol.DESCRIPTOR);
         exitWhenIdle(60_000); // nobody ever connected
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -58,6 +60,7 @@ final class HubDirectory extends Binder {
             boolean busy;
             synchronized (hosts) { busy = hosts.values().stream().anyMatch(Process::isAlive); }
             synchronized (appProcesses) { busy |= appProcesses.values().stream().anyMatch(Process::isAlive); }
+            busy |= installer.busy();
             synchronized (peers) {  // decided under the registration lock: a process that registers after this is refused and waits for the next hub
                 if (busy || !peers.isEmpty()) return;
                 stopping = true;
@@ -97,6 +100,29 @@ final class HubDirectory extends Binder {
     Peer appPeer(String name) {
         synchronized (peers) { return peers.values().stream().filter(peer -> peer.name.equals(name) && !peer.headless).findFirst().orElse(null); }
     }
+    /** Ends every process of the package (before the installer replaces or removes it, as Android kills the app), and waits for them to go. */
+    void stopPackage(String name) {
+        java.util.List<ProcessHandle> ending = new java.util.ArrayList<>();
+        synchronized (peers) { for (Peer peer : peers.values()) if (peer.name.equals(name)) ProcessHandle.of(peer.pid).ifPresent(ending::add); }
+        synchronized (hosts) { hosts.forEach((key, process) -> { if (key.equals(name) || key.startsWith(name + "#")) ending.add(process.toHandle()); }); }
+        synchronized (appProcesses) { Process app = appProcesses.get(name); if (app != null) ending.add(app.toHandle()); }
+        for (ProcessHandle process : ending) { process.descendants().forEach(ProcessHandle::destroy); process.destroy(); }
+        for (ProcessHandle process : ending) {
+            try { process.onExit().get(10, java.util.concurrent.TimeUnit.SECONDS); }
+            catch (Exception stuck) { process.destroyForcibly(); }
+        }
+        if (!ending.isEmpty()) System.out.println("[apklayer-hub] stopped " + name + " (" + ending.size() + " processes)");
+    }
+
+    /** Every other running app's package manager learns that the package was installed, updated or removed (before the package broadcasts go out). */
+    void packageChanged(String name, boolean removed) {
+        for (Peer peer : peersExcept(null)) {
+            if (peer.name.equals(name)) continue;
+            try { HubProtocol.call(peer.endpoint, HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_PACKAGE_CHANGED, request -> { request.writeString(name); request.writeBoolean(removed); }, reply -> null); }
+            catch (IllegalStateException gone) { /* it ended meanwhile */ }
+        }
+    }
+
     /** Starts the package as an app (window and all), as "apklayer run" does. */
     void launchApp(String name) {
         if (stopping) return;
@@ -250,7 +276,7 @@ final class HubDirectory extends Binder {
             case HubProtocol.START_ACTIVITY -> {
                 Peer caller = caller(); Intent intent = request.readTypedObject(Intent.CREATOR); android.os.ResultReceiver resultTo = request.readTypedObject(android.os.ResultReceiver.CREATOR);
                 request.enforceNoDataAvail();
-                boolean found = activities.start(caller, intent, resultTo);
+                boolean found = installer.confirm(caller, intent) || activities.start(caller, intent, resultTo);  // a confirmation the installer starts is the hub's own
                 reply.writeNoException(); reply.writeInt(found ? 0 : -1); return true;
             }
             case HubProtocol.START_SERVICE -> {
@@ -332,6 +358,28 @@ final class HubDirectory extends Binder {
                 Peer caller = caller(); String authority = request.readString(); request.enforceNoDataAvail();
                 IBinder provider = providers.get(caller, authority);
                 reply.writeNoException(); reply.writeStrongBinder(provider); return true;
+            }
+            case HubProtocol.INSTALL_COMMIT -> {
+                Peer caller = caller(); int sessionId = request.readInt(); String expected = request.readString(), label = request.readString();
+                java.util.List<String> names = new java.util.ArrayList<>(); java.util.List<android.os.ParcelFileDescriptor> files = new java.util.ArrayList<>();
+                for (int n = request.readInt(); n > 0; n--) { names.add(request.readString()); files.add(request.readFileDescriptor()); }
+                IBinder status = request.readStrongBinder(); boolean now = request.readBoolean(); request.enforceNoDataAvail();
+                try { installer.commit(caller, sessionId, expected, label, names, files, status, now); }
+                catch (IOException failure) { throw new IllegalStateException("Cannot stage the session's APKs", failure); }
+                reply.writeNoException(); return true;
+            }
+            case HubProtocol.INSTALL_PREAPPROVE -> {
+                Peer caller = caller(); int sessionId = request.readInt(); String pkg = request.readString(), label = request.readString(); IBinder status = request.readStrongBinder();
+                request.enforceNoDataAvail();
+                installer.preapprove(caller, sessionId, pkg, label, status); reply.writeNoException(); return true;
+            }
+            case HubProtocol.UNINSTALL -> {
+                Peer caller = caller(); String pkg = request.readString(); IBinder status = request.readStrongBinder(); boolean now = request.readBoolean(); request.enforceNoDataAvail();
+                installer.uninstall(caller, pkg, status, now); reply.writeNoException(); return true;
+            }
+            case HubProtocol.INSTALL_SOURCE -> {
+                Peer caller = caller(); boolean ask = request.readBoolean(); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeBoolean(installer.source(caller, ask)); return true;
             }
             case HubProtocol.CHECK_PERMISSION -> {
                 caller(); int pid = request.readInt(), uid = request.readInt(); String permission = request.readString(); request.enforceNoDataAvail();

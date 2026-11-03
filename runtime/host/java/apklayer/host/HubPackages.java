@@ -31,10 +31,14 @@ final class HubPackages {
         Path apk = directory.resolve("base.apk");
         if (!Files.isRegularFile(apk) || !Files.isRegularFile(directory.resolve("info.properties"))) return null;  // info.properties comes last: an install in progress is not one yet
         try {
-            long modified = Files.getLastModifiedTime(apk).toMillis(), size = Files.size(apk);
+            // info.properties is written last by every install, splits included
+            long modified = Files.getLastModifiedTime(directory.resolve("info.properties")).toMillis(), size = Files.size(apk);
             Cached old = cache.get(name);
             if (old != null && old.modified == modified && old.size == size) return old.parsed;
-            PackageParser.Package parsed = ShadowPackageParser.callParsePackage(apk);
+            boolean splits;
+            try (var files = Files.list(directory)) { splits = files.anyMatch(f -> f.getFileName().toString().matches("split_.*\\.apk")); }
+            // with splits the directory is parsed as a cluster, as PackageManagerService scans /data/app/<package>: splitNames and the split paths come with it
+            PackageParser.Package parsed = ShadowPackageParser.callParsePackage(splits ? directory : apk);
             if (!name.equals(parsed.packageName)) throw new SecurityException("Installed APK package mismatch: " + name + " holds " + parsed.packageName);
             parsed.applicationInfo.uid = uid(name);  // the app id the scanner assigns (PackageManagerService did this at scan time); every component shares this ApplicationInfo and the generators copy it
             cache.put(name, new Cached(modified, size, parsed)); return parsed;
@@ -217,6 +221,9 @@ final class HubPackages {
     }
 
     private static final HostSystemConfig SYSTEM = HostSystemConfig.load();
+
+    /** A platform-signed system app (in the privileged allowlist): the package installer does not remove it. */
+    boolean system(String name) { return SYSTEM.privileged.containsKey(name); }
 
     /** A service's android:permission, checked with the same grants as every other permission (holds): a requested dangerous one is granted too. */
     void enforceServicePermission(String caller, ServiceInfo service) {

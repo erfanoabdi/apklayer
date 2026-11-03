@@ -83,6 +83,11 @@ final class HubEndpoint extends Binder {
             } finally { Services.HUB_CALLS.decrementAndGet(); }
             return true;
         }
+        if (code == HubProtocol.ENDPOINT_PACKAGE_CHANGED) {
+            String pkg = request.readString(); boolean removed = request.readBoolean(); request.enforceNoDataAvail();
+            main.post(() -> HubClient.current().packageChanged(context, pkg, removed));
+            reply.writeNoException(); return true;
+        }
         if (code == HubProtocol.ENDPOINT_EXIT_IF_IDLE) {
             request.enforceNoDataAvail();
             main.post(Services::exitIfIdle);

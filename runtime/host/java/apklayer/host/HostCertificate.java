@@ -19,18 +19,33 @@ final class HostCertificate {
             String apps = System.getProperty("apklayer.apps");
             java.io.File apk = apps == null ? null : new java.io.File(new java.io.File(apps, name), "base.apk");
             if (apk == null || !apk.isFile()) return signatures();
-            String why;
-            try {
-                android.content.pm.parsing.result.ParseResult<android.content.pm.SigningDetails> read = android.util.apk.ApkSignatureVerifier.unsafeGetCertsWithoutVerification(
-                        android.content.pm.parsing.result.ParseTypeImpl.forParsingWithoutPlatformCompat(), apk.getPath(), android.content.pm.SigningDetails.SignatureSchemeVersion.JAR);
-                if (read.isSuccess() && read.getResult().getSignatures() != null && read.getResult().getSignatures().length > 0) return read.getResult().getSignatures();
-                why = read.getErrorMessage();
-            } catch (RuntimeException | LinkageError failure) { why = failure.toString(); }
-            Signature[] v1 = jarSigner(apk);  // the framework's v1 path (StrictJarFile) needs libcore's natives
-            if (v1 != null) return v1;
-            System.out.println("[apklayer] signing certificate of " + name + " not readable (" + why + "): the placeholder");
-            return signatures();
+            Signature[] read = read(apk);
+            return read != null ? read : signatures();
         });
+    }
+
+    /** The certificate an APK is signed with (v3, v2 or v1 signature block); null when it is unsigned or unreadable. */
+    static Signature[] read(java.io.File apk) {
+        String why;
+        try {
+            android.content.pm.parsing.result.ParseResult<android.content.pm.SigningDetails> read = android.util.apk.ApkSignatureVerifier.unsafeGetCertsWithoutVerification(
+                    android.content.pm.parsing.result.ParseTypeImpl.forParsingWithoutPlatformCompat(), apk.getPath(), android.content.pm.SigningDetails.SignatureSchemeVersion.JAR);
+            if (read.isSuccess() && read.getResult().getSignatures() != null && read.getResult().getSignatures().length > 0) return read.getResult().getSignatures();
+            why = read.getErrorMessage();
+        } catch (RuntimeException | LinkageError failure) { why = failure.toString(); }
+        Signature[] v1 = jarSigner(apk);  // the framework's v1 path (StrictJarFile) needs libcore's natives
+        if (v1 != null) return v1;
+        System.out.println("[apklayer] signing certificate of " + apk + " not readable (" + why + "): the placeholder");
+        return null;
+    }
+
+    /** The SHA-256 of an APK's signing certificates, "" for an unsigned one (what install compares on an update). */
+    static String digest(java.io.File apk) {
+        Signature[] signers = read(apk);
+        if (signers == null) return "";
+        StringBuilder out = new StringBuilder();
+        for (Signature s : signers) out.append(out.length() == 0 ? "" : ",").append(android.util.PackageUtils.computeSha256Digest(s.toByteArray()));
+        return out.toString();
     }
 
     /** A v1-only APK: the certificate in its META-INF signature block. shortcut: the block's first certificate (one signer without a chain, as APKs are signed); verify the chain if a multi-signer APK shows up. */

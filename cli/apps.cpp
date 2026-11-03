@@ -1,6 +1,7 @@
 #include "apps.h"
 
 #include <algorithm>
+#include <iostream>
 #include <cstdlib>
 #include <unistd.h>
 
@@ -16,8 +17,10 @@ int sh(std::vector<std::string> argv, const Env& env = currentEnv(), const std::
 }
 
 // The cache key of a conversion: same APK, same framework, same converter -> same classes.
-std::string cacheKey(const Layout& l, const std::string& apk) {
-    std::string text = sha256File(apk) + "\npost-processing v14: verified, Android classloader adapter, java.* own classes relocated (no library relocation: apps have their own class loader), static finals written outside clinit, native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke\n";
+std::string cacheKey(const Layout& l, const std::string& apk, const std::vector<std::string>& splits) {
+    std::string text = sha256File(apk);
+    for (const std::string& s : splits) text += " " + sha256File(s);  // a split's code converts with the base (dex2jvm reads split_*.apk beside base.apk)
+    text += "\npost-processing v14: verified, Android classloader adapter, java.* own classes relocated (no library relocation: apps have their own class loader), static finals written outside clinit, native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke\n";
     std::vector<std::string> jars = listDir(l.frameworkDir());
     std::sort(jars.begin(), jars.end());
     for (const std::string& j : jars)
@@ -39,18 +42,30 @@ void writeDesktop(const Layout& l, const std::string& pkg, const std::string& la
     sh({"xdg-mime", "default", "apklayer-open-apk.desktop", "application/vnd.android.package-archive"});
 }
 
-void extractLibs(const std::string& dir) {
+// The installed APKs: base.apk, then its splits (split_<name>.apk), as Android keeps them.
+std::vector<std::string> apkFiles(const std::string& dir) {
+    std::vector<std::string> found;
+    for (const std::string& f : listDir(dir))
+        if (f.rfind("split_", 0) == 0 && f.size() > 4 && f.substr(f.size() - 4) == ".apk") found.push_back(f);
+    std::sort(found.begin(), found.end());
+    found.insert(found.begin(), "base.apk");
+    return found;
+}
+
+void extractLibs(const std::string& dir) {  // from the base and its splits (an ABI split carries them)
     removeTree(join(dir, "lib"));
-    Spawn list;
-    list.argv = {"unzip", "-Z1", join(dir, "base.apk")};
-    list.env = currentEnv();
-    int st = 0;
-    std::string names = runCapture(list, &st);
     const std::string prefix = std::string("lib/") + kAbi + "/";
-    if (names.find("\n" + prefix) == std::string::npos && names.rfind(prefix, 0) != 0) return;
-    makeDirs(join(dir, "lib"));
-    sh({"unzip", "-o", "-j", "-q", join(dir, "base.apk"), prefix + "*.so", "-d", join(dir, "lib")});
-    sh({"chmod", "-R", "0755", join(dir, "lib")});  // as Android's installer leaves them: some apps run a bundled lib*.so as a program (Puzzles' libpuzzlesgen.so)
+    for (const std::string& apk : apkFiles(dir)) {
+        Spawn list;
+        list.argv = {"unzip", "-Z1", join(dir, apk)};
+        list.env = currentEnv();
+        int st = 0;
+        std::string names = runCapture(list, &st);
+        if (names.find("\n" + prefix) == std::string::npos && names.rfind(prefix, 0) != 0) continue;
+        makeDirs(join(dir, "lib"));
+        sh({"unzip", "-o", "-j", "-q", join(dir, apk), prefix + "*.so", "-d", join(dir, "lib")});
+    }
+    if (isDir(join(dir, "lib"))) sh({"chmod", "-R", "0755", join(dir, "lib")});  // as Android's installer leaves them: some apps run a bundled lib*.so as a program (Puzzles' libpuzzlesgen.so)
 }
 }  // namespace
 
@@ -76,12 +91,11 @@ std::string hostClasspath(const Layout& l) {  // no app classes: they get a load
            "/android-stub.jar:" + l.dex2jvmJar();
 }
 
-std::string installApp(const Layout& l, const Instance& inst, const std::string& apk) {
-    if (!exists(apk)) die("no such file: " + apk);
+std::string installApp(const Layout& l, const Instance& inst, const std::vector<std::string>& apks, bool allowDowngrade) {
+    for (const std::string& apk : apks) if (!exists(apk)) die("no such file: " + apk);
     if (!isDir(l.hostClasses()) || !exists(l.dex2jvmJar()))
         die("not built: run 'meson setup b && ninja -C b' and tools/build host " + l.native + " in " + l.root);
     makeDirs(l.appsDir);
-    std::string key = cacheKey(l, apk);
     char pattern[4096];
     snprintf(pattern, sizeof pattern, "%s/.install.XXXXXX", l.appsDir.c_str());
     if (!mkdtemp(pattern)) die("cannot create a temporary directory in " + l.appsDir);
@@ -90,16 +104,25 @@ std::string installApp(const Layout& l, const Instance& inst, const std::string&
     pending = tmp;
     std::atexit([] { removeTree(pending); });
 
+    // base.apk and split_<name>.apk, as a device installs a package (apklayer.tools.ApkSet: one APK, a base and its splits, or an .apks/.xapk/.apkm)
+    Spawn stage;
+    stage.argv = {"java", "-cp", l.hostClasses(), "apklayer.tools.ApkSet", tmp, kAbi};
+    stage.argv.insert(stage.argv.end(), apks.begin(), apks.end());
+    stage.env = currentEnv();
+    if (runAndWait(stage) != 0) die("not an installable package: " + apks[0]);
+    std::vector<std::string> splits;
+    for (const std::string& f : apkFiles(tmp)) if (f != "base.apk") splits.push_back(join(tmp, f));
+    std::string key = cacheKey(l, join(tmp, "base.apk"), splits);
     std::string reuse;
     for (const std::string& app : listDir(l.appsDir)) {
         std::string d = join(l.appsDir, app);
         if (auto k = readFile(join(d, "key")); k && trim(*k) == key && exists(join(d, "classes.jar"))) { reuse = join(d, "classes.jar"); break; }
     }
-    sh({"cp", apk, join(tmp, "base.apk")});
+    std::string name = baseName(apks[0]);
     if (!reuse.empty()) {
         sh({"cp", reuse, join(tmp, "classes.jar")});
     } else {
-        printf("apklayer: converting %s\n", baseName(apk).c_str());
+        printf("apklayer: converting %s\n", name.c_str());
         // dex2jvm reads the class hierarchy from its classpath (the framework we run on); keep it away from any installed Android SDK
         Env env = currentEnv();
         env["ANDROID_HOME"] = tmp;
@@ -114,7 +137,7 @@ std::string installApp(const Layout& l, const Instance& inst, const std::string&
         // every DEX class in a well-formed class file and the APK's java resources reachable: nothing half-converted is installed or cached
         // ASM's CheckClassAdapter comes from Robolectric_all.jar, which lacks asm-analysis: on the boot class path it is not verified, so the data-flow classes it names are never loaded
         if (sh({"java", "-Xbootclasspath/a:" + l.native + "/aosp/Robolectric_all.jar", "-cp", l.hostClasses() + ":" + l.dex2jvmJar(), "apklayer.tools.VerifyInstall", join(tmp, "base.apk"), join(tmp, "classes.jar")}) != 0)
-            die("the converted classes are incomplete or malformed (see above); " + baseName(apk) + " is not installed");
+            die("the converted classes are incomplete or malformed (see above); " + name + " is not installed");
         unlink(join(tmp, "raw.jar").c_str());
     }
     writeFile(join(tmp, "key"), key + "\n");
@@ -122,25 +145,39 @@ std::string installApp(const Layout& l, const Instance& inst, const std::string&
     NativeEnv ne = nativeEnv(l, inst);
     if (!ensureStack(l, inst)) die("the Android services are not available");
     std::vector<std::string> argv = hostJvmArgs(l, inst, ne);
-    argv.insert(argv.end(), {"-Djava.awt.headless=true", "-cp", hostClasspath(l), "apklayer.host.Main", "--describe", tmp, join(tmp, "base.apk"), join(tmp, "classes.jar")});
+    argv.insert(argv.end(), {"-Djava.awt.headless=true", "-Dapklayer.apps=" + l.appsDir, "-cp", hostClasspath(l), "apklayer.host.Main", "--describe", tmp, join(tmp, "base.apk"), join(tmp, "classes.jar")});
     Spawn d;
     d.argv = argv;
     d.env = ne.env;
     for (const std::string& line : split(runCapture(d), '\n'))
         if (!line.empty() && line.rfind("[apklayer] described", 0) != 0) puts(line.c_str());
-    if (!exists(join(tmp, "info.properties"))) die("could not read " + baseName(apk));
+    if (!exists(join(tmp, "info.properties"))) die("could not read " + name);
 
-    std::string pkg = property(join(tmp, "info.properties"), "package");
-    std::string label = property(join(tmp, "info.properties"), "label");
+    std::string info = join(tmp, "info.properties");
+    std::string pkg = property(info, "package");
+    std::string label = property(info, "label");
     std::string dir = appDir(l, pkg);
+    std::string old = join(dir, "info.properties");
+    // an update as Android allows it (INSTALL_FAILED_UPDATE_INCOMPATIBLE, INSTALL_FAILED_VERSION_DOWNGRADE): the same signer, no lower version unless asked
+    if (!property(info, "signerMismatch").empty()) {
+        std::cerr << "apklayer: INSTALL_FAILED_UPDATE_INCOMPATIBLE: " << pkg << " is installed with another signature" << std::endl;
+        std::exit(kInstallIncompatible);
+    }
+    if (exists(old) && !allowDowngrade && atoll(property(info, "versionCode").c_str()) < atoll(property(old, "versionCode").c_str())) {
+        std::cerr << "apklayer: INSTALL_FAILED_VERSION_DOWNGRADE: " << pkg << " " << property(old, "versionCode") << " is installed, this is "
+                  << property(info, "versionCode") << " (install -d allows it)" << std::endl;
+        std::exit(kInstallDowngrade);
+    }
     makeDirs(dir);
-    std::string oldUid = property(join(dir, "info.properties"), "uid");
-    for (const char* f : {"base.apk", "classes.jar", "key", "icon.png"}) sh({"mv", "-f", join(tmp, f), join(dir, f)});
+    std::string oldUid = property(old, "uid");
+    for (const std::string& f : apkFiles(dir)) if (f != "base.apk") unlink(join(dir, f).c_str());  // the update's own splits replace the old ones
+    for (const std::string& f : apkFiles(tmp)) sh({"mv", "-f", join(tmp, f), join(dir, f)});
+    for (const char* f : {"classes.jar", "key", "icon.png"}) sh({"mv", "-f", join(tmp, f), join(dir, f)});
     extractLibs(dir);
     // info.properties, with its uid, is the commit: a hub or JVM that meets the package while it is installed sees all of it or none
-    if (!oldUid.empty()) writeFile(join(tmp, "info.properties"), readFile(join(tmp, "info.properties")).value_or("") + "uid=" + oldUid + "\n");
+    if (!oldUid.empty()) writeFile(info, readFile(info).value_or("") + "uid=" + oldUid + "\n");
     ensureUid(l, tmp);
-    sh({"mv", "-f", join(tmp, "info.properties"), join(dir, "info.properties")});
+    sh({"mv", "-f", info, join(dir, "info.properties")});
     writeDesktop(l, pkg, label, dir);
     printf("apklayer: installed %s (%s) -> %s\n", pkg.c_str(), label.c_str(), dir.c_str());
     return pkg;

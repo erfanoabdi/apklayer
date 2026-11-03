@@ -20,6 +20,8 @@ public final class HostShadowProvider implements ShadowProvider {
     @Override public Collection<Map.Entry<String, String>> getShadows() {
         var entries = new ArrayList<>(List.of(
                 Map.entry("android.app.ApplicationPackageManager", ShadowHostPackageManager.class.getName()),
+                Map.entry("android.content.pm.PackageInstaller", ShadowHostPackageInstaller.class.getName()),  // sessions go to the hub's installer
+                Map.entry("android.content.pm.PackageInstaller.Session", ShadowHostPackageInstaller.Session.class.getName()),
                 Map.entry("android.net.ConnectivityManager", ShadowHostConnectivityManager.class.getName()),
                 Map.entry("android.app.DownloadManager", ShadowHostDownloadManager.class.getName()),
                 Map.entry("android.app.ContextImpl", ShadowHostContextImpl.class.getName()),

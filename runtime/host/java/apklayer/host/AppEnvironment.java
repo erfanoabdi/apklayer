@@ -119,6 +119,7 @@ final class AppEnvironment {
             android.content.pm.ApplicationInfo info = org.robolectric.util.ReflectionHelpers.getField(bound, "appInfo");
             info.nativeLibraryDir = libdir;
             info.primaryCpuAbi = HostBuild.ABI;
+            ShadowHostPackageManager.installedPaths(info);  // its splits, before LoadedApk reads them for the app's resources
         } catch (RuntimeException notBoundYet) { /* the context path (ShadowHostContextImpl.getApplicationInfo) covers it */ }
     }
 
