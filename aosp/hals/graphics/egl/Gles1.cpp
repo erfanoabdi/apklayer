@@ -1,7 +1,9 @@
 // OpenGL ES 1 for apklayer's libEGL. Android's libGLESv1_CM (staged, mapped to itself) jumps through a gl_hooks_t table that the thread's
 // TLS_SLOT_OPENGL_API points at; Android's EGL loader fills it from the driver (Loader::init_api) and stores it on eglMakeCurrent, and so
 // does this file: from the host's libGLESv1_CM.so.1 when the host driver has ES 1, else from libapklayer-gles1.so (gfxstream's GLES_CM
-// translator on a host GLES 3 context, bridge/hals/graphics/gles1). Contexts of other versions leave the slot null (an ES 1 call is a no-op).
+// translator on a host GLES 3 context, bridge/hals/graphics/gles1). Like Android's EGL (egl.cpp gHooks / gHooksNoContext), the slot is set on
+// every eglMakeCurrent: ES 2/3 contexts get the host's GLES entry points (libGLESv1_CM and libGLESv2 share names such as glClear, and a GLES 3
+// caller's symbol may bind to the ES 1 trampoline; its glGetString reads the table without a null check), no context a table of no-ops.
 #define LOG_TAG "apklayer.egl"
 
 #include "Gles1.h"
@@ -38,7 +40,11 @@ struct Translator {  // libapklayer-gles1.so's C interface
 const Translator* translator() {
     static Translator t = [] {
         Translator r{};
-        void* lib = dlopen("libapklayer-gles1.so", RTLD_NOW);  // glibc library from the native dir (bionic_translation's glibc fallback)
+        // a glibc library from the native dir, opened by glibc: app processes have that dir on the bionic search path (NativeLoader), where
+        // bionic_translation's dlopen links it as an Android library and fails. dlmopen, because bionic_translation's dlsym hands out its
+        // own bionic_dlopen for "dlopen" even from glibc's handle
+        static auto hostDlmopen = reinterpret_cast<void* (*)(long, const char*, int)>(dlsym(dlopen("libc.so.6", RTLD_NOW), "dlmopen"));
+        void* lib = hostDlmopen ? hostDlmopen(0 /* LM_ID_BASE */, "libapklayer-gles1.so", RTLD_NOW) : nullptr;
         if (!lib) { ALOGW("no libapklayer-gles1.so (tools/build gles1): no OpenGL ES 1 on this host"); return r; }
         r.create = reinterpret_cast<void* (*)(void*)>(dlsym(lib, "apklayer_gles1_create"));
         r.makeCurrent = reinterpret_cast<void (*)(void*)>(dlsym(lib, "apklayer_gles1_make_current"));
@@ -57,20 +63,29 @@ void fill(Hooks* h, void* (*find)(const char*)) {
     }
 }
 
-void* hostProc(const char* name) {  // the host's glvnd libraries (not our eglGetProcAddress: it hands out Android's trampolines for ES 1)
-    static void* lib = dlopen("libGLESv1_CM.so.1", RTLD_NOW);
+// the host's glvnd libraries (not our eglGetProcAddress: it hands out Android's trampolines for ES 1)
+void* hostProc(void* lib, const char* name) {
     static auto proc = reinterpret_cast<void* (*)(const char*)>(dlsym(dlopen("libEGL.so.1", RTLD_NOW), "eglGetProcAddress"));
     void* f = lib ? dlsym(lib, name) : nullptr;
     return f ? f : proc ? proc(name) : nullptr;
 }
+void* hostGles1(const char* name) {
+    static void* lib = dlopen("libGLESv1_CM.so.1", RTLD_NOW);
+    return hostProc(lib, name);
+}
+void* hostGles2(const char* name) {
+    static void* lib = dlopen("libGLESv2.so.2", RTLD_NOW);
+    return hostProc(lib, name);
+}
+void* none(const char*) { return nullptr; }
 
 struct Gles1 {
     void* translated;  // libapklayer-gles1's context, null for a host ES 1 context
 };
 std::mutex lock;
 std::map<EGLContext, Gles1> contexts;
-Hooks hostHooks, translatorHooks;
-bool hostFilled, translatorFilled;
+Hooks hostHooks, translatorHooks, gles2Hooks, noContextHooks;
+bool hostFilled, translatorFilled, gles2Filled;
 thread_local bool tTranslated;
 
 void setThreadHooks(const Hooks* h) {
@@ -79,6 +94,11 @@ void setThreadHooks(const Hooks* h) {
 #else
     (void)h;  // shortcut: x86_64's bionic slots are glibc's TCB words (bridge/native/bionic_tls.c); ES 1 apps need a reserved slot there first
 #endif
+}
+
+__attribute__((constructor)) void initHooks() {  // Android's early_egl_init: the loading thread starts with the no-context table
+    fill(&noContextHooks, none);
+    setThreadHooks(&noContextHooks);
 }
 
 }  // namespace
@@ -118,13 +138,14 @@ void gles1MadeCurrent(EGLContext ctx) {
     if (it == contexts.end()) {
         if (t) t->makeCurrent(nullptr);
         tTranslated = false;
-        setThreadHooks(nullptr);
+        if (ctx != EGL_NO_CONTEXT && !gles2Filled) { fill(&gles2Hooks, hostGles2); gles2Filled = true; }
+        setThreadHooks(ctx != EGL_NO_CONTEXT ? &gles2Hooks : &noContextHooks);
         return;
     }
     if (!it->second.translated) {
         if (t) t->makeCurrent(nullptr);
         tTranslated = false;
-        if (!hostFilled) { fill(&hostHooks, hostProc); hostFilled = true; }
+        if (!hostFilled) { fill(&hostHooks, hostGles1); hostFilled = true; }
         setThreadHooks(&hostHooks);
         return;
     }

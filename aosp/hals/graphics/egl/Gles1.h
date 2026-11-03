@@ -13,7 +13,8 @@ using HostCreateContext = EGLContext (*)(EGLDisplay, EGLConfig, EGLContext, cons
 bool wantsGles1(const std::vector<EGLint>& attribs);
 // An ES 1 context: the host's if its driver has ES 1, else a host GLES 3 context carrying libapklayer-gles1's translator.
 EGLContext gles1CreateContext(EGLDisplay dpy, EGLConfig cfg, EGLContext share, const std::vector<EGLint>& attribs, HostCreateContext create);
-// After a successful host eglMakeCurrent: the thread's GLES 1 hook table (Android's libGLESv1_CM dispatches through it) and translator context.
+// After a successful host eglMakeCurrent: the thread's GL hook table (Android's libGLESv1_CM dispatches through it: ES 1, ES 2/3 or no
+// context) and translator context.
 void gles1MadeCurrent(EGLContext ctx);
 // Before the host destroys `ctx`: its translator state (made on its host context).
 void gles1DestroyContext(EGLDisplay dpy, EGLContext ctx);

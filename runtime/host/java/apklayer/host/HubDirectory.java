@@ -69,6 +69,8 @@ final class HubDirectory extends Binder {
     }
     java.util.List<Peer> peersExcept(Peer one) { synchronized (peers) { return peers.values().stream().filter(peer -> peer != one).toList(); } }
     HubAccounts accounts() { return accounts; }
+    HubProviders providers() { return providers; }
+    HubPackages packages() { return packages; }
     Peer peerByPid(int pid) { synchronized (peers) { return peers.get(pid); } }
     /** A running process of the app with this Android uid (an app and its component hosts share it), or null. */
     Peer peerByUid(int appUid) { synchronized (peers) { return peers.values().stream().filter(peer -> peer.appUid == appUid).findFirst().orElse(null); } }
@@ -224,6 +226,10 @@ final class HubDirectory extends Binder {
                     reply.writeString(info.readPermission); reply.writeString(info.writePermission); reply.writeTypedObject(info, 0);
                     reply.writeInt(component.intents.size()); for (var filter : component.intents) reply.writeTypedObject(new android.content.IntentFilter(filter), 0); }
                 return true;
+            }
+            case HubProtocol.INPUT_METHODS -> {  // InputMethodManager's enabled list (apps targeting 34+ may not read ENABLED_INPUT_METHODS)
+                caller(); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeString(HubBootSettings.inputMethods(packages)); return true;  // what the boot writes: no wait (a host registers while the boot waits for it)
             }
             case HubProtocol.NOTIFY_CHANGE -> {
                 Peer caller = caller(); android.net.Uri uri = request.readTypedObject(android.net.Uri.CREATOR); int changeFlags = request.readInt(); request.enforceNoDataAvail();

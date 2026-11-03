@@ -72,7 +72,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         jvm.push_back("-Dapklayer.displaywindow=" + title);
     }
     ne.env["LD_LIBRARY_PATH"] = l.native + ":" + join(l.native, "glibc") + ":" + ne.env["LD_LIBRARY_PATH"];  // bionic linker + its libs
-    for (const std::string& o : {"-Dapklayer.data=" + join(dir, "data"), "-Dapklayer.package=" + package, "-Dapklayer.uid=" + property(join(dir, "info.properties"), "uid"),
+    for (const std::string& o : {"-Dapklayer.data=" + appDataDir(l, inst, package), "-Dapklayer.package=" + package, "-Dapklayer.uid=" + property(join(dir, "info.properties"), "uid"),
                                  "-Dapklayer.libdir=" + join(dir, "lib"), "-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary()})
         jvm.push_back(o);
     if (!provider.empty()) jvm.push_back("-Dapklayer.webviewprovider=" + join(l.appsDir, provider));  // its classes get a loader of their own (ShadowHostWebViewFactory)
@@ -99,7 +99,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     trace("app jvm spawned");
     // `apklayer stop` ends what this launch started: the JVM and its window sink
     std::string record = join(inst.stateDir, "run." + std::to_string(self));
-    writeFile(record, std::to_string(jvmPid) + "\n" + std::to_string(vdisplay) + "\n" + package + "\n");  // the package: the JVM's command line becomes its process name
+    writeFile(record, std::to_string(jvmPid) + "\n" + std::to_string(vdisplay) + "\n");
     int status = 0;
     while (waitpid(jvmPid, &status, 0) < 0 && errno == EINTR) {}
     unlink(record.c_str());
@@ -193,8 +193,10 @@ int screenshot(const Layout& l, const Instance& inst, const std::string& target,
             if (f.rfind("run.", 0) != 0) continue;
             auto record = readFile(join(inst.stateDir, f));
             std::vector<std::string> pids = record ? split(*record, '\n') : std::vector<std::string>();
-            if (pids.size() < 3 || atoi(pids[1].c_str()) <= 0) continue;  // a component host: no window
-            if (pids[2] == target && kill(atoi(pids[0].c_str()), 0) == 0) stack = f.substr(4);
+            if (pids.size() < 2 || atoi(pids[1].c_str()) <= 0) continue;  // a component host: no window
+            auto cmd = readFile("/proc/" + pids[0] + "/cmdline");
+            // the JVM's command line names the package, or (once the runtime named the process as Android does) is the process name
+            if (cmd && (cmd->find("-Dapklayer.package=" + target + std::string(1, '\0')) != std::string::npos || cmd->rfind(target + std::string(1, '\0'), 0) == 0)) stack = f.substr(4);
         }
         if (stack.empty()) { fprintf(stderr, "apklayer: no window of %s in instance %s\n", target.c_str(), inst.id.c_str()); return 1; }
     }

@@ -35,6 +35,8 @@ struct Instance {
     std::string runtimeDir;  // properties store and sockets of this instance
     std::string storageDir;  // <dataHome>/apklayer/<n>/storage: the instance's /storage; its sdcard is emulated/0 below (n = 0 for "default")
     std::string dataDir;     // <dataHome>/apklayer/<n>/data: the instance's Android /data (keystore2's database...), never the shared native root
+    std::string root;        // <dataHome>/apklayer/<n>: storage, data, app data, accounts.json, input-methods of the instance
+    std::string appData(const std::string& package) const { return root + "/app-data/" + package; }  // an app's own files in this instance (-Dapklayer.data)
     static Instance open(const Layout& layout, const std::string& id);
     std::string logs() const { return stateDir; }
     std::string pidFile() const { return join(stateDir, "stack.pid"); }
