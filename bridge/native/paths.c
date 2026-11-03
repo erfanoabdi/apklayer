@@ -45,13 +45,45 @@ static bool binder_device(char **path)
     return false;
 }
 
+/* Android's storage paths are the instance's storage directory ($APKLAYER_STORAGE, cli/layout): /storage/emulated/0 as on a device (MediaProvider
+ * reads volume and relative path from that spelling), and its other names /sdcard and /data/media/0. Mapped whether or not the file exists yet. */
+static bool storage_path(char **path)
+{
+    static const char *const names[][2] = { { "/storage", "" }, { "/sdcard", "/emulated/0" }, { "/data/media/0", "/emulated/0" } };
+    static const char *storage;
+    if (!storage) storage = getenv("APKLAYER_STORAGE") ? getenv("APKLAYER_STORAGE") : "";
+    if (!storage[0]) return false;
+    for (size_t i = 0; i < sizeof names / sizeof names[0]; i++) {
+        size_t n = strlen(names[i][0]);
+        if (strncmp(*path, names[i][0], n) || ((*path)[n] && (*path)[n] != '/')) continue;
+        char *mapped;
+        if (asprintf(&mapped, "%s%s%s", storage, names[i][1], *path + n) < 0) return false;
+        *path = mapped;
+        return true;
+    }
+    return false;
+}
+
+/* The rest of /data is the instance's ($APKLAYER_DATA, cli/layout: seeded from the Android root's data/): keystore2's database and other state
+ * never land in the native directory that all instances share. */
+static bool data_path(char **path)
+{
+    static const char *data;
+    if (!data) data = getenv("APKLAYER_DATA") ? getenv("APKLAYER_DATA") : "";
+    if (!data[0] || strncmp(*path, "/data", 5) || ((*path)[5] && (*path)[5] != '/')) return false;
+    char *mapped;
+    if (asprintf(&mapped, "%s%s", data, *path + 5) < 0) return false;
+    *path = mapped;
+    return true;
+}
+
 bool apklayer_apply_path_overrides(char **path)
 {
     const char *p = *path, *r = root();
     static int debug = -1;
     if (debug < 0) debug = getenv("APKLAYER_PATHS_DEBUG") != NULL;
     if (debug) fprintf(stderr, "[paths] %s (root %s)\n", p, r);
-    if (binder_device(path)) return true;
+    if (binder_device(path) || storage_path(path) || data_path(path)) return true;
     if (!r[0] || p[0] != '/') return false;
     for (int i = 0; prefixes[i]; i++) {
         if (strncmp(p, prefixes[i], strlen(prefixes[i]))) continue;

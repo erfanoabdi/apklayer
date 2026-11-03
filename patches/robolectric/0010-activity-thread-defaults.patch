@@ -13,13 +13,18 @@ upstream sources (<native>/aosp/robolectric-src); the result is compiled into na
 diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowActivityThread.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowActivityThread.java
 --- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowActivityThread.java
 +++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowActivityThread.java
-@@ -102,7 +102,16 @@
+@@ -102,7 +102,21 @@
                    .getServiceInfo(componentName, ((Number) args[1]).intValue());
              }
            }
 -          throw new UnsupportedOperationException("sorry, not supporting " + method + " yet!");
 +          // apklayer patch: system apps (the settings provider asks for the setup wizard package) call many methods the fake does not know: answer like a device
 +          // without the feature (null, false, 0, an empty list) instead of failing
++          if (method.getName().equals("getPackageInfo")) {  // the settings provider asks who its caller is (SSAID, permission checks)
++            long flags = args[1] instanceof Number ? ((Number) args[1]).longValue() : 0;
++            try { return RuntimeEnvironment.getApplication().getPackageManager().getPackageInfo((String) args[0], (int) flags); }
++            catch (PackageManager.NameNotFoundException e) { return null; }
++          }
 +          System.out.println("[apklayer] IPackageManager." + method.getName() + ": not provided, answering a default");
 +          Class<?> returned = method.getReturnType();
 +          if (returned == boolean.class) return false;
@@ -31,7 +36,7 @@ diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowActiv
          });
    }
  
-@@ -111,7 +120,14 @@
+@@ -111,7 +125,14 @@
      return RuntimeEnvironment.getActivityThread();
    }
  

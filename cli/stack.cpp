@@ -124,9 +124,9 @@ void ensureShell(const Layout& l, const Instance& inst, const NativeEnv& env) {
     close(lock);
 }
 
-// keystore2 keeps its database in /data/misc/keystore, which the path layer serves from the Android root
-static std::string keystoreDir(const Layout& l) {
-    std::string dir = join(getenvOr("APKLAYER_ANDROID_ROOT", join(l.native, "android-root")), "data/misc/keystore");
+// keystore2 keeps its database in /data/misc/keystore, which the path layer serves from the instance's /data
+static std::string keystoreDir(const Instance& inst) {
+    std::string dir = join(inst.dataDir, "misc/keystore");
     makeDirs(dir);
     return dir;
 }
@@ -174,8 +174,8 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     prop.env = ne.env;
     prop.logFile = join(inst.logs(), "aprop.log");
     runAndWait(prop);
-    // Android init creates this directory and announces it to RenderEngine; the path overlay resolves existing files only.
-    std::string cache = join(getenvOr("APKLAYER_ANDROID_ROOT", join(n, "android-root")), "data/misc/surfaceflinger");
+    // Android init creates this directory (in the instance's /data) and announces it to RenderEngine.
+    std::string cache = join(inst.dataDir, "misc/surfaceflinger");
     makeDirs(cache);
     for (const char* f : {"egl_shaders", "skia_shaders", "skia_graphite_pipelines"}) writeFile(join(cache, f), "");
     prop.argv = {join(n, "bin/aprop"), "set", "service.sf.cache_dir_available", "1"};
@@ -210,7 +210,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     }
     if (staged(l, "libapklayer_keymint.so") && staged(l, "libapklayer_keystore2.so")) {  // the real Android keystore: software KeyMint, then keystore2 over it
         start("keymint", "libapklayer_keymint.so", {});
-        keystoreDir(l);
+        keystoreDir(inst);
         start("keystore2", "libapklayer_keystore2.so", {"/data/misc/keystore"});  // as keystore2.rc: the database directory, through the path layer
     }
     start("surfaceflinger", "libapklayer_surfaceflinger.so", {});
