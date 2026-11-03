@@ -2,7 +2,7 @@ From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: apklayer <apklayer@localhost>
 Subject: [PATCH] SandboxClassLoader: array and slash names, app classes
 
-apklayer patch (docs/PATCHES.md "Per-app class loader"): ART's class loaders answer array class names ("[Ljava.lang.String;",
+apklayer patch (docs/PATCHES.md): ART's class loaders answer array class names ("[Ljava.lang.String;",
 which Chromium's JNI layer asks for) and binary names with slashes (Paddleboat loads "com/google/.../GameControllerManager");
 Robolectric's loadClass did neither. A name the sandbox cannot find is asked of the app's own class loader through
 ApklayerAppHook (runtime/patches, apklayer's own), because framework and Robolectric code load app classes by name through the
