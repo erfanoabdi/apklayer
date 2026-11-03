@@ -140,6 +140,31 @@ static void linux_socketpair(JNIEnv *env, jobject self, jint domain, jint type, 
     (*env)->SetIntField(env, two, fd_field(env), fds[1]);
 }
 
+/* Os.poll(StructPollfd[], timeout): what HostFdEvents waits in for a MessageQueue's file descriptor listeners (ParcelFileDescriptor's close listeners among them) */
+#include <poll.h>
+#include <stdlib.h>
+static jint linux_poll(JNIEnv *env, jobject self, jobjectArray array, jint timeout)
+{
+    (void)self;
+    jsize n = (*env)->GetArrayLength(env, array);
+    jclass cls = (*env)->FindClass(env, "android/system/StructPollfd");
+    jfieldID fd = (*env)->GetFieldID(env, cls, "fd", "Ljava/io/FileDescriptor;"), events = (*env)->GetFieldID(env, cls, "events", "S"), revents = (*env)->GetFieldID(env, cls, "revents", "S");
+    struct pollfd *fds = calloc(n ? n : 1, sizeof *fds);
+    for (jsize i = 0; i < n; i++) {
+        jobject one = (*env)->GetObjectArrayElement(env, array, i);
+        fds[i].fd = one ? fd_of(env, (*env)->GetObjectField(env, one, fd)) : -1;
+        fds[i].events = one ? (*env)->GetShortField(env, one, events) : 0;
+    }
+    int r = poll(fds, n, timeout), error = errno;
+    if (r < 0) { free(fds); throw_errno(env, "poll", error); return -1; }
+    for (jsize i = 0; i < n; i++) {
+        jobject one = (*env)->GetObjectArrayElement(env, array, i);
+        if (one) (*env)->SetShortField(env, one, revents, fds[i].revents);
+    }
+    free(fds);
+    return r;
+}
+
 int apklayer_register_linux(JNIEnv *env, jclass libcore_linux)
 {
     JNINativeMethod methods[] = {
@@ -153,6 +178,7 @@ int apklayer_register_linux(JNIEnv *env, jclass libcore_linux)
         {"open", "(Ljava/lang/String;II)Ljava/io/FileDescriptor;", (void *)linux_open},
         {"pipe2", "(I)[Ljava/io/FileDescriptor;", (void *)linux_pipe2},
         {"socketpair", "(IIILjava/io/FileDescriptor;Ljava/io/FileDescriptor;)V", (void *)linux_socketpair},
+        {"poll", "([Landroid/system/StructPollfd;I)I", (void *)linux_poll},
     };
     return (*env)->RegisterNatives(env, libcore_linux, methods, sizeof methods / sizeof *methods) == 0 ? 0 : -1;
 }

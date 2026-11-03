@@ -28,6 +28,14 @@ public class ShadowHostMessageQueue extends ShadowPausedMessageQueue {
         ShadowPausedMessageQueue.nativeWake(ptr);
     }
 
+    @org.robolectric.annotation.RealObject private MessageQueue queue;
+
+    /** File descriptor listeners: Robolectric has no native queue to watch them (HostFdEvents does). */
+    @Implementation protected static void nativeSetFileDescriptorEvents(long ptr, int fd, int events) {
+        org.robolectric.res.android.NativeObjRegistry<?> queues = org.robolectric.util.ReflectionHelpers.getStaticField(ShadowPausedMessageQueue.class, "nativeQueueRegistry");
+        HostFdEvents.set(((ShadowHostMessageQueue) queues.getNativeObject(ptr)).queue, fd, events);
+    }
+
     @Implementation protected static void __staticInitializer__() {
         Shadow.directInitialize(MessageQueue.class);
         try {

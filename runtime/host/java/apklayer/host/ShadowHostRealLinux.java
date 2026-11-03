@@ -54,6 +54,9 @@ public class ShadowHostRealLinux extends ShadowLinux {
         natively("socketpair", ClassParameter.from(int.class, domain), ClassParameter.from(int.class, type), ClassParameter.from(int.class, protocol),
                 ClassParameter.from(FileDescriptor.class, one), ClassParameter.from(FileDescriptor.class, two));
     }
+    @Implementation protected int poll(android.system.StructPollfd[] fds, int timeoutMs) {
+        return natively("poll", ClassParameter.from(android.system.StructPollfd[].class, fds), ClassParameter.from(int.class, timeoutMs));
+    }
 
     // extended attributes (MediaProvider keeps a database's uuid in "user.uuid"): the user.* namespace through NIO, kept in memory where the file system has none
     private static final java.util.Map<String, byte[]> XATTR_FALLBACK = new java.util.concurrent.ConcurrentHashMap<>();
