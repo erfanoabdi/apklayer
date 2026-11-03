@@ -170,3 +170,6 @@ Until an app presents its first frame, `bridge/shell/splash.c` fills the window 
 
 ## Windows (2026-11-04)
 - The bar is 46 logical px, drawn at the window's scale and shown through wp_viewporter. Windows follow wp_fractional_scale_v1 (the app gets the logical size and the scale; the vdisplay renders size x scale px). The first size is the display's shape fitted to 85% of xdg_toplevel.configure_bounds; maximized/fullscreen/tiled take the compositor's size; all outputs are tracked. Checked by `tests/run window-geometry`; other scales with tools/debug/nested-gnome.py. Open: xdg-decoration on non-GNOME desktops; a real-session scale switch check; landscape windows are not grown to the screen.
+
+## Manager (2026-11-04)
+- Needs a human check: the portal file chooser and the pkexec prompt. Open: per-app permissions are not shown (not in info.properties); removing a running instance ends the session's window shell (stopStack); binder devices of a removed instance stay until reboot; fetch-slint.sh has arm64 hashes only; the binary's rpath points into ~/.cache/apklayer/slint; ui.sh needs a desktop (not in meson test); a failing CLI leaves pages empty without an error.
