@@ -28,5 +28,3 @@ echo "Published $native/aosp/host-classes"
 # java.base members Android's native libraries look up (apklayer.host.JdkPatch): the JVM runs with --patch-module java.base=<native>/jdk-patch (bin/apklayer)
 rm -rf "$native/jdk-patch"
 java -cp "$native/aosp/host-classes:$native/aosp/Robolectric_all.jar" apklayer.host.JdkPatch "$native/jdk-patch"
-# the same classes built into a JDK image (class data sharing stays on), when the JDK has its jmods
-if [ -f "$(dirname "$(dirname "$(realpath "$(command -v java)")")")/jmods/java.base.jmod" ]; then scripts/build-host-jdk.sh "$native"; fi

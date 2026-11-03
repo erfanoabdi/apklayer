@@ -74,6 +74,7 @@ final class AppEnvironment {
         provideExternalStorage();
         provideNativeLibraryDir();
         if (!describing) initAppOpsWithoutApplication();
+        StartTrace.mark("data dirs, storage, library dir");
         HostKeyStore.install();  // apps open it in Application.onCreate (a call into keystore2 may create the lazy application: after its data dirs are persistent); needs the sandbox's shadows
     }
 
