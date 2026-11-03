@@ -1,0 +1,108 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 04/25] apklayer:
+ path-layer-open-access-opendir-readlink-openat
+
+also open via __open_2 (fortified open, libc-chk.c), openat/__openat_2, access, opendir and readlink go through the path layer
+
+apklayer patch: step 4 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0004 of patches/bionic_translation.
+---
+ libc/libc-chk.c            |  8 +++++++-
+ libc/libc-open-overrides.c | 17 +++++++++++++++++
+ libc/libc-verbose.h        | 16 +++++++++++++---
+ 3 files changed, 37 insertions(+), 4 deletions(-)
+
+diff --git a/libc/libc-chk.c b/libc/libc-chk.c
+index bfdc771..e91bd92 100644
+--- a/libc/libc-chk.c
++++ b/libc/libc-chk.c
+@@ -1,3 +1,6 @@
++#include <stdbool.h>
++#include <stdlib.h>
++bool libc_bio_apply_path_overrides(char **path); /* apklayer patch: path layer */
+ // SPDX-License-Identifier: MIT AND Apache-2.0
+ 
+ // portions of this file Copyright (C) The Android Open Source Project
+@@ -80,7 +83,10 @@ ssize_t bionic___read_chk(int fd, void *buf, size_t count, size_t buf_size)
+ int bionic___open_2(const char *pathname, int flags)
+ {
+ 	flags |= O_LARGEFILE;
+-	return open(pathname, flags, 0);
++	char *mapped = (char *)pathname; bool free_it = libc_bio_apply_path_overrides(&mapped);
++	int ret = open(mapped, flags, 0);
++	if (free_it) free(mapped);
++	return ret;
+ }
+ 
+ void *bionic___memset_chk(void *dest, int c, size_t n, size_t dest_len)
+diff --git a/libc/libc-open-overrides.c b/libc/libc-open-overrides.c
+index 5eb9b75..cf401b9 100644
+--- a/libc/libc-open-overrides.c
++++ b/libc/libc-open-overrides.c
+@@ -95,3 +95,20 @@ FILE *bionic_fopen(char *path, const char *restrict mode)
+ 		free(path);
+ 	return file;
+ }
++
++/* apklayer patch: openat with an absolute path goes through the path layer */
++int bionic_openat(int dirfd, const char *path, int oflag, ...)
++{
++	int mode = 0;
++	if (OPEN_NEEDS_MODE(oflag)) { va_list arg; va_start(arg, oflag); mode = va_arg(arg, int); va_end(arg); }
++	char *mapped = (char *)path;
++	bool free_it = path && path[0] == '/' && (*apply_path_overrides_func)(&mapped);
++	int fd = openat(dirfd, mapped, oflag, mode);
++	if (free_it) free(mapped);
++	return fd;
++}
++
++int bionic___openat_2(int dirfd, const char *path, int oflag)
++{
++	return bionic_openat(dirfd, path, oflag | O_LARGEFILE, 0);
++}
+diff --git a/libc/libc-verbose.h b/libc/libc-verbose.h
+index 1a41713..4c83af1 100644
+--- a/libc/libc-verbose.h
++++ b/libc/libc-verbose.h
+@@ -1,3 +1,4 @@
++bool libc_bio_apply_path_overrides(char **path); /* apklayer patch: path layer */
+ #pragma once
+ 
+ #include <stdarg.h>
+@@ -23,7 +24,10 @@ int bionic_rename(const char *old, const char *fresh)
+ int bionic_access(const char *path, int amode)
+ {
+ 	verbose("%s (%d)", path, amode);
+-	return access(path, amode);
++	char *mapped = (char *)path; bool free_it = libc_bio_apply_path_overrides(&mapped);
++	int ret = access(mapped, amode);
++	if (free_it) free(mapped);
++	return ret;
+ }
+ 
+ FILE *
+@@ -42,7 +46,10 @@ int bionic_mkdir(const char *path, mode_t mode)
+ DIR *bionic_opendir(const char *path)
+ {
+ 	verbose("%s", path);
+-	return opendir(path);
++	char *mapped = (char *)path; bool free_it = libc_bio_apply_path_overrides(&mapped);
++	DIR * ret = opendir(mapped);
++	if (free_it) free(mapped);
++	return ret;
+ }
+ 
+ int bionic_sprintf(char *str, const char *fmt, ...)
+@@ -125,7 +132,10 @@ ssize_t
+ bionic_readlink(const char *path, char *buf, size_t bufsize)
+ {
+ 	verbose("%s", path);
+-	return readlink(path, buf, bufsize);
++	char *mapped = (char *)path; bool free_it = libc_bio_apply_path_overrides(&mapped);
++	ssize_t ret = readlink(mapped, buf, bufsize);
++	if (free_it) free(mapped);
++	return ret;
+ }
+ 
+ int bionic_unlink(const char *path)

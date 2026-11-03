@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 25/25] apklayer: tls-dtpoff
+
+R_*_DTPOFF (the offset of a thread-local variable in its module's TLS block) stored sym_addr, which includes the library's load address: ELF TLS through __tls_get_addr (x86_64; arm64 code uses TLS descriptors) then returned base + (load address + offset), a doubled pointer (ApkAssets.nativeLoad crashed in zip_archive::Inflate on a PC).
+
+apklayer patch: step 20 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0025 of patches/bionic_translation.
+---
+ linker/linker.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/linker/linker.c b/linker/linker.c
+index 8592c2f..fdb550f 100644
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -1984,8 +1984,8 @@ static int apkenv_reloc_library(soinfo *si, REL_TYPE *rel, size_t count)
+ 		case R_GENERIC_TLS_DTPMOD:
+ 			*((ElfW(Addr) *)reloc) = si->tls_slot_id;
+ 			break;
+-		case R_GENERIC_TLS_DTPREL:
+-			*((ElfW(Addr) *)reloc) = sym_addr + get_addend(rel);
++		case R_GENERIC_TLS_DTPREL: /* apklayer patch: see scripts/patch-bionic-translation.sh step 20 */
++			*((ElfW(Addr) *)reloc) = (s ? s->st_value : sym ? si->symtab[sym].st_value : 0) + get_addend(rel);
+ 			break;
+ #if defined(__aarch64__)
+ 		case R_AARCH64_IRELATIVE: { /* apklayer patch: IRELATIVE (ifunc), see scripts/patch-bionic-translation.sh step 9 */

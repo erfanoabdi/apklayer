@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 01/25] apklayer: so-max-512
+
+SO_MAX 128 -> 512: Android's libandroid_runtime closure is 237 libraries (the soinfo pool was 128)
+
+apklayer patch: step 1 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0001 of patches/bionic_translation.
+---
+ linker/linker.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/linker/linker.c b/linker/linker.c
+index 7824cc1..5d8f4fe 100644
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -80,7 +80,7 @@
+ #include "linker_sleb128.h"
+ 
+ #define ALLOW_SYMBOLS_FROM_MAIN 1
+-#define SO_MAX 128
++#define SO_MAX 512
+ 
+ /* Assume average path length of 64 and max 8 paths */
+ #define LDPATH_BUFSIZE	  512

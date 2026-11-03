@@ -58,4 +58,7 @@ int pidfdOpen(int pid);
 char** toEnvp(const Env& env, std::vector<std::string>& storage, std::vector<char*>& pointers);
 Env currentEnv();
 
+// APKLAYER_RUNTIME_DEBUG: "[apklayer] t=<CLOCK_MONOTONIC ms> <step>" on stderr (the start-up timeline; the JVM prints the same with -Dapklayer.perf=true)
+void trace(const std::string& step);
+
 }  // namespace apklayer

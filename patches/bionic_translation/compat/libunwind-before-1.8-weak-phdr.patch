@@ -1,0 +1,21 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer compat: weak unw_set_iterate_phdr_function
+
+libunwind before 1.8 has no unw_set_iterate_phdr_function: it is called only when it exists, and backtraces
+then show only the libraries the system loader knows.
+Applied by scripts/build-bionic-translation.sh only when pkg-config reports libunwind older than 1.8.
+---
+diff --git a/linker/linker.c b/linker/linker.c
+index fdb550f..b6889cc 100644
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -1735,7 +1735,8 @@ void print_backtrace()
+ 	printf("simple backtrace:\n");
+ 
+ 	/* unwind info is in ELF sections, so we need to make sure libunwind knows about the elf files loaded by our linker */
+-	unw_set_iterate_phdr_function(unw_local_addr_space, &bionic_dl_iterate_phdr);
++extern void unw_set_iterate_phdr_function() __attribute__((weak));
++	if (unw_set_iterate_phdr_function) unw_set_iterate_phdr_function(unw_local_addr_space, &bionic_dl_iterate_phdr);
+ 
+ 	do {
+ 		unw_word_t offset, pc;

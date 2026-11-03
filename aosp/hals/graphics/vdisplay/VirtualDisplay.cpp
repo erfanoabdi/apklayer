@@ -11,6 +11,7 @@
 #include <gui/Surface.h>
 #include <gui/SurfaceComposerClient.h>
 #include <binder/IPCThreadState.h>
+#include <binder/IServiceManager.h>
 #include <binder/ProcessState.h>
 #include <log/log.h>
 #include <ui/GraphicBuffer.h>
@@ -19,6 +20,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <map>
+#include <string>
 #include <mutex>
 
 #include "apklayer/display.h"
@@ -54,6 +56,10 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         mToken = SurfaceComposerClient::createVirtualDisplay(std::string(title), /*isSecure=*/false);
         if (mToken == nullptr) { ALOGE("createVirtualDisplay failed"); return false; }
         applyDisplay();
+        // the display's token under a name, for `apklayer screenshot` (aosp/tools/screenshot.cpp: SurfaceFlinger's own captureDisplay of this display).
+        // shortcut: the entry outlives this process (its death link is SurfaceFlinger's); names are per-launch pids, so a stale one is never looked up
+        std::string name = "apklayer.vdisplay." + std::to_string(stack);
+        if (defaultServiceManager()->addService(String16(name.c_str()), mToken) != OK) ALOGW("cannot register %s (no screenshots)", name.c_str());
         ALOGI("virtual display \"%s\": layer stack %u, %ux%u", title, stack, w, h);
         // apklayer patch: only now, with the display existing; the shell's first (fitted) configure, if it came
         // meanwhile, is replayed here instead of being dropped (the display then kept the 720x1280 it opened at)

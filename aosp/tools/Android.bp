@@ -14,6 +14,14 @@ cc_library_shared {
     cflags: ["-Wall", "-Werror", "-Wno-main"],
 }
 
+// Per-app screenshot: SurfaceFlinger's captureDisplay of one app's virtual display, written as PNG (apklayer screenshot).
+cc_library_shared {
+    name: "libapklayer_screenshot",
+    srcs: ["screenshot.cpp"],
+    shared_libs: ["libgui", "libui", "libutils", "libbinder", "liblog", "libz"],
+    compile_multilib: "64",
+    cflags: ["-Wall", "-Werror", "-Wno-main"],
+}
 
 // EGL window-surface smoke test: GL ES rendering into a BufferQueue layer through libapklayer_egl.
 cc_library_shared {

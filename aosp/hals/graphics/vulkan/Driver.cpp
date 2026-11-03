@@ -1,6 +1,6 @@
 // apklayer patch: original Android Vulkan loader -> host Vulkan loader.
 // Keep Android WSI in AOSP. Host dispatchable handles retain their host vtables;
-// scripts/patch-vulkan.sh gives Android's loader separate private dispatch data.
+// patches/aosp/frameworks/native/0003-vulkan-host-dispatch.patch gives Android's loader separate private dispatch data.
 #define LOG_TAG "apklayer.vulkan"
 #include <hardware/hwvulkan.h>
 #include <vulkan/vk_android_native_buffer.h>

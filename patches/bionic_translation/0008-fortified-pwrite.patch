@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 08/25] apklayer: fortified-pwrite
+
+Android fortifies positional writes too (MTP in libmedia_jni). Reuse the existing checked-write implementation, preserving both bounds checks.
+
+apklayer patch: step 8 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0008 of patches/bionic_translation.
+---
+ libc/libc-chk.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/libc/libc-chk.c b/libc/libc-chk.c
+index e91bd92..bb6c8f8 100644
+--- a/libc/libc-chk.c
++++ b/libc/libc-chk.c
+@@ -265,3 +265,18 @@ char *bionic___strncpy_chk2(char *__restrict dst, const char *__restrict src,
+ 	}
+ 	return dst;
+ }
++
++/* apklayer patch: Android positional-write fortify ABI. */
++ssize_t bionic___pwrite64_chk(int fd, const void* buf, size_t count, off64_t offset, size_t buf_size) {
++	if (__builtin_expect(count > buf_size, 0)) {
++		fprintf(stderr, "pwrite64: prevented read past end of buffer");
++		abort();
++	}
++
++	if (__builtin_expect(count > SSIZE_MAX, 0)) {
++		fprintf(stderr, "pwrite64: count > SSIZE_MAX");
++		abort();
++	}
++
++	return pwrite64(fd, buf, count, offset);
++}

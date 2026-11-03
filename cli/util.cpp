@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <cerrno>
@@ -301,5 +302,13 @@ std::string runCapture(const Spawn& spec, int* statusOut) {
 }
 
 int pidfdOpen(int pid) { return static_cast<int>(syscall(SYS_pidfd_open, pid, 0)); }
+
+void trace(const std::string& step) {
+    static const bool on = getenv("APKLAYER_RUNTIME_DEBUG") != nullptr;
+    if (!on) return;
+    timespec ts {};
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    fprintf(stderr, "[apklayer] t=%lld %s\n", (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000, step.c_str());
+}
 
 }  // namespace apklayer

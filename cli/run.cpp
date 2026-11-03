@@ -33,9 +33,21 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     if (!provider.empty() && !webviewSandboxOff())
         die("the WebView provider route needs scripts/webview-setup.sh once (Chromium's seccomp sandbox cannot run inside an app JVM and is switched off; needs sudo)");
 
+    trace("run " + package);
     NativeEnv ne = nativeEnv(l, inst);
     if (!ensureStack(l, inst)) return 1;
+    trace("stack ready");
     ensureShell(l, inst, ne);
+    if (mode == RunMode::App) {
+        // the hub's JVM boots alongside the app's instead of after its Application.onCreate (HubStartup then finds it); an `apklayer hub` that finds
+        // hub.lock taken (the hub is up) returns at once
+        Spawn hub;
+        hub.argv = {l.cliBinary(), "--instance", inst.id, "hub"};
+        hub.env = ne.env;
+        hub.logFile = join(inst.logs(), "hub.log");
+        hub.detach = true;
+        spawn(hub);
+    }
 
     std::vector<std::string> jvm = hostJvmArgs(l, inst, ne);
     int vdisplay = 0;
@@ -133,6 +145,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         execReplace(app);
     }
     int jvmPid = spawn(app);
+    trace("app jvm spawned");
     // `apklayer stop` ends what this launch started: the JVM and its window sink
     std::string record = join(inst.stateDir, "run." + std::to_string(self));
     writeFile(record, std::to_string(jvmPid) + "\n" + std::to_string(vdisplay) + "\n");
@@ -148,6 +161,7 @@ int runHub(const Layout& l, const Instance& inst) {
     int lock = open(join(inst.stateDir, "hub.lock").c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0644);
     if (flock(lock, LOCK_EX | LOCK_NB) != 0) return 0;
     NativeEnv ne = nativeEnv(l, inst);
+    trace("hub start");
     if (!ensureStack(l, inst)) return 1;
     std::vector<std::string> jvm = hostJvmArgs(l, inst, ne);
     jvm.insert(jvm.end(), {"-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary(), "-cp", hostClasspath(l, ""), "apklayer.host.Main", "--hub"});
@@ -172,7 +186,7 @@ int runHub(const Layout& l, const Instance& inst) {
             waitpid(waiter, nullptr, 0);
             fds[1].fd = -1;
             auto out = readFile(join(inst.logs(), "ready-hub.log"));
-            if (out && out->find(": found") != std::string::npos) setProperty(l, ne, kHubReadyProperty, "1");
+            if (out && out->find(": found") != std::string::npos) { setProperty(l, ne, kHubReadyProperty, "1"); trace("hub ready"); }
         }
         if (fds[0].revents & POLLIN) {
             waitpid(pid, &status, 0);  // keeps the lock until the JVM ends
@@ -187,6 +201,29 @@ int runHub(const Layout& l, const Instance& inst) {
 int waitHub(const Layout& l, const Instance& inst) {
     NativeEnv ne = nativeEnv(l, inst);
     return waitForProperty(l, ne, kHubReadyProperty, "1", -1) ? 0 : 1;
+}
+
+// `apklayer screenshot <package|stack> <out.png>`: SurfaceFlinger's own capture of the app's virtual display (its sink registered the display's token
+// as apklayer.vdisplay.<layer stack>; the layer stack is the launcher's pid, the name of its run.<pid> record).
+int screenshot(const Layout& l, const Instance& inst, const std::string& target, std::string out) {
+    std::string stack = target;
+    if (target.empty() || target.find_first_not_of("0123456789") != std::string::npos) {
+        stack.clear();
+        for (const std::string& f : listDir(inst.stateDir)) {
+            if (f.rfind("run.", 0) != 0) continue;
+            auto record = readFile(join(inst.stateDir, f));
+            std::vector<std::string> pids = record ? split(*record, '\n') : std::vector<std::string>();
+            if (pids.size() < 2 || atoi(pids[1].c_str()) <= 0) continue;  // a component host: no window
+            auto cmd = readFile("/proc/" + pids[0] + "/cmdline");
+            if (cmd && cmd->find("-Dapklayer.package=" + target + std::string(1, '\0')) != std::string::npos) stack = f.substr(4);
+        }
+        if (stack.empty()) { fprintf(stderr, "apklayer: no window of %s in instance %s\n", target.c_str(), inst.id.c_str()); return 1; }
+    }
+    if (out.empty() || out[0] != '/') { char cwd[4096]; if (getcwd(cwd, sizeof cwd)) out = join(cwd, out); }
+    unlink(out.c_str());
+    execTool(l, inst, {"libapklayer_screenshot.so", "apklayer.vdisplay." + stack, out});
+    struct stat st {};
+    return ::stat(out.c_str(), &st) == 0 && st.st_size > 0 ? 0 : 1;  // btload's exit status is not the tool's: the file is the result
 }
 
 }  // namespace apklayer

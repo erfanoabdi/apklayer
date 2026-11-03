@@ -1,0 +1,65 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 22/25] apklayer: fortified-stdio-file-mapping
+
+Fortified stdio: __fprintf_chk, __vfprintf_chk, __fgets_chk and __fread_chk got bionic's FILE* (stderr is &__sF[2]) and passed it to glibc, which aborts with "glibc detected an invalid stdio handle". libc++abi's abort_message prints through __vfprintf_chk, so every uncaught C++ exception ended there instead of showing its message (Joplin).
+
+apklayer patch: step 17 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0022 of patches/bionic_translation.
+---
+ libc/libc-chk.c | 23 ++++++++++++++++++++---
+ 1 file changed, 20 insertions(+), 3 deletions(-)
+
+diff --git a/libc/libc-chk.c b/libc/libc-chk.c
+index 8660476..eecf214 100644
+--- a/libc/libc-chk.c
++++ b/libc/libc-chk.c
+@@ -16,6 +16,8 @@ bool libc_bio_apply_path_overrides(char **path); /* apklayer patch: path layer *
+ #include <fcntl.h>
+ #include <stdarg.h>
+ #include <stdio.h>
++#include <stdarg.h>
++#include "libc-stdio.h"
+ #include <stdlib.h>
+ #include <string.h>
+ #include <unistd.h>
+@@ -120,7 +122,7 @@ char *bionic___fgets_chk(char *dest, int supplied_size, FILE* stream, size_t des
+ 		fprintf(stderr, "fgets: prevented write past end of buffer");
+ 		abort();
+ 	}
+-	return fgets(dest, supplied_size, stream);
++	return fgets(dest, supplied_size, bionic_file_to_glibc_file(stream)); /* apklayer patch: see scripts/patch-bionic-translation.sh step 17 */
+ }
+ 
+ /* these don't exist in glibc either, which also means that by definition their ABI is not copied from glibc */
+@@ -287,7 +289,7 @@ size_t bionic___fread_chk(void *__restrict buf, size_t size, size_t count, FILE
+ 	size_t total;
+ 	if (__builtin_expect(__builtin_mul_overflow(size, count, &total), 0)) {
+ 		// overflow: trigger the error path in fread
+-		return fread(buf, size, count, stream);
++		return fread(buf, size, count, bionic_file_to_glibc_file(stream));
+ 	}
+ 
+ 	if (__builtin_expect(total > buf_size, 0)) {
+@@ -295,5 +297,20 @@ size_t bionic___fread_chk(void *__restrict buf, size_t size, size_t count, FILE
+ 		abort();
+ 	}
+ 
+-	return fread(buf, size, count, stream);
++	return fread(buf, size, count, bionic_file_to_glibc_file(stream));
++}
++
++/* apklayer patch: see scripts/patch-bionic-translation.sh step 17 */
++int bionic___vfprintf_chk(FILE *stream, int flag, const char *format, va_list ap)
++{
++	return __vfprintf_chk(bionic_file_to_glibc_file(stream), flag, format, ap);
++}
++
++int bionic___fprintf_chk(FILE *stream, int flag, const char *format, ...)
++{
++	va_list ap;
++	va_start(ap, format);
++	int r = __vfprintf_chk(bionic_file_to_glibc_file(stream), flag, format, ap);
++	va_end(ap);
++	return r;
+ }

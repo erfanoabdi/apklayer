@@ -139,3 +139,15 @@ Until an app presents its first frame, `bridge/shell/splash.c` fills the window 
 - OpenTTD: pelya's libSDL, `SDL: Couldn't allocate a window to draw on` (Rocks 'n' Diamonds uses the same SDL and works): check the requested video mode.
 - Sensors Multitool: opens on an empty "Battery" screen (no list); relaunch loop not reproduced.
 - Fennec: page text still missing (above).
+
+## Systematic compatibility (2026-11-03)
+- Fix order comes from `tests/corpus/fakes.md` (fakes ranked by how many apps hit them), not from the app in front of us. Robolectric-shadowed managers (window, display) appear in every app: read them apart from binder-method hits.
+- JdkScan leads still open, framework code that can run: `DatagramSocket.getFileDescriptor$` (VpnService.protect), `DirectByteBuffer.<init>(IJFileDescriptor,Runnable,Z)` (SharedMemory), `Cipher/Mac/Signature/KeyAgreement.getCurrentSpi` (keystore), `sun.misc.Cleaner` checkcasts. Out of reach on HotSpot: ART internals (`Thread.nativePeer`, `Method.dexMethodIndex`, `Class.accessFlags`).
+- system_server services standalone in the hub: not worth it (AlarmManagerService assessment in CHANGELOG 2026-11-03); keep the hub's own implementations, bounded by CTS-derived scenarios.
+- Open from this round: the late-install path (install while a component host runs) has no test; apps that read `Build` in static initialisers before `Application.onCreate` still see Robolectric's values; Build TAGS/TYPE are the build's `test-keys`/`userdebug` (root detectors flag them); a per-class dex2jvm failure now blocks the install.
+
+## Startup (2026-11-03, `tests/vm/startup.sh`)
+- Cold start: the hub JVM now boots alongside the app (UiBench cold 5.9 s -> 3.7 s, Telegram 6.9 s -> 4.5 s); warm starts unchanged (UiBench ~3.4 s, Telegram ~4.2 s). Stack and shell already stayed up between apps.
+- Warm breakdown (UiBench): JVM to main 45 ms, sandbox 150 ms, Robolectric setUpApplicationState 1.3-1.5 s, keystore2 probe + lazy Application 0.6 s, runtime and hub attach 0.2 s, first activity 0.5-0.65 s, first frame 0.16 s.
+- Next: (1) the overlay DefaultNativeRuntimeLoader copies fonts/ICU out of jars on every start (~0.4-0.7 s): Robolectric's `sharedAssetDirectory` has a keyed shared cache to port; its `maybeCopyFonts` also overrides the CLI's `-Drobolectric.nativeruntime.fontdir`. (2) the keystore2 probe (0.6-0.9 s). (3) CDS: 0.5 s possible, but JDK 21 dynamic archives of sandbox-loader classes crashed Telegram; a static archive of built-in-loader classes only is untested. Risk: a hub slower than HubStartup's 5 s wait means relaunches.
+- Parallel instances: every stop used to `pkill -x apklayer-shell` (all sessions); now only this session's shell (SO_PEERCRED on its socket).
