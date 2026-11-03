@@ -124,8 +124,11 @@ build_native() {
     for a in x86_64 aarch64; do cp "$B/bridge/native/libandroid_runtime.so" "$tmp/jar/native/linux/$a/"; done
     # apklayer patch (docs/PATCHES.md): Robolectric's loader refuses Linux aarch64; the patched class comes first in the jar
     build_overlay "$native" "$tmp/jar"
-    # Robolectric loads the library from the framework jar's own native/ first: the same copy there (zip writes a new file and renames it)
-    (cd "$tmp/jar" && for j in "$native"/aosp/android-all/*.jar "$native"/android-all/*.jar; do zip -q "$j" native/linux/x86_64/libandroid_runtime.so native/linux/aarch64/libandroid_runtime.so; done)
+    # Robolectric loads the library from the framework jar's own native/ first: the same copy there. zip -O writes a new jar
+    # (zip updates an archive in place, which would reach every hardlinked copy of it)
+    (cd "$tmp/jar" && for j in "$native"/aosp/android-all/*.jar "$native"/android-all/*.jar; do
+        zip -q -O "$j.new" "$j" native/linux/x86_64/libandroid_runtime.so native/linux/aarch64/libandroid_runtime.so && mv -f "$j.new" "$j"
+    done)
     build_cfg "$native"
     echo "Staged the native runtime in $native"
 }
