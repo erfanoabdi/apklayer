@@ -10,14 +10,31 @@ import org.robolectric.shadows.ShadowApplicationPackageManager;
 public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
     @org.robolectric.annotation.RealObject private android.app.ApplicationPackageManager real;
 
-    /** Trusts every installed package (callers' certificates are not compared: microG's clients and media browsers check theirs against Google's). */
+    /** As PackageManagerService: the package's signers, as getPackageInfo shows them (microG's spoofed one included), against a raw X.509 certificate or its SHA-256. */
     @Implementation
     protected boolean hasSigningCertificate(String packageName, byte[] certificate, int type) {
+        android.content.pm.PackageInfo info;
         try {
-            return real.getPackageInfo(packageName, 0) != null;
+            info = real.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES);
         } catch (PackageManager.NameNotFoundException e) {
             return false;
         }
+        android.content.pm.Signature[] signers = info.signingInfo == null ? null : info.signingInfo.getApkContentsSigners();
+        if (signers == null || certificate == null) return false;
+        for (android.content.pm.Signature signer : signers) {
+            byte[] mine = signer.toByteArray();
+            if (type == PackageManager.CERT_INPUT_SHA256) mine = android.util.PackageUtils.computeSha256DigestBytes(mine);
+            else if (type != PackageManager.CERT_INPUT_RAW_X509) return false;
+            if (java.util.Arrays.equals(mine, certificate)) return true;
+        }
+        return false;
+    }
+
+    @Implementation
+    protected boolean hasSigningCertificate(int uid, byte[] certificate, int type) {
+        String[] packages = real.getPackagesForUid(uid);
+        if (packages != null) for (String p : packages) if (hasSigningCertificate(p, certificate, type)) return true;
+        return false;
     }
 
     /** Another installed app's uid (its registered package info carries it): a package not registered yet attaches this JVM to the hub first, as getPackageInfo does. */
