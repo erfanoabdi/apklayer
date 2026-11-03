@@ -40,31 +40,34 @@ public final class HubClient {
         int count = 0;
         for (String name : names) {
             if (name.equals(context.getPackageName())) continue;
-            try {
-                HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.GET_PACKAGE, request -> request.writeString(name), reply -> {
-                    android.content.pm.PackageInfo info = reply.readTypedObject(android.content.pm.PackageInfo.CREATOR);
-                    if (info == null) return null;
-                    // the components go in one by one: installPackage keeps an array of them without the intent filter entries that addIntentFilterFor... needs
-                    android.content.pm.ActivityInfo[] activities = info.activities, receivers = info.receivers;
-                    android.content.pm.ServiceInfo[] serviceInfos = info.services;
-                    info.activities = null; info.services = null; info.receivers = null; info.providers = null;
-                    packageManager.installPackage(info);
-                    if (activities != null) for (android.content.pm.ActivityInfo a : activities) packageManager.addOrUpdateActivity(a);
-                    if (serviceInfos != null) for (android.content.pm.ServiceInfo a : serviceInfos) packageManager.addOrUpdateService(a);
-                    if (receivers != null) for (android.content.pm.ActivityInfo a : receivers) packageManager.addOrUpdateReceiver(a);
-                    for (boolean services : new boolean[] {false, true}) for (int n = reply.readInt(); n > 0; n--) {
-                        android.content.ComponentName component = new android.content.ComponentName(name, reply.readString());
-                        for (android.content.IntentFilter filter : reply.createTypedArrayList(android.content.IntentFilter.CREATOR)) {
-                            try { if (services) packageManager.addIntentFilterForService(component, filter); else packageManager.addIntentFilterForActivity(component, filter); }
-                            catch (IllegalArgumentException disabled) { /* a disabled component is not in the package info */ }
-                        }
-                    }
-                    return null;
-                });
-                count++;
-            } catch (RuntimeException failure) { System.out.println("[apklayer] package " + name + " not registered: " + failure); }
+            try { if (registerPackage(packageManager, name)) count++; }
+            catch (RuntimeException failure) { System.out.println("[apklayer] package " + name + " not registered: " + failure); }
         }
         System.out.println("[apklayer] packages registered: " + count);
+    }
+
+    /** One other installed app into this app's package manager (also for an app installed after this JVM attached); false when the hub does not know it. */
+    boolean registerPackage(org.robolectric.shadows.ShadowPackageManager packageManager, String name) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.GET_PACKAGE, request -> request.writeString(name), reply -> {
+            android.content.pm.PackageInfo info = reply.readTypedObject(android.content.pm.PackageInfo.CREATOR);
+            if (info == null) return false;
+            // the components go in one by one: installPackage keeps an array of them without the intent filter entries that addIntentFilterFor... needs
+            android.content.pm.ActivityInfo[] activities = info.activities, receivers = info.receivers;
+            android.content.pm.ServiceInfo[] serviceInfos = info.services;
+            info.activities = null; info.services = null; info.receivers = null; info.providers = null;
+            packageManager.installPackage(info);
+            if (activities != null) for (android.content.pm.ActivityInfo a : activities) packageManager.addOrUpdateActivity(a);
+            if (serviceInfos != null) for (android.content.pm.ServiceInfo a : serviceInfos) packageManager.addOrUpdateService(a);
+            if (receivers != null) for (android.content.pm.ActivityInfo a : receivers) packageManager.addOrUpdateReceiver(a);
+            for (boolean services : new boolean[] {false, true}) for (int n = reply.readInt(); n > 0; n--) {
+                android.content.ComponentName component = new android.content.ComponentName(name, reply.readString());
+                for (android.content.IntentFilter filter : reply.createTypedArrayList(android.content.IntentFilter.CREATOR)) {
+                    try { if (services) packageManager.addIntentFilterForService(component, filter); else packageManager.addIntentFilterForActivity(component, filter); }
+                    catch (IllegalArgumentException disabled) { /* a disabled component is not in the package info */ }
+                }
+            }
+            return true;
+        });
     }
 
     /** Providers of the other installed apps, registered under their authorities in this app's ContentResolver. */
