@@ -1,7 +1,6 @@
 #include "run.h"
 
 #include <cerrno>
-#include <dirent.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
@@ -66,43 +65,6 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         jvm.push_back("-Dapklayer.displaywindow=" + title);
     }
     ne.env["LD_LIBRARY_PATH"] = l.native + ":" + join(l.native, "glibc") + ":" + ne.env["LD_LIBRARY_PATH"];  // bionic linker + its libs
-    // Gecko (Firefox) reads its application-data roots from these (an Android Gecko without them cannot select a profile: "Could not find profile folder")
-    makeDirs(join(dir, "data/app/files/mozilla"));
-    makeDirs(join(dir, "data/app/cache/mozilla"));
-    if (exists(join(dir, "lib/libxul.so"))) {
-        // GeckoView: no GPU process. Its WebRender window is a Surface that has to reach that process, and one that crossed to another JVM is no window (ANativeWindow_fromSurface
-        // gives null: "Failed to obtain native window from Surface", then MOZ_CRASH(Fallback configurations exhausted)). Gecko reads user.js from the profile, which is made here
-        // so that the first start has it too.
-        const std::string mozilla = join(dir, "data/app/files/mozilla"), profile = join(mozilla, "apklayer.default");
-        if (!exists(join(mozilla, "profiles.ini")))
-            writeFile(join(mozilla, "profiles.ini"), "[General]\nStartWithLastProfile=1\nVersion=2\n\n[Profile0]\nName=default\nIsRelative=1\nPath=apklayer.default\nDefault=1\n");
-        makeDirs(profile);
-        if (DIR* d = opendir(mozilla.c_str())) {  // every profile there (one made by an earlier start included)
-            while (dirent* e = readdir(d)) {
-                const std::string name = e->d_name;
-                if (name.size() > 8 && name.compare(name.size() - 8, 8, ".default") == 0) {
-                    // Gecko writes user.js prefs back into prefs.js on exit: drop the ones this launcher owns so an earlier run's cannot linger
-                    const std::string prefs = join(join(mozilla, name), "prefs.js");
-                    if (auto text = readFile(prefs)) {
-                        std::string kept;
-                        size_t at = 0;
-                        while (at < text->size()) {
-                            size_t eol = text->find('\n', at); if (eol == std::string::npos) eol = text->size();
-                            std::string line = text->substr(at, eol - at);
-                            bool own = false;
-                            for (const char* k : {"\"gfx.", "\"layers.", "\"layout.frame_rate", "\"logging.", "\"webgl."}) if (line.find(k) != std::string::npos) own = true;
-                            if (!own) kept += line + "\n";
-                            at = eol + 1;
-                        }
-                        writeFile(prefs, kept);
-                    }
-                    writeFile(join(join(mozilla, name), "user.js"), "user_pref(\"layers.gpu-process.enabled\", false);\n" + getenvOr("APKLAYER_GECKO_PREFS", "")); }
-            }
-            closedir(d);
-        }
-    }
-    ne.env["MOZ_APP_DATA"] = join(dir, "data/app/files/mozilla");
-    ne.env["MOZ_LOCAL_APP_DATA"] = join(dir, "data/app/cache/mozilla");
     for (const std::string& o : {"-Dapklayer.data=" + join(dir, "data"), "-Dapklayer.package=" + package, "-Dapklayer.uid=" + property(join(dir, "info.properties"), "uid"),
                                  "-Dapklayer.libdir=" + join(dir, "lib"), "-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary()})
         jvm.push_back(o);

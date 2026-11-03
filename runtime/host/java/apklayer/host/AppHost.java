@@ -423,12 +423,10 @@ public final class AppHost implements Runnable {
         boolean bottom = stack.isEmpty();  // the first activity of the task answers isTaskRoot() already while it is created
         taskRootBuilding = bottom;
         HostRoles.install();
-        HostGeckoDiag.probeNetwork();
         ActivityController<? extends Activity> built = Robolectric.buildActivity(cls, intent);
         String caller = intent.getStringExtra(HubActivityClient.CALLER);  // the app that started it for a result (Activity.getCallingPackage)
         if (caller != null) ((ShadowActivity) Shadow.extract(built.get())).setCallingPackage(caller);
         ActivityController<? extends Activity> c = built.create();
-        HostGeckoDiag.dumpSurfaces(c.get());
         taskRootBuilding = false;
         if (bottom) taskRoot = c.get();
         if (c.get().isFinishing()) {  // finish() in onCreate (Telegram starts its intro screen so): Android destroys it without start or resume
