@@ -211,13 +211,6 @@ final class AppEnvironment {
         android.provider.Settings.Secure.putString(resolver, android.provider.Settings.Secure.ANDROID_ID, String.format("%016x", seed.hashCode() * 0x9E3779B97F4A7C15L));
     }
 
-    /** Settings that system_server writes on every boot before any app runs: PowerManagerService counts boots in Settings.Global.BOOT_COUNT (Device Info HW reads it with getInt and no default). */
-    static void bootSettings(Application app) {
-        android.content.ContentResolver resolver = app.getContentResolver();
-        // shortcut: this boot only (the settings live in memory per app JVM); count the instance's stack starts if an app ever shows the number
-        if (android.provider.Settings.Global.getString(resolver, android.provider.Settings.Global.BOOT_COUNT) == null) android.provider.Settings.Global.putInt(resolver, android.provider.Settings.Global.BOOT_COUNT, 1);
-    }
-
     static void startRuntime(Application app) {
         if (Boolean.getBoolean("apklayer.logcat")) for (String name : new String[] {"alarm", "jobscheduler", "notification", "connectivity"}) System.out.println("[apklayer] service " + name + " = " + app.getSystemService(name));
         HostBuild.install();

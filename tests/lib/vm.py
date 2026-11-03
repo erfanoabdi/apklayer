@@ -26,7 +26,7 @@ def push():
     """The working tree (tracked and new files, as they are now) into ROOT on the VM."""
     files = subprocess.run(['git', 'ls-files', '-co', '--exclude-standard', '-z'], cwd=REPO, capture_output=True, check=True).stdout.split(b'\0')
     names = b'\0'.join(f for f in files if f and os.path.lexists(REPO / f.decode()))  # symlinks too (their targets are on the VM)
-    tar = subprocess.Popen(['tar', '--no-xattrs', 'cf', '-', '--null', '-T', '-'], cwd=REPO, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+    tar = subprocess.Popen(['tar', '-c', '-f', '-', '--no-xattrs', '--null', '-T', '-'], cwd=REPO, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                            env=dict(os.environ, COPYFILE_DISABLE='1'))
     tar.stdin.write(names)  # the list fits the pipe: tar reads it while ssh takes its output
     tar.stdin.close()
@@ -37,7 +37,7 @@ def push():
 def copy(files, remote):
     """Local files into the VM directory `remote` (a shell word: $HOME works), by tar so that no error message carries the password."""
     files = [Path(f) for f in files]
-    tar = subprocess.Popen(['tar', '--no-xattrs', 'cf', '-', *[a for f in files for a in ('-C', str(f.parent), f.name)]], stdout=subprocess.PIPE, env=dict(os.environ, COPYFILE_DISABLE='1'))
+    tar = subprocess.Popen(['tar', '-c', '-f', '-', '--no-xattrs', *[a for f in files for a in ('-C', str(f.parent), f.name)]], stdout=subprocess.PIPE, env=dict(os.environ, COPYFILE_DISABLE='1'))
     remote_ok = ssh('mkdir -p %s && tar xf - -C %s' % (remote, remote), stdin=tar.stdout).returncode == 0
     assert tar.wait() == 0 and remote_ok, 'copying %d files to the VM failed' % len(files)
 
