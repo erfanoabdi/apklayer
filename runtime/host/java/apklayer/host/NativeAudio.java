@@ -24,19 +24,23 @@ final class NativeAudio {
                 AudioAttributes attributes = new AudioAttributes.Builder().setInternalLegacyStreamType(stream).build();
                 // Preserve the shared policy's index when another JVM already initialized this group.
                 if (AudioSystem.getMaxVolumeIndexForAttributes(attributes) >= 0) continue;
-                check(AudioSystem.initStreamVolume(stream, min, max));
+                if (!ok(AudioSystem.initStreamVolume(stream, min, max))) return;  // tried again on the next call, as AudioService retries
                 // Robolectric's manager says 0, which is silence; every stream sits at its maximum and the host's volume control is the volume
-                check(AudioSystem.setStreamVolumeIndexAS(stream, max, false, AudioSystem.DEVICE_OUT_SPEAKER));
+                if (!ok(AudioSystem.setStreamVolumeIndexAS(stream, max, false, AudioSystem.DEVICE_OUT_SPEAKER))) return;
             }
             initialized = true;
         } finally { initializing = false; }
     }
     static void apply(AudioManager manager, int stream) {
         ensureInitialized();
-        check(AudioSystem.setStreamVolumeIndexAS(stream, manager.getStreamVolume(stream),
+        ok(AudioSystem.setStreamVolumeIndexAS(stream, manager.getStreamVolume(stream),
                 manager.isStreamMute(stream), AudioSystem.DEVICE_OUT_SPEAKER));
     }
-    static void check(int status) {
-        if (status != AudioSystem.SUCCESS) throw new IllegalStateException("Native audio policy status " + status);
+    private static boolean reported;
+    /** A policy without outputs (no PipeWire on the machine) refuses volumes: AudioService logs that and the app goes on (CPU-Z's ads SDK died on the exception). */
+    private static boolean ok(int status) {
+        if (status == AudioSystem.SUCCESS) return true;
+        if (!reported) { reported = true; System.out.println("[apklayer] audio policy refuses stream volumes (status " + status + "): no audio output?"); }
+        return false;
     }
 }

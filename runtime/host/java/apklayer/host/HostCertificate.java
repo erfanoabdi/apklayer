@@ -19,12 +19,31 @@ final class HostCertificate {
             String apps = System.getProperty("apklayer.apps");
             java.io.File apk = apps == null ? null : new java.io.File(new java.io.File(apps, name), "base.apk");
             if (apk == null || !apk.isFile()) return signatures();
-            android.content.pm.parsing.result.ParseResult<android.content.pm.SigningDetails> read = android.util.apk.ApkSignatureVerifier.unsafeGetCertsWithoutVerification(
-                    android.content.pm.parsing.result.ParseTypeImpl.forParsingWithoutPlatformCompat(), apk.getPath(), android.content.pm.SigningDetails.SignatureSchemeVersion.JAR);
-            if (read.isSuccess() && read.getResult().getSignatures() != null && read.getResult().getSignatures().length > 0) return read.getResult().getSignatures();
-            System.out.println("[apklayer] signing certificate of " + name + " not readable (" + read.getErrorMessage() + "): the placeholder");
+            String why;
+            try {
+                android.content.pm.parsing.result.ParseResult<android.content.pm.SigningDetails> read = android.util.apk.ApkSignatureVerifier.unsafeGetCertsWithoutVerification(
+                        android.content.pm.parsing.result.ParseTypeImpl.forParsingWithoutPlatformCompat(), apk.getPath(), android.content.pm.SigningDetails.SignatureSchemeVersion.JAR);
+                if (read.isSuccess() && read.getResult().getSignatures() != null && read.getResult().getSignatures().length > 0) return read.getResult().getSignatures();
+                why = read.getErrorMessage();
+            } catch (RuntimeException | LinkageError failure) { why = failure.toString(); }
+            Signature[] v1 = jarSigner(apk);  // the framework's v1 path (StrictJarFile) needs libcore's natives
+            if (v1 != null) return v1;
+            System.out.println("[apklayer] signing certificate of " + name + " not readable (" + why + "): the placeholder");
             return signatures();
         });
+    }
+
+    /** A v1-only APK: the certificate in its META-INF signature block. shortcut: the block's first certificate (one signer without a chain, as APKs are signed); verify the chain if a multi-signer APK shows up. */
+    private static Signature[] jarSigner(java.io.File apk) {
+        try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(apk)) {
+            for (java.util.Enumeration<? extends java.util.zip.ZipEntry> e = zip.entries(); e.hasMoreElements(); ) {
+                java.util.zip.ZipEntry entry = e.nextElement();
+                if (!entry.getName().matches("META-INF/[^/]+\\.(RSA|DSA|EC)")) continue;
+                java.util.Collection<? extends java.security.cert.Certificate> certs = java.security.cert.CertificateFactory.getInstance("X.509").generateCertificates(zip.getInputStream(entry));
+                if (!certs.isEmpty()) return new Signature[] {new Signature(certs.iterator().next().getEncoded())};
+            }
+        } catch (java.io.IOException | java.security.GeneralSecurityException unreadable) { /* the placeholder */ }
+        return null;
     }
 
     static synchronized Signature[] signatures() {
