@@ -1,0 +1,141 @@
+#!/bin/sh
+# tools/build: the build steps around `meson setup b && ninja -C b`, on the machine that runs apklayer (arm64 VM, x86_64 PC).
+#   tools/build bt <bionic_translation source> [build dir]  bionic_translation patched (patches/apply) and built for this machine; before meson setup
+#   tools/build host <native>                 the host classes against the staged tree's Robolectric (<native>/aosp/host-classes) and <native>/jdk-patch
+#   tools/build native <native> [javac shards] ninja's native outputs into <native>, native-runtime.jar (overlay classes, JNI shim, critical-natives.txt),
+#                                             the shim in the framework jars, the library mapping. Without shards the list in native-runtime.jar is kept.
+#   tools/build overlay <native>              only the Robolectric overlay classes, into native-runtime.jar (its shim is kept)
+#   tools/build cfg <native>                  only bionic_translation's library mapping (after staging libraries)
+# Inputs: APKLAYER_BT (bionic_translation's build dir, default ~/bt-arm/bionic_translation/b), APKLAYER_ANDROID_LIBS (the staged Android libraries,
+# default ~/android-arm64/lib64), APKLAYER_BUILD (the meson build dir, default b). The javac shards are the framework's javac output
+# (~/los24/out/soong/.intermediates/frameworks/base/framework-minus-apex/android_common/javac/framework.jar<N>, copied here).
+set -eu
+repo="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$repo"
+bt="${APKLAYER_BT:-$HOME/bt-arm/bionic_translation/b}"
+libs="${APKLAYER_ANDROID_LIBS:-$HOME/android-arm64/lib64}"
+B="${APKLAYER_BUILD:-b}"
+die() { echo "tools/build: $*" >&2; exit 1; }
+put() { rm -f "$2" && cp "$1" "$2"; }  # a new file, never a write into an existing one (native dirs may be hardlinked copies)
+scratch=""
+trap 'rm -rf $scratch' EXIT
+
+build_bt() { # Older toolchains (Ubuntu 22.04: gcc 11, libunwind 1.3, glibc 2.35) also get patches/bionic_translation/compat/
+    src="$(cd "$1" && pwd)" build="${2:-$src/b}" compat="$repo/patches/bionic_translation/compat"
+    patches/apply bionic_translation "$src"
+    cflags="${CFLAGS:-}" cxxflags="${CXXFLAGS:-}"
+    gcc_major="$(${CC:-cc} -dumpversion | cut -d. -f1)"
+    if [ "$gcc_major" -lt 13 ] 2>/dev/null; then patches/apply "$compat/gcc-before-13-cxx2b.patch" "$src"; fi
+    if [ "$gcc_major" -lt 12 ] 2>/dev/null; then cxxflags="$cxxflags -I$compat/include"; fi
+    if ! grep -q 'Elf64_Relr' /usr/include/elf.h 2>/dev/null; then
+        cflags="$cflags -include $compat/include/relr-compat.h" cxxflags="$cxxflags -include $compat/include/relr-compat.h"
+    fi
+    case "$(pkg-config --modversion libunwind 2>/dev/null || echo 0)" in 0|1.[0-7]*) # one call each: a copy may have meson.build reset (tools/stage x86_64) and keep linker.c
+        patches/apply "$compat/libunwind-before-1.8-meson.patch" "$src"
+        patches/apply "$compat/libunwind-before-1.8-weak-phdr.patch" "$src";;
+    esac
+    rm -rf "$build"
+    CFLAGS="$cflags" CXXFLAGS="$cxxflags" meson setup "$build" "$src" >/dev/null
+    ninja -C "$build"
+}
+
+build_host() { # Call only while app JVMs are stopped; the previous build stays on compiler failure.
+    native="$(realpath "$1")"
+    work="$(mktemp -d "$native/aosp/.host.XXXXXX")" && scratch="$scratch $work"
+    mkdir "$work/classes"
+    # The tree simulator predates the FrameListener split: these two unchanged classes come from the pinned simulator artifact.
+    simulator="${APKLAYER_DEPS:-$HOME/.cache/apklayer/deps}/libs/simulator-4.17.jar"
+    (cd "$work/classes" && jar xf "$simulator" org/robolectric/simulator/FrameListener.class org/robolectric/simulator/ScreenUpdateHandler.class)
+    find runtime/host/java -name '*.java' ! -name '._*' | sort > "$work/sources"
+    echo "Compiling $(wc -l < "$work/sources") tree host sources"
+    javac -nowarn --add-exports java.base/sun.net.util=ALL-UNNAMED --add-exports java.base/sun.security.tools.keytool=ALL-UNNAMED --add-exports java.base/sun.security.x509=ALL-UNNAMED -d "$work/classes" \
+        -cp "$work/classes:$native/aosp/sim-classes:$native/aosp/Robolectric_all.jar:$native/aosp/android-all/*:$B/runtime/dex2jvm/dex2jvm.jar" "@$work/sources"
+    cp -R runtime/host/resources/. "$work/classes/"
+    [ ! -d "$native/aosp/host-classes" ] || mv "$native/aosp/host-classes" "$work/previous"
+    mv "$work/classes" "$native/aosp/host-classes"
+    echo "Published $native/aosp/host-classes"
+    # java.base members Android's native libraries look up (apklayer.host.JdkPatch): the JVM runs with --patch-module java.base=<native>/jdk-patch
+    rm -rf "$native/jdk-patch"
+    java -cp "$native/aosp/host-classes:$native/aosp/Robolectric_all.jar" apklayer.host.JdkPatch "$native/jdk-patch"
+}
+
+build_overlay() { # build_overlay <native> [dir with the shim and critical-natives.txt]: compile the tree Robolectric overlays, publish native-runtime.jar atomically
+    native="$(realpath "$1")" staging="${2:-}"
+    work="$(mktemp -d "$native/.overlay.XXXXXX")" && scratch="$scratch $work"
+    mkdir "$work/classes"
+    find runtime/patches -name '*.java' ! -name '._*' | sort > "$work/sources"
+    echo "Compiling $(wc -l < "$work/sources") runtime overlay sources"
+    javac -nowarn -d "$work/classes" -cp "$native/aosp/Robolectric_all.jar:$native/android-all/*" "@$work/sources"
+    # classes patched in bytecode (no source to copy): the sandbox class loader answers array class names
+    java -cp "$work/classes:$native/aosp/Robolectric_all.jar" apklayer.patches.SandboxLoaderPatch "$work/classes"
+    if [ -n "$staging" ]; then
+        cp -R "$staging/." "$work/classes/"
+        jar cf "$work/runtime.jar" -C "$work/classes" .
+    else
+        cp "$native/native-runtime.jar" "$work/runtime.jar"
+        jar uf "$work/runtime.jar" -C "$work/classes" .
+    fi
+    jar tf "$work/runtime.jar" | grep -qx 'native/linux/aarch64/libandroid_runtime.so' || die "native-runtime.jar has no shim"
+    mv -f "$work/runtime.jar" "$native/native-runtime.jar"
+    echo "Published $native/native-runtime.jar"
+}
+
+build_cfg() { # bionic_translation reads every file of <native>/share/bionic_translation/cfg.d and takes the first line naming a library
+    native="$1" cfg="$1/share/bionic_translation/cfg.d/bionic_translation.cfg"
+    [ -f "$libs/libnativedisplay.so" ] || die "$libs has no libnativedisplay.so (bridge/native/bionic_translation.cfg loads Android's)"
+    mkdir -p "$(dirname "$cfg")" && rm -f "$cfg"
+    {
+        cat bridge/native/bionic_translation.cfg
+        echo "# mappings that need a staged library"
+        [ ! -e "$libs/libapklayer_egl.so" ] || echo "libEGL.so libapklayer_egl.so"  # our EGL (aosp/hals/graphics/egl)
+        [ ! -f "$libs/libapklayer_vulkan.so" ] || [ ! -f "$libs/vulkan.apklayer.so" ] || echo "libvulkan.so libapklayer_vulkan.so"  # Android's Vulkan loader (renamed copy)
+        [ ! -f "$libs/libOpenSLES.so" ] || echo "libOpenSLES.so libOpenSLES.so"  # Android's OpenSL ES engine on the original audio services
+        echo "# bionic_translation's own cfg.d"
+        cat "$(dirname "$bt")/cfg.d/bionic_translation.cfg"
+    } > "$cfg"
+}
+
+build_native() {
+    native="$(realpath "$1")" shards="${2:-}"
+    patches/apply bionic_translation "$(dirname "$bt")"
+    ninja -C "$bt"  # real versioned outputs; symlink targets do not rebuild them
+    ninja -C "$B"
+    [ -e "$B/bridge/native/btload" ] || die "$B has no native runtime targets: meson found no $bt/libdl_bio.so (meson setup --reconfigure $B -Dbionic_translation=<dir>)"
+    [ -e "$B/bridge/native/libandroid_runtime.so" ] || die "$B has no JNI shim: meson found no JNI headers"
+    tmp="$(mktemp -d)" && scratch="$scratch $tmp"
+    mkdir -p "$native/bin" "$native/android-root"
+    [ -e "$native/android-libs" ] || ln -s "$libs" "$native/android-libs"
+    cp -r bridge/native/android-root/. "$native/android-root/"  # apklayer's own files of the Android root; the tree's come from tools/stage root
+    for f in btload aprop; do put "$B/bridge/native/$f" "$native/bin/$f"; done
+    put bridge/native/getprop "$native/bin/getprop" && chmod 755 "$native/bin/getprop"
+    put "$B/bridge/native/libapklayer-preload.so" "$native/libapklayer-preload.so"
+    for f in "$B"/bridge/ndk/lib*.so "$B"/bridge/hals/*/libapklayer-hal-*.so; do [ ! -e "$f" ] || put "$f" "$native/$(basename "$f")"; done
+    # the patched bionic_translation libraries: a stale copy in $native made the JVM spin in the property reader
+    for f in "$bt"/lib*_bio.so*; do [ ! -f "$f" ] || put "$f" "$native/$(basename "$f")"; done
+    # @CriticalNative methods (apklayer.host.CriticalNatives) from the javac shards, plus the ones of classes the shards lack (bridge/native/critical-natives-extra.txt)
+    if [ -n "$shards" ]; then
+        java -cp "$native/aosp/host-classes:$(ls "$native"/aosp/*.jar | tr '\n' ':')" apklayer.host.CriticalNatives "$tmp/list" $(ls "$shards" | grep -E '^framework\.jar[0-9]+$' | sed "s|^|$shards/|")
+    else
+        unzip -p "$native/native-runtime.jar" critical-natives.txt > "$tmp/list"
+    fi
+    mkdir -p "$tmp/jar/native/linux/x86_64" "$tmp/jar/native/linux/aarch64"
+    cat "$tmp/list" bridge/native/critical-natives-extra.txt | awk '!seen[$0]++' > "$tmp/jar/critical-natives.txt"
+    for a in x86_64 aarch64; do cp "$B/bridge/native/libandroid_runtime.so" "$tmp/jar/native/linux/$a/"; done
+    # apklayer patch (docs/PATCHES.md): Robolectric's loader refuses Linux aarch64; the patched class comes first in the jar
+    build_overlay "$native" "$tmp/jar"
+    # Robolectric loads the library from the framework jar's own native/ first: the same copy there (zip writes a new file and renames it)
+    (cd "$tmp/jar" && for j in "$native"/aosp/android-all/*.jar "$native"/android-all/*.jar; do zip -q "$j" native/linux/x86_64/libandroid_runtime.so native/linux/aarch64/libandroid_runtime.so; done)
+    build_cfg "$native"
+    echo "Staged the native runtime in $native"
+}
+
+[ $# -ge 2 ] || { sed -n '2,12p' "$0" >&2; exit 2; }
+step="$1"; shift
+case "$step" in
+    bt) build_bt "$@";;
+    host) build_host "$@";;
+    native) build_native "$@";;
+    overlay) build_overlay "$@";;
+    cfg) build_cfg "$@";;
+    *) die "unknown step $step";;
+esac

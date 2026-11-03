@@ -2,11 +2,11 @@
 """install-media-libs: the tree's software codecs (libcodec2_soft_*) and container extractors from the swcodec / media APEX build outputs
 (read-only in ~/los24 under OrbStack) to the VM's ~/android-arm64/lib64, with the libraries they need that are not there yet.
 Existing files are never overwritten (the platform copies of shared libraries stay). Run on the Mac, with the arm64 stack stopped:
-  scripts/install-media-libs.py [--dry-run]   then   scripts/gen-tree-files-lock.py"""
+  tools/stage media [--dry-run]   then   tools/gen/tree-files-lock.py"""
 import subprocess, sys, pathlib, re
 
 import os, sys
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests", "vm"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tests", "vm"))
 import config
 VM = config.VM
 SSH = ["sshpass", "-p", config.PASS, "ssh", "-o", "StrictHostKeyChecking=no", VM]
@@ -43,9 +43,8 @@ stage = pathlib.Path("/tmp/apklayer-media-libs"); stage.mkdir(exist_ok=True)
 for n, p in plan.items():
     subprocess.run(["cp", "/Users/erfanabdi/OrbStack/ubuntu22-x86" + p, str(stage / n)], check=True)
 subprocess.run(SCP + [str(f) for f in stage.iterdir()] + [VM + ":~/android-arm64/lib64/"], check=True)
-# apklayer patch: the real OpenSL ES engine uses the original audio services.
-# A legacy host mapping would bypass the staged Android library entirely.
-subprocess.run(SSH + ["sed -i '/^libOpenSLES.so[[:space:]]/d' ~/arm64-native/share/bionic_translation/cfg.d/bionic_translation.cfg"], check=True)
+# the staged libOpenSLES.so now answers for Android's OpenSL ES (the library mapping, tools/build cfg)
+subprocess.run(SSH + ["cd ~/apklayer && tools/build cfg ~/arm64-native"], check=True)
 for n in plan:
     expected = orb("sha256sum " + plan[n]).split()[0]
     actual = subprocess.check_output(SSH + ["sha256sum ~/android-arm64/lib64/" + n], text=True).split()[0]
