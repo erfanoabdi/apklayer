@@ -33,6 +33,11 @@ public final class HubHost {
         HostBattery.installHub(directory::sendSystem);
         System.out.println("[apklayer-hub] READY pid=" + android.os.Process.myPid());
         new Thread(HubHost::bootSettings, "hub-boot-settings").start();  // the hub is the instance's system (uid 1000): it writes what system_server writes at boot
+        String ready = System.getenv("APKLAYER_HUB_READY_FD");  // the launcher's pipe (cli runHub): it sets apklayer.hub.ready on this byte
+        if (ready != null) {
+            try (java.io.OutputStream out = new java.io.FileOutputStream("/proc/self/fd/" + ready)) { out.write('1'); }
+            catch (java.io.IOException failure) { System.out.println("[apklayer-hub] cannot tell the launcher: " + failure); }
+        }
         try { new CountDownLatch(1).await(); }
         catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
     }

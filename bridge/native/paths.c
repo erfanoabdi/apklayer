@@ -77,13 +77,22 @@ static bool data_path(char **path)
     return true;
 }
 
+static bool from_root(const char *r, char **path);
+
 bool apklayer_apply_path_overrides(char **path)
 {
-    const char *p = *path, *r = root();
     static int debug = -1;
     if (debug < 0) debug = getenv("APKLAYER_PATHS_DEBUG") != NULL;
-    if (debug) fprintf(stderr, "[paths] %s (root %s)\n", p, r);
+    if (debug) fprintf(stderr, "[paths] %s (root %s)\n", *path, root());
     if (binder_device(path) || storage_path(path) || data_path(path)) return true;
+    /* what one instance's stack stages for itself (the vintf fragments of the HALs it runs, cli/stack.cpp) comes before the shared root */
+    const char *own = getenv("APKLAYER_INSTANCE_ROOT");
+    return (own && own[0] && from_root(own, path)) || from_root(root(), path);
+}
+
+static bool from_root(const char *r, char **path)
+{
+    const char *p = *path;
     if (!r[0] || p[0] != '/') return false;
     for (int i = 0; prefixes[i]; i++) {
         if (strncmp(p, prefixes[i], strlen(prefixes[i]))) continue;

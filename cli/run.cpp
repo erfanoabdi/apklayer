@@ -138,44 +138,72 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     return WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
 }
 
-// Foreground hub daemon: one per instance, the lock and its JVM live for the instance lifetime.
+// Another launcher holds hub.lock: true once its hub is published (apklayer.hub.ready=1), false when the lock came free first (that hub was
+// going down and ended) and is now this launcher's. Both are events: the property's own wait, and a child blocked on the lock.
+static bool awaitHubOrLock(const Layout& l, const NativeEnv& ne, const std::string& lockPath, int lock) {
+    for (;;) {
+        Spawn wait;
+        wait.argv = {join(l.native, "bin/aprop"), "wait", kHubReadyProperty, "1"};
+        wait.env = ne.env;
+        int waiter = spawn(wait);
+        pid_t locker = fork();
+        if (locker == 0) { int fd = open(lockPath.c_str(), O_RDWR | O_CLOEXEC); flock(fd, LOCK_EX); _exit(0); }  // ends when the holder is gone
+        int wfd = pidfdOpen(waiter), lfd = pidfdOpen(locker);
+        pollfd fds[2] = {{wfd, POLLIN, 0}, {lfd, POLLIN, 0}};
+        while (poll(fds, 2, -1) < 0 && errno == EINTR) {}
+        bool ready = fds[0].revents & POLLIN;
+        kill(waiter, SIGTERM);
+        kill(locker, SIGKILL);
+        waitpid(waiter, nullptr, 0);
+        waitpid(locker, nullptr, 0);
+        close(wfd);
+        close(lfd);
+        if (ready) return true;
+        if (flock(lock, LOCK_EX | LOCK_NB) == 0) return false;  // another launcher may have been faster: wait for its hub then
+    }
+}
+
+// Foreground hub daemon: one per instance, the lock and its JVM live for the instance lifetime. A launcher that finds the lock held returns
+// once that hub is ready, or takes over when it was a hub going down.
 int runHub(const Layout& l, const Instance& inst) {
-    int lock = open(join(inst.stateDir, "hub.lock").c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0644);
-    if (flock(lock, LOCK_EX | LOCK_NB) != 0) return 0;
+    const std::string lockPath = join(inst.stateDir, "hub.lock");
+    int lock = open(lockPath.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0644);
     NativeEnv ne = nativeEnv(l, inst);
+    if (flock(lock, LOCK_EX | LOCK_NB) != 0 && awaitHubOrLock(l, ne, lockPath, lock)) return 0;
     trace("hub start");
     if (!ensureStack(l, inst)) return 1;
     std::vector<std::string> jvm = hostJvmArgs(l, inst, ne);
     jvm.insert(jvm.end(), {"-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary(), "-cp", hostClasspath(l), "apklayer.host.Main", "--hub"});
+    setProperty(l, ne, kHubReadyProperty, "0");
+    // Like init after a service registers: once this JVM has published the hub to the service manager it says so on this pipe (HubHost), and
+    // apklayer.hub.ready=1 (clients block on it). Its own word, not a service-manager lookup, which can still find the previous hub's binder.
+    int ready[2];
+    if (pipe2(ready, O_CLOEXEC) != 0) die("pipe failed");
+    fcntl(ready[1], F_SETFD, 0);
     Spawn hub;
     hub.argv = jvm;
     hub.env = ne.env;
+    hub.env["APKLAYER_HUB_READY_FD"] = std::to_string(ready[1]);
     int pid = spawn(hub);
+    close(ready[1]);
     writeFile(join(inst.stateDir, "hub.pid"), std::to_string(pid) + "\n" + std::to_string(getpid()) + "\n");  // the JVM, then this launcher (it holds hub.lock until the JVM is gone)
-    // Like init after a service registers: once the hub is published to the service manager, apklayer.hub.ready=1 (clients block on it)
-    setProperty(l, ne, kHubReadyProperty, "0");
-    Spawn published;
-    published.argv = {l.btload(), l.androidLibs, "libapklayer_servicetool.so", "--main", "wait", "apklayer.instance"};
-    published.env = ne.env;
-    published.logFile = join(inst.logs(), "ready-hub.log");
-    int waiter = spawn(published);
-    int jvmFd = pidfdOpen(pid), waiterFd = pidfdOpen(waiter);
-    pollfd fds[2] = {{jvmFd, POLLIN, 0}, {waiterFd, POLLIN, 0}};
+    int jvmFd = pidfdOpen(pid);
+    pollfd fds[2] = {{jvmFd, POLLIN, 0}, {ready[0], POLLIN, 0}};
     int status = 0;
     for (bool ended = false; !ended;) {
         if (poll(fds, 2, -1) < 0) continue;
-        if (fds[1].revents & POLLIN) {
-            waitpid(waiter, nullptr, 0);
-            fds[1].fd = -1;
-            auto out = readFile(join(inst.logs(), "ready-hub.log"));
-            if (out && out->find(": found") != std::string::npos) { setProperty(l, ne, kHubReadyProperty, "1"); trace("hub ready"); }
+        if (fds[1].revents & (POLLIN | POLLHUP)) {
+            char byte;
+            if (read(ready[0], &byte, 1) == 1) { setProperty(l, ne, kHubReadyProperty, "1"); trace("hub ready"); }
+            fds[1].fd = -1;  // said once (or the JVM closed it unsaid)
         }
         if (fds[0].revents & POLLIN) {
             waitpid(pid, &status, 0);  // keeps the lock until the JVM ends
             ended = true;
         }
     }
-    kill(waiter, SIGTERM);
+    close(ready[0]);
+    setProperty(l, ne, kHubReadyProperty, "0");  // before the lock is released: a waiting launcher never sees a gone hub as ready
     return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 }
 

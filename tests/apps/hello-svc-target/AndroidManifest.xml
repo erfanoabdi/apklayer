@@ -5,6 +5,7 @@
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
     </activity>
     <service android:name=".CounterService" android:exported="true"/>
+    <service android:name=".EchoService" android:exported="true"/>
     <service android:name=".PrivateService" android:exported="false"/>
   </application>
 </manifest>

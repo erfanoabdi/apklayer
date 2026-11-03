@@ -40,6 +40,16 @@ public final class Main extends Activity {
         store.load(null);
         SharedPreferences prefs = getSharedPreferences("ks", MODE_PRIVATE);
         byte[] plain = "attack at dawn".getBytes();
+        if ("other".equals(scenario)) {  // another app (tests/apps/hello-keystore-other): keys are per app uid, so the first app's are not visible here
+            java.util.List<String> aliases = Collections.list(store.aliases());
+            require(!aliases.contains("rsa") && !aliases.contains("ec"), "another app's keys are visible: " + aliases);
+            KeyGenerator aes = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
+            aes.init(new KeyGenParameterSpec.Builder("aes", KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
+                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).setKeySize(256).build());
+            aes.generateKey();  // the same alias as the first app's key: it must not replace that one
+            System.out.println("[ks] PASS other: " + getPackageName() + " (uid " + android.os.Process.myUid() + ") sees only its own keys " + Collections.list(store.aliases()));
+            return;
+        }
         if ("first".equals(scenario)) {
             for (String alias : Collections.list(store.aliases())) store.deleteEntry(alias);
             KeyGenerator aes = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");

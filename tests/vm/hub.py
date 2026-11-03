@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Cross-app tests through the instance hub, one phase per run: `hub.py <test> <phase>`. The test app prints `[<tag>] PASS|FAIL|KILL <pid>`;
-every JVM is owned and reaped. Tests: providers (basic denied death observe files grant), services (start selfstop sticky private),
+every JVM is owned and reaped. Tests: providers (basic denied death observe files grant), services (start selfstop sticky private filters late),
 activities (result explicit again private), pendingintents (broadcast targets cancel), notifications (click), webview (probe). HUB_VERBOSE=1: all lines."""
 import os
 import selectors
@@ -52,6 +52,8 @@ def notification_clicks():
 
 
 stop()
+if TEST == 'services' and PHASE == 'late':  # installed only while the test runs
+    subprocess.run(['bin/apklayer', 'uninstall', 'hello.svclate'], env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 proc = None
 lines = []
 try:
@@ -76,6 +78,9 @@ try:
                         if events.select(0.5): lines.extend(os.read(proc.stdout.fileno(), 65536).decode(errors='replace').split('\n'))
                     raise AssertionError(line + '\n' + '\n'.join(l for l in lines[-60:] if 'symbol may' not in l))
                 if line.startswith('[nt] POSTED'): notification_clicks()
+                if line.startswith('[%s] INSTALL ' % tag):  # a package installed while the instance runs (services late)
+                    apk = Path(os.environ.get('APKLY_APKS', '.tests/apks')) / (line.split()[2] + '.apk')
+                    subprocess.run(['bin/apklayer', 'install', str(apk)], env=ENV, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
                 if line.startswith('[%s] KILL ' % tag) and not killed:
                     killed = True
                     os.kill(int(line.split()[2]), signal.SIGKILL)

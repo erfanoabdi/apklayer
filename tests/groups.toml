@@ -20,7 +20,7 @@ run = ["tests/vm/properties.sh"]
 run = ["tests/vm/install-verify.sh"]
 
 [keystore]
-apps = ["hello-keystore"]
+apps = ["hello-keystore", "hello-keystore-other"]
 run = ["tests/vm/keystore.sh"]
 
 [devices]
@@ -60,9 +60,10 @@ apps = ["hello-cp-provider", "hello-cp-client", "hello-cp-denied"]
 run = ["python3 -u tests/vm/hub.py providers basic", "python3 -u tests/vm/hub.py providers denied", "python3 -u tests/vm/hub.py providers death"]
 
 [services]
-apps = ["hello-svc-target", "hello-svc-caller"]
+apps = ["hello-svc-target", "hello-svc-caller", "hello-svc-late"]  # hello-svc-late: installed again by the late phase while a host runs
 run = ["python3 -u tests/vm/hub.py services start", "python3 -u tests/vm/hub.py services selfstop", "python3 -u tests/vm/hub.py services sticky",
-       "python3 -u tests/vm/hub.py services private"]
+       "python3 -u tests/vm/hub.py services private", "python3 -u tests/vm/hub.py services filters",
+       "python3 -u tests/vm/hub.py services late"]
 
 [activities]
 apps = ["hello-act-target", "hello-act-caller"]

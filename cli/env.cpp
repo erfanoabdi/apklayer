@@ -51,6 +51,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     env["APKLAYER_INSTANCE"] = instance.id;
     env["APKLAYER_NATIVE"] = n;
     env["APKLAYER_LOGS"] = instance.logs();
+    env["APKLAYER_INSTANCE_ROOT"] = join(instance.runtimeDir, "android-root");  // what this instance's stack stages for itself (cli/stack.cpp), before the shared root
     env["APKLAYER_STORAGE"] = realPath(instance.storageDir);  // the path layer serves Android's /storage, /sdcard and /data/media/0 from it (bridge/native/paths.c)
     env["APKLAYER_DATA"] = realPath(instance.dataDir);  // and the rest of /data
     // bionic_translation's libraries first (the patched ones), then ours; the path layer and bionic's TLS slots come first in every lookup
