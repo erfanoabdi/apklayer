@@ -183,7 +183,7 @@ int runHub(const Layout& l, const Instance& inst) {
     Spawn hub;
     hub.argv = jvm;
     hub.env = ne.env;
-    hub.env["APKLAYER_READY_FD"] = std::to_string(ready[1]);
+    hub.env["APKLAYER_HUB_READY_FD"] = std::to_string(ready[1]);
     int pid = spawn(hub);
     close(ready[1]);
     writeFile(join(inst.stateDir, "hub.pid"), std::to_string(pid) + "\n" + std::to_string(getpid()) + "\n");  // the JVM, then this launcher (it holds hub.lock until the JVM is gone)

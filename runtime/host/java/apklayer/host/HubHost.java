@@ -19,7 +19,7 @@ public final class HubHost {
             throw new IllegalStateException("Cannot publish instance hub");
         HostBattery.installHub(directory::sendSystem);
         System.out.println("[apklayer-hub] READY pid=" + android.os.Process.myPid());
-        String ready = System.getenv("APKLAYER_READY_FD");  // the launcher's pipe (cli runHub): it sets apklayer.hub.ready on this byte
+        String ready = System.getenv("APKLAYER_HUB_READY_FD");  // the launcher's pipe (cli runHub): it sets apklayer.hub.ready on this byte
         if (ready != null) {
             try (java.io.OutputStream out = new java.io.FileOutputStream("/proc/self/fd/" + ready)) { out.write('1'); }
             catch (java.io.IOException failure) { System.out.println("[apklayer-hub] cannot tell the launcher: " + failure); }
