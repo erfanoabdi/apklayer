@@ -5,7 +5,7 @@ import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
 
 /**
- * The WebView provider is a Chromium APK (-Dapklayer.webviewprovider=&lt;installed package dir&gt;; its converted classes are on the class path, its native library
+ * The WebView provider is a Chromium APK (-Dapklayer.webviewprovider=&lt;installed package dir&gt;; its converted classes get a class loader of their own, its native library
  * in {@code lib/}). The framework's WebViewFactory finds a provider through the update service and a package context, neither of which exist here: this hands it the
  * provider class directly, after loading the native library through bionic_translation, and the rest of WebViewFactory.getProvider runs as on a device.
  */
@@ -40,9 +40,17 @@ public class ShadowHostWebViewFactory {
         if (providerClass != null) return providerClass;
         String dir = System.getProperty("apklayer.webviewprovider");
         File library = new File(dir, "lib/libwebviewchromium.so");
-        NativeLoader.load(library.getPath());
+        // a class loader of its own, as WebViewFactory makes one on Android: Chromium, jni_zero and its bundled libraries never meet the app's copies (microG and Meet bundle Cronet)
+        AppClassLoader loader = new AppClassLoader("webview", new java.nio.file.Path[] {new File(dir, "classes.jar").toPath(), new File(dir, "base.apk").toPath()},
+                ShadowHostWebViewFactory.class.getClassLoader());
+        try {  // framework code naming a provider class (its services) through the sandbox loader: after the app's own, the provider's
+            java.lang.reflect.Field hook = Class.forName("org.robolectric.internal.bytecode.ApklayerAppHook").getField("app");
+            @SuppressWarnings("unchecked") java.util.function.Function<String, Class<?>> app = (java.util.function.Function<String, Class<?>>) hook.get(null);
+            hook.set(null, (java.util.function.Function<String, Class<?>>) name -> { Class<?> c = app == null ? null : app.apply(name); return c != null ? c : loader.apply(name); });
+        } catch (ReflectiveOperationException noOverlay) { throw new IllegalStateException("runtime overlay without ApklayerAppHook", noOverlay); }
+        NativeLoader.load(library.getPath(), loader);
         providerPackage(dir);
-        try { return providerClass = Class.forName(FACTORY); }
-        catch (ClassNotFoundException missing) { throw new IllegalStateException("The WebView provider's classes are not on the class path", missing); }
+        try { return providerClass = Class.forName(FACTORY, true, loader); }
+        catch (ClassNotFoundException missing) { throw new IllegalStateException("The WebView provider's classes are missing from " + dir, missing); }
     }
 }

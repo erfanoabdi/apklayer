@@ -75,9 +75,9 @@ void ensureUid(const Layout& l, const std::string& dir) {
     writeFile(file, text + "uid=" + std::to_string(max + 1) + "\n");
 }
 
-std::string hostClasspath(const Layout& l, const std::string& appClasses) {
+std::string hostClasspath(const Layout& l) {  // no app classes: they get a loader of their own (apklayer.host.AppClassLoader)
     const std::string& n = l.native;
-    return n + "/native-runtime.jar:" + l.hostClasses() + ":" + n + "/aosp/sim-classes:" + appClasses + ":" + n + "/aosp/Robolectric_all.jar:" + l.deps +
+    return n + "/native-runtime.jar:" + l.hostClasses() + ":" + n + "/aosp/sim-classes:" + n + "/aosp/Robolectric_all.jar:" + l.deps +
            "/android-stub.jar:" + l.dex2jvmJar();
 }
 
@@ -123,7 +123,7 @@ std::string installApp(const Layout& l, const Instance& inst, const std::string&
     NativeEnv ne = nativeEnv(l, inst);
     if (!ensureStack(l, inst)) die("the Android services are not available");
     std::vector<std::string> argv = hostJvmArgs(l, inst, ne);
-    argv.insert(argv.end(), {"-Djava.awt.headless=true", "-cp", hostClasspath(l, join(tmp, "classes.jar")), "apklayer.host.Main", "--describe", tmp, join(tmp, "base.apk"), join(tmp, "classes.jar")});
+    argv.insert(argv.end(), {"-Djava.awt.headless=true", "-cp", hostClasspath(l), "apklayer.host.Main", "--describe", tmp, join(tmp, "base.apk"), join(tmp, "classes.jar")});
     Spawn d;
     d.argv = argv;
     d.env = ne.env;

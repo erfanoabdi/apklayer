@@ -94,29 +94,11 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     for (const std::string& o : {"-Dapklayer.data=" + join(dir, "data"), "-Dapklayer.package=" + package, "-Dapklayer.uid=" + property(join(dir, "info.properties"), "uid"),
                                  "-Dapklayer.libdir=" + join(dir, "lib"), "-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary()})
         jvm.push_back(o);
-    std::string classes = join(dir, "classes.jar") + ":" + join(dir, "base.apk");  // the APK too: Class.getResourceAsStream finds an APK's java resources (conscrypt.properties, META-INF/services), the converted jar has none
-    if (!provider.empty()) {
-        jvm.push_back("-Dapklayer.webviewprovider=" + join(l.appsDir, provider));
-        // The provider's jar is split by package (once, next to it): "core" is Chromium's own (org.chromium, org.jni_zero, WV, com.android.webview), "rest" its bundled copies of
-        // other libraries (com.google Play Services client classes, androidx, kotlin) which must never shadow the app's. An app bundling Chromium's base classes (microG's
-        // Cronet) needs core first (else NoSuchFieldError in ThreadUtils); other apps keep their own org.chromium / org.jni_zero first (Meet's JniZero is not the provider's).
-        std::string pdir = join(l.appsDir, provider), full = join(pdir, "classes.jar"), core = join(pdir, "classes-core.jar"), rest = join(pdir, "classes-rest.jar");
-        auto run = [](std::vector<std::string> argv) { Spawn x; x.argv = std::move(argv); x.env = currentEnv(); x.logFile = "/dev/null"; return runAndWait(x); };
-        struct stat a {}, b {};
-        if (::stat(core.c_str(), &b) != 0 || ::stat(full.c_str(), &a) != 0 || b.st_mtime < a.st_mtime) {
-            run({"cp", "-f", full, core}); run({"zip", "-q", "-d", core, "com/google/*", "androidx/*", "kotlin/*", "android/*"});
-            run({"cp", "-f", full, rest}); run({"zip", "-q", "-d", rest, "org/chromium/*", "org/jni_zero/*", "WV/*", "com/android/*", "J/*"});
-        }
-        // The provider's classes go first for an app that bundles Chromium's base classes without Chromium's own jni_zero (an embedded Cronet); any app can be forced with APKLAYER_PROVIDER_FIRST=1.
-        // The real fix is a class loader of its own for the provider (its natives find classes through the sandbox loader today): docs/PLAN.md.
-        auto bundles = [&](const char* entry) { Spawn x; x.argv = {"unzip", "-Z1", join(dir, "classes.jar"), entry}; x.env = currentEnv(); return !runCapture(x).empty(); };
-        if ((bundles("org/chromium/base/ThreadUtils.class") && !bundles("org/jni_zero/*")) || !getenvOr("APKLAYER_PROVIDER_FIRST", "").empty()) classes = core + ":" + classes + ":" + rest;
-        else classes = classes + ":" + core + ":" + rest;
-    }
+    if (!provider.empty()) jvm.push_back("-Dapklayer.webviewprovider=" + join(l.appsDir, provider));  // its classes get a loader of their own (ShadowHostWebViewFactory)
     if (!getenvOr("APKLAYER_ISOLATED", "").empty()) jvm.push_back("-Dapklayer.isolated=" + getenvOr("APKLAYER_ISOLATED", ""));
     if (!getenvOr("APKLAYER_LOGCAT", "").empty()) jvm.push_back("-Dapklayer.logcat=true");
     for (const std::string& o : split(getenvOr("APKLAYER_JOPTS", ""), ' ')) if (!o.empty()) jvm.push_back(o);
-    jvm.insert(jvm.end(), {"-cp", hostClasspath(l, classes), "apklayer.host.Main"});
+    jvm.insert(jvm.end(), {"-cp", hostClasspath(l), "apklayer.host.Main"});
     if (mode == RunMode::Component) jvm.push_back("--component-host");
     jvm.push_back(join(dir, "base.apk"));
     jvm.push_back(join(dir, "classes.jar"));
@@ -150,7 +132,7 @@ int runHub(const Layout& l, const Instance& inst) {
     NativeEnv ne = nativeEnv(l, inst);
     if (!ensureStack(l, inst)) return 1;
     std::vector<std::string> jvm = hostJvmArgs(l, inst, ne);
-    jvm.insert(jvm.end(), {"-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary(), "-cp", hostClasspath(l, ""), "apklayer.host.Main", "--hub"});
+    jvm.insert(jvm.end(), {"-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary(), "-cp", hostClasspath(l), "apklayer.host.Main", "--hub"});
     Spawn hub;
     hub.argv = jvm;
     hub.env = ne.env;

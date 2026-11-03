@@ -87,7 +87,7 @@ public final class AppHost implements Runnable {
 
     @Override
     public void run() {
-        Thread.currentThread().setContextClassLoader(sandbox.getRobolectricClassLoader());
+        Thread.currentThread().setContextClassLoader(AppClassLoader.app != null ? AppClassLoader.app : sandbox.getRobolectricClassLoader());  // the app's own loader, as on Android
         AppEnvironment.setUpApplication(sandbox, apk, describe != null);
         // apklayer patch: Android prepares the UI thread's native Looper before
         // native activity initialization; the paused Java queue alone does not.

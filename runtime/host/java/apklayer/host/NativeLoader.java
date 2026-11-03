@@ -37,7 +37,8 @@ public final class NativeLoader {
 
     private static native String dlerror();
 
-    private static native int callOnLoad(long fn);
+    /** JNI_OnLoad, with FindClass answering through that loader meanwhile (the library's, as ART's System.load gives it). */
+    private static native int callOnLoad(long fn, ClassLoader loader);
 
     private static native int registerNative(Class<?> target, String name, String sig, long fn);
 
@@ -55,14 +56,25 @@ public final class NativeLoader {
         return f.isFile() ? f.getAbsolutePath() : null;
     }
 
+    private static final StackWalker CALLER = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
+
     public static void loadLibrary(String name) {
+        loadLibrary(name, CALLER.getCallerClass().getClassLoader());
+    }
+
+    private static void loadLibrary(String name, ClassLoader loader) {
         String path = findLibrary(name);
         if (path == null) throw new UnsatisfiedLinkError("no " + name + " in "
                 + System.getProperty("apklayer.libdir", "") + " (ABI not in the APK?)");
-        load(path);
+        load(path, loader);
     }
 
     public static void load(String path) {
+        load(path, CALLER.getCallerClass().getClassLoader());
+    }
+
+    /** Loads the library for the classes of that loader (the caller's, as System.load on Android): its JNI_OnLoad and its Java_* functions see them. */
+    public static void load(String path, ClassLoader loader) {
         File asked = new File(path);
         if (!asked.isFile()) {  // the app extracted its libraries to a path that does not exist here (OpenTTD: files/../lib): the same name in the app's lib dir is the library
             File alt = new File(System.getProperty("apklayer.libdir", ""), asked.getName());
@@ -80,21 +92,21 @@ public final class NativeLoader {
             LOADED.put(path, handle);
             long onLoad = dlsym(handle, "JNI_OnLoad");
             if (onLoad != 0) {
-                int version = callOnLoad(onLoad);
+                int version = callOnLoad(onLoad, loader);
                 if (version < 0) throw new UnsatisfiedLinkError(path + ": JNI_OnLoad failed");
             }
-            int bound = bindByName(path, handle);
+            int bound = bindByName(path, handle, loader);
             System.out.println("[apklayer] loaded " + new File(path).getName() + " (JNI_OnLoad "
                     + (onLoad != 0 ? "ran" : "absent") + ", " + bound + " natives bound by name)");
         }
     }
 
     public static void runtimeLoadLibrary(Runtime r, String name) {
-        loadLibrary(name);
+        loadLibrary(name, CALLER.getCallerClass().getClassLoader());
     }
 
     public static void runtimeLoad(Runtime r, String path) {
-        load(path);
+        load(path, CALLER.getCallerClass().getClassLoader());
     }
 
     private static void init() {
@@ -109,9 +121,8 @@ public final class NativeLoader {
 
     // ---- binding Java_* functions by name ----
 
-    private static int bindByName(String path, long handle) {
+    private static int bindByName(String path, long handle, ClassLoader cl) {
         int bound = 0;
-        ClassLoader cl = NativeLoader.class.getClassLoader();
         for (String symbol : exportedJavaFunctions(path)) {
             try {
                 String[] parts = demangle(symbol);

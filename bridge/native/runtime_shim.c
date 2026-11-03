@@ -237,7 +237,8 @@ static jclass JNICALL lazy_find_class(JNIEnv *env, const char *name)
     for (; name[i] && i < sizeof dotted - 1; i++) dotted[i] = name[i] == '/' ? '.' : name[i];
     dotted[i] = 0;
     jstring s = (*env)->NewStringUTF(env, dotted);
-    jobject c = (*env)->CallStaticObjectMethod(env, class_class, for_name, s, JNI_FALSE, class_loader);
+    extern __thread jobject apklayer_onload_loader;  /* native_loader.c: inside a library's JNI_OnLoad, the loader of that library's classes */
+    jobject c = (*env)->CallStaticObjectMethod(env, class_class, for_name, s, JNI_FALSE, apklayer_onload_loader ? apklayer_onload_loader : class_loader);
     (*env)->DeleteLocalRef(env, s);
     if (!c && runtime_debug()) fprintf(stderr, "[runtime] FindClass(%s) failed\n", name);
     return (jclass)c; /* NULL with the pending exception, like FindClass */
