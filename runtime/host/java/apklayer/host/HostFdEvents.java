@@ -27,8 +27,7 @@ final class HostFdEvents {
 
     /** MessageQueue.nativeSetFileDescriptorEvents: watch {@code fd} for {@code events}, 0 ends the watch. */
     static void set(MessageQueue queue, int fd, int events) {
-        Key key = new Key(queue, fd);
-        Watch watch = events == 0 ? WATCHES.remove(key) : WATCHES.computeIfAbsent(key, Watch::new);
+        Key key = new Key(queue, fd);        Watch watch = events == 0 ? WATCHES.remove(key) : WATCHES.computeIfAbsent(key, Watch::new);
         if (watch == null) return;
         watch.events = events;
         watch.wake();
@@ -60,8 +59,7 @@ final class HostFdEvents {
                     target.events = (short) (((wanted & INPUT) != 0 ? POLLIN : 0) | ((wanted & OUTPUT) != 0 ? POLLOUT : 0));
                     woken.fd = wakePipe[0];
                     woken.events = POLLIN;
-                    Os.poll(new StructPollfd[] {target, woken}, -1);
-                    if (woken.revents != 0) { new java.io.FileInputStream(wakePipe[0]).read(new byte[64]); continue; }
+                    Os.poll(new StructPollfd[] {target, woken}, -1);                    if (woken.revents != 0) { new java.io.FileInputStream(wakePipe[0]).read(new byte[64]); continue; }
                     int seen = ((target.revents & POLLIN) != 0 ? INPUT : 0) | ((target.revents & POLLOUT) != 0 ? OUTPUT : 0)
                             | ((target.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0 ? ERROR : 0);
                     if (seen == 0) continue;

@@ -19,7 +19,12 @@ public class ShadowHostRealLinux extends ShadowLinux {
 
     @SuppressWarnings("unchecked")
     private <T> T natively(String name, ClassParameter<?>... parameters) {
-        return (T) ReflectionHelpers.callInstanceMethod(linux, "$$robo$$" + name + "$nativeBinding", parameters);
+        try {
+            return (T) ReflectionHelpers.callInstanceMethod(linux, "$$robo$$" + name + "$nativeBinding", parameters);
+        } catch (RuntimeException wrapped) {  // the ErrnoException as Os callers expect it (ParcelFileDescriptor reads its comm channel until EAGAIN)
+            if (wrapped.getCause() instanceof android.system.ErrnoException errno) throw org.robolectric.util.Util.sneakyThrow(errno);
+            throw wrapped;
+        }
     }
 
     @Implementation protected void close(FileDescriptor fd) { natively("close", ClassParameter.from(FileDescriptor.class, fd)); }
@@ -53,6 +58,12 @@ public class ShadowHostRealLinux extends ShadowLinux {
     @Implementation protected void socketpair(int domain, int type, int protocol, FileDescriptor one, FileDescriptor two) {
         natively("socketpair", ClassParameter.from(int.class, domain), ClassParameter.from(int.class, type), ClassParameter.from(int.class, protocol),
                 ClassParameter.from(FileDescriptor.class, one), ClassParameter.from(FileDescriptor.class, two));
+    }
+    @Implementation protected int readBytes(FileDescriptor fd, Object buffer, int offset, int count) {
+        return natively("readBytes", ClassParameter.from(FileDescriptor.class, fd), ClassParameter.from(Object.class, buffer), ClassParameter.from(int.class, offset), ClassParameter.from(int.class, count));
+    }
+    @Implementation protected int writeBytes(FileDescriptor fd, Object buffer, int offset, int count) {
+        return natively("writeBytes", ClassParameter.from(FileDescriptor.class, fd), ClassParameter.from(Object.class, buffer), ClassParameter.from(int.class, offset), ClassParameter.from(int.class, count));
     }
     @Implementation protected int poll(android.system.StructPollfd[] fds, int timeoutMs) {
         return natively("poll", ClassParameter.from(android.system.StructPollfd[].class, fds), ClassParameter.from(int.class, timeoutMs));
