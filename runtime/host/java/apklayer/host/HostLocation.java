@@ -21,29 +21,35 @@ final class HostLocation {
     static void install(Application app) {
         LocationManager manager = app.getSystemService(LocationManager.class);
         ShadowLocationManager shadow = Shadows.shadowOf(manager);
-        // Robolectric's location fake keeps its state in Settings.Secure (LOCATION_MODE, LOCATION_PROVIDERS_ALLOWED), which only the system may write once the
-        // real SettingsProvider answers (and which it removed, version 193): the fake cannot be switched then. No receiver is invented: the providers are removed
-        // (shortcut: GeoClue's network location is off with the real SettingsProvider until the hub, the system, writes the location mode; docs/PLAN.md)
-        if (android.provider.Settings.Secure.getString(app.getContentResolver(), android.provider.Settings.Secure.LOCATION_PROVIDERS_ALLOWED) == null) {
-            FakeLog.hit("location", "HostLocation: location state needs the system's settings writer");
+        // Robolectric's location fake keeps its state in Settings.Secure (LOCATION_MODE, LOCATION_PROVIDERS_ALLOWED), which only the system writes once the
+        // real SettingsProvider answers: the hub writes them at boot from the host's location service (HubBootSettings). The app's own provider state
+        // follows them, so the fake writes nothing (it writes only a state the settings do not have yet).
+        String allowed = android.provider.Settings.Secure.getString(app.getContentResolver(), android.provider.Settings.Secure.LOCATION_PROVIDERS_ALLOWED);
+        if (allowed == null) {  // the hub's first boot has not written them yet (shortcut: location is off for that launch; the next one reads them)
+            FakeLog.hit("location", "HostLocation: no location state from the system yet");
             shadow.removeProvider(LocationManager.GPS_PROVIDER);
             shadow.removeProvider(LocationManager.NETWORK_PROVIDER);
             return;
         }
-        for (String provider : new String[] {LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) shadow.setProviderEnabled(provider, false);
-        shadow.setLocationEnabled(false);
+        boolean network = allowed.contains(LocationManager.NETWORK_PROVIDER);
+        shadow.setProviderEnabled(LocationManager.GPS_PROVIDER, allowed.contains(LocationManager.GPS_PROVIDER));
+        shadow.setProviderEnabled(LocationManager.NETWORK_PROVIDER, network);
+        if (!network || !manager.isLocationEnabled()) return;  // the host has no location service
         try {
             Process helper = new ProcessBuilder(HostProcess.dying("python3", script())).redirectError(ProcessBuilder.Redirect.INHERIT).start();
             Runtime.getRuntime().addShutdownHook(new Thread(helper::destroy));
             BufferedReader in = new BufferedReader(new InputStreamReader(helper.getInputStream()));
             String first = in.readLine();  // `ready`, or why GeoClue is not usable
-            if (first == null || !first.equals("ready")) { System.out.println("[apklayer] location: " + (first == null ? "no helper" : first) + ", location is off"); helper.destroy(); return; }
-            shadow.setLocationEnabled(true);
-            shadow.setProviderEnabled(LocationManager.NETWORK_PROVIDER, true);
+            if (first == null || !first.equals("ready")) {  // GeoClue went away since the hub asked: no network provider here (a disabled one would be a settings write)
+                System.out.println("[apklayer] location: " + (first == null ? "no helper" : first) + ", location is off");
+                helper.destroy();
+                shadow.removeProvider(LocationManager.NETWORK_PROVIDER);
+                return;
+            }
             Thread follower = new Thread(() -> follow(in, shadow), "apklayer-location");
             follower.setDaemon(true);
             follower.start();
-        } catch (IOException noPython) { System.out.println("[apklayer] location: " + noPython.getMessage() + ", location is off"); }
+        } catch (IOException noPython) { System.out.println("[apklayer] location: " + noPython.getMessage() + ", location is off"); shadow.removeProvider(LocationManager.NETWORK_PROVIDER); }
     }
 
     private static void follow(BufferedReader in, ShadowLocationManager shadow) {
@@ -63,7 +69,7 @@ final class HostLocation {
         } catch (IOException ended) { /* GeoClue went away */ }
     }
 
-    private static String script() {
+    static String script() {
         java.io.File cli = new java.io.File(System.getProperty("apklayer.cli", ""));
         for (java.io.File dir = cli.getAbsoluteFile().getParentFile(); dir != null; dir = dir.getParentFile()) {
             java.io.File candidate = new java.io.File(dir, "bridge/portal/geoclue.py");

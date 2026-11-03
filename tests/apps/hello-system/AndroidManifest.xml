@@ -24,5 +24,9 @@
       <intent-filter><action android:name="android.accounts.AccountAuthenticator"/></intent-filter>
       <meta-data android:name="android.accounts.AccountAuthenticator" android:resource="@xml/authenticator"/>
     </service>
+    <service android:name=".Ime" android:permission="android.permission.BIND_INPUT_METHOD" android:exported="true">
+      <intent-filter><action android:name="android.view.InputMethod"/></intent-filter>
+      <meta-data android:name="android.view.im" android:resource="@xml/method"/>
+    </service>
   </application>
 </manifest>

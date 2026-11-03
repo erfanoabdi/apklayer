@@ -133,7 +133,6 @@ std::string installApp(const Layout& l, const Instance& inst, const std::string&
     std::string pkg = property(join(tmp, "info.properties"), "package");
     std::string label = property(join(tmp, "info.properties"), "label");
     std::string dir = appDir(l, pkg);
-    makeDirs(join(dir, "data"));
     std::string oldUid = property(join(dir, "info.properties"), "uid");
     for (const char* f : {"base.apk", "classes.jar", "key", "icon.png"}) sh({"mv", "-f", join(tmp, f), join(dir, f)});
     extractLibs(dir);
@@ -144,6 +143,26 @@ std::string installApp(const Layout& l, const Instance& inst, const std::string&
     writeDesktop(l, pkg, label, dir);
     printf("apklayer: installed %s (%s) -> %s\n", pkg.c_str(), label.c_str(), dir.c_str());
     return pkg;
+}
+
+std::string appDataDir(const Layout& l, const Instance& inst, const std::string& package) {
+    std::string own = inst.appData(package), shared = join(appDir(l, package), "data");
+    // before app data was per instance it lived beside the app's code, shared by every instance: the default instance keeps it
+    if (inst.id == "default" && !exists(own) && isDir(shared)) { makeDirs(dirName(own)); if (rename(shared.c_str(), own.c_str()) != 0) die("cannot move " + shared + " to " + own); }
+    makeDirs(own);
+    return own;
+}
+
+int inputMethod(const Layout& l, const Instance& inst, const std::string& action, const std::string& name) {
+    if (action != "enable" && action != "disable") die("ime enable|disable <package or ime id>");
+    if (action == "enable" && !isDir(appDir(l, name.substr(0, name.find('/'))))) die("not installed: " + name);
+    std::string file = join(inst.root, "input-methods"), kept;  // read by the hub at its start (HubBootSettings)
+    for (const std::string& line : split(readFile(file).value_or(""), '\n'))
+        if (!trim(line).empty() && trim(line) != name) kept += trim(line) + "\n";
+    if (action == "enable") kept += name + "\n";
+    if (!writeFile(file, kept)) die("cannot write " + file);
+    printf("apklayer: %s %sd for instance %s (from its next start)\n", name.c_str(), action.c_str(), inst.id.c_str());
+    return 0;
 }
 
 void listApps(const Layout& l) {
@@ -157,6 +176,8 @@ void listApps(const Layout& l) {
 void uninstallApp(const Layout& l, const std::string& package) {
     if (!isDir(appDir(l, package))) die("not installed: " + package);
     removeTree(appDir(l, package));
+    for (const std::string& instance : listDir(join(l.dataHome, "apklayer")))  // the app's data in every instance of this data home
+        if (isDir(join(l.dataHome, "apklayer/" + instance + "/app-data/" + package))) removeTree(join(l.dataHome, "apklayer/" + instance + "/app-data/" + package));
     unlink(join(l.dataHome, "applications/apklayer-" + package + ".desktop").c_str());
     printf("apklayer: removed %s\n", package.c_str());
 }

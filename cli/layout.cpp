@@ -54,11 +54,12 @@ Instance Instance::open(const Layout& layout, const std::string& id) {
     i.id = id;
     i.stateDir = getenvOr("APKLAYER_LOGS", join(layout.stateHome, "apklayer/" + id));  // tests may point the logs elsewhere
     i.runtimeDir = join(layout.runtimeHome, "apklayer/" + id);
-    i.storageDir = join(layout.dataHome, "apklayer/" + (id == "default" ? std::string("0") : id) + "/storage");
+    i.root = join(layout.dataHome, "apklayer/" + (id == "default" ? std::string("0") : id));
+    i.storageDir = join(i.root, "storage");
     makeDirs(join(i.storageDir, "emulated/0"));  // /storage/emulated/0, /sdcard and /data/media/0 of the instance (APKLAYER_STORAGE, the path layer)
     // /data of the instance (APKLAYER_DATA, the path layer), so the shared native directory stays read-only. What init makes at boot: the system
     // user's directory (SettingsProvider's files); keystore2's and SurfaceFlinger's come with the stack (cli/stack.cpp).
-    i.dataDir = join(layout.dataHome, "apklayer/" + (id == "default" ? std::string("0") : id) + "/data");
+    i.dataDir = join(i.root, "data");
     makeDirs(join(i.dataDir, "system/users/0"));
     makeDirs(i.stateDir);
     makeDirs(i.runtimeDir);

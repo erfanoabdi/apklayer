@@ -16,6 +16,11 @@ final class HubProviders {
 
     /** The provider's IContentProvider binder, the provider's process started when it is not running. Null when the authority is unknown or not for this caller. */
     IBinder get(HubDirectory.Peer caller, String authority) {
+        if (caller.appUid() != android.os.Process.SYSTEM_UID) HubBootSettings.awaitBoot();  // as on a device, apps see the settings the system writes at boot
+        return find(caller, authority);
+    }
+
+    private IBinder find(HubDirectory.Peer caller, String authority) {
         ProviderInfo info = packages.provider(authority);
         if (info == null) return null;
         if (!info.exported && !info.packageName.equals(caller.name())) {
@@ -27,6 +32,9 @@ final class HubProviders {
         return HubProtocol.call(target.endpoint(), HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_GET_PROVIDER, request -> request.writeString(authority),
                 reply -> reply.readStrongBinder());
     }
+
+    /** The provider's binder for the hub itself, the instance's system (uid 1000): what system_server writes at boot (HubBootSettings). */
+    IBinder system(String authority) { return find(new HubDirectory.Peer(android.os.Process.myPid(), 1000, "android", null, null, true, 1000, null), authority); }
 
     /** A content change, told to every other app that is running: each has its own observers, registered in its ContentResolver. */
     void notifyChange(HubDirectory.Peer caller, android.net.Uri uri, int flags) {
