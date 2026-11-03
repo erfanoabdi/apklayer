@@ -12,7 +12,7 @@ apps and games see real Android, shown as Wayland windows. Details of that route
           │                 (hierarchy from android-all)
           └─ manifest + resources.arsc ──AOSP PackageParser / native AssetManager
 
- App JVM, one per app: Robolectric sandbox (android-all 16, SDK 36) + apklayer shadows
+ App JVM, one per app: Robolectric sandbox (the LineageOS tree's android-all: Android 17, SDK 37) + apklayer shadows
    apklayer.host: Main → AppHost (lifecycle, back stack, host input, windows), the hub client
    Android's native libraries (libandroid_runtime, HWUI, media, binder) loaded by bionic_translation; the app's own .so too
         │ kernel binder (binderfs)

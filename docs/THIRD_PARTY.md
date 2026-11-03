@@ -14,7 +14,8 @@ apklayer itself is AGPL-3.0-or-later (PLAN D5), compatible with all of the above
 
 | Artifact | Origin | License |
 |---|---|---|
-| `android-all-instrumented-16-robolectric-13921718-i7.jar` (SDK 36) | Robolectric build of unmodified AOSP | Apache-2.0 |
+| `android-all-current-robolectric-r0.jar` (Android 17, SDK 37), built in the LineageOS tree with its `Robolectric_all.jar` | the tree's unmodified AOSP framework, the one the runtime uses | Apache-2.0 |
+| `android-all-instrumented-16-robolectric-13921718-i7.jar` (SDK 36) | Robolectric's Maven build of unmodified AOSP (pinned dependency) | Apache-2.0 |
 | Robolectric 4.17 (`robolectric`, `shadows-framework`, `sandbox`, `resources`, `nativeruntime`, `simulator`, …) | robolectric.org | MIT |
 | `nativeruntime-dist-compat-1.0.19` (HWUI/Skia/SQLite natives) | Robolectric prebuilt from AOSP sources | Apache-2.0 (AOSP) |
 | `android-stub.jar` (SDK platform android-36.1 `android.jar`) | Android SDK platform | Apache-2.0 |
