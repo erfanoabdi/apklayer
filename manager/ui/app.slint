@@ -67,19 +67,23 @@ export component AppWindow inherits MaterialWindow {
             items: root.nav;
             current-index: root.page;
             fab-icon: root.fab-icon;
+            alignment: start;
             index-changed(i) => { root.page = i; }
             fab-clicked => { root.fab-clicked(); }
         }
         VerticalLayout {
-            SmallAppBar {
-                title: root.titles[root.page] + "  ·  " + Backend.instance;
-                trailing-buttons: [
-                    { icon: AppIcons.refresh, tooltip: "Refresh", enabled: true },
-                    { icon: root.is-dark ? AppIcons.light : AppIcons.dark, tooltip: "Light or dark theme", enabled: true },
-                ];
-                trailing-button-clicked(i) => {
-                    if i == 0 { Backend.refresh(); }
-                    if i == 1 { root.toggle-theme(); }
+            HorizontalLayout {
+                padding-left: MaterialStyleMetrics.padding_12;  // M3: 16 dp to the title; the bar without a leading button has 4
+                SmallAppBar {
+                    title: root.titles[root.page] + "  ·  " + Backend.instance;
+                    trailing-buttons: [
+                        { icon: AppIcons.refresh, tooltip: "Refresh", enabled: true },
+                        { icon: root.is-dark ? AppIcons.light : AppIcons.dark, tooltip: "Light or dark theme", enabled: true },
+                    ];
+                    trailing-button-clicked(i) => {
+                        if i == 0 { Backend.refresh(); }
+                        if i == 1 { root.toggle-theme(); }
+                    }
                 }
             }
             Rectangle {
@@ -177,7 +181,7 @@ export component AppWindow inherits MaterialWindow {
             spacing: MaterialStyleMetrics.spacing_12;
             MaterialText { max-width: 400px; wrap: word-wrap; text: "An .apk file: it is converted once and then runs in every instance."; style: MaterialTypography.body_medium;
                            color: MaterialPalette.on_surface_variant; }
-            apk-path := TextField { min-width: 280px; label: "Path of the .apk"; }
+            apk-path := TextField { min-width: 280px; label: "Path of the .apk"; accessible-label: "APK path"; }
             HorizontalLayout { alignment: start; TextButton { text: "Choose file…"; icon: AppIcons.folder; clicked => { Backend.install-chooser(); } } }
         }
         default-action-clicked => { if apk-path.text != "" { Backend.install-path(apk-path.text); self.close(); } }
@@ -193,7 +197,7 @@ export component AppWindow inherits MaterialWindow {
             spacing: MaterialStyleMetrics.spacing_12;
             MaterialText { max-width: 400px; wrap: word-wrap; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant;
                            text: "Its own Android services, data and storage. Letters, digits, - and _."; }
-            instance-id := TextField { min-width: 280px; label: "Name"; }
+            instance-id := TextField { min-width: 280px; label: "Name"; accessible-label: "Instance name"; }
         }
         default-action-clicked => { if instance-id.text != "" { Backend.create-instance(instance-id.text); instance-id.text = ""; self.close(); } }
         action-clicked => { self.close(); }
@@ -224,8 +228,8 @@ export component AppWindow inherits MaterialWindow {
         actions: root.editing.source == "instance" ? ["Cancel", "Remove override"] : ["Cancel"];
         VerticalLayout {
             spacing: MaterialStyleMetrics.spacing_12;
-            prop-key := TextField { min-width: 280px; label: "Name"; text: root.editing.key; read-only: !root.editing-new; }
-            prop-value := TextField { min-width: 280px; label: "Value"; text: root.editing.value; }
+            prop-key := TextField { min-width: 280px; label: "Name"; accessible-label: "Property name"; text: root.editing.key; read-only: !root.editing-new; }
+            prop-value := TextField { min-width: 280px; label: "Value"; accessible-label: "Property value"; text: root.editing.value; }
             MaterialText { max-width: 400px; wrap: word-wrap; style: MaterialTypography.body_small; color: MaterialPalette.on_surface_variant;
                            text: "Applies when instance " + Backend.instance + " starts next."; }
         }

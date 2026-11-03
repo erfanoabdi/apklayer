@@ -44,15 +44,15 @@ component AppDetail {
             HorizontalLayout {
                 spacing: MaterialStyleMetrics.spacing_8;
                 alignment: start;
-                OutlineButton { text: "Clear data"; icon: AppIcons.clean; enabled: !Backend.busy; clicked => { root.confirm("clear-data", root.app.package); } }
-                OutlineButton { text: "Uninstall"; icon: AppIcons.delete; enabled: !Backend.busy; clicked => { root.confirm("uninstall", root.app.package); } }
+                OutlineButton { text: "Clear data…"; icon: AppIcons.clean; enabled: !Backend.busy; clicked => { root.confirm("clear-data", root.app.package); } }
+                OutlineButton { text: "Uninstall…"; icon: AppIcons.delete; enabled: !Backend.busy; clicked => { root.confirm("uninstall", root.app.package); } }
             }
             Heading { text: "App info"; }
             OutlinedCard {
                 VerticalLayout {
                     padding-top: MaterialStyleMetrics.padding_8;
                     padding-bottom: MaterialStyleMetrics.padding_8;
-                    for row in Backend.app-info : Row { text: row.value; supporting-text: row.key; clickable: false; }
+                    for row in Backend.app-info : Row { text: row.key; supporting-text: row.value; clickable: false; }
                 }
             }
         }

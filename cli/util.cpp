@@ -135,8 +135,24 @@ std::string property(const std::string& file, const std::string& key) {
     if (!content) return "";
     std::istringstream in(*content);
     std::string line, prefix = key + "=";
-    while (std::getline(in, line))
-        if (line.compare(0, prefix.size(), prefix) == 0) return line.substr(prefix.size());
+    while (std::getline(in, line)) {
+        if (line.compare(0, prefix.size(), prefix) != 0) continue;
+        // info.properties comes from java.util.Properties, which escapes (label "1010\! Klooni", \uXXXX); build.prop values carry no backslashes
+        std::string value;
+        for (size_t i = prefix.size(); i < line.size(); i++) {
+            if (line[i] != '\\' || i + 1 == line.size()) { value += line[i]; continue; }
+            char c = line[++i];
+            std::string hex = c == 'u' ? line.substr(i + 1, 4) : "";
+            if (hex.size() == 4 && hex.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos) {
+                unsigned cp = strtoul(hex.c_str(), nullptr, 16);  // shortcut: a surrogate pair (emoji) becomes two 3-byte sequences, not one 4-byte one
+                i += 4;
+                if (cp < 0x80) value += static_cast<char>(cp);
+                else if (cp < 0x800) { value += static_cast<char>(0xC0 | cp >> 6); value += static_cast<char>(0x80 | (cp & 0x3F)); }
+                else { value += static_cast<char>(0xE0 | cp >> 12); value += static_cast<char>(0x80 | (cp >> 6 & 0x3F)); value += static_cast<char>(0x80 | (cp & 0x3F)); }
+            } else value += c == 't' ? '\t' : c == 'n' ? '\n' : c;
+        }
+        return value;
+    }
     return "";
 }
 

@@ -1,13 +1,17 @@
 // apklayer-manager: the Slint UI (ui/app.slint) over the apklayer CLI (src/backend.h). The CLI runs on worker threads; results come back to the
 // UI thread with slint::invoke_from_event_loop. Usage: apklayer-manager [--instance ID] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG]
-// [--dialog install|instance|prop|uninstall] [--dark|--light]] (the screenshot mode renders once, writes the PNG and exits: the tests' view).
+// [--dialog install|instance|prop|uninstall] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N]] (the screenshot mode: presses the labelled
+// elements, waits for N refreshes when asked (the actions' results), renders once, writes the PNG and exits: the tests' view and input).
 #include <png.h>
 
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
+#include <optional>
 #include <thread>
 
 #include "app.h"
+#include "slint-testing.h"
 #include "backend.h"
 
 using manager::Cli;
@@ -96,8 +100,11 @@ public:
         }
         b.set_props(props);
         b.set_status(info(s.status));
-        if (!current_.empty() && !s.info.empty()) b.set_app_info(info(s.info));
+        if (!current_.empty() && !s.info.empty()) b.set_app_info(appInfo(s.info));
+        if (applied) applied();
     }
+
+    std::function<void()> applied;  // the screenshot mode's event: a refresh reached the window
 
     void refresh() {
         later([cli = cli_, current = current_] { return load(cli, current); }, [this](const Snapshot& s) { apply(s); });
@@ -118,6 +125,26 @@ private:
             m->push_back(e);
         }
         return m;
+    }
+
+    // `apklayer info` for people: titles, sizes in MB; package, label and version are in the detail's header already
+    static std::shared_ptr<slint::VectorModel<InfoEntry>> appInfo(const Rows& rows) {
+        static const std::vector<std::pair<std::string, std::string>> titles = {
+            {"versionCode", "Version code"}, {"targetSdk", "Target SDK"}, {"launcher", "Launcher activity"}, {"uid", "Android user id"},
+            {"codeSize", "App size"}, {"dataSize", "Data in this instance"}, {"dir", "Installed in"}, {"dataDir", "Data directory"}};
+        Rows out;
+        for (const auto& [key, title] : titles)
+            for (const auto& r : rows) {
+                if (field(r, 0) != key) continue;
+                std::string v = field(r, 1);
+                if (key.size() > 4 && key.substr(key.size() - 4) == "Size") {
+                    char mb[32];
+                    snprintf(mb, sizeof mb, "%.1f MB", atoll(v.c_str()) / 1e6);
+                    v = mb;
+                }
+                out.push_back({title, v});
+            }
+        return info(out);
     }
 
     // work on a thread, then done(result) on the UI thread
@@ -188,7 +215,7 @@ private:
             b.set_has_current_app(true);
             b.set_app_info(info({}));
             later([cli = cli_, p = current_] { return cli.rows({"info", p}); }, [this, p = current_](const Rows& rows) {
-                if (p == current_) ui_->global<Backend>().set_app_info(info(rows));
+                if (p == current_) ui_->global<Backend>().set_app_info(appInfo(rows));
             });
         });
         b.on_select_instance([this](slint::SharedString id) {
@@ -248,7 +275,8 @@ int main(int argc, char** argv) {
     Cli cli(Cli::locate());
     if (const char* id = getenv("APKLAYER_INSTANCE"); id && *id) cli.instance = id;
     std::string shot, app, dialog;
-    int width = 0, height = 0, page = 0, dark = -1;
+    std::vector<std::string> input;
+    int width = 0, height = 0, page = 0, dark = -1, waitRefreshes = 0, refreshes = 0;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         bool more = i + 1 < argc;
@@ -259,12 +287,13 @@ int main(int argc, char** argv) {
         else if (a == "--app" && more) app = argv[++i];
         else if (a == "--dialog" && more) dialog = argv[++i];
         else if (a == "--dark" || a == "--light") dark = a == "--dark";
-        else { fprintf(stderr, "usage: apklayer-manager [--instance ID] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG] [--dialog NAME] [--dark|--light]]\n"); return 2; }
+        else if ((a == "--click" || a == "--type") && more) input.push_back(argv[++i]);
+        else if (a == "--wait-refresh" && more) waitRefreshes = atoi(argv[++i]);
+        else { fprintf(stderr, "usage: apklayer-manager [--instance ID] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG] [--dialog NAME] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N]]\n"); return 2; }
     }
     auto ui = AppWindow::create();
     Manager m(ui, cli);
     if (width > 0 && height > 0) ui->window().set_size(slint::LogicalSize({static_cast<float>(width), static_cast<float>(height)}));
-    if (dark >= 0 && dark != ui->get_is_dark()) ui->invoke_toggle_theme();
     ui->set_page(page);
     if (shot.empty()) {
         m.refresh();
@@ -275,12 +304,34 @@ int main(int argc, char** argv) {
     ui->show();
     if (!dialog.empty()) ui->invoke_show_dialog(slint::SharedString(dialog));
     int status = 1;
-    // the dialogs fade in over their first 50 ms (material Dialog): the picture is taken once they settled
-    slint::Timer::single_shot(std::chrono::milliseconds(700), [&] {
+    auto take = [&] {
         auto pixels = ui->window().take_snapshot();
         status = pixels && writePng(shot, *pixels) ? 0 : 1;
         if (status == 0) printf("apklayer-manager: %ux%u -> %s\n", pixels->width(), pixels->height(), shot.c_str());
         slint::quit_event_loop();
+    };
+    // the dialogs fade in over their first 50 ms (material Dialog): the picture is taken once they settled
+    auto settled = [&] { slint::Timer::single_shot(std::chrono::milliseconds(600), take); };
+    slint::Timer::single_shot(std::chrono::milliseconds(100), [&] {
+        // the theme once the window has its own (the system's) scheme, which it would otherwise replace
+        if (dark >= 0 && dark != ui->get_is_dark()) ui->invoke_toggle_theme();
+        // scripted input: each label's control as a screen reader would press it (the last one: dialogs come after the pages)
+        for (std::string label : input) {
+            size_t eq = label.find('=');  // LABEL=TEXT types into a text field
+            std::string text = eq == std::string::npos ? "" : label.substr(eq + 1);
+            if (eq != std::string::npos) label.resize(eq);
+            std::optional<slint::testing::ElementHandle> target;  // a button's own label text matches too: the control, not its text
+            for (const auto& e : slint::testing::ElementHandle::find_by_accessible_label(ui, label))
+                if (e.accessible_role() != slint::language::AccessibleRole::Text) target = e;
+            if (!target) { fprintf(stderr, "apklayer-manager: nothing labelled %s\n", label.c_str()); slint::quit_event_loop(); return; }
+            if (eq == std::string::npos) target->invoke_accessible_default_action();
+            else target->set_accessible_value(slint::SharedString(text));
+            printf("apklayer-manager: %s %s\n", eq == std::string::npos ? "pressed" : "typed into", label.c_str());
+        }
+        if (waitRefreshes == 0) { settled(); return; }
+        // the picture after the actions' own events (an app's start, a finished uninstall) reached the window, not after a guessed delay
+        m.applied = [&] { if (++refreshes == waitRefreshes) settled(); };
+        slint::Timer::single_shot(std::chrono::minutes(3), [] { fputs("apklayer-manager: the refresh never came\n", stderr); slint::quit_event_loop(); });
     });
     slint::run_event_loop();
     return status;

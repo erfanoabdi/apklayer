@@ -14,6 +14,7 @@ export component Row {
     min-height: root.supporting-text != "" ? MaterialStyleMetrics.size_72 : MaterialStyleMetrics.size_56;
     accessible-role: list-item;
     accessible-label: root.text;
+    accessible-action-default => { if root.clickable { root.clicked(); } }
 
     Rectangle {
         background: root.selected ? MaterialPalette.secondary_container : transparent;

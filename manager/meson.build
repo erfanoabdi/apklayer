@@ -14,7 +14,7 @@ endif
 slint_compiler = find_program(slint / 'bin/slint-compiler')
 # the prebuilt Slint C++ package (no pkg-config file; its CMake config is not needed for one library)
 slint_dep = declare_dependency(
-  compile_args: ['-isystem', slint / 'cpp/include/slint'],
+  compile_args: ['-isystem', slint / 'cpp/include/slint', '-DSLINT_FEATURE_EXPERIMENTAL'],  # experimental: slint-testing.h (the screenshot mode's input)
   link_args: ['-L' + slint / 'cpp/lib', '-lslint_cpp', '-Wl,-rpath,' + slint / 'cpp/lib'])
 
 ui = custom_target('app.h',
@@ -22,7 +22,8 @@ ui = custom_target('app.h',
   output: 'app.h',
   depfile: 'app.d',
   command: [slint_compiler, '--style', 'material', '-L', 'material=' + slint / 'material/material.slint', '--embed-resources', 'embed-files',
-            '--depfile', '@DEPFILE@', '-o', '@OUTPUT@', '@INPUT@'])
+            '--depfile', '@DEPFILE@', '-o', '@OUTPUT@', '@INPUT@'],
+  env: {'SLINT_EMIT_DEBUG_INFO': '1'})  # element ids for slint-testing.h's lookups (the scripted input)
 
 backend = static_library('backend', 'src/backend.cpp')
 executable('apklayer-manager', 'src/main.cpp', ui,
