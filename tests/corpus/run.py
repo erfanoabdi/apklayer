@@ -95,7 +95,8 @@ class Stream:
 
 def end_run(again):
     """Ends the running app (this stack is ours while the lock script runs); the script then starts it again or stops the stack."""
-    ssh(('touch ' + AGAIN + '; ' if again else '') + "pkill -x apklayer-shell; pkill -f '[a]pklayer.host.Main'; pkill -f '[c]li/apklayer run '")  # not the stack daemon: the script's stop ends the stack
+    # the app JVM and its `run` only, not the stack daemon: a second launch reuses the running stack and window shell; the script's stop ends them
+    ssh(('touch ' + AGAIN + '; ' if again else 'pkill -x apklayer-shell; ') + "pkill -f '[a]pklayer.host.Main'; pkill -f '[c]li/apklayer run '")
 
 
 def launch(name, stream, at, row, key):
@@ -129,7 +130,7 @@ def run_one(name, spec, kind):
         proc.wait(); stream.thread.join()
         if proc.returncode == BUSY:
             row['note'] = 'lock busy (another agent runs a stack): rerun this app'; return row
-        row['install'] = 'FAIL'; row['note'] = cause(stream.lines); return row
+        row['install'] = 'FAIL'; row['note'] = cause(stream.lines) if stream.lines else 'no output, exit %s' % proc.returncode; return row
     row['install'] = 'ok'
     ok = launch(name, stream, first, row, 'frame')
     again = SECOND and ok
