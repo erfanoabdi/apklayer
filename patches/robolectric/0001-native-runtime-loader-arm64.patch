@@ -9,6 +9,9 @@ registered (windows are real SurfaceFlinger layers fed by a real BLASTBufferQueu
 real. Hyphen data is neither copied nor set: the device flavor uses the instance's staged system data and instance startup sets
 ro.hyphen.data.dir once (ro.* is write-once). The media classes (MediaCodec, MediaCodecList, MediaExtractor, MediaPlayer) and
 GLES20 run their static initializers after the device JNI is registered, because they call their own natives during class init.
+The fonts and the ICU data are copied once per archive into a directory under java.io.tmpdir that every JVM shares (upstream
+Robolectric's sharedAssetDirectory: keyed by the archive's path, size and mtime, a lock file across the copy, a marker once done)
+instead of ~126 MB per JVM start; a -Drobolectric.nativeruntime.fontdir naming a directory with a fonts.xml is used as it is.
 
 Against external/robolectric 87aa52b08 (REVISION). Applied by scripts/build-runtime-overlay.sh onto the staged
 upstream sources (<native>/aosp/robolectric-src); the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
@@ -16,7 +19,28 @@ upstream sources (<native>/aosp/robolectric-src); the result is compiled into na
 diff --git a/nativeruntime/src/main/java/org/robolectric/nativeruntime/DefaultNativeRuntimeLoader.java b/nativeruntime/src/main/java/org/robolectric/nativeruntime/DefaultNativeRuntimeLoader.java
 --- a/nativeruntime/src/main/java/org/robolectric/nativeruntime/DefaultNativeRuntimeLoader.java
 +++ b/nativeruntime/src/main/java/org/robolectric/nativeruntime/DefaultNativeRuntimeLoader.java
-@@ -90,6 +90,11 @@
+@@ -18,14 +18,20 @@
+ import com.google.common.collect.ImmutableList;
+ import com.google.common.collect.ImmutableMap;
+ import com.google.common.collect.Iterables;
++import com.google.common.hash.Hashing;
+ import com.google.common.io.Files;
+ import com.google.common.io.Resources;
+ import java.io.File;
+ import java.io.IOException;
++import java.io.RandomAccessFile;
+ import java.net.URI;
+ import java.net.URISyntaxException;
+ import java.net.URL;
++import java.nio.channels.FileChannel;
++import java.nio.channels.FileLock;
++import java.nio.charset.StandardCharsets;
+ import java.nio.file.FileSystem;
++import java.nio.file.FileSystemAlreadyExistsException;
+ import java.nio.file.FileSystems;
+ import java.nio.file.Path;
+ import java.nio.file.Paths;
+@@ -90,6 +96,11 @@
              "android.os.SystemProperties",
              "android.text.Hyphenator",
              "android.view.Surface",
@@ -28,7 +52,7 @@ diff --git a/nativeruntime/src/main/java/org/robolectric/nativeruntime/DefaultNa
              "com.android.internal.util.VirtualRefBasePtr",
              "libcore.util.NativeAllocationRegistry",
            });
-@@ -185,7 +190,11 @@
+@@ -185,7 +196,11 @@
  
    /** Overridable in Android, due to changing shadows in private branches. */
    protected List<String> getCoreClassNatives() {
@@ -41,7 +65,7 @@ diff --git a/nativeruntime/src/main/java/org/robolectric/nativeruntime/DefaultNa
    }
  
    /** Overridable in Android, due to changing shadows in private branches. */
-@@ -222,7 +231,7 @@
+@@ -222,7 +237,7 @@
                  if (VERSION.SDK_INT >= O) {
                    // Only copy fonts if graphics is supported, not just SQLite.
                    maybeCopyFonts(extractDirectory);
@@ -50,7 +74,7 @@ diff --git a/nativeruntime/src/main/java/org/robolectric/nativeruntime/DefaultNa
                  }
                  Map<String, String> originalProperties = new HashMap<>();
                  maybeCopyIcuData(extractDirectory);
-@@ -249,7 +258,7 @@
+@@ -249,7 +264,7 @@
                          .getAbsolutePath();
                  if (isAndroidVOrGreater()) {
                    invokeDeferredStaticInitializers();
@@ -59,7 +83,205 @@ diff --git a/nativeruntime/src/main/java/org/robolectric/nativeruntime/DefaultNa
                    Typeface.loadPreinstalledSystemFontMap();
                  } else {
                    System.setProperty("hyphen.data.dir", hyphenDataDir);
-@@ -412,7 +421,7 @@
+@@ -287,6 +302,25 @@
+ 
+   /** Attempts to load the ICU dat file. This is only relevant for native graphics. */
+   private void maybeCopyIcuData(TempDirectory tempDirectory) throws IOException {
++    // apklayer patch: one copy per archive shared by every JVM (upstream's sharedAssetDirectory), keyed from V by android-all's build.prop
++    // (the dat file's name varies with its ICU version, so a cached copy needs no enumeration of the archive)
++    URL source;
++    try {
++      source = Resources.getResource(VERSION.SDK_INT <= UPSIDE_DOWN_CAKE ? "icu/icudt68l.dat" : "build.prop");
++    } catch (IllegalArgumentException e) {
++      System.out.println("Could not load icu data file ");
++      throw new RuntimeException(e);
++    }
++    Path baseDir = assetDirectory("icu", source, tempDirectory, DefaultNativeRuntimeLoader::copyIcuData);
++    Path icuDatPath;
++    try (Stream<Path> files = java.nio.file.Files.list(baseDir.resolve("icu"))) {
++      icuDatPath = Iterables.getOnlyElement(ImmutableList.copyOf(files.iterator()));
++    }
++    System.setProperty("icu.data.path", icuDatPath.toAbsolutePath().toString());
++    System.setProperty("icu.locale.default", Locale.getDefault().toLanguageTag());
++  }
++
++  private static void copyIcuData(Path baseDir) throws IOException {
+     URL icuDatUrl;
+     try {
+       if (Build.VERSION.SDK_INT <= UPSIDE_DOWN_CAKE) {
+@@ -303,7 +337,7 @@
+       System.out.println("Could not load icu data file ");
+       throw new RuntimeException(e);
+     }
+-    Path icuPath = tempDirectory.create("icu");
++    Path icuPath = java.nio.file.Files.createDirectories(baseDir.resolve("icu"));
+     Path icuDatPath;
+     if (VERSION.SDK_INT <= UPSIDE_DOWN_CAKE) {
+       icuDatPath = icuPath.resolve("icudt68l.dat");
+@@ -312,8 +346,6 @@
+       icuDatPath = icuPath.resolve(Iterables.getLast(parts));
+     }
+     Resources.asByteSource(icuDatUrl).copyTo(Files.asByteSink(icuDatPath.toFile()));
+-    System.setProperty("icu.data.path", icuDatPath.toAbsolutePath().toString());
+-    System.setProperty("icu.locale.default", Locale.getDefault().toLanguageTag());
+   }
+ 
+   /**
+@@ -321,43 +353,131 @@
+    * graphics.
+    */
+   private void maybeCopyFonts(TempDirectory tempDirectory) throws IOException {
++    // apklayer patch: a font directory the launcher names (-Drobolectric.nativeruntime.fontdir, with its fonts.xml) is used as it is
++    String preset = System.getProperty("robolectric.nativeruntime.fontdir");
++    if (preset != null && preset.endsWith(File.separator) && new File(preset, "fonts.xml").isFile()) {
++      return;
++    }
++    URL fontsResource;
+     URI fontsUri;
+     try {
+-      fontsUri = Resources.getResource("fonts/").toURI();
++      fontsResource = Resources.getResource("fonts/");
++      fontsUri = fontsResource.toURI();
+     } catch (IllegalArgumentException | URISyntaxException e) {
+       return;
+     }
++    // apklayer patch: one copy per archive shared by every JVM (upstream's sharedAssetDirectory)
++    Path baseDir = assetDirectory("fonts", fontsResource, tempDirectory, directory -> copyFonts(fontsUri, directory));
++    System.setProperty(
++        "robolectric.nativeruntime.fontdir",
++        // Android's FontListParser expects a trailing slash for the base font directory.
++        baseDir.resolve("fonts").toAbsolutePath() + File.separator);
++  }
+ 
++  private static void copyFonts(URI fontsUri, Path baseDir) throws IOException {
+     FileSystem zipfs = null;
+-
+     if ("jar".equals(fontsUri.getScheme())) {
+-      zipfs = FileSystems.newFileSystem(fontsUri, ImmutableMap.of("create", "true"));
++      try {
++        zipfs = FileSystems.newFileSystem(fontsUri, ImmutableMap.of("create", "true"));
++      } catch (FileSystemAlreadyExistsException e) {
++        // already open elsewhere in this JVM: its owner closes it
++      }
+     }
++    try {
++      java.nio.file.Files.createDirectories(baseDir.resolve("fonts"));
++      try (Stream<Path> pathStream = java.nio.file.Files.walk(Paths.get(fontsUri))) {
++        Iterator<Path> fileIterator = pathStream.iterator();
++        while (fileIterator.hasNext()) {
++          Path path = fileIterator.next();
++          // Avoid copying parent directory.
++          if ("fonts".equals(path.getFileName().toString())) {
++            continue;
++          }
++          String fontPath = "fonts/" + path.getFileName();
++          URL resource = Resources.getResource(fontPath);
++          Resources.asByteSource(resource).copyTo(Files.asByteSink(baseDir.resolve(fontPath).toFile()));
++        }
++      }
++    } finally {
++      if (zipfs != null) {
++        zipfs.close();
++      }
++    }
++  }
+ 
+-    Path fontsInputPath = Paths.get(fontsUri);
+-    Path fontsOutputPath = tempDirectory.create("fonts");
++  /** Copies a group of the native runtime's data assets into the given directory. */
++  private interface AssetCopier {
++    void copyTo(Path directory) throws IOException;
++  }
+ 
+-    try (Stream<Path> pathStream = java.nio.file.Files.walk(fontsInputPath)) {
+-      Iterator<Path> fileIterator = pathStream.iterator();
+-      while (fileIterator.hasNext()) {
+-        Path path = fileIterator.next();
+-        // Avoid copying parent directory.
+-        if ("fonts".equals(path.getFileName().toString())) {
+-          continue;
++  /** The directory holding the group: shared with other loads where possible, this instance's temporary directory otherwise. */
++  private static Path assetDirectory(String group, URL source, TempDirectory tempDirectory, AssetCopier copier) throws IOException {
++    Path shared = sharedAssetDirectory(group, source, copier);
++    if (shared != null) {
++      return shared;
++    }
++    Path own = tempDirectory.getBasePath();
++    copier.copyTo(own);
++    return own;
++  }
++
++  /**
++   * From upstream Robolectric: a directory under java.io.tmpdir keyed by the archive that supplies the group, populated under a lock file
++   * concurrent JVMs share and used once its marker says the copy finished; null when the group has to be copied per instance.
++   */
++  private static Path sharedAssetDirectory(String group, URL source, AssetCopier copier) {
++    Path directory;
++    try {
++      String identity = archiveIdentity(source);
++      if (identity == null) {
++        Logger.info("Not sharing native runtime %s: %s is not supplied by an archive", group, source);
++        return null;
++      }
++      String key = Hashing.sha256().hashString(identity, StandardCharsets.UTF_8).toString().substring(0, 32);
++      directory = Paths.get(System.getProperty("java.io.tmpdir"), "robolectric-nativeruntime-assets", group + "-" + key);
++    } catch (RuntimeException e) {
++      Logger.info("Unable to determine native runtime asset cache directory: " + e.getMessage());
++      return null;
++    }
++    Path marker = directory.resolve(".complete");
++    if (java.nio.file.Files.exists(marker)) {
++      return directory;
++    }
++    Path lockFile = directory.resolveSibling(directory.getFileName() + ".lock");
++    try {
++      java.nio.file.Files.createDirectories(directory.getParent());
++      try (RandomAccessFile lockHandle = new RandomAccessFile(lockFile.toFile(), "rw");
++          FileChannel channel = lockHandle.getChannel();
++          FileLock lock = channel.lock()) {
++        // Another process may have finished while this one waited for the lock.
++        if (java.nio.file.Files.exists(marker)) {
++          return directory;
+         }
+-        String fontPath = "fonts/" + path.getFileName();
+-        URL resource = Resources.getResource(fontPath);
+-        Path outputPath = tempDirectory.getBasePath().resolve(fontPath);
+-        Resources.asByteSource(resource).copyTo(Files.asByteSink(outputPath.toFile()));
++        java.nio.file.Files.createDirectories(directory);
++        copier.copyTo(directory);
++        java.nio.file.Files.createFile(marker);
++        Logger.info("Copied native runtime %s to %s", group, directory);
++        return directory;
+       }
++    } catch (IOException | RuntimeException e) {
++      Logger.info("Unable to share native runtime " + group + ": " + e.getMessage());
++      return null;
+     }
+-    System.setProperty(
+-        "robolectric.nativeruntime.fontdir",
+-        // Android's FontListParser expects a trailing slash for the base font directory.
+-        fontsOutputPath.toAbsolutePath() + File.separator);
+-    if (zipfs != null) {
+-      zipfs.close();
++  }
++
++  /** The archive that supplies the resource, by location, size and modification time (a rebuilt archive gets a new key); null for none. */
++  private static String archiveIdentity(URL resource) {
++    if ("jar".equals(resource.getProtocol())) {
++      String jarPath = Iterables.get(Splitter.on('!').split(resource.toString()), 0);
++      String filePrefix = "jar:file:";
++      if (jarPath.startsWith(filePrefix)) {
++        File jarFile = new File(jarPath.substring(filePrefix.length()));
++        if (jarFile.isFile()) {
++          return jarFile.getAbsolutePath() + ":" + jarFile.length() + ":" + jarFile.lastModified();
++        }
++      }
+     }
++    return null;
+   }
+ 
+   /**
+@@ -412,7 +532,7 @@
    private static boolean isSupported() {
      return (OsUtil.isMac()
              && (Objects.equals(arch(), "aarch64") || Objects.equals(arch(), "x86_64")))
@@ -68,7 +290,7 @@ diff --git a/nativeruntime/src/main/java/org/robolectric/nativeruntime/DefaultNa
          || (OsUtil.isWindows() && Objects.equals(arch(), "x86_64"));
    }
  
-@@ -469,6 +478,15 @@
+@@ -469,6 +589,15 @@
        ReflectionHelpers.callStaticMethod(
            Shadow.class.getClassLoader(), className, "__staticInitializer__");
      }
