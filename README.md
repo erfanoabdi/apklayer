@@ -26,7 +26,7 @@ scripts/fetch-deps.sh                        # pinned Java deps -> ~/.cache/apkl
 meson setup b && ninja -C b                  # apklayer tool, shell, converter, host HAL libraries
 scripts/build-tree-host.sh ~/arm64-native    # host classes against the staged Robolectric
 sudo scripts/vm-binder-setup.sh              # kernel binderfs
-bin/apklayer install app.apk | run <package|app.apk> | list | uninstall <package> | stop
+bin/apklayer install app.apk | run <package|app.apk> | list | uninstall <package> | screenshot <package> <out.png> | stop
 ```
 
 ## Layout
