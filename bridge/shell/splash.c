@@ -67,7 +67,7 @@ struct wl_buffer *splash_buffer(const struct window *w, int width, int height)
     cairo_pattern_destroy(bg);
     if (have) {
         double sz = fmin(width, height) * 0.3, iw = cairo_image_surface_get_width(icon), ih = cairo_image_surface_get_height(icon);
-        if (sz > 192.0 * w->scale / 100) sz = 192.0 * w->scale / 100;
+        if (sz > 192.0 * window_scale(w) / 100) sz = 192.0 * window_scale(w) / 100;
         cairo_translate(cr, (width - sz) / 2, (height - sz) / 2);
         cairo_scale(cr, sz / iw, sz / ih);
         cairo_set_source_surface(cr, icon, 0, 0);

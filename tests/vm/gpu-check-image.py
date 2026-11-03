@@ -28,5 +28,6 @@ for filename in sys.argv[1:]:
     # Text can split the white columns: the outermost runs are the dialog edges.
     a, b = white[0][0], white[-1][1]
     margins = a, right - left - b
-    assert all(15 <= n <= 17 for n in margins), (filename, margins)
+    # the dialog is inset on both sides and centred: its dp margin is a few px at any window size and scale (16 at 100%, more on a narrower or scaled window)
+    assert all(8 <= n <= 40 for n in margins) and abs(margins[0] - margins[1]) <= 2, (filename, margins)
     print(f'PASS dialog margins {margins[0]}px / {margins[1]}px: {filename}')

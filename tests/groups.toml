@@ -98,6 +98,10 @@ run = ["python3 -u tests/vm/hub.py webview probe"]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/splash.py"]
 
+[window-geometry]
+needs = ["com.android.test.uibench"]
+run = ["python3 -u tests/vm/window-geometry.py"]
+
 [startup]
 needs = ["com.android.test.uibench"]
 run = ["tests/vm/startup.sh com.android.test.uibench"]
