@@ -58,7 +58,9 @@ public final class AppHost implements Runnable {
     private static volatile boolean taskRootBuilding;
     /** Activity.isTaskRoot(): launcher activities that finish themselves when they are not the root (AnkiDroid's IntentHandler) must see the task start here. */
     static boolean isTaskRoot(Activity activity) { return activity == taskRoot || (taskRootBuilding && taskRoot == null) || taskRootBuilding; }
-    private final Deque<ActivityController<? extends Activity>> stack = new ArrayDeque<>();
+    private static final Deque<ActivityController<? extends Activity>> stack = new ArrayDeque<>();  // one task per app process
+    /** The task's activities, the top one first; a finishing one is null (Android's activity starter and navigateUpTo pass over it). */
+    static List<Activity> task() { return stack.stream().map(c -> c.get().isFinishing() ? null : (Activity) c.get()).toList(); }
     /** Intents handed to other apps that will answer: routed handle -> {requesting activity, request intent}. */
     private final java.util.Map<HostApps.Routed, Object[]> crossApp = new java.util.HashMap<>();
     /** The activity another app started this process for (its result goes back, PLAN P6). */
@@ -375,7 +377,7 @@ public final class AppHost implements Runnable {
             return;
         }
         // task rules: reuse an instance already on the stack, clear what is above it, or clear everything
-        LaunchRules.Plan plan = LaunchRules.plan(stack.stream().<Class<?>>map(a -> a.get().getClass()).toList(), cls, intent.getFlags(), info.launchMode);
+        LaunchRules.Plan plan = LaunchRules.plan(task().stream().<Class<?>>map(a -> a == null ? null : a.getClass()).toList(), cls, intent.getFlags(), info.launchMode);
         if (plan.clearAll()) {
             while (!stack.isEmpty()) destroyTop();
         } else if (plan.above() >= 0) {

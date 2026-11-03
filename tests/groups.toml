@@ -73,7 +73,7 @@ run = ["python3 -u tests/vm/hub.py services start", "python3 -u tests/vm/hub.py 
 [activities]
 apps = ["hello-act-target", "hello-act-caller"]
 run = ["python3 -u tests/vm/hub.py activities result", "python3 -u tests/vm/hub.py activities explicit", "python3 -u tests/vm/hub.py activities again",
-       "python3 -u tests/vm/hub.py activities private"]
+       "python3 -u tests/vm/hub.py activities private", "python3 -u tests/vm/hub.py activities up"]
 
 [pendingintents]
 apps = ["hello-pi-holder", "hello-pi-creator", "hello-act-target", "hello-svc-target"]
