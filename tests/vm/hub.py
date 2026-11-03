@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Cross-app tests through the instance hub, one phase per run: `hub.py <test> <phase>`. The test app prints `[<tag>] PASS|FAIL|KILL <pid>`;
 every JVM is owned and reaped. Tests: providers (basic denied death observe files grant), services (start selfstop sticky private filters late oneway),
-activities (result explicit again private), pendingintents (broadcast targets cancel), notifications (click), webview (probe). HUB_VERBOSE=1: all lines."""
+activities (result explicit again private up), pendingintents (broadcast targets cancel), notifications (click), webview (probe). HUB_VERBOSE=1: all lines."""
 import os
 import selectors
 import signal

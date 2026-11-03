@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 29/29] apklayer: sem-clockwait-getvalue
+
+sem_clockwait, sem_timedwait_monotonic_np and sem_getvalue unwrap the semaphore like sem_wait does. Unwrapped they resolved to glibc, which
+read the stored native pointer as the semaphore: sem_clockwait returned at once and decremented the pointer, so SurfaceFlinger's OneShotTimer
+threads (TouchTimer, RegSampIdle) spun at full CPU and the drifting pointer later crashed SurfaceFlinger (SIGSEGV in OneShotTimer::loop's
+sem_wait, SIGBUS on a misaligned atomic: "exited: surfaceflinger (status 139/135)"). libgui and libprotobuf import sem_clockwait too.
+
+apklayer patch 0029 of patches/bionic_translation.
+---
+ pthread_wrapper/libpthread.c | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/pthread_wrapper/libpthread.c b/pthread_wrapper/libpthread.c
+index a520418..565312c 100644
+--- a/pthread_wrapper/libpthread.c
++++ b/pthread_wrapper/libpthread.c
+@@ -262,6 +262,27 @@ int bionic_sem_timedwait(bionic_sem_t *sem, const struct timespec *abs_timeout)
+ 	return sem_timedwait(sem->glibc, abs_timeout);
+ }
+ 
++/* apklayer patch: the rest of bionic's semaphore API. Unwrapped, these resolve to glibc, which takes the stored native pointer for the
++ * count: sem_clockwait "succeeds" at once by decrementing the pointer (SurfaceFlinger's OneShotTimer threads spin, then crash in sem_wait). */
++int bionic_sem_clockwait(bionic_sem_t *sem, clockid_t clock, const struct timespec *abs_timeout)
++{
++	assert(sem && abs_timeout);
++	INIT_IF_NOT_MAPPED(sem, default_sem_init);
++	return sem_clockwait(sem->glibc, clock, abs_timeout);
++}
++
++int bionic_sem_timedwait_monotonic_np(bionic_sem_t *sem, const struct timespec *abs_timeout)
++{
++	return bionic_sem_clockwait(sem, CLOCK_MONOTONIC, abs_timeout);
++}
++
++int bionic_sem_getvalue(bionic_sem_t *sem, int *value)
++{
++	assert(sem && value);
++	INIT_IF_NOT_MAPPED(sem, default_sem_init);
++	return sem_getvalue(sem->glibc, value);
++}
++
+ /* ---------------------------------------------------------------------------------------------- *
+  * ---------------------------------------------------------------------------------------------- *
+  * ---------------------------------------------------------------------------------------------- */

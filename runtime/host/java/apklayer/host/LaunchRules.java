@@ -23,7 +23,7 @@ final class LaunchRules {
         static final Plan NONE = new Plan(false, -1, false);
     }
 
-    /** @param stackTopFirst the classes of the activities in the task, the top one first */
+    /** @param stackTopFirst the classes of the activities in the task, the top one first; null for a finishing one (never the top to reuse) */
     static Plan plan(List<Class<?>> stackTopFirst, Class<?> cls, int flags, int launchMode) {
         if ((flags & Intent.FLAG_ACTIVITY_CLEAR_TASK) != 0 && (flags & Intent.FLAG_ACTIVITY_NEW_TASK) != 0) return new Plan(true, -1, false);
         boolean taskMode = launchMode == ActivityInfo.LAUNCH_SINGLE_TASK || launchMode == ActivityInfo.LAUNCH_SINGLE_INSTANCE;
@@ -32,7 +32,7 @@ final class LaunchRules {
         int at = stackTopFirst.indexOf(cls);
         if (at < 0) return Plan.NONE;
         if (clearTop) return new Plan(false, at, singleTop);
-        if (singleTop && at == 0) return new Plan(false, 0, true);
+        if (singleTop && stackTopFirst.subList(0, at).stream().allMatch(java.util.Objects::isNull)) return new Plan(false, 0, true);
         return Plan.NONE;
     }
 }

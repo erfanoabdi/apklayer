@@ -11,12 +11,15 @@ import android.widget.TextView;
 /** Starts activities of hello.acttarget (another app, started on demand by the hub). The scenario comes from -Dhello.act=... */
 public class Main extends Activity {
     private static void require(boolean yes, String detail) { if (!yes) throw new AssertionError(detail); }
+    private static Main first;  // scenario "up": the instance UpChild navigates up to
+    private static int upStage;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         TextView view = new TextView(this);
         view.setText("act caller");
         setContentView(view);
+        if (getIntent().getBooleanExtra("up", false)) { upArrived(); return; }
         try { start(System.getProperty("hello.act", "result")); }
         catch (Throwable failure) { failure.printStackTrace(System.out); System.out.println("[act] FAIL " + failure); }
     }
@@ -41,8 +44,26 @@ public class Main extends Activity {
                 startActivityForResult(new Intent().setComponent(new ComponentName("hello.acttarget", "hello.acttarget.PrivateActivity")), 9);
                 new android.os.Handler().postDelayed(() -> System.out.println("[act] PASS private: refused without starting"), 5000);
             }
+            case "up" -> { first = this; startActivity(new Intent(this, UpChild.class).putExtra("case", "orphan")); }
             default -> System.out.println("[act] unknown scenario");
         }
+    }
+
+    /** "up", back from the orphan child: the parent case (CLEAR_TOP up-intent to this standard activity) */
+    @Override protected void onResume() {
+        super.onResume();
+        if (this == first && UpChild.orphanDone && upStage++ == 0) startActivity(new Intent(this, UpChild.class).putExtra("case", "clear"));
+    }
+
+    /** The new Main the CLEAR_TOP up-intent created: the old one and the child are gone. */
+    private void upArrived() {
+        new android.os.Handler().postDelayed(() -> {
+            try {
+                require(first != null && first != this && first.isDestroyed(), "the old parent was not replaced");
+                require(UpChild.last != null && UpChild.last.isDestroyed(), "the child was not destroyed");
+                System.out.println("[act] PASS up: false without a parent in the task; CLEAR_TOP recreated the standard parent with the up-intent");
+            } catch (Throwable failure) { System.out.println("[act] FAIL " + failure); }
+        }, 1000);
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
