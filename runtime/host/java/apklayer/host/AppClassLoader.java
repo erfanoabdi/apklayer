@@ -12,7 +12,7 @@ import java.util.function.Function;
  * a device; everything else is the app's own first, so an app's Guava, BouncyCastle, Conscrypt, Kotlin or Chromium never mixes with the host's or another
  * package's copy. The WebView provider gets one of these too (ShadowHostWebViewFactory).
  *
- * <p>The sandbox loader asks {@link #apply} for names it cannot find (patches SandboxLoaderPatch/ApklayerAppHook): framework and Robolectric code that
+ * <p>The sandbox loader asks {@link #apply} for names it cannot find (patches/robolectric/0012-sandbox-loader-art-names.patch, ApklayerAppHook): framework and Robolectric code that
  * loads app classes by name with its own loader (activities, services, providers, Parcel's default loader) finds them here.
  */
 public final class AppClassLoader extends URLClassLoader implements Function<String, Class<?>> {

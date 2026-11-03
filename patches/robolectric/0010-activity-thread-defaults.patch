@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: apklayer <apklayer@localhost>
+Subject: [PATCH] ShadowActivityThread: default answers, currentProcessName
+
+apklayer patch: IPackageManager methods the fake does not know answer like a device without the feature (null, false, 0, an empty
+list) instead of throwing (system apps such as the settings provider call many). currentProcessName() answers
+-Dapklayer.processname (a secondary process, HostProcessName) or the package; upstream gave null, which made MediaProvider's
+static initializer fail.
+
+Against external/robolectric 87aa52b08 (REVISION). Applied by scripts/build-runtime-overlay.sh onto the staged
+upstream sources (<native>/aosp/robolectric-src); the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
+---
+diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowActivityThread.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowActivityThread.java
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowActivityThread.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowActivityThread.java
+@@ -102,7 +102,16 @@
+                   .getServiceInfo(componentName, ((Number) args[1]).intValue());
+             }
+           }
+-          throw new UnsupportedOperationException("sorry, not supporting " + method + " yet!");
++          // apklayer patch: system apps (the settings provider asks for the setup wizard package) call many methods the fake does not know: answer like a device
++          // without the feature (null, false, 0, an empty list) instead of failing
++          System.out.println("[apklayer] IPackageManager." + method.getName() + ": not provided, answering a default");
++          Class<?> returned = method.getReturnType();
++          if (returned == boolean.class) return false;
++          if (returned == int.class) return 0;
++          if (returned == long.class) return 0L;
++          if (java.util.List.class.isAssignableFrom(returned)) return java.util.Collections.emptyList();
++          try { return returned.getConstructor(java.util.List.class).newInstance(java.util.Collections.emptyList()); } // ParceledListSlice, PackageInfoList...
++          catch (ReflectiveOperationException notAList) { return null; }
+         });
+   }
+ 
+@@ -111,7 +120,14 @@
+     return RuntimeEnvironment.getActivityThread();
+   }
+ 
++  // apklayer patch: the process's name (Application.getProcessName): the package, or the name of a secondary process (HostProcessName); null made MediaProvider's static initialiser fail
+   @Implementation
++  protected static String currentProcessName() {
++    String name = System.getProperty("apklayer.processname");
++    return name != null ? name : System.getProperty("apklayer.package");
++  }
++
++  @Implementation
+   protected static Application currentApplication() {
+     return ((ActivityThread) currentActivityThread()).getApplication();
+   }
