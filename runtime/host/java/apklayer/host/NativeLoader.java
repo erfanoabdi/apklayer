@@ -25,11 +25,12 @@ import org.robolectric.annotation.internal.DoNotInstrument;
 public final class NativeLoader {
     private static final Map<String, Long> LOADED = new HashMap<>();
     private static boolean ready;
-    private static String searchPath = "";
+    private static String systemPath = "", appPath = "";
 
     private NativeLoader() {}
 
-    private static native void setLibraryPath(String dir);
+    /** The linker's two namespaces: the system's (device libraries) and the app's own (its libraries first, then the system's), as Android's classloader namespace. */
+    private static native void setLibraryPath(String system, String app);
 
     private static native long dlopen(String path);
 
@@ -71,10 +72,10 @@ public final class NativeLoader {
         synchronized (NativeLoader.class) {
             if (LOADED.containsKey(path)) return;
             init();
-            long handle = dlopen(new File(path).getName()); // bionic_translation finds a library by name in its path
-            if (handle == 0 && path.startsWith("/")) {  // a library elsewhere (SoLoader's decompressed SuperPack libraries in the app's data): its directory joins the search path
-                try { searchPath += ":" + new File(path).getParentFile().getCanonicalPath(); setLibraryPath(searchPath); } catch (java.io.IOException unreadable) { /* the error below says so */ }
-                handle = dlopen(new File(path).getName());
+            long handle = dlopen(path); // by path: a library in an app directory goes into the app's namespace
+            if (handle == 0 && path.startsWith("/")) {  // a library elsewhere (SoLoader's decompressed SuperPack libraries in the app's data): its directory joins the app's path
+                try { appPath += ":" + new File(path).getParentFile().getCanonicalPath(); setLibraryPath(systemPath, appPath); } catch (java.io.IOException unreadable) { /* the error below says so */ }
+                handle = dlopen(path);
             }
             if (handle == 0) throw new UnsatisfiedLinkError(path + ": " + dlerror());
             LOADED.put(path, handle);
@@ -102,8 +103,9 @@ public final class NativeLoader {
         String dir = System.getProperty("apklayer.native");
         String provider = System.getProperty("apklayer.webviewprovider");
         String androidLibs = System.getProperty("apklayer.androidlibs"); // the device-library route: Android's own libraries stay on the path (set by the runtime shim)
-        searchPath = (System.getProperty("apklayer.libdir", dir) + (provider == null ? "" : ":" + provider + "/lib") + ":" + (androidLibs != null ? androidLibs + ":" : "") + dir);
-        setLibraryPath(searchPath); // app libs, the WebView provider's, then the bionic_translation libs
+        appPath = System.getProperty("apklayer.libdir", dir);
+        systemPath = (provider == null ? "" : provider + "/lib:") + (androidLibs != null ? androidLibs + ":" : "") + dir;
+        setLibraryPath(systemPath, appPath); // the WebView provider's libs, Android's, then the bionic_translation libs
         ready = true;
     }
 

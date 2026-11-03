@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-extern void Java_apklayer_host_NativeLoader_setLibraryPath(JNIEnv *, jclass, jstring);
+extern void Java_apklayer_host_NativeLoader_setLibraryPath(JNIEnv *, jclass, jstring, jstring);
 extern jlong Java_apklayer_host_NativeLoader_dlopen(JNIEnv *, jclass, jstring);
 extern jlong Java_apklayer_host_NativeLoader_dlsym(JNIEnv *, jclass, jlong, jstring);
 extern jstring Java_apklayer_host_NativeLoader_dlerror(JNIEnv *, jclass);
@@ -15,7 +15,7 @@ extern jint Java_apklayer_host_NativeLoader_registerNative(JNIEnv *, jclass, jcl
 int apklayer_register_nativeloader(JNIEnv *env, jclass loader)
 {
     JNINativeMethod methods[] = {
-        {"setLibraryPath", "(Ljava/lang/String;)V", (void *)Java_apklayer_host_NativeLoader_setLibraryPath},
+        {"setLibraryPath", "(Ljava/lang/String;Ljava/lang/String;)V", (void *)Java_apklayer_host_NativeLoader_setLibraryPath},
         {"dlopen", "(Ljava/lang/String;)J", (void *)Java_apklayer_host_NativeLoader_dlopen},
         {"dlsym", "(JLjava/lang/String;)J", (void *)Java_apklayer_host_NativeLoader_dlsym},
         {"dlerror", "()Ljava/lang/String;", (void *)Java_apklayer_host_NativeLoader_dlerror},

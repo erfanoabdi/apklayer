@@ -10,6 +10,7 @@
 
 /* bionic_translation (libdl_bio) */
 extern void dl_parse_library_path(const char *path, char *delim);
+extern void dl_parse_app_library_path(const char *path, char *delim);
 extern void *bionic_dlopen(const char *filename, int flag);
 extern void *bionic_dlsym(void *handle, const char *symbol);
 extern char *bionic_dlerror(void);
@@ -22,13 +23,14 @@ __attribute__((constructor)) static void init_r_debug(void)
     _r_debug_ptr = &_r_debug;
 }
 
-JNIEXPORT void JNICALL Java_apklayer_host_NativeLoader_setLibraryPath(JNIEnv *env, jclass c, jstring dir)
+JNIEXPORT void JNICALL Java_apklayer_host_NativeLoader_setLibraryPath(JNIEnv *env, jclass c, jstring system, jstring app)
 {
     (void)c;
-    const char *d = (*env)->GetStringUTFChars(env, dir, NULL);
-    dl_parse_library_path(d, ":");
-    (void)c;
-    (*env)->ReleaseStringUTFChars(env, dir, d);
+    const char *s = (*env)->GetStringUTFChars(env, system, NULL), *a = (*env)->GetStringUTFChars(env, app, NULL);
+    dl_parse_library_path(s, ":");
+    dl_parse_app_library_path(a, ":");
+    (*env)->ReleaseStringUTFChars(env, system, s);
+    (*env)->ReleaseStringUTFChars(env, app, a);
 }
 
 JNIEXPORT jlong JNICALL Java_apklayer_host_NativeLoader_dlopen(JNIEnv *env, jclass c, jstring path)
