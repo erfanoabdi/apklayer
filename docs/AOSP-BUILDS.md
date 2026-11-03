@@ -8,8 +8,8 @@ Authorization (user, 2026-10-27): build what is needed in `~/los24` (OrbStack VM
 - The tree's own projects carry apklayer's edits as plain patches, `patches/aosp/<project path>/*.patch` (each project's pinned commit in its `REVISION`):
   `patches/apply aosp ~/los24` applies them, idempotently (already-applied patches are skipped). Check without writing: `git -C ~/los24/<project> apply --check -R <patch>`.
 - Edit `aosp/` in this repo and run `tools/sync-aosp.sh "message"` (mirrors into `~/los24/vendor/apklayer`); modules are listed in `aosp/hals/README.md`.
-- Incremental replay of one module without a graph change: `scripts/orb-build-module.py <module> <dir under vendor/apklayer> <Source.cpp ...>` (Vulkan: `scripts/orb-build-vulkan.py`),
-  then install the output on the test VM (`scripts/install-vulkan.sh`, or copy from `~/apklayer-stage` to `~/android-arm64/lib64` and check the sha256). Adding a source file or
+- Incremental replay of one module without a graph change: `tools/lib/orb-build-module.py <module> <dir under vendor/apklayer> <Source.cpp ...>` (Vulkan: `tools/lib/orb-build-vulkan.py`),
+  then install the output on the test VM (`tools/stage vulkan`, or copy from `~/apklayer-stage` to `~/android-arm64/lib64` and check the sha256). Adding a source file or
   module needs a build-graph regeneration: ask first.
 
 Files taken from the tree: `deps/android-tree-files.lock` lists every file the route stages from the LineageOS build (the Android libraries, the framework jar,

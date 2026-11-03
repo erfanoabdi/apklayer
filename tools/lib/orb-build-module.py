@@ -3,7 +3,7 @@
 
 The graph must already know the sources (regenerate it first with `m nothing`-style graph-only step). This replays the exact generated compile
 commands for the changed sources, relinks, strips and copies the library like the module's own commands do, and stages it for the VM install.
-No clean, no product change. Usage in OrbStack: python3 <repo>/scripts/orb-build-module.py <module> <dir under vendor/apklayer> <Source.cpp ...>
+No clean, no product change. Usage in OrbStack: python3 <repo>/tools/lib/orb-build-module.py <module> <dir under vendor/apklayer> <Source.cpp ...>
 (e.g. libapklayer_egl hals/graphics/egl Egl.cpp; no arguments: libapklayer_codec2 with its three sources)
 Then install on the test VM: copy ~/apklayer-stage/<module>.so to ~/android-arm64/lib64 (verify the SHA)."""
 import os
