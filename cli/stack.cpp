@@ -114,6 +114,25 @@ static std::string keystoreDir(const Layout& l) {
     return dir;
 }
 
+// What Android's init derives at boot (property_service.cpp): the fingerprint of the product the instance presents (bridge/native/apklayer.prop over
+// the tree's build.prop, whose own fingerprint names the GSI's "generic" product) and the ABI lists of this machine's CPU. Set before the files
+// are loaded: ro.* is write-once, so these win and every reader (natives, apklayer.host.HostBuild) sees one device.
+static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std::vector<std::string>& files) {
+    auto get = [&](const char* key) {
+        for (const std::string& f : files)
+            if (std::string v = property(f, key); !v.empty()) return v;
+        return std::string();
+    };
+    std::string fingerprint = get("ro.product.brand") + "/" + get("ro.product.name") + "/" + get("ro.product.device") + ":" + get("ro.build.version.release_or_codename") +
+                              "/" + get("ro.build.id") + "/" + get("ro.build.version.incremental") + ":" + get("ro.build.type") + "/" + get("ro.build.tags");
+    std::string abis = std::string(kAbi) + (*kAbi32 ? std::string(",") + kAbi32 : "");
+    setProperty(l, ne, "ro.build.fingerprint", fingerprint.c_str());
+    setProperty(l, ne, "ro.product.cpu.abi", kAbi);
+    setProperty(l, ne, "ro.product.cpu.abilist", abis.c_str());
+    setProperty(l, ne, "ro.product.cpu.abilist64", kAbi);
+    setProperty(l, ne, "ro.product.cpu.abilist32", kAbi32);
+}
+
 int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std::string>& tool) {
     NativeEnv ne = nativeEnv(l, inst);
     const std::string& n = l.native;
@@ -131,8 +150,10 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         removeTree(inst.runtimeDir);
         makeDirs(inst.runtimeDir);
     }
+    std::vector<std::string> propFiles = {join(l.root, "bridge/native/apklayer.prop"), join(n, "android-root/props/system_build.prop")};
+    setDerivedProperties(l, ne, propFiles);
     Spawn prop;
-    prop.argv = {join(n, "bin/aprop"), "load", join(l.root, "bridge/native/apklayer.prop"), join(n, "android-root/props/system_build.prop")};
+    prop.argv = {join(n, "bin/aprop"), "load", propFiles[0], propFiles[1]};
     prop.env = ne.env;
     prop.logFile = join(inst.logs(), "aprop.log");
     runAndWait(prop);
