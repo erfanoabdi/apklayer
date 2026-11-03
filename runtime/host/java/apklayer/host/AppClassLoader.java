@@ -45,20 +45,21 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
     protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
         if (name.startsWith("[")) return Class.forName(name.replace('/', '.'), false, this);  // ART's loaders answer array names (Chromium's JNI asks)
         name = name.replace('/', '.');  // ... and binary names with slashes (Paddleboat)
-        synchronized (getClassLoadingLock(name)) {
-            Class<?> c = findLoadedClass(name);
-            boolean boot = platform(name);
-            if (c == null && !boot) c = apply(name);
-            if (c == null) {
-                try { c = getParent().loadClass(name); }
-                catch (ClassNotFoundException missing) {
-                    if (boot) c = apply(name);  // a platform-named class the platform lacks (android.support.*, javax.inject)
-                    if (c == null) throw missing;
-                }
+        // No lock of ours is held while the parent loads: a thread in the sandbox's loadClass (holding its lock) may be defining an app class here through
+        // apply, whose superclass then comes through this method; apply itself copes with two threads defining one class.
+        Class<?> c;
+        if (platform(name)) {
+            try { c = getParent().loadClass(name); }
+            catch (ClassNotFoundException missing) {
+                c = apply(name);  // a platform-named class the platform lacks (android.support.*, javax.inject)
+                if (c == null) throw missing;
             }
-            if (resolve) resolveClass(c);
-            return c;
+        } else {
+            c = apply(name);
+            if (c == null) c = getParent().loadClass(name);
         }
+        if (resolve) resolveClass(c);
+        return c;
     }
 
     /** This loader's own class of that name, or null. Takes no lock: the sandbox calls it under its own, while a thread in loadClass may hold ours. */
