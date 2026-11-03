@@ -37,6 +37,9 @@ import org.objectweb.asm.Opcodes;
  * Usage: java -cp asm.jar:... apklayer.tools.JdkScan --libcore core-all.jar [--patch native/jdk-patch] [--android-all jar] input...
  *   input: a .so, a classes .jar, an .apk (its lib/arm64-v8a/*.so) or a directory (its *.so, *.apk and classes.jar, recursively).
  *   --self-check runs the built-in check (needs --libcore and --patch) instead.
+ *   core-all.jar: the tree's ~/los24/out/soong/.intermediates/libcore/core-all/android_common/javac/core-all.jar (read-only copy). Run on the JDK apklayer uses, e.g. on the VM:
+ *   java -cp <host-classes>:<native>/aosp/Robolectric_all.jar apklayer.tools.JdkScan --libcore core-all.jar --patch <native>/jdk-patch
+ *     --android-all <native>/aosp/android-all/android-all-16-*.jar <that jar> ~/android-arm64/lib64 ~/.local/share/apklayer/apps
  */
 public final class JdkScan {
     private JdkScan() {}
@@ -306,6 +309,7 @@ public final class JdkScan {
         check(all.contains("covered (runtime_shim GetFieldID descriptor->fd)={jni java/io/FileDescriptor.descriptor:I"), "descriptor via the shim", all);
         check(all.contains("covered (JdkPatch)={jni java/io/FileDescriptor.getInt$()I"), "getInt$ via JdkPatch", all);
         check(!all.contains(".fd:I"), "fd exists in the JDK", all);
+        check(compare(patched, false, "java/lang/Thread", "stop", "(Ljava/lang/Throwable;)V", true) == null, "Thread.stop(Throwable) copied from JdkMembers", "missing in --patch");
         System.out.println("PASS JdkScan self-check");
     }
 
