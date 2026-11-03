@@ -5,7 +5,7 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan: `docs/PLAN.md`. His
 ## State (2026-11-03)
 - Runs on the device-library route with per-app class loaders and linker namespaces, the real MediaProvider/SettingsProvider/keystore2, the instance hub
   (services, broadcasts, providers, activities, notifications, pending intents, accounts). Instances run side by side (own binder devices, /data, /storage, shell).
-- Tests: `tests/run [-j N] [group...]` (tests/groups.toml): 37 of 39 groups pass 4 at a time on the UTM VM; vulkan-present (Venus host driver) and audio-aidl
+- Tests: `tests/run [-j N] [group...]` (tests/groups.toml): 37 of 39 groups pass 4 at a time on the UTM VM; vulkan-present (Venus host driver; neither test VM has working Vulkan: needs a real PC) and audio-aidl
   (left-channel check) fail on that host. Corpus: `python3 tests/corpus/run.py <app>` (local `tests/corpus/apps.txt`, see apps.example.txt); 16 of 17 apps checked today pass.
 - Upstream edits are patch files only: patches/bionic_translation (0001-0028), patches/robolectric (0001-0015, staged sources in <native>/aosp/robolectric-src),
   patches/aosp (frameworks/native 0001-0005, av, base, libnativehelper, hardware/interfaces), applied by `patches/apply`. Build: meson + `tools/`.
