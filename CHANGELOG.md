@@ -48,6 +48,9 @@ Older dated notes (GPU follow-up, TextureView, MC3, Vulkan checkpoints, OTR2, ro
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 
+### 2026-11-03 — `m` instead of the ninja-replay scripts (scripts/orb-build-module.py, scripts/orb-build-vulkan.py)
+- Why: the two scripts replay Soong's compile commands by hand, from before builds were authorized (2026-10-27); one real `m` of the modules they rebuild confirms that `m <module>` replaces them, so they can be deleted. No source change. Command (under `flock -n ~/los24-build.lock`): `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_codec2 libvulkan vulkan.apklayer libapklayer_vktest`. Result: below.
+
 ### 2026-11-03 — per-instance screenshots: libapklayer_vdisplay (registers its display token) and the new libapklayer_screenshot
 - Why: tests on a desktop shared by several instances cannot tell windows apart; `apklayer screenshot` captures one app's virtual display through SurfaceFlinger's own captureDisplay. New module in vendor/apklayer/tools (build-graph regeneration). Only VirtualDisplay.cpp, tools/Android.bp and tools/screenshot.cpp copied into vendor/apklayer (not a full sync-aosp.sh: the tree has a hals/camera directory this branch lacks). Command: `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_vdisplay libapklayer_screenshot`. Result: below.
 
