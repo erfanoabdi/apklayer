@@ -50,6 +50,7 @@ void extractLibs(const std::string& dir) {
     if (names.find("\n" + prefix) == std::string::npos && names.rfind(prefix, 0) != 0) return;
     makeDirs(join(dir, "lib"));
     sh({"unzip", "-o", "-j", "-q", join(dir, "base.apk"), prefix + "*.so", "-d", join(dir, "lib")});
+    sh({"chmod", "-R", "0755", join(dir, "lib")});  // as Android's installer leaves them: some apps run a bundled lib*.so as a program (Puzzles' libpuzzlesgen.so)
 }
 }  // namespace
 
