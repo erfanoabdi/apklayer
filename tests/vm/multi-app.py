@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """Two native app JVMs, one cold-started stack; real focus and close routing."""
-import os as _os
-LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import os
-import json
 from pathlib import Path
 import selectors
 import signal
 import re
 import subprocess
+import sys
 import time
 
-ROOT = Path.home() / 'apklayer-m1'
-os.chdir(ROOT)
-ENV = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000',
-           APKLAYER_NATIVE=str(Path.home() / 'arm64-native'), APKLAYER_RUNTIME_DEBUG='1',
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import instance  # noqa: E402  (changes into the repo root)
+import pixels  # noqa: E402
+LOGDIR = instance.LOGDIR
+ROOT = instance.ROOT
+ENV = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1',
            APKLAYER_DISPLAY_WIDTH='420', APKLAYER_DISPLAY_HEIGHT='600')
 PACKAGES = ('hello.share.dst', 'hello.share.dst2')
 processes = {}
@@ -31,24 +31,22 @@ close_at = None
 def stop():
     subprocess.run(['bin/apklayer', 'stop'], env=ENV, stdout=subprocess.DEVNULL,
                    stderr=subprocess.DEVNULL)
-    subprocess.run(['pkill', '-9', '-x', 'tail'], check=False)
 
 
 def keys(*steps):
     print('INPUT ' + ' '.join(steps), flush=True)
-    subprocess.run(['sudo', '-n', '/tmp/uinput-keys', *steps],
+    instance.keys(*[*steps],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
 
 def layers():
-    r = subprocess.run(['b/cli/apklayer', 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger', '--list'],
+    r = subprocess.run(['bin/apklayer', 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger', '--list'],
                        env=ENV, capture_output=True, text=True, check=True)
     return r.stdout
 
 
 stop()
 try:
-    subprocess.run(['gcc', '-O1', '-o', '/tmp/uinput-keys', 'tests/vm/uinput-keys.c'], check=True)
     for package in PACKAGES:
         steps = '+'.join(f'{t}:clipcopy:{package}-{t}' for t in range(1000, 21000, 2000))
         env = dict(ENV, APKLAYER_JOPTS='-Dapklayer.runms=22000 -Dapklayer.script=' + steps)
@@ -79,8 +77,7 @@ try:
                     assert 'VRI-' + gone + '/' not in remaining, 'closed app layer remains'
                     closed = True
                     print('PASS close routed to ' + gone + '; ' + survivor + ' remains', flush=True)
-                    print('RESIZE surviving window', flush=True)
-                    points = json.loads(input())
+                    points = pixels.headers(instance.capture('resize surviving window'), 1, True)
                     keys(*(step for x, y in points for step in (f'abs:{x},{y}', 'click')))
                 continue
             logs[package].write(data)
@@ -100,11 +97,10 @@ try:
                 if ready == set(PACKAGES) and not focus_checked:
                     snapshot = layers()
                     assert all('VRI-' + p + '/' in snapshot for p in PACKAGES), 'missing app layer'
-                    print('LOCATE app windows', flush=True)
-                    points = json.loads(input())
+                    points = pixels.headers(instance.capture('locate app windows'))
                     keys(*(step for x, y in points for step in (f'abs:{x},{y}', 'click')))
                     focus_checked = True
-                    print('CAPTURE two app windows', flush=True)
+                    instance.capture('two app windows')
                 if late == set(PACKAGES) and focus_checked and not closed and gone is None:
                     gone = 'pending'  # send just once; EOF identifies the actual focused app
                     close_at = time.monotonic()
@@ -115,8 +111,8 @@ try:
     assert focus_checked and closed, 'real close did not reach either app'
     shell = Path(LOGDIR + '/shell.log').read_text(errors='replace')
     assert shell.count('[shell] listening on ') == 1, 'concurrent launches restarted the shell'
-    service = subprocess.run(['pgrep', '-af', '[l]ibapklayer_servicemanager.so'], capture_output=True, text=True)
-    assert len(service.stdout.splitlines()) == 1, 'more than one service stack'
+    service = instance.mine('[l]ibapklayer_servicemanager.so')
+    assert len(service) == 1, 'more than one service stack'
     assert '[shell] apklayer: window ' not in shell, 'primary window exists'
     assert all('[shell] ' + p + ' takes the input of window' in shell for p in PACKAGES)
     displays = [re.search(r'virtual display \"([^\"]+)\": layer stack (\d+)',
@@ -136,6 +132,5 @@ finally:
         proc.wait()
         logs[package].close()
     selector.close()
-    left = subprocess.run(['pgrep', '-af', '[a]pklayer.host.Main|[b]tload|[a]pklayer-shell'],
-                          capture_output=True, text=True)
-    assert left.returncode != 0, left.stdout
+    left = instance.mine('[a]pklayer.host.Main|[b]tload|[a]pklayer-shell')
+    assert not left, left

@@ -59,6 +59,7 @@ public final class Main {
         Path apk = Path.of(args[0]);
         Path classes = Path.of(args[1]);
         Path out = describe;
+        if (!componentHost && describe == null) RunDeadline.start();
         // The APK is on the classpath so its resources.arsc can be opened as a resource.
         AndroidSandbox sandbox = SandboxBuilder.newBuilder()
                 .addClasspathEntries(sandboxJars(apk))

@@ -33,3 +33,6 @@ if host_machine.system() == 'linux' and fs.exists(bt_dir / 'libdl_bio.so')
   subdir('bridge/native')
   subdir('bridge/ndk')
 endif
+
+# bionic_translation regression tests (meson test --suite bionic)
+subdir('tests/native')

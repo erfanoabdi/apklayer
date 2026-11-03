@@ -451,6 +451,9 @@ public final class AppHost implements Runnable {
             stopped.add(previous.get());
         }
         stack.push(c);
+        // finish() and then startActivity() (an activity restarting itself): Android destroys the finished one once the new one is up
+        for (ActivityController<? extends Activity> old : List.copyOf(stack))
+            if (old != c && old.get().isFinishing()) { stack.remove(old); if (!stopped.remove(old.get())) old.stop(); old.destroy(); }
         if (wantsResult) resultFor.put(c.get(), intent);
         // An activity that adds a window in onCreate (e.g. a dialog) otherwise never records its
         // own decor's first draw, and the composed screen would show nothing behind the dialog.

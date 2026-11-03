@@ -2,6 +2,7 @@ package apklayer.host;
 
 import android.app.Application;
 import android.app.Instrumentation;
+import android.app.Instrumentation.ActivityResult;
 import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
 import org.robolectric.annotation.RealObject;
@@ -24,8 +25,18 @@ public class ShadowHostInstrumentation extends ShadowInstrumentation {
             providersInstalled = true;
             HostBuild.install();  // before the app's own code: it reads Build in Application.onCreate
             AppEnvironment.androidId(app);
+            AppEnvironment.bootSettings(app);
             AppEnvironment.installProviders(app);
         }
         Shadow.directlyOn(real, "android.app.Instrumentation", "callApplicationOnCreate", org.robolectric.util.ReflectionHelpers.ClassParameter.from(Application.class, app));
+    }
+
+    /** -Dapklayer.tracestart=true: who started an activity (an app that relaunches itself, a start nobody expected). */
+    @Implementation
+    @Override
+    protected ActivityResult execStartActivity(android.content.Context who, android.os.IBinder contextThread, android.os.IBinder token, android.app.Activity target,
+            android.content.Intent intent, int requestCode, android.os.Bundle options) {
+        if (Boolean.getBoolean("apklayer.tracestart")) new Throwable("[apklayer] startActivity " + intent).printStackTrace(System.out);
+        return super.execStartActivity(who, contextThread, token, target, intent, requestCode, options);
     }
 }

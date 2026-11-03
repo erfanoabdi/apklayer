@@ -5,10 +5,13 @@ from pathlib import Path
 import selectors
 import signal
 import subprocess
+import sys
 import time
 
-os.chdir(Path.home() / 'apklayer-m1')
-env = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000', APKLAYER_NATIVE=str(Path.home() / 'arm64-native'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import instance  # noqa: E402  (changes into the repo root)
+LOGDIR = instance.LOGDIR
+env = dict(instance.ENV, APKLAYER_NATIVE=str(instance.NATIVE))
 proc = None
 try:
     proc = subprocess.Popen(['bin/apklayer', 'hub'], env=env, stdout=subprocess.PIPE,
@@ -37,6 +40,5 @@ finally:
         except ProcessLookupError: pass
         proc.wait(); proc.stdout.close()
     subprocess.run(['bin/apklayer', 'stop'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(['pkill', '-9', '-x', 'tail'], check=False)
-    left = subprocess.run(['pgrep', '-af', '[a]pklayer.host.Main|[b]tload|[a]pklayer-shell'], capture_output=True, text=True)
-    assert left.returncode != 0, left.stdout
+    left = instance.mine('[a]pklayer.host.Main|[b]tload|[a]pklayer-shell')
+    assert not left, left

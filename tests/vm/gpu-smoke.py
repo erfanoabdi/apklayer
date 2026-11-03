@@ -1,41 +1,34 @@
 #!/usr/bin/env python3
-"""GPU smoke test: UiBench starts on the GPU route, buffers reach the shell, and a screenshot shows the app (differs from the bare desktop).
-Window, dialog and resize behaviour: tests/vm/gpu-window.sh."""
-import os
+"""GPU smoke test: UiBench starts on the GPU route, buffers reach the shell, and SurfaceFlinger's picture of its window shows a drawn UI.
+Window, dialog and resize behaviour: the gpu-window group (tests/vm/gpu-window-run.py)."""
 import subprocess
 import sys
-from PIL import Image, ImageChops
+from pathlib import Path
 
-vm, password = sys.argv[1], sys.argv[2]
-sys.path.insert(0, os.path.dirname(__file__))
-from vmcapture import capture
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import instance  # noqa: E402  (changes into the repo root)
+import pixels  # noqa: E402
 
-ssh = ['sshpass', '-p', password, 'ssh', '-o', 'StrictHostKeyChecking=no', vm]
-ENV = ('cd ~/apklayer; export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 APKLAYER_NATIVE=$HOME/arm64-native '
-       'APKLAYER_RUNTIME_DEBUG=1 APKLAYER_JOPTS="-Dapklayer.runms=12000 $APKLAYER_EXTRA_JOPTS"; ')
-CLEANUP = 'cd ~/apklayer; bin/apklayer stop >/dev/null 2>&1; pkill -f "[b]in/apklayer hub"; pkill -9 -x tail; true'
-tmp = os.environ.get('TMPDIR', '/tmp')
+PKG = 'com.android.test.uibench'
+env = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1', APKLAYER_JOPTS='-Dapklayer.runms=12000 ' + instance.ENV.get('APKLAYER_EXTRA_JOPTS', ''))
 proc = None
 try:
-    subprocess.run(ssh + [CLEANUP], check=True)
-    capture(tmp + '/apklayer-gpu-before.png', vm, password)
-    proc = subprocess.Popen(ssh + [ENV + 'exec bin/apklayer run com.android.test.uibench'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    instance.stop()
+    proc = subprocess.Popen(['bin/apklayer', 'run', PKG], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     imported = 0
     shot = None
     for line in proc.stdout:
         if 'apklayer.egl: imported buffer' in line:
             imported += 1
             if imported == 3 and shot is None:  # the app is presenting GPU buffers: take the picture now
-                shot = tmp + '/apklayer-gpu-during.png'
-                capture(shot, vm, password)
+                shot = instance.capture('gpu', PKG)
         if 'Fatal signal' in line or 'SIGSEGV' in line or 'fatal error' in line:
             print(line.rstrip())
     code = proc.wait()
 finally:
-    subprocess.run(ssh + [CLEANUP])
+    instance.stop()
 assert code == 0, 'UiBench JVM exited with %d' % code
 assert shot, 'no GPU buffer reached the compositor'
-before, during = Image.open(tmp + '/apklayer-gpu-before.png').convert('RGB'), Image.open(shot).convert('RGB')
-changed = sum(1 for p in ImageChops.difference(before, during).convert('L').getdata() if p > 40) / (before.width * before.height)
-assert changed > 0.15, 'the screenshot barely differs from the bare desktop (%.0f%% changed)' % (changed * 100)
-print('PASS GPU smoke: UiBench drew, %.0f%% of the screen changed (%s)' % (changed * 100, shot))
+count = pixels.colors(shot)
+assert count > 100, 'the window shows no drawn UI (%d colours)' % count
+print('PASS GPU smoke: UiBench drew its window, %d colours (%s)' % (count, shot))

@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """Own a real PipeWire test sink, monitor PCM, native producer and cleanup."""
-import os as _os
-LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import array
 import math
 import os
@@ -12,8 +10,10 @@ import sys
 import subprocess
 import time
 
-os.chdir(Path.home() / 'apklayer-m1')
-env = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000')
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import instance  # noqa: E402  (changes into the repo root)
+LOGDIR = instance.LOGDIR
+env = dict(instance.ENV)
 system = sys.argv[1:] == ['system']
 aidl = system or sys.argv[1:] == ['aidl']
 mono = sys.argv[1:] == ['mono']
@@ -47,10 +47,10 @@ try:
                         producer_command = ['b/bridge/hals/audio/audio-test', name] + (['mono'] if mono else [])
                         if aidl:
                             env.update(APKLAYER_AUDIO_TARGET=name, APKLAYER_AUDIO='1')
-                            producer_command = ['b/cli/apklayer', 'stack', 'libapklayer_audio.so', '--probe']
+                            producer_command = ['bin/apklayer', 'stack', 'libapklayer_audio.so', '--probe']
                             if system:
                                 env['APKLAYER_AUDIO_SERVICES'] = '1'
-                                producer_command = ['b/cli/apklayer', 'stack', 'libapklayer_audioserver.so', '--track']
+                                producer_command = ['bin/apklayer', 'stack', 'libapklayer_audioserver.so', '--track']
                         producer = subprocess.Popen(producer_command, env=env,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
                         events.register(producer.stdout, selectors.EVENT_READ)
@@ -97,5 +97,5 @@ finally:
     if aidl:
         subprocess.run(['bin/apklayer', 'stop'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for manifest in ('apklayer-audio.xml', 'apklayer-audio-effects.xml'):
-            (Path.home() / 'arm64-native/android-root/vendor/etc/vintf/manifest' / manifest).unlink(missing_ok=True)
+            (instance.NATIVE / 'android-root/vendor/etc/vintf/manifest' / manifest).unlink(missing_ok=True)
     subprocess.run(['pactl', 'unload-module', module], env=env, check=True)

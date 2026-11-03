@@ -12,11 +12,11 @@ Current authorization (2026-10-27, user): build anything needed in `~/los24` aut
 
 ## Running and testing (user rules, repeated complaints)
 1. **No waiting.** No `sleep`, poll loops, `timeout` wrappers, `tail -f` waits. A command silent for ~3 s is killed (TaskStop/pkill), then read what it left and decide.
-2. **No background launches** via `run_in_background` to dodge waiting. Start, check and close a test app in ONE foreground command ending with `pkill -x apklayer-shell; pkill -f '[a]pklayer.host.Main'` (or `bin/apklayer stop` + `pkill -9 -x tail`).
+2. **No background launches** via `run_in_background` to dodge waiting. Start, check and close a test app in ONE foreground command ending with that instance's `apklayer [--instance ID] stop` (it ends only that instance's processes and shell). Never kill by process name (`pkill -x apklayer-shell`, `pkill -f '[a]pklayer.host.Main'`): other instances run in parallel; use `tests/vm/kill-instance.sh <id> <pattern>`.
 3. **Close everything you start**: test apps and shell on the VM, Monitors and background tasks (TaskStop). Before ending a turn confirm nothing of yours still runs (Mac `ps`, VM `ps`).
 4. Never `pkill -f` a pattern contained in your own command line (use `[x]pattern`).
 5. **Never ask the user to test by hand or leave an app open for them.** Verify with automated checks on the VM (scripted input, snapshots, logs, `-Dapklayer.perf`). What only a person can judge goes into docs/PLAN.md as "needs a human check" and is not asked for.
-6. Run only the test groups for the code you changed (`tests/vm/gpu.sh` quick smoke, `tests/vm/gpu-window.sh`, `tests/vm/otr2.sh`, `tests/vm/vulkan.sh`, the hub, media and audio scripts). No long scripts.
+6. Run only the test groups for the code you changed: `tests/run <group>...` (groups in `tests/groups.toml`: `gpu` quick smoke, `gpu-window`, `otr2`, `vulkan`, the hub groups `providers services activities pendingintents notifications broadcasts binder hub-services webview`, media `codec2 native-*`, audio `audio-*`, system `files view sysprov system-apps keystore devices portal properties`). Each group runs in its own apklayer instance, several at a time. No long scripts.
 7. VM: host and password live in `tests/vm/local.conf` (untracked; `local.conf.example`), read by `tests/vm/config.sh` / `config.py`; the repo copy on the VM is `~/apklayer`. Use `ssh utm@192.168.64.7` with that password (the VM user has passwordless sudo, `/etc/sudoers.d/90-apklayer-tests`; the tests use `sudo -n`).
 
 ## Before writing or downloading anything

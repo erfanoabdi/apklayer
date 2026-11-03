@@ -10,7 +10,7 @@ import org.robolectric.shadows.ShadowApplicationPackageManager;
 public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
     @org.robolectric.annotation.RealObject private android.app.ApplicationPackageManager real;
 
-    /** Every installed package carries the same placeholder certificate (AppHost.installSystemPackage): trust it. */
+    /** Trusts every installed package (callers' certificates are not compared: microG's clients and media browsers check theirs against Google's). */
     @Implementation
     protected boolean hasSigningCertificate(String packageName, byte[] certificate, int type) {
         try {
@@ -39,7 +39,7 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
     private android.content.pm.PackageInfo signed(android.content.pm.PackageInfo info, long flags) {
         if (info == null) return null;
         installedPaths(info.applicationInfo);
-        android.content.pm.Signature[] signatures = HostCertificate.signatures();
+        android.content.pm.Signature[] signatures = HostCertificate.of(info.packageName);
         android.content.pm.Signature fake = fakeSignature(info.packageName);
         if (fake != null) signatures = new android.content.pm.Signature[] {fake};
         if ((flags & PackageManager.GET_SIGNATURES) != 0 && (info.signatures == null || info.signatures.length == 0 || fake != null)) info.signatures = signatures;

@@ -84,5 +84,5 @@ side; buffers cross as dmabuf fds and fences as sync_file fds; one directory per
   timing anchor with the real refresh rate and vsync from the shell. Text input and clipboard belong to the focused proxied window; the shell reads and writes selections asynchronously.
 - Media: Codec2 and the extractor run as separate AOSP services with host GStreamer decoders behind them; YUV reaches SurfaceFlinger as dmabufs. Audio goes through the audio HAL to PipeWire.
 - Instance hub: a headless JVM (`apklayer hub`) owns the package/process directory; app JVMs carry real Binder/Parcel between each other. It reuses the framework's APK parser, launches
-  service-only apps through `component-host`, and implements bound and started services, broadcasts, providers, activities, notifications and pending intents. Tests: `tests/vm/*.sh`.
+  service-only apps through `component-host`, and implements bound and started services, broadcasts, providers, activities, notifications and pending intents. Tests: `tests/run` (groups in `tests/groups.toml`).
 - Every piece is meant to be per instance (instance root for data, properties, binder device, sockets); several instances at once are deferred (`docs/PLAN.md`).
