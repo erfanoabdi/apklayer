@@ -11,6 +11,7 @@ import org.robolectric.shadows.ShadowStorageManager;
 @Implements(value = StorageManager.class, isInAndroidSdk = false)
 public class ShadowHostStorageManager extends ShadowStorageManager {
     private static List<VolumeInfo> volumes;
+    @org.robolectric.annotation.RealObject private StorageManager real;
 
     /** No volume has a user-given nickname. */
     @Implementation
@@ -30,4 +31,14 @@ public class ShadowHostStorageManager extends ShadowStorageManager {
 
     @Implementation
     protected boolean isAllocationSupported(java.io.FileDescriptor fd) { return false; }
+
+    /**
+     * What ExtServices' CacheQuotaService gives the app in the foreground when it is the only one with usage (its fair share is the whole
+     * reserve): the framework's cache reserve of the volume the app's data is on, from that volume's real size and free space.
+     * shortcut: no usage history to share the reserve among apps; split it by foreground time if apps start to compete for cache.
+     */
+    @Implementation
+    protected long getCacheQuotaBytes(java.util.UUID storageUuid) {
+        return real.computeStorageCacheBytes(org.robolectric.RuntimeEnvironment.getApplication().getDataDir());
+    }
 }
