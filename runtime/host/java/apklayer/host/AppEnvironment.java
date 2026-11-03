@@ -31,9 +31,12 @@ import org.robolectric.simulator.FixedConfiguration;
 /** APK environment setup and startup services. */
 final class AppEnvironment {
     private static boolean ownsMediaAuthority;
+    static boolean installing;  // `apklayer install` reads the package's metadata: no stack, no hub
+
 
     /** Robolectric simulator AppLoader: application state straight from the APK. */
     static void setUpApplication(AndroidSandbox sandbox, Path apk, boolean describing) {
+        installing = describing;
         if (Thread.getDefaultUncaughtExceptionHandler() == null) Thread.setDefaultUncaughtExceptionHandler((thread, failure) -> { System.out.println("FATAL EXCEPTION: " + thread.getName()); failure.printStackTrace(System.out); });  // like Android's RuntimeInit: an app's own handlers (ACRA, Gecko) still chain to it
         System.setProperty("java.vm.name", "Dalvik");  // libgdx, Netty ... pick their Android code path (native libraries through System.loadLibrary) by these names
         System.setProperty("java.runtime.name", "Android Runtime");
