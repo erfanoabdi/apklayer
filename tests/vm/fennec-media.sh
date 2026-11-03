@@ -49,28 +49,9 @@ if [ -z "$MEDIA_URL" ]; then
             "$(grep -q '&w=320&h=240&' <<< "$last" && grep -q '&err=&' <<< "$last" && grep -q '&paused=false&' <<< "$last" && [ "$times" -ge 5 ] && echo 1)"
     done
 fi
-changed=$(python3 - "$work/a.png" "$work/b.png" <<'PY'
-import sys
-from PIL import Image, ImageChops
-a, b = (Image.open(p).convert('RGB') for p in sys.argv[1:3])
-d = ImageChops.difference(a, b).convert('L').point(lambda x: 255 if x > 24 else 0)
-print(sum(1 for p in d.getdata() if p), sum(1 for p in a.getdata() if sum(p) > 60))
-PY
-) || changed="0 0"
-read -r diff lit <<< "$changed"
-check "frames change between screenshots ($diff px differ, $lit px not black)" "$([ "${diff:-0}" -gt 2000 ] && echo 1)"
-streams=$(python3 - "$work/pw.json" "${APKLAYER_INSTANCE:-default}" <<'PY'
-import json, sys
-objs = json.load(open(sys.argv[1]))
-def instance(pid):  # whose instance the PipeWire client is (each instance's audio HAL is a process of its own)
-    try: env = open('/proc/%s/environ' % pid, 'rb').read().split(b'\0')
-    except (OSError, TypeError): return None
-    return next((e[18:].decode() for e in env if e.startswith(b'APKLAYER_INSTANCE=')), 'default')
-clients = {o['id']: o['info']['props'].get('application.process.id') for o in objs if o.get('type') == 'PipeWire:Interface:Client'}
-print(sum(1 for o in objs if o.get('type') == 'PipeWire:Interface:Node' and o['info']['props'].get('media.class') == 'Stream/Output/Audio'
-          and o['info'].get('state') == 'running' and instance(clients.get(o['info']['props'].get('client.id'))) == sys.argv[2]))
-PY
-) || streams=0
-check "PipeWire plays an output stream from the instance ($streams running)" "$([ "${streams:-0}" -gt 0 ] && echo 1)"
+diff=$(python3 tests/vm/media-check.py frames "$work/a.png" "$work/b.png")
+check "frames change between screenshots ($diff px differ)" "$([ "$diff" -gt 2000 ] && echo 1)"
+streams=$(python3 tests/vm/media-check.py pipewire "$work/pw.json" "${APKLAYER_INSTANCE:-default}")
+check "PipeWire plays an output stream from the instance ($streams running)" "$([ "$streams" -gt 0 ] && echo 1)"
 d="${XDG_STATE_HOME:-$HOME/.local/state}/fennec-media-last"; rm -rf "$d"; cp -r "$work" "$d"; echo "  screenshots, logs and reports: $d"
 exit $fail

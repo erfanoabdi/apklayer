@@ -198,3 +198,8 @@ run = ["tests/vm/fennec.sh"]
 optional = true  # needs Fennec past its onboarding in the group's instance
 needs = ["org.mozilla.fennec_fdroid"]
 run = ["tests/vm/fennec-media.sh"]
+
+[newpipe-media]
+optional = true  # needs the network (YouTube)
+needs = ["org.schabi.newpipe"]
+run = ["tests/vm/newpipe-media.sh"]
