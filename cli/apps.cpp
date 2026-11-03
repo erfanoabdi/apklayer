@@ -17,7 +17,7 @@ int sh(std::vector<std::string> argv, const Env& env = currentEnv(), const std::
 
 // The cache key of a conversion: same APK, same framework, same converter -> same classes.
 std::string cacheKey(const Layout& l, const std::string& apk) {
-    std::string text = sha256File(apk) + "\npost-processing v13: verified, Android classloader adapter, guava relocation (not for native Guava names), java.* own classes relocated, static finals written outside clinit, app BouncyCastle relocated, native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke\n";
+    std::string text = sha256File(apk) + "\npost-processing v14: verified, Android classloader adapter, java.* own classes relocated (no library relocation: apps have their own class loader), static finals written outside clinit, native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke\n";
     std::vector<std::string> jars = listDir(l.frameworkDir());
     std::sort(jars.begin(), jars.end());
     for (const std::string& j : jars)
@@ -69,9 +69,9 @@ void ensureUid(const Layout& l, const std::string& dir) {
     writeFile(file, text + "uid=" + std::to_string(max + 1) + "\n");
 }
 
-std::string hostClasspath(const Layout& l, const std::string& appClasses) {
+std::string hostClasspath(const Layout& l) {  // no app classes: they get a loader of their own (apklayer.host.AppClassLoader)
     const std::string& n = l.native;
-    return n + "/native-runtime.jar:" + l.hostClasses() + ":" + n + "/aosp/sim-classes:" + appClasses + ":" + n + "/aosp/Robolectric_all.jar:" + l.deps +
+    return n + "/native-runtime.jar:" + l.hostClasses() + ":" + n + "/aosp/sim-classes:" + n + "/aosp/Robolectric_all.jar:" + l.deps +
            "/android-stub.jar:" + l.dex2jvmJar();
 }
 
@@ -108,7 +108,7 @@ std::string installApp(const Layout& l, const Instance& inst, const std::string&
         conv.env = env;
         conv.logFile = join(inst.logs(), "convert.log");
         if (runAndWait(conv) != 0) die("conversion failed (see " + conv.logFile + ")");
-        if (sh({"java", "-cp", l.deps + "/libs/*:" + l.hostClasses(), "apklayer.tools.DenyInstrument", join(tmp, "raw.jar"), join(tmp, "classes.jar"), join(tmp, "base.apk")}) != 0)
+        if (sh({"java", "-cp", l.deps + "/libs/*:" + l.hostClasses(), "apklayer.tools.DenyInstrument", join(tmp, "raw.jar"), join(tmp, "classes.jar")}) != 0)
             die("preparing the converted classes failed (a half-written classes.jar is not installed)");
         // every DEX class in a well-formed class file and the APK's java resources reachable: nothing half-converted is installed or cached
         // ASM's CheckClassAdapter comes from Robolectric_all.jar, which lacks asm-analysis: on the boot class path it is not verified, so the data-flow classes it names are never loaded
@@ -121,7 +121,7 @@ std::string installApp(const Layout& l, const Instance& inst, const std::string&
     NativeEnv ne = nativeEnv(l, inst);
     if (!ensureStack(l, inst)) die("the Android services are not available");
     std::vector<std::string> argv = hostJvmArgs(l, inst, ne);
-    argv.insert(argv.end(), {"-Djava.awt.headless=true", "-cp", hostClasspath(l, join(tmp, "classes.jar")), "apklayer.host.Main", "--describe", tmp, join(tmp, "base.apk"), join(tmp, "classes.jar")});
+    argv.insert(argv.end(), {"-Djava.awt.headless=true", "-cp", hostClasspath(l), "apklayer.host.Main", "--describe", tmp, join(tmp, "base.apk"), join(tmp, "classes.jar")});
     Spawn d;
     d.argv = argv;
     d.env = ne.env;
