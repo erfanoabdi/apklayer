@@ -1,4 +1,30 @@
-# Compatibility results (2026-10-28, UTM VM, device-library route)
+# Compatibility results
+
+## 2026-11-03 (UTM VM, after the parallel round; judged on each app's own SurfaceFlinger capture)
+
+| App | State | Note |
+|---|---|---|
+| UiBench, Nextcloud (login), Telegram (intro), NewPipe, CPU-Z, Device Info HW, WireGuard, OpenVPN, Shelter, Sensors Multitool, Vibrations, GPS Test, OpenCalc, 2048, Tasks | draw | first frame within 30 s, content check passes |
+| Conversations | welcome screen | AndroidCAStore in HostTrust |
+| ASTRO | consent screen | Robolectric 0015 (no looper idle in changeDisplay) |
+| AnkiDroid | welcome screen | |
+| Puzzles | game chooser; games generate | bionic executables through btload (exec_preload), navigateUpTo |
+| Meet | welcome screen, "Failed to load accounts" | Sign In opens microG's LoginActivity; the Google sign-in needs a human check |
+| microG | settings list | |
+| Aegis, AntennaPod, Mindustry, Shattered Pixel Dungeon, Klooni | draw | |
+| Logseq | welcome page | needs com.android.webview installed in the same data home |
+| Rocks 'n' Diamonds | menu | |
+| Lemuroid | Home screen | startService from another thread returns before onCreate |
+| TIC-80 | console | the earlier crash was a stale build |
+| Joplin | notes list, responds | |
+| OTR2 | renders | inactive windows stay resumed |
+| Fennec | pages draw, text fills missing on virgl | host GPU bug (tests/vm/gles-int-branch.c) |
+| Unciv | black | draws nothing into its own surface (open) |
+| OpenTTD | no video driver | needs GLES1 (open) |
+| DRM Info | runs | needs Play Services: out of scope |
+| Open Camera, barcode scanners | no camera | camera HAL is last priority |
+
+## 2026-10-28 (UTM VM, device-library route)
 
 One run per app (tests/vm/appcheck.sh for errors, tests/vm/appshot.py for a screenshot). "Draws" = a screenshot shows the app's own UI.
 
