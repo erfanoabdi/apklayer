@@ -70,6 +70,8 @@ final class HubDirectory extends Binder {
     java.util.List<Peer> peersExcept(Peer one) { synchronized (peers) { return peers.values().stream().filter(peer -> peer != one).toList(); } }
     HubAccounts accounts() { return accounts; }
     Peer peerByPid(int pid) { synchronized (peers) { return peers.get(pid); } }
+    /** A running process of the app with this Android uid (an app and its component hosts share it), or null. */
+    Peer peerByUid(int appUid) { synchronized (peers) { return peers.values().stream().filter(peer -> peer.appUid == appUid).findFirst().orElse(null); } }
     /** The key of a process: the package, plus "#instance" for an isolated service instance (bindIsolatedService), which runs in a process of its own. */
     static String key(String pkg, String instance) { return instance == null ? pkg : pkg + "#" + instance; }
     static String key(Peer peer) { return key(peer.name, peer.instance); }
@@ -150,6 +152,8 @@ final class HubDirectory extends Binder {
                 String name = request.readString(); IBinder endpoint = request.readStrongBinder(); boolean headless = request.readBoolean(); IBinder appThread = request.readStrongBinder(); int appUid = request.readInt(); String instance = request.readString(); request.enforceNoDataAvail();
                 if (packages.get(name) == null || endpoint == null || appThread == null || !HubProtocol.ENDPOINT.equals(endpoint.getInterfaceDescriptor()))
                     throw new SecurityException("Unknown app endpoint");
+                int installedUid = packages.uid(name);  // what others know this process by (UID_OF_PID, oneway callers): the installed uid, not one it claims
+                if (installedUid >= 0 && appUid != installedUid) throw new SecurityException(name + " is uid " + installedUid + ", not " + appUid);
                 int pid = Binder.getCallingPid(), uid = Binder.getCallingUid();
                 Peer peer = new Peer(pid, uid, name, endpoint, appThread, headless, appUid, instance);
                 synchronized (peers) {
@@ -323,8 +327,8 @@ final class HubDirectory extends Binder {
                 reply.writeNoException(); reply.writeStrongBinder(provider); return true;
             }
             case HubProtocol.CHECK_PERMISSION -> {
-                caller(); int pid = request.readInt(); String permission = request.readString(); request.enforceNoDataAvail();
-                reply.writeNoException(); reply.writeInt(providers.check(pid, permission)); return true;
+                caller(); int pid = request.readInt(), uid = request.readInt(); String permission = request.readString(); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeInt(providers.check(pid, uid, permission)); return true;
             }
             default -> { return super.onTransact(code, request, reply, flags); }
         }

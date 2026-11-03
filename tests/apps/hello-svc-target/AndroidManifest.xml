@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="hello.svctarget">
   <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="34"/>
+  <permission android:name="hello.svctarget.permission.HELD" android:protectionLevel="normal"/>
+  <permission android:name="hello.svctarget.permission.UNHELD" android:protectionLevel="normal"/>
   <application android:label="svc-target">
     <activity android:name=".Main" android:exported="true">
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>

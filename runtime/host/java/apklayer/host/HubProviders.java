@@ -82,13 +82,18 @@ final class HubProviders {
         return false;
     }
 
-    /** Whether the process (a pid that registered with the hub) holds the permission: what a provider in another app asks about its caller. */
-    int check(int pid, String permission) {
-        // The hub is system_server, which holds every permission (an authenticator checks ACCOUNT_MANAGER on the account service). Its calls to an
-        // authenticator are oneway, and the kernel names no sender of a oneway call (pid 0): answered as for the hub.
-        // shortcut: any app's oneway call passes such a check too (apps share one Linux uid here, so the uid cannot tell them apart); name the sender if that matters.
-        if (pid == android.os.Process.myPid() || pid == 0) return 0;
-        HubDirectory.Peer peer = directory.peerByPid(pid);
+    /**
+     * Whether another app's caller holds the permission: what a provider or service asks about its binder caller. A synchronous call names the caller by the
+     * kernel's pid (a process registered with the hub); a oneway one has none (pid 0, or -1 in an AttributionSource) and names it by the uid its request header
+     * carried (ShadowHostRealParcel), which must be the uid of a running app or the hub's own (system_server's 1000: it holds every permission, and its
+     * oneway calls to an authenticator are checked for ACCOUNT_MANAGER).
+     * shortcut: that header is the runtime's (an app's Java code cannot set it through the framework) but a process writing raw binder parcels could claim
+     * another running app's uid: every app JVM is the same Linux uid, which also lets one read another's files, so the kernel's sender uid is the boundary only
+     * with per-app Linux uids (the per-app sandbox, docs/PLAN.md).
+     */
+    int check(int pid, int uid, String permission) {
+        if (pid == android.os.Process.myPid() || (pid <= 0 && uid == android.os.Process.SYSTEM_UID)) return 0;
+        HubDirectory.Peer peer = pid > 0 ? directory.peerByPid(pid) : directory.peerByUid(uid);
         return peer != null && packages.holds(peer.name(), permission) ? 0 : -1;
     }
 }

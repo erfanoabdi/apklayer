@@ -27,6 +27,9 @@ public class ItemsProvider extends ContentProvider {
 
     @Override public String getType(Uri uri) { return "vnd.android.cursor.dir/vnd.hello.item"; }
 
+    /** Reached oneway (ContentResolver.canonicalize): the Transport checks the read permission against the uid the request carried. */
+    @Override public Uri canonicalize(Uri uri) { return uri.buildUpon().appendQueryParameter("canonical", "1").build(); }
+
     @Override public Uri insert(Uri uri, ContentValues values) {
         Uri added;
         synchronized (ITEMS) { ITEMS.add(values.getAsString("name")); added = ContentUris.withAppendedId(uri, ITEMS.size()); }
