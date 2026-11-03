@@ -1,0 +1,18 @@
+Robolectric's changeDisplay(qualifiers) leaves the display-change messages to the app's run loop (apklayer patch).
+
+Against external/robolectric 87aa52b08 (REVISION). Applied by tools/build overlay onto the staged
+upstream sources (<native>/aosp/robolectric-src); the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
+---
+diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowDisplayManager.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowDisplayManager.java
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowDisplayManager.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowDisplayManager.java
+@@ -247,7 +247,8 @@
+   public static void changeDisplay(int displayId, String qualifiersStr) {
+     DisplayInfo displayInfo = createDisplayInfo(qualifiersStr, displayId);
+     getShadowDisplayManagerGlobal().changeDisplay(displayId, displayInfo);
+-    shadowMainLooper().idle();
++    // apklayer patch: the app's run loop delivers the display-change messages; an idle here ran until the main queue was empty,
++    // which never happens while an app keeps posting to it (ASTRO at its first window configure)
+   }
+ 
+   /**
