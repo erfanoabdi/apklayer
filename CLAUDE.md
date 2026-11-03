@@ -12,7 +12,7 @@ Current authorization (2026-10-27, user): build anything needed in `~/los24` aut
 
 ## Running and testing (user rules, repeated complaints)
 1. **No waiting.** No `sleep`, poll loops, `timeout` wrappers, `tail -f` waits. A command silent for ~3 s is killed (TaskStop/pkill), then read what it left and decide.
-2. **No background launches** via `run_in_background` to dodge waiting. Start, check and close a test app in ONE foreground command ending with `pkill -x apklayer-shell; pkill -f '[a]pklayer.host.Main'` (or `bin/apklayer stop` + `pkill -9 -x tail`).
+2. **No background launches** via `run_in_background` to dodge waiting. Start, check and close a test app in ONE foreground command ending with that instance's `apklayer [--instance ID] stop` (it ends only that instance's processes and shell). Never kill by process name (`pkill -x apklayer-shell`, `pkill -f '[a]pklayer.host.Main'`): other instances run in parallel; use `tests/vm/kill-instance.sh <id> <pattern>`.
 3. **Close everything you start**: test apps and shell on the VM, Monitors and background tasks (TaskStop). Before ending a turn confirm nothing of yours still runs (Mac `ps`, VM `ps`).
 4. Never `pkill -f` a pattern contained in your own command line (use `[x]pattern`).
 5. **Never ask the user to test by hand or leave an app open for them.** Verify with automated checks on the VM (scripted input, snapshots, logs, `-Dapklayer.perf`). What only a person can judge goes into docs/PLAN.md as "needs a human check" and is not asked for.
