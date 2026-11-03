@@ -66,6 +66,8 @@
 #include "xdg-shell-client-protocol.h"
 #include "cursor-shape-v1-client-protocol.h"
 #include "linux-dmabuf-v1-client-protocol.h"
+#include "viewporter-client-protocol.h"
+#include "fractional-scale-v1-client-protocol.h"
 #include "decor.h"
 enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
        MSG_INPUT = 101, MSG_CLOSE = 103, MSG_RELEASE = 104,
@@ -79,8 +81,9 @@ enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
 #define MSG_TEST_INPUT 11    /* test -> shell (testinput.c) */
 #define MSG_TEST_DONE 115    /* shell -> test: {i32 result} */
 /* TEST_INPUT kinds: focus; key {evdev, down}; pointer {x, y, button (0 move, +code press, -code release)}; touch {action, x, y};
- * text {preedit} + utf8; resize {logical w, h}. x, y: logical content pixels, y < 0 = the title bar. */
-enum { TEST_FOCUS, TEST_KEY, TEST_POINTER, TEST_TOUCH, TEST_TEXT, TEST_RESIZE };
+ * text {preedit} + utf8; resize {logical w, h}; scale {percent}: the compositor's preferred scale;
+ * maximize {on, w, h}: the compositor's (un)maximize to window geometry w x h (0 = the size is the client's). x, y: logical content pixels, y < 0 = the title bar. */
+enum { TEST_FOCUS, TEST_KEY, TEST_POINTER, TEST_TOUCH, TEST_TEXT, TEST_RESIZE, TEST_SCALE, TEST_MAXIMIZE };
 #define MSG_TEXT_INPUT 6
 /* app -> shell uses type 5 for MSG_CLIPBOARD_SET (text); shell -> app 109 pushes the selection */
 #define MSG_CLIPBOARD_SET 5
@@ -102,14 +105,19 @@ struct client {
 };
 struct window {
     struct client *client;
-    int id, w, h, configured;   /* w,h: buffer pixels */
-    int scale;                  /* percent the buffers were rendered at (wl buffer scale) */
+    int id, w, h, configured;   /* w,h: pixels of the shown buffer */
+    int scale;                  /* percent: buffer pixels per logical pixel of what is shown (input mapping), set by window_layout */
+    int pref_scale;             /* percent: the compositor's preferred scale for this surface (wp_fractional_scale_v1), 0 = output_scale */
     int told_scale;             /* scale last announced to the app */
-    int cfg_w, cfg_h;           /* latest logical content size requested by the compositor, 0 = none */
-    int maximized, activated;   /* xdg toplevel states */
+    int cfg_w, cfg_h;           /* logical content size (window geometry less the title bar) the app was told, 0 = not yet */
+    int float_w, float_h;       /* content size before a maximize/fullscreen/tile: restored when the compositor leaves the size to us */
+    int bounds_w, bounds_h;     /* xdg_toplevel.configure_bounds: the largest window geometry that fits the work area, 0 = unknown */
+    int maximized, activated;   /* xdg toplevel states (maximized: also fullscreen) */
+    int constrained;            /* maximized, fullscreen or tiled: the compositor decides the size */
+    int resized, state_changed; /* what the toplevel configure changed, applied at the xdg_surface configure (geometry.c) */
     int framed;                 /* the app has presented a frame (the splash is gone) */
-    int fit_sent;               /* the first configure already fitted the window to the screen */
-    int unmaximized_once;       /* the compositor's automatic maximize of a new window (GNOME does it for one taller than the screen) was undone */
+    struct wp_viewport *viewport;            /* buffer -> logical size (any scale, fractional included) */
+    struct wp_fractional_scale_v1 *fscale;
     int text_input_enabled;
     int minimized;              /* set by our Minimize button, cleared when the window is activated again */
     struct decor decor;         /* title bar subsurface */
@@ -147,10 +155,11 @@ extern struct wl_shm *shm;
 extern struct zwp_linux_dmabuf_v1 *dmabuf_mgr;  /* dmabuf.c */
 extern struct xdg_wm_base *wm_base;
 extern struct wl_seat *seat;
-extern struct wl_output *output;
+extern struct wp_viewporter *viewporter;                     /* registry.c */
+extern struct wp_fractional_scale_manager_v1 *fscale_mgr;
 extern int output_refresh_mhz;       /* the output's current mode (wl_output.mode), 60000 until known */
-extern int output_mode_w, output_mode_h;           /* the output's current mode height in pixels, 0 until known */
-extern int output_scale;            /* percent: 100 = 1x, 200 = 2x (P2 HiDPI) */
+extern int output_mode_w, output_mode_h;  /* logical size of the largest output, 0 until known (fallback without configure_bounds) */
+extern int output_scale;                  /* percent: the largest integer wl_output scale (fallback without wp_fractional_scale_v1) */
 extern struct window windows[MAX_WINDOWS];
 extern struct window *pointer_focus, *keyboard_focus;
 extern int debug_input;               /* APKLAYER_DEBUG_INPUT=1: log focus changes and key codes */
@@ -181,7 +190,14 @@ void key_event(uint32_t evdev, int down);  /* keyboard.c */
 struct window *window_for_surface(struct wl_surface *s);  /* window.c */
 struct window *window_find(struct client *c, int id);
 struct window *window_find_input(struct client *c, int id);  /* window.c */
-void window_layout(struct window *w);  /* window.c */
+void window_layout(struct window *w);  /* geometry.c */
+/* geometry.c: configures, scale, the app's CONFIGURE */
+int window_scale(const struct window *w);  /* the scale the window is drawn at (percent) */
+void window_scale_changed(struct window *w, int pref);  /* the compositor prefers another scale (pref percent, 0 = output_scale) */
+void window_send_configure(struct window *w);
+void window_geometry_init(struct window *w);
+void window_geometry_destroy(struct window *w);
+void window_show_first(struct window *w);  /* window.c: the frame that came before the first configure, or the splash */
 void pointer_forget_window(struct window *w); /* pointer.c: also clear title-bar hover on destroy */
 void window_create(struct client *c, int id, int width, int height, const char *path, const char *title);  /* window.c */
 void window_destroy(struct window *w);  /* window.c */
@@ -205,7 +221,8 @@ void keyboard_inject_key(struct window *w, uint32_t evdev, int down);  /* keyboa
 void pointer_inject(struct window *w, int x, int y, int button);  /* pointer.c */
 void touch_inject(struct window *w, int action, int x, int y);  /* touch.c */
 int text_input_inject(struct window *w, const char *text, int preedit);  /* textinput.c */
-void window_inject_configure(struct window *w, int cw, int ch, int activated);  /* window.c */
+void window_inject_configure(struct window *w, int cw, int ch, int activated);  /* geometry.c */
+void window_inject_maximize(struct window *w, int on, int gw, int gh);  /* geometry.c */
 extern const struct wl_pointer_listener ptr_listener;  /* pointer.c */
 extern const struct wl_keyboard_listener kb_listener;  /* keyboard.c */
 extern const struct wl_registry_listener registry_listener;  /* registry.c */

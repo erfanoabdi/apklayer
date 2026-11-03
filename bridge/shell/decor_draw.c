@@ -33,14 +33,13 @@ static void fit_title(cairo_t *cr, char *t, double max_w)
     }
 }
 
-void decor_draw(void *px, int pw, int ph, int lw, int s, int maximized, int hover, int focused,
+void decor_draw(void *px, int pw, int ph, int lw, int maximized, int hover, int focused,
                 const char *title, int dark, int (*button_x)(int, int))
 {
     cairo_surface_t *sf = cairo_image_surface_create_for_data(px, CAIRO_FORMAT_ARGB32, pw, ph, pw * 4);
     cairo_t *cr = cairo_create(sf);
-    double k = s / 100.0;
-    cairo_scale(cr, k, k);
-    double W = pw / k, H = ph / k;
+    cairo_scale(cr, (double)pw / lw, (double)ph / DECOR_H);  /* draws in logical units onto the buffer's pixels */
+    double W = lw, H = DECOR_H;
     cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
     cairo_set_source_rgba(cr, 0, 0, 0, 0);
     cairo_paint(cr);
