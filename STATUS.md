@@ -18,9 +18,10 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan: `docs/PLAN.md`. His
 Open work is in `docs/PLAN.md` (sections "After the 2026-11-03 round", "Systematic compatibility", "Fennec"). In order:
 1. Permission identity: oneway callers pass permission checks and every account is visible to every app (shortcuts in HubProviders/HubAccounts); per-app Linux uids or a carried sender uid.
 2. The hub as system settings writer (LOCATION_MODE, ENABLED_INPUT_METHODS); android_id stability across launches; app data per instance in one data home.
-3. Apps: OpenTTD (GLES1 on a host without it), Unciv (draws nothing), Lemuroid (WorkManager lock), TIC-80 (lazy_find_class), Joplin (2 frames); camera HAL (none).
+3. Apps: OpenTTD (GLES1 on a host without it), Unciv (draws nothing), Lemuroid (WorkManager lock), TIC-80 (lazy_find_class), Joplin (2 frames).
 4. Startup: Robolectric setup and font copy per JVM, keystore2 probe, CDS.
 5. Before release: x86_64 PC run, Flatpak, COMMERCIAL.md terms, CLA, per-app sandbox.
+6. Last priority (owner, 2026-11-03): camera HAL (PipeWire/V4L2); apps see no camera until then.
 
 ## Test VM (UTM)
 Host and password: `tests/vm/local.conf` (untracked; `local.conf.example`). Ubuntu 26.04 arm64, GNOME Wayland, Venus Vulkan 1.4, virgl ES 3.0 (apklayer claims 3.2). Passwordless sudo.

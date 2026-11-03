@@ -11,9 +11,10 @@ def capture(image, vm=None, password=None):
     vm = vm or config.VM
     remote = '/tmp/apklayer-vmcapture.png'
     ssh = config.auth('ssh', password) + [vm]
+    # flameshot 12 (Qt 5, Ubuntu 24.04) starts only on X: the second try goes through the session's Xwayland
     subprocess.run(ssh + ['export XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus WAYLAND_DISPLAY=wayland-0 '
-                          'XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=GNOME; rm -f ' + remote + '; flameshot full -p ' + remote
-                          + ' >/dev/null 2>&1'], check=True)
+                          'XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=GNOME; rm -f ' + remote + '; flameshot full -p ' + remote + ' >/dev/null 2>&1 || '
+                          'DISPLAY=:0 XAUTHORITY="$(ls /run/user/1000/.mutter-Xwaylandauth.* | head -1)" flameshot full -p ' + remote + ' >/dev/null 2>&1'], check=True)
     subprocess.run(config.auth('scp', password) + ['-q', vm + ':' + remote, image], check=True)
 
 
