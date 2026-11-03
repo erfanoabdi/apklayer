@@ -1,0 +1,54 @@
+// Device: what the selected instance runs on and sees (`apklayer status`): its services, GPU, audio, battery, location.
+import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, ScrollView, OutlinedCard } from "@material";
+import { Backend, AppIcons } from "backend.slint";
+import { Row } from "widgets.slint";
+
+export component DevicePage {
+    function icon(key: string) -> image {
+        if key == "stack" || key == "abi" { return AppIcons.board; }
+        if key == "gpu" || key == "gles" || key == "vulkan" { return AppIcons.memory; }
+        if key == "audio" { return AppIcons.audio; }
+        if key == "battery" { return AppIcons.battery; }
+        if key == "location" { return AppIcons.location; }
+        if key == "binder" { return AppIcons.admin; }
+        if key == "apps" { return AppIcons.apps; }
+        AppIcons.layers
+    }
+    function title(key: string) -> string {
+        if key == "stack" { return "Android services"; }
+        if key == "binder" { return "Binder devices"; }
+        if key == "apps" { return "Running apps"; }
+        if key == "abi" { return "CPU ABI"; }
+        if key == "gpu" { return "GPU"; }
+        if key == "gles" { return "OpenGL ES"; }
+        if key == "vulkan" { return "Vulkan"; }
+        if key == "audio" { return "Audio"; }
+        if key == "battery" { return "Battery"; }
+        if key == "location" { return "Location"; }
+        "Instance"
+    }
+
+    ScrollView {
+        HorizontalLayout {
+            alignment: center;
+            VerticalLayout {
+                max-width: 840px;
+                padding: MaterialStyleMetrics.padding_16;
+                spacing: MaterialStyleMetrics.spacing_8;
+                alignment: start;
+                OutlinedCard {
+                    VerticalLayout {
+                        padding-top: MaterialStyleMetrics.padding_8;
+                        padding-bottom: MaterialStyleMetrics.padding_8;
+                        for s in Backend.status : Row {
+                            text: root.title(s.key);
+                            supporting-text: s.value != "" ? s.value : "none";
+                            icon: root.icon(s.key);
+                            clickable: false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

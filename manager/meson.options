@@ -1,0 +1,2 @@
+option('slint', type: 'string', value: '',
+  description: 'where manager/fetch-slint.sh put Slint (cpp/, bin/slint-compiler, material/); empty: ~/.cache/apklayer/slint')

@@ -1,0 +1,44 @@
+// Properties: the instance's Android property overrides (`apklayer prop`) over apklayer's device defaults (bridge/native/apklayer.prop).
+// They are loaded when the instance's services start, so a change applies after a restart.
+import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, ScrollView, TonalButton, FilledCard } from "@material";
+import { Backend, AppIcons, PropEntry } from "backend.slint";
+import { Row, Tag, Heading } from "widgets.slint";
+
+export component PropsPage {
+    callback edit(entry: PropEntry);
+
+    ScrollView {
+        HorizontalLayout {
+            alignment: center;
+            VerticalLayout {
+                max-width: 840px;
+                padding: MaterialStyleMetrics.padding_16;
+                padding-bottom: 96px;
+                spacing: MaterialStyleMetrics.spacing_8;
+                alignment: start;
+                FilledCard {
+                    VerticalLayout {
+                        padding: MaterialStyleMetrics.padding_16;
+                        spacing: MaterialStyleMetrics.spacing_12;
+                        MaterialText {
+                            text: "Android properties of instance " + Backend.instance + ". Overrides take effect the next time its services start; ro.* values are fixed while it runs.";
+                            style: MaterialTypography.body_medium;
+                            color: MaterialPalette.on_surface;
+                            wrap: word-wrap;
+                        }
+                        if Backend.instance-running : HorizontalLayout {
+                            alignment: start;
+                            TonalButton { text: "Restart instance"; icon: AppIcons.restart; clicked => { Backend.stop-instance(Backend.instance); } }
+                        }
+                    }
+                }
+                for p in Backend.props : Row {
+                    text: p.key;
+                    supporting-text: p.value + (p.live != "" && p.live != p.value ? "   (running: " + p.live + ")" : "");
+                    clicked => { root.edit(p); }
+                    if p.source == "instance" : Tag { text: "Override"; strong: true; }
+                }
+            }
+        }
+    }
+}
