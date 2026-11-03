@@ -32,6 +32,7 @@ try:
         deadline = time.monotonic() + (25 if aidl else 8)
         pending = b''
         done = False
+        ended = None  # pcm length when the producer exited: the monitor lags the sink, so its tail is read until 100 ms of silence
         while not done:
             ready = events.select(3)
             assert ready and time.monotonic() < deadline, 'PipeWire audio test stalled'
@@ -42,6 +43,9 @@ try:
                 elif key.fileobj is recorder.stdout:
                     assert data, 'monitor exited'
                     pcm.extend(data)
+                    even = len(pcm) // 2 * 2
+                    tail = array.array('h', pcm[max(0, even - 19200):even])
+                    done = ended is not None and len(pcm) - ended >= 19200 and max(map(abs, tail)) <= 100
                     if producer is None:
                         print('Monitor receives real PipeWire PCM', flush=True)
                         producer_command = ['b/bridge/hals/audio/audio-test', name] + (['mono'] if mono else [])
@@ -61,7 +65,8 @@ try:
                             for logname in ('audio.log', 'tool.log'):
                                 print((Path(LOGDIR) / logname).read_text(errors='replace')[-6000:], flush=True)
                         assert status == 0, 'native audio probe failed'
-                        done = True
+                        events.unregister(producer.stdout)
+                        ended = len(pcm)
                         break
                     pending += data
                     lines = pending.split(b'\n'); pending = lines.pop()
