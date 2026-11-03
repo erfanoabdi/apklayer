@@ -99,3 +99,16 @@ void text_input_forget_window(struct window *w)
         entered_window = ime_window = NULL;
     }
 }
+
+/* Test input: what an input method sends to w's enabled field (commit or preedit, then done), through the text-input-v3 handlers. */
+int text_input_inject(struct window *w, const char *text, int preedit)
+{
+    if (!w->text_input_enabled) return -2;
+    struct window *was = ime_window;   /* the real IME's window stays what it was */
+    ime_window = w;
+    if (preedit) ti_preedit(NULL, NULL, text, 0, 0);
+    else ti_commit(NULL, NULL, text);
+    ti_done(NULL, NULL, ti_serial);
+    ime_window = was;
+    return 0;
+}

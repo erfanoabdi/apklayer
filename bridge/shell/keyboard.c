@@ -143,3 +143,12 @@ const struct wl_keyboard_listener kb_listener = {
     .keymap = kb_keymap, .enter = kb_enter, .leave = kb_leave, .key = kb_key,
     .modifiers = kb_mods, .repeat_info = kb_repeat_info };
 
+/* Test input: a keyboard enter on w, and a key with the modifier state xkb derives from the injected keys themselves (the compositor's
+ * modifiers event is what a real seat sends after a modifier key). */
+void keyboard_inject_focus(struct window *w) { kb_enter(NULL, NULL, 0, w->surface, NULL); }
+void keyboard_inject_key(struct window *w, uint32_t evdev, int down)
+{
+    keyboard_focus = w;
+    if (xkb_state) xkb_state_update_key(xkb_state, evdev + 8, down ? XKB_KEY_DOWN : XKB_KEY_UP);
+    kb_key(NULL, NULL, last_input_serial, 0, evdev, down ? WL_KEYBOARD_KEY_STATE_PRESSED : WL_KEYBOARD_KEY_STATE_RELEASED);
+}

@@ -41,11 +41,14 @@ final class HubActivities {
         return true;
     }
 
-    /** The launch waiting for a freshly started app process, if any. */
-    Launch take(String name) {
-        synchronized (pending) {
-            Deque<Launch> queue = pending.get(name);
-            return queue == null ? null : queue.poll();
-        }
+    /** The launch waiting for a freshly started app process, if any; later ones that came while it started go to it as to a running app. */
+    Launch take(HubDirectory.Peer app) {
+        Deque<Launch> queue;
+        synchronized (pending) { queue = pending.remove(app.name()); }
+        if (queue == null) return null;
+        Launch first = queue.poll();
+        for (Launch later : queue)  // the app keeps them until its first activity is up (HubActivityClient.setStarter)
+            HubProtocol.call(app.endpoint(), HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_START_ACTIVITY, request -> { request.writeTypedObject(later.intent(), 0); request.writeTypedObject(later.resultTo(), 0); }, reply -> null);
+        return first;
     }
 }

@@ -14,8 +14,15 @@ import org.robolectric.shadow.api.Shadow;
 final class HubActivityClient {
     private HubActivityClient() {}
 
-    /** Set by the AppHost: starts an activity for an intent that came through the hub. */
-    static volatile BiConsumer<Intent, ResultReceiver> starter;
+    /** Set by the AppHost once its first activity is up: starts an activity for an intent that came through the hub. */
+    private static BiConsumer<Intent, ResultReceiver> starter;
+    /** Intents that came before (main thread only): the first launch idles the main looper, and one run there would miss the activity being created (singleTask). */
+    private static final java.util.ArrayDeque<Object[]> early = new java.util.ArrayDeque<>();
+
+    static void setStarter(BiConsumer<Intent, ResultReceiver> start) {
+        starter = start;
+        for (Object[] waiting; (waiting = early.poll()) != null; ) start.accept((Intent) waiting[0], (ResultReceiver) waiting[1]);
+    }
     private static ResultReceiver launchReceiver;
 
     /** Intent extra naming the app that started an activity for a result (AppHost sets it as the activity's calling package). */
@@ -41,7 +48,7 @@ final class HubActivityClient {
         int found = HubProtocol.call(HubClient.current().binder(), HubProtocol.DESCRIPTOR, HubProtocol.START_ACTIVITY,
                 parcel -> { parcel.writeTypedObject(intent, 0); parcel.writeTypedObject(resultTo, 0); }, reply -> reply.readInt());
         if (found != 0) System.out.println("[apklayer] no installed app handles " + intent);
-        return true;
+        return found == 0;  // not handled: the caller's fallback (the desktop's file dialog for a picker) answers
     }
 
     /** A freshly started app process: the intent another app sent for it before it existed. */
@@ -58,8 +65,8 @@ final class HubActivityClient {
 
     /** From the hub, in a running app. */
     static void deliver(Intent intent, ResultReceiver resultTo) {
-        BiConsumer<Intent, ResultReceiver> start = starter;
-        if (start != null) start.accept(intent, resultTo);
+        if (starter != null) starter.accept(intent, resultTo);
+        else early.add(new Object[] {intent, resultTo});
     }
 
     static void answer(ResultReceiver resultTo, int code, Intent data) {

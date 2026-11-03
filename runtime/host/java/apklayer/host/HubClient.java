@@ -14,22 +14,32 @@ public final class HubClient {
     /** The hub JVM is the system: its pid is how a call from it (a oneway callback, a lifecycle command) is recognised as uid 1000. */
     int hubPid() { return hubPid; }
     private HubClient(Context context) {
-        hub = HubStartup.connect();
-        hubPid = HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.STATUS, request -> {}, reply -> reply.readInt());
-        endpoint = new HubEndpoint(context, hubPid);
+        IBinder found;
+        HubEndpoint own;
+        int pid;
+        for (;;) {  // a hub that is ending refuses the registration: wait for it to go and attach to the next one
+            found = HubStartup.connect();
+            own = new HubEndpoint(context, HubProtocol.call(found, HubProtocol.DESCRIPTOR, HubProtocol.STATUS, request -> {}, reply -> reply.readInt()));
+            try { pid = register(context, found, own); break; }
+            catch (IllegalStateException refused) { if (!HubProtocol.EXITING.equals(refused.getMessage())) throw refused; HubStartup.awaitDeath(found); }
+        }
+        hub = found; endpoint = own; hubPid = own.hubPid();
         try { hub.linkToDeath(() -> alive = false, 0); }
         catch (android.os.RemoteException failure) { throw new IllegalStateException("Hub disconnected during registration", failure); }
-        int pid = HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.REGISTER, request -> {
-            request.writeString(context.getPackageName()); request.writeStrongBinder(endpoint); request.writeBoolean(Boolean.getBoolean("apklayer.componenthost"));
-            request.writeStrongBinder(((android.app.IApplicationThread) android.app.ActivityThread.currentActivityThread().getApplicationThread()).asBinder());
-            request.writeInt(android.os.Process.myUid()); request.writeString(System.getProperty("apklayer.isolated"));
-        }, reply -> reply.readInt());
         if (pid != android.os.Process.myPid()) throw new IllegalStateException("Hub caller identity mismatch");
         HubPermissionChecker.install();
         registerPackages(context);
         HubProviders_registerRemote(context);
         System.out.println("[apklayer] hub registered " + context.getPackageName() + " pid=" + pid);
     }
+    private static int register(Context context, IBinder hub, HubEndpoint endpoint) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.REGISTER, request -> {
+            request.writeString(context.getPackageName()); request.writeStrongBinder(endpoint); request.writeBoolean(Boolean.getBoolean("apklayer.componenthost"));
+            request.writeStrongBinder(((android.app.IApplicationThread) android.app.ActivityThread.currentActivityThread().getApplicationThread()).asBinder());
+            request.writeInt(android.os.Process.myUid()); request.writeString(System.getProperty("apklayer.isolated"));
+        }, reply -> reply.readInt());
+    }
+
     /**
      * The other installed apps as this app's package manager sees them: their package info (components, metadata, permissions) and the intent filters of their
      * activities and services, so getPackageInfo, getInstalledPackages and resolveActivity answer for them as on a device.

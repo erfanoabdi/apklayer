@@ -1,24 +1,22 @@
 #!/usr/bin/env python3
-"""Foreground GPU regression on the VM; log events drive real compositor input."""
-import os as _os
-LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
+"""Foreground GPU regression on the VM; log events drive input and a resize through the shell's test input (instance.inject)."""
 import os
 import ctypes
 import time
 from pathlib import Path
 import re
 import selectors
-import select
 import signal
 import subprocess
 import sys
 import uuid
 
-ROOT = Path.home() / 'apklayer-m1'
-os.chdir(ROOT)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import instance  # noqa: E402  (changes into the repo root)
+LOGDIR = instance.LOGDIR
+ROOT = instance.ROOT
 PKG = 'com.android.test.uibench'
-ENV = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000',
-           APKLAYER_NATIVE=str(Path.home() / 'arm64-native'), APKLAYER_RUNTIME_DEBUG='1')
+ENV = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1')
 LOG = Path('/tmp/gpu-test.out')
 steps = ['1000:hover:0,0', '3000:hover:1,1', '5000:hover:0,0', '6000:hover:2,2',
          '8000:hover:0,0', '9000:hover:3,3', '12000:hover:0,0', '14000:hover:4,4',
@@ -36,24 +34,20 @@ def run(args, **kwargs):
 def stop():
     subprocess.run(['bin/apklayer', 'stop'], env=ENV, stdout=subprocess.DEVNULL,
                    stderr=subprocess.DEVNULL)
-    subprocess.run(['pkill', '-9', '-x', 'tail'], check=False)
 
 
 def input_steps(*steps):
-    print('INPUT ' + ' '.join(steps), flush=True)
-    run(['sudo', '-n', '/tmp/uinput-keys', *steps],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    instance.inject(PKG, *steps)
 
 
 def capture(label):
-    print('CAPTURE ' + label, flush=True)
-    assert select.select([sys.stdin], [], [], 3)[0], 'capture acknowledgement stalled'
-    assert sys.stdin.readline().strip() == 'captured', 'capture failed'
+    """The app window's screenshot and its dialog margin check (tests/vm/gpu-check-image.py)."""
+    run([sys.executable, 'tests/vm/gpu-check-image.py', str(instance.capture(label, PKG))])
 
 
 def dump(name):
     with open('/tmp/gpu-' + name + '.txt', 'wb') as out:
-        run(['b/cli/apklayer', 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger', '--list'],
+        run(['bin/apklayer', 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger', '--list'],
             stdout=out, stderr=subprocess.STDOUT)
     return Path('/tmp/gpu-' + name + '.txt').read_text(errors='replace')
 
@@ -63,7 +57,6 @@ proc = None
 seen = []
 resized = False
 try:
-    run(['gcc', '-O1', '-o', '/tmp/uinput-keys', 'tests/vm/uinput-keys.c'])
     proc = subprocess.Popen(['bin/apklayer', 'run', PKG], env=ENV, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, start_new_session=True)
     selector = selectors.DefaultSelector()
@@ -109,24 +102,24 @@ try:
                 seen.append(line)
                 print(line, flush=True)
                 if 'script: hover:1,1' in line:
-                    input_steps('abs:260,157', 'click')
+                    input_steps('focus', 'click:226,80')  # General (content pixels of the 452-wide list, rows of 49 below the action bar)
                 elif 'script: hover:2,2' in line:
-                    input_steps('abs:260,213', 'click')
+                    input_steps('click:226,129')  # Dialog List
                 elif 'script: hover:3,3' in line:
                     before = dump('before-resize')
                     if 'DialogListActivity' not in '\n'.join(seen):
-                        raise RuntimeError('real clicks did not open Dialog List')
+                        raise RuntimeError('clicks did not open Dialog List')
                     if 'VRI-' + PKG not in before:
                         raise RuntimeError('no app layer in SurfaceFlinger')
                     capture('dialog before resize')
-                    input_steps('abs:260,300', 'click', 'combo:alt+66', 'abs:650,650', 'key:28')
+                    input_steps('resize:520,640')  # what the compositor sends for a resize (narrower than the dialog's own width: it keeps filling the window)
                     resized = True
                 elif 'script: hover:4,4' in line:
                     after = dump('after-resize')
                     if 'VRI-' + PKG not in after:
                         raise RuntimeError('app layer disappeared after resize')
                     capture('dialog after resize')
-                    input_steps('abs:260,300', 'click', 'key:1')  # real Esc/Back must dismiss the dialog
+                    input_steps('key:1')  # Esc/Back must dismiss the dialog
                 elif 'script: hover:0,0' in line and 'clipboard to the system (16 chars)' in '\n'.join(seen):
                     final_layers = dump('after-back')
                     print('LAYERS after resize=' + str(after.count('VRI-')) + ' after Back=' + str(final_layers.count('VRI-')), flush=True)
@@ -135,26 +128,24 @@ try:
     text = '\n'.join(seen)
     assert resized, 'resize step never reached'
     sizes = re.findall(r'configure (\d+x\d+)', text)
-    assert len(set(sizes)) > 1, 'real compositor resize never reached the app'
+    assert len(set(sizes)) > 1, 'the compositor\'s resize never reached the app'
     final_size = sizes[-1]
     assert final_size != sizes[0], 'resize returned to the original dimensions'
     assert 'clipboard to the system (16 chars)' in text, 'main loop stalled after resize'
-    assert final_layers.count('VRI-') < after.count('VRI-'), 'real Back did not remove the dialog layer'
+    assert final_layers.count('VRI-') < after.count('VRI-'), 'Back did not remove the dialog layer'
     shell = Path(LOGDIR + '/shell.log').read_text(errors='replace')
     assert shell.count('dmabuf frame') > 5, 'no GPU frame delivery'
     assert '[shell] apklayer: window ' not in shell, 'empty primary window was created'
     assert final_size in shell, 'no GPU frame at the final resized dimensions'
-    assert Path(LOGDIR + '/vdisplay-' + PKG + '.log').exists(), 'sink was not launched'
-    print('PASS GPU dialog, real resize, Back and main-loop responsiveness', flush=True)
+    assert list(Path(LOGDIR).glob('vdisplay-' + PKG + '-*.log')), 'sink was not launched'  # vdisplay-<package>-<pid>.log
+    print('PASS GPU dialog, resize, Back and main-loop responsiveness', flush=True)
 except BaseException:
-    services = subprocess.run(['pgrep', '-f', '[b]tload.*libapklayer_(surfaceflinger|composer)'], capture_output=True, text=True)
-    for pid in services.stdout.split():
+    for pid in [l.split()[0] for l in instance.mine('[b]tload.*libapklayer_(surfaceflinger|composer)')]:
         Path('/tmp/gpu-maps-' + pid + '.txt').write_text(Path('/proc/' + pid + '/maps').read_text())
         with open('/tmp/gpu-native-' + pid + '.txt', 'wb') as out:
             subprocess.run(['sudo', '-n', 'gdb', '-batch', '-p', pid, '-ex', 'set pagination off', '-ex', 'thread apply all bt 8', '-ex', 'info sharedlibrary'], stdout=out, stderr=subprocess.STDOUT)
     if proc is not None and proc.poll() is None:
-        pids = subprocess.run(['pgrep', '-f', '[a]pklayer.host.Main'], capture_output=True, text=True)
-        for pid in pids.stdout.split():
+        for pid in [l.split()[0] for l in instance.mine('[a]pklayer.host.Main')]:
             with open('/tmp/gpu-threads-' + pid + '.txt', 'wb') as out:
                 subprocess.run(['jcmd', pid, 'Thread.print'], stdout=out, stderr=subprocess.STDOUT)
     raise
@@ -164,9 +155,8 @@ finally:
         if proc.poll() is None:
             os.killpg(proc.pid, signal.SIGKILL)
         proc.wait()
-    subprocess.run(['pkill', '-9', '-f', '[a]pklayer.host.Main --hub'], check=False)  # the instance hub (auto-started with the hub flags) also ends by itself when idle
-    left = subprocess.run(['pgrep', '-af', '[a]pklayer.host.Main|[b]tload|[a]pklayer-shell'],
-                          capture_output=True, text=True)
-    if left.returncode == 0:
-        print('FAIL leftover processes:\n' + left.stdout, file=sys.stderr)
+    instance.kill('[a]pklayer.host.Main --hub')  # the instance hub (auto-started with the hub flags) also ends by itself when idle
+    left = instance.mine('[a]pklayer.host.Main|[b]tload|[a]pklayer-shell')
+    if left:
+        print('FAIL leftover processes:\n' + '\n'.join(left), file=sys.stderr)
         sys.exit(1)

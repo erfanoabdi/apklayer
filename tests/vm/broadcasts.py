@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """Cross-app broadcasts through the instance hub: one phase per run (manifest | basic | ordered | sticky), every JVM owned, drained and reaped."""
-import os as _os
-LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import ctypes
 import os
 from pathlib import Path
@@ -11,11 +9,12 @@ import subprocess
 import sys
 import time
 
-os.chdir(Path.home() / 'apklayer-m1')
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import instance  # noqa: E402  (changes into the repo root)
+LOGDIR = instance.LOGDIR
 PHASE = sys.argv[1]
 BASE = '-Dapklayer.realbinder=true -Dapklayer.instancehub=true -Dapklayer.runms=60000' + (' -Dhello.trace=1' if os.environ.get('BC_TRACE') else '')
-ENV = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000', APKLAYER_NATIVE=str(Path.home() / 'arm64-native'),
-    APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400', APKLAYER_JOPTS=BASE)
+ENV = dict(instance.ENV, APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400', APKLAYER_JOPTS=BASE)
 ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-media.so'
 LOGS = Path(LOGDIR)
 libc = ctypes.CDLL(None, use_errno=True)
@@ -23,7 +22,6 @@ libc = ctypes.CDLL(None, use_errno=True)
 
 def stop():
     subprocess.run(['bin/apklayer', 'stop'], env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(['pkill', '-9', '-x', 'tail'], check=False)
 
 
 class Apps:
@@ -163,5 +161,5 @@ finally:
     for proc in apps.children.values():
         if proc.poll() is None: os.killpg(proc.pid, signal.SIGTERM)
     stop()
-    subprocess.run(['pkill', '-f', '[a]pklayer.host.Main --hub'], check=False)
-    subprocess.run(['pkill', '-f', '[c]omponent-host'], check=False)
+    instance.kill('[a]pklayer.host.Main --hub')
+    instance.kill('[c]omponent-host')

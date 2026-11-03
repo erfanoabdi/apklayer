@@ -27,7 +27,10 @@ final class HubServiceBindings {
     }
     private final HubDirectory directory;
     private final HubPackages packages;
-    private final Map<IBinder, Binding> bindings = new HashMap<>();
+    /** One connection may be bound to several services (bindService with one ServiceConnection and different intents): a binding per pair. */
+    private record Key(IBinder connection, ComponentName service) {}
+    private static Key key(Binding binding) { return new Key(binding.connection.asBinder(), binding.intent.getComponent()); }
+    private final Map<Key, Binding> bindings = new HashMap<>();
     private final java.util.concurrent.ExecutorService commands = java.util.concurrent.Executors.newSingleThreadExecutor(task -> {
         Thread thread = new Thread(task, "hub-service-dispatch"); thread.setDaemon(true); return thread;
     });
@@ -43,11 +46,11 @@ final class HubServiceBindings {
         System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " bind " + key + " " + info.name + " flags=0x" + Integer.toHexString(flags) + " from " + caller.name());
         Binding binding = new Binding(caller, explicit, connection, flags, key);
         synchronized (bindings) {
-            Binding old = bindings.get(connection.asBinder());
+            Binding old = bindings.get(key(binding));
             // binding the same connection to the same service again only changes its flags on Android (GeckoView does it to move a child process between priorities); the hub keeps the first ones
-            if (old != null && old.caller.pid() == caller.pid() && old.intent.getComponent().equals(explicit.getComponent())) return true;
+            if (old != null && old.caller.pid() == caller.pid()) return true;
             if (old != null) throw new IllegalArgumentException("Connection already bound");
-            bindings.put(connection.asBinder(), binding);
+            bindings.put(key(binding), binding);
         }
         HubDirectory.Peer target = directory.peer(key);
         if (target != null) dispatch(binding, target);
@@ -56,13 +59,11 @@ final class HubServiceBindings {
     }
     void unbind(HubDirectory.Peer caller, IBinder connection) {
         System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " unbind from " + caller.name());
-        Binding binding;
         synchronized (bindings) {
-            binding = bindings.get(connection);
-            if (binding == null) throw new IllegalArgumentException("Service connection is not bound");
-            if (binding.caller.pid() != caller.pid()) throw new SecurityException("Connection belongs to another process");
-            bindings.remove(connection);
-            commands.execute(() -> detach(binding));
+            List<Binding> bound = bindings.values().stream().filter(binding -> binding.connection.asBinder().equals(connection)).toList();
+            if (bound.isEmpty()) throw new IllegalArgumentException("Service connection is not bound");
+            if (bound.stream().anyMatch(binding -> binding.caller.pid() != caller.pid())) throw new SecurityException("Connection belongs to another process");
+            for (Binding binding : bound) { bindings.remove(key(binding)); commands.execute(() -> detach(binding)); }  // unbindService ends every binding of the connection
         }
     }
     boolean needsHost(String name) {
@@ -76,7 +77,7 @@ final class HubServiceBindings {
         synchronized (bindings) {
             failed = bindings.values().stream().filter(binding -> binding.target == null &&
                     binding.key.equals(name)).toList();
-            for (Binding binding : failed) bindings.remove(binding.connection.asBinder());
+            for (Binding binding : failed) bindings.remove(key(binding));
         }
         for (Binding binding : failed) {
             try { binding.connection.connected(binding.intent.getComponent(), null, null, true); }
@@ -93,14 +94,14 @@ final class HubServiceBindings {
     }
     private void dispatch(Binding binding, HubDirectory.Peer target) {
         synchronized (bindings) {
-            if (bindings.get(binding.connection.asBinder()) != binding || binding.target != null) return;
+            if (bindings.get(key(binding)) != binding || binding.target != null) return;
             binding.target = target;
             commands.execute(() -> deliver(binding, target));
         }
     }
     private void deliver(Binding binding, HubDirectory.Peer target) {
         synchronized (bindings) {
-            if (bindings.get(binding.connection.asBinder()) != binding || binding.target != target) return;
+            if (bindings.get(key(binding)) != binding || binding.target != target) return;
         }
         try {
             HubProtocol.call(target.endpoint(), HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_BIND, request -> {
@@ -115,7 +116,7 @@ final class HubServiceBindings {
         if (binding.target == null) return;
         try {
             HubProtocol.call(binding.target.endpoint(), HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_UNBIND,
-                    request -> request.writeStrongBinder(binding.connection.asBinder()), reply -> null);
+                    request -> { request.writeStrongBinder(binding.connection.asBinder()); request.writeTypedObject(binding.intent.getComponent(), 0); }, reply -> null);
         } catch (RuntimeException failure) {
             System.out.println("[apklayer-hub] unbind target already disconnected: " + binding.intent.getComponent());
         }
@@ -126,7 +127,7 @@ final class HubServiceBindings {
         synchronized (bindings) {
             for (Binding binding : List.copyOf(bindings.values())) {
                 if (binding.caller.pid() == peer.pid()) {
-                    bindings.remove(binding.connection.asBinder()); detached.add(binding);
+                    bindings.remove(key(binding)); detached.add(binding);
                 } else if (binding.target != null && binding.target.pid() == peer.pid()) {
                     binding.target = null;
                     // LoadedApk's original death monitor delivers onServiceDisconnected.

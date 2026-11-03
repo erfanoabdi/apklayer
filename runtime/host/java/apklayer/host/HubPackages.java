@@ -29,7 +29,7 @@ final class HubPackages {
         Path directory = root.resolve(name).normalize();
         if (!root.equals(directory.getParent())) throw new SecurityException("Invalid package name");
         Path apk = directory.resolve("base.apk");
-        if (!Files.isRegularFile(apk)) return null;
+        if (!Files.isRegularFile(apk) || !Files.isRegularFile(directory.resolve("info.properties"))) return null;  // info.properties comes last: an install in progress is not one yet
         try {
             long modified = Files.getLastModifiedTime(apk).toMillis(), size = Files.size(apk);
             Cached old = cache.get(name);
@@ -135,7 +135,7 @@ final class HubPackages {
     List<String> installed() {
         List<String> names = new ArrayList<>();
         try (var stream = Files.list(root)) {
-            stream.filter(directory -> Files.isRegularFile(directory.resolve("base.apk"))).forEach(directory -> names.add(directory.getFileName().toString()));
+            stream.filter(directory -> Files.isRegularFile(directory.resolve("base.apk")) && Files.isRegularFile(directory.resolve("info.properties"))).forEach(directory -> names.add(directory.getFileName().toString()));
         } catch (IOException failure) { throw new IllegalStateException("Cannot list installed packages", failure); }
         return names;
     }
@@ -218,19 +218,10 @@ final class HubPackages {
 
     private static final HostSystemConfig SYSTEM = HostSystemConfig.load();
 
+    /** A service's android:permission, checked with the same grants as every other permission (holds): a requested dangerous one is granted too. */
     void enforceServicePermission(String caller, ServiceInfo service) {
         if (caller.equals(service.packageName) || service.permission == null || service.permission.isEmpty()) return;
-        PackageParser.Package source = get(caller), owner = get(service.packageName);
-        if (source == null || !source.requestedPermissions.contains(service.permission))
-            throw new SecurityException("Service requires " + service.permission);
-        PermissionInfo definition = owner.permissions.stream().map(permission -> permission.info)
-                .filter(permission -> service.permission.equals(permission.name)).findFirst().orElse(null);
-        if (definition == null) {
-            try { definition = RuntimeEnvironment.getApplication().getPackageManager().getPermissionInfo(service.permission, 0); }
-            catch (PackageManager.NameNotFoundException missing) { throw new SecurityException("Unknown permission " + service.permission); }
-        }
-        if ((definition.protectionLevel & PermissionInfo.PROTECTION_MASK_BASE) != PermissionInfo.PROTECTION_NORMAL)
-            throw new SecurityException("Permission is not granted: " + service.permission);
+        if (!holds(caller, service.permission)) throw new SecurityException("Service requires " + service.permission);
     }
     ServiceInfo service(Intent intent) {
         ComponentName explicit = intent.getComponent();

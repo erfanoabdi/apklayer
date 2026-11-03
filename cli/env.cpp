@@ -51,6 +51,9 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     env["APKLAYER_INSTANCE"] = instance.id;
     env["APKLAYER_NATIVE"] = n;
     env["APKLAYER_LOGS"] = instance.logs();
+    env["APKLAYER_INSTANCE_ROOT"] = join(instance.runtimeDir, "android-root");  // what this instance's stack stages for itself (cli/stack.cpp), before the shared root
+    env["APKLAYER_STORAGE"] = realPath(instance.storageDir);  // the path layer serves Android's /storage, /sdcard and /data/media/0 from it (bridge/native/paths.c)
+    env["APKLAYER_DATA"] = realPath(instance.dataDir);  // and the rest of /data
     // bionic_translation's libraries first (the patched ones), then ours; the path layer and bionic's TLS slots come first in every lookup
     env["LD_LIBRARY_PATH"] = layout.bionic + ":" + n;
     env["PATH"] = join(n, "bin") + ":" + getenvOr("PATH", "/usr/local/bin:/usr/bin:/bin");  // getprop for the apps that run it
@@ -96,7 +99,7 @@ std::vector<std::string> hostJvmArgs(const Layout& l, const Instance& inst, Nati
     if (exists(join(n, "native-runtime.jar"))) a.push_back("-Dapklayer.nativejar=" + join(n, "native-runtime.jar"));
     if (isDir(join(nr, "apex"))) {
         ne.env["ANDROID_ROOT"] = join(nr, "system");
-        ne.env["ANDROID_DATA"] = join(nr, "data");
+        ne.env["ANDROID_DATA"] = "/data";  // the instance's own (APKLAYER_DATA through the path layer): SettingsProvider's files, not the shared native root's
         ne.env["ANDROID_I18N_ROOT"] = join(nr, "apex/com.android.i18n");
         ne.env["ANDROID_TZDATA_ROOT"] = join(nr, "apex/com.android.tzdata");
     }

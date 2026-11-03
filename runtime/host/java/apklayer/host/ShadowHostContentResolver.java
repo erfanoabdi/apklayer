@@ -28,6 +28,9 @@ public class ShadowHostContentResolver extends ShadowContentResolver {
     @Implementation @Override protected void notifyChange(Uri uri, ContentObserver observer, boolean syncToNetwork) { super.notifyChange(uri, observer, syncToNetwork); tell(uri, 0); }
     @Implementation @Override protected void notifyChange(Uri uri, ContentObserver observer) { super.notifyChange(uri, observer); tell(uri, 0); }
     @Implementation @Override protected void notifyChange(Uri uri, ContentObserver observer, int flags) { super.notifyChange(uri, observer, flags); tell(uri, flags); }
+    // the hidden per-user forms (SettingsProvider notifies this way): there is one user
+    @Implementation protected void notifyChange(Uri uri, ContentObserver observer, boolean syncToNetwork, int userHandle) { notifyChange(uri, observer, syncToNetwork); }
+    @Implementation protected void notifyChange(Uri uri, ContentObserver observer, int flags, int userHandle) { notifyChange(uri, observer, flags); }
 
     /** From the hub: this app's own observers only (no echo back). */
     static void deliver(Context context, Uri uri, int flags) {

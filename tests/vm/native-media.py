@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""Real MediaCodec APK, committed GPU frame, capture handshake and physical Back."""
-import os as _os
-LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
+"""Real MediaCodec APK, committed GPU frame, capture handshake and Back (the shell's test input)."""
 import ctypes
 import os
 from pathlib import Path
@@ -11,9 +9,10 @@ import subprocess
 import sys
 import time
 
-os.chdir(Path.home() / 'apklayer-m1')
-ENV = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000', APKLAYER_NATIVE=str(Path.home() / 'arm64-native'),
-    APKLAYER_CODEC2='1', APKLAYER_MEDIA_SERVICES='1', APKLAYER_DEBUG_INPUT='1', APKLAYER_RUNTIME_DEBUG='1',
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import instance  # noqa: E402  (changes into the repo root)
+LOGDIR = instance.LOGDIR
+ENV = dict(instance.ENV, APKLAYER_CODEC2='1', APKLAYER_MEDIA_SERVICES='1', APKLAYER_DEBUG_INPUT='1', APKLAYER_RUNTIME_DEBUG='1',
     APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400',
     APKLAYER_JOPTS='-Dapklayer.nativemedia=true -Dapklayer.runms=90000')
 extra = Path.home() / '.apklayer-extra-jopts'  # regression runs with a feature flag (e.g. -Dapklayer.realbinder=true): the file holds the extra options
@@ -22,7 +21,6 @@ ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.
 
 def stop():
     subprocess.run(['bin/apklayer', 'stop'], env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(['pkill', '-9', '-x', 'tail'], check=False)
 
 stop()
 logs = Path(LOGDIR)
@@ -32,9 +30,8 @@ notify = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
 assert notify >= 0 and libc.inotify_add_watch(notify, os.fsencode(logs), 0x102) >= 0
 app = None
 seen = []
-committed = captured = False
+committed = captured = focused = False
 try:
-    subprocess.run(['gcc', '-O1', '-o', '/tmp/uinput-keys', 'tests/vm/uinput-keys.c'], check=True)
     app = subprocess.Popen(['bin/apklayer', 'run', 'hello.nativecodec'], env=ENV,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
     with selectors.DefaultSelector() as events, Path('/tmp/apklayer-native-media.out').open('wb') as log:
@@ -67,12 +64,14 @@ try:
                     assert '[hello-native-codec] FAIL' not in line, line
                     if '[hello-native-codec] FRAME PASS' in line:
                         committed = True
-            # Capture after the real HWUI commit callback and a visible active window.
+            # Capture after the real HWUI commit callback and a visible active window: the shell's test input activates it (the desktop's
+            # focus belongs to whichever instance mapped a window last)
+            if committed and not focused:
+                instance.inject('hello.nativecodec', 'focus')
+                focused = True
             if committed and not captured and any('window state active=true' in s for s in seen):
-                print('CAPTURE native MediaCodec result', flush=True)
-                assert sys.stdin.readline().strip() == 'captured', 'capture not acknowledged'
-                subprocess.run(['sudo', '-n', '/tmp/uinput-keys', 'key:1'],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                instance.capture('native MediaCodec result', 'hello.nativecodec')
+                instance.inject('hello.nativecodec', 'key:1')  # Esc = Back
                 captured = True
     text = '\n'.join(seen)
     assert '[runtime] Android media JNI registered' in text
@@ -98,7 +97,7 @@ try:
         assert '[hello-native-codec] ENCODER PASS ' + kind in text, kind
     for asset in ('tone-mulaw.wav', 'tone-alaw.wav', 'tone-amrwb.awb', 'zeros-amrnb.amr'):
         assert '[hello-native-codec] AUDIO PASS ' + asset in text, asset
-    print('PASS APK MediaCodec JNI, real YUV/PTS/EOS, frame commit and physical Back', flush=True)
+    print('PASS APK MediaCodec JNI, real YUV/PTS/EOS, frame commit and Back', flush=True)
 finally:
     stop()
     if app is not None:
@@ -110,6 +109,6 @@ finally:
         app.stdout.close()
     os.close(notify)
     (Path(ENV['APKLAYER_NATIVE']) / 'android-root/vendor/etc/vintf/manifest/apklayer-media.xml').unlink(missing_ok=True)
-    subprocess.run(['pkill', '-9', '-f', '[a]pklayer.host.Main --hub'], check=False)  # the instance hub (auto-started with the hub flags) also ends by itself when idle
-    left = subprocess.run(['pgrep', '-af', '[a]pklayer.host.Main|[b]tload|[a]pklayer-shell'], capture_output=True, text=True)
-    assert left.returncode != 0, left.stdout
+    instance.kill('[a]pklayer.host.Main --hub')  # the instance hub (auto-started with the hub flags) also ends by itself when idle
+    left = instance.mine('[a]pklayer.host.Main|[b]tload|[a]pklayer-shell')
+    assert not left, left

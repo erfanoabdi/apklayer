@@ -1,3 +1,7 @@
 # Copy to tests/vm/local.conf (untracked). The test VM: an arm64 Linux with a GNOME Wayland session, the staged runtime, and a copy of this repo in ~/apklayer.
 APKLY_VM=user@host
 APKLY_VM_PASS=secret
+# Optional, for tests/run: the repo copy on the VM (default ~/apklayer) and extra environment of every VM command (a private native tree, data dir):
+# APKLY_VM_ROOT=~/wt/me/repo
+# APKLY_VM_ENV=APKLAYER_NATIVE=$HOME/wt/me/native XDG_DATA_HOME=$HOME/wt/me/data XDG_STATE_HOME=$HOME/wt/me/state
+# APKLY_SLOTS=me1 me2 me3 me4   (tests/run's instance ids, default tests tests2 ...: other users of the VM use those)

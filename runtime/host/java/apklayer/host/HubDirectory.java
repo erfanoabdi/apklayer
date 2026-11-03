@@ -56,10 +56,12 @@ final class HubDirectory extends Binder {
         Thread timer = new Thread(() -> {
             try { Thread.sleep(delayMs); } catch (InterruptedException interrupted) { return; }
             boolean busy;
-            synchronized (peers) { busy = !peers.isEmpty(); }
-            synchronized (hosts) { busy |= hosts.values().stream().anyMatch(Process::isAlive); }
+            synchronized (hosts) { busy = hosts.values().stream().anyMatch(Process::isAlive); }
             synchronized (appProcesses) { busy |= appProcesses.values().stream().anyMatch(Process::isAlive); }
-            if (busy) return;
+            synchronized (peers) {  // decided under the registration lock: a process that registers after this is refused and waits for the next hub
+                if (busy || !peers.isEmpty()) return;
+                stopping = true;
+            }
             System.out.println("[apklayer-hub] idle, exiting");
             System.exit(0);
         }, "hub-idle");
@@ -80,6 +82,12 @@ final class HubDirectory extends Binder {
             if (peer == null || peer.uid != Binder.getCallingUid()) throw new SecurityException("Unregistered calling process");
             return peer;
         }
+    }
+    /** After a start or stop: a component host left without services ends now that its reply is in (Services.exitIfIdle). */
+    void exitIfIdle(Peer target) {
+        if (!target.headless) return;
+        try { HubProtocol.call(target.endpoint, HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_EXIT_IF_IDLE, request -> {}, reply -> null); }
+        catch (IllegalStateException gone) { /* it may end before this reply */ }
     }
     /** The package's process that shows activities (not a headless component host). */
     Peer appPeer(String name) {
@@ -145,6 +153,7 @@ final class HubDirectory extends Binder {
                 int pid = Binder.getCallingPid(), uid = Binder.getCallingUid();
                 Peer peer = new Peer(pid, uid, name, endpoint, appThread, headless, appUid, instance);
                 synchronized (peers) {
+                    if (stopping) throw new IllegalStateException(HubProtocol.EXITING);
                     Peer old = peers.get(pid);
                     if (old != null) {
                         if (!old.name.equals(name) || !old.endpoint.equals(endpoint)) throw new SecurityException("Process already registered");
@@ -305,7 +314,7 @@ final class HubDirectory extends Binder {
             }
             case HubProtocol.TAKE_LAUNCH -> {
                 Peer caller = caller(); request.enforceNoDataAvail();
-                HubActivities.Launch launch = activities.take(caller.name());
+                HubActivities.Launch launch = activities.take(caller);
                 reply.writeNoException(); reply.writeTypedObject(launch == null ? null : launch.intent(), 0); reply.writeTypedObject(launch == null ? null : launch.resultTo(), 0); return true;
             }
             case HubProtocol.GET_PROVIDER -> {

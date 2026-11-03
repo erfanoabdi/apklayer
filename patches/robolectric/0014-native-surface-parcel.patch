@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 14/14] apklayer: native-surface-parcel
+
+apklayer patch: Surface.nativeReadFromParcel / nativeWriteToParcel / nativeGetFromSurfaceControl are the real natives. Upstream
+stubbed them (read and new Surface(SurfaceControl) gave no surface, write wrote nothing), so a Surface sent to another app process through a binder call (GeckoView's GPU process gets its
+compositor Surface this way) arrived as no window: ANativeWindow_fromSurface gave null.
+
+Against external/robolectric 87aa52b08 (REVISION). Applied by tools/build overlay onto the staged upstream sources
+(<native>/aosp/robolectric-src); the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
+---
+diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowNativeSurface.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowNativeSurface.java
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowNativeSurface.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowNativeSurface.java
+@@ -61,15 +61,12 @@
+     return SurfaceNatives.nativeCreateFromSurfaceControl(surfaceControlNativeObject);
+   }
+ 
+-  @Implementation(minSdk = Q)
+-  protected static long nativeGetFromSurfaceControl(
+-      long surfaceObject, long surfaceControlNativeObject) {
+-    return 0;
+-  }
++  // apklayer patch: nativeGetFromSurfaceControl (Q+) is the real native: a Surface made from a SurfaceControl (new Surface(SurfaceControl),
++  // GeckoView's child surfaces) is the SurfaceControl's BLAST surface; the stub gave none
+ 
+   @Implementation(minSdk = P, maxSdk = P)
+   protected static long nativeGetFromSurfaceControl(long surfaceControlNativeObject) {
+-    return nativeGetFromSurfaceControl(0, surfaceControlNativeObject);
++    return 0;
+   }
+ 
+   @Implementation(minSdk = S, maxSdk = UPSIDE_DOWN_CAKE)
+@@ -105,14 +102,9 @@
+     return SurfaceNatives.nativeIsConsumerRunningBehind(nativeObject);
+   }
+ 
+-  @Implementation
+-  protected static long nativeReadFromParcel(long nativeObject, Parcel source) {
+-    return 0;
+-  }
++  // apklayer patch: nativeReadFromParcel and nativeWriteToParcel are the real natives (a Surface sent to another app process stays a window: its
++  // IGraphicBufferProducer crosses in the binder Parcel; the stubs here returned no surface and wrote nothing)
+ 
+-  @Implementation
+-  protected static void nativeWriteToParcel(long nativeObject, Parcel dest) {}
+-
+   @Implementation(maxSdk = UPSIDE_DOWN_CAKE)
+   protected static void nativeAllocateBuffers(long nativeObject) {
+     SurfaceNatives.nativeAllocateBuffers(nativeObject);

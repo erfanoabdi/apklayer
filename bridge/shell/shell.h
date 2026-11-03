@@ -22,6 +22,8 @@
  *                                   dmabufs through zwp_linux_dmabuf_v1.
  *                  7 VSYNC_REQUEST  {i32 id}: tell me when the compositor shows the next frame of this window
  *                  5 CLIPBOARD_SET  utf8 text: the app copied something; the shell owns the selection
+ *                 11 TEST_INPUT     {i32 kind, a, b, c} utf8 window "\0" utf8 text: test input into a window (testinput.c, only with
+ *                                   APKLAYER_TEST_INPUT=1); answered with 115 TEST_DONE {i32 result}
  *   shell -> app 101 INPUT          {i32 id, i32 type, i32 a, i32 b}
  *                    type 0/1/2 = MotionEvent DOWN/UP/MOVE at (a, b); 3 = hover move, 4 = right click (long press); 100 = key (evdev a, pressed b)
  *                103 CLOSE          {i32 id}
@@ -74,6 +76,11 @@ enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
 #define CLIENT_MAX_FDS 16
 #define MSG_WINDOW_SIZE 10   /* app -> shell: {own window id, logical w, h}: the app wants its window this shape (orientation); the shell fits it to the screen and answers with CONFIGURE */
 #define MSG_VSYNC_REQUEST 7
+#define MSG_TEST_INPUT 11    /* test -> shell (testinput.c) */
+#define MSG_TEST_DONE 115    /* shell -> test: {i32 result} */
+/* TEST_INPUT kinds: focus; key {evdev, down}; pointer {x, y, button (0 move, +code press, -code release)}; touch {action, x, y};
+ * text {preedit} + utf8; resize {logical w, h}. x, y: logical content pixels, y < 0 = the title bar. */
+enum { TEST_FOCUS, TEST_KEY, TEST_POINTER, TEST_TOUCH, TEST_TEXT, TEST_RESIZE };
 #define MSG_TEXT_INPUT 6
 /* app -> shell uses type 5 for MSG_CLIPBOARD_SET (text); shell -> app 109 pushes the selection */
 #define MSG_CLIPBOARD_SET 5
@@ -191,6 +198,14 @@ void window_drop_proxy(struct client *c);  /* window.c */
 void window_dmabuf_show(struct window *w, int buf, const int32_t *damage);
 void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int nfds);  /* dmabuf.c */
 void window_dmabuf_destroy(struct window *w);  /* dmabuf.c */
+/* test input (testinput.c): the seat's and the compositor's events, injected into one window */
+void test_input(struct client *c, const uint8_t *p, uint32_t len);
+void keyboard_inject_focus(struct window *w);  /* keyboard.c */
+void keyboard_inject_key(struct window *w, uint32_t evdev, int down);  /* keyboard.c */
+void pointer_inject(struct window *w, int x, int y, int button);  /* pointer.c */
+void touch_inject(struct window *w, int action, int x, int y);  /* touch.c */
+int text_input_inject(struct window *w, const char *text, int preedit);  /* textinput.c */
+void window_inject_configure(struct window *w, int cw, int ch, int activated);  /* window.c */
 extern const struct wl_pointer_listener ptr_listener;  /* pointer.c */
 extern const struct wl_keyboard_listener kb_listener;  /* keyboard.c */
 extern const struct wl_registry_listener registry_listener;  /* registry.c */

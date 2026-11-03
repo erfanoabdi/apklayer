@@ -69,7 +69,7 @@ public final class AppHost implements Runnable {
     /** Activities another app started through the hub for a result -> where their result goes. */
     private final java.util.Map<Activity, android.os.ResultReceiver> hubResults = new java.util.IdentityHashMap<>();
     private Handler main;
-    private boolean pausedByFocus, stoppedByMinimize; // lifecycle driven by the window state
+    private boolean windowActive = true, stoppedByMinimize; // lifecycle driven by the window state
     private int logicalW, logicalH, logicalScale = 100; // current window size in dp and scale %
     private int lastOrientation = -2;                    // top activity's requested orientation last applied
     private final HostTextBridge text = new HostTextBridge();
@@ -199,11 +199,11 @@ public final class AppHost implements Runnable {
         }
         if (System.getProperty("apklayer.webviewprovider") != null) org.robolectric.Shadows.shadowOf(app.getPackageManager()).setSystemFeature(android.content.pm.PackageManager.FEATURE_WEBVIEW, true);
         StartTrace.mark("system package installed");
-        HubActivityClient.starter = this::startForHub;
         Intent incoming = HubActivityClient.incoming(); // another app started this one with an intent, through the hub
         if (incoming == null) incoming = HostApps.incoming(); // ... or through the older intent file (PLAN P6)
         launch(incoming != null ? incoming : AppMetadata.launcherIntent(app));
         if (incoming != null) { incomingActivity = stack.peek().get(); android.os.ResultReceiver answerTo = HubActivityClient.takeReceiver(); if (answerTo != null) hubResults.put(incomingActivity, answerTo); }
+        HubActivityClient.setStarter(this::startForHub);
         // Like Simulator.postMotionEvent: an off-screen move so the first frame is drawn.
         input.inject(MotionEvent.obtain(0, SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE, width, height, 0));
         loop(shell);
@@ -250,8 +250,10 @@ public final class AppHost implements Runnable {
                 long now = System.nanoTime();
                 long elapsed = (pausedMode ? SystemClock.uptimeMillis() : System.nanoTime() / 1_000_000) - start;
                 // exit when the run time is up (or the window closed) and every scheduled script step has fired
-                if (script.isEmpty() && (elapsed >= runMs || (shell != null && shell.closed())))
+                if (script.isEmpty() && (elapsed >= runMs || (shell != null && shell.closed()))) {
+                    System.out.println("[apklayer] ending: " + (elapsed >= runMs ? "run time " + runMs + " ms is up" : "window closed"));
                     break;
+                }
 
                 for (int[] ev; shell != null && (ev = shell.poll()) != null; ) input.onHostEvent(ev);
                 for (Object[] ime; shell != null && (ime = shell.pollIme()) != null; ) text.ime((int) ime[0], (int) ime[1], (String) ime[2], (String) ime[3]);
@@ -391,12 +393,10 @@ public final class AppHost implements Runnable {
         boolean bottom = stack.isEmpty();  // the first activity of the task answers isTaskRoot() already while it is created
         taskRootBuilding = bottom;
         HostRoles.install();
-        HostGeckoDiag.probeNetwork();
         ActivityController<? extends Activity> built = Robolectric.buildActivity(cls, intent);
         String caller = intent.getStringExtra(HubActivityClient.CALLER);  // the app that started it for a result (Activity.getCallingPackage)
         if (caller != null) ((ShadowActivity) Shadow.extract(built.get())).setCallingPackage(caller);
         ActivityController<? extends Activity> c = built.create();
-        HostGeckoDiag.dumpSurfaces(c.get());
         taskRootBuilding = false;
         if (bottom) taskRoot = c.get();
         if (c.get().isFinishing()) {  // finish() in onCreate (Telegram starts its intro screen so): Android destroys it without start or resume
@@ -408,7 +408,8 @@ public final class AppHost implements Runnable {
             else graceUntilMs = System.nanoTime() / 1_000_000 + 20000;  // a trampoline that starts the real screen from a coroutine (AnkiDroid's IntentHandler)
             return;
         }
-        c.start().postCreate(null).resume().visible().topActivityResumed(true);  // the rest of ActivityController.setup()
+        c.start().postCreate(null).resume().visible();  // the rest of ActivityController.setup(), focus as the window has it
+        focus(c, windowActive);
         // As in Android, the previous activity is stopped only once an opaque activity covers it;
         // behind a translucent one (dialog-style) it stays paused and visible.
         if (previous != null && !HostWindows.isTranslucent(c.get())) {
@@ -519,31 +520,35 @@ public final class AppHost implements Runnable {
 
 
     /**
-     * Window state from the shell (PLAN P2.9): an inactive window pauses the top activity, a
-     * minimized one stops it; becoming active again restarts/resumes it.
+     * Window state from the shell (PLAN P2.9), as in Android's freeform multi-window: an inactive window stays resumed and only
+     * loses window focus and top-resumed (SDL and game loops pause on onPause); a minimized one is stopped, restored it restarts.
      */
     private void hostState(int flags) {
         boolean active = (flags & 1) != 0, minimized = (flags & 2) != 0;
+        windowActive = active && !minimized;
         ActivityController<? extends Activity> top = stack.peek();
         if (top == null) return;
         System.out.println("[apklayer] window state active=" + active + " minimized=" + minimized);
         if (minimized && !stoppedByMinimize) {
-            if (!pausedByFocus) top.pause();
-            setVisible(top.stop(), false);
-            pausedByFocus = true;
+            setVisible(top.pause().stop(), false);
             stoppedByMinimize = true;
             System.out.println("[apklayer] lifecycle: stopped (minimized)");
-        } else if (!active && !pausedByFocus) {
-            top.pause();
-            pausedByFocus = true;
-            System.out.println("[apklayer] lifecycle: paused (window inactive)");
-        } else if (active && !minimized && (pausedByFocus || stoppedByMinimize)) {
-            if (stoppedByMinimize) setVisible(top.restart().resume().visible(), true);
-            else top.resume();
-            pausedByFocus = false;
+        } else if (!minimized && stoppedByMinimize) {
+            setVisible(top.restart().resume().visible(), true);
             stoppedByMinimize = false;
             System.out.println("[apklayer] lifecycle: resumed");
         }
+        focus(top, windowActive);
+    }
+
+    /** ViewRootImpl#windowFocusChanged and the top-resumed state, as the window manager reports them for the top window. */
+    private static void focus(ActivityController<? extends Activity> c, boolean has) {
+        View decor = c.get().getWindow().getDecorView();
+        if (decor.hasWindowFocus() == has) return;
+        List<android.view.ViewRootImpl> roots = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mRoots");
+        for (android.view.ViewRootImpl root : roots) // the decor may not be attached yet (its first traversal waits for vsync)
+            if (root.getView() == decor) root.windowFocusChanged(has);
+        c.topActivityResumed(has);
     }
 
     /**

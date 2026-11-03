@@ -1,6 +1,7 @@
 #include "run.h"
 
 #include <cerrno>
+#include <cstring>
 #include <dirent.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -16,9 +17,14 @@ namespace {
 const char* kHubReadyProperty = "apklayer.hub.ready";
 const char* kWebviewCommandLine = "/data/local/tmp/webview-command-line";
 
-bool webviewSandboxOff() {
+// The host's switch file (tools/host-setup/webview.sh), copied into the instance's own /data, where Chromium reads it through the path layer
+// (APKLAYER_DATA). A launch from inside the instance (the hub's component host, with the path layer preloaded) reads that copy under the same name.
+bool webviewSandboxOff(const Instance& inst) {
     auto text = readFile(kWebviewCommandLine);
-    return text && text->find("--no-sandbox") != std::string::npos;
+    if (!text || text->find("--no-sandbox") == std::string::npos) return false;
+    std::string own = join(inst.dataDir, std::string(kWebviewCommandLine).substr(strlen("/data/")));
+    if (readFile(own) != text) { makeDirs(dirName(own)); writeFile(own, *text); }
+    return true;
 }
 }  // namespace
 
@@ -28,9 +34,9 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     ensureUid(l, dir);
     // the Chromium WebView provider is the default WebView once installed and tools/host-setup/webview.sh ran; APKLAYER_WEBVIEW_PROVIDER=none disables it
     std::string provider = getenvOr("APKLAYER_WEBVIEW_PROVIDER", "\x01");
-    if (provider == "\x01") provider = exists(join(l.appsDir, "com.android.webview/classes.jar")) && webviewSandboxOff() ? "com.android.webview" : "";
+    if (provider == "\x01") provider = exists(join(l.appsDir, "com.android.webview/classes.jar")) && webviewSandboxOff(inst) ? "com.android.webview" : "";
     if (provider == "none") provider.clear();
-    if (!provider.empty() && !webviewSandboxOff())
+    if (!provider.empty() && !webviewSandboxOff(inst))
         die("the WebView provider route needs tools/host-setup/webview.sh once (Chromium's seccomp sandbox cannot run inside an app JVM and is switched off; needs sudo)");
 
     trace("run " + package);
@@ -66,43 +72,6 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         jvm.push_back("-Dapklayer.displaywindow=" + title);
     }
     ne.env["LD_LIBRARY_PATH"] = l.native + ":" + join(l.native, "glibc") + ":" + ne.env["LD_LIBRARY_PATH"];  // bionic linker + its libs
-    // Gecko (Firefox) reads its application-data roots from these (an Android Gecko without them cannot select a profile: "Could not find profile folder")
-    makeDirs(join(dir, "data/app/files/mozilla"));
-    makeDirs(join(dir, "data/app/cache/mozilla"));
-    if (exists(join(dir, "lib/libxul.so"))) {
-        // GeckoView: no GPU process. Its WebRender window is a Surface that has to reach that process, and one that crossed to another JVM is no window (ANativeWindow_fromSurface
-        // gives null: "Failed to obtain native window from Surface", then MOZ_CRASH(Fallback configurations exhausted)). Gecko reads user.js from the profile, which is made here
-        // so that the first start has it too.
-        const std::string mozilla = join(dir, "data/app/files/mozilla"), profile = join(mozilla, "apklayer.default");
-        if (!exists(join(mozilla, "profiles.ini")))
-            writeFile(join(mozilla, "profiles.ini"), "[General]\nStartWithLastProfile=1\nVersion=2\n\n[Profile0]\nName=default\nIsRelative=1\nPath=apklayer.default\nDefault=1\n");
-        makeDirs(profile);
-        if (DIR* d = opendir(mozilla.c_str())) {  // every profile there (one made by an earlier start included)
-            while (dirent* e = readdir(d)) {
-                const std::string name = e->d_name;
-                if (name.size() > 8 && name.compare(name.size() - 8, 8, ".default") == 0) {
-                    // Gecko writes user.js prefs back into prefs.js on exit: drop the ones this launcher owns so an earlier run's cannot linger
-                    const std::string prefs = join(join(mozilla, name), "prefs.js");
-                    if (auto text = readFile(prefs)) {
-                        std::string kept;
-                        size_t at = 0;
-                        while (at < text->size()) {
-                            size_t eol = text->find('\n', at); if (eol == std::string::npos) eol = text->size();
-                            std::string line = text->substr(at, eol - at);
-                            bool own = false;
-                            for (const char* k : {"\"gfx.", "\"layers.", "\"layout.frame_rate", "\"logging.", "\"webgl."}) if (line.find(k) != std::string::npos) own = true;
-                            if (!own) kept += line + "\n";
-                            at = eol + 1;
-                        }
-                        writeFile(prefs, kept);
-                    }
-                    writeFile(join(join(mozilla, name), "user.js"), "user_pref(\"layers.gpu-process.enabled\", false);\n" + getenvOr("APKLAYER_GECKO_PREFS", "")); }
-            }
-            closedir(d);
-        }
-    }
-    ne.env["MOZ_APP_DATA"] = join(dir, "data/app/files/mozilla");
-    ne.env["MOZ_LOCAL_APP_DATA"] = join(dir, "data/app/cache/mozilla");
     for (const std::string& o : {"-Dapklayer.data=" + join(dir, "data"), "-Dapklayer.package=" + package, "-Dapklayer.uid=" + property(join(dir, "info.properties"), "uid"),
                                  "-Dapklayer.libdir=" + join(dir, "lib"), "-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary()})
         jvm.push_back(o);
@@ -138,44 +107,72 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     return WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
 }
 
-// Foreground hub daemon: one per instance, the lock and its JVM live for the instance lifetime.
+// Another launcher holds hub.lock: true once its hub is published (apklayer.hub.ready=1), false when the lock came free first (that hub was
+// going down and ended) and is now this launcher's. Both are events: the property's own wait, and a child blocked on the lock.
+static bool awaitHubOrLock(const Layout& l, const NativeEnv& ne, const std::string& lockPath, int lock) {
+    for (;;) {
+        Spawn wait;
+        wait.argv = {join(l.native, "bin/aprop"), "wait", kHubReadyProperty, "1"};
+        wait.env = ne.env;
+        int waiter = spawn(wait);
+        pid_t locker = fork();
+        if (locker == 0) { int fd = open(lockPath.c_str(), O_RDWR | O_CLOEXEC); flock(fd, LOCK_EX); _exit(0); }  // ends when the holder is gone
+        int wfd = pidfdOpen(waiter), lfd = pidfdOpen(locker);
+        pollfd fds[2] = {{wfd, POLLIN, 0}, {lfd, POLLIN, 0}};
+        while (poll(fds, 2, -1) < 0 && errno == EINTR) {}
+        bool ready = fds[0].revents & POLLIN;
+        kill(waiter, SIGTERM);
+        kill(locker, SIGKILL);
+        waitpid(waiter, nullptr, 0);
+        waitpid(locker, nullptr, 0);
+        close(wfd);
+        close(lfd);
+        if (ready) return true;
+        if (flock(lock, LOCK_EX | LOCK_NB) == 0) return false;  // another launcher may have been faster: wait for its hub then
+    }
+}
+
+// Foreground hub daemon: one per instance, the lock and its JVM live for the instance lifetime. A launcher that finds the lock held returns
+// once that hub is ready, or takes over when it was a hub going down.
 int runHub(const Layout& l, const Instance& inst) {
-    int lock = open(join(inst.stateDir, "hub.lock").c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0644);
-    if (flock(lock, LOCK_EX | LOCK_NB) != 0) return 0;
+    const std::string lockPath = join(inst.stateDir, "hub.lock");
+    int lock = open(lockPath.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0644);
     NativeEnv ne = nativeEnv(l, inst);
+    if (flock(lock, LOCK_EX | LOCK_NB) != 0 && awaitHubOrLock(l, ne, lockPath, lock)) return 0;
     trace("hub start");
     if (!ensureStack(l, inst)) return 1;
     std::vector<std::string> jvm = hostJvmArgs(l, inst, ne);
     jvm.insert(jvm.end(), {"-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary(), "-cp", hostClasspath(l), "apklayer.host.Main", "--hub"});
+    setProperty(l, ne, kHubReadyProperty, "0");
+    // Like init after a service registers: once this JVM has published the hub to the service manager it says so on this pipe (HubHost), and
+    // apklayer.hub.ready=1 (clients block on it). Its own word, not a service-manager lookup, which can still find the previous hub's binder.
+    int ready[2];
+    if (pipe2(ready, O_CLOEXEC) != 0) die("pipe failed");
+    fcntl(ready[1], F_SETFD, 0);
     Spawn hub;
     hub.argv = jvm;
     hub.env = ne.env;
+    hub.env["APKLAYER_HUB_READY_FD"] = std::to_string(ready[1]);
     int pid = spawn(hub);
+    close(ready[1]);
     writeFile(join(inst.stateDir, "hub.pid"), std::to_string(pid) + "\n" + std::to_string(getpid()) + "\n");  // the JVM, then this launcher (it holds hub.lock until the JVM is gone)
-    // Like init after a service registers: once the hub is published to the service manager, apklayer.hub.ready=1 (clients block on it)
-    setProperty(l, ne, kHubReadyProperty, "0");
-    Spawn published;
-    published.argv = {l.btload(), l.androidLibs, "libapklayer_servicetool.so", "--main", "wait", "apklayer.instance"};
-    published.env = ne.env;
-    published.logFile = join(inst.logs(), "ready-hub.log");
-    int waiter = spawn(published);
-    int jvmFd = pidfdOpen(pid), waiterFd = pidfdOpen(waiter);
-    pollfd fds[2] = {{jvmFd, POLLIN, 0}, {waiterFd, POLLIN, 0}};
+    int jvmFd = pidfdOpen(pid);
+    pollfd fds[2] = {{jvmFd, POLLIN, 0}, {ready[0], POLLIN, 0}};
     int status = 0;
     for (bool ended = false; !ended;) {
         if (poll(fds, 2, -1) < 0) continue;
-        if (fds[1].revents & POLLIN) {
-            waitpid(waiter, nullptr, 0);
-            fds[1].fd = -1;
-            auto out = readFile(join(inst.logs(), "ready-hub.log"));
-            if (out && out->find(": found") != std::string::npos) { setProperty(l, ne, kHubReadyProperty, "1"); trace("hub ready"); }
+        if (fds[1].revents & (POLLIN | POLLHUP)) {
+            char byte;
+            if (read(ready[0], &byte, 1) == 1) { setProperty(l, ne, kHubReadyProperty, "1"); trace("hub ready"); }
+            fds[1].fd = -1;  // said once (or the JVM closed it unsaid)
         }
         if (fds[0].revents & POLLIN) {
             waitpid(pid, &status, 0);  // keeps the lock until the JVM ends
             ended = true;
         }
     }
-    kill(waiter, SIGTERM);
+    close(ready[0]);
+    setProperty(l, ne, kHubReadyProperty, "0");  // before the lock is released: a waiting launcher never sees a gone hub as ready
     return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 }
 

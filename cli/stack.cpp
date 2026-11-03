@@ -18,19 +18,34 @@ struct Service {
     std::string name;
     int pid;
     int pidfd;
+    Spawn spec;        // how it was started: an optional service that exits is started again the same way
+    int restarts = 0;
 };
+
+// What the stack cannot run without: these ending ends the stack (and the test tool's end is the end of a test run). SurfaceFlinger holds its
+// composer and allocator connections for its lifetime, so they are as essential. Every other service is restarted, as init restarts a HAL.
+bool essential(const std::string& name) {
+    for (const char* n : {"servicemanager", "surfaceflinger", "composer", "allocator", "tool", "test-display"})
+        if (name == n) return true;
+    return false;
+}
+const int kMaxRestarts = 5;  // like init's crash loop limit: a service that keeps dying stays down instead of restarting forever
 
 bool staged(const Layout& l, const char* lib) { return exists(join(l.androidLibs, lib)); }
 
-// A vintf manifest is declared only when this stack provides the service behind it.
-void stageManifest(const Layout& l, bool provided, const std::string& name, const std::string& source, const char* partition = "vendor") {
-    std::string target = join(l.native, std::string("android-root/") + partition + "/etc/vintf/manifest/" + name);
-    if (provided) {
-        makeDirs(dirName(target));
-        if (auto text = readFile(join(l.root, source))) writeFile(target, *text);
-    } else {
-        unlink(target.c_str());
+// A vintf manifest is declared only when this stack provides the service behind it: staged into the instance's own root (the path layer's
+// APKLAYER_INSTANCE_ROOT, made fresh with each stack), never into the native tree other instances share. That root's manifest directory
+// replaces the shared one, so it carries the shared fragments too.
+void stageManifest(const Instance& inst, const Layout& l, bool provided, const std::string& name, const std::string& source, const char* partition = "vendor") {
+    const std::string dir = std::string(partition) + "/etc/vintf/manifest";
+    const std::string own = join(join(inst.runtimeDir, "android-root"), dir), shared = join(l.native, "android-root/" + dir);
+    if (!exists(own)) {
+        makeDirs(own);
+        for (const std::string& f : listDir(shared))
+            if (f.rfind("apklayer-", 0) != 0) if (auto text = readFile(join(shared, f))) writeFile(join(own, f), *text);  // the tree's own fragments, not other instances' staging
     }
+    if (provided)
+        if (auto text = readFile(join(l.root, source))) writeFile(join(own, name), *text);
 }
 
 // The pid of the shell listening on this session's socket (0: none): what stops it, never a match by name (other sessions' shells run too).
@@ -97,22 +112,36 @@ bool waitForProperty(const Layout& l, const NativeEnv& ne, const char* name, con
     return ok;
 }
 
+// Returns with the session's shell listening. One start at a time (the stack daemon and `run` both ask; two shells would each own half the
+// clients), and the started shell reports readiness itself: it writes to APKLAYER_SHELL_READY_FD after listen() (EOF: it died first).
 void ensureShell(const Layout& l, const Instance& inst, const NativeEnv& env) {
-    if (shellPid(l) > 0) return;
     makeDirs(join(l.runtimeHome, "apklayer"));
-    unlink(l.shellSocket().c_str());
-    Spawn shell;
-    shell.argv = {l.shellBinary()};
-    shell.env = env.env;
-    shell.logFile = join(inst.logs(), "shell.log");
-    shell.newSession = true;  // outlives any instance; instances never stop it
-    shell.detach = true;
-    spawn(shell);
+    int lock = open(join(l.runtimeHome, "apklayer/shell.lock").c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+    flock(lock, LOCK_EX);
+    if (shellPid(l) == 0) {
+        unlink(l.shellSocket().c_str());
+        int ready[2];
+        if (pipe2(ready, O_CLOEXEC) != 0) die("pipe failed");
+        fcntl(ready[1], F_SETFD, 0);  // the shell inherits the write end
+        Spawn shell;
+        shell.argv = {l.shellBinary()};
+        shell.env = env.env;
+        shell.env["APKLAYER_SHELL_READY_FD"] = std::to_string(ready[1]);
+        shell.logFile = join(inst.logs(), "shell.log");
+        shell.newSession = true;  // outlives any instance; instances never stop it
+        shell.detach = true;
+        spawn(shell);
+        close(ready[1]);
+        char c;
+        while (read(ready[0], &c, 1) < 0 && errno == EINTR) {}
+        close(ready[0]);
+    }
+    close(lock);
 }
 
-// keystore2 keeps its database in /data/misc/keystore, which the path layer serves from the Android root
-static std::string keystoreDir(const Layout& l) {
-    std::string dir = join(getenvOr("APKLAYER_ANDROID_ROOT", join(l.native, "android-root")), "data/misc/keystore");
+// keystore2 keeps its database in /data/misc/keystore, which the path layer serves from the instance's /data
+static std::string keystoreDir(const Instance& inst) {
+    std::string dir = join(inst.dataDir, "misc/keystore");
     makeDirs(dir);
     return dir;
 }
@@ -140,19 +169,19 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     NativeEnv ne = nativeEnv(l, inst);
     const std::string& n = l.native;
     for (const std::string& f : listDir(inst.logs()))
-        if (f.size() > 4 && f.substr(f.size() - 4) == ".log") unlink(join(inst.logs(), f).c_str());
+        if (f.size() > 4 && f.substr(f.size() - 4) == ".log" && f != "stack.log") unlink(join(inst.logs(), f).c_str());  // stack.log: this daemon's own stderr, already open
 
-    stageManifest(l, staged(l, "libapklayer_codec2.so"), "apklayer-media.xml", "aosp/hals/media/codec2/manifest.xml");
-    stageManifest(l, staged(l, "libapklayer_audio.so"), "apklayer-audio.xml", "aosp/hals/audio/manifest.xml");
-    stageManifest(l, staged(l, "libapklayer_audioserver.so"), "apklayer-audio-effects.xml", "aosp/hals/audio/effects-manifest.xml");
-    stageManifest(l, staged(l, "libapklayer_keymint.so"), "apklayer-keymint.xml", "aosp/hals/security/manifest.xml");
-    stageManifest(l, staged(l, "libapklayer_keystore2.so"), "apklayer-keystore2.xml", "aosp/hals/security/keystore2-manifest.xml", "system");  // a framework HAL: keystore2 may register its service
 
     // a fresh property store per stack (ro.* is write-once); ensureStack already made it when a client waits on the ready property
     if (getenvOr("APKLAYER_STACK_PREPARED", "").empty()) {
         removeTree(inst.runtimeDir);
         makeDirs(inst.runtimeDir);
     }
+    stageManifest(inst, l, staged(l, "libapklayer_codec2.so"), "apklayer-media.xml", "aosp/hals/media/codec2/manifest.xml");
+    stageManifest(inst, l, staged(l, "libapklayer_audio.so"), "apklayer-audio.xml", "aosp/hals/audio/manifest.xml");
+    stageManifest(inst, l, staged(l, "libapklayer_audioserver.so"), "apklayer-audio-effects.xml", "aosp/hals/audio/effects-manifest.xml");
+    stageManifest(inst, l, staged(l, "libapklayer_keymint.so"), "apklayer-keymint.xml", "aosp/hals/security/manifest.xml");
+    stageManifest(inst, l, staged(l, "libapklayer_keystore2.so"), "apklayer-keystore2.xml", "aosp/hals/security/keystore2-manifest.xml", "system");  // a framework HAL: keystore2 may register its service
     std::vector<std::string> propFiles = {join(l.root, "bridge/native/apklayer.prop"), join(n, "android-root/props/system_build.prop")};
     setDerivedProperties(l, ne, propFiles);
     Spawn prop;
@@ -160,8 +189,8 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     prop.env = ne.env;
     prop.logFile = join(inst.logs(), "aprop.log");
     runAndWait(prop);
-    // Android init creates this directory and announces it to RenderEngine; the path overlay resolves existing files only.
-    std::string cache = join(getenvOr("APKLAYER_ANDROID_ROOT", join(n, "android-root")), "data/misc/surfaceflinger");
+    // Android init creates this directory (in the instance's /data) and announces it to RenderEngine.
+    std::string cache = join(inst.dataDir, "misc/surfaceflinger");
     makeDirs(cache);
     for (const char* f : {"egl_shaders", "skia_shaders", "skia_graphite_pipelines"}) writeFile(join(cache, f), "");
     prop.argv = {join(n, "bin/aprop"), "set", "service.sf.cache_dir_available", "1"};
@@ -177,7 +206,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         s.env = ne.env;
         s.logFile = join(inst.logs(), name + ".log");
         int pid = spawn(s);
-        running.push_back({name, pid, pidfdOpen(pid)});
+        running.push_back({name, pid, pidfdOpen(pid), s});
     };
     const std::string hals = join(l.root, "aosp/hals/audio");
     start("servicemanager", "libapklayer_servicemanager.so", {"/dev/binder"});
@@ -196,7 +225,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     }
     if (staged(l, "libapklayer_keymint.so") && staged(l, "libapklayer_keystore2.so")) {  // the real Android keystore: software KeyMint, then keystore2 over it
         start("keymint", "libapklayer_keymint.so", {});
-        keystoreDir(l);
+        keystoreDir(inst);
         start("keystore2", "libapklayer_keystore2.so", {"/data/misc/keystore"});  // as keystore2.rc: the database directory, through the path layer
     }
     start("surfaceflinger", "libapklayer_surfaceflinger.so", {});
@@ -240,8 +269,22 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         for (size_t i = 0; i < fds.size() && run; i++) {
             if (!(fds[i].revents & POLLIN)) continue;
             if (i < nServices) {
-                fprintf(stderr, "exited: %s\n", running[i].name.c_str());
-                status = running[i].name == "tool" ? 0 : 1;  // the tool finishing is the normal end of a test run; its verdict is in its log
+                Service& s = running[i];
+                int st = 0;
+                waitpid(s.pid, &st, 0);
+                close(s.pidfd);
+                fprintf(stderr, "exited: %s (status %d)\n", s.name.c_str(), WIFEXITED(st) ? WEXITSTATUS(st) : 128 + WTERMSIG(st));
+                if (!essential(s.name) && s.restarts < kMaxRestarts) {
+                    s.restarts++;
+                    s.pid = spawn(s.spec);
+                    s.pidfd = pidfdOpen(s.pid);
+                    fds[i].fd = s.pidfd;
+                    fprintf(stderr, "restarted: %s (%d of %d)\n", s.name.c_str(), s.restarts, kMaxRestarts);
+                    continue;
+                }
+                if (!essential(s.name)) { fds[i].fd = -1; s.pid = 0; fprintf(stderr, "%s keeps exiting: left stopped\n", s.name.c_str()); continue; }
+                s.pid = 0;  // reaped: never signalled again (its pid may be reused)
+                status = s.name == "tool" ? 0 : 1;  // the tool finishing is the normal end of a test run; its verdict is in its log
                 run = false;
             } else if (i < nServices + waiters.size()) {
                 int st = 0;
@@ -257,9 +300,9 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
             }
         }
     }
-    for (const Service& s : running) kill(s.pid, SIGTERM);
+    for (const Service& s : running) if (s.pid > 0) kill(s.pid, SIGTERM);
     for (int pid : waiters) kill(pid, SIGTERM);
-    for (const Service& s : running) waitpid(s.pid, nullptr, 0);
+    for (const Service& s : running) if (s.pid > 0) waitpid(s.pid, nullptr, 0);
     unlink(inst.pidFile().c_str());
     for (const std::string& name : listDir(inst.tmpDir())) removeTree(join(inst.tmpDir(), name));  // the JVMs of this stack are gone: their extracted native runtimes too (the directory stays: a JVM about to start has it as java.io.tmpdir)
     terminate(shellPid(l));  // the window shell ends with the stack (one instance per session today)

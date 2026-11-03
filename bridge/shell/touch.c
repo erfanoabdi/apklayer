@@ -51,3 +51,14 @@ static void t_orientation(void *d, struct wl_touch *t, int32_t id, wl_fixed_t o)
 const struct wl_touch_listener touch_listener = {
     .down = t_down, .up = t_up, .motion = t_motion, .frame = t_frame, .cancel = t_cancel,
     .shape = t_shape, .orientation = t_orientation };
+
+/* Test input: one finger (id 0) on w's content, through the wl_touch handlers. action 0 down, 1 up, 2 move, 3 cancel. */
+void touch_inject(struct window *w, int action, int x, int y)
+{
+    wl_fixed_t fx = wl_fixed_from_int(x), fy = wl_fixed_from_int(y);
+    if (action == 0) t_down(NULL, NULL, last_input_serial, 0, w->surface, 0, fx, fy);
+    else if (action == 1) t_up(NULL, NULL, last_input_serial, 0, 0);
+    else if (action == 2) t_motion(NULL, NULL, 0, 0, fx, fy);
+    else t_cancel(NULL, NULL);
+    t_frame(NULL, NULL);
+}

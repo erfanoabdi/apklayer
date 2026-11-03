@@ -142,6 +142,53 @@ static void linux_socketpair(JNIEnv *env, jobject self, jint domain, jint type, 
     (*env)->SetIntField(env, two, fd_field(env), fds[1]);
 }
 
+/* Os.poll(StructPollfd[], timeout): what HostFdEvents waits in for a MessageQueue's file descriptor listeners (ParcelFileDescriptor's close listeners among them) */
+#include <poll.h>
+#include <stdlib.h>
+static jint linux_poll(JNIEnv *env, jobject self, jobjectArray array, jint timeout)
+{
+    (void)self;
+    jsize n = (*env)->GetArrayLength(env, array);
+    jclass cls = (*env)->FindClass(env, "android/system/StructPollfd");
+    jfieldID fd = (*env)->GetFieldID(env, cls, "fd", "Ljava/io/FileDescriptor;"), events = (*env)->GetFieldID(env, cls, "events", "S"), revents = (*env)->GetFieldID(env, cls, "revents", "S");
+    struct pollfd *fds = calloc(n ? n : 1, sizeof *fds);
+    for (jsize i = 0; i < n; i++) {
+        jobject one = (*env)->GetObjectArrayElement(env, array, i);
+        fds[i].fd = one ? fd_of(env, (*env)->GetObjectField(env, one, fd)) : -1;
+        fds[i].events = one ? (*env)->GetShortField(env, one, events) : 0;
+    }
+    int r = poll(fds, n, timeout), error = errno;
+    if (r < 0) { free(fds); throw_errno(env, "poll", error); return -1; }
+    for (jsize i = 0; i < n; i++) {
+        jobject one = (*env)->GetObjectArrayElement(env, array, i);
+        if (one) (*env)->SetShortField(env, one, revents, fds[i].revents);
+    }
+    free(fds);
+    return r;
+}
+
+/* Os.read/Os.write (libcore's readBytes/writeBytes): a byte[] or a direct ByteBuffer. ParcelFileDescriptor's comm channel tells the other side how its descriptor was closed this way. */
+static jint linux_rw(JNIEnv *env, jobject fd, jobject buffer, jint offset, jint count, int writing)
+{
+    jclass bytes = (*env)->FindClass(env, "[B");
+    int n, error;
+    if ((*env)->IsInstanceOf(env, buffer, bytes)) {
+        jbyte *data = (*env)->GetByteArrayElements(env, (jbyteArray)buffer, NULL);
+        n = writing ? (int)write(fd_of(env, fd), data + offset, count) : (int)read(fd_of(env, fd), data + offset, count);
+        error = errno;
+        (*env)->ReleaseByteArrayElements(env, (jbyteArray)buffer, data, writing ? JNI_ABORT : 0);
+    } else {
+        char *data = (*env)->GetDirectBufferAddress(env, buffer);
+        if (!data) { throw_errno(env, writing ? "write" : "read", EINVAL); return -1; }
+        n = writing ? (int)write(fd_of(env, fd), data + offset, count) : (int)read(fd_of(env, fd), data + offset, count);
+        error = errno;
+    }
+    if (n < 0) throw_errno(env, writing ? "write" : "read", error);
+    return n;
+}
+static jint linux_read_bytes(JNIEnv *env, jobject self, jobject fd, jobject buffer, jint offset, jint count) { (void)self; return linux_rw(env, fd, buffer, offset, count, 0); }
+static jint linux_write_bytes(JNIEnv *env, jobject self, jobject fd, jobject buffer, jint offset, jint count) { (void)self; return linux_rw(env, fd, buffer, offset, count, 1); }
+
 int apklayer_register_linux(JNIEnv *env, jclass libcore_linux)
 {
     JNINativeMethod methods[] = {
@@ -155,6 +202,9 @@ int apklayer_register_linux(JNIEnv *env, jclass libcore_linux)
         {"open", "(Ljava/lang/String;II)Ljava/io/FileDescriptor;", (void *)linux_open},
         {"pipe2", "(I)[Ljava/io/FileDescriptor;", (void *)linux_pipe2},
         {"socketpair", "(IIILjava/io/FileDescriptor;Ljava/io/FileDescriptor;)V", (void *)linux_socketpair},
+        {"poll", "([Landroid/system/StructPollfd;I)I", (void *)linux_poll},
+        {"readBytes", "(Ljava/io/FileDescriptor;Ljava/lang/Object;II)I", (void *)linux_read_bytes},
+        {"writeBytes", "(Ljava/io/FileDescriptor;Ljava/lang/Object;II)I", (void *)linux_write_bytes},
     };
     return (*env)->RegisterNatives(env, libcore_linux, methods, sizeof methods / sizeof *methods) == 0 ? 0 : -1;
 }

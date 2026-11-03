@@ -1,0 +1,7 @@
+<!-- hello-svc-target's code (src links to it) as a package installed while the instance runs (services scenario "late", tests/vm/hub.py) -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="hello.svclate">
+  <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="34"/>
+  <application android:label="svc-late">
+    <service android:name="hello.svctarget.CounterService" android:exported="true"/>
+  </application>
+</manifest>

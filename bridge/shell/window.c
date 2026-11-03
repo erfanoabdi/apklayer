@@ -178,6 +178,19 @@ static void top_close(void *data, struct xdg_toplevel *t)
 static const struct xdg_toplevel_listener top_listener = {
     .configure = top_configure, .close = top_close };
 
+/* Test input: the configure a compositor sends on focus or resize. cw, ch: logical content size, 0 = the current one. */
+void window_inject_configure(struct window *w, int cw, int ch, int activated)
+{
+    struct wl_array states;
+    wl_array_init(&states);
+    if (w->maximized) *(uint32_t *)wl_array_add(&states, 4) = XDG_TOPLEVEL_STATE_MAXIMIZED;
+    if (activated) *(uint32_t *)wl_array_add(&states, 4) = XDG_TOPLEVEL_STATE_ACTIVATED;
+    if (cw <= 0) cw = w->cfg_w > 0 ? w->cfg_w : w->w * 100 / w->scale;
+    if (ch <= 0) ch = w->cfg_h > 0 ? w->cfg_h : w->h * 100 / w->scale;
+    top_configure(w, w->toplevel, cw, ch + DECOR_H, &states);
+    wl_array_release(&states);
+}
+
 
 /* (Re)creates the buffers of w from the shared file. */
 static int window_buffers(struct window *w, int width, int height, const char *path)

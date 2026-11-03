@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 28/28] apklayer: getenv-home-set-by-app
+
+getenv("HOME") was always NULL (the host's HOME is the user's home, which an Android app process does not have). A HOME the app sets
+itself is returned now; only the value the process started with stays hidden. GeckoLoader puts HOME=<files dir> and Gecko keeps its
+profile under $HOME/mozilla: without it Gecko stopped with "Could not find profile folder".
+
+apklayer patch 0028 of patches/bionic_translation.
+---
+ libc/libc-misc.c | 15 +++++++++++++--
+ 1 file changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/libc/libc-misc.c b/libc/libc-misc.c
+--- a/libc/libc-misc.c
++++ b/libc/libc-misc.c
+@@ -35,13 +35,24 @@
+ 	}
+ }
+
++static char *startup_home; /* the host's HOME as the process started, before any app code ran */
++__attribute__((constructor)) static void remember_startup_home(void)
++{
++	const char *home = getenv("HOME");
++	startup_home = home ? strdup(home) : NULL;
++}
++
+ char *bionic_getenv(const char *name) {
+ 	if(!name) {
+ 		printf("!!! NULL passed to %s\n", __func__);
+ 	}
+
+-	if(!strcmp(name, "HOME"))
+-		return NULL;
++	/* apklayer patch: an Android app process has no HOME; the host's (the user's home) stays hidden, one the app sets itself
++	 * (GeckoLoader: HOME=<files dir>, where Gecko keeps its profile) is the app's */
++	if(!strcmp(name, "HOME")) {
++		const char *home = getenv(name);
++		return home && (!startup_home || strcmp(home, startup_home)) ? (char *)home : NULL;
++	}
+
+ 	/* no point returning anything else, apps mix this with using hardcoded paths */
+ 	if(!strcmp(name, "ANDROID_ROOT"))

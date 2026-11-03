@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""Original native MediaPlayer, Parcel callbacks, Surface pixels and physical Back."""
-import os as _os
-LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
+"""Original native MediaPlayer, Parcel callbacks, Surface pixels and Back (the shell's test input)."""
 import ctypes
 import os
 from pathlib import Path
@@ -11,9 +9,11 @@ import subprocess
 import sys
 import time
 
-os.chdir(Path.home() / 'apklayer-m1')
-ENV = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000', APKLAYER_NATIVE=str(Path.home() / 'arm64-native'),
-    APKLAYER_CODEC2='1', APKLAYER_MEDIA_SERVICES='1', APKLAYER_AUDIO='1', APKLAYER_AUDIO_SERVICES='1', APKLAYER_NATIVE_MEDIA_PARCELS='1', APKLAYER_DEBUG_INPUT='1', APKLAYER_RUNTIME_DEBUG='1',
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import instance  # noqa: E402  (changes into the repo root)
+import pixels  # noqa: E402
+LOGDIR = instance.LOGDIR
+ENV = dict(instance.ENV, APKLAYER_CODEC2='1', APKLAYER_MEDIA_SERVICES='1', APKLAYER_AUDIO='1', APKLAYER_AUDIO_SERVICES='1', APKLAYER_NATIVE_MEDIA_PARCELS='1', APKLAYER_DEBUG_INPUT='1', APKLAYER_RUNTIME_DEBUG='1',
     APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400',
     APKLAYER_JOPTS='-Dapklayer.nativemedia=true -Dapklayer.nativeaudio=true -Dapklayer.nativeparcels=true -Dapklayer.nativeplayer=true -Dhello.asset=' + os.environ.get('PLAYER_ASSET', 'red-h264.mp4') + ' -Dapklayer.runms=20000')
 extra = Path.home() / '.apklayer-extra-jopts'  # regression runs with a feature flag (e.g. -Dapklayer.realbinder=true): the file holds the extra options
@@ -22,7 +22,6 @@ ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.
 
 def stop():
     subprocess.run(['bin/apklayer', 'stop'], env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(['pkill', '-9', '-x', 'tail'], check=False)
 
 stop()
 logs = Path(LOGDIR)
@@ -32,9 +31,8 @@ notify = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
 assert notify >= 0 and libc.inotify_add_watch(notify, os.fsencode(logs), 0x102) >= 0
 app = None
 seen = []
-committed = captured = False
+committed = captured = focused = False
 try:
-    subprocess.run(['gcc', '-O1', '-o', '/tmp/uinput-keys', 'tests/vm/uinput-keys.c'], check=True)
     app = subprocess.Popen(['bin/apklayer', 'run', 'hello.nativeplayer'], env=ENV,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
     with selectors.DefaultSelector() as events, Path('/tmp/apklayer-native-player.out').open('wb') as log:
@@ -67,14 +65,18 @@ try:
                     assert '[hello-native-player] FAIL' not in line, line
                     if '[hello-native-player] PLAYER PASS' in line:
                         committed = True
-            # Capture after the real HWUI commit callback and a visible active window.
+            # Capture after the real HWUI commit callback and a visible active window: the shell's test input activates it (the desktop's
+            # focus belongs to whichever instance mapped a window last)
+            if committed and not focused:
+                instance.inject('hello.nativeplayer', 'focus')
+                focused = True
             if committed and not captured and any('window state active=true' in s for s in seen):
                 with open('/tmp/apklayer-native-player-layers.txt', 'wb') as dump:
-                    subprocess.run(['b/cli/apklayer', 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger'], env=ENV, stdout=dump, stderr=subprocess.STDOUT, check=True)
-                print('CAPTURE native SurfaceView result', flush=True)
-                assert sys.stdin.readline().strip() == 'captured', 'capture not acknowledged'
-                subprocess.run(['sudo', '-n', '/tmp/uinput-keys', 'key:1'],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                    subprocess.run(['bin/apklayer', 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger'], env=ENV, stdout=dump, stderr=subprocess.STDOUT, check=True)
+                shot = instance.capture('native SurfaceView result', 'hello.nativeplayer')
+                asset = os.environ.get('PLAYER_ASSET', 'red-h264.mp4')
+                pixels.video_level(shot, asset) if asset.startswith(('white', 'black')) else pixels.red_surface(shot)
+                instance.inject('hello.nativeplayer', 'key:1')  # Esc = Back
                 captured = True
     text = '\n'.join(seen)
     assert '[runtime] Android media JNI registered' in text
@@ -98,7 +100,7 @@ try:
     assert committed and captured
     assert 'finished hello.nativeplayer.Main depth=0' in text and 'depth=0' in text
     assert (logs / 'shell.log').read_text(errors='replace').count('dmabuf frame') > 0
-    print('PASS native MediaPlayer video and physical Back', flush=True)
+    print('PASS native MediaPlayer video and Back', flush=True)
 finally:
     stop()
     if app is not None:
@@ -111,6 +113,6 @@ finally:
     os.close(notify)
     for manifest in ('apklayer-media.xml', 'apklayer-audio.xml', 'apklayer-audio-effects.xml'):
         (Path(ENV['APKLAYER_NATIVE']) / 'android-root/vendor/etc/vintf/manifest' / manifest).unlink(missing_ok=True)
-    subprocess.run(['pkill', '-9', '-f', '[a]pklayer.host.Main --hub'], check=False)  # the instance hub (auto-started with the hub flags) also ends by itself when idle
-    left = subprocess.run(['pgrep', '-af', '[a]pklayer.host.Main|[b]tload|[a]pklayer-shell'], capture_output=True, text=True)
-    assert left.returncode != 0, left.stdout
+    instance.kill('[a]pklayer.host.Main --hub')  # the instance hub (auto-started with the hub flags) also ends by itself when idle
+    left = instance.mine('[a]pklayer.host.Main|[b]tload|[a]pklayer-shell')
+    assert not left, left
