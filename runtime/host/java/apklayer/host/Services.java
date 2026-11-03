@@ -91,7 +91,15 @@ public final class Services {
     private static void destroy(String key, Running r) {
         r.controller.destroy();
         RUNNING.remove(key);
-        if (Boolean.getBoolean("apklayer.componenthost") && RUNNING.isEmpty()) { System.out.println("[apklayer] last service of this process destroyed: exiting"); System.out.flush(); Runtime.getRuntime().halt(0); }
+        if (HUB_CALLS.get() == 0) exitIfIdle();  // inside a hub request the reply goes first: the hub asks again once it has it
+    }
+
+    /** Hub requests (start, stop) being served: a host never exits inside one, or the hub would get no reply. */
+    static final java.util.concurrent.atomic.AtomicInteger HUB_CALLS = new java.util.concurrent.atomic.AtomicInteger();
+
+    /** A component host with no service left ends (main thread). */
+    static void exitIfIdle() {
+        if (Boolean.getBoolean("apklayer.componenthost") && RUNNING.isEmpty() && !creating) { System.out.println("[apklayer] last service of this process destroyed: exiting"); System.out.flush(); Runtime.getRuntime().halt(0); }
     }
 
     /** Runs a task on the main thread and waits for it (services are created and called there). */

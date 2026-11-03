@@ -63,6 +63,9 @@ int main(void)
     for (int i = 0; i < MAX_CLIENTS; i++) clients[i].fd = -1;
     int lfd = listen_socket(path);
     fprintf(stderr, "[shell] listening on %s\n", path);
+    /* readiness, like sd_notify: the launcher (cli ensureShell) blocks on this pipe until clients can connect */
+    const char *ready = getenv("APKLAYER_READY_FD");
+    if (ready) { int fd = atoi(ready); (void)!write(fd, "1", 1); close(fd); unsetenv("APKLAYER_READY_FD"); }
 
     for (;;) {
         struct pollfd pfd[2 + CLIPBOARD_FDS + MAX_CLIENTS];

@@ -21,6 +21,7 @@ final class HubEndpoint extends Binder {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Map<IBinder, ServiceConnection> connections = new HashMap<>();
     HubEndpoint(Context context, int hubPid) { this.context = context; this.hubPid = hubPid; attachInterface(null, HubProtocol.ENDPOINT); }
+    int hubPid() { return hubPid; }
     @Override protected boolean onTransact(int code, Parcel request, Parcel reply, int flags) throws RemoteException {
         try { return handle(code, request, reply, flags); }
         catch (RuntimeException failure) { System.out.println("[apklayer] endpoint request " + code + " failed: " + failure); failure.printStackTrace(System.out); throw failure; }
@@ -70,11 +71,20 @@ final class HubEndpoint extends Binder {
             Intent explicit = request.readTypedObject(Intent.CREATOR); Intent delivered = code == HubProtocol.ENDPOINT_START ? request.readTypedObject(Intent.CREATOR) : null;
             request.enforceNoDataAvail();
             if (explicit == null || explicit.getComponent() == null || !context.getPackageName().equals(explicit.getComponent().getPackageName())) throw new SecurityException("Wrong endpoint target");
-            if (code == HubProtocol.ENDPOINT_START) {
-                int[] result = Services.startFromHub(context, explicit, delivered);
-                reply.writeNoException(); reply.writeInt(result == null ? -1 : result[0]); reply.writeInt(result == null ? 0 : result[1]);
-            } else { reply.writeNoException(); reply.writeBoolean(Services.stopService(context, explicit)); }
+            // a component host whose last service ends here must still send this reply: the hub asks it to exit afterwards (ENDPOINT_EXIT_IF_IDLE)
+            Services.HUB_CALLS.incrementAndGet();
+            try {
+                if (code == HubProtocol.ENDPOINT_START) {
+                    int[] result = Services.startFromHub(context, explicit, delivered);
+                    reply.writeNoException(); reply.writeInt(result == null ? -1 : result[0]); reply.writeInt(result == null ? 0 : result[1]);
+                } else { reply.writeNoException(); reply.writeBoolean(Services.stopService(context, explicit)); }
+            } finally { Services.HUB_CALLS.decrementAndGet(); }
             return true;
+        }
+        if (code == HubProtocol.ENDPOINT_EXIT_IF_IDLE) {
+            request.enforceNoDataAvail();
+            main.post(Services::exitIfIdle);
+            reply.writeNoException(); return true;
         }
         if (code == HubProtocol.ENDPOINT_NOTIFY) {
             android.net.Uri uri = request.readTypedObject(android.net.Uri.CREATOR); int changeFlags = request.readInt(); request.enforceNoDataAvail();

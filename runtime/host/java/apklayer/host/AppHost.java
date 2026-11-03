@@ -200,11 +200,11 @@ public final class AppHost implements Runnable {
         }
         if (System.getProperty("apklayer.webviewprovider") != null) org.robolectric.Shadows.shadowOf(app.getPackageManager()).setSystemFeature(android.content.pm.PackageManager.FEATURE_WEBVIEW, true);
         StartTrace.mark("system package installed");
-        HubActivityClient.starter = this::startForHub;
         Intent incoming = HubActivityClient.incoming(); // another app started this one with an intent, through the hub
         if (incoming == null) incoming = HostApps.incoming(); // ... or through the older intent file (PLAN P6)
         launch(incoming != null ? incoming : AppMetadata.launcherIntent(app));
         if (incoming != null) { incomingActivity = stack.peek().get(); android.os.ResultReceiver answerTo = HubActivityClient.takeReceiver(); if (answerTo != null) hubResults.put(incomingActivity, answerTo); }
+        HubActivityClient.setStarter(this::startForHub);
         // Like Simulator.postMotionEvent: an off-screen move so the first frame is drawn.
         input.inject(MotionEvent.obtain(0, SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE, width, height, 0));
         loop(shell);
@@ -251,8 +251,10 @@ public final class AppHost implements Runnable {
                 long now = System.nanoTime();
                 long elapsed = (pausedMode ? SystemClock.uptimeMillis() : System.nanoTime() / 1_000_000) - start;
                 // exit when the run time is up (or the window closed) and every scheduled script step has fired
-                if (script.isEmpty() && (elapsed >= runMs || (shell != null && shell.closed())))
+                if (script.isEmpty() && (elapsed >= runMs || (shell != null && shell.closed()))) {
+                    System.out.println("[apklayer] ending: " + (elapsed >= runMs ? "run time " + runMs + " ms is up" : "window closed"));
                     break;
+                }
 
                 for (int[] ev; shell != null && (ev = shell.poll()) != null; ) input.onHostEvent(ev);
                 for (Object[] ime; shell != null && (ime = shell.pollIme()) != null; ) text.ime((int) ime[0], (int) ime[1], (String) ime[2], (String) ime[3]);

@@ -37,6 +37,7 @@ final class HubStartedServices {
         synchronized (started) { started.put(explicit.getComponent(), new Started(explicit, 0, target.pid())); }  // before the call: stopSelf inside onStartCommand removes it
         int[] result = HubProtocol.call(target.endpoint(), HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_START,
                 request -> { request.writeTypedObject(explicit, 0); request.writeTypedObject(delivered, 0); }, reply -> new int[] {reply.readInt(), reply.readInt()});
+        directory.exitIfIdle(target);  // a service that stopped itself in onStartCommand may have been the host's last
         synchronized (started) {
             if (result[0] < 0) { started.remove(explicit.getComponent()); return null; }
             if (started.containsKey(explicit.getComponent())) started.put(explicit.getComponent(), new Started(explicit, result[1], target.pid()));
@@ -53,7 +54,9 @@ final class HubStartedServices {
         HubDirectory.Peer target = directory.peer(info.packageName);
         synchronized (started) { started.remove(name); }
         if (target == null) return false;
-        return HubProtocol.call(target.endpoint(), HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_STOP, request -> request.writeTypedObject(new Intent().setComponent(name), 0), reply -> reply.readBoolean());
+        boolean stopped = HubProtocol.call(target.endpoint(), HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_STOP, request -> request.writeTypedObject(new Intent().setComponent(name), 0), reply -> reply.readBoolean());
+        directory.exitIfIdle(target);
+        return stopped;
     }
 
     /** The service stopped itself (stopSelf). */

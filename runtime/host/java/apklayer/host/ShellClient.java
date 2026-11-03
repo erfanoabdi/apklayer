@@ -166,10 +166,12 @@ final class ShellClient {
                 } else if (type == VSYNC) {
                     if (vsync != null) vsync.vsync(body.getInt(4));
                 } else if (type == CLOSE) {
+                    System.out.println("[apklayer] the shell closed window " + body.getInt(0));
                     closed = true;
                 }
             }
         } catch (IOException e) {
+            System.out.println("[apklayer] shell connection ended: " + e.getMessage());
             closed = true; // shell went away
         }
     }

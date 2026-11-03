@@ -18,7 +18,18 @@ struct Service {
     std::string name;
     int pid;
     int pidfd;
+    Spawn spec;        // how it was started: an optional service that exits is started again the same way
+    int restarts = 0;
 };
+
+// What the stack cannot run without: these ending ends the stack (and the test tool's end is the end of a test run). SurfaceFlinger holds its
+// composer and allocator connections for its lifetime, so they are as essential. Every other service is restarted, as init restarts a HAL.
+bool essential(const std::string& name) {
+    for (const char* n : {"servicemanager", "surfaceflinger", "composer", "allocator", "tool", "test-display"})
+        if (name == n) return true;
+    return false;
+}
+const int kMaxRestarts = 5;  // like init's crash loop limit: a service that keeps dying stays down instead of restarting forever
 
 bool staged(const Layout& l, const char* lib) { return exists(join(l.androidLibs, lib)); }
 
@@ -97,17 +108,30 @@ bool waitForProperty(const Layout& l, const NativeEnv& ne, const char* name, con
     return ok;
 }
 
+// Returns once the shell listens (or failed to start): a JVM started next connects instead of falling back to headless. Launches of one
+// session take turns (flock), so they never start two shells that unlink each other's socket.
 void ensureShell(const Layout& l, const Instance& inst, const NativeEnv& env) {
-    if (shellPid(l) > 0) return;
     makeDirs(join(l.runtimeHome, "apklayer"));
+    int lock = open(join(l.runtimeHome, "apklayer/shell.lock").c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+    flock(lock, LOCK_EX);
+    if (shellPid(l) > 0) { close(lock); return; }
     unlink(l.shellSocket().c_str());
+    int ready[2];
+    if (pipe2(ready, O_CLOEXEC) != 0) die("pipe failed");
+    fcntl(ready[1], F_SETFD, 0);  // the shell's end survives its exec
     Spawn shell;
     shell.argv = {l.shellBinary()};
     shell.env = env.env;
+    shell.env["APKLAYER_READY_FD"] = std::to_string(ready[1]);
     shell.logFile = join(inst.logs(), "shell.log");
     shell.newSession = true;  // outlives any instance; instances never stop it
     shell.detach = true;
     spawn(shell);
+    close(ready[1]);
+    char byte;
+    while (read(ready[0], &byte, 1) < 0 && errno == EINTR) {}  // a byte once it listens, end of file when it died first
+    close(ready[0]);
+    close(lock);
 }
 
 // keystore2 keeps its database in /data/misc/keystore, which the path layer serves from the Android root
@@ -177,7 +201,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         s.env = ne.env;
         s.logFile = join(inst.logs(), name + ".log");
         int pid = spawn(s);
-        running.push_back({name, pid, pidfdOpen(pid)});
+        running.push_back({name, pid, pidfdOpen(pid), s});
     };
     const std::string hals = join(l.root, "aosp/hals/audio");
     start("servicemanager", "libapklayer_servicemanager.so", {"/dev/binder"});
@@ -240,8 +264,22 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         for (size_t i = 0; i < fds.size() && run; i++) {
             if (!(fds[i].revents & POLLIN)) continue;
             if (i < nServices) {
-                fprintf(stderr, "exited: %s\n", running[i].name.c_str());
-                status = running[i].name == "tool" ? 0 : 1;  // the tool finishing is the normal end of a test run; its verdict is in its log
+                Service& s = running[i];
+                int st = 0;
+                waitpid(s.pid, &st, 0);
+                close(s.pidfd);
+                fprintf(stderr, "exited: %s (status %d)\n", s.name.c_str(), WIFEXITED(st) ? WEXITSTATUS(st) : 128 + WTERMSIG(st));
+                if (!essential(s.name) && s.restarts < kMaxRestarts) {
+                    s.restarts++;
+                    s.pid = spawn(s.spec);
+                    s.pidfd = pidfdOpen(s.pid);
+                    fds[i].fd = s.pidfd;
+                    fprintf(stderr, "restarted: %s (%d of %d)\n", s.name.c_str(), s.restarts, kMaxRestarts);
+                    continue;
+                }
+                if (!essential(s.name)) { fds[i].fd = -1; s.pid = 0; fprintf(stderr, "%s keeps exiting: left stopped\n", s.name.c_str()); continue; }
+                s.pid = 0;  // reaped: never signalled again (its pid may be reused)
+                status = s.name == "tool" ? 0 : 1;  // the tool finishing is the normal end of a test run; its verdict is in its log
                 run = false;
             } else if (i < nServices + waiters.size()) {
                 int st = 0;
@@ -257,9 +295,9 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
             }
         }
     }
-    for (const Service& s : running) kill(s.pid, SIGTERM);
+    for (const Service& s : running) if (s.pid > 0) kill(s.pid, SIGTERM);
     for (int pid : waiters) kill(pid, SIGTERM);
-    for (const Service& s : running) waitpid(s.pid, nullptr, 0);
+    for (const Service& s : running) if (s.pid > 0) waitpid(s.pid, nullptr, 0);
     unlink(inst.pidFile().c_str());
     for (const std::string& name : listDir(inst.tmpDir())) removeTree(join(inst.tmpDir(), name));  // the JVMs of this stack are gone: their extracted native runtimes too (the directory stays: a JVM about to start has it as java.io.tmpdir)
     terminate(shellPid(l));  // the window shell ends with the stack (one instance per session today)

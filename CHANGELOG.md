@@ -48,6 +48,9 @@ Older dated notes (GPU follow-up, TextureView, MC3, Vulkan checkpoints, OTR2, ro
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 
+### 2026-11-03 — libbinder: the caller uid of an app JVM is its work source (keystore2 key namespaces per app)
+- Why: keystore2 keys its database by the kernel's calling uid, which is the one Linux uid of every app JVM. `patches/aosp/frameworks/native/0005-libbinder-work-source-calling-uid.patch` (applied with `patches/apply aosp ~/los24`). Command: `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libbinder`, under `flock -n ~/los24-build.lock`. Result: below.
+
 ### 2026-11-03 — per-instance screenshots: libapklayer_vdisplay (registers its display token) and the new libapklayer_screenshot
 - Why: tests on a desktop shared by several instances cannot tell windows apart; `apklayer screenshot` captures one app's virtual display through SurfaceFlinger's own captureDisplay. New module in vendor/apklayer/tools (build-graph regeneration). Only VirtualDisplay.cpp, tools/Android.bp and tools/screenshot.cpp copied into vendor/apklayer (not a full sync-aosp.sh: the tree has a hals/camera directory this branch lacks). Command: `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_vdisplay libapklayer_screenshot`. Result: below.
 
