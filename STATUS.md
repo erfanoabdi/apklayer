@@ -22,7 +22,7 @@ Everything parked is listed in `docs/PLAN.md`.
   (services, broadcasts, providers, activities, notifications, pending intents). Verified on the UTM VM this session: gpu smoke, native-surface, native-media, codec2, binder,
   services, broadcasts, providers; activities, notifications and pending intents pass phase by phase but flake when run back to back (the hang in item 1).
 - Known failing, not from this work: native-player (audio HAL stream open), texture-view (black on the UTM VM), webview (no provider on the VM), `hub-services.sh auto`.
-- CLI: C++ tool in `cli/` (`bin/apklayer` execs it): `install | run | list | uninstall | stop | hub | component-host | wait hub | env`; test helpers `stack <lib>` and `exec <lib>`.
+- CLI: C++ tool in `cli/` (`bin/apklayer` execs it): `install | run | list | uninstall | stop | hub | component-host | wait hub | env | screenshot <package|stack> <out.png>` (SurfaceFlinger capture of one app window, per instance); test helpers `stack <lib>` and `exec <lib>`.
   State and logs: `~/.local/state/apklayer/<instance>/`. Apps: `~/.local/share/apklayer/apps/<pkg>`.
 - Build: `meson setup b && ninja -C b` (g++), `scripts/build-tree-host.sh ~/arm64-native`, `scripts/fetch-deps.sh`. Run on the VM:
   `XDG_RUNTIME_DIR=/run/user/1000 ~/apklayer/bin/apklayer run <package>`.
@@ -30,7 +30,7 @@ Everything parked is listed in `docs/PLAN.md`.
 ## Test VM (UTM)
 Host and password: `tests/vm/local.conf` (untracked; `local.conf.example`). Ubuntu 26.04 arm64, GNOME Wayland, Venus Vulkan 1.4, virgl ES 3.0 (apklayer claims 3.2). Passwordless sudo.
 Repo copy `~/apklayer`, runtime `~/arm64-native`, libs `~/android-arm64`. After a reboot run `scripts/vm-binder-setup.sh [instance...]`. Parallel stacks: each named instance gets its own binder devices (`/dev/binderfs/binder-<id>`, mapped by `bridge/native/paths.c`); run with `APKLAYER_INSTANCE=<id>` plus a private `XDG_RUNTIME_DIR`/`XDG_STATE_HOME`/`XDG_DATA_HOME` and an absolute `WAYLAND_DISPLAY=/run/user/1000/wayland-0`. `/tmp` is tmpfs: never put big files there.
-Screenshots: `tests/vm/vmcapture.py`. Input: `tests/vm/uinput-keys.c`.
+Screenshots: `apklayer [--instance ID] screenshot <package> <out.png>` or `tests/vm/vmcapture.py OUT PKG ENV...` (per app window, from SurfaceFlinger); the desktop capture (`tests/vm/vmcapture.py`) is the fallback. Input: `tests/vm/uinput-keys.c`.
 
 ## References on this machine
 Mac.apk, Robolectric, android_translation_layer (all in `~/GitHub`), Husk (GPL, read-only reference, not to copy). LineageOS tree `~/los24` in OrbStack `ubuntu22-x86`
