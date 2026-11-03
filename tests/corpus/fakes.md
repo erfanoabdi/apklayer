@@ -1,6 +1,6 @@
 # Fake services hit by the corpus
 
-Run 2026-11-03 16:55, apps: nextcloud
+Run 2026-11-03 19:04, apps: nextcloud
 
 First call per process to a Robolectric null/deep proxy, a missing or Robolectric-shadowed manager, or HostMediaStub ("[fake]" lines, FakeLog).
 

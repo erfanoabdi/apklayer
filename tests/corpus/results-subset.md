@@ -1,8 +1,8 @@
 # Compatibility corpus results
 
-Run 2026-11-03 16:55
+Run 2026-11-03 19:04
 
-"first frame" = 20 GPU frames while running and the screenshot shows content (uniform/nowindow otherwise); "second" = the same after a second launch.
+"first frame" = a GPU frame while running and the screenshot shows content (uniform/nowindow otherwise); "second" = the same after a second launch.
 
 | app | kind | install | launch | first frame | second | fakes | note |
 |---|---|---|---|---|---|---|---|
