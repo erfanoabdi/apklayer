@@ -144,9 +144,17 @@ std::string property(const std::string& file, const std::string& key) {
             char c = line[++i];
             std::string hex = c == 'u' ? line.substr(i + 1, 4) : "";
             if (hex.size() == 4 && hex.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos) {
-                unsigned cp = strtoul(hex.c_str(), nullptr, 16);  // shortcut: a surrogate pair (emoji) becomes two 3-byte sequences, not one 4-byte one
+                unsigned cp = strtoul(hex.c_str(), nullptr, 16);
                 i += 4;
-                if (cp < 0x80) value += static_cast<char>(cp);
+                // a UTF-16 surrogate pair (\uD83D\uDE00: an emoji) is one code point
+                if (cp >= 0xD800 && cp < 0xDC00 && i + 6 < line.size() && line[i + 1] == '\\' && line[i + 2] == 'u') {
+                    unsigned low = strtoul(line.substr(i + 3, 4).c_str(), nullptr, 16);
+                    if (low >= 0xDC00 && low < 0xE000) { cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00); i += 6; }
+                }
+                if (cp >= 0x10000) {
+                    value += static_cast<char>(0xF0 | cp >> 18); value += static_cast<char>(0x80 | (cp >> 12 & 0x3F));
+                    value += static_cast<char>(0x80 | (cp >> 6 & 0x3F)); value += static_cast<char>(0x80 | (cp & 0x3F));
+                } else if (cp < 0x80) value += static_cast<char>(cp);
                 else if (cp < 0x800) { value += static_cast<char>(0xC0 | cp >> 6); value += static_cast<char>(0x80 | (cp & 0x3F)); }
                 else { value += static_cast<char>(0xE0 | cp >> 12); value += static_cast<char>(0x80 | (cp >> 6 & 0x3F)); value += static_cast<char>(0x80 | (cp & 0x3F)); }
             } else value += c == 't' ? '\t' : c == 'n' ? '\n' : c;

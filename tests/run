@@ -18,10 +18,6 @@ import vm  # noqa: E402
 GROUPS = tomllib.loads((vm.REPO / 'tests/groups.toml').read_text())
 LOGS = vm.REPO / 'build/tests'
 print_lock = threading.Lock()
-# shortcut: a hardlinked copy of APKLAYER_NATIVE (cp -al) shares android-root/data (keystore2's database, the /data/media/0 link to one
-# instance's storage) with its source; the copy gets data of its own until the path layer keeps /data per instance (docs/PLAN.md)
-OWN_DATA = ('d=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/data; if [ "$d" != $HOME/arm64-native/android-root/data ] && [ -n "$(find $d -type f -links +1 -print -quit)" ]; then '
-            'rm -rf $d.own && cp -a $d $d.own && rm -rf $d && mv $d.own $d && rm -f $d/media/0; fi')
 INSTANCE_MB = 1000  # what one running instance (stack, hub, app JVMs, shell) takes
 MIN_FREE_MB = 3000  # a group starts only while the VM has this much available (room for the other users of the VM)
 
@@ -40,7 +36,7 @@ def prepare(groups, slots):
     t = time.monotonic()
     vm.push()
     build = vm.ssh(vm.instance_env(slots[0]) + '{ [ -d b ] || meson setup b >/dev/null; } && ninja -C b >/dev/null && '
-                   'sudo -n sh tools/host-setup/binder.sh %s >/dev/null && %s' % (' '.join(slots), OWN_DATA), capture_output=True, text=True)
+                   'sudo -n sh tools/host-setup/binder.sh %s >/dev/null' % ' '.join(slots), capture_output=True, text=True)
     assert build.returncode == 0, 'VM build failed:\n' + build.stdout[-3000:] + build.stderr[-3000:]
     apps = sorted({a for g in groups for a in GROUPS[g].get('apps', [])})
     if apps:
