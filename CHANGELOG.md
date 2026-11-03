@@ -61,6 +61,9 @@ Older dated notes (GPU follow-up, TextureView, MC3, Vulkan checkpoints, OTR2, ro
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 
+### 2026-11-03 — libapklayer_egl: GL hook table for every context (egl agent)
+- Why: with Android's libGLESv1_CM mapped, SurfaceFlinger crashed in its glGetString (reads TLS_SLOT_OPENGL_API's table without a null check) because our EGL set the slot only for ES 1 contexts; now ES 2/3 contexts get a table of the host's GLES entry points and no context a no-op table, as Android's EGL does (gHooks / gHooksNoContext). Only aosp/hals/graphics/egl/{Gles1.cpp,Gles1.h} copied into vendor/apklayer (Egl.cpp and Android.bp there were identical to this branch). Command: `flock -n ~/los24-build.lock -c 'cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_egl'`.
+
 ### 2026-11-03 — libapklayer_egl: OpenGL ES 1 contexts (gl agent)
 - Why: ES 1 apps (OpenTTD's SDL 1.2) got an ES 2 context in place of the ES 1 one the host's Mesa lacks; now an ES 1 context is the host's or gfxstream's GLES_CM translator (libapklayer-gles1.so, built on the VM) on a host GLES 3 context, and Android's libGLESv1_CM dispatches through the hook table our EGL stores in TLS_SLOT_OPENGL_API. Only aosp/hals/graphics/egl/{Android.bp,Egl.cpp,Gles1.cpp,Gles1.h} copied into vendor/apklayer (the tree's Egl.cpp was identical to main's). Command: `flock -n ~/los24-build.lock -c 'cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_egl'`. Result: not run (this agent's session refuses `source build/envsetup.sh`); the four files wait in vendor/apklayer for that command. A full tools/sync-aosp.sh from a branch without them reverts them there. If Soong refuses `include_dirs` into frameworks/native, that is the line to change.
 
