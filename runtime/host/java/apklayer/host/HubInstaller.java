@@ -51,6 +51,7 @@ final class HubInstaller {
     HubInstaller(HubDirectory directory, HubPackages packages, HubPendingIntents pendingIntents, Path instanceData) {
         this.directory = directory; this.packages = packages; this.pendingIntents = pendingIntents;
         staging = instanceData.resolve("install-staging"); sources = instanceData.resolve("install-sources");
+        delete(staging);  // what an earlier hub left staged when it ended mid-install
     }
 
     /** An install or a question is in progress (the hub stays up for it). */
@@ -61,7 +62,8 @@ final class HubInstaller {
         Path dir = Files.createDirectories(staging.resolve(caller.name() + "-" + sessionId + "-" + tokens.incrementAndGet()));
         for (int i = 0; i < files.size(); i++) {
             try (var in = new ParcelFileDescriptor.AutoCloseInputStream(files.get(i))) {
-                Files.copy(in, dir.resolve(i + "-" + names.get(i).replaceAll("[^A-Za-z0-9_.-]", "_") + ".apk"));
+                String name = names.get(i).replaceAll("[^A-Za-z0-9_.-]", "_");
+                Files.copy(in, dir.resolve(i + "-" + (name.endsWith(".apk") ? name : name + ".apk")));
             }
         }
         String pkg = null;
@@ -115,8 +117,9 @@ final class HubInstaller {
     boolean confirm(HubDirectory.Peer caller, Intent intent) {
         String token = intent.getStringExtra(CONFIRM);
         if (token == null) return false;
-        Request request;
-        synchronized (pending) { request = pending.get(token); if (request != null && request.installer.equals(caller.name())) pending.remove(token); else request = null; }
+        Request found;
+        synchronized (pending) { found = pending.get(token); if (found != null && found.installer.equals(caller.name())) pending.remove(token); else found = null; }
+        Request request = found;
         if (request == null) { System.out.println("[apklayer-hub] " + caller.name() + " starts an unknown or used install confirmation"); return true; }
         submit(() -> confirmed(request));
         return true;
@@ -182,7 +185,6 @@ final class HubInstaller {
         List<String> command = new ArrayList<>(List.of(System.getProperty("apklayer.cli"), "install"));
         try (var listing = Files.list(request.staged)) { listing.sorted().forEach(apk -> command.add(apk.toString())); }
         catch (IOException failure) { send(request.status, request.sessionId, request.pkg, PackageInstaller.STATUS_FAILURE, failure.toString(), null); return; }
-        if (update) directory.stopPackage(request.pkg);  // as Android kills an app it replaces: its classes are swapped under it
         int[] exit = {0};
         String output = run(command, exit);
         delete(request.staged);
@@ -191,6 +193,10 @@ final class HubInstaller {
             send(request.status, request.sessionId, request.pkg, status, output, null);
             return;
         }
+        // as Android kills an app it replaced; until now it ran on the old files (install moves new ones in, open ones stay readable)
+        if (update) directory.stopPackage(request.pkg);
+        android.content.pm.PackageInfo installed = packages.packageInfo(request.pkg);
+        System.out.println("[apklayer-hub] " + request.pkg + " " + (installed == null ? "unreadable" : installed.versionName + " (" + installed.getLongVersionCode() + ")") + " installed");
         directory.packageChanged(request.pkg, false);
         int uid = packages.uid(request.pkg);
         if (update) {

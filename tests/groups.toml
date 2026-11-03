@@ -70,6 +70,10 @@ run = ["python3 -u tests/vm/hub.py services start", "python3 -u tests/vm/hub.py 
        "python3 -u tests/vm/hub.py services private", "python3 -u tests/vm/hub.py services filters",
        "python3 -u tests/vm/hub.py services late", "python3 -u tests/vm/hub.py services oneway"]
 
+[installer]
+apps = ["hello-installer"]  # carries the payload APKs (hello-payload with a config split, hello-payload2, hello-payload-other) as assets
+run = ["python3 -u tests/vm/installer.py"]
+
 [activities]
 apps = ["hello-act-target", "hello-act-caller"]
 run = ["python3 -u tests/vm/hub.py activities result", "python3 -u tests/vm/hub.py activities explicit", "python3 -u tests/vm/hub.py activities again",

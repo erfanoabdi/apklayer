@@ -1,11 +1,9 @@
 package apklayer.host;
 
-import java.awt.Color;
-import java.awt.Font;
-import java.awt.FontMetrics;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
-import java.awt.image.BufferedImage;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Typeface;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.net.UnixDomainSocketAddress;
@@ -80,36 +78,41 @@ final class HubInstallDialog {
 
     private static boolean inside(int x, int y, int[] box) { return x >= box[0] && x < box[0] + BUTTON_W && y >= box[1] && y < box[1] + BUTTON_H; }
 
-    /** ARGB pixels of the dialog: heading, wrapped body text, the two buttons (yes filled). */
+    /** ARGB pixels of the dialog: heading, wrapped body text, the two buttons (yes filled). Android's own Canvas: the hub JVM's Java2D natives are not usable next to the device libraries. */
     private static int[] draw(String heading, String body, String yes, String no, int[] yesBox, int[] noBox) {
-        BufferedImage image = new BufferedImage(W, H, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = image.createGraphics();
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        g.setColor(new Color(0xFAFAFA)); g.fillRect(0, 0, W, H);
-        g.setColor(new Color(0x1C1B1F)); g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18)); g.drawString(heading, 20, 36);
-        g.setColor(new Color(0x49454F)); g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
-        int y = 64;
-        for (String line : wrap(body, g.getFontMetrics(), W - 40)) { g.drawString(line, 20, y); y += 20; }
-        g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
-        g.setColor(new Color(0x6750A4)); g.fillRoundRect(yesBox[0], yesBox[1], BUTTON_W, BUTTON_H, 18, 18);
-        g.setColor(Color.WHITE); centered(g, yes, yesBox);
-        g.setColor(new Color(0x6750A4)); g.drawRoundRect(noBox[0], noBox[1], BUTTON_W - 1, BUTTON_H - 1, 18, 18); centered(g, no, noBox);
-        g.dispose();
-        return image.getRGB(0, 0, W, H, null, 0, W);
+        Bitmap bitmap = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawColor(0xFFFAFAFA);
+        Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
+        text.setColor(0xFF1C1B1F); text.setTextSize(18); text.setTypeface(Typeface.DEFAULT_BOLD);
+        canvas.drawText(heading, 20, 36, text);
+        text.setColor(0xFF49454F); text.setTextSize(14); text.setTypeface(Typeface.DEFAULT);
+        float y = 64;
+        for (String line : wrap(body, text, W - 40)) { canvas.drawText(line, 20, y, text); y += 20; }
+        Paint button = new Paint(Paint.ANTI_ALIAS_FLAG);
+        button.setColor(0xFF6750A4);
+        canvas.drawRoundRect(yesBox[0], yesBox[1], yesBox[0] + BUTTON_W, yesBox[1] + BUTTON_H, 18, 18, button);
+        button.setStyle(Paint.Style.STROKE); button.setStrokeWidth(1.5f);
+        canvas.drawRoundRect(noBox[0] + 1, noBox[1] + 1, noBox[0] + BUTTON_W - 1, noBox[1] + BUTTON_H - 1, 18, 18, button);
+        text.setTypeface(Typeface.DEFAULT_BOLD); text.setColor(0xFFFFFFFF); centered(canvas, text, yes, yesBox);
+        text.setColor(0xFF6750A4); centered(canvas, text, no, noBox);
+        int[] pixels = new int[W * H];
+        bitmap.getPixels(pixels, 0, W, 0, 0, W, H);
+        bitmap.recycle();
+        return pixels;
     }
 
-    private static void centered(Graphics2D g, String text, int[] box) {
-        FontMetrics m = g.getFontMetrics();
-        g.drawString(text, box[0] + (BUTTON_W - m.stringWidth(text)) / 2, box[1] + (BUTTON_H + m.getAscent() - m.getDescent()) / 2);
+    private static void centered(Canvas canvas, Paint paint, String text, int[] box) {
+        Paint.FontMetrics m = paint.getFontMetrics();
+        canvas.drawText(text, box[0] + (BUTTON_W - paint.measureText(text)) / 2, box[1] + (BUTTON_H - m.ascent - m.descent) / 2, paint);
     }
 
-    private static List<String> wrap(String text, FontMetrics m, int width) {
+    private static List<String> wrap(String text, Paint paint, int width) {
         List<String> lines = new ArrayList<>();
         for (String paragraph : text.split("\n")) {
             StringBuilder line = new StringBuilder();
             for (String word : paragraph.split(" ")) {
-                if (line.length() > 0 && m.stringWidth(line + " " + word) > width) { lines.add(line.toString()); line.setLength(0); }
+                if (line.length() > 0 && paint.measureText(line + " " + word) > width) { lines.add(line.toString()); line.setLength(0); }
                 line.append(line.length() > 0 ? " " : "").append(word);
             }
             lines.add(line.toString());

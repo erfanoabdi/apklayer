@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Builds a sample APK from tests/apps/<name>/ (AndroidManifest.xml, src/**/*.java, optional *.c -> libapp.so for x86_64)
 # with the local Android SDK + NDK. Usage: build.sh <name> [out.apk]  (default build/<name>.apk)
+# Optional in the app's directory: split.list (lines "<split>:<aapt2 config>": config splits, written beside the APK as <out>-split_<split>.apk),
+# sign (a key name: the APKs are signed with build/keys/<name>.jks, made on first use), embed.list (test apps built into this one's assets).
 set -euo pipefail
-NAME="$1"; cd "$(dirname "$0")/$NAME"
+NAME="$1"; SELF="$(cd "$(dirname "$0")" && pwd)/build.sh"; cd "$(dirname "$0")/$NAME"
 SDK="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 NDK=$(ls -d "$SDK"/ndk/* | tail -1); BT=$(ls -d "$SDK"/build-tools/* | tail -1); AJ="$SDK/platforms/android-36.1/android.jar"
 OUT="${2:-$PWD/../../../build/$NAME.apk}"; W=$(mktemp -d)
@@ -26,6 +28,20 @@ RES=()
 if [ -d res ]; then "$BT"/aapt2 compile --dir res -o "$W/res.zip"; RES=("$W/res.zip"); fi  # an app with resources (its own 0x7f package)
 ASSETS=()
 [ ! -d assets ] || ASSETS=(-A "$PWD/assets")
-"$BT"/aapt2 link ${ASSETS[@]+"${ASSETS[@]}"} -o "$W/base.apk" -I "$AJ" ${RES[@]+"${RES[@]}"} --manifest AndroidManifest.xml
-(cd "$W" && zip -q base.apk classes.dex $LIBS) && cp "$W/base.apk" "$OUT"
+if [ -f embed.list ]; then  # other test APKs (and their splits) as assets/<app>.apk
+  mkdir -p "$W/embedded"; ASSETS+=(-A "$W/embedded")
+  while IFS= read -r app; do [ -z "$app" ] || "$SELF" "$app" "$W/embedded/$app.apk" >/dev/null; done < embed.list
+fi
+SPLITS=()
+if [ -f split.list ]; then while IFS=: read -r split config; do [ -z "$split" ] || SPLITS+=(--split "$W/split_$split.apk:$config"); done < split.list; fi
+"$BT"/aapt2 link ${ASSETS[@]+"${ASSETS[@]}"} -o "$W/base.apk" -I "$AJ" ${RES[@]+"${RES[@]}"} ${SPLITS[@]+"${SPLITS[@]}"} --manifest AndroidManifest.xml
+(cd "$W" && zip -q base.apk classes.dex $LIBS)
+sign() { cp "$1" "$2"; }
+if [ -f sign ]; then
+  KS="$PWD/../../../build/keys/$(cat sign).jks"; mkdir -p "$(dirname "$KS")"
+  [ -f "$KS" ] || keytool -genkeypair -keystore "$KS" -alias key -storepass apklayer -keypass apklayer -dname "CN=$(cat sign)" -keyalg RSA -validity 10000 -noprompt >/dev/null 2>&1
+  sign() { "$BT"/zipalign -f 4 "$1" "$1.aligned" && "$BT"/apksigner sign --v4-signing-enabled false --ks "$KS" --ks-pass pass:apklayer --out "$2" "$1.aligned" 2>/dev/null; }
+fi
+sign "$W/base.apk" "$OUT"
+for f in "$W"/split_*.apk; do [ ! -f "$f" ] || sign "$f" "${OUT%.apk}-$(basename "$f")"; done
 echo "$OUT"

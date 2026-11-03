@@ -91,7 +91,9 @@ public final class HubClient {
         for (String authority : remoteAuthorities.getOrDefault(name, java.util.List.of())) org.robolectric.shadows.ShadowContentResolver.registerProviderInternal(authority, null);
         remoteAuthorities.remove(name);
         if (!removed) { registerPackage(packageManager, name); HubProviders_registerRemote(context, name); }
-        System.out.println("[apklayer] package " + name + (removed ? " removed" : " (re)installed"));
+        String version;
+        try { version = removed ? "" : " version " + context.getPackageManager().getPackageInfo(name, 0).getLongVersionCode(); } catch (android.content.pm.PackageManager.NameNotFoundException gone) { version = " (not found)"; }
+        System.out.println("[apklayer] package " + name + (removed ? " removed" : " (re)installed") + version);
     }
 
     /** The authorities registered for each other package (packageChanged replaces them). */
