@@ -176,3 +176,6 @@ Until an app presents its first frame, `bridge/shell/splash.c` fills the window 
 
 ## Media (2026-11-04)
 - Open: m.youtube.com/watch pages show a cookie-consent dialog (the test uses YouTube's embedded player in a local page); the audio permission feed happens once at hub start (an app installed later or an audioserver restart is not re-fed: shortcut in HubAudioPermissions); the native-audio group fails on main (NativeParcel.activeParcels missing); fennec-media needs a profile past Fenix's onboarding on a fresh install (being fixed).
+
+## Package installer (2026-11-04)
+- Done: sessions, preapproval, legacy intents, splits/bundles, update checks. Open: .xapk/.apkm and dropping splits of another ABI have no test; an installer updating itself; preapprovals and sessions do not survive a hub or app restart; SessionCallback.onFinished is never posted; package broadcasts skip manifest receivers (apps targeting below 26); the confirmation is a fixed 440x200 at 100% scale; unsigned updates are accepted (shortcut); legacy intents get no startActivityForResult result; the `view` group lacks `needs` for com.android.externalstorage.
