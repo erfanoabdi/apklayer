@@ -2,13 +2,15 @@
 # Fennec plays HTML5 video: a local page (tests/vm/www/video.html) plays generated VP9/Opus WebM (muted) and H.264/AAC MP4 (with sound)
 # side by side, opened through a VIEW intent; it beacons each video's state (/r?src=..&t=..&w=..) to the local server once a second.
 # Checks: each video's currentTime advances and it has a size and no error, two app screenshots differ (frames change), and PipeWire got
-# an output stream from the instance. MEDIA_URL=<url> opens that page instead (e.g. a YouTube watch page) and checks frames and audio only.
+# an output stream from the instance. MEDIA_URL=<url> opens that page instead and checks frames and audio only; YOUTUBE=<video id>: that
+# video in YouTube's embedded player (tests/vm/www/youtube.html).
 # Usage (on the VM, in the caller's instance: APKLAYER_INSTANCE and the XDG_* dirs as for any run): tests/vm/fennec-media.sh
 #   FENNEC_SECS (playing time before the checks, default 40).
 cd "$(dirname "$0")/../.." || exit 1
 pkg=org.mozilla.fennec_fdroid; port=${PORT:-18091}; secs=${FENNEC_SECS:-40}
 work=$(mktemp -d "${XDG_STATE_HOME:-$HOME/.local/state}/fennec-media.XXXXXX"); trap 'rm -rf "$work"' EXIT
-cp tests/vm/www/video.html "$work/"
+cp tests/vm/www/video.html tests/vm/www/youtube.html "$work/"
+[ -n "$YOUTUBE" ] && MEDIA_URL="http://127.0.0.1:$port/youtube.html?v=$YOUTUBE"  # its embedded player in a local page
 inst=${APKLAYER_INSTANCE:-default}; [ "$inst" = default ] && inst=0  # app data per instance (cli/layout.h)
 prof=$(ls -d "${XDG_DATA_HOME:-$HOME/.local/share}/apklayer/$inst/app-data/$pkg/app/files/mozilla/"*.default* 2>/dev/null | head -1)
 [ -n "$prof" ] || { echo "FAIL no Fennec profile yet (start Fennec once)"; exit 1; }
@@ -70,5 +72,5 @@ print(sum(1 for o in objs if o.get('type') == 'PipeWire:Interface:Node' and o['i
 PY
 ) || streams=0
 check "PipeWire plays an output stream from the instance ($streams running)" "$([ "${streams:-0}" -gt 0 ] && echo 1)"
-[ $fail = 0 ] || { d="${XDG_STATE_HOME:-$HOME/.local/state}/fennec-media-last"; rm -rf "$d"; cp -r "$work" "$d"; echo "  kept $d"; }
+d="${XDG_STATE_HOME:-$HOME/.local/state}/fennec-media-last"; rm -rf "$d"; cp -r "$work" "$d"; echo "  screenshots, logs and reports: $d"
 exit $fail
