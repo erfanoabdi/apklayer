@@ -12,6 +12,7 @@ import org.objectweb.asm.Opcodes;
 /**
  * Generator ({@code JdkPatch outDir}) for the classes of java.base that Android's native libraries expect to be libcore's: the JVM runs with
  * {@code --patch-module java.base=outDir} (bin/apklayer). Chromium's JNI looks up {@code FileDescriptor.getOwnerId$()} and {@code getInt$()}; OpenJDK's FileDescriptor has neither.
+ * Other libcore-only members (Thread.stop(Throwable), InetAddress.parseNumericAddress, ...) are copied from {@link JdkMembers}; apklayer.tools.JdkScan finds them.
  * Android's ArrayList iterator ends after the list's size at its creation ({@code limit}), so a loop may remove the element it is on (DocumentsUI does, in the last one); OpenJDK's throws.
  */
 public final class JdkPatch {
@@ -40,6 +41,34 @@ public final class JdkPatch {
         arrayListIterator(Path.of(args[0], "java/util/ArrayList$Itr.class"));
         limitAdjusted("java/util/ArrayList$Itr", "remove", -1, Path.of(args[0], "java/util/ArrayList$Itr.class"));  // Android: remove() lowers limit
         limitAdjusted("java/util/ArrayList$ListItr", "add", 1, Path.of(args[0], "java/util/ArrayList$ListItr.class"));  // and ListIterator.add() raises it
+        for (var target : TARGETS.entrySet()) withMembers(target.getKey(), target.getValue(), Path.of(args[0], target.getValue() + ".class"));
+    }
+
+    /** JdkMembers nested class -> the java.base class that receives its members. */
+    static final java.util.Map<String, String> TARGETS = java.util.Map.of(
+            "Thread", "java/lang/Thread", "InetAddress", "java/net/InetAddress", "DateFormat", "java/text/DateFormat",
+            "ECParameterSpec", "java/security/spec/ECParameterSpec", "ByteBuffer", "java/nio/ByteBuffer");
+
+    /** Copies the fields and methods (not the constructor) of JdkMembers$<name> into {@code target}, the nested class renamed to the target. */
+    private static void withMembers(String name, String target, Path out) throws Exception {
+        String template = "apklayer/host/JdkMembers$" + name;
+        byte[] original, members;
+        try (InputStream in = Object.class.getResourceAsStream("/" + target + ".class")) { original = in.readAllBytes(); }
+        try (InputStream in = JdkPatch.class.getResourceAsStream("/" + template + ".class")) { members = in.readAllBytes(); }
+        ClassReader reader = new ClassReader(original);
+        ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_MAXS);
+        reader.accept(new ClassVisitor(Opcodes.ASM9, writer) {
+            @Override public void visitEnd() {
+                ClassVisitor copy = new ClassVisitor(Opcodes.ASM9) {
+                    @Override public org.objectweb.asm.FieldVisitor visitField(int a, String n, String d, String s, Object v) { return writer.visitField(a, n, d, s, v); }
+                    @Override public MethodVisitor visitMethod(int a, String n, String d, String s, String[] e) { return n.equals("<init>") ? null : writer.visitMethod(a, n, d, s, e); }
+                };
+                new ClassReader(members).accept(new org.objectweb.asm.commons.ClassRemapper(copy, new org.objectweb.asm.commons.SimpleRemapper(template, target)), 0);
+                super.visitEnd();
+            }
+        }, 0);
+        Files.createDirectories(out.getParent());
+        Files.write(out, writer.toByteArray());
     }
 
     /** Before every return of {@code method}: {@code limit += delta} (the class read from the patch dir when it is already there, else from the JDK). */
