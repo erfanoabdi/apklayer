@@ -2,7 +2,7 @@ From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: apklayer <apklayer@localhost>
 Subject: [PATCH] DefaultNativeRuntimeLoader: arm64 Linux, real window and media natives
 
-apklayer patch (docs/PATCHES.md "Robolectric DefaultNativeRuntimeLoader"): isSupported() also accepts Linux aarch64, because the
+apklayer patch (docs/PATCHES.md): isSupported() also accepts Linux aarch64, because the
 shim and the device libraries are arm64. The natives of SurfaceControl, SurfaceSession, BLASTBufferQueue and HardwareBuffer are
 registered (windows are real SurfaceFlinger layers fed by a real BLASTBufferQueue), and Parcel and the resource classes
 (ApkAssets, AssetManager, StringBlock, XmlBlock: the NDK asset and configuration APIs need real resource pointers) are always

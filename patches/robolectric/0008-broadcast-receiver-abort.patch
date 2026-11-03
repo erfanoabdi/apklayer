@@ -2,7 +2,7 @@ From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: apklayer <apklayer@localhost>
 Subject: [PATCH] ShadowBroadcastReceiver: Android's own abortBroadcast()
 
-apklayer patch (docs/PATCHES.md, instance hub broadcasts): Robolectric's abortBroadcast() only sets a flag it reads itself;
+apklayer patch (docs/PATCHES.md): Robolectric's abortBroadcast() only sets a flag it reads itself;
 Android's own runs, so the abort reaches the PendingResult and with it the hub's ordered queue. Covered by tests/vm/broadcasts.sh
 ordered.
 

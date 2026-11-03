@@ -2,7 +2,7 @@ From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: apklayer <apklayer@localhost>
 Subject: [PATCH] ShadowKeyCharacterMap: no character under Ctrl/Alt/Meta
 
-apklayer patch (docs/PATCHES.md "Proxied IME and clipboard"): AOSP KeyCharacterMap.matchesMetaState requires exact Ctrl/Alt/Meta
+apklayer patch (docs/PATCHES.md): AOSP KeyCharacterMap.matchesMetaState requires exact Ctrl/Alt/Meta
 matches; without this Ctrl+V typed 'v' before Android shortcuts ran. Covered by tests/vm/input.sh.
 
 Against external/robolectric 87aa52b08 (REVISION). Applied by scripts/build-runtime-overlay.sh onto the staged

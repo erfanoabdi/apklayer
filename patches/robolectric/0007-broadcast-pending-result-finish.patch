@@ -2,7 +2,7 @@ From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: apklayer <apklayer@localhost>
 Subject: [PATCH] ShadowBroadcastPendingResult: Android's own finish()
 
-apklayer patch (docs/PATCHES.md, instance hub broadcasts): Robolectric's finish() only completes a future; Android's own finish()
+apklayer patch (docs/PATCHES.md): Robolectric's finish() only completes a future; Android's own finish()
 runs too, so the (hub-backed) activity manager learns the receiver is done and an ordered broadcast's result is passed on.
 Covered by tests/vm/broadcasts.sh.
 
