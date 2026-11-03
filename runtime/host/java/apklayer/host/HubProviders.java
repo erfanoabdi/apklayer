@@ -84,6 +84,10 @@ final class HubProviders {
 
     /** Whether the process (a pid that registered with the hub) holds the permission: what a provider in another app asks about its caller. */
     int check(int pid, String permission) {
+        // The hub is system_server, which holds every permission (an authenticator checks ACCOUNT_MANAGER on the account service). Its calls to an
+        // authenticator are oneway, and the kernel names no sender of a oneway call (pid 0): answered as for the hub.
+        // shortcut: any app's oneway call passes such a check too (apps share one Linux uid here, so the uid cannot tell them apart); name the sender if that matters.
+        if (pid == android.os.Process.myPid() || pid == 0) return 0;
         HubDirectory.Peer peer = directory.peerByPid(pid);
         return peer != null && packages.holds(peer.name(), permission) ? 0 : -1;
     }
