@@ -1,7 +1,8 @@
 /* Android's fixed paths for the desktop (PLAN P7.1 step 0.3). Android libraries read /system, /vendor, /apex, /etc/task_profiles.json,
  * /dev/binder ... A desktop has none of them, and an instance (PLAN P9) must not share them. This overlays them from the
  * instance's Android root: a path under a known prefix is served from $APKLAYER_ANDROID_ROOT/<path> (else <native>/android-root)
- * when that file exists there, otherwise the host's own file is used, so nothing the host needs is hidden. Installed into
+ * when that file exists there, otherwise the host's own file is used, so nothing the host needs is hidden. What one instance stages for
+ * itself (the vintf fragments of the HALs its stack runs) is in $APKLAYER_INSTANCE_ROOT, looked at first. Installed into
  * bionic_translation's libc (open, fopen, stat, lstat, fstatat) through its apply_path_overrides hook. */
 #define _GNU_SOURCE
 #include <dlfcn.h>
@@ -45,13 +46,21 @@ static bool binder_device(char **path)
     return false;
 }
 
+static bool from_root(const char *r, char **path);
+
 bool apklayer_apply_path_overrides(char **path)
 {
-    const char *p = *path, *r = root();
     static int debug = -1;
     if (debug < 0) debug = getenv("APKLAYER_PATHS_DEBUG") != NULL;
-    if (debug) fprintf(stderr, "[paths] %s (root %s)\n", p, r);
+    if (debug) fprintf(stderr, "[paths] %s (root %s)\n", *path, root());
     if (binder_device(path)) return true;
+    const char *own = getenv("APKLAYER_INSTANCE_ROOT");
+    return (own && own[0] && from_root(own, path)) || from_root(root(), path);
+}
+
+static bool from_root(const char *r, char **path)
+{
+    const char *p = *path;
     if (!r[0] || p[0] != '/') return false;
     for (int i = 0; prefixes[i]; i++) {
         if (strncmp(p, prefixes[i], strlen(prefixes[i]))) continue;

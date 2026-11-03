@@ -33,15 +33,19 @@ const int kMaxRestarts = 5;  // like init's crash loop limit: a service that kee
 
 bool staged(const Layout& l, const char* lib) { return exists(join(l.androidLibs, lib)); }
 
-// A vintf manifest is declared only when this stack provides the service behind it.
-void stageManifest(const Layout& l, bool provided, const std::string& name, const std::string& source, const char* partition = "vendor") {
-    std::string target = join(l.native, std::string("android-root/") + partition + "/etc/vintf/manifest/" + name);
-    if (provided) {
-        makeDirs(dirName(target));
-        if (auto text = readFile(join(l.root, source))) writeFile(target, *text);
-    } else {
-        unlink(target.c_str());
+// A vintf manifest is declared only when this stack provides the service behind it: staged into the instance's own root (the path layer's
+// APKLAYER_INSTANCE_ROOT, made fresh with each stack), never into the native tree other instances share. That root's manifest directory
+// replaces the shared one, so it carries the shared fragments too.
+void stageManifest(const Instance& inst, const Layout& l, bool provided, const std::string& name, const std::string& source, const char* partition = "vendor") {
+    const std::string dir = std::string(partition) + "/etc/vintf/manifest";
+    const std::string own = join(join(inst.runtimeDir, "android-root"), dir), shared = join(l.native, "android-root/" + dir);
+    if (!exists(own)) {
+        makeDirs(own);
+        for (const std::string& f : listDir(shared))
+            if (f.rfind("apklayer-", 0) != 0) if (auto text = readFile(join(shared, f))) writeFile(join(own, f), *text);  // the tree's own fragments, not other instances' staging
     }
+    if (provided)
+        if (auto text = readFile(join(l.root, source))) writeFile(join(own, name), *text);
 }
 
 // The pid of the shell listening on this session's socket (0: none): what stops it, never a match by name (other sessions' shells run too).
@@ -166,17 +170,17 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     for (const std::string& f : listDir(inst.logs()))
         if (f.size() > 4 && f.substr(f.size() - 4) == ".log") unlink(join(inst.logs(), f).c_str());
 
-    stageManifest(l, staged(l, "libapklayer_codec2.so"), "apklayer-media.xml", "aosp/hals/media/codec2/manifest.xml");
-    stageManifest(l, staged(l, "libapklayer_audio.so"), "apklayer-audio.xml", "aosp/hals/audio/manifest.xml");
-    stageManifest(l, staged(l, "libapklayer_audioserver.so"), "apklayer-audio-effects.xml", "aosp/hals/audio/effects-manifest.xml");
-    stageManifest(l, staged(l, "libapklayer_keymint.so"), "apklayer-keymint.xml", "aosp/hals/security/manifest.xml");
-    stageManifest(l, staged(l, "libapklayer_keystore2.so"), "apklayer-keystore2.xml", "aosp/hals/security/keystore2-manifest.xml", "system");  // a framework HAL: keystore2 may register its service
 
     // a fresh property store per stack (ro.* is write-once); ensureStack already made it when a client waits on the ready property
     if (getenvOr("APKLAYER_STACK_PREPARED", "").empty()) {
         removeTree(inst.runtimeDir);
         makeDirs(inst.runtimeDir);
     }
+    stageManifest(inst, l, staged(l, "libapklayer_codec2.so"), "apklayer-media.xml", "aosp/hals/media/codec2/manifest.xml");
+    stageManifest(inst, l, staged(l, "libapklayer_audio.so"), "apklayer-audio.xml", "aosp/hals/audio/manifest.xml");
+    stageManifest(inst, l, staged(l, "libapklayer_audioserver.so"), "apklayer-audio-effects.xml", "aosp/hals/audio/effects-manifest.xml");
+    stageManifest(inst, l, staged(l, "libapklayer_keymint.so"), "apklayer-keymint.xml", "aosp/hals/security/manifest.xml");
+    stageManifest(inst, l, staged(l, "libapklayer_keystore2.so"), "apklayer-keystore2.xml", "aosp/hals/security/keystore2-manifest.xml", "system");  // a framework HAL: keystore2 may register its service
     std::vector<std::string> propFiles = {join(l.root, "bridge/native/apklayer.prop"), join(n, "android-root/props/system_build.prop")};
     setDerivedProperties(l, ne, propFiles);
     Spawn prop;

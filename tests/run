@@ -3,6 +3,7 @@
 Pushes the working tree to the VM and builds it once, builds and installs the groups' test apps once, then runs the groups: up to N at a time
 (default: by the VM's free memory, ~1 GB per instance; a group starts only while 3 GB are available, at most 4 at a time), the groups marked `alone` afterwards one by one. Logs: build/tests/<group>.log."""
 import argparse
+import os
 import concurrent.futures
 import subprocess
 import sys
@@ -88,7 +89,8 @@ def main():
     unknown = [g for g in groups if g not in GROUPS]
     if unknown: parser.error('unknown group(s): %s' % ' '.join(unknown))
     jobs = args.j or max(1, min(4, (available() - MIN_FREE_MB) // INSTANCE_MB + 1))
-    slots = ['tests'] + ['tests%d' % i for i in range(2, jobs + 1)]
+    prefix = os.environ.get('APKLY_INSTANCES', 'tests')  # instance names: another runner on the same VM (an agent's worktree) takes its own
+    slots = [prefix] + ['%s%d' % (prefix, i) for i in range(2, jobs + 1)]
     start = time.monotonic()
     LOGS.mkdir(parents=True, exist_ok=True)
     prepare(groups, slots)
