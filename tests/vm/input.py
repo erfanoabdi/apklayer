@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 """Real widget typing, clipboard and IBus -> Mutter -> proxied text-input-v3."""
-import os as _os
-LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import gi
 gi.require_version('IBus', '1.0')
 from gi.repository import IBus, Gio
-import json
 import os
 from pathlib import Path
 import selectors
 import signal
 import subprocess
+import sys
 import time
 
-os.chdir(Path.home() / 'apklayer-m1')
-ENV = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000', WAYLAND_DISPLAY='wayland-0',
-    DBUS_SESSION_BUS_ADDRESS='unix:path=/run/user/1000/bus',
-    APKLAYER_NATIVE=str(Path.home() / 'arm64-native'), APKLAYER_RUNTIME_DEBUG='1',
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import instance  # noqa: E402  (changes into the repo root)
+import pixels  # noqa: E402
+LOGDIR = instance.LOGDIR
+ENV = dict(instance.ENV, DBUS_SESSION_BUS_ADDRESS='unix:path=%s/bus' % instance.SESSION,
+    APKLAYER_RUNTIME_DEBUG='1',
     APKLAYER_DEBUG_INPUT='1', APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='600')
 os.environ['DBUS_SESSION_BUS_ADDRESS'] = ENV['DBUS_SESSION_BUS_ADDRESS']
 IBus.init()
@@ -49,18 +49,16 @@ checks = set()
 
 def stop():
     subprocess.run(['bin/apklayer', 'stop'], env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(['pkill', '-9', '-x', 'tail'], check=False)
 
 
 def keys(*steps):
     print('INPUT ' + ' '.join(steps), flush=True)
-    subprocess.run(['sudo', '-n', '/tmp/uinput-keys', *steps],
+    instance.keys(*[*steps],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
 
 def locate(content_y):
-    print('LOCATE ' + str(content_y), flush=True)
-    return json.loads(input())[0]
+    return pixels.headers(instance.capture('locate'), 1, content_y=content_y)[0]
 
 
 def paste():
@@ -69,7 +67,6 @@ def paste():
 
 stop()
 try:
-    subprocess.run(['gcc', '-O1', '-o', '/tmp/uinput-keys', 'tests/vm/uinput-keys.c'], check=True)
     engine = subprocess.Popen(['python3', '-u', 'tests/vm/ibus-engine.py'], env=ENV,
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     children.append(engine)
@@ -137,7 +134,7 @@ try:
                     assert paste() == b'L' * 20000, 'long clipboard transfer was truncated or stalled'
                     checks.add('long-clipboard')
                 elif 'script: hover:9,0' in line:
-                    print('CAPTURE verified input', flush=True)
+                    instance.capture('verified input')
     assert len(checks) == 5, checks
     shell = Path(LOGDIR + '/shell.log').read_text(errors='replace')
     assert '[shell] text input enabled' in shell, 'proxied field did not enable text-input-v3'
@@ -157,6 +154,5 @@ finally:
         child.wait()
     log.close()
     selector.close()
-    left = subprocess.run(['pgrep', '-af', '[a]pklayer.host.Main|[b]tload|[a]pklayer-shell|[i]bus-engine.py'],
-                          capture_output=True, text=True)
-    assert left.returncode != 0, left.stdout
+    left = instance.mine('[a]pklayer.host.Main|[b]tload|[a]pklayer-shell|[i]bus-engine.py')
+    assert not left, left

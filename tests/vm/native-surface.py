@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """Real MediaCodec Surface output, SurfaceFlinger layer, pixels and physical Back."""
-import os as _os
-LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import ctypes
 import os
 from pathlib import Path
@@ -11,16 +9,17 @@ import subprocess
 import sys
 import time
 
-os.chdir(Path.home() / 'apklayer-m1')
-ENV = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000', APKLAYER_NATIVE=str(Path.home() / 'arm64-native'),
-    APKLAYER_CODEC2='1', APKLAYER_MEDIA_SERVICES='1', APKLAYER_DEBUG_INPUT='1', APKLAYER_RUNTIME_DEBUG='1',
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import instance  # noqa: E402  (changes into the repo root)
+import pixels  # noqa: E402
+LOGDIR = instance.LOGDIR
+ENV = dict(instance.ENV, APKLAYER_CODEC2='1', APKLAYER_MEDIA_SERVICES='1', APKLAYER_DEBUG_INPUT='1', APKLAYER_RUNTIME_DEBUG='1',
     APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400',
     APKLAYER_JOPTS='-Dapklayer.nativemedia=true -Dapklayer.runms=20000')
 ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-media.so'
 
 def stop():
     subprocess.run(['bin/apklayer', 'stop'], env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(['pkill', '-9', '-x', 'tail'], check=False)
 
 stop()
 logs = Path(LOGDIR)
@@ -32,7 +31,6 @@ app = None
 seen = []
 committed = captured = False
 try:
-    subprocess.run(['gcc', '-O1', '-o', '/tmp/uinput-keys', 'tests/vm/uinput-keys.c'], check=True)
     app = subprocess.Popen(['bin/apklayer', 'run', 'hello.nativesurface'], env=ENV,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
     with selectors.DefaultSelector() as events, Path('/tmp/apklayer-native-surface.out').open('wb') as log:
@@ -68,10 +66,9 @@ try:
             # Capture after the real HWUI commit callback and a visible active window.
             if committed and not captured and any('window state active=true' in s for s in seen):
                 with open('/tmp/apklayer-native-surface-layers.txt', 'wb') as dump:
-                    subprocess.run(['b/cli/apklayer', 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger'], env=ENV, stdout=dump, stderr=subprocess.STDOUT, check=True)
-                print('CAPTURE native SurfaceView result', flush=True)
-                assert sys.stdin.readline().strip() == 'captured', 'capture not acknowledged'
-                subprocess.run(['sudo', '-n', '/tmp/uinput-keys', 'key:1'],
+                    subprocess.run(['bin/apklayer', 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger'], env=ENV, stdout=dump, stderr=subprocess.STDOUT, check=True)
+                pixels.red_surface(instance.capture('native SurfaceView result', 'hello.nativesurface'))
+                instance.keys(*['key:1'],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                 captured = True
     text = '\n'.join(seen)
@@ -96,5 +93,5 @@ finally:
         app.stdout.close()
     os.close(notify)
     (Path(ENV['APKLAYER_NATIVE']) / 'android-root/vendor/etc/vintf/manifest/apklayer-media.xml').unlink(missing_ok=True)
-    left = subprocess.run(['pgrep', '-af', '[a]pklayer.host.Main|[b]tload|[a]pklayer-shell'], capture_output=True, text=True)
-    assert left.returncode != 0, left.stdout
+    left = instance.mine('[a]pklayer.host.Main|[b]tload|[a]pklayer-shell')
+    assert not left, left

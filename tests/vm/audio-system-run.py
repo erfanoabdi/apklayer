@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """Own the complete audio services; actual log events expose progress and stalls."""
-import os as _os
-LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import ctypes
 import os
 from pathlib import Path
@@ -11,7 +9,9 @@ import subprocess
 import sys
 import time
 
-logs = Path(os.environ.get('APKLAYER_LOGS', LOGDIR))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import instance  # noqa: E402  (changes into the repo root)
+logs = Path(os.environ.get('APKLAYER_LOGS', instance.LOGDIR))
 logs.mkdir(parents=True, exist_ok=True)
 libc = ctypes.CDLL(None, use_errno=True)
 fd = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
@@ -44,7 +44,7 @@ def progress():
         except FileNotFoundError:
             positions.pop(name, None)
 
-proc = subprocess.Popen(['b/cli/apklayer', 'stack', 'libapklayer_audioserver.so', '--probe'],
+proc = subprocess.Popen(['bin/apklayer', 'stack', 'libapklayer_audioserver.so', '--probe'],
     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
 try:
     with selectors.DefaultSelector() as events:

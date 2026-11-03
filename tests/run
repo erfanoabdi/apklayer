@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""tests/run [-j N] [group...]: the VM test groups of tests/groups.toml (no group: all of them), each in an apklayer instance of its own, in parallel.
+Pushes the working tree to the VM and builds it once, builds and installs the groups' test apps once, then runs the groups: up to N at a time
+(default: by the VM's free memory, ~1 GB per instance; a group starts only while 3 GB are available, at most 4 at a time), the groups marked `alone` afterwards one by one. Logs: build/tests/<group>.log."""
+import argparse
+import concurrent.futures
+import subprocess
+import sys
+import threading
+import time
+import tomllib
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / 'lib'))
+import vm  # noqa: E402
+
+GROUPS = tomllib.loads((vm.REPO / 'tests/groups.toml').read_text())
+LOGS = vm.REPO / 'build/tests'
+print_lock = threading.Lock()
+# shortcut: a hardlinked copy of APKLAYER_NATIVE (cp -al) shares android-root/data (keystore2's database, the /data/media/0 link to one
+# instance's storage) with its source; the copy gets data of its own until the path layer keeps /data per instance (docs/PLAN.md)
+OWN_DATA = ('d=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/data; if [ "$d" != $HOME/arm64-native/android-root/data ] && [ -n "$(find $d -type f -links +1 -print -quit)" ]; then '
+            'rm -rf $d.own && cp -a $d $d.own && rm -rf $d && mv $d.own $d && rm -f $d/media/0; fi')
+INSTANCE_MB = 1000  # what one running instance (stack, hub, app JVMs, shell) takes
+MIN_FREE_MB = 3000  # a group starts only while the VM has this much available (room for the other users of the VM)
+
+
+def say(*args):
+    with print_lock: print(*args, flush=True)
+
+
+def available():
+    """MemAvailable of the VM in MB."""
+    out = vm.ssh("awk '/MemAvailable/ {print int($2 / 1024)}' /proc/meminfo", capture_output=True, text=True).stdout
+    return int(out or 0)
+
+
+def prepare(groups, slots):
+    t = time.monotonic()
+    vm.push()
+    build = vm.ssh(vm.instance_env(slots[0]) + '{ [ -d b ] || meson setup b >/dev/null; } && ninja -C b >/dev/null && '
+                   'sudo -n sh tools/host-setup/binder.sh %s >/dev/null && %s' % (' '.join(slots), OWN_DATA), capture_output=True, text=True)
+    assert build.returncode == 0, 'VM build failed:\n' + build.stdout[-3000:] + build.stderr[-3000:]
+    apps = sorted({a for g in groups for a in GROUPS[g].get('apps', [])})
+    if apps:
+        LOGS.mkdir(parents=True, exist_ok=True)
+        with concurrent.futures.ThreadPoolExecutor(6) as pool:
+            built = list(pool.map(lambda a: subprocess.run(['tests/apps/build.sh', a], cwd=vm.REPO, capture_output=True, text=True), apps))
+        for app, b in zip(apps, built): assert b.returncode == 0, 'building %s failed:\n%s' % (app, b.stderr[-2000:])
+        vm.copy([vm.REPO / 'build' / (a + '.apk') for a in apps], vm.WORK + '/apks')
+        install = ('for a in %s; do out=$(bin/apklayer install %s/apks/$a.apk 2>&1); '
+                   'grep -aq "installed" <<<"$out" || { tail -5 <<<"$out"; echo "install $a failed"; exit 1; }; done') % (' '.join(apps), vm.WORK)
+        assert vm.ssh(vm.instance_env(slots[0]) + install).returncode == 0, 'installing the test apps failed'
+    setup = [c for g in groups for c in GROUPS[g].get('setup', [])]
+    for command in dict.fromkeys(setup):
+        assert vm.ssh(vm.instance_env(slots[0]) + command).returncode == 0, 'setup failed: ' + command
+    say('prepared (push, build, %d apps) in %.0f s' % (len(apps), time.monotonic() - t))
+
+
+def run_group(name, slot):
+    group = GROUPS[name]
+    t = time.monotonic()
+    log = LOGS / (name + '.log')
+    env = vm.instance_env(slot, '%s/out/%s' % (vm.WORK, name))
+    ok = True
+    with log.open('w') as out:
+        commands = [(c, [*vm.SSH, env + c]) for c in group.get('run', [])] + [(c, ['sh', '-c', c]) for c in group.get('mac', [])]
+        for command, argv in commands:
+            out.write('$ ' + command + '\n')
+            out.flush()
+            if subprocess.run(argv, cwd=vm.REPO, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL).returncode != 0:
+                ok = False
+                break
+        vm.ssh(env + 'python3 -c "import sys; sys.path.insert(0, \'tests/lib\'); import instance; instance.stop()"', stdout=out, stderr=subprocess.STDOUT)
+    seconds = time.monotonic() - t
+    say('%s %-16s %4.0f s  [%s]' % ('PASS' if ok else 'FAIL', name, seconds, slot))
+    if not ok:
+        say(''.join('    | ' + line for line in log.read_text(errors='replace').splitlines(True)[-25:]))
+    return name, ok, seconds
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('-j', type=int, help='groups at a time (default: by free VM memory)')
+    parser.add_argument('groups', nargs='*', help='default: ' + ' '.join(GROUPS))
+    args = parser.parse_args()
+    groups = args.groups or [g for g in GROUPS if not GROUPS[g].get('optional')]
+    unknown = [g for g in groups if g not in GROUPS]
+    if unknown: parser.error('unknown group(s): %s' % ' '.join(unknown))
+    jobs = args.j or max(1, min(4, (available() - MIN_FREE_MB) // INSTANCE_MB + 1))
+    slots = ['tests'] + ['tests%d' % i for i in range(2, jobs + 1)]
+    start = time.monotonic()
+    LOGS.mkdir(parents=True, exist_ok=True)
+    prepare(groups, slots)
+    ready = time.monotonic()
+    have = vm.ssh(vm.instance_env(slots[0]) + 'bin/apklayer list', capture_output=True, text=True).stdout
+    results = []
+    for g in groups:
+        missing = [p for p in GROUPS[g].get('needs', []) if p not in have]
+        if missing:
+            say('SKIP %-16s needs %s installed' % (g, ' '.join(missing)))
+            groups = [x for x in groups if x != g]
+    free_slots = list(slots)
+    changed = threading.Condition()
+
+    def job(name):
+        # a group starts when the VM has room for one more instance (other users' instances count too); while it has not, it waits for one of
+        # ours to end (none running: it starts anyway)
+        with changed:
+            while len(free_slots) < len(slots) and available() < MIN_FREE_MB: changed.wait()
+            slot = free_slots.pop()
+        try: return run_group(name, slot)
+        finally:
+            with changed:
+                free_slots.append(slot)
+                changed.notify_all()
+
+    together = [g for g in groups if not GROUPS[g].get('alone')]
+    with concurrent.futures.ThreadPoolExecutor(jobs) as pool:
+        results += list(pool.map(job, together))
+    results += [job(g) for g in groups if GROUPS[g].get('alone')]
+    failed = [n for n, ok, _ in results if not ok]
+    say('%d groups in %.0f s wall after %.0f s of preparation (%.0f s of group time, the sequential cost), %d at a time: %s' % (len(results), time.monotonic() - ready, ready - start, sum(s for *_, s in results), jobs,
+        'all passed' if not failed else 'FAILED: ' + ' '.join(failed)))
+    return 1 if failed else 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
