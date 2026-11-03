@@ -89,6 +89,7 @@ def main():
     if unknown: parser.error('unknown group(s): %s' % ' '.join(unknown))
     jobs = args.j or max(1, min(4, (available() - MIN_FREE_MB) // INSTANCE_MB + 1))
     slots = (vm.config.SLOTS or ['tests'] + ['tests%d' % i for i in range(2, jobs + 1)])[:jobs]  # APKLY_SLOTS: instance ids of one's own
+    jobs = len(slots)
     start = time.monotonic()
     LOGS.mkdir(parents=True, exist_ok=True)
     prepare(groups, slots)
