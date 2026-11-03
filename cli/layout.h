@@ -34,6 +34,7 @@ struct Instance {
     std::string stateDir;    // logs, pid and ready markers, locks: on disk, never in tmpfs
     std::string runtimeDir;  // properties store and sockets of this instance
     std::string storageDir;  // <dataHome>/apklayer/<n>/storage: the instance's /storage; its sdcard is emulated/0 below (n = 0 for "default")
+    std::string dataDir;     // <dataHome>/apklayer/<n>/data: the instance's Android /data (keystore2's database...), never the shared native root
     static Instance open(const Layout& layout, const std::string& id);
     std::string logs() const { return stateDir; }
     std::string pidFile() const { return join(stateDir, "stack.pid"); }

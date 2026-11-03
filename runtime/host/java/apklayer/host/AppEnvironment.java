@@ -31,9 +31,12 @@ import org.robolectric.simulator.FixedConfiguration;
 /** APK environment setup and startup services. */
 final class AppEnvironment {
     private static boolean ownsMediaAuthority;
+    static boolean installing;  // `apklayer install` reads the package's metadata: no stack, no hub
+
 
     /** Robolectric simulator AppLoader: application state straight from the APK. */
     static void setUpApplication(AndroidSandbox sandbox, Path apk, boolean describing) {
+        installing = describing;
         if (Thread.getDefaultUncaughtExceptionHandler() == null) Thread.setDefaultUncaughtExceptionHandler((thread, failure) -> { System.out.println("FATAL EXCEPTION: " + thread.getName()); failure.printStackTrace(System.out); });  // like Android's RuntimeInit: an app's own handlers (ACRA, Gecko) still chain to it
         System.setProperty("java.vm.name", "Dalvik");  // libgdx, Netty ... pick their Android code path (native libraries through System.loadLibrary) by these names
         System.setProperty("java.runtime.name", "Android Runtime");
@@ -44,9 +47,10 @@ final class AppEnvironment {
         if (Boolean.getBoolean("apklayer.logcat")) org.robolectric.shadows.ShadowLog.stream = System.out; // android.util.Log output (-Dapklayer.logcat=true, APKLAYER_LOGCAT=1)
         AndroidManifest manifest = apk == null ? new AndroidManifest(null, null, null, "apklayer.hub")
                 : new AndroidManifest(null, null, null, null, "", apk);
-        // an app that is itself the MediaStore provider answers for "media": no stand-in (Robolectric's fake one, HostMediaStub) in front of it
-        ownsMediaAuthority = manifest.getContentProviders().stream().anyMatch(c -> c.getAuthorities() != null && java.util.Arrays.asList(c.getAuthorities().split(";")).contains("media"));
-        if (ownsMediaAuthority) System.setProperty("robolectric.installFakeMediaProvider", "false");
+        // an app that is itself the MediaStore provider answers for "media": no stand-in (Robolectric's fake one, HostMediaStub) in front of it.
+        // Robolectric parses the manifest's providers only when it creates the application, after deciding on its fake: the install recorded them (AppMetadata).
+        ownsMediaAuthority = apk != null && java.util.Arrays.asList(installProperty(apk, "authorities").split(";")).contains("media");
+        System.setProperty("robolectric.installFakeMediaProvider", "false");  // not Robolectric's fake MediaStore: HostMediaStub until the hub hands out the real one
         Config.Builder builder = new Config.Builder()
                 .setSdk(Integer.getInteger("apklayer.sdk", 36))
                 .setQualifiers(System.getProperty("apklayer.qualifiers", "w480dp-h800dp"));
@@ -75,7 +79,17 @@ final class AppEnvironment {
         provideNativeLibraryDir();
         if (!describing) initAppOpsWithoutApplication();
         StartTrace.mark("data dirs, storage, library dir");
+        // before the application exists: the hub attaches in Application.onCreate's place (ShadowHostInstrumentation) and replaces it with the installed MediaProvider
+        if (!ownsMediaAuthority) org.robolectric.shadows.ShadowContentResolver.registerProviderInternal("media", new HostMediaStub());
         HostKeyStore.install();  // apps open it in Application.onCreate (a call into keystore2 may create the lazy application: after its data dirs are persistent); needs the sandbox's shadows
+    }
+
+    /** A value of the install metadata next to the installed APK (info.properties, AppMetadata.describe); "" when there is none. */
+    private static String installProperty(Path apk, String key) {
+        java.util.Properties info = new java.util.Properties();
+        try (java.io.Reader in = java.nio.file.Files.newBufferedReader(apk.resolveSibling("info.properties"))) { info.load(in); }
+        catch (java.io.IOException notInstalled) { return ""; }
+        return info.getProperty(key, "");
     }
 
     /**
@@ -215,7 +229,6 @@ final class AppEnvironment {
         HostUsb.install(app);
         HostStorage.install(app);
         HostTrust.install();  // the default trust manager with the host-aware check Android's callers (Chromium, X509TrustManagerExtensions) need
-        if (!ownsMediaAuthority) org.robolectric.shadows.ShadowContentResolver.registerProviderInternal("media", new HostMediaStub());  // replaced by the installed MediaProvider's remote provider when there is one
         HostLocation.install(app);
         HostSystemConfig.load().apply(app);  // features, privileged-permission allowlist and default grants of the build
         if (Boolean.getBoolean("apklayer.debugdata")) {

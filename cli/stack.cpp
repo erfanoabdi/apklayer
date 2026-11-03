@@ -112,35 +112,36 @@ bool waitForProperty(const Layout& l, const NativeEnv& ne, const char* name, con
     return ok;
 }
 
-// Returns once the shell listens (or failed to start): a JVM started next connects instead of falling back to headless. Launches of one
-// session take turns (flock), so they never start two shells that unlink each other's socket.
+// Returns with the session's shell listening. One start at a time (the stack daemon and `run` both ask; two shells would each own half the
+// clients), and the started shell reports readiness itself: it writes to APKLAYER_SHELL_READY_FD after listen() (EOF: it died first).
 void ensureShell(const Layout& l, const Instance& inst, const NativeEnv& env) {
     makeDirs(join(l.runtimeHome, "apklayer"));
     int lock = open(join(l.runtimeHome, "apklayer/shell.lock").c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
     flock(lock, LOCK_EX);
-    if (shellPid(l) > 0) { close(lock); return; }
-    unlink(l.shellSocket().c_str());
-    int ready[2];
-    if (pipe2(ready, O_CLOEXEC) != 0) die("pipe failed");
-    fcntl(ready[1], F_SETFD, 0);  // the shell's end survives its exec
-    Spawn shell;
-    shell.argv = {l.shellBinary()};
-    shell.env = env.env;
-    shell.env["APKLAYER_READY_FD"] = std::to_string(ready[1]);
-    shell.logFile = join(inst.logs(), "shell.log");
-    shell.newSession = true;  // outlives any instance; instances never stop it
-    shell.detach = true;
-    spawn(shell);
-    close(ready[1]);
-    char byte;
-    while (read(ready[0], &byte, 1) < 0 && errno == EINTR) {}  // a byte once it listens, end of file when it died first
-    close(ready[0]);
+    if (shellPid(l) == 0) {
+        unlink(l.shellSocket().c_str());
+        int ready[2];
+        if (pipe2(ready, O_CLOEXEC) != 0) die("pipe failed");
+        fcntl(ready[1], F_SETFD, 0);  // the shell inherits the write end
+        Spawn shell;
+        shell.argv = {l.shellBinary()};
+        shell.env = env.env;
+        shell.env["APKLAYER_SHELL_READY_FD"] = std::to_string(ready[1]);
+        shell.logFile = join(inst.logs(), "shell.log");
+        shell.newSession = true;  // outlives any instance; instances never stop it
+        shell.detach = true;
+        spawn(shell);
+        close(ready[1]);
+        char c;
+        while (read(ready[0], &c, 1) < 0 && errno == EINTR) {}
+        close(ready[0]);
+    }
     close(lock);
 }
 
-// keystore2 keeps its database in /data/misc/keystore, which the path layer serves from the Android root
-static std::string keystoreDir(const Layout& l) {
-    std::string dir = join(getenvOr("APKLAYER_ANDROID_ROOT", join(l.native, "android-root")), "data/misc/keystore");
+// keystore2 keeps its database in /data/misc/keystore, which the path layer serves from the instance's /data
+static std::string keystoreDir(const Instance& inst) {
+    std::string dir = join(inst.dataDir, "misc/keystore");
     makeDirs(dir);
     return dir;
 }
@@ -188,8 +189,8 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     prop.env = ne.env;
     prop.logFile = join(inst.logs(), "aprop.log");
     runAndWait(prop);
-    // Android init creates this directory and announces it to RenderEngine; the path overlay resolves existing files only.
-    std::string cache = join(getenvOr("APKLAYER_ANDROID_ROOT", join(n, "android-root")), "data/misc/surfaceflinger");
+    // Android init creates this directory (in the instance's /data) and announces it to RenderEngine.
+    std::string cache = join(inst.dataDir, "misc/surfaceflinger");
     makeDirs(cache);
     for (const char* f : {"egl_shaders", "skia_shaders", "skia_graphite_pipelines"}) writeFile(join(cache, f), "");
     prop.argv = {join(n, "bin/aprop"), "set", "service.sf.cache_dir_available", "1"};
@@ -224,7 +225,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     }
     if (staged(l, "libapklayer_keymint.so") && staged(l, "libapklayer_keystore2.so")) {  // the real Android keystore: software KeyMint, then keystore2 over it
         start("keymint", "libapklayer_keymint.so", {});
-        keystoreDir(l);
+        keystoreDir(inst);
         start("keystore2", "libapklayer_keystore2.so", {"/data/misc/keystore"});  // as keystore2.rc: the database directory, through the path layer
     }
     start("surfaceflinger", "libapklayer_surfaceflinger.so", {});
