@@ -18,7 +18,7 @@ wait $app; kill $web 2>/dev/null; wait $web 2>/dev/null
 logs="${XDG_STATE_HOME:-$HOME/.local/state}/apklayer/${APKLAYER_INSTANCE:-default}"
 fail=0
 check() { if [ "$2" = 1 ]; then echo "PASS $1"; else echo "FAIL $1"; fail=1; fi; }
-check "page fetched" "$(grep -q "GET /$page" "$work/www.log" && echo 1)"
+check "page fetched" "$(grep -q "GET /$page[^ ]* HTTP/[0-9.]*\" 200" "$work/www.log" && echo 1)"
 check "GPU process has a window" "$(grep -a -q "Failed to obtain native window" "$work/run.out" "$logs"/component-*gpu*.log 2>/dev/null || echo 1)"
 read -r red dark < <(python3 - "$work/shot.png" <<'PY'
 import sys
