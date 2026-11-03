@@ -3,9 +3,10 @@
 (inotify on the VM, no timers beyond a patience limit), take a screenshot, check it shows content (content.py), launch it a second time, stop it, and write
 tests/corpus/results.md (results-subset.md when names are given) plus the fake-service ranking tests/corpus/fakes.md (the app's "[fake]" lines, FakeLog).
 Each app's install and runs hold the VM's Android-stack lock (~/apklayer-vm.lock, flock -n): a busy lock is reported as "lock busy", nothing waits for it.
-Usage: tests/corpus/run.py [name ...]   (no names: every app)
+Usage: tests/corpus/run.py [name ...]   (no names: every app);  run.py --report name...  rebuilds the tables from tests/corpus/logs/*.json
 Environment: CORPUS_PATIENCE (seconds per launch), CORPUS_VM_REPO (repo copy on the VM, default ~/apklayer), CORPUS_VM_NATIVE (APKLAYER_NATIVE on the VM),
 CORPUS_SECOND=0 (skip the second launch)."""
+import json
 import os
 import re
 import subprocess
@@ -94,7 +95,7 @@ class Stream:
 
 def end_run(again):
     """Ends the running app (this stack is ours while the lock script runs); the script then starts it again or stops the stack."""
-    ssh(('touch ' + AGAIN + '; ' if again else '') + "pkill -x apklayer-shell; pkill -f '[a]pklayer.host.Main'; pkill -x apklayer")
+    ssh(('touch ' + AGAIN + '; ' if again else '') + "pkill -x apklayer-shell; pkill -f '[a]pklayer.host.Main'; pkill -f '[c]li/apklayer run '")  # not the stack daemon: the script's stop ends the stack
 
 
 def launch(name, stream, at, row, key):
@@ -147,19 +148,25 @@ def run_one(name, spec, kind):
         if row['note'] == '-': row['note'] = next((l.strip()[:110].replace('|', '/') for l in reversed(lines) if l.strip() and '[fake]' not in l and 'CORPUS-END' not in l), 'no output')
     (HERE / 'logs').mkdir(exist_ok=True)
     (HERE / 'logs' / (name + '.log')).write_text(''.join(lines))
+    (HERE / 'logs' / (name + '.json')).write_text(json.dumps(row))
     return row
 
 
 def main():
-    wanted = sys.argv[1:]
+    report = sys.argv[1:2] == ['--report']  # only rebuild the tables from the rows saved in logs/ (runs split over several calls)
+    wanted = sys.argv[2:] if report else sys.argv[1:]
     entries = []
     for line in (HERE / 'apps.txt').read_text().splitlines():
         if line.strip() and not line.startswith('#'):
             name, spec, kind = [p.strip() for p in line.split('|')]
             if not wanted or name in wanted: entries.append((name, spec, kind))
-    ssh('mkdir -p %s/tests/corpus' % REPO)
-    subprocess.run(['sshpass', '-p', config.PASS, 'scp', '-q', str(HERE / 'first-frame.py'), config.VM + ':' + REPO.replace('~/', '') + '/tests/corpus/first-frame.py'], check=True)
-    rows = [run_one(*e) for e in entries]
+    if report:
+        rows = [json.loads((HERE / 'logs' / (e[0] + '.json')).read_text()) for e in entries if (HERE / 'logs' / (e[0] + '.json')).exists()]
+    else:
+        ssh('mkdir -p %s/tests/corpus' % REPO)
+        subprocess.run(['sshpass', '-p', config.PASS, 'scp', '-q', str(HERE / 'first-frame.py'), config.VM + ':' + REPO.replace('~/', '') + '/tests/corpus/first-frame.py'], check=True)
+        rows = [run_one(*e) for e in entries]
+        rows = [run_one(*e) if r['note'].startswith('lock busy') else r for e, r in zip(entries, rows)]  # one more try for the apps that found the lock busy
     out = ['# Compatibility corpus results', '', time.strftime('Run %Y-%m-%d %H:%M'), '',
            '"first frame" = 20 GPU frames while running and the screenshot shows content (uniform/nowindow otherwise); "second" = the same after a second launch.', '',
            '| app | kind | install | launch | first frame | second | fakes | note |', '|---|---|---|---|---|---|---|---|']

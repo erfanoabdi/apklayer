@@ -39,6 +39,22 @@ def verdict(filename):
     return ('uniform' if share > 0.985 or len(counts) < 3 else 'content'), detail
 
 
+def selftest(tmp='/tmp/apklayer-content-selftest.png'):
+    from PIL import ImageDraw
+    for fill, text, want in (((0, 0, 0), False, 'uniform'), ((240, 240, 240), True, 'content')):
+        im = Image.new('RGB', (1280, 800), (20, 20, 20))
+        draw = ImageDraw.Draw(im)
+        draw.rectangle((67, 32, 787, 63), fill=BAR[0])
+        draw.rectangle((67, 64, 787, 799), fill=fill)
+        if text:
+            draw.rectangle((67, 64, 787, 144), fill=(66, 133, 244))
+            for y in range(200, 700, 40): draw.text((100, y), 'Some list item text', fill=(30, 30, 30))
+        im.save(tmp)
+        assert verdict(tmp)[0] == want, (want, verdict(tmp))
+    print('PASS content.py selftest')
+
+
 if __name__ == '__main__':
+    if sys.argv[1:] == ['--selftest']: selftest(); sys.exit()
     for f in sys.argv[1:]:
         print(*verdict(f), f)
