@@ -44,6 +44,12 @@ public final class NativeLoader {
     private static native int registerNative(Class<?> target, String name, String sig, long fn);
 
     private static native void skipNativeExitHandlers();
+    private static native void setProcessName(String name);
+
+    /** The process's command line and name as Android's Process.setArgV0 sets them (native code reads /proc/self/cmdline). */
+    static void nameProcess(String name) {
+        try { setProcessName(name); } catch (LinkageError noShim) { /* no native runtime in this process */ }
+    }
 
     /** The process is about to exit: it ends as Android ends an app process (killed), without the native libraries' static destructors (native_loader.c). */
     static void endWithoutNativeDestructors() {

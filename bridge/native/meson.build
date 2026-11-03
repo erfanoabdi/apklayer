@@ -7,7 +7,7 @@ bt_link = ['-L' + bt_dir, '-ldl_bio']
 jni_dep = dependency('jni', required: false)
 if jni_dep.found()
   # the JNI shim Robolectric loads (tools/build native puts it into native-runtime.jar and the framework jars)
-  shared_module('android_runtime', ['runtime_shim.c', 'media_runtime.c', 'binder_runtime.c', 'app_native.c', 'native_loader.c',
+  shared_module('android_runtime', ['runtime_shim.c', 'media_runtime.c', 'binder_runtime.c', 'app_native.c', 'proc_title.c', 'native_loader.c',
       'android_platform.c', 'properties.c', 'paths.c', 'android_stubs.c'],
     dependencies: jni_dep, link_args: bt_link, build_rpath: bt_dir, c_args: native_cargs, override_options: native_opts)
 endif
