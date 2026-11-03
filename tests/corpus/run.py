@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Compatibility corpus runner (on the Mac, drives the test VM): for every app in apps.txt install it, launch it, wait for the first GPU frame the shell receives
-(inotify on the VM, no timers beyond a patience limit), take a screenshot, check it shows content (content.py), launch it a second time, stop it, and write
+(inotify on the VM, no timers beyond a patience limit), take a screenshot, check it shows content (content.py, against a capture taken before the launch), launch it a second time, stop it, and write
 tests/corpus/results.md (results-subset.md when names are given) plus the fake-service ranking tests/corpus/fakes.md (the app's "[fake]" lines, FakeLog).
 Each app's install and runs hold the VM's Android-stack lock (~/apklayer-vm.lock, flock -n): a busy lock is reported as "lock busy", nothing waits for it.
 Usage: tests/corpus/run.py [name ...]   (no names: every app);  run.py --report name...  rebuilds the tables from tests/corpus/logs/*.json
@@ -99,7 +99,7 @@ def end_run(again):
     ssh(('touch ' + AGAIN + '; ' if again else 'pkill -x apklayer-shell; ') + "pkill -f '[a]pklayer.host.Main'; pkill -f '[c]li/apklayer run '")
 
 
-def launch(name, stream, at, row, key):
+def launch(name, stream, at, row, key, before):
     """One launch from the OFFSET line at index `at`: a steady picture (20 frames while still running), a screenshot, its content check."""
     offset = stream.lines[at].split()[1]
     frame = ssh('python3 %s/tests/corpus/first-frame.py %s/shell.log %s %d 20' % (REPO, STATE, offset, PATIENCE))
@@ -111,7 +111,7 @@ def launch(name, stream, at, row, key):
     shot = HERE / 'shots' / (name + ('' if key == 'frame' else '-2') + '.png')
     shot.parent.mkdir(exist_ok=True)
     vmcapture.capture(str(shot))
-    verdict, detail = content.verdict(str(shot))
+    verdict, detail = content.verdict(str(shot), str(before))
     row[key] = 'ok' if verdict == 'content' else verdict
     if key == 'frame': row['content'] = detail
     return verdict == 'content'
@@ -123,6 +123,9 @@ def run_one(name, spec, kind):
     if apk is None:
         row['note'] = 'no apk'; return row
     subprocess.run(['sshpass', '-p', config.PASS, 'scp', '-q', str(apk), config.VM + ':corpus-' + name + '.apk'], check=True)
+    before = HERE / 'shots' / (name + '-before.png')  # the desktop without the app: content.py takes the window as what differs
+    before.parent.mkdir(exist_ok=True)
+    vmcapture.capture(str(before))
     proc = subprocess.Popen(SSH + [ENV + script(name)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors='replace')
     stream = Stream(proc)
     first = stream.wait_for('OFFSET')
@@ -132,13 +135,13 @@ def run_one(name, spec, kind):
             row['note'] = 'lock busy (another agent runs a stack): rerun this app'; return row
         row['install'] = 'FAIL'; row['note'] = cause(stream.lines) if stream.lines else 'no output, exit %s' % proc.returncode; return row
     row['install'] = 'ok'
-    ok = launch(name, stream, first, row, 'frame')
+    ok = launch(name, stream, first, row, 'frame', before)
     again = SECOND and ok
     end_run(again)
     if again:
         second = stream.wait_for('OFFSET', first + 1)
         if second is not None:
-            launch(name, stream, second, row, 'second')
+            launch(name, stream, second, row, 'second', before)
             end_run(False)
     proc.wait(); stream.thread.join()
     lines = stream.lines
