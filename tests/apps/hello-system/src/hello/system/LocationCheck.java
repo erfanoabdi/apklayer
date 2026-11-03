@@ -12,7 +12,9 @@ final class LocationCheck implements Check {
         String allowed = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.LOCATION_PROVIDERS_ALLOWED);
         boolean network = location.getAllProviders().contains(LocationManager.NETWORK_PROVIDER) && location.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
         String seen = "mode " + mode + ", providers [" + allowed + "], enabled " + location.isLocationEnabled() + ", network " + network;
-        Check.require(mode >= 0 && allowed != null, "no location state from the system: " + seen);
+        // the system writes the mode; with location off its provider list is empty, which SettingsProvider reads back as null
+        Check.require(mode >= 0 && (allowed != null || mode == Settings.Secure.LOCATION_MODE_OFF), "no location state from the system: " + seen);
+        if (allowed == null) allowed = "";
         Check.require(location.isLocationEnabled() == (mode != Settings.Secure.LOCATION_MODE_OFF), seen);
         Check.require(network == (mode != Settings.Secure.LOCATION_MODE_OFF && allowed.contains(LocationManager.NETWORK_PROVIDER)), seen);
         return seen;
