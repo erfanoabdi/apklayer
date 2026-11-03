@@ -48,6 +48,9 @@ Older dated notes (GPU follow-up, TextureView, MC3, Vulkan checkpoints, OTR2, ro
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 
+### 2026-11-03 — libapklayer_vdisplay: the configure callback after the display exists (gfx agent)
+- Why: a first configure that arrived while `createVirtualDisplay` ran was dropped (`mToken == nullptr`), so the display kept 720x1280 while the app laid out at the fitted size (content rectangle smaller than the window). Only VirtualDisplay.cpp copied into vendor/apklayer (the tree's copy differed by this change only). Command: `flock -n ~/los24-build.lock -c 'cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_vdisplay'`. Result: below.
+
 ### 2026-11-03 — per-instance screenshots: libapklayer_vdisplay (registers its display token) and the new libapklayer_screenshot
 - Why: tests on a desktop shared by several instances cannot tell windows apart; `apklayer screenshot` captures one app's virtual display through SurfaceFlinger's own captureDisplay. New module in vendor/apklayer/tools (build-graph regeneration). Only VirtualDisplay.cpp, tools/Android.bp and tools/screenshot.cpp copied into vendor/apklayer (not a full sync-aosp.sh: the tree has a hals/camera directory this branch lacks). Command: `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_vdisplay libapklayer_screenshot`. Result: below.
 

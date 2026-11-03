@@ -142,6 +142,23 @@ final class ScriptRunner {
                 System.out.println("[apklayer] thread \"" + t.getName() + "\" " + t.getState());
                 for (StackTraceElement e : st) System.out.println("    at " + e);
             });
+        } else if (step.startsWith("field:")) { // field:<class>#<static field>[.<field>...]: an app's state by reflection (diagnostics)
+            String[] p = step.substring(6).split("#");
+            try {
+                Object o = null;
+                Class<?> k = Class.forName(p[0], false, org.robolectric.RuntimeEnvironment.getApplication().getClassLoader());
+                for (String name : p[1].split("\\.")) {
+                    java.lang.reflect.Field f = null;
+                    for (Class<?> c = o == null ? k : o.getClass(); f == null && c != null; c = c.getSuperclass())
+                        try { f = c.getDeclaredField(name); } catch (NoSuchFieldException ignored) { }
+                    if (f == null) throw new NoSuchFieldException(name + " in " + (o == null ? k : o.getClass()).getName());
+                    f.setAccessible(true);
+                    o = f.get(o);
+                    System.out.println("[apklayer] field " + name + " = " + (o == null ? null : o.getClass().getName() + ": " + o));
+                }
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                System.out.println("[apklayer] field " + step + ": " + e);
+            }
         } else if (step.equals("back")) {
             input.inject(new KeyEvent(now, now, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK, 0));
             input.inject(new KeyEvent(now, now, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK, 0));
