@@ -36,11 +36,8 @@ public class ShadowHostWebViewFactory {
     /** Known from the start, not from the package feature the host sets once the Application exists (apps call WebView statics in Application.onCreate). */
     @Implementation protected static boolean isWebViewSupported() { return System.getProperty("apklayer.webviewprovider") != null; }
 
-    @Implementation protected static synchronized Class<?> getProviderClass() {
-        if (providerClass != null) return providerClass;
-        String dir = System.getProperty("apklayer.webviewprovider");
-        File library = new File(dir, "lib/libwebviewchromium.so");
-        // a class loader of its own, as WebViewFactory makes one on Android: Chromium, jni_zero and its bundled libraries never meet the app's copies (microG and Meet bundle Cronet)
+    /** A class loader of its own, as WebViewFactory makes one on Android: Chromium, jni_zero and its bundled libraries never meet the app's copies (microG and Meet bundle Cronet). */
+    private static AppClassLoader providerLoader(String dir) {
         AppClassLoader loader = new AppClassLoader("webview", new java.nio.file.Path[] {new File(dir, "classes.jar").toPath(), new File(dir, "base.apk").toPath()},
                 ShadowHostWebViewFactory.class.getClassLoader());
         try {  // framework code naming a provider class (its services) through the sandbox loader: after the app's own, the provider's
@@ -48,6 +45,15 @@ public class ShadowHostWebViewFactory {
             @SuppressWarnings("unchecked") java.util.function.Function<String, Class<?>> app = (java.util.function.Function<String, Class<?>>) hook.get(null);
             hook.set(null, (java.util.function.Function<String, Class<?>>) name -> { Class<?> c = app == null ? null : app.apply(name); return c != null ? c : loader.apply(name); });
         } catch (ReflectiveOperationException noOverlay) { throw new IllegalStateException("runtime overlay without ApklayerAppHook", noOverlay); }
+        return loader;
+    }
+
+    @Implementation protected static synchronized Class<?> getProviderClass() {
+        if (providerClass != null) return providerClass;
+        String dir = System.getProperty("apklayer.webviewprovider");
+        File library = new File(dir, "lib/libwebviewchromium.so");
+        // the provider package itself (its renderer services in a component host) already runs in its app loader
+        ClassLoader loader = new File(dir).getName().equals(System.getProperty("apklayer.package")) && AppClassLoader.app != null ? AppClassLoader.app : providerLoader(dir);
         NativeLoader.load(library.getPath(), loader);
         providerPackage(dir);
         try { return providerClass = Class.forName(FACTORY, true, loader); }
