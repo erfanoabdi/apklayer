@@ -4,10 +4,21 @@ import subprocess
 import time
 
 
-def dump():
+def instance_of(pid):
+    """The apklayer instance a process belongs to (APKLAYER_INSTANCE in its environment; none means "default")."""
+    try:
+        env = open('/proc/%s/environ' % pid, 'rb').read().split(b'\0')
+    except OSError:
+        return None
+    return next((e[len(b'APKLAYER_INSTANCE='):].decode() for e in env if e.startswith(b'APKLAYER_INSTANCE=')), 'default')
+
+
+def dump(instance=None):
+    """With an instance: only its JVMs (parallel instances run their own)."""
     out = os.path.expanduser('~/hang-' + time.strftime('%H%M%S'))
     os.makedirs(out, exist_ok=True)
     pids = subprocess.run(['pgrep', '-f', '[a]pklayer.host.Main'], capture_output=True, text=True).stdout.split()
+    if instance: pids = [p for p in pids if instance_of(p) == instance]
     for pid in pids:
         try:
             with open(out + '/' + pid + '.maps', 'w') as f: f.write(open('/proc/' + pid + '/maps').read())

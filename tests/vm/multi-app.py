@@ -52,7 +52,7 @@ try:
     gone = None
     survivor = None
     while selector.get_map():
-        events = selector.select(3)
+        events = selector.select(10)  # a start that waits for the settings provider's host can be quiet for ~3 s under parallel load
         assert events and time.monotonic() < deadline, 'silent or stalled multi-app run'
         for key, _ in events:
             package = key.data
