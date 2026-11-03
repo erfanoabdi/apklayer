@@ -22,8 +22,7 @@ final class HostInstallIntents {
         String action = intent.getAction();
         if (action == null || !HubClient.connected()) return false;
         Uri data = intent.getData();
-        boolean install = Intent.ACTION_INSTALL_PACKAGE.equals(action) || (Intent.ACTION_VIEW.equals(action) && data != null
-                && (APK.equals(intent.getType()) || APK.equals(RuntimeEnvironment.getApplication().getContentResolver().getType(data))));
+        boolean install = Intent.ACTION_INSTALL_PACKAGE.equals(action) || (Intent.ACTION_VIEW.equals(action) && data != null && APK.equals(type(intent)));
         if (install && data != null) {
             try (ParcelFileDescriptor apk = RuntimeEnvironment.getApplication().getContentResolver().openFileDescriptor(data, "r")) {
                 HubClient.current().commitInstall(0, null, null, List.of("base.apk"), List.of(apk), null, true);
@@ -39,5 +38,12 @@ final class HostInstallIntents {
             return true;
         }
         return false;
+    }
+
+    /** The intent's type, or its content URI's (Intent.resolveTypeIfNeeded, as startActivity resolves it on Android). */
+    private static String type(Intent intent) {
+        if (intent.getType() != null || !"content".equals(intent.getData().getScheme())) return intent.getType();
+        try { return RuntimeEnvironment.getApplication().getContentResolver().getType(intent.getData()); }
+        catch (RuntimeException unknown) { return null; }
     }
 }
