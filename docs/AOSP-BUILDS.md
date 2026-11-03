@@ -5,6 +5,8 @@ Authorization (user, 2026-10-27): build what is needed in `~/los24` (OrbStack VM
   `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m <target>`.
 - **Never wipe or clean `out/`**: no `rm -rf out`, `m clean`, `installclean`, no other product, no separate `OUT_DIR`, no `git clean`/`repo sync -d` that could remove it.
 - Log each build in `CHANGELOG.md` ("Build log") before it runs: what, why it is necessary, command, result.
+- The tree's own projects carry apklayer's edits as plain patches, `patches/aosp/<project path>/*.patch` (each project's pinned commit in its `REVISION`):
+  `patches/apply aosp ~/los24` applies them, idempotently (already-applied patches are skipped). Check without writing: `git -C ~/los24/<project> apply --check -R <patch>`.
 - Edit `aosp/` in this repo and run `scripts/sync-aosp.sh "message"` (mirrors into `~/los24/vendor/apklayer`); modules are listed in `aosp/hals/README.md`.
 - Incremental replay of one module without a graph change: `scripts/orb-build-module.py <module> <dir under vendor/apklayer> <Source.cpp ...>` (Vulkan: `scripts/orb-build-vulkan.py`),
   then install the output on the test VM (`scripts/install-vulkan.sh`, or copy from `~/apklayer-stage` to `~/android-arm64/lib64` and check the sha256). Adding a source file or

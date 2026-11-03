@@ -1,0 +1,68 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: servicemanager and SurfaceFlinger as shared libraries
+
+Appends libapklayer_servicemanager and libapklayer_surfaceflinger: the binaries' own sources as shared
+libraries exporting main, because bionic_translation loads libraries, not executables (PLAN P7.1,
+docs/AOSP-BUILDS.md). This was a hand edit with no script before. The tree also has an empty
+services/surfaceflinger/include/ (a patch cannot carry an empty directory; no Android.bp or .mk in
+frameworks/native, vendor/apklayer or build/soong names it, so it is left out; if Soong ever asks for it,
+`mkdir -p services/surfaceflinger/include`).
+Against frameworks/native 46018f54b424 (REVISION). Apply: patches/apply aosp <LineageOS tree>.
+---
+diff --git a/cmds/servicemanager/Android.bp b/cmds/servicemanager/Android.bp
+index e5d7b7456b..955ba96736 100644
+--- a/cmds/servicemanager/Android.bp
++++ b/cmds/servicemanager/Android.bp
+@@ -130,3 +130,31 @@ cc_fuzz {
+         ],
+     },
+ }
++
++// apklayer: the service manager as a library (its main() is exported) so a launcher on bionic_translation can run it. The tree's
++// ServiceManager and main are used as they are; the access policy (SELinux) is replaced by vendor/apklayer's allow-all Access.
++cc_library_shared {
++    name: "libapklayer_servicemanager",
++    srcs: [
++        "main.cpp",
++        "ServiceManager.cpp",
++        ":apklayer_servicemanager_access",
++    ],
++    compile_multilib: "64",
++    cflags: [
++        "-Wall",
++        "-Wextra",
++        "-Werror",
++        "-DANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION",
++        "-Wno-unused-private-field",  // Access.h declares the SELinux context our allow-all Access does not use
++    ],
++    shared_libs: [
++        "libbase",
++        "libvintf",
++        "libcutils",
++        "liblog",
++        "libutils",
++        "libperfetto_c",
++        "libbinder",
++    ],
++}
+diff --git a/services/surfaceflinger/Android.bp b/services/surfaceflinger/Android.bp
+index f69e5bc1ab..09aa870a6d 100644
+--- a/services/surfaceflinger/Android.bp
++++ b/services/surfaceflinger/Android.bp
+@@ -491,3 +491,16 @@ genrule {
+         "statslog_surfaceflinger.cpp",
+     ],
+ }
++
++// apklayer: SurfaceFlinger as a library (its main() is exported) so a launcher on bionic_translation can run it
++cc_library_shared {
++    name: "libapklayer_surfaceflinger",
++    defaults: ["libsurfaceflinger_binary"],
++    srcs: [
++        ":surfaceflinger_binary_sources",
++        "SurfaceFlingerFactory.cpp",
++    ],
++    shared_libs: ["libSurfaceFlingerProp"],
++    allow_undefined_symbols: true, // Layer::logFrameStats is declared and never defined (dead code in the binary)
++    logtags: ["surfaceflinger.logtags"],
++}

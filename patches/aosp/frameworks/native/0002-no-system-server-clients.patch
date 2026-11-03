@@ -1,0 +1,66 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: ActivityManager and SensorPrivacyManager clients without system_server
+
+A host-only APKLAYER_NO_SYSTEM_SERVER branch in the original ActivityManager (libactivitymanager_aidl)
+and SensorPrivacyManager (libsensorprivacy) clients returns the real checkService absence instead of
+waiting forever for services that apklayer keeps in Java shadows. Their existing error/default behaviour
+remains; without the variable Android behaviour is unchanged. Needed by the original AudioPolicy.
+Formerly part of scripts/patch-audio.sh.
+Against frameworks/native 46018f54b424 (REVISION). Apply: patches/apply aosp <LineageOS tree>.
+---
+diff --git a/libs/binder/ActivityManager.cpp b/libs/binder/ActivityManager.cpp
+index fd832727a5..ed934ba869 100644
+--- a/libs/binder/ActivityManager.cpp
++++ b/libs/binder/ActivityManager.cpp
+@@ -15,6 +15,7 @@
+  */
+ 
+ #include <mutex>
++#include <cstdlib>
+ #include <unistd.h>
+ 
+ #include <android/app/IProcessObserver.h>
+@@ -37,6 +38,15 @@ sp<IActivityManager> ActivityManager::getService()
+ {
+     std::lock_guard<Mutex> scoped_lock(mLock);
+     sp<IActivityManager> service = mService;
++    // apklayer patch: standalone clients must not wait for system_server.
++    if (std::getenv("APKLAYER_NO_SYSTEM_SERVER")) {
++        if (service == nullptr || !IInterface::asBinder(service)->isBinderAlive()) {
++            auto binder = defaultServiceManager()->checkService(String16("activity"));
++            mService = interface_cast<IActivityManager>(binder);
++        }
++        return mService;
++    }
++
+     if (ProcessState::self()->isThreadPoolStarted()) {
+         if (service == nullptr || !IInterface::asBinder(service)->isBinderAlive()) {
+             sp<IBinder> binder = defaultServiceManager()->waitForService(String16("activity"));
+diff --git a/libs/sensorprivacy/SensorPrivacyManager.cpp b/libs/sensorprivacy/SensorPrivacyManager.cpp
+index 0147e23ad3..46d9bf521a 100644
+--- a/libs/sensorprivacy/SensorPrivacyManager.cpp
++++ b/libs/sensorprivacy/SensorPrivacyManager.cpp
+@@ -15,6 +15,7 @@
+  */
+ 
+ #include <mutex>
++#include <cstdlib>
+ #include <unistd.h>
+ 
+ #include <binder/Binder.h>
+@@ -33,6 +34,15 @@ sp<hardware::ISensorPrivacyManager> SensorPrivacyManager::getService()
+ {
+     std::lock_guard<Mutex> scoped_lock(mLock);
+     sp<hardware::ISensorPrivacyManager> service = mService;
++    // apklayer patch: standalone clients must not wait for system_server.
++    if (std::getenv("APKLAYER_NO_SYSTEM_SERVER")) {
++        if (service == nullptr || !IInterface::asBinder(service)->isBinderAlive()) {
++            auto binder = defaultServiceManager()->checkService(String16("sensor_privacy"));
++            mService = interface_cast<hardware::ISensorPrivacyManager>(binder);
++        }
++        return mService;
++    }
++
+     if (service == nullptr || !IInterface::asBinder(service)->isBinderAlive()) {
+       sp<IBinder> binder = defaultServiceManager()->waitForService(String16("sensor_privacy"));
+       mService = interface_cast<hardware::ISensorPrivacyManager>(binder);

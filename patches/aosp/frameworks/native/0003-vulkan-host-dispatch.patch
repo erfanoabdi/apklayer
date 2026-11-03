@@ -1,0 +1,212 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: libvulkan keeps the host loader dispatch pointers
+
+Original Android libvulkan runs over a vulkan.apklayer frontend to the host libvulkan.so.1, reusing
+AOSP's API/WSI implementation. Host dispatchable handles keep their original vtables; Android's private
+data lives in a guarded side table, retired on buffer/pool/device/instance destruction
+(aosp/hals/graphics/vulkan). Formerly scripts/patch-vulkan.sh; build with scripts/orb-build-vulkan.py.
+Against frameworks/native 46018f54b424 (REVISION). Apply: patches/apply aosp <LineageOS tree>.
+---
+diff --git a/vulkan/libvulkan/driver.cpp b/vulkan/libvulkan/driver.cpp
+index 4d3b92c1dd..9738e5617e 100644
+--- a/vulkan/libvulkan/driver.cpp
++++ b/vulkan/libvulkan/driver.cpp
+@@ -34,6 +34,8 @@
+ #include <vndksupport/linker.h>
+ 
+ #include <algorithm>
++#include <mutex>
++#include <unordered_map>
+ #include <array>
+ #include <climits>
+ #include <new>
+@@ -48,6 +50,35 @@ extern "C" android_namespace_t* android_get_exported_namespace(const char*);
+ 
+ namespace vulkan {
+ namespace driver {
++// apklayer patch: side table preserves the host loader dispatch pointer.
++namespace {
++std::mutex host_dispatch_mutex;
++struct HostDispatchEntry { const void* data; VkCommandPool pool; };
++std::unordered_map<const void*, HostDispatchEntry> host_dispatch_data;
++}
++bool HostDispatchEnabled() {
++    static const bool enabled = getenv("APKLAYER_VULKAN_HOST") != nullptr;
++    return enabled;
++}
++bool SetHostData(const void* object, const void* data) {
++    std::lock_guard<std::mutex> lock(host_dispatch_mutex);
++    host_dispatch_data[object] = {data, VK_NULL_HANDLE};
++    return true;
++}
++void* GetHostData(const void* object) {
++    std::lock_guard<std::mutex> lock(host_dispatch_mutex);
++    auto it = host_dispatch_data.find(object);
++    return it == host_dispatch_data.end() ? nullptr : const_cast<void*>(it->second.data);
++}
++void ForgetHostData(const void* data) {
++    if (!HostDispatchEnabled()) return;
++    std::lock_guard<std::mutex> lock(host_dispatch_mutex);
++    for (auto it = host_dispatch_data.begin(); it != host_dispatch_data.end();) {
++        if (it->second.data == data) it = host_dispatch_data.erase(it);
++        else ++it;
++    }
++}
++
+ 
+ namespace {
+ 
+@@ -843,6 +874,7 @@ InstanceData* AllocateInstanceData(const VkAllocationCallbacks& allocator) {
+ 
+ void FreeInstanceData(InstanceData* data,
+                       const VkAllocationCallbacks& allocator) {
++    ForgetHostData(data);
+     data->~InstanceData();
+     allocator.pfnFree(allocator.pUserData, data);
+ }
+@@ -860,12 +892,26 @@ DeviceData* AllocateDeviceData(
+ }
+ 
+ void FreeDeviceData(DeviceData* data, const VkAllocationCallbacks& allocator) {
++    ForgetHostData(data);
+     data->~DeviceData();
+     allocator.pfnFree(allocator.pUserData, data);
+ }
+ 
+ }  // anonymous namespace
+ 
++// apklayer patch: require Android native-buffer support for WSI.
++bool HostPresentationSupported(VkPhysicalDevice physical) {
++    if (!HostDispatchEnabled()) return true;
++    const auto enumerate = GetData(physical).driver.EnumerateDeviceExtensionProperties;
++    uint32_t count = 0;
++    if (enumerate(physical, nullptr, &count, nullptr) != VK_SUCCESS) return false;
++    std::vector<VkExtensionProperties> extensions(count);
++    if (enumerate(physical, nullptr, &count, extensions.data()) != VK_SUCCESS) return false;
++    for (const auto& extension : extensions)
++        if (!strcmp(extension.extensionName, VK_ANDROID_NATIVE_BUFFER_EXTENSION_NAME)) return true;
++    return false;
++}
++
+ bool OpenHAL() {
+     return Hal::Open();
+ }
+@@ -918,7 +964,43 @@ PFN_vkVoidFunction GetInstanceProcAddr(VkInstance instance, const char* pName) {
+     return proc;
+ }
+ 
++// apklayer patch: retire side-table entries on command-buffer/pool destruction.
++void HostFreeCommandBuffers(VkDevice device, VkCommandPool pool, uint32_t count,
++                           const VkCommandBuffer* buffers) {
++    auto fn = reinterpret_cast<PFN_vkFreeCommandBuffers>(
++        GetData(device).driver.GetDeviceProcAddr(device, "vkFreeCommandBuffers"));
++    fn(device, pool, count, buffers);
++    std::lock_guard<std::mutex> lock(host_dispatch_mutex);
++    for (uint32_t i = 0; i < count; ++i) host_dispatch_data.erase(buffers[i]);
++}
++void HostDestroyCommandPool(VkDevice device, VkCommandPool pool,
++                           const VkAllocationCallbacks* allocator) {
++    const void* data = &GetData(device);
++    auto fn = reinterpret_cast<PFN_vkDestroyCommandPool>(
++        GetData(device).driver.GetDeviceProcAddr(device, "vkDestroyCommandPool"));
++    fn(device, pool, allocator);
++    std::lock_guard<std::mutex> lock(host_dispatch_mutex);
++    for (auto it = host_dispatch_data.begin(); it != host_dispatch_data.end();) {
++        if (it->second.data == data && it->second.pool == pool && pool != VK_NULL_HANDLE)
++            it = host_dispatch_data.erase(it);
++        else ++it;
++    }
++}
++void HostTrackCommandBuffers(const VkCommandBufferAllocateInfo* info,
++                            VkCommandBuffer* buffers) {
++    if (!HostDispatchEnabled()) return;
++    std::lock_guard<std::mutex> lock(host_dispatch_mutex);
++    for (uint32_t i = 0; i < info->commandBufferCount; ++i)
++        host_dispatch_data.at(buffers[i]).pool = info->commandPool;
++}
++
+ PFN_vkVoidFunction GetDeviceProcAddr(VkDevice device, const char* pName) {
++    if (HostDispatchEnabled()) {
++        if (!strcmp(pName, "vkFreeCommandBuffers"))
++            return reinterpret_cast<PFN_vkVoidFunction>(HostFreeCommandBuffers);
++        if (!strcmp(pName, "vkDestroyCommandPool"))
++            return reinterpret_cast<PFN_vkVoidFunction>(HostDestroyCommandPool);
++    }
+     const ProcHook* hook = GetProcHook(pName);
+     PFN_vkVoidFunction drv_func = GetData(device).driver.GetDeviceProcAddr(device, pName);
+ 
+@@ -1224,6 +1306,9 @@ VkResult EnumerateDeviceExtensionProperties(
+              VK_KHR_SWAPCHAIN_MUTABLE_FORMAT_SPEC_VERSION});
+     }
+ 
++    // apklayer patch: no presentation-dependent extensions without a buffer importer.
++    if (!HostPresentationSupported(physicalDevice)) loader_extensions.clear();
++
+     // enumerate our extensions first
+     if (!pLayerName && pProperties) {
+         uint32_t count = std::min(
+@@ -1721,6 +1806,7 @@ VkResult AllocateCommandBuffers(
+     if (result == VK_SUCCESS) {
+         for (uint32_t i = 0; i < pAllocateInfo->commandBufferCount; i++)
+             SetData(pCommandBuffers[i], data);
++        HostTrackCommandBuffers(pAllocateInfo, pCommandBuffers);
+     }
+ 
+     return result;
+diff --git a/vulkan/libvulkan/driver.h b/vulkan/libvulkan/driver.h
+index 785b9034a2..a962db5cb1 100644
+--- a/vulkan/libvulkan/driver.h
++++ b/vulkan/libvulkan/driver.h
+@@ -18,6 +18,7 @@
+ #define LIBVULKAN_DRIVER_H 1
+ 
+ #include <inttypes.h>
++#include <stdlib.h>
+ 
+ #include <bitset>
+ #include <type_traits>
+@@ -242,9 +243,18 @@ void StaticAssertDispatchable(DispatchableType) {
+         "unrecognized dispatchable type");
+ }
+ 
++// apklayer patch: side table preserves the host loader dispatch pointer.
++// Host libvulkan and Android libvulkan must never overwrite each other's vtables.
++bool HostDispatchEnabled();
++bool HostPresentationSupported(VkPhysicalDevice physical);
++bool SetHostData(const void* object, const void* data);
++void* GetHostData(const void* object);
++void ForgetHostData(const void* data);
++
+ template <typename DispatchableType>
+ bool SetDataInternal(DispatchableType dispatchable, const void* data) {
+     StaticAssertDispatchable(dispatchable);
++    if (HostDispatchEnabled()) return SetHostData(dispatchable, data);
+ 
+     hwvulkan_dispatch_t* dispatch =
+         reinterpret_cast<hwvulkan_dispatch_t*>(dispatchable);
+@@ -262,6 +272,7 @@ bool SetDataInternal(DispatchableType dispatchable, const void* data) {
+ template <typename DispatchableType>
+ void* GetDataInternal(DispatchableType dispatchable) {
+     StaticAssertDispatchable(dispatchable);
++    if (HostDispatchEnabled()) return GetHostData(dispatchable);
+ 
+     const hwvulkan_dispatch_t* dispatch =
+         reinterpret_cast<const hwvulkan_dispatch_t*>(dispatchable);
+diff --git a/vulkan/libvulkan/swapchain.cpp b/vulkan/libvulkan/swapchain.cpp
+index 48e2586132..1b74dc0aa3 100644
+--- a/vulkan/libvulkan/swapchain.cpp
++++ b/vulkan/libvulkan/swapchain.cpp
+@@ -855,11 +855,11 @@ void DestroySurfaceKHR(VkInstance instance,
+ }
+ 
+ VKAPI_ATTR
+-VkResult GetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice /*pdev*/,
++VkResult GetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice pdev,
+                                             uint32_t /*queue_family*/,
+                                             VkSurfaceKHR /*surface_handle*/,
+                                             VkBool32* supported) {
+-    *supported = VK_TRUE;
++    *supported = driver::HostPresentationSupported(pdev) ? VK_TRUE : VK_FALSE;
+     return VK_SUCCESS;
+ }
+ 

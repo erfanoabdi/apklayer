@@ -1,0 +1,22 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: audio: the effect factory as a public filegroup
+
+Exposes the unchanged EffectFactory.cpp to apklayer's audio HAL entrypoint (a shared library loaded by
+btload) through a public filegroup. Formerly part of scripts/patch-audio.sh.
+Against hardware/interfaces 13fc23dae0dc (REVISION). Apply: patches/apply aosp <LineageOS tree>.
+---
+diff --git a/audio/aidl/default/Android.bp b/audio/aidl/default/Android.bp
+index f46c2ee30d..002425af41 100644
+--- a/audio/aidl/default/Android.bp
++++ b/audio/aidl/default/Android.bp
+@@ -469,3 +469,10 @@ prebuilt_etc {
+         default: false,
+     }),
+ }
++
++// apklayer patch: reuse the original effect factory in a shared-library entrypoint.
++filegroup {
++    name: "apklayer_audio_effect_factory_sources",
++    srcs: ["EffectFactory.cpp"],
++    visibility: ["//visibility:public"],
++}
