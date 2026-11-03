@@ -1,6 +1,7 @@
 #include "run.h"
 
 #include <cerrno>
+#include <cstring>
 #include <dirent.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -16,9 +17,14 @@ namespace {
 const char* kHubReadyProperty = "apklayer.hub.ready";
 const char* kWebviewCommandLine = "/data/local/tmp/webview-command-line";
 
-bool webviewSandboxOff() {
+// The host's switch file (tools/host-setup/webview.sh), copied into the instance's own /data, where Chromium reads it through the path layer
+// (APKLAYER_DATA). A launch from inside the instance (the hub's component host, with the path layer preloaded) reads that copy under the same name.
+bool webviewSandboxOff(const Instance& inst) {
     auto text = readFile(kWebviewCommandLine);
-    return text && text->find("--no-sandbox") != std::string::npos;
+    if (!text || text->find("--no-sandbox") == std::string::npos) return false;
+    std::string own = join(inst.dataDir, std::string(kWebviewCommandLine).substr(strlen("/data/")));
+    if (readFile(own) != text) { makeDirs(dirName(own)); writeFile(own, *text); }
+    return true;
 }
 }  // namespace
 
@@ -28,9 +34,9 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     ensureUid(l, dir);
     // the Chromium WebView provider is the default WebView once installed and tools/host-setup/webview.sh ran; APKLAYER_WEBVIEW_PROVIDER=none disables it
     std::string provider = getenvOr("APKLAYER_WEBVIEW_PROVIDER", "\x01");
-    if (provider == "\x01") provider = exists(join(l.appsDir, "com.android.webview/classes.jar")) && webviewSandboxOff() ? "com.android.webview" : "";
+    if (provider == "\x01") provider = exists(join(l.appsDir, "com.android.webview/classes.jar")) && webviewSandboxOff(inst) ? "com.android.webview" : "";
     if (provider == "none") provider.clear();
-    if (!provider.empty() && !webviewSandboxOff())
+    if (!provider.empty() && !webviewSandboxOff(inst))
         die("the WebView provider route needs tools/host-setup/webview.sh once (Chromium's seccomp sandbox cannot run inside an app JVM and is switched off; needs sudo)");
 
     trace("run " + package);
