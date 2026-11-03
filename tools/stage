@@ -2,9 +2,9 @@
 # tools/stage: files from the LineageOS tree's build (~/los24 in the OrbStack machine ubuntu22-x86) to where apklayer runs. Read-only on the tree.
 #   tools/stage libs <dest> <lib.so>...  libraries and everything they need (DT_NEEDED, recursively), skipping what dest has; prints the copied names.
 #                                        ANDROID_LIBS_SRC: source dirs separated by ":" (first match wins; default the arm64 system/lib64). Runs where the tree is.
-#   tools/stage root                     the files Android processes read at fixed paths into the VM's ~/arm64-native/android-root (on the Mac).
+#   tools/stage root                     the files Android processes read at fixed paths into the VM's native dir's android-root (its ~/.config/apklayer/env, else ~/arm64-native; on the Mac).
 #                                        ANDROID_PRODUCT (default generic_arm64) picks the product; STAGE_DEST=<dir> writes a local directory instead.
-#   tools/stage media [--dry-run]        software codecs and extractors from the media APEX outputs into the VM's ~/android-arm64/lib64 (tools/lib/stage-media.py)
+#   tools/stage media [--dry-run]        software codecs and extractors from the media APEX outputs into the VM's Android library dir (tools/lib/stage-media.py)
 #   tools/stage sysapps                  the tree's providers and system apps installed as apklayer apps on the VM
 #   tools/stage vulkan [stage dir]       the Orb Vulkan loader build onto the VM (the loader keeps its SONAME; the mapping selects the renamed copy)
 #   tools/stage x86_64                   everything an x86_64 machine needs, one tar file: build/x86_64/apklayer-x86_64-stage.tar (docs/X86_64.md)
@@ -15,7 +15,9 @@ repo="$(dirname "$here")"
 tree=/home/erfanabdi/los24
 ORB="${APKLAYER_ORB-orb -m ubuntu22-x86}"  # "env" when this runs inside the OrbStack machine
 vm_config() { . "$repo/tests/vm/config.sh"; }
-vm() { vm_auth ssh -o StrictHostKeyChecking=no "$VM" "$@"; }
+vm() { vm_auth ssh -o StrictHostKeyChecking=no "$VM" "$VM_PATHS $*"; }
+# the VM's own runtime paths, as its CLI reads them (~/.config/apklayer/env, else the default layout): $N native dir, $L Android libraries
+VM_PATHS='[ -f ~/.config/apklayer/env ] && . ~/.config/apklayer/env; N=${APKLAYER_NATIVE:-$HOME/arm64-native}; L=${APKLAYER_ANDROID_LIBS:-$HOME/android-arm64/lib64};'
 
 stage_libs() {
     src="${ANDROID_LIBS_SRC:-$tree/out/target/product/generic_arm64/system/lib64}"
@@ -42,7 +44,7 @@ stage_root() {
         sink() { mkdir -p "$STAGE_DEST/$1" && tar xf - -C "$STAGE_DEST/$1"; }
     else
         vm_config
-        sink() { vm "mkdir -p ~/arm64-native/android-root/$1 && tar xf - -C ~/arm64-native/android-root/$1"; }
+        sink() { vm "mkdir -p \$N/android-root/$1 && tar xf - -C \$N/android-root/$1"; }
     fi
     $ORB tar cf - -C "$OUT" system/etc/cgroups.json system/etc/task_profiles.json system/etc/task_profiles system/usr/hyphen-data system/etc/permissions system/etc/compatconfig system/etc/sysconfig system/etc/default-permissions system/etc/vintf/manifest.xml \
         system/fonts system/etc/fonts.xml system/etc/font_fallback.xml system/framework/org.lineageos.platform-res.apk apex/com.android.i18n/etc apex/com.android.tzdata/etc | sink .
@@ -78,13 +80,13 @@ stage_vulkan() {
     stage="${1:-$HOME/OrbStack/ubuntu22-x86/home/erfanabdi/apklayer-vulkan-stage}"
     for name in libvulkan.so vulkan.apklayer.so libapklayer_vktest.so; do
         target="$name"; [ "$name" != libvulkan.so ] || target=libapklayer_vulkan.so
-        vm_auth scp "$stage/$name" "$VM:android-arm64/lib64/$target"
-        actual=$(vm "sha256sum android-arm64/lib64/$target" | cut -d' ' -f1)
+        vm "cat > \$L/$target" < "$stage/$name"
+        actual=$(vm "sha256sum \$L/$target" | cut -d' ' -f1)
         [ "$actual" = "$(shasum -a 256 "$stage/$name" | cut -d' ' -f1)" ] || { echo "hash mismatch: $target" >&2; exit 1; }
         echo "Verified $target $actual"
     done
     COPYFILE_DISABLE=1 tar cf - -C "$repo" bridge/native/apklayer.prop bridge/native/bionic_translation.cfg tools/build | vm 'tar xf - -C ~/apklayer'
-    vm 'cd ~/apklayer && tools/build cfg ~/arm64-native'
+    vm 'cd ~/apklayer && tools/build cfg $N'
 }
 
 stage_x86_64() { # re-runs itself inside the OrbStack machine; every staged ELF is checked to be x86-64
