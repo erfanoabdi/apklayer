@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Check UiBench's rendered dialog margins in a VM capture (100% scale)."""
+"""Check UiBench's rendered dialog margins in a VM capture (100% scale): a desktop capture, or with --app the app window's own
+(apklayer screenshot: the content alone)."""
 import sys
 from PIL import Image
 
@@ -14,9 +15,8 @@ def runs(flags):
             start = None
 
 
-for filename in sys.argv[1:]:
-    im = Image.open(filename).convert('RGB')
-    pixels = im.load()
+def desktop_window(im, pixels):
+    """The app window's columns in a desktop capture and the first content row to check."""
     # Locate the active shell decoration, rather than assuming a desktop x/y.
     for top in range(im.height):
         bars = list(runs([pixels[x, top] == (43, 43, 43) for x in range(im.width)]))
@@ -33,10 +33,18 @@ for filename in sys.argv[1:]:
                 for y in range(32, im.height)) > (im.height - 32) * .75
             for x in range(im.width)]))
         left, right = body[0][0], body[-1][1]
+    return left, right, max(32, top + 32 + 21)
+
+
+app = '--app' in sys.argv
+for filename in [a for a in sys.argv[1:] if a != '--app']:
+    im = Image.open(filename).convert('RGB')
+    pixels = im.load()
+    # an app capture is the content alone: its edges are the window's, the rows a desktop capture skips below the title bar are 7
+    left, right, first_row = (0, im.width, 7) if app else desktop_window(im, pixels)
     # Most rows in each dialog edge column are white. Averaging excludes text,
     # dividers and the narrow scrollbar thumb without mistaking the grey inset
     # background for the dialog itself.
-    first_row = max(32, top + 32 + 21)
     white = list(runs([
         sum(min(pixels[x, y]) > 253 for y in range(first_row, im.height))
             > (im.height - first_row) * .75

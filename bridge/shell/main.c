@@ -48,6 +48,7 @@ int main(void)
     snprintf(path, sizeof path, "%s/shell.sock", dir);
 
     signal(SIGPIPE, SIG_IGN);
+    for (int i = 0; i < MAX_CLIENTS; i++) clients[i].fd = -1;  /* before the first roundtrip: the output's mode event writes to every client */
     const char *dbg = getenv("APKLAYER_DEBUG_INPUT");
     debug_input = dbg && !strcmp(dbg, "1");
     display = wl_display_connect(NULL);
@@ -60,7 +61,6 @@ int main(void)
     if (!compositor || !shm || !wm_base) { fprintf(stderr, "[shell] missing Wayland globals\n"); return 1; }
 
     clipboard_init();
-    for (int i = 0; i < MAX_CLIENTS; i++) clients[i].fd = -1;
     int lfd = listen_socket(path);
     fprintf(stderr, "[shell] listening on %s\n", path);
 

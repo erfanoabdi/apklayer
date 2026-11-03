@@ -4,9 +4,10 @@
 #   apps   tests/apps/<name>, built on the Mac and installed once before any group starts
 #   setup  VM commands run once before any group starts (files the groups' stacks read from APKLAYER_NATIVE)
 #   needs  packages that must be installed already (user-supplied APKs: `bin/apklayer install <apk>` on the VM); missing: the group is skipped
-#   alone  true: runs with no other group of the runner, after the parallel ones: real keys go to the focused window, desktop screenshots
-#          (window geometry) show every window, and stacks that declare HAL services write their vintf manifests into the shared
-#          APKLAYER_NATIVE. Pixel checks of one app use its own SurfaceFlinger picture (apklayer screenshot) and run in parallel.
+#   alone  true: runs with no other group of the runner, after the parallel ones: real keys (uinput) go to the focused window, IBus and
+#          the clipboard are the desktop's, and stacks that declare HAL services write their vintf manifests into the shared APKLAYER_NATIVE
+#          (another stack removes them). Input into one app goes through its shell's test input (instance.inject), pixel checks use its own
+#          SurfaceFlinger picture (apklayer screenshot): those groups run in parallel.
 #   optional  true: only when named on the command line
 # (the stacks of the HAL groups write their vintf manifests anew: removed first so that a hardlinked copy of APKLAYER_NATIVE gets new files)
 
@@ -102,12 +103,10 @@ run = ["python3 -u tests/vm/gpu-smoke.py"]
 
 [gpu-window]
 needs = ["com.android.test.uibench"]
-alone = true
 run = ["python3 -u tests/vm/gpu-window-run.py"]
 
 [texture-view]
 needs = ["com.android.test.uibench"]
-alone = true
 run = ["python3 -u tests/vm/texture-view.py"]
 
 [vulkan]
@@ -130,12 +129,10 @@ run = ["python3 -u tests/vm/input.py"]
 
 [multi-app]
 apps = ["hello-share-dst", "hello-share-dst2"]
-alone = true
 run = ["python3 -u tests/vm/multi-app.py"]
 
 [portal]
 apps = ["hello-portal"]
-alone = true
 run = ["tests/vm/portal.sh"]
 
 [codec2]
