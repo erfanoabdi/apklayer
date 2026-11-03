@@ -29,6 +29,7 @@
 
 #include "gralloc_handle.h"
 #include "apklayer/graphics.h"
+#include "Gles1.h"
 
 using namespace apklayer::gralloc;
 
@@ -480,18 +481,9 @@ EGLImage eglCreateImage(EGLDisplay dpy, EGLContext ctx, EGLenum target, EGLClien
 EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig cfg, EGLContext share, const EGLint* attribs) {
     // priority, protected content and the telemetry hint are Android-only context attributes
     auto a = filtered(attribs, {EGL_CONTEXT_PRIORITY_LEVEL_IMG, EGL_PROTECTED_CONTENT_EXT, EGL_TELEMETRY_HINT_ANDROID});
-    EGLContext ctx = host<PFNEGLCREATECONTEXTPROC>("eglCreateContext")(dpy, cfg, share, a.data());
-    if (ctx == EGL_NO_CONTEXT) {  // no client version means OpenGL ES 1.x, which the host's Mesa does not offer: an ES 2 context answers the queries ES 1 apps make (Device Info HW's renderer strings)
-        bool versioned = false;
-        for (size_t i = 0; i + 1 < a.size(); i += 2) if (a[i] == EGL_CONTEXT_CLIENT_VERSION) versioned = true;
-        if (!versioned) {
-            std::vector<EGLint> two(a.begin(), a.end());
-            if (!two.empty() && two.back() == EGL_NONE) two.pop_back();
-            two.push_back(EGL_CONTEXT_CLIENT_VERSION); two.push_back(2); two.push_back(EGL_NONE);
-            ctx = host<PFNEGLCREATECONTEXTPROC>("eglCreateContext")(dpy, cfg, share, two.data());
-            if (ctx != EGL_NO_CONTEXT) return ctx;
-        }
-    }
+    auto create = host<PFNEGLCREATECONTEXTPROC>("eglCreateContext");
+    // no client version (or 1) is OpenGL ES 1: the host's own, or the translator over a host GLES 3 context (Gles1.cpp)
+    EGLContext ctx = apklayer::egl::wantsGles1(a) ? apklayer::egl::gles1CreateContext(dpy, cfg, share, a, create) : create(dpy, cfg, share, a.data());
     if (ctx == EGL_NO_CONTEXT) {  // diagnosis: engines (bgfx) probe several versions, the last failure is the one they report
         EGLint err = host<EGLint (*)()>("eglGetError")();
         std::string list;
@@ -562,6 +554,7 @@ EGLBoolean eglDestroySurface(EGLDisplay dpy, EGLSurface surface) {
 
 EGLBoolean eglMakeCurrent(EGLDisplay dpy, EGLSurface draw, EGLSurface read, EGLContext ctx) {
     EGLBoolean ok = host<PFNEGLMAKECURRENTPROC>("eglMakeCurrent")(dpy, hostSurface(draw), hostSurface(read), ctx);
+    if (ok) apklayer::egl::gles1MadeCurrent(ctx);
     static bool logged;
     if (ok && ctx != EGL_NO_CONTEXT && !logged) {  // apklayer patch (diagnostic): the GL the context really gives (Skia's renderability caps depend on it)
         logged = true;
@@ -569,6 +562,16 @@ EGLBoolean eglMakeCurrent(EGLDisplay dpy, EGLSurface draw, EGLSurface read, EGLC
         if (gs) ALOGI("GL version '%s' renderer '%s' extensions '%s'", gs(0x1F02), gs(0x1F01), gs(0x1F03));
     }
     return ok;
+}
+
+EGLBoolean eglDestroyContext(EGLDisplay dpy, EGLContext ctx) {
+    apklayer::egl::gles1DestroyContext(dpy, ctx);
+    return host<EGLBoolean (*)(EGLDisplay, EGLContext)>("eglDestroyContext")(dpy, ctx);
+}
+
+EGLBoolean eglQueryContext(EGLDisplay dpy, EGLContext ctx, EGLint attribute, EGLint* value) {
+    if (apklayer::egl::gles1QueryContext(ctx, attribute, value)) return EGL_TRUE;
+    return host<EGLBoolean (*)(EGLDisplay, EGLContext, EGLint, EGLint*)>("eglQueryContext")(dpy, ctx, attribute, value);
 }
 
 EGLSurface eglGetCurrentSurface(EGLint which) {
@@ -650,10 +653,10 @@ EGLBoolean eglPresentationTimeANDROID(EGLDisplay, EGLSurface, EGLnsecsANDROID) {
 #define FORWARDED(X) \
     X(eglBindAPI) X(eglBindTexImage) X(eglClientWaitSync) X(eglClientWaitSyncKHR) X(eglCopyBuffers) \
     X(eglCreatePbufferFromClientBuffer) X(eglCreatePixmapSurface) X(eglCreatePlatformPixmapSurface) \
-    X(eglCreateSync) X(eglCreateSyncKHR) X(eglDestroyContext) X(eglDestroyImage) X(eglDestroyImageKHR) \
+    X(eglCreateSync) X(eglCreateSyncKHR) X(eglDestroyImage) X(eglDestroyImageKHR) \
     X(eglDestroySync) X(eglDestroySyncKHR) X(eglDupNativeFenceFDANDROID) X(eglGetConfigs) \
     X(eglGetCurrentContext) X(eglGetCurrentDisplay) X(eglGetSyncAttrib) X(eglGetSyncAttribKHR) \
-    X(eglQueryAPI) X(eglQueryContext) X(eglReleaseTexImage) \
+    X(eglQueryAPI) X(eglReleaseTexImage) \
     X(eglReleaseThread) X(eglSignalSyncKHR) \
     X(eglSwapInterval) X(eglWaitClient) X(eglWaitGL) X(eglWaitNative) \
     X(eglWaitSync) X(eglWaitSyncKHR) X(eglLockSurfaceKHR) X(eglUnlockSurfaceKHR)
@@ -704,6 +707,7 @@ __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char* name) {
     };
     if (getenv("APKLAYER_EGL_PROBE") && !strcmp(name, "glEGLImageTargetTexture2DOES")) return reinterpret_cast<__eglMustCastToProperFunctionPointerType>(probeImageTarget);
     for (auto& o : ours) if (!strcmp(name, o.n)) return reinterpret_cast<__eglMustCastToProperFunctionPointerType>(o.f);
+    if (void* es1 = apklayer::egl::gles1ProcAddress(name)) return reinterpret_cast<__eglMustCastToProperFunctionPointerType>(es1);
     auto proc = host<__eglMustCastToProperFunctionPointerType (*)(const char*)>("eglGetProcAddress");
     auto found = proc(name);
     if (!found && getenv("APKLAYER_EGL_PROBE")) ALOGW("probe: eglGetProcAddress(%s): the host has no such function", name);  // a null here is a crash or a silent no-op in the caller

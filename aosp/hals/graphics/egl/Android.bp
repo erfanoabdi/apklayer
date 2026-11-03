@@ -2,7 +2,8 @@
 // bionic_translation's cfg.d. Host EGL and the host graphics HAL's functions resolve at load time (bionic_translation's glibc fallback).
 cc_library_shared {
     name: "libapklayer_egl",
-    srcs: ["Egl.cpp"],
+    srcs: ["Egl.cpp", "Gles1.cpp"],
+    include_dirs: ["frameworks/native/opengl/libs"],  // entries.in: the GLES hook table layout of Android's libGLESv1_CM (Gles1.cpp)
     header_libs: [
         "libapklayer_gralloc_common_headers",
         "libapklayer_graphics_host_headers",
