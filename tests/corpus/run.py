@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Compatibility corpus runner (on the Mac, drives the test VM): for every app in apps.txt install it, launch it, wait for the first GPU frame the shell receives
-(inotify on the VM, no timers beyond a patience limit), take a screenshot, check it shows content (content.py, against a capture taken before the launch), launch it a second time, stop it, and write
+(inotify on the VM, no timers beyond a patience limit), take a screenshot of its window (`apklayer screenshot`; a desktop capture against one taken before the launch as the fallback), check it shows content (content.py), launch it a second time, stop it, and write
 tests/corpus/results.md (results-subset.md when names are given) plus the fake-service ranking tests/corpus/fakes.md (the app's "[fake]" lines, FakeLog).
 Each app's install and runs hold the VM's Android-stack lock (~/apklayer-vm.lock, flock -n): a busy lock is reported as "lock busy", nothing waits for it.
 Usage: tests/corpus/run.py [name ...]   (no names: every app);  run.py --report name...  rebuilds the tables from tests/corpus/logs/*.json
@@ -110,8 +110,13 @@ def launch(name, stream, at, row, key, before):
         return False
     shot = HERE / 'shots' / (name + ('' if key == 'frame' else '-2') + '.png')
     shot.parent.mkdir(exist_ok=True)
-    vmcapture.capture(str(shot))
-    verdict, detail = content.verdict(str(shot), str(before))
+    # the app's own window from SurfaceFlinger (no desktop, no other instance's windows); the desktop against the before-launch capture only as a fallback
+    pkg = next((m.group(1) for l in stream.lines for m in [re.search(r'installed (\S+)', l)] if m), None)
+    if pkg and vmcapture.app_capture(str(shot), pkg, ENV, cli=REPO + '/b/cli/apklayer'):
+        verdict, detail = content.verdict(str(shot))
+    else:
+        vmcapture.capture(str(shot))
+        verdict, detail = content.verdict(str(shot), str(before))
     row[key] = 'ok' if verdict == 'content' else verdict
     if key == 'frame': row['content'] = detail
     return verdict == 'content'
@@ -125,7 +130,7 @@ def run_one(name, spec, kind):
     subprocess.run(['sshpass', '-p', config.PASS, 'scp', '-q', str(apk), config.VM + ':corpus-' + name + '.apk'], check=True)
     proc = subprocess.Popen(SSH + [ENV + script(name)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors='replace')
     stream = Stream(proc)
-    before = HERE / 'shots' / (name + '-before.png')  # the desktop without the app (content.py takes the window as what differs), taken holding the lock
+    before = HERE / 'shots' / (name + '-before.png')  # the fallback's desktop without the app (content.py takes the window as what differs), taken holding the lock
     if stream.wait_for('LOCKED') is not None:
         before.parent.mkdir(exist_ok=True)
         vmcapture.capture(str(before))

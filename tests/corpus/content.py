@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Does a VM capture show app content, not a blank/uniform window? The window is what differs from a capture of the same desktop taken before the
-launch (no assumption about decoration colours or where the compositor put it); its title bar (the top rows of one shade) is left out, the rest measured.
-Usage: content.py SHOT.png BEFORE.png   or   content.py --selftest;  prints "<verdict> <detail>"; verdict is content, uniform or nowindow."""
+"""Does a capture show app content, not a blank/uniform window? With one image it is the app's window itself (`apklayer screenshot`, SurfaceFlinger's
+capture of the app's display): the whole image is measured. With a desktop capture (the fallback) the window is what differs from a capture of the same
+desktop taken before the launch (no assumption about decoration colours or where the compositor put it); its title bar (the top rows of one shade) is left out.
+Usage: content.py SHOT.png [BEFORE.png]   or   content.py --selftest;  prints "<verdict> <detail>"; verdict is content, uniform or nowindow."""
 import sys
 from PIL import Image, ImageChops
 
@@ -16,7 +17,18 @@ def window(shot, before):
     return (cols[0], rows[0], cols[-1] + 2, rows[-1] + 2) if rows and cols else None
 
 
-def verdict(filename, before_name):
+def measure(area, detail):
+    """A clear colour with nothing drawn on it, or only a sliver of something (a spinner): uniform. 64 colours: tolerant of gradients and scaling noise."""
+    counts = sorted((c for c, _ in area.quantize(64).getcolors(64)), reverse=True)
+    share = counts[0] / sum(counts)
+    return ('uniform' if share > 0.985 or len(counts) < 3 else 'content'), '%s dominant %.1f%% colours %d' % (detail, share * 100, len(counts))
+
+
+def verdict(filename, before_name=None):
+    if before_name is None:  # the app's window alone
+        shot = Image.open(filename).convert('RGB')
+        if shot.width < 50 or shot.height < 50: return 'nowindow', 'window %dx%d' % shot.size
+        return measure(shot, 'window %dx%d' % shot.size)
     shot, before = Image.open(filename).convert('RGB'), Image.open(before_name).convert('RGB')
     if shot.size != before.size: return 'nowindow', 'capture sizes differ'
     box = window(shot, before)
@@ -30,12 +42,7 @@ def verdict(filename, before_name):
     if body - top > 60: body = top  # no title bar (fullscreen, or the app's own colour matched): measure everything
     body += 2  # the bar's dark bottom edge
     if bottom - body < 50 or right - left < 50: return 'nowindow', 'changed area %dx%d' % (right - left, bottom - top)
-    area = shot.crop((left + 2, body, right - 2, bottom)).quantize(64)  # 64 colours: tolerant of gradients and scaling noise
-    counts = sorted((c for c, _ in area.getcolors(64)), reverse=True)
-    share = counts[0] / sum(counts)
-    detail = '%dx%d dominant %.1f%% colours %d' % (right - left - 4, bottom - body, share * 100, len(counts))
-    # a clear colour with nothing drawn on it, or only a sliver of something (a spinner)
-    return ('uniform' if share > 0.985 or len(counts) < 3 else 'content'), detail
+    return measure(shot.crop((left + 2, body, right - 2, bottom)), '%dx%d' % (right - left - 4, bottom - body))
 
 
 def selftest(tmp='/tmp/apklayer-content-selftest'):
@@ -56,9 +63,16 @@ def selftest(tmp='/tmp/apklayer-content-selftest'):
         im.save(tmp + '.png')
         assert verdict(tmp + '.png', tmp + '-before.png')[0] == want, (want, verdict(tmp + '.png', tmp + '-before.png'))
     assert verdict(tmp + '-before.png', tmp + '-before.png')[0] == 'nowindow'
+    for fill, text, want in (((0, 0, 0), False, 'uniform'), ((250, 250, 250), True, 'content')):  # a window capture alone
+        im = Image.new('RGB', (720, 1280), fill)
+        if text:
+            ImageDraw.Draw(im).rectangle((0, 0, 719, 160), fill=(66, 133, 244))
+            for y in range(220, 1200, 60): ImageDraw.Draw(im).text((40, y), 'Some list item text', fill=(30, 30, 30))
+        im.save(tmp + '-window.png')
+        assert verdict(tmp + '-window.png')[0] == want, (want, verdict(tmp + '-window.png'))
     print('PASS content.py selftest')
 
 
 if __name__ == '__main__':
     if sys.argv[1:] == ['--selftest']: selftest(); sys.exit()
-    print(*verdict(sys.argv[1], sys.argv[2]), sys.argv[1])
+    print(*verdict(*sys.argv[1:3]), sys.argv[1])

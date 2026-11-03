@@ -189,4 +189,27 @@ int waitHub(const Layout& l, const Instance& inst) {
     return waitForProperty(l, ne, kHubReadyProperty, "1", -1) ? 0 : 1;
 }
 
+// `apklayer screenshot <package|stack> <out.png>`: SurfaceFlinger's own capture of the app's virtual display (its sink registered the display's token
+// as apklayer.vdisplay.<layer stack>; the layer stack is the launcher's pid, the name of its run.<pid> record).
+int screenshot(const Layout& l, const Instance& inst, const std::string& target, std::string out) {
+    std::string stack = target;
+    if (target.empty() || target.find_first_not_of("0123456789") != std::string::npos) {
+        stack.clear();
+        for (const std::string& f : listDir(inst.stateDir)) {
+            if (f.rfind("run.", 0) != 0) continue;
+            auto record = readFile(join(inst.stateDir, f));
+            std::vector<std::string> pids = record ? split(*record, '\n') : std::vector<std::string>();
+            if (pids.size() < 2 || atoi(pids[1].c_str()) <= 0) continue;  // a component host: no window
+            auto cmd = readFile("/proc/" + pids[0] + "/cmdline");
+            if (cmd && cmd->find("-Dapklayer.package=" + target + std::string(1, '\0')) != std::string::npos) stack = f.substr(4);
+        }
+        if (stack.empty()) { fprintf(stderr, "apklayer: no window of %s in instance %s\n", target.c_str(), inst.id.c_str()); return 1; }
+    }
+    if (out.empty() || out[0] != '/') { char cwd[4096]; if (getcwd(cwd, sizeof cwd)) out = join(cwd, out); }
+    unlink(out.c_str());
+    execTool(l, inst, {"libapklayer_screenshot.so", "apklayer.vdisplay." + stack, out});
+    struct stat st {};
+    return ::stat(out.c_str(), &st) == 0 && st.st_size > 0 ? 0 : 1;  // btload's exit status is not the tool's: the file is the result
+}
+
 }  // namespace apklayer
