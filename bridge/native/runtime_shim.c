@@ -237,7 +237,8 @@ static jclass JNICALL lazy_find_class(JNIEnv *env, const char *name)
     for (; name[i] && i < sizeof dotted - 1; i++) dotted[i] = name[i] == '/' ? '.' : name[i];
     dotted[i] = 0;
     jstring s = (*env)->NewStringUTF(env, dotted);
-    jobject c = (*env)->CallStaticObjectMethod(env, class_class, for_name, s, JNI_FALSE, class_loader);
+    extern __thread jobject apklayer_onload_loader;  /* native_loader.c: inside a library's JNI_OnLoad, the loader of that library's classes */
+    jobject c = (*env)->CallStaticObjectMethod(env, class_class, for_name, s, JNI_FALSE, apklayer_onload_loader ? apklayer_onload_loader : class_loader);
     (*env)->DeleteLocalRef(env, s);
     if (!c && runtime_debug()) fprintf(stderr, "[runtime] FindClass(%s) failed\n", name);
     return (jclass)c; /* NULL with the pending exception, like FindClass */
@@ -495,19 +496,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     if (!attribution_failed) {
         extern int apklayer_register_nativeloader(JNIEnv *, jclass);
         jclass loader = lazy_find_class(env, "apklayer/host/NativeLoader");
-        attribution_failed = !loader || apklayer_register_nativeloader(env, loader);
-        /* Classes the sandbox does not acquire (org.conscrypt: an app's own Conscrypt) see the JVM's own copy of NativeLoader, a different class: its natives too */
-        jclass system = NULL;
-        if (!attribution_failed) {
-            jclass cl = (*env)->FindClass(env, "java/lang/ClassLoader");
-            jmethodID getter = (*env)->GetStaticMethodID(env, cl, "getSystemClassLoader", "()Ljava/lang/ClassLoader;");
-            jobject app = getter ? (*env)->CallStaticObjectMethod(env, cl, getter) : NULL;
-            jstring dotted = (*env)->NewStringUTF(env, "apklayer.host.NativeLoader");
-            system = app ? (jclass)(*env)->CallStaticObjectMethod(env, class_class, for_name, dotted, JNI_FALSE, app) : NULL;
-            if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
-            if (system && !(*env)->IsSameObject(env, system, loader)) attribution_failed = apklayer_register_nativeloader(env, system);
-        }
-        if (system) (*env)->DeleteLocalRef(env, system);
+        attribution_failed = !loader || apklayer_register_nativeloader(env, loader);  /* the sandbox's copy: app classes (their own Conscrypt too) reach it through their loader */
         if (loader) (*env)->DeleteLocalRef(env, loader);
     }
     if (!attribution_failed) {

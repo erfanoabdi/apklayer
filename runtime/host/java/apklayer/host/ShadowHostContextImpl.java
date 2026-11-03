@@ -30,6 +30,10 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
         Context app = Shadow.directlyOn(real, "android.app.ContextImpl", "getApplicationContext");
         return app != null ? app : android.app.ActivityThread.currentApplication();
     }
+    /** The app's own class loader (AppClassLoader), as LoadedApk's on Android; Robolectric answers with the sandbox's. */
+    @Implementation @Override protected ClassLoader getClassLoader() {
+        return AppClassLoader.app != null ? AppClassLoader.app : super.getClassLoader();
+    }
     @Implementation protected Object getSystemService(String name) {
         Object service = (Object) Shadow.directlyOn(real, "android.app.ContextImpl", "getSystemService", ClassParameter.from(String.class, name));
         if (Boolean.getBoolean("apklayer.tracesvc")) System.out.println("[apklayer] getSystemService " + name + " -> " + service + " (" + real.getClass().getSimpleName() + ", " + Thread.currentThread().getName() + ")");

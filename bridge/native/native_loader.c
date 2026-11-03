@@ -56,14 +56,21 @@ JNIEXPORT jstring JNICALL Java_apklayer_host_NativeLoader_dlerror(JNIEnv *env, j
     return e ? (*env)->NewStringUTF(env, e) : NULL;
 }
 
+/* The loader FindClass answers through on this thread while a library's JNI_OnLoad runs (runtime_shim.c): the one that loads the library, as ART does. */
+__thread jobject apklayer_onload_loader;
+
 /* Calls the library's JNI_OnLoad(JavaVM*, void*): returns its JNI version, or -1. */
-JNIEXPORT jint JNICALL Java_apklayer_host_NativeLoader_callOnLoad(JNIEnv *env, jclass c, jlong fn)
+JNIEXPORT jint JNICALL Java_apklayer_host_NativeLoader_callOnLoad(JNIEnv *env, jclass c, jlong fn, jobject loader)
 {
     (void)c;
     JavaVM *vm;
     if ((*env)->GetJavaVM(env, &vm) != JNI_OK) return -1;
     jint (*on_load)(JavaVM *, void *) = (jint (*)(JavaVM *, void *))(intptr_t)fn;
-    return on_load(vm, NULL);
+    jobject outer = apklayer_onload_loader;  /* a JNI_OnLoad that loads another library */
+    apklayer_onload_loader = loader;
+    jint version = on_load(vm, NULL);
+    apklayer_onload_loader = outer;
+    return version;
 }
 
 /* Binds one native method to a function found by name (JNI naming convention). */

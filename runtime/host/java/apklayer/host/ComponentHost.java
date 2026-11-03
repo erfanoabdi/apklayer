@@ -16,7 +16,7 @@ public final class ComponentHost implements Runnable {
     private final Path apk;
     public ComponentHost(AndroidSandbox sandbox, Path apk, Path ignored) { this.sandbox = sandbox; this.apk = apk; }
     @Override public void run() {
-        Thread.currentThread().setContextClassLoader(sandbox.getRobolectricClassLoader());
+        Thread.currentThread().setContextClassLoader(AppClassLoader.app != null ? AppClassLoader.app : sandbox.getRobolectricClassLoader());  // the app's own loader, as on Android
         AppEnvironment.setUpApplication(sandbox, apk, false);
         Application app = RuntimeEnvironment.getApplication();
         AppEnvironment.startRuntime(app);
