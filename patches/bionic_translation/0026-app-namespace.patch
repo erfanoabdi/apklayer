@@ -1,0 +1,266 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 26/26] apklayer: app-namespace
+
+apklayer patch 0026 of patches/bionic_translation (docs/PATCHES.md): two linker namespaces, as Android's classloader
+namespace. Libraries found in the app's directories (dl_parse_app_library_path) form the app namespace; their DT_NEEDED and
+dlopen look in the app namespace first, then in the system one. The system namespace (dl_parse_library_path) never sees the
+app's libraries, so an app library named like a device one (OpenSSL libcrypto.so next to BoringSSL's) is a second library.
+---
+diff --git a/linker/dlfcn.c b/linker/dlfcn.c
+--- a/linker/dlfcn.c
++++ b/linker/dlfcn.c
+@@ -66,13 +66,15 @@
+ 	dl_err_str = (const char *)&dl_err_buf[0];
+ }
+ 
+-void *bionic_dlopen(const char *filename, int flag)
++/* apklayer patch: the caller's namespace (an app library's is the app's) is where filename is looked up */
++static void *dlopen_from(const char *filename, int flag, const void *caller)
+ {
+ //	verbose("%s (%d)", filename, flag);
+ 	soinfo *ret;
+ 	pthread_mutex_lock(&apkenv_dl_lock);
+ 	void *glibc_handle = NULL;
+-	ret = apkenv_find_library(filename, true, flag, &glibc_handle); // flag only used for glibc dlopen
++	soinfo *from = apkenv_find_containing_library(caller);
++	ret = apkenv_find_library(filename, from && from->app_ns, true, flag, &glibc_handle); // flag only used for glibc dlopen
+ 
+ 	if (ret) {
+ 		apkenv_call_constructors_recursive(ret);
+@@ -86,6 +88,11 @@
+ 	return ret;
+ }
+ 
++void *bionic_dlopen(const char *filename, int flag)
++{
++	return dlopen_from(filename, flag, __builtin_return_address(0));
++}
++
+ struct android_dlextinfo {
+ 	uint64_t flags;
+ 	void*   reserved_addr;
+@@ -101,7 +108,7 @@
+ 	if (info) {
+ 		fprintf(stderr, "ERROR: android_dlopen_ext with android_dlextinfo not implemented\n");
+ 	}
+-	return bionic_dlopen(filename, flags);
++	return dlopen_from(filename, flags, __builtin_return_address(0));
+ }
+ 
+ const char *bionic_dlerror(void)
+diff --git a/linker/dlfcn.h b/linker/dlfcn.h
+--- a/linker/dlfcn.h
++++ b/linker/dlfcn.h
+@@ -11,6 +11,7 @@
+ #endif
+ 
+ void dl_parse_library_path(const char *path, char *delim);
++void dl_parse_app_library_path(const char *path, char *delim);
+ void *bionic_dlopen(const char *filename, int flag);
+ const char *bionic_dlerror(void);
+ void *bionic_dlsym(void *handle, const char *symbol);
+diff --git a/linker/linker.c b/linker/linker.c
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -152,6 +152,9 @@
+ 
+ static char apkenv_ldpaths_buf[LDPATH_BUFSIZE];
+ static const char *apkenv_ldpaths[LDPATH_MAX + 1];
++/* apklayer patch: the app's library directories, its own namespace (Android's classloader namespace); apkenv_ldpaths are the system's */
++static char apkenv_app_ldpaths_buf[LDPATH_BUFSIZE];
++static const char *apkenv_app_ldpaths[LDPATH_MAX + 1];
+ 
+ static const char *apkenv_ldpreload_names[LDPRELOAD_MAX + 1];
+ 
+@@ -843,7 +846,7 @@
+ 	return -1;
+ }
+ 
+-static int apkenv_open_library(const char *name, char *fullpath)
++static int apkenv_open_library(const char *name, char *fullpath, const char **paths, bool sopaths)
+ {
+ 	int fd;
+ 	char buf[512];
+@@ -879,7 +882,7 @@
+ 	path_normalized_name = realpath(dirname(tmp_name), NULL);
+ 	free(tmp_name);
+ 
+-	for (path = apkenv_ldpaths; *path; path++) {
++	for (path = paths; *path; path++) {
+ 		char *ldpath_normalized = NULL;
+ 		const char *wildcard = strpbrk(*path, "*");
+ 		if (wildcard) {
+@@ -926,7 +929,7 @@
+ 
+ 	free(path_normalized_name);
+ 
+-	for (path = apkenv_sopaths; *path; path++) {
++	for (path = apkenv_sopaths; sopaths && *path; path++) {
+ 		n = format_buffer(buf, sizeof(buf), "%s/%s", *path, name);
+ 		if (n < 0 || n >= (int)sizeof(buf)) {
+ 			WARN("Ignoring very long library path: %s/%s\n", *path, name);
+@@ -1393,10 +1396,10 @@
+ #endif
+ 
+ static soinfo *
+-apkenv_load_library(const char *name, const bool try_glibc, int glibc_flag, void **_glibc_handle)
++apkenv_load_library(const char *name, const bool app, const bool try_glibc, int glibc_flag, void **_glibc_handle)
+ {
+ 	char fullpath[512];
+-	int fd = apkenv_open_library(name, fullpath);
++	int fd = apkenv_open_library(name, fullpath, app ? apkenv_app_ldpaths : apkenv_ldpaths, !app);
+ 	int cnt;
+ 	size_t ext_sz;
+ 	size_t req_base;
+@@ -1404,6 +1407,8 @@
+ 	soinfo *si = NULL;
+ 	ElfW(Ehdr) * hdr;
+ 
++	if (fd == -1 && app)
++		return NULL; /* not the app's: the system namespace is searched next */
+ 	if (fd == -1) {
+ 		if (try_glibc) {
+ 			if (!(glibc_flag & (RTLD_LAZY | RTLD_NOW)))
+@@ -1467,6 +1472,7 @@
+ 	if (si == NULL)
+ 		goto fail;
+ 
++	si->app_ns = app;
+ 	/* apkenv */
+ 	strncpy(si->fullpath, fullpath, sizeof(si->fullpath));
+ 	si->fullpath[sizeof(si->fullpath) - 1] = 0;
+@@ -1528,8 +1534,27 @@
+ 
+ extern struct override_map lib_override_map;
+ 
+-soinfo *apkenv_find_library(const char *name, const bool try_glibc, int glibc_flag, void **glibc_handle)
++/* apklayer patch: is the absolute name in one of the app's library directories? */
++static bool apkenv_in_app_dir(const char *name)
+ {
++	if (name[0] != '/')
++		return false;
++	char *tmp = strdup(name), *dir = realpath(dirname(tmp), NULL);
++	bool in = false;
++	for (const char **path = apkenv_app_ldpaths; dir && *path && !in; path++) {
++		char *real = realpath(*path, NULL);
++		in = real && !strcmp(real, dir);
++		free(real);
++	}
++	free(dir);
++	free(tmp);
++	return in;
++}
++
++/* apklayer patch: a library asked for from the app's namespace (app) is the app's own copy when it has one, else the system's;
++ * the system namespace never sees the app's libraries (an app's OpenSSL libcrypto.so next to the device's BoringSSL one) */
++soinfo *apkenv_find_library(const char *name, bool app, const bool try_glibc, int glibc_flag, void **glibc_handle)
++{
+ 	soinfo *si;
+ 	const char *bname;
+ 
+@@ -1561,9 +1586,11 @@
+ 
+ 	bname = strrchr(name, '/');
+ 	bname = bname ? bname + 1 : name;
++	app = app || apkenv_in_app_dir(name);
+ 
++again:
+ 	for (si = apkenv_solist; si != 0; si = si->next) {
+-		if (!strcmp(bname, si->name)) {
++		if (!strcmp(bname, si->name) && si->app_ns == app) {
+ 			if (si->flags & FLAG_ERROR) {
+ 				DL_ERR("%5d '%s' failed to load previously", apkenv_pid, bname);
+ 				return NULL;
+@@ -1576,7 +1603,11 @@
+ 	}
+ 
+ 	TRACE("[ %5d '%s' has not been loaded yet.  Locating...]\n", apkenv_pid, name);
+-	if (!(si = apkenv_load_library(name, try_glibc, glibc_flag, glibc_handle)) || !(si = apkenv_init_library(si)))
++	if (!(si = apkenv_load_library(name, app, try_glibc, glibc_flag, glibc_handle)) && app) {
++		app = false;
++		goto again;
++	}
++	if (!si || !(si = apkenv_init_library(si)))
+ 		return NULL;
+ 
+ 	if (!strcmp(bname, "libstdc++.so")) {
+@@ -2804,7 +2835,7 @@
+ 		int i;
+ 		memset(apkenv_preloads, 0, sizeof(apkenv_preloads));
+ 		for (i = 0; apkenv_ldpreload_names[i] != NULL; i++) {
+-			soinfo *lsi = apkenv_find_library(apkenv_ldpreload_names[i], true, RTLD_NOW, NULL);
++			soinfo *lsi = apkenv_find_library(apkenv_ldpreload_names[i], false, true, RTLD_NOW, NULL);
+ 			if (lsi == 0) {
+ 				apkenv_strlcpy(apkenv_tmp_err_buf, apkenv_linker_get_error(), sizeof(apkenv_tmp_err_buf));
+ // not sure if this is "fixable", but worst case scenario is truncated error message, so silencing it
+@@ -2825,7 +2856,7 @@
+ 			DEBUG("%5d %s needs %s\n", apkenv_pid, si->name, si->strtab + d->d_un.d_val);
+ 			soinfo *lsi = NULL;
+ 			// if (get_builtin_lib_handle(si->strtab + d->d_un.d_val) == NULL)
+-			lsi = apkenv_find_library(si->strtab + d->d_un.d_val, true, RTLD_NOW, NULL);
++			lsi = apkenv_find_library(si->strtab + d->d_un.d_val, si->app_ns, true, RTLD_NOW, NULL);
+ 			if (lsi == 0) {
+ 				/**
+ 				 * XXX Dirty Hack Alarm --thp XXX
+@@ -2953,13 +2984,13 @@
+ 	return -1;
+ }
+ 
+-void dl_parse_library_path(const char *path, char *delim)
++static void apkenv_parse_paths(const char *path, char *delim, char *apkenv_ldpaths_buf, const char **apkenv_ldpaths)
+ {
+ 	size_t len;
+ 	char *apkenv_ldpaths_bufp = apkenv_ldpaths_buf;
+ 	int i = 0;
+ 
+-	len = apkenv_strlcpy(apkenv_ldpaths_buf, path, sizeof(apkenv_ldpaths_buf));
++	len = apkenv_strlcpy(apkenv_ldpaths_buf, path, LDPATH_BUFSIZE);
+ 
+ 	while (i < LDPATH_MAX && (apkenv_ldpaths[i] = strsep(&apkenv_ldpaths_bufp, delim))) {
+ 		if (*apkenv_ldpaths[i] != '\0')
+@@ -2968,10 +2999,21 @@
+ 
+ 	/* Forget the last path if we had to truncate; this occurs if the 2nd to
+ 	 * last char isn't '\0' (i.e. not originally a delim). */
+-	if (i > 0 && len >= sizeof(apkenv_ldpaths_buf) &&
+-	    apkenv_ldpaths_buf[sizeof(apkenv_ldpaths_buf) - 2] != '\0') {
++	if (i > 0 && len >= LDPATH_BUFSIZE &&
++	    apkenv_ldpaths_buf[LDPATH_BUFSIZE - 2] != '\0') {
+ 		apkenv_ldpaths[i - 1] = NULL;
+ 	} else {
+ 		apkenv_ldpaths[i] = NULL;
+ 	}
++}
++
++void dl_parse_library_path(const char *path, char *delim)
++{
++	apkenv_parse_paths(path, delim, apkenv_ldpaths_buf, apkenv_ldpaths);
++}
++
++/* apklayer patch: the directories of the app's namespace */
++void dl_parse_app_library_path(const char *path, char *delim)
++{
++	apkenv_parse_paths(path, delim, apkenv_app_ldpaths_buf, apkenv_app_ldpaths);
+ }
+diff --git a/linker/linker.h b/linker/linker.h
+--- a/linker/linker.h
++++ b/linker/linker.h
+@@ -244,6 +244,7 @@
+ 	size_t tls_slot_id;
+ 
+ 	struct tls_index_list *tls_index_list;
++	bool app_ns; /* apklayer patch: in the app's namespace */
+ };
+ 
+ extern soinfo apkenv_libdl_info;
+@@ -272,7 +273,7 @@
+ #define DT_PREINIT_ARRAYSZ 33
+ #endif
+ 
+-soinfo *apkenv_find_library(const char *name, const bool try_glibc, int glibc_flags, void **glibc_handle);
++soinfo *apkenv_find_library(const char *name, bool app, const bool try_glibc, int glibc_flags, void **glibc_handle);
+ unsigned apkenv_unload_library(soinfo *si);
+ ElfW(Sym) *apkenv_lookup_in_library(soinfo **found, const char *name);
+ ElfW(Sym) *apkenv_lookup(const char *name, soinfo **found, soinfo *start);

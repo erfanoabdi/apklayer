@@ -5,7 +5,7 @@
 namespace apklayer {
 
 namespace {
-bool looksLikeRoot(const std::string& dir) { return isDir(join(dir, "bridge")) && isDir(join(dir, "scripts")); }
+bool looksLikeRoot(const std::string& dir) { return isDir(join(dir, "bridge")) && isDir(join(dir, "tools")); }
 
 // ~/.config/apklayer/env: lines of KEY=VALUE or `export KEY=VALUE`, applied to the environment unless already set (menu launches get them too).
 void applyConfig() {

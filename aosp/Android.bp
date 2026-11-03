@@ -1,7 +1,7 @@
 // apklayer's own code for the AOSP tree. Layout (docs/ARCHITECTURE.md "Android side and host side"):
 //   hals/<domain>/...   HAL services and libraries (AIDL frontends), one directory per HAL domain
-//   tools/              development tools run with scripts/btload.c --main
-// This directory is synced to vendor/apklayer (scripts/sync-aosp.sh) and built with `m <module>`, as recorded in
+//   tools/              development tools run with bridge/native/btload.c --main
+// This directory is synced to vendor/apklayer (tools/sync-aosp.sh) and built with `m <module>`, as recorded in
 // docs/AOSP-BUILDS.md. Executables are built as shared libraries exporting main(): bionic_translation loads libraries.
 package {
     default_visibility: ["//visibility:public"],

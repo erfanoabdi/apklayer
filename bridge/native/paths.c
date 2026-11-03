@@ -29,7 +29,7 @@ static const char *root(void)
 }
 
 /* An instance other than "default" has its own binder contexts: /dev/<name> is /dev/binderfs/<name>-<instance>
- * (created by scripts/vm-binder-setup.sh <instance>), so two instances never share a servicemanager. */
+ * (created by tools/host-setup/binder.sh <instance>), so two instances never share a servicemanager. */
 static bool binder_device(char **path)
 {
     static const char *const names[] = { "binder", "hwbinder", "vndbinder", NULL };

@@ -8,7 +8,7 @@
 namespace apklayer {
 
 struct Layout {
-    std::string root;         // contains bridge/, scripts/, aosp/, runtime/ (the repo, or the installed share directory)
+    std::string root;         // contains bridge/, tools/, aosp/, runtime/ (the repo, or the installed share directory)
     std::string build;        // Meson build directory: shell, converter, host HAL libraries
     std::string native;       // the staged native runtime (native-runtime.jar, aosp/, android-root/, bin/btload...)
     std::string androidLibs;  // the device build's libraries
