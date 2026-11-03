@@ -29,6 +29,7 @@ final class HubDirectory extends Binder {
     private final HubStartedServices startedServices;
     private final HubPendingIntents pendingIntents;
     private final HubNotifications notifications;
+    private final HubAccounts accounts;
     private final Map<String, Process> appProcesses = new HashMap<>();
     private final Map<String, Process> hosts = new HashMap<>();
     private final Map<String, Integer> failures = new HashMap<>();
@@ -37,6 +38,8 @@ final class HubDirectory extends Binder {
     HubDirectory(Path apps) {
         packages = new HubPackages(apps); bindings = new HubServiceBindings(this, packages); broadcasts = new HubBroadcasts(this, packages); providers = new HubProviders(this, packages, broadcasts); activities = new HubActivities(this, packages, providers); startedServices = new HubStartedServices(this, packages, broadcasts); pendingIntents = new HubPendingIntents(this, broadcasts, activities, startedServices);
         notifications = new HubNotifications(packages, pendingIntents);
+        // the instance's own data directory (the volumes' parent): accounts belong to the instance, as /data/system_ce does to a device
+        accounts = new HubAccounts(this, bindings, new HubAuthenticators(apps, packages), Path.of(System.getProperty("apklayer.storage")).getParent().resolve("accounts.json"));
         attachInterface(null, HubProtocol.DESCRIPTOR);
         exitWhenIdle(60_000); // nobody ever connected
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -65,6 +68,7 @@ final class HubDirectory extends Binder {
         timer.setDaemon(true); timer.start();
     }
     java.util.List<Peer> peersExcept(Peer one) { synchronized (peers) { return peers.values().stream().filter(peer -> peer != one).toList(); } }
+    HubAccounts accounts() { return accounts; }
     Peer peerByPid(int pid) { synchronized (peers) { return peers.get(pid); } }
     /** The key of a process: the package, plus "#instance" for an isolated service instance (bindIsolatedService), which runs in a process of its own. */
     static String key(String pkg, String instance) { return instance == null ? pkg : pkg + "#" + instance; }

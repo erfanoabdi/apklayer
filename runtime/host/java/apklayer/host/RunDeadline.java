@@ -19,7 +19,8 @@ final class RunDeadline {
             Thread.getAllStackTraces().forEach((t, stack) -> {
                 if (t.isDaemon() && t != Thread.currentThread() && !t.getName().contains("main") && !t.getName().contains("Main")) return;
                 System.out.println("[apklayer] thread " + t.getName() + " " + t.getState());
-                for (int i = 0; i < Math.min(stack.length, 25); i++) System.out.println("[apklayer]     at " + stack[i]);
+                int depth = t.getName().contains("Main") ? 150 : 25;  // the main thread's app frames lie under Robolectric's method-handle chains
+                for (int i = 0; i < Math.min(stack.length, depth); i++) System.out.println("[apklayer]     at " + stack[i]);
             });
             System.out.flush();
             Runtime.getRuntime().halt(124);  // timeout(1)'s status

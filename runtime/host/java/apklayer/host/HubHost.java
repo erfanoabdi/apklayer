@@ -30,6 +30,8 @@ public final class HubHost {
         HubDirectory directory = new HubDirectory(apps);
         if (!RealBinder.publish(HubProtocol.SERVICE, directory))
             throw new IllegalStateException("Cannot publish instance hub");
+        if (!RealBinder.publish(HubAccounts.SERVICE, directory.accounts()))
+            throw new IllegalStateException("Cannot publish the account service");
         HostBattery.installHub(directory::sendSystem);
         System.out.println("[apklayer-hub] READY pid=" + android.os.Process.myPid());
         new Thread(HubHost::bootSettings, "hub-boot-settings").start();  // the hub is the instance's system (uid 1000): it writes what system_server writes at boot

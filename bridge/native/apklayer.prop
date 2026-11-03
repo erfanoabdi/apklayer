@@ -1,5 +1,6 @@
-# Properties a desktop instance defines itself (loaded after the tree's build.prop files; ro.* are write-once, so these
-# only fill what the build files lack). The display values are refined at instance start from the real output.
+# Properties a desktop instance defines itself (loaded before the tree's build.prop, cli/stack.cpp; ro.* are write-once, so these
+# win over the tree's values). The display values are refined at instance start from the real output.
+# The version stays the tree's (Android 17, SDK 37): the framework jar apps run against is built from the same tree.
 ro.sf.lcd_density=160
 ro.surface_flinger.max_frame_buffer_acquired_buffers=3
 ro.boot.hardware=apklayer

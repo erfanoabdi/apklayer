@@ -8,7 +8,6 @@ import android.app.Application;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ActivityInfo;
-import android.content.res.TypedArray;
 import android.hardware.display.DisplayManager;
 import android.os.Handler;
 import android.os.Looper;
@@ -294,7 +293,7 @@ public final class AppHost implements Runnable {
                     perfLoops++;
                     looper.idle();
                 }
-                if (TRACE_ROOTS && now - lastRootTrace > 1_000_000_000L) { lastRootTrace = now; traceRoots(); }
+                if (TRACE_ROOTS && now - lastRootTrace > 1_000_000_000L) { lastRootTrace = now; HostWindows.traceRoots(); }
                 if (stack.isEmpty()) { followNavigation(); continue; }  // the grace period after a launcher activity finished itself
                 followNavigation();
                 followOrientation();
@@ -321,37 +320,6 @@ public final class AppHost implements Runnable {
     private static final boolean TRACE_ROOTS = Boolean.getBoolean("apklayer.traceroots");
     private long lastRootTrace;
 
-    /** -Dapklayer.traceroots=true: once a second, the state of every window's ViewRootImpl (why does a window not draw?). */
-    private void traceRoots() {
-        java.util.List<?> roots;
-        try {
-            java.lang.reflect.Field rf = android.view.WindowManagerGlobal.class.getDeclaredField("mRoots");
-            rf.setAccessible(true);
-            roots = new ArrayList<>((java.util.List<?>) rf.get(android.view.WindowManagerGlobal.getInstance()));
-        } catch (Throwable e) {
-            System.out.println("[apklayer] root trace failed: " + e);
-            return;
-        }
-        if (roots.isEmpty()) System.out.println("[apklayer] root: no windows");
-        for (Object o : roots) {
-            try {
-                android.view.ViewRootImpl root = (android.view.ViewRootImpl) o;
-                StringBuilder sb = new StringBuilder("[apklayer] root:");
-                for (String f : new String[] {"mFirst", "mAdded", "mTraversalScheduled", "mWillDrawSoon", "mStopped", "mIsDrawing", "mLayoutRequested", "mRelayoutRequested"}) {
-                    java.lang.reflect.Field fld = android.view.ViewRootImpl.class.getDeclaredField(f);
-                    fld.setAccessible(true);
-                    sb.append(' ').append(f).append('=').append(fld.get(root));
-                }
-                java.lang.reflect.Field sf = android.view.ViewRootImpl.class.getDeclaredField("mSurface");
-                sf.setAccessible(true);
-                System.out.println(sb + " surfaceValid=" + ((android.view.Surface) sf.get(root)).isValid() + " visibility=" + root.getView().getVisibility()
-                        + " nextVsync=" + ShadowChoreographer.getNextVsyncTime());
-            } catch (Throwable e) {
-                System.out.println("[apklayer] root trace failed: " + e);
-            }
-        }
-    }
-
     private boolean nativeLooperSeen;
     /** Native code (Chromium) that runs a message pump on the main thread waits on the thread's native looper: run what is ready. */
     private void pollNativeLooper() {
@@ -369,10 +337,12 @@ public final class AppHost implements Runnable {
 
     /** Builds and fully starts the activity, as the simulator does (Robolectric.setupActivity). */
     private void launch(Intent intent) {
+        launch(intent, stack.isEmpty() ? null : ((ShadowActivity) Shadow.extract(stack.peek().get())).getNextStartedActivityForResult());
+    }
+
+    /** @param request the start's record, with its request code: startActivityForResult is only recorded by Robolectric, the host delivers the result (PLAN P5.3) */
+    private void launch(Intent intent, ShadowActivity.IntentForResult request) {
         if (Boolean.getBoolean("apklayer.tracestart")) System.out.println("[apklayer] launch " + intent + " flags=0x" + Integer.toHexString(intent.getFlags()));
-        // startActivityForResult: Robolectric only records it; the host delivers the result (PLAN P5.3)
-        ShadowActivity.IntentForResult request = stack.isEmpty() ? null
-                : ((ShadowActivity) Shadow.extract(stack.peek().get())).getNextStartedActivityForResult();
         boolean wantsResult = request != null && request.requestCode >= 0;
         Class<? extends Activity> cls;
         ActivityInfo info;
@@ -435,17 +405,16 @@ public final class AppHost implements Runnable {
             c.destroy();
             System.out.println("[apklayer] finished in onCreate: " + c.get().getClass().getName());
             Intent next = ((ShadowApplication) Shadow.extract(RuntimeEnvironment.getApplication())).getNextStartedActivity();  // what it started before (the intro screen)
-            if (next == null) next = ((org.robolectric.shadows.ShadowActivity) Shadow.extract(c.get())).getNextStartedActivity();  // started through the activity itself
-            if (next != null) launch(next);
+            if (next != null) launchStarted(next);
             else if (previous != null) previous.resume();
             else graceUntilMs = System.nanoTime() / 1_000_000 + 20000;  // a trampoline that starts the real screen from a coroutine (AnkiDroid's IntentHandler)
             return;
         }
         c.start().postCreate(null).resume().visible();  // the rest of ActivityController.setup(), focus as the window has it
-        focus(c, windowActive);
+        HostWindows.focus(c, windowActive);
         // As in Android, the previous activity is stopped only once an opaque activity covers it;
         // behind a translucent one (dialog-style) it stays paused and visible.
-        if (previous != null && !isTranslucent(c.get())) {
+        if (previous != null && !HostWindows.isTranslucent(c.get())) {
             setVisible(previous.stop(), false);
             stopped.add(previous.get());
         }
@@ -459,6 +428,18 @@ public final class AppHost implements Runnable {
         c.get().getWindow().getDecorView().invalidate();
         System.out.println("[apklayer] started " + c.get().getClass().getName() + " depth=" + stack.size());
         StartTrace.mark("activity resumed " + c.get().getClass().getName());
+    }
+
+    /**
+     * Robolectric hands started activities back newest first; Android starts them in call order (startActivities: the last one ends on top).
+     * Each start's for-result record (a second list, also newest first) stays with its intent.
+     */
+    private void launchStarted(Intent newest) {
+        ShadowApplication shadowApp = Shadow.extract(RuntimeEnvironment.getApplication());
+        ShadowActivity top = stack.isEmpty() ? null : Shadow.extract(stack.peek().get());
+        java.util.ArrayDeque<Object[]> started = new java.util.ArrayDeque<>();
+        for (Intent i = newest; i != null; i = shadowApp.getNextStartedActivity()) started.push(new Object[] {i, top == null ? null : top.getNextStartedActivityForResult()});
+        while (!started.isEmpty()) { Object[] start = started.pop(); launch((Intent) start[0], (ShadowActivity.IntentForResult) start[1]); }
     }
 
     /** Hands an answer from another app (or its disappearance, as RESULT_CANCELED) to the activity that asked. */
@@ -485,7 +466,6 @@ public final class AppHost implements Runnable {
         else top.pause().stop().destroy();
     }
 
-    /** Follows the app's startActivity() calls and finish() of the top activity. */
     /**
      * PLAN P2.3: a portrait/landscape request from the top activity (manifest screenOrientation or
      * setRequestedOrientation) reshapes the window. Other values keep the current shape.
@@ -503,11 +483,12 @@ public final class AppHost implements Runnable {
         }
     }
 
+    /** Follows the app's startActivity() calls and finish() of the top activity. */
     private void followNavigation() {
         ShadowApplication shadowApp = Shadow.extract(RuntimeEnvironment.getApplication());
         Intent next = shadowApp.getNextStartedActivity();
         if (next != null) {
-            launch(next);
+            launchStarted(next);
             return;
         }
         if (stack.isEmpty()) return;
@@ -539,26 +520,11 @@ public final class AppHost implements Runnable {
      * again when it returns. Stopped windows then stay out of the composed screen, and the
      * visibility change redraws, which makes ScreenUpdateHandler capture a fresh frame.
      */
-    private static boolean isTranslucent(Activity activity) {
-        TypedArray a = activity.getTheme().obtainStyledAttributes(
-                new int[] {android.R.attr.windowIsTranslucent, android.R.attr.windowIsFloating});
-        try {
-            return a.getBoolean(0, false) || a.getBoolean(1, false);
-        } finally {
-            a.recycle();
-        }
-    }
-
     private static void setVisible(ActivityController<? extends Activity> c, boolean visible) {
         c.get().getWindow().getDecorView().setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
     }
 
 
-    /**
-     * Resize / DPI (PLAN P2): logical size and output scale -> sandbox qualifiers (density =
-     * 160 x scale). The screen capture then comes out at the new pixel size and the shell
-     * client rebuffers the window to match (ShellClient.present).
-     */
     /**
      * Window state from the shell (PLAN P2.9), as in Android's freeform multi-window: an inactive window stays resumed and only
      * loses window focus and top-resumed (SDL and game loops pause on onPause); a minimized one is stopped, restored it restarts.
@@ -578,19 +544,14 @@ public final class AppHost implements Runnable {
             stoppedByMinimize = false;
             System.out.println("[apklayer] lifecycle: resumed");
         }
-        focus(top, windowActive);
+        HostWindows.focus(top, windowActive);
     }
 
-    /** ViewRootImpl#windowFocusChanged and the top-resumed state, as the window manager reports them for the top window. */
-    private static void focus(ActivityController<? extends Activity> c, boolean has) {
-        View decor = c.get().getWindow().getDecorView();
-        if (decor.hasWindowFocus() == has) return;
-        List<android.view.ViewRootImpl> roots = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mRoots");
-        for (android.view.ViewRootImpl root : roots) // the decor may not be attached yet (its first traversal waits for vsync)
-            if (root.getView() == decor) root.windowFocusChanged(has);
-        c.topActivityResumed(has);
-    }
-
+    /**
+     * Resize / DPI (PLAN P2): logical size and output scale -> sandbox qualifiers (density =
+     * 160 x scale). The screen capture then comes out at the new pixel size and the shell
+     * client rebuffers the window to match (ShellClient.present).
+     */
     private void hostResize(int w, int h, int scalePct) {
         int dpi = 160 * scalePct / 100;
         int wdp = Math.max(1, w), hdp = Math.max(1, h);

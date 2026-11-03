@@ -48,6 +48,10 @@ apps = ["hello-system"]
 needs = ["com.android.providers.contacts", "com.android.documentsui"]
 run = ["tests/vm/system-apps.sh"]
 
+[accounts]
+apps = ["hello-system", "hello-accounts"]
+run = ["tests/vm/accounts.sh"]
+
 [binder]
 apps = ["hello-binder-server", "hello-binder-client"]
 run = ["python3 -u tests/vm/binder.py"]

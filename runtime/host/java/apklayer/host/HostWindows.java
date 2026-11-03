@@ -277,4 +277,56 @@ final class HostWindows {
         View f = root == null ? null : root.findFocus();
         return f != null && f.onCheckIsTextEditor() ? f : null;
     }
+
+    /** -Dapklayer.traceroots=true: once a second, the state of every window's ViewRootImpl (why does a window not draw?). */
+    static void traceRoots() {
+        java.util.List<?> roots;
+        try {
+            java.lang.reflect.Field rf = android.view.WindowManagerGlobal.class.getDeclaredField("mRoots");
+            rf.setAccessible(true);
+            roots = new ArrayList<>((java.util.List<?>) rf.get(android.view.WindowManagerGlobal.getInstance()));
+        } catch (Throwable e) {
+            System.out.println("[apklayer] root trace failed: " + e);
+            return;
+        }
+        if (roots.isEmpty()) System.out.println("[apklayer] root: no windows");
+        for (Object o : roots) {
+            try {
+                android.view.ViewRootImpl root = (android.view.ViewRootImpl) o;
+                StringBuilder sb = new StringBuilder("[apklayer] root:");
+                for (String f : new String[] {"mFirst", "mAdded", "mTraversalScheduled", "mWillDrawSoon", "mStopped", "mIsDrawing", "mLayoutRequested", "mRelayoutRequested"}) {
+                    java.lang.reflect.Field fld = android.view.ViewRootImpl.class.getDeclaredField(f);
+                    fld.setAccessible(true);
+                    sb.append(' ').append(f).append('=').append(fld.get(root));
+                }
+                java.lang.reflect.Field sf = android.view.ViewRootImpl.class.getDeclaredField("mSurface");
+                sf.setAccessible(true);
+                System.out.println(sb + " surfaceValid=" + ((android.view.Surface) sf.get(root)).isValid() + " visibility=" + root.getView().getVisibility()
+                        + " nextVsync=" + ShadowChoreographer.getNextVsyncTime());
+            } catch (Throwable e) {
+                System.out.println("[apklayer] root trace failed: " + e);
+            }
+        }
+    }
+
+    /** A translucent or floating activity (dialog-style): the one below it stays paused and visible. */
+    static boolean isTranslucent(Activity activity) {
+        TypedArray a = activity.getTheme().obtainStyledAttributes(
+                new int[] {android.R.attr.windowIsTranslucent, android.R.attr.windowIsFloating});
+        try {
+            return a.getBoolean(0, false) || a.getBoolean(1, false);
+        } finally {
+            a.recycle();
+        }
+    }
+
+    /** ViewRootImpl#windowFocusChanged and the top-resumed state, as the window manager reports them for the top window. */
+    static void focus(org.robolectric.android.controller.ActivityController<? extends Activity> c, boolean has) {
+        View decor = c.get().getWindow().getDecorView();
+        if (decor.hasWindowFocus() == has) return;
+        List<android.view.ViewRootImpl> roots = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mRoots");
+        for (android.view.ViewRootImpl root : roots) // the decor may not be attached yet (its first traversal waits for vsync)
+            if (root.getView() == decor) root.windowFocusChanged(has);
+        c.topActivityResumed(has);
+    }
 }

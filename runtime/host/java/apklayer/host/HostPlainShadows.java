@@ -10,4 +10,6 @@ final class HostPlainShadows {
     @Implements(className = "android.provider.Settings$Secure", isInAndroidSdk = false) public static final class SettingsSecure {}
     @Implements(className = "android.provider.Settings$Global", isInAndroidSdk = false) public static final class SettingsGlobal {}
     @Implements(className = "android.provider.Settings$Config", isInAndroidSdk = false) public static final class SettingsConfig {}
+    /** The framework's AccountManager over the instance's account service in the hub (HubAccounts), instead of Robolectric's per-JVM store. */
+    @Implements(className = "android.accounts.AccountManager", isInAndroidSdk = false) public static final class AccountManager {}
 }

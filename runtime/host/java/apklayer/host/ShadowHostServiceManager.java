@@ -20,9 +20,14 @@ import org.robolectric.util.ReflectionHelpers;
 public class ShadowHostServiceManager extends ShadowServiceManager {
     private static final Set<IBinder> wrapped = ConcurrentHashMap.newKeySet();
 
-    @Implementation protected static IBinder getService(String name) { return report(name, ShadowServiceManager.getService(name)); }
-    @Implementation protected static IBinder checkService(String name) { return report(name, ShadowServiceManager.checkService(name)); }
-    @Implementation protected static IBinder waitForService(String name) throws InterruptedException { return report(name, ShadowServiceManager.waitForService(name)); }
+    @Implementation protected static IBinder getService(String name) { IBinder hub = hub(name); return hub != null ? hub : report(name, ShadowServiceManager.getService(name)); }
+    @Implementation protected static IBinder checkService(String name) { IBinder hub = hub(name); return hub != null ? hub : report(name, ShadowServiceManager.checkService(name)); }
+    @Implementation protected static IBinder waitForService(String name) throws InterruptedException { IBinder hub = hub(name); return hub != null ? hub : report(name, ShadowServiceManager.waitForService(name)); }
+
+    /** System services the instance hub serves for every app: "account" (HubAccounts). Null for the others, or when no hub is running. */
+    private static IBinder hub(String name) {
+        return android.content.Context.ACCOUNT_SERVICE.equals(name) ? RealBinder.lookup(HubAccounts.SERVICE) : null;
+    }
 
     private static IBinder report(String name, IBinder binder) {
         if (binder == null || wrapped.contains(binder)) return binder;
