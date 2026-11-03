@@ -105,7 +105,11 @@ std::vector<std::string> hostJvmArgs(const Layout& l, const Instance& inst, Nati
     const std::string& n = l.native;
     std::string nr = join(n, "android-root");
     makeDirs(inst.tmpDir());
-    std::vector<std::string> a = {ne.java, "-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC", "@" + join(l.root, "runtime/host/jvm.args"), "-Drobolectric.offline=true",
+    std::vector<std::string> a = {ne.java, "-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC",
+                                  // a JVM defines ~5400 framework classes at start: with the default 32K buckets the symbol lookups of their constant pools
+                                  // take about half of the class definition time (perf: SymbolTable::do_lookup), the table grows only later
+                                  "-XX:+UnlockExperimentalVMOptions", "-XX:SymbolTableSize=262144",
+                                  "@" + join(l.root, "runtime/host/jvm.args"), "-Drobolectric.offline=true",
                                   "-Drobolectric.dependency.dir=" + frameworkDependencyDir(l), "-Dapklayer.native=" + n, "-Dapklayer.androidlibs=" + join(n, "android-libs"),
                                   "-Drobolectric.windowManager.useRequestedSize=true",
                                   "-Drobolectric.allowPlatformPermissions=true",  // system apps (ContactsProvider...) declare platform permissions of their own
