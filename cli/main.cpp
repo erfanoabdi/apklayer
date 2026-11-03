@@ -11,7 +11,8 @@ using namespace apklayer;
 namespace {
 int usage() {
     fputs("usage: apklayer [--instance ID] <command>\n"
-          "  install <app.apk>      convert + describe + install (menu entry, icon, .apk handler)\n"
+          "  install [-d] <app.apk> [split.apk...]  convert + describe + install (menu entry, icon, .apk handler); also .apks/.xapk/.apkm;\n"
+          "                         an update keeps the data, needs the same signer and a version no lower (-d: allow a downgrade)\n"
           "  run <package|app.apk>  run an installed app (an .apk path is installed first)\n"
           "  list [--tsv]           installed apps (--tsv: package, label, version, dir, uid, running in this instance)\n"
           "  info <package>         the app's description, sizes and directories (key<TAB>value)\n"
@@ -39,10 +40,15 @@ int main(int argc, char** argv) {
     Instance inst = Instance::open(layout, id);
     const std::string& cmd = args[0];
     size_t n = args.size();
-    if (cmd == "install" && n == 2) { installApp(layout, inst, args[1]); return 0; }
+    if (cmd == "install" && n >= 2) {
+        bool downgrade = args[1] == "-d";
+        if (n == 2 && downgrade) return usage();
+        installApp(layout, inst, std::vector<std::string>(args.begin() + 1 + downgrade, args.end()), downgrade);
+        return 0;
+    }
     if (cmd == "run" && n == 2) {
         std::string target = args[1];
-        if (exists(target)) target = installApp(layout, inst, target);
+        if (exists(target)) target = installApp(layout, inst, {target});
         return runApp(layout, inst, target, RunMode::App);
     }
     if (cmd == "component-host" && n == 2) return runApp(layout, inst, args[1], RunMode::Component);

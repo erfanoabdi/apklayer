@@ -60,6 +60,7 @@ final class AppMetadata {
             for (int i = 0; i < filters.size(); i++) info.setProperty("filter." + i, filters.get(i).encode()); // for cross-app intents (PLAN P6)
             android.content.pm.ProviderInfo[] providers = pm.getPackageInfo(app.getPackageName(), PackageManager.GET_PROVIDERS).providers;
             info.setProperty("authorities", providers == null ? "" : String.join(";", java.util.Arrays.stream(providers).map(p -> p.authority).filter(java.util.Objects::nonNull).toList()));  // read at launch before the manifest is parsed (AppEnvironment)
+            signer(info, dir, app.getPackageName());
             Files.createDirectories(dir);
             try (Writer out = Files.newBufferedWriter(dir.resolve("info.properties"))) {
                 info.store(out, "apklayer install metadata");
@@ -79,6 +80,25 @@ final class AppMetadata {
         } catch (IOException | PackageManager.NameNotFoundException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * The signer of the new package (its base and every split, as PackageManagerService requires) and, on an update, whether the installed one has another
+     * (signerMismatch: install refuses it). shortcut: an unsigned APK (the test apps) has signer "" and updates an unsigned install; Android refuses
+     * unsigned APKs outright, refuse them too if anything but the test apps ever comes unsigned.
+     */
+    private static void signer(Properties info, Path dir, String pkg) throws IOException {
+        String signer = HostCertificate.digest(dir.resolve("base.apk").toFile());
+        try (var files = Files.list(dir)) {
+            for (Path split : files.filter(f -> f.getFileName().toString().matches("split_.*\\.apk")).sorted().toList()) {
+                if (!HostCertificate.digest(split.toFile()).equals(signer)) throw new IOException(split.getFileName() + " is not signed like base.apk");
+                info.setProperty("splits", (info.getProperty("splits", "").isEmpty() ? "" : info.getProperty("splits") + ",") + split.getFileName().toString().replaceAll("^split_|\\.apk$", ""));
+            }
+        }
+        info.setProperty("signer", signer);
+        String apps = System.getProperty("apklayer.apps");
+        java.io.File installed = apps == null ? null : Path.of(apps, pkg, "base.apk").toFile();
+        if (installed != null && installed.isFile() && !HostCertificate.digest(installed).equals(signer)) info.setProperty("signerMismatch", "true");
     }
 
     private AppMetadata() {}

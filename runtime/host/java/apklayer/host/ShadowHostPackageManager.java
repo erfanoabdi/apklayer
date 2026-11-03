@@ -44,6 +44,10 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
         catch (PackageManager.NameNotFoundException unknown) { if (!registerInstalled(packageName)) throw unknown; return super.getPackageUid(packageName, flags); }
     }
 
+    /** Whether the app may ask to install packages: it requests REQUEST_INSTALL_PACKAGES and the person allowed it as a source (HubInstaller), as AppOps answers on Android. */
+    @Implementation(minSdk = android.os.Build.VERSION_CODES.O)
+    protected boolean canRequestPackageInstalls() { return HubClient.connected() && HubClient.current().installSource(false); }
+
     /** The features the build declares, as a list (Robolectric answers null while its own list is empty; apps read .length). */
     @Implementation
     protected android.content.pm.FeatureInfo[] getSystemAvailableFeatures() {
@@ -56,6 +60,7 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
     private android.content.pm.PackageInfo signed(android.content.pm.PackageInfo info, long flags) {
         if (info == null) return null;
         installedPaths(info.applicationInfo);
+        if (info.splitNames == null && info.applicationInfo != null) info.splitNames = info.applicationInfo.splitNames;
         android.content.pm.Signature[] signatures = HostCertificate.of(info.packageName);
         android.content.pm.Signature fake = fakeSignature(info.packageName);
         if (fake != null) signatures = new android.content.pm.Signature[] {fake};
@@ -80,12 +85,21 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
     }
 
     /** Where an installed app's APK and libraries are (Robolectric leaves them null, Chromium's crash reporter builds file paths from them in Application.onCreate). */
-    private static void installedPaths(android.content.pm.ApplicationInfo app) {
+    static void installedPaths(android.content.pm.ApplicationInfo app) {
         String apps = System.getProperty("apklayer.apps");
-        if (app == null || apps == null || app.sourceDir != null) return;
+        if (app == null || apps == null) return;
         java.io.File dir = new java.io.File(apps, app.packageName);
         java.io.File apk = new java.io.File(dir, "base.apk");
         if (!apk.isFile()) return;
+        if (app.splitNames == null) {  // the installed splits (split_<name>.apk), as PackageManagerService records them: LoadedApk adds their resources
+            java.io.File[] splits = dir.listFiles((d, name) -> name.startsWith("split_") && name.endsWith(".apk"));
+            if (splits != null && splits.length > 0) {
+                java.util.Arrays.sort(splits);
+                app.splitNames = java.util.Arrays.stream(splits).map(f -> f.getName().substring(6, f.getName().length() - 4)).toArray(String[]::new);
+                app.splitSourceDirs = app.splitPublicSourceDirs = java.util.Arrays.stream(splits).map(java.io.File::getPath).toArray(String[]::new);
+            }
+        }
+        if (app.sourceDir != null) return;
         app.sourceDir = app.publicSourceDir = apk.getPath();
         if (app.nativeLibraryDir == null) app.nativeLibraryDir = new java.io.File(dir, "lib").getPath();
     }
