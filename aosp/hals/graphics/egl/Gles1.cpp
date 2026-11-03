@@ -40,7 +40,11 @@ struct Translator {  // libapklayer-gles1.so's C interface
 const Translator* translator() {
     static Translator t = [] {
         Translator r{};
-        void* lib = dlopen("libapklayer-gles1.so", RTLD_NOW);  // glibc library from the native dir (bionic_translation's glibc fallback)
+        // a glibc library from the native dir, opened by glibc: app processes have that dir on the bionic search path (NativeLoader), where
+        // bionic_translation's dlopen links it as an Android library and fails. dlmopen, because bionic_translation's dlsym hands out its
+        // own bionic_dlopen for "dlopen" even from glibc's handle
+        static auto hostDlmopen = reinterpret_cast<void* (*)(long, const char*, int)>(dlsym(dlopen("libc.so.6", RTLD_NOW), "dlmopen"));
+        void* lib = hostDlmopen ? hostDlmopen(0 /* LM_ID_BASE */, "libapklayer-gles1.so", RTLD_NOW) : nullptr;
         if (!lib) { ALOGW("no libapklayer-gles1.so (tools/build gles1): no OpenGL ES 1 on this host"); return r; }
         r.create = reinterpret_cast<void* (*)(void*)>(dlsym(lib, "apklayer_gles1_create"));
         r.makeCurrent = reinterpret_cast<void (*)(void*)>(dlsym(lib, "apklayer_gles1_make_current"));
