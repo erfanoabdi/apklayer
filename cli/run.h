@@ -9,5 +9,7 @@ enum class RunMode { App, Component };
 int runApp(const Layout& layout, const Instance& instance, const std::string& package, RunMode mode);
 int waitHub(const Layout& layout, const Instance& instance);
 int runHub(const Layout& layout, const Instance& instance);
+// PNG of what SurfaceFlinger shows on an app window (by package or layer stack); 0 when the file was written.
+int screenshot(const Layout& layout, const Instance& instance, const std::string& target, std::string out);
 
 }  // namespace apklayer

@@ -60,7 +60,7 @@ public final class VerifyInstall {
             }
         }
 
-        // DenyInstrument moves an app's copy of a host library (and its own java.* classes) under apklayer/relocated/
+        // DenyInstrument moves an app's own java.* classes under apklayer/relocated/ (apps keep their library copies: they have their own class loader)
         List<String> missing = new ArrayList<>();
         for (String c : dexClasses) if (!jarClasses.contains(c) && !jarClasses.contains("apklayer/relocated/" + c)) missing.add(c);
         if (!missing.isEmpty()) problems.add(missing.size() + " of " + dexClasses.size() + " DEX classes are not in the jar (see convert.log for those dex2jvm could not translate): "
@@ -81,7 +81,7 @@ public final class VerifyInstall {
                         String provider = line.replaceAll("#.*", "").trim();
                         if (provider.isEmpty()) continue;
                         providers++;
-                        // a provider the DEX files define is covered by the class check (relocated: the host's copy answers the name); one they lack is missing on a device too
+                        // a provider the DEX files define is covered by the class check; one they lack is missing on a device too
                         if (!dexClasses.contains(provider.replace('.', '/'))) System.out.println("[apklayer] verify: note: service provider " + provider + " (" + n + ") is not in the APK");
                     }
                 }

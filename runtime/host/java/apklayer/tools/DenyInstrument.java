@@ -22,8 +22,8 @@ import java.util.jar.JarOutputStream;
  * lowering (<init> -> __constructor__) collides with Robolectric's own <init> renaming
  * (VerifyError). App classes don't need shadow dispatch — only the framework does.
  *
- * Also relocates an app's bundled Guava into a private package: an older or shrunk copy would
- * otherwise mix with the host's Guava 33 in the same class loader (NoSuchMethodError).
+ * Classes an app defines in a java.* package are moved to a private package (the JVM defines java.* only in the boot loader). An app's
+ * own copies of libraries the host runs too (Guava, BouncyCastle) need nothing: the app has a class loader of its own (apklayer.host.AppClassLoader).
  *
  * Routes the app's startService/stopService/bindService/unbindService calls to
  * apklayer.host.Services, which runs the app's own services in-process.
@@ -35,31 +35,15 @@ import java.util.jar.JarOutputStream;
 public final class DenyInstrument {
     private static final String ANNO = "Lorg/robolectric/annotation/internal/DoNotInstrument;";
 
-    /** Libraries the host itself runs (Guava 33) whose app copy is relocated. */
-    private static final String[][] LIBRARIES = {
-        {"com/google/common/", "com/google/thirdparty/"},
-        {"org/bouncycastle/"}};
-    // BouncyCastle (an R8-shrunk app copy mixed with the host's complete one fails: Aegis, Strings.toLowerCase) is relocated too; it names its provider classes in strings, which
-    // the remapper follows (mapValue below)
-    private static final java.util.List<String> RELOCATED = new java.util.ArrayList<>(); // active prefixes
     private static final String RELOCATED_TO = "apklayer/relocated/";
     // classes an app defines in a java.* package (WhatsApp's java.lang.RunnableEBaseShape*): the JVM refuses to define them outside the boot loader
     private static final java.util.Set<String> JAVA_OWN = new java.util.HashSet<>();
 
-    /** Maps the bundled Guava's internal names into the private package. */
+    /** Maps the app's own java.* classes into the private package. */
     private static final Remapper RELOCATOR = new Remapper() {
         @Override
-        public Object mapValue(Object value) {
-            if (value instanceof String str && str.startsWith("org.bouncycastle.") && RELOCATED.contains("org/bouncycastle/")) return "apklayer.relocated." + str;
-            return super.mapValue(value);
-        }
-        @Override
         public String map(String name) {
-            if (JAVA_OWN.contains(name)) return RELOCATED_TO + name;
-            for (String prefix : RELOCATED) {
-                if (name.startsWith(prefix)) return RELOCATED_TO + name;
-            }
-            return name;
+            return JAVA_OWN.contains(name) ? RELOCATED_TO + name : name;
         }
     };
 
@@ -95,25 +79,6 @@ public final class DenyInstrument {
         catch (RuntimeException malformed) { return null; }
     }
 
-    private static boolean nativeNamesGuava(String apk) throws java.io.IOException {
-        byte[] needle = "com/google/common/util/concurrent/".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
-        try (JarFile jar = new JarFile(apk)) {
-            for (JarEntry e : Collections.list(jar.entries())) {
-                if (!e.getName().endsWith(".so")) continue;
-                try (InputStream is = jar.getInputStream(e)) {
-                    byte[] data = is.readAllBytes();
-                    outer:
-                    for (int i = 0; i + needle.length <= data.length; i++) {
-                        if (data[i] != needle[0]) continue;
-                        for (int j = 1; j < needle.length; j++) if (data[i + j] != needle[j]) continue outer;
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
     public static void main(String[] args) throws Exception {
         try (JarFile scan = new JarFile(args[0])) {
             for (JarEntry e : Collections.list(scan.entries())) {
@@ -134,19 +99,12 @@ public final class DenyInstrument {
             }
         }
         try (JarFile probe = new JarFile(args[0])) {
-            for (String[] library : LIBRARIES) {
-                boolean bundled = Collections.list(probe.entries()).stream()
-                        .anyMatch(en -> en.getName().startsWith(library[0]));
-                if (bundled) RELOCATED.addAll(java.util.Arrays.asList(library));
-            }
             for (JarEntry e : Collections.list(probe.entries())) {
                 String n = e.getName();
                 if (n.startsWith("java/") && n.endsWith(".class") && ClassLoader.getPlatformClassLoader().getResource(n) == null) JAVA_OWN.add(n.substring(0, n.length() - 6));
             }
         }
-        // an app whose native libraries name Guava classes in JNI signatures (Meet's TaclFutureCallback.attachToFuture) keeps them unrelocated: relocation would break the lookup
-        if (args.length > 2 && nativeNamesGuava(args[2])) { RELOCATED.remove("com/google/common/"); RELOCATED.remove("com/google/thirdparty/"); }
-        boolean relocate = !RELOCATED.isEmpty() || !JAVA_OWN.isEmpty();
+        boolean relocate = !JAVA_OWN.isEmpty();
         try (JarFile in = new JarFile(args[0]);
              JarOutputStream out = new JarOutputStream(
                      new BufferedOutputStream(new FileOutputStream(args[1])))) {
@@ -255,7 +213,7 @@ public final class DenyInstrument {
                 count++;
             }
             System.out.println("[apklayer] DoNotInstrument stamped on " + count + " classes"
-                    + (relocate ? " (relocated " + RELOCATED + ")" : ""));
+                    + (relocate ? " (" + JAVA_OWN.size() + " java.* classes relocated)" : ""));
         }
     }
 }

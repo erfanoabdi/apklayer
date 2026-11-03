@@ -87,7 +87,7 @@ public final class AppHost implements Runnable {
 
     @Override
     public void run() {
-        Thread.currentThread().setContextClassLoader(sandbox.getRobolectricClassLoader());
+        Thread.currentThread().setContextClassLoader(AppClassLoader.app != null ? AppClassLoader.app : sandbox.getRobolectricClassLoader());  // the app's own loader, as on Android
         StartTrace.mark("apphost run");
         AppEnvironment.setUpApplication(sandbox, apk, describe != null);
         StartTrace.mark("application set up");
