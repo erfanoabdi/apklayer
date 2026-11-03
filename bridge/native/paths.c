@@ -16,24 +16,34 @@ static const char *const prefixes[] = {
     "/system/", "/vendor/", "/product/", "/system_ext/", "/odm/", "/apex/", "/data/", "/etc/", "/linkerconfig/", NULL,
 };
 
-static const char *root(void)
+/* The environment is read once, when this library loads: the path layer runs inside every stat/open, also while another thread's setenv
+ * (GeckoView's mozglue sets variables from its own threads) reallocates environ, and a getenv walking the freed array crashed the JVM. */
+static char root_buf[PATH_MAX];
+static const char *inst_env, *own_env, *storage_env = "", *data_env = "";
+static int debug_env;
+
+static const char *copy_env(const char *name, const char *fallback) { const char *v = getenv(name); return v ? strdup(v) : fallback; }
+
+__attribute__((constructor)) static void read_env(void)
 {
-    static const char *r;
-    static char buf[PATH_MAX];
-    if (r) return r;
     const char *e = getenv("APKLAYER_ANDROID_ROOT"), *n = getenv("APKLAYER_NATIVE");
-    if (e) snprintf(buf, sizeof buf, "%s", e);
-    else if (n) snprintf(buf, sizeof buf, "%s/android-root", n);
-    else buf[0] = 0;
-    return r = buf;
+    if (e) snprintf(root_buf, sizeof root_buf, "%s", e);
+    else if (n) snprintf(root_buf, sizeof root_buf, "%s/android-root", n);
+    inst_env = copy_env("APKLAYER_INSTANCE", NULL);
+    own_env = copy_env("APKLAYER_INSTANCE_ROOT", NULL);
+    storage_env = copy_env("APKLAYER_STORAGE", "");
+    data_env = copy_env("APKLAYER_DATA", "");
+    debug_env = getenv("APKLAYER_PATHS_DEBUG") != NULL;
 }
+
+static const char *root(void) { return root_buf; }
 
 /* An instance other than "default" has its own binder contexts: /dev/<name> is /dev/binderfs/<name>-<instance>
  * (created by tools/host-setup/binder.sh <instance>), so two instances never share a servicemanager. */
 static bool binder_device(char **path)
 {
     static const char *const names[] = { "binder", "hwbinder", "vndbinder", NULL };
-    const char *inst = getenv("APKLAYER_INSTANCE");
+    const char *inst = inst_env;
     if (!inst || !inst[0] || !strcmp(inst, "default") || strncmp(*path, "/dev/", 5)) return false;
     for (int i = 0; names[i]; i++) {
         if (strcmp(*path + 5, names[i])) continue;
@@ -50,8 +60,7 @@ static bool binder_device(char **path)
 static bool storage_path(char **path)
 {
     static const char *const names[][2] = { { "/storage", "" }, { "/sdcard", "/emulated/0" }, { "/data/media/0", "/emulated/0" } };
-    static const char *storage;
-    if (!storage) storage = getenv("APKLAYER_STORAGE") ? getenv("APKLAYER_STORAGE") : "";
+    const char *storage = storage_env;
     if (!storage[0]) return false;
     for (size_t i = 0; i < sizeof names / sizeof names[0]; i++) {
         size_t n = strlen(names[i][0]);
@@ -68,8 +77,7 @@ static bool storage_path(char **path)
  * never land in the native directory that all instances share. */
 static bool data_path(char **path)
 {
-    static const char *data;
-    if (!data) data = getenv("APKLAYER_DATA") ? getenv("APKLAYER_DATA") : "";
+    const char *data = data_env;
     if (!data[0] || strncmp(*path, "/data", 5) || ((*path)[5] && (*path)[5] != '/')) return false;
     char *mapped;
     if (asprintf(&mapped, "%s%s", data, *path + 5) < 0) return false;
@@ -81,12 +89,10 @@ static bool from_root(const char *r, char **path);
 
 bool apklayer_apply_path_overrides(char **path)
 {
-    static int debug = -1;
-    if (debug < 0) debug = getenv("APKLAYER_PATHS_DEBUG") != NULL;
-    if (debug) fprintf(stderr, "[paths] %s (root %s)\n", *path, root());
+    if (debug_env) fprintf(stderr, "[paths] %s (root %s)\n", *path, root());
     if (binder_device(path) || storage_path(path) || data_path(path)) return true;
     /* what one instance's stack stages for itself (the vintf fragments of the HALs it runs, cli/stack.cpp) comes before the shared root */
-    const char *own = getenv("APKLAYER_INSTANCE_ROOT");
+    const char *own = own_env;
     return (own && own[0] && from_root(own, path)) || from_root(root(), path);
 }
 
