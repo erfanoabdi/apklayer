@@ -43,6 +43,13 @@ public final class NativeLoader {
 
     private static native int registerNative(Class<?> target, String name, String sig, long fn);
 
+    private static native void skipNativeExitHandlers();
+
+    /** The process is about to exit: it ends as Android ends an app process (killed), without the native libraries' static destructors (native_loader.c). */
+    static void endWithoutNativeDestructors() {
+        try { skipNativeExitHandlers(); } catch (LinkageError noShim) { /* no native runtime in this process: a plain exit */ }
+    }
+
     // ---- entry points the converter routes the app's calls to ----
 
     public static String findLibrary(String name) {

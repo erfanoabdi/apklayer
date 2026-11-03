@@ -6,7 +6,9 @@
 #include <link.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 /* bionic_translation (libdl_bio) */
 extern void dl_parse_library_path(const char *path, char *delim);
@@ -87,4 +89,21 @@ JNIEXPORT jint JNICALL Java_apklayer_host_NativeLoader_registerNative(JNIEnv *en
     (*env)->ReleaseStringUTFChars(env, name, n);
     (*env)->ReleaseStringUTFChars(env, sig, s);
     return r;
+}
+
+/* An app process ends the way Android ends it, killed: its native libraries' static destructors and atexit handlers do not run. Under HotSpot they would run on
+ * the VM thread, which is not attached to the JVM (fbjni's destructors abort: "Unable to retrieve jni environment"), while the app's threads still use what they
+ * destroy. Registered last, this handler runs first in exit(): stdio is flushed, then the process ends with the status. */
+static void end_without_native_destructors(int status, void *arg)
+{
+    (void)arg;
+    fflush(NULL);
+    _exit(status);
+}
+
+JNIEXPORT void JNICALL Java_apklayer_host_NativeLoader_skipNativeExitHandlers(JNIEnv *env, jclass c)
+{
+    (void)env;
+    (void)c;
+    on_exit(end_without_native_destructors, NULL);
 }

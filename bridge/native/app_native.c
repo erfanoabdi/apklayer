@@ -11,6 +11,7 @@ extern jlong Java_apklayer_host_NativeLoader_dlsym(JNIEnv *, jclass, jlong, jstr
 extern jstring Java_apklayer_host_NativeLoader_dlerror(JNIEnv *, jclass);
 extern jint Java_apklayer_host_NativeLoader_callOnLoad(JNIEnv *, jclass, jlong, jobject);
 extern jint Java_apklayer_host_NativeLoader_registerNative(JNIEnv *, jclass, jclass, jstring, jstring, jlong);
+extern void Java_apklayer_host_NativeLoader_skipNativeExitHandlers(JNIEnv *, jclass);
 
 int apklayer_register_nativeloader(JNIEnv *env, jclass loader)
 {
@@ -21,6 +22,7 @@ int apklayer_register_nativeloader(JNIEnv *env, jclass loader)
         {"dlerror", "()Ljava/lang/String;", (void *)Java_apklayer_host_NativeLoader_dlerror},
         {"callOnLoad", "(JLjava/lang/ClassLoader;)I", (void *)Java_apklayer_host_NativeLoader_callOnLoad},
         {"registerNative", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/String;J)I", (void *)Java_apklayer_host_NativeLoader_registerNative},
+        {"skipNativeExitHandlers", "()V", (void *)Java_apklayer_host_NativeLoader_skipNativeExitHandlers},
     };
     if ((*env)->RegisterNatives(env, loader, methods, sizeof methods / sizeof *methods) != 0) {
         fprintf(stderr, "[runtime] cannot register the NativeLoader natives\n");
