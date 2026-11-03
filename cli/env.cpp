@@ -5,9 +5,10 @@
 namespace apklayer {
 
 namespace {
-std::string findJava(const Layout&) {
+std::string findJava(const Layout& layout) {
     std::string wanted = getenvOr("APKLAYER_NATIVE_JAVA", "");
     if (!wanted.empty() && isExecutable(wanted)) return wanted;
+    if (isExecutable(join(layout.native, "jdk/bin/java"))) return join(layout.native, "jdk/bin/java");  // scripts/build-host-jdk.sh: java.base with jdk-patch built in
     std::string standard = "/usr/lib/jvm/java-21-openjdk-arm64/bin/java";
     if (isExecutable(standard)) return standard;
     glob_t found{};
@@ -78,7 +79,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     return result;
 }
 
-std::vector<std::string> hostJvmArgs(const Layout& l, const Instance& inst, NativeEnv& ne) {
+std::vector<std::string> hostJvmArgs(const Layout& l, const Instance& inst, NativeEnv& ne, const std::string& archive) {
     const std::string& n = l.native;
     std::string nr = join(n, "android-root");
     makeDirs(inst.tmpDir());
@@ -89,7 +90,16 @@ std::vector<std::string> hostJvmArgs(const Layout& l, const Instance& inst, Nati
                                   // Robolectric extracts ~120 MB of native runtime per JVM: into the instance's state directory (disk), emptied when its stack stops
                                   "-Djava.io.tmpdir=" + inst.tmpDir(),
                                   "-Dapklayer.storage=" + inst.storageDir};  // volumes: Internal storage (emulated/0 below), Home, Linux root
-    if (isDir(join(n, "jdk-patch"))) { a.push_back("--patch-module"); a.push_back("java.base=" + join(n, "jdk-patch")); }  // libcore-only members Android's natives look up
+    if (ne.java == join(n, "jdk/bin/java")) {
+        // the JDK already carries jdk-patch, so class data sharing works: the classes this JVM loads (the sandbox's too) are kept in an archive of its own,
+        // written at the first exit and rewritten whenever the classpath changed (JDK 19+)
+        if (!archive.empty()) {
+            makeDirs(join(inst.stateDir, "cds"));
+            a.insert(a.begin() + 1, {"-XX:SharedArchiveFile=" + join(inst.stateDir, "cds/" + archive + ".jsa"), "-XX:+AutoCreateSharedArchive"});
+        }
+    } else if (isDir(join(n, "jdk-patch"))) {
+        a.push_back("--patch-module"); a.push_back("java.base=" + join(n, "jdk-patch"));  // libcore-only members Android's natives look up (switches class data sharing off)
+    }
     if (isDir(join(nr, "system/fonts"))) a.push_back("-Drobolectric.nativeruntime.fontdir=" + join(nr, "system/fonts/"));
     std::string res = join(nr, "system/framework/org.lineageos.platform-res.apk");
     if (exists(res)) a.push_back("-Dapklayer.platformres=" + res);

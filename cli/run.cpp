@@ -38,8 +38,18 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     if (!ensureStack(l, inst)) return 1;
     trace("stack ready");
     ensureShell(l, inst, ne);
+    if (mode == RunMode::App) {
+        // the hub's JVM boots alongside the app's instead of after its Application.onCreate (HubStartup then finds it); an `apklayer hub` that finds
+        // hub.lock taken (the hub is up) returns at once
+        Spawn hub;
+        hub.argv = {l.cliBinary(), "--instance", inst.id, "hub"};
+        hub.env = ne.env;
+        hub.logFile = join(inst.logs(), "hub.log");
+        hub.detach = true;
+        spawn(hub);
+    }
 
-    std::vector<std::string> jvm = hostJvmArgs(l, inst, ne);
+    std::vector<std::string> jvm = hostJvmArgs(l, inst, ne, package + (mode == RunMode::Component ? ".component" : ""));
     int vdisplay = 0;
     int self = getpid();
     // one virtual display per app window (its own layer stack and sink per launch); pid-based ids cannot collide, and the title identifies instance and
@@ -153,7 +163,7 @@ int runHub(const Layout& l, const Instance& inst) {
     NativeEnv ne = nativeEnv(l, inst);
     trace("hub start");
     if (!ensureStack(l, inst)) return 1;
-    std::vector<std::string> jvm = hostJvmArgs(l, inst, ne);
+    std::vector<std::string> jvm = hostJvmArgs(l, inst, ne, "hub");
     jvm.insert(jvm.end(), {"-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary(), "-cp", hostClasspath(l, ""), "apklayer.host.Main", "--hub"});
     Spawn hub;
     hub.argv = jvm;
