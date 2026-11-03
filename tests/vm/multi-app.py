@@ -113,7 +113,10 @@ try:
     final_size = re.findall(r'configure (\d+x\d+)', '\n'.join(lines[survivor]))[-1]
     assert final_size in shell, 'survivor produced no frame after its neighbor closed'
     assert all(any('active=true' in s for s in lines[p]) for p in PACKAGES), 'focus never reached both apps'
-    assert 'resumed' in '\n'.join(sum(lines.values(), [])), 'focus restore was not delivered'
+    def refocused(log):  # inactive windows stay resumed (Android multi-window): focus coming back shows as the window turning active again
+        text = '\n'.join(log)
+        return 'active=false' in text and 'active=true' in text[text.index('active=false'):]
+    assert any(refocused(lines[p]) for p in PACKAGES), 'focus restore was not delivered'
     print('PASS two app JVMs, distinct displays, focus/close/resize, one shared stack', flush=True)
 finally:
     stop()

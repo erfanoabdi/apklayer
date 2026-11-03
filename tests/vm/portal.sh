@@ -3,6 +3,9 @@
 # org.freedesktop.impl.portal.Request.Close on this request's handle: no key to the shared desktop's focus), the app gets RESULT_CANCELED.
 # On the VM, in the group's instance (tests/run portal): APKLAYER_INSTANCE, APKLY_STATE (its logs) and the test apps installed by the runner.
 : "${APKLY_STATE:=${XDG_STATE_HOME:-$HOME/.local/state}/apklayer/${APKLAYER_INSTANCE:-default}}"
+# the portal is the fallback when no installed app handles a document picker: a data home without DocumentsUI, holding only the test app
+export XDG_DATA_HOME="$APKLY_STATE/portal-data"
+bin/apklayer install .tests/apks/hello-portal.apk 2>&1 | grep -aq installed || { echo "install hello-portal failed"; exit 1; }
 out=$APKLY_STATE/portal.out
 backends=$(gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.ListNames | grep -o "org\.freedesktop\.impl\.portal\.desktop\.[a-z]*")
 bin/apklayer stop >/dev/null 2>&1

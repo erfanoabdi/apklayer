@@ -137,7 +137,6 @@ apps = ["hello-portal"]
 run = ["tests/vm/portal.sh"]
 
 [codec2]
-setup = ["rm -f ${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/vendor/etc/vintf/manifest/apklayer-*.xml"]
 alone = true
 run = ["tests/vm/codec2.sh"]
 
@@ -160,23 +159,19 @@ alone = true
 run = ["python3 -u tests/vm/native-player.py"]
 
 [native-audio]
-setup = ["rm -f ${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/vendor/etc/vintf/manifest/apklayer-*.xml"]
 apps = ["hello-native-audio"]
 alone = true
 run = ["python3 -u tests/vm/native-audio.py"]
 
 [audio-aidl]
-setup = ["rm -f ${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/vendor/etc/vintf/manifest/apklayer-*.xml"]
 alone = true
 run = ["tests/vm/audio-host.sh aidl"]
 
 [audio-track]
-setup = ["rm -f ${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/vendor/etc/vintf/manifest/apklayer-*.xml"]
 alone = true
 run = ["tests/vm/audio-host.sh system"]
 
 [audio-system]
-setup = ["rm -f ${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/vendor/etc/vintf/manifest/apklayer-*.xml"]
 alone = true
 run = ["tests/vm/audio-system.sh"]
 
@@ -189,3 +184,8 @@ run = ["python3 -u tests/vm/otr2-run.py"]
 optional = true
 alone = true
 mac = ["python3 tests/corpus/run.py"]
+
+[fennec]
+optional = true  # its page-text check fails on virgl hosts (ints set in shader branches come back as NaN: tests/vm/gles-int-branch.c)
+needs = ["org.mozilla.fennec_fdroid"]
+run = ["tests/vm/fennec.sh"]
