@@ -6,10 +6,13 @@
 #include <link.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 /* bionic_translation (libdl_bio) */
 extern void dl_parse_library_path(const char *path, char *delim);
+extern void dl_parse_app_library_path(const char *path, char *delim);
 extern void *bionic_dlopen(const char *filename, int flag);
 extern void *bionic_dlsym(void *handle, const char *symbol);
 extern char *bionic_dlerror(void);
@@ -22,13 +25,14 @@ __attribute__((constructor)) static void init_r_debug(void)
     _r_debug_ptr = &_r_debug;
 }
 
-JNIEXPORT void JNICALL Java_apklayer_host_NativeLoader_setLibraryPath(JNIEnv *env, jclass c, jstring dir)
+JNIEXPORT void JNICALL Java_apklayer_host_NativeLoader_setLibraryPath(JNIEnv *env, jclass c, jstring system, jstring app)
 {
     (void)c;
-    const char *d = (*env)->GetStringUTFChars(env, dir, NULL);
-    dl_parse_library_path(d, ":");
-    (void)c;
-    (*env)->ReleaseStringUTFChars(env, dir, d);
+    const char *s = (*env)->GetStringUTFChars(env, system, NULL), *a = (*env)->GetStringUTFChars(env, app, NULL);
+    dl_parse_library_path(s, ":");
+    dl_parse_app_library_path(a, ":");
+    (*env)->ReleaseStringUTFChars(env, system, s);
+    (*env)->ReleaseStringUTFChars(env, app, a);
 }
 
 JNIEXPORT jlong JNICALL Java_apklayer_host_NativeLoader_dlopen(JNIEnv *env, jclass c, jstring path)
@@ -56,14 +60,21 @@ JNIEXPORT jstring JNICALL Java_apklayer_host_NativeLoader_dlerror(JNIEnv *env, j
     return e ? (*env)->NewStringUTF(env, e) : NULL;
 }
 
+/* The loader FindClass answers through on this thread while a library's JNI_OnLoad runs (runtime_shim.c): the one that loads the library, as ART does. */
+__thread jobject apklayer_onload_loader;
+
 /* Calls the library's JNI_OnLoad(JavaVM*, void*): returns its JNI version, or -1. */
-JNIEXPORT jint JNICALL Java_apklayer_host_NativeLoader_callOnLoad(JNIEnv *env, jclass c, jlong fn)
+JNIEXPORT jint JNICALL Java_apklayer_host_NativeLoader_callOnLoad(JNIEnv *env, jclass c, jlong fn, jobject loader)
 {
     (void)c;
     JavaVM *vm;
     if ((*env)->GetJavaVM(env, &vm) != JNI_OK) return -1;
     jint (*on_load)(JavaVM *, void *) = (jint (*)(JavaVM *, void *))(intptr_t)fn;
-    return on_load(vm, NULL);
+    jobject outer = apklayer_onload_loader;  /* a JNI_OnLoad that loads another library */
+    apklayer_onload_loader = loader;
+    jint version = on_load(vm, NULL);
+    apklayer_onload_loader = outer;
+    return version;
 }
 
 /* Binds one native method to a function found by name (JNI naming convention). */
@@ -78,4 +89,21 @@ JNIEXPORT jint JNICALL Java_apklayer_host_NativeLoader_registerNative(JNIEnv *en
     (*env)->ReleaseStringUTFChars(env, name, n);
     (*env)->ReleaseStringUTFChars(env, sig, s);
     return r;
+}
+
+/* An app process ends the way Android ends it, killed: its native libraries' static destructors and atexit handlers do not run. Under HotSpot they would run on
+ * the VM thread, which is not attached to the JVM (fbjni's destructors abort: "Unable to retrieve jni environment"), while the app's threads still use what they
+ * destroy. Registered last, this handler runs first in exit(): stdio is flushed, then the process ends with the status. */
+static void end_without_native_destructors(int status, void *arg)
+{
+    (void)arg;
+    fflush(NULL);
+    _exit(status);
+}
+
+JNIEXPORT void JNICALL Java_apklayer_host_NativeLoader_skipNativeExitHandlers(JNIEnv *env, jclass c)
+{
+    (void)env;
+    (void)c;
+    on_exit(end_without_native_destructors, NULL);
 }

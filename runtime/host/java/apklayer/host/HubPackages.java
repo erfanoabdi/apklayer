@@ -164,7 +164,7 @@ final class HubPackages {
 
     private Map<String, PermissionInfo> framework;
 
-    /** The framework's permission definitions (name, base protection level), generated from the tree's manifest (scripts/gen-framework-permissions.py). */
+    /** The framework's permission definitions (name, base protection level), generated from the tree's manifest (tools/gen/framework-permissions.py). */
     private synchronized PermissionInfo frameworkPermission(String name) {
         if (framework == null) {
             framework = new HashMap<>();

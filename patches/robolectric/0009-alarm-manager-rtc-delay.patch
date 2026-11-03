@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: apklayer <apklayer@localhost>
+Subject: [PATCH] ShadowAlarmManager: an RTC alarm's delay from the wall clock
+
+apklayer patch: schedule() (auto schedule) subtracted elapsed realtime from a wall-clock trigger time, so an RTC alarm waited for
+years; RTC and RTC_WAKEUP now take the delay from System.currentTimeMillis().
+
+Against external/robolectric 87aa52b08 (REVISION). Applied by scripts/build-runtime-overlay.sh onto the staged
+upstream sources (<native>/aosp/robolectric-src); the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
+---
+diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowAlarmManager.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowAlarmManager.java
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowAlarmManager.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowAlarmManager.java
+@@ -710,7 +710,9 @@
+ 
+     InternalScheduledAlarm schedule() {
+       if (autoSchedule) {
+-        schedulingHandler.postDelayed(this, triggerAtTime - SystemClock.elapsedRealtime());
++        // apklayer patch: an RTC alarm's time is a wall-clock time, not elapsed realtime (its delay was years, it never fired)
++        long now = type == AlarmManager.RTC || type == AlarmManager.RTC_WAKEUP ? System.currentTimeMillis() : SystemClock.elapsedRealtime();
++        schedulingHandler.postDelayed(this, triggerAtTime - now);
+       }
+       return this;
+     }

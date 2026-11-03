@@ -12,6 +12,6 @@ void uninstallApp(const Layout& layout, const std::string& package);
 std::string appDir(const Layout& layout, const std::string& package);
 void ensureUid(const Layout& layout, const std::string& dir);
 // The classpath of a JVM running the host: the staged runtime, host classes, the tree's Robolectric, then the converter.
-std::string hostClasspath(const Layout& layout, const std::string& appClasses);
+std::string hostClasspath(const Layout& layout);
 
 }  // namespace apklayer
