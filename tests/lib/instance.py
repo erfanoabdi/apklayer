@@ -65,7 +65,8 @@ def capture(name, app=None):
         return image
     env = dict(os.environ, XDG_RUNTIME_DIR=SESSION, DBUS_SESSION_BUS_ADDRESS='unix:path=%s/bus' % SESSION, WAYLAND_DISPLAY='wayland-0',
                XDG_SESSION_TYPE='wayland', XDG_CURRENT_DESKTOP='GNOME')
-    subprocess.run(['flameshot', 'full', '-p', str(image)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    # flameshot can wait forever on GNOME's screenshot portal: a bounded wait, so one stuck capture never stalls a run
+    subprocess.run(['flameshot', 'full', '-p', str(image)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=20)
     print('CAPTURED ' + str(image), flush=True)
     return image
 

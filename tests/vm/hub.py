@@ -88,7 +88,7 @@ try:
                     target = log / 'app-hello.acttarget.log'
                     if TEST == 'activities' and PHASE == 'private' and target.exists():
                         assert 'PRIVATE STARTED' not in target.read_text(errors='replace'), 'private activity started'
-                    if TEST == 'webview': capture('webview')  # what the WebView drew, for a look afterwards
+                    if TEST == 'webview': capture('webview', package)  # what the WebView drew, for a look afterwards
                     print('PASS %s %s' % (TEST, PHASE), flush=True)
                     raise SystemExit(0)
     import hangdump
