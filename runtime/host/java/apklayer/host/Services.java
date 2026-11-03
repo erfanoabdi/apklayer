@@ -135,6 +135,16 @@ public final class Services {
     public static ComponentName startService(Context ctx, Intent intent) {
         ComponentName cn = resolve(ctx, intent);
         if (cn == null) return ctx.startService(intent);
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            // Android's startService returns before onCreate runs: a caller that holds a lock the service's onCreate takes (WorkManager's
+            // Processor starting SystemForegroundService) would otherwise deadlock with the main thread
+            Runnable start = () -> {
+                try { deliver(cn, intent, intent); }
+                catch (ClassNotFoundException e) { System.out.println("[apklayer] service class missing: " + cn); }
+            };
+            new Handler(Looper.getMainLooper()).post(() -> { if (creating) DEFERRED.add(start); else start.run(); });
+            return cn;
+        }
         return onMain(() -> {
             try {
                 deliver(cn, intent, intent);
