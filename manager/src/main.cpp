@@ -1,6 +1,6 @@
 // apklayer-manager: the Slint UI (ui/app.slint) over the apklayer CLI (src/backend.h). The CLI runs on worker threads; results come back to the
 // UI thread with slint::invoke_from_event_loop. Usage: apklayer-manager [--instance ID] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG]
-// [--dialog install|instance|prop|uninstall] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N]] (the screenshot mode: presses the labelled
+// [--dialog install|instance|prop|uninstall] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--expect LABEL]...] (the screenshot mode: presses the labelled
 // elements, waits for N refreshes when asked (the actions' results), renders once, writes the PNG and exits: the tests' view and input).
 #include <png.h>
 
@@ -275,7 +275,7 @@ int main(int argc, char** argv) {
     Cli cli(Cli::locate());
     if (const char* id = getenv("APKLAYER_INSTANCE"); id && *id) cli.instance = id;
     std::string shot, app, dialog;
-    std::vector<std::string> input;
+    std::vector<std::string> input, expect;
     int width = 0, height = 0, page = 0, dark = -1, waitRefreshes = 0, refreshes = 0;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
@@ -289,7 +289,8 @@ int main(int argc, char** argv) {
         else if (a == "--dark" || a == "--light") dark = a == "--dark";
         else if ((a == "--click" || a == "--type") && more) input.push_back(argv[++i]);
         else if (a == "--wait-refresh" && more) waitRefreshes = atoi(argv[++i]);
-        else { fprintf(stderr, "usage: apklayer-manager [--instance ID] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG] [--dialog NAME] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N]]\n"); return 2; }
+        else if (a == "--expect" && more) expect.push_back(argv[++i]);
+        else { fprintf(stderr, "usage: apklayer-manager [--instance ID] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG] [--dialog NAME] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--expect LABEL]...]\n"); return 2; }
     }
     auto ui = AppWindow::create();
     Manager m(ui, cli);
@@ -308,6 +309,8 @@ int main(int argc, char** argv) {
         auto pixels = ui->window().take_snapshot();
         status = pixels && writePng(shot, *pixels) ? 0 : 1;
         if (status == 0) printf("apklayer-manager: %ux%u -> %s\n", pixels->width(), pixels->height(), shot.c_str());
+        for (const std::string& label : expect)  // what the picture must show (a dialog's title...)
+            if (slint::testing::ElementHandle::find_by_accessible_label(ui, label).empty()) { fprintf(stderr, "apklayer-manager: no %s on screen\n", label.c_str()); status = 1; }
         slint::quit_event_loop();
     };
     // the dialogs fade in over their first 50 ms (material Dialog): the picture is taken once they settled

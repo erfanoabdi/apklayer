@@ -42,6 +42,12 @@ export component AppWindow inherits MaterialWindow {
     property <string> ask-target;
     property <PropEntry> editing;
     property <bool> editing-new;
+    // what C++ announces for a dialog: watched here, as a popup's own properties exist only while it is shown
+    property <string> apk-path;
+    property <string> chosen: Backend.chosen-path;
+    changed chosen => { root.apk-path = root.chosen; }
+    property <int> binder-serial: Backend.binder-serial;
+    changed binder-serial => { binder-dialog.show(); }
 
     public function toggle-theme() { Palette.color-scheme = root.is-dark ? ColorScheme.light : ColorScheme.dark; }
     public function show-dialog(name: string) {
@@ -171,8 +177,6 @@ export component AppWindow inherits MaterialWindow {
     }
 
     install-dialog := Dialog {
-        property <string> chosen: Backend.chosen-path;
-        changed chosen => { apk-path.text = self.chosen; }
         x: 0; y: 0; width: root.width; height: root.height;
         title: "Install an app";
         default-action-text: "Install";
@@ -181,7 +185,7 @@ export component AppWindow inherits MaterialWindow {
             spacing: MaterialStyleMetrics.spacing_12;
             MaterialText { max-width: 400px; wrap: word-wrap; text: "An .apk file: it is converted once and then runs in every instance."; style: MaterialTypography.body_medium;
                            color: MaterialPalette.on_surface_variant; }
-            apk-path := TextField { min-width: 280px; label: "Path of the .apk"; accessible-label: "APK path"; }
+            apk-path := TextField { min-width: 280px; label: "Path of the .apk"; accessible-label: "APK path"; text <=> root.apk-path; }
             HorizontalLayout { alignment: start; TextButton { text: "Choose file…"; icon: AppIcons.folder; clicked => { Backend.install-chooser(); } } }
         }
         default-action-clicked => { if apk-path.text != "" { Backend.install-path(apk-path.text); self.close(); } }
@@ -204,8 +208,6 @@ export component AppWindow inherits MaterialWindow {
     }
 
     binder-dialog := Dialog {
-        property <int> serial: Backend.binder-serial;
-        changed serial => { self.show(); }
         x: 0; y: 0; width: root.width; height: root.height;
         icon: AppIcons.admin;
         title: "Binder devices needed";

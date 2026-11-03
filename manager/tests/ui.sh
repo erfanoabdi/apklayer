@@ -20,5 +20,13 @@ check 1 "opened from the app's detail: it runs"
 check 0 "stopped from the app's detail"
 "$m" --screenshot "$shots/ui-4-uninstall.png" --size 400x840 --app "$pkg" --click "Uninstall…" --click Uninstall --wait-refresh 1
 check "" "uninstalled after the confirmation"
+spare="$APKLAYER_INSTANCE-ui"
+"$cli" instance remove "$spare" >/dev/null 2>&1 || true
+expect=()
+[ -e "/dev/binderfs/binder-$spare" ] || expect=(--expect "Binder devices needed")
+"$m" --screenshot "$shots/ui-5-new-instance.png" --size 400x840 --page 1 --dialog instance --type "Instance name=$spare" --click Create --wait-refresh 1 "${expect[@]}"
+"$cli" instances | grep -q "^$spare	" || { echo "FAIL the new instance is not listed"; exit 1; }
+echo "ok   instance created through its dialog (and the binder setup offered when its devices are missing)"
+"$cli" instance remove "$spare" >/dev/null
 "$cli" stop >/dev/null
 echo "PASS manager UI"
