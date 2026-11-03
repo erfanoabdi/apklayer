@@ -116,8 +116,11 @@ public final class HubClient {
     void grantUri(String target, android.net.Uri uri, int mode, boolean revoke) {
         HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.GRANT_URI, request -> { request.writeString(target); request.writeTypedObject(uri, 0); request.writeInt(mode); request.writeBoolean(revoke); }, reply -> null);
     }
-    boolean uriGranted(android.net.Uri uri, int mode) {
-        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CHECK_URI, request -> { request.writeTypedObject(uri, 0); request.writeInt(mode); }, reply -> reply.readInt()) == 0;
+    boolean uriGranted(android.net.Uri uri, int mode) { return checkUri(uri, android.os.Process.myPid(), android.os.Process.myUid(), mode) == 0; }
+    /** Whether a process (named as for checkPermission) holds a grant on the uri: what a provider asks about its caller (checkUriPermission). */
+    int checkUri(android.net.Uri uri, int pid, int uid, int mode) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CHECK_URI, request -> { request.writeTypedObject(uri, 0); request.writeInt(mode); request.writeInt(pid); request.writeInt(uid); },
+                reply -> reply.readInt());
     }
     void postNotification(String pkg, String tag, int id, android.app.Notification notification, int importance) {
         HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.NOTIFY_POST, request -> {

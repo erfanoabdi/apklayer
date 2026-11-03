@@ -42,6 +42,7 @@ final class RemoteProvider extends ContentProvider {
         ReflectionHelpers.setField(ContentProvider.class, this, "mContext", context);
         ReflectionHelpers.setField(ContentProvider.class, this, "mCallingAttributionSource", new ThreadLocal<AttributionSource>());
         ReflectionHelpers.setField(ContentProvider.class, this, "mAuthority", authority);
+        ReflectionHelpers.setField(ContentProvider.class, this, "mMyUid", android.os.Process.myUid());  // as attachInfo sets it: this app's own calls pass its Transport; the provider's app checks them
         ReflectionHelpers.setField(ContentProvider.class, this, "mAuthorities", new String[] {authority});  // the Transport of the resolver's side validates uris against it
     }
 

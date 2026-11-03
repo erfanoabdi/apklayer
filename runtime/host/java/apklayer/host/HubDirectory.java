@@ -237,8 +237,9 @@ final class HubDirectory extends Binder {
                 reply.writeNoException(); return true;
             }
             case HubProtocol.CHECK_URI -> {
-                Peer caller = caller(); android.net.Uri uri = request.readTypedObject(android.net.Uri.CREATOR); int mode = request.readInt(); request.enforceNoDataAvail();
-                reply.writeNoException(); reply.writeInt(providers.granted(caller.name(), uri, mode) ? 0 : -1); return true;
+                caller(); android.net.Uri uri = request.readTypedObject(android.net.Uri.CREATOR); int mode = request.readInt(), pid = request.readInt(), uid = request.readInt();
+                request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeInt(providers.checkUri(pid, uid, uri, mode)); return true;
             }
             case HubProtocol.START_ACTIVITY -> {
                 Peer caller = caller(); Intent intent = request.readTypedObject(Intent.CREATOR); android.os.ResultReceiver resultTo = request.readTypedObject(android.os.ResultReceiver.CREATOR);

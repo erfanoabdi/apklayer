@@ -92,8 +92,18 @@ final class HubProviders {
      * with per-app Linux uids (the per-app sandbox, docs/PLAN.md).
      */
     int check(int pid, int uid, String permission) {
-        if (pid == android.os.Process.myPid() || (pid <= 0 && uid == android.os.Process.SYSTEM_UID)) return 0;
-        HubDirectory.Peer peer = pid > 0 ? directory.peerByPid(pid) : directory.peerByUid(uid);
+        if (system(pid, uid)) return 0;
+        HubDirectory.Peer peer = caller(pid, uid);
         return peer != null && packages.holds(peer.name(), permission) ? 0 : -1;
     }
+
+    /** checkUriPermission(uri, pid, uid, mode) about another app's caller, named as for check: whether it holds a grant on the uri. */
+    int checkUri(int pid, int uid, android.net.Uri uri, int mode) {
+        if (system(pid, uid)) return 0;
+        HubDirectory.Peer peer = caller(pid, uid);
+        return peer != null && granted(peer.name(), uri, mode) ? 0 : -1;
+    }
+
+    private static boolean system(int pid, int uid) { return pid == android.os.Process.myPid() || (pid <= 0 && uid == android.os.Process.SYSTEM_UID); }
+    private HubDirectory.Peer caller(int pid, int uid) { return pid > 0 ? directory.peerByPid(pid) : directory.peerByUid(uid); }
 }
