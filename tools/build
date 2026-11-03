@@ -99,6 +99,7 @@ build_native() {
     native="$(realpath "$1")" shards="${2:-}"
     patches/apply bionic_translation "$(dirname "$bt")"
     ninja -C "$bt"  # real versioned outputs; symlink targets do not rebuild them
+    meson configure "$B" -Dbionic_translation="$bt" -Dandroid_libs="$libs"  # the same inputs as the files staged below (a later regeneration keeps them)
     ninja -C "$B"
     [ -e "$B/bridge/native/btload" ] || die "$B has no native runtime targets: meson found no $bt/libdl_bio.so (meson setup --reconfigure $B -Dbionic_translation=<dir>)"
     [ -e "$B/bridge/native/libandroid_runtime.so" ] || die "$B has no JNI shim: meson found no JNI headers"
