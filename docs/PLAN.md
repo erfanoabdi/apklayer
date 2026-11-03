@@ -139,3 +139,9 @@ Until an app presents its first frame, `bridge/shell/splash.c` fills the window 
 - OpenTTD: pelya's libSDL, `SDL: Couldn't allocate a window to draw on` (Rocks 'n' Diamonds uses the same SDL and works): check the requested video mode.
 - Sensors Multitool: opens on an empty "Battery" screen (no list); relaunch loop not reproduced.
 - Fennec: page text still missing (above).
+
+## Systematic compatibility (2026-11-03)
+- Fix order comes from `tests/corpus/fakes.md` (fakes ranked by how many apps hit them), not from the app in front of us. Robolectric-shadowed managers (window, display) appear in every app: read them apart from binder-method hits.
+- JdkScan leads still open, framework code that can run: `DatagramSocket.getFileDescriptor$` (VpnService.protect), `DirectByteBuffer.<init>(IJFileDescriptor,Runnable,Z)` (SharedMemory), `Cipher/Mac/Signature/KeyAgreement.getCurrentSpi` (keystore), `sun.misc.Cleaner` checkcasts. Out of reach on HotSpot: ART internals (`Thread.nativePeer`, `Method.dexMethodIndex`, `Class.accessFlags`).
+- system_server services standalone in the hub: not worth it (AlarmManagerService assessment in CHANGELOG 2026-11-03); keep the hub's own implementations, bounded by CTS-derived scenarios.
+- Open from this round: the late-install path (install while a component host runs) has no test; apps that read `Build` in static initialisers before `Application.onCreate` still see Robolectric's values; Build TAGS/TYPE are the build's `test-keys`/`userdebug` (root detectors flag them); a per-class dex2jvm failure now blocks the install.
