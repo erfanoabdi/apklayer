@@ -137,8 +137,8 @@ final class HubBroadcasts {
             for (Reg reg : dynamic) {
                 if (onlyPackage != null && !onlyPackage.equals(reg.peer.name())) continue;
                 if (reg.filter.match(null, intent, false, "apklayer-hub") < 0) continue;
-                // RECEIVER_NOT_EXPORTED (flag 4): only its own app may reach it
-                if ((reg.flags & 4) != 0 && !reg.peer.name().equals(sender.name())) continue;
+                // RECEIVER_NOT_EXPORTED (flag 4): only its own app and the system may reach it (checkComponentPermission grants the system uid)
+                if ((reg.flags & 4) != 0 && !reg.peer.name().equals(sender.name()) && sender.appUid() != 1000) continue;
                 if (reg.permission != null && !reg.permission.isEmpty() && !reg.peer.name().equals(sender.name()) && !packages.holds(sender.name(), reg.permission)) {
                     System.out.println("[apklayer-hub] " + sender.name() + " lacks " + reg.permission + " for a receiver of " + reg.peer.name()); continue;
                 }

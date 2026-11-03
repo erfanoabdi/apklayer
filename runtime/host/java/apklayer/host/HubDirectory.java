@@ -74,6 +74,7 @@ final class HubDirectory extends Binder {
     HubAccounts accounts() { return accounts; }
     HubProviders providers() { return providers; }
     HubPackages packages() { return packages; }
+    HubInstaller installer() { return installer; }
     Peer peerByPid(int pid) { synchronized (peers) { return peers.get(pid); } }
     /** A running process of the app with this Android uid (an app and its component hosts share it), or null. */
     Peer peerByUid(int appUid) { synchronized (peers) { return peers.values().stream().filter(peer -> peer.appUid == appUid).findFirst().orElse(null); } }
@@ -276,7 +277,7 @@ final class HubDirectory extends Binder {
             case HubProtocol.START_ACTIVITY -> {
                 Peer caller = caller(); Intent intent = request.readTypedObject(Intent.CREATOR); android.os.ResultReceiver resultTo = request.readTypedObject(android.os.ResultReceiver.CREATOR);
                 request.enforceNoDataAvail();
-                boolean found = installer.confirm(caller, intent) || activities.start(caller, intent, resultTo);  // a confirmation the installer starts is the hub's own
+                boolean found = activities.start(caller, intent, resultTo);
                 reply.writeNoException(); reply.writeInt(found ? 0 : -1); return true;
             }
             case HubProtocol.START_SERVICE -> {

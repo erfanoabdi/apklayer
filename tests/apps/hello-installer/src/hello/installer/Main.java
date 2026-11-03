@@ -67,6 +67,14 @@ public class Main extends Activity {
             boolean gone;
             try { getPackageManager().getPackageInfo(PAYLOAD, 0); gone = false; } catch (PackageManager.NameNotFoundException removed) { gone = true; }
             check("uninstall", status == 0 && gone && broadcast(Intent.ACTION_PACKAGE_REMOVED), "status " + status + " gone " + gone);
+            check("source allowed", getPackageManager().canRequestPackageInstalls(), "canRequestPackageInstalls is false after the person allowed it");
+            // the legacy intents: an APK to view (the installer's activity is the confirmation), then the package to delete
+            java.io.File apk = new java.io.File(getCacheDir(), "legacy.apk");
+            try (InputStream in = getAssets().open("hello-payload2.apk")) { java.nio.file.Files.copy(in, apk.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
+            runOnUiThread(() -> startActivity(new Intent(Intent.ACTION_VIEW).setDataAndType(android.net.Uri.fromFile(apk), "application/vnd.android.package-archive").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)));
+            check("view apk", broadcast(Intent.ACTION_PACKAGE_ADDED), "no PACKAGE_ADDED");
+            runOnUiThread(() -> startActivity(new Intent(Intent.ACTION_DELETE, android.net.Uri.fromParts("package", PAYLOAD, null)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)));
+            check("delete intent", broadcast(Intent.ACTION_PACKAGE_REMOVED), "no PACKAGE_REMOVED");
         } catch (Exception failure) {
             System.out.println("[inst] FAIL " + failure);
             failure.printStackTrace(System.out);

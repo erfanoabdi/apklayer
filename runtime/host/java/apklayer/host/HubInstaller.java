@@ -278,7 +278,7 @@ final class HubInstaller {
     }
 
     private static void delete(Path dir) {
-        if (dir == null) return;
+        if (dir == null || !Files.exists(dir)) return;
         try (var files = Files.walk(dir)) { for (Path p : files.sorted(java.util.Comparator.reverseOrder()).toList()) Files.deleteIfExists(p); }
         catch (IOException failure) { System.out.println("[apklayer-hub] cannot remove " + dir + ": " + failure); }
     }

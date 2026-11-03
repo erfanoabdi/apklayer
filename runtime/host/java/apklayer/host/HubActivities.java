@@ -26,6 +26,7 @@ final class HubActivities {
 
     /** False when no activity can handle the intent. */
     boolean start(HubDirectory.Peer caller, Intent intent, ResultReceiver resultTo) {
+        if (directory.installer().confirm(caller, intent)) return true;  // a confirmation the installer starts (or sends as its PendingIntent) is the hub's own
         ActivityInfo info = packages.activity(intent, caller.name());
         if (info == null) return false;
         providers.grantFromIntent(caller, intent, info.packageName);

@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 from instance import ENV, HOST_LIBS, INSTANCE, LOGDIR, inject, stop  # noqa: E402
 
-STEPS = ['abandon', 'cancel', 'install', 'split resource', 'update', 'data kept', 'mismatch', 'downgrade', 'uninstall']
+STEPS = ['abandon', 'cancel', 'install', 'split resource', 'update', 'data kept', 'mismatch', 'downgrade', 'uninstall', 'source allowed', 'view apk', 'delete intent']
 data = Path(ENV.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'apklayer'
 log = Path(LOGDIR)
 env = dict(ENV, APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400', APKLAYER_HOST_LIBS=HOST_LIBS,
