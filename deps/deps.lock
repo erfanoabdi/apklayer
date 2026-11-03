@@ -4,7 +4,7 @@
 #   maven:<group>:<artifact>:<version>:<ext>       file from Maven Central (or ~/.m2)
 #   aar-classes:<group>:<artifact>:<version>       classes.jar extracted from that AAR
 #   sdk:<path under the Android SDK>               file from a local Android SDK
-# scripts/fetch-deps.sh resolves local sources first and downloads only what is missing.
+# tools/fetch-deps.sh resolves local sources first and downloads only what is missing.
 #
 # Robolectric 4.17 runtime (resolved from org.robolectric:robolectric:4.17; no JUnit: the host is
 # the Simulator-style apklayer.host.Main)

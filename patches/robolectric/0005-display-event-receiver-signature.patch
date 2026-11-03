@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: apklayer <apklayer@localhost>
+Subject: [PATCH] ShadowDisplayEventReceiver: nativeInit chosen by signature
+
+apklayer patch: the five-argument nativeInit is the signature this tree's framework has while it reports SDK 36 (upstream gates
+it on POST_BAKLAVA), so the signature alone picks it.
+
+Against external/robolectric 87aa52b08 (REVISION). Applied by scripts/build-runtime-overlay.sh onto the staged
+upstream sources (<native>/aosp/robolectric-src); the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
+---
+diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowDisplayEventReceiver.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowDisplayEventReceiver.java
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowDisplayEventReceiver.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowDisplayEventReceiver.java
+@@ -88,7 +88,8 @@
+     return nativeInit(receiver, msgQueue);
+   }
+ 
+-  @Implementation(minSdk = POST_BAKLAVA)
++  // apklayer patch: LineageOS 24's framework has this signature while reporting SDK 36; the signature alone picks it
++  @Implementation
+   protected static long nativeInit(
+       WeakReference<DisplayEventReceiver> receiver,
+       WeakReference<Object> vsyncEventData,

@@ -4,7 +4,7 @@ cc_library_headers {
     export_include_dirs: ["common"],
 }
 
-// The host graphics HAL's C API (bridge/hals/graphics/include, copied here by scripts/sync-aosp.sh; the host side is the
+// The host graphics HAL's C API (bridge/hals/graphics/include, copied here by tools/sync-aosp.sh; the host side is the
 // single source). Its functions are not linked: bionic_translation resolves them from the glibc process at load time.
 cc_library_headers {
     name: "libapklayer_graphics_host_headers",

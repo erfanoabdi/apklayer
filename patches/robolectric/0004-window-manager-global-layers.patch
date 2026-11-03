@@ -1,0 +1,149 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: apklayer <apklayer@localhost>
+Subject: [PATCH] ShadowWindowManagerGlobal: relayout2, window layers placed and stacked, frames clamped
+
+apklayer patch: the window session also answers relayout2/relayoutAsync/relayoutAsync2 (Android 16 useClientSurface). Each window
+gets a WindowSurface container (runtime/patches/org/robolectric/shadows/WindowSurface.java, apklayer's own file): its layer is
+placed at its frame, in the app's layer stack, stacked by window type then the order added (the window manager's share for the
+compositor); removal destroys it. Requested frames are clamped to the display so ViewRootImpl remeasures oversized windows
+(UiBench margin checks). -Dapklayer.tracewindows prints each window's attrs, requested size and frame.
+
+Against external/robolectric 87aa52b08 (REVISION). Applied by scripts/build-runtime-overlay.sh onto the staged
+upstream sources (<native>/aosp/robolectric-src); the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
+---
+diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java
+@@ -150,7 +150,11 @@
+                   windowSessionDelegate.remove(args);
+                   return null;
+                 case "relayout":
++                case "relayout2": // apklayer patch: Android 16 with client-managed surfaces (WindowManager.useClientSurface) relayouts through relayout2
+                   return windowSessionDelegate.relayout(args);
++                case "relayoutAsync":
++                case "relayoutAsync2":
++                  return null; // oneway, nothing to return
+                 case "getInTouchMode":
+                   return windowSessionDelegate.getInTouchMode();
+                 case "performDrag":
+@@ -228,7 +232,14 @@
+ 
+     protected int addToDisplay(Object[] args) {
+       int sdk = getApiLevel();
+-      WindowInfo windowInfo = windows.computeIfAbsent((IWindow) args[0], id -> new WindowInfo());
++      WindowInfo windowInfo =
++          windows.computeIfAbsent(
++              (IWindow) args[0],
++              id -> {
++                WindowInfo created = new WindowInfo();
++                created.zOrder = ++nextZOrder; // apklayer patch: windows stack in the order they were added
++                return created;
++              });
+       int displayId = (int) args[sdk <= R ? 4 : 3];
+       // TODO: This is to allow window insets to be keyed per display, i.e. a window has requested
+       //  insets visibility changed before it was added to a display, does android actually allow
+@@ -297,25 +308,39 @@
+ 
+     protected void remove(Object[] args) {
+       IWindow window = (IWindow) args[0];
+-      windows.remove(window);
++      WindowInfo removed = windows.remove(window);
++      if (removed != null) removed.surface.close();
+       // TODO: This transfers control to the last window, should there be another heuristic here?
+       // TODO: Streams.findLast is not available in Android Guava yet.
+       transferWindowInsetsControlTo(windows.values().stream().reduce((a, b) -> b).orElse(null));
+     }
+ 
+     protected int relayout(Object[] args) {
++      try {
++        return relayoutImpl(args);
++      } catch (Throwable t) {
++        t.printStackTrace();
++        throw t;
++      }
++    }
++
++    private int relayoutImpl(Object[] args) {
+       int sdk = getApiLevel();
+       WindowRelayoutResult windowLayoutResult =
+           sdk >= VANILLA_ICE_CREAM ? findFirst(WindowRelayoutResult.class, args) : null;
+ 
++      SurfaceControl layer = null; // apklayer patch: this window's SurfaceFlinger layer, placed below once its frame is known
+       // Simulate initializing the SurfaceControl member object, which happens during this method.
+       if (sdk >= Q) {
+-        SurfaceControl surfaceControl =
+-            sdk >= VANILLA_ICE_CREAM
+-                    && ReflectionHelpers.hasField(WindowRelayoutResult.class, "surfaceControl")
+-                ? ReflectionHelpers.getField(windowLayoutResult, "surfaceControl")
+-                : findFirst(SurfaceControl.class, args);
+-        Shadow.<ShadowSurfaceControl>extract(surfaceControl).initializeNativeObject();
++        // apklayer patch: the client-managed SurfaceControl is an argument (relayout2); older shapes carry it in the result
++        SurfaceControl surfaceControl = findFirstOpt(SurfaceControl.class, args).orElse(null);
++        if (surfaceControl == null
++            && sdk >= VANILLA_ICE_CREAM
++            && ReflectionHelpers.hasField(WindowRelayoutResult.class, "surfaceControl")) {
++          surfaceControl = ReflectionHelpers.getField(windowLayoutResult, "surfaceControl");
++        }
++        if (surfaceControl != null) Shadow.<ShadowSurfaceControl>extract(surfaceControl).initializeNativeObject();
++        layer = surfaceControl;
+       }
+ 
+       IWindow window = (IWindow) args[0];
+@@ -354,6 +379,30 @@
+                     ? windowLayoutResult.insetsState
+                     : findFirst(InsetsState.class, args))
+                 : null);
++        windowInfo.surface.place(layer, windowInfo);
++        if (Boolean.getBoolean("apklayer.tracewindows")) {
++          System.err.println(
++              "[apklayer] window "
++                  + windowInfo.attrs.getTitle()
++                  + " type "
++                  + windowInfo.attrs.type
++                  + " attrs "
++                  + windowInfo.attrs.width
++                  + "x"
++                  + windowInfo.attrs.height
++                  + " gravity 0x"
++                  + Integer.toHexString(windowInfo.attrs.gravity)
++                  + " requested "
++                  + args[requestedSizeIdx]
++                  + "x"
++                  + args[requestedSizeIdx + 1]
++                  + " -> frame "
++                  + windowInfo.frame.toShortString()
++                  + " surfaceInsets "
++                  + windowInfo.attrs.surfaceInsets.toShortString()
++                  + " z "
++                  + windowInfo.zOrder);
++        }
+       }
+ 
+       return inTouchMode ? RELAYOUT_RES_IN_TOUCH_MODE : 0;
+@@ -389,6 +438,12 @@
+           useRequestedSize && requestedSize != null && attrs.height != LayoutParams.MATCH_PARENT
+               ? requestedSize.y
+               : (attrs.height > 0 ? attrs.height : contentFrame.height());
++      // apklayer patch: return bounded frames so ViewRootImpl remeasures an
++      // oversized requested window against its display, including on resize.
++      if (useRequestedSize) {
++        width = Math.min(width, contentFrame.width());
++        height = Math.min(height, contentFrame.height());
++      }
+       // TODO: Take account of parent frame for child windows.
+       Gravity.apply(
+           attrs.gravity,
+@@ -644,8 +699,13 @@
+       return controls;
+     }
+   }
++
++  // apklayer patch: the window manager's share that SurfaceFlinger needs: where a window's layer is and above what
++  static int nextZOrder;
+ 
+   static final class WindowInfo {
++    final WindowSurface surface = new WindowSurface();
++    int zOrder;
+     final Rect displayFrame = new Rect();
+     final ClientWindowFrames frames;
+     final Rect frame;

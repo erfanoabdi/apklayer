@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: apklayer <apklayer@localhost>
+Subject: [PATCH] ShadowBlastBufferQueue: the real libgui BLASTBufferQueue
+
+apklayer patch: the shadow calls the real natives by default (the real BLASTBufferQueue feeds the window's layer); only
+nativeSetApplyToken is a no-op, because reading the apply token's native peer needs the real android.os.Binder JNI, which this
+runtime does not register.
+
+Against external/robolectric 87aa52b08 (REVISION). Applied by scripts/build-runtime-overlay.sh onto the staged
+upstream sources (<native>/aosp/robolectric-src); the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
+---
+diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowBlastBufferQueue.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowBlastBufferQueue.java
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowBlastBufferQueue.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowBlastBufferQueue.java
+@@ -12,43 +12,13 @@
+ import org.robolectric.annotation.Implements;
+ import org.robolectric.shadow.api.Shadow;
+ 
+-@Implements(value = BLASTBufferQueue.class, isInAndroidSdk = false, minSdk = TIRAMISU)
++@Implements(value = BLASTBufferQueue.class, isInAndroidSdk = false, minSdk = TIRAMISU, callNativeMethodsByDefault = true) // apklayer patch: the real natives (libgui) run
+ public class ShadowBlastBufferQueue {
+ 
+-  private int width;
+-  private int height;
++  // apklayer patch: no fake BLASTBufferQueue; the real one (libgui) feeds the window's layer in SurfaceFlinger
+ 
++  // The apply token is a Java android.os.Binder; reading its native peer needs the real android.os.Binder JNI, which this runtime
++  // does not register (Binder stays Robolectric's in-process one). The token only orders transactions of one client: skipped.
+   @Implementation
+-  protected void update(SurfaceControl sc, int width, int height, int format) {
+-    this.width = width;
+-    this.height = height;
+-  }
+-
+-  /**
+-   * The real Android implementation is backed by native code which is currently unsupported on host
+-   * OSes.
+-   *
+-   * <p>This implementation uses ImageReader to ensure a Surface where isValid() is true is
+-   * returned. Returning a valid Surface is vital to performing the real Draw logic.
+-   */
+-  @Implementation
+-  protected Surface createSurfaceWithHandle() {
+-    if (ShadowView.useRealDrawTraversals()) {
+-      checkState(width > 0);
+-      checkState(height > 0);
+-      ImageReader imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 1);
+-      Surface surface = imageReader.getSurface();
+-
+-      ShadowNativeSurface shadowSurface = Shadow.extract(surface);
+-      shadowSurface.setContainerImageReader(imageReader);
+-      return surface;
+-    } else {
+-      return null;
+-    }
+-  }
+-
+-  @Implementation
+-  protected Surface createSurface() {
+-    return createSurfaceWithHandle();
+-  }
++  protected static void nativeSetApplyToken(long ptr, android.os.IBinder applyToken) {}
+ }

@@ -22,15 +22,17 @@ apklayer-shell ──> one Wayland window per app                               
 ## Build and run
 The Android side comes from a LineageOS tree built once; `CHANGELOG.md` logs the incremental builds, rules in `docs/AOSP-BUILDS.md`.
 ```sh
-scripts/fetch-deps.sh                        # pinned Java deps -> ~/.cache/apklayer/deps
-meson setup b && ninja -C b                  # apklayer tool, shell, converter, host HAL libraries
-scripts/build-tree-host.sh ~/arm64-native    # host classes against the staged Robolectric
-sudo scripts/vm-binder-setup.sh              # kernel binderfs
+tools/fetch-deps.sh                          # pinned Java deps -> ~/.cache/apklayer/deps
+tools/build bt ~/bt-arm/bionic_translation   # bionic_translation, patched (patches/apply), for this machine
+meson setup b && ninja -C b                  # tool, shell, converter, host HALs, native runtime (JNI shim, btload, preload, NDK stubs)
+tools/build host ~/arm64-native              # host classes against the staged Robolectric
+tools/build native ~/arm64-native [shards]   # stage the native runtime: ninja's outputs, native-runtime.jar, library mapping
+sudo tools/host-setup/binder.sh              # kernel binderfs
 bin/apklayer install app.apk | run <package|app.apk> | list | uninstall <package> | screenshot <package> <out.png> | stop
 ```
 
 ## Layout
-`cli/` the tool · `runtime/` app host, dex2jvm, Robolectric overlays · `bridge/` JNI shim, shell, host HALs · `aosp/` Android-side modules · `scripts/` staging and builds ·
+`cli/` the tool · `runtime/` app host, dex2jvm, Robolectric overlays · `bridge/` JNI shim, shell, host HALs · `aosp/` Android-side modules · `tools/` builds (`tools/build`), staging from the tree (`tools/stage`), generators, host setup ·
 `tests/` VM tests, sample apps · `docs/` plan, architecture, patches, licenses · `STATUS.md`, `goal.md`, `CLAUDE.md` (agent rules).
 
 ## License

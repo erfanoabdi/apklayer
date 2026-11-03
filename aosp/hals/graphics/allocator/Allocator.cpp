@@ -131,7 +131,7 @@ class Allocator : public BnAllocator {
 
 }  // namespace
 
-// Exported so bionic_translation's launcher (scripts/btload.c --main) can run the service from the library.
+// Exported so bionic_translation's launcher (bridge/native/btload.c --main) can run the service from the library.
 extern "C" int main(int, char**) {
     apklayer_gfx* gfx = apklayer_gfx_open(nullptr);
     if (gfx == nullptr) {

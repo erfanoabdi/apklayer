@@ -48,7 +48,7 @@ public final class JdkScan {
     /** Findings covered outside the jdk-patch dir (regex on the finding key -> where). */
     private static final Map<String, String> COVERED = Map.of(
             "java/io/FileDescriptor\\.descriptor:I", "runtime_shim GetFieldID descriptor->fd",
-            "java/nio/(NIOAccess|[A-Za-z]*Buffer\\._elementSizeShift:I)", "scripts/patch-nativehelper.sh: public Buffer API");
+            "java/nio/(NIOAccess|[A-Za-z]*Buffer\\._elementSizeShift:I)", "patches/aosp/libnativehelper/0001-file-descriptor-hotspot.patch: public Buffer API");
 
     record Member(String owner, String name, String desc, int access) {
         boolean isStatic() { return (access & Opcodes.ACC_STATIC) != 0; }

@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: apklayer <apklayer@localhost>
+Subject: [PATCH] InstrumentationConfiguration: acquire javax.microedition.khronos
+
+apklayer patch: EGL's javax.microedition.khronos classes belong to Android (the framework jar), not the SDK stub jar, so the
+sandbox acquires them (EGL10/GLImpl run Android's code, TextureView GL apps). Formerly a bytecode rewrite
+(runtime/patches/apklayer/patches/SandboxLoaderPatch.java).
+
+Against external/robolectric 87aa52b08 (REVISION). Applied by scripts/build-runtime-overlay.sh onto the staged
+upstream sources (<native>/aosp/robolectric-src); the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
+---
+diff --git a/sandbox/src/main/java/org/robolectric/internal/bytecode/InstrumentationConfiguration.java b/sandbox/src/main/java/org/robolectric/internal/bytecode/InstrumentationConfiguration.java
+--- a/sandbox/src/main/java/org/robolectric/internal/bytecode/InstrumentationConfiguration.java
++++ b/sandbox/src/main/java/org/robolectric/internal/bytecode/InstrumentationConfiguration.java
+@@ -119,6 +119,10 @@
+    * @return True if the class should be loaded.
+    */
+   public boolean shouldAcquire(String name) {
++    // apklayer patch: EGL's javax classes belong to Android (the framework jar), not the SDK stub jar
++    if (name.startsWith("javax.microedition.khronos.")) {
++      return true;
++    }
+     if (CLASSES_TO_ALWAYS_ACQUIRE.contains(name)) {
+       return true;
+     }

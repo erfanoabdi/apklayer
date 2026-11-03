@@ -1,0 +1,83 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: apklayer <apklayer@localhost>
+Subject: [PATCH] ShadowBroadcastPendingResult: Android's own finish()
+
+apklayer patch (docs/PATCHES.md, instance hub broadcasts): Robolectric's finish() only completes a future; Android's own finish()
+runs too, so the (hub-backed) activity manager learns the receiver is done and an ordered broadcast's result is passed on.
+Covered by tests/vm/broadcasts.sh.
+
+Against external/robolectric 87aa52b08 (REVISION). Applied by scripts/build-runtime-overlay.sh onto the staged
+upstream sources (<native>/aosp/robolectric-src); the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
+---
+diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowBroadcastPendingResult.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowBroadcastPendingResult.java
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowBroadcastPendingResult.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowBroadcastPendingResult.java
+@@ -9,26 +9,23 @@
+ import org.robolectric.annotation.Implementation;
+ import org.robolectric.annotation.Implements;
+ import org.robolectric.annotation.RealObject;
++import org.robolectric.shadow.api.Shadow;
+ 
++/**
++ * Robolectric's stand-in for BroadcastReceiver.PendingResult: finish() only completes a future. apklayer patch: with the instance hub (-Dapklayer.instancehub=true)
++ * the real finish() runs too, so Android's own code tells the (hub-backed) activity manager that the receiver is done and passes the ordered result on.
++ */
+ @Implements(BroadcastReceiver.PendingResult.class)
+ public final class ShadowBroadcastPendingResult {
+   @RealObject BroadcastReceiver.PendingResult pendingResult;
+ 
++  private final SettableFuture<BroadcastReceiver.PendingResult> finished = SettableFuture.create();
++
+   static BroadcastReceiver.PendingResult create(
+       int resultCode, String resultData, Bundle resultExtras, boolean ordered) {
+     try {
+-
+-        return new BroadcastReceiver.PendingResult(
+-            resultCode,
+-            resultData,
+-            resultExtras,
+-            0 /* type */,
+-            ordered,
+-            false /*sticky*/,
+-            null /* ibinder token */,
+-            0 /* userid */,
+-            0 /* flags */);
+-
++      return new BroadcastReceiver.PendingResult(
++          resultCode, resultData, resultExtras, 0 /* TYPE_REGISTERED */, ordered, false, null, 0, 0);
+     } catch (Exception e) {
+       throw new RuntimeException(e);
+     }
+@@ -36,27 +33,18 @@
+ 
+   static BroadcastReceiver.PendingResult createSticky(Intent intent) {
+     try {
+-        return new BroadcastReceiver.PendingResult(
+-            0 /*resultCode*/,
+-            intent.getDataString(),
+-            intent.getExtras(),
+-            0 /* type */,
+-            false /*ordered*/,
+-            true /*sticky*/,
+-            null /* ibinder token */,
+-            0 /* userid */,
+-            0 /* flags */);
+-
++      return new BroadcastReceiver.PendingResult(
++          0, intent.getDataString(), intent.getExtras(), 0 /* TYPE_REGISTERED */, false, true, null, 0, 0);
+     } catch (Exception e) {
+       throw new RuntimeException(e);
+     }
+   }
+ 
+-  private final SettableFuture<BroadcastReceiver.PendingResult> finished = SettableFuture.create();
+-
+   @Implementation
+   protected void finish() {
+-    Preconditions.checkState(finished.set(pendingResult), "Broadcast already finished");
++    org.robolectric.util.ReflectionHelpers.callInstanceMethod(
++        pendingResult, Shadow.directMethodName("android.content.BroadcastReceiver$PendingResult", "finish"));
++    finished.set(pendingResult);
+   }
+ 
+   public ListenableFuture<BroadcastReceiver.PendingResult> getFuture() {

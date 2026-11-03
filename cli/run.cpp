@@ -26,12 +26,12 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     std::string dir = appDir(l, package);
     if (!exists(join(dir, "info.properties"))) die("not installed: " + package + " (apklayer install <app.apk>)");
     ensureUid(l, dir);
-    // the Chromium WebView provider is the default WebView once installed and scripts/webview-setup.sh ran; APKLAYER_WEBVIEW_PROVIDER=none disables it
+    // the Chromium WebView provider is the default WebView once installed and tools/host-setup/webview.sh ran; APKLAYER_WEBVIEW_PROVIDER=none disables it
     std::string provider = getenvOr("APKLAYER_WEBVIEW_PROVIDER", "\x01");
     if (provider == "\x01") provider = exists(join(l.appsDir, "com.android.webview/classes.jar")) && webviewSandboxOff() ? "com.android.webview" : "";
     if (provider == "none") provider.clear();
     if (!provider.empty() && !webviewSandboxOff())
-        die("the WebView provider route needs scripts/webview-setup.sh once (Chromium's seccomp sandbox cannot run inside an app JVM and is switched off; needs sudo)");
+        die("the WebView provider route needs tools/host-setup/webview.sh once (Chromium's seccomp sandbox cannot run inside an app JVM and is switched off; needs sudo)");
 
     trace("run " + package);
     NativeEnv ne = nativeEnv(l, inst);
