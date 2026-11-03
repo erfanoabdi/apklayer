@@ -18,5 +18,13 @@ public class ShadowHostActivity extends ShadowActivity {
         if (requestCode >= 0) real.startActivityForResult(intent, requestCode, options); else real.startActivity(intent, options);
         return true;
     }
+    /** navigateUpTo goes to ActivityClient, which nothing answers here: as the task manager does, the parent on the back stack comes back with
+     *  everything above it finished (CLEAR_TOP through LaunchRules: a standard parent is recreated, a single-top one gets onNewIntent); a parent
+     *  not on the stack is started. Puzzles' GamePlay returns to its chooser so. */
+    @Implementation protected boolean navigateUpTo(android.content.Intent upIntent) {
+        real.startActivity(new android.content.Intent(upIntent).addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP));
+        real.finish();
+        return true;
+    }
     @Implementation protected boolean isTaskRoot() { return !Boolean.getBoolean("apklayer.notaskroot") && AppHost.isTaskRoot(real); }
 }
