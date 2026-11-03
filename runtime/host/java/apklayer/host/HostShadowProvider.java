@@ -98,8 +98,6 @@ public final class HostShadowProvider implements ShadowProvider {
     @Override public Map<String, String> getShadowPickerMap() {
         return Map.of("android.content.res.ApkAssets", ShadowHostApkAssets.Picker.class.getName(),
                 "android.os.MessageQueue", ShadowHostMessageQueue.Picker.class.getName(),
-                "android.graphics.BitmapFactory", ShadowHostBitmapFactory.Picker.class.getName(),
-                "android.graphics.ImageDecoder", ShadowHostImageDecoder.Picker.class.getName(),
                 "android.database.CursorWindow", ShadowHostRealCursorWindow.Picker.class.getName());
     }
 }
