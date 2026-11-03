@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The storage volumes of the instance, as the storage service lists them: Internal storage (the emulated primary volume, {@code <storage>/emulated/0}, what
+ * The storage volumes of the instance, as the storage service lists them: Internal storage (the emulated primary volume, {@code /storage/emulated/0} served from {@code <storage>/emulated/0} by the path layer, what
  * Environment.getExternalStorageDirectory() returns), Home (the Linux user's home) and Linux root ({@code /}, which apklayer can mostly only read).
  * {@code -Dapklayer.storage} is the instance's storage directory (cli/layout).
  */
