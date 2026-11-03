@@ -8,6 +8,9 @@
 #          whole desktop (pixel checks), and stacks that declare HAL services write their vintf manifests into the shared APKLAYER_NATIVE.
 #   optional  true: only when named on the command line
 
+[native]
+run = ["meson test -C b --suite bionic --print-errorlogs"]
+
 [properties]
 run = ["tests/vm/properties.sh"]
 

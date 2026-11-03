@@ -18,3 +18,6 @@ subdir('bridge/hals/graphics')
 subdir('bridge/hals/media')
 
 subdir('bridge/hals/audio')
+
+# bionic_translation regression tests (meson test --suite bionic)
+subdir('tests/native')

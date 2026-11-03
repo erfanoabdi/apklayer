@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Foreground OTR2 (Off The Road 2) on the GPU route: real GPU frames, capture handshake and physical Back. Driven by tests/vm/otr2-driver.py."""
+"""Foreground OTR2 (Off The Road 2) on the GPU route: real GPU frames, screenshots with game content and physical Back (tests/run otr2; OTR2 installed by hand)."""
 import ctypes
 import os
 from pathlib import Path

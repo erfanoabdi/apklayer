@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""VM side of tests/vm/vulkan-present.sh: hello.vulkan.Present presents solid frames through an Android Vulkan swapchain on a SurfaceView."""
+"""tests/run vulkan-present: hello.vulkan.Present presents solid frames through an Android Vulkan swapchain on a SurfaceView; the screenshot must show
+them (needs a host Vulkan device that imports dma-bufs and shares sync fds)."""
 import os
 from pathlib import Path
 import selectors

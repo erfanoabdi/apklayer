@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """tests/run [-j N] [group...]: the VM test groups of tests/groups.toml (no group: all of them), each in an apklayer instance of its own, in parallel.
 Pushes the working tree to the VM and builds it once, builds and installs the groups' test apps once, then runs the groups: up to N at a time
-(default: by the VM's free memory, ~1 GB per instance), the groups marked `alone` afterwards one by one. Logs: build/tests/<group>.log."""
+(default: by the VM's free memory, ~1 GB per instance; a group starts only while 1.5 GB are available), the groups marked `alone` afterwards one by one. Logs: build/tests/<group>.log."""
 import argparse
 import concurrent.futures
 import subprocess
@@ -17,10 +17,18 @@ import vm  # noqa: E402
 GROUPS = tomllib.loads((vm.REPO / 'tests/groups.toml').read_text())
 LOGS = vm.REPO / 'build/tests'
 print_lock = threading.Lock()
+INSTANCE_MB = 1000  # what one running instance (stack, hub, app JVMs, shell) takes
+MIN_FREE_MB = 1500  # a group starts only while the VM has this much available
 
 
 def say(*args):
     with print_lock: print(*args, flush=True)
+
+
+def available():
+    """MemAvailable of the VM in MB."""
+    out = vm.ssh("awk '/MemAvailable/ {print int($2 / 1024)}' /proc/meminfo", capture_output=True, text=True).stdout
+    return int(out or 0)
 
 
 def prepare(groups, slots):
@@ -35,8 +43,7 @@ def prepare(groups, slots):
         with concurrent.futures.ThreadPoolExecutor(6) as pool:
             built = list(pool.map(lambda a: subprocess.run(['tests/apps/build.sh', a], cwd=vm.REPO, capture_output=True, text=True), apps))
         for app, b in zip(apps, built): assert b.returncode == 0, 'building %s failed:\n%s' % (app, b.stderr[-2000:])
-        vm.ssh('mkdir -p %s/apks' % vm.WORK, check=True)
-        vm.scp([vm.REPO / 'build' / (a + '.apk') for a in apps], vm.WORK + '/apks/')
+        vm.copy([vm.REPO / 'build' / (a + '.apk') for a in apps], vm.WORK + '/apks')
         install = ' && '.join('bin/apklayer install %s/apks/%s.apk 2>&1 | grep -aq installed || { echo "install %s failed"; false; }' % (vm.WORK, a, a) for a in apps)
         assert vm.ssh(vm.instance_env(slots[0]) + install).returncode == 0, 'installing the test apps failed'
     setup = [c for g in groups for c in GROUPS[g].get('setup', [])]
@@ -75,10 +82,7 @@ def main():
     groups = args.groups or [g for g in GROUPS if not GROUPS[g].get('optional')]
     unknown = [g for g in groups if g not in GROUPS]
     if unknown: parser.error('unknown group(s): %s' % ' '.join(unknown))
-    jobs = args.j
-    if not jobs:
-        free = vm.ssh("awk '/MemAvailable/ {print int($2 / 1024)}' /proc/meminfo", capture_output=True, text=True).stdout
-        jobs = max(1, min(6, (int(free or 0) - 1000) // 1000))
+    jobs = args.j or max(1, min(6, (available() - MIN_FREE_MB) // INSTANCE_MB + 1))
     slots = ['tests'] + ['tests%d' % i for i in range(2, jobs + 1)]
     start = time.monotonic()
     LOGS.mkdir(parents=True, exist_ok=True)
@@ -91,13 +95,19 @@ def main():
             say('SKIP %-16s needs %s installed' % (g, ' '.join(missing)))
             groups = [x for x in groups if x != g]
     free_slots = list(slots)
-    lock = threading.Lock()
+    changed = threading.Condition()
 
     def job(name):
-        with lock: slot = free_slots.pop()
+        # a group starts when the VM has room for one more instance (other users' instances count too); while it has not, it waits for one of
+        # ours to end (none running: it starts anyway)
+        with changed:
+            while len(free_slots) < len(slots) and available() < MIN_FREE_MB: changed.wait()
+            slot = free_slots.pop()
         try: return run_group(name, slot)
         finally:
-            with lock: free_slots.append(slot)
+            with changed:
+                free_slots.append(slot)
+                changed.notify_all()
 
     together = [g for g in groups if not GROUPS[g].get('alone')]
     with concurrent.futures.ThreadPoolExecutor(jobs) as pool:

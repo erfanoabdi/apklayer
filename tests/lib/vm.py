@@ -34,8 +34,12 @@ def push():
     assert tar.wait() == 0 and remote.returncode == 0, 'pushing the tree failed'
 
 
-def scp(local, remote):
-    subprocess.run(['sshpass', '-p', config.PASS, 'scp', '-q', '-o', 'StrictHostKeyChecking=no', *map(str, local), config.VM + ':' + remote], check=True)
+def copy(files, remote):
+    """Local files into the VM directory `remote` (a shell word: $HOME works), by tar so that no error message carries the password."""
+    files = [Path(f) for f in files]
+    tar = subprocess.Popen(['tar', 'cf', '-', *[a for f in files for a in ('-C', str(f.parent), f.name)]], stdout=subprocess.PIPE, env=dict(os.environ, COPYFILE_DISABLE='1'))
+    remote_ok = ssh('mkdir -p %s && tar xf - -C %s' % (remote, remote), stdin=tar.stdout).returncode == 0
+    assert tar.wait() == 0 and remote_ok, 'copying %d files to the VM failed' % len(files)
 
 
 def instance_env(instance, out=None):
