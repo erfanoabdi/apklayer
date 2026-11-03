@@ -8,7 +8,6 @@ import android.app.Application;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ActivityInfo;
-import android.content.res.TypedArray;
 import android.hardware.display.DisplayManager;
 import android.os.Handler;
 import android.os.Looper;
@@ -292,7 +291,7 @@ public final class AppHost implements Runnable {
                     perfLoops++;
                     looper.idle();
                 }
-                if (TRACE_ROOTS && now - lastRootTrace > 1_000_000_000L) { lastRootTrace = now; traceRoots(); }
+                if (TRACE_ROOTS && now - lastRootTrace > 1_000_000_000L) { lastRootTrace = now; HostWindows.traceRoots(); }
                 if (stack.isEmpty()) { followNavigation(); continue; }  // the grace period after a launcher activity finished itself
                 followNavigation();
                 followOrientation();
@@ -318,37 +317,6 @@ public final class AppHost implements Runnable {
 
     private static final boolean TRACE_ROOTS = Boolean.getBoolean("apklayer.traceroots");
     private long lastRootTrace;
-
-    /** -Dapklayer.traceroots=true: once a second, the state of every window's ViewRootImpl (why does a window not draw?). */
-    private void traceRoots() {
-        java.util.List<?> roots;
-        try {
-            java.lang.reflect.Field rf = android.view.WindowManagerGlobal.class.getDeclaredField("mRoots");
-            rf.setAccessible(true);
-            roots = new ArrayList<>((java.util.List<?>) rf.get(android.view.WindowManagerGlobal.getInstance()));
-        } catch (Throwable e) {
-            System.out.println("[apklayer] root trace failed: " + e);
-            return;
-        }
-        if (roots.isEmpty()) System.out.println("[apklayer] root: no windows");
-        for (Object o : roots) {
-            try {
-                android.view.ViewRootImpl root = (android.view.ViewRootImpl) o;
-                StringBuilder sb = new StringBuilder("[apklayer] root:");
-                for (String f : new String[] {"mFirst", "mAdded", "mTraversalScheduled", "mWillDrawSoon", "mStopped", "mIsDrawing", "mLayoutRequested", "mRelayoutRequested"}) {
-                    java.lang.reflect.Field fld = android.view.ViewRootImpl.class.getDeclaredField(f);
-                    fld.setAccessible(true);
-                    sb.append(' ').append(f).append('=').append(fld.get(root));
-                }
-                java.lang.reflect.Field sf = android.view.ViewRootImpl.class.getDeclaredField("mSurface");
-                sf.setAccessible(true);
-                System.out.println(sb + " surfaceValid=" + ((android.view.Surface) sf.get(root)).isValid() + " visibility=" + root.getView().getVisibility()
-                        + " nextVsync=" + ShadowChoreographer.getNextVsyncTime());
-            } catch (Throwable e) {
-                System.out.println("[apklayer] root trace failed: " + e);
-            }
-        }
-    }
 
     private boolean nativeLooperSeen;
     /** Native code (Chromium) that runs a message pump on the main thread waits on the thread's native looper: run what is ready. */
@@ -443,7 +411,7 @@ public final class AppHost implements Runnable {
         c.start().postCreate(null).resume().visible().topActivityResumed(true);  // the rest of ActivityController.setup()
         // As in Android, the previous activity is stopped only once an opaque activity covers it;
         // behind a translucent one (dialog-style) it stays paused and visible.
-        if (previous != null && !isTranslucent(c.get())) {
+        if (previous != null && !HostWindows.isTranslucent(c.get())) {
             setVisible(previous.stop(), false);
             stopped.add(previous.get());
         }
@@ -491,7 +459,6 @@ public final class AppHost implements Runnable {
         else top.pause().stop().destroy();
     }
 
-    /** Follows the app's startActivity() calls and finish() of the top activity. */
     /**
      * PLAN P2.3: a portrait/landscape request from the top activity (manifest screenOrientation or
      * setRequestedOrientation) reshapes the window. Other values keep the current shape.
@@ -509,6 +476,7 @@ public final class AppHost implements Runnable {
         }
     }
 
+    /** Follows the app's startActivity() calls and finish() of the top activity. */
     private void followNavigation() {
         ShadowApplication shadowApp = Shadow.extract(RuntimeEnvironment.getApplication());
         Intent next = shadowApp.getNextStartedActivity();
@@ -545,26 +513,11 @@ public final class AppHost implements Runnable {
      * again when it returns. Stopped windows then stay out of the composed screen, and the
      * visibility change redraws, which makes ScreenUpdateHandler capture a fresh frame.
      */
-    private static boolean isTranslucent(Activity activity) {
-        TypedArray a = activity.getTheme().obtainStyledAttributes(
-                new int[] {android.R.attr.windowIsTranslucent, android.R.attr.windowIsFloating});
-        try {
-            return a.getBoolean(0, false) || a.getBoolean(1, false);
-        } finally {
-            a.recycle();
-        }
-    }
-
     private static void setVisible(ActivityController<? extends Activity> c, boolean visible) {
         c.get().getWindow().getDecorView().setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
     }
 
 
-    /**
-     * Resize / DPI (PLAN P2): logical size and output scale -> sandbox qualifiers (density =
-     * 160 x scale). The screen capture then comes out at the new pixel size and the shell
-     * client rebuffers the window to match (ShellClient.present).
-     */
     /**
      * Window state from the shell (PLAN P2.9): an inactive window pauses the top activity, a
      * minimized one stops it; becoming active again restarts/resumes it.
@@ -593,6 +546,11 @@ public final class AppHost implements Runnable {
         }
     }
 
+    /**
+     * Resize / DPI (PLAN P2): logical size and output scale -> sandbox qualifiers (density =
+     * 160 x scale). The screen capture then comes out at the new pixel size and the shell
+     * client rebuffers the window to match (ShellClient.present).
+     */
     private void hostResize(int w, int h, int scalePct) {
         int dpi = 160 * scalePct / 100;
         int wdp = Math.max(1, w), hdp = Math.max(1, h);
