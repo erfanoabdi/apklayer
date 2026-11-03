@@ -80,7 +80,11 @@ bool alive(int pid) { return pid > 0 && kill(pid, 0) == 0; }
 // SIGTERM, then wait for the exit on a pidfd (SIGKILL after 5 s): `stop` returns with the processes gone.
 void terminate(int pid) {
     if (!alive(pid)) return;
-    if (auto cmd = readFile("/proc/" + std::to_string(pid) + "/cmdline"); !cmd || cmd->find("apklayer") == std::string::npos) return;  // a recycled pid is not ours
+    // a recycled pid is not ours: every process apklayer starts carries APKLAYER_INSTANCE (its command line may be an Android process name)
+    if (auto env = readFile("/proc/" + std::to_string(pid) + "/environ"); !env || env->find("APKLAYER_INSTANCE=") == std::string::npos) {
+        auto cmd = readFile("/proc/" + std::to_string(pid) + "/cmdline");
+        if (!cmd || cmd->find("apklayer") == std::string::npos) return;
+    }
     int fd = pidfdOpen(pid);
     kill(pid, SIGTERM);
     pollfd p{fd, POLLIN, 0};
