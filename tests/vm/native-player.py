@@ -69,7 +69,9 @@ try:
             if committed and not captured and any('window state active=true' in s for s in seen):
                 with open('/tmp/apklayer-native-player-layers.txt', 'wb') as dump:
                     subprocess.run(['bin/apklayer', 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger'], env=ENV, stdout=dump, stderr=subprocess.STDOUT, check=True)
-                shot = instance.capture('native SurfaceView result')
+                shot = instance.capture('native SurfaceView result', 'hello.nativeplayer')
+                asset = os.environ.get('PLAYER_ASSET', 'red-h264.mp4')
+                pixels.video_level(shot, asset) if asset.startswith(('white', 'black')) else pixels.red_surface(shot)
                 instance.keys(*['key:1'],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                 captured = True

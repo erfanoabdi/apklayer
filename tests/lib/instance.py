@@ -50,10 +50,16 @@ def stop():
     kill('[a]pklayer.host.Main', '[c]omponent-host', '[c]li/apklayer run ')
 
 
-def capture(name):
-    """A screenshot of the whole desktop (other instances' windows included) as OUT/<name>.png; returns the path."""
+def capture(name, app=None):
+    """A screenshot as OUT/<name>.png; returns the path. With app (a package of this instance): its window as SurfaceFlinger composes it
+    (`apklayer screenshot`), independent of the desktop and of other instances. Without: the whole desktop (other windows included)."""
     image = OUT / (name.replace(' ', '-') + '.png')
     image.unlink(missing_ok=True)
+    if app:
+        subprocess.run(['bin/apklayer', 'screenshot', app, str(image)], env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        assert image.exists(), 'no screenshot of %s in instance %s' % (app, INSTANCE)
+        print('CAPTURED ' + str(image), flush=True)
+        return image
     env = dict(os.environ, XDG_RUNTIME_DIR=SESSION, DBUS_SESSION_BUS_ADDRESS='unix:path=%s/bus' % SESSION, WAYLAND_DISPLAY='wayland-0',
                XDG_SESSION_TYPE='wayland', XDG_CURRENT_DESKTOP='GNOME')
     subprocess.run(['flameshot', 'full', '-p', str(image)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)

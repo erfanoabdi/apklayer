@@ -39,7 +39,7 @@ try:
         while True:
             ready = events.select(3)
             if not ready or time.monotonic() >= end:
-                best = max(best, pixels.game_content(instance.capture('OTR2 quiet')))
+                best = max(best, pixels.game_content(instance.capture('OTR2 quiet', 'com.dogbytegames.otrnext')))
                 print('OTR2 observation ended (no log events for 3s or test budget reached)', flush=True)
                 break
             finished = False
@@ -66,7 +66,7 @@ try:
                 # its capture can contain partially black rows during animation.
                 os.kill(pid, signal.SIGSTOP)
                 try:
-                    best = max(best, pixels.game_content(instance.capture('OTR2 GPU output ' + str(captures))))
+                    best = max(best, pixels.game_content(instance.capture('OTR2 GPU output ' + str(captures), 'com.dogbytegames.otrnext')))
                 finally: os.kill(pid, signal.SIGCONT)
                 if captures < 2: continue
                 instance.keys(*['key:1'], check=True,

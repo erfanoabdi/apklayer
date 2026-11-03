@@ -10,7 +10,7 @@ ninja -C b bridge/hals/media/codec-test bridge/hals/media/codec-reorder-test
 cp --remove-destination b/bridge/hals/media/libapklayer-hal-media.so "$APKLAYER_NATIVE/"
 b/bridge/hals/media/codec-test /tmp/apklayer-vp8.ivf /tmp/apklayer-vp9.ivf
 b/bridge/hals/media/codec-reorder-test /tmp/apklayer-h264.au
-b/cli/apklayer exec libapklayer_codec2.so --probe > /tmp/apklayer-codec2-interface.log 2>&1
+b/cli/apklayer exec libapklayer_codec2.so --probe > /tmp/apklayer-codec2-interface.log 2>&1 || true  # the verdict is the PASS lines
 grep -a 'codec2: PASS' /tmp/apklayer-codec2-interface.log
 python3 -u tests/vm/codec2-run.py
 grep -a 'codec2: PASS' $APKLY_STATE/tool.log

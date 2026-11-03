@@ -48,9 +48,9 @@ try:
                     print(line, flush=True)
                 assert not any(tag in line for tag in ('FATAL EXCEPTION', 'fatal error has been detected')), line
                 if not captured and 'vkswap: presented 60 frames' in line:
-                    shot = instance.capture('Vulkan swapchain frames')
+                    shot = instance.capture('Vulkan swapchain frames', 'hello.vulkan')
                     magenta = pixels.count(shot, lambda r, g, b: r > 200 and g < 60 and 100 < b < 160) / (lambda im: im.width * im.height)(pixels.rgb(shot))
-                    print('IMAGE %s: %.0f%% magenta' % (shot, magenta * 100), flush=True)
+                    print('IMAGE %s: %.0f%% of the window magenta' % (shot, magenta * 100), flush=True)
                     assert magenta > 0.25, 'the presented frames are not on screen (%.0f%% magenta)' % (magenta * 100)
                     captured = True
     app.wait()

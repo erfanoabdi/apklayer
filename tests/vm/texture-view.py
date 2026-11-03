@@ -63,7 +63,7 @@ try:
                 # its capture can contain partially black rows during animation.
                 os.kill(pid, signal.SIGSTOP)
                 try:
-                    shot = instance.capture('TextureView GPU output ' + str(captures))
+                    shot = instance.capture('TextureView GPU output ' + str(captures), 'com.android.test.uibench')
                     orange = pixels.count(shot, lambda r, g, b: r > 80 and r > g * 1.2 and g > b * 1.2)
                     assert orange > 60000, ('missing canyon texture', shot, orange)
                     print('PASS canyon texture pixels:', orange, flush=True)

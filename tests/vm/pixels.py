@@ -1,4 +1,4 @@
-"""Pixel checks of desktop screenshots (instance.capture) for the GPU, media and window tests; PIL on the VM."""
+"""Pixel checks of screenshots (instance.capture: an app window, or the desktop for window geometry) for the GPU, media and window tests; PIL on the VM."""
 from collections import Counter
 from PIL import Image, ImageChops
 
@@ -37,15 +37,14 @@ def video_level(image, asset):
     print(f'PASS {asset} shows gray {value}', flush=True)
 
 
-def changed(before, after, threshold=40):
-    """The share of pixels that differ clearly between two screenshots."""
-    a, b = rgb(before), rgb(after)
-    return sum(1 for p in ImageChops.difference(a, b).convert('L').getdata() if p > threshold) / (a.width * a.height)
+def colors(image):
+    """Distinct colours of a screenshot: antialiased text and edges of a drawn UI give hundreds, an empty or black window a handful."""
+    return len(rgb(image).getcolors(1 << 24))
 
 
-def game_content(image, box=(120, 130, 830, 880)):
-    """How much of the window area (below its title bar) is lit, 0 when it is flat (few colours): OTR2's frames."""
-    pixels = list(rgb(image).crop(box).getdata())
+def game_content(image):
+    """How much of an app window capture is lit, 0 when it is flat (few colours): OTR2's frames."""
+    pixels = list(rgb(image).getdata())
     lit = sum(1 for p in pixels if max(p) > 40) / len(pixels)
     colors = len({(p[0] >> 4, p[1] >> 4, p[2] >> 4) for p in pixels})
     print(f'IMAGE {image}: {lit:.0%} lit, {colors} colors', flush=True)
