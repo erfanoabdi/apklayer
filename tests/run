@@ -39,7 +39,7 @@ def prepare(groups, slots):
     t = time.monotonic()
     vm.push()
     build = vm.ssh(vm.instance_env(slots[0]) + '{ [ -d b ] || meson setup b >/dev/null; } && ninja -C b >/dev/null && '
-                   'sudo -n sh scripts/vm-binder-setup.sh %s >/dev/null && %s' % (' '.join(slots), OWN_DATA), capture_output=True, text=True)
+                   'sudo -n sh tools/host-setup/binder.sh %s >/dev/null && %s' % (' '.join(slots), OWN_DATA), capture_output=True, text=True)
     assert build.returncode == 0, 'VM build failed:\n' + build.stdout[-3000:] + build.stderr[-3000:]
     apps = sorted({a for g in groups for a in GROUPS[g].get('apps', [])})
     if apps:

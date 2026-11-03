@@ -1,5 +1,5 @@
 #!/bin/bash
-# sysprov.sh [settings contacts dictionary]: the tree's own providers (SettingsProvider, ContactsProvider, UserDictionaryProvider) installed as apps (scripts/install-system-apps.sh) and reached from another app through the hub.
+# sysprov.sh [settings contacts dictionary]: the tree's own providers (SettingsProvider, ContactsProvider, UserDictionaryProvider) installed as apps (tools/stage sysapps) and reached from another app through the hub.
 # On the VM, in the group's instance (tests/run sysprov): APKLAYER_INSTANCE, APKLY_STATE (its logs) and the test apps installed by the runner.
 : "${APKLY_STATE:=${XDG_STATE_HOME:-$HOME/.local/state}/apklayer/${APKLAYER_INSTANCE:-default}}"
 status=0

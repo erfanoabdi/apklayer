@@ -28,7 +28,7 @@ STATE = '~/.local/state/apklayer/default'
 REPO = os.environ.get('CORPUS_VM_REPO', '~/apklayer')
 NATIVE = os.environ.get('CORPUS_VM_NATIVE')
 ENV = 'cd %s; export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 APKLAYER_ROOT=%s%s; ' % (REPO, REPO, ' APKLAYER_NATIVE=' + NATIVE if NATIVE else '')
-PATIENCE = int(os.environ.get('CORPUS_PATIENCE', '150'))
+PATIENCE = int(os.environ.get('CORPUS_PATIENCE', '30'))  # seconds to the first frame; a static screen draws only a few, so one frame plus a live process is the bar
 SECOND = os.environ.get('CORPUS_SECOND', '1') != '0'
 AGAIN = '/tmp/apklayer-corpus-again'  # present when a run ends: the VM script launches the app once more
 BUSY = 75  # flock's exit status when the lock is held by someone else
@@ -103,7 +103,7 @@ def end_run(again):
 def launch(name, stream, at, row, key, before):
     """One launch from the OFFSET line at index `at`: a steady picture (20 frames while still running), a screenshot, its content check."""
     offset = stream.lines[at].split()[1]
-    frame = ssh('python3 %s/tests/corpus/first-frame.py %s/shell.log %s %d 20' % (REPO, STATE, offset, PATIENCE))
+    frame = ssh('python3 %s/tests/corpus/first-frame.py %s/shell.log %s %d 1' % (REPO, STATE, offset, PATIENCE))
     running = not any(l.startswith(('SECOND', 'CORPUS-END')) for l in stream.lines[at:])  # the run command has not returned
     if 'FRAME' not in frame.stdout or not running:
         row[key] = 'FAIL'
@@ -180,7 +180,7 @@ def main():
         rows = [run_one(*e) for e in entries]
         rows = [run_one(*e) if r['note'].startswith('lock busy') else r for e, r in zip(entries, rows)]  # one more try for the apps that found the lock busy
     out = ['# Compatibility corpus results', '', time.strftime('Run %Y-%m-%d %H:%M'), '',
-           '"first frame" = 20 GPU frames while running and the screenshot shows content (uniform/nowindow otherwise); "second" = the same after a second launch.', '',
+           '"first frame" = a GPU frame while running and the screenshot shows content (uniform/nowindow otherwise); "second" = the same after a second launch.', '',
            '| app | kind | install | launch | first frame | second | fakes | note |', '|---|---|---|---|---|---|---|---|']
     out += ['| {name} | {kind} | {install} | {launch} | {frame} | {second} | %d | {note} |'.format(**r) % len(r['fakes']) for r in rows]
     passed = sum(1 for r in rows if r['frame'] == 'ok')

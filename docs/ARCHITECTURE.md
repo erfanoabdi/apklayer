@@ -77,7 +77,7 @@ desktop splits every hardware-facing service in two:
 The same C API shape as libhybris's compat layers, in the opposite direction: there the host calls an Android HAL, here an
 Android HAL calls the host. Rules: the Android side stays thin (translate, never decide); no GPU/vendor specifics in the Android
 side; buffers cross as dmabuf fds and fences as sync_file fds; one directory per domain on both sides, named as AOSP names it.
-`aosp/` is mirrored into `~/los24/vendor/apklayer` (its own git history, one commit per sync) by `scripts/sync-aosp.sh`.
+`aosp/` is mirrored into `~/los24/vendor/apklayer` (its own git history, one commit per sync) by `tools/sync-aosp.sh`.
 
 ## Windows, timing, media, hub (short)
 - Each app renders into BLAST window layers of one SurfaceFlinger virtual display; the sink (`libapklayer_vdisplay`) turns it into a shell toplevel. The primary display is a headless

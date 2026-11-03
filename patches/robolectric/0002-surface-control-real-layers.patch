@@ -1,0 +1,132 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: apklayer <apklayer@localhost>
+Subject: [PATCH] ShadowSurfaceControl: real SurfaceFlinger layers
+
+apklayer patch (docs/PATCHES.md "Robolectric shadows for the device-library (GPU) route"): no fake nativeCreate; the JNI binding
+($$robo$$nativeCreate$nativeBinding, registered by the shim) runs against the instance's SurfaceFlinger, without the Java
+metadata Parcel (Robolectric's Parcel has no native peer) and without NOT_ADD_TO_ROOT (no window manager parents the layer).
+initializeNativeObject keeps a layer ViewRootImpl already made (Android 16 client-managed surfaces) and builds a BLAST layer only
+if the out SurfaceControl is empty.
+
+Against external/robolectric 87aa52b08 (REVISION). Applied by scripts/build-runtime-overlay.sh onto the staged
+upstream sources (<native>/aosp/robolectric-src); the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
+---
+diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowSurfaceControl.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowSurfaceControl.java
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowSurfaceControl.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowSurfaceControl.java
+@@ -7,6 +7,8 @@
+ import static android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE;
+ 
+ import android.os.Parcel;
++import org.robolectric.util.reflector.Static;
++import static org.robolectric.util.reflector.Reflector.reflector;
+ import android.view.SurfaceControl;
+ import android.view.SurfaceSession;
+ import dalvik.system.CloseGuard;
+@@ -21,11 +23,12 @@
+ import org.robolectric.util.reflector.ForType;
+ 
+ /** Shadow for {@link android.view.SurfaceControl} */
+-@Implements(value = SurfaceControl.class, isInAndroidSdk = false)
++@Implements(value = SurfaceControl.class, isInAndroidSdk = false, callNativeMethodsByDefault = true) // apklayer patch: the real natives (libgui) run
+ public class ShadowSurfaceControl {
+   private static final AtomicInteger nativeObject = new AtomicInteger();
+ 
+   @ReflectorObject private SurfaceControlReflector surfaceControlReflector;
++  @org.robolectric.annotation.RealObject private SurfaceControl realObject;
+ 
+   @Resetter
+   public static void reset() {
+@@ -42,50 +45,44 @@
+     surfaceControlReflector.finalize();
+   }
+ 
+-  @Implementation(maxSdk = N_MR1)
+-  protected static long nativeCreate(
+-      SurfaceSession session, String name, int w, int h, int format, int flags) {
+-    // Return a non-zero value otherwise constructing a SurfaceControl fails with
+-    // OutOfResourcesException.
+-    return nativeObject.incrementAndGet();
++  // The JNI function itself: Robolectric renames the native method to $$robo$$nativeCreate$nativeBinding (the shim registers
++  // libandroid_runtime's functions under that name). A @Direct reflector call would reach the generated stub that returns 0.
++  private static long nativeCreateBinding(
++      SurfaceSession session, String name, int w, int h, int format, int flags, long parentObject) {
++    try {
++      java.lang.reflect.Method m =
++          SurfaceControl.class.getDeclaredMethod(
++              "$$robo$$nativeCreate$nativeBinding",
++              SurfaceSession.class, String.class, int.class, int.class, int.class, int.class, long.class, Parcel.class);
++      m.setAccessible(true);
++      return (long) m.invoke(null, session, name, w, h, format, flags, parentObject, null);
++    } catch (java.lang.reflect.InvocationTargetException e) {
++      throw new RuntimeException(e.getCause());
++    } catch (ReflectiveOperationException e) {
++      throw new LinkageError("SurfaceControl native binding", e);
++    }
+   }
+ 
+-  @Implementation(minSdk = O, maxSdk = P)
+-  protected static long nativeCreate(
+-      SurfaceSession session,
+-      String name,
+-      int w,
+-      int h,
+-      int format,
+-      int flags,
+-      long parentObject,
+-      int windowType,
+-      int ownerUid) {
+-    // Return a non-zero value otherwise constructing a SurfaceControl fails with
+-    // OutOfResourcesException.
+-    return nativeObject.incrementAndGet();
+-  }
+-
++  // apklayer patch: no fake nativeCreate; SurfaceControls are real layers of the instance's SurfaceFlinger. The metadata Parcel is
++  // Robolectric's Java Parcel (no native object behind it), so the real native create gets none (it only carries the window type).
+   @Implementation(minSdk = Q)
+   protected static long nativeCreate(
+-      SurfaceSession session,
+-      String name,
+-      int w,
+-      int h,
+-      int format,
+-      int flags,
+-      long parentObject,
+-      Parcel metadata) {
+-    // Return a non-zero value otherwise constructing a SurfaceControl fails with
+-    // OutOfResourcesException.
+-    return nativeObject.incrementAndGet();
++      SurfaceSession session, String name, int w, int h, int format, int flags, long parentObject, Parcel metadata) {
++    // The window manager would parent an app window's layer under its task and display; there is none here, so the layer joins the
++    // root of the layer stack instead (NOT_ADD_TO_ROOT would leave it in no stack at all)
++    flags &= ~SurfaceControl.NOT_ADD_TO_ROOT;
++    long handle = nativeCreateBinding(session, name, w, h, format, flags, parentObject);
++    return handle;
+   }
+ 
++  // apklayer patch: relayout's out SurfaceControl becomes a real BLAST layer of SurfaceFlinger (the window's buffer queue layer)
+   void initializeNativeObject() {
+-    surfaceControlReflector.setNativeObject(nativeObject.incrementAndGet());
+-    if (RuntimeEnvironment.getApiLevel() >= UPSIDE_DOWN_CAKE) {
+-      surfaceControlReflector.setFreeNativeResources(() -> {});
+-    }
++    // Android 16 (client-managed surfaces): ViewRootImpl made the window's layer itself before relayout; replacing it would destroy it
++    if (((SurfaceControl) realObject).isValid()) return;
++    SurfaceControl real =
++        new SurfaceControl.Builder().setName("apklayer-window").setBLASTLayer().setFormat(android.graphics.PixelFormat.RGBA_8888).build();
++    ((SurfaceControl) realObject).copyFrom(real, "apklayer relayout");
++    real.release();
+   }
+ 
+   @ForType(SurfaceControl.class)
+@@ -101,5 +98,10 @@
+ 
+     @Accessor("mFreeNativeResources")
+     void setFreeNativeResources(Runnable runnable);
++
++    @Static
++    @Direct
++    long nativeCreate(
++        SurfaceSession session, String name, int w, int h, int format, int flags, long parentObject, Parcel metadata);
+   }
+ }
