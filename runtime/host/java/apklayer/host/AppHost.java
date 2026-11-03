@@ -88,7 +88,9 @@ public final class AppHost implements Runnable {
     @Override
     public void run() {
         Thread.currentThread().setContextClassLoader(sandbox.getRobolectricClassLoader());
+        StartTrace.mark("apphost run");
         AppEnvironment.setUpApplication(sandbox, apk, describe != null);
+        StartTrace.mark("application set up");
         // apklayer patch: Android prepares the UI thread's native Looper before
         // native activity initialization; the paused Java queue alone does not.
         if (describe == null && NativeLooper.prepareForThread() == 0)
@@ -98,8 +100,11 @@ public final class AppHost implements Runnable {
             AppMetadata.describe(app, describe);
             return;
         }
+        StartTrace.mark("application created (onCreate done)");
         AppEnvironment.startRuntime(app);
+        StartTrace.mark("runtime started");
         HubClient.attach(app);
+        StartTrace.mark("hub attached");
 
         Display display = app.getSystemService(DisplayManager.class).getDisplay(Display.DEFAULT_DISPLAY);
         int width = display.getWidth(), height = display.getHeight();
@@ -446,6 +451,7 @@ public final class AppHost implements Runnable {
         // own decor's first draw, and the composed screen would show nothing behind the dialog.
         c.get().getWindow().getDecorView().invalidate();
         System.out.println("[apklayer] started " + c.get().getClass().getName() + " depth=" + stack.size());
+        StartTrace.mark("activity resumed " + c.get().getClass().getName());
     }
 
     /** Hands an answer from another app (or its disappearance, as RESULT_CANCELED) to the activity that asked. */

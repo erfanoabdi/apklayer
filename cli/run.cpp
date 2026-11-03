@@ -33,8 +33,10 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     if (!provider.empty() && !webviewSandboxOff())
         die("the WebView provider route needs scripts/webview-setup.sh once (Chromium's seccomp sandbox cannot run inside an app JVM and is switched off; needs sudo)");
 
+    trace("run " + package);
     NativeEnv ne = nativeEnv(l, inst);
     if (!ensureStack(l, inst)) return 1;
+    trace("stack ready");
     ensureShell(l, inst, ne);
 
     std::vector<std::string> jvm = hostJvmArgs(l, inst, ne);
@@ -133,6 +135,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         execReplace(app);
     }
     int jvmPid = spawn(app);
+    trace("app jvm spawned");
     // `apklayer stop` ends what this launch started: the JVM and its window sink
     std::string record = join(inst.stateDir, "run." + std::to_string(self));
     writeFile(record, std::to_string(jvmPid) + "\n" + std::to_string(vdisplay) + "\n");
@@ -148,6 +151,7 @@ int runHub(const Layout& l, const Instance& inst) {
     int lock = open(join(inst.stateDir, "hub.lock").c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0644);
     if (flock(lock, LOCK_EX | LOCK_NB) != 0) return 0;
     NativeEnv ne = nativeEnv(l, inst);
+    trace("hub start");
     if (!ensureStack(l, inst)) return 1;
     std::vector<std::string> jvm = hostJvmArgs(l, inst, ne);
     jvm.insert(jvm.end(), {"-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary(), "-cp", hostClasspath(l, ""), "apklayer.host.Main", "--hub"});
@@ -172,7 +176,7 @@ int runHub(const Layout& l, const Instance& inst) {
             waitpid(waiter, nullptr, 0);
             fds[1].fd = -1;
             auto out = readFile(join(inst.logs(), "ready-hub.log"));
-            if (out && out->find(": found") != std::string::npos) setProperty(l, ne, kHubReadyProperty, "1");
+            if (out && out->find(": found") != std::string::npos) { setProperty(l, ne, kHubReadyProperty, "1"); trace("hub ready"); }
         }
         if (fds[0].revents & POLLIN) {
             waitpid(pid, &status, 0);  // keeps the lock until the JVM ends
