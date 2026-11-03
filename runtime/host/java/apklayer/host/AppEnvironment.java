@@ -215,6 +215,7 @@ final class AppEnvironment {
         if (Boolean.getBoolean("apklayer.logcat")) for (String name : new String[] {"alarm", "jobscheduler", "notification", "connectivity"}) System.out.println("[apklayer] service " + name + " = " + app.getSystemService(name));
         HostBuild.install();
         HostSystemConfigService.install();
+        HostContentService.install();
         HostNetwork.install(app);
         HostBattery.install(app);
         // no doze on the desktop: an app is never held back by battery optimization
