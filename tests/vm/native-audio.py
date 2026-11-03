@@ -83,7 +83,7 @@ try:
                         committed = True
             # Capture after the real HWUI commit callback and a visible active window.
             if committed and not captured and any('window state active=true' in s for s in seen):
-                shot = instance.capture(('native AudioTrack JNI result' if audio_mode else 'native attribution result'))
+                instance.capture('native AudioTrack JNI result' if audio_mode else 'native attribution result', 'hello.nativeaudio')
                 instance.keys(*['key:1'],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                 captured = True

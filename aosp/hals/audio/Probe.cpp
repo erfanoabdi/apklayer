@@ -4,6 +4,7 @@
 #include <aidl/android/media/audio/common/Int.h>
 #include <android/binder_manager.h>
 #include <android-base/logging.h>
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -22,9 +23,9 @@ int audioProbe() {
     CHECK(module && AIBinder_isRemote(module->asBinder().get()));
     std::vector<AudioPort> ports;
     check(module->getAudioPorts(&ports));
-    CHECK(ports.size() == 2);
     int mixId = 0, deviceId = 0;
     for (const auto& port : ports) {
+        if (port.flags.getTag() != AudioIoFlags::output) continue;  // the input mix and microphone ports are AudioRecord's (audio-system)
         AudioPortConfig request, applied;
         request.portId = port.id;
         request.flags = port.flags;
@@ -41,7 +42,7 @@ int audioProbe() {
         if (port.ext.getTag() == AudioPortExt::mix) mixId = applied.id;
         else deviceId = applied.id;
     }
-    CHECK(mixId && deviceId);
+    CHECK(mixId && deviceId);  // one output mix and one output device: the playback route under test
     AudioPatch request, patch;
     request.sourcePortConfigIds = {mixId}; request.sinkPortConfigIds = {deviceId};
     check(module->setAudioPatch(request, &patch));
@@ -118,7 +119,12 @@ int audioProbe() {
     opened.stream.reset(); common.reset();
     check(module->resetAudioPatch(patch.id));
     check(module->resetAudioPortConfig(mixId));
-    check(module->resetAudioPortConfig(deviceId));
+    // AudioFlinger (the stack runs it) patches the same device config: shared then, and not the probe's to reset
+    std::vector<AudioPatch> patches;
+    check(module->getAudioPatches(&patches));
+    if (std::none_of(patches.begin(), patches.end(), [&](const AudioPatch& p) {
+            return std::count(p.sinkPortConfigIds.begin(), p.sinkPortConfigIds.end(), deviceId); }))
+        check(module->resetAudioPortConfig(deviceId));
     puts("PASS audio remote AIDL/FMQ 48000 stereo PCM frames, real position/drain and close");
     return 0;
 }

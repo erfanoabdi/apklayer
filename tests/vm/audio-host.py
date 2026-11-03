@@ -32,6 +32,7 @@ try:
         deadline = time.monotonic() + (25 if aidl else 8)
         pending = b''
         done = False
+        ended = None  # pcm length when the producer exited: the monitor lags the sink, so its tail is read until 100 ms of silence
         while not done:
             ready = events.select(3)
             assert ready and time.monotonic() < deadline, 'PipeWire audio test stalled'
@@ -42,6 +43,9 @@ try:
                 elif key.fileobj is recorder.stdout:
                     assert data, 'monitor exited'
                     pcm.extend(data)
+                    even = len(pcm) // 2 * 2
+                    tail = array.array('h', pcm[max(0, even - 19200):even])
+                    done = ended is not None and len(pcm) - ended >= 19200 and max(map(abs, tail)) <= 100
                     if producer is None:
                         print('Monitor receives real PipeWire PCM', flush=True)
                         producer_command = ['b/bridge/hals/audio/audio-test', name] + (['mono'] if mono else [])
@@ -61,12 +65,17 @@ try:
                             for logname in ('audio.log', 'tool.log'):
                                 print((Path(LOGDIR) / logname).read_text(errors='replace')[-6000:], flush=True)
                         assert status == 0, 'native audio probe failed'
-                        done = True
+                        events.unregister(producer.stdout)
+                        ended = len(pcm)
                         break
                     pending += data
                     lines = pending.split(b'\n'); pending = lines.pop()
                     for line in lines: print(line.decode(errors='replace'), flush=True)
     print(f'Captured {len(pcm)//4} monitor frames', flush=True)
+    if aidl:  # first: the stack exits 0 when the tool aborts, so a crashed probe would only show as silent PCM
+        log = Path(LOGDIR + '/tool.log').read_text(errors='replace')
+        print('\n'.join(line for line in log.splitlines() if line.startswith(('audio:', 'PASS audio', 'PASS original'))), flush=True)
+        assert ('PASS original AudioTrack' if system else 'PASS audio remote AIDL/FMQ') in log, 'native PCM probe did not finish: ' + log[-3000:]
     samples = array.array('h', pcm[:len(pcm) // 4 * 4])
     left, right = samples[::2], samples[1::2]
     def power(samples, hz):
@@ -79,10 +88,6 @@ try:
     assert power(left, 440) > power(left, 880) * 50, 'left channel tone lost/swapped'
     assert power(right, 440 if mono else 880) > power(right, 880 if mono else 440) * 50, 'right channel tone lost/swapped'
     active = sum(abs(l) + abs(r) > 100 for l, r in zip(left, right))
-    if aidl:
-        log = Path(LOGDIR + '/tool.log').read_text(errors='replace')
-        print('\n'.join(line for line in log.splitlines() if line.startswith(('audio:', 'PASS audio', 'PASS original'))), flush=True)
-        assert ('PASS original AudioTrack' if system else 'PASS audio remote AIDL/FMQ') in log, 'native PCM probe did not finish'
     assert active > (47500 if aidl else 52000), f'PCM missing: {active} non-silent frames'
     print(f'PASS monitor captured {"F32 mono 440" if mono else "S16 stereo 440/880"} Hz PCM, {active} non-silent frames', flush=True)
 finally:
