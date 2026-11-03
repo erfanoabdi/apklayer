@@ -30,7 +30,7 @@ final class HostBuild {
     private static final Map<String, String> VERSION = Map.of("INCREMENTAL", "ro.build.version.incremental", "RELEASE", "ro.build.version.release",
             "RELEASE_OR_CODENAME", "ro.build.version.release_or_codename", "RELEASE_OR_PREVIEW_DISPLAY", "ro.build.version.release_or_preview_display",
             "BASE_OS", "ro.build.version.base_os", "SECURITY_PATCH", "ro.build.version.security_patch", "CODENAME", "ro.build.version.codename");
-    private static final String[] ABI_KEYS = {"ro.product.cpu.abi", "ro.product.cpu.abilist", "ro.product.cpu.abilist64", "ro.product.cpu.abilist32", "ro.build.date.utc"};
+    private static final String[] OTHER_KEYS = {"ro.product.cpu.abi", "ro.product.cpu.abilist", "ro.product.cpu.abilist64", "ro.product.cpu.abilist32", "ro.build.date.utc"};
 
     static void install() {
         String getter;
@@ -41,10 +41,10 @@ final class HostBuild {
         Set<String> keys = new TreeSet<>(((Properties) ReflectionHelpers.getStaticField(ShadowSystemProperties.class, "buildProperties")).stringPropertyNames());
         keys.addAll(BUILD.values());
         keys.addAll(VERSION.values());
-        keys.addAll(java.util.List.of(ABI_KEYS));
+        keys.addAll(java.util.List.of(OTHER_KEYS));
         for (String key : keys) {
             String value = store(key, getter);
-            if (!value.isEmpty()) ShadowSystemProperties.override(key, value);
+            if (!value.isEmpty() || key.startsWith("ro.product.cpu.")) ShadowSystemProperties.override(key, value);  // an empty ABI list is a value (no 32-bit ABIs on x86_64)
         }
         BUILD.forEach((field, key) -> setFrom(Build.class, field, key));
         VERSION.forEach((field, key) -> setFrom(Build.VERSION.class, field, key));
