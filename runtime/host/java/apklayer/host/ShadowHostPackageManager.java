@@ -94,12 +94,12 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
         catch (PackageManager.NameNotFoundException unknown) { if (!registerInstalled(packageName)) throw unknown; return signed(super.getPackageInfo(packageName, flags), flags); }
     }
 
-    /** The other installed apps register with this JVM when it first meets the hub, which can be late (Play Services clients ask for com.android.vending at start): an installed package not known yet attaches now. */
+    /** The other installed apps register with this JVM when it first meets the hub, which can be late (Play Services clients ask for com.android.vending at start): an installed package not known yet attaches now, or registers alone when it was installed later. */
     private boolean registerInstalled(String packageName) {
         String apps = System.getProperty("apklayer.apps");
-        if (apps == null || HubClient.connected() || !new java.io.File(new java.io.File(apps, packageName), "info.properties").exists()) return false;
-        HubClient.attach(org.robolectric.RuntimeEnvironment.getApplication());
-        return true;
+        if (apps == null || !new java.io.File(new java.io.File(apps, packageName), "info.properties").exists()) return false;
+        if (!HubClient.connected()) { HubClient.attach(org.robolectric.RuntimeEnvironment.getApplication()); return true; }
+        return HubClient.current().registerPackage(this, packageName);  // installed after this JVM attached
     }
 
     @Implementation(minSdk = android.os.Build.VERSION_CODES.TIRAMISU)
