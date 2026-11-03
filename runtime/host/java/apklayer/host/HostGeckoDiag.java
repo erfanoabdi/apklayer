@@ -42,6 +42,14 @@ final class HostGeckoDiag {
                 for (String n : new String[] {"mHasSurface", "mWaitingForSurface", "mPaused", "mRenderMode", "mWidth", "mHeight", "mRequestRender", "mSizeChanged", "mShouldExit", "mExited", "mHaveEglContext", "mHaveEglSurface", "mFinishedCreatingEglSurface", "mSurfaceIsBad"})
                     f.append(' ').append(n).append('=').append(String.valueOf((Object) org.robolectric.util.ReflectionHelpers.getField(t, n)));
                 sb.append(f);
+                Object r = org.robolectric.util.ReflectionHelpers.getField(gl, "mRenderer");  // the renderer's own state (an engine's running/paused flags)
+                StringBuilder rf = new StringBuilder("\n      renderer " + r.getClass().getName() + ":");
+                for (Class<?> k = r.getClass(); k != Object.class; k = k.getSuperclass())
+                    for (Field g : k.getDeclaredFields())
+                        if (g.getType().isPrimitive() && !java.lang.reflect.Modifier.isStatic(g.getModifiers())) {
+                            try { g.setAccessible(true); rf.append(' ').append(g.getName()).append('=').append(g.get(r)); } catch (ReflectiveOperationException | RuntimeException ignored) { }
+                        }
+                sb.append(rf);
             } catch (RuntimeException e) { sb.append("\n      GLThread: ").append(e); }
         }
         if (v instanceof android.view.SurfaceView sv0) { /* above */ }

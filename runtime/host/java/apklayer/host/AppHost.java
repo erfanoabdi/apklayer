@@ -70,7 +70,7 @@ public final class AppHost implements Runnable {
     /** Activities another app started through the hub for a result -> where their result goes. */
     private final java.util.Map<Activity, android.os.ResultReceiver> hubResults = new java.util.IdentityHashMap<>();
     private Handler main;
-    private boolean pausedByFocus, stoppedByMinimize; // lifecycle driven by the window state
+    private boolean windowActive = true, stoppedByMinimize; // lifecycle driven by the window state
     private int logicalW, logicalH, logicalScale = 100; // current window size in dp and scale %
     private int lastOrientation = -2;                    // top activity's requested orientation last applied
     private final HostTextBridge text = new HostTextBridge();
@@ -433,7 +433,8 @@ public final class AppHost implements Runnable {
             else graceUntilMs = System.nanoTime() / 1_000_000 + 20000;  // a trampoline that starts the real screen from a coroutine (AnkiDroid's IntentHandler)
             return;
         }
-        c.start().postCreate(null).resume().visible().topActivityResumed(true);  // the rest of ActivityController.setup()
+        c.start().postCreate(null).resume().visible();  // the rest of ActivityController.setup(), focus as the window has it
+        focus(c, windowActive);
         // As in Android, the previous activity is stopped only once an opaque activity covers it;
         // behind a translucent one (dialog-style) it stays paused and visible.
         if (previous != null && !isTranslucent(c.get())) {
@@ -547,31 +548,35 @@ public final class AppHost implements Runnable {
      * client rebuffers the window to match (ShellClient.present).
      */
     /**
-     * Window state from the shell (PLAN P2.9): an inactive window pauses the top activity, a
-     * minimized one stops it; becoming active again restarts/resumes it.
+     * Window state from the shell (PLAN P2.9), as in Android's freeform multi-window: an inactive window stays resumed and only
+     * loses window focus and top-resumed (SDL and game loops pause on onPause); a minimized one is stopped, restored it restarts.
      */
     private void hostState(int flags) {
         boolean active = (flags & 1) != 0, minimized = (flags & 2) != 0;
+        windowActive = active && !minimized;
         ActivityController<? extends Activity> top = stack.peek();
         if (top == null) return;
         System.out.println("[apklayer] window state active=" + active + " minimized=" + minimized);
         if (minimized && !stoppedByMinimize) {
-            if (!pausedByFocus) top.pause();
-            setVisible(top.stop(), false);
-            pausedByFocus = true;
+            setVisible(top.pause().stop(), false);
             stoppedByMinimize = true;
             System.out.println("[apklayer] lifecycle: stopped (minimized)");
-        } else if (!active && !pausedByFocus) {
-            top.pause();
-            pausedByFocus = true;
-            System.out.println("[apklayer] lifecycle: paused (window inactive)");
-        } else if (active && !minimized && (pausedByFocus || stoppedByMinimize)) {
-            if (stoppedByMinimize) setVisible(top.restart().resume().visible(), true);
-            else top.resume();
-            pausedByFocus = false;
+        } else if (!minimized && stoppedByMinimize) {
+            setVisible(top.restart().resume().visible(), true);
             stoppedByMinimize = false;
             System.out.println("[apklayer] lifecycle: resumed");
         }
+        focus(top, windowActive);
+    }
+
+    /** ViewRootImpl#windowFocusChanged and the top-resumed state, as the window manager reports them for the top window. */
+    private static void focus(ActivityController<? extends Activity> c, boolean has) {
+        View decor = c.get().getWindow().getDecorView();
+        if (decor.hasWindowFocus() == has) return;
+        List<android.view.ViewRootImpl> roots = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mRoots");
+        for (android.view.ViewRootImpl root : roots) // the decor may not be attached yet (its first traversal waits for vsync)
+            if (root.getView() == decor) root.windowFocusChanged(has);
+        c.topActivityResumed(has);
     }
 
     private void hostResize(int w, int h, int scalePct) {
