@@ -121,6 +121,10 @@ run = ["python3 -u tests/vm/vulkan-present.py"]
 
 [input]
 apps = ["hello-input"]
+run = ["python3 -u tests/vm/input-inject.py"]
+
+[input-desktop]
+apps = ["hello-input"]
 alone = true
 run = ["python3 -u tests/vm/input.py"]
 

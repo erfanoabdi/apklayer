@@ -1,8 +1,8 @@
-"""APKLY_VM, APKLY_VM_PASS, APKLY_VM_ROOT (the repo copy on the VM) and APKLY_VM_ENV (extra VM environment for tests/run) from the environment or tests/vm/local.conf (untracked, see local.conf.example)."""
+"""APKLY_VM, APKLY_VM_PASS, APKLY_VM_ROOT (the repo copy on the VM) and APKLY_VM_ENV (extra VM environment for tests/run), APKLY_SLOTS (tests/run's instance ids, default tests tests2 ...) from the environment or tests/vm/local.conf (untracked, see local.conf.example)."""
 import os
 from pathlib import Path
 
-KEYS = ('APKLY_VM', 'APKLY_VM_PASS', 'APKLY_VM_ROOT', 'APKLY_VM_ENV')
+KEYS = ('APKLY_VM', 'APKLY_VM_PASS', 'APKLY_VM_ROOT', 'APKLY_VM_ENV', 'APKLY_SLOTS')
 
 
 def _read():
@@ -25,3 +25,4 @@ VM = _values['APKLY_VM']
 PASS = _values['APKLY_VM_PASS']
 ROOT = _values['APKLY_VM_ROOT'] or '~/apklayer'
 ENV = _values['APKLY_VM_ENV']
+SLOTS = _values['APKLY_SLOTS'].split()
