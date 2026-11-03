@@ -1,6 +1,6 @@
 build/
 __pycache__/
-tests/vm/local.conf
+tests/vm/*.conf
 tests/corpus/shots/
 tests/corpus/logs/
 .claude/

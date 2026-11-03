@@ -23,7 +23,7 @@ import config  # noqa: E402
 import vmcapture  # noqa: E402
 import content  # noqa: E402  (tests/corpus is on sys.path as the script's directory)
 
-SSH = ['sshpass', '-p', config.PASS, 'ssh', '-o', 'StrictHostKeyChecking=no', config.VM]
+SSH = config.auth('ssh') + [config.VM]
 STATE = '~/.local/state/apklayer/default'
 REPO = os.environ.get('CORPUS_VM_REPO', '~/apklayer')
 NATIVE = os.environ.get('CORPUS_VM_NATIVE')
@@ -128,7 +128,7 @@ def run_one(name, spec, kind):
     apk = fetch(name, spec)
     if apk is None:
         row['note'] = 'no apk'; return row
-    subprocess.run(['sshpass', '-p', config.PASS, 'scp', '-q', str(apk), config.VM + ':corpus-' + name + '.apk'], check=True)
+    subprocess.run(config.auth('scp') + ['-q', str(apk), config.VM + ':corpus-' + name + '.apk'], check=True)
     proc = subprocess.Popen(SSH + [ENV + script(name)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors='replace')
     stream = Stream(proc)
     before = HERE / 'shots' / (name + '-before.png')  # the fallback's desktop without the app (content.py takes the window as what differs), taken holding the lock
@@ -176,7 +176,7 @@ def main():
         rows = [json.loads((HERE / 'logs' / (e[0] + '.json')).read_text()) for e in entries if (HERE / 'logs' / (e[0] + '.json')).exists()]
     else:
         ssh('mkdir -p %s/tests/corpus' % REPO)
-        subprocess.run(['sshpass', '-p', config.PASS, 'scp', '-q', str(HERE / 'first-frame.py'), config.VM + ':' + REPO.replace('~/', '') + '/tests/corpus/first-frame.py'], check=True)
+        subprocess.run(config.auth('scp') + ['-q', str(HERE / 'first-frame.py'), config.VM + ':' + REPO.replace('~/', '') + '/tests/corpus/first-frame.py'], check=True)
         rows = [run_one(*e) for e in entries]
         rows = [run_one(*e) if r['note'].startswith('lock busy') else r for e, r in zip(entries, rows)]  # one more try for the apps that found the lock busy
     out = ['# Compatibility corpus results', '', time.strftime('Run %Y-%m-%d %H:%M'), '',

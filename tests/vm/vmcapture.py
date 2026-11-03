@@ -9,24 +9,22 @@ import config
 
 def capture(image, vm=None, password=None):
     vm = vm or config.VM
-    password = password or config.PASS
     remote = '/tmp/apklayer-vmcapture.png'
-    ssh = ['sshpass', '-p', password, 'ssh', '-o', 'StrictHostKeyChecking=no', vm]
+    ssh = config.auth('ssh', password) + [vm]
     subprocess.run(ssh + ['export XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus WAYLAND_DISPLAY=wayland-0 '
                           'XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=GNOME; rm -f ' + remote + '; flameshot full -p ' + remote
                           + ' >/dev/null 2>&1'], check=True)
-    subprocess.run(['sshpass', '-p', password, 'scp', '-q', '-o', 'StrictHostKeyChecking=no', vm + ':' + remote, image], check=True)
+    subprocess.run(config.auth('scp', password) + ['-q', vm + ':' + remote, image], check=True)
 
 
 def app_capture(image, target, env='', cli='~/apklayer/b/cli/apklayer', vm=None, password=None):
     """One app window as SurfaceFlinger composes it (`apklayer screenshot <package|stack>`), independent of the desktop and of other instances.
     env: shell assignments for the instance (APKLAYER_INSTANCE=... XDG_*=...). Returns False when no such window or capture exists (callers fall back to capture())."""
     vm = vm or config.VM
-    password = password or config.PASS
     remote = '/tmp/apklayer-appcapture-%d.png' % os.getpid()
-    ssh = ['sshpass', '-p', password, 'ssh', '-o', 'StrictHostKeyChecking=no', vm]
+    ssh = config.auth('ssh', password) + [vm]
     if subprocess.run(ssh + ['%s %s screenshot %s %s >/dev/null 2>&1' % (env, cli, target, remote)]).returncode != 0: return False
-    ok = subprocess.run(['sshpass', '-p', password, 'scp', '-q', '-o', 'StrictHostKeyChecking=no', vm + ':' + remote, image]).returncode == 0
+    ok = subprocess.run(config.auth('scp', password) + ['-q', vm + ':' + remote, image]).returncode == 0
     subprocess.run(ssh + ['rm -f ' + remote])
     return ok
 

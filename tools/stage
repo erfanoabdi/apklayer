@@ -15,7 +15,7 @@ repo="$(dirname "$here")"
 tree=/home/erfanabdi/los24
 ORB="${APKLAYER_ORB-orb -m ubuntu22-x86}"  # "env" when this runs inside the OrbStack machine
 vm_config() { . "$repo/tests/vm/config.sh"; }
-vm() { sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$VM" "$@"; }
+vm() { vm_auth ssh -o StrictHostKeyChecking=no "$VM" "$@"; }
 
 stage_libs() {
     src="${ANDROID_LIBS_SRC:-$tree/out/target/product/generic_arm64/system/lib64}"
@@ -78,7 +78,7 @@ stage_vulkan() {
     stage="${1:-$HOME/OrbStack/ubuntu22-x86/home/erfanabdi/apklayer-vulkan-stage}"
     for name in libvulkan.so vulkan.apklayer.so libapklayer_vktest.so; do
         target="$name"; [ "$name" != libvulkan.so ] || target=libapklayer_vulkan.so
-        sshpass -p "$PASS" scp "$stage/$name" "$VM:android-arm64/lib64/$target"
+        vm_auth scp "$stage/$name" "$VM:android-arm64/lib64/$target"
         actual=$(vm "sha256sum android-arm64/lib64/$target" | cut -d' ' -f1)
         [ "$actual" = "$(shasum -a 256 "$stage/$name" | cut -d' ' -f1)" ] || { echo "hash mismatch: $target" >&2; exit 1; }
         echo "Verified $target $actual"

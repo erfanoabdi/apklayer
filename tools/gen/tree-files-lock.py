@@ -10,7 +10,7 @@ import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tests", "vm"))
 import config
 VM = config.VM
-SSH = ["sshpass", "-p", config.PASS, "ssh", "-o", "StrictHostKeyChecking=no", VM]
+SSH = config.auth("ssh") + [VM]
 OUT = "out/target/product/generic_arm64"
 
 def sh(cmd, orb=False):

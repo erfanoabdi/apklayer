@@ -9,7 +9,7 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / 'tests/vm'))
 import config  # noqa: E402
 
-SSH = ['sshpass', '-p', config.PASS, 'ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'ServerAliveInterval=15', config.VM]
+SSH = config.auth('ssh') + ['-o', 'ServerAliveInterval=15', config.VM]
 ROOT = config.ROOT.replace('~', '$HOME', 1) if config.ROOT.startswith('~') else config.ROOT  # the repo copy on the VM (a shell word)
 WORK = ROOT + '/.tests'  # the runner's files there: run/<instance> (runtime dirs), out/<group>, apks/
 
