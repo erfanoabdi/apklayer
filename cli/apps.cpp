@@ -26,6 +26,7 @@ std::string cacheKey(const Layout& l, const std::string& apk, const std::vector<
     for (const std::string& j : jars)
         if (j.size() > 4 && j.substr(j.size() - 4) == ".jar") text += sha256File(join(l.frameworkDir(), j)) + "\n";
     if (auto commit = readFile(join(l.root, "runtime/dex2jvm/.dex2jvm-commit"))) text += *commit;
+    text += sha256File(l.dex2jvmJar()) + "\n";  // the converter as built: a change to its code converts again
     return sha256Text(text);
 }
 
