@@ -1,7 +1,7 @@
 // gles1-translator: libapklayer-gles1.so (OpenGL ES 1.1 over a host GLES 3 context, tools/build gles1) draws what ES 1 apps draw: a clear,
 // a fixed-function triangle from a client vertex array (glVertexPointer + glColor4f under glOrthof), a texture through glDrawTexiOES
 // (SDL 1.2's Android blit). On the host's EGL/GBM window surface, read back through the ES 1 API.
-// cc -o gles1-translator tests/vm/gles1-translator.c -lEGL -lgbm -ldl && ./gles1-translator <native>/libapklayer-gles1.so   (exit 0 = PASS)
+// cc -std=gnu17 -o gles1-translator tests/vm/gles1-translator.c -lEGL -lgbm -ldl && ./gles1-translator <native>/libapklayer-gles1.so   (exit 0 = PASS)
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES/gl.h>
@@ -12,7 +12,7 @@
 #include <stdio.h>
 
 static void* (*proc)(const char*);
-#define GL(name, ...) ((void (*)())proc(#name))(__VA_ARGS__)
+#define GL(name, ...) ((void (*)())proc(#name))(__VA_ARGS__)  // an unprototyped call: -std=gnu17 (C23 reads () as no parameters)
 
 int main(int argc, char** argv) {
     void* lib = dlopen(argc > 1 ? argv[1] : "libapklayer-gles1.so", RTLD_NOW);

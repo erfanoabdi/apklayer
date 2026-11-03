@@ -58,6 +58,9 @@ Older dated notes (GPU follow-up, TextureView, MC3, Vulkan checkpoints, OTR2, ro
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 
+### 2026-11-03 — libapklayer_egl: OpenGL ES 1 contexts (gl agent)
+- Why: ES 1 apps (OpenTTD's SDL 1.2) got an ES 2 context in place of the ES 1 one the host's Mesa lacks; now an ES 1 context is the host's or gfxstream's GLES_CM translator (libapklayer-gles1.so, built on the VM) on a host GLES 3 context, and Android's libGLESv1_CM dispatches through the hook table our EGL stores in TLS_SLOT_OPENGL_API. Only aosp/hals/graphics/egl/{Android.bp,Egl.cpp,Gles1.cpp,Gles1.h} copied into vendor/apklayer (the tree's Egl.cpp was identical to main's). Command: `flock -n ~/los24-build.lock -c 'cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_egl'`. Result: not run (this agent's session refuses `source build/envsetup.sh`); the four files wait in vendor/apklayer for that command. A full tools/sync-aosp.sh from a branch without them reverts them there. If Soong refuses `include_dirs` into frameworks/native, that is the line to change.
+
 ### 2026-11-03 — libbinder: the caller uid of an app JVM is its work source (keystore2 key namespaces per app)
 - Why: keystore2 keys its database by the kernel's calling uid, which is the one Linux uid of every app JVM. `patches/aosp/frameworks/native/0005-libbinder-work-source-calling-uid.patch` (applied with `patches/apply aosp ~/los24`). Command: `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libbinder`, under `flock -n ~/los24-build.lock`. Result: built (`m libbinder`, 10:32), `out/target/product/generic_arm64/system/lib64/libbinder.so`.
 ### 2026-11-03 — libapklayer_vdisplay: the configure callback after the display exists (gfx agent)
