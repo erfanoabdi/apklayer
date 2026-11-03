@@ -39,7 +39,7 @@ final class HubDirectory extends Binder {
         packages = new HubPackages(apps); bindings = new HubServiceBindings(this, packages); broadcasts = new HubBroadcasts(this, packages); providers = new HubProviders(this, packages, broadcasts); activities = new HubActivities(this, packages, providers); startedServices = new HubStartedServices(this, packages, broadcasts); pendingIntents = new HubPendingIntents(this, broadcasts, activities, startedServices);
         notifications = new HubNotifications(packages, pendingIntents);
         // the instance's own data directory (the volumes' parent): accounts belong to the instance, as /data/system_ce does to a device
-        accounts = new HubAccounts(this, bindings, new HubAuthenticators(apps, packages), Path.of(System.getProperty("apklayer.storage")).getParent().resolve("accounts.json"));
+        accounts = new HubAccounts(this, bindings, packages, new HubAuthenticators(apps, packages), Path.of(System.getProperty("apklayer.storage")).getParent().resolve("accounts.json"));
         attachInterface(null, HubProtocol.DESCRIPTOR);
         exitWhenIdle(60_000); // nobody ever connected
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
