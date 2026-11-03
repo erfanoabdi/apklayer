@@ -45,6 +45,9 @@ public class Main extends Activity {
         opts.inPreferredConfig = Bitmap.Config.HARDWARE;
         Bitmap factory = BitmapFactory.decodeByteArray(png.toByteArray(), 0, png.size(), opts);
         System.out.println("hwbitmap: BitmapFactory config " + (factory == null ? null : factory.getConfig()));
+        Bitmap stream = BitmapFactory.decodeStream(new java.io.ByteArrayInputStream(png.toByteArray()), null, opts);
+        Bitmap resource = BitmapFactory.decodeResource(getResources(), android.R.drawable.ic_dialog_info, opts);
+        System.out.println("hwbitmap: decodeStream " + (stream == null ? null : stream.getConfig()) + " decodeResource " + (resource == null ? null : resource.getConfig()));
         ImageView view = new ImageView(this);
         view.setScaleType(ImageView.ScaleType.FIT_XY);
         view.setImageBitmap(hw);
