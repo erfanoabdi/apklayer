@@ -3,6 +3,7 @@ this instance's processes, screenshots, test input into this instance's windows 
 import os
 import socket
 import struct
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -30,9 +31,10 @@ def kill(*patterns):
     subprocess.run(['sh', 'tests/vm/kill-instance.sh', INSTANCE, *patterns], check=False)
 
 
-def mine(pattern):
-    """`pgrep -af pattern` restricted to this instance: the lines of its matching processes."""
-    found = subprocess.run(['pgrep', '-af', pattern], capture_output=True, text=True).stdout.splitlines()
+def mine(pattern, exact=False):
+    """`pgrep -af pattern` restricted to this instance: the lines of its matching processes. exact: match the process name (`pgrep -x`), for the
+    JVMs, whose command line is their Android process name once the runtime has named them."""
+    found = subprocess.run(['pgrep', '-a'] + (['-x'] if exact else ['-f']) + [pattern], capture_output=True, text=True).stdout.splitlines()
     result = []
     for line in found:
         try: env = Path('/proc/%s/environ' % line.split()[0]).read_bytes().split(b'\0')
@@ -43,14 +45,17 @@ def mine(pattern):
 
 def assert_clean():
     """Nothing of this instance is left running (app JVMs, btload, the shell)."""
-    left = mine('[a]pklayer.host.Main|[b]tload|[a]pklayer-shell')
+    left = mine('[b]tload|[a]pklayer-shell') + mine('java', exact=True)
     assert not left, 'left running:\n' + '\n'.join(left)
 
 
 def stop():
     """The instance's stack, hub, apps and shell, then anything of this instance the stop missed."""
     subprocess.run(['bin/apklayer', 'stop'], env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    kill('[a]pklayer.host.Main', '[c]omponent-host', '[c]li/apklayer run ')
+    kill('[c]omponent-host')
+    for line in mine('java', exact=True):  # the app and service JVMs the stop missed (by name: their command lines are process names)
+        try: os.kill(int(line.split()[0]), signal.SIGTERM)
+        except (OSError, ValueError): pass
 
 
 def capture(name, app=None):
