@@ -30,7 +30,7 @@ public final class ComponentHost implements Runnable {
             long due = android.os.SystemClock.uptimeMillis() + STOP_WORK_MS, deadline = System.nanoTime() + STOP_DEADLINE_MS * 1_000_000L;
             android.app.QueuedWork.waitToFinish();
             while (PendingWork.dueBefore(due) && System.nanoTime() < deadline) step(looper);
-            System.out.println("[apklayer] component-host stopped " + app.getPackageName());
+            System.out.println("[apklayer] component-host stopped " + app.getPackageName() + " after " + ((System.nanoTime() - deadline) / 1_000_000 + STOP_DEADLINE_MS) + " ms of due work");
         }
         NativeLoader.endWithoutNativeDestructors();
     }
