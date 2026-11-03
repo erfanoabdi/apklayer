@@ -63,7 +63,7 @@ def script(name):
     """The VM side of one app, under the stack lock: install, then one or two runs, each preceded by the shell.log offset its frames count from."""
     cli = 'b/cli/apklayer'
     offset = 'echo "OFFSET $(stat -c %s ' + STATE + '/shell.log 2>/dev/null || echo 0)"; '
-    body = (cli + ' stop >/dev/null 2>&1; rm -f ' + AGAIN + '; out=$(' + cli + ' install ~/corpus-' + name + '.apk 2>&1); echo "$out"; '
+    body = ('echo LOCKED; read go; ' + cli + ' stop >/dev/null 2>&1; rm -f ' + AGAIN + '; out=$(' + cli + ' install ~/corpus-' + name + '.apk 2>&1); echo "$out"; '
             'pkg=$(echo "$out" | sed -n "s/.*installed \\([^ ]*\\).*/\\1/p" | head -n1); [ -n "$pkg" ] || exit 3; '
             + offset + cli + ' run $pkg 2>&1; '
             'if [ -e ' + AGAIN + ' ]; then rm -f ' + AGAIN + '; echo SECOND; ' + offset + cli + ' run $pkg 2>&1; fi; '
@@ -123,11 +123,13 @@ def run_one(name, spec, kind):
     if apk is None:
         row['note'] = 'no apk'; return row
     subprocess.run(['sshpass', '-p', config.PASS, 'scp', '-q', str(apk), config.VM + ':corpus-' + name + '.apk'], check=True)
-    before = HERE / 'shots' / (name + '-before.png')  # the desktop without the app: content.py takes the window as what differs
-    before.parent.mkdir(exist_ok=True)
-    vmcapture.capture(str(before))
-    proc = subprocess.Popen(SSH + [ENV + script(name)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors='replace')
+    proc = subprocess.Popen(SSH + [ENV + script(name)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors='replace')
     stream = Stream(proc)
+    before = HERE / 'shots' / (name + '-before.png')  # the desktop without the app (content.py takes the window as what differs), taken holding the lock
+    if stream.wait_for('LOCKED') is not None:
+        before.parent.mkdir(exist_ok=True)
+        vmcapture.capture(str(before))
+        proc.stdin.write('go\n'); proc.stdin.flush()
     first = stream.wait_for('OFFSET')
     if first is None:
         proc.wait(); stream.thread.join()
