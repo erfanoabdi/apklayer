@@ -319,4 +319,14 @@ final class HostWindows {
             a.recycle();
         }
     }
+
+    /** ViewRootImpl#windowFocusChanged and the top-resumed state, as the window manager reports them for the top window. */
+    static void focus(org.robolectric.android.controller.ActivityController<? extends Activity> c, boolean has) {
+        View decor = c.get().getWindow().getDecorView();
+        if (decor.hasWindowFocus() == has) return;
+        List<android.view.ViewRootImpl> roots = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mRoots");
+        for (android.view.ViewRootImpl root : roots) // the decor may not be attached yet (its first traversal waits for vsync)
+            if (root.getView() == decor) root.windowFocusChanged(has);
+        c.topActivityResumed(has);
+    }
 }

@@ -337,10 +337,12 @@ public final class AppHost implements Runnable {
 
     /** Builds and fully starts the activity, as the simulator does (Robolectric.setupActivity). */
     private void launch(Intent intent) {
+        launch(intent, stack.isEmpty() ? null : ((ShadowActivity) Shadow.extract(stack.peek().get())).getNextStartedActivityForResult());
+    }
+
+    /** @param request the start's record, with its request code: startActivityForResult is only recorded by Robolectric, the host delivers the result (PLAN P5.3) */
+    private void launch(Intent intent, ShadowActivity.IntentForResult request) {
         if (Boolean.getBoolean("apklayer.tracestart")) System.out.println("[apklayer] launch " + intent + " flags=0x" + Integer.toHexString(intent.getFlags()));
-        // startActivityForResult: Robolectric only records it; the host delivers the result (PLAN P5.3)
-        ShadowActivity.IntentForResult request = stack.isEmpty() ? null
-                : ((ShadowActivity) Shadow.extract(stack.peek().get())).getNextStartedActivityForResult();
         boolean wantsResult = request != null && request.requestCode >= 0;
         Class<? extends Activity> cls;
         ActivityInfo info;
@@ -409,7 +411,7 @@ public final class AppHost implements Runnable {
             return;
         }
         c.start().postCreate(null).resume().visible();  // the rest of ActivityController.setup(), focus as the window has it
-        focus(c, windowActive);
+        HostWindows.focus(c, windowActive);
         // As in Android, the previous activity is stopped only once an opaque activity covers it;
         // behind a translucent one (dialog-style) it stays paused and visible.
         if (previous != null && !HostWindows.isTranslucent(c.get())) {
@@ -428,12 +430,16 @@ public final class AppHost implements Runnable {
         StartTrace.mark("activity resumed " + c.get().getClass().getName());
     }
 
-    /** Robolectric hands started activities back newest first; Android starts them in call order (startActivities: the last one ends on top). */
+    /**
+     * Robolectric hands started activities back newest first; Android starts them in call order (startActivities: the last one ends on top).
+     * Each start's for-result record (a second list, also newest first) stays with its intent.
+     */
     private void launchStarted(Intent newest) {
         ShadowApplication shadowApp = Shadow.extract(RuntimeEnvironment.getApplication());
-        java.util.ArrayDeque<Intent> started = new java.util.ArrayDeque<>();
-        for (Intent i = newest; i != null; i = shadowApp.getNextStartedActivity()) started.push(i);
-        while (!started.isEmpty()) launch(started.pop());
+        ShadowActivity top = stack.isEmpty() ? null : Shadow.extract(stack.peek().get());
+        java.util.ArrayDeque<Object[]> started = new java.util.ArrayDeque<>();
+        for (Intent i = newest; i != null; i = shadowApp.getNextStartedActivity()) started.push(new Object[] {i, top == null ? null : top.getNextStartedActivityForResult()});
+        while (!started.isEmpty()) { Object[] start = started.pop(); launch((Intent) start[0], (ShadowActivity.IntentForResult) start[1]); }
     }
 
     /** Hands an answer from another app (or its disappearance, as RESULT_CANCELED) to the activity that asked. */
@@ -538,17 +544,7 @@ public final class AppHost implements Runnable {
             stoppedByMinimize = false;
             System.out.println("[apklayer] lifecycle: resumed");
         }
-        focus(top, windowActive);
-    }
-
-    /** ViewRootImpl#windowFocusChanged and the top-resumed state, as the window manager reports them for the top window. */
-    private static void focus(ActivityController<? extends Activity> c, boolean has) {
-        View decor = c.get().getWindow().getDecorView();
-        if (decor.hasWindowFocus() == has) return;
-        List<android.view.ViewRootImpl> roots = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mRoots");
-        for (android.view.ViewRootImpl root : roots) // the decor may not be attached yet (its first traversal waits for vsync)
-            if (root.getView() == decor) root.windowFocusChanged(has);
-        c.topActivityResumed(has);
+        HostWindows.focus(top, windowActive);
     }
 
     /**
