@@ -41,6 +41,7 @@ final class HubServices {
             android.content.pm.ServiceInfo info = context.getPackageManager().getServiceInfo(intent.getComponent(), 0);
             // as ActivityManagerService: the service runs here only when its process is this one (a component host is the process of its own
             // service: GeckoView's tab process binds MediaManager of ":media", which must not run inside the tab)
+            if (info.name.equals(System.getProperty("apklayer.isolated"))) return null;  // the service this component host was started for runs here
             String here = System.getProperty("apklayer.processname", context.getPackageName());
             String process = info.processName != null ? info.processName : context.getPackageName();
             return (info.flags & android.content.pm.ServiceInfo.FLAG_ISOLATED_PROCESS) != 0 || !process.equals(here) ? info.name : null;
