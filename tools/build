@@ -106,7 +106,7 @@ build_native() {
     tmp="$(mktemp -d)" && scratch="$scratch $tmp"
     mkdir -p "$native/bin" "$native/android-root"
     [ -e "$native/android-libs" ] || ln -s "$libs" "$native/android-libs"
-    cp -r bridge/native/android-root/. "$native/android-root/"  # apklayer's own files of the Android root; the tree's come from tools/stage root
+    cp -r --remove-destination bridge/native/android-root/. "$native/android-root/"  # apklayer's own files of the Android root; the tree's come from tools/stage root
     for f in btload aprop; do put "$B/bridge/native/$f" "$native/bin/$f"; done
     put bridge/native/getprop "$native/bin/getprop" && chmod 755 "$native/bin/getprop"
     put "$B/bridge/native/libapklayer-preload.so" "$native/libapklayer-preload.so"
