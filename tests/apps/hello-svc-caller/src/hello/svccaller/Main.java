@@ -86,12 +86,55 @@ public class Main extends Activity {
             }
             case "filters" -> filters();
             case "late" -> late();
+            case "oneway" -> {
+                String[] answers = probe(0, IBinder.FLAG_ONEWAY);
+                String sync = answers[0], oneway = answers[1];
+                System.out.println("[svc] probe sync: " + sync + "; oneway: " + oneway);
+                String expected = "uid=" + android.os.Process.myUid() + " held=0 unheld=-1";
+                require(sync.equals("pid=" + android.os.Process.myPid() + " " + expected), "synchronous caller identity or permissions: " + sync);
+                require(oneway.equals("pid=0 " + expected), "oneway caller identity or permissions: " + oneway);
+                System.out.println("[svc] PASS oneway: the service sees this app's uid and permissions over synchronous and oneway calls");
+            }
             case "private" -> {
                 try { startService(new Intent().setComponent(new ComponentName("hello.svctarget", "hello.svctarget.PrivateService"))); require(false, "private service started"); }
                 catch (SecurityException expected) { System.out.println("[svc] PASS private: " + expected.getMessage()); }
             }
             default -> System.out.println("[svc] unknown scenario");
         }
+    }
+
+    /** EchoService's PROBE once per flags (0 or oneway), in one binding: the caller's pid, uid and both permission checks as the service saw them. */
+    private String[] probe(int... flags) throws Exception {
+        CountDownLatch connected = new CountDownLatch(1);
+        IBinder[] binder = new IBinder[1];
+        ServiceConnection connection = new ServiceConnection() {
+            @Override public void onServiceConnected(ComponentName name, IBinder service) { binder[0] = service; connected.countDown(); }
+            @Override public void onServiceDisconnected(ComponentName name) { }
+        };
+        require(bindService(new Intent().setComponent(new ComponentName("hello.svctarget", "hello.svctarget.EchoService")), connection, Context.BIND_AUTO_CREATE), "bind");
+        try {
+            require(connected.await(15, TimeUnit.SECONDS), "no connection");
+            String[] answers = new String[flags.length];
+            for (int i = 0; i < flags.length; i++) {
+                CountDownLatch answered = new CountDownLatch(1);
+                int at = i;
+                android.os.Binder callback = new android.os.Binder() {
+                    @Override protected boolean onTransact(int code, Parcel data, Parcel reply, int f) {
+                        answers[at] = "pid=" + data.readInt() + " uid=" + data.readInt() + " held=" + data.readInt() + " unheld=" + data.readInt();
+                        answered.countDown();
+                        return true;
+                    }
+                };
+                Parcel data = Parcel.obtain();
+                try {
+                    data.writeInterfaceToken("hello.svctarget.IProbe");  // as an AIDL proxy does
+                    data.writeStrongBinder(callback);
+                    require(binder[0].transact(2, data, null, flags[i]), "transact");
+                } finally { data.recycle(); }
+                require(answered.await(15, TimeUnit.SECONDS), "no answer");
+            }
+            return answers;
+        } finally { unbindService(connection); }
     }
 
     private static final int Service_START_STICKY = 1;

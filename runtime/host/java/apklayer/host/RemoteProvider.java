@@ -42,6 +42,7 @@ final class RemoteProvider extends ContentProvider {
         ReflectionHelpers.setField(ContentProvider.class, this, "mContext", context);
         ReflectionHelpers.setField(ContentProvider.class, this, "mCallingAttributionSource", new ThreadLocal<AttributionSource>());
         ReflectionHelpers.setField(ContentProvider.class, this, "mAuthority", authority);
+        ReflectionHelpers.setField(ContentProvider.class, this, "mMyUid", android.os.Process.myUid());  // as attachInfo sets it: this app's own calls pass its Transport; the provider's app checks them
         ReflectionHelpers.setField(ContentProvider.class, this, "mAuthorities", new String[] {authority});  // the Transport of the resolver's side validates uris against it
     }
 
@@ -50,7 +51,7 @@ final class RemoteProvider extends ContentProvider {
      * ContentProvider.Transport would for another uid (through the hub: it knows permissions other apps declare).
      */
     private void enforce(String permission, boolean write, Uri uri) {
-        if (permission == null || (uri != null && HubClient.current().uriGranted(uri, write ? 2 : 1)) || HubClient.current().checkPermission(android.os.Process.myPid(), permission) == android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+        if (permission == null || (uri != null && HubClient.current().uriGranted(uri, write ? 2 : 1)) || HubClient.current().checkPermission(android.os.Process.myPid(), android.os.Process.myUid(), permission) == android.content.pm.PackageManager.PERMISSION_GRANTED) return;
         throw new SecurityException("Permission Denial: " + (write ? "writing " : "reading ") + authority + " requires " + permission + ", or grantUriPermission()");
     }
 
@@ -115,5 +116,21 @@ final class RemoteProvider extends ContentProvider {
     @Override public ContentProviderResult[] applyBatch(ArrayList<ContentProviderOperation> operations) throws OperationApplicationException {
         try { return call((p, source) -> p.applyBatch(source, authority, operations)); } catch (FileNotFoundException impossible) { throw new IllegalStateException(impossible); }
     }
-    @Override public Uri canonicalize(Uri url) { return plain((p, source) -> p.canonicalize(source, url)); }
+    // oneway with a callback, as ContentResolver.canonicalize/uncanonicalize call them
+    @Override public Uri canonicalize(Uri url) { return async((p, source, callback) -> p.canonicalizeAsync(source, url, callback)); }
+    @Override public Uri uncanonicalize(Uri url) { return async((p, source, callback) -> p.uncanonicalizeAsync(source, url, callback)); }
+
+    private interface AsyncOp { void run(IContentProvider provider, AttributionSource source, android.os.RemoteCallback callback) throws RemoteException; }
+
+    private Uri async(AsyncOp operation) {
+        java.util.concurrent.CompletableFuture<Bundle> answer = new java.util.concurrent.CompletableFuture<>();
+        plain((p, source) -> { operation.run(p, source, new android.os.RemoteCallback(answer::complete)); return null; });
+        Bundle result;
+        try { result = answer.get(20, java.util.concurrent.TimeUnit.SECONDS); }  // ContentResolver.CONTENT_PROVIDER_TIMEOUT_MILLIS
+        catch (java.util.concurrent.TimeoutException | InterruptedException | java.util.concurrent.ExecutionException failure) { throw new IllegalStateException("Provider " + authority + " did not answer", failure); }
+        android.os.ParcelableException error = result.getParcelable(ContentResolver.REMOTE_CALLBACK_ERROR, android.os.ParcelableException.class);
+        if (error != null && error.getCause() instanceof RuntimeException thrown) throw thrown;
+        if (error != null) throw new IllegalStateException(error.getCause());
+        return result.getParcelable(ContentResolver.REMOTE_CALLBACK_RESULT, Uri.class);
+    }
 }

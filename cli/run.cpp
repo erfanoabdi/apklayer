@@ -142,7 +142,8 @@ int runHub(const Layout& l, const Instance& inst) {
     trace("hub start");
     if (!ensureStack(l, inst)) return 1;
     std::vector<std::string> jvm = hostJvmArgs(l, inst, ne);
-    jvm.insert(jvm.end(), {"-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary(), "-cp", hostClasspath(l), "apklayer.host.Main", "--hub"});
+    // uid 1000: the hub is the instance's system_server, also as the uid its oneway calls carry (HubProviders.check)
+    jvm.insert(jvm.end(), {"-Dapklayer.uid=1000", "-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary(), "-cp", hostClasspath(l), "apklayer.host.Main", "--hub"});
     setProperty(l, ne, kHubReadyProperty, "0");
     // Like init after a service registers: once this JVM has published the hub to the service manager it says so on this pipe (HubHost), and
     // apklayer.hub.ready=1 (clients block on it). Its own word, not a service-manager lookup, which can still find the previous hub's binder.

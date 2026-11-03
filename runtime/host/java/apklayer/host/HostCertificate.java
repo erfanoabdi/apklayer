@@ -46,6 +46,12 @@ final class HostCertificate {
         return null;
     }
 
+    /** Whether two installed packages are signed with the same certificate; an unsigned or unreadable APK (the placeholder) matches none. */
+    static boolean sameSigner(String a, String b) {
+        Signature[] first = of(a), second = of(b);
+        return first != signatures() && second != signatures() && java.util.Arrays.equals(first, second);
+    }
+
     static synchronized Signature[] signatures() {
         if (signatures == null) {
             try {

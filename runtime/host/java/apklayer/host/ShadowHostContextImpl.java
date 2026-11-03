@@ -108,7 +108,7 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
 
     // A provider (or any service) in this process asking about its caller: with the hub the caller's package decides, not this app's own grants.
     @Implementation @Override protected int checkPermission(String permission, int pid, int uid) {
-        if (hub() && HubClient.connected() && pid != android.os.Process.myPid()) return HubClient.current().checkPermission(pid, permission);
+        if (hub() && HubClient.connected() && pid != android.os.Process.myPid()) return HubClient.current().checkPermission(pid, uid, permission);
         int result = super.checkPermission(permission, pid, uid);
         if (result != android.content.pm.PackageManager.PERMISSION_GRANTED && permission != null && pid == android.os.Process.myPid()) {
             // an app holds the permissions it declares itself (microG's UnifiedNlp checks its own SERVICE_ADMIN for a call from its own client)
@@ -118,6 +118,10 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
         }
         return result;
     }
+
+    // Android's own: the binder caller's pid and uid, not this app's (Robolectric checks the app itself, so every caller of a service held its permissions).
+    @Implementation @Override protected int checkCallingPermission(String permission) { return real("checkCallingPermission", ClassParameter.from(String.class, permission)); }
+    @Implementation @Override protected int checkCallingOrSelfPermission(String permission) { return real("checkCallingOrSelfPermission", ClassParameter.from(String.class, permission)); }
 
     // With the instance hub, broadcasts and receiver registrations run Android's own ContextImpl code (LoadedApk.ReceiverDispatcher, PendingResult...), which ends
     // in the hub-backed activity manager (HubActivityManager): Robolectric's in-process queue would only reach this app's own receivers.

@@ -6,8 +6,9 @@ import android.app.Activity;
 import android.os.Bundle;
 
 /**
- * Another app's account (hello-system's "accounts" check adds it): this app lists it and gets a token from hello-system's authenticator, which the
- * instance's account service binds for it. Prints "[accounts] PASS|FAIL detail".
+ * Another app's account (hello-system's "accounts" check adds it and makes it visible to hello.accounts): this app lists it and gets a token from
+ * hello-system's authenticator, which the instance's account service binds for it. Built again as hello.accountshidden (tests/apps/hello-accounts-hidden),
+ * to which the account was not made visible: it lists none and gets no token. Prints "[accounts] PASS|FAIL detail".
  */
 public final class Main extends Activity {
     @Override protected void onCreate(Bundle state) {
@@ -16,6 +17,16 @@ public final class Main extends Activity {
             try {
                 AccountManager am = AccountManager.get(this);
                 Account[] accounts = am.getAccountsByType("hello.system.account");
+                if (!getPackageName().equals("hello.accounts")) {
+                    if (accounts.length != 0 || java.util.Arrays.stream(am.getAccounts()).anyMatch(a -> a.type.equals("hello.system.account")))
+                        throw new AssertionError("hello-system's account is visible to " + getPackageName());
+                    try {
+                        am.getAuthToken(new Account("check", "hello.system.account"), "cross", null, false, null, null).getResult();
+                        throw new AssertionError("a token of an account this app does not see");
+                    } catch (android.accounts.AuthenticatorException | IllegalArgumentException refused) { /* expected */ }
+                    System.out.println("[accounts] PASS hidden: " + getPackageName() + " sees no account of hello.system.account and gets no token");
+                    return;
+                }
                 if (accounts.length == 0) throw new AssertionError("hello-system's account is not listed");
                 String token = am.getAuthToken(accounts[0], "cross", null, false, null, null).getResult().getString(AccountManager.KEY_AUTHTOKEN);
                 if (!("token-cross-" + android.os.Process.myUid()).equals(token)) throw new AssertionError("token " + token);
