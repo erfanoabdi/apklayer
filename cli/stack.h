@@ -26,6 +26,9 @@ void stopStack(const Layout& layout, const Instance& instance);
 // The instance's property store (Android's readiness mechanism): set a property, or block until it has a value (false if deathPidfd became readable first).
 void setProperty(const Layout& layout, const NativeEnv& env, const char* name, const char* value);
 bool waitForProperty(const Layout& layout, const NativeEnv& env, const char* name, const char* value, int deathPidfd);
+bool alive(int pid);
+// SIGTERM, then SIGKILL after 5 s; returns once the process is gone (only a process whose command line names apklayer: a recycled pid is not ours).
+void terminate(int pid);
 // Starts the session's window shell when none listens on its socket.
 void ensureShell(const Layout& layout, const Instance& instance, const NativeEnv& env);
 

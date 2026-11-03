@@ -1,0 +1,65 @@
+// What the C++ side (src/main.cpp) fills in and answers: the rows of the apklayer CLI and the actions on them.
+
+export struct AppEntry { package: string, label: string, version: string, icon: image, running: bool }
+export struct InstanceEntry { id: string, running: bool, binder: bool, root: string }
+export struct PropEntry { key: string, value: string, source: string, live: string }
+export struct InfoEntry { key: string, value: string }
+
+export global Backend {
+    in property <[AppEntry]> apps;
+    in property <[InstanceEntry]> instances;
+    in property <[PropEntry]> props;
+    in property <[InfoEntry]> status;
+    in property <AppEntry> current-app;   // the app selected with select-app, and its info rows
+    in property <bool> has-current-app;
+    in property <[InfoEntry]> app-info;
+    in property <string> instance: "default";
+    in property <bool> instance-running;
+    in property <bool> busy;               // a long action (install, uninstall, instance setup) runs
+    in property <string> busy-text;
+    in property <string> message;          // the latest result, shown in the snackbar
+    in property <int> message-serial;      // bumped with every message (the same text twice shows twice)
+    in property <string> binder-command;   // set when a new instance still needs its binder devices
+    in property <string> binder-instance;
+    in property <int> binder-serial;       // bumped to show the binder dialog
+    in property <string> chosen-path;      // what the file chooser returned
+
+    callback refresh();
+    callback install-chooser();            // the desktop's file chooser (portal), then install
+    callback install-path(string);
+    callback open-app(string);
+    callback stop-app(string);
+    callback clear-data(string);
+    callback uninstall(string);
+    callback select-app(string);
+    callback select-instance(string);
+    callback create-instance(string);
+    callback remove-instance(string);
+    callback setup-binder(string);         // pkexec the setup script
+    callback stop-instance(string);
+    callback set-prop(string, string);
+    callback unset-prop(string);
+}
+
+export global AppIcons {
+    out property <image> apps: @image-url("icons/apps.svg");
+    out property <image> layers: @image-url("icons/layers.svg");
+    out property <image> tune: @image-url("icons/tune.svg");
+    out property <image> memory: @image-url("icons/memory.svg");
+    out property <image> add: @image-url("icons/add.svg");
+    out property <image> delete: @image-url("icons/delete.svg");
+    out property <image> play: @image-url("icons/play_arrow.svg");
+    out property <image> stop: @image-url("icons/stop.svg");
+    out property <image> refresh: @image-url("icons/refresh.svg");
+    out property <image> clean: @image-url("icons/cleaning_services.svg");
+    out property <image> folder: @image-url("icons/folder_open.svg");
+    out property <image> dark: @image-url("icons/dark_mode.svg");
+    out property <image> light: @image-url("icons/light_mode.svg");
+    out property <image> back: @image-url("icons/arrow_back.svg");
+    out property <image> restart: @image-url("icons/restart_alt.svg");
+    out property <image> audio: @image-url("icons/graphic_eq.svg");
+    out property <image> battery: @image-url("icons/battery_full.svg");
+    out property <image> location: @image-url("icons/location_on.svg");
+    out property <image> board: @image-url("icons/developer_board.svg");
+    out property <image> admin: @image-url("icons/admin_panel_settings.svg");
+}

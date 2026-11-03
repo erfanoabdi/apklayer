@@ -29,6 +29,13 @@ tools/build host ~/arm64-native              # host classes against the staged R
 tools/build native ~/arm64-native [shards]   # stage the native runtime: ninja's outputs, native-runtime.jar, library mapping
 sudo tools/host-setup/binder.sh              # kernel binderfs
 bin/apklayer install app.apk | run <package|app.apk> | list | uninstall <package> | screenshot <package> <out.png> | stop
+bin/apklayer instances | instance create|remove <id> | prop [set KEY VALUE | unset KEY] | info | clear-data | stop <package> | status
+```
+
+**apklayer-manager** (`manager/`): a Material 3 window over the CLI for phones and desktops: apps (install, open, stop, clear data, uninstall,
+info), instances, per-instance Android property overrides, what the instance sees of the device. Built on its own (prebuilt Slint, no Rust):
+```sh
+manager/fetch-slint.sh && meson setup manager/b manager && ninja -C manager/b && manager/b/apklayer-manager
 ```
 
 ## Layout
