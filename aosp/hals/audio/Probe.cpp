@@ -22,9 +22,9 @@ int audioProbe() {
     CHECK(module && AIBinder_isRemote(module->asBinder().get()));
     std::vector<AudioPort> ports;
     check(module->getAudioPorts(&ports));
-    CHECK(ports.size() == 2);
     int mixId = 0, deviceId = 0;
     for (const auto& port : ports) {
+        if (port.flags.getTag() != AudioIoFlags::output) continue;  // the input mix and microphone ports are AudioRecord's (audio-system)
         AudioPortConfig request, applied;
         request.portId = port.id;
         request.flags = port.flags;
@@ -41,7 +41,7 @@ int audioProbe() {
         if (port.ext.getTag() == AudioPortExt::mix) mixId = applied.id;
         else deviceId = applied.id;
     }
-    CHECK(mixId && deviceId);
+    CHECK(mixId && deviceId);  // one output mix and one output device: the playback route under test
     AudioPatch request, patch;
     request.sourcePortConfigIds = {mixId}; request.sinkPortConfigIds = {deviceId};
     check(module->setAudioPatch(request, &patch));

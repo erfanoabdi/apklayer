@@ -70,6 +70,10 @@ Older dated notes (GPU follow-up, TextureView, MC3, Vulkan checkpoints, OTR2, ro
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 
+### 2026-11-04 — libapklayer_audio: the --probe configures only the output ports (audio agent)
+- Why: since the input mix and microphone ports were added (ec9f119) the HAL has four ports; the probe asserted two and aborted before writing PCM (audio-aidl reported it as "left channel tone lost/swapped").
+- Command (OrbStack, under `flock -n ~/los24-build.lock`): only `hals/audio/Probe.cpp` copied into `vendor/apklayer` (the tree's copy was identical to main's), then `APKLAYER_VARIANT=android_vendor_arm64_armv8-a_shared python3 tools/lib/orb-build-module.py libapklayer_audio hals/audio Probe.cpp`: compiled, link failed (the vendor-variant libraries it links, libfmq.so, libaudioutils.so ..., are not in out/). Second command: `flock -n ~/los24-build.lock -c 'cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_audio'`.
+
 ### 2026-11-04 — libapklayer_codec2: EOS drain without a timestamp (media agent)
 - Why: the AVC/VP8/VP9 adapter (ReorderedDecoder) rejected an end-of-stream work whose timestamp is -1 us (MediaCodec clients drain with an empty EOS buffer; GeckoView does), so MediaCodec reported UNKNOWN_ERROR at the end of every H.264 video.
 - Command (OrbStack, under `flock -n ~/los24-build.lock`): only `hals/media/codec2/ReorderedDecoder.cpp` copied into `vendor/apklayer` (same as main before the edit), then `python3 tools/lib/orb-build-module.py libapklayer_codec2 hals/media/codec2 ReorderedDecoder.cpp`.
