@@ -25,7 +25,7 @@ def popen(command, **kw):
 def push():
     """The working tree (tracked and new files, as they are now) into ROOT on the VM."""
     files = subprocess.run(['git', 'ls-files', '-co', '--exclude-standard', '-z'], cwd=REPO, capture_output=True, check=True).stdout.split(b'\0')
-    names = b'\0'.join(f for f in files if f and os.path.isfile(REPO / f.decode()))
+    names = b'\0'.join(f for f in files if f and os.path.lexists(REPO / f.decode()))  # symlinks too (their targets are on the VM)
     tar = subprocess.Popen(['tar', 'cf', '-', '--null', '-T', '-'], cwd=REPO, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                            env=dict(os.environ, COPYFILE_DISABLE='1'))
     tar.stdin.write(names)  # the list fits the pipe: tar reads it while ssh takes its output
