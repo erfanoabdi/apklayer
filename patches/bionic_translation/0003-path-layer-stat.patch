@@ -1,0 +1,94 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 03/25] apklayer: path-layer-stat
+
+the path hook (libc_bio_set_apply_path_overrides_func, already there for open/fopen) also serves stat, lstat and fstatat, through one exported function, so apklayer's path layer (bridge/native/paths.c) covers the file checks the Android libraries make
+
+apklayer patch: step 3 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0003 of patches/bionic_translation.
+---
+ libc/libc-open-overrides.c |  6 ++++++
+ libc/libc.c                | 22 ++++++++++++++++++----
+ 2 files changed, 24 insertions(+), 4 deletions(-)
+
+diff --git a/libc/libc-open-overrides.c b/libc/libc-open-overrides.c
+index e7cccdf..5eb9b75 100644
+--- a/libc/libc-open-overrides.c
++++ b/libc/libc-open-overrides.c
+@@ -23,6 +23,12 @@ void libc_bio_set_apply_path_overrides_func(apply_path_overrides_func_type *func
+ 	apply_path_overrides_func = func;
+ }
+ 
++/* apklayer patch: the same hook for the stat family (libc.c) */
++bool libc_bio_apply_path_overrides(char **path)
++{
++	return (*apply_path_overrides_func)(path);
++}
++
+ /* open and fopen overrides */
+ int bionic_open(char *path, int oflag, ...)
+ {
+diff --git a/libc/libc.c b/libc/libc.c
+index cbfb590..9e1ba92 100644
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -1,3 +1,5 @@
++#include <stdbool.h>
++#include <stdlib.h>
+ #include "../wrapper/verbose.h"
+ #include <assert.h>
+ #include <dirent.h>
+@@ -58,6 +60,7 @@ struct bionic_sigaction {
+ 
+ // Stuff that doesn't exist in glibc
+ 
++bool libc_bio_apply_path_overrides(char **path); /* apklayer patch: path layer */
+ #define PROP_NAME_MAX  32
+ #define PROP_VALUE_MAX 92
+ 
+@@ -145,7 +148,9 @@ int bionic_stat(const char *restrict path, struct bionic_stat *restrict buf)
+ 	verbose("%s", path);
+ 	struct stat native_stat;
+ 
+-	int ret = stat(path, &native_stat);
++	char *mapped = (char *)path; bool free_it = libc_bio_apply_path_overrides(&mapped);
++	int ret = stat(mapped, &native_stat);
++	if (free_it) free(mapped);
+ 	*buf = (struct bionic_stat) {
+ 		.st_dev = native_stat.st_dev,
+ 		.st_ino = native_stat.st_ino,
+@@ -169,14 +174,20 @@ int bionic_stat(const char *restrict path, struct bionic_stat *restrict buf)
+ int bionic_stat(const char *restrict path, struct stat *restrict buf)
+ {
+ 	verbose("%s", path);
+-	return stat(path, buf);
++	char *mapped = (char *)path; bool free_it = libc_bio_apply_path_overrides(&mapped);
++	int ret = stat(mapped, buf);
++	if (free_it) free(mapped);
++	return ret;
+ }
+ #endif
+ 
+ int bionic_lstat(const char *restrict path, struct stat *restrict buf)
+ {
+ 	verbose("%s", path);
+-	return lstat(path, buf);
++	char *mapped = (char *)path; bool free_it = libc_bio_apply_path_overrides(&mapped);
++	int ret = lstat(mapped, buf);
++	if (free_it) free(mapped);
++	return ret;
+ }
+ 
+ int bionic_fstat(int fd, struct stat *buf)
+@@ -188,7 +199,10 @@ int bionic_fstat(int fd, struct stat *buf)
+ int bionic_fstatat(int dirfd, const char *pathname, void *buf, int flags)
+ {
+ 	verbose("%d, %s", dirfd, pathname);
+-	return fstatat(dirfd, pathname, buf, flags);
++	char *mapped = (char *)pathname; bool free_it = pathname && pathname[0] == '/' && libc_bio_apply_path_overrides(&mapped);
++	int ret = fstatat(dirfd, mapped, buf, flags);
++	if (free_it) free(mapped);
++	return ret;
+ }
+ 
+ static void

@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 24/25] apklayer: path-layer-unlink-rename-mkdir
+
+The path layer also serves the calls that remove or move what open created: unlink, unlinkat, rename, mkdir, rmdir. keystore2's sqlite created its journal under /data/misc/keystore (served from the Android root) and then unlinked the plain /data path: SQLITE_IOERR_DELETE_NOENT, the database could not commit.
+
+apklayer patch: step 19 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0024 of patches/bionic_translation.
+---
+ libc/libc.c | 23 +++++++++++++++++++++++
+ 1 file changed, 23 insertions(+)
+
+diff --git a/libc/libc.c b/libc/libc.c
+index aafc903..626d4dd 100644
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -559,3 +559,26 @@ size_t bionic_regerror(int errcode, const struct bionic_regex *preg, char *errbu
+ {
+ 	return regerror(errcode, preg ? preg->re_g : NULL, errbuf, errbuf_size);
+ }
++
++/* apklayer patch: see scripts/patch-bionic-translation.sh step 19 */
++#include <unistd.h>
++#include <sys/stat.h>
++#include <stdio.h>
++static char *apk_map(const char *path, bool *owned)
++{
++	char *m = (char *)path;
++	*owned = path && path[0] == '/' && libc_bio_apply_path_overrides(&m);
++	return m;
++}
++int bionic_unlink(const char *path) { bool o; char *m = apk_map(path, &o); int r = unlink(m); if (o) free(m); return r; }
++int bionic_unlinkat(int dirfd, const char *path, int flags) { bool o; char *m = apk_map(path, &o); int r = unlinkat(dirfd, m, flags); if (o) free(m); return r; }
++int bionic_rmdir(const char *path) { bool o; char *m = apk_map(path, &o); int r = rmdir(m); if (o) free(m); return r; }
++int bionic_mkdir(const char *path, mode_t mode) { bool o; char *m = apk_map(path, &o); int r = mkdir(m, mode); if (o) free(m); return r; }
++int bionic_rename(const char *from, const char *to)
++{
++	bool of, ot; char *a = apk_map(from, &of), *b = apk_map(to, &ot);
++	int r = rename(a, b);
++	if (of) free(a);
++	if (ot) free(b);
++	return r;
++}

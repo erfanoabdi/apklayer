@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 12/25] apklayer: cond-monotonic-deadline
+
+Android's monotonic waits take an absolute deadline, regardless of the condition attribute. Relative waits also use the monotonic clock.
+
+apklayer patch: step 12 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0012 of patches/bionic_translation.
+---
+ pthread_wrapper/libpthread.c | 30 ++++++++++--------------------
+ 1 file changed, 10 insertions(+), 20 deletions(-)
+
+diff --git a/pthread_wrapper/libpthread.c b/pthread_wrapper/libpthread.c
+index 0e33b76..a052faf 100644
+--- a/pthread_wrapper/libpthread.c
++++ b/pthread_wrapper/libpthread.c
+@@ -680,32 +680,22 @@ int bionic_pthread_cond_timedwait(bionic_cond_t *cond, bionic_mutex_t *mutex, co
+ 	return ret;
+ }
+ 
++/* apklayer patch: explicit monotonic deadlines, matching bionic pthread_cond.cpp. */
+ int bionic_pthread_cond_timedwait_relative_np(bionic_cond_t *cond, bionic_mutex_t *mutex, const struct timespec *reltime)
+ {
+-	assert(cond && mutex && reltime);
+-	struct timespec tv;
+-	clock_gettime(CLOCK_REALTIME, &tv);
+-	tv.tv_sec += reltime->tv_sec;
+-	tv.tv_nsec += reltime->tv_nsec;
+-	if (tv.tv_nsec >= 1000000000) {
+-		++tv.tv_sec;
+-		tv.tv_nsec -= 1000000000;
+-	}
+-	return bionic_pthread_cond_timedwait(cond, mutex, &tv);
++    assert(cond && mutex && reltime);
++    struct timespec tv;
++    clock_gettime(CLOCK_MONOTONIC, &tv);
++    tv.tv_sec += reltime->tv_sec;
++    tv.tv_nsec += reltime->tv_nsec;
++    if (tv.tv_nsec >= 1000000000) { ++tv.tv_sec; tv.tv_nsec -= 1000000000; }
++    return bionic_pthread_cond_clockwait(cond, mutex, CLOCK_MONOTONIC, &tv);
+ }
+ 
+ int bionic_pthread_cond_timedwait_monotonic_np(bionic_cond_t *cond, bionic_mutex_t *mutex, const struct timespec *abstime)
+ {
+-	assert(cond && mutex && abstime);
+-	struct timespec tv;
+-	clock_gettime(CLOCK_MONOTONIC, &tv);
+-	tv.tv_sec += abstime->tv_sec;
+-	tv.tv_nsec += abstime->tv_nsec;
+-	if (tv.tv_nsec >= 1000000000) {
+-		++tv.tv_sec;
+-		tv.tv_nsec -= 1000000000;
+-	}
+-	return bionic_pthread_cond_timedwait(cond, mutex, &tv);
++    assert(cond && mutex && abstime);
++    return bionic_pthread_cond_clockwait(cond, mutex, CLOCK_MONOTONIC, abstime);
+ }
+ 
+ int bionic_pthread_cond_timedwait_monotonic(bionic_cond_t *cond, bionic_mutex_t *mutex, const struct timespec *abstime)

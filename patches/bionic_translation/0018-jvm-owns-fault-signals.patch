@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 18/25] apklayer: jvm-owns-fault-signals
+
+A bionic library does not take over SIGSEGV, SIGBUS, SIGILL and SIGFPE: the JVM owns them (implicit null checks, safepoint polls). Gecko's crash handler installed over the JVM's treated every one of them as a crash and exited with status 11 a few seconds after start. The call succeeds and reports the current action; a crash then ends in the JVM's own report.
+
+apklayer patch: step 13 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0018 of patches/bionic_translation.
+---
+ libc/libc.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/libc/libc.c b/libc/libc.c
+index 9e1ba92..86f2006 100644
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -286,6 +286,15 @@ int bionic_sigaction(int sig, const struct bionic_sigaction *restrict act, struc
+ 		sig = SIGRTMIN;
+ 
+ 	struct sigaction goact = {0}, gact = {0};
++	if (act && (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL || sig == SIGFPE)) { /* apklayer patch: see scripts/patch-bionic-translation.sh step 13 */
++		if (oact) {
++			sigaction(sig, NULL, &goact);
++			*oact = (struct bionic_sigaction){0};
++			oact->bsa_handler = goact.sa_handler;
++			oact->sa_flags = goact.sa_flags;
++		}
++		return 0;
++	}
+ 	if (act) {
+ 		gact.sa_handler = act->bsa_handler;
+ 		gact.sa_flags = act->sa_flags;

@@ -1,0 +1,34 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer compat: libunwind before 1.8
+
+Ubuntu 22.04 ships libunwind 1.3. Accept it, and call unw_set_iterate_phdr_function (new in 1.8)
+only when it exists: backtraces then show only the libraries the system loader knows.
+Applied by scripts/build-bionic-translation.sh only when pkg-config reports libunwind older than 1.8.
+---
+diff --git a/linker/linker.c b/linker/linker.c
+index fdb550f..b6889cc 100644
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -1735,7 +1735,8 @@ void print_backtrace()
+ 	printf("simple backtrace:\n");
+ 
+ 	/* unwind info is in ELF sections, so we need to make sure libunwind knows about the elf files loaded by our linker */
+-	unw_set_iterate_phdr_function(unw_local_addr_space, &bionic_dl_iterate_phdr);
++extern void unw_set_iterate_phdr_function() __attribute__((weak));
++	if (unw_set_iterate_phdr_function) unw_set_iterate_phdr_function(unw_local_addr_space, &bionic_dl_iterate_phdr);
+ 
+ 	do {
+ 		unw_word_t offset, pc;
+diff --git a/meson.build b/meson.build
+index d741726..0350835 100644
+--- a/meson.build
++++ b/meson.build
+@@ -53,7 +53,7 @@ dl_bio = shared_library('dl_bio',
+ 		dependency('dl'),
+ 		dependency('egl'),
+ 		dependency('libelf'),
+-		dependency('libunwind', version : '>=1.8.0'), # needed by libc_bio anyway, so might as well use it here
++		dependency('libunwind', version : '>=1.3.0'), # needed by libc_bio anyway, so might as well use it here
+ 		config,
+ 	],
+ 	link_with: [

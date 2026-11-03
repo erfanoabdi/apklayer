@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 14/25] apklayer: aarch64-irelative
+
+R_AARCH64_IRELATIVE (ifunc) relocations: the linker rejected them ("unknown reloc type 1032"). Chromium's libwebviewchromium.so has hundreds. As in bionic's linker, the resolver at base+addend is called with the hwcap (plus the _IFUNC_ARG_HWCAP bit) and an __ifunc_arg_t, and its result stored.
+
+apklayer patch: step 9 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0014 of patches/bionic_translation.
+---
+ linker/linker.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/linker/linker.c b/linker/linker.c
+index 1a40ed9..8592c2f 100644
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -32,6 +32,7 @@
+ #define LINKER_DEBUG_PRINTF(...)
+ #endif
+ 
++#include <sys/auxv.h>
+ #include <linux/auxvec.h>
+ 
+ #include <assert.h>
+@@ -1987,6 +1988,14 @@ static int apkenv_reloc_library(soinfo *si, REL_TYPE *rel, size_t count)
+ 			*((ElfW(Addr) *)reloc) = sym_addr + get_addend(rel);
+ 			break;
+ #if defined(__aarch64__)
++		case R_AARCH64_IRELATIVE: { /* apklayer patch: IRELATIVE (ifunc), see scripts/patch-bionic-translation.sh step 9 */
++			struct { unsigned long size, hwcap, hwcap2; } ifunc_arg = { sizeof(ifunc_arg), getauxval(AT_HWCAP), getauxval(AT_HWCAP2) };
++			ElfW(Addr) (*resolver)(unsigned long, void *) = (void *)(si->base + get_addend(rel));
++			COUNT_RELOC(RELOC_RELATIVE);
++			MARK(rel->r_offset);
++			*((ElfW(Addr) *)reloc) = resolver(ifunc_arg.hwcap | (1UL << 62), &ifunc_arg);
++			break;
++		}
+ 		case R_AARCH64_ABS64:
+ 			COUNT_RELOC(RELOC_ABSOLUTE);
+ 			MARK(rel->r_offset);

@@ -1,0 +1,119 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 07/25] apklayer: cond-destroy-nonblocking
+
+Bionic cond_destroy never waits for sleeping threads. Track translated waiters and defer freeing their native object; glibc destroy would block forever in process-exit destructors while Android's worker threads sleep.
+
+apklayer patch: step 7 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0007 of patches/bionic_translation.
+---
+ pthread_wrapper/libpthread.c | 51 ++++++++++++++++++++++++++++--------
+ 1 file changed, 40 insertions(+), 11 deletions(-)
+
+diff --git a/pthread_wrapper/libpthread.c b/pthread_wrapper/libpthread.c
+index 68fa5a3..58af132 100644
+--- a/pthread_wrapper/libpthread.c
++++ b/pthread_wrapper/libpthread.c
+@@ -560,22 +560,44 @@ int bionic_pthread_condattr_setclock(bionic_condattr_t *attr, clockid_t clock_id
+ 
+ /* cond */
+ 
++/* apklayer patch: Android's non-blocking condition destruction. */
++struct apklayer_cond { pthread_cond_t cond; unsigned state; };
++#define APKLAYER_COND_DESTROYED (1u << 31)
++static void apklayer_cond_free(struct apklayer_cond *native)
++{
++	pthread_cond_destroy(&native->cond);
++	munmap(native, sizeof(*native));
++}
++static void apklayer_cond_wait_done(void *opaque)
++{
++	struct apklayer_cond *native = opaque;
++	unsigned old = __atomic_fetch_sub(&native->state, 1, __ATOMIC_ACQ_REL);
++	if (old == (APKLAYER_COND_DESTROYED | 1u)) apklayer_cond_free(native);
++}
++#define APKLAYER_COND_WAIT(result, call) do { \
++	struct apklayer_cond *tracked = (void *)cond->glibc; \
++	__atomic_fetch_add(&tracked->state, 1, __ATOMIC_ACQ_REL); \
++	pthread_cleanup_push(apklayer_cond_wait_done, tracked); \
++	result = (call); \
++	pthread_cleanup_pop(1); \
++} while (0)
++
+ static void default_pthread_cond_init(bionic_cond_t *cond)
+ {
+ 	assert(cond);
+-	cond->glibc = mmap(NULL, sizeof(*cond->glibc), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+-	memset(cond->glibc, 0, sizeof(*cond->glibc));
++	cond->glibc = mmap(NULL, sizeof(struct apklayer_cond), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
++	memset(cond->glibc, 0, sizeof(struct apklayer_cond));
+ }
+ 
+ int bionic_pthread_cond_destroy(bionic_cond_t *cond)
+ {
+ 	assert(cond);
+-	int ret = 0;
+ 	if (IS_MAPPED(cond)) {
+-		ret = pthread_cond_destroy(cond->glibc);
+-		munmap(cond->glibc, sizeof(*cond->glibc));
++		struct apklayer_cond *native = (void *)cond->glibc;
++		unsigned old = __atomic_fetch_or(&native->state, APKLAYER_COND_DESTROYED, __ATOMIC_ACQ_REL);
++		if (old == 0) apklayer_cond_free(native);
+ 	}
+-	return ret;
++	return 0;
+ }
+ 
+ int bionic_pthread_cond_init(bionic_cond_t *cond, const bionic_condattr_t *attr)
+@@ -584,7 +606,7 @@ int bionic_pthread_cond_init(bionic_cond_t *cond, const bionic_condattr_t *attr)
+ 	// From PTHREAD_COND_INIT(3)
+ 	// Attempting to initialize an already initialized mutex result in undefined behavior.
+ 	*cond = (bionic_cond_t){0};
+-	cond->glibc = mmap(NULL, sizeof(*cond->glibc), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
++	cond->glibc = mmap(NULL, sizeof(struct apklayer_cond), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+ 	return pthread_cond_init(cond->glibc, (attr ? attr->glibc : NULL));
+ }
+ 
+@@ -607,7 +629,9 @@ bionic_pthread_cond_wait(bionic_cond_t *cond, bionic_mutex_t *mutex) {
+ 	assert(cond && mutex);
+ 	INIT_IF_NOT_MAPPED(cond, default_pthread_cond_init);
+ 	INIT_IF_NOT_MAPPED(mutex, default_pthread_mutex_init);
+-	return pthread_cond_wait(cond->glibc, mutex->glibc);
++	int ret;
++	APKLAYER_COND_WAIT(ret, pthread_cond_wait(cond->glibc, mutex->glibc));
++	return ret;
+ }
+ 
+ int bionic_pthread_cond_clockwait(bionic_cond_t *cond, bionic_mutex_t *mutex, clockid_t clock_id, const struct timespec *abs_timeout) {
+@@ -615,7 +639,9 @@ int bionic_pthread_cond_clockwait(bionic_cond_t *cond, bionic_mutex_t *mutex, cl
+ 	INIT_IF_NOT_MAPPED(cond, default_pthread_cond_init);
+ 	INIT_IF_NOT_MAPPED(mutex, default_pthread_mutex_init);
+ #ifdef __GLIBC__
+-	return pthread_cond_clockwait(cond->glibc, mutex->glibc, clock_id, abs_timeout);
++	int ret;
++	APKLAYER_COND_WAIT(ret, pthread_cond_clockwait(cond->glibc, mutex->glibc, clock_id, abs_timeout));
++	return ret;
+ #else /* musl */
+ 	/*
+ 	 * FIXME: This is a bit ugly but musl doesn't implement _clockwait yet.
+@@ -624,7 +650,8 @@ int bionic_pthread_cond_clockwait(bionic_cond_t *cond, bionic_mutex_t *mutex, cl
+ 	 */
+ 	clockid_t old_clock = cond->glibc->__u.__i[4]; /* _c_clock */
+ 	cond->glibc->__u.__i[4] = clock_id;
+-	int ret = pthread_cond_timedwait(cond->glibc, mutex->glibc, abs_timeout);
++	int ret;
++	APKLAYER_COND_WAIT(ret, pthread_cond_timedwait(cond->glibc, mutex->glibc, abs_timeout));
+ 	cond->glibc->__u.__i[4] = old_clock;
+ 	return ret;
+ #endif
+@@ -635,7 +662,9 @@ int bionic_pthread_cond_timedwait(bionic_cond_t *cond, bionic_mutex_t *mutex, co
+ 	assert(cond && mutex);
+ 	INIT_IF_NOT_MAPPED(cond, default_pthread_cond_init);
+ 	INIT_IF_NOT_MAPPED(mutex, default_pthread_mutex_init);
+-	return pthread_cond_timedwait(cond->glibc, mutex->glibc, abs_timeout);
++	int ret;
++	APKLAYER_COND_WAIT(ret, pthread_cond_timedwait(cond->glibc, mutex->glibc, abs_timeout));
++	return ret;
+ }
+ 
+ int bionic_pthread_cond_timedwait_relative_np(bionic_cond_t *cond, bionic_mutex_t *mutex, const struct timespec *reltime)
