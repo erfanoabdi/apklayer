@@ -98,7 +98,7 @@ std::vector<std::string> hostJvmArgs(const Layout& l, const Instance& inst, Nati
     if (exists(join(n, "native-runtime.jar"))) a.push_back("-Dapklayer.nativejar=" + join(n, "native-runtime.jar"));
     if (isDir(join(nr, "apex"))) {
         ne.env["ANDROID_ROOT"] = join(nr, "system");
-        ne.env["ANDROID_DATA"] = join(nr, "data");
+        ne.env["ANDROID_DATA"] = "/data";  // the instance's own (APKLAYER_DATA through the path layer): SettingsProvider's files, not the shared native root's
         ne.env["ANDROID_I18N_ROOT"] = join(nr, "apex/com.android.i18n");
         ne.env["ANDROID_TZDATA_ROOT"] = join(nr, "apex/com.android.tzdata");
     }

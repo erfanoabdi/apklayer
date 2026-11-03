@@ -80,12 +80,13 @@ public final class HostShadowProvider implements ShadowProvider {
             entries.add(Map.entry("android.webkit.WebViewDelegate", ShadowHostWebViewDelegate.class.getName()));
             entries.add(Map.entry("android.webkit.WebViewFactory", ShadowHostWebViewFactory.class.getName()));
         }
-        if (Boolean.getBoolean("apklayer.realsettings") && systemApp("com.android.providers.settings")) {  // opt-in: the provider still fails to start (PLAN)
- // the tree's SettingsProvider is installed: Settings.* talk to it through the hub like on a device
-            entries.add(Map.entry("android.provider.Settings$System", HostPlainShadows.SettingsSystem.class.getName()));
-            entries.add(Map.entry("android.provider.Settings$Secure", HostPlainShadows.SettingsSecure.class.getName()));
-            entries.add(Map.entry("android.provider.Settings$Global", HostPlainShadows.SettingsGlobal.class.getName()));
-            entries.add(Map.entry("android.provider.Settings$Config", HostPlainShadows.SettingsConfig.class.getName()));
+        if (systemApp("com.android.providers.settings")) {
+            // the tree's SettingsProvider is installed: Settings.* talk to it through the hub like on a device, not to Robolectric's in-memory tables.
+            // Keys of nested classes are canonical names (ShadowMap looks them up by Class.getCanonicalName()).
+            entries.add(Map.entry("android.provider.Settings.System", HostPlainShadows.SettingsSystem.class.getName()));
+            entries.add(Map.entry("android.provider.Settings.Secure", HostPlainShadows.SettingsSecure.class.getName()));
+            entries.add(Map.entry("android.provider.Settings.Global", HostPlainShadows.SettingsGlobal.class.getName()));
+            entries.add(Map.entry("android.provider.Settings.Config", HostPlainShadows.SettingsConfig.class.getName()));
         }
         return entries;
     }
