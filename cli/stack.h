@@ -5,6 +5,15 @@
 
 namespace apklayer {
 
+// The device ABIs are those of this machine's CPU: apps run the code of that ABI (install extracts lib/<kAbi>, ro.product.cpu.abilist*).
+#if defined(__x86_64__)
+inline constexpr const char* kAbi = "x86_64";
+inline constexpr const char* kAbi32 = "";
+#else
+inline constexpr const char* kAbi = "arm64-v8a";
+inline constexpr const char* kAbi32 = "armeabi-v7a,armeabi";
+#endif
+
 // Makes sure the instance's stack is up and ready (starts the daemon on demand). Returns false with a message on failure.
 bool ensureStack(const Layout& layout, const Instance& instance);
 // The daemon body (`apklayer stack-daemon <id>`): starts the services, signals readiness, ends as soon as one exits.

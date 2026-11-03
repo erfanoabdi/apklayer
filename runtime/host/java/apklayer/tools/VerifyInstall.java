@@ -26,7 +26,7 @@ import org.objectweb.asm.util.CheckClassAdapter;
  * finds them (classes.jar, then base.apk: cli/run.cpp). The only intended drop is a class a later DEX file defines again: the first
  * definition wins, as on ART and in dex2jvm. A class dex2jvm could not translate is missing too and fails the install: the jar is cached.
  *
- * <p>Usage: java -cp Robolectric_all.jar:host-classes:dex2jvm.jar apklayer.tools.VerifyInstall <base.apk> <classes.jar>. Exit 1 on a failure.
+ * <p>Usage: java -Xbootclasspath/a:Robolectric_all.jar -cp host-classes:dex2jvm.jar apklayer.tools.VerifyInstall <base.apk> <classes.jar>. Exit 1 on a failure.
  */
 public final class VerifyInstall {
     private static final int SHOWN = 10;
