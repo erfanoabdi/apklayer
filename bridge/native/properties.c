@@ -6,7 +6,7 @@
  * Layout: header + fixed-size records found by a linear scan (a build has a few hundred properties). A record's serial is
  * (value length << 24 | counter), the low bit set while a writer is updating (the same protocol as bionic's prop_info).
  * Exported under bionic's names; bionic_translation's stubs for the three it defines are removed by
- * scripts/patch-bionic-translation.sh so these are what bionic libraries resolve. */
+ * patches/bionic_translation/0002-properties-from-apklayer.patch so these are what bionic libraries resolve. */
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>

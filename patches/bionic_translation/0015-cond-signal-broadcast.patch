@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 15/25] apklayer: cond-signal-broadcast
+
+pthread_cond_signal wakes every waiter: with one woken waiter an HWUI CommonPool task could be left queued while both workers slept, and the render thread then waited for its future forever (hang in HardwareRenderer.nSetStopped, 1 run in 10 of tests/vm/pendingintents.sh; 0 in 25 after). Spurious wakeups are allowed by POSIX, so waking all is always correct.
+
+apklayer patch: step 10 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0015 of patches/bionic_translation.
+---
+ pthread_wrapper/libpthread.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/pthread_wrapper/libpthread.c b/pthread_wrapper/libpthread.c
+index b522a9d..a520418 100644
+--- a/pthread_wrapper/libpthread.c
++++ b/pthread_wrapper/libpthread.c
+@@ -644,7 +644,7 @@ int bionic_pthread_cond_signal(bionic_cond_t *cond)
+ {
+ 	assert(cond);
+ 	INIT_IF_NOT_MAPPED(cond, default_pthread_cond_init);
+-	return pthread_cond_signal(cond->glibc);
++	return pthread_cond_broadcast(cond->glibc); /* apklayer patch: see scripts/patch-bionic-translation.sh step 10 */
+ }
+ 
+ int

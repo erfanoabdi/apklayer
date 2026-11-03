@@ -36,6 +36,7 @@ final class HubPackages {
             if (old != null && old.modified == modified && old.size == size) return old.parsed;
             PackageParser.Package parsed = ShadowPackageParser.callParsePackage(apk);
             if (!name.equals(parsed.packageName)) throw new SecurityException("Installed APK package mismatch: " + name + " holds " + parsed.packageName);
+            parsed.applicationInfo.uid = uid(name);  // the app id the scanner assigns (PackageManagerService did this at scan time); every component shares this ApplicationInfo and the generators copy it
             cache.put(name, new Cached(modified, size, parsed)); return parsed;
         } catch (IOException failure) { throw new IllegalStateException("Cannot read installed package " + name, failure); }
     }
@@ -54,15 +55,8 @@ final class HubPackages {
         if (pkg == null) return null;
         int flags = PackageManager.GET_ACTIVITIES | PackageManager.GET_SERVICES | PackageManager.GET_RECEIVERS | PackageManager.GET_PROVIDERS
                 | PackageManager.GET_META_DATA | PackageManager.GET_PERMISSIONS | PackageManager.GET_CONFIGURATIONS
-                | PackageManager.MATCH_DIRECT_BOOT_AWARE | PackageManager.MATCH_DIRECT_BOOT_UNAWARE;  // without these (the package manager service adds them) no component matches the user state
-        android.content.pm.PackageInfo info = PackageParser.generatePackageInfo(pkg, new int[0], flags, 0L, 0L, null, android.content.pm.pkg.FrameworkPackageUserState.DEFAULT);
-        int uid = uid(name);
-        if (info != null && uid >= 0) {  // the Android app uid every installed package has (info.properties); the parser leaves -1
-            info.applicationInfo.uid = uid;
-            for (android.content.pm.ComponentInfo[] components : new android.content.pm.ComponentInfo[][] {info.activities, info.services, info.receivers, info.providers})
-                if (components != null) for (android.content.pm.ComponentInfo component : components) if (component != null && component.applicationInfo != null) component.applicationInfo.uid = uid;
-        }
-        return info;
+                | PackageManager.MATCH_DIRECT_BOOT_AWARE | PackageManager.MATCH_DIRECT_BOOT_UNAWARE;  // ComputerEngine.updateFlags adds these for an unlocked user; without them no component matches the user state
+        return PackageParser.generatePackageInfo(pkg, new int[0], flags, 0L, 0L, null, android.content.pm.pkg.FrameworkPackageUserState.DEFAULT);
     }
 
     /** The Android app uid of an installed package (info.properties), or -1. */

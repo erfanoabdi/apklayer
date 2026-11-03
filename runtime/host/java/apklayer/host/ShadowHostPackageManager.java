@@ -20,51 +20,11 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
         }
     }
 
-    /** The other installed apps' Android uids (info.properties of every installed app): services of another app check a caller's package against its uid. */
+    /** Another installed app's uid (its registered package info carries it): a package not registered yet attaches this JVM to the hub first, as getPackageInfo does. */
     @Implementation
     public int getPackageUid(String packageName, int flags) throws PackageManager.NameNotFoundException {
-        PackageManager.NameNotFoundException unknown = null;
-        int known = -1;
-        try { known = super.getPackageUid(packageName, flags); }
-        catch (PackageManager.NameNotFoundException notFound) { unknown = notFound; }
-        if (known >= 0) return known;  // a package registered from the hub carries no uid (-1): its info.properties has it
-        String apps = System.getProperty("apklayer.apps");
-        if (apps != null) {
-            java.io.File info = new java.io.File(new java.io.File(apps, packageName), "info.properties");
-            try (java.io.BufferedReader in = new java.io.BufferedReader(new java.io.FileReader(info))) {
-                for (String line; (line = in.readLine()) != null; ) if (line.startsWith("uid=")) return Integer.parseInt(line.substring(4).trim());
-            } catch (java.io.IOException | NumberFormatException none) { /* not installed */ }
-        }
-        if (unknown != null) throw unknown;
-        return known;
-    }
-
-
-    /** The installed apps by uid (their info.properties): a provider asks which package a caller's uid belongs to. */
-    private static String packageOfUid(int uid) {
-        String apps = System.getProperty("apklayer.apps");
-        java.io.File[] dirs = apps == null ? null : new java.io.File(apps).listFiles();
-        if (dirs == null) return null;
-        for (java.io.File dir : dirs) {
-            try (java.io.BufferedReader in = new java.io.BufferedReader(new java.io.FileReader(new java.io.File(dir, "info.properties")))) {
-                for (String line; (line = in.readLine()) != null; ) if (line.equals("uid=" + uid)) return dir.getName();
-            } catch (java.io.IOException | RuntimeException none) { /* not an app directory */ }
-        }
-        return null;
-    }
-
-    @Implementation
-    protected String[] getPackagesForUid(int uid) {
-        String[] known = super.getPackagesForUid(uid);
-        if (known != null && known.length > 0) return known;
-        String found = packageOfUid(uid);
-        return found == null ? known : new String[] {found};
-    }
-
-    @Implementation
-    protected String getNameForUid(int uid) {
-        String known = super.getNameForUid(uid);
-        return known != null ? known : packageOfUid(uid);
+        try { return super.getPackageUid(packageName, flags); }
+        catch (PackageManager.NameNotFoundException unknown) { if (!registerInstalled(packageName)) throw unknown; return super.getPackageUid(packageName, flags); }
     }
 
     /** The features the build declares, as a list (Robolectric answers null while its own list is empty; apps read .length). */
@@ -134,12 +94,12 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
         catch (PackageManager.NameNotFoundException unknown) { if (!registerInstalled(packageName)) throw unknown; return signed(super.getPackageInfo(packageName, flags), flags); }
     }
 
-    /** The other installed apps register with this JVM when it first meets the hub, which can be late (Play Services clients ask for com.android.vending at start): an installed package not known yet attaches now. */
+    /** The other installed apps register with this JVM when it first meets the hub, which can be late (Play Services clients ask for com.android.vending at start): an installed package not known yet attaches now, or registers alone when it was installed later. */
     private boolean registerInstalled(String packageName) {
         String apps = System.getProperty("apklayer.apps");
-        if (apps == null || HubClient.connected() || !new java.io.File(new java.io.File(apps, packageName), "info.properties").exists()) return false;
-        HubClient.attach(org.robolectric.RuntimeEnvironment.getApplication());
-        return true;
+        if (apps == null || !new java.io.File(new java.io.File(apps, packageName), "info.properties").exists()) return false;
+        if (!HubClient.connected()) { HubClient.attach(org.robolectric.RuntimeEnvironment.getApplication()); return true; }
+        return HubClient.current().registerPackage(this, packageName);  // installed after this JVM attached
     }
 
     @Implementation(minSdk = android.os.Build.VERSION_CODES.TIRAMISU)

@@ -29,7 +29,7 @@ Everything parked is listed in `docs/PLAN.md`.
 
 ## Test VM (UTM)
 Host and password: `tests/vm/local.conf` (untracked; `local.conf.example`). Ubuntu 26.04 arm64, GNOME Wayland, Venus Vulkan 1.4, virgl ES 3.0 (apklayer claims 3.2). Passwordless sudo.
-Repo copy `~/apklayer`, runtime `~/arm64-native`, libs `~/android-arm64`. After a reboot run `scripts/vm-binder-setup.sh`. `/tmp` is tmpfs: never put big files there.
+Repo copy `~/apklayer`, runtime `~/arm64-native`, libs `~/android-arm64`. After a reboot run `scripts/vm-binder-setup.sh [instance...]`. Parallel stacks: each named instance gets its own binder devices (`/dev/binderfs/binder-<id>`, mapped by `bridge/native/paths.c`); run with `APKLAYER_INSTANCE=<id>` plus a private `XDG_RUNTIME_DIR`/`XDG_STATE_HOME`/`XDG_DATA_HOME` and an absolute `WAYLAND_DISPLAY=/run/user/1000/wayland-0`. `/tmp` is tmpfs: never put big files there.
 Screenshots: `tests/vm/vmcapture.py`. Input: `tests/vm/uinput-keys.c`.
 
 ## References on this machine
@@ -40,7 +40,7 @@ Mac.apk, Robolectric, android_translation_layer (all in `~/GitHub`), Husk (GPL, 
 - dex2jvm needs `android-all` on its own classpath; its output needs `@DoNotInstrument` (`DenyInstrument`).
 - `ro.*` properties are write-once: every stack start gets a fresh store.
 - `pkill -f` can kill your own shell: use `pkill -x` or `[x]pattern`. macOS tar: `COPYFILE_DISABLE=1`.
-- The VM's bionic_translation build (`~/bt-arm/bionic_translation/b`): `scripts/patch-bionic-translation.sh` first; the linker (`libdl_bio`) build needs `~/local/lib/libunwind.so` (symlink to the system one); copy the result over `~/arm64-native/libdl_bio*` (a stale copy there made WebView fail with an unknown IRELATIVE relocation).
+- The VM's bionic_translation build (`~/bt-arm/bionic_translation/b`): `patches/apply bionic_translation ~/bt-arm/bionic_translation` first; the linker (`libdl_bio`) build needs `~/local/lib/libunwind.so` (symlink to the system one); copy the result over `~/arm64-native/libdl_bio*` (a stale copy there made WebView fail with an unknown IRELATIVE relocation).
 - `scripts/install-shim.sh` needs the untracked `bridge/native/android_stubs.c` (copy `~/bt-arm/android_stubs.c`); gcc 15 makes implicit declarations errors.
 
 - Compatibility pass (2026-10-28): results per app in `tests/corpus/results.md` (tools: `tests/vm/appcheck.sh`, `tests/vm/appshot.py`, `tests/corpus/fdroid.py` for hash-verified F-Droid downloads). About 25 apps draw their UI; open: AnkiDroid (crash behind ACRA), Puzzles (anti-piracy redirect), Open Sudoku (database), SDL games with assets (Rocks 'n' Diamonds, TIC-80 black), WireGuard (Go TLS), Unciv black, NewPipe/Sensors content, camera apps. Meet reaches its welcome screen; its accounts and the Google sign-in wait for the microG Device Attestation / real keystore (planned, not started).

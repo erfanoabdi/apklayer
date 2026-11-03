@@ -38,7 +38,17 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
         Object service = (Object) Shadow.directlyOn(real, "android.app.ContextImpl", "getSystemService", ClassParameter.from(String.class, name));
         if (Boolean.getBoolean("apklayer.tracesvc")) System.out.println("[apklayer] getSystemService " + name + " -> " + service + " (" + real.getClass().getSimpleName() + ", " + Thread.currentThread().getName() + ")");
         if (service == null && Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] no system service " + name + " for " + real.getPackageName());
+        if (name != null && fakeChecked.add(name)) reportFake(name, service);
         return service;
+    }
+    private static final java.util.Set<String> fakeChecked = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    /** Once per service name: none at all, or a manager whose Robolectric shadow may answer without reaching any binder. */
+    private static void reportFake(String name, Object service) {
+        try {
+            Object shadow = service == null ? null : Shadow.extract(service);
+            if (service == null) FakeLog.hit(name, "getSystemService=null");
+            else if (shadow != null && shadow.getClass().getName().startsWith("org.robolectric.shadows.")) FakeLog.hit(name, "getSystemService=" + shadow.getClass().getSimpleName());
+        } catch (Throwable notShadowed) { /* not an instrumented manager */ }
     }
     /** An Activity's context is associated with the display; the contexts Robolectric builds for activities are not marked as such (libgdx apps ask the activity for its display). */
     @Implementation protected android.view.Display getDisplay() {

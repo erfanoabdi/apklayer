@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 05/25] apklayer: mutex-timedlock
+
+Timed locking must unwrap the same mutex as normal locking. Falling back to glibc passes it a bionic object and overwrites its stored native pointer.
+
+apklayer patch: step 5 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0005 of patches/bionic_translation.
+---
+ pthread_wrapper/libpthread.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/pthread_wrapper/libpthread.c b/pthread_wrapper/libpthread.c
+index 3247a79..68fa5a3 100644
+--- a/pthread_wrapper/libpthread.c
++++ b/pthread_wrapper/libpthread.c
+@@ -509,6 +509,14 @@ int bionic_pthread_mutex_trylock(bionic_mutex_t *mutex)
+ 	return pthread_mutex_trylock(mutex->glibc);
+ }
+ 
++/* apklayer patch: Android Mutex::timedLock and libc++ timed_mutex. */
++int bionic_pthread_mutex_timedlock(bionic_mutex_t *mutex, const struct timespec *abstime)
++{
++	assert(mutex);
++	INIT_IF_NOT_MAPPED(mutex, default_pthread_mutex_init);
++	return pthread_mutex_timedlock(mutex->glibc, abstime);
++}
++
+ int bionic_pthread_mutex_unlock(bionic_mutex_t *mutex)
+ {
+ 	assert(mutex);

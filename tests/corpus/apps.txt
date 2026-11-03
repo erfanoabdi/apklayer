@@ -19,3 +19,4 @@ device-info | ~/TestApps/Device Info HW_v4.26.5_apkpure.com.apk | system info
 sensors | ~/TestApps/sensorsmultitoo.apk | sensors
 microg | ~/TestApps/microg.apk | Google services
 documentsui | tree:system/priv-app/DocumentsUI/DocumentsUI.apk | system app
+unciv | ~/fdroid-dl/apks/com.unciv.app.apk | libgdx, Kotlin

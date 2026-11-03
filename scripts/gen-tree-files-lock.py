@@ -49,7 +49,7 @@ for p in sorted(sums):
     n, h = p.split("/")[-1], sums[p]
     if p.startswith("android-arm64/lib64/"):
         if n == "libapklayer_vulkan.so":
-            origin, st = tree["libvulkan.so"][1] + " (renamed; scripts/patch-vulkan.sh)", "patched"
+            origin, st = tree["libvulkan.so"][1] + " (renamed; patches/aosp/frameworks/native/0003-vulkan-host-dispatch.patch)", "patched"
         elif n in apk and apk[n][0] == h: origin, st = apk[n][1], "apklayer"
         elif n in tree and tree[n][0] == h: origin, st = tree[n][1], "same"
         elif n in tree: origin, st = tree[n][1], "patched"

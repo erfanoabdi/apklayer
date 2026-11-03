@@ -29,6 +29,7 @@ apps and games see real Android, shown as Wayland windows. Details of that route
 |---|---|
 | `runtime/dex2jvm/` | DEX → JVM bytecode (upstream kksimp/dex2jvm, Apache-2.0, plus our `HostDefaults.java`). Reads the class hierarchy from its own classpath, so it runs with the target `android-all` on it. |
 | `runtime/host/java/apklayer/tools/DenyInstrument.java` | Stamps `@DoNotInstrument` on the app classes (dex2jvm's `<init>` lowering conflicts with Robolectric's constructor renaming) and rewrites a few app calls (native loading, services). |
+| `runtime/host/java/apklayer/tools/VerifyInstall.java` | Checks the converted jar before install marks it installed or cached: every DEX class present (first definition wins), ASM structural check of every class, the APK's java resources reachable. |
 | `runtime/host/java/apklayer/host/` | `Main` builds the sandbox, `AppHost` runs the app (setup as in Robolectric's simulator `AppLoader`), `HostInput`/`HostWindows`/`ScriptRunner` input and verification steps, `ShellClient` the shell connection, `Native*`/`ShadowHost*` the native shadows, `Hub*` the instance hub, `HostShadowProvider` registers the shadows. |
 | `runtime/patches/` | Robolectric overlay classes (thin, marked "apklayer patch", listed in docs/PATCHES.md). |
 | `bridge/native/` | The JNI shim that registers Android's natives, system properties, the path layer, TLS and binder glue, `NativeLoader` support for apps' `.so`. |

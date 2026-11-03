@@ -1,0 +1,20 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: libmediametrics visible to vendor/apklayer
+
+The audioserver shared entrypoint in vendor/apklayer reuses the original metrics library; Soong permits
+only the vendor subtree as a visibility grant from outside vendor. Formerly part of scripts/patch-audio.sh.
+Against frameworks/av 937eb9047ec2 (REVISION). Apply: patches/apply aosp <LineageOS tree>.
+---
+diff --git a/media/libmediametrics/Android.bp b/media/libmediametrics/Android.bp
+index 37a71dd6b4..30bbef9203 100644
+--- a/media/libmediametrics/Android.bp
++++ b/media/libmediametrics/Android.bp
+@@ -75,6 +75,8 @@ cc_library {
+     },
+ 
+     visibility: [
++        // apklayer patch: the audioserver shared entrypoint reuses original metrics.
++        "//vendor:__subpackages__",
+         "//cts/tests/tests/nativemedia/mediametrics",
+         "//frameworks/av:__subpackages__",
+         "//frameworks/base/apex/media/framework",

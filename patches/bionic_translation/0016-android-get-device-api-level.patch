@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 16/25] apklayer: android-get-device-api-level
+
+android_get_device_api_level in libc.so: Go's cgo runtime (WireGuard, Rethink DNS) looks it up with dlsym on libc.so; its presence selects the Android Q path that uses the free TLS_SLOT_APP (slot 2, which bridge/native/bionic_tls.c keeps at tp+16) instead of scanning pthread keys for a slot, which finds nothing here.
+
+apklayer patch: step 11 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0016 of patches/bionic_translation.
+---
+ libc/libc-misc.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/libc/libc-misc.c b/libc/libc-misc.c
+index ba67c36..43895cc 100644
+--- a/libc/libc-misc.c
++++ b/libc/libc-misc.c
+@@ -68,3 +68,9 @@ char* bionic___gnu_strerror_r(int error_number, char* buf, size_t buf_len) {
+ 	return buf;
+ #endif
+ }
++
++/* apklayer patch: see scripts/patch-bionic-translation.sh step 11 */
++int bionic_android_get_device_api_level(void)
++{
++	return 36;
++}

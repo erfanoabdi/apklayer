@@ -88,7 +88,9 @@ public final class AppHost implements Runnable {
     @Override
     public void run() {
         Thread.currentThread().setContextClassLoader(AppClassLoader.app != null ? AppClassLoader.app : sandbox.getRobolectricClassLoader());  // the app's own loader, as on Android
+        StartTrace.mark("apphost run");
         AppEnvironment.setUpApplication(sandbox, apk, describe != null);
+        StartTrace.mark("application set up");
         // apklayer patch: Android prepares the UI thread's native Looper before
         // native activity initialization; the paused Java queue alone does not.
         if (describe == null && NativeLooper.prepareForThread() == 0)
@@ -98,8 +100,11 @@ public final class AppHost implements Runnable {
             AppMetadata.describe(app, describe);
             return;
         }
+        StartTrace.mark("application created (onCreate done)");
         AppEnvironment.startRuntime(app);
+        StartTrace.mark("runtime started");
         HubClient.attach(app);
+        StartTrace.mark("hub attached");
 
         Display display = app.getSystemService(DisplayManager.class).getDisplay(Display.DEFAULT_DISPLAY);
         int width = display.getWidth(), height = display.getHeight();
@@ -182,6 +187,7 @@ public final class AppHost implements Runnable {
                 }
             }
         }
+        StartTrace.mark("window configured by the shell");
         this.shell = shell;
         text.shell = shell;
         app.getSystemService(android.content.ClipboardManager.class).addPrimaryClipChangedListener(text::onAppClipboardChanged);
@@ -193,6 +199,7 @@ public final class AppHost implements Runnable {
             Thread.setDefaultUncaughtExceptionHandler((thread, failure) -> { System.out.println("FATAL EXCEPTION: " + thread.getName()); failure.printStackTrace(System.out); System.out.flush(); Runtime.getRuntime().halt(10); });
         }
         if (System.getProperty("apklayer.webviewprovider") != null) org.robolectric.Shadows.shadowOf(app.getPackageManager()).setSystemFeature(android.content.pm.PackageManager.FEATURE_WEBVIEW, true);
+        StartTrace.mark("system package installed");
         HubActivityClient.starter = this::startForHub;
         Intent incoming = HubActivityClient.incoming(); // another app started this one with an intent, through the hub
         if (incoming == null) incoming = HostApps.incoming(); // ... or through the older intent file (PLAN P6)
@@ -446,6 +453,7 @@ public final class AppHost implements Runnable {
         // own decor's first draw, and the composed screen would show nothing behind the dialog.
         c.get().getWindow().getDecorView().invalidate();
         System.out.println("[apklayer] started " + c.get().getClass().getName() + " depth=" + stack.size());
+        StartTrace.mark("activity resumed " + c.get().getClass().getName());
     }
 
     /** Hands an answer from another app (or its disappearance, as RESULT_CANCELED) to the activity that asked. */

@@ -64,13 +64,36 @@ final class AppEnvironment {
                 .put(ResourcesMode.Mode.class, ResourcesMode.Mode.NATIVE)
                 .put(Config.class, config)
                 .build();
+        StartTrace.mark("manifest and config read");
         sandbox.getTestEnvironment().setUpApplicationState("apklayer", configuration, manifest);
+        StartTrace.mark("robolectric application state set up");
         HostClock.alignToMonotonic();  // after the clock's reset by the state setup
         NativeProcess.install();
+        StartTrace.mark("native process installed");
         persistDataDirs();
         provideExternalStorage();
         provideNativeLibraryDir();
+        if (!describing) initAppOpsWithoutApplication();
+        StartTrace.mark("data dirs, storage, library dir");
         HostKeyStore.install();  // apps open it in Application.onCreate (a call into keystore2 may create the lazy application: after its data dirs are persistent); needs the sandbox's shadows
+    }
+
+    /**
+     * AppOpsManager's static initializer asks ActivityThread.currentApplication() (getSystemAlertWindowDefault), which creates the lazy
+     * application: Application.onCreate would run inside the class initializer of the first binder call (the keystore2 probe below), and
+     * app threads that reach AppOpsManager then deadlock against it (Nextcloud's WorkManager holding the hub's activity manager).
+     * Initialized while the sandbox hands out no application, it takes the default mode, as on a device before any app ran.
+     */
+    private static void initAppOpsWithoutApplication() {
+        com.google.common.base.Supplier<Application> lazy = org.robolectric.util.ReflectionHelpers.getStaticField(RuntimeEnvironment.class, "applicationSupplier");
+        RuntimeEnvironment.setApplicationSupplier(null);
+        try {
+            Class.forName("android.app.AppOpsManager");
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException(e);
+        } finally {
+            RuntimeEnvironment.setApplicationSupplier(lazy);
+        }
     }
 
     /** The app's ApplicationInfo names the directory of its extracted native libraries (SoLoader, ReLinker and others read it): where `apklayer install` put the arm64 ones. */

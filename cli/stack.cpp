@@ -33,14 +33,17 @@ void stageManifest(const Layout& l, bool provided, const std::string& name, cons
     }
 }
 
-bool shellListening(const Layout& l) {
+// The pid of the shell listening on this session's socket (0: none): what stops it, never a match by name (other sessions' shells run too).
+int shellPid(const Layout& l) {
     int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
     sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
     snprintf(addr.sun_path, sizeof addr.sun_path, "%s", l.shellSocket().c_str());
-    bool ok = connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof addr) == 0;
+    ucred peer{};
+    socklen_t len = sizeof peer;
+    bool ok = connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof addr) == 0 && getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &peer, &len) == 0;
     close(fd);
-    return ok;
+    return ok ? peer.pid : 0;
 }
 
 // Android's way: readiness is a system property of the instance (apklayer.stack.ready=1), waited on with the property store's own wait.
@@ -95,7 +98,7 @@ bool waitForProperty(const Layout& l, const NativeEnv& ne, const char* name, con
 }
 
 void ensureShell(const Layout& l, const Instance& inst, const NativeEnv& env) {
-    if (shellListening(l)) return;
+    if (shellPid(l) > 0) return;
     makeDirs(join(l.runtimeHome, "apklayer"));
     unlink(l.shellSocket().c_str());
     Spawn shell;
@@ -112,6 +115,25 @@ static std::string keystoreDir(const Layout& l) {
     std::string dir = join(getenvOr("APKLAYER_ANDROID_ROOT", join(l.native, "android-root")), "data/misc/keystore");
     makeDirs(dir);
     return dir;
+}
+
+// What Android's init derives at boot (property_service.cpp): the fingerprint of the product the instance presents (bridge/native/apklayer.prop over
+// the tree's build.prop, whose own fingerprint names the GSI's "generic" product) and the ABI lists of this machine's CPU. Set before the files
+// are loaded: ro.* is write-once, so these win and every reader (natives, apklayer.host.HostBuild) sees one device.
+static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std::vector<std::string>& files) {
+    auto get = [&](const char* key) {
+        for (const std::string& f : files)
+            if (std::string v = property(f, key); !v.empty()) return v;
+        return std::string();
+    };
+    std::string fingerprint = get("ro.product.brand") + "/" + get("ro.product.name") + "/" + get("ro.product.device") + ":" + get("ro.build.version.release_or_codename") +
+                              "/" + get("ro.build.id") + "/" + get("ro.build.version.incremental") + ":" + get("ro.build.type") + "/" + get("ro.build.tags");
+    std::string abis = std::string(kAbi) + (*kAbi32 ? std::string(",") + kAbi32 : "");
+    setProperty(l, ne, "ro.build.fingerprint", fingerprint.c_str());
+    setProperty(l, ne, "ro.product.cpu.abi", kAbi);
+    setProperty(l, ne, "ro.product.cpu.abilist", abis.c_str());
+    setProperty(l, ne, "ro.product.cpu.abilist64", kAbi);
+    setProperty(l, ne, "ro.product.cpu.abilist32", kAbi32);
 }
 
 int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std::string>& tool) {
@@ -131,8 +153,10 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         removeTree(inst.runtimeDir);
         makeDirs(inst.runtimeDir);
     }
+    std::vector<std::string> propFiles = {join(l.root, "bridge/native/apklayer.prop"), join(n, "android-root/props/system_build.prop")};
+    setDerivedProperties(l, ne, propFiles);
     Spawn prop;
-    prop.argv = {join(n, "bin/aprop"), "load", join(l.root, "bridge/native/apklayer.prop"), join(n, "android-root/props/system_build.prop")};
+    prop.argv = {join(n, "bin/aprop"), "load", propFiles[0], propFiles[1]};
     prop.env = ne.env;
     prop.logFile = join(inst.logs(), "aprop.log");
     runAndWait(prop);
@@ -238,10 +262,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     for (const Service& s : running) waitpid(s.pid, nullptr, 0);
     unlink(inst.pidFile().c_str());
     for (const std::string& name : listDir(inst.tmpDir())) removeTree(join(inst.tmpDir(), name));  // the JVMs of this stack are gone: their extracted native runtimes too (the directory stays: a JVM about to start has it as java.io.tmpdir)
-    Spawn shell;  // the window shell ends with the stack (one instance per session today)
-    shell.argv = {"pkill", "-x", "apklayer-shell"};
-    shell.env = currentEnv();
-    runAndWait(shell);
+    terminate(shellPid(l));  // the window shell ends with the stack (one instance per session today)
     return status;
 }
 
@@ -281,11 +302,7 @@ int execTool(const Layout& l, const Instance& inst, const std::vector<std::strin
 }
 
 void stopStack(const Layout& l, const Instance& inst) {
-    Spawn shell;  // one instance per session today: the window shell goes with it
-    shell.argv = {"pkill", "-x", "apklayer-shell"};
-    shell.env = currentEnv();
-    runAndWait(shell);
-    (void)l;
+    terminate(shellPid(l));  // one instance per session today: the window shell goes with it
     for (const std::string& f : listDir(inst.stateDir)) {  // launches of this instance: their JVM and window sink
         if (f.rfind("run.", 0) != 0) continue;
         auto record = readFile(join(inst.stateDir, f));

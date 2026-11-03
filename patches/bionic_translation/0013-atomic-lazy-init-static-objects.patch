@@ -1,0 +1,77 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 13/25] apklayer: atomic-lazy-init-static-objects
+
+Statically initialised (all-zero) conditions, semaphores, rwlocks and mutexes get their native object on first use, and two threads arriving together each made one and overwrote the other's: one waited on a condition the other signalled never (lost wakeup). libhwui's WorkQueue, a std::condition_variable first used by the main and the render thread at once, hung the whole app at startup (black window, main thread in HardwareRenderer.nSetStopped). The native object is now made under a lock, only if no other thread already did.
+
+apklayer patch: step 8 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0013 of patches/bionic_translation.
+---
+ pthread_wrapper/libpthread.c | 26 ++++++++++++++++++--------
+ 1 file changed, 18 insertions(+), 8 deletions(-)
+
+diff --git a/pthread_wrapper/libpthread.c b/pthread_wrapper/libpthread.c
+index a052faf..b522a9d 100644
+--- a/pthread_wrapper/libpthread.c
++++ b/pthread_wrapper/libpthread.c
+@@ -136,6 +136,20 @@ struct bionic_pthread_cleanup_t {
+ // Used for sanity checking and static initialization below.
+ #define IS_MAPPED(x) is_mapped(x->glibc, sizeof(*x))
+ 
++/* apklayer patch: atomic lazy init. The native object is made under a lock and only if no other thread already did. (The bionic structs keep the
++ * pointer 4-byte aligned: a compare-and-swap on it is a bus error on arm64.) */
++static pthread_mutex_t apklayer_install_lock = PTHREAD_MUTEX_INITIALIZER;
++#define APKLAYER_INSTALL(field, size, init_stmt) do { \
++	pthread_mutex_lock(&apklayer_install_lock); \
++	if (!is_mapped((void *)(field), (size))) { \
++		typeof(field) native = mmap(NULL, (size), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0); \
++		init_stmt; \
++		__atomic_thread_fence(__ATOMIC_RELEASE); \
++		(field) = native; \
++	} \
++	pthread_mutex_unlock(&apklayer_install_lock); \
++} while (0)
++
+ // For handling static initialization.
+ #define INIT_IF_NOT_MAPPED(x, init) do { if (!IS_MAPPED(x)) init(x); } while(0)
+ 
+@@ -207,8 +221,7 @@ static void default_sem_init(bionic_sem_t *sem)
+ {
+ 	// Apparently some android apps (hearthstone) do not call sem_init()
+ 	assert(sem);
+-	sem->glibc = mmap(NULL, sizeof(*sem->glibc), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+-	memset(sem->glibc, 0, sizeof(*sem->glibc));
++	APKLAYER_INSTALL(sem->glibc, sizeof(*sem->glibc), memset(native, 0, sizeof(*native)));
+ }
+ 
+ int bionic_sem_init(bionic_sem_t *sem, int pshared, unsigned int value)
+@@ -271,8 +284,7 @@ static void default_rwlock_init(bionic_rwlock_t *rwlock)
+ {
+ 	// Apparently some android apps/libs (Qt5) do not call pthread_rwlock_init()
+ 	assert(rwlock);
+-	rwlock->glibc = mmap(NULL, sizeof(*rwlock->glibc), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+-	memset(rwlock->glibc, 0, sizeof(*rwlock->glibc));
++	APKLAYER_INSTALL(rwlock->glibc, sizeof(*rwlock->glibc), memset(native, 0, sizeof(*native)));
+ }
+ 
+ int bionic_pthread_rwlock_init(bionic_rwlock_t *restrict rwlock, const bionic_rwlockattr_t *restrict attr)
+@@ -477,8 +489,7 @@ static void default_pthread_mutex_init(bionic_mutex_t *mutex)
+ 		if (memcmp(&bionic_mutex_init_map[i].bionic, mutex, sizeof(*mutex)))
+ 			continue;
+ 
+-		mutex->glibc = mmap(NULL, sizeof(*mutex->glibc), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+-		memcpy(mutex->glibc, &bionic_mutex_init_map[i].glibc, sizeof(bionic_mutex_init_map[i].glibc));
++		APKLAYER_INSTALL(mutex->glibc, sizeof(*mutex->glibc), memcpy(native, &bionic_mutex_init_map[i].glibc, sizeof(bionic_mutex_init_map[i].glibc)));
+ 		return;
+ 	}
+ 
+@@ -598,8 +609,7 @@ static void apklayer_cond_wait_done(void *opaque)
+ static void default_pthread_cond_init(bionic_cond_t *cond)
+ {
+ 	assert(cond);
+-	cond->glibc = mmap(NULL, sizeof(struct apklayer_cond), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+-	memset(cond->glibc, 0, sizeof(struct apklayer_cond));
++	APKLAYER_INSTALL(cond->glibc, sizeof(struct apklayer_cond), memset((void *)native, 0, sizeof(struct apklayer_cond)));
+ }
+ 
+ int bionic_pthread_cond_destroy(bionic_cond_t *cond)

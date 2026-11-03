@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 19/25] apklayer: component-host-kill
+
+kill(): a service host (APKLAYER_COMPONENT_HOST, e.g. a GeckoView content process) cannot signal any process but itself. On Android its isolated uid makes that an EPERM; here every process shares one uid, and a Gecko child ended the app by SIGKILL (AppShutdown/IPC teardown) a few seconds after a page load began.
+
+apklayer patch: step 14 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0019 of patches/bionic_translation.
+---
+ libc/libc.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/libc/libc.c b/libc/libc.c
+index 86f2006..cd32ce1 100644
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -71,6 +71,15 @@ pid_t gettid(void)
+ 	return syscall(SYS_gettid);
+ }
+ 
++int bionic_kill(pid_t pid, int sig) /* apklayer patch: see scripts/patch-bionic-translation.sh step 14 */
++{
++	if (pid != getpid() && getenv("APKLAYER_COMPONENT_HOST")) {
++		errno = EPERM;
++		return -1;
++	}
++	return kill(pid, sig);
++}
++
+ int tgkill(int tgid, int tid, int sig)
+ {
+ 	verbose("%d, %d, %d", tgid, tid, sig);

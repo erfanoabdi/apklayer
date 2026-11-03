@@ -31,6 +31,7 @@ public final class Main {
     }
 
     public static void main(String[] args) {
+        StartTrace.mark("jvm main");
         if (args.length == 1 && args[0].equals("--hub")) {
             String nativeJar = System.getProperty("apklayer.nativejar");
             AndroidSandbox sandbox = SandboxBuilder.newBuilder()
@@ -63,6 +64,7 @@ public final class Main {
                 .addClasspathEntries(sandboxJars(apk))
                 .setSdkVersion(Integer.getInteger("apklayer.sdk", 36))
                 .build();
+        StartTrace.mark("sandbox built");
         try {
             sandbox.runOnMainThread(() -> {
                 try {

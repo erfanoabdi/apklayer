@@ -34,6 +34,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.os.BinderProxy", ShadowHostRealBinderProxy.class.getName()),
                 Map.entry("com.android.internal.os.BinderInternal", ShadowHostRealBinderInternal.class.getName()),
                 Map.entry("android.os.Process", ShadowHostProcess.class.getName()),
+                Map.entry("android.os.ServiceManager", ShadowHostServiceManager.class.getName()),  // reports calls that land on Robolectric's null/deep proxies
                 Map.entry("android.app.NotificationManager", ShadowHostNotificationManager.class.getName()),
                 Map.entry("android.app.JobSchedulerImpl", ShadowHostJobScheduler.class.getName()),
                 Map.entry("android.drm.DrmManagerClient", ShadowHostDrmManagerClient.class.getName()),
