@@ -55,11 +55,7 @@ Instance Instance::open(const Layout& layout, const std::string& id) {
     i.stateDir = getenvOr("APKLAYER_LOGS", join(layout.stateHome, "apklayer/" + id));  // tests may point the logs elsewhere
     i.runtimeDir = join(layout.runtimeHome, "apklayer/" + id);
     i.storageDir = join(layout.dataHome, "apklayer/" + (id == "default" ? std::string("0") : id) + "/storage");
-    makeDirs(join(i.storageDir, "emulated/0"));
-    // MediaProvider keeps its bookkeeping (extended attributes, database backups) under /data/media/<user>, which the path layer serves from the Android root: the primary volume
-    const std::string media = join(layout.native, "android-root/data/media");
-    makeDirs(media);
-    if (symlink(join(i.storageDir, "emulated/0").c_str(), join(media, "0").c_str()) != 0 && errno != EEXIST) perror("apklayer: /data/media/0");
+    makeDirs(join(i.storageDir, "emulated/0"));  // /storage/emulated/0, /sdcard and /data/media/0 of the instance (APKLAYER_STORAGE, the path layer)
     makeDirs(i.stateDir);
     makeDirs(i.runtimeDir);
     return i;

@@ -15,7 +15,10 @@ final class HostVolumes {
 
     static File internal() {
         String storage = System.getProperty("apklayer.storage");
-        return storage == null ? null : new File(storage, "emulated/" + android.os.Process.myUserHandle().getIdentifier());
+        if (storage == null) return null;
+        // Android's spelling when the path layer serves it from the storage directory (APKLAYER_STORAGE, bridge/native/paths.c): MediaProvider reads volume and relative path from it
+        if (System.getenv("APKLAYER_STORAGE") != null) storage = "/storage";
+        return new File(storage, "emulated/" + android.os.Process.myUserHandle().getIdentifier());
     }
 
     static List<VolumeInfo> list() {
