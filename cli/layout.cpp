@@ -56,15 +56,10 @@ Instance Instance::open(const Layout& layout, const std::string& id) {
     i.runtimeDir = join(layout.runtimeHome, "apklayer/" + id);
     i.storageDir = join(layout.dataHome, "apklayer/" + (id == "default" ? std::string("0") : id) + "/storage");
     makeDirs(join(i.storageDir, "emulated/0"));  // /storage/emulated/0, /sdcard and /data/media/0 of the instance (APKLAYER_STORAGE, the path layer)
-    // /data of the instance (APKLAYER_DATA, the path layer): what the Android root ships there, new files only, so the shared native directory stays read-only
+    // /data of the instance (APKLAYER_DATA, the path layer), so the shared native directory stays read-only. What init makes at boot: the system
+    // user's directory (SettingsProvider's files); keystore2's and SurfaceFlinger's come with the stack (cli/stack.cpp).
     i.dataDir = join(layout.dataHome, "apklayer/" + (id == "default" ? std::string("0") : id) + "/data");
-    makeDirs(i.dataDir);
-    const std::string shipped = join(getenvOr("APKLAYER_ANDROID_ROOT", join(layout.native, "android-root")), "data");
-    if (isDir(shipped)) {
-        Spawn seed;
-        seed.argv = {"cp", "-a", "--update=none", shipped + "/.", i.dataDir};
-        runAndWait(seed);
-    }
+    makeDirs(join(i.dataDir, "system/users/0"));
     makeDirs(i.stateDir);
     makeDirs(i.runtimeDir);
     return i;

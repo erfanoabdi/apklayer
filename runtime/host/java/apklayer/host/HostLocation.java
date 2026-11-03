@@ -21,6 +21,12 @@ final class HostLocation {
     static void install(Application app) {
         LocationManager manager = app.getSystemService(LocationManager.class);
         ShadowLocationManager shadow = Shadows.shadowOf(manager);
+        // Robolectric's location fake keeps its state in Settings.Secure (LOCATION_MODE, LOCATION_PROVIDERS_ALLOWED), which only the system may write once the
+        // real SettingsProvider answers (and which it removed, version 193): the fake cannot be configured then (docs/PLAN.md: location state in the hub)
+        if (android.provider.Settings.Secure.getString(app.getContentResolver(), android.provider.Settings.Secure.LOCATION_PROVIDERS_ALLOWED) == null) {
+            FakeLog.hit("location", "HostLocation: location state needs the system's settings writer");
+            return;
+        }
         for (String provider : new String[] {LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) shadow.setProviderEnabled(provider, false);
         shadow.setLocationEnabled(false);
         try {
