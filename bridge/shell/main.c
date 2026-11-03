@@ -50,6 +50,7 @@ int main(void)
     signal(SIGPIPE, SIG_IGN);
     const char *dbg = getenv("APKLAYER_DEBUG_INPUT");
     debug_input = dbg && !strcmp(dbg, "1");
+    for (int i = 0; i < MAX_CLIENTS; i++) clients[i].fd = -1;  /* before any Wayland event: the clipboard writes to every client with fd >= 0 (0 is stdin) */
     display = wl_display_connect(NULL);
     if (!display) { fprintf(stderr, "[shell] no Wayland compositor\n"); return 1; }
     struct wl_registry *reg = wl_display_get_registry(display);
@@ -60,9 +61,15 @@ int main(void)
     if (!compositor || !shm || !wm_base) { fprintf(stderr, "[shell] missing Wayland globals\n"); return 1; }
 
     clipboard_init();
-    for (int i = 0; i < MAX_CLIENTS; i++) clients[i].fd = -1;
     int lfd = listen_socket(path);
     fprintf(stderr, "[shell] listening on %s\n", path);
+    const char *ready = getenv("APKLAYER_SHELL_READY_FD");  /* the launcher (cli ensureShell) waits on this pipe: clients may connect now */
+    if (ready) {
+        int rfd = atoi(ready);
+        if (write(rfd, "1", 1) < 0) fprintf(stderr, "[shell] readiness pipe: %s\n", strerror(errno));
+        close(rfd);
+        unsetenv("APKLAYER_SHELL_READY_FD");
+    }
 
     for (;;) {
         struct pollfd pfd[2 + CLIPBOARD_FDS + MAX_CLIENTS];

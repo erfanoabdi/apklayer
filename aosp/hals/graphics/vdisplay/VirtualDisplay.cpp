@@ -52,7 +52,6 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         cb.released = &Sink::onReleased;
         mDisplay = apklayer_display_open(title, w, h, &cb);
         if (mDisplay == nullptr) { ALOGE("cannot open the shell window (is apklayer-shell running?)"); return false; }
-        apklayer_display_set_configure_callback(mDisplay, &Sink::onConfigure, this);
 
         mToken = SurfaceComposerClient::createVirtualDisplay(std::string(title), /*isSecure=*/false);
         if (mToken == nullptr) { ALOGE("createVirtualDisplay failed"); return false; }
@@ -62,6 +61,9 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         std::string name = "apklayer.vdisplay." + std::to_string(stack);
         if (defaultServiceManager()->addService(String16(name.c_str()), mToken) != OK) ALOGW("cannot register %s (no screenshots)", name.c_str());
         ALOGI("virtual display \"%s\": layer stack %u, %ux%u", title, stack, w, h);
+        // apklayer patch: only now, with the display existing; the shell's first (fitted) configure, if it came
+        // meanwhile, is replayed here instead of being dropped (the display then kept the 720x1280 it opened at)
+        apklayer_display_set_configure_callback(mDisplay, &Sink::onConfigure, this);
         return true;
     }
 

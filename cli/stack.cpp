@@ -97,17 +97,31 @@ bool waitForProperty(const Layout& l, const NativeEnv& ne, const char* name, con
     return ok;
 }
 
+// Returns with the session's shell listening. One start at a time (the stack daemon and `run` both ask; two shells would each own half the
+// clients), and the started shell reports readiness itself: it writes to APKLAYER_SHELL_READY_FD after listen() (EOF: it died first).
 void ensureShell(const Layout& l, const Instance& inst, const NativeEnv& env) {
-    if (shellPid(l) > 0) return;
     makeDirs(join(l.runtimeHome, "apklayer"));
-    unlink(l.shellSocket().c_str());
-    Spawn shell;
-    shell.argv = {l.shellBinary()};
-    shell.env = env.env;
-    shell.logFile = join(inst.logs(), "shell.log");
-    shell.newSession = true;  // outlives any instance; instances never stop it
-    shell.detach = true;
-    spawn(shell);
+    int lock = open(join(l.runtimeHome, "apklayer/shell.lock").c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+    flock(lock, LOCK_EX);
+    if (shellPid(l) == 0) {
+        unlink(l.shellSocket().c_str());
+        int ready[2];
+        if (pipe2(ready, O_CLOEXEC) != 0) die("pipe failed");
+        fcntl(ready[1], F_SETFD, 0);  // the shell inherits the write end
+        Spawn shell;
+        shell.argv = {l.shellBinary()};
+        shell.env = env.env;
+        shell.env["APKLAYER_SHELL_READY_FD"] = std::to_string(ready[1]);
+        shell.logFile = join(inst.logs(), "shell.log");
+        shell.newSession = true;  // outlives any instance; instances never stop it
+        shell.detach = true;
+        spawn(shell);
+        close(ready[1]);
+        char c;
+        while (read(ready[0], &c, 1) < 0 && errno == EINTR) {}
+        close(ready[0]);
+    }
+    close(lock);
 }
 
 // keystore2 keeps its database in /data/misc/keystore, which the path layer serves from the Android root
