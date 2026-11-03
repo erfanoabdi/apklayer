@@ -13,7 +13,11 @@ cp tests/vm/www/video.html tests/vm/www/youtube.html "$work/"
 [ -n "$YOUTUBE" ] && MEDIA_URL="http://127.0.0.1:$port/youtube.html?v=$YOUTUBE"  # its embedded player in a local page
 inst=${APKLAYER_INSTANCE:-default}; [ "$inst" = default ] && inst=0  # app data per instance (cli/layout.h)
 prof=$(ls -d "${XDG_DATA_HOME:-$HOME/.local/share}/apklayer/$inst/app-data/$pkg/app/files/mozilla/"*.default* 2>/dev/null | head -1)
-[ -n "$prof" ] || { echo "FAIL no Fennec profile yet (start Fennec once)"; exit 1; }
+if [ -z "$prof" ]; then  # a fresh install: Gecko makes its own profile on the first start
+    APKLAYER_JOPTS="-Dapklayer.runms=25000" bin/apklayer run "$pkg" > "$work/first-start.log" 2>&1 < /dev/null
+    prof=$(ls -d "${XDG_DATA_HOME:-$HOME/.local/share}/apklayer/$inst/app-data/$pkg/app/files/mozilla/"*.default* 2>/dev/null | head -1)
+fi
+[ -n "$prof" ] || { echo "FAIL Fennec made no profile on its first start (see $work/first-start.log)"; exit 1; }
 # Gecko's media logs go to the work dir (MOZ_LOG does not reach Gecko)
 { grep -v 'fennec-media.sh' "$prof/user.js" 2>/dev/null
   for p in "\"logging.config.LOG_FILE\", \"$work/gecko.log\"" '"logging.config.sync", true' \
