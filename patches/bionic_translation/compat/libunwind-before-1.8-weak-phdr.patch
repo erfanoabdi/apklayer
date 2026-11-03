@@ -3,7 +3,7 @@ Subject: [PATCH] apklayer compat: weak unw_set_iterate_phdr_function
 
 libunwind before 1.8 has no unw_set_iterate_phdr_function: it is called only when it exists, and backtraces
 then show only the libraries the system loader knows.
-Applied by scripts/build-bionic-translation.sh only when pkg-config reports libunwind older than 1.8.
+Applied by tools/build bt only when pkg-config reports libunwind older than 1.8.
 ---
 diff --git a/linker/linker.c b/linker/linker.c
 index fdb550f..b6889cc 100644
