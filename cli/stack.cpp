@@ -78,7 +78,9 @@ bool alive(int pid) { return pid > 0 && kill(pid, 0) == 0; }
 // SIGTERM, then wait for the exit on a pidfd (SIGKILL after 5 s): `stop` returns with the processes gone.
 void terminate(int pid) {
     if (!alive(pid)) return;
-    if (auto cmd = readFile("/proc/" + std::to_string(pid) + "/cmdline"); !cmd || cmd->find("apklayer") == std::string::npos) return;  // a recycled pid is not ours
+    // a recycled pid is not ours; an app JVM's command line is its Android process name (bridge/native/proc_title.c), its environment still says apklayer
+    auto ours = [pid](const char* file) { auto s = readFile("/proc/" + std::to_string(pid) + file); return s && s->find("apklayer") != std::string::npos; };
+    if (!ours("/cmdline") && !ours("/environ")) return;
     int fd = pidfdOpen(pid);
     kill(pid, SIGTERM);
     pollfd p{fd, POLLIN, 0};
