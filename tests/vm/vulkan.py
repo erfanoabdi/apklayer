@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """Real APK JNI Vulkan readback, presentation capability matching the host device and physical Back."""
-import os as _os
-LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import ctypes
 import os
 from pathlib import Path
@@ -11,9 +9,10 @@ import subprocess
 import sys
 import time
 
-os.chdir(Path.home() / 'apklayer-m1')
-env = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000', APKLAYER_NATIVE=str(Path.home() / 'arm64-native'),
-    APKLAYER_RUNTIME_DEBUG='1', APKLAYER_LOGCAT='1',
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import instance  # noqa: E402  (changes into the repo root)
+LOGDIR = instance.LOGDIR
+env = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1', APKLAYER_LOGCAT='1',
     APKLAYER_JOPTS='-Dapklayer.realbinder=true -Dapklayer.instancehub=true -Dapklayer.runms=20000')
 intent = Path('/tmp/apklayer-vulkan-intent.properties')
 intent.write_text('component=hello.vulkan.Main\n')
@@ -21,7 +20,6 @@ env['APKLAYER_INTENT_FILE'] = str(intent)
 
 def stop():
     subprocess.run(['bin/apklayer', 'stop'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(['pkill', '-9', '-x', 'tail'], check=False)
 
 stop()
 logs = Path(LOGDIR); logs.mkdir(exist_ok=True)
@@ -31,7 +29,6 @@ assert notify >= 0 and libc.inotify_add_watch(notify, os.fsencode(logs), 0x102) 
 app = None
 seen = []; captured = False
 try:
-    subprocess.run(['gcc', '-O1', '-o', '/tmp/uinput-keys', 'tests/vm/uinput-keys.c'], check=True)
     app = subprocess.Popen(['bin/apklayer', 'run', 'hello.vulkan'], env=env,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
     end = time.monotonic() + 25
@@ -62,7 +59,7 @@ try:
                 assert any(('android_swapchain=1' in line and 'dma_buf=1 drm_modifier=1 semaphore_fd=1' in line) or 'android_swapchain=0' in line for line in seen)
                 print('CAPTURE Vulkan probe result', flush=True)
                 assert sys.stdin.readline().strip() == 'captured'
-                subprocess.run(['sudo', '-n', '/tmp/uinput-keys', 'key:1'], check=True,
+                instance.keys(*['key:1'], check=True,
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 captured = True
     assert captured and any('finished hello.vulkan.Main depth=0' in line for line in seen)
@@ -73,7 +70,7 @@ finally:
         except ProcessLookupError: pass
         app.wait(); app.stdout.close()
     stop(); os.close(notify); intent.unlink(missing_ok=True)
-    subprocess.run(['pkill', '-9', '-f', '[a]pklayer.host.Main'], check=False)
+    instance.kill('[a]pklayer.host.Main')
 
-left = subprocess.run(['pgrep', '-af', '[a]pklayer.host.Main|[b]tload|[a]pklayer-shell'], capture_output=True, text=True)
-assert left.returncode == 1, 'leaked runtime processes: ' + left.stdout
+left = instance.mine('[a]pklayer.host.Main|[b]tload|[a]pklayer-shell')
+assert not left, 'leaked runtime processes: ' + '\n'.join(left)

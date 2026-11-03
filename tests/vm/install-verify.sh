@@ -1,12 +1,9 @@
 #!/bin/bash
 # The install's own output check (apklayer.tools.VerifyInstall): an installed UiBench jar passes, a copy with one class dropped and a copy with a
-# truncated class file fail. No Android stack is started (APKLAYER_NATIVE, APKLAYER_ROOT: the VM paths to test). Prints PASS/FAIL per case, exits 1 on a wrong verdict.
+# truncated class file fail. No Android stack is started. On the VM, in the repo copy (tests/run install-verify). Prints PASS/FAIL per case, exits 1 on a wrong verdict.
 set -uo pipefail
-cd "$(dirname "$0")/../.."
-. tests/vm/config.sh
-sshpass -p "$PASS" ssh "$VM" env APKLAYER_NATIVE="${APKLAYER_NATIVE:-}" APKLAYER_ROOT="${APKLAYER_ROOT:-}" bash -s <<'REMOTE'
-N=${APKLAYER_NATIVE:-$HOME/arm64-native} R=${APKLAYER_ROOT:-$HOME/apklayer}
-app=$HOME/.local/share/apklayer/apps/com.android.test.uibench
+N=${APKLAYER_NATIVE:-$HOME/arm64-native} R=$PWD
+app=${XDG_DATA_HOME:-$HOME/.local/share}/apklayer/apps/com.android.test.uibench
 w=$(mktemp -d "$HOME/.install-verify.XXXXXX"); trap 'rm -rf "$w"' EXIT
 verify() { java -Xbootclasspath/a:$N/aosp/Robolectric_all.jar -cp $N/aosp/host-classes:$R/b/runtime/dex2jvm/dex2jvm.jar apklayer.tools.VerifyInstall $app/base.apk "$1"; }
 classes=$(unzip -Z1 $app/classes.jar | grep '\.class$')
@@ -21,4 +18,3 @@ for c in "pass $app/classes.jar" "fail $w/dropped.jar" "fail $w/truncated.jar"; 
     sed 's/^/    /' <<<"$out" | head -3
 done
 exit $status
-REMOTE

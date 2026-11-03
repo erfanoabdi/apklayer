@@ -1,0 +1,181 @@
+# The test groups of tests/run. Each group runs in an apklayer instance of its own on the VM (binder devices, XDG_RUNTIME_DIR, window shell).
+#   run    VM commands, in order, in the repo copy with the instance's environment; the group passes when all of them exit 0
+#   mac    commands on the Mac instead (cwd: the repo)
+#   apps   tests/apps/<name>, built on the Mac and installed once before any group starts
+#   setup  VM commands run once before any group starts (files the groups' stacks read from APKLAYER_NATIVE)
+#   needs  packages that must be installed already (user-supplied APKs: `bin/apklayer install <apk>` on the VM); missing: the group is skipped
+#   alone  true: runs with no other group of the runner, after the parallel ones. Real keys go to the focused window and screenshots show the
+#          whole desktop (pixel checks), and stacks that declare HAL services write their vintf manifests into the shared APKLAYER_NATIVE.
+#   optional  true: only when named on the command line
+
+[properties]
+run = ["tests/vm/properties.sh"]
+
+[install-verify]
+run = ["tests/vm/install-verify.sh"]
+
+[keystore]
+apps = ["hello-keystore"]
+run = ["tests/vm/keystore.sh"]
+
+[devices]
+apps = ["hello-devices"]
+run = ["tests/vm/devices.sh"]
+
+[files]
+apps = ["hello-files"]
+setup = ["""f=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/system/etc/permissions/apklayer-test-hello-files.xml; [ -e $f ] || printf '<permissions><privapp-permissions package="hello.files"><permission name="android.permission.MANAGE_DOCUMENTS"/></privapp-permissions></permissions>\\n' > $f"""]
+run = ["tests/vm/files.sh"]
+
+[view]
+apps = ["hello-files", "hello-reader"]
+setup = ["""f=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/system/etc/permissions/apklayer-test-hello-files.xml; [ -e $f ] || printf '<permissions><privapp-permissions package="hello.files"><permission name="android.permission.MANAGE_DOCUMENTS"/></privapp-permissions></permissions>\\n' > $f"""]
+run = ["tests/vm/view.sh"]
+
+[sysprov]
+apps = ["hello-sysprov"]
+needs = ["com.android.providers.settings", "com.android.providers.contacts", "com.android.providers.userdictionary"]
+run = ["tests/vm/sysprov.sh"]
+
+[system-apps]
+apps = ["hello-system"]
+needs = ["com.android.providers.contacts", "com.android.documentsui"]
+run = ["tests/vm/system-apps.sh"]
+
+[binder]
+apps = ["hello-binder-server", "hello-binder-client"]
+run = ["python3 -u tests/vm/binder.py"]
+
+[hub-services]
+apps = ["hello-hub-server", "hello-hub-client"]
+run = ["python3 -u tests/vm/hub-smoke.py", "python3 -u tests/vm/binder.py bound", "python3 -u tests/vm/binder.py auto"]
+
+[providers]
+apps = ["hello-cp-provider", "hello-cp-client", "hello-cp-denied"]
+run = ["python3 -u tests/vm/hub.py providers basic", "python3 -u tests/vm/hub.py providers denied", "python3 -u tests/vm/hub.py providers death"]
+
+[services]
+apps = ["hello-svc-target", "hello-svc-caller"]
+run = ["python3 -u tests/vm/hub.py services start", "python3 -u tests/vm/hub.py services selfstop", "python3 -u tests/vm/hub.py services sticky",
+       "python3 -u tests/vm/hub.py services private"]
+
+[activities]
+apps = ["hello-act-target", "hello-act-caller"]
+run = ["python3 -u tests/vm/hub.py activities result", "python3 -u tests/vm/hub.py activities explicit", "python3 -u tests/vm/hub.py activities again",
+       "python3 -u tests/vm/hub.py activities private"]
+
+[pendingintents]
+apps = ["hello-pi-holder", "hello-pi-creator", "hello-act-target", "hello-svc-target"]
+run = ["python3 -u tests/vm/hub.py pendingintents broadcast", "python3 -u tests/vm/hub.py pendingintents targets", "python3 -u tests/vm/hub.py pendingintents cancel"]
+
+[notifications]
+apps = ["hello-nt-poster"]
+run = ["python3 -u tests/vm/hub.py notifications click"]
+
+[broadcasts]
+apps = ["hello-bc-receiver", "hello-bc-sender", "hello-bc-denied"]
+run = ["python3 -u tests/vm/broadcasts.py manifest", "python3 -u tests/vm/broadcasts.py basic", "python3 -u tests/vm/broadcasts.py ordered",
+       "python3 -u tests/vm/broadcasts.py sticky", "python3 -u tests/vm/broadcasts.py async", "python3 -u tests/vm/broadcasts.py once",
+       "python3 -u tests/vm/broadcasts.py death"]
+
+[webview]
+apps = ["hello-wvprobe"]
+needs = ["com.android.webview"]
+run = ["python3 -u tests/vm/hub.py webview probe"]
+
+[splash]
+needs = ["com.android.test.uibench"]
+run = ["python3 -u tests/vm/splash.py"]
+
+[startup]
+needs = ["com.android.test.uibench"]
+run = ["tests/vm/startup.sh com.android.test.uibench"]
+
+[gpu]
+needs = ["com.android.test.uibench"]
+alone = true
+run = ["python3 -u tests/vm/gpu-smoke.py"]
+
+[gpu-window]
+needs = ["com.android.test.uibench"]
+alone = true
+run = ["python3 -u tests/vm/gpu-window-run.py"]
+
+[texture-view]
+needs = ["com.android.test.uibench"]
+alone = true
+run = ["python3 -u tests/vm/texture-view.py"]
+
+[vulkan]
+apps = ["hello-vulkan"]
+alone = true
+run = ["python3 -u tests/vm/vulkan.py"]
+
+[vulkan-present]
+apps = ["hello-vulkan"]
+alone = true
+run = ["python3 -u tests/vm/vulkan-present.py"]
+
+[input]
+apps = ["hello-input"]
+alone = true
+run = ["python3 -u tests/vm/input.py"]
+
+[multi-app]
+apps = ["hello-share-dst", "hello-share-dst2"]
+alone = true
+run = ["python3 -u tests/vm/multi-app.py"]
+
+[portal]
+apps = ["hello-portal"]
+alone = true
+run = ["tests/vm/portal.sh"]
+
+[codec2]
+alone = true
+run = ["tests/vm/codec2.sh"]
+
+[native-surface]
+apps = ["hello-native-surface"]
+setup = ["N=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root; mkdir -p $N/vendor/etc $N/system/lib64 && cp -a --remove-destination bridge/native/android-root/system/lib64/extractors $N/system/lib64/ && cp --remove-destination bridge/native/android-root/vendor/etc/media_codecs.xml $N/vendor/etc/"]
+alone = true
+run = ["python3 -u tests/vm/native-surface.py"]
+
+[native-media]
+apps = ["hello-native-codec"]
+setup = ["N=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root; mkdir -p $N/vendor/etc $N/system/lib64 && cp -a --remove-destination bridge/native/android-root/system/lib64/extractors $N/system/lib64/ && cp --remove-destination bridge/native/android-root/vendor/etc/media_codecs.xml $N/vendor/etc/"]
+alone = true
+run = ["python3 -u tests/vm/native-media.py"]
+
+[native-player]
+apps = ["hello-native-player"]
+setup = ["N=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root; mkdir -p $N/vendor/etc $N/system/lib64 && cp -a --remove-destination bridge/native/android-root/system/lib64/extractors $N/system/lib64/ && cp --remove-destination bridge/native/android-root/vendor/etc/media_codecs.xml $N/vendor/etc/"]
+alone = true
+run = ["python3 -u tests/vm/native-player.py"]
+
+[native-audio]
+apps = ["hello-native-audio"]
+alone = true
+run = ["python3 -u tests/vm/native-audio.py"]
+
+[audio-aidl]
+alone = true
+run = ["tests/vm/audio-host.sh aidl"]
+
+[audio-track]
+alone = true
+run = ["tests/vm/audio-host.sh system"]
+
+[audio-system]
+alone = true
+run = ["tests/vm/audio-system.sh"]
+
+[otr2]
+needs = ["com.dogbytegames.otrnext"]
+alone = true
+run = ["python3 -u tests/vm/otr2-run.py"]
+
+[corpus]
+optional = true
+alone = true
+mac = ["python3 tests/corpus/run.py"]

@@ -1,13 +1,8 @@
 #!/bin/bash
-# Verify Android write-once semantics across separate host processes.
+# Android write-once property semantics across separate host processes; an instance has an independent area.
+# On the VM, in the group's instance (tests/run properties: APKLAYER_INSTANCE, APKLY_STATE = its logs, APKLAYER_NATIVE).
 set -euo pipefail
-cd "$(dirname "$0")/../.."
-. tests/vm/config.sh
-COPYFILE_DISABLE=1 tar cf - bridge/native/aprop.c bridge/native/properties.c |
-    sshpass -p "$PASS" ssh "$VM" 'tar xf - -C ~/apklayer'
-sshpass -p "$PASS" ssh "$VM" bash -s <<'REMOTE'
-set -euo pipefail
-cd ~/apklayer
+: "${APKLAYER_NATIVE:=$HOME/arm64-native}" "${APKLY_STATE:=${XDG_STATE_HOME:-$HOME/.local/state}/apklayer/${APKLAYER_INSTANCE:-default}}"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 cc -O2 -Wall -o "$work/aprop" bridge/native/aprop.c bridge/native/properties.c
@@ -23,4 +18,3 @@ export APKLAYER_PROPERTIES="$work/other-instance"
 "$work/aprop" set ro.hyphen.data.dir /other-instance
 test "$("$work/aprop" get ro.hyphen.data.dir)" = /other-instance
 echo 'PASS cross-process read-only, mutable and independent instance properties'
-REMOTE

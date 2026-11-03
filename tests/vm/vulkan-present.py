@@ -8,9 +8,11 @@ import subprocess
 import sys
 import time
 
-os.chdir(Path.home() / 'apklayer-m1')
-env = dict(os.environ, APKLAYER_VULKAN_PRESENT='1', XDG_RUNTIME_DIR='/run/user/1000', APKLAYER_NATIVE=str(Path.home() / 'arm64-native'),
-    APKLAYER_RUNTIME_DEBUG='1', APKLAYER_LOGCAT='1', APKLAYER_JOPTS='-Dapklayer.nativemedia=true -Dapklayer.realbinder=true -Dapklayer.instancehub=true -Dapklayer.runms=25000')
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import instance  # noqa: E402  (changes into the repo root)
+import pixels  # noqa: E402
+LOGDIR = instance.LOGDIR
+env = dict(instance.ENV, APKLAYER_VULKAN_PRESENT='1', APKLAYER_RUNTIME_DEBUG='1', APKLAYER_LOGCAT='1', APKLAYER_JOPTS='-Dapklayer.nativemedia=true -Dapklayer.realbinder=true -Dapklayer.instancehub=true -Dapklayer.runms=25000')
 intent = Path('/tmp/apklayer-vulkan-present-intent.properties')
 intent.write_text('component=hello.vulkan.Present\n')
 env['APKLAYER_INTENT_FILE'] = str(intent)
@@ -18,8 +20,7 @@ env['APKLAYER_INTENT_FILE'] = str(intent)
 
 def stop():
     subprocess.run(['bin/apklayer', 'stop'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(['pkill', '-9', '-x', 'tail'], check=False)
-    subprocess.run(['pkill', '-f', '[b]in/apklayer hub'], check=False)
+    instance.kill('[b]in/apklayer hub')
 
 
 stop()
@@ -46,8 +47,10 @@ try:
                     print(line, flush=True)
                 assert not any(tag in line for tag in ('FATAL EXCEPTION', 'fatal error has been detected')), line
                 if not captured and 'vkswap: presented 60 frames' in line:
-                    print('CAPTURE Vulkan swapchain frames', flush=True)
-                    assert sys.stdin.readline().strip() == 'captured'
+                    shot = instance.capture('Vulkan swapchain frames')
+                    magenta = pixels.count(shot, lambda r, g, b: r > 200 and g < 60 and 100 < b < 160) / (lambda im: im.width * im.height)(pixels.rgb(shot))
+                    print('IMAGE %s: %.0f%% magenta' % (shot, magenta * 100), flush=True)
+                    assert magenta > 0.25, 'the presented frames are not on screen (%.0f%% magenta)' % (magenta * 100)
                     captured = True
     app.wait()
     assert captured, 'the swapchain never presented 60 frames'
@@ -59,4 +62,4 @@ finally:
         except ProcessLookupError: pass
         app.wait(); app.stdout.close()
     stop(); intent.unlink(missing_ok=True)
-    subprocess.run(['pkill', '-9', '-f', '[a]pklayer.host.Main'], check=False)
+    instance.kill('[a]pklayer.host.Main')

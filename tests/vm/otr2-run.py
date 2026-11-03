@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """Foreground OTR2 (Off The Road 2) on the GPU route: real GPU frames, capture handshake and physical Back. Driven by tests/vm/otr2-driver.py."""
-import os as _os
-LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import ctypes
 import os
 from pathlib import Path
@@ -11,9 +9,11 @@ import subprocess
 import sys
 import time
 
-os.chdir(Path.home() / 'apklayer-m1')
-env = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000', APKLAYER_NATIVE=str(Path.home() / 'arm64-native'),
-    APKLAYER_RUNTIME_DEBUG='1', APKLAYER_LOGCAT='1',
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import instance  # noqa: E402  (changes into the repo root)
+import pixels  # noqa: E402
+LOGDIR = instance.LOGDIR
+env = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1', APKLAYER_LOGCAT='1',
     APKLAYER_JOPTS='-Dapklayer.nativeresources=true -Dapklayer.nativemedia=true -Dapklayer.realbinder=true -Dapklayer.instancehub=true -Dapklayer.runms=20000')
 intent = Path('/tmp/apklayer-otr2-intent.properties')
 intent.write_text('component=com.dogbytegames.otrnext.OTRNext\n')
@@ -21,7 +21,6 @@ env['APKLAYER_INTENT_FILE'] = str(intent)
 
 def stop():
     subprocess.run(['bin/apklayer', 'stop'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(['pkill', '-9', '-x', 'tail'], check=False)
 
 stop()
 logs = Path(LOGDIR); logs.mkdir(exist_ok=True)
@@ -29,9 +28,8 @@ libc = ctypes.CDLL(None, use_errno=True)
 notify = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
 assert notify >= 0 and libc.inotify_add_watch(notify, os.fsencode(logs), 0x102) >= 0
 app = None
-seen = []; captured = False; captures = 0
+seen = []; captured = False; captures = 0; best = 0.0
 try:
-    subprocess.run(['gcc', '-O1', '-o', '/tmp/uinput-keys', 'tests/vm/uinput-keys.c'], check=True)
     app = subprocess.Popen(['bin/apklayer', 'run', 'com.dogbytegames.otrnext'], env=env,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
     end = time.monotonic() + 25
@@ -41,8 +39,7 @@ try:
         while True:
             ready = events.select(3)
             if not ready or time.monotonic() >= end:
-                print('CAPTURE OTR2 quiet', flush=True)
-                assert sys.stdin.readline().strip() == 'captured'
+                best = max(best, pixels.game_content(instance.capture('OTR2 quiet')))
                 print('OTR2 observation ended (no log events for 3s or test budget reached)', flush=True)
                 break
             finished = False
@@ -69,22 +66,23 @@ try:
                 # its capture can contain partially black rows during animation.
                 os.kill(pid, signal.SIGSTOP)
                 try:
-                    print('CAPTURE OTR2 GPU output ' + str(captures), flush=True)
-                    assert sys.stdin.readline().strip() == 'captured'
+                    best = max(best, pixels.game_content(instance.capture('OTR2 GPU output ' + str(captures))))
                 finally: os.kill(pid, signal.SIGCONT)
                 if captures < 2: continue
-                subprocess.run(['sudo', '-n', '/tmp/uinput-keys', 'key:1'], check=True,
+                instance.keys(*['key:1'], check=True,
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 captured = True
     print('OTR2 captured stages:', captures, 'Back returned to depth 0:', any('finished com.dogbytegames.otrnext.OTRNext depth=0' in line for line in seen), flush=True)
     print('OTR2 observation complete', flush=True)
+    assert best >= 0.5, 'FAIL OTR2 drew no game content'
+    print('PASS OTR2 renders game frames (%.0f%% of the window lit)' % (best * 100), flush=True)
 finally:
     if app is not None:
         try: os.killpg(app.pid, signal.SIGKILL)
         except ProcessLookupError: pass
         app.wait(); app.stdout.close()
     stop(); os.close(notify); intent.unlink(missing_ok=True)
-    subprocess.run(['pkill', '-9', '-f', '[a]pklayer.host.Main'], check=False)
+    instance.kill('[a]pklayer.host.Main')
 
-left = subprocess.run(['pgrep', '-af', '[a]pklayer.host.Main|[b]tload|[a]pklayer-shell'], capture_output=True, text=True)
-assert left.returncode == 1, 'leaked runtime processes: ' + left.stdout
+left = instance.mine('[a]pklayer.host.Main|[b]tload|[a]pklayer-shell')
+assert not left, 'leaked runtime processes: ' + '\n'.join(left)

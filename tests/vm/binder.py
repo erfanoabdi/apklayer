@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """Own two JVMs, observe actual Binder calls/death, and reap every child."""
-import os as _os
-LOGDIR = _os.path.expanduser('~/.local/state/apklayer/default')  # the default instance's logs (apklayer tool)
 import os
 from pathlib import Path
 import selectors
@@ -10,9 +8,10 @@ import subprocess
 import sys
 import time
 
-os.chdir(Path.home() / 'apklayer-m1')
-ENV = dict(os.environ, XDG_RUNTIME_DIR='/run/user/1000', APKLAYER_NATIVE=str(Path.home() / 'arm64-native'),
-    APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400',
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import instance  # noqa: E402  (changes into the repo root)
+LOGDIR = instance.LOGDIR
+ENV = dict(instance.ENV, APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400',
     APKLAYER_JOPTS='-Dapklayer.realbinder=true -Dapklayer.runms=60000')
 auto_mode = sys.argv[1:] == ['auto']
 bound_mode = auto_mode or sys.argv[1:] == ['bound']
@@ -23,7 +22,6 @@ ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.
 
 def stop():
     subprocess.run(['bin/apklayer', 'stop'], env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(['pkill', '-9', '-x', 'tail'], check=False)
 
 
 stop()
@@ -72,8 +70,8 @@ with selectors.DefaultSelector() as events:
             start('client', 'hello.hubclient')
             ready = wait_for('client', '[hello-hub-client] READY serverPid=')
             server_pid = int(ready.split('serverPid=')[1])
-            displays = subprocess.run(['pgrep', '-af', '[l]ibapklayer_vdisplay.*hello.hubserver'], capture_output=True, text=True)
-            assert displays.returncode == 1, 'headless service created a display: ' + displays.stdout
+            displays = instance.mine('[l]ibapklayer_vdisplay.*hello.hubserver')
+            assert not displays, 'headless service created a display: ' + '\n'.join(displays)
             os.kill(server_pid, signal.SIGKILL)
             wait_for('client', '[hello-hub-client] BIND PASS')
             wait_for('client', 'finished hello.hubclient.Main depth=0')
@@ -120,5 +118,5 @@ with selectors.DefaultSelector() as events:
                 pass
             proc.stdout.close()
             Path('/tmp/apklayer-binder-' + name + '.out').write_text('\n'.join(logs[name]))
-        left = subprocess.run(['pgrep', '-af', '[a]pklayer.host.Main|[b]tload|[a]pklayer-shell'], capture_output=True, text=True)
-        assert left.returncode != 0, left.stdout
+        left = instance.mine('[a]pklayer.host.Main|[b]tload|[a]pklayer-shell')
+        assert not left, left
