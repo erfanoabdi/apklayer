@@ -12,7 +12,7 @@ final class RateCheck {
     }
 
     static void run() throws Exception {
-        final int rate = 48000, seconds = 8, total = rate * seconds, chunk = 960;
+        final int asked = Integer.getInteger("hello.rate", 1), rate = asked > 1 ? asked : 48000, seconds = 8, total = rate * seconds, chunk = 960;  // -Dhello.rate=<Hz> (1: 48000)
         AudioTrack track = new AudioTrack.Builder()
                 .setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
                 .setAudioFormat(new AudioFormat.Builder().setSampleRate(rate).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
