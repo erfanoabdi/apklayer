@@ -1,7 +1,7 @@
 #!/bin/sh
 # sync-aosp: mirror apklayer's AOSP-side sources (aosp/) into the tree at ~/los24/vendor/apklayer (OrbStack), where
 # `m <module>` builds them, and commit the change there (vendor/apklayer has its own git history).
-# Usage: scripts/sync-aosp.sh "commit message".  Only that directory is written; never touches out/.
+# Usage: tools/sync-aosp.sh "commit message".  Only that directory is written; never touches out/.
 set -e
 cd "$(dirname "$0")/.."
 msg="${1:-sync from apklayer $(git rev-parse --short HEAD)}"

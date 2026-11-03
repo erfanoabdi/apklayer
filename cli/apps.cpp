@@ -78,7 +78,7 @@ std::string hostClasspath(const Layout& l) {  // no app classes: they get a load
 std::string installApp(const Layout& l, const Instance& inst, const std::string& apk) {
     if (!exists(apk)) die("no such file: " + apk);
     if (!isDir(l.hostClasses()) || !exists(l.dex2jvmJar()))
-        die("not built: run 'meson setup b && ninja -C b' and scripts/build-tree-host.sh " + l.native + " in " + l.root);
+        die("not built: run 'meson setup b && ninja -C b' and tools/build host " + l.native + " in " + l.root);
     makeDirs(l.appsDir);
     std::string key = cacheKey(l, apk);
     char pattern[4096];

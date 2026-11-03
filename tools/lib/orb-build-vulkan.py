@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Incremental Vulkan build, reusing existing arm64 Soong compile/link commands.
-Run inside OrbStack after syncing aosp/ and applying patch-vulkan.sh. Never cleans.
+Run inside OrbStack after syncing aosp/ and patches/apply aosp ~/los24. Never cleans.
 The graph need not be regenerated to build the two small new shared tools: their
 Android.bp modules use the same existing device C++ toolchain as libapklayer_egl.
 """

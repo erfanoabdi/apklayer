@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Reads the framework's AndroidManifest.xml on stdin and prints `name<TAB>level` for every permission, level = normal | dangerous | appop | signature (appop: the user grants it in Settings on a device, so the desktop grants it at install; signature covers
-signature|privileged and the like). Staged as android-root/system/etc/apklayer-permission-levels.tsv by scripts/collect-android-root.sh: normal permissions are granted
+signature|privileged and the like). Staged as android-root/system/etc/apklayer-permission-levels.tsv by tools/stage root: normal permissions are granted
 at install, signature ones go to platform-signed system apps, dangerous ones are asked for."""
 import sys
 import xml.etree.ElementTree as ET

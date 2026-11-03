@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 import javax.annotation.Priority;
 import org.robolectric.internal.ShadowProvider;
-import org.robolectric.internal.ClassTracker;
 
 /**
  * apklayer's shadows, found through META-INF/services like Robolectric's own. A higher priority than
@@ -14,7 +13,7 @@ import org.robolectric.internal.ClassTracker;
  */
 @Priority(1000)
 public final class HostShadowProvider implements ShadowProvider {
-    @Override public void reset(ClassTracker classTracker) {}
+    @Override public void reset() {}  // the tree's ShadowProvider (Robolectric_all.jar); Maven's Robolectric takes a ClassTracker
 
     @Override public String[] getProvidedPackageNames() { return new String[0]; }
 

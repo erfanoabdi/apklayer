@@ -5,7 +5,7 @@ cd "$(dirname "$0")/../.."
 . tests/vm/config.sh
 for app in hello-act-target hello-act-caller; do tests/apps/build.sh "$app" > /dev/null; done
 sshpass -p "$PASS" scp build/hello-act-target.apk build/hello-act-caller.apk "$VM:/tmp/"
-COPYFILE_DISABLE=1 tar cf - tests/vm/activities.py bin/apklayer scripts | sshpass -p "$PASS" ssh "$VM" 'tar xf - -C ~/apklayer'
+COPYFILE_DISABLE=1 tar cf - tests/vm/activities.py bin/apklayer tools | sshpass -p "$PASS" ssh "$VM" 'tar xf - -C ~/apklayer'
 sshpass -p "$PASS" ssh "$VM" 'set -e; cd ~/apklayer; export XDG_RUNTIME_DIR=/run/user/1000 APKLAYER_NATIVE="$HOME/arm64-native"; for a in target caller; do bin/apklayer install /tmp/hello-act-$a.apk 2>&1 | grep -a installed; done'
 for phase in ${@:-result explicit again private}; do
     sshpass -p "$PASS" ssh "$VM" "cd ~/apklayer; ACT_VERBOSE=\${ACT_VERBOSE:-} python3 -u tests/vm/activities.py $phase"

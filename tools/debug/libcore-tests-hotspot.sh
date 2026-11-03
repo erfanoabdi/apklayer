@@ -1,7 +1,7 @@
 #!/bin/bash
 # Compile a subset of libcore's java.* tests (util, io, nio, lang; not net: network) against the tree's prebuilt JDK 21
 # (read-only tree, output in /tmp/lctest) and run them with JUnit 4: a failure is a libcore-vs-OpenJDK behaviour difference (or a test of a libcore internal).
-# Run in the tree's VM: orb -m ubuntu22-x86 /bin/bash scripts/libcore-tests-hotspot.sh  (failures: /tmp/lctest/run.txt). Sources that do not compile on the JDK are dropped.
+# Run in the tree's VM: orb -m ubuntu22-x86 /bin/bash tools/debug/libcore-tests-hotspot.sh  (failures: /tmp/lctest/run.txt). Sources that do not compile on the JDK are dropped.
 set -e
 cd ~/los24
 J=prebuilts/jdk/jdk21/linux-x86/bin

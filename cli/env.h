@@ -1,4 +1,4 @@
-// The environment of every process that runs Android's own libraries (services, app JVMs, helpers): what scripts/native-env.sh did.
+// The environment of every process that runs Android's own libraries (services, app JVMs, helpers).
 #pragma once
 
 #include <string>

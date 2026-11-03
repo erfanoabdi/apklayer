@@ -1,6 +1,6 @@
 #!/bin/sh
 # vm-binder-setup: kernel binderfs for the services stack on the Ubuntu test VM.
-# Run as root: echo PASSWORD | sudo -S sh scripts/vm-binder-setup.sh [instance...]. Loads binder_linux, mounts binderfs, creates the binder, hwbinder and vndbinder
+# Run as root: echo PASSWORD | sudo -S sh tools/host-setup/binder.sh [instance...]. Loads binder_linux, mounts binderfs, creates the binder, hwbinder and vndbinder
 # nodes through the binder-control ioctl (a loaded module ignores devices=), and makes them usable by every user. Idempotent; run it after a reboot.
 # Each instance named on the command line gets its own binder-<id>, hwbinder-<id>, vndbinder-<id> (bridge/native/paths.c maps /dev/binder there),
 # so stacks of different instances (apklayer --instance <id>) run side by side.
