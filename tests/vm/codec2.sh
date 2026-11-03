@@ -3,7 +3,6 @@
 # On the VM, in the group's instance (tests/run codec2: APKLAYER_INSTANCE, APKLY_STATE = its logs, APKLAYER_NATIVE).
 set -euo pipefail
 : "${APKLAYER_NATIVE:=$HOME/arm64-native}" "${APKLY_STATE:=${XDG_STATE_HOME:-$HOME/.local/state}/apklayer/${APKLAYER_INSTANCE:-default}}"
-export APKLAYER_CODEC2=1
 export APKLAYER_HOST_LIBS="$APKLAYER_NATIVE/libapklayer-hal-graphics.so:$APKLAYER_NATIVE/libapklayer-hal-media.so"
 trap 'bin/apklayer stop >/dev/null 2>&1; true; rm -f "$APKLAYER_NATIVE/android-root/vendor/etc/vintf/manifest/apklayer-media.xml"' EXIT
 ninja -C b bridge/hals/media/codec-test bridge/hals/media/codec-reorder-test

@@ -13,7 +13,7 @@ from audio_capture import AudioCapture
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 import instance  # noqa: E402  (changes into the repo root)
 LOGDIR = instance.LOGDIR
-ENV = dict(instance.ENV, APKLAYER_CODEC2='0', APKLAYER_MEDIA_SERVICES='0', APKLAYER_DEBUG_INPUT='1', APKLAYER_RUNTIME_DEBUG='1',
+ENV = dict(instance.ENV, APKLAYER_DEBUG_INPUT='1', APKLAYER_RUNTIME_DEBUG='1',
     APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400',
     APKLAYER_JOPTS='-Dapklayer.nativeattribution=true -Dapklayer.runms=90000')
 extra = Path.home() / '.apklayer-extra-jopts'  # regression runs with a feature flag (e.g. -Dapklayer.realbinder=true): the file holds the extra options
@@ -23,7 +23,6 @@ ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.
 audio_mode = sys.argv[1:] == ['audio']
 capture = None
 if audio_mode:
-    ENV.update(APKLAYER_AUDIO='1', APKLAYER_AUDIO_SERVICES='1', APKLAYER_MEDIA_SERVICES='1', APKLAYER_CODEC2='1')  # the recorder's encoder is a Codec2 component
     ENV['APKLAYER_JOPTS'] += ' -Dapklayer.nativemedia=true -Dapklayer.nativeaudio=true -Dapklayer.nativeparcels=true -Dhello.rate=1 -Dhello.record=1'
     ENV['APKLAYER_HOST_LIBS'] += ':' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-audio.so'
 

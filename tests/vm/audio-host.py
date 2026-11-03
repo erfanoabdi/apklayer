@@ -50,10 +50,10 @@ try:
                         print('Monitor receives real PipeWire PCM', flush=True)
                         producer_command = ['b/bridge/hals/audio/audio-test', name] + (['mono'] if mono else [])
                         if aidl:
-                            env.update(APKLAYER_AUDIO_TARGET=name, APKLAYER_AUDIO='1')
+                            env.update(APKLAYER_AUDIO_TARGET=name)
                             producer_command = ['bin/apklayer', 'stack', 'libapklayer_audio.so', '--probe']
                             if system:
-                                env['APKLAYER_AUDIO_SERVICES'] = '1'
+                                pass  # the stack starts the audio services when their libraries are installed
                                 producer_command = ['bin/apklayer', 'stack', 'libapklayer_audioserver.so', '--track']
                         producer = subprocess.Popen(producer_command, env=env,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)

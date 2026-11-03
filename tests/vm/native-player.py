@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 import instance  # noqa: E402  (changes into the repo root)
 import pixels  # noqa: E402
 LOGDIR = instance.LOGDIR
-ENV = dict(instance.ENV, APKLAYER_CODEC2='1', APKLAYER_MEDIA_SERVICES='1', APKLAYER_AUDIO='1', APKLAYER_AUDIO_SERVICES='1', APKLAYER_NATIVE_MEDIA_PARCELS='1', APKLAYER_DEBUG_INPUT='1', APKLAYER_RUNTIME_DEBUG='1',
+ENV = dict(instance.ENV, APKLAYER_NATIVE_MEDIA_PARCELS='1', APKLAYER_DEBUG_INPUT='1', APKLAYER_RUNTIME_DEBUG='1',
     APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400',
     APKLAYER_JOPTS='-Dapklayer.nativemedia=true -Dapklayer.nativeaudio=true -Dapklayer.nativeparcels=true -Dapklayer.nativeplayer=true -Dhello.asset=' + os.environ.get('PLAYER_ASSET', 'red-h264.mp4') + ' -Dapklayer.runms=20000')
 extra = Path.home() / '.apklayer-extra-jopts'  # regression runs with a feature flag (e.g. -Dapklayer.realbinder=true): the file holds the extra options
