@@ -265,7 +265,7 @@ final class HubInstaller {
         queue.execute(() -> {
             try { work.run(); }
             catch (RuntimeException failure) { System.out.println("[apklayer-hub] installer failed: " + failure); failure.printStackTrace(System.out); }
-            finally { busy.decrementAndGet(); }
+            finally { if (busy.decrementAndGet() == 0) directory.installerIdle(); }
         });
     }
 

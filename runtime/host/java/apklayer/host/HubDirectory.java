@@ -75,6 +75,8 @@ final class HubDirectory extends Binder {
     HubProviders providers() { return providers; }
     HubPackages packages() { return packages; }
     HubInstaller installer() { return installer; }
+    /** The installer finished its work: a hub that lost its last app meanwhile (an installer that updated itself) ends as it would have. */
+    void installerIdle() { exitWhenIdle(IDLE_EXIT_MS); }
     Peer peerByPid(int pid) { synchronized (peers) { return peers.get(pid); } }
     /** A running process of the app with this Android uid (an app and its component hosts share it), or null. */
     Peer peerByUid(int appUid) { synchronized (peers) { return peers.values().stream().filter(peer -> peer.appUid == appUid).findFirst().orElse(null); } }
