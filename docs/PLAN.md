@@ -167,3 +167,6 @@ Until an app presents its first frame, `bridge/shell/splash.c` fills the window 
 - Settings: the default-instance app-data migration ran on no real data yet; a hanging GeoClue call can delay an app's first provider request up to 10 s; the IME choice applies at the next instance start; no IME binding to input yet; DEVICE_PROVISIONED/USER_SETUP_COMPLETE are 1 everywhere.
 - Window shape on Parallels: NewPipe opened as a 329x1280 strip, OpenTTD's landscape request as 870x223 (windowing round in progress).
 - NewPipe 0.20.1 (2021) cannot parse today's YouTube: the corpus needs current app versions (F-Droid index + tests/corpus/fdroid.py); NewPipe 0.28 lists videos.
+
+## Windows (2026-11-04)
+- The bar is 46 logical px, drawn at the window's scale and shown through wp_viewporter. Windows follow wp_fractional_scale_v1 (the app gets the logical size and the scale; the vdisplay renders size x scale px). The first size is the display's shape fitted to 85% of xdg_toplevel.configure_bounds; maximized/fullscreen/tiled take the compositor's size; all outputs are tracked. Checked by `tests/run window-geometry`; other scales with tools/debug/nested-gnome.py. Open: xdg-decoration on non-GNOME desktops; a real-session scale switch check; landscape windows are not grown to the screen.
