@@ -90,8 +90,9 @@ build_instrument() { # the framework jars instrumented once (apklayer.tools.PreI
     [ -d "$native/aosp/host-classes" ] || { echo "tools/build: no host classes yet, framework jar not instrumented"; return 0; }
     rm -rf "$out" && mkdir -p "$out"
     done_jar=""
-    for j in "$native"/aosp/android-all/*.jar; do  # the SDK provider names the jar twice (16 and current): hardlinks of one file, instrumented once
-        if [ -n "$done_jar" ] && [ "$j" -ef "$done_jar" ]; then ln "$out/$(basename "$done_jar")" "$out/$(basename "$j")"; continue; fi
+    entries() { unzip -lv "$1" | awk 'NR > 3 { print $1, $7, $8 }'; }  # size, CRC and name of every entry
+    for j in "$native"/aosp/android-all/*.jar; do  # the SDK provider names the jar twice (16 and current): the same entries, instrumented once
+        if [ -n "$done_jar" ] && [ "$(entries "$j")" = "$(entries "$done_jar")" ]; then ln "$out/$(basename "$done_jar")" "$out/$(basename "$j")"; continue; fi
         java -cp "$native/native-runtime.jar:$native/aosp/host-classes:$native/aosp/sim-classes:$native/aosp/Robolectric_all.jar" apklayer.tools.PreInstrument "$j" "$out/$(basename "$j")"
         done_jar="$j"
     done

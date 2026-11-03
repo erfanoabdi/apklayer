@@ -11,6 +11,7 @@ import java.util.Enumeration;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
+import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import org.robolectric.interceptors.AndroidInterceptors;
 import org.robolectric.internal.bytecode.ClassDetails;
@@ -63,6 +64,13 @@ public final class PreInstrument {
                 }
                 JarEntry copy = new JarEntry(name);
                 copy.setTime(entry.getTime());
+                // stored, not deflated: the sandbox loader reads ~40 MB of classes per start, ~0.1 s of inflating (the jar grows from ~190 to ~440 MB)
+                CRC32 crc = new CRC32();
+                crc.update(bytes);
+                copy.setMethod(ZipEntry.STORED);
+                copy.setSize(bytes.length);
+                copy.setCompressedSize(bytes.length);
+                copy.setCrc(crc.getValue());
                 jar.putNextEntry(copy);
                 jar.write(bytes);
             }
