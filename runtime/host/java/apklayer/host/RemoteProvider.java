@@ -37,8 +37,15 @@ final class RemoteProvider extends ContentProvider {
     private final String readPermission, writePermission;
     private IContentProvider provider;
 
+    private final java.util.function.Supplier<IBinder> source;  // the provider's binder: from the hub (an app), or the hub's own registry (the hub, HubBootSettings)
+
     RemoteProvider(Context context, String authority, String readPermission, String writePermission) {
-        this.context = context; this.authority = authority; this.readPermission = readPermission; this.writePermission = writePermission;
+        this(context, authority, readPermission, writePermission,
+                () -> HubProtocol.call(HubClient.current().binder(), HubProtocol.DESCRIPTOR, HubProtocol.GET_PROVIDER, request -> request.writeString(authority), reply -> reply.readStrongBinder()));
+    }
+
+    RemoteProvider(Context context, String authority, String readPermission, String writePermission, java.util.function.Supplier<IBinder> source) {
+        this.context = context; this.authority = authority; this.readPermission = readPermission; this.writePermission = writePermission; this.source = source;
         ReflectionHelpers.setField(ContentProvider.class, this, "mContext", context);
         ReflectionHelpers.setField(ContentProvider.class, this, "mCallingAttributionSource", new ThreadLocal<AttributionSource>());
         ReflectionHelpers.setField(ContentProvider.class, this, "mAuthority", authority);
@@ -57,7 +64,7 @@ final class RemoteProvider extends ContentProvider {
 
     private synchronized IContentProvider provider(boolean fresh) {
         if (provider != null && !fresh) return provider;
-        IBinder binder = HubProtocol.call(HubClient.current().binder(), HubProtocol.DESCRIPTOR, HubProtocol.GET_PROVIDER, request -> request.writeString(authority), reply -> reply.readStrongBinder());
+        IBinder binder = source.get();
         if (binder == null) throw new IllegalArgumentException("Unknown provider " + authority);
         provider = android.content.ContentProviderNative.asInterface(binder);
         return provider;

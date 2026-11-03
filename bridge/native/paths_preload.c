@@ -91,3 +91,60 @@ int renameat(int fd1, const char *from, int fd2, const char *to) {
     MAP(a, from && from[0] == '/' ? from : NULL); MAP(b, to && to[0] == '/' ? to : NULL);
     int r = ((int (*)(int, const char *, int, const char *))REAL(renameat))(fd1, a ? a : from, fd2, b ? b : to); DONE(a); DONE(b); return r;
 }
+
+/* The rest that bionic code and the JDK reach by name and glibc does not route through the functions above (bionic_translation hands an unwrapped
+ * libc symbol to glibc's): the other *at forms, creat and mknod, extended attributes, inotify (FileObserver), and the glibc functions that open
+ * through internal calls (mkstemp family, scandir, freopen). */
+#include <sys/inotify.h>
+#include <sys/xattr.h>
+#define AT(var, p) MAP(var, (p) && (p)[0] == '/' ? (p) : NULL); const char *var##_use = var ? var : (p)
+WRAP(int, creat, (const char *path, mode_t mode), (const char *, mode_t), m, mode)
+WRAP(int, creat64, (const char *path, mode_t mode), (const char *, mode_t), m, mode)
+WRAP(int, mkfifo, (const char *path, mode_t mode), (const char *, mode_t), m, mode)
+WRAP(int, mknod, (const char *path, mode_t mode, dev_t dev), (const char *, mode_t, dev_t), m, mode, dev)
+WRAPAT(int, mkfifoat, (int dirfd, const char *path, mode_t mode), (int, const char *, mode_t), dirfd, use, mode)
+WRAPAT(int, mknodat, (int dirfd, const char *path, mode_t mode, dev_t dev), (int, const char *, mode_t, dev_t), dirfd, use, mode, dev)
+WRAPAT(int, fchownat, (int dirfd, const char *path, uid_t u, gid_t g, int flags), (int, const char *, uid_t, gid_t, int), dirfd, use, u, g, flags)
+WRAPAT(ssize_t, readlinkat, (int dirfd, const char *path, char *buf, size_t n), (int, const char *, char *, size_t), dirfd, use, buf, n)
+WRAPAT(int, symlinkat, (const char *target, int dirfd, const char *path), (const char *, int, const char *), target, dirfd, use)
+WRAP(int, setxattr, (const char *path, const char *name, const void *v, size_t n, int f), (const char *, const char *, const void *, size_t, int), m, name, v, n, f)
+WRAP(int, lsetxattr, (const char *path, const char *name, const void *v, size_t n, int f), (const char *, const char *, const void *, size_t, int), m, name, v, n, f)
+WRAP(ssize_t, getxattr, (const char *path, const char *name, void *v, size_t n), (const char *, const char *, void *, size_t), m, name, v, n)
+WRAP(ssize_t, lgetxattr, (const char *path, const char *name, void *v, size_t n), (const char *, const char *, void *, size_t), m, name, v, n)
+WRAP(ssize_t, listxattr, (const char *path, char *list, size_t n), (const char *, char *, size_t), m, list, n)
+WRAP(ssize_t, llistxattr, (const char *path, char *list, size_t n), (const char *, char *, size_t), m, list, n)
+WRAP(int, removexattr, (const char *path, const char *name), (const char *, const char *), m, name)
+WRAP(int, lremovexattr, (const char *path, const char *name), (const char *, const char *), m, name)
+int inotify_add_watch(int fd, const char *path, uint32_t mask) { MAP(m, path); int r = ((int (*)(int, const char *, uint32_t))REAL(inotify_add_watch))(fd, m, mask); DONE(m); return r; }
+int linkat(int fd1, const char *from, int fd2, const char *to, int flags) {
+    AT(a, from); AT(b, to); int r = ((int (*)(int, const char *, int, const char *, int))REAL(linkat))(fd1, a_use, fd2, b_use, flags); DONE(a); DONE(b); return r;
+}
+int renameat2(int fd1, const char *from, int fd2, const char *to, unsigned int flags) {
+    AT(a, from); AT(b, to); int r = ((int (*)(int, const char *, int, const char *, unsigned int))REAL(renameat2))(fd1, a_use, fd2, b_use, flags); DONE(a); DONE(b); return r;
+}
+FILE *freopen(const char *path, const char *mode, FILE *f) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *, FILE *))REAL(freopen))(m, mode, f); DONE(m); return r; }
+FILE *freopen64(const char *path, const char *mode, FILE *f) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *, FILE *))REAL(freopen64))(m, mode, f); DONE(m); return r; }
+int scandir(const char *path, struct dirent ***list, int (*filter)(const struct dirent *), int (*compare)(const struct dirent **, const struct dirent **)) {
+    MAP(m, path); int r = ((int (*)(const char *, struct dirent ***, void *, void *))REAL(scandir))(m, list, filter, compare); DONE(m); return r;
+}
+int scandir64(const char *path, struct dirent64 ***list, int (*filter)(const struct dirent64 *), int (*compare)(const struct dirent64 **, const struct dirent64 **)) {
+    MAP(m, path); int r = ((int (*)(const char *, struct dirent64 ***, void *, void *))REAL(scandir64))(m, list, filter, compare); DONE(m); return r;
+}
+/* The mkstemp family fills the template's last characters in: the mapped copy differs only in its prefix, so its tail is the caller's name. */
+#define TEMPLATE(ret, name, params, types, tail, ...) ret name params { \
+    MAP(m, path); ret r = ((ret (*) types)REAL(name))(__VA_ARGS__); \
+    if (m_alloc) { size_t n_ = (tail), lp_ = strlen(path), lm_ = strlen(m); if (n_ <= lp_ && n_ <= lm_) memcpy(path + lp_ - n_, m + lm_ - n_, n_); free(m); } \
+    return r; }
+TEMPLATE(int, mkstemp, (char *path), (char *), 6, m)
+TEMPLATE(int, mkstemp64, (char *path), (char *), 6, m)
+TEMPLATE(int, mkostemp, (char *path, int flags), (char *, int), 6, m, flags)
+TEMPLATE(int, mkostemp64, (char *path, int flags), (char *, int), 6, m, flags)
+TEMPLATE(int, mkstemps, (char *path, int suffix), (char *, int), 6 + (size_t)suffix, m, suffix)
+TEMPLATE(int, mkostemps, (char *path, int suffix, int flags), (char *, int, int), 6 + (size_t)suffix, m, suffix, flags)
+TEMPLATE(int, mkstemps64, (char *path, int suffix), (char *, int), 6 + (size_t)suffix, m, suffix)
+TEMPLATE(int, mkostemps64, (char *path, int suffix, int flags), (char *, int, int), 6 + (size_t)suffix, m, suffix, flags)
+char *mkdtemp(char *path) {
+    MAP(m, path); char *r = ((char *(*)(char *))REAL(mkdtemp))(m);
+    if (m_alloc) { size_t lp = strlen(path), lm = strlen(m); if (lp >= 6 && lm >= 6) memcpy(path + lp - 6, m + lm - 6, 6); free(m); }
+    return r ? path : NULL;
+}

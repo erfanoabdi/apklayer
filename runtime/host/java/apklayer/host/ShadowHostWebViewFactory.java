@@ -21,7 +21,7 @@ public class ShadowHostWebViewFactory {
         if (info == null) throw new IllegalStateException("Cannot read the WebView provider's manifest: " + apk);
         info.applicationInfo.sourceDir = info.applicationInfo.publicSourceDir = apk;  // before the package is installed: the package manager's copy is what Chromium asks for its paths
         info.applicationInfo.nativeLibraryDir = new File(dir, "lib").getPath();
-        info.applicationInfo.dataDir = new File(dir, "data").getPath();
+        info.applicationInfo.dataDir = java.nio.file.Path.of(System.getProperty("apklayer.storage")).resolveSibling("app-data").resolve(info.packageName).toString();  // per instance (cli/layout)
         org.robolectric.shadows.ShadowPackageManager shadow = org.robolectric.Shadows.shadowOf(pm); // the provider is an installed package here too: its renderer services resolve
         shadow.installPackage(info);
         org.robolectric.util.ReflectionHelpers.setStaticField(android.webkit.WebViewFactory.class, "sPackageInfo", info);
