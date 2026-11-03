@@ -65,7 +65,9 @@ public class Main extends Activity {
                 try { resolver.query(PRIVATE, null, null, null, null); require(false, "a private provider answered"); }
                 catch (SecurityException expected) { System.out.println("[cpc] private provider refused: " + expected.getMessage()); }
                 System.out.println("[cpc] provider pid=" + out.getInt("pid"));
-                System.out.println("[cpc] PASS basic: query/insert/update/delete/getType/call, identities, private provider refused");
+                Uri canonical = resolver.canonicalize(ITEMS);  // a oneway call: the provider knows this app by the uid its request carried
+                require(canonical != null && "1".equals(canonical.getQueryParameter("canonical")), "canonicalize (oneway) " + canonical);
+                System.out.println("[cpc] PASS basic: query/insert/update/delete/getType/call/canonicalize, identities, private provider refused");
             }
             case "denied" -> {
                 require("open,".equals(names(resolver, OPEN)), "open provider is open to everyone");

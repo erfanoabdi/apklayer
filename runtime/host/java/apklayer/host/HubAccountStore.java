@@ -15,13 +15,15 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 /**
- * The instance's accounts, what AccountManagerService keeps in accounts_ce.db: per account its password, user data and cached auth tokens,
+ * The instance's accounts, what AccountManagerService keeps in accounts_ce.db: per account its password, user data, cached auth tokens and visibility,
  * in one JSON file of the instance (written whole on every change, through a temporary file).
  */
 final class HubAccountStore {
     static final class Entry {
         String password;
         final Map<String, String> data = new LinkedHashMap<>(), tokens = new LinkedHashMap<>();
+        /** AccountManager visibility set per package (and the legacy defaults' keys), as the visibility table keeps it. */
+        final Map<String, Integer> visibility = new LinkedHashMap<>();
     }
 
     private final Path file;
@@ -38,6 +40,8 @@ final class HubAccountStore {
                 entry.password = a.isNull("password") ? null : a.getString("password");
                 read(a.getJSONObject("data"), entry.data);
                 read(a.getJSONObject("tokens"), entry.tokens);
+                JSONObject visibility = a.optJSONObject("visibility");  // absent in files written before visibility was kept
+                if (visibility != null) for (java.util.Iterator<String> keys = visibility.keys(); keys.hasNext(); ) { String key = keys.next(); entry.visibility.put(key, visibility.getInt(key)); }
                 accounts.put(new Account(a.getString("name"), a.getString("type")), entry);
             }
         } catch (IOException | JSONException unreadable) {
@@ -103,7 +107,7 @@ final class HubAccountStore {
             JSONArray list = new JSONArray();
             for (Map.Entry<Account, Entry> e : accounts.entrySet())
                 list.put(new JSONObject().put("name", e.getKey().name).put("type", e.getKey().type).put("password", e.getValue().password == null ? JSONObject.NULL : e.getValue().password)
-                        .put("data", new JSONObject(e.getValue().data)).put("tokens", new JSONObject(e.getValue().tokens)));
+                        .put("data", new JSONObject(e.getValue().data)).put("tokens", new JSONObject(e.getValue().tokens)).put("visibility", new JSONObject(e.getValue().visibility)));
             Files.createDirectories(file.getParent());
             Path part = file.resolveSibling(file.getFileName() + ".part");
             Files.writeString(part, new JSONObject().put("accounts", list).toString(1), StandardCharsets.UTF_8);

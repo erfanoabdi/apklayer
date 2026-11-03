@@ -308,7 +308,10 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
             fprintf(stderr, "stopped: %s (status %d)\n", s.name.c_str(), WIFEXITED(st) ? WEXITSTATUS(st) : 128 + WTERMSIG(st));  // a clean stop is SIGTERM's default action
     }
     unlink(inst.pidFile().c_str());
-    for (const std::string& name : listDir(inst.tmpDir())) removeTree(join(inst.tmpDir(), name));  // the JVMs of this stack are gone: their extracted native runtimes too (the directory stays: a JVM about to start has it as java.io.tmpdir)
+    // the JVMs of this stack are gone: their extracted native runtimes too (the directory stays: a JVM about to start has it as java.io.tmpdir), but not the
+    // fonts and ICU data they share (robolectric patch 0001). shortcut: a copy keyed by an older framework jar stays until the state dir is removed.
+    for (const std::string& name : listDir(inst.tmpDir()))
+        if (name != "robolectric-nativeruntime-assets") removeTree(join(inst.tmpDir(), name));
     terminate(shellPid(l));  // the window shell ends with the stack (one instance per session today)
     return status;
 }

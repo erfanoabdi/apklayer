@@ -24,8 +24,8 @@ import java.util.Map;
 /**
  * The instance's account service, what AccountManagerService is: one store of accounts (HubAccountStore) every app's AccountManager reaches through
  * the hub ("account" in each app, ShadowHostServiceManager), and the authenticators bound as services through the hub to add accounts and issue tokens.
- * As on Android, only an account type's authenticator package adds, removes and reads the secrets of its accounts.
- * shortcut: every account is visible to every app (Android O's per-package visibility is not modelled); model it when an app must not see another's accounts.
+ * As on Android, only an account type's authenticator (its package, or one signed with the same certificate) adds, removes and reads the secrets of its
+ * accounts, and an app sees an account only when it is visible to it (resolveAccountVisibility below).
  */
 final class HubAccounts extends IAccountManager.Stub {
     static final String SERVICE = "apklayer.accounts";
@@ -34,12 +34,14 @@ final class HubAccounts extends IAccountManager.Stub {
 
     private final HubDirectory directory;
     private final HubServiceBindings bindings;
+    private final HubPackages packages;
     private final HubAuthenticators authenticators;
     private final HubAccountStore store;
 
-    HubAccounts(HubDirectory directory, HubServiceBindings bindings, HubAuthenticators authenticators, java.nio.file.Path file) {
+    HubAccounts(HubDirectory directory, HubServiceBindings bindings, HubPackages packages, HubAuthenticators authenticators, java.nio.file.Path file) {
         this.directory = directory;
         this.bindings = bindings;
+        this.packages = packages;
         this.authenticators = authenticators;
         this.store = new HubAccountStore(file);
     }
@@ -50,13 +52,52 @@ final class HubAccounts extends IAccountManager.Stub {
         return peer;
     }
 
-    /** checkCallingUidAgainstAuthenticator: the secrets and the list of an account type belong to the package that authenticates it. */
+    /** The package that authenticates the account type, or null. */
+    private String authenticator(String type) {
+        HubAuthenticators.Authenticator authenticator = type == null ? null : authenticators.all().get(type);
+        return authenticator == null ? null : authenticator.service().getPackageName();
+    }
+
+    /** isAccountManagedByCaller: the authenticator's package, or one signed with the same certificate. */
+    private boolean manages(String pkg, String type) {
+        String authenticator = authenticator(type);
+        return authenticator != null && (authenticator.equals(pkg) || HostCertificate.sameSigner(pkg, authenticator));
+    }
+
+    /** The secrets and the visibility of an account type belong to the packages that manage it. */
     private HubDirectory.Peer owner(String type) {
         HubDirectory.Peer peer = caller();
-        HubAuthenticators.Authenticator authenticator = type == null ? null : authenticators.all().get(type);
-        if (authenticator == null || !authenticator.service().getPackageName().equals(peer.name()))
-            throw new SecurityException(peer.name() + " is not the authenticator of account type " + type);
+        if (!manages(peer.name(), type)) throw new SecurityException(peer.name() + " is not the authenticator of account type " + type);
         return peer;
+    }
+
+    /**
+     * AccountManagerService.resolveAccountVisibility: the system and the authenticator's package always see an account; then what was set for the
+     * package; else the legacy default: visible ("user managed") to a package signed like the authenticator, to an app targeting before O that holds
+     * GET_ACCOUNTS and to holders of GET_ACCOUNTS_PRIVILEGED, not visible to others.
+     * shortcut: READ_CONTACTS does not open contacts-managing account types (accountTypeManagesContacts); model it with a contacts sync adapter that needs it.
+     */
+    private int visibility(Account account, String pkg) {
+        String authenticator = authenticator(account.type);
+        if ("android".equals(pkg) || pkg.equals(authenticator)) return AccountManager.VISIBILITY_VISIBLE;
+        Integer set = store.read(account, e -> e.visibility.get(pkg));
+        if (set != null && set != AccountManager.VISIBILITY_UNDEFINED) return set;
+        android.content.pm.PackageParser.Package parsed = packages.get(pkg);
+        if (parsed == null) return AccountManager.VISIBILITY_NOT_VISIBLE;
+        boolean legacy = (authenticator != null && HostCertificate.sameSigner(pkg, authenticator))
+                || (parsed.applicationInfo.targetSdkVersion < android.os.Build.VERSION_CODES.O && packages.holds(pkg, android.Manifest.permission.GET_ACCOUNTS))
+                || packages.holds(pkg, android.Manifest.permission.GET_ACCOUNTS_PRIVILEGED);
+        Integer fallback = store.read(account, e -> e.visibility.get(legacy ? AccountManager.PACKAGE_NAME_KEY_LEGACY_VISIBLE : AccountManager.PACKAGE_NAME_KEY_LEGACY_NOT_VISIBLE));
+        if (fallback != null && fallback != AccountManager.VISIBILITY_UNDEFINED) return fallback;
+        return legacy ? AccountManager.VISIBILITY_USER_MANAGED_VISIBLE : AccountManager.VISIBILITY_USER_MANAGED_NOT_VISIBLE;
+    }
+
+    /** The accounts (of the type, or all) the package sees; with userManaged also those its user could pick for it (an authenticator asking for another package). */
+    private Account[] visible(String type, String pkg, boolean userManaged) {
+        return java.util.Arrays.stream(store.list(type)).filter(account -> {
+            int v = visibility(account, pkg);
+            return v == AccountManager.VISIBILITY_VISIBLE || v == AccountManager.VISIBILITY_USER_MANAGED_VISIBLE || (userManaged && v == AccountManager.VISIBILITY_USER_MANAGED_NOT_VISIBLE);
+        }).toArray(Account[]::new);
     }
 
     private void changed(Account removed) {
@@ -129,9 +170,15 @@ final class HubAccounts extends IAccountManager.Stub {
     @Override public AuthenticatorDescription[] getAuthenticatorTypes(int userId) {
         return authenticators.all().values().stream().map(HubAuthenticators.Authenticator::description).toArray(AuthenticatorDescription[]::new);
     }
-    @Override public Account[] getAccountsForPackage(String packageName, int uid, String opPackageName) { return store.list(null); }
-    @Override public Account[] getAccountsByTypeForPackage(String type, String packageName, String opPackageName) { return store.list(type); }
-    @Override public Account[] getAccountsAsUser(String type, int userId, String opPackageName) { return store.list(type); }
+    @Override public Account[] getAccountsForPackage(String packageName, int uid, String opPackageName) {
+        throw new SecurityException("getAccountsForPackage() called from unauthorized " + caller().name());  // the system's: no app is
+    }
+    /** For another package: only an authenticator asks, for its own type (an account chooser it shows); all types: only what this app sees itself. */
+    @Override public Account[] getAccountsByTypeForPackage(String type, String packageName, String opPackageName) {
+        if (type == null) return visible(null, caller().name(), false);
+        return manages(caller().name(), type) ? visible(type, packageName, true) : new Account[0];
+    }
+    @Override public Account[] getAccountsAsUser(String type, int userId, String opPackageName) { return visible(type, caller().name(), false); }
     @Override public boolean addAccountExplicitly(Account account, String password, Bundle extras, String opPackageName) {
         owner(account.type);
         boolean added = store.add(account, password, extras);
@@ -139,7 +186,12 @@ final class HubAccounts extends IAccountManager.Stub {
         return added;
     }
     @Override public boolean addAccountExplicitlyWithVisibility(Account account, String password, Bundle extras, Map visibility, String opPackageName) {
-        return addAccountExplicitly(account, password, extras, opPackageName);
+        owner(account.type);
+        if (!store.add(account, password, extras)) return false;
+        if (visibility != null) store.update(account, e -> ((Map<?, ?>) visibility).forEach((pkg, v) -> e.visibility.put((String) pkg, (Integer) v)));
+        System.out.println("[apklayer-hub] account added: " + account.type + " by " + caller().name());
+        changed(null);
+        return true;
     }
     @Override public boolean removeAccountExplicitly(Account account) {
         owner(account.type);
@@ -176,17 +228,37 @@ final class HubAccounts extends IAccountManager.Stub {
     @Override public String getPreviousName(Account account) { return null; }
     @Override public boolean someUserHasAccount(Account account) { return store.has(account); }
 
-    // Visibility: every account is visible to every app (see the class comment)
+    // Visibility: set and read by the packages that manage the account type
 
-    @Override public Map getPackagesAndVisibilityForAccount(Account account) { return new HashMap<String, Integer>(); }
-    @Override public boolean setAccountVisibility(Account account, String packageName, int newVisibility) { return store.has(account); }
-    @Override public int getAccountVisibility(Account account, String packageName) { return AccountManager.VISIBILITY_VISIBLE; }
-    @Override public Map getAccountsAndVisibilityForPackage(String packageName, String accountType) {
-        Map<Account, Integer> visible = new HashMap<>();
-        for (Account account : store.list(accountType)) visible.put(account, AccountManager.VISIBILITY_VISIBLE);
-        return visible;
+    @Override public Map getPackagesAndVisibilityForAccount(Account account) {
+        owner(account.type);
+        Map<String, Integer> set = store.read(account, e -> new HashMap<>(e.visibility));
+        return set == null ? new HashMap<String, Integer>() : set;
     }
-    @Override public boolean hasAccountAccess(Account account, String packageName, UserHandle userHandle) { return store.has(account); }
+    @Override public boolean setAccountVisibility(Account account, String packageName, int newVisibility) {
+        owner(account.type);
+        boolean set = store.update(account, e -> e.visibility.put(packageName, newVisibility));
+        if (set) changed(null);
+        return set;
+    }
+    @Override public int getAccountVisibility(Account account, String packageName) {
+        owner(account.type);
+        if (AccountManager.PACKAGE_NAME_KEY_LEGACY_VISIBLE.equals(packageName) || AccountManager.PACKAGE_NAME_KEY_LEGACY_NOT_VISIBLE.equals(packageName)) {
+            Integer set = store.read(account, e -> e.visibility.get(packageName));
+            return set != null ? set : packageName.equals(AccountManager.PACKAGE_NAME_KEY_LEGACY_VISIBLE) ? AccountManager.VISIBILITY_USER_MANAGED_VISIBLE : AccountManager.VISIBILITY_USER_MANAGED_NOT_VISIBLE;
+        }
+        return store.has(account) ? visibility(account, packageName) : AccountManager.VISIBILITY_NOT_VISIBLE;
+    }
+    @Override public Map getAccountsAndVisibilityForPackage(String packageName, String accountType) {
+        if (accountType == null) throw new SecurityException("getAccountsAndVisibilityForPackage() for every type is the system's");
+        owner(accountType);
+        Map<Account, Integer> result = new HashMap<>();
+        for (Account account : store.list(accountType)) result.put(account, visibility(account, packageName));
+        return result;
+    }
+    @Override public boolean hasAccountAccess(Account account, String packageName, UserHandle userHandle) {
+        throw new SecurityException("hasAccountAccess can be called only by the system, not " + caller().name());
+    }
     @Override public IntentSender createRequestAccountAccessIntentSenderAsUser(Account account, String packageName, UserHandle userHandle) { return null; }
     @Override public void updateAppPermission(Account account, String authTokenType, int uid, boolean value) { /* every app may use every token type */ }
     @Override public void registerAccountListener(String[] accountTypes, String opPackageName) { /* the change broadcasts go to every app */ }
@@ -201,7 +273,15 @@ final class HubAccounts extends IAccountManager.Stub {
 
     // Through the authenticator
 
+    /**
+     * shortcut: an account the caller does not see gets no token (Android asks its user, GrantCredentialsPermissionActivity, which does not exist here); one it
+     * sees gets one without asking (updateAppPermission). Show that prompt as a desktop dialog when an app needs another app's account it was not shown.
+     */
     @Override public void getAuthToken(IAccountManagerResponse response, Account account, String authTokenType, boolean notifyOnAuthFailure, boolean expectActivityLaunch, Bundle options) {
+        if (account != null && !java.util.Arrays.asList(visible(account.type, caller().name(), false)).contains(account)) {
+            error(response, AccountManager.ERROR_CODE_BAD_ARGUMENTS, caller().name() + " cannot see the account it asks a token of");
+            return;
+        }
         HubAuthenticators.Authenticator authenticator = account == null ? null : authenticators.all().get(account.type);
         boolean custom = authenticator != null && authenticator.description().customTokens;
         String cached = custom ? null : store.read(account, e -> e.tokens.get(authTokenType));
@@ -256,12 +336,12 @@ final class HubAccounts extends IAccountManager.Stub {
     /** shortcut: the required features are not checked with the authenticator (hasFeatures per account); ask it when an app filters by features. */
     @Override public void getAccountsByFeatures(IAccountManagerResponse response, String accountType, String[] features, String opPackageName) {
         Bundle result = new Bundle();
-        result.putParcelableArray(AccountManager.KEY_ACCOUNTS, store.list(accountType));
+        result.putParcelableArray(AccountManager.KEY_ACCOUNTS, visible(accountType, caller().name(), false));
         reply(response, result);
     }
     /** The one account of the type, or none (Android shows a chooser for several: the first is taken here). */
     @Override public void getAccountByTypeAndFeatures(IAccountManagerResponse response, String accountType, String[] features, String opPackageName) {
-        Account[] accounts = store.list(accountType);
+        Account[] accounts = visible(accountType, caller().name(), false);
         reply(response, accounts.length == 0 ? new Bundle() : accountResult(accounts[0]));
     }
 }

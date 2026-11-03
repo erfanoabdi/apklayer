@@ -25,6 +25,11 @@ final class AccountsCheck implements Check {
             Check.require(am.addAccountExplicitly(account, "secret", data), "addAccountExplicitly refused");
         }
         Check.require(java.util.Arrays.asList(am.getAccounts()).contains(account), "added account not listed");
+        // another app (unsigned, target 34) sees it only when the authenticator makes it visible; hello.accountshidden is never shown it
+        if (persisted) Check.require(am.getAccountVisibility(account, "hello.accounts") == AccountManager.VISIBILITY_VISIBLE, "visibility not kept");
+        Check.require(am.setAccountVisibility(account, "hello.accounts", AccountManager.VISIBILITY_VISIBLE), "setAccountVisibility refused");
+        int hidden = am.getAccountVisibility(account, "hello.accountshidden");
+        Check.require(hidden == AccountManager.VISIBILITY_USER_MANAGED_NOT_VISIBLE, "visibility to an app it was not shown: " + hidden);
         Check.require("value".equals(am.getUserData(account, "key")) && "secret".equals(am.getPassword(account)), "user data or password lost");
         am.invalidateAuthToken(account.type, am.peekAuthToken(account, "full"));
         String token = am.getAuthToken(account, "full", null, false, null, null).getResult().getString(AccountManager.KEY_AUTHTOKEN);

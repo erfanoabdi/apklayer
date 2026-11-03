@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- hello-accounts' code (src links there) as a third app that hello-system's account is not made visible to: target 34, so GET_ACCOUNTS alone shows nothing. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="hello.accountshidden">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34"/>
+  <uses-permission android:name="android.permission.GET_ACCOUNTS"/>
+  <application android:label="accounts-hidden">
+    <activity android:name="hello.accounts.Main" android:exported="true">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+    </activity>
+  </application>
+</manifest>

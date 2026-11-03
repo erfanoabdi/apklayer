@@ -1,10 +1,30 @@
 #include "env.h"
 
 #include <glob.h>
+#include <sys/stat.h>
 
 namespace apklayer {
 
 namespace {
+// The framework jars as tools/build instrument left them (apklayer.tools.PreInstrument: the sandbox loader's own instrumentation, done once) while each is
+// at least as new as what it was made from; else the plain jars, which the sandbox loader instruments class by class on every start.
+std::string frameworkDependencyDir(const Layout& l) {
+    std::string dir = join(l.native, "aosp/android-all-instrumented");
+    std::vector<std::string> jars;
+    for (const std::string& name : listDir(l.frameworkDir()))
+        if (name.size() > 4 && name.substr(name.size() - 4) == ".jar") jars.push_back(name);
+    if (jars.empty()) return l.frameworkDir();
+    for (const std::string& jar : jars) {
+        struct stat made{};
+        if (stat(join(dir, jar).c_str(), &made) != 0) return l.frameworkDir();
+        for (const std::string& input : {join(l.frameworkDir(), jar), join(l.native, "native-runtime.jar"), join(l.native, "aosp/Robolectric_all.jar")}) {
+            struct stat st{};
+            if (stat(input.c_str(), &st) == 0 && st.st_mtime > made.st_mtime) return l.frameworkDir();
+        }
+    }
+    return dir;
+}
+
 std::string findJava(const Layout&) {
     std::string wanted = getenvOr("APKLAYER_NATIVE_JAVA", "");
     if (!wanted.empty() && isExecutable(wanted)) return wanted;
@@ -85,15 +105,20 @@ std::vector<std::string> hostJvmArgs(const Layout& l, const Instance& inst, Nati
     const std::string& n = l.native;
     std::string nr = join(n, "android-root");
     makeDirs(inst.tmpDir());
-    std::vector<std::string> a = {ne.java, "-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC", "@" + join(l.root, "runtime/host/jvm.args"), "-Drobolectric.offline=true",
-                                  "-Drobolectric.dependency.dir=" + l.frameworkDir(), "-Dapklayer.native=" + n, "-Dapklayer.androidlibs=" + join(n, "android-libs"),
+    std::vector<std::string> a = {ne.java, "-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC",
+                                  // a JVM defines ~5400 framework classes at start: with the default 32K buckets the symbol lookups of their constant pools
+                                  // take about half of the class definition time (perf: SymbolTable::do_lookup), the table grows only later
+                                  "-XX:+UnlockExperimentalVMOptions", "-XX:SymbolTableSize=262144",
+                                  "@" + join(l.root, "runtime/host/jvm.args"), "-Drobolectric.offline=true",
+                                  "-Drobolectric.dependency.dir=" + frameworkDependencyDir(l), "-Dapklayer.native=" + n, "-Dapklayer.androidlibs=" + join(n, "android-libs"),
                                   "-Drobolectric.windowManager.useRequestedSize=true",
                                   "-Drobolectric.allowPlatformPermissions=true",  // system apps (ContactsProvider...) declare platform permissions of their own
-                                  // Robolectric extracts ~120 MB of native runtime per JVM: into the instance's state directory (disk), emptied when its stack stops
+                                  // Robolectric's native runtime: its library per JVM, its fonts and ICU data once (robolectric patch 0001), in the instance's state directory (disk)
                                   "-Djava.io.tmpdir=" + inst.tmpDir(),
                                   "-Dapklayer.storage=" + inst.storageDir};  // volumes: Internal storage (emulated/0 below), Home, Linux root
     if (isDir(join(n, "jdk-patch"))) { a.push_back("--patch-module"); a.push_back("java.base=" + join(n, "jdk-patch")); }  // libcore-only members Android's natives look up
-    if (isDir(join(nr, "system/fonts"))) a.push_back("-Drobolectric.nativeruntime.fontdir=" + join(nr, "system/fonts/"));
+    // the fonts of the device build, once a fonts.xml is staged beside them (Robolectric's font shadows read <fontdir>/fonts.xml); Robolectric's own otherwise
+    if (exists(join(nr, "system/fonts/fonts.xml"))) a.push_back("-Drobolectric.nativeruntime.fontdir=" + join(nr, "system/fonts/"));
     std::string res = join(nr, "system/framework/org.lineageos.platform-res.apk");
     if (exists(res)) a.push_back("-Dapklayer.platformres=" + res);
     if (exists(join(n, "native-runtime.jar"))) a.push_back("-Dapklayer.nativejar=" + join(n, "native-runtime.jar"));

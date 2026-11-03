@@ -10,6 +10,8 @@
 
 apklayer itself is AGPL-3.0-or-later (PLAN D5), compatible with all of the above.
 
+- gfxstream's GLES_CM translator and GLcommon (`hardware/google/gfxstream` in the LineageOS tree), Apache-2.0, unmodified: staged into `<native>/aosp/gfxstream-src` and built on the test host into `libapklayer-gles1.so` (`tools/build gles1`).
+
 ## Consumed at runtime (not vendored; pinned in deps/deps.lock, cached in ~/.cache/apklayer/deps)
 
 | Artifact | Origin | License |

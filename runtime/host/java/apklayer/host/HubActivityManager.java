@@ -81,6 +81,8 @@ final class HubActivityManager implements InvocationHandler {
                 HubClient.current().grantUri(target, uri, mode, revoke);
                 return null;
             }
+            case "checkUriPermission": // (uri, pid, uid, mode, userId, callerToken): a provider asking about its caller's grants (Robolectric's stand-in granted all)
+                return HubClient.current().checkUri((Uri) args[0], (Integer) args[1], (Integer) args[2], (Integer) args[3]);
             case "getIntentSenderWithFeature": // (type, package, feature, token, resultWho, requestCode, intents[], resolvedTypes[], flags, options, userId)
                 return pendingIntent((Integer) args[0], (String) args[1], (String) args[4], (Integer) args[5], (Intent[]) args[6], (String[]) args[7], (Integer) args[8], (Bundle) args[9]);
             case "getIntentSender": // (type, package, token, resultWho, requestCode, intents[], resolvedTypes[], flags, options, userId)
