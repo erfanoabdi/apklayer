@@ -2,26 +2,30 @@
 
 Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan: `docs/PLAN.md`. History: `CHANGELOG.md`.
 
-## State (2026-11-03)
-- Runs on the device-library route with per-app class loaders and linker namespaces, the real MediaProvider/SettingsProvider/keystore2, the instance hub
-  (services, broadcasts, providers, activities, notifications, pending intents, accounts). Instances run side by side (own binder devices, /data, /storage, shell).
-- Tests: `tests/run [-j N] [group...]` (tests/groups.toml): 37 of 39 groups pass 4 at a time on the UTM VM; vulkan-present (Venus host driver; neither test VM has working Vulkan: needs a real PC) and audio-aidl
-  (left-channel check) fail on that host. Corpus: `python3 tests/corpus/run.py <app>` (local `tests/corpus/apps.txt`, see apps.example.txt); 16 of 17 apps checked today pass.
-- Upstream edits are patch files only: patches/bionic_translation (0001-0028), patches/robolectric (0001-0015, staged sources in <native>/aosp/robolectric-src),
-  patches/aosp (frameworks/native 0001-0005, av, base, libnativehelper, hardware/interfaces), applied by `patches/apply`. Build: meson + `tools/`.
-- CLI: C++ tool in `cli/` (`bin/apklayer` execs it): `install | run | list | uninstall | stop | hub | component-host | wait hub | env | screenshot <package|stack> <out.png>` (SurfaceFlinger capture of one app window, per instance); test helpers `stack <lib>` and `exec <lib>`.
-  State and logs: `~/.local/state/apklayer/<instance>/`. Apps: `~/.local/share/apklayer/apps/<pkg>`.
-- Build: `meson setup b && ninja -C b` (g++), `tools/build bt|host|native|overlay|cfg <native>`, `tools/fetch-deps.sh`. Run on the VM:
-  `XDG_RUNTIME_DIR=/run/user/1000 ~/apklayer/bin/apklayer run <package>`.
+## State (2026-11-04)
+- Runs on the device-library route with per-app class loaders and linker namespaces, the real MediaProvider/SettingsProvider/keystore2/AccountManager-through-the-hub,
+  the instance hub (services, broadcasts, providers, activities, notifications, pending intents, accounts, caller identity). Instances run side by side (own binder
+  devices, /data, /storage, app data, shell). Processes carry their Android process name (Process.setArgV0); services run in their declared process.
+- GL: our EGL keeps Android's per-context hook tables; ES1 through gfxstream's GLES_CM translator when the host has none. Windows follow the compositor's
+  fractional scale (wp_fractional_scale_v1, wp_viewporter) and its bounds. Media: Fennec (WebM, MP4, YouTube) and NewPipe play video with sound.
+- Tests: `tests/run [-j N] [group...]` (tests/groups.toml), every group in its own instance, on UTM (default) or Parallels (`APKLY_VM_CONF=parallels`).
+  Known failing on these VM hosts: vulkan-present (no Vulkan presentation on either VM: needs a real PC), input-desktop (needs the shared desktop to itself).
+  Corpus: `python3 tests/corpus/run.py <app>`; results in tests/corpus/results.md.
+- Manager UI: `manager/` (Slint, Material 3): `manager/fetch-slint.sh && meson setup manager/b manager && ninja -C manager/b`.
+- Upstream edits are patch files only: patches/bionic_translation (0001-0030), patches/robolectric (0001-0015), patches/aosp (frameworks/native 0001-0005, av,
+  base, libnativehelper, hardware/interfaces), applied by `patches/apply`. Build: meson + `tools/` (`tools/build host|native|overlay|instrument|cfg|gles1|bt`).
+- CLI: C++ tool in `cli/`: `install | run | list | uninstall | stop | hub | component-host | wait hub | env | screenshot | info | clear-data | instances |
+  instance create|remove | prop [set|unset] | status | ime enable|disable`; state and logs in `~/.local/state/apklayer/<instance>/`.
+- Build: `meson setup b && ninja -C b`, `tools/build bt|host|native <native>`, `tools/fetch-deps.sh`. Run on the VM: `XDG_RUNTIME_DIR=/run/user/1000 ~/apklayer/bin/apklayer run <package>`.
 
 ## NEXT TASKS
-Open work is in `docs/PLAN.md` (sections "After the 2026-11-03 round", "Systematic compatibility", "Fennec"). In order:
-1. Permission identity: oneway callers pass permission checks and every account is visible to every app (shortcuts in HubProviders/HubAccounts); per-app Linux uids or a carried sender uid.
-2. The hub as system settings writer (LOCATION_MODE, ENABLED_INPUT_METHODS); android_id stability across launches; app data per instance in one data home.
-3. Apps: OpenTTD (GLES1 on a host without it), Unciv (draws nothing), Lemuroid (WorkManager lock), TIC-80 (lazy_find_class), Joplin (2 frames).
-4. Startup: Robolectric setup and font copy per JVM, keystore2 probe, CDS.
-5. Before release: x86_64 PC run, Flatpak, COMMERCIAL.md terms, CLA, per-app sandbox.
-6. Last priority (owner, 2026-11-03): camera HAL (PipeWire/V4L2); apps see no camera until then.
+Open work is listed in `docs/PLAN.md` (sections from "After the 2026-11-03 round" on). In order:
+1. Store installs: Android's package installer linked to `apklayer install` (sessions, split APKs/bundles; F-Droid client) — in progress 2026-11-04.
+2. audio-aidl's left channel; fennec-media on a fresh profile (onboarding); m.youtube.com consent dialog.
+3. NativeLoader puts the native dir on the app's bionic search path (glibc libraries get linked as bionic: libapklayer-gles1 uses dlmopen as a workaround).
+4. Startup: sandbox class define/init (~0.7 s), cold starts wait ~2 s for the hub.
+5. Before release: x86_64 PC run, Vulkan on a real GPU, Flatpak, COMMERCIAL.md terms, CLA, per-app sandbox (kernel-attested uids).
+6. Last priority (owner): camera HAL.
 
 ## Test VM (UTM)
 Host and password: `tests/vm/local.conf` (untracked; `local.conf.example`). Ubuntu 26.04 arm64, GNOME Wayland, Venus Vulkan 1.4, virgl ES 3.0 (apklayer claims 3.2). Passwordless sudo.
