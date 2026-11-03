@@ -33,14 +33,17 @@ void stageManifest(const Layout& l, bool provided, const std::string& name, cons
     }
 }
 
-bool shellListening(const Layout& l) {
+// The pid of the shell listening on this session's socket (0: none): what stops it, never a match by name (other sessions' shells run too).
+int shellPid(const Layout& l) {
     int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
     sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
     snprintf(addr.sun_path, sizeof addr.sun_path, "%s", l.shellSocket().c_str());
-    bool ok = connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof addr) == 0;
+    ucred peer{};
+    socklen_t len = sizeof peer;
+    bool ok = connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof addr) == 0 && getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &peer, &len) == 0;
     close(fd);
-    return ok;
+    return ok ? peer.pid : 0;
 }
 
 // Android's way: readiness is a system property of the instance (apklayer.stack.ready=1), waited on with the property store's own wait.
@@ -95,7 +98,7 @@ bool waitForProperty(const Layout& l, const NativeEnv& ne, const char* name, con
 }
 
 void ensureShell(const Layout& l, const Instance& inst, const NativeEnv& env) {
-    if (shellListening(l)) return;
+    if (shellPid(l) > 0) return;
     makeDirs(join(l.runtimeHome, "apklayer"));
     unlink(l.shellSocket().c_str());
     Spawn shell;
@@ -259,10 +262,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     for (const Service& s : running) waitpid(s.pid, nullptr, 0);
     unlink(inst.pidFile().c_str());
     for (const std::string& name : listDir(inst.tmpDir())) removeTree(join(inst.tmpDir(), name));  // the JVMs of this stack are gone: their extracted native runtimes too (the directory stays: a JVM about to start has it as java.io.tmpdir)
-    Spawn shell;  // the window shell ends with the stack (one instance per session today)
-    shell.argv = {"pkill", "-x", "apklayer-shell"};
-    shell.env = currentEnv();
-    runAndWait(shell);
+    terminate(shellPid(l));  // the window shell ends with the stack (one instance per session today)
     return status;
 }
 
@@ -302,11 +302,7 @@ int execTool(const Layout& l, const Instance& inst, const std::vector<std::strin
 }
 
 void stopStack(const Layout& l, const Instance& inst) {
-    Spawn shell;  // one instance per session today: the window shell goes with it
-    shell.argv = {"pkill", "-x", "apklayer-shell"};
-    shell.env = currentEnv();
-    runAndWait(shell);
-    (void)l;
+    terminate(shellPid(l));  // one instance per session today: the window shell goes with it
     for (const std::string& f : listDir(inst.stateDir)) {  // launches of this instance: their JVM and window sink
         if (f.rfind("run.", 0) != 0) continue;
         auto record = readFile(join(inst.stateDir, f));
