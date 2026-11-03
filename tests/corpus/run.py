@@ -115,10 +115,12 @@ def launch(name, stream, at, row, key, before):
     shot.parent.mkdir(exist_ok=True)
     # the app's own window from SurfaceFlinger (no desktop, no other instance's windows)
     pkg = next((m.group(1) for l in stream.lines for m in [re.search(r'installed (\S+)', l)] if m), None)
-    if pkg and vmcapture.app_capture(str(shot), pkg, ENV, cli=REPO + '/b/cli/apklayer'):
-        verdict, detail = content.verdict(str(shot))
-    else:
-        verdict, detail = 'nocapture', 'apklayer screenshot found no window of %s' % pkg
+    verdict, detail = 'nocapture', 'apklayer screenshot found no window of %s' % pkg
+    for attempt in range(3):  # the first frame is often a splash screen (one colour and a logo): look again while the app gets past it
+        if attempt: time.sleep(5)
+        if pkg and vmcapture.app_capture(str(shot), pkg, ENV, cli=REPO + '/b/cli/apklayer'):
+            verdict, detail = content.verdict(str(shot))
+            if verdict == 'content': break
     row[key] = 'ok' if verdict == 'content' else verdict
     if key == 'frame': row['content'] = detail
     return verdict == 'content'
