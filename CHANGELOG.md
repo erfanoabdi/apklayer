@@ -48,6 +48,9 @@ Older dated notes (GPU follow-up, TextureView, MC3, Vulkan checkpoints, OTR2, ro
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 
+### 2026-11-03 — per-instance screenshots: libapklayer_vdisplay (registers its display token) and the new libapklayer_screenshot
+- Why: tests on a desktop shared by several instances cannot tell windows apart; `apklayer screenshot` captures one app's virtual display through SurfaceFlinger's own captureDisplay. New module in vendor/apklayer/tools (build-graph regeneration). Only VirtualDisplay.cpp, tools/Android.bp and tools/screenshot.cpp copied into vendor/apklayer (not a full sync-aosp.sh: the tree has a hals/camera directory this branch lacks). Command: `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_vdisplay libapklayer_screenshot`. Result: below.
+
 ### 2026-10-29 — x86_64: the patched tree libraries and the keystore modules (gsi_x86_64, incremental in the user's x86_64 out; for the prebuilts branch)
 - Why: the x86_64 stage had the tree's unpatched libbinder, libnativehelper, libmedia_jni, libstatspull, libactivitymanager_aidl, libsensorprivacy and no keymint/keystore2. The tree sources are patched already (shared with the arm64 build). Command: `cd ~/los24 && source build/envsetup.sh && breakfast gsi_x86_64 userdebug && m libbinder libnativehelper libmedia_jni libstatspull libactivitymanager_aidl libsensorprivacy libapklayer_keystore2 libapklayer_keymint`. Result: below.
 

@@ -23,6 +23,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.net.ConnectivityManager", ShadowHostConnectivityManager.class.getName()),
                 Map.entry("android.app.DownloadManager", ShadowHostDownloadManager.class.getName()),
                 Map.entry("android.app.ContextImpl", ShadowHostContextImpl.class.getName()),
+                Map.entry("android.app.LoadedApk", ShadowHostLoadedApk.class.getName()),
                 Map.entry("android.view.Display", ShadowHostDisplay.class.getName()),
                 Map.entry("android.app.ActivityManager", ShadowHostActivityManager.class.getName()),
                 // real Binder, Parcel and the instance hub: system services across apps are processes behind real binder
