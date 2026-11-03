@@ -46,6 +46,9 @@ final class HubServices {
             return (info.flags & android.content.pm.ServiceInfo.FLAG_ISOLATED_PROCESS) != 0 || (info.processName != null && !info.processName.equals(context.getPackageName())) ? info.name : null;
         } catch (android.content.pm.PackageManager.NameNotFoundException | RuntimeException unknown) { return null; }
     }
+    /** One handler, as ContextImpl passes the main thread's: LoadedApk refuses a connection bound again with another one. */
+    private static Handler main;
+    private static synchronized Handler main() { if (main == null) main = new Handler(Looper.getMainLooper()); return main; }
     static boolean bind(Context context, Intent intent, int flags, Executor executor, ServiceConnection connection) { return bind(context, intent, flags, executor, connection, null); }
     static boolean bind(Context context, Intent intent, int flags, Executor executor, ServiceConnection connection, String requested) {
         java.util.Objects.requireNonNull(connection);
@@ -60,7 +63,7 @@ final class HubServices {
             else if (Boolean.getBoolean("apklayer.logcat")) used = new Traced(connection);
         }
         IServiceConnection dispatcher = executor == null
-                ? loaded.getServiceDispatcher(used, outer, new Handler(Looper.getMainLooper()), flags)
+                ? loaded.getServiceDispatcher(used, outer, main(), flags)
                 : loaded.getServiceDispatcher(used, outer, executor, flags);
         HubClient client = HubClient.attach(context);
         boolean known;

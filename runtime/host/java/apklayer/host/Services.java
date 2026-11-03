@@ -29,16 +29,20 @@ public final class Services {
     private static final class Running {
         ServiceController<? extends Service> controller;
         Service service;
-        IBinder binder;
-        boolean bound, started;
+        /** As ActiveServices' IntentBindRecord: onBind once per distinct intent (Intent.filterEquals), onUnbind when its last client goes, onRebind when that returned true. */
+        final Map<Intent.FilterComparison, Filter> filters = new HashMap<>();
+        boolean started;
         int lastStartId, startResult;
         IBinder traced;
         int connections;
-        Intent intent;
     }
 
+    private static final class Filter { IBinder binder; int clients; boolean rebind, received; }
+
     private static final Map<String, Running> RUNNING = new HashMap<>();
-    private static final Map<ServiceConnection, String> CONNECTIONS = new IdentityHashMap<>();
+    /** The services each connection is bound to (one ServiceConnection may be bound to several, as on Android). */
+    private record Bound(String service, Intent.FilterComparison filter) {}
+    private static final Map<ServiceConnection, java.util.List<Bound>> CONNECTIONS = new IdentityHashMap<>();
     private static int startId;
     /** ServiceController.create idles the main looper: a bind queued behind the one that creates a service would run inside it and create the service again. */
     private static boolean creating;
@@ -74,7 +78,6 @@ public final class Services {
         Running r = RUNNING.get(key);
         if (r == null) {
             r = new Running();
-            r.intent = intent;
             Class<? extends Service> cls = (Class<? extends Service>) Class.forName(key, true, Services.class.getClassLoader());
             if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] creating service " + cls.getName() + " on " + Thread.currentThread().getName());
             r.controller = Robolectric.buildService(cls, intent);
@@ -205,15 +208,20 @@ public final class Services {
             if (creating) { DEFERRED.add(() -> bindService(ctx, intent, conn, flags)); return true; }
             try {
                 Running r = instance(cn, intent);
-                r.connections++; // before onBind: a service that calls stopSelf() there (Chromium's ChildProcessService) stays while it is bound
-                if (!r.bound) {
-                    try { r.binder = r.service.onBind(intent); }
-                    catch (RuntimeException failure) { r.connections--; throw failure; }
-                    r.bound = true;
+                Bound pair = new Bound(className(cn), new Intent.FilterComparison(new Intent(intent)));
+                java.util.List<Bound> bound = CONNECTIONS.computeIfAbsent(conn, c -> new java.util.ArrayList<>());
+                Filter filter = r.filters.computeIfAbsent(pair.filter(), f -> new Filter());
+                if (!bound.contains(pair)) {  // the same connection and intent again only changes flags on Android: still one binding
+                    r.connections++; // before onBind: a service that calls stopSelf() there (Chromium's ChildProcessService) stays while it is bound
+                    try {
+                        if (!filter.received) { filter.binder = r.service.onBind(intent); filter.received = true; }
+                        else if (filter.clients == 0 && filter.rebind) r.service.onRebind(intent);
+                    } catch (RuntimeException failure) { r.connections--; throw failure; }
+                    filter.clients++;
+                    bound.add(pair);
                 }
-                CONNECTIONS.put(conn, className(cn));
-                if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] bind " + className(cn) + ": onBind gave " + r.binder + " (service " + r.service.getClass().getName() + ")");
-                IBinder shown = r.binder;
+                if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] bind " + className(cn) + ": onBind gave " + filter.binder + " (service " + r.service.getClass().getName() + ")");
+                IBinder shown = filter.binder;
                 if (Boolean.getBoolean("apklayer.tracebind") && shown != null) { if (r.traced == null) r.traced = traced(shown); shown = r.traced; } // one IBinder for every connection, as on Android
                 IBinder binder = shown;
                 new Handler(Looper.getMainLooper()).post(() -> conn.onServiceConnected(cn, binder));
@@ -241,21 +249,18 @@ public final class Services {
     }
 
     public static void unbindService(Context ctx, ServiceConnection conn) {
-        String key = CONNECTIONS.remove(conn);
-        if (key == null) {
+        java.util.List<Bound> pairs = CONNECTIONS.remove(conn);
+        if (pairs == null) {
             ctx.unbindService(conn);
             return;
         }
-        onMain(() -> {
-            Running r = RUNNING.get(key);
-            if (r != null && Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] unbind: " + (r.connections - 1) + " connections left of " + key);
-            if (r != null && --r.connections == 0) {
-                r.service.onUnbind(r.intent);
-                r.bound = false;
-                if (!r.started) {
-                    destroy(key, r);
-                }
-            }
+        for (Bound pair : pairs) onMain(() -> {
+            Running r = RUNNING.get(pair.service());
+            if (r == null) return null;
+            if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] unbind: " + (r.connections - 1) + " connections left of " + pair.service());
+            Filter filter = r.filters.get(pair.filter());
+            if (filter != null && --filter.clients == 0) filter.rebind = r.service.onUnbind(pair.filter().getIntent());
+            if (--r.connections == 0 && !r.started) destroy(pair.service(), r);
             return null;
         });
     }

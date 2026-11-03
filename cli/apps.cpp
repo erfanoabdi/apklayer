@@ -135,10 +135,12 @@ std::string installApp(const Layout& l, const Instance& inst, const std::string&
     std::string dir = appDir(l, pkg);
     makeDirs(join(dir, "data"));
     std::string oldUid = property(join(dir, "info.properties"), "uid");
-    for (const char* f : {"base.apk", "classes.jar", "key", "info.properties", "icon.png"}) sh({"mv", "-f", join(tmp, f), join(dir, f)});
-    if (!oldUid.empty()) writeFile(join(dir, "info.properties"), readFile(join(dir, "info.properties")).value_or("") + "uid=" + oldUid + "\n");
-    ensureUid(l, dir);
+    for (const char* f : {"base.apk", "classes.jar", "key", "icon.png"}) sh({"mv", "-f", join(tmp, f), join(dir, f)});
     extractLibs(dir);
+    // info.properties, with its uid, is the commit: a hub or JVM that meets the package while it is installed sees all of it or none
+    if (!oldUid.empty()) writeFile(join(tmp, "info.properties"), readFile(join(tmp, "info.properties")).value_or("") + "uid=" + oldUid + "\n");
+    ensureUid(l, tmp);
+    sh({"mv", "-f", join(tmp, "info.properties"), join(dir, "info.properties")});
     writeDesktop(l, pkg, label, dir);
     printf("apklayer: installed %s (%s) -> %s\n", pkg.c_str(), label.c_str(), dir.c_str());
     return pkg;

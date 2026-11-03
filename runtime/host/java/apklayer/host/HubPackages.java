@@ -29,7 +29,7 @@ final class HubPackages {
         Path directory = root.resolve(name).normalize();
         if (!root.equals(directory.getParent())) throw new SecurityException("Invalid package name");
         Path apk = directory.resolve("base.apk");
-        if (!Files.isRegularFile(apk)) return null;
+        if (!Files.isRegularFile(apk) || !Files.isRegularFile(directory.resolve("info.properties"))) return null;  // info.properties comes last: an install in progress is not one yet
         try {
             long modified = Files.getLastModifiedTime(apk).toMillis(), size = Files.size(apk);
             Cached old = cache.get(name);
@@ -135,7 +135,7 @@ final class HubPackages {
     List<String> installed() {
         List<String> names = new ArrayList<>();
         try (var stream = Files.list(root)) {
-            stream.filter(directory -> Files.isRegularFile(directory.resolve("base.apk"))).forEach(directory -> names.add(directory.getFileName().toString()));
+            stream.filter(directory -> Files.isRegularFile(directory.resolve("base.apk")) && Files.isRegularFile(directory.resolve("info.properties"))).forEach(directory -> names.add(directory.getFileName().toString()));
         } catch (IOException failure) { throw new IllegalStateException("Cannot list installed packages", failure); }
         return names;
     }

@@ -19,7 +19,8 @@ final class HubEndpoint extends Binder {
     private final Context context;
     private final int hubPid;
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final Map<IBinder, ServiceConnection> connections = new HashMap<>();
+    /** The hub's connection and the service it is bound to (one connection may be bound to several services here) -> the local connection. */
+    private final Map<java.util.List<Object>, ServiceConnection> connections = new HashMap<>();
     HubEndpoint(Context context, int hubPid) { this.context = context; this.hubPid = hubPid; attachInterface(null, HubProtocol.ENDPOINT); }
     int hubPid() { return hubPid; }
     @Override protected boolean onTransact(int code, Parcel request, Parcel reply, int flags) throws RemoteException {
@@ -47,17 +48,18 @@ final class HubEndpoint extends Binder {
                         catch (RemoteException failure) { System.out.println("[apklayer] service client disconnected: " + name); }
                     }
                 };
-                connections.put(remote.asBinder(), local);
+                java.util.List<Object> key = java.util.List.of(remote.asBinder(), intent.getComponent());
+                connections.put(key, local);
                 if (!Services.bindService(context, intent, local, bindFlags)) {
-                    connections.remove(remote.asBinder()); local.onNullBinding(intent.getComponent());
+                    connections.remove(key); local.onNullBinding(intent.getComponent());
                 }
             });
             reply.writeNoException(); return true;
         }
         if (code == HubProtocol.ENDPOINT_UNBIND) {
-            IBinder remote = request.readStrongBinder(); request.enforceNoDataAvail();
+            IBinder remote = request.readStrongBinder(); ComponentName service = request.readTypedObject(ComponentName.CREATOR); request.enforceNoDataAvail();
             main.post(() -> {
-                ServiceConnection local = connections.remove(remote);
+                ServiceConnection local = connections.remove(java.util.List.of(remote, service));
                 if (local != null) Services.unbindService(context, local);
             });
             reply.writeNoException(); return true;
