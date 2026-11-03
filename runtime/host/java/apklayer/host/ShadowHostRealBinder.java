@@ -9,8 +9,6 @@ import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
 import org.robolectric.annotation.RealObject;
 import org.robolectric.shadow.api.Shadow;
-import org.robolectric.util.ReflectionHelpers;
-import org.robolectric.util.ReflectionHelpers.ClassParameter;
 
 /**
  * The framework's own Binder (transact, linkToDeath, calling identity) over the real binder JNI, not Robolectric's in-process stand-in. Every process has the desktop
@@ -54,15 +52,29 @@ public class ShadowHostRealBinder {
     @Implementation protected boolean execTransact(int code, long dataObj, long replyObj, int flags) {
         Integer previous = HEADER_UID.get();
         HEADER_UID.set(Binder.getCallingPid() == 0 ? headerUid(dataObj) : null);
-        try {
-            return Shadow.directlyOn(real, "android.os.Binder", "execTransact", ClassParameter.from(int.class, code), ClassParameter.from(long.class, dataObj),
-                    ClassParameter.from(long.class, replyObj), ClassParameter.from(int.class, flags));
-        } finally { HEADER_UID.set(previous); }
+        try { return (Boolean) EXEC_TRANSACT.invoke(real, code, dataObj, replyObj, flags); }
+        catch (java.lang.reflect.InvocationTargetException failed) { throw sneaky(failed.getCause()); }
+        catch (IllegalAccessException impossible) { throw new IllegalStateException(impossible); }
+        finally { HEADER_UID.set(previous); }
     }
+
+    // looked up once: this runs for every transaction a process gets (Shadow.directlyOn looks the method up on each call)
+    private static final java.lang.reflect.Method EXEC_TRANSACT = accessible(Binder.class, Shadow.directMethodName("android.os.Binder", "execTransact"), int.class, long.class, long.class, int.class);
+    private static final java.lang.reflect.Method OBTAIN = accessible(Parcel.class, "obtain", long.class);
+
+    private static java.lang.reflect.Method accessible(Class<?> type, String name, Class<?>... parameters) {
+        try { java.lang.reflect.Method method = type.getDeclaredMethod(name, parameters); method.setAccessible(true); return method; }
+        catch (NoSuchMethodException missing) { throw new IllegalStateException(missing); }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> RuntimeException sneaky(Throwable failure) throws T { throw (T) failure; }
 
     /** The work-source uid of an interface-token header (strict-mode policy, work source, header word, descriptor), or null without one. */
     private static Integer headerUid(long dataObj) {
-        Parcel data = ReflectionHelpers.callStaticMethod(Parcel.class, "obtain", ClassParameter.from(long.class, dataObj));
+        Parcel data;
+        try { data = (Parcel) OBTAIN.invoke(null, dataObj); }
+        catch (ReflectiveOperationException failed) { throw new IllegalStateException(failed); }
         int at = data.dataPosition();
         try {
             if (data.dataAvail() < 12) return null;
