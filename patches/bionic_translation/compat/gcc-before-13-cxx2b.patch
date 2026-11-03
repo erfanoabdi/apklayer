@@ -2,7 +2,7 @@ From: Erfan Abdi <erfangplus@gmail.com>
 Subject: [PATCH] apklayer compat: -std=c++2b for gcc before 13
 
 gcc 11 and 12 (Ubuntu 22.04) do not know --std=c++23; c++2b is the same draft standard.
-Applied by scripts/build-bionic-translation.sh only when the compiler is gcc older than 13.
+Applied by tools/build bt only when the compiler is gcc older than 13.
 ---
 diff --git a/meson.build b/meson.build
 index d741726..e1ced47 100644

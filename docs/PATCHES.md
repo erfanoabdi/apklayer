@@ -100,7 +100,7 @@ Behaviour that differs from Android or from stock Robolectric without editing up
 - Android app uids (10000+): `-Dapklayer.uid`, `ShadowHostProcess.java`; native services get it as the binder work source (aosp patch 0005 above).
 - Keystore: `HostKeyStoreProvider` is a software "AndroidKeyStore" in the app's data directory, not hardware-backed.
 - Media store: `HostMediaStub` answers the "media" provider with nothing indexed until the tree's MediaProvider is installed.
-- Cross-app intents: `HostApps`, `ManifestFilters` match other installed apps' filters (stand-in for the instance hub's registry).
+- Cross-app intents: `HostApps`, `ManifestFilters` match other installed apps' filters when the instance hub is off (with the hub, `HubActivityClient` asks it).
 - MessageQueue: `ShadowHostMessageQueue` turns off DeliQueue (Robolectric's scheduler reads the legacy queue).
 - Window container a window manager would make for each window: `runtime/patches/org/robolectric/shadows/WindowSurface.java`.
 - Codec2: `aosp/hals/media/codec2/SoftCodecs.cpp` loads whichever tree `libcodec2_soft_*` are installed (the platform list aborts on a missing one); codec list `bridge/native/android-root/vendor/etc/media_codecs.xml`.
