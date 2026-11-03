@@ -173,3 +173,6 @@ Until an app presents its first frame, `bridge/shell/splash.c` fills the window 
 
 ## Manager (2026-11-04)
 - Needs a human check: the portal file chooser and the pkexec prompt. Open: per-app permissions are not shown (not in info.properties); removing a running instance ends the session's window shell (stopStack); binder devices of a removed instance stay until reboot; fetch-slint.sh has arm64 hashes only; the binary's rpath points into ~/.cache/apklayer/slint; ui.sh needs a desktop (not in meson test); a failing CLI leaves pages empty without an error.
+
+## Media (2026-11-04)
+- Open: m.youtube.com/watch pages show a cookie-consent dialog (the test uses YouTube's embedded player in a local page); the audio permission feed happens once at hub start (an app installed later or an audioserver restart is not re-fed: shortcut in HubAudioPermissions); the native-audio group fails on main (NativeParcel.activeParcels missing); fennec-media needs a profile past Fenix's onboarding on a fresh install (being fixed).
