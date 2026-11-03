@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: apklayer <apklayer@localhost>
+Subject: [PATCH] ShadowUserManager: getAliveUsers, getUserProperties
+
+apklayer patch: getAliveUsers() returns the users that exist (the settings provider migrates its settings for each at start);
+getUserProperties(UserHandle) returns a full user's default UserProperties (the fake user service has none; DocumentsUI reads it).
+
+Against external/robolectric 87aa52b08 (REVISION). Applied by scripts/build-runtime-overlay.sh onto the staged
+upstream sources (<native>/aosp/robolectric-src); the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
+---
+diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUserManager.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUserManager.java
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUserManager.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUserManager.java
+@@ -201,6 +201,18 @@
+   public long addUserProfile(UserHandle userHandle) {
+     addProfile(UserHandle.myUserId(), userHandle.getIdentifier(), "", 0);
+     return userManagerState.userSerialNumbers.get(userHandle.getIdentifier());
++  }
++
++  // apklayer patch: the users that exist (the settings provider migrates its settings for each of them at start)
++  @Implementation
++  protected List<UserInfo> getAliveUsers() {
++    return new ArrayList<>(userManagerState.userInfoMap.values());
++  }
++
++  // apklayer patch: UserManager.getUserProperties() answers the properties of a full user (the fake user service has none, apps read a profile's properties)
++  @Implementation(minSdk = UPSIDE_DOWN_CAKE)
++  protected android.content.pm.UserProperties getUserProperties(UserHandle userHandle) {
++    return new android.content.pm.UserProperties.Builder().build();
+   }
+ 
+   @Implementation

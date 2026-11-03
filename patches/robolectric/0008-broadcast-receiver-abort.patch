@@ -1,0 +1,93 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: apklayer <apklayer@localhost>
+Subject: [PATCH] ShadowBroadcastReceiver: Android's own abortBroadcast()
+
+apklayer patch (docs/PATCHES.md, instance hub broadcasts): Robolectric's abortBroadcast() only sets a flag it reads itself;
+Android's own runs, so the abort reaches the PendingResult and with it the hub's ordered queue. Covered by tests/vm/broadcasts.sh
+ordered.
+
+Against external/robolectric 87aa52b08 (REVISION). Applied by scripts/build-runtime-overlay.sh onto the staged
+upstream sources (<native>/aosp/robolectric-src); the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
+---
+diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowBroadcastReceiver.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowBroadcastReceiver.java
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowBroadcastReceiver.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowBroadcastReceiver.java
+@@ -3,29 +3,32 @@
+ import static org.robolectric.util.reflector.Reflector.reflector;
+ 
+ import android.content.BroadcastReceiver;
+-import android.content.BroadcastReceiver.PendingResult;
+ import android.content.Context;
+ import android.content.Intent;
+ import java.util.concurrent.atomic.AtomicBoolean;
+ import org.robolectric.annotation.Implementation;
+ import org.robolectric.annotation.Implements;
+ import org.robolectric.annotation.RealObject;
++import org.robolectric.shadow.api.Shadow;
++import org.robolectric.util.ReflectionHelpers;
+ import org.robolectric.util.reflector.Direct;
+ import org.robolectric.util.reflector.ForType;
+ 
++/**
++ * Robolectric's BroadcastReceiver stand-in (abortBroadcast only sets a flag it reads itself). apklayer patch: with the instance hub (-Dapklayer.instancehub=true)
++ * abortBroadcast is Android's own, so the abort reaches the PendingResult and with it the hub's ordered queue.
++ */
+ @Implements(BroadcastReceiver.class)
+ public class ShadowBroadcastReceiver {
+   @RealObject BroadcastReceiver receiver;
+ 
+-  // The abort state of the currently processed broadcast
+   private AtomicBoolean abort = new AtomicBoolean(false);
+   private boolean wentAsync = false;
+-  private PendingResult originalPendingResult;
++  private BroadcastReceiver.PendingResult originalPendingResult;
+ 
+   @Implementation
+   protected void abortBroadcast() {
+-    // TODO probably needs a check to prevent calling this method from ordinary Broadcasts
+-    abort.set(true);
++    ReflectionHelpers.callInstanceMethod(receiver, Shadow.directMethodName("android.content.BroadcastReceiver", "abortBroadcast"));
+   }
+ 
+   @Implementation
+@@ -38,17 +41,13 @@
+   public void onReceive(Context context, Intent intent, AtomicBoolean abort) {
+     this.abort = abort;
+     onReceive(context, intent);
+-    // If the underlying receiver has called goAsync(), we should not finish the pending result yet
+-    // - they'll do that
+-    // for us.
+     if (receiver.getPendingResult() != null) {
+       receiver.getPendingResult().finish();
+     }
+   }
+ 
+   @Implementation
+-  protected PendingResult goAsync() {
+-    // Save the PendingResult before goAsync() clears it.
++  protected BroadcastReceiver.PendingResult goAsync() {
+     originalPendingResult = receiver.getPendingResult();
+     wentAsync = true;
+     return reflector(BroadcastReceiverReflector.class, receiver).goAsync();
+@@ -62,18 +61,13 @@
+     return abort.get();
+   }
+ 
+-  public PendingResult getOriginalPendingResult() {
+-    if (wentAsync) {
+-      return originalPendingResult;
+-    } else {
+-      return receiver.getPendingResult();
+-    }
++  public BroadcastReceiver.PendingResult getOriginalPendingResult() {
++    return wentAsync ? originalPendingResult : receiver.getPendingResult();
+   }
+ 
+   @ForType(BroadcastReceiver.class)
+   interface BroadcastReceiverReflector {
+-
+     @Direct
+-    PendingResult goAsync();
++    BroadcastReceiver.PendingResult goAsync();
+   }
+ }

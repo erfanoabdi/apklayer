@@ -303,6 +303,7 @@ public final class AppHost implements Runnable {
             throw new RuntimeException(e);
         }
         System.out.println("[apklayer] exit: depth=" + stack.size());
+        NativeLoader.endWithoutNativeDestructors();
         if (Boolean.getBoolean("apklayer.threads")) { // -Dapklayer.threads=true: what every thread is doing at the end (stalls)
             Thread.getAllStackTraces().forEach((t, st) -> {
                 if (st.length == 0 || t.isDaemon() && !t.getName().contains("Main") && !t.getName().contains("Render")) return;

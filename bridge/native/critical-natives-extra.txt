@@ -15,3 +15,11 @@ android.content.res.XmlBlock nativeGetClassAttribute(J)I
 android.content.res.XmlBlock nativeGetStyleAttribute(J)I
 android.content.res.XmlBlock nativeGetSourceResId(J)I
 android.content.res.ApkAssets nativeIsUpToDate(J)I
+android.database.CursorWindow nativeClear(J)V
+android.database.CursorWindow nativeGetNumRows(J)I
+android.database.CursorWindow nativeSetNumColumns(JI)Z
+android.database.CursorWindow nativeFreeLastRow(J)V
+android.database.CursorWindow nativeGetType(JII)I
+android.database.CursorWindow nativePutLong(JJII)Z
+android.database.CursorWindow nativePutDouble(JDII)Z
+android.database.CursorWindow nativePutNull(JII)Z

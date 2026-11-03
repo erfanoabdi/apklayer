@@ -18,10 +18,12 @@ import javax.net.ssl.X509TrustManager;
 /**
  * Android's TrustManagerImpl has {@code checkServerTrusted(chain, authType, host)}, which android.net.http.X509TrustManagerExtensions (and so Chromium's X509Util,
  * the WebView's certificate check) requires of the default trust manager; the JDK's has not ("Could not find suitable trust manager": no HTTPS page in a WebView).
- * This provider answers for the default TrustManagerFactory with the JDK's own trust managers wrapped to have that method (same roots, same verification).
+ * This provider answers for the default TrustManagerFactory with the JDK's own trust managers wrapped to have that method (same roots, same verification),
+ * and for the "AndroidCAStore" KeyStore (HostCaStore).
  */
 final class HostTrust extends Provider {
-    private HostTrust() { super("ApklayerTrust", "1", "default trust managers with Android's host-aware check"); put("TrustManagerFactory.PKIX", Factory.class.getName()); put("TrustManagerFactory.X509", Factory.class.getName()); }
+    private HostTrust() { super("ApklayerTrust", "1", "default trust managers with Android's host-aware check"); put("TrustManagerFactory.PKIX", Factory.class.getName()); put("TrustManagerFactory.X509", Factory.class.getName());
+        put("KeyStore.AndroidCAStore", HostCaStore.class.getName()); }  // the system CA store, whichever AndroidKeyStore (keystore2 or the software one) is installed
 
     static void install() { Security.insertProviderAt(new HostTrust(), 1); }
 
