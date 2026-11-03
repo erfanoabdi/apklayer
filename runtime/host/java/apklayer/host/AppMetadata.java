@@ -58,6 +58,8 @@ final class AppMetadata {
             info.setProperty("targetSdk", String.valueOf(app.getApplicationInfo().targetSdkVersion));
             List<ManifestFilters.Filter> filters = ManifestFilters.read(app);
             for (int i = 0; i < filters.size(); i++) info.setProperty("filter." + i, filters.get(i).encode()); // for cross-app intents (PLAN P6)
+            android.content.pm.ProviderInfo[] providers = pm.getPackageInfo(app.getPackageName(), PackageManager.GET_PROVIDERS).providers;
+            info.setProperty("authorities", providers == null ? "" : String.join(";", java.util.Arrays.stream(providers).map(p -> p.authority).filter(java.util.Objects::nonNull).toList()));  // read at launch before the manifest is parsed (AppEnvironment)
             Files.createDirectories(dir);
             try (Writer out = Files.newBufferedWriter(dir.resolve("info.properties"))) {
                 info.store(out, "apklayer install metadata");

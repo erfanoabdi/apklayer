@@ -44,8 +44,9 @@ final class AppEnvironment {
         if (Boolean.getBoolean("apklayer.logcat")) org.robolectric.shadows.ShadowLog.stream = System.out; // android.util.Log output (-Dapklayer.logcat=true, APKLAYER_LOGCAT=1)
         AndroidManifest manifest = apk == null ? new AndroidManifest(null, null, null, "apklayer.hub")
                 : new AndroidManifest(null, null, null, null, "", apk);
-        // an app that is itself the MediaStore provider answers for "media": no stand-in (Robolectric's fake one, HostMediaStub) in front of it
-        ownsMediaAuthority = manifest.getContentProviders().stream().anyMatch(c -> c.getAuthorities() != null && java.util.Arrays.asList(c.getAuthorities().split(";")).contains("media"));
+        // an app that is itself the MediaStore provider answers for "media": no stand-in (Robolectric's fake one, HostMediaStub) in front of it.
+        // Robolectric parses the manifest's providers only when it creates the application, after deciding on its fake: the install recorded them (AppMetadata).
+        ownsMediaAuthority = apk != null && java.util.Arrays.asList(installProperty(apk, "authorities").split(";")).contains("media");
         if (ownsMediaAuthority) System.setProperty("robolectric.installFakeMediaProvider", "false");
         Config.Builder builder = new Config.Builder()
                 .setSdk(Integer.getInteger("apklayer.sdk", 36))
@@ -76,6 +77,14 @@ final class AppEnvironment {
         if (!describing) initAppOpsWithoutApplication();
         StartTrace.mark("data dirs, storage, library dir");
         HostKeyStore.install();  // apps open it in Application.onCreate (a call into keystore2 may create the lazy application: after its data dirs are persistent); needs the sandbox's shadows
+    }
+
+    /** A value of the install metadata next to the installed APK (info.properties, AppMetadata.describe); "" when there is none. */
+    private static String installProperty(Path apk, String key) {
+        java.util.Properties info = new java.util.Properties();
+        try (java.io.Reader in = java.nio.file.Files.newBufferedReader(apk.resolveSibling("info.properties"))) { info.load(in); }
+        catch (java.io.IOException notInstalled) { return ""; }
+        return info.getProperty(key, "");
     }
 
     /**
