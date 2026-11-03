@@ -92,6 +92,10 @@ __attribute__((visibility("default"))) void apklayer_gles1_make_current(void* ct
     if (!tCurrent) return;
     std::lock_guard<std::mutex> l(lock);
     iface->initContext(tCurrent->gles, tCurrent->group, false, false);  // first time: GL limits and the shader engine, on the host context
+    // the translator's limit getters (getMaxTexSize, getMaxLights...) read the GLES 2 caps, which only a GLES 2 translator context fills
+    // (the emulator always has one); without it GL_MAX_TEXTURE_SIZE is 0 and every glTexImage2D fails: the ES 1 caps stand in
+    GLSupport* global = GLEScontext::getCapsGlobal();
+    if (!global->maxTexSize) *global = *tCurrent->gles->getCaps();
 }
 
 // Frees `ctx`; its host context must be current (the translator deletes its GL objects).

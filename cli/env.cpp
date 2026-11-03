@@ -110,7 +110,7 @@ std::vector<std::string> hostJvmArgs(const Layout& l, const Instance& inst, Nati
                                   // take about half of the class definition time (perf: SymbolTable::do_lookup), the table grows only later
                                   "-XX:+UnlockExperimentalVMOptions", "-XX:SymbolTableSize=262144",
                                   "@" + join(l.root, "runtime/host/jvm.args"), "-Drobolectric.offline=true",
-                                  "-Drobolectric.dependency.dir=" + frameworkDependencyDir(l), "-Dapklayer.native=" + n, "-Dapklayer.androidlibs=" + join(n, "android-libs"),
+                                  "-Drobolectric.dependency.dir=" + frameworkDependencyDir(l), "-Dapklayer.native=" + n, "-Dapklayer.androidlibs=" + l.androidLibs,
                                   "-Drobolectric.windowManager.useRequestedSize=true",
                                   "-Drobolectric.allowPlatformPermissions=true",  // system apps (ContactsProvider...) declare platform permissions of their own
                                   // Robolectric's native runtime: its library per JVM, its fonts and ICU data once (robolectric patch 0001), in the instance's state directory (disk)
