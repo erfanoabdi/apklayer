@@ -1,6 +1,6 @@
 # Compatibility corpus results
 
-Run 2026-11-03 14:47
+Run 2026-11-03 14:59
 
 "first frame" = 20 GPU frames while running and the screenshot shows content (uniform/nowindow otherwise); "second" = the same after a second launch.
 
