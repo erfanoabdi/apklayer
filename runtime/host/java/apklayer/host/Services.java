@@ -91,7 +91,7 @@ public final class Services {
     private static void destroy(String key, Running r) {
         r.controller.destroy();
         RUNNING.remove(key);
-        if (Boolean.getBoolean("apklayer.componenthost") && RUNNING.isEmpty()) { System.out.println("[apklayer] last service of this process destroyed: exiting"); System.out.flush(); Runtime.getRuntime().halt(0); }
+        if (Boolean.getBoolean("apklayer.componenthost") && RUNNING.isEmpty()) { System.out.println("[apklayer] last service of this process destroyed: exiting"); System.out.flush(); NativeLoader.endWithoutNativeDestructors(); Runtime.getRuntime().halt(0); }
     }
 
     /** Runs a task on the main thread and waits for it (services are created and called there). */
