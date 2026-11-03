@@ -23,6 +23,8 @@ apklayer-shell through the host display HAL. Written new because nothing local f
 service SurfaceFlinger calls, client composition only, no virtual displays by design), `servicetool` is a one-shot client, and AOSP's
 `screenrecord` (the same virtual display + consumer pattern) is built around a video encoder. It is a `cc_library_shared` exporting
 `main` only because that is how every Android-side process here is run (`btload --main`).
+The sink also registers its display token as `apklayer.vdisplay.<layer stack>`; `apklayer screenshot` runs `aosp/tools/screenshot.cpp`, which captures that display
+through SurfaceFlinger's own `captureDisplay` (the screencap path; the capture buffer is CPU-readable through the mapper's GBM map) and writes the PNG.
 
 
 ## Media decoder backend (in progress)
