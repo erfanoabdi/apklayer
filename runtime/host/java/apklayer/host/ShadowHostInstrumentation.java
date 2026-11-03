@@ -17,10 +17,6 @@ public class ShadowHostInstrumentation extends ShadowInstrumentation {
 
     @Implementation
     protected void callApplicationOnCreate(Application app) {
-        if (HostProcessName.install(app) && System.getProperty("apklayer.keeponcreate") == null) {  // a GeckoView child process: Fenix's Application.onCreate starts a Gecko of its own there
-            System.out.println("[apklayer] Application.onCreate skipped in the secondary process");
-            return;
-        }
         // as Android's bindApplication: the system's and other apps' providers (Settings among them) answer from Application.onCreate on
         if (System.getProperty("apklayer.package") != null && !AppEnvironment.installing) HubClient.attach(app);
         if (!providersInstalled && System.getProperty("apklayer.package") != null && !Boolean.getBoolean("apklayer.componenthost")) {  // not in the service hosts (the WebView package's own providers abort the renderer host)

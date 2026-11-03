@@ -41,7 +41,6 @@ final class AppEnvironment {
         System.setProperty("java.vm.name", "Dalvik");  // libgdx, Netty ... pick their Android code path (native libraries through System.loadLibrary) by these names
         System.setProperty("java.runtime.name", "Android Runtime");
         HostCompat.install();  // behavior changes by the app's target SDK (PendingIntent mutability, ...)
-        HostGeckoDiag.start();
         org.robolectric.shadows.ShadowAlarmManager.setAutoSchedule(true);  // an alarm fires its PendingIntent or listener when its time comes (Robolectric only records it otherwise)
         HostLibraryPath.install();  // before the app's own code runs: SoLoader finds the system libraries it looks up by name
         if (Boolean.getBoolean("apklayer.logcat")) org.robolectric.shadows.ShadowLog.stream = System.out; // android.util.Log output (-Dapklayer.logcat=true, APKLAYER_LOGCAT=1)
@@ -72,6 +71,7 @@ final class AppEnvironment {
         sandbox.getTestEnvironment().setUpApplicationState("apklayer", configuration, manifest);
         StartTrace.mark("robolectric application state set up");
         HostClock.alignToMonotonic();  // after the clock's reset by the state setup
+        HostProcessName.install(apk);  // before the Application is attached: Application.onCreate runs in every process, and apps check which one they are in
         NativeProcess.install();
         StartTrace.mark("native process installed");
         persistDataDirs();
