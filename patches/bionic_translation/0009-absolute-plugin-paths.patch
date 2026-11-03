@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 09/25] apklayer: absolute-plugin-paths
+
+Android plugin loaders use absolute /system or /apex paths. Resolve them through the same instance-root overlay as open/stat, before library search.
+
+apklayer patch: step 9 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0009 of patches/bionic_translation.
+---
+ linker/linker.c | 17 +++++++++++++++--
+ 1 file changed, 15 insertions(+), 2 deletions(-)
+
+diff --git a/linker/linker.c b/linker/linker.c
+index 3959ef3..1a40ed9 100644
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -861,6 +861,19 @@ static int apkenv_open_library(const char *name, char *fullpath)
+ 
+ 	strcpy(fullpath, name);
+ 
++	/* apklayer patch: absolute libraries use the instance path overlay. */
++	if (name[0] == '/') {
++		bool (*override)(char **) = dlsym(RTLD_DEFAULT, "apklayer_apply_path_overrides");
++		char *mapped = (char *)name;
++		if (override && override(&mapped)) {
++			if (strlen(mapped) >= 512) { free(mapped); errno = ENAMETOOLONG; return -1; }
++			fd = apkenv__open_lib(mapped);
++			if (fd >= 0) strcpy(fullpath, mapped);
++			free(mapped);
++			return fd;
++		}
++	}
++
+ 	tmp_name = strdup(name);
+ 	path_normalized_name = realpath(dirname(tmp_name), NULL);
+ 	free(tmp_name);
+@@ -1533,9 +1546,9 @@ soinfo *apkenv_find_library(const char *name, const bool try_glibc, int glibc_fl
+ 	const char *prefix64 = "/system/lib64/";
+ 	const int prefix64_len = strlen(prefix64);
+ 
+-	if(!strncmp(name, prefix, prefix_len))
++	if(!strncmp(name, prefix, prefix_len) && !strchr(name + prefix_len, '/'))
+ 		name += prefix_len;
+-	else if(!strncmp(name, prefix64, prefix64_len))
++	else if(!strncmp(name, prefix64, prefix64_len) && !strchr(name + prefix64_len, '/'))
+ 		name += prefix64_len;
+ 
+ 	for(int i = 0; i < lib_override_map.len; i++) {

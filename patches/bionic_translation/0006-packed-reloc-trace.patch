@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 06/25] apklayer: packed-reloc-trace
+
+Packed relocations use the linker's existing trace facility, like other relocation diagnostics; unconditional output produces megabytes per launch.
+
+apklayer patch: step 6 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0006 of patches/bionic_translation.
+---
+ linker/linker.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/linker/linker.c b/linker/linker.c
+index 5d8f4fe..3959ef3 100644
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -2269,9 +2269,9 @@ static inline bool apkenv_apply_packed_relocs(soinfo *si, const uint8_t* packed_
+ 			// FIXME: clean up apkenv_reloc_library so we don't need to do this
+ 			// (this function expects an array, and will probably be extra slow like this)
+ #if defined(USE_RELA)
+-			fprintf(stderr, "calling apkenv_reloc_library with packed reloc: {.offset = 0x%lx, .r_info = 0x%lx, .r_addend = 0x%lx}\n", reloc.r_offset, reloc.r_info, reloc.r_addend);
++			TRACE(/* apklayer patch: relocation tracing */ "calling apkenv_reloc_library with packed reloc: {.offset = 0x%lx, .r_info = 0x%lx, .r_addend = 0x%lx}\n", reloc.r_offset, reloc.r_info, reloc.r_addend);
+ #else
+-			fprintf(stderr, "calling apkenv_reloc_library with packed reloc: {.offset = 0x%lx, .r_info = 0x%lx}\n", reloc.r_offset, reloc.r_info);
++			TRACE(/* apklayer patch: relocation tracing */ "calling apkenv_reloc_library with packed reloc: {.offset = 0x%lx, .r_info = 0x%lx}\n", reloc.r_offset, reloc.r_info);
+ #endif
+ 			ret = apkenv_reloc_library(si, &reloc, 1);
+ 			if (unlikely(ret))

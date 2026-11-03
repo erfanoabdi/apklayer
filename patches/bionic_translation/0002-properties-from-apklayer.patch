@@ -1,0 +1,81 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 02/25] apklayer: properties-from-apklayer
+
+remove its three system-property stubs (they print "not handled yet" and return nothing): bionic libraries then resolve __system_property_* to apklayer's real store (bridge/native/properties.c) through the glibc-namespace fallback
+
+apklayer patch: step 2 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0002 of patches/bionic_translation.
+---
+ libc/libc-misc.c | 35 +----------------------------------
+ libc/libc.c      | 11 +----------
+ 2 files changed, 2 insertions(+), 44 deletions(-)
+
+diff --git a/libc/libc-misc.c b/libc/libc-misc.c
+index c46c010..ba67c36 100644
+--- a/libc/libc-misc.c
++++ b/libc/libc-misc.c
+@@ -5,40 +5,7 @@
+ #include <stdlib.h>
+ #include <string.h>
+ 
+-// this seems to not be a stable ABI, so hopefully nobody treats it as such
+-// FIXME: move this out into it's own file whenever we get to implementing it more properly
+-struct prop_info {
+-	const char *name;
+-};
+-
+-#define PROP_NAME_MAX  32
+-#define PROP_VALUE_MAX 92
+-
+-const struct prop_info *bionic___system_property_find(const char *name)
+-{
+-	struct prop_info *ret = malloc(sizeof(struct prop_info));
+-	ret->name = name;
+-
+-	return ret;
+-}
+-
+-int bionic___system_property_read(const struct prop_info *prop_info, char *name, char *value)
+-{
+-	if (name)
+-		strncpy(name, prop_info->name, PROP_NAME_MAX);
+-
+-	if (!value)
+-		return 0;
+-
+-	if (!strcmp(prop_info->name, "ro.build.fingerprint")) {
+-		strncpy(value, "", PROP_VALUE_MAX); // there is no good reason that apps should need this, so just return an empty string
+-	} else {
+-		printf("__system_property_find: >%s< not handled yet\n", prop_info->name);
+-		strncpy(value, "", PROP_VALUE_MAX);
+-	}
+-
+-	return strlen(value);
+-}
++// apklayer patch: the property functions are provided by apklayer (bridge/native/properties.c)
+ 
+ // actually misc stuff
+ 
+diff --git a/libc/libc.c b/libc/libc.c
+index 0f57724..cbfb590 100644
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -61,16 +61,7 @@ struct bionic_sigaction {
+ #define PROP_NAME_MAX  32
+ #define PROP_VALUE_MAX 92
+ 
+-int __system_property_get(const char *name, char *value)
+-{
+-	verbose("%s", name);
+-
+-	if (!strcmp(name, "ro.build.version.sdk"))
+-		return snprintf(value, PROP_VALUE_MAX, "%d", 21);
+-
+-	*value = 0;
+-	return 0;
+-}
++/* apklayer patch: __system_property_get is provided by apklayer (bridge/native/properties.c) */
+ 
+ pid_t gettid(void)
+ {

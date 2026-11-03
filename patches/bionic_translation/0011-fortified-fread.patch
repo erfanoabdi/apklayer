@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 11/25] apklayer: fortified-fread
+
+Android's fortified fread argument order differs from glibc. Reuse the existing Android fwrite wrapper with its overflow and buffer-size checks.
+
+apklayer patch: step 11 of the former scripts/patch-bionic-translation.sh (see docs/PATCHES.md), patch 0011 of patches/bionic_translation.
+---
+ libc/libc-chk.c | 17 +++++++++++++++++
+ 1 file changed, 17 insertions(+)
+
+diff --git a/libc/libc-chk.c b/libc/libc-chk.c
+index bb6c8f8..8660476 100644
+--- a/libc/libc-chk.c
++++ b/libc/libc-chk.c
+@@ -280,3 +280,20 @@ ssize_t bionic___pwrite64_chk(int fd, const void* buf, size_t count, off64_t off
+ 
+ 	return pwrite64(fd, buf, count, offset);
+ }
++
++/* apklayer patch: Android fread fortify argument order. */
++size_t bionic___fread_chk(void *__restrict buf, size_t size, size_t count, FILE *__restrict stream, size_t buf_size)
++{
++	size_t total;
++	if (__builtin_expect(__builtin_mul_overflow(size, count, &total), 0)) {
++		// overflow: trigger the error path in fread
++		return fread(buf, size, count, stream);
++	}
++
++	if (__builtin_expect(total > buf_size, 0)) {
++		fprintf(stderr, "*** fread write overflow detected ***\n");
++		abort();
++	}
++
++	return fread(buf, size, count, stream);
++}

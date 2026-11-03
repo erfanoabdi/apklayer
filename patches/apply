@@ -1,0 +1,45 @@
+#!/bin/sh
+# apply: apklayer's upstream patches onto a source tree, idempotently (docs/PATCHES.md).
+# Usage: patches/apply <project | file.patch ...> <tree>
+#   patches/<project>/*.patch go onto <tree>; a project with no patches of its own maps each subdirectory holding
+#   patches to the same path under <tree> (patches/aosp/frameworks/native/*.patch -> <tree>/frameworks/native).
+# The patches already in the tree are skipped: the longest prefix of the series that reverses, last patch first, on a
+# copy of the touched files (a later patch can change an earlier one's context, so each is not checked alone).
+# A patch that then does not apply is an error. git apply also serves a plain directory: GIT_CEILING_DIRECTORIES
+# keeps it from using an enclosing repository.
+# shortcut: paths with spaces are not supported (word-split lists), fine for our trees.
+set -e
+eval "tree=\${$#}"
+tree="$(cd "$tree" && pwd -P)"
+here="$(cd "$(dirname "$0")" && pwd -P)"
+ga() { (cd "$1" && shift && GIT_CEILING_DIRECTORIES="$(dirname "$PWD")" git apply --whitespace=nowarn "$@"); }
+applied() { # <dir> <m> <patch>...: patches 1..m are what <dir> carries
+    d="$1"; m="$2"; shift 2; t="$(mktemp -d)"
+    for f in $(sed -n 's|^+++ b/||p' "$@" | sort -u); do
+        [ -e "$d/$f" ] && mkdir -p "$t/$(dirname "$f")" && cp "$d/$f" "$t/$f"
+    done
+    rev=""; i=0; for p; do i=$((i + 1)); [ "$i" -le "$m" ] && rev="$p $rev"; done
+    ok=0; for p in $rev; do ga "$t" -R "$p" >/dev/null 2>&1 || { ok=1; break; }; done
+    rm -rf "$t"; return $ok
+}
+series() { # <dir> <patch>...
+    d="$1"; shift; m=$#
+    while [ "$m" -gt 0 ] && ! applied "$d" "$m" "$@"; do m=$((m - 1)); done
+    i=0
+    for p; do
+        i=$((i + 1))
+        if [ "$i" -le "$m" ]; then echo "already applied: ${p#$here/} ($d)"
+        elif ga "$d" "$p"; then echo "applied: ${p#$here/} ($d)"
+        else echo "patches/apply: ${p#$here/} neither applies nor is applied in $d" >&2; exit 1; fi
+    done
+}
+case "$1" in *.patch)
+    n=$(($# - 1))
+    while [ "$n" -gt 0 ]; do set -- "$@" "$(cd "$(dirname "$1")" && pwd -P)/$(basename "$1")"; shift; n=$((n - 1)); done
+    shift; series "$tree" "$@"; exit 0;;
+esac
+set -- "$here/$1"/*.patch
+if [ -f "$1" ]; then series "$tree" "$@"; exit 0; fi
+root="$(dirname "$1")"
+[ -d "$root" ] || { echo "patches/apply: no directory $root" >&2; exit 1; }
+find "$root" -name '*.patch' -exec dirname {} \; | sort -u | while read -r d; do series "$tree/${d#$root/}" "$d"/*.patch; done
