@@ -1,6 +1,6 @@
 #!/bin/bash
 # The tree's own providers (SettingsProvider, ContactsProvider, UserDictionaryProvider) installed as apps and reached from another app through the hub.
-# Needs scripts/install-system-apps.sh first. Usage: sysprov.sh [settings contacts dictionary]
+# Needs tools/stage sysapps first. Usage: sysprov.sh [settings contacts dictionary]
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 . tests/vm/config.sh

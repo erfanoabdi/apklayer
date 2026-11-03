@@ -11,7 +11,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
 /**
- * Generator ({@code SandboxLoaderPatch outDir}), run by scripts/build-runtime-overlay.sh: Robolectric's SandboxClassLoader.loadClass cannot load array classes
+ * Generator ({@code SandboxLoaderPatch outDir}), run by tools/build overlay: Robolectric's SandboxClassLoader.loadClass cannot load array classes
  * ("[Ljava.lang.String;"), which ART's class loaders can and Chromium's JNI layer asks for. The original loadClass(String, boolean) is renamed and a new one
  * answers array names with Class.forName(name, false, this) and hands everything else to the original with slashes turned into dots, through
  * ApklayerAppHook (a name the sandbox lacks is asked of the app's own class loader).
