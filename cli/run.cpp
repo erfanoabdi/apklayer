@@ -195,7 +195,8 @@ int screenshot(const Layout& l, const Instance& inst, const std::string& target,
             std::vector<std::string> pids = record ? split(*record, '\n') : std::vector<std::string>();
             if (pids.size() < 2 || atoi(pids[1].c_str()) <= 0) continue;  // a component host: no window
             auto cmd = readFile("/proc/" + pids[0] + "/cmdline");
-            if (cmd && cmd->find("-Dapklayer.package=" + target + std::string(1, '\0')) != std::string::npos) stack = f.substr(4);
+            // the JVM's command line names the package, or (once the runtime named the process as Android does) is the process name
+            if (cmd && (cmd->find("-Dapklayer.package=" + target + std::string(1, '\0')) != std::string::npos || cmd->rfind(target + std::string(1, '\0'), 0) == 0)) stack = f.substr(4);
         }
         if (stack.empty()) { fprintf(stderr, "apklayer: no window of %s in instance %s\n", target.c_str(), inst.id.c_str()); return 1; }
     }
