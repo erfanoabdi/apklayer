@@ -133,6 +133,7 @@ std::string installApp(const Layout& l, const Instance& inst, const std::string&
     std::string pkg = property(join(tmp, "info.properties"), "package");
     std::string label = property(join(tmp, "info.properties"), "label");
     std::string dir = appDir(l, pkg);
+    makeDirs(dir);
     std::string oldUid = property(join(dir, "info.properties"), "uid");
     for (const char* f : {"base.apk", "classes.jar", "key", "icon.png"}) sh({"mv", "-f", join(tmp, f), join(dir, f)});
     extractLibs(dir);
