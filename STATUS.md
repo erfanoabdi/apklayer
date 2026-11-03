@@ -26,6 +26,7 @@ Open work is in `docs/PLAN.md` (sections "After the 2026-11-03 round", "Systemat
 ## Test VM (UTM)
 Host and password: `tests/vm/local.conf` (untracked; `local.conf.example`). Ubuntu 26.04 arm64, GNOME Wayland, Venus Vulkan 1.4, virgl ES 3.0 (apklayer claims 3.2). Passwordless sudo.
 Repo copy `~/apklayer`, runtime `~/arm64-native`, libs `~/android-arm64`. After a reboot run `sudo tools/host-setup/binder.sh [instance...]`. Parallel stacks: each named instance gets its own binder devices (`/dev/binderfs/binder-<id>`, mapped by `bridge/native/paths.c`); run with `APKLAYER_INSTANCE=<id>` plus a private `XDG_RUNTIME_DIR`/`XDG_STATE_HOME`/`XDG_DATA_HOME` and an absolute `WAYLAND_DISPLAY=/run/user/1000/wayland-0`. `/tmp` is tmpfs: never put big files there.
+Second VM (Parallels, Ubuntu 24.04 arm64, 12 CPUs, key auth, passwordless sudo): `APKLY_VM_CONF=parallels tests/run <group>` (tests/vm/parallels.conf, see local.conf.example); runtime in `~/apklayer-rt` (env file `~/apklayer-rt/env`, also `~/.config/apklayer/env`) beside the old 2026-10-27 dirs, glibc parts rebuilt there. Its flameshot desktop capture aborts/hangs: use `apklayer screenshot`.
 Screenshots: `apklayer [--instance ID] screenshot <package> <out.png>` or `tests/vm/vmcapture.py OUT PKG ENV...` (per app window, from SurfaceFlinger); the desktop capture (`tests/vm/vmcapture.py`) is the fallback. Input: `tests/vm/uinput-keys.c`.
 
 ## References on this machine
