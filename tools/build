@@ -6,6 +6,7 @@
 #                                             the shim in the framework jars, the library mapping. Without shards the list in native-runtime.jar is kept.
 #   tools/build overlay <native>              only the Robolectric overlay classes, into native-runtime.jar (its shim is kept)
 #   tools/build cfg <native>                  only bionic_translation's library mapping (after staging libraries)
+#   tools/build instrument <native>           only the framework jar instrumented ahead of time (also the last step of host, native and overlay)
 # Inputs: APKLAYER_BT (bionic_translation's build dir, default ~/bt-arm/bionic_translation/b), APKLAYER_ANDROID_LIBS (the staged Android libraries,
 # default ~/android-arm64/lib64), APKLAYER_BUILD (the meson build dir, default b). The javac shards are the framework's javac output
 # (~/los24/out/soong/.intermediates/frameworks/base/framework-minus-apex/android_common/javac/framework.jar<N>, copied here).
@@ -57,6 +58,7 @@ build_host() { # Call only while app JVMs are stopped; the previous build stays 
     # java.base members Android's native libraries look up (apklayer.host.JdkPatch): the JVM runs with --patch-module java.base=<native>/jdk-patch
     rm -rf "$native/jdk-patch"
     java -cp "$native/aosp/host-classes:$native/aosp/Robolectric_all.jar" apklayer.host.JdkPatch "$native/jdk-patch"
+    build_instrument "$native"
 }
 
 build_overlay() { # build_overlay <native> [dir with the shim and critical-natives.txt]: compile the tree Robolectric overlays, publish native-runtime.jar atomically
@@ -81,6 +83,18 @@ build_overlay() { # build_overlay <native> [dir with the shim and critical-nativ
     jar tf "$work/runtime.jar" | grep -qx 'native/linux/aarch64/libandroid_runtime.so' || die "native-runtime.jar has no shim"
     mv -f "$work/runtime.jar" "$native/native-runtime.jar"
     echo "Published $native/native-runtime.jar"
+}
+
+build_instrument() { # the framework jars instrumented once (apklayer.tools.PreInstrument), which app JVMs take while they are newer than their inputs (cli/env.cpp)
+    native="$(realpath "$1")"; out="$native/aosp/android-all-instrumented"
+    [ -d "$native/aosp/host-classes" ] || { echo "tools/build: no host classes yet, framework jar not instrumented"; return 0; }
+    rm -rf "$out" && mkdir -p "$out"
+    done_jar=""
+    for j in "$native"/aosp/android-all/*.jar; do  # the SDK provider names the jar twice (16 and current): hardlinks of one file, instrumented once
+        if [ -n "$done_jar" ] && [ "$j" -ef "$done_jar" ]; then ln "$out/$(basename "$done_jar")" "$out/$(basename "$j")"; continue; fi
+        java -cp "$native/native-runtime.jar:$native/aosp/host-classes:$native/aosp/sim-classes:$native/aosp/Robolectric_all.jar" apklayer.tools.PreInstrument "$j" "$out/$(basename "$j")"
+        done_jar="$j"
+    done
 }
 
 build_cfg() { # bionic_translation reads every file of <native>/share/bionic_translation/cfg.d and takes the first line naming a library
@@ -133,16 +147,18 @@ build_native() {
         zip -q -O "$j.new" "$j" native/linux/x86_64/libandroid_runtime.so native/linux/aarch64/libandroid_runtime.so && mv -f "$j.new" "$j"
     done)
     build_cfg "$native"
+    build_instrument "$native"
     echo "Staged the native runtime in $native"
 }
 
-[ $# -ge 2 ] || { sed -n '2,12p' "$0" >&2; exit 2; }
+[ $# -ge 2 ] || { sed -n '2,13p' "$0" >&2; exit 2; }
 step="$1"; shift
 case "$step" in
     bt) build_bt "$@";;
     host) build_host "$@";;
     native) build_native "$@";;
-    overlay) build_overlay "$@";;
+    overlay) build_overlay "$@"; build_instrument "$1";;
+    instrument) build_instrument "$@";;
     cfg) build_cfg "$@";;
     *) die "unknown step $step";;
 esac
