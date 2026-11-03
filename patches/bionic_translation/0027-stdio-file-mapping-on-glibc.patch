@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 3 Nov 2026 00:00:00 +0000
+Subject: [PATCH 27/27] apklayer: stdio-file-mapping-on-glibc
+
+apklayer patch 0027 of patches/bionic_translation (docs/PATCHES.md): the stdio functions that take a FILE (fprintf,
+vfprintf, fputs, fputc, fgets, fread, fclose ...) map bionic's three standard streams on glibc too. They were compiled only
+for musl; a bionic library built for an API before 23 passes &__sF[2] as stderr, and glibc aborts on it with "glibc detected
+an invalid stdio handle" (libc++abi's abort_message hid every uncaught C++ exception behind that, Joplin).
+---
+diff --git a/libc/libc-musl.c b/libc/libc-musl.c
+--- a/libc/libc-musl.c
++++ b/libc/libc-musl.c
+@@ -317,7 +317,11 @@
+ 	return aio_suspend(list, nent, timeout);
+ }
+ 
++#endif
++
+ /* the rest of functions that use FILE (see libc-stdio) */
++/* apklayer patch: also on glibc. A bionic library's stderr can be &__sF[2] (libc++abi's abort_message), and glibc's stdio
++ * aborts on that ("glibc detected an invalid stdio handle"): every function taking a FILE maps bionic's three streams. */
+ 
+ ssize_t bionic_getline(char **lineptr, size_t *n, FILE *stream)
+ {
+@@ -698,5 +702,3 @@
+ {
+ 	return fwide(bionic_file_to_glibc_file(stream), mode);
+ }
+-
+-#endif
