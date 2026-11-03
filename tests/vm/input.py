@@ -63,7 +63,7 @@ def keys(*steps):
 
 
 def locate(content_y):
-    return pixels.headers(instance.capture('locate'), 1, content_y=content_y)[0]
+    return pixels.active_window(instance.capture('locate'), content_y)
 
 
 def paste():

@@ -42,7 +42,7 @@ def input_steps(*steps):
 
 def capture(label):
     """The app window's screenshot and its dialog margin check (tests/vm/gpu-check-image.py)."""
-    run([sys.executable, 'tests/vm/gpu-check-image.py', '--app', str(instance.capture(label, PKG))])
+    run([sys.executable, 'tests/vm/gpu-check-image.py', str(instance.capture(label, PKG))])
 
 
 def dump(name):
