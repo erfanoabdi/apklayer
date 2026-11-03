@@ -3,9 +3,7 @@
 #include "apklayer/display.h"
 
 #include <errno.h>
-#include <poll.h>
 #include <pthread.h>
-#include <sys/inotify.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -118,37 +116,6 @@ out:
     return NULL;
 }
 
-/* Connects to the shell's socket; if it does not exist yet (the shell is starting) waits for it to appear, up to 5 s. */
-static int connect_shell(int fd, const struct sockaddr_un *a)
-{
-    int inotify = -1;
-    int64_t deadline = now_ns() + 5000000000LL;
-    for (;;) {
-        if (connect(fd, (const struct sockaddr *)a, sizeof *a) == 0) { if (inotify >= 0) close(inotify); return 0; }
-        if (errno != ENOENT && errno != ECONNREFUSED) break;
-        int64_t left = deadline - now_ns();
-        if (left <= 0) break;
-        if (inotify < 0) {
-            char dir[sizeof a->sun_path];
-            snprintf(dir, sizeof dir, "%s", a->sun_path);
-            char *slash = strrchr(dir, '/');
-            if (!slash) break;
-            *slash = 0;
-            inotify = inotify_init1(IN_CLOEXEC);
-            if (inotify < 0 || inotify_add_watch(inotify, dir, IN_CREATE | IN_MOVED_TO) < 0) break;
-            continue; /* the socket may have appeared before the watch: try again first */
-        }
-        struct pollfd p = { inotify, POLLIN, 0 };
-        if (poll(&p, 1, (int)(left / 1000000)) <= 0) break;
-        char ev[512];
-        if (read(inotify, ev, sizeof ev) < 0) break;
-    }
-    int e = errno;
-    if (inotify >= 0) close(inotify);
-    errno = e;
-    return -1;
-}
-
 static struct apklayer_display *display_open(const char *name, uint32_t width, uint32_t height,
                                              const struct apklayer_display_callbacks *callbacks, int headless)
 {
@@ -162,7 +129,8 @@ static struct apklayer_display *display_open(const char *name, uint32_t width, u
     const char *path = getenv("APKLAYER_SHELL"), *rt = getenv("XDG_RUNTIME_DIR");
     if (path) snprintf(a.sun_path, sizeof a.sun_path, "%s", path);
     else snprintf(a.sun_path, sizeof a.sun_path, "%s/apklayer/shell.sock", rt ? rt : "/tmp");
-    if (d->fd < 0 || connect_shell(d->fd, &a) < 0) { int e = errno; close(d->fd); free(d); errno = e; return NULL; }
+    /* the CLI starts the shell and returns once it listens (ensureShell): no waiting here */
+    if (d->fd < 0 || connect(d->fd, (const struct sockaddr *)&a, sizeof a) < 0) { int e = errno; close(d->fd); free(d); errno = e; return NULL; }
 
     char hello[4 + 128];
     int32_t pid = getpid();

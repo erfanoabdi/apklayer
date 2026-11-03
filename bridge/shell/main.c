@@ -63,6 +63,13 @@ int main(void)
     for (int i = 0; i < MAX_CLIENTS; i++) clients[i].fd = -1;
     int lfd = listen_socket(path);
     fprintf(stderr, "[shell] listening on %s\n", path);
+    const char *ready = getenv("APKLAYER_SHELL_READY_FD");  /* the launcher (cli ensureShell) waits on this pipe: clients may connect now */
+    if (ready) {
+        int rfd = atoi(ready);
+        if (write(rfd, "1", 1) < 0) fprintf(stderr, "[shell] readiness pipe: %s\n", strerror(errno));
+        close(rfd);
+        unsetenv("APKLAYER_SHELL_READY_FD");
+    }
 
     for (;;) {
         struct pollfd pfd[2 + CLIPBOARD_FDS + MAX_CLIENTS];
