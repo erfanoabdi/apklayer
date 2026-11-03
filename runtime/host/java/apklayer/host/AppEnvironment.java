@@ -64,13 +64,17 @@ final class AppEnvironment {
                 .put(ResourcesMode.Mode.class, ResourcesMode.Mode.NATIVE)
                 .put(Config.class, config)
                 .build();
+        StartTrace.mark("manifest and config read");
         sandbox.getTestEnvironment().setUpApplicationState("apklayer", configuration, manifest);
+        StartTrace.mark("robolectric application state set up");
         HostClock.alignToMonotonic();  // after the clock's reset by the state setup
         NativeProcess.install();
+        StartTrace.mark("native process installed");
         persistDataDirs();
         provideExternalStorage();
         provideNativeLibraryDir();
         if (!describing) initAppOpsWithoutApplication();
+        StartTrace.mark("data dirs, storage, library dir");
         HostKeyStore.install();  // apps open it in Application.onCreate (a call into keystore2 may create the lazy application: after its data dirs are persistent); needs the sandbox's shadows
     }
 
