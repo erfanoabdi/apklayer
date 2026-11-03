@@ -28,12 +28,30 @@ static const char *root(void)
     return r = buf;
 }
 
+/* An instance other than "default" has its own binder contexts: /dev/<name> is /dev/binderfs/<name>-<instance>
+ * (created by scripts/vm-binder-setup.sh <instance>), so two instances never share a servicemanager. */
+static bool binder_device(char **path)
+{
+    static const char *const names[] = { "binder", "hwbinder", "vndbinder", NULL };
+    const char *inst = getenv("APKLAYER_INSTANCE");
+    if (!inst || !inst[0] || !strcmp(inst, "default") || strncmp(*path, "/dev/", 5)) return false;
+    for (int i = 0; names[i]; i++) {
+        if (strcmp(*path + 5, names[i])) continue;
+        char *mapped;
+        if (asprintf(&mapped, "/dev/binderfs/%s-%s", names[i], inst) < 0) return false;
+        *path = mapped;
+        return true;
+    }
+    return false;
+}
+
 bool apklayer_apply_path_overrides(char **path)
 {
     const char *p = *path, *r = root();
     static int debug = -1;
     if (debug < 0) debug = getenv("APKLAYER_PATHS_DEBUG") != NULL;
     if (debug) fprintf(stderr, "[paths] %s (root %s)\n", p, r);
+    if (binder_device(path)) return true;
     if (!r[0] || p[0] != '/') return false;
     for (int i = 0; prefixes[i]; i++) {
         if (strncmp(p, prefixes[i], strlen(prefixes[i]))) continue;

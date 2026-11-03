@@ -29,7 +29,7 @@ Everything parked is listed in `docs/PLAN.md`.
 
 ## Test VM (UTM)
 Host and password: `tests/vm/local.conf` (untracked; `local.conf.example`). Ubuntu 26.04 arm64, GNOME Wayland, Venus Vulkan 1.4, virgl ES 3.0 (apklayer claims 3.2). Passwordless sudo.
-Repo copy `~/apklayer`, runtime `~/arm64-native`, libs `~/android-arm64`. After a reboot run `scripts/vm-binder-setup.sh`. `/tmp` is tmpfs: never put big files there.
+Repo copy `~/apklayer`, runtime `~/arm64-native`, libs `~/android-arm64`. After a reboot run `scripts/vm-binder-setup.sh [instance...]`. Parallel stacks: each named instance gets its own binder devices (`/dev/binderfs/binder-<id>`, mapped by `bridge/native/paths.c`); run with `APKLAYER_INSTANCE=<id>` plus a private `XDG_RUNTIME_DIR`/`XDG_STATE_HOME`/`XDG_DATA_HOME` and an absolute `WAYLAND_DISPLAY=/run/user/1000/wayland-0`. `/tmp` is tmpfs: never put big files there.
 Screenshots: `tests/vm/vmcapture.py`. Input: `tests/vm/uinput-keys.c`.
 
 ## References on this machine
