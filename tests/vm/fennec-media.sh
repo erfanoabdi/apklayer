@@ -9,11 +9,12 @@ cd "$(dirname "$0")/../.." || exit 1
 pkg=org.mozilla.fennec_fdroid; port=${PORT:-18091}; secs=${FENNEC_SECS:-40}
 work=$(mktemp -d "${XDG_STATE_HOME:-$HOME/.local/state}/fennec-media.XXXXXX"); trap 'rm -rf "$work"' EXIT
 cp tests/vm/www/video.html "$work/"
-prof=$(ls -d "${XDG_DATA_HOME:-$HOME/.local/share}/apklayer/apps/$pkg/data/app/files/mozilla/"*.default* 2>/dev/null | head -1)
+inst=${APKLAYER_INSTANCE:-default}; [ "$inst" = default ] && inst=0  # app data per instance (cli/layout.h)
+prof=$(ls -d "${XDG_DATA_HOME:-$HOME/.local/share}/apklayer/$inst/app-data/$pkg/app/files/mozilla/"*.default* 2>/dev/null | head -1)
 [ -n "$prof" ] || { echo "FAIL no Fennec profile yet (start Fennec once)"; exit 1; }
-# sound may autoplay (Android Gecko blocks it without a tap); Gecko's media logs go to the work dir (MOZ_LOG does not reach Gecko)
+# Gecko's media logs go to the work dir (MOZ_LOG does not reach Gecko)
 { grep -v 'fennec-media.sh' "$prof/user.js" 2>/dev/null
-  for p in '"media.autoplay.default", 0' "\"logging.config.LOG_FILE\", \"$work/gecko.log\"" '"logging.config.sync", true' \
+  for p in "\"logging.config.LOG_FILE\", \"$work/gecko.log\"" '"logging.config.sync", true' \
       '"logging.PlatformDecoderModule", 5' '"logging.MediaFormatReader", 4' '"logging.AndroidDecoderModule", 5' '"logging.FFmpegVideo", 5' \
       '"logging.FFmpegAudio", 5'; do echo "user_pref($p); // fennec-media.sh"; done; } > "$work/user.js" && cp "$work/user.js" "$prof/user.js"
 v="videotestsrc num-buffers=150 pattern=smpte horizontal-speed=4 ! video/x-raw,format=I420,width=320,height=240,framerate=30/1"
@@ -24,9 +25,11 @@ gst-launch-1.0 -q $v ! x264enc speed-preset=ultrafast ! video/x-h264,profile=mai
 (cd "$work" && exec python3 -m http.server "$port" --bind 127.0.0.1 > "$work/www.log" 2>&1) & web=$!
 url=${MEDIA_URL:-http://127.0.0.1:$port/video.html?src=t.webm,t.mp4&muted=1,0&run=$$}
 printf 'action=android.intent.action.VIEW\ndata=%s\ncomponent=org.mozilla.fenix.IntentReceiverActivity\n' "$url" > "$work/intent.properties"
-APKLAYER_INTENT_FILE="$work/intent.properties" APKLAYER_JOPTS="-Dapklayer.logcat=true -Dapklayer.runms=$(( (secs + 12) * 1000 ))" bin/apklayer run $pkg > "$work/run.out" 2>&1 &
+APKLAYER_TEST_INPUT=1 APKLAYER_INTENT_FILE="$work/intent.properties" APKLAYER_JOPTS="-Dapklayer.logcat=true -Dapklayer.runms=$(( (secs + 12) * 1000 ))" bin/apklayer run $pkg > "$work/run.out" 2>&1 &
 app=$!
-sleep "$secs"
+sleep $((secs / 2))  # then a tap in the page: sound plays only after a user gesture (Fenix blocks audible autoplay)
+python3 -c 'import sys; sys.path.insert(0, "tests/lib"); import instance; instance.inject(sys.argv[1], "tap:160,400")' $pkg > "$work/tap.out" 2>&1
+sleep $((secs - secs / 2))
 bin/apklayer screenshot $pkg "$work/a.png" > "$work/shot.out" 2>&1
 pw-dump 2>/dev/null > "$work/pw.json"
 sleep 2
@@ -54,11 +57,16 @@ PY
 ) || changed="0 0"
 read -r diff lit <<< "$changed"
 check "frames change between screenshots ($diff px differ, $lit px not black)" "$([ "${diff:-0}" -gt 2000 ] && echo 1)"
-streams=$(python3 - "$work/pw.json" <<'PY'
+streams=$(python3 - "$work/pw.json" "${APKLAYER_INSTANCE:-default}" <<'PY'
 import json, sys
-nodes = [o for o in json.load(open(sys.argv[1])) if o.get('type') == 'PipeWire:Interface:Node']
-print(sum(1 for n in nodes if (n.get('info', {}).get('props', {}).get('media.class') == 'Stream/Output/Audio'
-          and n['info'].get('state') == 'running' and 'apklayer' in json.dumps(n['info']['props']).lower())))
+objs = json.load(open(sys.argv[1]))
+def instance(pid):  # whose instance the PipeWire client is (each instance's audio HAL is a process of its own)
+    try: env = open('/proc/%s/environ' % pid, 'rb').read().split(b'\0')
+    except (OSError, TypeError): return None
+    return next((e[18:].decode() for e in env if e.startswith(b'APKLAYER_INSTANCE=')), 'default')
+clients = {o['id']: o['info']['props'].get('application.process.id') for o in objs if o.get('type') == 'PipeWire:Interface:Client'}
+print(sum(1 for o in objs if o.get('type') == 'PipeWire:Interface:Node' and o['info']['props'].get('media.class') == 'Stream/Output/Audio'
+          and o['info'].get('state') == 'running' and instance(clients.get(o['info']['props'].get('client.id'))) == sys.argv[2]))
 PY
 ) || streams=0
 check "PipeWire plays an output stream from the instance ($streams running)" "$([ "${streams:-0}" -gt 0 ] && echo 1)"

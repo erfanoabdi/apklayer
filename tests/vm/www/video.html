@@ -1,6 +1,7 @@
 <html><head><meta name="viewport" content="width=device-width"></head><body style="background:#fff;margin:0">
 <script>
 // ?src=a.webm,b.mp4&muted=1,0: one autoplaying looped <video> per file; each reports its state as a GET beacon (/r?src=..) once a second.
+// A tap anywhere plays them all (audible autoplay needs a user gesture).
 var q = new URLSearchParams(location.search), muted = (q.get('muted') || '').split(',');
 (q.get('src') || '').split(',').forEach(function(src, i) {
   var v = document.createElement('video'), ev = [];
@@ -8,6 +9,7 @@ var q = new URLSearchParams(location.search), muted = (q.get('muted') || '').spl
   document.body.appendChild(v);
   ['loadedmetadata', 'playing', 'error', 'stalled', 'waiting'].forEach(function(e) { v.addEventListener(e, function() { ev.push(e); }); });
   v.play().catch(function(e) { ev.push('play-rejected:' + e.name); });
+  document.addEventListener('click', function() { v.play().then(function() { ev.push('tap-play'); }, function(e) { ev.push('tap-rejected:' + e.name); }); });
   setInterval(function() {
     var e = v.error, p = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {};
     new Image().src = '/r?src=' + src + '&t=' + v.currentTime.toFixed(2) + '&w=' + v.videoWidth + '&h=' + v.videoHeight + '&rs=' + v.readyState +
