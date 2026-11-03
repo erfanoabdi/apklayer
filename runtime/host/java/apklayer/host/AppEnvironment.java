@@ -64,9 +64,12 @@ final class AppEnvironment {
                 .put(ResourcesMode.Mode.class, ResourcesMode.Mode.NATIVE)
                 .put(Config.class, config)
                 .build();
+        StartTrace.mark("manifest and config read");
         sandbox.getTestEnvironment().setUpApplicationState("apklayer", configuration, manifest);
+        StartTrace.mark("robolectric application state set up");
         HostClock.alignToMonotonic();  // after the clock's reset by the state setup
         NativeProcess.install();
+        StartTrace.mark("native process installed");
         persistDataDirs();
         provideExternalStorage();
         provideNativeLibraryDir();

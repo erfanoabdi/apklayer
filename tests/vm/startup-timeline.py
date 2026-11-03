@@ -16,7 +16,7 @@ for path in sys.argv[3:]:  # the hub launcher's lines (its log, not the app's ou
         if m:
             steps.append((int(m.group(1)), m.group(2).strip()))
 start = next(t for t, s in steps if s.startswith('run '))
-steps = sorted((t, s) for t, s in steps if t >= start)
+steps = sorted(((t, s) for t, s in steps if t >= start), key=lambda e: e[0])  # stable: same-millisecond steps keep their printed order
 # the shell prints seconds modulo 1000 with milliseconds: the first frame at or after the start
 base = start // 1000000 * 1000000
 for line in open(sys.argv[2], errors='replace'):
@@ -29,6 +29,6 @@ for line in open(sys.argv[2], errors='replace'):
             steps.append((t, 'first frame (shell)'))
             break
 prev = start
-for t, s in sorted(steps):
+for t, s in sorted(steps, key=lambda e: e[0]):
     print('%7d ms  (+%6d)  %s' % (t - start, t - prev, s))
     prev = t
