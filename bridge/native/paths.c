@@ -64,13 +64,26 @@ static bool storage_path(char **path)
     return false;
 }
 
+/* The rest of /data is the instance's ($APKLAYER_DATA, cli/layout: seeded from the Android root's data/): keystore2's database and other state
+ * never land in the native directory that all instances share. */
+static bool data_path(char **path)
+{
+    static const char *data;
+    if (!data) data = getenv("APKLAYER_DATA") ? getenv("APKLAYER_DATA") : "";
+    if (!data[0] || strncmp(*path, "/data", 5) || ((*path)[5] && (*path)[5] != '/')) return false;
+    char *mapped;
+    if (asprintf(&mapped, "%s%s", data, *path + 5) < 0) return false;
+    *path = mapped;
+    return true;
+}
+
 bool apklayer_apply_path_overrides(char **path)
 {
     const char *p = *path, *r = root();
     static int debug = -1;
     if (debug < 0) debug = getenv("APKLAYER_PATHS_DEBUG") != NULL;
     if (debug) fprintf(stderr, "[paths] %s (root %s)\n", p, r);
-    if (binder_device(path) || storage_path(path)) return true;
+    if (binder_device(path) || storage_path(path) || data_path(path)) return true;
     if (!r[0] || p[0] != '/') return false;
     for (int i = 0; prefixes[i]; i++) {
         if (strncmp(p, prefixes[i], strlen(prefixes[i]))) continue;
