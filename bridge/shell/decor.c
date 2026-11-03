@@ -7,13 +7,16 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include "viewporter-client-protocol.h"
 
 static struct wl_compositor *compositor;
 static struct wl_subcompositor *subcompositor;
 static struct wl_shm *shm;
+static struct wp_viewporter *viewporter;
 
-void decor_setup(struct wl_compositor *c, struct wl_subcompositor *sc, struct wl_shm *s)
+void decor_setup(struct wl_compositor *c, struct wl_subcompositor *sc, struct wl_shm *s, struct wp_viewporter *vp)
 {
+    viewporter = vp;
     compositor = c;
     subcompositor = sc;
     shm = s;
@@ -29,6 +32,7 @@ void decor_create(struct decor *d, struct wl_surface *parent)
     d->sub = wl_subcompositor_get_subsurface(subcompositor, d->surface, parent);
     wl_subsurface_set_position(d->sub, 0, -DECOR_H);
     wl_subsurface_set_desync(d->sub); /* the bar redraws independently of app frames */
+    if (viewporter) d->viewport = wp_viewporter_get_viewport(viewporter, d->surface);
 }
 
 static int button_x(int lw, int which)
@@ -56,7 +60,7 @@ void decor_update(struct decor *d, int logical_w, int scale, int maximized, int 
         && d->hover == hover && d->focused == focused)
         return;
     int s = scale > 0 ? scale : 100;
-    int pw = logical_w * s / 100, ph = DECOR_H * s / 100;
+    int pw = (logical_w * s + 99) / 100, ph = (DECOR_H * s + 99) / 100;  /* buffer pixels at the window's scale, never logical ones */
     size_t len = (size_t)pw * ph * 4;
     if (!d->buffer || d->lw != logical_w || d->scale != scale) { /* new size: new pool + buffer */
         int fd = memfd_create("apklayer-decor", MFD_CLOEXEC);
@@ -72,14 +76,15 @@ void decor_update(struct decor *d, int logical_w, int scale, int maximized, int 
         d->buffer = buf;
         d->map = map;
         d->map_len = len;
-        wl_surface_set_buffer_scale(d->surface, (s + 50) / 100);
+        if (d->viewport) wp_viewport_set_destination(d->viewport, logical_w, DECOR_H);
+        else wl_surface_set_buffer_scale(d->surface, (s + 50) / 100);  /* shortcut: exact at integer scales only (no wp_viewporter) */
     }
     d->lw = logical_w;
     d->scale = scale;
     d->maximized = maximized;
     d->hover = hover;
     d->focused = focused;
-    decor_draw(d->map, pw, ph, logical_w, s, maximized, hover, focused, d->title, d->dark, button_x);
+    decor_draw(d->map, pw, ph, logical_w, maximized, hover, focused, d->title, d->dark, button_x);
     wl_surface_attach(d->surface, d->buffer, 0, 0);
     wl_surface_damage_buffer(d->surface, 0, 0, pw, ph);
     wl_surface_commit(d->surface);
@@ -99,6 +104,7 @@ void decor_destroy(struct decor *d)
 {
     if (d->buffer) wl_buffer_destroy(d->buffer);
     if (d->map) munmap(d->map, d->map_len);
+    if (d->viewport) wp_viewport_destroy(d->viewport);
     if (d->sub) wl_subsurface_destroy(d->sub);
     if (d->surface) wl_surface_destroy(d->surface);
     memset(d, 0, sizeof *d);

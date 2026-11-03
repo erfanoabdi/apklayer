@@ -36,7 +36,29 @@ static void seat_name(void *d, struct wl_seat *st, const char *n)
 { (void)d; (void)st; (void)n; }
 static const struct wl_seat_listener seat_listener = { .capabilities = seat_caps, .name = seat_name };
 
-/* ---- output: integer scale feeds CONFIGURE (P2 HiDPI) ---- */
+/* ---- outputs: every wl_output is tracked (a VM's display change replaces its output); the largest scale and size are the fallback
+ * for compositors without wp_fractional_scale_v1 and configure_bounds ---- */
+
+struct wp_viewporter *viewporter;
+struct wp_fractional_scale_manager_v1 *fscale_mgr;
+#define MAX_OUTPUTS 8
+static struct out { struct wl_output *o; uint32_t name; int w, h, scale; } outs[MAX_OUTPUTS];
+
+static void outputs_changed(void)
+{
+    int scale = 0, mw = 0, mh = 0;
+    for (int i = 0; i < MAX_OUTPUTS; i++) {
+        if (!outs[i].o) continue;
+        int s = outs[i].scale > 0 ? outs[i].scale : 1;
+        if (s * 100 > scale) scale = s * 100;
+        if (outs[i].w / s * (outs[i].h / s) > mw * mh) { mw = outs[i].w / s; mh = outs[i].h / s; }
+    }
+    output_scale = scale ? scale : 100;
+    output_mode_w = mw;
+    output_mode_h = mh;
+    for (int i = 0; i < MAX_WINDOWS; i++)   /* windows without a per-surface preferred scale follow the outputs */
+        if (windows[i].client && !windows[i].pref_scale) window_scale_changed(&windows[i], 0);
+}
 
 static void out_geometry(void *d, struct wl_output *o, int32_t x, int32_t y, int32_t pw,
                          int32_t ph, int32_t sub, const char *make, const char *model,
@@ -45,12 +67,13 @@ static void out_geometry(void *d, struct wl_output *o, int32_t x, int32_t y, int
 static void out_mode(void *d, struct wl_output *o, uint32_t f, int32_t w, int32_t h,
                      int32_t refresh)
 {
-    (void)d; (void)o;
+    (void)o;
+    struct out *out = d;
     if ((f & WL_OUTPUT_MODE_CURRENT) && refresh > 0) output_refresh_mhz = refresh;
-    if (f & WL_OUTPUT_MODE_CURRENT) { output_mode_w = w; output_mode_h = h; }
+    if (f & WL_OUTPUT_MODE_CURRENT) { out->w = w; out->h = h; }
 }
 static void out_scale(void *d, struct wl_output *o, int32_t s)
-{ (void)d; (void)o; output_scale = s * 100; }
+{ (void)o; ((struct out *)d)->scale = s; }
 static void out_done(void *d, struct wl_output *o)
 {
     (void)d; (void)o;
@@ -59,14 +82,7 @@ static void out_done(void *d, struct wl_output *o)
         told_refresh = output_refresh_mhz;
         for (int i = 0; i < MAX_CLIENTS; i++) send_msg(&clients[i], MSG_DISPLAY, &(int32_t){ output_refresh_mhz }, 1);
     }
-    /* Scale changed (HiDPI, or moved to another output): tell every app so it re-renders. */
-    for (int i = 0; i < MAX_WINDOWS; i++) {
-        struct window *w = &windows[i];
-        if (!w->client || !w->configured || w->told_scale == output_scale) continue;
-        int32_t v[4] = { W_ID(w), w->w * 100 / w->scale, w->h * 100 / w->scale, output_scale };
-        w->told_scale = output_scale;
-        send_msg(W_TARGET(w), MSG_CONFIGURE, v, 4);
-    }
+    outputs_changed();
 }
 static const struct wl_output_listener out_listener = {
     .geometry = out_geometry, .mode = out_mode, .done = out_done, .scale = out_scale };
@@ -99,18 +115,33 @@ static void registry(void *d, struct wl_registry *r, uint32_t name, const char *
     else if (!strcmp(iface, wl_shm_interface.name))
         shm = wl_registry_bind(r, name, &wl_shm_interface, 1);
     else if (!strcmp(iface, xdg_wm_base_interface.name)) {
-        wm_base = wl_registry_bind(r, name, &xdg_wm_base_interface, 1);
+        wm_base = wl_registry_bind(r, name, &xdg_wm_base_interface, ver < 4 ? ver : 4);  /* v4: configure_bounds */
         xdg_wm_base_add_listener(wm_base, &wm_listener, NULL);
     } else if (!strcmp(iface, wl_seat_interface.name) && !seat) {
         /* v5: pointer frame/axis events; every listener slot is filled. */
         seat = wl_registry_bind(r, name, &wl_seat_interface, ver < 5 ? ver : 5);
         wl_seat_add_listener(seat, &seat_listener, NULL);
-    } else if (!strcmp(iface, wl_output_interface.name) && !output) {
-        output = wl_registry_bind(r, name, &wl_output_interface, ver < 2 ? ver : 2); /* scale/done */
-        wl_output_add_listener(output, &out_listener, NULL);
-    }
+    } else if (!strcmp(iface, wl_output_interface.name)) {
+        for (int i = 0; i < MAX_OUTPUTS; i++)
+            if (!outs[i].o) {
+                outs[i] = (struct out){ wl_registry_bind(r, name, &wl_output_interface, ver < 2 ? ver : 2), name, 0, 0, 1 }; /* scale/done */
+                wl_output_add_listener(outs[i].o, &out_listener, &outs[i]);
+                break;
+            }
+    } else if (!strcmp(iface, wp_viewporter_interface.name))
+        viewporter = wl_registry_bind(r, name, &wp_viewporter_interface, 1);
+    else if (!strcmp(iface, wp_fractional_scale_manager_v1_interface.name))
+        fscale_mgr = wl_registry_bind(r, name, &wp_fractional_scale_manager_v1_interface, 1);
 }
 static void registry_rm(void *d, struct wl_registry *r, uint32_t n)
-{ (void)d; (void)r; (void)n; }
+{
+    (void)d; (void)r;
+    for (int i = 0; i < MAX_OUTPUTS; i++)
+        if (outs[i].o && outs[i].name == n) {
+            wl_output_destroy(outs[i].o);
+            outs[i] = (struct out){ 0 };
+            outputs_changed();
+        }
+}
 const struct wl_registry_listener registry_listener = { registry, registry_rm };
 

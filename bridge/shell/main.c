@@ -10,9 +10,8 @@ struct wp_cursor_shape_manager_v1 *cursor_mgr;
 struct wl_shm *shm;
 struct xdg_wm_base *wm_base;
 struct wl_seat *seat;
-struct wl_output *output;
 int output_refresh_mhz = 60000;
-int output_mode_w, output_mode_h;                /* the output's current mode height in pixels, 0 until known */
+int output_mode_w, output_mode_h;  /* logical size of the largest output, 0 until known */
 int output_scale = 100;            /* percent: 100 = 1x, 200 = 2x (P2 HiDPI) */
 struct window windows[MAX_WINDOWS];
 struct window *pointer_focus, *keyboard_focus;
@@ -58,7 +57,7 @@ int main(void)
     wl_registry_add_listener(reg, &registry_listener, NULL);
     wl_display_roundtrip(display);
     wl_display_roundtrip(display); /* bound wl_output objects deliver their initial mode/scale */
-    decor_setup(compositor, subcompositor, shm);
+    decor_setup(compositor, subcompositor, shm, viewporter);
     if (!compositor || !shm || !wm_base) { fprintf(stderr, "[shell] missing Wayland globals\n"); return 1; }
 
     clipboard_init();

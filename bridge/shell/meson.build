@@ -4,7 +4,6 @@ wl_protos_dep = dependency('wayland-protocols', required: host_machine.system() 
 cairo_dep = dependency('cairo', required: host_machine.system() == 'linux')
 xkb_dep = dependency('xkbcommon', required: host_machine.system() == 'linux')
 wl_cursor_dep = dependency('wayland-cursor', required: host_machine.system() == 'linux')
-cairo_dep = dependency('cairo', required: host_machine.system() == 'linux')
 scanner = find_program('wayland-scanner', required: host_machine.system() == 'linux')
 if wl_client_dep.found() and wl_protos_dep.found() and xkb_dep.found() and cairo_dep.found() and scanner.found()
   protodir = wl_protos_dep.get_variable(pkgconfig: 'pkgdatadir')
@@ -15,6 +14,8 @@ if wl_client_dep.found() and wl_protos_dep.found() and xkb_dep.found() and cairo
     'text-input-v3': protodir / 'unstable/text-input/text-input-unstable-v3.xml',
     'tablet-v2': protodir / 'unstable/tablet/tablet-unstable-v2.xml',
     'linux-dmabuf-v1': protodir / 'stable/linux-dmabuf/linux-dmabuf-v1.xml',
+    'viewporter': protodir / 'stable/viewporter/viewporter.xml',  # buffers of any scale shown at the window's logical size
+    'fractional-scale-v1': protodir / 'staging/fractional-scale/fractional-scale-v1.xml',  # the compositor's preferred (fractional) scale per surface
   }
   generated = []
   foreach name, xml : protocols
@@ -28,7 +29,7 @@ if wl_client_dep.found() and wl_protos_dep.found() and xkb_dep.found() and cairo
       command: [scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
   endforeach
   executable('apklayer-shell',
-    ['main.c', 'client.c', 'window.c', 'pointer.c', 'keyboard.c', 'registry.c', 'clipboard.c', 'textinput.c', 'touch.c', 'decor.c', 'decor_draw.c', 'appinfo.c', 'dmabuf.c', 'splash.c', 'vsync.c', 'testinput.c', generated],
+    ['main.c', 'client.c', 'window.c', 'geometry.c', 'pointer.c', 'keyboard.c', 'registry.c', 'clipboard.c', 'textinput.c', 'touch.c', 'decor.c', 'decor_draw.c', 'appinfo.c', 'dmabuf.c', 'splash.c', 'vsync.c', 'testinput.c', generated],
     dependencies: [cairo_dep, wl_client_dep, wl_cursor_dep, xkb_dep, meson.get_compiler('c').find_library('m')],  # hypot (splash.c): glibc 2.39 (Ubuntu 24.04) does not pull libm in by itself
     c_args: ['-Werror=incompatible-pointer-types', '-Werror=implicit-function-declaration'],
     install: false)
