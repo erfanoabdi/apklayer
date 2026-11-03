@@ -170,6 +170,7 @@ final class AppEnvironment {
         info.applicationInfo = new android.content.pm.ApplicationInfo();
         info.applicationInfo.packageName = "android";
         info.applicationInfo.flags = android.content.pm.ApplicationInfo.FLAG_SYSTEM;
+        info.applicationInfo.uid = android.os.Process.SYSTEM_UID;  // a provider checks that a caller naming "android" is uid 1000 (the hub, HubBootSettings)
         org.robolectric.shadows.ShadowPackageManager pm = Shadow.extract(app.getPackageManager());
         pm.installPackage(info);
         // the app's own package carries its APK's certificate (apps compare their own and callers' signing certificates)

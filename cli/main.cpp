@@ -14,6 +14,7 @@ int usage() {
           "  run <package|app.apk>  run an installed app (an .apk path is installed first)\n"
           "  list                   installed apps\n"
           "  uninstall <package>    remove an app and its data\n"
+          "  ime enable|disable <package>  let the app's input method be used (from the instance's next start)\n"
           "  screenshot <package|stack> <out.png>  PNG of the app's window as SurfaceFlinger composes it\n"
           "  stop                   stop the instance's Android services (apps end with them)\n"
           "  env                    print the environment of Android's processes\n",
@@ -42,6 +43,7 @@ int main(int argc, char** argv) {
     if (cmd == "wait" && n == 2 && args[1] == "hub") return waitHub(layout, inst);
     if (cmd == "list") { listApps(layout); return 0; }
     if (cmd == "uninstall" && n == 2) { uninstallApp(layout, args[1]); return 0; }
+    if (cmd == "ime" && n == 3) return inputMethod(layout, inst, args[1], args[2]);
     if (cmd == "screenshot" && n == 3) return screenshot(layout, inst, args[1], args[2]);
     if (cmd == "stop") { stopStack(layout, inst); return 0; }
     if (cmd == "stack-daemon") return runStackDaemon(layout, inst);
