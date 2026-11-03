@@ -41,4 +41,5 @@ esac
 set -- "$here/$1"/*.patch
 if [ -f "$1" ]; then series "$tree" "$@"; exit 0; fi
 root="$(dirname "$1")"
+[ -d "$root" ] || { echo "patches/apply: no directory $root" >&2; exit 1; }
 find "$root" -name '*.patch' -exec dirname {} \; | sort -u | while read -r d; do series "$tree/${d#$root/}" "$d"/*.patch; done

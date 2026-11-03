@@ -18,7 +18,10 @@ if [ "$gcc_major" -lt 12 ] 2>/dev/null; then
 fi
 if ! grep -q 'Elf64_Relr' /usr/include/elf.h 2>/dev/null; then cflags="$cflags -include $compat/include/relr-compat.h"; cxxflags="$cxxflags -include $compat/include/relr-compat.h"; fi
 unwind="$(pkg-config --modversion libunwind 2>/dev/null || echo 0)"
-case "$unwind" in 0|1.[0-7]*) "$patches/apply" "$compat/libunwind-before-1.8.patch" "$src";; esac
+case "$unwind" in 0|1.[0-7]*) # one call each: a copy may have meson.build reset (scripts/stage-x86_64.sh) and keep linker.c
+    "$patches/apply" "$compat/libunwind-before-1.8-meson.patch" "$src"
+    "$patches/apply" "$compat/libunwind-before-1.8-weak-phdr.patch" "$src";;
+esac
 rm -rf "$build"
 CFLAGS="$cflags" CXXFLAGS="$cxxflags" meson setup "$build" "$src" >/dev/null
 ninja -C "$build"
