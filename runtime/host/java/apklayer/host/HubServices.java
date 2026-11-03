@@ -31,19 +31,19 @@ final class HubServices {
         String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
         if (target == null) return false;
         if (!target.equals(context.getPackageName())) return true;
-        // a service of the app's own package that runs in its own process (android:process, isolatedProcess: GeckoView's child processes) gets that process, hosted through the hub
-        if (intent.getComponent() == null || Boolean.getBoolean("apklayer.componenthost")) return false;
-        try {
-            android.content.pm.ServiceInfo info = context.getPackageManager().getServiceInfo(intent.getComponent(), 0);
-            return (info.flags & android.content.pm.ServiceInfo.FLAG_ISOLATED_PROCESS) != 0 || (info.processName != null && !info.processName.equals(context.getPackageName()));
-        } catch (android.content.pm.PackageManager.NameNotFoundException | RuntimeException unknown) { return false; }
+        // a service of the app's own package that runs in another process (android:process, isolatedProcess: GeckoView's child processes) gets that process, hosted through the hub
+        return ownProcess(context, intent) != null;
     }
     /** The process of an own-package service that has one of its own (each GeckoView child is a process): its own hub peer, as an isolated instance is. Null for the app's process. */
     private static String ownProcess(Context context, Intent intent) {
         if (intent.getComponent() == null || !intent.getComponent().getPackageName().equals(context.getPackageName())) return null;
         try {
             android.content.pm.ServiceInfo info = context.getPackageManager().getServiceInfo(intent.getComponent(), 0);
-            return (info.flags & android.content.pm.ServiceInfo.FLAG_ISOLATED_PROCESS) != 0 || (info.processName != null && !info.processName.equals(context.getPackageName())) ? info.name : null;
+            // as ActivityManagerService: the service runs here only when its process is this one (a component host is the process of its own
+            // service: GeckoView's tab process binds MediaManager of ":media", which must not run inside the tab)
+            String here = System.getProperty("apklayer.processname", context.getPackageName());
+            String process = info.processName != null ? info.processName : context.getPackageName();
+            return (info.flags & android.content.pm.ServiceInfo.FLAG_ISOLATED_PROCESS) != 0 || !process.equals(here) ? info.name : null;
         } catch (android.content.pm.PackageManager.NameNotFoundException | RuntimeException unknown) { return null; }
     }
     /** One handler, as ContextImpl passes the main thread's: LoadedApk refuses a connection bound again with another one. */

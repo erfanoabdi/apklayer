@@ -59,6 +59,7 @@ public final class Services {
             cn = new ComponentName(ri.serviceInfo.packageName, ri.serviceInfo.name);
         }
         if (!cn.getPackageName().equals(ctx.getPackageName())) return null;
+        if (HubServices.external(ctx, new Intent(intent).setComponent(cn))) return null;  // declared in another process (android:process): the hub hosts it there
         try {
             Class.forName(className(cn), false, Services.class.getClassLoader()).asSubclass(Service.class);
             return cn;
