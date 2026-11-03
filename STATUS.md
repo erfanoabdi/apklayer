@@ -2,30 +2,25 @@
 
 Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan: `docs/PLAN.md`. History: `CHANGELOG.md`.
 
-## 2026-10-29 night summary
-- Fennec starts, loads pages, content processes run; page area still white (WebRender gets no transaction): see docs/PLAN.md item 1 and the tools in tests/vm (fennec-view.sh, egl-trace.bt).
-- tests/apps/hello-system + tests/vm/system-apps.sh: 10 of 11 system-service checks pass (media open). Hub groups rerun: pass.
-- Conversations starts; Device Info HW and Puzzles are licence/anti-piracy gated; Joplin: JS idle, white window (the exit abort was a red herring, fixed anyway, bt step 17).
-- x86_64: docs/X86_64.md, `tools/stage x86_64` (libs, root, bt, shards); natives compile for x86_64. The x86_64 build of vendor/apklayer modules was still running in ~/los24 (log ~/apklayer-x86-build.log in OrbStack); when done rerun `tools/stage x86_64`, then `m libeffectconfig libcodec2_hidl_plugin_stub` for x86_64. Afterwards check arm64 with a no-op `m libapklayer_egl`.
-- Not started: real keystore2/KeyMint, Google apps retest, OpenTTD, Unciv/Lemuroid/Rocks black windows.
-
-## NEXT TASKS (2026-10-28 night: items 1-7 of the previous list were worked through; what is left is below)
-0. **Done this morning, not in the list below**: DocumentsUI works (volumes: Internal storage = primary, Home, Linux root per instance; opening a file in another app with its grant; `tests/vm/files.sh`, `tests/vm/view.sh`). Open from it: which volumes ordinary apps reach, storage permission rules, the real MediaProvider (`docs/PLAN.md` "Storage volumes").
-1. **Corpus** (`tests/corpus/results.md`: 14 of 20 apps reach a steady GPU picture, up from 11): fix the remaining causes listed in `docs/PLAN.md` (Nextcloud, Telegram, WhatsApp, OTR2 under the WebView route, WireGuard, drminfo); add one app per engine (Unity, UE4, Godot, cocos2d-x, Flutter) when APKs are available.
-2. **Settings provider**: the tree's SettingsProvider starts but `Settings.*` still use Robolectric's in-memory fakes (`-Dapklayer.realsettings=true` switches them off; the provider then fails in its settings migration). UserDictionaryProvider inserts return null. Calendar/Download providers untested.
-3. **Camera** is not implemented (no camera HAL; apps see no camera). Also not done: attestation/KeyInfo for the Keystore, `GeoClue` accuracy (needs an agent), `tests/run texture-view` (black on the UTM VM), `tests/run audio-aidl` (left channel check).
-4. **Before release**: COMMERCIAL.md terms, CLA, NOTICE files, per-app sandbox, x86_64 Android libraries (needs approval for a second `out/`), Flatpak.
-Everything parked is listed in `docs/PLAN.md`.
-
-## State (2026-10-28)
-- Works: UiBench (GPU, input, dialogs, resize), WebView, TextureView/SurfaceView, native games (OTR2 renders), media and audio through the real services, the instance hub
-  (services, broadcasts, providers, activities, notifications, pending intents). Verified on the UTM VM this session: gpu smoke, native-surface, native-media, codec2, binder,
-  services, broadcasts, providers; activities, notifications and pending intents pass phase by phase but flake when run back to back (the hang in item 1).
-- Known failing, not from this work: native-player (audio HAL stream open), texture-view (black on the UTM VM), webview (no provider on the VM), `hub-services.sh auto`.
+## State (2026-11-03)
+- Runs on the device-library route with per-app class loaders and linker namespaces, the real MediaProvider/SettingsProvider/keystore2, the instance hub
+  (services, broadcasts, providers, activities, notifications, pending intents, accounts). Instances run side by side (own binder devices, /data, /storage, shell).
+- Tests: `tests/run [-j N] [group...]` (tests/groups.toml): 37 of 39 groups pass 4 at a time on the UTM VM; vulkan-present (Venus host driver) and audio-aidl
+  (left-channel check) fail on that host. Corpus: `python3 tests/corpus/run.py <app>` (local `tests/corpus/apps.txt`, see apps.example.txt); 16 of 17 apps checked today pass.
+- Upstream edits are patch files only: patches/bionic_translation (0001-0028), patches/robolectric (0001-0015, staged sources in <native>/aosp/robolectric-src),
+  patches/aosp (frameworks/native 0001-0005, av, base, libnativehelper, hardware/interfaces), applied by `patches/apply`. Build: meson + `tools/`.
 - CLI: C++ tool in `cli/` (`bin/apklayer` execs it): `install | run | list | uninstall | stop | hub | component-host | wait hub | env | screenshot <package|stack> <out.png>` (SurfaceFlinger capture of one app window, per instance); test helpers `stack <lib>` and `exec <lib>`.
   State and logs: `~/.local/state/apklayer/<instance>/`. Apps: `~/.local/share/apklayer/apps/<pkg>`.
-- Build: `meson setup b && ninja -C b` (g++), `tools/build host ~/arm64-native` (`tools/build bt|native|overlay|cfg` for the rest), `tools/fetch-deps.sh`. Run on the VM:
+- Build: `meson setup b && ninja -C b` (g++), `tools/build bt|host|native|overlay|cfg <native>`, `tools/fetch-deps.sh`. Run on the VM:
   `XDG_RUNTIME_DIR=/run/user/1000 ~/apklayer/bin/apklayer run <package>`.
+
+## NEXT TASKS
+Open work is in `docs/PLAN.md` (sections "After the 2026-11-03 round", "Systematic compatibility", "Fennec"). In order:
+1. Permission identity: oneway callers pass permission checks and every account is visible to every app (shortcuts in HubProviders/HubAccounts); per-app Linux uids or a carried sender uid.
+2. The hub as system settings writer (LOCATION_MODE, ENABLED_INPUT_METHODS); android_id stability across launches; app data per instance in one data home.
+3. Apps: OpenTTD (GLES1 on a host without it), Unciv (draws nothing), Lemuroid (WorkManager lock), TIC-80 (lazy_find_class), Joplin (2 frames); camera HAL (none).
+4. Startup: Robolectric setup and font copy per JVM, keystore2 probe, CDS.
+5. Before release: x86_64 PC run, Flatpak, COMMERCIAL.md terms, CLA, per-app sandbox.
 
 ## Test VM (UTM)
 Host and password: `tests/vm/local.conf` (untracked; `local.conf.example`). Ubuntu 26.04 arm64, GNOME Wayland, Venus Vulkan 1.4, virgl ES 3.0 (apklayer claims 3.2). Passwordless sudo.
