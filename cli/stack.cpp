@@ -73,12 +73,18 @@ bool propertyIs(const Layout& l, const NativeEnv& ne, const char* name, const ch
 
 bool waitReady(const Layout& l, const NativeEnv& ne, int deathPidfd) { return waitForProperty(l, ne, kReadyProperty, "1", deathPidfd); }
 
+}  // namespace
+
 bool alive(int pid) { return pid > 0 && kill(pid, 0) == 0; }
 
 // SIGTERM, then wait for the exit on a pidfd (SIGKILL after 5 s): `stop` returns with the processes gone.
 void terminate(int pid) {
     if (!alive(pid)) return;
-    if (auto cmd = readFile("/proc/" + std::to_string(pid) + "/cmdline"); !cmd || cmd->find("apklayer") == std::string::npos) return;  // a recycled pid is not ours
+    // a recycled pid is not ours: every process apklayer starts carries APKLAYER_INSTANCE (its command line may be an Android process name)
+    if (auto env = readFile("/proc/" + std::to_string(pid) + "/environ"); !env || env->find("APKLAYER_INSTANCE=") == std::string::npos) {
+        auto cmd = readFile("/proc/" + std::to_string(pid) + "/cmdline");
+        if (!cmd || cmd->find("apklayer") == std::string::npos) return;
+    }
     int fd = pidfdOpen(pid);
     kill(pid, SIGTERM);
     pollfd p{fd, POLLIN, 0};
@@ -88,7 +94,6 @@ void terminate(int pid) {
     }
     if (fd >= 0) close(fd);
 }
-}  // namespace
 
 void setProperty(const Layout& l, const NativeEnv& ne, const char* name, const char* value) {
     Spawn set;
@@ -183,9 +188,13 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     stageManifest(inst, l, staged(l, "libapklayer_keymint.so"), "apklayer-keymint.xml", "aosp/hals/security/manifest.xml");
     stageManifest(inst, l, staged(l, "libapklayer_keystore2.so"), "apklayer-keystore2.xml", "aosp/hals/security/keystore2-manifest.xml", "system");  // a framework HAL: keystore2 may register its service
     std::vector<std::string> propFiles = {join(l.root, "bridge/native/apklayer.prop"), join(n, "android-root/props/system_build.prop")};
+    // the instance's own overrides (`apklayer prop set`): first, as ro.* is write-once (and the fingerprint is derived from them), and again last, as
+    // every other property keeps the last value loaded
+    if (exists(inst.propOverrides())) { propFiles.insert(propFiles.begin(), inst.propOverrides()); propFiles.push_back(inst.propOverrides()); }
     setDerivedProperties(l, ne, propFiles);
     Spawn prop;
-    prop.argv = {join(n, "bin/aprop"), "load", propFiles[0], propFiles[1]};
+    prop.argv = {join(n, "bin/aprop"), "load"};
+    prop.argv.insert(prop.argv.end(), propFiles.begin(), propFiles.end());
     prop.env = ne.env;
     prop.logFile = join(inst.logs(), "aprop.log");
     runAndWait(prop);

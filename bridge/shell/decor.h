@@ -16,6 +16,7 @@ enum { DECOR_NONE = -1, DECOR_BAR = 0, DECOR_BACK, DECOR_MIN, DECOR_MAX, DECOR_C
 struct decor {
     struct wl_surface *surface;
     struct wl_subsurface *sub;
+    struct wp_viewport *viewport;
     struct wl_buffer *buffer;
     void *map;
     size_t map_len;
@@ -24,7 +25,9 @@ struct decor {
     char title[64];
 };
 
-void decor_setup(struct wl_compositor *c, struct wl_subcompositor *sc, struct wl_shm *shm);
+struct wp_viewporter;
+/* vp: wp_viewporter or NULL; with it the bar is drawn at any scale (fractional included) and shown at DECOR_H logical pixels */
+void decor_setup(struct wl_compositor *c, struct wl_subcompositor *sc, struct wl_shm *shm, struct wp_viewporter *vp);
 void decor_create(struct decor *d, struct wl_surface *parent);
 /* Redraws and commits the bar if anything it shows changed. scale is in percent. */
 void decor_update(struct decor *d, int logical_w, int scale, int maximized, int hover, int focused);
@@ -33,7 +36,7 @@ int decor_hit(const struct decor *d, int x, int y);
 void decor_set_title(struct decor *d, const char *title);
 /* decor_draw.c: Adwaita-style drawing; decor_dark() = the desktop prefers the dark scheme */
 int decor_dark(void);
-void decor_draw(void *px, int pw, int ph, int lw, int s, int maximized, int hover, int focused,
+void decor_draw(void *px, int pw, int ph, int lw, int maximized, int hover, int focused,
                 const char *title, int dark, int (*button_x)(int, int));
 void decor_destroy(struct decor *d);
 

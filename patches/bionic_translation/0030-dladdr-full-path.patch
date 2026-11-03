@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Wed, 4 Nov 2026 00:00:00 +0000
+Subject: [PATCH] linker: dladdr gives the library's full path
+
+dladdr's dli_fname was the soinfo's base name; Android's dladdr gives the full path (soinfo::get_realpath). Code that finds its sibling
+libraries from its own path got a relative name: GeckoView's utility process looks for libmozavutil/libmozavcodec next to libmozglue
+(dladdr(&malloc)), gave up, and so had no ffvpx decoder ("no decoder found for audio/opus": WebM audio did not play).
+
+apklayer patch 0030 of patches/bionic_translation.
+---
+ linker/dlfcn.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/linker/dlfcn.c b/linker/dlfcn.c
+--- a/linker/dlfcn.c
++++ b/linker/dlfcn.c
+@@ -226,7 +226,9 @@
+ 	if (si) {
+ 		memset(info, 0, sizeof(*info));
+
+-		info->dli_fname = si->name;
++		/* apklayer patch: the full path, as Android's dladdr gives (si->name is the base name): code that finds its sibling libraries
++		 * from its own path (GeckoView's ffvpx loader: dladdr(&malloc) in libmozglue) got a relative name and gave up */
++		info->dli_fname = si->fullpath[0] ? si->fullpath : si->name;
+ 		info->dli_fbase = (void *)(uintptr_t)si->base;
+
+ 		/* Determine if any symbol in the library contains the specified address */

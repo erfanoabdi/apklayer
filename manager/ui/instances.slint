@@ -1,0 +1,38 @@
+// Instances: each an Android of its own (binder devices, /data, /storage, property store). Selecting one points every other page at it.
+import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, ScrollView, IconButton, OutlinedCard } from "@material";
+import { Backend, AppIcons } from "backend.slint";
+import { Row, Tag, Heading } from "widgets.slint";
+
+export component InstancesPage {
+    callback confirm(kind: string, target: string);
+
+    ScrollView {
+        HorizontalLayout {
+            alignment: center;
+            VerticalLayout {
+                max-width: 840px;
+                padding: MaterialStyleMetrics.padding_16;
+                padding-bottom: 96px;
+                spacing: MaterialStyleMetrics.spacing_8;
+                alignment: start;
+                MaterialText {
+                    text: "Every instance runs its own Android services, data and storage. Apps are installed once and run in the selected instance.";
+                    style: MaterialTypography.body_medium;
+                    color: MaterialPalette.on_surface_variant;
+                    wrap: word-wrap;
+                }
+                for inst in Backend.instances : Row {
+                    text: inst.id;
+                    supporting-text: (inst.running ? "Running" : "Stopped") + (inst.binder ? "" : " · binder devices missing");
+                    icon: inst.binder ? AppIcons.layers : AppIcons.admin;
+                    selected: inst.id == Backend.instance;
+                    clicked => { Backend.select-instance(inst.id); }
+                    if inst.id == Backend.instance : Tag { text: "Selected"; strong: true; }
+                    if !inst.binder : IconButton { icon: AppIcons.admin; tooltip: "Set up binder devices"; clicked => { Backend.setup-binder(inst.id); } }
+                    if inst.running : IconButton { icon: AppIcons.stop; tooltip: "Stop"; clicked => { Backend.stop-instance(inst.id); } }
+                    if inst.id != "default" : IconButton { icon: AppIcons.delete; tooltip: "Remove"; enabled: !Backend.busy; clicked => { root.confirm("remove-instance", inst.id); } }
+                }
+            }
+        }
+    }
+}

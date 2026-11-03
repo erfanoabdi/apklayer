@@ -56,8 +56,7 @@ static const struct wl_buffer_listener initial_listener = { initial_release };
 
 static void show_initial(struct window *w)
 {
-    int width = w->cfg_w > 0 ? w->cfg_w * w->scale / 100 : w->w;
-    int height = w->cfg_h > 0 ? w->cfg_h * w->scale / 100 : w->h;
+    int width = w->cfg_w * window_scale(w) / 100, height = w->cfg_h * window_scale(w) / 100;
     w->initial_buffer = splash_buffer(w, width, height);  /* the logo on its colour until the first frame */
     if (!w->initial_buffer) return;
     wl_buffer_add_listener(w->initial_buffer, &initial_listener, w);
@@ -74,6 +73,14 @@ static void show(struct window *w, int buf, const int32_t *d)
     wl_surface_commit(w->surface);
 }
 
+void window_show_first(struct window *w)
+{
+    if (w->pending_buf >= 0) show(w, w->pending_buf, w->pending_damage);
+    else if (w->pending_dbuf >= 0) window_dmabuf_show(w, w->pending_dbuf, w->pending_ddamage);
+    else if (!w->framed) show_initial(w);
+    else wl_surface_commit(w->surface);
+}
+
 /* Tells the app whether its window is active / minimized (Android lifecycle: pause, stop, resume). */
 void send_state(struct window *w)
 {
@@ -82,116 +89,6 @@ void send_state(struct window *w)
     vsync_source_changed();
 }
 
-/* Window geometry = content + title bar; the bar follows the content width and scale. */
-/* The size (logical) a window of w x h opens at: at most 85% of the output (less top bar and title bar), same aspect. */
-static void fit_size(int w, int h, int *fw, int *fh)
-{
-    int maxh = (output_mode_h * 100 / output_scale - 32 - DECOR_H) * 85 / 100, maxw = output_mode_w * 100 / output_scale * 85 / 100;
-    *fw = w; *fh = h;
-    if (maxh > 0 && *fh > maxh) { *fw = *fw * maxh / *fh; *fh = maxh; }
-    if (maxw > 0 && *fw > maxw) { *fh = *fh * maxw / *fw; *fw = maxw; }
-}
-
-void window_layout(struct window *w)
-{
-    int lw = w->w * 100 / w->scale, lh = w->h * 100 / w->scale;
-    if (w->fit_sent && w->cfg_w > 0 && w->cfg_h > 0) {  /* apklayer patch: the window is never bigger than what the app was configured to (its buffers may still be the display's size) */
-        if (w->cfg_w < lw) lw = w->cfg_w;
-        if (w->cfg_h < lh) lh = w->cfg_h;
-    }
-    decor_update(&w->decor, lw, w->scale, w->maximized,
-                 w->bar_hover, w->activated);
-    xdg_surface_set_window_geometry(w->xdg_surface, 0, -DECOR_H, lw, lh + DECOR_H);
-}
-
-static void xs_configure(void *data, struct xdg_surface *xs, uint32_t serial)
-{
-    struct window *w = data;
-    xdg_surface_ack_configure(xs, serial);
-    if (!w->configured) {
-        w->configured = 1;
-        if (output_mode_h > 0) {  /* apklayer patch: the first size is the fitted one, not the compositor's clamp of the display's size */
-            w->fit_sent = 1;
-            fit_size(w->w * 100 / w->scale, w->h * 100 / w->scale, &w->cfg_w, &w->cfg_h);
-        }
-        fprintf(stderr, "[shell] first configure: window %dx%d, compositor %dx%d, output %dx%d @%d%%\n", w->w, w->h, w->cfg_w, w->cfg_h, output_mode_w, output_mode_h, output_scale);
-        /* Tell the app its size and the output scale (P2 HiDPI: density = 160*scale). */
-        int32_t lw = w->cfg_w > 0 ? w->cfg_w : w->w * 100 / w->scale;
-        int32_t lh = w->cfg_h > 0 ? w->cfg_h : w->h * 100 / w->scale;
-        int32_t v[4] = { W_ID(w), lw, lh, output_scale };
-        w->told_scale = output_scale;
-        send_msg(W_TARGET(w), MSG_CONFIGURE, v, 4);
-        if (w->proxy) send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, lw, lh, output_scale }, 4);
-        if (w->pending_buf >= 0) show(w, w->pending_buf, w->pending_damage);
-        else if (w->pending_dbuf >= 0) window_dmabuf_show(w, w->pending_dbuf, w->pending_ddamage);
-        else if (!w->framed) show_initial(w);
-        else wl_surface_commit(w->surface);
-        vsync_source_changed();
-    }
-}
-static const struct xdg_surface_listener xs_listener = { xs_configure };
-static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t ch,
-                          struct wl_array *st)
-{
-    struct window *w = d;
-    int maximized = 0, activated = 0;
-    uint32_t *state;
-    wl_array_for_each(state, st) {
-        if (*state == XDG_TOPLEVEL_STATE_MAXIMIZED || *state == XDG_TOPLEVEL_STATE_FULLSCREEN)
-            maximized = 1;
-        if (*state == XDG_TOPLEVEL_STATE_ACTIVATED) activated = 1;
-    }
-    if (maximized && !w->unmaximized_once) {  // windows open in their own size: only the first (automatic) maximize is undone, the user's own later ones stay
-        w->unmaximized_once = 1;
-        xdg_toplevel_unset_maximized(t);
-        maximized = 0;
-    }
-    int changed = maximized != w->maximized || activated != w->activated;
-    int active_changed = activated != w->activated;
-    w->maximized = maximized;
-    w->activated = activated;
-    /* The configure size is the window geometry: content + title bar. 0x0 = "your preferred
-     * size". Any other size is a resize request: tell the app the logical content size; it
-     * relayouts and re-sends WINDOW_CREATE with the same id, and the shell swaps the buffers of
-     * the existing toplevel (no re-map). */
-    ch = ch > DECOR_H ? ch - DECOR_H : 0;
-    w->cfg_w = cw > 0 ? cw : 0;
-    w->cfg_h = ch > 0 ? ch : 0;
-    if (activated) w->minimized = 0;
-    if (w->configured && changed) window_layout(w);
-    if (w->configured && active_changed) send_state(w);
-    if (cw > 0 && ch > 0 && w->configured
-        && (cw != w->w * 100 / w->scale || ch != w->h * 100 / w->scale)) {
-        int32_t v[4] = { W_ID(w), cw, ch, output_scale };
-        w->told_scale = output_scale;
-        send_msg(W_TARGET(w), MSG_CONFIGURE, v, 4);
-        if (w->proxy) send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, cw, ch, output_scale }, 4);  /* the display's owner follows the window as well */
-    }
-}
-static void top_close(void *data, struct xdg_toplevel *t)
-{
-    (void)t;
-    struct window *w = data;
-    int32_t v[1] = { W_ID(w) };
-    send_msg(W_TARGET(w), MSG_CLOSE, v, 1);
-}
-static const struct xdg_toplevel_listener top_listener = {
-    .configure = top_configure, .close = top_close };
-
-/* Test input: the configure a compositor sends on focus or resize. cw, ch: logical content size, 0 = the current one. */
-void window_inject_configure(struct window *w, int cw, int ch, int activated)
-{
-    struct wl_array states;
-    wl_array_init(&states);
-    if (w->maximized) *(uint32_t *)wl_array_add(&states, 4) = XDG_TOPLEVEL_STATE_MAXIMIZED;
-    if (activated) *(uint32_t *)wl_array_add(&states, 4) = XDG_TOPLEVEL_STATE_ACTIVATED;
-    if (cw <= 0) cw = w->cfg_w > 0 ? w->cfg_w : w->w * 100 / w->scale;
-    if (ch <= 0) ch = w->cfg_h > 0 ? w->cfg_h : w->h * 100 / w->scale;
-    top_configure(w, w->toplevel, cw, ch + DECOR_H, &states);
-    wl_array_release(&states);
-}
-
-
 /* (Re)creates the buffers of w from the shared file. */
 static int window_buffers(struct window *w, int width, int height, const char *path)
 {
@@ -199,10 +96,8 @@ static int window_buffers(struct window *w, int width, int height, const char *p
         w->w = width;
         w->h = height;
         w->pending_buf = -1;
-    w->pending_dbuf = -1;
-        w->scale = w->told_scale ? w->told_scale : 100;
-        wl_surface_set_buffer_scale(w->surface, (w->scale + 50) / 100);
-        if (w->xdg_surface) window_layout(w);
+        w->pending_dbuf = -1;
+        if (w->configured) window_layout(w);
         return 0;
     }
     int fd = open(path, O_RDWR);
@@ -226,9 +121,7 @@ static int window_buffers(struct window *w, int width, int height, const char *p
     w->h = height;
     w->pending_buf = -1;
     w->pending_dbuf = -1;
-    w->scale = w->told_scale ? w->told_scale : 100;
-    wl_surface_set_buffer_scale(w->surface, (w->scale + 50) / 100);
-    if (w->xdg_surface) window_layout(w);
+    if (w->configured) window_layout(w);
     return 0;
 }
 
@@ -257,7 +150,6 @@ void window_create(struct client *c, int id, int width, int height, const char *
         return;
     }
     w->xdg_surface = xdg_wm_base_get_xdg_surface(wm_base, w->surface);
-    xdg_surface_add_listener(w->xdg_surface, &xs_listener, w);
     decor_create(&w->decor, w->surface);
     w->bar_hover = DECOR_NONE;
     const char *package = appinfo_package(title[0] ? title : c->pkg);
@@ -265,17 +157,12 @@ void window_create(struct client *c, int id, int width, int height, const char *
     appinfo_label(package, label, sizeof label);   /* apklayer patch: the window carries the app's real name, and the app id is its package (the desktop entry's StartupWMClass) */
     decor_set_title(&w->decor, label);
     w->toplevel = xdg_surface_get_toplevel(w->xdg_surface);
-    xdg_toplevel_add_listener(w->toplevel, &top_listener, w);
+    window_geometry_init(w);
     snprintf(w->title, sizeof w->title, "%s", title);
     xdg_toplevel_set_title(w->toplevel, label);
     xdg_toplevel_set_app_id(w->toplevel, package);
-    xdg_toplevel_set_min_size(w->toplevel, 240, 240 + DECOR_H);
-    if (output_mode_h > 0) {   /* apklayer patch: open at a size that fits the screen, so the compositor has nothing to clamp (a clamp is a configure that disagrees with the app) */
-        fit_size(width * 100 / w->scale, height * 100 / w->scale, &w->cfg_w, &w->cfg_h);
-        w->fit_sent = 1;
-    }
-    window_layout(w); /* geometry needs the toplevel role */ /* desktop-resizable (P2) */
-    wl_surface_commit(w->surface);
+    xdg_toplevel_set_min_size(w->toplevel, 160, 160 + DECOR_H);  /* below the smallest fitted size (geometry.c), or the compositor restores a larger one */
+    wl_surface_commit(w->surface);  /* no buffer: asks for the first configure, whose size and bounds decide the window's (geometry.c) */
     fprintf(stderr, "[shell] %s: window %d %dx%d \"%s\"\n", c->pkg, id, width, height, title);
     for (int i = 0; i < MAX_CLIENTS; i++)   /* an app that asked for a window of this title before it existed */
         if (clients[i].fd >= 0 && clients[i].attach_title[0] && !strcmp(clients[i].attach_title, w->title))
@@ -296,27 +183,11 @@ void window_attach_input(struct client *c, int own_id, const char *title)
         clipboard_push(w);
         fprintf(stderr, "[shell] %s takes the input of window \"%s\" (as its window %d)\n", c->pkg, title, own_id);
         if (w->configured) {  // its size, scale and state, now that someone listens
-            int32_t v[4] = { own_id, w->cfg_w > 0 ? w->cfg_w : w->w * 100 / w->scale, w->cfg_h > 0 ? w->cfg_h : w->h * 100 / w->scale, output_scale };  /* apklayer patch: the fitted size, not the display's */
-            w->told_scale = output_scale;
-            send_msg(c, MSG_CONFIGURE, v, 4);
+            window_send_configure(w);
             send_state(w);
-            send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, v[1], v[2], output_scale }, 4);
         }
         return;
     }
-}
-
-/* apklayer patch: the app asks for another shape (portrait <-> landscape): fitted to the screen, sent to the app and to the display's owner. */
-void window_request_size(struct window *w, int lw, int lh)
-{
-    int fw, fh;
-    if (!w->configured) return;
-    fit_size(lw, lh, &fw, &fh);
-    if (fw == w->w * 100 / w->scale && fh == w->h * 100 / w->scale) return;
-    w->cfg_w = fw; w->cfg_h = fh;
-    int32_t v[4] = { W_ID(w), fw, fh, output_scale };
-    send_msg(W_TARGET(w), MSG_CONFIGURE, v, 4);
-    if (w->proxy) send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, fw, fh, output_scale }, 4);
 }
 
 void window_drop_proxy(struct client *c)
@@ -337,6 +208,7 @@ void window_destroy(struct window *w)
     if (w->initial_buffer) wl_buffer_destroy(w->initial_buffer);
     window_dmabuf_destroy(w);
     decor_destroy(&w->decor);
+    window_geometry_destroy(w);
     xdg_toplevel_destroy(w->toplevel);
     xdg_surface_destroy(w->xdg_surface);
     wl_surface_destroy(w->surface);

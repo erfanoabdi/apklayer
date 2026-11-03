@@ -17,7 +17,7 @@ def dump(instance=None):
     """With an instance: only its JVMs (parallel instances run their own)."""
     out = os.path.expanduser('~/hang-' + time.strftime('%H%M%S'))
     os.makedirs(out, exist_ok=True)
-    pids = subprocess.run(['pgrep', '-f', '[a]pklayer.host.Main'], capture_output=True, text=True).stdout.split()
+    pids = subprocess.run(['pgrep', '-x', 'java'], capture_output=True, text=True).stdout.split()  # the JVMs (their command lines are Android process names)
     if instance: pids = [p for p in pids if instance_of(p) == instance]
     for pid in pids:
         try:

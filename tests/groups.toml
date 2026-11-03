@@ -102,6 +102,10 @@ run = ["python3 -u tests/vm/hub.py webview probe"]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/splash.py"]
 
+[window-geometry]
+needs = ["com.android.test.uibench"]
+run = ["python3 -u tests/vm/window-geometry.py"]
+
 [startup]
 needs = ["com.android.test.uibench"]
 run = ["tests/vm/startup.sh com.android.test.uibench"]
@@ -197,3 +201,13 @@ mac = ["python3 tests/corpus/run.py"]
 optional = true  # its page-text check fails on virgl hosts (ints set in shader branches come back as NaN: tests/vm/gles-int-branch.c)
 needs = ["org.mozilla.fennec_fdroid"]
 run = ["tests/vm/fennec.sh"]
+
+[fennec-media]
+optional = true  # needs Fennec past its onboarding in the group's instance
+needs = ["org.mozilla.fennec_fdroid"]
+run = ["tests/vm/fennec-media.sh", "YOUTUBE=jNQXAC9IVRw tests/vm/fennec-media.sh"]  # local WebM/MP4, then YouTube's embedded player (network)
+
+[newpipe-media]
+optional = true  # needs the network (YouTube)
+needs = ["org.schabi.newpipe"]
+run = ["tests/vm/newpipe-media.sh"]

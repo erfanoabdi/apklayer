@@ -5,7 +5,8 @@ Subject: [PATCH 14/14] apklayer: native-surface-parcel
 
 apklayer patch: Surface.nativeReadFromParcel / nativeWriteToParcel / nativeGetFromSurfaceControl are the real natives. Upstream
 stubbed them (read and new Surface(SurfaceControl) gave no surface, write wrote nothing), so a Surface sent to another app process through a binder call (GeckoView's GPU process gets its
-compositor Surface this way) arrived as no window: ANativeWindow_fromSurface gave null.
+compositor Surface this way) arrived as no window: ANativeWindow_fromSurface gave null. nativeCreateFromSurfaceTexture is real too: the
+stub made new Surface(SurfaceTexture) a released Surface, so a video decoder given one failed (MediaCodec.configure: "The surface has been released").
 
 Against external/robolectric 87aa52b08 (REVISION). Applied by tools/build overlay onto the staged upstream sources
 (<native>/aosp/robolectric-src); the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
@@ -13,7 +14,22 @@ Against external/robolectric 87aa52b08 (REVISION). Applied by tools/build overla
 diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowNativeSurface.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowNativeSurface.java
 --- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowNativeSurface.java
 +++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowNativeSurface.java
-@@ -61,15 +61,12 @@
+@@ -48,12 +48,8 @@
+   // the ImageReader.OnImageAvailableListener callback and drawing.
+   private final AtomicReference<ImageReader> containerImageReader = new AtomicReference<>(null);
+
+-  @Implementation
+-  protected static long nativeCreateFromSurfaceTexture(SurfaceTexture surfaceTexture)
+-      throws OutOfResourcesException {
+-    // SurfaceTexture is not available for host.
+-    return 0;
+-  }
++  // apklayer patch: nativeCreateFromSurfaceTexture is the real native: SurfaceTexture is real here (a BufferQueue and GLConsumer), and a Surface
++  // made from it (new Surface(surfaceTexture), the output of a video decoder) is its producer; the stub gave a released Surface
+
+   @Implementation(maxSdk = UPSIDE_DOWN_CAKE)
+   protected static long nativeCreateFromSurfaceControl(long surfaceControlNativeObject) {
+@@ -61,15 +57,12 @@
      return SurfaceNatives.nativeCreateFromSurfaceControl(surfaceControlNativeObject);
    }
  
@@ -32,7 +48,7 @@ diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowNativ
    }
  
    @Implementation(minSdk = S, maxSdk = UPSIDE_DOWN_CAKE)
-@@ -105,14 +102,9 @@
+@@ -105,14 +98,9 @@
      return SurfaceNatives.nativeIsConsumerRunningBehind(nativeObject);
    }
  

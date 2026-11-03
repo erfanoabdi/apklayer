@@ -96,8 +96,10 @@ class Stream:
 def end_run(again):
     """Ends the running app (this stack is ours while the lock script runs); the script then starts it again or stops the stack."""
     # the app JVM and its `run` only, not the stack daemon: a second launch reuses the running stack and window shell; the script's stop ends them
-    kill = 'tests/vm/kill-instance.sh default '  # only this instance's processes: other instances (parallel test copies) keep running
-    ssh('cd ~/apklayer; ' + ('touch ' + AGAIN + '; ' if again else kill + "'^[^ ]*apklayer-shell'; ") + kill + "'[a]pklayer.host.Main' '[c]li/apklayer run '")
+    # by the pids the instance records for each launch (run.<pid>: the app JVM and its window sink), never by a name pattern: the JVM's command
+    # line is its Android process name, and a pattern also matches this script's own command line; `run` returns once its JVM is gone
+    ends = 'for f in %s/run.*; do [ -f "$f" ] && kill $(cat "$f") 2>/dev/null; done; ' % STATE
+    ssh(('touch ' + AGAIN + '; ' if again else '') + ends + 'true')
 
 
 def launch(name, stream, at, row, key, before):

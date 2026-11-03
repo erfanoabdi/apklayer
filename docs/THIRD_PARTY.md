@@ -12,6 +12,8 @@ apklayer itself is AGPL-3.0-or-later (PLAN D5), compatible with all of the above
 
 - gfxstream's GLES_CM translator and GLcommon (`hardware/google/gfxstream` in the LineageOS tree), Apache-2.0, unmodified: staged into `<native>/aosp/gfxstream-src` and built on the test host into `libapklayer-gles1.so` (`tools/build gles1`).
 
+- apklayer-manager: Slint C++ 1.18.1 (prebuilt, GPLv3 or Slint's royalty-free/commercial licence) and Material Components for Slint 1.1.0 (MIT), downloaded at build time by `manager/fetch-slint.sh`, not vendored; Material Symbols SVGs (Apache-2.0) vendored in `manager/ui/icons/` with their LICENSE. Note for the commercial licence: Slint's GPLv3 option binds the manager binary; a commercial build needs Slint's royalty-free or commercial terms.
+
 ## Consumed at runtime (not vendored; pinned in deps/deps.lock, cached in ~/.cache/apklayer/deps)
 
 | Artifact | Origin | License |

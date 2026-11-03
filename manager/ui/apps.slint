@@ -1,0 +1,107 @@
+// Apps: the M3 list-detail layout. Side by side when the window is expanded (>= 840 dp), else the list, and the detail over it with a back button.
+import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, ScrollView, FilledButton, TonalButton, OutlineButton,
+         IconButton, OutlinedCard, HorizontalDivider, VerticalDivider } from "@material";
+import { Backend, AppIcons, AppEntry } from "backend.slint";
+import { Row, Tag, Heading } from "widgets.slint";
+
+component AppDetail {
+    in property <AppEntry> app;
+    in property <bool> show-back;
+    callback back();
+    callback confirm(kind: string, target: string);
+
+    ScrollView {
+        VerticalLayout {
+            padding: MaterialStyleMetrics.padding_24;
+            spacing: MaterialStyleMetrics.spacing_16;
+            alignment: start;
+            if root.show-back : HorizontalLayout {
+                alignment: start;
+                IconButton { icon: AppIcons.back; tooltip: "Back"; clicked => { root.back(); } }
+            }
+            HorizontalLayout {
+                spacing: MaterialStyleMetrics.spacing_16;
+                Rectangle {
+                    width: MaterialStyleMetrics.size_72;
+                    height: MaterialStyleMetrics.size_72;
+                    border-radius: MaterialStyleMetrics.border_radius_16;
+                    clip: true;
+                    Image { width: 100%; height: 100%; source: root.app.icon; image-fit: contain; }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    MaterialText { text: root.app.label; style: MaterialTypography.headline_small; color: MaterialPalette.on_surface; overflow: elide; }
+                    MaterialText { text: root.app.package; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; overflow: elide; }
+                    MaterialText { text: "Version " + root.app.version; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; overflow: elide; }
+                }
+            }
+            HorizontalLayout {
+                spacing: MaterialStyleMetrics.spacing_8;
+                alignment: start;
+                FilledButton { text: root.app.running ? "Open again" : "Open"; icon: AppIcons.play; enabled: !Backend.busy; clicked => { Backend.open-app(root.app.package); } }
+                if root.app.running : TonalButton { text: "Stop"; icon: AppIcons.stop; clicked => { Backend.stop-app(root.app.package); } }
+            }
+            HorizontalLayout {
+                spacing: MaterialStyleMetrics.spacing_8;
+                alignment: start;
+                OutlineButton { text: "Clear data…"; icon: AppIcons.clean; enabled: !Backend.busy; clicked => { root.confirm("clear-data", root.app.package); } }
+                OutlineButton { text: "Uninstall…"; icon: AppIcons.delete; enabled: !Backend.busy; clicked => { root.confirm("uninstall", root.app.package); } }
+            }
+            Heading { text: "App info"; }
+            OutlinedCard {
+                VerticalLayout {
+                    padding-top: MaterialStyleMetrics.padding_8;
+                    padding-bottom: MaterialStyleMetrics.padding_8;
+                    for row in Backend.app-info : Row { text: row.key; supporting-text: row.value; clickable: false; }
+                }
+            }
+        }
+    }
+}
+
+export component AppsPage {
+    in property <bool> two-pane;
+    in-out property <bool> detail-open;     // compact: the detail covers the list
+    callback confirm(kind: string, target: string);
+    property <bool> show-detail: Backend.has-current-app && (root.two-pane || root.detail-open);
+    property <bool> show-list: root.two-pane || !root.show-detail;
+
+    HorizontalLayout {
+        if root.show-list : Rectangle {
+            width: root.two-pane ? 360px : root.width;
+            if Backend.apps.length == 0 : VerticalLayout {
+                alignment: center;
+                padding: MaterialStyleMetrics.padding_24;
+                MaterialText { text: "No apps installed"; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; horizontal-alignment: center; }
+                MaterialText { text: "Install an .apk file with the button below."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant;
+                               horizontal-alignment: center; wrap: word-wrap; }
+            }
+            ScrollView {
+                VerticalLayout {
+                    padding: MaterialStyleMetrics.padding_8;
+                    padding-bottom: 96px;  // room for the FAB
+                    alignment: start;
+                    for app in Backend.apps : Row {
+                        text: app.label;
+                        supporting-text: app.package + " · " + app.version;
+                        picture: app.icon;
+                        selected: root.two-pane && Backend.has-current-app && app.package == Backend.current-app.package;
+                        clicked => { Backend.select-app(app.package); root.detail-open = true; }
+                        if app.running : Tag { text: "Running"; strong: true; }
+                    }
+                }
+            }
+        }
+        if root.two-pane : VerticalDivider { }
+        if root.show-detail : AppDetail {
+            app: Backend.current-app;
+            show-back: !root.two-pane;
+            back => { root.detail-open = false; }
+            confirm(k, t) => { root.confirm(k, t); }
+        }
+        if root.two-pane && !root.show-detail : VerticalLayout {
+            alignment: center;
+            MaterialText { text: "Select an app"; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface_variant; horizontal-alignment: center; }
+        }
+    }
+}

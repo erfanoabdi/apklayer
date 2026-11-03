@@ -161,3 +161,18 @@ Until an app presents its first frame, `bridge/shell/splash.c` fills the window 
 ## Identity and GL (2026-11-03, late)
 - Caller identity is the carried uid checked against the hub's registry; kernel-attested identity needs per-app Linux uids (a privileged launcher; the desktop sockets in /run/user are 0700), part of the per-app sandbox item. Open: the getAuthToken grant dialog (refused today, stricter than Android); a test for the pre-O GET_ACCOUNTS rule; an unbind followed by an immediate rebind can get the binder of a component host that is exiting.
 - GL: OpenTTD end to end on the ES1 translator needs the built libapklayer_egl installed and a screenshot on both VMs. A plain RGB8 eglChooseConfig puts a 10-bit XR30 config first on both VMs and the present path cannot read XR30/AB4H/XB4H back: a native app taking the first config would show black (cause open). The translator reports "Android Emulator OpenGL ES Translator" as its renderer (emulator sniffers see it). ES1 on x86_64 needs a reserved TLS slot first. On Parallels a landscape request gave an 870x223 window (check the fit logic).
+
+## Open after the 2026-11-04 night round
+- NativeLoader puts the native dir on the app's bionic search path, so glibc libraries there get linked as bionic ones (libapklayer-gles1 is loaded through dlmopen as a workaround). eglReleaseThread does not reset the hook slot. The host-ES1 path is untested (no Mesa with ES1 on the VMs).
+- Settings: the default-instance app-data migration ran on no real data yet; a hanging GeoClue call can delay an app's first provider request up to 10 s; the IME choice applies at the next instance start; no IME binding to input yet; DEVICE_PROVISIONED/USER_SETUP_COMPLETE are 1 everywhere.
+- Window shape on Parallels: NewPipe opened as a 329x1280 strip, OpenTTD's landscape request as 870x223 (windowing round in progress).
+- NewPipe 0.20.1 (2021) cannot parse today's YouTube: the corpus needs current app versions (F-Droid index + tests/corpus/fdroid.py); NewPipe 0.28 lists videos.
+
+## Windows (2026-11-04)
+- The bar is 46 logical px, drawn at the window's scale and shown through wp_viewporter. Windows follow wp_fractional_scale_v1 (the app gets the logical size and the scale; the vdisplay renders size x scale px). The first size is the display's shape fitted to 85% of xdg_toplevel.configure_bounds; maximized/fullscreen/tiled take the compositor's size; all outputs are tracked. Checked by `tests/run window-geometry`; other scales with tools/debug/nested-gnome.py. Open: xdg-decoration on non-GNOME desktops; a real-session scale switch check; landscape windows are not grown to the screen.
+
+## Manager (2026-11-04)
+- Needs a human check: the portal file chooser and the pkexec prompt. Open: per-app permissions are not shown (not in info.properties); removing a running instance ends the session's window shell (stopStack); binder devices of a removed instance stay until reboot; fetch-slint.sh has arm64 hashes only; the binary's rpath points into ~/.cache/apklayer/slint; ui.sh needs a desktop (not in meson test); a failing CLI leaves pages empty without an error.
+
+## Media (2026-11-04)
+- Open: m.youtube.com/watch pages show a cookie-consent dialog (the test uses YouTube's embedded player in a local page); the audio permission feed happens once at hub start (an app installed later or an audioserver restart is not re-fed: shortcut in HubAudioPermissions); the native-audio group fails on main (NativeParcel.activeParcels missing); fennec-media needs a profile past Fenix's onboarding on a fresh install (being fixed).

@@ -29,6 +29,8 @@ static int32_t inject(struct window *w, const int32_t *v, const char *text)
     case TEST_TOUCH: touch_inject(w, v[1], v[2], v[3]); return 0;
     case TEST_TEXT: return text_input_inject(w, text, v[1]);
     case TEST_RESIZE: window_inject_configure(w, v[1], v[2], w->activated); return 0;
+    case TEST_SCALE: if (v[1] < 100 || v[1] > 400) return -3; window_scale_changed(w, v[1]); return 0;
+    case TEST_MAXIMIZE: window_inject_maximize(w, v[1], v[2], v[3]); return 0;
     default: return -3;
     }
 }

@@ -10,13 +10,12 @@ final class ParcelCheck {
         if (!value) throw new AssertionError(detail);
     }
     static void run() throws Exception {
-        boolean real = Boolean.getBoolean("apklayer.realbinder");
+        boolean real = true;  // real Binder is the only mode (the apklayer.realbinder flag and NativeParcel.activeParcels went with the other route)
         Class<?> helper = Class.forName("apklayer.host.NativeParcel");
-        Method obtain = helper.getMethod("obtain"), active = helper.getMethod("activeParcels");
+        Method obtain = helper.getMethod("obtain");
         for (int cycle = 0; cycle < 3; cycle++) {
             Parcel p = (Parcel) obtain.invoke(null), copy = (Parcel) obtain.invoke(null);
             try {
-                require(real || ((Number) active.invoke(null)).intValue() == 2, "native payload ownership");
                 p.writeInt(0x12345678); p.writeLong(0x123456789abcdef0L);
                 p.writeFloat(1.25f); p.writeDouble(-3.5);
                 p.writeString("تست-😀"); p.writeString(null);
@@ -72,7 +71,6 @@ final class ParcelCheck {
                 try { p.writeByteArray(new byte[1], 1, 1); throw new AssertionError("array bounds accepted"); }
                 catch (ArrayIndexOutOfBoundsException expected) { }
             } finally { p.recycle(); copy.recycle(); }
-            require(real || ((Number) active.invoke(null)).intValue() == 0, "native payload recycle");
         }
         System.out.println("[hello-native-audio] native Parcel PASS bytes/scalars/Unicode/arrays/append/coexistence/recycle");
     }

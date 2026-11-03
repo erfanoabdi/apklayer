@@ -3,6 +3,7 @@ this instance's processes, screenshots, test input into this instance's windows 
 import os
 import socket
 import struct
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -30,9 +31,10 @@ def kill(*patterns):
     subprocess.run(['sh', 'tests/vm/kill-instance.sh', INSTANCE, *patterns], check=False)
 
 
-def mine(pattern):
-    """`pgrep -af pattern` restricted to this instance: the lines of its matching processes."""
-    found = subprocess.run(['pgrep', '-af', pattern], capture_output=True, text=True).stdout.splitlines()
+def mine(pattern, exact=False):
+    """`pgrep -af pattern` restricted to this instance: the lines of its matching processes. exact: match the process name (`pgrep -x`), for the
+    JVMs, whose command line is their Android process name once the runtime has named them."""
+    found = subprocess.run(['pgrep', '-a'] + (['-x'] if exact else ['-f']) + [pattern], capture_output=True, text=True).stdout.splitlines()
     result = []
     for line in found:
         try: env = Path('/proc/%s/environ' % line.split()[0]).read_bytes().split(b'\0')
@@ -43,14 +45,17 @@ def mine(pattern):
 
 def assert_clean():
     """Nothing of this instance is left running (app JVMs, btload, the shell)."""
-    left = mine('[a]pklayer.host.Main|[b]tload|[a]pklayer-shell')
+    left = mine('[b]tload|[a]pklayer-shell') + mine('java', exact=True)
     assert not left, 'left running:\n' + '\n'.join(left)
 
 
 def stop():
     """The instance's stack, hub, apps and shell, then anything of this instance the stop missed."""
     subprocess.run(['bin/apklayer', 'stop'], env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    kill('[a]pklayer.host.Main', '[c]omponent-host', '[c]li/apklayer run ')
+    kill('[c]omponent-host')
+    for line in mine('java', exact=True):  # the app and service JVMs the stop missed (by name: their command lines are process names)
+        try: os.kill(int(line.split()[0]), signal.SIGTERM)
+        except (OSError, ValueError): pass
 
 
 def capture(name, app=None):
@@ -84,19 +89,20 @@ def keys(*steps, **kw):
 
 MODS = {'alt': 56, 'ctrl': 29, 'shift': 42, 'super': 125}  # evdev codes of combo:<mod>+<code>
 TEST_INPUT, TEST_DONE = 11, 115  # bridge/shell/shell.h
-FOCUS, KEY, POINTER, TOUCH, TEXT, RESIZE = range(6)
+FOCUS, KEY, POINTER, TOUCH, TEXT, RESIZE, SCALE, MAXIMIZE = range(8)
 
 
 def inject(window, *steps):
     """Test input into one window of this instance's shell (bridge/shell/testinput.c): no desktop, no focus, so groups that use it run in
     parallel. The events take the shell's own path from the seat on (focus, xkb, pointer, touch, text-input, configure). window: the app's
     package. Steps (x, y: logical pixels in the window's content, y < 0: its title bar):
-      focus | key:<evdev> | combo:<mod>+<evdev> | click:<x>,<y> | rclick:<x>,<y> | tap:<x>,<y> | text:<utf8> | preedit:<utf8> | resize:<w>,<h>"""
+      focus | key:<evdev> | combo:<mod>+<evdev> | click:<x>,<y> | rclick:<x>,<y> | tap:<x>,<y> | text:<utf8> | preedit:<utf8> | resize:<w>,<h>
+      | scale:<percent> (the compositor's preferred scale) | maximize:<w>,<h> (window geometry) | unmaximize[:<w>,<h>]"""
     print('INJECT %s %s' % (window, ' '.join(steps)), flush=True)
     messages = []
     for step in steps:
         kind, _, arg = step.partition(':')
-        xy = [int(n) for n in arg.split(',')] if kind in ('click', 'rclick', 'tap', 'resize') else []
+        xy = [int(n) for n in arg.split(',')] if kind in ('click', 'rclick', 'tap', 'resize', 'maximize') or (kind == 'unmaximize' and arg) else [0, 0]
         if kind == 'focus': messages.append((FOCUS, 0, 0, 0, ''))
         elif kind == 'key': messages += [(KEY, int(arg), 1, 0, ''), (KEY, int(arg), 0, 0, '')]
         elif kind == 'combo':
@@ -108,6 +114,9 @@ def inject(window, *steps):
         elif kind == 'tap': messages += [(TOUCH, 0, *xy, ''), (TOUCH, 1, *xy, '')]
         elif kind in ('text', 'preedit'): messages.append((TEXT, int(kind == 'preedit'), 0, 0, arg))
         elif kind == 'resize': messages.append((RESIZE, *xy, 0, ''))
+        elif kind == 'scale': messages.append((SCALE, int(arg), 0, 0, ''))
+        elif kind == 'maximize': messages.append((MAXIMIZE, 1, *xy, ''))
+        elif kind == 'unmaximize': messages.append((MAXIMIZE, 0, *xy, ''))  # with w,h: a floating configure of that size
         else: raise ValueError('unknown step ' + step)
     with socket.socket(socket.AF_UNIX) as s:
         s.settimeout(3)

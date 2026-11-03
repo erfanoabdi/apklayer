@@ -1,0 +1,101 @@
+// Small pieces the pages share: a Material 3 list item with a leading picture and trailing actions, a page frame with a top app bar.
+import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, StateLayerArea, Icon } from "@material";
+
+// M3 list item: 56 dp (one line) / 72 dp (two lines); leading icon (tinted) or picture (an app icon, untinted); trailing slot
+export component Row {
+    in property <string> text;
+    in property <string> supporting-text;
+    in property <image> icon;        // tinted symbol
+    in property <image> picture;     // full-colour image
+    in property <bool> selected;
+    in property <bool> clickable: true;
+    callback clicked();
+
+    min-height: root.supporting-text != "" ? MaterialStyleMetrics.size_72 : MaterialStyleMetrics.size_56;
+    accessible-role: list-item;
+    accessible-label: root.text;
+    accessible-action-default => { if root.clickable { root.clicked(); } }
+
+    Rectangle {
+        background: root.selected ? MaterialPalette.secondary_container : transparent;
+        border-radius: MaterialStyleMetrics.border_radius_28;
+    }
+    if root.clickable : StateLayerArea {
+        color: MaterialPalette.on_surface;
+        border-radius: MaterialStyleMetrics.border_radius_28;
+        clicked => { root.clicked(); }
+    }
+    HorizontalLayout {
+        padding-left: MaterialStyleMetrics.padding_16;
+        padding-right: MaterialStyleMetrics.padding_16;
+        padding-top: MaterialStyleMetrics.padding_8;
+        padding-bottom: MaterialStyleMetrics.padding_8;
+        spacing: MaterialStyleMetrics.spacing_16;
+        if root.picture.width > 0 : VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: MaterialStyleMetrics.size_40;
+                height: MaterialStyleMetrics.size_40;
+                border-radius: MaterialStyleMetrics.border_radius_12;
+                clip: true;
+                Image { width: 100%; height: 100%; source: root.picture; image-fit: contain; }
+            }
+        }
+        if root.picture.width == 0 && root.icon.width > 0 : VerticalLayout {
+            alignment: center;
+            Icon { width: MaterialStyleMetrics.icon_size_24; source: root.icon; colorize: MaterialPalette.on_surface_variant; }
+        }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            MaterialText {
+                text: root.text;
+                style: MaterialTypography.body_large;
+                color: root.selected ? MaterialPalette.on_secondary_container : MaterialPalette.on_surface;
+                overflow: elide;
+            }
+            if root.supporting-text != "" : MaterialText {
+                text: root.supporting-text;
+                style: MaterialTypography.body_medium;
+                color: MaterialPalette.on_surface_variant;
+                overflow: elide;
+            }
+        }
+        @children
+    }
+}
+
+// a small status label (M3 assist chip look, not interactive)
+export component Tag {
+    in property <string> text;
+    in property <bool> strong;
+    HorizontalLayout {
+        alignment: center;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                background: root.strong ? MaterialPalette.tertiary_container : transparent;
+                border-color: root.strong ? transparent : MaterialPalette.outline_variant;
+                border-width: 1px;
+                border-radius: MaterialStyleMetrics.border_radius_8;
+                HorizontalLayout {
+                    padding-left: MaterialStyleMetrics.padding_8;
+                    padding-right: MaterialStyleMetrics.padding_8;
+                    padding-top: MaterialStyleMetrics.padding_4;
+                    padding-bottom: MaterialStyleMetrics.padding_4;
+                    MaterialText {
+                        text: root.text;
+                        style: MaterialTypography.label_medium;
+                        color: root.strong ? MaterialPalette.on_tertiary_container : MaterialPalette.on_surface_variant;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// an M3 section heading (title small, primary)
+export component Heading inherits MaterialText {
+    style: MaterialTypography.title_small;
+    color: MaterialPalette.primary;
+}

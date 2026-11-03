@@ -1,0 +1,241 @@
+// apklayer-manager: Material 3, one window for phones and desktops. Compact (< 600 dp): navigation bar and an extended FAB; medium and
+// expanded: navigation rail with its FAB; expanded (>= 840 dp) also shows the apps' list and detail side by side.
+import { MaterialWindow, MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, NavigationBar, NavigationRail, NavigationItem,
+         SmallAppBar, FloatingActionButton, FABStyle, Dialog, TextField, LinearProgressIndicator, TextButton } from "@material";
+import { Palette } from "std-widgets.slint";
+import { Backend, AppIcons, PropEntry } from "backend.slint";
+import { AppsPage } from "apps.slint";
+import { InstancesPage } from "instances.slint";
+import { PropsPage } from "props.slint";
+import { DevicePage } from "device.slint";
+
+export { Backend }
+
+export component AppWindow inherits MaterialWindow {
+    title: "apklayer";
+    preferred-width: 1024px;
+    preferred-height: 720px;
+    min-width: 320px;
+    min-height: 480px;
+
+    in-out property <int> page;
+    in-out property <bool> app-detail-open;
+    out property <bool> is-dark: Palette.color-scheme == ColorScheme.dark;
+    // set on a width change, not bound to the width: the rail's presence changes the window's own minimum width (a binding loop)
+    property <bool> wide;
+    property <bool> expanded;
+    function classify() { root.wide = root.width >= 600px; root.expanded = root.width >= 840px; }
+    changed width => { root.classify(); }
+    init => { root.classify(); }
+    property <[NavigationItem]> nav: [
+        { icon: AppIcons.apps, text: "Apps" },
+        { icon: AppIcons.layers, text: "Instances" },
+        { icon: AppIcons.tune, text: "Properties" },
+        { icon: AppIcons.memory, text: "Device" },
+    ];
+    property <[string]> titles: ["Apps", "Instances", "Properties", "Device"];
+    property <string> fab-text: root.page == 0 ? "Install APK" : root.page == 1 ? "New instance" : root.page == 2 ? "Add property" : "";
+    property <image> fab-icon: root.page == 3 ? AppIcons.refresh : AppIcons.add;
+
+    // the confirmation (uninstall, clear data, remove instance) and the property being edited
+    property <string> ask-kind;
+    property <string> ask-target;
+    property <PropEntry> editing;
+    property <bool> editing-new;
+    // what C++ announces for a dialog: watched here, as a popup's own properties exist only while it is shown
+    property <string> apk-path;
+    property <string> chosen: Backend.chosen-path;
+    changed chosen => { root.apk-path = root.chosen; }
+    property <int> binder-serial: Backend.binder-serial;
+    changed binder-serial => { binder-dialog.show(); }
+
+    public function toggle-theme() { Palette.color-scheme = root.is-dark ? ColorScheme.light : ColorScheme.dark; }
+    public function show-dialog(name: string) {
+        if name == "install" { install-dialog.show(); }
+        if name == "instance" { instance-dialog.show(); }
+        if name == "prop" { root.editing = { key: "", value: "", source: "", live: "" }; root.editing-new = true; prop-dialog.show(); }
+        if name == "uninstall" && Backend.has-current-app { root.ask("uninstall", Backend.current-app.package); }
+    }
+    function fab-clicked() {
+        if root.page == 0 { install-dialog.show(); }
+        if root.page == 1 { instance-dialog.show(); }
+        if root.page == 2 { root.show-dialog("prop"); }
+        if root.page == 3 { Backend.refresh(); }
+    }
+    function ask(kind: string, target: string) {
+        root.ask-kind = kind;
+        root.ask-target = target;
+        confirm-dialog.show();
+    }
+
+    HorizontalLayout {
+        if root.wide : NavigationRail {
+            items: root.nav;
+            current-index: root.page;
+            fab-icon: root.fab-icon;
+            alignment: start;
+            index-changed(i) => { root.page = i; }
+            fab-clicked => { root.fab-clicked(); }
+        }
+        VerticalLayout {
+            HorizontalLayout {
+                padding-left: MaterialStyleMetrics.padding_12;  // M3: 16 dp to the title; the bar without a leading button has 4
+                SmallAppBar {
+                    title: root.titles[root.page] + "  ·  " + Backend.instance;
+                    trailing-buttons: [
+                        { icon: AppIcons.refresh, tooltip: "Refresh", enabled: true },
+                        { icon: root.is-dark ? AppIcons.light : AppIcons.dark, tooltip: "Light or dark theme", enabled: true },
+                    ];
+                    trailing-button-clicked(i) => {
+                        if i == 0 { Backend.refresh(); }
+                        if i == 1 { root.toggle-theme(); }
+                    }
+                }
+            }
+            Rectangle {
+                height: MaterialStyleMetrics.size_4;
+                if Backend.busy : LinearProgressIndicator { width: 100%; height: 100%; indeterminate: true; }
+            }
+            Rectangle {
+                vertical-stretch: 1;
+                if root.page == 0 : AppsPage {
+                    width: 100%;
+                    height: 100%;
+                    two-pane: root.expanded;
+                    detail-open <=> root.app-detail-open;
+                    confirm(k, t) => { root.ask(k, t); }
+                }
+                if root.page == 1 : InstancesPage { width: 100%; height: 100%; confirm(k, t) => { root.ask(k, t); } }
+                if root.page == 2 : PropsPage {
+                    width: 100%;
+                    height: 100%;
+                    edit(p) => { root.editing = p; root.editing-new = false; prop-dialog.show(); }
+                }
+                if root.page == 3 : DevicePage { width: 100%; height: 100%; }
+                if !root.wide && root.fab-text != "" && !(root.page == 0 && root.app-detail-open && Backend.has-current-app) : FloatingActionButton {
+                    x: parent.width - self.width - MaterialStyleMetrics.padding_16;
+                    y: parent.height - self.height - MaterialStyleMetrics.padding_16;
+                    icon: root.fab-icon;
+                    text: root.fab-text;
+                    clicked => { root.fab-clicked(); }
+                }
+                // M3 snackbar: the latest result for four seconds
+                snackbar := Rectangle {
+                    property <int> serial: Backend.message-serial;
+                    changed serial => { self.opacity = 1; snack-timer.running = false; snack-timer.running = true; }
+                    x: (parent.width - self.width) / 2;
+                    y: parent.height - self.height - (root.wide ? MaterialStyleMetrics.padding_16 : 88px);
+                    width: min(parent.width - 2 * MaterialStyleMetrics.padding_16, 560px);
+                    height: snack-text.preferred-height + 2 * MaterialStyleMetrics.padding_14;
+                    opacity: 0;
+                    visible: self.opacity > 0;
+                    border-radius: MaterialStyleMetrics.border_radius_4;
+                    background: MaterialPalette.inverse_surface;
+                    animate opacity { duration: 150ms; }
+                    snack-text := MaterialText {
+                        x: MaterialStyleMetrics.padding_16;
+                        width: parent.width - 2 * MaterialStyleMetrics.padding_16;
+                        text: Backend.message;
+                        wrap: word-wrap;
+                        style: MaterialTypography.body_medium;
+                        color: MaterialPalette.inverse_on_surface;
+                    }
+                    snack-timer := Timer { interval: 4s; running: false; triggered => { snackbar.opacity = 0; self.running = false; } }
+                    TouchArea { clicked => { snackbar.opacity = 0; } }
+                }
+            }
+            if !root.wide : NavigationBar {
+                items: root.nav;
+                current-index: root.page;
+                index-changed(i) => { root.page = i; }
+            }
+        }
+    }
+
+    confirm-dialog := Dialog {
+        x: 0; y: 0; width: root.width; height: root.height;
+        title: root.ask-kind == "uninstall" ? "Uninstall " + root.ask-target + "?" : root.ask-kind == "clear-data" ? "Clear the data of " + root.ask-target + "?"
+             : "Remove instance " + root.ask-target + "?";
+        default-action-text: root.ask-kind == "uninstall" ? "Uninstall" : root.ask-kind == "clear-data" ? "Clear data" : "Remove";
+        actions: ["Cancel"];
+        MaterialText {
+            max-width: 400px;
+            wrap: word-wrap;
+            style: MaterialTypography.body_medium;
+            color: MaterialPalette.on_surface_variant;
+            text: root.ask-kind == "uninstall" ? "The app and its data in every instance are removed."
+                : root.ask-kind == "clear-data" ? "The app is stopped and its files in instance " + Backend.instance + " are deleted."
+                : "The instance is stopped and its data, storage and app data are deleted.";
+        }
+        default-action-clicked => {
+            if root.ask-kind == "uninstall" { Backend.uninstall(root.ask-target); root.app-detail-open = false; }
+            if root.ask-kind == "clear-data" { Backend.clear-data(root.ask-target); }
+            if root.ask-kind == "remove-instance" { Backend.remove-instance(root.ask-target); }
+            self.close();
+        }
+        action-clicked => { self.close(); }
+    }
+
+    install-dialog := Dialog {
+        x: 0; y: 0; width: root.width; height: root.height;
+        title: "Install an app";
+        default-action-text: "Install";
+        actions: ["Cancel"];
+        VerticalLayout {
+            spacing: MaterialStyleMetrics.spacing_12;
+            MaterialText { max-width: 400px; wrap: word-wrap; text: "An .apk file: it is converted once and then runs in every instance."; style: MaterialTypography.body_medium;
+                           color: MaterialPalette.on_surface_variant; }
+            apk-path := TextField { min-width: 280px; label: "Path of the .apk"; accessible-label: "APK path"; text <=> root.apk-path; }
+            HorizontalLayout { alignment: start; TextButton { text: "Choose file…"; icon: AppIcons.folder; clicked => { Backend.install-chooser(); } } }
+        }
+        default-action-clicked => { if apk-path.text != "" { Backend.install-path(apk-path.text); self.close(); } }
+        action-clicked => { self.close(); }
+    }
+
+    instance-dialog := Dialog {
+        x: 0; y: 0; width: root.width; height: root.height;
+        title: "New instance";
+        default-action-text: "Create";
+        actions: ["Cancel"];
+        VerticalLayout {
+            spacing: MaterialStyleMetrics.spacing_12;
+            MaterialText { max-width: 400px; wrap: word-wrap; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant;
+                           text: "Its own Android services, data and storage. Letters, digits, - and _."; }
+            instance-id := TextField { min-width: 280px; label: "Name"; accessible-label: "Instance name"; }
+        }
+        default-action-clicked => { if instance-id.text != "" { Backend.create-instance(instance-id.text); instance-id.text = ""; self.close(); } }
+        action-clicked => { self.close(); }
+    }
+
+    binder-dialog := Dialog {
+        x: 0; y: 0; width: root.width; height: root.height;
+        icon: AppIcons.admin;
+        title: "Binder devices needed";
+        default-action-text: "Set up";
+        actions: ["Later"];
+        VerticalLayout {
+            spacing: MaterialStyleMetrics.spacing_12;
+            MaterialText { max-width: 400px; wrap: word-wrap; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant;
+                           text: "The kernel's binder devices of a new instance can only be made by an administrator. Set up asks for your password (polkit), or run:"; }
+            TextField { min-width: 280px; read-only: true; text: Backend.binder-command; }
+        }
+        default-action-clicked => { Backend.setup-binder(Backend.binder-instance); self.close(); }
+        action-clicked => { self.close(); }
+    }
+
+    prop-dialog := Dialog {
+        x: 0; y: 0; width: root.width; height: root.height;
+        title: root.editing-new ? "Add property" : "Edit property";
+        default-action-text: "Save";
+        actions: root.editing.source == "instance" ? ["Cancel", "Remove override"] : ["Cancel"];
+        VerticalLayout {
+            spacing: MaterialStyleMetrics.spacing_12;
+            prop-key := TextField { min-width: 280px; label: "Name"; accessible-label: "Property name"; text: root.editing.key; read-only: !root.editing-new; }
+            prop-value := TextField { min-width: 280px; label: "Value"; accessible-label: "Property value"; text: root.editing.value; }
+            MaterialText { max-width: 400px; wrap: word-wrap; style: MaterialTypography.body_small; color: MaterialPalette.on_surface_variant;
+                           text: "Applies when instance " + Backend.instance + " starts next."; }
+        }
+        default-action-clicked => { if prop-key.text != "" { Backend.set-prop(prop-key.text, prop-value.text); self.close(); } }
+        action-clicked(i) => { if i == 1 { Backend.unset-prop(root.editing.key); } self.close(); }
+    }
+}

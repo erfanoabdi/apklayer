@@ -38,6 +38,7 @@ struct Instance {
     std::string root;        // <dataHome>/apklayer/<n>: storage, data, app data, accounts.json, input-methods of the instance
     std::string appData(const std::string& package) const { return root + "/app-data/" + package; }  // an app's own files in this instance (-Dapklayer.data)
     static Instance open(const Layout& layout, const std::string& id);
+    std::string propOverrides() const { return join(root, "overrides.prop"); }  // Android properties of this instance (`apklayer prop`), loaded at its stack's start
     std::string logs() const { return stateDir; }
     std::string pidFile() const { return join(stateDir, "stack.pid"); }
     std::string tmpDir() const { return join(stateDir, "tmp"); }  // java.io.tmpdir of the instance's JVMs

@@ -1,0 +1,211 @@
+#include "manage.h"
+
+#include <cctype>
+#include <cstring>
+#include <ftw.h>
+#include <map>
+#include <set>
+#include <unistd.h>
+
+namespace apklayer {
+
+namespace {
+// The launches of this instance (run.<pid> records: the JVM first, then the window sink; a component host has its launcher, which became the JVM),
+// by package: the JVM's command line names it (-Dapklayer.package=), or once the runtime renamed the process as Android does, it is the process name.
+std::map<std::string, std::vector<std::string>> launches(const Layout& l, const Instance& inst) {
+    std::map<std::string, std::vector<std::string>> byPackage;
+    for (const std::string& f : listDir(inst.stateDir)) {
+        if (f.rfind("run.", 0) != 0) continue;
+        auto record = readFile(join(inst.stateDir, f));
+        std::vector<std::string> pids = record ? split(*record, '\n') : std::vector<std::string>();
+        if (pids.empty() || !alive(atoi(pids[0].c_str()))) continue;
+        auto cmd = readFile("/proc/" + pids[0] + "/cmdline");
+        if (!cmd) continue;
+        std::string pkg;
+        const std::string key = "-Dapklayer.package=";
+        if (size_t at = cmd->find(key); at != std::string::npos) pkg = cmd->substr(at + key.size(), cmd->find('\0', at) - at - key.size());
+        else pkg = cmd->substr(0, cmd->find_first_of(std::string(":\0", 2)));
+        if (!pkg.empty() && isDir(appDir(l, pkg))) byPackage[pkg].push_back(f);
+    }
+    return byPackage;
+}
+
+long long treeSize;
+int addSize(const char*, const struct stat* st, int type, FTW*) { if (type == FTW_F) treeSize += st->st_size; return 0; }
+long long dirSize(const std::string& dir) {
+    treeSize = 0;
+    if (isDir(dir)) nftw(dir.c_str(), addSize, 32, FTW_PHYS);
+    return treeSize;
+}
+
+bool stackRunning(const Instance& inst) {
+    auto pid = readFile(inst.pidFile());
+    return pid && alive(atoi(pid->c_str()));
+}
+
+std::string binderDevice(const std::string& id) { return "/dev/binderfs/" + (id == "default" ? std::string("binder") : "binder-" + id); }
+
+// what may name an instance: a binder device suffix and a directory name, never one of the data home's own directories
+bool validInstanceId(const std::string& id) {
+    if (id.empty() || id.size() > 32 || id == "apps" || id == "0") return false;
+    for (char c : id) if (!(isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_')) return false;
+    return true;
+}
+
+// key=value lines in file order (build.prop format: comments and blank lines skipped)
+std::vector<std::pair<std::string, std::string>> propLines(const std::string& file) {
+    std::vector<std::pair<std::string, std::string>> out;
+    for (const std::string& line : split(readFile(file).value_or(""), '\n')) {
+        size_t eq = line.find('=');
+        if (line.empty() || line[0] == '#' || eq == std::string::npos) continue;
+        out.emplace_back(trim(line.substr(0, eq)), line.substr(eq + 1));
+    }
+    return out;
+}
+
+// the live store of a running stack (aprop dump: "[name]: [value]")
+std::map<std::string, std::string> liveProperties(const Layout& l, const Instance& inst) {
+    std::map<std::string, std::string> live;
+    if (!stackRunning(inst)) return live;
+    Spawn dump;
+    dump.argv = {join(l.native, "bin/aprop"), "dump"};
+    dump.env = nativeEnv(l, inst).env;
+    for (const std::string& line : split(runCapture(dump), '\n')) {
+        size_t sep = line.find("]: [");
+        if (line.size() > 4 && line[0] == '[' && sep != std::string::npos && line.back() == ']') live[line.substr(1, sep - 1)] = line.substr(sep + 4, line.size() - sep - 5);
+    }
+    return live;
+}
+
+std::string clean(std::string s) {  // a field of a row
+    for (char& c : s) if (c == '\t' || c == '\n' || c == '\r') c = ' ';
+    return s;
+}
+}  // namespace
+
+void listAppsTsv(const Layout& l, const Instance& inst) {
+    auto running = launches(l, inst);
+    for (const std::string& app : listDir(l.appsDir)) {
+        std::string f = join(appDir(l, app), "info.properties");
+        if (!exists(f)) continue;
+        printf("%s\t%s\t%s\t%s\t%s\t%d\n", clean(property(f, "package")).c_str(), clean(property(f, "label")).c_str(), clean(property(f, "versionName")).c_str(),
+               appDir(l, app).c_str(), property(f, "uid").c_str(), running.count(app) ? 1 : 0);
+    }
+}
+
+int appInfo(const Layout& l, const Instance& inst, const std::string& package) {
+    std::string dir = appDir(l, package), f = join(dir, "info.properties");
+    if (!exists(f)) die("not installed: " + package);
+    for (const char* key : {"package", "label", "versionName", "versionCode", "targetSdk", "launcher", "uid"}) printf("%s\t%s\n", key, clean(property(f, key)).c_str());
+    printf("dir\t%s\ncodeSize\t%lld\n", dir.c_str(), dirSize(dir) - dirSize(join(dir, "data")));
+    printf("dataDir\t%s\ndataSize\t%lld\n", inst.appData(package).c_str(), dirSize(inst.appData(package)));
+    printf("running\t%d\n", launches(l, inst).count(package) ? 1 : 0);
+    return 0;
+}
+
+int stopApp(const Layout& l, const Instance& inst, const std::string& package) {
+    auto running = launches(l, inst);
+    for (const std::string& record : running[package]) {
+        if (auto pids = readFile(join(inst.stateDir, record))) for (const std::string& pid : split(*pids, '\n')) terminate(atoi(pid.c_str()));
+        unlink(join(inst.stateDir, record).c_str());
+    }
+    printf("apklayer: stopped %zu launch(es) of %s\n", running[package].size(), package.c_str());
+    return 0;
+}
+
+int clearData(const Layout& l, const Instance& inst, const std::string& package) {
+    if (!isDir(appDir(l, package))) die("not installed: " + package);
+    stopApp(l, inst, package);
+    removeTree(inst.appData(package));
+    if (inst.id == "default") removeTree(join(appDir(l, package), "data"));  // the shared place before data was per instance (appDataDir would move it back in)
+    printf("apklayer: cleared the data of %s in instance %s\n", package.c_str(), inst.id.c_str());
+    return 0;
+}
+
+void listInstances(const Layout& l) {
+    for (const std::string& name : listDir(join(l.dataHome, "apklayer"))) {
+        std::string root = join(l.dataHome, "apklayer/" + name);
+        if (!isDir(join(root, "storage")) && !isDir(join(root, "data"))) continue;  // apps/ and anything else that is not an instance
+        std::string id = name == "0" ? "default" : name;
+        auto pid = readFile(join(l.stateHome, "apklayer/" + id + "/stack.pid"));
+        printf("%s\t%d\t%d\t%s\n", id.c_str(), pid && alive(atoi(pid->c_str())) ? 1 : 0, exists(binderDevice(id)) ? 1 : 0, root.c_str());
+    }
+}
+
+int instanceCommand(const Layout& l, const std::string& action, const std::string& id) {
+    if (!validInstanceId(id) || (action == "remove" && id == "default")) die("not an instance name one may " + action + ": " + id + " (letters, digits, - and _)");
+    if (action == "create") {
+        Instance inst = Instance::open(l, id);
+        printf("created\t%s\n", inst.root.c_str());
+        if (exists(binderDevice(id))) puts("binder\tok");
+        else printf("binder\tmissing\tsudo sh %s %s\n", join(l.root, "tools/host-setup/binder.sh").c_str(), id.c_str());  // binderfs devices need root
+        return 0;
+    }
+    if (action != "remove") die("instance create|remove <id>");
+    if (!isDir(join(l.dataHome, "apklayer/" + id))) die("no such instance: " + id);
+    Instance inst = Instance::open(l, id);
+    if (stackRunning(inst)) stopStack(l, inst);
+    for (const std::string& dir : {inst.root, join(l.stateHome, "apklayer/" + id), inst.runtimeDir}) removeTree(dir);  // not $APKLAYER_LOGS: a test's own directory
+    printf("apklayer: removed instance %s (its binder devices stay until the next reboot)\n", id.c_str());
+    return 0;
+}
+
+int propCommand(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {
+    const std::string file = inst.propOverrides();
+    auto own = propLines(file);
+    if (args.empty() || (args[0] == "list" && args.size() == 1)) {
+        auto live = liveProperties(l, inst);
+        auto row = [&](const std::string& k, const std::string& v, const char* source) {
+            printf("%s\t%s\t%s\t%s\n", clean(k).c_str(), clean(v).c_str(), source, live.count(k) ? clean(live[k]).c_str() : "");
+        };
+        std::set<std::string> seen;
+        for (const auto& [k, v] : own) { row(k, v, "instance"); seen.insert(k); }
+        for (const auto& [k, v] : propLines(join(l.root, "bridge/native/apklayer.prop"))) if (seen.insert(k).second) row(k, v, "apklayer");
+        return 0;
+    }
+    const std::string& action = args[0];
+    if (!((action == "set" && args.size() == 3) || (action == "unset" && args.size() == 2))) die("prop [list] | set KEY VALUE | unset KEY");
+    const std::string& key = args[1];
+    // the property store's limits (bridge/native/properties.c): names up to 63 bytes, values up to 91, one line each
+    bool ok = !key.empty() && key.size() < 64;
+    for (char c : key) ok = ok && (isalnum(static_cast<unsigned char>(c)) || strchr("._-:@", c));
+    if (!ok) die("not a property name: " + key);
+    if (action == "set" && (args[2].size() > 91 || args[2].find_first_of("\n\r") != std::string::npos)) die("a property value is one line of at most 91 bytes");
+    std::string text;
+    for (const auto& [k, v] : own) if (k != key) text += k + "=" + v + "\n";
+    if (action == "set") text += key + "=" + args[2] + "\n";
+    if (!writeFile(file, text)) die("cannot write " + file);
+    printf("apklayer: %s %s for instance %s (from its next start)\n", key.c_str(), action == "set" ? "set" : "unset", inst.id.c_str());
+    return 0;
+}
+
+int status(const Layout& l, const Instance& inst) {
+    NativeEnv ne = nativeEnv(l, inst);  // probes the host GLES once per session
+    std::string pkgs;
+    for (const auto& [pkg, records] : launches(l, inst)) pkgs += (pkgs.empty() ? "" : ",") + pkg;
+    printf("instance\t%s\nstack\t%s\nbinder\t%s\napps\t%s\nabi\t%s\n", inst.id.c_str(), stackRunning(inst) ? "running" : "stopped",
+           exists(binderDevice(inst.id)) ? "ok" : "missing", pkgs.c_str(), kAbi);
+    Spawn egl;
+    egl.argv = {"eglinfo", "-B", "-p", "gbm"};
+    egl.env = currentEnv();  // the host driver as it is, without the version claim nativeEnv adds
+    for (const std::string& line : split(runCapture(egl), '\n')) {
+        if (line.rfind("OpenGL ES profile renderer: ", 0) == 0) printf("gpu\t%s\n", clean(line.substr(28)).c_str());
+        if (line.rfind("OpenGL ES profile version: ", 0) == 0) printf("gles\t%s%s\n", clean(line.substr(27)).c_str(), ne.env.count("MESA_GLES_VERSION_OVERRIDE") ? " (apps see 3.2)" : "");
+    }
+    printf("vulkan\t%s\n", ne.env.count("APKLAYER_VULKAN_HOST") ? "host driver" : "not staged");
+    std::string pw = join(getenvOr("PIPEWIRE_RUNTIME_DIR", l.runtimeHome), "pipewire-0");
+    printf("audio\t%s\n", exists(pw) ? ("PipeWire (" + pw + ")").c_str() : "no PipeWire socket");
+    // what apklayer.host.HostBattery reads: a present Battery supply of /sys/class/power_supply, else a desktop on mains
+    std::string battery = "none (mains power)";
+    for (const std::string& s : listDir("/sys/class/power_supply")) {
+        std::string d = join("/sys/class/power_supply", s);
+        if (trim(readFile(join(d, "type")).value_or("")) == "Battery" && trim(readFile(join(d, "present")).value_or("1")) != "0")
+            battery = trim(readFile(join(d, "capacity")).value_or("?")) + "% " + trim(readFile(join(d, "status")).value_or(""));
+    }
+    printf("battery\t%s\n", clean(battery).c_str());
+    // apps get location from GeoClue (bridge/portal/geoclue.py) when the system has it
+    printf("location\t%s\n", exists("/usr/share/dbus-1/system-services/org.freedesktop.GeoClue2.service") ? "GeoClue" : "off (no GeoClue)");
+    return 0;
+}
+
+}  // namespace apklayer

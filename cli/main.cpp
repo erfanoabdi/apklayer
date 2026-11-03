@@ -3,6 +3,7 @@
 #include <cstring>
 #include <unistd.h>
 
+#include "manage.h"
 #include "run.h"
 
 using namespace apklayer;
@@ -13,11 +14,17 @@ int usage() {
           "  install [-d] <app.apk> [split.apk...]  convert + describe + install (menu entry, icon, .apk handler); also .apks/.xapk/.apkm;\n"
           "                         an update keeps the data, needs the same signer and a version no lower (-d: allow a downgrade)\n"
           "  run <package|app.apk>  run an installed app (an .apk path is installed first)\n"
-          "  list                   installed apps\n"
+          "  list [--tsv]           installed apps (--tsv: package, label, version, dir, uid, running in this instance)\n"
+          "  info <package>         the app's description, sizes and directories (key<TAB>value)\n"
+          "  clear-data <package>   remove the app's files in this instance\n"
           "  uninstall <package>    remove an app and its data\n"
           "  ime enable|disable <package>  let the app's input method be used (from the instance's next start)\n"
           "  screenshot <package|stack> <out.png>  PNG of the app's window as SurfaceFlinger composes it\n"
-          "  stop                   stop the instance's Android services (apps end with them)\n"
+          "  stop [package]         stop the instance's Android services (apps end with them), or one app\n"
+          "  instances              id, running, binder devices, root of every instance\n"
+          "  instance create|remove <id>  make an instance (prints the binder setup it still needs) or remove it with its data\n"
+          "  prop [list] | set KEY VALUE | unset KEY  the instance's Android property overrides (from its next start)\n"
+          "  status                 the instance's stack, running apps, GPU, audio, battery, location\n"
           "  env                    print the environment of Android's processes\n",
           stderr);
     return 2;
@@ -47,7 +54,15 @@ int main(int argc, char** argv) {
     if (cmd == "component-host" && n == 2) return runApp(layout, inst, args[1], RunMode::Component);
     if (cmd == "hub") return runHub(layout, inst);
     if (cmd == "wait" && n == 2 && args[1] == "hub") return waitHub(layout, inst);
+    if (cmd == "list" && n == 2 && args[1] == "--tsv") { listAppsTsv(layout, inst); return 0; }
     if (cmd == "list") { listApps(layout); return 0; }
+    if (cmd == "info" && n == 2) return appInfo(layout, inst, args[1]);
+    if (cmd == "clear-data" && n == 2) return clearData(layout, inst, args[1]);
+    if (cmd == "stop" && n == 2) return stopApp(layout, inst, args[1]);
+    if (cmd == "instances") { listInstances(layout); return 0; }
+    if (cmd == "instance" && n == 3) return instanceCommand(layout, args[1], args[2]);
+    if (cmd == "prop") return propCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
+    if (cmd == "status") return status(layout, inst);
     if (cmd == "uninstall" && n == 2) { uninstallApp(layout, args[1]); return 0; }
     if (cmd == "ime" && n == 3) return inputMethod(layout, inst, args[1], args[2]);
     if (cmd == "screenshot" && n == 3) return screenshot(layout, inst, args[1], args[2]);
