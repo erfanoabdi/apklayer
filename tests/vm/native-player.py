@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Original native MediaPlayer, Parcel callbacks, Surface pixels and physical Back."""
+"""Original native MediaPlayer, Parcel callbacks, Surface pixels and Back (the shell's test input)."""
 import ctypes
 import os
 from pathlib import Path
@@ -31,7 +31,7 @@ notify = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
 assert notify >= 0 and libc.inotify_add_watch(notify, os.fsencode(logs), 0x102) >= 0
 app = None
 seen = []
-committed = captured = False
+committed = captured = focused = False
 try:
     app = subprocess.Popen(['bin/apklayer', 'run', 'hello.nativeplayer'], env=ENV,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
@@ -65,15 +65,18 @@ try:
                     assert '[hello-native-player] FAIL' not in line, line
                     if '[hello-native-player] PLAYER PASS' in line:
                         committed = True
-            # Capture after the real HWUI commit callback and a visible active window.
+            # Capture after the real HWUI commit callback and a visible active window: the shell's test input activates it (the desktop's
+            # focus belongs to whichever instance mapped a window last)
+            if committed and not focused:
+                instance.inject('hello.nativeplayer', 'focus')
+                focused = True
             if committed and not captured and any('window state active=true' in s for s in seen):
                 with open('/tmp/apklayer-native-player-layers.txt', 'wb') as dump:
                     subprocess.run(['bin/apklayer', 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger'], env=ENV, stdout=dump, stderr=subprocess.STDOUT, check=True)
                 shot = instance.capture('native SurfaceView result', 'hello.nativeplayer')
                 asset = os.environ.get('PLAYER_ASSET', 'red-h264.mp4')
                 pixels.video_level(shot, asset) if asset.startswith(('white', 'black')) else pixels.red_surface(shot)
-                instance.keys(*['key:1'],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                instance.inject('hello.nativeplayer', 'key:1')  # Esc = Back
                 captured = True
     text = '\n'.join(seen)
     assert '[runtime] Android media JNI registered' in text
@@ -97,7 +100,7 @@ try:
     assert committed and captured
     assert 'finished hello.nativeplayer.Main depth=0' in text and 'depth=0' in text
     assert (logs / 'shell.log').read_text(errors='replace').count('dmabuf frame') > 0
-    print('PASS native MediaPlayer video and physical Back', flush=True)
+    print('PASS native MediaPlayer video and Back', flush=True)
 finally:
     stop()
     if app is not None:

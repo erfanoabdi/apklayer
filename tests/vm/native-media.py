@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real MediaCodec APK, committed GPU frame, capture handshake and physical Back."""
+"""Real MediaCodec APK, committed GPU frame, capture handshake and Back (the shell's test input)."""
 import ctypes
 import os
 from pathlib import Path
@@ -30,7 +30,7 @@ notify = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
 assert notify >= 0 and libc.inotify_add_watch(notify, os.fsencode(logs), 0x102) >= 0
 app = None
 seen = []
-committed = captured = False
+committed = captured = focused = False
 try:
     app = subprocess.Popen(['bin/apklayer', 'run', 'hello.nativecodec'], env=ENV,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
@@ -64,11 +64,14 @@ try:
                     assert '[hello-native-codec] FAIL' not in line, line
                     if '[hello-native-codec] FRAME PASS' in line:
                         committed = True
-            # Capture after the real HWUI commit callback and a visible active window.
+            # Capture after the real HWUI commit callback and a visible active window: the shell's test input activates it (the desktop's
+            # focus belongs to whichever instance mapped a window last)
+            if committed and not focused:
+                instance.inject('hello.nativecodec', 'focus')
+                focused = True
             if committed and not captured and any('window state active=true' in s for s in seen):
-                shot = instance.capture('native MediaCodec result')
-                instance.keys(*['key:1'],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                instance.capture('native MediaCodec result', 'hello.nativecodec')
+                instance.inject('hello.nativecodec', 'key:1')  # Esc = Back
                 captured = True
     text = '\n'.join(seen)
     assert '[runtime] Android media JNI registered' in text
@@ -94,7 +97,7 @@ try:
         assert '[hello-native-codec] ENCODER PASS ' + kind in text, kind
     for asset in ('tone-mulaw.wav', 'tone-alaw.wav', 'tone-amrwb.awb', 'zeros-amrnb.amr'):
         assert '[hello-native-codec] AUDIO PASS ' + asset in text, asset
-    print('PASS APK MediaCodec JNI, real YUV/PTS/EOS, frame commit and physical Back', flush=True)
+    print('PASS APK MediaCodec JNI, real YUV/PTS/EOS, frame commit and Back', flush=True)
 finally:
     stop()
     if app is not None:

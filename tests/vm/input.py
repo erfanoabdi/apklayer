@@ -19,8 +19,13 @@ ENV = dict(instance.ENV, DBUS_SESSION_BUS_ADDRESS='unix:path=%s/bus' % instance.
     APKLAYER_RUNTIME_DEBUG='1',
     APKLAYER_DEBUG_INPUT='1', APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='600')
 os.environ['DBUS_SESSION_BUS_ADDRESS'] = ENV['DBUS_SESSION_BUS_ADDRESS']
+# IBus finds its daemon by a file named after the Wayland display (~/.config/ibus/bus/<machine>-unix-<WAYLAND_DISPLAY>): the desktop's
+# name, not the absolute path an instance's environment carries
+IBUS_ENV = dict(ENV, WAYLAND_DISPLAY=Path(ENV['WAYLAND_DISPLAY']).name)
+os.environ['WAYLAND_DISPLAY'] = IBUS_ENV['WAYLAND_DISPLAY']
 IBus.init()
 bus = IBus.Bus.new()
+assert bus.is_connected(), 'no IBus daemon for display ' + IBUS_ENV['WAYLAND_DISPLAY']
 baseline = bus.get_global_engine()
 if baseline:
     previous = baseline.get_name()
@@ -58,7 +63,7 @@ def keys(*steps):
 
 
 def locate(content_y):
-    return pixels.headers(instance.capture('locate'), 1, content_y=content_y)[0]
+    return pixels.active_window(instance.capture('locate'), content_y)
 
 
 def paste():
@@ -67,7 +72,7 @@ def paste():
 
 stop()
 try:
-    engine = subprocess.Popen(['python3', '-u', 'tests/vm/ibus-engine.py'], env=ENV,
+    engine = subprocess.Popen(['python3', '-u', 'tests/vm/ibus-engine.py'], env=IBUS_ENV,
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     children.append(engine)
     assert engine.stdout.readline().strip() == b'ENGINE ready'

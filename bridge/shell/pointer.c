@@ -39,7 +39,7 @@ static void ptr_enter(void *d, struct wl_pointer *p, uint32_t s, struct wl_surfa
     ptr_enter_serial = s;
     cursor_name_cur = NULL; /* every enter needs the cursor set again */
     the_pointer = p;
-    if (!cursor_dev && cursor_mgr) cursor_dev = wp_cursor_shape_manager_v1_get_pointer(cursor_mgr, p);
+    if (!cursor_dev && cursor_mgr && p) cursor_dev = wp_cursor_shape_manager_v1_get_pointer(cursor_mgr, p);
     struct window *w = window_for_surface(sf);
     ptr_x = wl_fixed_to_int(x); ptr_y = wl_fixed_to_int(y);
     if (w && sf == w->decor.surface) { pointer_decor_win = w; pointer_focus = NULL; }
@@ -252,3 +252,18 @@ const struct wl_pointer_listener ptr_listener = {
     .axis = ptr_axis, .frame = ptr_frame, .axis_source = ptr_axis_source,
     .axis_stop = ptr_axis_stop, .axis_discrete = ptr_axis_discrete };
 
+/* Test input: the pointer over w at (x, y) (logical content pixels; y < 0 = the title bar), then a button: 0 none, +code press,
+ * -code release (BTN_LEFT 0x110, BTN_RIGHT 0x111). Leave, enter, motion and button go through the wl_pointer handlers. */
+void pointer_inject(struct window *w, int x, int y, int button)
+{
+    int bar = y < 0;
+    struct wl_surface *sf = bar ? w->decor.surface : w->surface;
+    wl_fixed_t fx = wl_fixed_from_int(x), fy = wl_fixed_from_int(bar ? y + DECOR_H : y);
+    if ((bar ? pointer_decor_win : pointer_focus) != w) {
+        if (pointer_focus || pointer_decor_win) ptr_leave(NULL, the_pointer, 0, NULL);
+        ptr_enter(NULL, the_pointer, ptr_enter_serial, sf, fx, fy);
+    }
+    ptr_motion(NULL, the_pointer, 0, fx, fy);
+    if (button) ptr_button(NULL, the_pointer, last_input_serial, (uint32_t)now_ms(), (uint32_t)abs(button),
+                           button > 0 ? WL_POINTER_BUTTON_STATE_PRESSED : WL_POINTER_BUTTON_STATE_RELEASED);
+}

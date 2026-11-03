@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Two native app JVMs, one cold-started stack; real focus and close routing."""
+"""Two native app JVMs, one cold-started stack; focus, close routing and resize through the shell's test input (instance.inject)."""
 import os
 from pathlib import Path
 import selectors
@@ -11,7 +11,6 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 import instance  # noqa: E402  (changes into the repo root)
-import pixels  # noqa: E402
 LOGDIR = instance.LOGDIR
 ROOT = instance.ROOT
 ENV = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1',
@@ -31,12 +30,6 @@ close_at = None
 def stop():
     subprocess.run(['bin/apklayer', 'stop'], env=ENV, stdout=subprocess.DEVNULL,
                    stderr=subprocess.DEVNULL)
-
-
-def keys(*steps):
-    print('INPUT ' + ' '.join(steps), flush=True)
-    instance.keys(*[*steps],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
 
 def layers():
@@ -68,7 +61,7 @@ try:
                 selector.unregister(key.fileobj)
                 assert processes[package].wait() == 0, package + ' crashed'
                 if not closed:
-                    assert focus_checked and close_at is not None and time.monotonic() - close_at < 3, 'app did not exit in response to real Back'
+                    assert focus_checked and close_at is not None and time.monotonic() - close_at < 3, 'app did not exit in response to Back'
                     gone = package
                     survivor = next(p for p in PACKAGES if p != gone)
                     assert processes[survivor].poll() is None, 'closing one app stopped the other'
@@ -77,8 +70,7 @@ try:
                     assert 'VRI-' + gone + '/' not in remaining, 'closed app layer remains'
                     closed = True
                     print('PASS close routed to ' + gone + '; ' + survivor + ' remains', flush=True)
-                    points = pixels.headers(instance.capture('resize surviving window'), 1, True)
-                    keys(*(step for x, y in points for step in (f'abs:{x},{y}', 'click')))
+                    instance.inject(survivor, 'focus', 'resize:360,480')  # what the desktop does next: focus the other window; then a resize
                 continue
             logs[package].write(data)
             buffers[package] += data
@@ -97,18 +89,17 @@ try:
                 if ready == set(PACKAGES) and not focus_checked:
                     snapshot = layers()
                     assert all('VRI-' + p + '/' in snapshot for p in PACKAGES), 'missing app layer'
-                    points = pixels.headers(instance.capture('locate app windows'))
-                    keys(*(step for x, y in points for step in (f'abs:{x},{y}', 'click')))
+                    for p in PACKAGES: instance.inject(p, 'focus')  # the last one keeps it
                     focus_checked = True
-                    instance.capture('two app windows')
+                    for p in PACKAGES: instance.capture('window of ' + p, p)
                 if late == set(PACKAGES) and focus_checked and not closed and gone is None:
                     gone = 'pending'  # send just once; EOF identifies the actual focused app
                     close_at = time.monotonic()
-                    keys('key:1')
+                    instance.inject(PACKAGES[-1], 'key:1')  # Esc = Back to the focused app
                 if closed and package == survivor and 'script: clipcopy:' + package + '-17000' in line:
                     assert processes[package].poll() is None
                     print('PASS surviving app main loop remains responsive', flush=True)
-    assert focus_checked and closed, 'real close did not reach either app'
+    assert focus_checked and closed, 'close did not reach either app'
     shell = Path(LOGDIR + '/shell.log').read_text(errors='replace')
     assert shell.count('[shell] listening on ') == 1, 'concurrent launches restarted the shell'
     service = instance.mine('[l]ibapklayer_servicemanager.so')
@@ -116,14 +107,14 @@ try:
     assert '[shell] apklayer: window ' not in shell, 'primary window exists'
     assert all('[shell] ' + p + ' takes the input of window' in shell for p in PACKAGES)
     displays = [re.search(r'virtual display \"([^\"]+)\": layer stack (\d+)',
-        Path(LOGDIR + '/vdisplay-' + p + '.log').read_text(errors='replace')).groups() for p in PACKAGES]
+        next(Path(LOGDIR).glob('vdisplay-' + p + '-*.log')).read_text(errors='replace')).groups() for p in PACKAGES]  # vdisplay-<package>-<pid>.log
     assert len({d[0] for d in displays}) == len({d[1] for d in displays}) == 2, displays
     assert any('configure 420x600' not in s and 'configure ' in s for s in lines[survivor]), 'survivor did not resize'
     final_size = re.findall(r'configure (\d+x\d+)', '\n'.join(lines[survivor]))[-1]
     assert final_size in shell, 'survivor produced no frame after its neighbor closed'
     assert all(any('active=true' in s for s in lines[p]) for p in PACKAGES), 'focus never reached both apps'
     assert 'resumed' in '\n'.join(sum(lines.values(), [])), 'focus restore was not delivered'
-    print('PASS two app JVMs, distinct displays, real focus/close, one shared stack', flush=True)
+    print('PASS two app JVMs, distinct displays, focus/close/resize, one shared stack', flush=True)
 finally:
     stop()
     for package, proc in processes.items():

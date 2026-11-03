@@ -48,6 +48,7 @@ int main(void)
     snprintf(path, sizeof path, "%s/shell.sock", dir);
 
     signal(SIGPIPE, SIG_IGN);
+    for (int i = 0; i < MAX_CLIENTS; i++) clients[i].fd = -1;  /* before the first roundtrip: the output's mode event writes to every client */
     const char *dbg = getenv("APKLAYER_DEBUG_INPUT");
     debug_input = dbg && !strcmp(dbg, "1");
     for (int i = 0; i < MAX_CLIENTS; i++) clients[i].fd = -1;  /* before any Wayland event: the clipboard writes to every client with fd >= 0 (0 is stdin) */

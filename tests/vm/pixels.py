@@ -51,23 +51,22 @@ def game_content(image):
     return lit if colors > 200 else 0.0
 
 
-def headers(image, count=2, maximize=False, content_y=None):
-    """Locates app window decorations (the shell's dark title bars) in a capture: permille points to click, lower window first, so uinput can
-    focus them without relying on Alt-Tab state or fixed desktop coordinates."""
+def active_window(image, content_y):
+    """The desktop's active app window (the shell's focused dark title bar, bridge/shell/decor_draw.c; the others' bars are darker) in a
+    desktop capture: the permille point content_y below the top of its title bar, for uinput, without fixed desktop coordinates."""
     im = rgb(image)
     px = im.load()
     found = []
     for y in range(32, im.height):
         start = None
         for x in range(im.width + 1):
-            match = x < im.width and px[x, y] in ((43, 43, 43), (58, 58, 58))
+            match = x < im.width and px[x, y] == (48, 48, 48)
             if match and start is None:
                 start = x
             elif not match and start is not None:
-                if x - start >= 240 and not any(abs(y - r[1]) < 32 and min(x, r[2]) - max(start, r[0]) >= 240 for r in found):
+                if x - start >= 240 and not any(abs(y - r[1]) < 46 and min(x, r[2]) - max(start, r[0]) >= 240 for r in found):  # 46: DECOR_H
                     found.append((start, y, x))
                 start = None
-    assert len(found) == count, ('unexpected app decorations', found)
-    found.sort(key=lambda r: r[1], reverse=True)
-    return [[round((right - 60 if maximize else (left + right) / 2) * 1000 / im.width),
-             round((top + 16 if content_y is None else top + 32 + content_y) * 1000 / im.height)] for left, top, right in found]
+    assert len(found) == 1, ('no single active app window', found)
+    left, top, right = found[0]
+    return round((left + right) / 2 * 1000 / im.width), round((top + 32 + content_y) * 1000 / im.height)

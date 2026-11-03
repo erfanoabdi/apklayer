@@ -48,7 +48,7 @@ final class HubActivityClient {
         int found = HubProtocol.call(HubClient.current().binder(), HubProtocol.DESCRIPTOR, HubProtocol.START_ACTIVITY,
                 parcel -> { parcel.writeTypedObject(intent, 0); parcel.writeTypedObject(resultTo, 0); }, reply -> reply.readInt());
         if (found != 0) System.out.println("[apklayer] no installed app handles " + intent);
-        return true;
+        return found == 0;  // not handled: the caller's fallback (the desktop's file dialog for a picker) answers
     }
 
     /** A freshly started app process: the intent another app sent for it before it existed. */

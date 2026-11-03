@@ -4,3 +4,4 @@ APKLY_VM_PASS=secret
 # Optional, for tests/run: the repo copy on the VM (default ~/apklayer) and extra environment of every VM command (a private native tree, data dir):
 # APKLY_VM_ROOT=~/wt/me/repo
 # APKLY_VM_ENV=APKLAYER_NATIVE=$HOME/wt/me/native XDG_DATA_HOME=$HOME/wt/me/data XDG_STATE_HOME=$HOME/wt/me/state
+# APKLY_SLOTS=me1 me2 me3 me4   (tests/run's instance ids, default tests tests2 ...: other users of the VM use those)

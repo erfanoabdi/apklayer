@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Foreground GPU regression on the VM; log events drive real compositor input."""
+"""Foreground GPU regression on the VM; log events drive input and a resize through the shell's test input (instance.inject)."""
 import os
 import ctypes
 import time
@@ -37,13 +37,12 @@ def stop():
 
 
 def input_steps(*steps):
-    print('INPUT ' + ' '.join(steps), flush=True)
-    instance.keys(*steps, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    instance.inject(PKG, *steps)
 
 
 def capture(label):
-    """A desktop screenshot and its dialog margin check (tests/vm/gpu-check-image.py)."""
-    run([sys.executable, 'tests/vm/gpu-check-image.py', str(instance.capture(label))])
+    """The app window's screenshot and its dialog margin check (tests/vm/gpu-check-image.py)."""
+    run([sys.executable, 'tests/vm/gpu-check-image.py', str(instance.capture(label, PKG))])
 
 
 def dump(name):
@@ -103,24 +102,24 @@ try:
                 seen.append(line)
                 print(line, flush=True)
                 if 'script: hover:1,1' in line:
-                    input_steps('abs:260,157', 'click')
+                    input_steps('focus', 'click:226,80')  # General (content pixels of the 452-wide list, rows of 49 below the action bar)
                 elif 'script: hover:2,2' in line:
-                    input_steps('abs:260,213', 'click')
+                    input_steps('click:226,129')  # Dialog List
                 elif 'script: hover:3,3' in line:
                     before = dump('before-resize')
                     if 'DialogListActivity' not in '\n'.join(seen):
-                        raise RuntimeError('real clicks did not open Dialog List')
+                        raise RuntimeError('clicks did not open Dialog List')
                     if 'VRI-' + PKG not in before:
                         raise RuntimeError('no app layer in SurfaceFlinger')
                     capture('dialog before resize')
-                    input_steps('abs:260,300', 'click', 'combo:alt+66', 'abs:650,650', 'key:28')
+                    input_steps('resize:520,640')  # what the compositor sends for a resize (narrower than the dialog's own width: it keeps filling the window)
                     resized = True
                 elif 'script: hover:4,4' in line:
                     after = dump('after-resize')
                     if 'VRI-' + PKG not in after:
                         raise RuntimeError('app layer disappeared after resize')
                     capture('dialog after resize')
-                    input_steps('abs:260,300', 'click', 'key:1')  # real Esc/Back must dismiss the dialog
+                    input_steps('key:1')  # Esc/Back must dismiss the dialog
                 elif 'script: hover:0,0' in line and 'clipboard to the system (16 chars)' in '\n'.join(seen):
                     final_layers = dump('after-back')
                     print('LAYERS after resize=' + str(after.count('VRI-')) + ' after Back=' + str(final_layers.count('VRI-')), flush=True)
@@ -129,17 +128,17 @@ try:
     text = '\n'.join(seen)
     assert resized, 'resize step never reached'
     sizes = re.findall(r'configure (\d+x\d+)', text)
-    assert len(set(sizes)) > 1, 'real compositor resize never reached the app'
+    assert len(set(sizes)) > 1, 'the compositor\'s resize never reached the app'
     final_size = sizes[-1]
     assert final_size != sizes[0], 'resize returned to the original dimensions'
     assert 'clipboard to the system (16 chars)' in text, 'main loop stalled after resize'
-    assert final_layers.count('VRI-') < after.count('VRI-'), 'real Back did not remove the dialog layer'
+    assert final_layers.count('VRI-') < after.count('VRI-'), 'Back did not remove the dialog layer'
     shell = Path(LOGDIR + '/shell.log').read_text(errors='replace')
     assert shell.count('dmabuf frame') > 5, 'no GPU frame delivery'
     assert '[shell] apklayer: window ' not in shell, 'empty primary window was created'
     assert final_size in shell, 'no GPU frame at the final resized dimensions'
-    assert Path(LOGDIR + '/vdisplay-' + PKG + '.log').exists(), 'sink was not launched'
-    print('PASS GPU dialog, real resize, Back and main-loop responsiveness', flush=True)
+    assert list(Path(LOGDIR).glob('vdisplay-' + PKG + '-*.log')), 'sink was not launched'  # vdisplay-<package>-<pid>.log
+    print('PASS GPU dialog, resize, Back and main-loop responsiveness', flush=True)
 except BaseException:
     for pid in [l.split()[0] for l in instance.mine('[b]tload.*libapklayer_(surfaceflinger|composer)')]:
         Path('/tmp/gpu-maps-' + pid + '.txt').write_text(Path('/proc/' + pid + '/maps').read_text())
