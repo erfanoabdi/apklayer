@@ -25,7 +25,7 @@ final class HostLocation {
         // real SettingsProvider answers: the hub writes them at boot from the host's location service (HubBootSettings). The app's own provider state
         // follows them, so the fake writes nothing (it writes only a state the settings do not have yet).
         String allowed = android.provider.Settings.Secure.getString(app.getContentResolver(), android.provider.Settings.Secure.LOCATION_PROVIDERS_ALLOWED);
-        if (allowed == null) {  // the hub's first boot has not written them yet (shortcut: location is off for that launch; the next one reads them)
+        if (allowed == null) {  // the hub did not write them within its boot wait (HubBootSettings.awaitBoot): location is off for this launch
             FakeLog.hit("location", "HostLocation: no location state from the system yet");
             shadow.removeProvider(LocationManager.GPS_PROVIDER);
             shadow.removeProvider(LocationManager.NETWORK_PROVIDER);

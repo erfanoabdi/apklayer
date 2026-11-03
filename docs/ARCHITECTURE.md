@@ -44,7 +44,7 @@ apps and games see real Android, shown as Wayland windows. Details of that route
 Robolectric creates `<pkg>-dataDir`, `userDataDir` and `deviceDataDir` in its per-run temp
 directory when the Application is created, and deletes them at exit. The host runs with
 `LazyApplication` ON and pre-creates those three entries as links into
-`apps/<pkg>/data/{app,user,device}` (`-Dapklayer.data`, `-Dapklayer.package`) before the
+`<data home>/apklayer/<n>/app-data/<pkg>/{app,user,device}` of the instance (`-Dapklayer.data`, `-Dapklayer.package`) before the
 Application exists. Robolectric keeps an existing entry and its exit cleanup does not follow
 links, so SharedPreferences, databases, files and caches persist across launches.
 
