@@ -218,19 +218,10 @@ final class HubPackages {
 
     private static final HostSystemConfig SYSTEM = HostSystemConfig.load();
 
+    /** A service's android:permission, checked with the same grants as every other permission (holds): a requested dangerous one is granted too. */
     void enforceServicePermission(String caller, ServiceInfo service) {
         if (caller.equals(service.packageName) || service.permission == null || service.permission.isEmpty()) return;
-        PackageParser.Package source = get(caller), owner = get(service.packageName);
-        if (source == null || !source.requestedPermissions.contains(service.permission))
-            throw new SecurityException("Service requires " + service.permission);
-        PermissionInfo definition = owner.permissions.stream().map(permission -> permission.info)
-                .filter(permission -> service.permission.equals(permission.name)).findFirst().orElse(null);
-        if (definition == null) {
-            try { definition = RuntimeEnvironment.getApplication().getPackageManager().getPermissionInfo(service.permission, 0); }
-            catch (PackageManager.NameNotFoundException missing) { throw new SecurityException("Unknown permission " + service.permission); }
-        }
-        if ((definition.protectionLevel & PermissionInfo.PROTECTION_MASK_BASE) != PermissionInfo.PROTECTION_NORMAL)
-            throw new SecurityException("Permission is not granted: " + service.permission);
+        if (!holds(caller, service.permission)) throw new SecurityException("Service requires " + service.permission);
     }
     ServiceInfo service(Intent intent) {
         ComponentName explicit = intent.getComponent();
