@@ -70,7 +70,9 @@ class ReorderedDecoder final : public SimpleC2Component {
         bool input = !work->input.buffers.empty();
         if (!input && !mCodec) { mEosQueued = eos; return; }
         int64_t pts = work->input.ordinal.timestamp.peekll();
-        if (pts < 0 || pts > INT64_MAX / 1000) { work->result = C2_BAD_VALUE; return; }
+        if (!eos && (pts < 0 || pts > INT64_MAX / 1000)) { work->result = C2_BAD_VALUE; return; }
+        // an end-of-stream work may carry no time (a client draining with an empty EOS buffer at -1 us, as GeckoView does); only bytes need one
+        if (eos && input && (pts < 0 || pts > INT64_MAX / 1000)) pts = 0;
         if (!mCodec) {
             apklayer_codec_config setup = {mParams->info().mime, mParams->width(), mParams->height(), nullptr, 0};
             if (apklayer_codec_open(&setup, &mCodec) || apklayer_codec_set_notify(mCodec, ready, this)) {

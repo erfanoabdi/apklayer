@@ -1,0 +1,8 @@
+<html><head><meta name="viewport" content="width=device-width"></head><body style="background:#fff;margin:0">
+<!-- ?v=<video id>: YouTube's embedded player filling the page, started by a tap (with sound); an embed opened as the top page refuses to play (error 153) -->
+<script>
+var v = new URLSearchParams(location.search).get('v'), f = document.createElement('iframe');
+f.src = 'https://www.youtube.com/embed/' + v + '?loop=1&playlist=' + v + '&playsinline=1';
+f.allow = 'autoplay; encrypted-media'; f.style = 'width:100%;height:90vh;border:0';
+document.body.appendChild(f);
+</script></body></html>

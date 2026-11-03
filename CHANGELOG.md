@@ -69,6 +69,11 @@ Older dated notes (GPU follow-up, TextureView, MC3, Vulkan checkpoints, OTR2, ro
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 
+### 2026-11-04 — libapklayer_codec2: EOS drain without a timestamp (media agent)
+- Why: the AVC/VP8/VP9 adapter (ReorderedDecoder) rejected an end-of-stream work whose timestamp is -1 us (MediaCodec clients drain with an empty EOS buffer; GeckoView does), so MediaCodec reported UNKNOWN_ERROR at the end of every H.264 video.
+- Command (OrbStack, under `flock -n ~/los24-build.lock`): only `hals/media/codec2/ReorderedDecoder.cpp` copied into `vendor/apklayer` (same as main before the edit), then `python3 tools/lib/orb-build-module.py libapklayer_codec2 hals/media/codec2 ReorderedDecoder.cpp`.
+- Result: built (01:11), sha256 af4b582bc1320b91f30d0e0b44f27ba96a2cec461b50e23475d3958d2059ff91; installed only in the media agent's lib64 copy on the Parallels VM (`~/wt/fx/lib64`). The file in `vendor/apklayer` is changed but not committed there (the branch carries it; the next `tools/sync-aosp.sh` from main after the merge commits it).
+
 ### 2026-11-03 — libapklayer_egl: GL hook table for every context (egl agent)
 - Why: with Android's libGLESv1_CM mapped, SurfaceFlinger crashed in its glGetString (reads TLS_SLOT_OPENGL_API's table without a null check) because our EGL set the slot only for ES 1 contexts; now ES 2/3 contexts get a table of the host's GLES entry points and no context a no-op table, as Android's EGL does (gHooks / gHooksNoContext). Only aosp/hals/graphics/egl/{Gles1.cpp,Gles1.h} copied into vendor/apklayer (Egl.cpp and Android.bp there were identical to this branch). Command: `flock -n ~/los24-build.lock -c 'cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_egl'`.
 - Result: built (10:44), sha256 7c64fcf17456953d5bf9cdfb1984564e302d3583d1e5bb187ddfec1307fbca03. Second build, same command: Gles1.cpp opens libapklayer-gles1.so through glibc's dlmopen (in app processes the native dir is on the bionic search path and bionic_translation linked the glibc library as an Android one: "failed to link libapklayer-gles1.so", OpenTTD got no ES 1 context). Result: built, sha256 eeee4d5179fb60fad0b38b652a8f942dae5ad19f4422644dd287b02b8d47f6aa.
