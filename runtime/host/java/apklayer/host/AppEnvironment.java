@@ -94,7 +94,7 @@ final class AppEnvironment {
 
     /**
      * The native runtime (Robolectric's libandroid_runtime, fonts, hyphenation), which setUpApplicationState loads once per sandbox: a spare
-     * component host loads it ahead (ComponentSpare), as zygote preloads. Its shadow pickers read the configuration, set here as the state setup sets it.
+     * loads it ahead (AppSpare), as zygote preloads. Its shadow pickers read the configuration, set here as the state setup sets it.
      */
     static void loadNativeRuntime() {
         org.robolectric.config.ConfigurationRegistry.instance = new org.robolectric.config.ConfigurationRegistry(configuration(false).map());

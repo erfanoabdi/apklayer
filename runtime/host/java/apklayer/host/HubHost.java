@@ -10,14 +10,15 @@ public final class HubHost {
     private HubHost() {}
     public static void run(AndroidSandbox sandbox) {
         Thread.currentThread().setContextClassLoader(sandbox.getRobolectricClassLoader());
-        // before the hub's own setup (~1 s): the first component host, the settings provider an app's Application.onCreate waits for, is then warm by the time it is asked for
-        HubSpare spare = new HubSpare(HubDirectory.LOGS);
-        spare.start();
+        // the instance's spare (cli/spare.cpp), before the hub's own setup (~1 s): the first component host, the settings provider an app's
+        // Application.onCreate waits for, is then warm by the time it is asked for (none starts when the instance has one)
+        try { new ProcessBuilder(System.getProperty("apklayer.cli"), "app-spare").redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start(); }
+        catch (java.io.IOException failure) { System.out.println("[apklayer-hub] cannot start the instance's spare: " + failure); }
         AppEnvironment.setUpApplication(sandbox, null, false);
         RuntimeEnvironment.getApplication();
         RealBinder.init();
         Path apps = Path.of(System.getProperty("apklayer.apps"));
-        HubDirectory directory = new HubDirectory(apps, spare);
+        HubDirectory directory = new HubDirectory(apps);
         if (!RealBinder.publish(HubProtocol.SERVICE, directory))
             throw new IllegalStateException("Cannot publish instance hub");
         if (!RealBinder.publish(HubAccounts.SERVICE, directory.accounts()))

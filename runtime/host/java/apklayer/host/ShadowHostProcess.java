@@ -18,6 +18,6 @@ public class ShadowHostProcess extends ShadowProcess {
     }
 
     @Implementation protected static int myPid() { return PID; }
-    // the package's Android app uid (bin/apklayer), the desktop user's uid without one; read per call: a spare component host learns it late (ComponentSpare)
+    // the package's Android app uid (bin/apklayer), the desktop user's uid without one; read per call: a spare learns it late (AppSpare)
     @Implementation protected static int myUid() { return Integer.getInteger("apklayer.uid", REAL_UID); }
 }

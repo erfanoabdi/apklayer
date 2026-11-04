@@ -15,12 +15,8 @@ public final class ComponentHost implements Runnable {
     private final AndroidSandbox sandbox;
     private final Path apk;
     public ComponentHost(AndroidSandbox sandbox, Path apk, Path ignored) { this.sandbox = sandbox; this.apk = apk; }
-    /** What a spare component host does before it knows its package (ComponentSpare). */
-    public static void prepare() {
-        AppEnvironment.loadNativeRuntime();
-    }
     @Override public void run() {
-        // from here on SIGTERM is an orderly stop; before (a spare host waiting for its package) the JVM's default exit
+        // from here on SIGTERM is an orderly stop; before (a spare waiting for its launch) the JVM's default exit
         sun.misc.Signal.handle(new sun.misc.Signal("TERM"), signal -> stopping = true);
         Thread.currentThread().setContextClassLoader(AppClassLoader.app != null ? AppClassLoader.app : sandbox.getRobolectricClassLoader());  // the app's own loader, as on Android
         StartTrace.mark("componenthost run");
@@ -34,6 +30,7 @@ public final class ComponentHost implements Runnable {
         HubClient client = HubClient.attach(app);
         StartTrace.mark("hub attached");
         System.out.println("[apklayer] component-host READY " + app.getPackageName() + " pid=" + android.os.Process.myPid());
+        AppSpare.launchStarted();
         ShadowPausedLooper looper = Shadow.extract(Looper.getMainLooper());
         while (client.alive() && !stopping) step(looper);
         if (stopping) {

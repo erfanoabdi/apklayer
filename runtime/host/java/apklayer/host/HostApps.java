@@ -151,7 +151,7 @@ final class HostApps {
 
     /** In the callee: tells the app that started this process how the activity it was started for ended. */
     static void writeResult(int resultCode, Intent data) {
-        String path = System.getenv(RESULT_ENV);
+        String path = AppSpare.launchEnv(RESULT_ENV);
         if (path == null) return;
         Properties p = data == null ? new Properties() : toProperties(data);
         p.setProperty("resultCode", String.valueOf(resultCode));
@@ -166,7 +166,7 @@ final class HostApps {
 
     /** The intent another app handed to this process at start (null for a normal launch). */
     static Intent incoming() {
-        String path = System.getenv(INTENT_ENV);
+        String path = AppSpare.launchEnv(INTENT_ENV);
         return path == null ? null : read(Path.of(path), RuntimeEnvironment.getApplication().getPackageName());
     }
 

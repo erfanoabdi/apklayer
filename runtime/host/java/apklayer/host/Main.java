@@ -43,22 +43,19 @@ public final class Main {
             } catch (Throwable failure) { failure.printStackTrace(); System.exit(1); }
             return;
         }
-        boolean spare = args.length == 1 && args[0].equals("--component-spare");  // a component host started before its package is known (ComponentSpare)
-        boolean appSpare = args.length == 1 && args[0].equals("--app-spare");  // a window JVM started before its launch is known (AppSpare)
-        boolean componentHost = spare || args.length == 3 && args[0].equals("--component-host");
-        if (componentHost) { args = spare ? args : new String[]{args[1], args[2]}; System.setProperty("apklayer.componenthost", "true"); }
+        boolean spare = args.length == 1 && args[0].equals("--spare");  // the instance's spare: started before its launch is known (AppSpare)
         Path describe = null;
         if (args.length == 4 && args[0].equals("--describe")) {
             describe = Path.of(args[1]);
             args = new String[] {args[2], args[3]};
         }
-        if (!spare && !appSpare && args.length != 2) {
+        if (!spare && args.length != 2) {
             System.err.println("usage: apklayer.host.Main [--describe <out-dir>] <app.apk> <app-classes.jar>");
             System.exit(2);
         }
-        String[] files = spare || appSpare ? null : args;
+        String[] files = spare ? null : args;
         Path out = describe;
-        if (!componentHost && !appSpare && describe == null) RunDeadline.start();
+        if (!spare && !Boolean.getBoolean("apklayer.componenthost") && describe == null) RunDeadline.start();
         AndroidSandbox sandbox = sandbox();
         StartTrace.mark("sandbox built");
         try {
@@ -67,14 +64,11 @@ public final class Main {
                     String[] target = files;
                     if (spare) {
                         Thread.currentThread().setContextClassLoader(sandbox.getRobolectricClassLoader());  // the native runtime's resources (build.prop, ICU) are the sandbox's
-                        sandbox.bootstrappedClass(ComponentHost.class).getMethod("prepare").invoke(null);
-                        target = ComponentSpare.awaitTarget();
-                    }
-                    if (appSpare) {
-                        Thread.currentThread().setContextClassLoader(sandbox.getRobolectricClassLoader());
                         target = (String[]) sandbox.bootstrappedClass(AppSpare.class).getMethod("awaitTarget").invoke(null);
-                        RunDeadline.start();  // the launch's runms
+                        if (!Boolean.getBoolean("apklayer.componenthost")) RunDeadline.start();  // the launch's runms
                     }
+                    // an app's window process, or a package's headless component host (the hub's `apklayer component-host`: -Dapklayer.componenthost)
+                    boolean componentHost = Boolean.getBoolean("apklayer.componenthost");
                     Path apk = Path.of(target[0]), classes = Path.of(target[1]);
                     Thread.currentThread().setContextClassLoader(appLoader(sandbox, apk, classes));
                     Class<?> host = sandbox.bootstrappedClass(componentHost ? ComponentHost.class : AppHost.class);
