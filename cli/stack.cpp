@@ -192,7 +192,11 @@ static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std
     }
     std::string fingerprint = get("ro.product.brand") + "/" + get("ro.product.name") + "/" + get("ro.product.device") + ":" + get("ro.build.version.release_or_codename") +
                               "/" + get("ro.build.id") + "/" + incremental + ":" + get("ro.build.type") + "/" + get("ro.build.tags");
-    std::string abis = std::string(kAbi) + (*kAbi32 ? std::string(",") + kAbi32 : "");
+    // a staged native bridge adds its ABI, as on an x86_64 device with one (ro.dalvik.vm.native.bridge names it; apps pick their libraries by the list)
+    bool bridge = *kBridgeAbi && exists(join(l.androidLibs, kBridgeLib));
+    std::string abis64 = std::string(kAbi) + (bridge ? std::string(",") + kBridgeAbi : "");
+    std::string abis = abis64 + (*kAbi32 ? std::string(",") + kAbi32 : "");
+    if (bridge) setProperty(l, ne, "ro.dalvik.vm.native.bridge", kBridgeLib);
     setProperty(l, ne, "ro.build.fingerprint", fingerprint.c_str());
     setProperty(l, ne, "ro.system.build.fingerprint", fingerprint.c_str());
     // as the build system writes them for the build type and tags the instance presents (apklayer.prop), not the tree's "userdebug ... test-keys"
@@ -203,7 +207,7 @@ static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std
                                                 incremental + " " + get("ro.build.tags")).c_str());
     setProperty(l, ne, "ro.product.cpu.abi", kAbi);
     setProperty(l, ne, "ro.product.cpu.abilist", abis.c_str());
-    setProperty(l, ne, "ro.product.cpu.abilist64", kAbi);
+    setProperty(l, ne, "ro.product.cpu.abilist64", abis64.c_str());
     setProperty(l, ne, "ro.product.cpu.abilist32", kAbi32);
 }
 
