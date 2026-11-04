@@ -61,10 +61,21 @@ public class ShadowHostNativeAudioManager extends ShadowAudioManager {
     }
     @Implementation @Override protected boolean setCommunicationDevice(AudioDeviceInfo device) {
         Objects.requireNonNull(device);
-        if (!getAvailableCommunicationDevices().contains(device)) throw new IllegalArgumentException("invalid device type: " + device.getType());
-        return change(new AudioDeviceAttributes(device));
+        boolean valid = false;
+        for (int type : COMMUNICATION_TYPES) valid |= device.isSink() && device.getType() == type;
+        if (!valid) throw new IllegalArgumentException("invalid device type: " + device.getType());
+        return getAvailableCommunicationDevices().contains(device) && change(new AudioDeviceAttributes(device));
     }
     @Implementation @Override protected void clearCommunicationDevice() { change(null); }
+    // AudioDeviceBroker.isSpeakerphoneOn: the speaker is the requested communication device; setSpeakerphoneOn requests or drops it.
+    @Implementation @Override protected boolean isSpeakerphoneOn() {
+        return requested != null && requested.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER;
+    }
+    @Implementation @Override protected void setSpeakerphoneOn(boolean on) {
+        if (!on) { if (isSpeakerphoneOn()) change(null); return; }
+        for (AudioDeviceInfo device : getAvailableCommunicationDevices())
+            if (device.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) { change(new AudioDeviceAttributes(device)); return; }
+    }
     @Implementation @Override protected AudioDeviceInfo getCommunicationDevice() {
         List<AudioDeviceInfo> devices = getAvailableCommunicationDevices();
         AudioDeviceAttributes wanted = requested;

@@ -37,6 +37,7 @@ final class CommCheck {
         require(Integer.parseInt(audio.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)) > 0, "output sample rate");
         AudioDeviceInfo chosen = available.get(available.size() - 1);
         require(audio.setCommunicationDevice(chosen) && chosen.equals(audio.getCommunicationDevice()), "communication device not selected");
+        require(audio.isSpeakerphoneOn() == (chosen.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER), "speakerphone follows the communication device");
         audio.setMode(AudioManager.MODE_IN_COMMUNICATION);
         try {
             require(audio.getMode() == AudioManager.MODE_IN_COMMUNICATION, "mode " + audio.getMode());
@@ -45,6 +46,7 @@ final class CommCheck {
             audio.clearCommunicationDevice();
             audio.setMode(AudioManager.MODE_NORMAL);
         }
+        require(!audio.isSpeakerphoneOn(), "speakerphone after clearCommunicationDevice");
     }
 
     private CommCheck() {}
