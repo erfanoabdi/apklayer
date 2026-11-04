@@ -10,6 +10,10 @@
 #include <cstring>
 
 int sensorsProbe();
+// weak: the probe runs this library without a backend loaded (bionic's linker binds every symbol at load)
+#pragma weak apklayer_sensors_init
+#pragma weak apklayer_sensors_list
+#pragma weak apklayer_sensors_read
 
 namespace aidl::android::hardware::sensors {
 namespace {
@@ -69,6 +73,7 @@ extern "C" int main(int argc, char** argv) {
     setvbuf(stdout, nullptr, _IOLBF, 0);
     setvbuf(stderr, nullptr, _IOLBF, 0);
     if (argc == 2 && !std::strcmp(argv[1], "--probe")) return sensorsProbe();
+    if (!apklayer_sensors_init) { fprintf(stderr, "sensors: no backend library (APKLAYER_HOST_LIBS)\n"); return 1; }
     if (int error = apklayer_sensors_init(argc - 1, argv + 1)) { fprintf(stderr, "sensors backend: %s\n", strerror(-error)); return 1; }
     ABinderProcess_setThreadPoolMaxThreadCount(0);
     auto sensors = ndk::SharedRefBase::make<BackendSensors>();

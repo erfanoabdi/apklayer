@@ -13,6 +13,12 @@
 #include <cstring>
 #include <thread>
 
+// weak: the probe runs this library without a backend loaded (bionic's linker binds every symbol at load)
+#pragma weak apklayer_vibrator_init
+#pragma weak apklayer_vibrator_on
+#pragma weak apklayer_vibrator_off
+#pragma weak apklayer_vibrator_amplitude
+
 namespace aidl::android::hardware::vibrator {
 namespace {
 class BackendVibrator final : public Vibrator {
@@ -71,6 +77,7 @@ extern "C" int main(int argc, char** argv) {
     ABinderProcess_setThreadPoolMaxThreadCount(4);
     ABinderProcess_startThreadPool();
     if (argc == 2 && !std::strcmp(argv[1], "--probe")) return probe();
+    if (!apklayer_vibrator_init) { fprintf(stderr, "vibrator: no backend library (APKLAYER_HOST_LIBS)\n"); return 1; }
     if (int error = apklayer_vibrator_init(argc - 1, argv + 1)) { fprintf(stderr, "vibrator backend: %s\n", strerror(-error)); return 1; }
     auto vibrator = ndk::SharedRefBase::make<BackendVibrator>();
     CHECK_EQ(AServiceManager_addService(vibrator->asBinder().get(), Vibrator::makeServiceName("default").c_str()), STATUS_OK);

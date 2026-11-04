@@ -11,6 +11,9 @@
 #include <cstring>
 
 int gnssClient(int fixes);
+// weak: the client runs this library without a backend loaded (bionic's linker binds every symbol at load)
+#pragma weak apklayer_gnss_init
+#pragma weak apklayer_gnss_next_fix
 
 namespace aidl::android::hardware::gnss {
 namespace {
@@ -42,6 +45,7 @@ extern "C" int main(int argc, char** argv) {
     ABinderProcess_startThreadPool();
     // `--client [N]`: a client of the HAL printing each fix (`location LAT LON ACCURACY`; N fixes, then PASS; 0 = until killed)
     if (argc >= 2 && !std::strcmp(argv[1], "--client")) return gnssClient(argc == 3 ? atoi(argv[2]) : 0);
+    if (!apklayer_gnss_init) { fprintf(stderr, "gnss: no backend library (APKLAYER_HOST_LIBS)\n"); return 1; }
     if (int error = apklayer_gnss_init(argc - 1, argv + 1)) { fprintf(stderr, "gnss backend: %s\n", strerror(-error)); return 1; }
     auto gnss = ndk::SharedRefBase::make<BackendGnss>();
     CHECK_EQ(AServiceManager_addService(gnss->asBinder().get(), (std::string(Gnss::descriptor) + "/default").c_str()), STATUS_OK);
