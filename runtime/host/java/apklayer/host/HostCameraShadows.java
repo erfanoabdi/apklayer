@@ -29,6 +29,7 @@ final class HostCameraShadows {
                 Map.entry("android.hardware.camera2.TotalCaptureResult", TotalCaptureResult.class.getName()),
                 Map.entry("android.hardware.camera2.impl.CameraDeviceImpl", CameraDeviceImpl.class.getName()),
                 Map.entry("android.hardware.camera2.impl.CameraCaptureSessionImpl", CameraCaptureSessionImpl.class.getName()),
+                Map.entry("android.hardware.camera2.utils.SurfaceUtils", SurfaceUtils.class.getName()),
                 Map.entry("android.hardware.camera2.impl.CameraMetadataNative", CameraMetadataNative.class.getName()),
                 Map.entry("android.hardware.Camera", Camera.class.getName()),
                 Map.entry("android.hardware.Camera.Parameters", CameraParameters.class.getName()),
@@ -43,8 +44,9 @@ final class HostCameraShadows {
     @Implements(className = "android.hardware.camera2.CameraMetadata", isInAndroidSdk = false) public static final class CameraMetadata {}
     @Implements(className = "android.hardware.camera2.CaptureResult", isInAndroidSdk = false) public static final class CaptureResult {}
     @Implements(className = "android.hardware.camera2.TotalCaptureResult", isInAndroidSdk = false) public static final class TotalCaptureResult {}
-    @Implements(className = "android.hardware.camera2.impl.CameraDeviceImpl", isInAndroidSdk = false) public static final class CameraDeviceImpl {}
+    @Implements(className = "android.hardware.camera2.impl.CameraDeviceImpl", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class CameraDeviceImpl {}
     @Implements(className = "android.hardware.camera2.impl.CameraCaptureSessionImpl", isInAndroidSdk = false) public static final class CameraCaptureSessionImpl {}
+    @Implements(className = "android.hardware.camera2.utils.SurfaceUtils", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class SurfaceUtils {}
     @Implements(className = "android.hardware.camera2.impl.CameraMetadataNative", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class CameraMetadataNative {}
     @Implements(className = "android.hardware.Camera", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class Camera {}
     @Implements(className = "android.hardware.Camera$Parameters", isInAndroidSdk = false) public static final class CameraParameters {}
