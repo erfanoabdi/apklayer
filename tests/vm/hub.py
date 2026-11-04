@@ -51,6 +51,16 @@ def notification_clicks():
         time.sleep(1)
 
 
+def own_data_dir(pkg):
+    """The app's data (its WebView profile) is in this instance's directory, not one every instance of the data home shares (cli/layout appData)."""
+    info = dict(l.split('\t', 1) for l in subprocess.run(['bin/apklayer', 'info', pkg], env=ENV, capture_output=True, text=True, check=True).stdout.splitlines() if '\t' in l)
+    want = '/apklayer/%s/app-data/%s' % ('0' if INSTANCE == 'default' else INSTANCE, pkg)
+    assert info['dataDir'].endswith(want), 'app data of %s not per instance: %s' % (pkg, info['dataDir'])
+    assert Path(info['dataDir'], 'app/app_webview').is_dir(), 'no WebView profile in ' + info['dataDir']
+    assert not Path(info['dir'], 'data').exists(), 'a data dir beside the shared code: ' + info['dir'] + '/data'
+    print('[wv] app data per instance: ' + info['dataDir'], flush=True)
+
+
 stop()
 if TEST == 'services' and PHASE == 'late':  # installed only while the test runs
     subprocess.run(['bin/apklayer', 'uninstall', 'hello.svclate'], env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -88,7 +98,9 @@ try:
                     target = log / 'app-hello.acttarget.log'
                     if TEST == 'activities' and PHASE == 'private' and target.exists():
                         assert 'PRIVATE STARTED' not in target.read_text(errors='replace'), 'private activity started'
-                    if TEST == 'webview': capture('webview', package)  # what the WebView drew, for a look afterwards
+                    if TEST == 'webview':
+                        capture('webview', package)  # what the WebView drew, for a look afterwards
+                        own_data_dir(package)
                     print('PASS %s %s' % (TEST, PHASE), flush=True)
                     raise SystemExit(0)
     import hangdump
