@@ -36,6 +36,10 @@ run = ["tests/vm/settings.sh"]
 apps = ["hello-devices"]
 run = ["tests/vm/devices.sh"]
 
+[bluetooth]
+apps = ["hello-bluetooth"]
+run = ["tests/vm/bluetooth.sh"]
+
 [files]
 apps = ["hello-files"]
 setup = ["""f=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/system/etc/permissions/apklayer-test-hello-files.xml; [ -e $f ] || printf '<permissions><privapp-permissions package="hello.files"><permission name="android.permission.MANAGE_DOCUMENTS"/></privapp-permissions></permissions>\\n' > $f"""]

@@ -164,6 +164,11 @@ public final class HubClient {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.UID_OF_PID, request -> request.writeInt(pid), reply -> reply.readInt());
     }
     /** Whether another app's caller holds the permission: the kernel's pid of a synchronous call names it, the uid its header carried a oneway one (pid 0 or -1). */
+    /** A BlueZ helper of this process's own (HubBluetooth): {its stdin, its stdout}; an RFCOMM connection when address and uuid are given. */
+    android.os.ParcelFileDescriptor[] bluetooth(String address, String uuid) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.BLUETOOTH, request -> { request.writeString(address); request.writeString(uuid); },
+                reply -> new android.os.ParcelFileDescriptor[] {reply.readTypedObject(android.os.ParcelFileDescriptor.CREATOR), reply.readTypedObject(android.os.ParcelFileDescriptor.CREATOR)});
+    }
     int checkPermission(int pid, int uid, String permission) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CHECK_PERMISSION, request -> { request.writeInt(pid); request.writeInt(uid); request.writeString(permission); }, reply -> reply.readInt());
     }
