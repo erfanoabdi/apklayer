@@ -16,6 +16,18 @@ final class HostKeyStore {
         return RealBinder.await(name, 5000);  // it registers once it has met KeyMint and negotiated the shared secret
     }
 
+    /**
+     * Android's AndroidKeyStoreSpi as Android's libcore runs it: there KeyStoreSpi.engineGetEntry(alias, null) returns a key entry ("Android-removed" password
+     * check), the JDK's throws "requested entry requires a password" (Element's SecretStoringUtils.ensureKey, from its Application.onCreate).
+     */
+    public static final class Spi extends android.security.keystore2.AndroidKeyStoreSpi {
+        @Override public java.security.KeyStore.Entry engineGetEntry(String alias, java.security.KeyStore.ProtectionParameter protection)
+                throws java.security.KeyStoreException, java.security.NoSuchAlgorithmException, java.security.UnrecoverableEntryException {
+            boolean keyEntry = protection == null && engineContainsAlias(alias) && !engineIsCertificateEntry(alias);
+            return super.engineGetEntry(alias, keyEntry ? new java.security.KeyStore.PasswordProtection(null) : protection);
+        }
+    }
+
     static void install() {
         if (Security.getProvider("AndroidKeyStore") != null) return;
         if (!Boolean.getBoolean("apklayer.softkeystore")) {
@@ -27,6 +39,7 @@ final class HostKeyStore {
                             android.system.keystore2.IKeystoreService.Stub.asInterface(real));
                     org.robolectric.shadows.ShadowServiceManager.setServiceDeclaredOrNot("android.system.keystore2.IKeystoreService/default", true);
                     android.security.keystore2.AndroidKeyStoreProvider.install();
+                    Security.getProvider("AndroidKeyStore").put("KeyStore.AndroidKeyStore", Spi.class.getName());
                     StartTrace.mark("keystore provider installed");
                     try {  // a first call tells whether keystore2 answers this process at all
                         java.security.KeyStore probe = java.security.KeyStore.getInstance("AndroidKeyStore");
