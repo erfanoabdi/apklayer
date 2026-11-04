@@ -161,6 +161,20 @@ bin/apklayer --instance work stop
 bin/apklayer instance remove work         # deletes its data
 ```
 
+### USB devices
+
+Apps reach a USB device the way they do on Android (UsbManager: the device list, the attach intent, a permission question, `openDevice`); apklayer
+then opens the device's node `/dev/bus/usb/BBB/DDD` read-write as your user. By default those nodes are root's: give your user the device with a udev
+rule (`uaccess`: the logged-in desktop user gets it while their session is active), e.g. for a USB serial adapter:
+
+```sh
+echo 'SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="0403", ATTR{idProduct}=="6001", TAG+="uaccess"' | sudo tee /etc/udev/rules.d/70-my-usb-device.rules
+sudo udevadm control --reload && sudo udevadm trigger    # or unplug and plug in again
+```
+
+An interface a Linux driver holds (ftdi_sio, cdc_acm, usb-storage...) cannot be claimed while it does, unless the app forces it (`claimInterface(..., true)`,
+which detaches the driver until the device is plugged in again); blacklisting the driver (`/etc/modprobe.d`) keeps it off for good.
+
 ## 11. Troubleshooting
 
 - Logs: `~/.local/state/apklayer/<instance>/` (`default` for the default instance): `stack.log` (the services' start), `shell.log` (windows, frames, input),

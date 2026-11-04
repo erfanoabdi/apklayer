@@ -196,6 +196,11 @@ public final class HubClient {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.INSTALL_SOURCE, request -> request.writeBoolean(ask), reply -> reply.readBoolean());
     }
 
+    /** UsbManager.hasPermission ({@code ask} false) and requestPermission ({@code ask} true: waits for the person's answer). */
+    boolean usbPermission(String device, boolean ask) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.USB_PERMISSION, request -> { request.writeString(device); request.writeBoolean(ask); }, reply -> reply.readBoolean());
+    }
+
     static synchronized HubClient attach(Context context) {
         Context app = context.getApplicationContext();  // null while Application.attach runs (LoadedApk has no Application yet): the Application itself
         if (current == null) current = new HubClient(app != null ? app : context);

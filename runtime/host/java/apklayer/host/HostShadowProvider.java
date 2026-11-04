@@ -94,6 +94,11 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.os.Vibrator", HostPlainShadows.Vibrator.class.getName()),
                 Map.entry("android.os.SystemVibrator", HostPlainShadows.SystemVibrator.class.getName()),
                 Map.entry("android.widget.Toast", ShadowHostToast.class.getName()),
+                // USB without a HAL: the host's devices and the framework's own connection code over the device node (HostUsb, HubUsb)
+                Map.entry("android.hardware.usb.UsbManager", ShadowHostUsbManager.class.getName()),
+                Map.entry("android.hardware.usb.UsbDevice", HostPlainShadows.UsbDevice.class.getName()),
+                Map.entry("android.hardware.usb.UsbDeviceConnection", HostPlainShadows.UsbDeviceConnection.class.getName()),
+                Map.entry("android.hardware.usb.UsbRequest", HostPlainShadows.UsbRequest.class.getName()),
                 Map.entry("android.os.SystemProperties", ShadowHostSystemProperties.class.getName()),
                 Map.entry("android.hardware.HardwareBuffer", ShadowHostNativeHardwareBuffer.class.getName()),
                 Map.entry("android.app.DownloadManager", ShadowHostDownloadManager.class.getName()),  // the real one talks to DownloadProvider (DownloadStorageProvider reads it)

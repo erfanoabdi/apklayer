@@ -54,24 +54,36 @@ int apklayer_register_attribution(JNIEnv *env, jclass helper)
     return 0;
 }
 
-/* These device-runtime entrypoints are absent from Google's small HostRuntime
- * table. Reuse their actual AOSP registration order and caches. */
-int apklayer_register_audio(JNIEnv *env, void *runtime)
+/* Device-runtime entrypoints absent from Google's small HostRuntime table: called by their mangled names, in AOSP's registration order. */
+static int register_runtime_jni(JNIEnv *env, void *runtime, const char *const *names, size_t count, const char *what)
 {
-    const char *names[] = {"register_android_media_AudioDeviceAttributes",
-        "register_android_media_AudioEffectDescriptor", "register_android_media_AudioSystem",
-        "register_android_media_AudioTrack", "register_android_media_AudioRecord", "register_android_media_AudioAttributes"};
-    for (size_t i = 0; i < sizeof names / sizeof *names; i++) {
+    for (size_t i = 0; i < count; i++) {
         char symbol[160];
         snprintf(symbol, sizeof symbol, "_Z%zu%sP7_JNIEnv", strlen(names[i]), names[i]);
         int (*reg)(JNIEnv *) = bionic_dlsym(runtime, symbol);
-        fprintf(stderr, "[runtime] audio JNI %s: %s\n", names[i], reg ? "found" : "MISSING");
+        fprintf(stderr, "[runtime] %s JNI %s: %s\n", what, names[i], reg ? "found" : "MISSING");
         if (!reg || reg(env) < 0 || (*env)->ExceptionCheck(env)) {
             fprintf(stderr, "[runtime] cannot register %s\n", names[i]);
             if ((*env)->ExceptionCheck(env)) (*env)->ExceptionDescribe(env);
             return -1;
         }
     }
-    fprintf(stderr, "[runtime] original Android audio JNI registered\n");
+    fprintf(stderr, "[runtime] original Android %s JNI registered\n", what);
     return 0;
+}
+
+int apklayer_register_audio(JNIEnv *env, void *runtime)
+{
+    static const char *const names[] = {"register_android_media_AudioDeviceAttributes",
+        "register_android_media_AudioEffectDescriptor", "register_android_media_AudioSystem",
+        "register_android_media_AudioTrack", "register_android_media_AudioRecord", "register_android_media_AudioAttributes"};
+    return register_runtime_jni(env, runtime, names, sizeof names / sizeof *names, "audio");
+}
+
+/* UsbDeviceConnection and UsbRequest on libusbhost (usbdevfs ioctls on the /dev/bus/usb node HostUsbShadows opens) */
+int apklayer_register_usb(JNIEnv *env, void *runtime)
+{
+    static const char *const names[] = {"register_android_hardware_UsbDevice",
+        "register_android_hardware_UsbDeviceConnection", "register_android_hardware_UsbRequest"};
+    return register_runtime_jni(env, runtime, names, sizeof names / sizeof *names, "usb");
 }

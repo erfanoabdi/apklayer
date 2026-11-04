@@ -21,6 +21,7 @@ final class HubProtocol {
             RESOLVE_ACTIVITY = 39,
             START_INPUT = 40, FINISH_INPUT = 41,
             HOST_SETTINGS = 42,  // {} -> the instance's host settings Bundle (HubHostSettings), pushed again on a change (ENDPOINT_CONFIGURATION)
+            USB_PERMISSION = 44,  // {device name, ask} -> whether the caller may open the USB device (HubUsb); ask: the person decides now
             SETTINGS_CHANGED = 43;  // `apklayer settings set|unset` (the CLI, through servicetool call): {} -> the hub rereads the instance's overrides  // the input method binding (HubInputMethods): {IRemoteInputConnection, EditorInfo} / {}  // {intent} -> 1 when an installed app (or the installer's confirmation) handles it: startActivity's ActivityNotFoundException
             // RELAUNCH: `apklayer run` of a running app (the CLI, through servicetool call): {package, intent file or ""} -> 0 delivered, 1 not running
     static final int ENDPOINT_BIND = 1, ENDPOINT_UNBIND = 2, ENDPOINT_START = 3, ENDPOINT_STOP = 4, ENDPOINT_GET_PROVIDER = 5, ENDPOINT_NOTIFY = 6, ENDPOINT_START_ACTIVITY = 7, ENDPOINT_EXIT_IF_IDLE = 8, ENDPOINT_PACKAGE_CHANGED = 9, ENDPOINT_CONFIGURATION = 10;
