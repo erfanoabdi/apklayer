@@ -91,7 +91,7 @@ before this rewrite is `docs/history/PLAN-2026-11-04-full.md`). If a decision ch
 - **Apps**: Godot 4 needs Vulkan presentation; Meet's Google sign-in through microG needs a human check.
 
 ## Needs real hardware or a person
-- **x86_64 PC**: the staged x86_64 route (`tools/stage x86_64`, `docs/X86_64.md`) has never run.
+- **x86_64 PC** (the owner's, Alder Lake-N, Mesa ANV): UiBench runs (2026-11-04: GLES 3.2 on the Intel GPU, dmabuf frames reach the shell). Open: an x86_64 tree build of the modules missing or stale in the x86_64 prebuilts (libapklayer_screenshot, _vulkan, vulkan.apklayer, _vktest missing; _audio, _audioserver, _codec2, _egl, _servicetool, _vdisplay, _allocator, libbinder stale; needs the owner's approval: another product in ~/los24), the Vulkan build script for x86_64 (tools/lib/orb-build-vulkan.py reads only the arm64 product), then screenshots, the gpu groups and vulkan-present on real hardware.
 - **A real GPU**: Vulkan presentation (vulkan-present, Godot); Fennec page text (virgl drops ints set in shader branches on UTM, `tests/vm/gles-int-branch.c`; report to virglrenderer).
 - **A Halium/Sailfish device**: the host binder contexts against real vendor HALs; the `android_wlegl` buffer path; device sensors, camera and vibrator.
 - **A person**: the window raise of a relaunched app (the shell asks with the launcher's XDG_ACTIVATION_TOKEN; mutter refuses the shell's own token, no test has a launcher token); what the text magnifier draws; the portal file chooser and pkexec prompt in the manager; the Google sign-in in Meet/microG; playback quality by ear and eye.
