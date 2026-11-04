@@ -49,12 +49,15 @@ void writeProviders(const std::string& file, const std::vector<ProviderConfig>& 
     if (!writeFile(file, text)) die("cannot write " + file);
 }
 
-// probe() of a backend library: <0 unusable here, 0 usable (never a default), >0 quality; INT32_MIN when it cannot be loaded
-int probe(const std::string& lib, const std::string& domain) {
+// probe() of a backend library: <0 unusable here, 0 usable (never a default), >0 quality; INT32_MIN when it cannot be loaded.
+// options: the backend's apklayer_<domain>_options, a line "key<TAB>default<TAB>kind" per option it takes (kind text or file), "" without
+int probe(const std::string& lib, const std::string& domain, std::string& options) {
     void* handle = dlopen(lib.c_str(), RTLD_NOW | RTLD_LOCAL);
     if (!handle) return INT32_MIN;
     auto fn = reinterpret_cast<int (*)()>(dlsym(handle, ("apklayer_" + domain + "_probe").c_str()));
     int quality = fn ? fn() : INT32_MIN;
+    auto declared = static_cast<const char*>(dlsym(handle, ("apklayer_" + domain + "_options").c_str()));
+    options = declared ? declared : "";
     dlclose(handle);
     return quality;
 }
@@ -111,19 +114,22 @@ std::vector<ProviderService> providerServices(const Layout& l, const Instance& i
 int providersCommand(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {
     const std::string file = providersFile(inst);
     auto domains = readProviders(file);
-    if (args.empty()) {  // domain, provider, backend, options; then every backend found with its probe() answer
+    if (args.empty()) {  // domain, provider, backend, its options (a field each); then every backend found with its probe() answer and the options it takes
         for (const ProviderConfig& d : domains) {
-            std::string options;
-            for (const std::string& o : d.options) options += (options.empty() ? "" : " ") + o;
-            printf("%s\t%s\t%s\t%s\n", d.domain.c_str(), d.provider.c_str(), d.backend.c_str(), options.c_str());
+            printf("%s\t%s\t%s", d.domain.c_str(), d.provider.c_str(), d.backend.c_str());
+            for (const std::string& o : d.options) printf("\t%s", o.c_str());
+            printf("\n");
         }
         for (const Domain& d : kDomains)
             for (const std::string& f : listDir(l.native)) {
                 std::string prefix = std::string("libapklayer-") + d.name + "-";
                 if (f.rfind(prefix, 0) != 0 || f.size() < prefix.size() + 4 || f.substr(f.size() - 3) != ".so") continue;
-                int q = probe(join(l.native, f), d.name);
+                std::string options;
+                int q = probe(join(l.native, f), d.name, options);
                 std::string name = f.substr(prefix.size(), f.size() - prefix.size() - 3);
                 printf("backend\t%s\t%s\t%s\n", d.name, name.c_str(), q == INT32_MIN ? "unloadable" : q < 0 ? "unavailable" : ("quality " + std::to_string(q)).c_str());
+                for (const std::string& o : split(options, '\n'))
+                    if (!o.empty()) printf("option\t%s\t%s\t%s\n", d.name, name.c_str(), o.c_str());
             }
         return 0;
     }

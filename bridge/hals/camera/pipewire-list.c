@@ -103,6 +103,8 @@ int apklayer_camera_probe(void)
     return apklayer_camera_list(cams, 1) > 0 ? 10 : -1;  /* a real camera beats the fake; no camera: unusable here */
 }
 
+const char apklayer_camera_options[] = "role\tcamera\ttext\n";  /* camera or any (every video source) */
+
 int apklayer_camera_init(int count, const char *const *options)
 {
     for (int i = 0; i < count; i++) {

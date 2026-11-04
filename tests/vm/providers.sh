@@ -11,7 +11,11 @@ trap 'bin/apklayer stop >/dev/null 2>&1; for d in sensors vibrator gnss; do bin/
 bin/apklayer providers set sensors fake accel=0.5,9.5,1.25 >/dev/null
 bin/apklayer providers set vibrator fake >/dev/null
 bin/apklayer providers set gnss fake location=48.8584,2.2945 accuracy=3 >/dev/null
-bin/apklayer providers
+bin/apklayer providers | tee $APKLY_STATE/providers.out
+# the listing the manager's Hardware page reads: the configured options a field each, the options every backend takes
+grep -q "^gnss	apklayer	fake	location=48.8584,2.2945	accuracy=3$" $APKLY_STATE/providers.out || fail "providers: the configured options are not a field each"
+grep -q "^option	gnss	fake	gpx		file$" $APKLY_STATE/providers.out && grep -q "^option	sensors	fake	accel	0,9.80665,0	text$" $APKLY_STATE/providers.out \
+    || fail "providers: no option rows from the backends"
 
 # 1. each HAL as its framework client uses it (sensors: NDK ASensorManager through SensorService, since the HAL serves one client): the stack runs the probe as its tool (output in tool.log; the next stack removes it)
 tool=$APKLY_STATE/tool.log

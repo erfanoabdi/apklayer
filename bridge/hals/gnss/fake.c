@@ -54,6 +54,7 @@ static int load_gpx(const char *path)
 }
 
 int apklayer_gnss_probe(void) { return 0; }
+const char apklayer_gnss_options[] = "location\t37.4219999,-122.0840575,1.6\ttext\naccuracy\t5\ttext\ngpx\t\tfile\n";
 
 int apklayer_gnss_init(int count, const char *const *options)
 {
