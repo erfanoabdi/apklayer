@@ -9,6 +9,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+extern void apklayer_log_follow_stderr(void);
+
 jstring Java_apklayer_host_NativeLoader_receiveTarget(JNIEnv *env, jclass cls, jint fd)
 {
     (void)cls;
@@ -32,6 +34,7 @@ jstring Java_apklayer_host_NativeLoader_receiveTarget(JNIEnv *env, jclass cls, j
         dup2(got[1], 2);
         close(got[0]);
         close(got[1]);
+        apklayer_log_follow_stderr();  /* liblog writes to its own copy of stderr (android_platform.c) */
         if (count == 3) {  /* kept open (close-on-exec) for AppSpare.launchStarted */
             char line[64];
             int len = snprintf(line, sizeof line, "-Dapklayer.startedfd=%d\n", got[2]);
