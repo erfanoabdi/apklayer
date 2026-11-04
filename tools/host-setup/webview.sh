@@ -8,7 +8,11 @@
 set -euo pipefail
 sudo mkdir -p /data/local/tmp
 sudo chmod 1777 /data /data/local /data/local/tmp
-echo "webview --no-sandbox --disable-seccomp-filter-sandbox" | sudo tee /data/local/tmp/webview-command-line >/dev/null
-sudo chmod 644 /data/local/tmp/webview-command-line
-echo "webview-setup: /data/local/tmp/webview-command-line written (seccomp sandbox off)"
+f=/data/local/tmp/webview-command-line line="webview --no-sandbox --disable-seccomp-filter-sandbox"
+if [ "$(cat "$f" 2>/dev/null)" != "$line" ]; then
+    sudo rm -f "$f"  # fs.protected_regular: root cannot reopen another user's file in the sticky directory, only replace it
+    echo "$line" | sudo tee "$f" >/dev/null
+    sudo chmod 644 "$f"
+fi
+echo "webview-setup: $f in place (seccomp sandbox off)"
 [ $# -eq 0 ] || "$(dirname "$0")/../../bin/apklayer" install "$1"

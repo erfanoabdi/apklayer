@@ -1,6 +1,6 @@
 # Installing apklayer
 
-Step by step, from a fresh Linux machine to an Android app in a window. Tested on Ubuntu 24.04 arm64 (a Parallels VM, GNOME Wayland).
+Step by step, from a fresh Linux machine to an Android app in a window. Tested on Ubuntu 24.04 arm64 (a Parallels VM, GNOME Wayland, Mesa virgl), 2026-11-04, from a fresh clone.
 x86_64 has its own prebuilts but was never run on a real PC (`docs/X86_64.md`); the steps below are written for arm64.
 
 What you need: arm64 Linux with **Ubuntu 24.04 or newer, or Debian 13**, a **Wayland** desktop session (GNOME, KDE), a GPU with Mesa (GBM, EGL, GLES), PipeWire for audio,
@@ -61,24 +61,25 @@ git -C "$AL/bionic_translation" checkout "$(cat "$AL/repo/patches/bionic_transla
 The CLI and the build read these paths from the environment; `~/.config/apklayer/env` keeps them for later shells and for apps started from the desktop menu.
 
 ```sh
-mkdir -p ~/.config/apklayer
-cat > ~/.config/apklayer/env <<EOF
+C="${XDG_CONFIG_HOME:-$HOME/.config}/apklayer"
+mkdir -p "$C"
+cat > "$C/env" <<EOF
 export APKLAYER_NATIVE=$AL/native
 export APKLAYER_ANDROID_LIBS=$AL/prebuilts/arm64/android-libs/lib64
 export APKLAYER_BT=$AL/bionic_translation/b
 export APKLAYER_DEPS=$AL/deps
 EOF
-. ~/.config/apklayer/env
+. "$C/env"
 ```
 
 `APKLAYER_NATIVE` is the staged runtime (built in step 6), `APKLAYER_ANDROID_LIBS` Android's own libraries (used in place from the prebuilts),
-`APKLAYER_BT` bionic_translation's build, `APKLAYER_DEPS` the pinned Java libraries. Source the file again in every new shell that builds (`. ~/.config/apklayer/env`).
+`APKLAYER_BT` bionic_translation's build, `APKLAYER_DEPS` the pinned Java libraries. In a new shell that builds, set `AL` again and source the file (`. ~/.config/apklayer/env`); the CLI reads it by itself.
 
 ## 5. Build
 
 ```sh
 cd "$AL/repo"
-APKLAYER_DEPS_LOCAL="$AL/prebuilts/common" tools/fetch-deps.sh "$APKLAYER_DEPS"   # Maven jars (downloaded, sha256-checked); android-stub.jar from the prebuilts
+APKLAYER_DEPS_LOCAL="$AL/prebuilts/common" tools/fetch-deps.sh "$APKLAYER_DEPS"   # Maven jars (about 400 MB, sha256-checked); android-stub.jar from the prebuilts
 tools/build bt "$AL/bionic_translation"                                           # bionic_translation, patched (patches/apply)
 meson setup b -Dbionic_translation="$APKLAYER_BT" -Dandroid_libs="$APKLAYER_ANDROID_LIBS"
 ninja -C b                                                                        # the CLI, shell, dex2jvm, host HALs, JNI shim, btload
@@ -90,13 +91,12 @@ The runtime directory gets the Android root and the framework jars from the preb
 
 ```sh
 N="$APKLAYER_NATIVE" P="$AL/prebuilts/common"
-mkdir -p "$N/aosp/android-all" "$N/android-all"
+mkdir -p "$N/aosp/android-all"
 cp -a "$AL/prebuilts/arm64/android-root" "$N/"
 cp "$P/Robolectric_all.jar" "$N/aosp/"
 cp -r "$P/sim-classes" "$P/robolectric-src" "$N/aosp/"
 cp "$P/android-all-16-robolectric-13921718.jar" "$N/aosp/android-all/"
 cp "$P/android-all-16-robolectric-13921718.jar" "$N/aosp/android-all/android-all-current-robolectric-r0.jar"
-cp "$APKLAYER_DEPS"/android-all/*.jar "$N/android-all/"     # Robolectric's SDK 36 jar: the overlays compile against it
 tools/build host "$N"                                     # the host classes
 tools/build native "$N" "$P/javac-shards"                 # native runtime, native-runtime.jar, library mapping, the framework instrumented once
 ```

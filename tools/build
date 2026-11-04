@@ -73,7 +73,7 @@ build_overlay() { # build_overlay <native> [dir with the shim and critical-nativ
     patches/apply robolectric "$work/src" >/dev/null
     find runtime/patches "$work/src" -name '*.java' ! -name '._*' | sort > "$work/sources"
     echo "Compiling $(wc -l < "$work/sources") runtime overlay sources"
-    javac -nowarn -d "$work/classes" -cp "$native/aosp/Robolectric_all.jar:$native/android-all/*" "@$work/sources"
+    javac -nowarn -d "$work/classes" -cp "$native/aosp/Robolectric_all.jar:$native/aosp/android-all/*" "@$work/sources"
     if [ -n "$staging" ]; then
         cp -R "$staging/." "$work/classes/"
         jar cf "$work/runtime.jar" -C "$work/classes" .
@@ -151,7 +151,7 @@ build_native() {
     # what apps that dlopen system libraries by name find on the LD_LIBRARY_PATH they read (HostLibraryPath.java)
     mkdir -p "$native/android-system-stubs"
     for f in libc libdl libstdc++; do ln -sfn "../${f}_bio.so" "$native/android-system-stubs/$f.so"; done
-    ln -sfn "$(${CC:-cc} -print-file-name=libm.so.6)" "$native/android-system-stubs/libm.so"
+    ln -sfn "$(realpath "$(${CC:-cc} -print-file-name=libm.so.6)")" "$native/android-system-stubs/libm.so"
     cp -r --remove-destination bridge/native/android-root/. "$native/android-root/"  # apklayer's own files of the Android root; the tree's come from tools/stage root
     for f in btload aprop; do put "$B/bridge/native/$f" "$native/bin/$f"; done
     put bridge/native/getprop "$native/bin/getprop" && chmod 755 "$native/bin/getprop"
@@ -172,7 +172,7 @@ build_native() {
     build_overlay "$native" "$tmp/jar"
     # Robolectric loads the library from the framework jar's own native/ first: the same copy there. zip -O writes a new jar
     # (zip updates an archive in place, which would reach every hardlinked copy of it)
-    (cd "$tmp/jar" && for j in "$native"/aosp/android-all/*.jar "$native"/android-all/*.jar; do
+    (cd "$tmp/jar" && for j in "$native"/aosp/android-all/*.jar; do
         zip -q -O "$j.new" "$j" native/linux/x86_64/libandroid_runtime.so native/linux/aarch64/libandroid_runtime.so && mv -f "$j.new" "$j"
     done)
     build_cfg "$native"
