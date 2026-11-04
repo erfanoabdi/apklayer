@@ -11,30 +11,46 @@ final class HostCertificate {
     private HostCertificate() {}
 
     private static Signature[] signatures;
-    private static final java.util.Map<String, Signature[]> byPackage = new java.util.HashMap<>();
+    private static final java.util.Map<String, android.content.pm.SigningDetails> byPackage = new java.util.HashMap<>();
 
-    /** The certificate of an installed package's base.apk (v3, v2 or v1 signature block); the placeholder when it cannot be read. */
-    static synchronized Signature[] of(String packageName) {
+    /** The current certificate of an installed package's base.apk (v3, v2 or v1 signature block); the placeholder when it cannot be read. */
+    static Signature[] of(String packageName) { return details(packageName).getSignatures(); }
+
+    /** The signers of an installed package's base.apk with its v3 rotation history (SigningDetails as the package manager keeps them); the placeholder when unreadable. */
+    static synchronized android.content.pm.SigningDetails details(String packageName) {
         return byPackage.computeIfAbsent(packageName, name -> {
             String apps = System.getProperty("apklayer.apps");
             java.io.File apk = apps == null ? null : new java.io.File(new java.io.File(apps, name), "base.apk");
-            if (apk == null || !apk.isFile()) return signatures();
-            Signature[] read = read(apk);
-            return read != null ? read : signatures();
+            android.content.pm.SigningDetails read = apk == null || !apk.isFile() ? null : details(apk);
+            return read != null ? read : new android.content.pm.SigningDetails(signatures(), android.content.pm.SigningDetails.SignatureSchemeVersion.JAR, null, null);
         });
     }
 
-    /** The certificate an APK is signed with (v3, v2 or v1 signature block); null when it is unsigned or unreadable. */
+    /**
+     * PackageInfo.signatures, PackageInfoUtils.getDeprecatedSignatures: for an APK that rotated its key (v3 lineage) the oldest certificate, so callers unaware
+     * of rotation keep matching the key they always knew (microG's list of Google apps); else the current signers.
+     */
+    static Signature[] legacy(android.content.pm.SigningDetails details) {
+        return details.hasPastSigningCertificates() ? new Signature[] {details.getPastSigningCertificates()[0]} : details.getSignatures();
+    }
+
+    /** The current certificate an APK is signed with (v3, v2 or v1 signature block); null when it is unsigned or unreadable. */
     static Signature[] read(java.io.File apk) {
+        android.content.pm.SigningDetails details = details(apk);
+        return details == null ? null : details.getSignatures();
+    }
+
+    /** The signers of an APK and its rotation history (v3, v2 or v1 signature block); null when it is unsigned or unreadable. */
+    private static android.content.pm.SigningDetails details(java.io.File apk) {
         String why;
         try {
             android.content.pm.parsing.result.ParseResult<android.content.pm.SigningDetails> read = android.util.apk.ApkSignatureVerifier.unsafeGetCertsWithoutVerification(
                     android.content.pm.parsing.result.ParseTypeImpl.forParsingWithoutPlatformCompat(), apk.getPath(), android.content.pm.SigningDetails.SignatureSchemeVersion.JAR);
-            if (read.isSuccess() && read.getResult().getSignatures() != null && read.getResult().getSignatures().length > 0) return read.getResult().getSignatures();
+            if (read.isSuccess() && read.getResult().getSignatures() != null && read.getResult().getSignatures().length > 0) return read.getResult();
             why = read.getErrorMessage();
         } catch (RuntimeException | LinkageError failure) { why = failure.toString(); }
         Signature[] v1 = jarSigner(apk);  // the framework's v1 path (StrictJarFile) needs libcore's natives
-        if (v1 != null) return v1;
+        if (v1 != null) return new android.content.pm.SigningDetails(v1, android.content.pm.SigningDetails.SignatureSchemeVersion.JAR, null, null);
         System.out.println("[apklayer] signing certificate of " + apk + " not readable (" + why + "): the placeholder");
         return null;
     }

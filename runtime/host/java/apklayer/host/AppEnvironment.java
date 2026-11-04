@@ -195,7 +195,7 @@ final class AppEnvironment {
         android.content.pm.PackageInfo own = pm.getInternalMutablePackageInfo(app.getPackageName());
         if (own != null) {
             android.content.pm.Signature[] ownCert = HostCertificate.of(own.packageName);
-            if (own.signatures == null) own.signatures = ownCert;
+            if (own.signatures == null) own.signatures = HostCertificate.legacy(HostCertificate.details(own.packageName));
             if (own.signingInfo == null) own.signingInfo = new android.content.pm.SigningInfo(new android.content.pm.SigningDetails(ownCert, 2, new android.util.ArraySet<>(), null));
         }
     }
