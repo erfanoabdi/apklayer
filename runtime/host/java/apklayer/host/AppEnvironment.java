@@ -204,7 +204,8 @@ final class AppEnvironment {
      * Android creates the ContentProviders the manifest declares for a process (highest initOrder first) before Application.onCreate, in each process
      * of the app (ActivityManagerService.generateApplicationProvidersLocked: the provider's process name, or multiprocess); libraries like androidx.startup
      * (WorkManager, emoji2, ProcessLifecycleOwner) initialise through them. Here the package's process hosts all of them (the hub sends every provider
-     * of the package there: MediaProvider's "android.process.media" too); a service's process of its own (HostProcessName) hosts only its own.
+     * of the package there: MediaProvider's "android.process.media" too); a service's process of its own (HostProcessName) hosts only its own and the
+     * multiprocess ones, an isolated process (android:isolatedProcess) none.
      */
     static void installProviders(Application app) {
         // the package's process, or a service's own (an isolated instance: apklayer.isolated; its process name from HostProcessName, if it has one)
@@ -212,10 +213,10 @@ final class AppEnvironment {
         try {
             android.content.pm.ProviderInfo[] providers = app.getPackageManager()
                     .getPackageInfo(app.getPackageName(), android.content.pm.PackageManager.GET_PROVIDERS).providers;
-            if (providers == null) return;
+            if (providers == null || HostProcessName.isolated) return;
             java.util.Arrays.sort(providers, java.util.Comparator.comparingInt((android.content.pm.ProviderInfo p) -> p.initOrder).reversed());
             for (android.content.pm.ProviderInfo info : providers) {
-                if (process != null && !info.multiprocess && !process.equals(info.processName)) continue;  // shortcut: an isolated process gets multiprocess providers too (Android: none); upgrade when one breaks there
+                if (process != null && !info.multiprocess && !process.equals(info.processName)) continue;
                 try {
                     // as ContentProviderController.create, but attached to the Application itself: ActivityThread.installProvider gives a provider of the
                     // app's own package mInitialApplication (apps cast getContext() to their Application class), Robolectric its base ContextImpl

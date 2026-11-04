@@ -56,11 +56,11 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
     }
     @Implementation @Override protected boolean bindService(Intent intent, ServiceConnection connection, int flags) {
         if (HubServices.external(real, intent)) return HubServices.bind(real, intent, flags, null, connection);
-        return Services.bindHere(real, intent, connection, flags);
+        return Services.bindHere(real, intent, connection, flags, null);
     }
     @Implementation @Override protected boolean bindService(Intent intent, int flags, Executor executor, ServiceConnection connection) {
         if (HubServices.external(real, intent)) return HubServices.bind(real, intent, flags, executor, connection);
-        return Services.bindHere(real, intent, connection, flags);  // shortcut: callbacks on the main thread, not the executor; upgrade when a caller needs its executor
+        return Services.bindHere(real, intent, connection, flags, executor);
     }
     @Implementation @Override protected android.content.ComponentName startService(Intent intent) {
         return HubServices.external(real, intent) ? HubServices.start(real, intent) : super.startService(intent);
@@ -88,7 +88,7 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
     }
     @Implementation public boolean bindService(Intent intent, Context.BindServiceFlags flags, Executor executor, ServiceConnection connection) {
         if (HubServices.external(real, intent)) return HubServices.bind(real, intent, (int) flags.getValue(), executor, connection);
-        return Services.bindHere(real, intent, connection, (int) flags.getValue());  // shortcut: callbacks on the main thread, not the executor; upgrade when a caller needs its executor
+        return Services.bindHere(real, intent, connection, (int) flags.getValue(), executor);
     }
     @Implementation @Override protected void unbindService(ServiceConnection connection) {
         if (!HubServices.unbind(connection) && !Services.unbindHere(connection)) super.unbindService(connection);

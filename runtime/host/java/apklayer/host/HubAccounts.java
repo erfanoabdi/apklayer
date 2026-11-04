@@ -199,14 +199,15 @@ final class HubAccounts extends IAccountManager.Stub {
         if (removed) changed(account);
         return removed;
     }
-    /** shortcut: removed without asking the authenticator's getAccountRemovalAllowed (every authenticator here allows it); ask it when one refuses. */
+    /** AccountManagerService.RemoveAccountSession: the authenticator's getAccountRemovalAllowed decides; an allowed removal answers whether the store had it. */
     @Override public void removeAccountAsUser(IAccountManagerResponse response, Account account, boolean expectActivityLaunch, int userId) {
         owner(account.type);
-        boolean removed = store.remove(account);
-        if (removed) changed(account);
-        Bundle result = new Bundle();
-        result.putBoolean(AccountManager.KEY_BOOLEAN_RESULT, removed);
-        reply(response, result);
+        session(account.type, response, (a, r) -> a.getAccountRemovalAllowed(r, account), result -> {
+            if (!result.getBoolean(AccountManager.KEY_BOOLEAN_RESULT) || result.containsKey(AccountManager.KEY_INTENT)) return;
+            boolean removed = store.remove(account);
+            if (removed) changed(account);
+            result.putBoolean(AccountManager.KEY_BOOLEAN_RESULT, removed);
+        });
     }
     @Override public void invalidateAuthToken(String accountType, String authToken) { store.invalidate(accountType, authToken); }
     @Override public String peekAuthToken(Account account, String authTokenType) { owner(account.type); return store.read(account, e -> e.tokens.get(authTokenType)); }
@@ -333,7 +334,7 @@ final class HubAccounts extends IAccountManager.Stub {
     @Override public void isCredentialsUpdateSuggested(IAccountManagerResponse response, Account account, String statusToken) {
         session(account.type, response, (a, r) -> a.isCredentialsUpdateSuggested(r, account, statusToken), null);
     }
-    /** shortcut: the required features are not checked with the authenticator (hasFeatures per account); ask it when an app filters by features. */
+    /** Limit: the required features are not checked with the authenticator (its hasFeatures per account): every visible account of the type is returned. */
     @Override public void getAccountsByFeatures(IAccountManagerResponse response, String accountType, String[] features, String opPackageName) {
         Bundle result = new Bundle();
         result.putParcelableArray(AccountManager.KEY_ACCOUNTS, visible(accountType, caller().name(), false));

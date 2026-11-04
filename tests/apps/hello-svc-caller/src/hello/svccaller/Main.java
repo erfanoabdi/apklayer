@@ -236,9 +236,14 @@ public class Main extends Activity {
     /** Own-package services bound by action and package (as microG binds its ":unstable" DroidGuard) and by component, in this process and in ":other"; binds nothing resolves return false and never connect. */
     private void own() throws Exception {
         int me = android.os.Process.myPid();
-        int here = pidOf(new Intent("hello.svccaller.PID").setPackage(getPackageName()));
-        int other = pidOf(new Intent("hello.svccaller.OTHER_PID").setPackage(getPackageName()));
-        int otherByName = pidOf(new Intent().setComponent(new ComponentName(this, OtherPidService.class)));
+        int[] hereProbe = pidOf(new Intent("hello.svccaller.PID").setPackage(getPackageName()));
+        int[] otherProbe = pidOf(new Intent("hello.svccaller.OTHER_PID").setPackage(getPackageName()));
+        int here = hereProbe[0], other = otherProbe[0];
+        int otherByName = pidOf(new Intent().setComponent(new ComponentName(this, OtherPidService.class)))[0];
+        int[] isolated = pidOf(new Intent().setComponent(new ComponentName(this, IsolatedPidService.class)));
+        // the multiprocess provider: created in this process and in ":other", not in the isolated one (ActivityManagerService gives an isolated process none)
+        require(hereProbe[1] == 1 && otherProbe[1] == 1, "multiprocess provider missing: here " + hereProbe[1] + ", \":other\" " + otherProbe[1]);
+        require(isolated[0] != me && isolated[1] == 0, "isolated service (pid " + isolated[0] + ") created the provider: " + isolated[1]);
         require(here == me, "in-process service runs in pid " + here + ", not " + me);
         // the ":other" host ends with its last binding (pidOf unbinds), so the two binds may see two pids
         require(other > 0 && other != me && otherByName > 0 && otherByName != me, "\":other\" service pids " + other + " / " + otherByName + " (this process " + me + ")");
@@ -251,10 +256,23 @@ public class Main extends Activity {
         require(!bindService(new Intent("hello.svccaller.NOBODY").setPackage(getPackageName()), none, Context.BIND_AUTO_CREATE), "bind of an unresolved own action returned true");
         require(!bindService(new Intent().setComponent(new ComponentName("hello.nosuchpackage", "hello.Missing")), none, Context.BIND_AUTO_CREATE), "bind of a missing package returned true");
         require(!called.await(2, TimeUnit.SECONDS), "a refused bind connected");
-        System.out.println("[svc] PASS own: in-process service pid " + here + ", \":other\" service pid " + other + " by action and by name; three unresolved binds returned false");
+        // bindService with an Executor: onServiceConnected runs on that executor's thread
+        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newSingleThreadExecutor(r -> new Thread(r, "svc-executor"));
+        java.util.concurrent.BlockingQueue<String> thread = new java.util.concurrent.LinkedBlockingQueue<>();
+        ServiceConnection onExecutor = new ServiceConnection() {
+            @Override public void onServiceConnected(ComponentName name, IBinder service) { thread.add(Thread.currentThread().getName()); }
+            @Override public void onServiceDisconnected(ComponentName name) { }
+        };
+        require(bindService(new Intent("hello.svccaller.PID").setPackage(getPackageName()), Context.BIND_AUTO_CREATE, executor, onExecutor), "bind with an executor");
+        String connectedOn = thread.poll(15, TimeUnit.SECONDS);
+        unbindService(onExecutor);
+        executor.shutdown();
+        require("svc-executor".equals(connectedOn), "onServiceConnected of an executor bind ran on " + connectedOn);
+        System.out.println("[svc] PASS own: in-process service pid " + here + ", \":other\" service pid " + other + " by action and by name; three unresolved binds returned false; an executor bind connected on its executor; the multiprocess provider in both, not in the isolated pid " + isolated[0]);
     }
 
-    private int pidOf(Intent intent) throws Exception {
+    /** {pid, whether that process created ProbeProvider} of the service the intent binds. */
+    private int[] pidOf(Intent intent) throws Exception {
         CountDownLatch connected = new CountDownLatch(1);
         IBinder[] binder = new IBinder[1];
         ServiceConnection connection = new ServiceConnection() {
@@ -266,7 +284,7 @@ public class Main extends Activity {
             require(connected.await(15, TimeUnit.SECONDS), "no connection for " + intent);
             require(binder[0] != null, "null binder for " + intent);
             Parcel data = Parcel.obtain(), reply = Parcel.obtain();
-            try { require(binder[0].transact(1, data, reply, 0), "transact"); return reply.readInt(); }
+            try { require(binder[0].transact(1, data, reply, 0), "transact"); return new int[] {reply.readInt(), reply.readInt()}; }
             finally { data.recycle(); reply.recycle(); }
         } finally { unbindService(connection); }
     }
