@@ -61,7 +61,8 @@ final class HostLocation {
             BufferedReader in = new BufferedReader(new InputStreamReader(helper.getInputStream()));
             String first = in.readLine();  // `ready`, or why the source is not usable
             // btload's own line, and the GNSS client's session status (it may come before its `ready`)
-            while (first != null && (first.startsWith("LOADED ") || first.startsWith("status "))) first = in.readLine();
+            // shortcut: a fix that comes before `ready` is dropped (a backend that sends one fix only would lose it; the fakes and GeoClue repeat)
+            while (first != null && (first.startsWith("LOADED ") || first.startsWith("status ") || first.startsWith("location "))) first = in.readLine();
             if (first == null || !first.equals("ready")) {  // it went away since the hub asked: no such provider here (a disabled one would be a settings write)
                 System.out.println("[apklayer] location: " + provider + ": " + (first == null ? "no helper" : first) + ", provider removed");
                 helper.destroy();
