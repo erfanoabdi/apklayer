@@ -13,7 +13,7 @@ www=$(mktemp -d) && head -c 40000 /dev/urandom > $www/check.bin
 port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
 python3 -m http.server $port --bind 127.0.0.1 --directory $www > $www/server.log 2>&1 &
 server=$!
-trap 'kill $server; rm -rf $www' EXIT
+trap 'kill $server; rm -rf $www; bin/apklayer ime disable hello.system >/dev/null' EXIT  # an enabled IME would bind to the fields of later groups
 status=0
 for scenario in ${@:-all}; do
     out=$APKLY_STATE/sys-$scenario.out

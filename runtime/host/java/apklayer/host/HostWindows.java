@@ -323,6 +323,37 @@ final class HostWindows {
         }
     }
 
+    private static final java.util.Map<Activity, List<View>> hiddenWith = new java.util.WeakHashMap<>();
+
+    /**
+     * The window manager hides an activity's windows while it is stopped: besides its decor (AppHost.setVisible), its dialogs (their
+     * token is the activity's) and the popups over those (the parent window's token). Hidden, they take no input (patches/robolectric
+     * 0017) and stay out of the screen; the stopped activity's fragments are stopped too and must not see taps. Shown again: only those hidden here.
+     */
+    static void setAttachedVisible(Activity activity, boolean visible) {
+        List<View> hidden = hiddenWith.remove(activity);
+        if (visible) {
+            if (hidden != null) for (View v : hidden) if (v.getVisibility() == View.INVISIBLE) v.setVisibility(View.VISIBLE);
+            return;
+        }
+        Object wmg = android.view.WindowManagerGlobal.getInstance();
+        List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
+        List<android.view.WindowManager.LayoutParams> params = org.robolectric.util.ReflectionHelpers.getField(wmg, "mParams");
+        View decor = activity.getWindow().getDecorView();
+        java.util.Set<android.os.IBinder> tokens = new java.util.HashSet<>();
+        tokens.add(activity.getWindow().getAttributes().token);
+        tokens.add(decor.getWindowToken());
+        tokens.remove(null); // not attached yet: no window is over it
+        List<View> now = new ArrayList<>();
+        for (int i = 0; i < views.size(); i++) { // in the order they were added: a parent window before the windows over it
+            View v = views.get(i);
+            if (v == decor || !tokens.contains(params.get(i).token)) continue;
+            if (v.getWindowToken() != null) tokens.add(v.getWindowToken());
+            if (v.getVisibility() == View.VISIBLE) { v.setVisibility(View.INVISIBLE); now.add(v); }
+        }
+        if (!now.isEmpty()) hiddenWith.put(activity, now);
+    }
+
     /** ViewRootImpl#windowFocusChanged and the top-resumed state, as the window manager reports them for the top window. */
     static void focus(org.robolectric.android.controller.ActivityController<? extends Activity> c, boolean has) {
         View decor = c.get().getWindow().getDecorView();

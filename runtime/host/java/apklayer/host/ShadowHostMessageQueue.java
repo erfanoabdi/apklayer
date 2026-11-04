@@ -16,6 +16,8 @@ public class ShadowHostMessageQueue extends ShadowPausedMessageQueue {
 
     /** A thread with a native Looper waits there (its eventfds wake it for native tasks, ALooper_wake for Java messages) instead of only on Robolectric's monitor. */
     @Implementation @Override protected void nativePollOnce(long ptr, int timeoutMillis) {
+        // only a real Looper.loop() polls here (Robolectric's idle and poll do not): on the main thread that is the app's own loop, which the run loop goes on in
+        if (queue == android.os.Looper.getMainLooper().getQueue() && AppHost.stepInAppLoop()) return;
         long looper = NativeLooper.forThread();
         if (looper == 0) { super.nativePollOnce(ptr, timeoutMillis); return; }
         NATIVE_LOOPERS.put(ptr, looper);

@@ -120,6 +120,7 @@ final class HubBroadcasts {
             synchronized (this) { sticky.removeIf(old -> old.filterEquals(intent)); sticky.add(new Intent(intent)); }
         }
         Intent copy = new Intent(intent);
+        if (packages.implicitAllowed(copy.getAction())) copy.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);  // BroadcastController: getBackgroundLaunchBroadcasts
         queue.execute(() -> {
             try { run(sender, copy, resultTo, code, data, extras, required == null ? new String[0] : required, ordered, isSticky, userId); }
             catch (RuntimeException failure) { System.out.println("[apklayer-hub] broadcast " + copy.getAction() + " failed: " + failure); }
@@ -149,8 +150,9 @@ final class HubBroadcasts {
         if ((intent.getFlags() & Intent.FLAG_RECEIVER_REGISTERED_ONLY) == 0) for (HubPackages.Receiver receiver : packages.receivers(intent, onlyPackage)) {
             ActivityInfo info = receiver.info();
             if (!info.enabled || !info.applicationInfo.enabled) continue;
-            // BroadcastSkipPolicy: FLAG_RECEIVER_EXCLUDE_BACKGROUND keeps it from the manifest receivers of apps targeting 26+ (background execution limits)
-            if ((intent.getFlags() & Intent.FLAG_RECEIVER_EXCLUDE_BACKGROUND) != 0 && info.applicationInfo.targetSdkVersion >= android.os.Build.VERSION_CODES.O) continue;
+            if (info.applicationInfo.targetSdkVersion >= android.os.Build.VERSION_CODES.O && disallowBackgroundStart(intent, required)) {
+                System.out.println("[apklayer-hub] background execution not allowed: " + intent.getAction() + " to " + info.packageName + "/" + info.name); continue;
+            }
             boolean same = info.packageName.equals(sender.name());
             if (!same && !info.exported && sender.appUid() != 1000) continue;  // unexported: its own app and the system (MY_PACKAGE_REPLACED, ...)
             if (!same && info.permission != null && !info.permission.isEmpty() && !packages.holds(sender.name(), info.permission)) {
@@ -160,6 +162,17 @@ final class HubBroadcasts {
             targets.add(new Target(receiver.filter(), null, info));
         }
         return targets;
+    }
+
+    /**
+     * BroadcastSkipPolicy.disallowBackgroundStart, the background execution limit for manifest receivers of apps targeting 26+ (getAppStartModeLOSP with
+     * alwaysRestrict: whether the app runs does not matter): excluded explicitly, or implicit (no component, no package) unless the sender included
+     * background receivers (send() adds that for the build's allow-implicit-broadcast actions) or every required permission is a signature one.
+     */
+    private boolean disallowBackgroundStart(Intent intent, String[] required) {
+        return (intent.getFlags() & Intent.FLAG_RECEIVER_EXCLUDE_BACKGROUND) != 0
+                || (intent.getComponent() == null && intent.getPackage() == null && (intent.getFlags() & Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND) == 0
+                        && !packages.allSignature(required));
     }
 
     private boolean holdsAll(String pkg, String[] required) {

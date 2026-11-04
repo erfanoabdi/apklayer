@@ -103,7 +103,7 @@ final class HubAccounts extends IAccountManager.Stub {
     private void changed(Account removed) {
         directory.sendSystem(new Intent(AccountManager.LOGIN_ACCOUNTS_CHANGED_ACTION).addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND), false);
         directory.sendSystem(new Intent(AccountManager.ACTION_VISIBLE_ACCOUNTS_CHANGED), false);
-        if (removed != null) directory.sendSystem(new Intent(AccountManager.ACTION_ACCOUNT_REMOVED)
+        if (removed != null) directory.sendSystem(new Intent(AccountManager.ACTION_ACCOUNT_REMOVED).addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND)
                 .putExtra(AccountManager.KEY_ACCOUNT_NAME, removed.name).putExtra(AccountManager.KEY_ACCOUNT_TYPE, removed.type), false);
     }
 

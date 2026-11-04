@@ -148,6 +148,7 @@ final class AppEnvironment {
             android.content.pm.ApplicationInfo info = org.robolectric.util.ReflectionHelpers.getField(bound, "appInfo");
             info.nativeLibraryDir = libdir;
             info.primaryCpuAbi = HostBuild.ABI;
+            markSystem(info);
             ShadowHostPackageManager.installedPaths(info);  // its splits, before LoadedApk reads them for the app's resources
         } catch (RuntimeException notBoundYet) { /* the context path (ShadowHostContextImpl.getApplicationInfo) covers it */ }
     }
@@ -190,6 +191,11 @@ final class AppEnvironment {
         }
     }
 
+    /** A system app's own ApplicationInfo carries FLAG_SYSTEM (`apklayer install --system`, passed as -Dapklayer.system), as other apps see it from the hub. */
+    static void markSystem(android.content.pm.ApplicationInfo info) {
+        if (info != null && Boolean.getBoolean("apklayer.system")) info.flags |= android.content.pm.ApplicationInfo.FLAG_SYSTEM;
+    }
+
     /** Every Android device has the package "android" (the framework); androidx.media and others look it up. */
     static void installSystemPackage(Application app) {
         android.content.pm.PackageInfo info = new android.content.pm.PackageInfo();
@@ -206,6 +212,7 @@ final class AppEnvironment {
         // the app's own package carries its APK's certificate (apps compare their own and callers' signing certificates)
         android.content.pm.PackageInfo own = pm.getInternalMutablePackageInfo(app.getPackageName());
         if (own != null) {
+            markSystem(own.applicationInfo);
             android.content.pm.Signature[] ownCert = HostCertificate.of(own.packageName);
             if (own.signatures == null) own.signatures = HostCertificate.legacy(HostCertificate.details(own.packageName));
             if (own.signingInfo == null) own.signingInfo = new android.content.pm.SigningInfo(new android.content.pm.SigningDetails(ownCert, 2, new android.util.ArraySet<>(), null));

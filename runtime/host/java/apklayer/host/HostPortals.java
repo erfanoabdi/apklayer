@@ -57,6 +57,17 @@ final class HostPortals {
     private static final Set<String> PICKERS = Set.of(Intent.ACTION_OPEN_DOCUMENT, Intent.ACTION_GET_CONTENT,
             Intent.ACTION_CREATE_DOCUMENT, Intent.ACTION_OPEN_DOCUMENT_TREE);
 
+    /**
+     * Intents the host answers itself when no installed app does (AppHost.launch's fallbacks: desktop links and file dialogs, permission requests, the
+     * installer's intents): startActivity does not throw ActivityNotFoundException for them.
+     */
+    static boolean hostAnswers(Intent intent) {
+        String action = intent.getAction();
+        return action == null || Intent.ACTION_VIEW.equals(action) || Intent.ACTION_CHOOSER.equals(action) || isPicker(intent)
+                || Set.of("android.content.pm.action.REQUEST_PERMISSIONS", Intent.ACTION_INSTALL_PACKAGE, Intent.ACTION_DELETE, Intent.ACTION_UNINSTALL_PACKAGE,
+                        android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).contains(action);
+    }
+
     static boolean isPicker(Intent intent) { return intent.getAction() != null && PICKERS.contains(intent.getAction()); }
 
     /**

@@ -61,6 +61,11 @@ public class ShadowHostServiceManager extends ShadowServiceManager {
         String iface = types.length > 0 ? types[0].getSimpleName() : fake.getClass().getSimpleName();
         return (IInterface) Proxy.newProxyInstance(fake.getClass().getClassLoader(), types, (proxy, method, args) -> {
             if (method.getDeclaringClass() != Object.class && !method.getName().equals("asBinder") && seen.add(method)) FakeLog.hit(name, iface + "." + method.getName());
+            // WindowManagerService attaches a window context (an InputMethodService, a WindowProviderService) to its display area or window token and
+            // answers its configuration: null means "not attached", and an IME's initializeInternal throws on it
+            if (android.content.Context.WINDOW_SERVICE.equals(name) && method.getName().startsWith("attachWindowContextTo"))
+                return new android.window.WindowContextInfo(new android.content.res.Configuration(org.robolectric.RuntimeEnvironment.getApplication().getResources().getConfiguration()),
+                        android.view.Display.DEFAULT_DISPLAY);
             try {
                 return method.invoke(fake, args);
             } catch (InvocationTargetException e) {

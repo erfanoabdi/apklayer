@@ -26,6 +26,7 @@ final class HostSystemConfig {
     final Map<String, Set<String>> denied = new HashMap<>();
     final Map<String, Set<String>> defaultGrants = new HashMap<>();
     final Map<String, String> levels = new HashMap<>();  // permission -> normal | dangerous | appop | signature
+    final Set<String> implicitBroadcasts = new HashSet<>();  // <allow-implicit-broadcast>: actions that still reach manifest receivers of apps targeting 26+
 
     /** The features of the last configuration applied (ShadowHostPackageManager lists them). */
     static volatile java.util.Set<String> loadedFeatures = java.util.Set.of();
@@ -60,6 +61,7 @@ final class HostSystemConfig {
     private void readConfig(Element root) {
         for (Element feature : children(root, "feature")) features.add(feature.getAttribute("name"));
         for (Element feature : children(root, "unavailable-feature")) unavailable.add(feature.getAttribute("name"));
+        for (Element broadcast : children(root, "allow-implicit-broadcast")) implicitBroadcasts.add(broadcast.getAttribute("action"));
         for (Element app : children(root, "privapp-permissions")) {
             String pkg = app.getAttribute("package");
             for (Element permission : children(app, "permission")) privileged.computeIfAbsent(pkg, k -> new HashSet<>()).add(permission.getAttribute("name"));

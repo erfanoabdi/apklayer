@@ -7,7 +7,7 @@ import android.view.inputmethod.InputMethodInfo;
 import android.view.inputmethod.InputMethodManager;
 
 /**
- * This app's input method, enabled by the user (`apklayer ime enable hello.system`, tests/vm/system-apps.sh): installed, enabled, and the default
+ * This app's input method (bound to another app's field by tests/vm/ime-bind.py), enabled by the user (`apklayer ime enable hello.system`, tests/vm/system-apps.sh): installed, enabled, and the default
  * as the only one. ENABLED_INPUT_METHODS itself is not readable for this targetSdk (34): the enabled list comes from InputMethodManager, as on a device.
  */
 final class ImeCheck implements Check {

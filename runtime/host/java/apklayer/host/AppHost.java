@@ -202,18 +202,24 @@ public final class AppHost implements Runnable {
         StartTrace.mark("system package installed");
         Intent incoming = HubActivityClient.incoming(); // another app started this one with an intent, through the hub
         if (incoming == null) incoming = HostApps.incoming(); // ... or through the older intent file (PLAN P6)
-        launch(incoming != null ? incoming : AppMetadata.launcherIntent(app));
-        if (incoming != null) { incomingActivity = stack.peek().get(); android.os.ResultReceiver answerTo = HubActivityClient.takeReceiver(); if (answerTo != null) hubResults.put(incomingActivity, answerTo); }
-        HubActivityClient.setStarter(this::startForHub);
-        // Like Simulator.postMotionEvent: an off-screen move so the first frame is drawn.
-        input.inject(MotionEvent.obtain(0, SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE, width, height, 0));
+        // a message, as Android's launch transaction is: an app whose Application.onCreate posted its own Looper.loop() (a crash guard: SimpleX) runs it from there
+        final Intent first = incoming;
+        final int moveX = width, moveY = height;
+        new android.os.Handler(Looper.getMainLooper()).post(() -> {
+            launch(first != null ? first : AppMetadata.launcherIntent(app));
+            if (first != null) { incomingActivity = stack.peek().get(); android.os.ResultReceiver answerTo = HubActivityClient.takeReceiver(); if (answerTo != null) hubResults.put(incomingActivity, answerTo); }
+            HubActivityClient.setStarter(this::startForHub);
+            // Like Simulator.postMotionEvent: an off-screen move so the first frame is drawn.
+            input.inject(MotionEvent.obtain(0, SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE, moveX, moveY, 0));
+            launched = true;
+        });
         loop(shell);
     }
 
     /** Simulator.loop(), plus host input, navigation and the verification hooks. */
     private void loop(ShellClient shell) {
-        ShadowPausedLooper looper = Shadow.extract(Looper.myLooper());
-        looper.idle();
+        looper = Shadow.extract(Looper.myLooper());
+        loopShell = shell;
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
             @Override
             public void doFrame(long frameTimeNanos) {
@@ -221,7 +227,6 @@ public final class AppHost implements Runnable {
             }
         });
 
-        TreeMap<Long, String> script = new TreeMap<>();
         for (String step : System.getProperty("apklayer.script", "").split("[+;]")) {
             if (step.isEmpty()) continue;
             String[] kv = step.split(":", 2);
@@ -233,77 +238,92 @@ public final class AppHost implements Runnable {
             long t = Long.getLong("apklayer.autotap.ms", 4500);
             script.put(t, "tap:first");
         }
-        // runms must be honoured in headless mode too (tests schedule taps at absolute times and rely on the run ending on schedule).
-        // Headless runs must advance PAUSED clocks by the scheduled deadline (Simulator
-        // does this with ShadowSystemClock::advanceTo + idleFor); wall-clock waiting only
-        // works with a live window (shell mode), where real time drives the frame clock.
-        boolean pausedMode = shell == null;
-        long runMs = Long.getLong("apklayer.runms", pausedMode ? 3000 : Long.MAX_VALUE);
-        // Schedule clock: in headless (PAUSED) mode the sandbox clock is stepped by the loop
-        // below, so schedule script times on it — a "6 s" run then completes in well
-        // under a second of real time. In shell mode real time drives everything.
+        // runms holds in headless mode too, on the sandbox clock step() advances (Simulator's advanceTo + idleFor); with a window real time drives it
+        pausedMode = shell == null;
+        runMs = Long.getLong("apklayer.runms", pausedMode ? 3000 : Long.MAX_VALUE);
         clockNanos = perfAt = System.nanoTime();
         perfUptime = SystemClock.uptimeMillis();
-        long start = pausedMode ? SystemClock.uptimeMillis() : System.nanoTime() / 1_000_000;
+        loopStart = pausedMode ? SystemClock.uptimeMillis() : System.nanoTime() / 1_000_000;
+        running = this;
+        looper.idle();  // the first launch
+        while (step(false)) {}
+        end();
+    }
 
-        try {
-            while (!stack.isEmpty() || System.nanoTime() / 1_000_000 < graceUntilMs) {
-                long now = System.nanoTime();
-                long elapsed = (pausedMode ? SystemClock.uptimeMillis() : System.nanoTime() / 1_000_000) - start;
-                // exit when the run time is up (or the window closed) and every scheduled script step has fired
-                if (script.isEmpty() && (elapsed >= runMs || (shell != null && shell.closed()))) {
-                    System.out.println("[apklayer] ending: " + (elapsed >= runMs ? "run time " + runMs + " ms is up" : "window closed"));
-                    break;
-                }
+    private ShadowPausedLooper looper;
+    private ShellClient loopShell;
+    private final TreeMap<Long, String> script = new TreeMap<>();
+    private boolean pausedMode, launched;
+    private long runMs, loopStart;
+    private static AppHost running;
 
-                for (int[] ev; shell != null && (ev = shell.poll()) != null; ) input.onHostEvent(ev);
-                for (Object[] ime; shell != null && (ime = shell.pollIme()) != null; ) text.ime((int) ime[0], (int) ime[1], (String) ime[2], (String) ime[3]);
-                for (String clip; shell != null && (clip = shell.pollClipboard()) != null; ) text.clipboardIn(clip);
-                while (!script.isEmpty() && script.firstKey() <= elapsed) scriptRunner.runStep(script.pollFirstEntry().getValue());
+    /** An app's own Looper.loop() on the main thread waits here for its next message (ShadowHostMessageQueue.nativePollOnce): the run loop goes on inside it.
+     * False before the run loop started (the caller waits as usual). The app's loop is never left (a crash guard calls it again), so the run ends here. */
+    static boolean stepInAppLoop() {
+        AppHost host = running;
+        if (host == null) return false;
+        if (!host.step(true)) { host.end(); System.exit(0); }
+        return true;
+    }
 
-                long nextTask = looper.getNextScheduledTaskTime().toMillis();
-                long nextVsync = ShadowChoreographer.getNextVsyncTime();
-                long timeout = nextTask == 0 || nextVsync == 0 ? max(nextTask, nextVsync) : min(nextTask, nextVsync);
-                if (pausedMode) {
-                    // PAUSED looper mode: scheduled Runnables and vsync callbacks only run
-                    // when the (paused) clock is advanced. Step it to the next deadline and
-                    // drain — wall time is irrelevant here, so a "6 s" run completes in well
-                    // under a second of real time (the scripted ms are scheduler time).
-                    if (timeout != 0) {
-                        ShadowSystemClock.advanceBy(Duration.ofMillis(max(1, timeout - SystemClock.uptimeMillis())));
-                    } else {
-                        ShadowSystemClock.advanceBy(Duration.ofMillis(8));
-                    }
-                    looper.idle();
-                } else {
-                    // Shell mode: a live window; real time drives everything. Bounded poll
-                    // so host input and scripted steps are serviced while idle.
-                    long wait = timeout == 0 ? 8 : max(1, min(8, timeout - SystemClock.uptimeMillis()));
-                    looper.poll(wait);
-                    pollNativeLooper();
-                    // Wall time since the previous advance, not since the top of this iteration: the time spent running the looper and
-                    // the follow-ups below was dropped, so the app's clock ran at a third of real time under load (ExoPlayer played
-                    // video at 8 fps and starved the audio, its clock being SystemClock).
-                    long clockNow = System.nanoTime();
-                    ShadowSystemClock.advanceBy(Duration.ofNanos(Math.max(0, clockNow - org.robolectric.shadows.ShadowSystem.nanoTime())));  // to the monotonic clock, which native code (Gecko's vsync) reads too
-                    clockNanos = clockNow;
-                    if (Boolean.getBoolean("apklayer.perf") && clockNow - perfAt > 2_000_000_000L) { // app clock against wall time, and the loop's pace
-                        System.out.println("[apklayer] clock: app " + (SystemClock.uptimeMillis() - perfUptime) + " ms, wall " + (clockNow - perfAt) / 1_000_000 + " ms, loops " + perfLoops);
-                        perfAt = clockNow; perfUptime = SystemClock.uptimeMillis(); perfLoops = 0;
-                    }
-                    perfLoops++;
-                    looper.idle();
-                }
-                if (TRACE_ROOTS && now - lastRootTrace > 1_000_000_000L) { lastRootTrace = now; HostWindows.traceRoots(); }
-                if (stack.isEmpty()) { followNavigation(); continue; }  // the grace period after a launcher activity finished itself
-                followNavigation();
-                followOrientation();
-                text.followTextInput();
-                deliverCrossAppResults();
-            }
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+    /** One pass of the run loop; false when the app ends. inAppLoop: the app's own Looper.loop() dispatches the messages, this pass only waits for them. */
+    private boolean step(boolean inAppLoop) {
+        ShellClient shell = loopShell;
+        if (launched && stack.isEmpty() && System.nanoTime() / 1_000_000 >= graceUntilMs) return false;
+        long now = System.nanoTime();
+        long elapsed = (pausedMode ? SystemClock.uptimeMillis() : System.nanoTime() / 1_000_000) - loopStart;
+        // exit when the run time is up (or the window closed) and every scheduled script step has fired
+        if (script.isEmpty() && (elapsed >= runMs || (shell != null && shell.closed()))) {
+            System.out.println("[apklayer] ending: " + (elapsed >= runMs ? "run time " + runMs + " ms is up" : "window closed"));
+            return false;
         }
+
+        for (int[] ev; shell != null && (ev = shell.poll()) != null; ) input.onHostEvent(ev);
+        for (Object[] ime; shell != null && (ime = shell.pollIme()) != null; ) text.ime((int) ime[0], (int) ime[1], (String) ime[2], (String) ime[3]);
+        for (String clip; shell != null && (clip = shell.pollClipboard()) != null; ) text.clipboardIn(clip);
+        while (!script.isEmpty() && script.firstKey() <= elapsed) scriptRunner.runStep(script.pollFirstEntry().getValue());
+
+        long nextTask = looper.getNextScheduledTaskTime().toMillis();
+        long nextVsync = ShadowChoreographer.getNextVsyncTime();
+        long timeout = nextTask == 0 || nextVsync == 0 ? max(nextTask, nextVsync) : min(nextTask, nextVsync);
+        if (pausedMode) {
+            // PAUSED looper mode: the clock steps to the next deadline (scripted ms are scheduler time, a "6 s" run takes well under a second)
+            if (timeout != 0) {
+                ShadowSystemClock.advanceBy(Duration.ofMillis(max(1, timeout - SystemClock.uptimeMillis())));
+            } else {
+                ShadowSystemClock.advanceBy(Duration.ofMillis(8));
+            }
+            if (!inAppLoop) looper.idle();
+        } else {
+            // Shell mode: a live window; real time drives everything. Bounded poll
+            // so host input and scripted steps are serviced while idle.
+            long wait = timeout == 0 ? 8 : max(1, min(8, timeout - SystemClock.uptimeMillis()));
+            looper.poll(wait);
+            pollNativeLooper();
+            // Wall time since the previous advance, not since the top of this iteration: the time spent running the looper and
+            // the follow-ups below was dropped, so the app's clock ran at a third of real time under load (ExoPlayer played
+            // video at 8 fps and starved the audio, its clock being SystemClock).
+            long clockNow = System.nanoTime();
+            ShadowSystemClock.advanceBy(Duration.ofNanos(Math.max(0, clockNow - org.robolectric.shadows.ShadowSystem.nanoTime())));  // to the monotonic clock, which native code (Gecko's vsync) reads too
+            clockNanos = clockNow;
+            if (Boolean.getBoolean("apklayer.perf") && clockNow - perfAt > 2_000_000_000L) { // app clock against wall time, and the loop's pace
+                System.out.println("[apklayer] clock: app " + (SystemClock.uptimeMillis() - perfUptime) + " ms, wall " + (clockNow - perfAt) / 1_000_000 + " ms, loops " + perfLoops);
+                perfAt = clockNow; perfUptime = SystemClock.uptimeMillis(); perfLoops = 0;
+            }
+            perfLoops++;
+            if (!inAppLoop) looper.idle();
+        }
+        if (TRACE_ROOTS && now - lastRootTrace > 1_000_000_000L) { lastRootTrace = now; HostWindows.traceRoots(); }
+        followNavigation();
+        if (stack.isEmpty()) return true;  // the grace period after a launcher activity finished itself
+        followOrientation();
+        text.followTextInput();
+        deliverCrossAppResults();
+        return true;
+    }
+
+    private void end() {
+        running = null;
         System.out.println("[apklayer] exit: depth=" + stack.size());
         NativeLoader.endWithoutNativeDestructors();
         if (Boolean.getBoolean("apklayer.threads")) { // -Dapklayer.threads=true: what every thread is doing at the end (stalls)
@@ -336,6 +356,12 @@ public final class AppHost implements Runnable {
         if (resultTo != null && !stack.isEmpty()) hubResults.put(stack.peek().get(), resultTo);
     }
 
+    private static ActivityInfo resolved(Intent intent) throws android.content.pm.PackageManager.NameNotFoundException {
+        android.content.pm.ResolveInfo found = RuntimeEnvironment.getApplication().getPackageManager().resolveActivity(intent, 0);
+        if (found == null) throw new android.content.pm.PackageManager.NameNotFoundException("no activity of this app handles it");
+        return found.activityInfo;
+    }
+
     /** Builds and fully starts the activity, as the simulator does (Robolectric.setupActivity). */
     private void launch(Intent intent) {
         launch(intent, stack.isEmpty() ? null : ((ShadowActivity) Shadow.extract(stack.peek().get())).getNextStartedActivityForResult());
@@ -350,7 +376,7 @@ public final class AppHost implements Runnable {
         try {
             info = intent.getComponent() != null
                     ? RuntimeEnvironment.getApplication().getPackageManager().getActivityInfo(intent.getComponent(), 0)
-                    : RuntimeEnvironment.getApplication().getPackageManager().resolveActivity(intent, 0).activityInfo;
+                    : resolved(intent);
             // an <activity-alias> names its real class in targetActivity
             cls = Class.forName(info.targetActivity != null ? info.targetActivity : info.name)
                     .asSubclass(Activity.class);
@@ -527,6 +553,7 @@ public final class AppHost implements Runnable {
      */
     private static void setVisible(ActivityController<? extends Activity> c, boolean visible) {
         c.get().getWindow().getDecorView().setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
+        HostWindows.setAttachedVisible(c.get(), visible);
     }
 
 

@@ -1,0 +1,12 @@
+# The tree's system apps as apklayer installs them (tools/stage sysapps, tools/host-setup/webview.sh: apklayer install --system).
+# package<TAB>APK under the product output (a glob; - : installed by another setup step). apklayer list marks installs of these made before the mark.
+com.android.providers.settings	system/priv-app/SettingsProvider/SettingsProvider.apk
+com.android.providers.contacts	system/priv-app/ContactsProvider/ContactsProvider.apk
+com.android.providers.calendar	system/priv-app/CalendarProvider/CalendarProvider.apk
+com.android.providers.downloads	system/priv-app/DownloadProvider/DownloadProvider.apk
+com.android.providers.userdictionary	system/priv-app/UserDictionaryProvider/UserDictionaryProvider.apk
+com.android.externalstorage	system/priv-app/ExternalStorageProvider/ExternalStorageProvider.apk
+com.android.providers.telephony	system/priv-app/TelephonyProvider/TelephonyProvider.apk
+com.android.documentsui	system/priv-app/DocumentsUI/DocumentsUI.apk
+com.android.providers.media.module	apex/com.android.mediaprovider/priv-app/MediaProvider*/MediaProvider.apk
+com.android.webview	-

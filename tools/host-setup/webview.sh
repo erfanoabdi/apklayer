@@ -11,4 +11,4 @@ sudo chmod 1777 /data /data/local /data/local/tmp
 echo "webview --no-sandbox --disable-seccomp-filter-sandbox" | sudo tee /data/local/tmp/webview-command-line >/dev/null
 sudo chmod 644 /data/local/tmp/webview-command-line
 echo "webview-setup: /data/local/tmp/webview-command-line written (seccomp sandbox off)"
-[ $# -eq 0 ] || "$(dirname "$0")/../../bin/apklayer" install "$1"
+[ $# -eq 0 ] || "$(dirname "$0")/../../bin/apklayer" install --system "$1"  # the WebView provider is a system app (tools/sysapps.list)
