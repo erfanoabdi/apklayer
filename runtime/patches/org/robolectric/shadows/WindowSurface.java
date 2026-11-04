@@ -39,13 +39,22 @@ final class WindowSurface {
       } else {
         t.setPosition(parent, window.frame.left - insets.left, window.frame.top - insets.top)
             .setLayerStack(parent, Integer.getInteger("apklayer.layerstack", 0))
-            .setLayer(parent, window.attrs.type * 1000 + window.zOrder);
+            .setLayer(parent, WindowOrder.screenLayer(window.attrs.type, window.zOrder, activityZOrder(window, windows)));
       }
       t.setLayer(child, 0)
           .show(parent)
           .show(child)
           .apply();
     }
+  }
+
+  /** The zOrder of the window's activity (its token's base window, WindowOrder.activityOrder), its own without one. */
+  private static int activityZOrder(ShadowWindowManagerGlobal.WindowInfo window, Map<IWindow, ShadowWindowManagerGlobal.WindowInfo> windows) {
+    if (window.attrs.type >= android.view.WindowManager.LayoutParams.FIRST_SYSTEM_WINDOW || window.attrs.token == null) return window.zOrder;
+    for (ShadowWindowManagerGlobal.WindowInfo w : windows.values()) {
+      if (w.attrs.type == android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION && w.attrs.token == window.attrs.token) return w.zOrder;
+    }
+    return window.zOrder;
   }
 
   void close() {
