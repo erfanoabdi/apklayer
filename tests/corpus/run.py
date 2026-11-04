@@ -4,7 +4,7 @@
 tests/corpus/results.md (results-subset.md when names are given) plus the fake-service ranking tests/corpus/fakes.md (the app's "[fake]" lines, FakeLog).
 Each app's install and runs hold the instance's lock (~/apklayer-vm.lock, ~/apklayer-vm-<instance>.lock with CORPUS_INSTANCE; flock -n): a busy lock is reported as "lock busy", nothing waits for it.
 Usage: tests/corpus/run.py [name ...]   (no names: every app);  run.py --report name...  rebuilds the tables from tests/corpus/logs/*.json
-Environment: CORPUS_PATIENCE (seconds per launch), CORPUS_VM_REPO (repo copy on the VM, default ~/apklayer), CORPUS_VM_NATIVE (APKLAYER_NATIVE on the VM),
+Environment: CORPUS_PATIENCE (seconds per launch), CORPUS_QUIET (seconds without frames before the screenshot, default 3),CORPUS_VM_REPO (repo copy on the VM, default ~/apklayer), CORPUS_VM_NATIVE (APKLAYER_NATIVE on the VM),
 CORPUS_SECOND=0 (skip the second launch), CORPUS_INSTANCE=<id> (run in that apklayer instance, tests/lib/vm.py's environment: several runners in parallel,
 one instance each; the repo copy is APKLY_VM_ROOT, the VM APKLY_VM_CONF, extra environment APKLY_VM_ENV)."""
 import json
@@ -40,6 +40,7 @@ else:
 TAG = '-' + INSTANCE if INSTANCE else ''  # the instance's own lock, marker and APK copies
 PATIENCE = int(os.environ.get('CORPUS_PATIENCE', '30'))  # seconds to the first frame; a static screen draws only a few, so one frame plus a live process is the bar
 SECOND = os.environ.get('CORPUS_SECOND', '1') != '0'
+QUIET = int(os.environ.get('CORPUS_QUIET', '3'))  # seconds without a frame that count as settled (0: screenshot at the first frame)
 AGAIN = '/tmp/apklayer-corpus-again' + TAG  # present when a run ends: the VM script launches the app once more
 BUSY = 75  # flock's exit status when the lock is held by someone else
 CAUSES = ['UnsatisfiedLinkError', 'ClassNotFoundException', 'NoSuchMethodError', 'SecurityException', 'NullPointerException', 'Fatal signal', 'SIGSEGV', 'Exception', 'Error']
@@ -115,7 +116,8 @@ def end_run(again):
 def launch(name, stream, at, row, key, before):
     """One launch from the OFFSET line at index `at`: a steady picture (20 frames while still running), a screenshot, its content check."""
     offset = stream.lines[at].split()[1]
-    frame = ssh(ENV + 'python3 %s/tests/corpus/first-frame.py %s/shell.log %s %d 1' % (REPO, STATE, offset, PATIENCE))
+    # the first frame, then until the frames stop for QUIET seconds: the screenshot shows where the app settled, not its splash screen
+    frame = ssh(ENV + 'python3 %s/tests/corpus/first-frame.py %s/shell.log %s %d 1 %d' % (REPO, STATE, offset, PATIENCE, QUIET))
     running = not any(l.startswith(('SECOND', 'CORPUS-END')) for l in stream.lines[at:])  # the run command has not returned
     if 'FRAME' not in frame.stdout or not running:
         row[key] = 'FAIL'

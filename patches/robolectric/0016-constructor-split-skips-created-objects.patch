@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: apklayer <apklayer@localhost>
+Subject: [PATCH] ClassInstrumentor: skip <init> calls of objects created before the super call
+
+apklayer patch: extractCallToSuperConstructor took the first INVOKESPECIAL <init> whose owner is the class or its superclass as the
+super()/this() call. A constructor that creates an object of its superclass as an argument of this(...) (AuthenticationRequiredException(Parcel):
+this(new SecurityException(in.readString()), ...); IkeSessionStateMachine$IkeInitData) was cut inside the argument list: ASM's frame
+computation then failed (NegativeArraySizeException: -2), PreInstrument left the class to the sandbox loader, and the sandbox loader threw
+the same error at an app's first use of the class (DAVx5's Application.onCreate). <init> calls that initialise an object created by a
+NEW in the constructor are now skipped.
+
+Against external/robolectric 87aa52b08 (REVISION). Applied by tools/build overlay onto the staged
+upstream sources (<native>/aosp/robolectric-src); the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
+---
+diff --git a/sandbox/src/main/java/org/robolectric/internal/bytecode/ClassInstrumentor.java b/sandbox/src/main/java/org/robolectric/internal/bytecode/ClassInstrumentor.java
+--- a/sandbox/src/main/java/org/robolectric/internal/bytecode/ClassInstrumentor.java
++++ b/sandbox/src/main/java/org/robolectric/internal/bytecode/ClassInstrumentor.java
+@@ -485,14 +485,24 @@
+     // Start removing instructions at the beginning of the method. The first instructions of
+     // constructors may vary.
+     int startIndex = 0;
++    // apklayer patch: objects the constructor creates before its super()/this() call (this(new SecurityException(..), ..)
++    // in AuthenticationRequiredException) are initialised by an <init> of the superclass too: that call is not the super call
++    int pendingNew = 0;
+ 
+     AbstractInsnNode[] insns = ctor.instructions.toArray();
+     for (int i = 0; i < insns.length; i++) {
+       AbstractInsnNode node = insns[i];
+ 
+       switch (node.getOpcode()) {
++        case Opcodes.NEW:
++          pendingNew++;
++          break;
+         case Opcodes.INVOKESPECIAL:
+           MethodInsnNode mnode = (MethodInsnNode) node;
++          if (pendingNew > 0 && "<init>".equals(mnode.name)) {
++            pendingNew--;
++            break;
++          }
+           if (mnode.owner.equals(mutableClass.internalClassName)
+               || mnode.owner.equals(mutableClass.classNode.superName)) {
+             if (!"<init>".equals(mnode.name)) {

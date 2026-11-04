@@ -1,37 +1,28 @@
 // libEGL for apklayer's Android userspace (PLAN P7.1 step 3): replaces Android's EGL loader (cfg.d maps libEGL.so here). It
 // forwards to the host's EGL on the GBM platform of the host graphics HAL's device (vendor-neutral: Mesa, NVIDIA...) and adds
 // what Android expects of an EGL driver: EGL_ANDROID_image_native_buffer (an ANativeWindowBuffer from our gralloc becomes a
-// dmabuf EGLImage), eglGetNativeClientBufferANDROID, filtering of attributes the host does not know. Window surfaces are a host
-// gbm_surface plus a GPU copy into the ANativeWindow's buffer; everything not listed in IMPLEMENTED below is a straight tail-call into the host library.
+// dmabuf EGLImage), eglGetNativeClientBufferANDROID, filtering of attributes the host does not know. Window surfaces (EglWindow.cpp) are a host
+// gbm_surface plus a GPU copy into the ANativeWindow's buffer; everything not implemented in these two files is a straight tail-call into the host library.
 #define LOG_TAG "apklayer.egl"
 
 #include <EGL/egl.h>
-#include <EGL/eglext.h>
 #include <android/hardware_buffer.h>
-#include <dlfcn.h>
 #include <drm_fourcc.h>
 #include <log/log.h>
 #include <nativebase/nativebase.h>
-#include <poll.h>
-#include <sys/prctl.h>
-#include <sys/mman.h>
-#include <system/window.h>
-#include <unistd.h>
 
-#include <algorithm>
-#include <cerrno>
 #include <cstring>
 #include <initializer_list>
 #include <mutex>
-#include <set>
 #include <string>
 #include <vector>
 
+#include "EglHost.h"
 #include "gralloc_handle.h"
-#include "apklayer/graphics.h"
 #include "Gles1.h"
 
 using namespace apklayer::gralloc;
+using namespace apklayer::egl;
 
 namespace android {
 // libnativewindow's platform-visible conversion (C++ linkage in this tree)
@@ -47,39 +38,25 @@ ANativeWindowBuffer* AHardwareBuffer_to_ANativeWindowBuffer(AHardwareBuffer*);
 #define EGL_TELEMETRY_HINT_ANDROID 0x3570
 #endif
 
-namespace {
-
-void* hostLib() {
+void* apklayer::egl::hostLib() {
     static void* h = dlopen("libEGL.so.1", RTLD_NOW | RTLD_GLOBAL);  // the host's glvnd EGL (bionic_dlopen falls back to glibc)
     LOG_ALWAYS_FATAL_IF(h == nullptr, "no host libEGL.so.1");
     return h;
 }
 
-// A function of the host's libEGL. glvnd exports only the core entry points by name; extension functions (eglCreateImageKHR,
-// eglGetPlatformDisplayEXT, the *SyncKHR ones...) come from its eglGetProcAddress, so that is the fallback for every lookup.
-template <typename F>
-F host(const char* name) {
-    void* p = dlsym(hostLib(), name);
-    if (!p && strcmp(name, "eglGetProcAddress") != 0) {
-        auto proc = reinterpret_cast<void* (*)(const char*)>(dlsym(hostLib(), "eglGetProcAddress"));
-        if (proc) p = proc(name);
-    }
-    return reinterpret_cast<F>(p);
-}
-
-thread_local EGLint tError = EGL_SUCCESS;  // errors of our own (the host keeps its own)
-EGLBoolean fail(EGLint e) {
+thread_local EGLint apklayer::egl::tError = EGL_SUCCESS;  // errors of our own (the host keeps its own)
+EGLBoolean apklayer::egl::fail(EGLint e) {
     tError = e;
     return EGL_FALSE;
 }
 
-apklayer_gfx* gfx() {
+apklayer_gfx* apklayer::egl::gfx() {
     static apklayer_gfx* g = apklayer_gfx_open(nullptr);
     LOG_ALWAYS_FATAL_IF(g == nullptr, "no render node for the host graphics HAL");
     return g;
 }
 
-EGLDisplay gbmDisplay() {
+EGLDisplay apklayer::egl::gbmDisplay() {
     static EGLDisplay d = [] {
         EGLDisplay display = EGL_NO_DISPLAY;
         void* gbm = apklayer_gfx_gbm_device(gfx());
@@ -95,6 +72,8 @@ EGLDisplay gbmDisplay() {
     }();
     return d;
 }
+
+namespace {
 
 // Copy an attribute list without the keys the host EGL does not know.
 std::vector<EGLint> filtered(const EGLint* attribs, std::initializer_list<EGLint> drop) {
@@ -114,8 +93,10 @@ const char* kAndroidExtensions =
 
 static unsigned displayRefs;  // initialize/terminate count, below
 
+}  // namespace
+
 // An ANativeWindowBuffer of our gralloc as a dmabuf EGLImage on the host.
-EGLImage imageFromNativeBuffer(EGLDisplay dpy, ANativeWindowBuffer* buf) {
+EGLImage apklayer::egl::imageFromNativeBuffer(EGLDisplay dpy, ANativeWindowBuffer* buf) {
     // apklayer patch: Skia asks eglGetCurrentDisplay() on threads with no context (Bitmap.copy of a hardware bitmap on the main thread):
     // EGL_NO_DISPLAY, which the host rejects with EGL_BAD_DISPLAY. There is one display.
     if (dpy == EGL_NO_DISPLAY) dpy = gbmDisplay();
@@ -159,258 +140,11 @@ EGLImage imageFromNativeBuffer(EGLDisplay dpy, ANativeWindowBuffer* buf) {
     if (image == EGL_NO_IMAGE)
         ALOGE("host eglCreateImageKHR(dmabuf %ux%u fourcc 0x%x planes %u modifier 0x%llx) failed: EGL error 0x%x (display refs %u)", d.width, d.height,
               d.fourcc, d.numPlanes, (unsigned long long)d.modifier, host<EGLint (*)()>("eglGetError")(), displayRefs);
-    else {
-        if (getenv("APKLAYER_EGL_PROBE")) {  // temporary: who imports which buffer
-            char name[32] = {0};
-            prctl(PR_GET_NAME, name);
-            ALOGW("probe: image of buffer %llx (%ux%u usage 0x%llx) created on thread %s", (unsigned long long)d.id, d.width, d.height, (unsigned long long)d.usage, name);
-        }
+    else
         ALOGI("imported buffer id %llx: %ux%u fourcc 0x%x android format %u usage 0x%llx planes %u stride %u modifier 0x%llx", (unsigned long long)d.id,
               d.width, d.height, d.fourcc, d.androidFormat, (unsigned long long)d.usage, d.numPlanes, d.stride[0], (unsigned long long)d.modifier);
-    }
     return image;
 }
-
-
-// ---- window surfaces (PLAN P7.1 step 3b) ----
-// The host's GBM platform has no pbuffers and cannot render into somebody else's buffer, so an Android window is a host window
-// surface on a gbm_surface of the same size, and eglSwapBuffers copies the finished frame on the GPU (glBlitFramebuffer between two
-// dmabuf EGLImages, a native fence handed to the BufferQueue: no CPU touch) into a buffer dequeued from the ANativeWindow.
-// A resize (the window's default size changing) makes a new surface pair behind the same app-side EGLSurface.
-// The app's EGLSurface is the address of its Window: the host surface behind it is replaced when the Android window changes size.
-struct Window {
-    EGLDisplay dpy;
-    EGLConfig cfg;
-    ANativeWindow* native;
-    void* gbmSurface;
-    EGLSurface host;
-    uint32_t width, height;
-    EGLint visual;
-};
-std::recursive_mutex windowsLock;
-std::set<Window*> windows;
-
-Window* windowOf(EGLSurface s) {  // windowsLock held
-    auto* w = static_cast<Window*>(s);
-    return windows.count(w) ? w : nullptr;
-}
-// the host's surface for one of ours (anything else, EGL_NO_SURFACE or a pbuffer, is the host's already)
-EGLSurface hostSurface(EGLSurface s) {
-    std::lock_guard<std::recursive_mutex> lock(windowsLock);
-    Window* w = windowOf(s);
-    return w ? w->host : s;
-}
-EGLSurface appSurface(EGLSurface host) {  // reverse, for eglGetCurrentSurface
-    std::lock_guard<std::recursive_mutex> lock(windowsLock);
-    for (Window* w : windows) if (w->host == host) return w;
-    return host;
-}
-
-constexpr int kApiEgl = 1;  // NATIVE_WINDOW_API_EGL
-constexpr uint64_t kUsageRender = 0x200, kUsageTexture = 0x100;  // GRALLOC_USAGE_HW_RENDER | HW_TEXTURE
-
-template <typename F>
-F gbmFn(const char* name) {
-    static void* lib = dlopen("libgbm.so.1", RTLD_NOW | RTLD_GLOBAL);
-    return reinterpret_cast<F>(lib ? dlsym(lib, name) : nullptr);
-}
-
-// GL entry points of the current context (through the host's eglGetProcAddress: glvnd exports no names)
-template <typename F>
-F gl(const char* name) {
-    return host<F>(name);
-}
-
-// The current context's framebuffer bindings, texture binding and scissor test around our copy.
-struct GlState {
-    int read = 0, draw = 0, tex = 0, scissor = 0;
-    GlState() {
-        auto get = gl<void (*)(unsigned, int*)>("glGetIntegerv");
-        get(0x8CAA, &read);  // GL_READ_FRAMEBUFFER_BINDING
-        get(0x8CA6, &draw);  // GL_DRAW_FRAMEBUFFER_BINDING
-        get(0x8069, &tex);   // GL_TEXTURE_BINDING_2D
-        scissor = gl<unsigned char (*)(unsigned)>("glIsEnabled")(0xC11);
-        if (scissor) gl<void (*)(unsigned)>("glDisable")(0xC11);
-    }
-    ~GlState() {
-        gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA8 /* GL_READ_FRAMEBUFFER */, read);
-        gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA9 /* GL_DRAW_FRAMEBUFFER */, draw);
-        gl<void (*)(unsigned, unsigned)>("glBindTexture")(0xDE1, tex);
-        if (scissor) gl<void (*)(unsigned)>("glEnable")(0xC11);
-    }
-};
-
-// A framebuffer with the image as its colour attachment; image and texture are the caller's to delete.
-unsigned fboForImage(EGLImage image, unsigned* tex) {
-    unsigned fbo = 0;
-    gl<void (*)(int, unsigned*)>("glGenTextures")(1, tex);
-    gl<void (*)(unsigned, unsigned)>("glBindTexture")(0xDE1, *tex);
-    gl<void (*)(unsigned, void*)>("glEGLImageTargetTexture2DOES")(0xDE1, image);
-    gl<void (*)(int, unsigned*)>("glGenFramebuffers")(1, &fbo);
-    gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8D40, fbo);
-    gl<void (*)(unsigned, unsigned, unsigned, unsigned, int)>("glFramebufferTexture2D")(0x8D40, 0x8CE0, 0xDE1, *tex, 0);
-    return fbo;
-}
-
-// The frame just swapped into the gbm_surface, copied into a buffer of the Android window and queued.
-void presentToWindow(EGLDisplay dpy, Window& w) {
-    ANativeWindow* nw = w.native;
-    void* bo = gbmFn<void* (*)(void*)>("gbm_surface_lock_front_buffer")(w.gbmSurface);
-    if (!bo) { ALOGE("gbm_surface_lock_front_buffer failed"); return; }
-    ANativeWindowBuffer* dst = nullptr;
-    int fence = -1;
-    if (nw->dequeueBuffer(nw, &dst, &fence) != 0 || !dst) {
-        ALOGE("dequeueBuffer failed");
-        gbmFn<void (*)(void*, void*)>("gbm_surface_release_buffer")(w.gbmSurface, bo);
-        return;
-    }
-    if (fence >= 0) { pollfd p = {fence, POLLIN, 0}; poll(&p, 1, 1000); close(fence); }
-
-    int fd = gbmFn<int (*)(void*)>("gbm_bo_get_fd")(bo);
-    uint32_t stride = gbmFn<uint32_t (*)(void*)>("gbm_bo_get_stride")(bo);
-    uint32_t format = gbmFn<uint32_t (*)(void*)>("gbm_bo_get_format")(bo);
-    uint64_t modifier = gbmFn<uint64_t (*)(void*)>("gbm_bo_get_modifier")(bo);
-    std::vector<EGLint> a = {EGL_WIDTH, (EGLint)w.width, EGL_HEIGHT, (EGLint)w.height, EGL_LINUX_DRM_FOURCC_EXT, (EGLint)format,
-                             EGL_DMA_BUF_PLANE0_FD_EXT, fd, EGL_DMA_BUF_PLANE0_OFFSET_EXT, 0, EGL_DMA_BUF_PLANE0_PITCH_EXT, (EGLint)stride};
-    if (modifier != DRM_FORMAT_MOD_INVALID)
-        a.insert(a.end(), {EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, (EGLint)(modifier & 0xffffffff), EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, (EGLint)(modifier >> 32)});
-    a.push_back(EGL_NONE);
-    auto createImage = host<PFNEGLCREATEIMAGEKHRPROC>("eglCreateImageKHR");
-    auto destroyImage = host<PFNEGLDESTROYIMAGEKHRPROC>("eglDestroyImageKHR");
-    EGLImage src = createImage(dpy, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, a.data());
-    EGLImage out = imageFromNativeBuffer(dpy, dst);
-    int outFence = -1;
-    if (src != EGL_NO_IMAGE && out != EGL_NO_IMAGE && host<EGLContext (*)()>("eglGetCurrentContext")() != EGL_NO_CONTEXT) {
-        GlState saved;
-        unsigned srcTex = 0, dstTex = 0;
-        unsigned srcFbo = fboForImage(src, &srcTex), dstFbo = fboForImage(out, &dstTex);
-        gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA8 /* GL_READ_FRAMEBUFFER */, srcFbo);
-        gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA9 /* GL_DRAW_FRAMEBUFFER */, dstFbo);
-        gl<void (*)(int, int, int, int, int, int, int, int, unsigned, unsigned)>("glBlitFramebuffer")(
-                0, 0, w.width, w.height, 0, 0, dst->width, dst->height, 0x4000 /* GL_COLOR_BUFFER_BIT */, 0x2600 /* GL_NEAREST */);
-        if (getenv("APKLAYER_EGL_PROBE")) {  // temporary: what the frame holds before and after the copy
-            gl<void (*)()>("glFinish")();
-            unsigned char before[4] = {0}, after[4] = {0};
-            gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8D40, srcFbo);
-            gl<void (*)(int, int, int, int, unsigned, unsigned, void*)>("glReadPixels")(w.width / 2, w.height / 2, 1, 1, 0x1908, 0x1401, before);
-            gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8D40, dstFbo);
-            gl<void (*)(int, int, int, int, unsigned, unsigned, void*)>("glReadPixels")(dst->width / 2, dst->height / 2, 1, 1, 0x1908, 0x1401, after);
-            ALOGW("probe: window %ux%u center src %d,%d,%d,%d dst %d,%d,%d,%d (buffer %ux%u fourcc 0x%x)", w.width, w.height, before[0], before[1], before[2], before[3],
-                  after[0], after[1], after[2], after[3], dst->width, dst->height, format);
-        }
-        if (getenv("APKLAYER_EGL_CPUCOPY")) {  // temporary experiment: the frame into the buffer through the CPU (read back, mmap the dmabuf)
-            HandleData dd;
-            if (decode(dst->handle, &dd)) {
-                std::vector<unsigned char> rows((size_t)w.width * w.height * 4);
-                gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8D40, srcFbo);
-                gl<void (*)(int, int, int, int, unsigned, unsigned, void*)>("glReadPixels")(0, 0, w.width, w.height, 0x1908, 0x1401, rows.data());
-                size_t length = (size_t)dd.stride[0] * dd.height;
-                void* map = mmap(nullptr, length, PROT_READ | PROT_WRITE, MAP_SHARED, dst->handle->data[0], 0);
-                if (map == MAP_FAILED) ALOGW("cpucopy: mmap of the buffer failed (errno %d)", errno);
-                else {
-                    for (uint32_t y = 0; y < dd.height && y < w.height; y++)
-                        memcpy((char*)map + (size_t)y * dd.stride[0], rows.data() + (size_t)y * w.width * 4, std::min<size_t>(dd.stride[0], (size_t)w.width * 4));
-                    munmap(map, length);
-                    ALOGW("cpucopy: wrote %ux%u into the buffer", w.width, w.height);
-                }
-            }
-        }
-        gl<void (*)()>("glFlush")();
-        auto createSync = host<PFNEGLCREATESYNCKHRPROC>("eglCreateSyncKHR");
-        auto dupFence = host<PFNEGLDUPNATIVEFENCEFDANDROIDPROC>("eglDupNativeFenceFDANDROID");
-        EGLSyncKHR sync = createSync && dupFence ? createSync(dpy, EGL_SYNC_NATIVE_FENCE_ANDROID, nullptr) : EGL_NO_SYNC_KHR;
-        if (sync != EGL_NO_SYNC_KHR) {
-            gl<void (*)()>("glFlush")();
-            outFence = dupFence(dpy, sync);
-            host<PFNEGLDESTROYSYNCKHRPROC>("eglDestroySyncKHR")(dpy, sync);
-        }
-        if (outFence < 0 || getenv("APKLAYER_EGL_NOFENCE")) {  // (the env test: finish the work here and queue no fence)
-            gl<void (*)()>("glFinish")();
-            if (outFence >= 0) { close(outFence); outFence = -1; }
-        }
-        gl<void (*)(int, unsigned*)>("glDeleteFramebuffers")(1, &srcFbo);
-        gl<void (*)(int, unsigned*)>("glDeleteFramebuffers")(1, &dstFbo);
-        gl<void (*)(int, unsigned*)>("glDeleteTextures")(1, &srcTex);
-        gl<void (*)(int, unsigned*)>("glDeleteTextures")(1, &dstTex);
-    } else {
-        ALOGE("window present: images %p %p or no current context", src, out);
-    }
-    if (src != EGL_NO_IMAGE) destroyImage(dpy, src);
-    if (out != EGL_NO_IMAGE) destroyImage(dpy, out);
-    close(fd);
-    gbmFn<void (*)(void*, void*)>("gbm_surface_release_buffer")(w.gbmSurface, bo);
-    nw->queueBuffer(nw, dst, outFence);
-}
-
-// The Android window's current size: the user's if set, else the consumer's default (what a resize changes).
-bool windowSize(ANativeWindow* nw, uint32_t* w, uint32_t* h) {
-    int iw = 0, ih = 0;
-    nw->query(nw, 6 /* NATIVE_WINDOW_DEFAULT_WIDTH */, &iw);
-    nw->query(nw, 7 /* NATIVE_WINDOW_DEFAULT_HEIGHT */, &ih);
-    if (iw <= 0 || ih <= 0) { nw->query(nw, 0 /* WIDTH */, &iw); nw->query(nw, 1 /* HEIGHT */, &ih); }
-    if (iw <= 0 || ih <= 0) return false;
-    *w = iw;
-    *h = ih;
-    return true;
-}
-
-// A gbm_surface and a host window surface of the Android window's size, stored in the Window (the old pair is the caller's).
-bool attachHostSurface(Window* win) {
-    uint32_t w, h;
-    if (!windowSize(win->native, &w, &h)) return false;
-    void* gs = gbmFn<void* (*)(void*, uint32_t, uint32_t, uint32_t, uint32_t)>("gbm_surface_create")(
-            apklayer_gfx_gbm_device(gfx()), w, h, (uint32_t)win->visual, 1u << 2 /* GBM_BO_USE_RENDERING */);
-    if (!gs) { ALOGE("gbm_surface_create %ux%u format 0x%x failed", w, h, win->visual); return false; }
-    EGLSurface surface = host<PFNEGLCREATEPLATFORMWINDOWSURFACEPROC>("eglCreatePlatformWindowSurface")(win->dpy, win->cfg, gs, nullptr);
-    if (surface == EGL_NO_SURFACE) {
-        ALOGE("host window surface failed: 0x%x", host<EGLint (*)()>("eglGetError")());
-        gbmFn<void (*)(void*)>("gbm_surface_destroy")(gs);
-        return false;
-    }
-    win->gbmSurface = gs;
-    win->host = surface;
-    win->width = w;
-    win->height = h;
-    return true;
-}
-
-// The window changed size: a new surface pair, the context moved over if this surface was current, the old pair destroyed.
-void resizeWindow(Window* win) {
-    EGLSurface oldHost = win->host;
-    void* oldGbm = win->gbmSurface;
-    uint32_t oldW = win->width, oldH = win->height;
-    EGLDisplay cur = host<EGLDisplay (*)()>("eglGetCurrentDisplay")();
-    EGLContext ctx = host<EGLContext (*)()>("eglGetCurrentContext")();
-    bool wasDraw = host<EGLSurface (*)(EGLint)>("eglGetCurrentSurface")(EGL_DRAW) == oldHost;
-    bool wasRead = host<EGLSurface (*)(EGLint)>("eglGetCurrentSurface")(EGL_READ) == oldHost;
-    if (!attachHostSurface(win)) { win->host = oldHost; win->gbmSurface = oldGbm; win->width = oldW; win->height = oldH; return; }
-    if (wasDraw || wasRead)
-        host<PFNEGLMAKECURRENTPROC>("eglMakeCurrent")(cur, wasDraw ? win->host : host<EGLSurface (*)(EGLint)>("eglGetCurrentSurface")(EGL_DRAW),
-                                                      wasRead ? win->host : host<EGLSurface (*)(EGLint)>("eglGetCurrentSurface")(EGL_READ), ctx);
-    host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglDestroySurface")(win->dpy, oldHost);
-    gbmFn<void (*)(void*)>("gbm_surface_destroy")(oldGbm);
-    ALOGI("window %p resized %ux%u -> %ux%u", win, oldW, oldH, win->width, win->height);
-}
-
-EGLBoolean swapWindow(EGLDisplay dpy, EGLSurface surface) {
-    std::lock_guard<std::recursive_mutex> lock(windowsLock);
-    Window* win = windowOf(surface);
-    if (getenv("APKLAYER_EGL_PROBE")) {
-        char name[32] = {0};
-        prctl(PR_GET_NAME, name);
-        ALOGW("probe: eglSwapBuffers surface %p on %s: %s", surface, name, win ? (win->native ? "window" : "no native window") : "not ours");
-    }
-    if (!win) return host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglSwapBuffers")(dpy, surface);
-    if (!win->native) return EGL_TRUE;  // a pbuffer is never presented
-    EGLBoolean ok = host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglSwapBuffers")(dpy, win->host);
-    if (!ok) return ok;
-    presentToWindow(dpy, *win);
-    uint32_t w, h;
-    if (windowSize(win->native, &w, &h) && (w != win->width || h != win->height)) resizeWindow(win);
-    return ok;
-}
-
-}  // namespace
 
 extern "C" {
 
@@ -509,49 +243,6 @@ EGLBoolean eglChooseConfig(EGLDisplay dpy, const EGLint* attribs, EGLConfig* cfg
     return ok;
 }
 
-EGLSurface eglCreateWindowSurface(EGLDisplay dpy, EGLConfig cfg, EGLNativeWindowType native, const EGLint*) {
-    auto* nw = reinterpret_cast<ANativeWindow*>(native);
-    if (nw == nullptr || nw->common.magic != ANDROID_NATIVE_WINDOW_MAGIC) { tError = EGL_BAD_NATIVE_WINDOW; return EGL_NO_SURFACE; }
-    auto* win = new Window{dpy, cfg, nw, nullptr, EGL_NO_SURFACE, 0, 0, 0};
-    host<EGLBoolean (*)(EGLDisplay, EGLConfig, EGLint, EGLint*)>("eglGetConfigAttrib")(dpy, cfg, EGL_NATIVE_VISUAL_ID, &win->visual);
-    if (!attachHostSurface(win)) { delete win; tError = EGL_BAD_ALLOC; return EGL_NO_SURFACE; }
-    // apklayer patch: EGL owns the window until eglDestroySurface. EGL10's
-    // SurfaceTexture wrapper drops its temporary sp<Surface> after this call.
-    nw->common.incRef(&nw->common);
-    // the Android side: connect as an EGL producer and ask for buffers the GPU renders to and SurfaceFlinger samples
-    native_window_api_connect(nw, kApiEgl);
-    native_window_set_usage(nw, kUsageRender | kUsageTexture);
-    native_window_set_buffers_format(nw, 1 /* HAL_PIXEL_FORMAT_RGBA_8888 */);
-    std::lock_guard<std::recursive_mutex> lock(windowsLock);
-    windows.insert(win);
-    ALOGI("window surface %p: %ux%u, gbm format 0x%x", win, win->width, win->height, win->visual);
-    return win;
-}
-
-EGLBoolean eglSwapBuffers(EGLDisplay dpy, EGLSurface surface) { return swapWindow(dpy, surface); }
-
-EGLBoolean eglSwapBuffersWithDamageKHR(EGLDisplay dpy, EGLSurface surface, const EGLint*, EGLint) { return swapWindow(dpy, surface); }
-EGLBoolean eglSwapBuffersWithDamageEXT(EGLDisplay dpy, EGLSurface surface, const EGLint* rects, EGLint n) { return eglSwapBuffersWithDamageKHR(dpy, surface, rects, n); }  // GeckoView asks for the EXT name
-// HWUI announces the frame's damage with it before drawing; every swap here presents the whole buffer, so there is nothing to tell the host
-// (forwarding failed with EGL_BAD_SURFACE: the handle is ours, not the host's, and HWUI aborts on the failure)
-EGLBoolean eglSetDamageRegionKHR(EGLDisplay, EGLSurface, EGLint*, EGLint) { return EGL_TRUE; }
-
-EGLBoolean eglDestroySurface(EGLDisplay dpy, EGLSurface surface) {
-    {
-        std::lock_guard<std::recursive_mutex> lock(windowsLock);
-        if (Window* w = windowOf(surface)) {
-            if (w->native) native_window_api_disconnect(w->native, kApiEgl);
-            windows.erase(w);
-            if (w->native) w->native->common.decRef(&w->native->common);
-            EGLBoolean ok = host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglDestroySurface")(dpy, w->host);
-            gbmFn<void (*)(void*)>("gbm_surface_destroy")(w->gbmSurface);
-            delete w;
-            return ok;
-        }
-    }
-    return host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglDestroySurface")(dpy, surface);
-}
-
 EGLBoolean eglMakeCurrent(EGLDisplay dpy, EGLSurface draw, EGLSurface read, EGLContext ctx) {
     EGLBoolean ok = host<PFNEGLMAKECURRENTPROC>("eglMakeCurrent")(dpy, hostSurface(draw), hostSurface(read), ctx);
     if (ok) apklayer::egl::gles1MadeCurrent(ctx);
@@ -580,29 +271,9 @@ EGLBoolean eglReleaseThread() {
     return ok;
 }
 
-EGLSurface eglGetCurrentSurface(EGLint which) {
-    return appSurface(host<EGLSurface (*)(EGLint)>("eglGetCurrentSurface")(which));
-}
-
-EGLBoolean eglQuerySurface(EGLDisplay dpy, EGLSurface surface, EGLint attribute, EGLint* value) {
-    {
-        std::lock_guard<std::recursive_mutex> lock(windowsLock);
-        if (Window* w = windowOf(surface)) {
-            if (attribute == EGL_WIDTH) { *value = w->width; return EGL_TRUE; }
-            if (attribute == EGL_HEIGHT) { *value = w->height; return EGL_TRUE; }
-            surface = w->host;
-        }
-    }
-    return host<EGLBoolean (*)(EGLDisplay, EGLSurface, EGLint, EGLint*)>("eglQuerySurface")(dpy, surface, attribute, value);
-}
-
-EGLBoolean eglSurfaceAttrib(EGLDisplay dpy, EGLSurface surface, EGLint attribute, EGLint value) {
-    return host<EGLBoolean (*)(EGLDisplay, EGLSurface, EGLint, EGLint)>("eglSurfaceAttrib")(dpy, hostSurface(surface), attribute, value);
-}
-
 EGLBoolean eglGetConfigAttrib(EGLDisplay dpy, EGLConfig cfg, EGLint attribute, EGLint* value) {
     EGLBoolean ok = host<EGLBoolean (*)(EGLDisplay, EGLConfig, EGLint, EGLint*)>("eglGetConfigAttrib")(dpy, cfg, attribute, value);
-    if (ok && attribute == EGL_SURFACE_TYPE && value) *value |= EGL_PBUFFER_BIT;  // eglCreatePbufferSurface below works on every config
+    if (ok && attribute == EGL_SURFACE_TYPE && value) *value |= EGL_PBUFFER_BIT;  // eglCreatePbufferSurface (EglWindow.cpp) works on every config
     // Android's native visual id is a HAL pixel format (engines hand it to ANativeWindow_setBuffersGeometry: bgfx, SDL, Unity); the host's is a DRM fourcc
     if (ok && attribute == EGL_NATIVE_VISUAL_ID && value) {
         switch (static_cast<uint32_t>(*value)) {
@@ -615,34 +286,6 @@ EGLBoolean eglGetConfigAttrib(EGLDisplay dpy, EGLConfig cfg, EGLint attribute, E
         }
     }
     return ok;
-}
-
-EGLSurface eglCreatePbufferSurface(EGLDisplay dpy, EGLConfig cfg, const EGLint* attribs) {
-    uint32_t w = 1, h = 1;
-    for (; attribs && *attribs != EGL_NONE; attribs += 2) {
-        if (attribs[0] == EGL_WIDTH) w = attribs[1];
-        if (attribs[0] == EGL_HEIGHT) h = attribs[1];
-    }
-    auto* win = new Window{dpy, cfg, nullptr, nullptr, EGL_NO_SURFACE, 0, 0, 0};
-    host<EGLBoolean (*)(EGLDisplay, EGLConfig, EGLint, EGLint*)>("eglGetConfigAttrib")(dpy, cfg, EGL_NATIVE_VISUAL_ID, &win->visual);
-    void* gs = gbmFn<void* (*)(void*, uint32_t, uint32_t, uint32_t, uint32_t)>("gbm_surface_create")(
-            apklayer_gfx_gbm_device(gfx()), w, h, (uint32_t)win->visual, 1u << 2 /* GBM_BO_USE_RENDERING */);
-    EGLSurface surface = gs ? host<PFNEGLCREATEPLATFORMWINDOWSURFACEPROC>("eglCreatePlatformWindowSurface")(dpy, cfg, gs, nullptr) : EGL_NO_SURFACE;
-    if (surface == EGL_NO_SURFACE) {
-        ALOGE("pbuffer %ux%u format 0x%x: host surface failed", w, h, win->visual);
-        if (gs) gbmFn<void (*)(void*)>("gbm_surface_destroy")(gs);
-        delete win;
-        tError = EGL_BAD_ALLOC;
-        return EGL_NO_SURFACE;
-    }
-    win->gbmSurface = gs; win->host = surface; win->width = w; win->height = h;
-    std::lock_guard<std::recursive_mutex> lock(windowsLock);
-    windows.insert(win);
-    return win;
-}
-
-EGLSurface eglCreatePlatformWindowSurface(EGLDisplay d, EGLConfig c, void* w, const EGLAttrib*) {
-    return eglCreateWindowSurface(d, c, reinterpret_cast<EGLNativeWindowType>(w), nullptr);
 }
 
 // Android's EGL extensions the framework asks for that need no real work here.
@@ -681,19 +324,6 @@ FORWARDED(DECLARE_SLOT)
 #endif
 FORWARDED(DEFINE_STUB)
 
-// temporary (APKLAYER_EGL_PROBE): the image-to-texture call with its target and the GL error it leaves
-static void probeImageTarget(unsigned target, void* image) {
-    auto call = host<void (*)(unsigned, void*)>("glEGLImageTargetTexture2DOES");
-    auto getError = host<unsigned (*)()>("glGetError");
-    auto getInt = host<void (*)(unsigned, int*)>("glGetIntegerv");
-    while (getError() != 0) {}
-    call(target, image);
-    unsigned error = getError();
-    int bound = 0;
-    getInt(target == 0x8D65 ? 0x8D67 : 0x8069, &bound);  // GL_TEXTURE_BINDING_EXTERNAL_OES / _2D
-    ALOGW("probe: glEGLImageTargetTexture2DOES target 0x%x image %p -> GL error 0x%x (texture %d bound)", target, image, error, bound);
-}
-
 // extensions an app or library may ask eglGetProcAddress for: ours where we implement them, the host's otherwise
 __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char* name) {
     struct { const char* n; void* f; } ours[] = {
@@ -711,13 +341,10 @@ __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char* name) {
         {"eglPresentationTimeANDROID", (void*)eglPresentationTimeANDROID},
         {"eglCreatePlatformWindowSurface", (void*)eglCreatePlatformWindowSurface},
     };
-    if (getenv("APKLAYER_EGL_PROBE") && !strcmp(name, "glEGLImageTargetTexture2DOES")) return reinterpret_cast<__eglMustCastToProperFunctionPointerType>(probeImageTarget);
     for (auto& o : ours) if (!strcmp(name, o.n)) return reinterpret_cast<__eglMustCastToProperFunctionPointerType>(o.f);
     if (void* es1 = apklayer::egl::gles1ProcAddress(name)) return reinterpret_cast<__eglMustCastToProperFunctionPointerType>(es1);
     auto proc = host<__eglMustCastToProperFunctionPointerType (*)(const char*)>("eglGetProcAddress");
-    auto found = proc(name);
-    if (!found && getenv("APKLAYER_EGL_PROBE")) ALOGW("probe: eglGetProcAddress(%s): the host has no such function", name);  // a null here is a crash or a silent no-op in the caller
-    return found;
+    return proc(name);
 }
 
 // A forwarded function the host does not have: fails instead of crashing on a null call.
@@ -741,4 +368,3 @@ __attribute__((constructor)) static void resolveForwarded() {
 
 // Android's libEGL exports this one with C++ linkage (_Z13eglBeginFramePvS_); callers in the framework expect that symbol.
 void eglBeginFrame(void*, void*) {}
-

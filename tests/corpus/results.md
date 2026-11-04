@@ -1,5 +1,30 @@
 # Compatibility results
 
+## 2026-11-04, second round (current F-Droid versions; UTM instance k3, Parallels k1/k2; screenshot after the frames stop for 3 s)
+
+| App (version) | Kind | VM | State | Note |
+|---|---|---|---|---|
+| Aurora Store 4.8.4 | Compose, store client | Parallels | draws (welcome) | |
+| F-Droid 2.0.2 | store client | Parallels | draws (Discover, "Fetching app repositories") | the index download (foreground worker) had not finished within the run; no error logged |
+| Fossify Gallery 1.14.1 | MediaStore | UTM | draws (folders, "No media files") | |
+| Fossify Calendar 1.12.1 | CalendarContract | UTM | draws (month) | |
+| Fossify Contacts 1.6.0 | ContactsContract | UTM | draws (contacts, empty) | |
+| Fossify File Manager 1.6.3 | file manager | Parallels | draws (Internal, folder list) | |
+| Fossify Camera 1.5.0 | CameraX | Parallels | draws controls, black preview | no camera HAL (parked) |
+| Catima 2.45.2 | SQLite | UTM | draws (welcome) | |
+| AntennaPod 3.12.3 (was 2026-10-28) | media3 | Parallels | draws (Home) | |
+| Jellyfin 2.7.3 | WebView | UTM | draws (Connect to Server) | needs com.android.webview in the data home |
+| Wikipedia r/50614 | WebView, Room | UTM | draws (onboarding) | needs com.android.webview in the data home |
+| Termux 0.119.0-beta.3 | terminal | Parallels | draws its "Bootstrap Error" dialog | hard-coded /data/data/com.termux/files: needs a /data/data/<pkg> view of the app's data dir (open) |
+| StreetComplete 64.0 | Compose Multiplatform | Parallels | draws (welcome) | |
+| Amaze 3.11.4 | file manager | UTM | draws (/storage/emulated/0, folders) | header says "8 folders" for 4 (not investigated) |
+| Etar 1.0.57 | CalendarContract | Parallels | draws (week) | |
+| DAVx5 4.5.21 | Compose, accounts | UTM, Parallels | draws (intro) | fixed: Robolectric 0016 (AuthenticationRequiredException failed instrumentation: NegativeArraySizeException in Application.onCreate) |
+| Syncthing-Fork 2.1.7.0 | Go native | Parallels | draws (welcome) | |
+| Briar 1.5.23 | Tor, H2 | UTM, Parallels | draws (nickname setup) | the first-frame screenshot showed its splash: the runner now waits for the frames to stop |
+| QUIK 4.3.7 | SMS | Parallels | draws (inbox, empty) | |
+| SimpleX Chat 7.0.4 | Compose, Haskell core | UTM | white window, no activity started | fixed: its libraries link now (bionic_translation 0032, sibling symbols); then libapp-lib.so loads (18 natives) but no activity starts within the run (the Haskell runtime start is the suspect, open) |
+
 ## 2026-11-04 (current F-Droid versions; UTM and Parallels, one instance per runner: `CORPUS_INSTANCE=<id> tests/corpus/run.py`; judged on each app's own SurfaceFlinger capture)
 
 | App (version) | Kind | VM | State | Note |

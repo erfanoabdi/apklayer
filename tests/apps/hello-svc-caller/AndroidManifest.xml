@@ -12,5 +12,7 @@
       <intent-filter><action android:name="hello.svccaller.OTHER_PID"/></intent-filter>
     </service>
     <service android:name=".ExitService" android:process=":exit"/>
+    <service android:name=".IsolatedPidService" android:isolatedProcess="true" android:exported="false"/>
+    <provider android:name=".ProbeProvider" android:authorities="hello.svccaller.probe" android:multiprocess="true" android:exported="false"/>
   </application>
 </manifest>

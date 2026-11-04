@@ -95,7 +95,7 @@ final class HubProviders {
      * kernel's pid (a process registered with the hub); a oneway one has none (pid 0, or -1 in an AttributionSource) and names it by the uid its request header
      * carried (ShadowHostRealParcel), which must be the uid of a running app or the hub's own (system_server's 1000: it holds every permission, and its
      * oneway calls to an authenticator are checked for ACCOUNT_MANAGER).
-     * shortcut: that header is the runtime's (an app's Java code cannot set it through the framework) but a process writing raw binder parcels could claim
+     * Limit: that header is the runtime's (an app's Java code cannot set it through the framework) but a process writing raw binder parcels could claim
      * another running app's uid: every app JVM is the same Linux uid, which also lets one read another's files, so the kernel's sender uid is the boundary only
      * with per-app Linux uids (the per-app sandbox, docs/PLAN.md).
      */
