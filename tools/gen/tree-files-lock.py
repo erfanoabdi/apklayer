@@ -68,7 +68,7 @@ for p in sorted(sums):
     else:
         origin, st = "(staged from the tree's build outputs, see CHANGELOG.md)", "same"
         if "/android-all/" in p and p.endswith(".jar"):
-            origin, st = "(tree framework with apklayer JNI shim; tools/build native)", "patched"
+            origin, st = "(tree framework with apklayer JNI shim; runtime/android-all/meson.build)", "patched"
         if p.startswith(ROOTP + "vendor/etc/") and n in ("audio_policy_volumes.xml", "default_volume_tables.xml"):
             origin, st = tree[n][1], "same" if tree[n][0] == h else "patched"
         prefix = ROOTP

@@ -1,22 +1,32 @@
 #!/usr/bin/make -f
-# The apklayer deb (docs/RELEASES.md). tools/release/build-deb.sh fetches the inputs (network), writes debian/changelog and the
-# codename's substvars, then runs dpkg-buildpackage; this file builds offline through tools/release/package.sh.
+# The apklayer deb (docs/RELEASES.md): the Meson build and install of a development tree (docs/INSTALL.md) with prefix /usr and without the
+# Android half, which the per-user runtime bundle brings. tools/release/build-deb.sh writes debian/changelog and the codename's substvars, then
+# runs dpkg-buildpackage with APKLAYER_PREBUILTS (a joined prebuilts checkout) and APKLAYER_SLINT (manager/fetch-slint.sh).
 export APKLAYER_VERSION ?= $(shell dpkg-parsechangelog -S Version)
-W := $(CURDIR)/debian/work
+B := $(CURDIR)/debian/build
+# the flags the tree is built and tested with (meson's), not dpkg-buildflags' (LTO, Ubuntu's -Bsymbolic-functions): the path layer and
+# bionic_translation interpose symbols across libraries
+MESON := env -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS -u OBJCFLAGS -u OBJCXXFLAGS -u FFLAGS -u FCFLAGS meson
 
 %:
 	dh $@
 
-override_dh_auto_configure override_dh_auto_test:
+override_dh_auto_configure:
+	$(MESON) setup $(B) --prefix=/usr -Dprebuilts=$(APKLAYER_PREBUILTS) -Dandroid_runtime=false -Dpackage_version=$(APKLAYER_VERSION)
+	$(MESON) setup $(B)-manager manager --prefix=/usr -Dlibdir=lib/apklayer -Dslint=$(APKLAYER_SLINT)
 
 override_dh_auto_build:
-	sh tools/release/package.sh build $(W)
+	ninja -C $(B)
+	ninja -C $(B)-manager apklayer-manager
 
 override_dh_auto_install:
-	sh tools/release/package.sh install $(W) $(CURDIR)/debian/apklayer
+	DESTDIR=$(CURDIR)/debian/apklayer meson install -C $(B) --skip-subprojects --no-rebuild --quiet
+	DESTDIR=$(CURDIR)/debian/apklayer meson install -C $(B)-manager --no-rebuild --quiet
+
+override_dh_auto_test:
 
 override_dh_auto_clean:
-	rm -rf $(W)
+	rm -rf $(B) $(B)-manager
 
 override_dh_installsystemd:
 	dh_installsystemd --name=apklayer-binder

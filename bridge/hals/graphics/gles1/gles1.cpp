@@ -3,7 +3,7 @@
 // Android emulator runs for guests that ask for ES 1; its CoreProfileEngine emulates the fixed-function pipeline with shaders). This file is
 // the EGL side the translator expects (gfxstream's own egl_imp.cpp drives the same calls), reduced to what apklayer's libEGL needs: a context
 // per EGL context, its share group, the thread's current context, the GL entry points. The caller makes the host context current first.
-// Built on the machine that runs apklayer (glibc), loaded by apklayer's libEGL (Android side) through a C interface: tools/build gles1.
+// Built on the machine that runs apklayer (glibc), loaded by apklayer's libEGL (Android side) through a C interface: meson -Dgfxstream (bridge/hals/graphics/gles1/meson.build).
 #include <EGL/egl.h>
 #include <dlfcn.h>
 #include <string.h>

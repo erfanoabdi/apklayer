@@ -21,7 +21,7 @@ import org.robolectric.annotation.internal.DoNotInstrument;
  * The framework's {@code @CriticalNative} methods. ART calls those without JNIEnv and jclass; Robolectric's host build
  * compiles the extra parameters in, the device libraries do not, so the native runtime shim (bridge/native/runtime_shim.c)
  * registers them through an adapter that drops the two arguments. The android-all jar has the annotation stripped, the
- * build's own javac output keeps it: {@code main} (tools/build native) lists "class name+signature" lines from
+ * build's own javac output keeps it: {@code main} (runtime/meson.build) lists "class name+signature" lines from
  * those jars into {@code critical-natives.txt}, which goes into native-runtime.jar; {@code of} reads it at run time.
  */
 @DoNotInstrument

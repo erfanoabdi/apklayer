@@ -18,7 +18,7 @@ import org.robolectric.annotation.internal.DoNotInstrument;
  * glibc), its JNI_OnLoad runs, and every exported {@code Java_...} function is bound to its native
  * method with JNI RegisterNatives (HotSpot's own lookup cannot see libraries it did not load).
  *
- * <p>Needs the staged native runtime (tools/build native) ({@code -Dapklayer.native=<dir>}) and
+ * <p>Needs the native runtime meson installs ({@code -Dapklayer.native=<dir>}) and
  * the app's extracted libs ({@code -Dapklayer.libdir=<dir>}).
  */
 @DoNotInstrument

@@ -46,8 +46,8 @@ for n, p in plan.items():
 tar = subprocess.Popen(["tar", "-c", "-f", "-", "-C", str(stage), "."], stdout=subprocess.PIPE)
 subprocess.run(SSH + [PATHS + "tar xf - -C $L"], stdin=tar.stdout, check=True)
 assert tar.wait() == 0
-# the staged libOpenSLES.so now answers for Android's OpenSL ES (the library mapping, tools/build cfg)
-subprocess.run(SSH + [PATHS + "cd ~/apklayer && tools/build cfg $N"], check=True)
+# the staged libOpenSLES.so now answers for Android's OpenSL ES (the library mapping: bridge/native/meson.build looks at the libraries when it configures)
+subprocess.run(SSH + [PATHS + "cd ~/apklayer && ninja -C b reconfigure >/dev/null && meson install -C b --skip-subprojects --only-changed --quiet"], check=True)
 for n in plan:
     expected = orb("sha256sum " + plan[n]).split()[0]
     actual = subprocess.check_output(SSH + [PATHS + "sha256sum $L/" + n], text=True).split()[0]

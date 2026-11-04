@@ -1,4 +1,4 @@
-// gles1-translator: libapklayer-gles1.so (OpenGL ES 1.1 over a host GLES 3 context, tools/build gles1) draws what ES 1 apps draw: a clear,
+// gles1-translator: libapklayer-gles1.so (OpenGL ES 1.1 over a host GLES 3 context, meson -Dgfxstream) draws what ES 1 apps draw: a clear,
 // a fixed-function triangle from a client vertex array (glVertexPointer + glColor4f under glOrthof), a texture through glDrawTexiOES
 // (SDL 1.2's Android blit). On the host's EGL/GBM window surface, read back through the ES 1 API.
 // cc -std=gnu17 -o gles1-translator tests/vm/gles1-translator.c -lEGL -lgbm -ldl && ./gles1-translator <native>/libapklayer-gles1.so   (exit 0 = PASS)

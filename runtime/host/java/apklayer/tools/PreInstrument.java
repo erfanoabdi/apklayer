@@ -28,7 +28,7 @@ import org.robolectric.util.inject.Injector;
  * except that the configuration is the one the app JVM's sandbox uses (the simulator SandboxBuilder's, with the same interceptors), so the bytes
  * equal what the sandbox loader would produce; a class the instrumentor rejects stays as it is (the loader then instruments it, as before).
  *
- * <p>Usage (tools/build instrument): java -cp native-runtime.jar:host-classes:sim-classes:Robolectric_all.jar apklayer.tools.PreInstrument <in.jar> <out.jar>
+ * <p>Usage (runtime/android-all-instrumented/meson.build): java -cp overlay.jar:host-classes.jar:sim-classes:Robolectric_all.jar apklayer.tools.PreInstrument <in.jar> <out.jar>
  */
 public final class PreInstrument {
     public static void main(String[] args) throws Exception {

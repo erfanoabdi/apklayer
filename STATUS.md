@@ -9,10 +9,10 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): 
 
 ## How to work here
 - A new machine: `docs/INSTALL.md` (prebuilts branch, build, first app).
-- Build: `meson setup b && ninja -C b`; `tools/build bt|host|native|overlay|instrument|cfg|gles1 <native>`; `tools/fetch-deps.sh`; staging from the tree: `tools/stage`.
+- Build: `meson setup b --prefix <dir> -Dprebuilts=<prebuilts> && ninja -C b && meson install -C b --skip-subprojects [--only-changed]` builds and stages everything (bionic_translation as a patched subproject, pinned jars, native runtime, host classes, framework jars instrumented once; `-Dgfxstream=` for ES 1); the tree's `bin/apklayer` uses that install. Staging from the tree: `tools/stage`.
 - Upstream edits are patch files only (`patches/`, applied by `patches/apply`; index in `docs/PATCHES.md`). Android-side modules: edit `aosp/`, `tools/sync-aosp.sh`,
   incremental builds in `~/los24` (`docs/AOSP-BUILDS.md`), then install the output on both VMs (take a module's library from `out/soong/.intermediates/vendor/apklayer/...`: `m <module>` does not refresh `system/lib64`) and run `tools/gen/tree-files-lock.py`.
-- Tests: one `tests/run [-j N] [group...]` per VM tree at a time (a lock refuses a second; put groups in one run with -j) (groups in `tests/groups.toml`; each its own instance; it pushes the tree and rebuilds the runtime when sources changed).
+- Tests: one `tests/run [-j N] [group...]` per VM tree at a time (a lock refuses a second; put groups in one run with -j) (groups in `tests/groups.toml`; each its own instance; it pushes the tree, then `ninja` and `meson install` into `<repo copy>/inst`; `-Dprebuilts` from `APKLAYER_PREBUILTS` in `APKLY_VM_ENV`).
   Second VM: `APKLY_VM_CONF=parallels`; named instances: `APKLY_SLOTS="a b"` (space-separated). Corpus: `CORPUS_INSTANCE=<id> python3 tests/corpus/run.py <app>`.
 - Screenshots: `apklayer [--instance ID] screenshot <package> <out.png>` (the app's own SurfaceFlinger picture). Input into one instance's window:
   `instance.inject` (tests/lib/instance.py); kernel keys (`instance.keys`) go to the shared desktop's focus and are only for input-desktop.
@@ -36,6 +36,6 @@ Mac.apk, Robolectric, android_translation_layer (all in `~/GitHub`), Husk (GPL, 
 - `ro.*` properties are write-once: every stack start gets a fresh store.
 - Process lookup: Android processes carry their process name in `/proc/<pid>/cmdline`; find an instance's processes by `APKLAYER_INSTANCE` in `/proc/<pid>/environ`
   or the recorded `run.*` pids, never by name. Never `pkill -f` a pattern in your own command line. Do not attach `jcmd` to app JVMs (it ended Fennec).
-- The native dir's copies of `libdl_bio`/`libc_bio` win over `APKLAYER_BT`: after a bionic_translation patch run `tools/build native <native>` (tests/run does it).
+- After an edited bionic_translation patch: `meson subprojects update --reset bionic_translation`, then ninja and install (a new patch is picked up by ninja itself).
 - Files deleted in git stay on the VMs after a push: remove them there by name. macOS tar: `COPYFILE_DISABLE=1`, `tar -c -f - --no-xattrs`.
 - dex2jvm needs `android-all` on its own classpath; its output needs `@DoNotInstrument` (`DenyInstrument`). gcc 15 makes implicit declarations errors.

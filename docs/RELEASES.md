@@ -19,12 +19,12 @@ downloads it only when the version changes). `converter_abi` and `data_format` a
 
 ## The deb
 
-Everything glibc-linked, built from the tag with the prebuilts as build inputs (`tools/release/package.sh`, the steps of `docs/INSTALL.md`):
+Everything glibc-linked, built from the tag with the prebuilts as build inputs (`debian/rules`: the Meson build and install of `docs/INSTALL.md` with `-Dandroid_runtime=false`):
 
 | Path | What |
 |---|---|
 | `/usr/bin/apklayer` -> `/usr/lib/apklayer/cli/apklayer`, `/usr/bin/apklayer-manager` | the CLI, the manager |
-| `/usr/lib/apklayer/` | a mirror of a meson build dir (`cli/`, `bridge/shell/apklayer-shell`, `runtime/dex2jvm/dex2jvm.jar`), `bionic_translation/{b,cfg.d}` (built at `patches/bionic_translation/REVISION` with `patches/apply`), `native/` (the package's half of the native dir: `bin/` btload, aprop, getprop; the preload, NDK and HAL libraries; `native-runtime.jar` with the JNI shim; `jdk-patch/`; `aosp/host-classes`; `libs/`, the Maven jars an install runs), `apklayer-manager/libslint_cpp.so` |
+| `/usr/lib/apklayer/` | a mirror of a meson build dir (`cli/`, `bridge/shell/apklayer-shell`, `runtime/dex2jvm/dex2jvm.jar`), `bionic_translation/{b,cfg.d}` (the subproject at `subprojects/bionic_translation.wrap`'s revision with `patches/apply`), `native/` (the package's half of the native dir: `bin/` btload, aprop, getprop; the preload, NDK and HAL libraries; `native-runtime.jar` with the JNI shim; `jdk-patch/`; `aosp/host-classes.jar`; `share/bionic_translation/cfg.d` the library mapping; `libs/`, the Maven jars an install runs), `apklayer-manager/libslint_cpp.so` |
 | `/usr/share/apklayer/` | the CLI's root: `versions`, `tools/{build,sysapps.list,host-setup}`, `runtime/host/jvm.args`, `bridge/native/{apklayer.prop,bionic_translation.cfg,android-root}`, `bridge/portal`, `aosp/hals/**.xml` |
 | `/usr/lib/modules-load.d/apklayer.conf`, `apklayer-binder.service` | `binder_linux` at boot; binderfs and the default instance's devices (`tools/host-setup/binder.sh`), enabled and started by the package |
 
@@ -48,8 +48,8 @@ system-apps/        the providers, DocumentsUI and webview.apk for the first run
 Install (what apklayer-manager does): unpack into `~/.local/share/apklayer/runtime/R/` (`$XDG_DATA_HOME` is honoured) and point the symlink
 `runtime/current` at `R`; by hand: `mkdir -p ~/.local/share/apklayer/runtime/R && tar --zstd -xf apklayer-runtime-<cpu>-R.tar.zst -C ~/.local/share/apklayer/runtime/R && ln -sfn R ~/.local/share/apklayer/runtime/current`.
 The installed CLI takes `runtime/current` (else `runtime/R` of its `versions`) as its native dir: on first use, and again after each package or runtime update, it runs
-`tools/build runtime` (under a lock) which links the package's half in, puts the JNI shim into the framework jars, writes bionic_translation's
-library mapping and instruments the framework once (a few minutes). Without the bundle, commands that start Android code say where it is missing.
+`tools/setup-runtime.sh` (`tools/release/setup-runtime.sh`, under a lock) which links the package's half in (with its library mapping), puts the JNI shim into the framework jars
+and instruments the framework once (a few minutes). Without the bundle, commands that start Android code say where it is missing.
 Environment variables (`APKLAYER_NATIVE`, `APKLAYER_ANDROID_LIBS`, ...) still override every path; a source tree keeps working as before (no `versions` at its root).
 
 ## releases.json

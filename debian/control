@@ -2,7 +2,7 @@ Source: apklayer
 Section: utils
 Priority: optional
 Maintainer: Erfan Abdi <erfangplus@gmail.com>
-Build-Depends: debhelper-compat (= 13), meson, ninja-build, pkg-config, python3, zip, unzip, binutils,
+Build-Depends: debhelper-compat (= 13), meson, ninja-build, pkg-config, python3, binutils, git, ca-certificates,
  openjdk-21-jdk-headless,
  libwayland-dev, wayland-protocols, libxkbcommon-dev, libcairo2-dev, libpng-dev,
  libdrm-dev, libgbm-dev, libegl-dev, libgles-dev,

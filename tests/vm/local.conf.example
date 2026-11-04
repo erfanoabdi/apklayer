@@ -3,9 +3,10 @@ APKLY_VM=user@host
 APKLY_VM_PASS=secret
 # Optional, for tests/run: the repo copy on the VM (default ~/apklayer) and extra environment of every VM command (a private native tree, data dir):
 # APKLY_VM_ROOT=~/wt/me/repo
-# APKLY_VM_ENV=APKLAYER_NATIVE=$HOME/wt/me/native XDG_DATA_HOME=$HOME/wt/me/data XDG_STATE_HOME=$HOME/wt/me/state
+# APKLY_VM_ENV=APKLAYER_PREBUILTS=$HOME/prebuilts XDG_DATA_HOME=$HOME/wt/me/data XDG_STATE_HOME=$HOME/wt/me/state
+#   (tests/run builds with Meson and installs into <APKLY_VM_ROOT>/inst; APKLAYER_PREBUILTS is the joined prebuilts checkout its first `meson setup` takes)
 # APKLY_SLOTS=me1 me2 me3 me4   (tests/run's instance ids, default tests tests2 ...: other users of the VM use those)
 # A second VM without editing this file: tests/vm/<name>.conf (untracked) with the same keys, picked by APKLY_VM_CONF=<name>; no APKLY_VM_PASS = ssh key
 # authentication. The Parallels VM (runtime staged beside its old setup in ~/apklayer-rt), tests/vm/parallels.conf:
 # APKLY_VM=parallels@10.211.55.4
-# APKLY_VM_ENV=APKLAYER_NATIVE=$HOME/apklayer-rt/native APKLAYER_ANDROID_LIBS=$HOME/apklayer-rt/android-arm64/lib64 APKLAYER_BT=$HOME/apklayer-rt/bt/bionic_translation/b APKLAYER_DEPS=$HOME/apklayer-rt/deps XDG_DATA_HOME=$HOME/apklayer-rt/data XDG_STATE_HOME=$HOME/apklayer-rt/state
+# APKLY_VM_ENV=APKLAYER_PREBUILTS=$HOME/apklayer-rt/prebuilts XDG_DATA_HOME=$HOME/apklayer-rt/data XDG_STATE_HOME=$HOME/apklayer-rt/state

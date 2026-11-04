@@ -84,8 +84,8 @@ stage_vulkan() {
         [ "$actual" = "$(shasum -a 256 "$stage/$name" | cut -d' ' -f1)" ] || { echo "hash mismatch: $target" >&2; exit 1; }
         echo "Verified $target $actual"
     done
-    COPYFILE_DISABLE=1 tar cf - -C "$repo" bridge/native/apklayer.prop bridge/native/bionic_translation.cfg tools/build | vm 'tar xf - -C ~/apklayer'
-    vm 'cd ~/apklayer && tools/build cfg $N'
+    COPYFILE_DISABLE=1 tar cf - -C "$repo" bridge/native/apklayer.prop bridge/native/bionic_translation.cfg | vm 'tar xf - -C ~/apklayer'
+    vm 'cd ~/apklayer && ninja -C b reconfigure >/dev/null && meson install -C b --skip-subprojects --only-changed --quiet'  # the mapping sees the loader
 }
 
 stage_x86_64() { # re-runs itself inside the OrbStack machine; every staged ELF is checked to be x86-64
@@ -120,25 +120,20 @@ stage_x86_64() { # re-runs itself inside the OrbStack machine; every staged ELF 
     fi
     echo "== Robolectric"
     mkdir -p "$stage/aosp" && cp "$tree/out/host/linux-x86/framework/Robolectric_all.jar" "$stage/aosp/"
-    echo "== framework javac shards (tools/build native lists the @CriticalNative methods from them)"
+    echo "== framework javac shards (runtime/meson.build lists the @CriticalNative methods from them)"
     rm -rf "$stage/javac-shards"; mkdir -p "$stage/javac-shards"
     cp "$tree"/out/soong/.intermediates/frameworks/base/framework-minus-apex/android_common/javac/framework.jar[0-9]* "$stage/javac-shards/" 2>/dev/null || true
     rm -f "$stage"/javac-shards/*.rsp "$stage"/javac-shards/*.pc_state
-    echo "== bionic_translation"
-    if [ ! -d "$stage/bt" ]; then cp -r "$HOME/bt/bionic_translation" "$stage/bt" && (cd "$stage/bt" && rm -rf b b2 && git checkout meson.build); fi
-    sh "$here/build" bt "$stage/bt" > "$stage/bt-build.log" 2>&1 && echo "built, log $stage/bt-build.log"
     echo "== check: every ELF is x86-64"
     bad=0
-    for f in "$stage"/android-x86_64/lib64/*.so* "$stage"/bt/b/lib*_bio.so*; do
+    for f in "$stage"/android-x86_64/lib64/*.so*; do
         [ -f "$f" ] || continue
         case "$(readelf -h "$f" 2>/dev/null | sed -n 's/.*Machine: *//p')" in *X86-64*) ;; *) echo "not x86-64: $f"; bad=$((bad + 1));; esac
     done
     echo "$bad foreign ELF files"
     echo "== tar"
-    rm -rf "$stage/bt-libs"; mkdir -p "$stage/bt-libs"
-    for f in "$stage"/bt/b/lib*_bio.so*; do [ -f "$f" ] && cp -L "$f" "$stage/bt-libs/"; done
     mkdir -p "$repo/build/x86_64"
-    tar cf "$repo/build/x86_64/apklayer-x86_64-stage.tar" -C "$stage" android-x86_64 android-root aosp javac-shards bt-libs libs-copied.txt libs-missing.txt
+    tar cf "$repo/build/x86_64/apklayer-x86_64-stage.tar" -C "$stage" android-x86_64 android-root aosp javac-shards libs-copied.txt libs-missing.txt
     ls -la "$repo/build/x86_64/apklayer-x86_64-stage.tar"
 }
 

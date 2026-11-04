@@ -25,11 +25,9 @@ apklayer-shell ──> one Wayland window per app                               
 **Installing on a new machine: `docs/INSTALL.md`** (step by step, with the Android parts from the `prebuilts` branch; no LineageOS tree needed).
 For development, the Android side comes from a LineageOS tree built once; `CHANGELOG.md` logs the incremental builds, rules in `docs/AOSP-BUILDS.md`.
 ```sh
-tools/fetch-deps.sh                          # pinned Java deps -> ~/.cache/apklayer/deps
-tools/build bt ~/bt-arm/bionic_translation   # bionic_translation, patched (patches/apply), for this machine
-meson setup b && ninja -C b                  # tool, shell, converter, host HALs, native runtime (JNI shim, btload, preload, NDK stubs)
-tools/build host ~/arm64-native              # host classes against the staged Robolectric
-tools/build native ~/arm64-native [shards]   # stage the native runtime: ninja's outputs, native-runtime.jar, library mapping
+meson setup b --prefix ~/apklayer-install -Dprebuilts=<prebuilts checkout>   # bionic_translation (subproject, patched), pinned jars: fetched
+ninja -C b                                   # tool, shell, converter, host HALs, native runtime, host classes, framework jars (instrumented once)
+meson install -C b --skip-subprojects        # the runtime into the prefix (bin/apklayer uses it)
 sudo tools/host-setup/binder.sh              # kernel binderfs
 bin/apklayer install app.apk | run <package|app.apk> | list | uninstall <package> | screenshot <package> <out.png> | stop
 bin/apklayer instances | instance create|remove <id> | prop [set KEY VALUE | unset KEY] | info | clear-data | permissions [grant|revoke] | stop <package> | status
@@ -51,7 +49,7 @@ Every launch of an app writes its log, from the desktop's app grid as well as fr
 To report a bug: open the app again, reproduce the problem, run `apklayer report <package>` and attach the archive to a [new issue](https://github.com/erfanoabdi/apklayer/issues/new/choose) together with the app's link and version and the steps to reproduce. Look through the archive first: logs can contain account names, URLs and file names.
 
 ## Layout
-`cli/` the tool · `runtime/` app host, dex2jvm, Robolectric overlays · `bridge/` JNI shim, shell, host HALs · `aosp/` Android-side modules · `tools/` builds (`tools/build`), staging from the tree (`tools/stage`), generators, host setup ·
+`cli/` the tool · `runtime/` app host, dex2jvm, Robolectric overlays · `bridge/` JNI shim, shell, host HALs · `aosp/` Android-side modules · Meson builds everything (`meson.build`); `tools/` staging from the tree (`tools/stage`), generators, host setup ·
 `tests/` VM tests, sample apps · `docs/` plan, architecture, patches, licenses · `STATUS.md`, `goal.md`, `CLAUDE.md` (agent rules).
 
 ## License
