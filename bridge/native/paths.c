@@ -154,7 +154,8 @@ static bool from_root(const char *r, char **path)
     const char *p = *path;
     if (!r[0] || p[0] != '/') return false;
     for (int i = 0; prefixes[i]; i++) {
-        if (strncmp(p, prefixes[i], strlen(prefixes[i]))) continue;
+        size_t n = strlen(prefixes[i]);  /* "/system/..." and the directory itself, "/system" (the guest linker's config sections test it); not the host's /etc */
+        if (strncmp(p, prefixes[i], n) && (strncmp(p, prefixes[i], n - 1) || p[n - 1] || !strcmp(prefixes[i], "/etc/"))) continue;
         /* /etc is a symlink to /system/etc on Android */
         const char *tries[2] = { "", !strcmp(prefixes[i], "/etc/") ? "/system" : NULL };
         for (int t = 0; t < 2 && tries[t]; t++) {
@@ -185,8 +186,8 @@ long apklayer_android_spelling(char *buf, long n)
         long k = roots[i] ? (long)strlen(roots[i]) : 0;
         if (!k || n <= k || strncmp(buf, roots[i], (size_t)k) || buf[k] != '/') continue;
         for (int j = 0; prefixes[j]; j++) {
-            long p = (long)strlen(prefixes[j]);
-            if (n - k >= p && !strncmp(buf + k, prefixes[j], (size_t)p)) { memmove(buf, buf + k, (size_t)(n - k)); return n - k; }
+            long p = (long)strlen(prefixes[j]);  /* the directory itself too ("/system": n - k == p - 1) */
+            if (n - k >= p - 1 && !strncmp(buf + k, prefixes[j], (size_t)(n - k >= p ? p : p - 1))) { memmove(buf, buf + k, (size_t)(n - k)); return n - k; }
         }
     }
     return n;
