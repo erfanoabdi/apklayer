@@ -19,4 +19,17 @@ public final class AppSpare {
         StartTrace.mark("spare target");
         return ComponentSpare.apply(target.lines().toList());
     }
+
+    private static boolean started;
+
+    /** The launch's first activity is up: one byte on the launcher's pipe, upon which the next spare starts preparing (it would compete with this start). */
+    static void launchStarted() {
+        if (started) return;
+        started = true;
+        Integer fd = Integer.getInteger("apklayer.startedfd");  // a spare's (spare_target.c); a plain launch's in the environment
+        if (fd == null && System.getenv("APKLAYER_STARTED_FD") != null) fd = Integer.valueOf(System.getenv("APKLAYER_STARTED_FD"));
+        if (fd == null) return;
+        try (java.io.OutputStream out = new java.io.FileOutputStream("/proc/self/fd/" + fd)) { out.write('1'); }
+        catch (java.io.IOException launcherGone) { /* nobody waits for it */ }
+    }
 }

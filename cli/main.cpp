@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
     if (cmd == "component-host" && n == 2 && args[1] == "--spare") return runApp(layout, inst, "", RunMode::Spare);
     if (cmd == "component-host" && n == 3 && args[1] == "--args") return printPackageArgs(layout, inst, args[2]);
     if (cmd == "component-host" && n == 2) return runApp(layout, inst, args[1], RunMode::Component);
-    if (cmd == "app-spare" && n == 1) return runAppSpare(layout, inst);  // started by `run` (cli/spare.cpp)
+    if (cmd == "app-spare" && n == 3 && args[1] == "--after") return runAppSpare(layout, inst, atoi(args[2].c_str()));  // started by `run` (cli/spare.cpp)
     if (cmd == "hub") return runHub(layout, inst);
     if (cmd == "wait" && n == 2 && args[1] == "hub") return waitHub(layout, inst);
     if (cmd == "list" && n == 2 && args[1] == "--tsv") { listAppsTsv(layout, inst); return 0; }

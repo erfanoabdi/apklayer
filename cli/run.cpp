@@ -166,11 +166,11 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     }
     std::vector<std::string> late = launchOptions(window, own);
     std::string record = join(inst.stateDir, "run." + std::to_string(self));
-    int conn = -1, jvmPid = -1;
-    if (mode == RunMode::App) {  // the instance's app spare takes the launch when it matches (its sandbox and native runtime are up: cli/spare.cpp)
+    int conn = -1, jvmPid = -1, started[2] = {-1, -1};  // started: the launch's first activity is up (AppSpare.launchStarted)
+    if (mode == RunMode::App && pipe2(started, O_CLOEXEC) == 0) {  // the instance's app spare takes the launch when it matches (cli/spare.cpp)
         std::vector<std::string> target = late;
         target.insert(target.end(), files.begin(), files.end());
-        jvmPid = takeAppSpare(inst, spareKey, target, &conn);
+        jvmPid = takeAppSpare(inst, spareKey, target, started[1], &conn);
         if (jvmPid > 0) trace("app spare taken");
     }
     jvm.insert(jvm.end() - 3, late.begin(), late.end());
@@ -191,12 +191,17 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         execReplace(app);
     }
     if (jvmPid <= 0) {
+        if (started[1] >= 0) { fcntl(started[1], F_SETFD, 0); app.env["APKLAYER_STARTED_FD"] = std::to_string(started[1]); }
         jvmPid = spawn(app);
         trace("app jvm spawned");
     }
     // `apklayer stop` ends what this launch started: the JVM and its window sink
     writeFile(record, std::to_string(jvmPid) + "\n" + std::to_string(vdisplay) + "\n");
-    if (mode == RunMode::App) startAppSpare(l, inst);  // for the next launch, as zygote forks the next app process
+    if (started[0] >= 0) {  // for the next launch, as zygote forks the next app process
+        close(started[1]);
+        startAppSpare(l, inst, started[0]);
+        close(started[0]);
+    }
     int status = 0;
     if (conn >= 0) status = awaitAppSpare(conn, jvmPid);
     else {

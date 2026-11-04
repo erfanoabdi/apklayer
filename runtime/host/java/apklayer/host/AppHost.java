@@ -432,6 +432,7 @@ public final class AppHost implements Runnable {
         c.get().getWindow().getDecorView().invalidate();
         System.out.println("[apklayer] started " + c.get().getClass().getName() + " depth=" + stack.size());
         StartTrace.mark("activity resumed " + c.get().getClass().getName());
+        AppSpare.launchStarted();
     }
 
     /**
