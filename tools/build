@@ -148,6 +148,10 @@ build_native() {
     tmp="$(mktemp -d)" && scratch="$scratch $tmp"
     mkdir -p "$native/bin" "$native/android-root"
     [ -e "$native/android-libs" ] || ln -s "$libs" "$native/android-libs"
+    # what apps that dlopen system libraries by name find on the LD_LIBRARY_PATH they read (HostLibraryPath.java)
+    mkdir -p "$native/android-system-stubs"
+    for f in libc libdl libstdc++; do ln -sfn "../${f}_bio.so" "$native/android-system-stubs/$f.so"; done
+    ln -sfn "$(${CC:-cc} -print-file-name=libm.so.6)" "$native/android-system-stubs/libm.so"
     cp -r --remove-destination bridge/native/android-root/. "$native/android-root/"  # apklayer's own files of the Android root; the tree's come from tools/stage root
     for f in btload aprop; do put "$B/bridge/native/$f" "$native/bin/$f"; done
     put bridge/native/getprop "$native/bin/getprop" && chmod 755 "$native/bin/getprop"
