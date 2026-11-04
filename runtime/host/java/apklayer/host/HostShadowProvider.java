@@ -71,6 +71,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.view.SurfaceView", ShadowHostNativeSurfaceView.class.getName()),
                 Map.entry("android.view.TextureView", ShadowHostRealTextureView.class.getName()),
                 Map.entry("android.view.SurfaceSession", HostPlainShadows.SurfaceSession.class.getName()),
+                Map.entry("android.net.LocalSocketImpl", HostPlainShadows.LocalSocketImpl.class.getName()),
                 Map.entry("android.view.PixelCopy", HostPlainShadows.PixelCopy.class.getName()),
                 Map.entry("android.graphics.SurfaceTexture", HostGLShadows.SurfaceTexture.class.getName()),
                 Map.entry("android.graphics.TextureLayer", HostGLShadows.TextureLayer.class.getName()),

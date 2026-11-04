@@ -329,7 +329,9 @@ static int register_classes(JNIEnv *env, JavaVM *vm, void *rt)
         "register_android_opengl_jni_GLES10", "register_android_opengl_jni_GLES10Ext", "register_android_opengl_jni_GLES11",
         "register_android_opengl_jni_GLES11Ext", "register_android_opengl_jni_GLES20", "register_android_opengl_jni_GLES30",
         "register_android_opengl_jni_GLES31", "register_android_opengl_jni_GLES31Ext", "register_android_opengl_jni_GLES32",
-        "register_android_opengl_classes", NULL
+        "register_android_opengl_classes",
+        "register_android_net_LocalSocketImpl", /* not GL: LocalSocket's natives, also absent from HostRuntime's list */
+        NULL
     };
     for (int i = 0; device_gl[i]; i++) {
         int (*fn)(JNIEnv *) = find_register_function(rt, hwui, device_gl[i]);
@@ -433,6 +435,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     if (!rt) { fprintf(stderr, "[runtime] cannot load libandroid_runtime.so: %s\n", bionic_dlerror()); return -1; }
     { extern void apklayer_install_path_layer(void); apklayer_install_path_layer(); } /* libc_bio is loaded now: Android paths (/system, /vendor...) as btload does */
     apklayer_log_to_stderr();
+    { extern void apklayer_private_stdio(JNIEnv *); apklayer_private_stdio(env); }  /* System.out/err survive an app's redirection of fds 1 and 2 */
     /* intercept RegisterNatives for the duration of startReg (JVMTI's supported JNI function table swap) */
     jvmtiEnv *ti;
     if ((*vm)->GetEnv(vm, (void **)&ti, JVMTI_VERSION_1_2) != JNI_OK) { fprintf(stderr, "[runtime] no JVMTI\n"); return -1; }

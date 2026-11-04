@@ -61,6 +61,14 @@ public class ShadowHostRealLinux extends ShadowLinux {
         natively("socketpair", ClassParameter.from(int.class, domain), ClassParameter.from(int.class, type), ClassParameter.from(int.class, protocol),
                 ClassParameter.from(FileDescriptor.class, one), ClassParameter.from(FileDescriptor.class, two));
     }
+    @Implementation protected FileDescriptor socket(int domain, int type, int protocol) {
+        return natively("socket", ClassParameter.from(int.class, domain), ClassParameter.from(int.class, type), ClassParameter.from(int.class, protocol));
+    }
+    @Implementation protected void listen(FileDescriptor fd, int backlog) { natively("listen", ClassParameter.from(FileDescriptor.class, fd), ClassParameter.from(int.class, backlog)); }
+    @Implementation protected FileDescriptor accept(FileDescriptor fd, java.net.SocketAddress peer) {
+        return natively("accept", ClassParameter.from(FileDescriptor.class, fd), ClassParameter.from(java.net.SocketAddress.class, peer));
+    }
+    @Implementation protected void shutdown(FileDescriptor fd, int how) { natively("shutdown", ClassParameter.from(FileDescriptor.class, fd), ClassParameter.from(int.class, how)); }
     @Implementation protected int readBytes(FileDescriptor fd, Object buffer, int offset, int count) {
         return natively("readBytes", ClassParameter.from(FileDescriptor.class, fd), ClassParameter.from(Object.class, buffer), ClassParameter.from(int.class, offset), ClassParameter.from(int.class, count));
     }

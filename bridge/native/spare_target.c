@@ -9,7 +9,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-extern void apklayer_log_follow_stderr(void);
+extern void apklayer_log_follow_stderr(void), apklayer_private_stdio_follow(void);
 
 jstring Java_apklayer_host_NativeLoader_receiveTarget(JNIEnv *env, jclass cls, jint fd)
 {
@@ -35,6 +35,7 @@ jstring Java_apklayer_host_NativeLoader_receiveTarget(JNIEnv *env, jclass cls, j
         close(got[0]);
         close(got[1]);
         apklayer_log_follow_stderr();  /* liblog writes to its own copy of stderr (android_platform.c) */
+        apklayer_private_stdio_follow();  /* so do System.out and System.err (private_stdio.c) */
         if (count == 3) {  /* kept open (close-on-exec) for AppSpare.launchStarted */
             char line[64];
             int len = snprintf(line, sizeof line, "-Dapklayer.startedfd=%d\n", got[2]);
