@@ -26,7 +26,8 @@ try:
             print(line.rstrip())
     code = proc.wait()
 finally:
-    instance.stop()
+    unclean = instance.stop()
+assert not unclean, 'services did not end cleanly at stop: %s' % unclean  # SurfaceFlinger's exit-time SIGSEGV (bionic_translation 0029)
 assert code == 0, 'UiBench JVM exited with %d' % code
 assert shot, 'no GPU buffer reached the compositor'
 count = pixels.colors(shot)
