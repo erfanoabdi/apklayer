@@ -29,7 +29,7 @@ tools/build host ~/arm64-native              # host classes against the staged R
 tools/build native ~/arm64-native [shards]   # stage the native runtime: ninja's outputs, native-runtime.jar, library mapping
 sudo tools/host-setup/binder.sh              # kernel binderfs
 bin/apklayer install app.apk | run <package|app.apk> | list | uninstall <package> | screenshot <package> <out.png> | stop
-bin/apklayer instances | instance create|remove <id> | prop [set KEY VALUE | unset KEY] | info | clear-data | stop <package> | status
+bin/apklayer instances | instance create|remove <id> | prop [set KEY VALUE | unset KEY] | info | clear-data | permissions [grant|revoke] | stop <package> | status
 ```
 
 **apklayer-manager** (`manager/`): a Material 3 window over the CLI for phones and desktops: apps (install, open, stop, clear data, uninstall,

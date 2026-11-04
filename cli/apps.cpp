@@ -215,8 +215,14 @@ void listApps(const Layout& l) {
 void uninstallApp(const Layout& l, const std::string& package) {
     if (!isDir(appDir(l, package))) die("not installed: " + package);
     removeTree(appDir(l, package));
-    for (const std::string& instance : listDir(join(l.dataHome, "apklayer")))  // the app's data in every instance of this data home
+    for (const std::string& instance : listDir(join(l.dataHome, "apklayer"))) {  // the app's data in every instance of this data home
         if (isDir(join(l.dataHome, "apklayer/" + instance + "/app-data/" + package))) removeTree(join(l.dataHome, "apklayer/" + instance + "/app-data/" + package));
+        // and its revoked permissions (cli/manage.cpp): a reinstall starts with the grants of a new install, as on Android
+        std::string revoked = join(l.dataHome, "apklayer/" + instance + "/permissions-revoked"), kept;
+        if (!exists(revoked)) continue;
+        for (const std::string& line : split(readFile(revoked).value_or(""), '\n')) if (!line.empty() && line.rfind(package + "\t", 0) != 0) kept += line + "\n";
+        writeFile(revoked, kept);
+    }
     unlink(join(l.dataHome, "applications/apklayer-" + package + ".desktop").c_str());
     printf("apklayer: removed %s\n", package.c_str());
 }
