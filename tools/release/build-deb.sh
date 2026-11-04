@@ -19,9 +19,10 @@ APKLAYER_DEPS_LOCAL="$P/common" APKLAYER_DEPS_SKIP='android-all/*' tools/fetch-d
 manager/fetch-slint.sh "$IN/slint"
 
 # per-release differences: Ubuntu keeps binder_linux in linux-modules-extra, which only its kernel metapackages pull in; Debian builds it into its kernel
+# a recommendation, not a dependency: a hard one would pull the generic kernel onto systems running another flavour (lowlatency, cloud, OEM, a custom one)
 case "$codename" in
-    noble) echo 'apklayer:Depends=linux-image-generic | linux-image-generic-hwe-24.04' ;;
-    *) echo 'apklayer:Depends=' ;;
+    noble) printf '%s\n' 'apklayer:Depends=' 'apklayer:Recommends=linux-modules-extra-generic | linux-image-generic | linux-image-generic-hwe-24.04' ;;
+    *) printf '%s\n' 'apklayer:Depends=' 'apklayer:Recommends=' ;;
 esac > "debian/$codename.substvars"
 if [ -f "debian/patches/$codename/series" ]; then cp "debian/patches/$codename"/* debian/patches/; fi  # none so far
 
