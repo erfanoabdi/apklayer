@@ -20,7 +20,8 @@ extra = Path.home() / '.apklayer-extra-jopts'  # regression runs with a feature 
 if extra.exists(): ENV['APKLAYER_JOPTS'] += ' ' + extra.read_text().strip()
 ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-media.so'
 
-audio_mode = sys.argv[1:] == ['audio']
+late = sys.argv[1:] == ['late']  # installed while the hub runs: audioserver must learn the package (HubAudioPermissions.registered)
+audio_mode = late or sys.argv[1:] == ['audio']
 capture = None
 if audio_mode:
     ENV['APKLAYER_JOPTS'] += ' -Dapklayer.nativemedia=true -Dapklayer.nativeaudio=true -Dapklayer.nativeparcels=true -Dhello.rate=1 -Dhello.record=1'
@@ -36,7 +37,7 @@ logs.mkdir(exist_ok=True)
 libc = ctypes.CDLL(None, use_errno=True)
 notify = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
 assert notify >= 0 and libc.inotify_add_watch(notify, os.fsencode(logs), 0x102) >= 0
-app = None
+app = hub = None
 seen = []
 committed = captured = False
 try:
@@ -44,6 +45,15 @@ try:
         capture = AudioCapture(ENV)
         ENV['APKLAYER_AUDIO_TARGET'] = capture.name
         ENV['APKLAYER_AUDIO_TARGET_IN'] = capture.name
+    if late:
+        subprocess.run(['bin/apklayer', 'uninstall', 'hello.nativeaudio'], env=ENV, stdout=subprocess.DEVNULL, check=True)
+        hub_log = Path(os.environ.get('APKLY_OUT', '/tmp')) / 'late-hub.log'  # not in the logs: the stack's start renews them
+        hub_log.parent.mkdir(parents=True, exist_ok=True)
+        with hub_log.open('wb') as out:
+            hub = subprocess.Popen(['bin/apklayer', 'hub'], env=ENV, stdout=out, stderr=subprocess.STDOUT, start_new_session=True)
+        subprocess.run(['bin/apklayer', 'wait', 'hub'], env=ENV, check=True, timeout=30)
+        out = subprocess.run(['bin/apklayer', 'install', '.tests/apks/hello-native-audio.apk'], env=ENV, capture_output=True, text=True)
+        assert 'installed' in out.stdout + out.stderr, out.stdout[-2000:] + out.stderr[-2000:]
     app = subprocess.Popen(['bin/apklayer', 'run', 'hello.nativeaudio'], env=ENV,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
     with selectors.DefaultSelector() as events, Path('/tmp/apklayer-native-audio.out').open('wb') as log:
@@ -98,10 +108,13 @@ try:
         assert '[hello-native-audio] RECORD PASS' in text
         assert '[hello-native-audio] RECORDER PASS' in text
         capture.verify()
+    if late:
+        hub_text = hub_log.read_text(errors='replace')  # fed again when the app registered (the hub's start knew no hello.nativeaudio)
+        assert 'audio permissions fed' in hub_text[hub_text.index('registered hello.nativeaudio'):], 'the late install was not fed to audioserver'
     assert committed and captured
     assert 'finished hello.nativeaudio.Main depth=0' in text and 'depth=0' in text
     assert (logs / 'shell.log').read_text(errors='replace').count('dmabuf frame') > 0
-    print('PASS APK ' + ('AudioTrack JNI/PCM/clock/callbacks and attribution' if audio_mode else 'real attribution Parcel fields/identity/ownership') + ', frame commit and physical Back', flush=True)
+    print('PASS APK ' + ('installed while the hub ran: ' if late else '') + ('AudioTrack JNI/PCM/clock/callbacks and attribution' if audio_mode else 'real attribution Parcel fields/identity/ownership') + ', frame commit and physical Back', flush=True)
 finally:
     stop()
     if app is not None:
@@ -111,6 +124,7 @@ finally:
             pass
         app.wait()
         app.stdout.close()
+    if hub is not None: hub.wait(timeout=10)
     if capture: capture.close()
     os.close(notify)
     for name in ('apklayer-media.xml', 'apklayer-audio.xml', 'apklayer-audio-effects.xml'):
