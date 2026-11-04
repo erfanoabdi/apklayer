@@ -14,5 +14,5 @@ cc_library_shared {
     static_libs: ["libcameraservice"],
     version_script: "exports.map",
     compile_multilib: "64",
-    cflags: ["-Wall", "-Werror", "-Wno-main"],
+    cflags: ["-Wall", "-Werror", "-Wno-main", "-Wno-overloaded-virtual"], // libcamera_client's ICamera.h trips it with BnCameraServiceProxy
 }
