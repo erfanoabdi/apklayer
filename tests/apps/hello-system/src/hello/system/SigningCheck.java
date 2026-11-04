@@ -17,6 +17,9 @@ final class SigningCheck implements Check {
         byte[] other = cert.clone();
         other[other.length / 2] ^= 1;
         Check.require(!pm.hasSigningCertificate(self, other, PackageManager.CERT_INPUT_RAW_X509), "a different certificate matched");
+        // this app names Google's certificate in "fake-signature" too, but it is not microG (LineageOS spoofs only microG-signed gms and vending): its own shows
+        Signature google = new Signature(pm.getApplicationInfo(self, PackageManager.GET_META_DATA).metaData.getString("fake-signature"));
+        Check.require(!pm.getPackageInfo(self, PackageManager.GET_SIGNATURES).signatures[0].equals(google) && !own[0].equals(google), "this app was spoofed with its fake-signature");
         String gms = "not installed";
         try {
             android.os.Bundle meta = pm.getApplicationInfo("com.google.android.gms", PackageManager.GET_META_DATA).metaData;
@@ -24,9 +27,15 @@ final class SigningCheck implements Check {
             if (fake != null) {
                 Check.require(pm.hasSigningCertificate("com.google.android.gms", new Signature(fake).toByteArray(), PackageManager.CERT_INPUT_RAW_X509), "microG's spoofed certificate not matched");
                 Check.require(!pm.hasSigningCertificate("com.google.android.gms", cert, PackageManager.CERT_INPUT_RAW_X509), "microG matched this app's certificate");
+                // what GooglePlayServicesUtilLight compares: one signature (GET_SIGNATURES), Google's, and the Play Store (microG Companion) signed alike
+                Signature[] services = pm.getPackageInfo("com.google.android.gms", PackageManager.GET_SIGNATURES).signatures;
+                Check.require(services.length == 1 && services[0].equals(google), "microG's GET_SIGNATURES is not Google's certificate");
                 gms = "spoofed certificate matched";
+                Signature[] store = pm.getPackageInfo("com.android.vending", PackageManager.MATCH_UNINSTALLED_PACKAGES | PackageManager.GET_SIGNATURES).signatures;
+                Check.require(store.length == 1 && store[0].equals(services[0]), "microG Companion not signed as microG Services");
+                gms += ", Companion too";
             }
-        } catch (PackageManager.NameNotFoundException absent) { /* microG not installed in this instance */ }
+        } catch (PackageManager.NameNotFoundException absent) { /* microG (or its Companion) not installed in this instance */ }
         // the framework's certificate is one per device: the same in every process of the app
         String platform = OtherProcess.platformCertificate(context), inOther = OtherProcess.ask(context)[1];
         Check.require(platform.equals(inOther), "android certificate " + platform + " here, " + inOther + " in :other");
