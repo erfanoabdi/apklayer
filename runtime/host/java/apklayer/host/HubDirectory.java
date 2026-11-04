@@ -49,12 +49,19 @@ final class HubDirectory extends Binder {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             stopping = true;
             spare.stop();
-            synchronized (hosts) {
-                for (Process host : java.util.stream.Stream.concat(hosts.values().stream(), appProcesses.values().stream()).toList()) {
-                    host.descendants().forEach(child -> child.destroyForcibly()); host.destroyForcibly();
-                }
-            }
+            java.util.List<ProcessHandle> ending;
+            synchronized (hosts) { ending = java.util.stream.Stream.concat(hosts.values().stream(), appProcesses.values().stream()).map(Process::toHandle).toList(); }
+            end(ending, 4000);  // a component host saves its due work on SIGTERM (ComponentHost); `apklayer stop` kills the hub after 5 s
         }, "hub-component-cleanup"));
+    }
+    /** SIGTERM to the processes and their children, SIGKILL to what is left after {@code waitMs}. */
+    private static void end(java.util.List<ProcessHandle> ending, long waitMs) {
+        for (ProcessHandle process : ending) { process.descendants().forEach(ProcessHandle::destroy); process.destroy(); }
+        long deadline = System.nanoTime() + waitMs * 1_000_000L;
+        for (ProcessHandle process : ending) {
+            try { process.onExit().get(Math.max(0, deadline - System.nanoTime()), java.util.concurrent.TimeUnit.NANOSECONDS); }
+            catch (Exception stuck) { process.descendants().forEach(ProcessHandle::destroyForcibly); process.destroyForcibly(); }
+        }
     }
     /** The hub ends once nothing is connected or being started (an auto-started hub belongs to the apps that use it). */
     private void exitWhenIdle(long delayMs) {
@@ -113,11 +120,7 @@ final class HubDirectory extends Binder {
         synchronized (peers) { for (Peer peer : peers.values()) if (peer.name.equals(name)) ProcessHandle.of(peer.pid).ifPresent(ending::add); }
         synchronized (hosts) { hosts.forEach((key, process) -> { if (key.equals(name) || key.startsWith(name + "#")) ending.add(process.toHandle()); }); }
         synchronized (appProcesses) { Process app = appProcesses.get(name); if (app != null) ending.add(app.toHandle()); }
-        for (ProcessHandle process : ending) { process.descendants().forEach(ProcessHandle::destroy); process.destroy(); }
-        for (ProcessHandle process : ending) {
-            try { process.onExit().get(10, java.util.concurrent.TimeUnit.SECONDS); }
-            catch (Exception stuck) { process.destroyForcibly(); }
-        }
+        end(ending, 10_000);
         if (!ending.isEmpty()) System.out.println("[apklayer-hub] stopped " + name + " (" + ending.size() + " processes)");
     }
 
