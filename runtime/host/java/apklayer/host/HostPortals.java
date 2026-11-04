@@ -62,7 +62,7 @@ final class HostPortals {
             Intent.ACTION_CREATE_DOCUMENT, Intent.ACTION_OPEN_DOCUMENT_TREE);
 
     /**
-     * Intents the host answers itself when no installed app does (AppHost.launch's fallbacks: desktop links and file dialogs, permission requests, the
+     * Intents the host answers itself when no installed app does (ActivityTask.launch's fallbacks: desktop links and file dialogs, permission requests, the
      * installer's intents): startActivity does not throw ActivityNotFoundException for them.
      */
     static boolean hostAnswers(Intent intent) {
