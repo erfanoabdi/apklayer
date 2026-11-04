@@ -44,7 +44,7 @@ public final class Services {
     private record Bound(String service, Intent.FilterComparison filter) {}
     private static final Map<ServiceConnection, java.util.List<Bound>> CONNECTIONS = new IdentityHashMap<>();
     private static int startId;
-    /** ServiceController.create idles the main looper: a bind queued behind the one that creates a service would run inside it and create the service again. */
+    /** ServiceController.create (and destroy) idles the main looper: a bind queued behind the one that creates a service would run inside it and create the service again. */
     private static boolean creating;
     private static final java.util.ArrayDeque<Runnable> DEFERRED = new java.util.ArrayDeque<>();
 
@@ -93,8 +93,13 @@ public final class Services {
 
     /** A service in a process of its own (GeckoView children) dies with its last service, as Android kills that process: the next bind starts a fresh one (their static state forbids reuse). */
     private static void destroy(String key, Running r) {
-        r.controller.destroy();
+        // ServiceController.destroy idles the main looper too: a bind queued meanwhile (the hub's next client) would bind this dying instance and the
+        // process would exit under it; it waits (DEFERRED) and binds a fresh instance once this one is gone
+        boolean nested = creating;
+        creating = true;
+        try { r.controller.destroy(); } finally { creating = nested; }
         RUNNING.remove(key);
+        if (!nested) for (Runnable next; (next = DEFERRED.poll()) != null; ) next.run();
         if (HUB_CALLS.get() == 0) exitIfIdle();  // inside a hub request the reply goes first: the hub asks again once it has it
     }
 
