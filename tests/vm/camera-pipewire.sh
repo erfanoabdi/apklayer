@@ -15,4 +15,5 @@ bin/apklayer stop >/dev/null 2>&1
 APKLAYER_JOPTS="-Dapklayer.runms=25000" bin/apklayer run hello.camera > $out 2>&1 || true
 grep -a "\[cam\]" $out
 bin/apklayer stop >/dev/null 2>&1
-grep -aq "\[cam\] opened" $out && grep -aq "\[cam\] preview: " $out
+# the frames are the fixture's SMPTE bars, not the fake's: a YUV frame of the asked size is enough
+grep -aq "\[cam\] opened" $out && grep -aq "\[cam\] yuv .* 640x480" $out

@@ -40,6 +40,10 @@ run = ["tests/vm/devices.sh"]
 apps = ["hello-camera"]
 run = ["tests/vm/camera.sh"]
 
+[camera-pipewire]  # a camera node on the desktop's PipeWire (other instances' PipeWire backends see it while it runs)
+apps = ["hello-camera"]
+run = ["CAMERA_APP=1 tests/vm/camera-pipewire.sh"]
+
 [files]
 apps = ["hello-files"]
 setup = ["""f=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/system/etc/permissions/apklayer-test-hello-files.xml; [ -e $f ] || printf '<permissions><privapp-permissions package="hello.files"><permission name="android.permission.MANAGE_DOCUMENTS"/></privapp-permissions></permissions>\\n' > $f"""]
