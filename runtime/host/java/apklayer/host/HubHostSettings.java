@@ -41,7 +41,6 @@ final class HubHostSettings {
 
     /** Reads the desktop's settings until the hub ends (a thread of its own); without python or a portal the overrides alone apply. */
     void watch() {
-        HubBootSettings.awaitBoot();  // the hub's resolver reaches the settings provider from then on
         Process reader = null;
         try {
             ProcessBuilder builder = new ProcessBuilder(HostProcess.dying("python3", HostLocation.script("settings.py"))).redirectError(ProcessBuilder.Redirect.DISCARD);
@@ -106,22 +105,23 @@ final class HubHostSettings {
     }
 
     /** The desktop or the overrides changed: apply what differs from the instance's current settings. */
-    void changed() {
-        synchronized (applying) { apply(); }
-        first.countDown();
-    }
+    void changed() { synchronized (applying) { apply(); } }
     private final Object applying = new Object();
 
     private void apply() {
         Bundle next = effective(), before;
         synchronized (this) { before = current; current = next; }
+        boolean boot = first.getCount() > 0;
+        first.countDown();  // before the settings provider is written to: its own process registers with HOST_SETTINGS
         if (same(before, next)) return;
         System.out.println("[apklayer-hub] host settings " + describe(next));
+        HubBootSettings.awaitBoot();  // the hub's resolver reaches the settings provider from then on
         writeSystemSettings(before, next);
         for (HubDirectory.Peer peer : directory.peersExcept(null)) {
             try { HubProtocol.call(peer.endpoint(), HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_CONFIGURATION, request -> request.writeBundle(next), reply -> null); }
             catch (IllegalStateException gone) { /* it ended meanwhile */ }
         }
+        if (boot) return;  // the instance's first settings: nothing changed for anyone
         if (differs(before, next, "night") || differs(before, next, "locale") || differs(before, next, "fontScale"))
             directory.sendSystem(new Intent(Intent.ACTION_CONFIGURATION_CHANGED).addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY), false);
         if (differs(before, next, "locale")) directory.sendSystem(new Intent(Intent.ACTION_LOCALE_CHANGED), false);
@@ -146,6 +146,7 @@ final class HubHostSettings {
                         "{\"android.theme.customization.system_palette\":\"%08X\",\"android.theme.customization.color_source\":\"preset\"}", next.getInt("accent")));
         } catch (RuntimeException failed) {
             System.out.println("[apklayer-hub] host settings not written: " + failed);
+            failed.printStackTrace(System.out);
         }
         if (next.containsKey("timezone")) android.os.SystemProperties.set("persist.sys.timezone", next.getString("timezone"));
         if (next.containsKey("locale")) android.os.SystemProperties.set("persist.sys.locale", next.getString("locale"));

@@ -52,7 +52,12 @@ public final class Main extends Activity {
         return "night=" + night + " nightMode=" + modes.getNightMode() + " fontScale=" + c.fontScale + " locale=" + c.getLocales().get(0).toLanguageTag()
                 + " default=" + Locale.getDefault().toLanguageTag() + " cancel=" + getString(android.R.string.cancel) + " tz=" + TimeZone.getDefault().getID()
                 + " 24h=" + DateFormat.is24HourFormat(this) + " animator=" + ValueAnimator.getDurationScale()
-                + " contrast=" + (android.os.Build.VERSION.SDK_INT >= 34 ? modes.getContrast() : 0f)
-                + " palette=" + Settings.Secure.getString(getContentResolver(), "theme_customization_overlay_packages");
+                + " palette=" + secure("theme_customization_overlay_packages");
+    }
+
+    /** A Settings.Secure value; hidden keys not annotated @Readable are refused to apps (S+). */
+    private String secure(String key) {
+        try { return Settings.Secure.getString(getContentResolver(), key); }
+        catch (SecurityException refused) { return "unreadable"; }
     }
 }

@@ -1,6 +1,6 @@
 // Properties: the instance's Android property overrides (`apklayer prop`) over apklayer's device defaults (bridge/native/apklayer.prop).
 // They are loaded when the instance's services start, so a change applies after a restart.
-import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, ScrollView, TonalButton, FilledCard } from "@material";
+import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, ScrollView, TonalButton, FilledButton, FilledCard } from "@material";
 import { Backend, AppIcons, PropEntry } from "backend.slint";
 import { Row, Tag, Heading } from "widgets.slint";
 
@@ -29,6 +29,26 @@ export component PropsPage {
                         if Backend.instance-running : HorizontalLayout {
                             alignment: start;
                             TonalButton { text: "Restart instance"; icon: AppIcons.restart; clicked => { Backend.stop-instance(Backend.instance); } }
+                        }
+                    }
+                }
+                FilledCard {
+                    VerticalLayout {
+                        padding: MaterialStyleMetrics.padding_16;
+                        spacing: MaterialStyleMetrics.spacing_12;
+                        MaterialText {
+                            text: "Colour scheme of instance " + Backend.instance + ": its apps and title bars, applied at once (apklayer settings has the other host settings).";
+                            style: MaterialTypography.body_medium;
+                            color: MaterialPalette.on_surface;
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            spacing: MaterialStyleMetrics.spacing_8;
+                            for choice in [{ label: "Follow the desktop", value: "" }, { label: "Light", value: "no" }, { label: "Dark", value: "yes" }] : HorizontalLayout {
+                                if Backend.night-setting == choice.value : FilledButton { text: choice.label; }
+                                if Backend.night-setting != choice.value : TonalButton { text: choice.label; clicked => { Backend.set-setting("night", choice.value); } }
+                            }
                         }
                     }
                 }

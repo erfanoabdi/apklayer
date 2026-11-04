@@ -197,6 +197,7 @@ void window_set_dark(struct window *w, int dark)
     if (w->decor.dark == dark) return;
     w->decor.dark = dark;
     w->decor.focused = -1;  /* force the redraw */
+    fprintf(stderr, "[shell] %s: title bar %s\n", w->title, dark ? "dark" : "light");
     if (w->decor.lw > 0) decor_update(&w->decor, w->decor.lw, window_scale(w), w->maximized, w->bar_hover, w->activated);
 }
 

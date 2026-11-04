@@ -11,7 +11,7 @@ import org.robolectric.android.controller.ActivityController;
 /**
  * The instance's host settings (HubHostSettings: the desktop's, or the instance's overrides) as an app process's configuration: night mode
  * and locale as resource qualifiers on top of the window's size ones, the font scale, the default locale and time zone, the animator duration
- * scale, UiModeManager's night mode and contrast. AppHost hands a change to its activities as ActivityThread's handleConfigurationChanged does.
+ * scale, UiModeManager's night mode (contrast is the hub's CONTRAST_LEVEL only). AppHost hands a change to its activities as ActivityThread's handleConfigurationChanged does.
  */
 final class HostConfiguration {
     private HostConfiguration() {}
@@ -37,10 +37,17 @@ final class HostConfiguration {
         }
         android.animation.ValueAnimator.setDurationScale(settings.getFloat("animatorScale", 1f));  // WindowManagerGlobal sets it from the system's on a device
         Boolean night = night();
-        if (night != null) org.robolectric.util.ReflectionHelpers.setStaticField(org.robolectric.shadows.ShadowUIModeManager.class, "currentNightMode",
-                night ? android.app.UiModeManager.MODE_NIGHT_YES : android.app.UiModeManager.MODE_NIGHT_NO);  // its setNightMode writes Settings.Secure: the hub's
         android.app.UiModeManager modes = RuntimeEnvironment.getApplication().getSystemService(android.app.UiModeManager.class);
-        if (modes != null) ((org.robolectric.shadows.ShadowUIModeManager) org.robolectric.shadow.api.Shadow.extract(modes)).setContrast(settings.getFloat("contrast", 0f));
+        if (night != null && modes != null) {  // the shadow's own setNightMode writes Settings.Secure, which only the system (the hub) may
+            try {
+                Object shadow = org.robolectric.shadow.api.Shadow.extract(modes);
+                java.lang.reflect.Field mode = org.robolectric.shadows.ShadowUIModeManager.class.getDeclaredField("currentNightMode");
+                mode.setAccessible(true);
+                mode.setInt(java.lang.reflect.Modifier.isStatic(mode.getModifiers()) ? null : shadow, night ? android.app.UiModeManager.MODE_NIGHT_YES : android.app.UiModeManager.MODE_NIGHT_NO);
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                System.out.println("[apklayer] UiModeManager night mode not set: " + e);
+            }
+        }
         int changes = before.diff(RuntimeEnvironment.getApplication().getResources().getConfiguration()) & SETTINGS_CHANGES;
         System.out.println("[apklayer] host settings " + settings.keySet().stream().sorted().map(k -> k + "=" + settings.get(k)).toList() + (changes != 0 ? " changes=0x" + Integer.toHexString(changes) : ""));
         return changes;
@@ -56,8 +63,8 @@ final class HostConfiguration {
         Boolean night = night();
         if (night != null) extra.append(extra.length() > 0 ? "-" : "").append(night ? "night" : "notnight");
         RuntimeEnvironment.setQualifiers(extra.length() > 0 ? size + " +" + extra : size);
-        float fontScale = settings.getFloat("fontScale", 1f);
-        if (fontScale != 1f) RuntimeEnvironment.setFontScale(fontScale);  // not a qualifier: the qualifiers reset it
+        // not a qualifier, and the qualifiers' configuration leaves it undefined (0), which keeps the last one: set every time, 1 included
+        RuntimeEnvironment.setFontScale(settings.getFloat("fontScale", 1f));
         if (locale != null && !locale.isEmpty()) android.os.LocaleList.setDefault(RuntimeEnvironment.getApplication().getResources().getConfiguration().getLocales());
     }
 
