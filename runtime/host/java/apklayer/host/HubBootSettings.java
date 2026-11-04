@@ -76,7 +76,7 @@ final class HubBootSettings {
 
     /** The host's location service (GeoClue, bridge/portal/geoclue.py) as HostLocation asks it: null without python. */
     private static Process startLocationProbe() {
-        try { return new ProcessBuilder(HostProcess.dying("python3", HostLocation.script())).redirectError(ProcessBuilder.Redirect.DISCARD).start(); }
+        try { return new ProcessBuilder(HostProcess.dying("python3", HostLocation.script("geoclue.py"))).redirectError(ProcessBuilder.Redirect.DISCARD).start(); }
         catch (IOException noPython) { return null; }
     }
 

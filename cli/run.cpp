@@ -1,5 +1,7 @@
 #include "run.h"
+#include "logs.h"
 #include "manage.h"
+#include "sandbox.h"
 #include "spare.h"
 
 #include <cerrno>
@@ -82,7 +84,9 @@ std::vector<std::string> packageJvmArgs(const Layout& l, const Instance& inst, c
     std::string dir = appDir(l, package);
     if (!exists(join(dir, "info.properties"))) die("not installed: " + package + " (apklayer install <app.apk>)");
     ensureUid(l, dir);
-    std::vector<std::string> a = {"-Dapklayer.data=" + appDataDir(l, inst, package), "-Dapklayer.package=" + package, "-Dapklayer.uid=" + property(join(dir, "info.properties"), "uid"),
+    std::string data = appDataDir(l, inst, package);
+    if (!sandboxOn()) reclaim(data);  // the sandbox ran it as the app's own uid; without it the app runs as the user
+    std::vector<std::string> a = {"-Dapklayer.data=" + data, "-Dapklayer.package=" + package, "-Dapklayer.uid=" + property(join(dir, "info.properties"), "uid"),
                                   "-Dapklayer.libdir=" + join(dir, "lib")};
     if (property(join(dir, "info.properties"), "system") == "true") a.push_back("-Dapklayer.system=true");  // ApplicationInfo.FLAG_SYSTEM of its own package
     if (!getenvOr("APKLAYER_ISOLATED", "").empty()) a.push_back("-Dapklayer.isolated=" + getenvOr("APKLAYER_ISOLATED", ""));
@@ -134,6 +138,10 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     trace("stack ready");
     if (!ensureShell(l, inst, ne)) return 1;
     if (mode == RunMode::App && relaunch(l, inst, ne, package)) return 0;
+    if (mode == RunMode::App) {  // the launch's output and the app's android.util.Log go to <logs>/app-<package>.log too (`apklayer logs`, `apklayer report`)
+        teeLaunchOutput(inst, package);
+        own.push_back("-Dapklayer.applog=" + appLogPath(inst, package));
+    }
     if (mode == RunMode::App) {
         // the hub's JVM boots alongside the app's instead of after its Application.onCreate (HubStartup then finds it); an `apklayer hub` that finds
         // hub.lock taken (the hub is up) returns at once
@@ -166,7 +174,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     std::string record = join(inst.stateDir, "run." + std::to_string(self));
     // started: the launch's process is up (AppSpare.launchStarted), upon which the next spare prepares, as zygote forks the next app process
     int conn = -1, jvmPid = -1, started[2] = {-1, -1};
-    if (pipe2(started, O_CLOEXEC) == 0) {  // the instance's spare takes the launch when it matches (cli/spare.cpp)
+    if (!sandboxOn() && pipe2(started, O_CLOEXEC) == 0) {  // the instance's spare takes the launch when it matches (cli/spare.cpp)
         std::vector<std::string> target = late;
         target.insert(target.end(), files.begin(), files.end());
         jvmPid = takeAppSpare(inst, spareKey, target, ne.env, started[1], &conn);
@@ -179,6 +187,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     app.argv = jvm;
     app.env = ne.env;
     app.cwd = dir;
+    if (sandboxOn()) sandboxSpawn(l, inst, app, package);  // the JVM as the app's own uid in its own view (cli/sandbox.cpp)
     if (jvmPid <= 0 && started[1] >= 0) { fcntl(started[1], F_SETFD, 0); app.env["APKLAYER_STARTED_FD"] = std::to_string(started[1]); }
     if (started[0] >= 0) { startAppSpare(l, inst, started[0]); close(started[0]); }
     if (mode == RunMode::Component && jvmPid <= 0) {
@@ -253,6 +262,7 @@ int runHub(const Layout& l, const Instance& inst) {
     hub.argv = jvm;
     hub.env = ne.env;
     hub.env["APKLAYER_HUB_READY_FD"] = std::to_string(ready[1]);
+    if (sandboxOn()) sandboxSpawn(l, inst, hub, "-");  // in the instance's user namespace: the kernel names its callers by their app uids
     int pid = spawn(hub);
     close(ready[1]);
     writeFile(join(inst.stateDir, "hub.pid"), std::to_string(pid) + "\n" + std::to_string(getpid()) + "\n");  // the JVM, then this launcher (it holds hub.lock until the JVM is gone)

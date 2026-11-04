@@ -105,6 +105,13 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         if (len >= 4) client_vsync_request(c, v[0]);
         break;
     }
+    case MSG_DECOR_DARK: {
+        if (len < 8) return;
+        c->dark = v[1];
+        struct window *w = window_find_input(c, v[0]);
+        if (w) window_set_dark(w, c->dark == 2);
+        break;
+    }
     case MSG_ACTIVATE:
         activate_message(p, len);
         break;

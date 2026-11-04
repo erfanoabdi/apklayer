@@ -17,6 +17,7 @@ public final class HubHost {
         AppEnvironment.setUpApplication(sandbox, null, false);
         RuntimeEnvironment.getApplication();
         RealBinder.init();
+        HostCertificate.signatures();  // the instance's platform certificate exists before any app registers: a sandboxed app cannot make it (cli/sandbox.cpp)
         Path apps = Path.of(System.getProperty("apklayer.apps"));
         HubDirectory directory = new HubDirectory(apps);
         if (!RealBinder.publish(HubProtocol.SERVICE, directory))
@@ -29,6 +30,10 @@ public final class HubHost {
         HubVibrator.publishIfProvided(directory.packages()::uidHolds);  // before READY: an app's SystemVibratorManager looks it up once
         System.out.println("[apklayer-hub] READY pid=" + android.os.Process.myPid());
         new Thread(() -> HubBootSettings.write(RuntimeEnvironment.getApplication(), directory), "hub-boot-settings").start();  // the hub is the instance's system (uid 1000)
+        directory.hostSettings = new HubHostSettings(RuntimeEnvironment.getApplication(), directory);
+        Thread settings = new Thread(directory.hostSettings::watch, "hub-host-settings");
+        settings.setDaemon(true);
+        settings.start();
         Thread audio = new Thread(() -> HubAudioPermissions.watch(directory.packages()), "hub-audio-permissions");
         audio.setDaemon(true);
         audio.start();

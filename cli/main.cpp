@@ -1,9 +1,15 @@
 // apklayer: run Android apps on Linux. install | run | list | uninstall | screenshot | stop | hub | component-host | env (see README.md).
 #include <cstdio>
 #include <cstring>
+#include <set>
 #include <unistd.h>
 
+#include "daemon.h"
 #include "desktop.h"
+#include "gpus.h"
+#include "logs.h"
+#include "portal.h"
+#include "sandbox.h"
 #include "manage.h"
 #include "migrate.h"
 #include "providers.h"
@@ -34,9 +40,20 @@ int usage() {
           "  instance create|remove <id>  make an instance (prints the binder setup it still needs) or remove it with its data\n"
           "  prop [list] | set KEY VALUE | unset KEY  the instance's Android property overrides (from its next start)\n"
           "  providers [set DOMAIN BACKEND [KEY=VALUE...] | unset DOMAIN]  the hardware providers (sensors, gnss, vibrator) and their backends\n"
+          "  settings [list] | set KEY VALUE | unset KEY  the instance's own values over the desktop's settings (night yes|no, accent #rrggbb,\n"
+          "                         contrast high|normal, animations on|off, font-scale, locale, timezone, time-format 12|24); live in a running instance\n"
           "  permissions <package> | grant|revoke <package> <permission>  what the app requests (permission, level, granted); a runtime one granted or revoked\n"
+          "  logs [<package> [--previous]]  the app's log of its last launch (its output and android.util.Log; --previous: the launch before);\n"
+          "                         without a package: the instance's log files\n"
+          "  report <package> [out.tar.gz]  one archive for a bug report: versions, host, the app's info, its logs and the instance's service logs\n"
           "  status                 the instance's stack, running apps, GPU, audio, battery, location\n"
+          "  gpus                   the host's GPUs (id, node, driver, vendor:device, compositor's, this instance's, name)\n"
+          "  gpu set <id|node> | unset  the instance's GPU (default: the compositor's; from its next start)\n"
           "  env                    print the environment of Android's processes\n"
+          "  daemon                 apklayerd: every command (and every app process) then runs under it (tools/host-setup/apklayerd.service);\n"
+          "                         APKLAYER_SANDBOX=1: apps run sandboxed, each as its own uid (docs/PLAN.md), and the daemon starts on demand\n"
+          "  home-access <package> on|off  with the sandbox: the app sees the user's whole home (else only what the picker hands it)\n"
+          "  portal pick open|save|directory [--multiple] [--name N] | open <uri>  the desktop's file dialog or link opener (a sandboxed app's)\n"
           "  --version              version, converterAbi, dataFormat (key<TAB>value)\n",
           stderr);
     return 2;
@@ -45,11 +62,18 @@ int usage() {
 
 int main(int argc, char** argv) {
     std::vector<std::string> args(argv + 1, argv + argc);
+    bool inDaemon = !args.empty() && args[0] == "--no-daemon";  // apklayerd's own child: runs here
+    if (inDaemon) args.erase(args.begin());
+    std::vector<std::string> full = args;
     std::string id = getenvOr("APKLAYER_INSTANCE", "default");
     if (args.size() >= 2 && args[0] == "--instance") { id = args[1]; args.erase(args.begin(), args.begin() + 2); }
     if (args.empty()) return usage();
     if (args[0] == "--version") { printf("version\t%s\nconverterAbi\t%d\ndataFormat\t%d\n", kVersion, kConverterAbi, kDataFormat); return 0; }
     Layout layout = Layout::detect();
+    // a command runs in apklayerd when it runs (its processes are then the daemon's); the internal ones and the daemon itself stay here
+    static const std::set<std::string> kLocal = {"daemon", "stack-daemon", "stack", "exec", "sandbox-exec", "app-spare", "env"};
+    if (int status = 0; !inDaemon && !kLocal.count(args[0]) && forwardToDaemon(layout, full, &status)) return status;
+    if (args[0] == "daemon") return runDaemon(layout, args.size() == 2 && args[1] == "--on-demand");
     migrateData(layout);
     Instance inst = Instance::open(layout, id);
     const std::string& cmd = args[0];
@@ -69,22 +93,31 @@ int main(int argc, char** argv) {
         return runApp(layout, inst, target, RunMode::App);
     }
     if (cmd == "component-host" && n == 2) return runApp(layout, inst, args[1], RunMode::Component);
+    if (cmd == "app-spare" && sandboxOn()) return 0;  // a spare JVM is nobody's yet: the sandbox starts each app process as its own uid
     if (cmd == "app-spare" && n == 3 && args[1] == "--after") return runAppSpare(layout, inst, atoi(args[2].c_str()));  // started by a launch (cli/spare.cpp)
     if (cmd == "app-spare" && n == 1) { wakeAppSpare(layout, inst); return 0; }  // the hub's, at its start
+    if (cmd == "sandbox-exec") return sandboxExec(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
+    if (cmd == "home-access" && n == 3) return homeAccessCommand(layout, inst, args[1], args[2]);
+    if (cmd == "portal") return portalCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "hub") return runHub(layout, inst);
     if (cmd == "wait" && n == 2 && args[1] == "hub") return waitHub(layout, inst);
     if (cmd == "list") markSystemApps(layout);  // installs staged before the system mark
     if (cmd == "list" && n == 2 && args[1] == "--tsv") { listAppsTsv(layout, inst); return 0; }
     if (cmd == "list") { listApps(layout); return 0; }
     if (cmd == "info" && n == 2) return appInfo(layout, inst, args[1]);
+    if (cmd == "logs") return logsCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
+    if (cmd == "report") return reportCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "clear-data" && n == 2) return clearData(layout, inst, args[1]);
     if (cmd == "stop" && n == 2) return stopApp(layout, inst, args[1]);
     if (cmd == "instances") { listInstances(layout); return 0; }
     if (cmd == "instance" && n == 3) return instanceCommand(layout, args[1], args[2]);
     if (cmd == "providers") return providersCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
+    if (cmd == "settings") return settingsCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "prop") return propCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "permissions" && n >= 2) return permissionsCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "status") return status(layout, inst);
+    if (cmd == "gpus" && n == 1) return gpusCommand(layout, inst);
+    if (cmd == "gpu" && n >= 2) return gpuCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "uninstall" && n == 2) { uninstallApp(layout, args[1]); return 0; }
     if (cmd == "launcher" && n == 3) return launcherCommand(layout, args[1], args[2]);
     if (cmd == "ime" && n == 3) return inputMethod(layout, inst, args[1], args[2]);

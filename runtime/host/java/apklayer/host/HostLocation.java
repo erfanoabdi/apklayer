@@ -37,7 +37,7 @@ final class HostLocation {
         shadow.setProviderEnabled(LocationManager.GPS_PROVIDER, gps);
         shadow.setProviderEnabled(LocationManager.NETWORK_PROVIDER, network);
         if (!manager.isLocationEnabled()) return;  // the host has no location service
-        if (network) follow(shadow, LocationManager.NETWORK_PROVIDER, HostProcess.dying("python3", script()));
+        if (network) follow(shadow, LocationManager.NETWORK_PROVIDER, HostProcess.dying("python3", script("geoclue.py")));
         // the GNSS HAL (providers.toml) through its client, which speaks the same lines; shortcut: Robolectric's LocationManager stays the framework side
         // (no LocationManagerService/GnssLocationProvider in the hub), fed with the HAL's fixes; the HAL keeps one callback, so with two apps
         // locating at once only the later one gets fixes, until one client in the hub serves them all
@@ -88,12 +88,13 @@ final class HostLocation {
         } catch (IOException ended) { /* GeoClue went away */ }
     }
 
-    static String script() {
+    /** A helper of bridge/portal (geoclue.py, settings.py) above the CLI, as installed or in the tree. */
+    static String script(String name) {
         java.io.File cli = new java.io.File(System.getProperty("apklayer.cli", ""));
         for (java.io.File dir = cli.getAbsoluteFile().getParentFile(); dir != null; dir = dir.getParentFile()) {
-            java.io.File candidate = new java.io.File(dir, "bridge/portal/geoclue.py");
+            java.io.File candidate = new java.io.File(dir, "bridge/portal/" + name);
             if (candidate.exists()) return candidate.getPath();
         }
-        return "bridge/portal/geoclue.py";
+        return "bridge/portal/" + name;
     }
 }

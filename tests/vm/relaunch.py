@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import instance  # noqa: E402
 from instance import ENV, INSTANCE, LOGDIR, OUT, stop  # noqa: E402
 
 PKG = 'hello.acttarget'
@@ -48,9 +49,8 @@ def jvms(package):
         try:
             cmd = (proc / 'cmdline').read_bytes()
             if not (cmd.startswith(package.encode() + b'\0') or b'-Dapklayer.package=%s\0' % package.encode() in cmd): continue
-            environ = (proc / 'environ').read_bytes().split(b'\0')
         except OSError: continue
-        if b'APKLAYER_INSTANCE=' + INSTANCE.encode() in environ: found.append(int(proc.name))
+        if instance.belongs(proc.name): found.append(int(proc.name))
     return found
 
 

@@ -28,6 +28,8 @@ work = Path(ENV.get('APKLY_OUT', log / 'installer-test'))
 env = dict(ENV, APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400', APKLAYER_HOST_LIBS=HOST_LIBS,
            APKLAYER_JOPTS='-Dapklayer.realbinder=true -Dapklayer.instancehub=true -Dapklayer.runms=400000')
 passed, failed = set(), []
+# the payload has an arm64_v8a and an x86_64 split: the host's is kept, the other left out
+HOST_ABI, OTHER_ABI = ('x86_64', 'arm64_v8a') if os.uname().machine == 'x86_64' else ('arm64_v8a', 'x86_64')
 
 
 def cli(*args):
@@ -50,7 +52,7 @@ def bundles():
         out = cli('install', str(bundle))
         info = (data / 'apps/hello.payload/info.properties')
         props = dict(l.split('=', 1) for l in info.read_text().splitlines() if '=' in l) if info.exists() else {}
-        ok = out.returncode == 0 and 'leaving out config.x86_64' in out.stdout + out.stderr and props.get('splits') == 'config.arm64_v8a,config.xxhdpi'
+        ok = out.returncode == 0 and 'leaving out config.' + OTHER_ABI in out.stdout + out.stderr and props.get('splits') == 'config.%s,config.xxhdpi' % HOST_ABI
         report('bundle ' + kind, ok, 'exit %d splits %s: %s' % (out.returncode, props.get('splits'), (out.stdout + out.stderr)[-600:]))
         cli('uninstall', 'hello.payload')
     unsigned = work / 'unsigned.apk'

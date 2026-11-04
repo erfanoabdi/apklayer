@@ -18,8 +18,9 @@ final class HubStartup {
             try {
                 Files.createDirectories(logs);
                 // `apklayer hub` starts the hub, or returns once the running one is ready, or takes over from one that is going down (cli runHub)
-                Process launcher = new ProcessBuilder("setsid", System.getProperty("apklayer.cli"), "hub")
-                        .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(logs.resolve("hub.log").toFile())).start();
+                // a sandboxed app (cli/sandbox.cpp) sees the instance's logs read-only: apklayerd runs the hub, with this app's output
+                ProcessBuilder.Redirect log = "1".equals(System.getenv("APKLAYER_SANDBOX")) ? ProcessBuilder.Redirect.INHERIT : ProcessBuilder.Redirect.appendTo(logs.resolve("hub.log").toFile());
+                Process launcher = new ProcessBuilder("setsid", System.getProperty("apklayer.cli"), "hub").redirectErrorStream(true).redirectOutput(log).start();
                 System.out.println("[apklayer] starting hub launcherPid=" + launcher.pid());
                 // Like waiting for init's service property: block until apklayer.hub.ready=1. A launcher that fails (the hub died) ends the wait.
                 Process ready = new ProcessBuilder(System.getProperty("apklayer.cli"), "wait", "hub").inheritIO().start();

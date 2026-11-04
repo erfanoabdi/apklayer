@@ -4,6 +4,7 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): 
 
 ## State (2026-11-04)
 - About 60 real apps draw and run, current F-Droid versions included (`tests/corpus/results.md`); Google apps through microG (sign-in, Meet accounts). Full suite on UTM (2026-11-04, after the startup/media/installer/cleanup rounds): 43 of 44 groups pass; vulkan-present cannot pass on either VM; it passes on the owner's x86_64 PC (real GPU), where the x86_64 route runs.
+- v0.1.0 released 2026-11-04 (tag v0.1.0, prebuilts-v0.1.0). Meet works in a call: join, sound, remote video (owner checked, 2026-11-04).
 - Next phase, in order: `docs/PLAN.md` "Next phase".
 
 ## How to work here
@@ -16,7 +17,7 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): 
 - Screenshots: `apklayer [--instance ID] screenshot <package> <out.png>` (the app's own SurfaceFlinger picture). Input into one instance's window:
   `instance.inject` (tests/lib/instance.py); kernel keys (`instance.keys`) go to the shared desktop's focus and are only for input-desktop.
 - CLI (`cli/`): `--version | reconvert <pkg>|--all-stale | launcher show|hide | install [--system] | run | list | uninstall | stop [<package>] | hub | wait hub | screenshot | info | clear-data | permissions [grant|revoke] | instances |
-  instance create|remove | prop [set|unset] | status | ime enable|disable`. State and logs: `~/.local/state/apklayer/<instance>/`.
+  instance create|remove | prop [set|unset] | status | ime enable|disable | settings [list]|set KEY VALUE|unset KEY | gpus | gpu set|unset | daemon | home-access <pkg> on|off | logs [<pkg>] | report <pkg>`. State and logs: `~/.local/state/apklayer/<instance>/`.
 - Manager UI: `manager/fetch-slint.sh && meson setup manager/b manager && ninja -C manager/b`.
 
 ## Test VMs

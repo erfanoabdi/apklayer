@@ -20,7 +20,7 @@ final class ShellClient {
     private static final byte[] DISPLAY_WINDOW = System.getProperty("apklayer.displaywindow", "apklayer").getBytes(StandardCharsets.UTF_8);
     private static final int INPUT = 101, CLOSE = 103, KEY = 105, SCROLL = 106,
             CONFIGURE = 107, STATE = 108, CLIPBOARD = 109, CLIPBOARD_SET = 5, TEXT_INPUT = 6, IME = 110, TOUCH = 111,
-            DISPLAY = 112, VSYNC = 113, VSYNC_REQUEST = 7;
+            DISPLAY = 112, VSYNC = 113, VSYNC_REQUEST = 7, DECOR_DARK = 13;
     private static final int WINDOW_ID = 1;
 
     private final SocketChannel channel;
@@ -96,6 +96,15 @@ final class ShellClient {
     void sendWindowSize(int w, int h) {
         try {
             send(WINDOW_SIZE, buf(12).putInt(WINDOW_ID).putInt(w).putInt(h));
+        } catch (IOException e) {
+            // shell gone: the read loop notices
+        }
+    }
+
+    /** The instance's colour scheme (HostConfiguration): the shell draws the window's title bar to match. */
+    void sendDecorDark(boolean dark) {
+        try {
+            send(DECOR_DARK, buf(8).putInt(WINDOW_ID).putInt(dark ? 2 : 1));
         } catch (IOException e) {
             // shell gone: the read loop notices
         }

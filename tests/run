@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """tests/run [-j N] [group...]: the VM test groups of tests/groups.toml (no group: all of them), each in an apklayer instance of its own, in parallel.
 Pushes the working tree to the VM and builds it once, builds and installs the groups' test apps once, then runs the groups: up to N at a time
-(default: by the VM's free memory, ~1 GB per instance; a group starts only while 3 GB are available, at most 4 at a time), the groups marked `alone` afterwards one by one. Logs: build/tests/<group>.log."""
+(default: by the VM's free memory, ~1 GB per instance, and half its CPUs; a group starts only while 3 GB are available, at most 4 at a time), the groups marked `alone` afterwards one by one. Logs: build/tests/<group>.log."""
 import argparse
 import os
 import concurrent.futures
@@ -103,7 +103,9 @@ def main():
     RUNNER = open(LOGS / ('runner-%s-%s.lock' % (vm.config.VM.replace('@', '_'), vm.ROOT.replace('/', '_').replace('$', ''))), 'w')
     try: fcntl.flock(RUNNER, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError: parser.error('another tests/run uses %s on %s now: wait for it, or add groups to one run with -j' % (vm.ROOT, vm.config.VM))
-    jobs = args.j or max(1, min(4, (available() - MIN_FREE_MB) // INSTANCE_MB + 1))
+    # a group's stack, hub and app JVMs keep about two CPUs busy while they start: on a 4-CPU host three at a time stalled the silence checks of hub-smoke, input and webview
+    cpus = int(vm.ssh('nproc', capture_output=True, text=True).stdout or 2)
+    jobs = args.j or max(1, min(4, cpus // 2, (available() - MIN_FREE_MB) // INSTANCE_MB + 1))
     prefix = os.environ.get('APKLY_INSTANCES', 'tests')  # instance names: another runner on the same VM (an agent's worktree) takes its own
     slots = (vm.config.SLOTS or [prefix] + ['%s%d' % (prefix, i) for i in range(2, jobs + 1)])[:jobs]  # APKLY_SLOTS: an explicit list of one's own
     jobs = len(slots)

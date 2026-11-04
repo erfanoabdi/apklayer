@@ -93,7 +93,7 @@ diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindo
                      ? windowLayoutResult.insetsState
                      : findFirst(InsetsState.class, args))
                  : null);
-+        windowInfo.surface.place(layer, windowInfo);
++        windowInfo.surface.place(layer, windowInfo, windows);
 +        if (Boolean.getBoolean("apklayer.tracewindows")) {
 +          System.err.println(
 +              "[apklayer] window "

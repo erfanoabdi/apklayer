@@ -1,4 +1,5 @@
 #include "apps.h"
+#include "sandbox.h"
 
 #include "desktop.h"
 #include "version.h"
@@ -6,6 +7,8 @@
 #include <algorithm>
 #include <iostream>
 #include <cstdlib>
+#include <sys/wait.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 namespace apklayer {
@@ -47,16 +50,22 @@ std::vector<std::string> apkFiles(const std::string& dir) {
 void extractLibs(const std::string& dir) {  // from the base and its splits (an ABI split carries them)
     removeTree(join(dir, "lib"));
     const std::string prefix = std::string("lib/") + kAbi + "/";
+    bool otherAbi = false;
     for (const std::string& apk : apkFiles(dir)) {
         Spawn list;
         list.argv = {"unzip", "-Z1", join(dir, apk)};
         list.env = currentEnv();
         int st = 0;
         std::string names = runCapture(list, &st);
-        if (names.find("\n" + prefix) == std::string::npos && names.rfind(prefix, 0) != 0) continue;
+        if (names.find("\n" + prefix) == std::string::npos && names.rfind(prefix, 0) != 0) {
+            otherAbi |= names.find("\nlib/") != std::string::npos || names.rfind("lib/", 0) == 0;
+            continue;
+        }
         makeDirs(join(dir, "lib"));
         sh({"unzip", "-o", "-j", "-q", join(dir, apk), prefix + "*.so", "-d", join(dir, "lib")});
     }
+    // Android refuses such an APK (INSTALL_FAILED_NO_MATCHING_ABIS); here its Java part may still run, so a warning
+    if (!isDir(join(dir, "lib")) && otherAbi) std::cerr << "apklayer: warning: the APK has native libraries but none for " << kAbi << ": its native code cannot load\n";
     if (isDir(join(dir, "lib"))) sh({"chmod", "-R", "0755", join(dir, "lib")});  // as Android's installer leaves them: some apps run a bundled lib*.so as a program (Puzzles' libpuzzlesgen.so)
 }
 }  // namespace
@@ -168,7 +177,10 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
     makeDirs(dir);
     std::string oldUid = property(old, "uid");
     for (const std::string& f : apkFiles(dir)) if (f != "base.apk") unlink(join(dir, f).c_str());  // the update's own splits replace the old ones
-    for (const std::string& f : apkFiles(tmp)) sh({"mv", "-f", join(tmp, f), join(dir, f)});
+    for (const std::string& f : apkFiles(tmp)) {
+        sh({"mv", "-f", join(tmp, f), join(dir, f)});
+        chmod(join(dir, f).c_str(), 0644);  // readable by every app, as Android's /data/app (a sandboxed app's own uid too); a copy keeps its source's 0600
+    }
     for (const char* f : {"classes.jar", "key", "icon.png"}) sh({"mv", "-f", join(tmp, f), join(dir, f)});
     extractLibs(dir);
     // info.properties, with its uid, is the commit: a hub or JVM that meets the package while it is installed sees all of it or none
@@ -196,16 +208,25 @@ int reconvert(const Layout& l, const Instance& inst, const std::string& target) 
     std::vector<std::string> packages;
     if (target != "--all-stale") packages.push_back(target);
     else for (const std::string& app : listDir(l.appsDir)) if (exists(join(appDir(l, app), "info.properties")) && isStale(join(appDir(l, app), "info.properties"))) packages.push_back(app);
+    std::string failed;
     for (const std::string& pkg : packages) {
         std::string dir = appDir(l, pkg);
         if (!exists(join(dir, "base.apk"))) die("not installed: " + pkg);
         std::vector<std::string> apks;
         for (const std::string& f : apkFiles(dir)) apks.push_back(join(dir, f));
-        // an update with the same APKs: the converter ABI is in the cache key, so they convert again; uid, system mark and data stay
-        installApp(l, inst, apks, true);
+        // an update with the same APKs: the converter ABI is in the cache key, so they convert again; uid, system mark and data stay.
+        if (target != "--all-stale") { installApp(l, inst, apks, true); break; }  // its failure message is the command's last line
+        // Each in a child: installApp die()s on a failure, which then ends only this package's attempt (its old install is untouched).
+        fflush(stdout);
+        pid_t child = fork();
+        if (child == 0) { installApp(l, inst, apks, true); fflush(stdout); _exit(0); }
+        int st = -1;
+        if (child < 0 || waitpid(child, &st, 0) != child || !WIFEXITED(st) || WEXITSTATUS(st) != 0) failed += " " + pkg;
     }
     if (packages.empty()) puts("apklayer: no stale apps");
-    return 0;
+    if (failed.empty()) return 0;
+    fprintf(stderr, "apklayer: not converted again (their old install stays):%s\n", failed.c_str());
+    return 1;
 }
 
 std::string appDataDir(const Layout& l, const Instance& inst, const std::string& package) {
@@ -240,7 +261,9 @@ void uninstallApp(const Layout& l, const std::string& package) {
     if (!isDir(appDir(l, package))) die("not installed: " + package);
     removeTree(appDir(l, package));
     for (const std::string& instance : listDir(join(l.dataHome, "apklayer"))) {  // the app's data in every instance of this data home
-        if (isDir(join(l.dataHome, "apklayer/" + instance + "/app-data/" + package))) removeTree(join(l.dataHome, "apklayer/" + instance + "/app-data/" + package));
+        std::string data = join(l.dataHome, "apklayer/" + instance + "/app-data/" + package);
+        if (isDir(data)) { reclaim(data); removeTree(data); }  // reclaim: files the sandbox's app uid owns
+        setHomeAccess(join(l.dataHome, "apklayer/" + instance), package, false);
         // and its revoked permissions (cli/manage.cpp): a reinstall starts with the grants of a new install, as on Android
         std::string revoked = join(l.dataHome, "apklayer/" + instance + "/permissions-revoked"), kept;
         if (!exists(revoked)) continue;

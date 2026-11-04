@@ -30,7 +30,10 @@ public final class HubClient {
         HubPermissionChecker.install();
         registerPackages(context);
         HubProviders_registerRemote(context);
-        HostInputMethods.install(context, HubProtocol.call(found, HubProtocol.DESCRIPTOR, HubProtocol.INPUT_METHODS, request -> {}, reply -> reply.readString()));
+        android.os.Bundle settings = HubProtocol.call(found, HubProtocol.DESCRIPTOR, HubProtocol.HOST_SETTINGS, request -> {}, reply -> reply.readBundle(HubClient.class.getClassLoader()));
+        // a message (an early attachment runs inside the application's creation), queued before the first launch's (AppHost.run)
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> AppHost.configurationChanged(HostConfiguration.update(settings)));
+        HostInputMethods.install(context,HubProtocol.call(found, HubProtocol.DESCRIPTOR, HubProtocol.INPUT_METHODS, request -> {}, reply -> reply.readString()));
         System.out.println("[apklayer] hub registered " + context.getPackageName() + " pid=" + pid);
     }
     private static int register(Context context, IBinder hub, HubEndpoint endpoint) {

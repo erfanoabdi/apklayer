@@ -68,7 +68,9 @@ for name, source in [('vulkan.apklayer', 'hals/graphics/vulkan/Driver.cpp'), ('l
     print('compile', source, flush=True)
     subprocess.run(c, shell=True, check=True)
     target = root + 'unstripped/' + name + '.so'
-    rsp = re.sub(r'\S+\.o(?= )', lambda m: obj if m.group().startswith(old) else m.group(), old_rsp)
+    # libapklayer_egl's objects (Egl.cpp, EglWindow.cpp, Gles1.cpp since the split) become the one object: the first in place, the others dropped
+    olds = [o for o in re.findall(r'\S+\.o(?= )', old_rsp) if o.startswith(old)]
+    rsp = re.sub(r'\S+\.o(?= )', lambda m: (obj if m.group() == olds[0] else '') if m.group().startswith(old) else m.group(), old_rsp)
     Path(target + '.rsp').write_text(rsp)
     for c in cmds:
         if ' -c ' not in c and (' -o ' + old_target in c or (old in c and ('strip.sh' in c or '/cp -d ' in c))):
