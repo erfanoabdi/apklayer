@@ -341,6 +341,16 @@ static int register_classes(JNIEnv *env, JavaVM *vm, void *rt)
         }
     }
 
+    /* the camera's (android.hardware.Camera, camera2): also absent from HostRuntime's list; used over the stack's cameraserver (HostCameraShadows) */
+    static const char *const camera[] = {
+        "register_android_hardware_Camera", "register_android_hardware_camera2_CameraMetadata", "register_android_hardware_camera2_CameraDevice",
+        "register_android_hardware_camera2_utils_SurfaceUtils", NULL
+    };
+    for (int i = 0; camera[i]; i++) {
+        int (*fn)(JNIEnv *) = find_register_function(rt, hwui, camera[i]);
+        if (!fn || fn(env) < 0 || (*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); fprintf(stderr, "[runtime] registering %s failed\n", camera[i]); failed++; }
+    }
+
     JNINativeMethod registry = { "applyFreeFunction", "(JJ)V", (void *)apply_free_function };
     jclass nar = (*env)->FindClass(env, "libcore/util/NativeAllocationRegistry");
     if (nar) (*env)->GetMethodID(env, nar, "<init>", "()V"), (*env)->ExceptionClear(env), (*env)->RegisterNatives(env, nar, &registry, 1);

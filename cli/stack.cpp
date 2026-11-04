@@ -226,6 +226,14 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     stageManifest(inst, l, staged(l, "libapklayer_audioserver.so"), "apklayer-audio-effects.xml", "aosp/hals/audio/effects-manifest.xml");
     stageManifest(inst, l, staged(l, "libapklayer_keymint.so"), "apklayer-keymint.xml", "aosp/hals/security/manifest.xml");
     stageManifest(inst, l, staged(l, "libapklayer_keystore2.so"), "apklayer-keystore2.xml", "aosp/hals/security/keystore2-manifest.xml", "system");  // a framework HAL: keystore2 may register its service
+    // the camera provider (aosp/hals/camera) over a backend (bridge/hals/camera), and cameraserver: APKLAYER_CAMERA="<backend> [key=value...]"
+    // shortcut: an environment variable until the hardware providers' providers.toml (another branch) is merged; then camera is one of its domains
+    std::vector<std::string> camera;
+    for (const std::string& word : split(getenvOr("APKLAYER_CAMERA", ""), ' ')) if (!word.empty()) camera.push_back(word);
+    const std::string cameraBackend = camera.empty() ? "" : join(n, "libapklayer-camera-" + camera[0] + ".so");
+    const bool cameraOn = !camera.empty() && staged(l, "libapklayer_camera.so") && staged(l, "libapklayer_cameraserver.so") && exists(cameraBackend);
+    if (!camera.empty() && !cameraOn) fprintf(stderr, "camera: libapklayer_camera.so, libapklayer_cameraserver.so or %s is not staged\n", cameraBackend.c_str());
+    stageManifest(inst, l, cameraOn, "apklayer-camera.xml", "aosp/hals/camera/manifest.xml");
     std::vector<std::string> propFiles = {join(l.root, "bridge/native/apklayer.prop"), join(n, "android-root/props/system_build.prop")};
     // the instance's own overrides (`apklayer prop set`): first, as ro.* is write-once (and the fingerprint is derived from them), and again last, as
     // every other property keeps the last value loaded
@@ -247,11 +255,12 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     if (getenvOr("APKLAYER_START_SHELL", "1") == "1") ensureShell(l, inst, ne);  // `run` asks again and fails on its own when this did not work
 
     std::vector<Service> running;
-    auto start = [&](const std::string& name, const std::string& lib, std::vector<std::string> args) {
+    auto start = [&](const std::string& name, const std::string& lib, std::vector<std::string> args, const std::string& backend = "") {
         Spawn s;
         s.argv = {l.btload(), l.androidLibs, lib, "--main"};
         s.argv.insert(s.argv.end(), args.begin(), args.end());
         s.env = ne.env;
+        if (!backend.empty()) s.env["APKLAYER_HOST_LIBS"] += (s.env["APKLAYER_HOST_LIBS"].empty() ? "" : ":") + backend;  // a HAL front's backend (bridge/hals/<domain>)
         s.logFile = join(inst.logs(), name + ".log");
         int pid = spawn(s);
         running.push_back({name, pid, pidfdOpen(pid), s});
@@ -275,6 +284,10 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         start("keymint", "libapklayer_keymint.so", {});
         keystoreDir(inst);
         start("keystore2", "libapklayer_keystore2.so", {"/data/misc/keystore"});  // as keystore2.rc: the database directory, through the path layer
+    }
+    if (cameraOn) {
+        start("camera", "libapklayer_camera.so", std::vector<std::string>(camera.begin() + 1, camera.end()), cameraBackend);
+        start("cameraserver", "libapklayer_cameraserver.so", {});
     }
     start("surfaceflinger", "libapklayer_surfaceflinger.so", {});
     if (!tool.empty()) {
