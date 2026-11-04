@@ -50,6 +50,8 @@ public class ShadowHostRealLinux extends ShadowLinux {
     @Implementation protected long lseek(FileDescriptor fd, long offset, int whence) {
         return natively("lseek", ClassParameter.from(FileDescriptor.class, fd), ClassParameter.from(long.class, offset), ClassParameter.from(int.class, whence));
     }
+    /** Os.strerror, and with it every ErrnoException message (a native Robolectric leaves returning null: apps that print it crashed). */
+    @Implementation protected String strerror(int errno) { return natively("strerror", ClassParameter.from(int.class, errno)); }
     @Implementation protected void ftruncate(FileDescriptor fd, long length) { natively("ftruncate", ClassParameter.from(FileDescriptor.class, fd), ClassParameter.from(long.class, length)); }
     @Implementation @Override protected FileDescriptor open(String path, int flags, int mode) {
         return natively("open", ClassParameter.from(String.class, path), ClassParameter.from(int.class, flags), ClassParameter.from(int.class, mode));

@@ -4,6 +4,7 @@
 #include <jni.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 extern void Java_apklayer_host_NativeLoader_setLibraryPath(JNIEnv *, jclass, jstring, jstring);
 extern jlong Java_apklayer_host_NativeLoader_dlopen(JNIEnv *, jclass, jstring);
@@ -110,6 +111,7 @@ static jobject linux_dup2(JNIEnv *env, jobject self, jobject fd, jint to) { (voi
 static jint linux_fcntl_int(JNIEnv *env, jobject self, jobject fd, jint cmd, jint arg) { (void)self; int n = fcntl(fd_of(env, fd), cmd, arg); if (n < 0) throw_errno(env, "fcntl", errno); return n; }
 static jint linux_fcntl_void(JNIEnv *env, jobject self, jobject fd, jint cmd) { (void)self; int n = fcntl(fd_of(env, fd), cmd); if (n < 0) throw_errno(env, "fcntl", errno); return n; }
 static jlong linux_lseek(JNIEnv *env, jobject self, jobject fd, jlong offset, jint whence) { (void)self; off_t n = lseek(fd_of(env, fd), offset, whence); if (n < 0) throw_errno(env, "lseek", errno); return n; }
+static jstring linux_strerror(JNIEnv *env, jobject self, jint error) { (void)self; char buf[128]; return (*env)->NewStringUTF(env, strerror_r(error, buf, sizeof buf)); }  /* GNU strerror_r (_GNU_SOURCE) */
 static void linux_ftruncate(JNIEnv *env, jobject self, jobject fd, jlong length) { (void)self; if (ftruncate(fd_of(env, fd), length) < 0) throw_errno(env, "ftruncate", errno); }
 
 static jobject linux_open(JNIEnv *env, jobject self, jstring path, jint flags, jint mode)
@@ -201,6 +203,7 @@ int apklayer_register_linux(JNIEnv *env, jclass libcore_linux)
         {"fcntlVoid", "(Ljava/io/FileDescriptor;I)I", (void *)linux_fcntl_void},
         {"lseek", "(Ljava/io/FileDescriptor;JI)J", (void *)linux_lseek},
         {"ftruncate", "(Ljava/io/FileDescriptor;J)V", (void *)linux_ftruncate},
+        {"strerror", "(I)Ljava/lang/String;", (void *)linux_strerror},
         {"open", "(Ljava/lang/String;II)Ljava/io/FileDescriptor;", (void *)linux_open},
         {"pipe2", "(I)[Ljava/io/FileDescriptor;", (void *)linux_pipe2},
         {"socketpair", "(IIILjava/io/FileDescriptor;Ljava/io/FileDescriptor;)V", (void *)linux_socketpair},
