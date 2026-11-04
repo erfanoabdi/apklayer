@@ -53,7 +53,8 @@ try:
                     print('IMAGE %s: %.0f%% of the window magenta' % (shot, magenta * 100), flush=True)
                     assert magenta > 0.25, 'the presented frames are not on screen (%.0f%% magenta)' % (magenta * 100)
                     captured = True
-    app.wait()
+            if any('vkswap: PASS' in line for line in seen):
+                break  # done: the app idles until its run time ends (the finally ends it)
     assert captured, 'the swapchain never presented 60 frames'
     assert any('vkswap: PASS' in line for line in seen), 'presentation did not finish'
     print('PASS Vulkan swapchain presented frames on a SurfaceView', flush=True)

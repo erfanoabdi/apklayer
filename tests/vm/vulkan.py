@@ -60,7 +60,7 @@ try:
             if not captured and any('[hello-vulkan] PASS' in line for line in seen) and any('[hello-vulkan] FRAME' in line for line in seen) and any('window state active=true' in line for line in seen):
                 assert sum('PASS cycle ' in line for line in seen) == 6
                 assert any(('android_swapchain=1' in line and 'dma_buf=1 drm_modifier=1 semaphore_fd=1' in line) or 'android_swapchain=0' in line for line in seen)
-                instance.capture('Vulkan probe result')
+                instance.capture('Vulkan probe result', 'hello.vulkan')  # the app's own window (SurfaceFlinger), not the shared desktop
                 instance.inject('hello.vulkan', 'key:1')  # Back into this instance's window: other instances share the desktop's focus
                 captured = True
     assert captured and any('finished hello.vulkan.Main depth=0' in line for line in seen)
