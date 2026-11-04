@@ -22,8 +22,8 @@ index fc14da7a..1ed287bd 100644
  NativeBridgeStaticTlsConfig g_static_tls_config;
  
 +// apklayer patch: the records a glibc host gives each guest thread (InitStaticTls): a pthread_internal_t, then a bionic_tls.
-+constexpr size_t kGlibcHostThreadRecordSize = AlignUpPageSize(sizeof(pthread_internal_t));
-+constexpr size_t kGlibcHostRecordsSize = kGlibcHostThreadRecordSize + AlignUpPageSize(sizeof(bionic_tls));
++const size_t kGlibcHostThreadRecordSize = AlignUpPageSize(sizeof(pthread_internal_t));
++const size_t kGlibcHostRecordsSize = kGlibcHostThreadRecordSize + AlignUpPageSize(sizeof(bionic_tls));
 +
  namespace {
  
