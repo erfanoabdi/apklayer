@@ -199,6 +199,8 @@ struct apklayer_gfx_mapping {
     struct apklayer_gfx_mapping *plane_map[4];
     int planes;
     bool write;
+    void *mapped;                        /* a tiled buffer's map, read and written through the linear copy in stage */
+    uint32_t map_stride, stage_stride, row_bytes, rows;
 };
 
 void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffer *buf, int plane, bool write,
@@ -209,6 +211,7 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
     struct apklayer_gfx_mapping *m = calloc(1, sizeof *m);
     if (!m) { errno = ENOMEM; return NULL; }
     uint8_t *addr = NULL;
+    size_t offset = buf->fourcc == 0 ? 0 : buf->offset[plane];
     if (buf->fourcc == 0) { /* plain memory */
         m->blob_len = buf->width;
         void *p = mmap(NULL, m->blob_len, PROT_READ | (write ? PROT_WRITE : 0), MAP_SHARED, buf->fd[0], 0);
@@ -227,6 +230,13 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
             fd_data.stride = buf->stride[plane];
             fd_data.format = plane_format(sp, plane);
         }
+        /* a tiled buffer (a render target locked by the CPU, e.g. SurfaceFlinger's capture): the driver detiles in its map only when the
+         * import names the modifier; without it the map is the raw tiles */
+        if (!buf->packed && buf->num_planes == 1 && buf->modifier != DRM_FORMAT_MOD_INVALID && buf->modifier != DRM_FORMAT_MOD_LINEAR) {
+            struct gbm_import_fd_modifier_data md = { .width = fd_data.width, .height = fd_data.height, .format = fd_data.format, .num_fds = 1,
+                .fds = { fd_data.fd }, .strides = { (int)fd_data.stride }, .offsets = { (int)buf->offset[0] }, .modifier = buf->modifier };
+            if ((m->bo = gbm_bo_import(gfx->gbm, GBM_BO_IMPORT_FD_MODIFIER, &md, GBM_BO_USE_RENDERING))) offset = 0;
+        }
         /* a buffer made for rendering (framebuffers) can refuse the linear usage on import; the same dmabuf imports with the usage it was made for */
         static const uint32_t import_usage[] = { GBM_BO_USE_LINEAR, GBM_BO_USE_RENDERING, GBM_BO_USE_RENDERING | GBM_BO_USE_SCANOUT, 0 };
         for (size_t u = 0; u < sizeof import_usage / sizeof *import_usage && !m->bo; u++)
@@ -239,12 +249,26 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
             if (!addr && getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[gfx] gbm_bo_map %ux%u: %s\n", fd_data.width, fd_data.height, strerror(errno));
             if (!addr) gbm_bo_destroy(m->bo);
         }
-        (void)map_stride; /* the buffer's own strides apply: for a packed buffer the allocation and the map agree */
+        /* Android reads a locked buffer at its own stride: a map with another one (a driver's detiled staging copy) is read and written
+         * through a copy at that stride */
+        if (addr && map_stride && map_stride != buf->stride[plane]) {
+            m->rows = fd_data.height;
+            m->row_bytes = map_stride < buf->stride[plane] ? map_stride : buf->stride[plane];
+            m->stage = malloc((size_t)buf->stride[plane] * m->rows);
+            if (!m->stage) { gbm_bo_unmap(m->bo, m->map_data); gbm_bo_destroy(m->bo); free(m); errno = ENOMEM; return NULL; }
+            for (uint32_t y = 0; y < m->rows; y++) memcpy((char *)m->stage + (size_t)y * buf->stride[plane], addr + offset + (size_t)y * map_stride, m->row_bytes);
+            m->mapped = addr + offset;
+            m->map_stride = map_stride;
+            m->stage_stride = buf->stride[plane];
+            m->write = write;
+            addr = m->stage;
+            offset = 0;
+        }
     }
     if (!addr) { free(m); return NULL; }
     *stride = buf->stride[plane];
     *mapping = m;
-    return addr + (buf->fourcc == 0 ? 0 : buf->offset[plane]);
+    return addr + offset;
 }
 
 /* Android's mapper lock API exposes one base pointer. Separate GPU resources
@@ -282,6 +306,9 @@ void *apklayer_gfx_map_linear(struct apklayer_gfx *gfx, const struct apklayer_gf
 void apklayer_gfx_unmap(struct apklayer_gfx_mapping *m)
 {
     if (!m) return;
+    if (m->mapped && m->write)  /* CPU writes go back through the driver's map */
+        for (uint32_t y = 0; y < m->rows; y++)
+            memcpy((char *)m->mapped + (size_t)y * m->map_stride, (char *)m->stage + (size_t)y * m->stage_stride, m->row_bytes);
     if (m->stage) {
         for (int p = 0; p < m->planes; p++) {
             if (m->write) memcpy(m->plane_addr[p], (char *)m->stage + m->stage_offset[p], m->plane_size[p]);
