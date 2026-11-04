@@ -68,6 +68,7 @@ int gnss_source_start(GDBusConnection *bus)
     return -1;
 }
 
+const char apklayer_gnss_options[] = "desktop-id\tapklayer\ttext\n";
 int apklayer_gnss_probe(void) { return gnss_session_ping(G_BUS_TYPE_SYSTEM, GEOCLUE, "/org/freedesktop/GeoClue2/Manager") ? 10 : -1; }
 
 int apklayer_gnss_init(int count, const char *const *options)
