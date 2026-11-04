@@ -112,7 +112,7 @@ One run per app (tests/vm/appcheck.sh for errors, tests/vm/appshot.py for a scre
 | Rocks 'n' Diamonds | org.artsoft.rocksndiamonds | aborts | SDL_image: IMG_Load failed (asset read) |
 | WireGuard | com.wireguard.android | draws | fixed by `android_get_device_api_level` in the translated libc (Go takes the Android Q TLS path) |
 | DRM Info | com.androidfung.drminfo | crashes | Google Ads / Firebase need Play Services |
-| Open Camera, Barcode Scanner, Motorola Camera | | no camera | no camera HAL |
+| Open Camera, Barcode Scanner | | no camera | no camera HAL |
 | Clash, SSR | | not supported | 32-bit (armeabi-v7a) only |
 | Aegis | com.beemdevelopment.aegis | draws welcome | needed the app's BouncyCastle relocated |
 | Mindustry | io.anuke.mindustry | draws its map | libgdx |
