@@ -52,8 +52,10 @@ build_host() { # Call only while app JVMs are stopped; the previous build stays 
     (cd "$work/classes" && jar xf "$simulator" org/robolectric/simulator/FrameListener.class org/robolectric/simulator/ScreenUpdateHandler.class)
     find runtime/host/java -name '*.java' ! -name '._*' | sort > "$work/sources"
     echo "Compiling $(wc -l < "$work/sources") tree host sources"
+    # -sourcepath runtime/patches -implicit:none: the overlay classes the host calls (WindowOrder) are checked from their sources and
+    # come from native-runtime.jar at run time, so the host builds before the overlay too (tools/release/package.sh)
     javac -nowarn --add-exports java.base/sun.net.util=ALL-UNNAMED --add-exports java.base/sun.security.tools.keytool=ALL-UNNAMED --add-exports java.base/sun.security.x509=ALL-UNNAMED -d "$work/classes" \
-        -cp "$work/classes:$native/aosp/sim-classes:$native/native-runtime.jar:$native/aosp/Robolectric_all.jar:$native/aosp/android-all/*:$B/runtime/dex2jvm/dex2jvm.jar" "@$work/sources"
+        -sourcepath runtime/patches -implicit:none -cp "$work/classes:$native/aosp/sim-classes:$native/aosp/Robolectric_all.jar:$native/aosp/android-all/*:$B/runtime/dex2jvm/dex2jvm.jar" "@$work/sources"
     cp -R runtime/host/resources/. "$work/classes/"
     [ ! -d "$native/aosp/host-classes" ] || mv "$native/aosp/host-classes" "$work/previous"
     mv "$work/classes" "$native/aosp/host-classes"
