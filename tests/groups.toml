@@ -71,7 +71,7 @@ run = ["python3 -u tests/vm/hub.py services start", "python3 -u tests/vm/hub.py 
        "python3 -u tests/vm/hub.py services late", "python3 -u tests/vm/hub.py services oneway", "python3 -u tests/vm/hub.py services respawn"]
 
 [installer]
-apps = ["hello-installer"]  # carries the payload APKs (hello-payload with a config split, hello-payload2, hello-payload-other) as assets
+apps = ["hello-installer", "hello-legacy-receiver"]  # hello-installer carries the payload APKs (hello-payload with config and ABI splits, hello-payload2, hello-payload-other, hello-installer2) as assets
 run = ["python3 -u tests/vm/installer.py"]
 
 [activities]

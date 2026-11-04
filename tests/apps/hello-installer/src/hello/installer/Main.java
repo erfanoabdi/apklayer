@@ -22,7 +22,8 @@ import java.util.concurrent.TimeUnit;
 public class Main extends Activity {
     private static final String STATUS = "hello.installer.STATUS", PAYLOAD = "hello.payload";
     private final LinkedBlockingQueue<Intent> statuses = new LinkedBlockingQueue<>(), packages = new LinkedBlockingQueue<>();
-    private final LinkedBlockingQueue<String> reports = new LinkedBlockingQueue<>();
+    private final LinkedBlockingQueue<String> reports = new LinkedBlockingQueue<>(), finishedSessions = new LinkedBlockingQueue<>();
+    private final LinkedBlockingQueue<Intent> results = new LinkedBlockingQueue<>();
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -35,22 +36,51 @@ public class Main extends Activity {
         } }, changes, RECEIVER_EXPORTED);
         registerReceiver(new BroadcastReceiver() { @Override public void onReceive(Context c, Intent i) { reports.add(String.valueOf(i.getStringExtra("report"))); } },
                 new IntentFilter("hello.payload.REPORT"), RECEIVER_EXPORTED);
+        getPackageManager().getPackageInstaller().registerSessionCallback(new PackageInstaller.SessionCallback() {
+            @Override public void onCreated(int id) {}
+            @Override public void onBadgingChanged(int id) {}
+            @Override public void onActiveChanged(int id, boolean active) {}
+            @Override public void onProgressChanged(int id, float progress) {}
+            @Override public void onFinished(int id, boolean success) { finishedSessions.add(id + "=" + success); }
+        }, new android.os.Handler(android.os.Looper.getMainLooper()));
         new Thread(this::steps, "installer-steps").start();
+    }
+
+    @Override protected void onActivityResult(int request, int result, Intent data) {
+        results.add(new Intent().putExtra("code", result).putExtra("install", data == null ? Integer.MIN_VALUE : data.getIntExtra("android.intent.extra.INSTALL_RESULT", Integer.MIN_VALUE)));
     }
 
     private void steps() {
         try {
             System.out.println("[inst] canRequestPackageInstalls=" + getPackageManager().canRequestPackageInstalls());
             PackageInstaller installer = getPackageManager().getPackageInstaller();
+            for (PackageInstaller.SessionInfo kept : installer.getMySessions()) {
+                if (!PAYLOAD.equals(kept.getAppPackageName())) continue;
+                // the second start (tests/vm/installer.py stopped the instance in between): the session prepared and preapproved before it is still there
+                try (PackageInstaller.Session s = installer.openSession(kept.getSessionId())) {
+                    check("session kept", java.util.Arrays.asList(s.getNames()).contains("hello-payload.apk"), "names " + java.util.Arrays.toString(s.getNames()));
+                    s.commit(sender(kept.getSessionId()).getIntentSender());
+                }
+                int status = await();
+                check("preapproval kept", status == PackageInstaller.STATUS_SUCCESS && getPackageManager().getPackageInfo(PAYLOAD, 0) != null, "status " + status);
+                installer.uninstall(PAYLOAD, senderOf(0x7ffe));
+                await();
+                System.out.println("[inst] DONE");
+                return;
+            }
             int abandoned = installer.createSession(params());
             try (PackageInstaller.Session s = installer.openSession(abandoned)) { write(s, "hello-payload.apk"); s.abandon(); }
             check("abandon", installer.getSessionInfo(abandoned) == null, "the session is still there");
             int status = commit("hello-payload.apk", "hello-payload-split_xxhdpi.apk");
             check("cancel", status == PackageInstaller.STATUS_FAILURE_ABORTED, "status " + status);
+            int cancelled = lastSession;
             status = commit("hello-payload.apk", "hello-payload-split_xxhdpi.apk");
             PackageInfo info = status == 0 ? getPackageManager().getPackageInfo(PAYLOAD, 0) : null;
             check("install", info != null && info.getLongVersionCode() == 1 && info.splitNames != null && java.util.Arrays.asList(info.splitNames).contains("config.xxhdpi")
                     && broadcast(Intent.ACTION_PACKAGE_ADDED), "status " + status + " info " + (info == null ? null : info.getLongVersionCode() + " " + java.util.Arrays.toString(info.splitNames)));
+            java.util.Set<String> ends = new java.util.HashSet<>();
+            for (String end; ends.size() < 3 && (end = finishedSessions.poll(10, TimeUnit.SECONDS)) != null; ) ends.add(end);
+            check("session finished", ends.equals(java.util.Set.of(abandoned + "=false", cancelled + "=false", lastSession + "=true")) && installer.getSessionInfo(lastSession) == null, "onFinished " + ends);
             String report = launchPayload();
             check("split resource", report.contains("version=1 split=from split splits=[config.xxhdpi]"), report);
             status = commit("hello-payload2.apk");
@@ -73,8 +103,27 @@ public class Main extends Activity {
             try (InputStream in = getAssets().open("hello-payload2.apk")) { java.nio.file.Files.copy(in, apk.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
             runOnUiThread(() -> startActivity(new Intent(Intent.ACTION_VIEW).setDataAndType(android.net.Uri.fromFile(apk), "application/vnd.android.package-archive").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)));
             check("view apk", broadcast(Intent.ACTION_PACKAGE_ADDED), "no PACKAGE_ADDED");
-            runOnUiThread(() -> startActivity(new Intent(Intent.ACTION_DELETE, android.net.Uri.fromParts("package", PAYLOAD, null)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)));
-            check("delete intent", broadcast(Intent.ACTION_PACKAGE_REMOVED), "no PACKAGE_REMOVED");
+            // with EXTRA_RETURN_RESULT the result says how it ended: version 1 over the 2 just installed is a downgrade
+            java.io.File older = new java.io.File(getCacheDir(), "older.apk");
+            try (InputStream in = getAssets().open("hello-payload.apk")) { java.nio.file.Files.copy(in, older.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
+            Intent result = forResult(new Intent(Intent.ACTION_INSTALL_PACKAGE, android.net.Uri.fromFile(older)).putExtra(Intent.EXTRA_RETURN_RESULT, true));
+            check("install result", result != null && result.getIntExtra("code", 0) == RESULT_FIRST_USER && result.getIntExtra("install", 0) == -25 /* INSTALL_FAILED_VERSION_DOWNGRADE */,
+                    "result " + (result == null ? null : result.getExtras()));
+            result = forResult(new Intent(Intent.ACTION_DELETE, android.net.Uri.fromParts("package", PAYLOAD, null)).putExtra(Intent.EXTRA_RETURN_RESULT, true));
+            check("delete intent", broadcast(Intent.ACTION_PACKAGE_REMOVED) && result != null && result.getIntExtra("code", 0) == RESULT_OK && result.getIntExtra("install", 0) == 1 /* DELETE_SUCCEEDED */,
+                    "result " + (result == null ? null : result.getExtras()));
+            // a session left for the next start, preapproved: the hub keeps both across the installer's and its own restart
+            int kept = installer.createSession(params());
+            try (PackageInstaller.Session s = installer.openSession(kept)) {
+                write(s, "hello-payload.apk");
+                s.requestUserPreapproval(new PackageInstaller.PreapprovalDetails.Builder().setPackageName(PAYLOAD).setLabel("Payload").setLocale(android.icu.util.ULocale.US).build(), sender(kept).getIntentSender());
+            }
+            status = await();
+            check("preapproved", status == PackageInstaller.STATUS_SUCCESS && installer.getSessionInfo(kept) != null, "status " + status);
+            // last: an installer updating itself is stopped like any updated app; the new version's MY_PACKAGE_REPLACED receiver reports (SelfUpdated)
+            System.out.println("[inst] updating itself");
+            status = commitFor(getPackageName(), "hello-installer2.apk");
+            check("self update", false, "still running after its own update, status " + status);
         } catch (Exception failure) {
             System.out.println("[inst] FAIL " + failure);
             failure.printStackTrace(System.out);
@@ -82,10 +131,19 @@ public class Main extends Activity {
         System.out.println("[inst] DONE");
     }
 
-    private static PackageInstaller.SessionParams params() {
+    private static PackageInstaller.SessionParams params() { return params(PAYLOAD); }
+
+    private static PackageInstaller.SessionParams params(String pkg) {
         PackageInstaller.SessionParams p = new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
-        p.setAppPackageName(PAYLOAD);
+        p.setAppPackageName(pkg);
         return p;
+    }
+
+    /** startActivityForResult of a legacy installer intent: its result. */
+    private Intent forResult(Intent intent) throws InterruptedException {
+        results.clear();
+        runOnUiThread(() -> startActivityForResult(intent, 7));
+        return results.poll(150, TimeUnit.SECONDS);
     }
 
     private void write(PackageInstaller.Session session, String asset) throws Exception {
@@ -93,9 +151,13 @@ public class Main extends Activity {
     }
 
     /** A session with these assets, committed: its final status (a confirmation it asks for is started on the way). */
-    private int commit(String... assets) throws Exception {
+    private int commit(String... assets) throws Exception { return commitFor(PAYLOAD, assets); }
+
+    private int lastSession;
+
+    private int commitFor(String pkg, String... assets) throws Exception {
         PackageInstaller installer = getPackageManager().getPackageInstaller();
-        int id = installer.createSession(params());
+        int id = lastSession = installer.createSession(params(pkg));
         try (PackageInstaller.Session session = installer.openSession(id)) {
             for (String asset : assets) write(session, asset);
             session.commit(sender(id).getIntentSender());

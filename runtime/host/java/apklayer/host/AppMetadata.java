@@ -86,8 +86,7 @@ final class AppMetadata {
 
     /**
      * The signer of the new package (its base and every split, as PackageManagerService requires) and, on an update, whether the installed one has another
-     * (signerMismatch: install refuses it). shortcut: an unsigned APK (the test apps) has signer "" and updates an unsigned install; Android refuses
-     * unsigned APKs outright, refuse them too if anything but the test apps ever comes unsigned.
+     * (signerMismatch: install refuses it). An unsigned APK has signer "": install refuses it, as Android does.
      */
     private static void signer(Properties info, Path dir, String pkg) throws IOException {
         String signer = HostCertificate.digest(dir.resolve("base.apk").toFile());

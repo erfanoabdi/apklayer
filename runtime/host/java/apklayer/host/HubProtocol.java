@@ -16,7 +16,9 @@ final class HubProtocol {
     static final int REGISTER_RECEIVER = 7, UNREGISTER_RECEIVER = 8, BROADCAST = 9, FINISH_RECEIVER = 10, UNBROADCAST = 11,
             LIST_PROVIDERS = 12, GET_PROVIDER = 13, CHECK_PERMISSION = 14, NOTIFY_CHANGE = 15, GRANT_URI = 16, CHECK_URI = 17, START_ACTIVITY = 18, TAKE_LAUNCH = 19, START_SERVICE = 20, STOP_SERVICE = 21, SERVICE_STOPPED = 22, PI_GET = 23, PI_SEND = 24, PI_CANCEL = 25, PI_INFO = 26, NOTIFY_POST = 27, NOTIFY_CANCEL = 28, UID_OF_PID = 29, LIST_PACKAGES = 30, GET_PACKAGE = 31, INPUT_METHODS = 32,
             INSTALL_COMMIT = 33, INSTALL_PREAPPROVE = 34, UNINSTALL = 35, INSTALL_SOURCE = 36,  // the package installer (HubInstaller)
-            RELAUNCH = 37;  // `apklayer run` of a running app (the CLI, through servicetool call): {package, intent file or ""} -> 0 delivered, 1 not running
+            RELAUNCH = 37,
+            INSTALL_SESSION = 38;  // the PackageInstaller sessions (HubInstallSessions): {op, arguments}
+            // RELAUNCH: `apklayer run` of a running app (the CLI, through servicetool call): {package, intent file or ""} -> 0 delivered, 1 not running
     static final int ENDPOINT_BIND = 1, ENDPOINT_UNBIND = 2, ENDPOINT_START = 3, ENDPOINT_STOP = 4, ENDPOINT_GET_PROVIDER = 5, ENDPOINT_NOTIFY = 6, ENDPOINT_START_ACTIVITY = 7, ENDPOINT_EXIT_IF_IDLE = 8, ENDPOINT_PACKAGE_CHANGED = 9;
     private HubProtocol() {}
     static <T> T call(IBinder target, String descriptor, int code, Consumer<Parcel> write, Function<Parcel, T> read) {
