@@ -10,7 +10,7 @@ other=$root/app-data/hello.other
 mkdir -p "$other" "$home" && echo secret > "$other/secret.txt" && echo home > "$home/home.txt" && echo picked > "$home/picked.txt" && echo beside > "$home/notpicked.txt"
 export APKLAYER_PICKER="echo $home/picked.txt"  # apklayerd's picker (it runs as the user); the app's own environment does not reach it
 bin/apklayer install .tests/apks/hello-sandbox.apk 2>&1 | grep -aq installed || { echo "install hello-sandbox failed"; exit 1; }
-bin/apklayer stop >/dev/null 2>&1
+bin/apklayer stop >/dev/null 2>&1; bin/apklayer home-access hello.sandbox off >/dev/null
 jopts="-Dhello.other=$other -Dhello.home=$home/home.txt -Dhello.notpicked=$home/notpicked.txt"
 APKLAYER_JOPTS="-Dapklayer.runms=20000 $jopts" bin/apklayer run hello.sandbox > "$out" 2>&1
 grep -a "\[sandbox\]\|apklayer: " "$out"

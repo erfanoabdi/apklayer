@@ -125,14 +125,15 @@ void apply(const std::vector<Step>& steps) {
     }
 }
 
-// What an app process sees: its own data, the instance's shared storage and /data, the runtime read-only; the user's home, /tmp and runtime directory
-// are empty tmpfs, the other apps' data is not there. Everything at the host's paths, so no path changes.
-std::string homeAccessFile(const Instance& inst) { return join(inst.root, "home-access"); }  // the packages granted the user's home, one per line
+std::string homeAccessFile(const std::string& root) { return join(root, "home-access"); }  // an instance's packages granted the user's home, one per line
 
 bool homeAccess(const Instance& inst, const std::string& package) {
-    for (const std::string& p : split(readFile(homeAccessFile(inst)).value_or(""), '\n')) if (p == package) return true;
+    for (const std::string& p : split(readFile(homeAccessFile(inst.root)).value_or(""), '\n')) if (p == package) return true;
     return false;
 }
+
+// What an app process sees: its own data, the instance's shared storage and /data, the runtime read-only; the user's home, /tmp and runtime directory
+// are empty tmpfs, the other apps' data is not there. Everything at the host's paths, so no path changes.
 
 std::vector<Step> appView(const Layout& l, const Instance& inst, const std::string& package, uid_t uid, const std::string& java) {
     std::string home = realPath(homeDir()), runtime = realPath(l.runtimeHome);
@@ -198,13 +199,18 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
 }
 }  // namespace
 
+void setHomeAccess(const std::string& root, const std::string& package, bool on) {
+    if (!exists(homeAccessFile(root)) && !on) return;
+    std::string kept;
+    for (const std::string& p : split(readFile(homeAccessFile(root)).value_or(""), '\n')) if (!p.empty() && p != package) kept += p + "\n";
+    if (on) kept += package + "\n";
+    writeFile(homeAccessFile(root), kept);
+}
+
 int homeAccessCommand(const Layout& l, const Instance& inst, const std::string& package, const std::string& state) {
     if (!exists(join(appDir(l, package), "info.properties"))) die("not installed: " + package);
     if (state != "on" && state != "off") die("home-access <package> on|off");
-    std::string kept;
-    for (const std::string& p : split(readFile(homeAccessFile(inst)).value_or(""), '\n')) if (!p.empty() && p != package) kept += p + "\n";
-    if (state == "on") kept += package + "\n";
-    writeFile(homeAccessFile(inst), kept);
+    setHomeAccess(inst.root, package, state == "on");
     printf("apklayer: %s %s the user's home in instance %s (with the sandbox, from its next start)\n", package.c_str(), state == "on" ? "sees" : "no longer sees", inst.id.c_str());
     return 0;
 }

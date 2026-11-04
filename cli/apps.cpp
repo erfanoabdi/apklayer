@@ -247,6 +247,7 @@ void uninstallApp(const Layout& l, const std::string& package) {
     for (const std::string& instance : listDir(join(l.dataHome, "apklayer"))) {  // the app's data in every instance of this data home
         std::string data = join(l.dataHome, "apklayer/" + instance + "/app-data/" + package);
         if (isDir(data)) { reclaim(data); removeTree(data); }  // reclaim: files the sandbox's app uid owns
+        setHomeAccess(join(l.dataHome, "apklayer/" + instance), package, false);
         // and its revoked permissions (cli/manage.cpp): a reinstall starts with the grants of a new install, as on Android
         std::string revoked = join(l.dataHome, "apklayer/" + instance + "/permissions-revoked"), kept;
         if (!exists(revoked)) continue;

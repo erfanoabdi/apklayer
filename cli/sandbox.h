@@ -18,6 +18,8 @@ int sandboxExec(const Layout& layout, const Instance& instance, const std::vecto
 bool grantPath(const Instance& instance, int pid, const std::string& path);
 // `apklayer home-access <package> on|off`: the app's sandbox view gets the user's whole home, read-write (the opt-in beside the picker)
 int homeAccessCommand(const Layout& layout, const Instance& instance, const std::string& package, const std::string& state);
+// The grant in the instance with this root (<dataHome>/apklayer/<n>): uninstall takes it back, as Android forgets an uninstalled app's grants
+void setHomeAccess(const std::string& root, const std::string& package, bool on);
 // The user owns dir again (an app's data after the sandbox ran it as its own uid): before it is removed, or used without the sandbox.
 void reclaim(const std::string& dir);
 
