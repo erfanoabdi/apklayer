@@ -1,6 +1,6 @@
 // Apps: the M3 list-detail layout. Side by side when the window is expanded (>= 840 dp), else the list, and the detail over it with a back button.
 import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, ScrollView, FilledButton, TonalButton, OutlineButton,
-         IconButton, OutlinedCard, HorizontalDivider, VerticalDivider, Switch } from "@material";
+         IconButton, OutlinedCard, HorizontalDivider, VerticalDivider, Switch, FilterChip } from "@material";
 import { Backend, AppIcons, AppEntry } from "backend.slint";
 import { Row, Tag, Heading } from "widgets.slint";
 
@@ -34,6 +34,7 @@ component AppDetail {
                     MaterialText { text: root.app.package; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; overflow: elide; }
                     if root.app.version != "" : MaterialText { text: "Version " + root.app.version; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; overflow: elide; }
                 }
+                if root.app.system : VerticalLayout { alignment: center; Tag { text: "System"; } }
             }
             HorizontalLayout {
                 spacing: MaterialStyleMetrics.spacing_8;
@@ -46,6 +47,27 @@ component AppDetail {
                 alignment: start;
                 OutlineButton { text: "Clear data…"; icon: AppIcons.clean; enabled: !Backend.busy; clicked => { root.confirm("clear-data", root.app.package); } }
                 OutlineButton { text: "Uninstall…"; icon: AppIcons.delete; enabled: !Backend.busy; clicked => { root.confirm("uninstall", root.app.package); } }
+            }
+            OutlinedCard {
+                VerticalLayout {
+                    padding-top: MaterialStyleMetrics.padding_8;
+                    padding-bottom: MaterialStyleMetrics.padding_8;
+                    Row {
+                        text: "Show in app drawer";
+                        supporting-text: root.app.system ? "A system app: hidden unless shown" : "The app's launcher in the desktop's app drawer";
+                        clickable: false;
+                        VerticalLayout {
+                            alignment: center;
+                            Switch {
+                                width: MaterialStyleMetrics.size_52;
+                                checked: root.app.in-drawer;
+                                enabled: !Backend.busy;
+                                accessible-label: "Show in app drawer";
+                                checked-state-changed(on) => { Backend.set-drawer(root.app.package, on); }
+                            }
+                        }
+                    }
+                }
             }
             Heading { text: "Permissions"; }
             if Backend.permissions-note != "" : MaterialText {
@@ -91,6 +113,8 @@ export component AppsPage {
     callback confirm(kind: string, target: string);
     property <bool> show-detail: Backend.has-current-app && (root.two-pane || root.detail-open);
     property <bool> show-list: root.two-pane || !root.show-detail;
+    property <bool> show-installed: true;   // the list's filters: user-installed apps, system apps
+    property <bool> show-system: true;
 
     HorizontalLayout {
         if root.show-list : Rectangle {
@@ -108,13 +132,23 @@ export component AppsPage {
                     padding: MaterialStyleMetrics.padding_8;
                     padding-bottom: 96px;  // room for the FAB
                     alignment: start;
-                    for app in Backend.apps : Row {
-                        text: app.label;
-                        supporting-text: app.package + (app.version == "" ? "" : " · " + app.version);
-                        picture: app.icon;
-                        selected: root.two-pane && Backend.has-current-app && app.package == Backend.current-app.package;
-                        clicked => { Backend.select-app(app.package); root.detail-open = true; }
-                        if app.running : Tag { text: "Running"; strong: true; }
+                    HorizontalLayout {
+                        padding: MaterialStyleMetrics.padding_8;
+                        spacing: MaterialStyleMetrics.spacing_8;
+                        alignment: start;
+                        FilterChip { text: "Installed"; checked <=> root.show-installed; }
+                        FilterChip { text: "System"; checked <=> root.show-system; }
+                    }
+                    for app in Backend.apps : VerticalLayout {
+                        if app.system ? root.show-system : root.show-installed : Row {
+                            text: app.label;
+                            supporting-text: app.package + (app.version == "" ? "" : " · " + app.version);
+                            picture: app.icon;
+                            selected: root.two-pane && Backend.has-current-app && app.package == Backend.current-app.package;
+                            clicked => { Backend.select-app(app.package); root.detail-open = true; }
+                            if app.system : Tag { text: "System"; }
+                            if app.running : Tag { text: "Running"; strong: true; }
+                        }
                     }
                 }
             }

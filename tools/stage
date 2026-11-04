@@ -65,15 +65,13 @@ stage_root() {
 stage_sysapps() {
     vm_config
     OUT="$tree/out/target/product/generic_arm64"
-    install_apk() { # install_apk <path in the tree's outputs> <name>
-        orb -m ubuntu22-x86 cat "$1" | vm "cat > ~/sys-$2.apk"
-        vm "cd ~/apklayer; export XDG_RUNTIME_DIR=/run/user/1000; b/cli/apklayer install ~/sys-$2.apk 2>&1 | grep -a 'installed\|rror\|xception' | head -3"
-    }
-    for app in SettingsProvider ContactsProvider CalendarProvider DownloadProvider UserDictionaryProvider ExternalStorageProvider TelephonyProvider DocumentsUI; do
-        install_apk "$OUT/system/priv-app/$app/$app.apk" "$app"
+    # tools/sysapps.list: package and APK (a glob: MediaProvider's Mainline module is a flattened APEX directory); system apps, so --system
+    grep -v '^#' "$here/sysapps.list" | while IFS="$(printf '\t')" read -r pkg apk; do
+        [ "$apk" != - ] || continue
+        name="$(basename "$apk" .apk)"
+        orb -m ubuntu22-x86 sh -c "cat \$(ls $OUT/$apk | head -1)" < /dev/null | vm "cat > ~/sys-$name.apk"
+        vm "cd ~/apklayer; export XDG_RUNTIME_DIR=/run/user/1000; b/cli/apklayer install --system ~/sys-$name.apk 2>&1 | grep -a 'installed\|rror\|xception' | head -3" < /dev/null
     done
-    # MediaProvider lives in a Mainline module: the APK is in the flattened APEX directory
-    install_apk "$(orb -m ubuntu22-x86 sh -c "ls $OUT/apex/com.android.mediaprovider/priv-app/MediaProvider*/MediaProvider.apk | head -1")" MediaProvider
 }
 
 stage_vulkan() {

@@ -18,6 +18,12 @@ check 0 "installed through the install dialog"
 check 1 "opened from the app's detail: it runs"
 "$m" --screenshot "$shots/ui-3-stop.png" --size 1100x760 --app "$pkg" --click Stop --wait-refresh 1
 check 0 "stopped from the app's detail"
+entry="${XDG_DATA_HOME:-$HOME/.local/share}/applications/apklayer-$pkg.desktop"
+"$m" --screenshot "$shots/ui-3b-drawer.png" --size 1100x760 --app "$pkg" --click "Show in app drawer" --wait-refresh 1
+grep -qx NoDisplay=true "$entry" || { echo "FAIL the drawer switch did not hide $pkg"; exit 1; }
+"$m" --screenshot "$shots/ui-3c-drawer.png" --size 400x840 --app "$pkg" --click "Show in app drawer" --wait-refresh 1
+! grep -qx NoDisplay=true "$entry" || { echo "FAIL the drawer switch did not show $pkg"; exit 1; }
+echo "ok   the app detail's drawer switch hides and shows its launcher"
 "$m" --screenshot "$shots/ui-4-uninstall.png" --size 400x840 --app "$pkg" --click "Uninstall…" --click Uninstall --wait-refresh 1
 check "" "uninstalled after the confirmation"
 spare="$APKLAYER_INSTANCE-ui"

@@ -41,6 +41,7 @@ final class HubPackages {
             PackageParser.Package parsed = ShadowPackageParser.callParsePackage(splits ? directory : apk);
             if (!name.equals(parsed.packageName)) throw new SecurityException("Installed APK package mismatch: " + name + " holds " + parsed.packageName);
             parsed.applicationInfo.uid = uid(name);  // the app id the scanner assigns (PackageManagerService did this at scan time); every component shares this ApplicationInfo and the generators copy it
+            if (system(name)) parsed.applicationInfo.flags |= android.content.pm.ApplicationInfo.FLAG_SYSTEM;  // as the scanner marks the system partition's packages
             cache.put(name, new Cached(modified, size, parsed)); return parsed;
         } catch (IOException failure) { throw new IllegalStateException("Cannot read installed package " + name, failure); }
     }
@@ -65,10 +66,15 @@ final class HubPackages {
 
     /** The Android app uid of an installed package (info.properties), or -1. */
     int uid(String name) {
+        try { return Integer.parseInt(property(name, "uid")); } catch (NumberFormatException none) { return -1; }
+    }
+
+    /** A key of the package's info.properties (written by `apklayer install`), "" when absent. */
+    private String property(String name, String key) {
         try {
-            for (String line : Files.readAllLines(root.resolve(name).resolve("info.properties"))) if (line.startsWith("uid=")) return Integer.parseInt(line.substring(4).trim());
+            for (String line : Files.readAllLines(root.resolve(name).resolve("info.properties"))) if (line.startsWith(key + "=")) return line.substring(key.length() + 1).trim();
         } catch (IOException | RuntimeException none) { /* not an app directory */ }
-        return -1;
+        return "";
     }
 
     /** The intent filters of the package's activities (services: {@code services}), by component class name. */
@@ -229,8 +235,8 @@ final class HubPackages {
 
     private static final HostSystemConfig SYSTEM = HostSystemConfig.load();
 
-    /** A platform-signed system app (in the privileged allowlist): the package installer does not remove it. */
-    boolean system(String name) { return SYSTEM.privileged.containsKey(name); }
+    /** A system app (installed with --system: system=true in info.properties) or a platform-signed one (the privileged allowlist): FLAG_SYSTEM, the package installer does not remove it. */
+    boolean system(String name) { return SYSTEM.privileged.containsKey(name) || "true".equals(property(name, "system")); }
 
     /** A service's android:permission, checked with the same grants as every other permission (holds): a requested dangerous one is granted too. */
     void enforceServicePermission(String caller, ServiceInfo service) {

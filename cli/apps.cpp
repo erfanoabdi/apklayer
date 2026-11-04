@@ -1,5 +1,7 @@
 #include "apps.h"
 
+#include "desktop.h"
+
 #include <algorithm>
 #include <iostream>
 #include <cstdlib>
@@ -28,19 +30,6 @@ std::string cacheKey(const Layout& l, const std::string& apk, const std::vector<
     if (auto commit = readFile(join(l.root, "runtime/dex2jvm/.dex2jvm-commit"))) text += *commit;
     text += sha256File(l.dex2jvmJar()) + "\n";  // the converter as built: a change to its code converts again
     return sha256Text(text);
-}
-
-void writeDesktop(const Layout& l, const std::string& pkg, const std::string& label, const std::string& dir) {
-    std::string apps = join(l.dataHome, "applications");
-    makeDirs(apps);
-    std::string cli = l.cliBinary();
-    writeFile(join(apps, "apklayer-" + pkg + ".desktop"),
-              "[Desktop Entry]\nType=Application\nName=" + label + "\nComment=Android app (" + pkg + ") via apklayer\nExec=" + cli + " run " + pkg +
-                  "\nIcon=" + dir + "/icon.png\nStartupWMClass=" + pkg + "\nCategories=Utility;\n");
-    writeFile(join(apps, "apklayer-open-apk.desktop"),
-              "[Desktop Entry]\nType=Application\nName=Android app (apklayer)\nExec=" + cli + " run %f\nMimeType=application/vnd.android.package-archive;\nNoDisplay=true\n");
-    sh({"update-desktop-database", apps});
-    sh({"xdg-mime", "default", "apklayer-open-apk.desktop", "application/vnd.android.package-archive"});
 }
 
 // The installed APKs: base.apk, then its splits (split_<name>.apk), as Android keeps them.
@@ -92,7 +81,7 @@ std::string hostClasspath(const Layout& l) {  // no app classes: they get a load
            "/android-stub.jar:" + l.dex2jvmJar();
 }
 
-std::string installApp(const Layout& l, const Instance& inst, const std::vector<std::string>& apks, bool allowDowngrade) {
+std::string installApp(const Layout& l, const Instance& inst, const std::vector<std::string>& apks, bool allowDowngrade, bool system) {
     for (const std::string& apk : apks) if (!exists(apk)) die("no such file: " + apk);
     if (!isDir(l.hostClasses()) || !exists(l.dex2jvmJar()))
         die("not built: run 'meson setup b && ninja -C b' and tools/build host " + l.native + " in " + l.root);
@@ -181,9 +170,12 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
     extractLibs(dir);
     // info.properties, with its uid, is the commit: a hub or JVM that meets the package while it is installed sees all of it or none
     if (!oldUid.empty()) writeFile(info, readFile(info).value_or("") + "uid=" + oldUid + "\n");
+    // an update keeps the system mark and the app drawer choice; --system (the staging of the tree's system apps) marks it
+    if (system || isSystemApp(old)) setProperty(info, "system", "true");
+    if (std::string drawer = property(old, "drawer"); !drawer.empty()) setProperty(info, "drawer", drawer);
     ensureUid(l, tmp);
     sh({"mv", "-f", info, join(dir, "info.properties")});
-    writeDesktop(l, pkg, label, dir);
+    writeDesktop(l, pkg);
     printf("apklayer: installed %s (%s) -> %s\n", pkg.c_str(), label.c_str(), dir.c_str());
     return pkg;
 }
@@ -212,7 +204,7 @@ void listApps(const Layout& l) {
     for (const std::string& app : listDir(l.appsDir)) {
         std::string f = join(join(l.appsDir, app), "info.properties");
         if (!exists(f)) continue;
-        printf("%-40s %-24s %s\n", property(f, "package").c_str(), property(f, "label").c_str(), property(f, "versionName").c_str());
+        printf("%-40s %-24s %-16s %s\n", property(f, "package").c_str(), property(f, "label").c_str(), property(f, "versionName").c_str(), isSystemApp(f) ? "system" : "");
     }
 }
 
