@@ -1,1 +1,1 @@
-executable('apklayer', ['main.cpp', 'util.cpp', 'layout.cpp', 'env.cpp', 'stack.cpp', 'apps.cpp', 'run.cpp', 'manage.cpp'], install: true)
+executable('apklayer', ['main.cpp', 'util.cpp', 'layout.cpp', 'env.cpp', 'stack.cpp', 'apps.cpp', 'run.cpp', 'spare.cpp', 'manage.cpp'], install: true)

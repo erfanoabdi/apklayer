@@ -35,6 +35,12 @@ final class ComponentSpare {
             System.exit(1);
             return null;
         }
+        return apply(out);
+    }
+
+    /** A target's lines: -D options (set as the JVM's properties), then the APK and the classes jar (returned). An app spare's too (AppSpare). */
+    static String[] apply(List<String> out) {
+        if (out.size() < 2) throw new IllegalStateException("no APK and classes jar in the target");
         for (String option : out.subList(0, out.size() - 2)) {
             int eq = option.indexOf('=');
             if (!option.startsWith("-D") || eq < 0) throw new IllegalStateException("unexpected JVM option " + option);

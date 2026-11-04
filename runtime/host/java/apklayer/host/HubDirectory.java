@@ -34,11 +34,13 @@ final class HubDirectory extends Binder {
     private final Map<String, Process> appProcesses = new HashMap<>();
     private final Map<String, Process> hosts = new HashMap<>();
     private final Map<String, Integer> failures = new HashMap<>();
-    private final Path logs = Path.of(System.getenv().getOrDefault("APKLAYER_LOGS", System.getProperty("user.home") + "/.local/state/apklayer/default"));
-    private final HubSpare spare = new HubSpare(logs);
+    static final Path LOGS = Path.of(System.getenv().getOrDefault("APKLAYER_LOGS", System.getProperty("user.home") + "/.local/state/apklayer/default"));
+    private final Path logs = LOGS;
+    private final HubSpare spare;
     private static final long IDLE_EXIT_MS = 10_000;
     private volatile boolean stopping;
-    HubDirectory(Path apps) {
+    HubDirectory(Path apps, HubSpare spare) {
+        this.spare = spare;
         packages = new HubPackages(apps); bindings = new HubServiceBindings(this, packages); broadcasts = new HubBroadcasts(this, packages); providers = new HubProviders(this, packages, broadcasts); activities = new HubActivities(this, packages, providers); startedServices = new HubStartedServices(this, packages, broadcasts); pendingIntents = new HubPendingIntents(this, broadcasts, activities, startedServices);
         notifications = new HubNotifications(packages, pendingIntents);
         // the instance's own data directory (the volumes' parent): accounts belong to the instance, as /data/system_ce does to a device
@@ -82,7 +84,6 @@ final class HubDirectory extends Binder {
     }
     java.util.List<Peer> peersExcept(Peer one) { synchronized (peers) { return peers.values().stream().filter(peer -> peer != one).toList(); } }
     HubAccounts accounts() { return accounts; }
-    void startSpare() { if (!stopping) spare.start(); }
     HubProviders providers() { return providers; }
     HubPackages packages() { return packages; }
     HubInstaller installer() { return installer; }

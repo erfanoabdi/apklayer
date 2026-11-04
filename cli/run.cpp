@@ -1,5 +1,6 @@
 #include "run.h"
 #include "manage.h"
+#include "spare.h"
 
 #include <cerrno>
 #include <cstdint>
@@ -94,16 +95,41 @@ int printPackageArgs(const Layout& l, const Instance& inst, const std::string& p
     return 0;
 }
 
-int runApp(const Layout& l, const Instance& inst, const std::string& package, RunMode mode) {
-    std::vector<std::string> own = mode == RunMode::Spare ? std::vector<std::string>() : packageJvmArgs(l, inst, package);
-    auto files = own.end() - (own.empty() ? 0 : 2);  // the APK and classes jar: Main's arguments
-    std::string dir = mode == RunMode::Spare ? l.appsDir : appDir(l, package);
+std::vector<std::string> windowJvmArgs(const Layout& l, const Instance& inst, NativeEnv& ne) {
     // the Chromium WebView provider is the default WebView once installed and tools/host-setup/webview.sh ran; APKLAYER_WEBVIEW_PROVIDER=none disables it
     std::string provider = getenvOr("APKLAYER_WEBVIEW_PROVIDER", "\x01");
     if (provider == "\x01") provider = exists(join(l.appsDir, "com.android.webview/classes.jar")) && webviewSandboxOff(inst) ? "com.android.webview" : "";
     if (provider == "none") provider.clear();
     if (!provider.empty() && !webviewSandboxOff(inst))
         die("the WebView provider route needs tools/host-setup/webview.sh once (Chromium's seccomp sandbox cannot run inside an app JVM and is switched off; needs sudo)");
+    std::vector<std::string> jvm = hostJvmArgs(l, inst, ne);
+    ne.env["LD_LIBRARY_PATH"] = l.native + ":" + join(l.native, "glibc") + ":" + ne.env["LD_LIBRARY_PATH"];  // bionic linker + its libs
+    jvm.push_back("-Dapklayer.apps=" + l.appsDir);
+    jvm.push_back("-Dapklayer.cli=" + l.cliBinary());
+    if (!provider.empty()) jvm.push_back("-Dapklayer.webviewprovider=" + join(l.appsDir, provider));  // its classes get a loader of their own (ShadowHostWebViewFactory)
+    if (!getenvOr("APKLAYER_LOGCAT", "").empty()) jvm.push_back("-Dapklayer.logcat=true");
+    for (const std::string& o : split(getenvOr("APKLAYER_JOPTS", ""), ' '))
+        if (!o.empty() && o.rfind("-Dapklayer.runms=", 0) != 0) jvm.push_back(o);  // the run time is the launch's own (launchOptions)
+    jvm.insert(jvm.end(), {"-cp", hostClasspath(l), "apklayer.host.Main"});
+    return jvm;
+}
+
+namespace {
+// What a launch adds before -cp (an app spare sets them as properties with its target): its window, its package, and the JOPTS' properties again
+// (after the package's, as on the command line).
+std::vector<std::string> launchOptions(const std::vector<std::string>& window, const std::vector<std::string>& own) {
+    std::vector<std::string> a = window;
+    a.insert(a.end(), own.begin(), own.end());
+    for (const std::string& o : split(getenvOr("APKLAYER_JOPTS", ""), ' ')) if (o.rfind("-D", 0) == 0) a.push_back(o);
+    return a;
+}
+}  // namespace
+
+int runApp(const Layout& l, const Instance& inst, const std::string& package, RunMode mode) {
+    std::vector<std::string> own = mode == RunMode::Spare ? std::vector<std::string>() : packageJvmArgs(l, inst, package);
+    std::vector<std::string> files(own.end() - (own.empty() ? 0 : 2), own.end());  // the APK and classes jar: Main's arguments
+    own.resize(own.size() - files.size());
+    std::string dir = mode == RunMode::Spare ? l.appsDir : appDir(l, package);
 
     trace("run " + (mode == RunMode::Spare ? std::string("spare component host") : package));
     NativeEnv ne = nativeEnv(l, inst);
@@ -122,7 +148,8 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         spawn(hub);
     }
 
-    std::vector<std::string> jvm = hostJvmArgs(l, inst, ne);
+    std::vector<std::string> jvm = windowJvmArgs(l, inst, ne), window;
+    std::string spareKey = mode == RunMode::App ? appSpareKey(l, inst, jvm, ne.env) : "";
     int vdisplay = 0;
     int self = getpid();
     // one virtual display per app window (its own layer stack and sink per launch); pid-based ids cannot collide, and the title identifies instance and
@@ -135,20 +162,21 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         sink.env = ne.env;
         sink.logFile = join(inst.logs(), "vdisplay-" + package + "-" + std::to_string(self) + ".log");
         vdisplay = spawn(sink);
-        jvm.push_back("-Dapklayer.layerstack=" + std::to_string(self));
-        jvm.push_back("-Dapklayer.displaywindow=" + title);
+        window = {"-Dapklayer.layerstack=" + std::to_string(self), "-Dapklayer.displaywindow=" + title};
     }
-    ne.env["LD_LIBRARY_PATH"] = l.native + ":" + join(l.native, "glibc") + ":" + ne.env["LD_LIBRARY_PATH"];  // bionic linker + its libs
-    jvm.insert(jvm.end(), own.begin(), files);
-    jvm.push_back("-Dapklayer.apps=" + l.appsDir);
-    jvm.push_back("-Dapklayer.cli=" + l.cliBinary());
-    if (!provider.empty()) jvm.push_back("-Dapklayer.webviewprovider=" + join(l.appsDir, provider));  // its classes get a loader of their own (ShadowHostWebViewFactory)
-    if (!getenvOr("APKLAYER_LOGCAT", "").empty()) jvm.push_back("-Dapklayer.logcat=true");
-    for (const std::string& o : split(getenvOr("APKLAYER_JOPTS", ""), ' ')) if (!o.empty()) jvm.push_back(o);
-    jvm.insert(jvm.end(), {"-cp", hostClasspath(l), "apklayer.host.Main"});
+    std::vector<std::string> late = launchOptions(window, own);
+    std::string record = join(inst.stateDir, "run." + std::to_string(self));
+    int conn = -1, jvmPid = -1;
+    if (mode == RunMode::App) {  // the instance's app spare takes the launch when it matches (its sandbox and native runtime are up: cli/spare.cpp)
+        std::vector<std::string> target = late;
+        target.insert(target.end(), files.begin(), files.end());
+        jvmPid = takeAppSpare(inst, spareKey, target, &conn);
+        if (jvmPid > 0) trace("app spare taken");
+    }
+    jvm.insert(jvm.end() - 3, late.begin(), late.end());
     if (mode == RunMode::Component) jvm.push_back("--component-host");
     if (mode == RunMode::Spare) jvm.push_back("--component-spare");  // prepares what every package shares, then waits for its target (ComponentSpare)
-    jvm.insert(jvm.end(), files, own.end());
+    jvm.insert(jvm.end(), files.begin(), files.end());
 
     Spawn app;
     app.argv = jvm;
@@ -162,16 +190,22 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         writeFile(join(inst.stateDir, "run." + std::to_string(self)), std::to_string(self) + "\n");
         execReplace(app);
     }
-    int jvmPid = spawn(app);
-    trace("app jvm spawned");
+    if (jvmPid <= 0) {
+        jvmPid = spawn(app);
+        trace("app jvm spawned");
+    }
     // `apklayer stop` ends what this launch started: the JVM and its window sink
-    std::string record = join(inst.stateDir, "run." + std::to_string(self));
     writeFile(record, std::to_string(jvmPid) + "\n" + std::to_string(vdisplay) + "\n");
+    if (mode == RunMode::App) startAppSpare(l, inst);  // for the next launch, as zygote forks the next app process
     int status = 0;
-    while (waitpid(jvmPid, &status, 0) < 0 && errno == EINTR) {}
+    if (conn >= 0) status = awaitAppSpare(conn, jvmPid);
+    else {
+        while (waitpid(jvmPid, &status, 0) < 0 && errno == EINTR) {}
+        status = WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
+    }
     unlink(record.c_str());
     if (vdisplay > 0) kill(vdisplay, SIGTERM);
-    return WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
+    return status;
 }
 
 // Another launcher holds hub.lock: true once its hub is published (apklayer.hub.ready=1), false when the lock came free first (that hub was

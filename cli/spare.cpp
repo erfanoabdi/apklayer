@@ -1,0 +1,190 @@
+#include "spare.h"
+#include "env.h"
+#include "run.h"
+#include "stack.h"
+
+#include <cerrno>
+#include <csignal>
+#include <cstring>
+#include <fcntl.h>
+#include <poll.h>
+#include <set>
+#include <sys/file.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/un.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+namespace apklayer {
+
+namespace {
+// One SOCK_SEQPACKET message each way. Launch -> holder: key, NUL, target lines, with fds 1 and 2. Holder -> launch: "pid <n>" (taken) or "stale"
+// (another key: the holder ends, the launcher starts a spare of its own key), later "exit <status>". Holder -> spare JVM: target lines, with the fds.
+std::string socketPath(const Instance& inst) { return join(inst.stateDir, "app-spare.sock"); }
+
+bool sendWithFds(int fd, const std::string& text, const int* fds, int count) {
+    iovec iov{const_cast<char*>(text.data()), text.size()};
+    msghdr msg{};
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    alignas(cmsghdr) char control[CMSG_SPACE(2 * sizeof(int))];
+    if (count > 0) {
+        msg.msg_control = control;
+        msg.msg_controllen = CMSG_SPACE(count * sizeof(int));
+        cmsghdr* c = CMSG_FIRSTHDR(&msg);
+        c->cmsg_level = SOL_SOCKET;
+        c->cmsg_type = SCM_RIGHTS;
+        c->cmsg_len = CMSG_LEN(count * sizeof(int));
+        memcpy(CMSG_DATA(c), fds, count * sizeof(int));
+    }
+    ssize_t n;
+    while ((n = sendmsg(fd, &msg, MSG_NOSIGNAL)) < 0 && errno == EINTR) {}
+    return n == static_cast<ssize_t>(text.size());
+}
+
+// A message (empty on EOF or error) and, into fds (count), descriptors that came with it.
+std::string receive(int fd, int* fds = nullptr, int* count = nullptr) {
+    static char text[1 << 18];
+    iovec iov{text, sizeof text};
+    msghdr msg{};
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    alignas(cmsghdr) char control[CMSG_SPACE(2 * sizeof(int))];
+    msg.msg_control = control;
+    msg.msg_controllen = sizeof control;
+    ssize_t n;
+    while ((n = recvmsg(fd, &msg, MSG_CMSG_CLOEXEC)) < 0 && errno == EINTR) {}
+    if (count) *count = 0;
+    cmsghdr* c = n > 0 ? CMSG_FIRSTHDR(&msg) : nullptr;
+    if (c && c->cmsg_level == SOL_SOCKET && c->cmsg_type == SCM_RIGHTS) {
+        int got[2], n = static_cast<int>((c->cmsg_len - CMSG_LEN(0)) / sizeof(int));  // at most 2: the control buffer's room
+        memcpy(got, CMSG_DATA(c), n * sizeof(int));
+        if (fds && count) { memcpy(fds, got, n * sizeof(int)); *count = n; }
+        else for (int i = 0; i < n; i++) close(got[i]);
+    }
+    return n > 0 ? std::string(text, static_cast<size_t>(n)) : std::string();
+}
+
+std::string stamp(const std::string& path) {
+    struct stat st{};
+    if (stat(path.c_str(), &st) != 0) return path + " -\n";
+    return path + " " + std::to_string(st.st_ino) + " " + std::to_string(st.st_mtim.tv_sec) + "." + std::to_string(st.st_mtim.tv_nsec) + "\n";
+}
+
+volatile sig_atomic_t forwardTo = 0;
+void forward(int sig) { if (forwardTo > 0) kill(forwardTo, sig); }
+}  // namespace
+
+std::string appSpareKey(const Layout& l, const Instance& inst, const std::vector<std::string>& argv, const Env& env) {
+    std::string key;
+    for (const std::string& a : argv) key += a + '\0';
+    // what differs from launch to launch and the runtime never reads: the JOPTS (in argv, but the launch's own late ones), a desktop launcher's
+    // activation token, the login session's and the shell's own bookkeeping
+    static const std::set<std::string> perLaunch = {"APKLAYER_JOPTS", "XDG_ACTIVATION_TOKEN", "DESKTOP_STARTUP_ID", "SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY",
+                                                    "XDG_SESSION_ID", "PWD", "OLDPWD", "SHLVL", "_"};
+    for (const auto& [name, value] : env)
+        if (!perLaunch.count(name)) key += name + "=" + value + '\0';
+    // the runtime build it loaded (a rebuild replaces these) and the stack whose binder it holds
+    for (const std::string& path : {l.hostClasses(), join(l.native, "native-runtime.jar"), join(l.native, "aosp/Robolectric_all.jar"),
+                                    join(l.native, "aosp/android-all-instrumented"), l.native, l.bionic, l.androidLibs, l.cliBinary()})
+        key += stamp(path);
+    return key + readFile(inst.pidFile()).value_or("");
+}
+
+int takeAppSpare(const Instance& inst, const std::string& key, const std::vector<std::string>& target, int* conn) {
+    int fd = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
+    sockaddr_un addr{};
+    addr.sun_family = AF_UNIX;
+    snprintf(addr.sun_path, sizeof addr.sun_path, "%s", socketPath(inst).c_str());
+    std::string text = key + '\0';
+    for (const std::string& line : target) text += line + "\n";
+    int out[2] = {1, 2};
+    if (fd < 0 || connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof addr) != 0 || !sendWithFds(fd, text, out, 2)) { if (fd >= 0) close(fd); return -1; }
+    std::string reply = receive(fd);
+    int pid = reply.rfind("pid ", 0) == 0 ? atoi(reply.c_str() + 4) : -1;
+    if (pid <= 0) { close(fd); return -1; }
+    *conn = fd;
+    return pid;
+}
+
+int awaitAppSpare(int conn, int jvmPid) {
+    forwardTo = jvmPid;
+    struct sigaction sa{};
+    sa.sa_handler = forward;
+    for (int sig : {SIGINT, SIGTERM, SIGHUP}) sigaction(sig, &sa, nullptr);
+    std::string reply = receive(conn);
+    close(conn);
+    // no word: the holder was killed (`apklayer stop` ends the JVM, its holder then reports); the JVM is gone or going
+    return reply.rfind("exit ", 0) == 0 ? atoi(reply.c_str() + 5) : 128 + SIGKILL;
+}
+
+void startAppSpare(const Layout& l, const Instance& inst) {
+    Spawn holder;
+    holder.argv = {l.cliBinary(), "--instance", inst.id, "app-spare"};
+    holder.env = currentEnv();  // the launcher's own: the holder derives the spare's environment and key as the launcher does
+    holder.logFile = join(inst.logs(), "app-spare.log");  // never the launcher's stdout (a caller reading it to its end would wait for the spare)
+    holder.detach = true;
+    spawn(holder);
+}
+
+int runAppSpare(const Layout& l, const Instance& inst) {
+    int lock = open(join(inst.stateDir, "app-spare.lock").c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0644);
+    if (lock < 0 || flock(lock, LOCK_EX | LOCK_NB) != 0) return 0;  // one spare per instance
+    NativeEnv ne = nativeEnv(l, inst);
+    std::vector<std::string> argv = windowJvmArgs(l, inst, ne);
+    std::string key = appSpareKey(l, inst, argv, ne.env);
+    int pair[2];
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0, pair) != 0) return 1;
+    fcntl(pair[1], F_SETFD, 0);
+    Spawn jvm;
+    jvm.argv = argv;
+    jvm.argv.push_back("--app-spare");
+    jvm.env = ne.env;
+    jvm.env["APKLAYER_SPARE_FD"] = std::to_string(pair[1]);
+    jvm.cwd = l.appsDir;
+    int pid = spawn(jvm);
+    close(pair[1]);
+    std::string record = join(inst.stateDir, "run." + std::to_string(getpid()));  // `apklayer stop` ends the spare with the instance's launches
+    writeFile(record, std::to_string(pid) + "\n");
+    unlink(socketPath(inst).c_str());
+    int server = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
+    sockaddr_un addr{};
+    addr.sun_family = AF_UNIX;
+    snprintf(addr.sun_path, sizeof addr.sun_path, "%s", socketPath(inst).c_str());
+    if (server < 0 || bind(server, reinterpret_cast<sockaddr*>(&addr), sizeof addr) != 0 || listen(server, 8) != 0) { kill(pid, SIGKILL); unlink(record.c_str()); return 1; }
+    printf("[apklayer] app spare pid=%d\n", pid);
+    fflush(stdout);
+    // before any answer: the socket and the lock are free for the next spare, which the launcher starts right after
+    auto release = [&] { close(server); unlink(socketPath(inst).c_str()); unlink(record.c_str()); flock(lock, LOCK_UN); };
+    int exited = pidfdOpen(pid), launch = -1;
+    for (;;) {
+        pollfd fds[2] = {{server, POLLIN, 0}, {exited, POLLIN, 0}};
+        while (poll(fds, 2, -1) < 0 && errno == EINTR) {}
+        if (fds[1].revents) { release(); waitpid(pid, nullptr, 0); return 0; }  // the spare ended before a launch took it (`apklayer stop`)
+        int c = accept4(server, nullptr, nullptr, SOCK_CLOEXEC);
+        if (c < 0) continue;
+        int out[2], count = 0;
+        std::string message = receive(c, out, &count);
+        bool match = count == 2 && message.size() > key.size() && message.compare(0, key.size(), key) == 0 && message[key.size()] == '\0';
+        if (match && sendWithFds(pair[0], message.substr(key.size() + 1), out, 2)) launch = c;
+        for (int i = 0; i < count; i++) close(out[i]);
+        if (launch >= 0) break;
+        if (message.empty()) { close(c); continue; }  // a launcher that gave up
+        // a launch of another build or environment: this spare is of no use to it (nor likely to the next); it starts one of its own
+        release();
+        sendWithFds(c, "stale", nullptr, 0);
+        close(c);
+        kill(pid, SIGKILL);
+        waitpid(pid, nullptr, 0);
+        return 0;
+    }
+    release();  // the launch records the JVM as its own from here on
+    sendWithFds(launch, "pid " + std::to_string(pid), nullptr, 0);
+    int status = 0;
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+    sendWithFds(launch, "exit " + std::to_string(WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status)), nullptr, 0);
+    return 0;
+}
+
+}  // namespace apklayer
