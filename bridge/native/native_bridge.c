@@ -46,7 +46,9 @@ struct NativeBridgeCallbacks {
     void (*preZygoteFork)(void);
     void *(*getTrampolineWithJNICallType)(void *handle, const char *name, const char *shorty, uint32_t len, int jni_call_type);
 };
-enum { kJNICallTypeRegular = 1, ANDROID_NAMESPACE_TYPE_ISOLATED = 1, RTLD_NOW_BIONIC = 2 };
+enum { kJNICallTypeRegular = 1, RTLD_NOW_BIONIC = 2 };
+/* bionic/libc/platform/bionic/dlext_namespaces.h: an app's classloader namespace, isolated and the anonymous one (libnativeloader's first) */
+static const uint64_t kAppNamespaceType = 1 | 0x10000000;
 
 static struct NativeBridgeCallbacks *nb;
 static struct native_bridge_namespace_t *app_ns;
@@ -134,7 +136,7 @@ JNIEXPORT jstring JNICALL Java_apklayer_host_NativeLoader_bridgeInit(JNIEnv *env
     else {
         char *pub = public_libraries();
         struct native_bridge_namespace_t *system = nb->getExportedNamespace("system");
-        app_ns = nb->createNamespace("classloader-namespace", NULL, libdir, ANDROID_NAMESPACE_TYPE_ISOLATED, libdir, system);
+        app_ns = nb->createNamespace("classloader-namespace", NULL, libdir, kAppNamespaceType, libdir, system);
         if (!app_ns || !nb->linkNamespaces(app_ns, system, pub))
             snprintf(err, sizeof err, "%s: app namespace: %s", bridge, nb->getError() ? nb->getError() : "?");
         free(pub);

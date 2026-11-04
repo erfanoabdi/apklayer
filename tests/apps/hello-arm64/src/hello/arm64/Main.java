@@ -15,6 +15,15 @@ public class Main extends Activity {
 
     private static void log(String s) { System.out.println("[hello-arm64] " + s); }
 
+    /** Berberis's code cache is memfd-backed (exec_region): its mappings in /proc/self/maps show translation ran in this process. */
+    private static long memfdMappings() {
+        try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader("/proc/self/maps"))) {
+            return r.lines().filter(l -> l.contains("memfd:")).count();
+        } catch (java.io.IOException e) {
+            return -1;
+        }
+    }
+
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         long t0 = System.nanoTime();
@@ -33,6 +42,7 @@ public class Main extends Activity {
         log("load " + (t1 - t0) / 1000 + " us, cpu " + cpu + " (" + (t2 - t1) / 1000 + " us)");
         log("work(1000) first " + (t3 - t2) / 1000 + " us, warm " + (t4 - t3) / 1000 + " us, work(1e7) " + (t5 - t4) / 1000 + " us = " + big);
         log("callJava " + call + ", threadCall " + thread + " (" + (t6 - t5) / 1000 + " us)");
+        log("translated code mappings " + memfdMappings());
         boolean ok = "aarch64".equals(cpu) && first == warm && call == 42 && thread == 100;
         log(ok ? "PASS" : "FAIL first=" + first + " warm=" + warm);
         TextView v = new TextView(this);
