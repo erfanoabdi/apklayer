@@ -33,6 +33,14 @@ dbcd2909b22aae1bdca8bed5aee4353c08f7a91ec0f8829207fe238ab76f600f 469648 android-
 da14e50c1ac0589b3e84404949d546b874dc39bf8ec77487aa107fcab1c6d493 469920 android-arm64/lib64/android.hardware.drm@1.2.so out/target/product/generic_arm64/system/lib64/android.hardware.drm@1.2.so same
 84d08efbee7733426ab3a4f8e9723ddb2d72791708ef9db5a0d66f36f8a57875 169096 android-arm64/lib64/android.hardware.drm@1.3.so out/target/product/generic_arm64/system/lib64/android.hardware.drm@1.3.so same
 5c1e4c28d784b16fdc6d36347b8cfda8acb1fd01c1a351be3719acefe10fe229 419232 android-arm64/lib64/android.hardware.drm@1.4.so out/target/product/generic_arm64/system/lib64/android.hardware.drm@1.4.so same
+11839a7eff77e28c1d22b11df6805714d84a143c70c1e824facdb0b1a0401b7a 581528 android-arm64/lib64/android.hardware.gnss-V7-ndk.so out/target/product/generic_arm64/system/lib64/android.hardware.gnss-V7-ndk.so same
+89123c869ecd9168d64c790255299b0951c6858df266ab39cf147abf2abee772 152280 android-arm64/lib64/android.hardware.gnss.measurement_corrections@1.0.so out/target/product/generic_arm64/system/lib64/android.hardware.gnss.measurement_corrections@1.0.so same
+445b36593deb0a54626ca46a04f6bbaaa9c15f28aa99d23793dcd4a6d5df16c8 118784 android-arm64/lib64/android.hardware.gnss.measurement_corrections@1.1.so out/target/product/generic_arm64/system/lib64/android.hardware.gnss.measurement_corrections@1.1.so same
+eb3c26871b0d8963385955a312864bcdf0215cc183c3d062a8cb88b7b7a483b0 152280 android-arm64/lib64/android.hardware.gnss.visibility_control@1.0.so out/target/product/generic_arm64/system/lib64/android.hardware.gnss.visibility_control@1.0.so same
+0c2d2a185cb251d34bbee0ae078c73387eed3102c0456caa57a953f1830d1312 1143928 android-arm64/lib64/android.hardware.gnss@1.0.so out/target/product/generic_arm64/system/lib64/android.hardware.gnss@1.0.so same
+f6a32d681ed7ba6f825ae6bfb7f20632af253d7b5204da875a855f724cf1eeb1 383672 android-arm64/lib64/android.hardware.gnss@1.1.so out/target/product/generic_arm64/system/lib64/android.hardware.gnss@1.1.so same
+33693dba1437a63a1d24387d5fc19e5b65809e0c92abd8af0ccefb707a01d55e 747936 android-arm64/lib64/android.hardware.gnss@2.0.so out/target/product/generic_arm64/system/lib64/android.hardware.gnss@2.0.so same
+ac6ed0fe0c2985b7dedd02e5138bcd1e9d69fb9e0da0aeb7535ebcd146c57fd6 565232 android-arm64/lib64/android.hardware.gnss@2.1.so out/target/product/generic_arm64/system/lib64/android.hardware.gnss@2.1.so same
 becfe6943d1ed76270cd3bbb2f20fb69dad7ba75f560212427eace898267c837 69072 android-arm64/lib64/android.hardware.graphics.allocator-V2-ndk.so out/target/product/generic_arm64/system/lib64/android.hardware.graphics.allocator-V2-ndk.so same
 ca2beac9c081d939f72c3c74885ad7538486033eb8a9a3dfd44bf940224538a6 119088 android-arm64/lib64/android.hardware.graphics.allocator@2.0.so out/target/product/generic_arm64/system/lib64/android.hardware.graphics.allocator@2.0.so same
 eb5f4ed6900e044f5d1971f8642165ac9be8a959645b8b1c4d66b08fbcbfac69 119088 android-arm64/lib64/android.hardware.graphics.allocator@3.0.so out/target/product/generic_arm64/system/lib64/android.hardware.graphics.allocator@3.0.so same
@@ -69,13 +77,18 @@ f8b6c0c5a0b0d7082f5e92fde814ea9bb4065452cd4e3382bac1ec0e9f78080f 68872 android-a
 6c834c7d78a815032dc6f86b92447958253f2600fc10e6902b1e9615c731b9c4 119160 android-arm64/lib64/android.hardware.power@1.1.so out/target/product/generic_arm64/system/lib64/android.hardware.power@1.1.so same
 a98e3face551da652acd827db394361f7374fa1c6e4b1f2d2cda0c73b23f0daa 119088 android-arm64/lib64/android.hardware.power@1.2.so out/target/product/generic_arm64/system/lib64/android.hardware.power@1.2.so same
 338431ca182c9b94d8f596f0ba14df65fbaee4c31725a3681d4e5d15572368f3 119168 android-arm64/lib64/android.hardware.power@1.3.so out/target/product/generic_arm64/system/lib64/android.hardware.power@1.3.so same
-469b95e16413a2a5cc540d17251f01dcd31c042af7a25a9c406fd60b3ba4f8de 137632 android-arm64/lib64/android.hardware.security.keymint-V4-ndk.so - unresolved
+469b95e16413a2a5cc540d17251f01dcd31c042af7a25a9c406fd60b3ba4f8de 137632 android-arm64/lib64/android.hardware.security.keymint-V4-ndk.so out/target/product/generic_arm64/vendor/lib64/android.hardware.security.keymint-V4-ndk.so same
 d4c9b7b0085f6c9aa3b7e674bdd940e39823b1c0a9853d73dc50658560bb3e9a 137720 android-arm64/lib64/android.hardware.security.keymint-V5-ndk.so out/target/product/generic_arm64/system/lib64/android.hardware.security.keymint-V5-ndk.so same
 ba8ed0e869393eb2e6a3c8620c6d487f517f1f7ea0dcc776b2de65bafb0ba11e 85888 android-arm64/lib64/android.hardware.security.rkp-V3-ndk.so out/target/product/generic_arm64/system/lib64/android.hardware.security.rkp-V3-ndk.so same
 d5d21ce7c0128315705adf1397b9cacf42874ac44d569d07acb4b32467ba6d4d 69104 android-arm64/lib64/android.hardware.security.secureclock-V1-ndk.so out/target/product/generic_arm64/system/lib64/android.hardware.security.secureclock-V1-ndk.so same
 6485a4a785050877410c7ed632375d783558ade24035aac96193b5fec876af51 85648 android-arm64/lib64/android.hardware.security.sharedsecret-V1-ndk.so out/target/product/generic_arm64/system/lib64/android.hardware.security.sharedsecret-V1-ndk.so same
+cd16460d1fc8f6ed45c18ee3c4262139e75675ed6fcc4b4a1c63727e4b7f9a6d 118736 android-arm64/lib64/android.hardware.sensors-V3-ndk.so out/target/product/generic_arm64/system/lib64/android.hardware.sensors-V3-ndk.so same
+3f0df151f7a9dcb313bcbc484e27c8ad981237d065431b7f9ad7beed890b71b8 135896 android-arm64/lib64/android.hardware.sensors@1.0.so out/target/product/generic_arm64/system/lib64/android.hardware.sensors@1.0.so same
+b2a8e228ca4a8e06151b8fcc86de3cc92aa8206a487adfff2749c3e33513127f 185976 android-arm64/lib64/android.hardware.sensors@2.0.so out/target/product/generic_arm64/system/lib64/android.hardware.sensors@2.0.so same
+0c025506ef25919b39698253ba7f0dd7ea18319f06bc7983950e1d7b269ebee2 186008 android-arm64/lib64/android.hardware.sensors@2.1.so out/target/product/generic_arm64/system/lib64/android.hardware.sensors@2.1.so same
 edc321c2339349f1697bfb5faf417d4ee924260df0eb7e15061a340f4c4064d9 407376 android-arm64/lib64/android.hardware.tv.tuner-V3-ndk.so out/target/product/generic_arm64/system/lib64/android.hardware.tv.tuner-V3-ndk.so same
 2554913e2baf648be66aae468a3a57b7b1371d23de74613c51fd9e4b3d922f59 51576 android-arm64/lib64/android.hardware.usb.flags-aconfig-cc-lib.so out/target/product/generic_arm64/system/lib64/android.hardware.usb.flags-aconfig-cc-lib.so same
+cdec0485100f8c5121aab06ea385880a7f70731d1188c522562e79a8179f424a 151936 android-arm64/lib64/android.hardware.vibrator-V4-ndk.so out/target/product/generic_arm64/system/lib64/android.hardware.vibrator-V4-ndk.so same
 9304a129e30f80669440c408ef573f8415a8f2934778b287740e7cfe491f4ba2 119088 android-arm64/lib64/android.hidl.allocator@1.0.so out/target/product/generic_arm64/system/lib64/android.hidl.allocator@1.0.so same
 d079be16ab02a0ccd2c1ed90569ba7b0bdcbb77ebac8adf9389b1d4fcba9a966 102504 android-arm64/lib64/android.hidl.memory.token@1.0.so out/target/product/generic_arm64/system/lib64/android.hidl.memory.token@1.0.so same
 0fb1b69ce3a91c856da2dc9105bb72b34447353d8df6cb9a3519c7490e4f4c40 168752 android-arm64/lib64/android.hidl.memory@1.0.so out/target/product/generic_arm64/system/lib64/android.hidl.memory@1.0.so same
@@ -83,7 +96,7 @@ d12dd5749086ae2ec157af920911857424d715059a533d1c0e24d4e758d82626 35296 android-a
 85b27909365f89f32e2a6b0a197758f03e5d82ebf2cbbd13b073061954d5f4e7 51896 android-arm64/lib64/android.hidl.token@1.0-utils.so out/target/product/generic_arm64/system/lib64/android.hidl.token@1.0-utils.so same
 57e6a7d85fef03280728b0408597098dd5c6b2748ff3facf9bc697dbe1536265 119064 android-arm64/lib64/android.hidl.token@1.0.so out/target/product/generic_arm64/system/lib64/android.hidl.token@1.0.so same
 fa8fbd1b44c637be124666695448d7173aed4f575bf27f53080550c9f52fe40e 52488 android-arm64/lib64/android.media.audio-aconfig-cc.so out/target/product/generic_arm64/system/lib64/android.media.audio-aconfig-cc.so same
-199515f6a083854c5a1bb8295aa19f63814de1c671a153a833c64325efba66b6 140984 android-arm64/lib64/android.media.audio.common.types-V5-cpp.so out/target/product/generic_arm64/system/lib64/android.media.audio.common.types-V5-cpp.so same
+199515f6a083854c5a1bb8295aa19f63814de1c671a153a833c64325efba66b6 140984 android-arm64/lib64/android.media.audio.common.types-V5-cpp.so out/target/product/generic_arm64/system/lib64/android.media.audio.common.types-V5-cpp.so patched
 e2ec9110d2e92df8dba09bf7cf25c168a51935312b531508c8b4ff545b5f8850 168920 android-arm64/lib64/android.media.audio.common.types-V5-ndk.so out/target/product/generic_arm64/system/lib64/android.media.audio.common.types-V5-ndk.so same
 fb8936705890c538cd8afe7ab8daa405ece7c3b5cdee49088c8ed493b39c4f65 85536 android-arm64/lib64/android.media.audio.eraser.types-V2-ndk.so out/target/product/generic_arm64/system/lib64/android.media.audio.eraser.types-V2-ndk.so same
 5d4ba1f2708135ea56e9bb846ff6e0dc7febc78715a8596dd47bbb01b2be3ab2 51728 android-arm64/lib64/android.media.audiopolicy-aconfig-cc.so out/target/product/generic_arm64/system/lib64/android.media.audiopolicy-aconfig-cc.so same
@@ -94,13 +107,13 @@ b7d783bc52c3e33fadf289b3532cee02341b06d9d5668b0e27e1b1176507e2f3 51568 android-a
 f6216a229d4b19b228d9e4e561b732958e09bc3658b3a51c58f0cc8c0faf736b 52448 android-arm64/lib64/android.security.compat-ndk.so out/target/product/generic_arm64/system/lib64/android.security.compat-ndk.so same
 49e9abfe5c972ddfbd859f61bf00f9e6e93b0102ea5cdc188854f403621bf5c5 119464 android-arm64/lib64/android.system.keystore2-V6-ndk.so out/target/product/generic_arm64/system/lib64/android.system.keystore2-V6-ndk.so same
 55b290b1fee52c736f26db95ae7aef8606e861c027ecdf7faa0f743e7165fd80 68840 android-arm64/lib64/android.system.suspend-V1-ndk.so out/target/product/generic_arm64/system/lib64/android.system.suspend-V1-ndk.so same
-f49223537088c6a6b4a6174ca129e72426c265feede792f266159a32914a6a32 68616 android-arm64/lib64/audio-permission-aidl-cpp.so out/target/product/generic_arm64/system/lib64/audio-permission-aidl-cpp.so same
-fa714c0580816fe4be8fdda27b32990680a01f05ab0b3715e3449d169b2eb19a 89232 android-arm64/lib64/audioclient-types-aidl-cpp.so out/target/product/generic_arm64/system/lib64/audioclient-types-aidl-cpp.so same
-d671b6f7df701d46a6c5ec52723a63850fb912499ed6dda11d20d712fb2bedb3 400744 android-arm64/lib64/audioflinger-aidl-cpp.so out/target/product/generic_arm64/system/lib64/audioflinger-aidl-cpp.so same
-5107f404526aaf90781f793c937d8ac2006ea41556e3d02b4185bb363c1c5c63 318056 android-arm64/lib64/audiopolicy-aidl-cpp.so out/target/product/generic_arm64/system/lib64/audiopolicy-aidl-cpp.so same
-3b874306d46ac5c556fe381400172c63ebd65419877b7ada3f91d2b8c27fe626 53768 android-arm64/lib64/audiopolicy-types-aidl-cpp.so out/target/product/generic_arm64/system/lib64/audiopolicy-types-aidl-cpp.so same
+f49223537088c6a6b4a6174ca129e72426c265feede792f266159a32914a6a32 68616 android-arm64/lib64/audio-permission-aidl-cpp.so out/target/product/generic_arm64/system/lib64/audio-permission-aidl-cpp.so patched
+fa714c0580816fe4be8fdda27b32990680a01f05ab0b3715e3449d169b2eb19a 89232 android-arm64/lib64/audioclient-types-aidl-cpp.so out/target/product/generic_arm64/system/lib64/audioclient-types-aidl-cpp.so patched
+d671b6f7df701d46a6c5ec52723a63850fb912499ed6dda11d20d712fb2bedb3 400744 android-arm64/lib64/audioflinger-aidl-cpp.so out/target/product/generic_arm64/system/lib64/audioflinger-aidl-cpp.so patched
+5107f404526aaf90781f793c937d8ac2006ea41556e3d02b4185bb363c1c5c63 318056 android-arm64/lib64/audiopolicy-aidl-cpp.so out/target/product/generic_arm64/system/lib64/audiopolicy-aidl-cpp.so patched
+3b874306d46ac5c556fe381400172c63ebd65419877b7ada3f91d2b8c27fe626 53768 android-arm64/lib64/audiopolicy-types-aidl-cpp.so out/target/product/generic_arm64/system/lib64/audiopolicy-types-aidl-cpp.so patched
 c8f7aa7b8a3251b01042de97d9dce25f8329601d94d997f1bf0d64a37aad3b05 85928 android-arm64/lib64/av-audio-types-aidl-ndk.so out/target/product/generic_arm64/system/lib64/av-audio-types-aidl-ndk.so same
-02f08eeba88bd8edacae91c59cd8dfd577c279daf54576e47f48c2b93f112308 68856 android-arm64/lib64/av-types-aidl-cpp.so out/target/product/generic_arm64/system/lib64/av-types-aidl-cpp.so same
+02f08eeba88bd8edacae91c59cd8dfd577c279daf54576e47f48c2b93f112308 68856 android-arm64/lib64/av-types-aidl-cpp.so out/target/product/generic_arm64/system/lib64/av-types-aidl-cpp.so patched
 eb15937e113a809098509dfb1919d0076e12c8f00f12085a0048e0354efd324b 52248 android-arm64/lib64/camera_platform_flags_c_lib.so out/target/product/generic_arm64/system/lib64/camera_platform_flags_c_lib.so same
 dcf262d06d056b82cd96fa5e3351ef0966d4d43a6e9edb9628e25837e6333674 51856 android-arm64/lib64/capture_state_listener-aidl-cpp.so out/target/product/generic_arm64/system/lib64/capture_state_listener-aidl-cpp.so same
 cd893a5bfb7f333a10b23d063b6b65ce54323d5ad089c4d3e4e86acb1dd4f22d 51784 android-arm64/lib64/chre_flags_c_lib.so out/target/product/generic_arm64/system/lib64/chre_flags_c_lib.so same
@@ -111,8 +124,8 @@ c230600165349e54393ff07684d6a922dcd2787a1e016929d9e887a932c54f0d 52080 android-a
 b3c30df641b7821a6cd85b007793ba8f90eabf564c0e1f9f460ea172037a9c75 84336 android-arm64/lib64/com.android.window.flags.window-aconfig_flags_c_lib.so out/target/product/generic_arm64/system/lib64/com.android.window.flags.window-aconfig_flags_c_lib.so same
 7e15069b78ae024335c5aaaadbe4de84f5734c7946c7d60e3765711f22dd6fdb 203360 android-arm64/lib64/contexthub_data_flow.so out/target/product/generic_arm64/system/lib64/contexthub_data_flow.so same
 013b9f5dc220b7706d9be5f096f4452752c583f5a730097ce6dc240216f72369 68432 android-arm64/lib64/dynamic_instrumentation_manager_aidl-cpp.so out/target/product/generic_arm64/system/lib64/dynamic_instrumentation_manager_aidl-cpp.so same
-369582f9b111ecf768b155dd64c25919e5d2ec3cc7bc288e97a2fcea735f4d04 84936 android-arm64/lib64/effect-aidl-cpp.so out/target/product/generic_arm64/system/lib64/effect-aidl-cpp.so same
-d4eac9c756cacf8263c24210703b2cc988fb177c77601789500fabf74623d73b 68640 android-arm64/lib64/framework-permission-aidl-cpp.so out/target/product/generic_arm64/system/lib64/framework-permission-aidl-cpp.so same
+369582f9b111ecf768b155dd64c25919e5d2ec3cc7bc288e97a2fcea735f4d04 84936 android-arm64/lib64/effect-aidl-cpp.so out/target/product/generic_arm64/system/lib64/effect-aidl-cpp.so patched
+d4eac9c756cacf8263c24210703b2cc988fb177c77601789500fabf74623d73b 68640 android-arm64/lib64/framework-permission-aidl-cpp.so out/target/product/generic_arm64/system/lib64/framework-permission-aidl-cpp.so patched
 67ace5f23360e92aa31652e30bad5ba4f394f07df3f9a615b96b38b272109290 102176 android-arm64/lib64/graphicbuffersource-aidl-ndk.so out/target/product/generic_arm64/system/lib64/graphicbuffersource-aidl-ndk.so same
 136241ae9ae53bdf0ebc4c32d70743f71a13de7723668a0d7b8cc08197b7801e 35248 android-arm64/lib64/lib-camera-compatibility-info-api.so out/target/product/generic_arm64/system/lib64/lib-camera-compatibility-info-api.so same
 666464a595f7247457d6da93c205d9ba174231b246ebd5b54db41bb77d676a37 51832 android-arm64/lib64/lib-platform-compat-native-api.so out/target/product/generic_arm64/system/lib64/lib-platform-compat-native-api.so same
@@ -125,7 +138,7 @@ de4fee9ec19c4922ab82be786a9895bd65bd6d27da6ff80468afb4ac9ced0be1 117216 android-
 918fcb5c5315d441ad149e60b6ffe95c1deade70376838298a36f2676e459916 117216 android-arm64/lib64/libGLESv3.so out/target/product/generic_arm64/system/lib64/libGLESv3.so same
 623d3c611541cca0332580e893b79e08e949522649646ff0d6d6adf7caa32343 35896 android-arm64/lib64/libOpenSLES.so out/target/product/generic_arm64/system/lib64/libOpenSLES.so same
 8b1f6af244714a7bb0f9aee31473054c2f815b154353761c39bbd6b571dce126 52504 android-arm64/lib64/libSurfaceFlingerProp.so out/target/product/generic_arm64/system/lib64/libSurfaceFlingerProp.so same
-81b79bbd2b2a6d0b559b69c268567266cd4193241e6180e5a18bb516ac8fb977 37400 android-arm64/lib64/lib_android_keymaster_keymint_utils.so - unresolved
+81b79bbd2b2a6d0b559b69c268567266cd4193241e6180e5a18bb516ac8fb977 37400 android-arm64/lib64/lib_android_keymaster_keymint_utils.so out/target/product/generic_arm64/vendor/lib64/lib_android_keymaster_keymint_utils.so same
 c889cdaa86ec352b64c3a979d3afdee606ebe0b0f33587b14767056d06248238 37848 android-arm64/lib64/lib_android_keymaster_keymint_utils_fake_latest.so out/target/product/generic_arm64/system/lib64/lib_android_keymaster_keymint_utils_fake_latest.so same
 765cacf110f1676ff3f8d07277b32d903eb10eb67653cad87006b664380b8ff5 69920 android-arm64/lib64/libaacextractor.so out/target/product/generic_arm64/apex/com.android.media/lib64/extractors/libaacextractor.so same
 a239e50ac611fb20c06a96647750eae69b965ec41203003665f3198e869cd01c 86000 android-arm64/lib64/libaaudio.so out/target/product/generic_arm64/system/lib64/libaaudio.so same
@@ -152,18 +165,22 @@ ec126d6ebbd6e6c75726c26f8d25fe6d4455857906bc566c7504022178adbc6c 1026040 android
 425632dc78989752dc286ea38dcbd233b4057b896a3d9f81810f07938d745e23 1959160 android-arm64/lib64/libapklayer_audioserver.so out/soong/.intermediates/vendor/apklayer/hals/audio/services/libapklayer_audioserver/android_arm64_armv8-a_shared/libapklayer_audioserver.so apklayer
 af4b582bc1320b91f30d0e0b44f27ba96a2cec461b50e23475d3958d2059ff91 172048 android-arm64/lib64/libapklayer_codec2.so out/soong/.intermediates/vendor/apklayer/hals/media/codec2/libapklayer_codec2/android_arm64_armv8-a_shared/libapklayer_codec2.so apklayer
 2d4a388cb3863ebcf77f4ba13faf83d1ee37ac4b8ed263910419ece516851680 70048 android-arm64/lib64/libapklayer_composer.so out/soong/.intermediates/vendor/apklayer/hals/graphics/composer/libapklayer_composer/android_arm64_armv8-a_shared/libapklayer_composer.so apklayer
-edd793dcc0610fb985114be0fe55e2126472af38e45024ea1a0ada7145d7e432 118032 android-arm64/lib64/libapklayer_egl.so out/soong/.intermediates/vendor/apklayer/hals/graphics/egl/libapklayer_egl/android_arm64_armv8-a_shared/libapklayer_egl.so apklayer
+de60e97094f625e5ef80f9c323bc2349cf461f436d0dbc7e834261dd43f9ba1a 118064 android-arm64/lib64/libapklayer_egl.so out/soong/.intermediates/vendor/apklayer/hals/graphics/egl/libapklayer_egl/android_arm64_armv8-a_shared/libapklayer_egl.so apklayer
 81cd4a059422d4eb5e5600d5d82e56ea9649b21896eebd6479e383884d3991ea 51640 android-arm64/lib64/libapklayer_gltest.so out/soong/.intermediates/vendor/apklayer/tools/libapklayer_gltest/android_arm64_armv8-a_shared/libapklayer_gltest.so apklayer
+98fe060442dfe8f5d33451607e474c82a7095ae3d4e8e66bb0a58b1bd1c92d9d 253216 android-arm64/lib64/libapklayer_gnss.so out/soong/.intermediates/vendor/apklayer/hals/gnss/libapklayer_gnss/android_arm64_armv8-a_shared/libapklayer_gnss.so apklayer
 fb7622f17d4931d08d56923c5202cbee4970575b4748fb890a0c12a002fe30ae 52032 android-arm64/lib64/libapklayer_keymint.so out/soong/.intermediates/vendor/apklayer/hals/security/libapklayer_keymint/android_vendor_arm64_armv8-a_shared/libapklayer_keymint.so apklayer
 25fec814413b61db9177b01dacc85ffb4885ff415db37f043aaf0250cedb594f 2561264 android-arm64/lib64/libapklayer_keystore2.so out/soong/.intermediates/vendor/apklayer/hals/security/libapklayer_keystore2/android_arm64_armv8-a_shared/libapklayer_keystore2.so apklayer
 6f75fb6e7d3c21cd88a26eb893e37f00e3b4d3f17b174ef9455383189b28b68b 35680 android-arm64/lib64/libapklayer_mediaserver.so out/soong/.intermediates/vendor/apklayer/hals/media/services/libapklayer_mediaserver/android_arm64_armv8-a_shared/libapklayer_mediaserver.so apklayer
 aa44b2ec1914f8db5e63d7aafa8d0a2ab3e62b57dbc11bf5dcc6f6184848348f 51928 android-arm64/lib64/libapklayer_permission.so out/soong/.intermediates/vendor/apklayer/hals/permission/libapklayer_permission/android_arm64_armv8-a_shared/libapklayer_permission.so apklayer
 8d9368a3cce6dbc0e9ba5f4b55799900dfbf4815f958b72847612aaf0f37b1c2 52328 android-arm64/lib64/libapklayer_screenshot.so out/soong/.intermediates/vendor/apklayer/tools/libapklayer_screenshot/android_arm64_armv8-a_shared/libapklayer_screenshot.so apklayer
+fae6eaeb344e244755fb86540094001be36bf441e0561e07922c6e935287ed7b 86248 android-arm64/lib64/libapklayer_sensors.so out/soong/.intermediates/vendor/apklayer/hals/sensors/libapklayer_sensors/android_arm64_armv8-a_shared/libapklayer_sensors.so apklayer
+bea16dc3eae49c8fabeefdecaf4e883b0832cb22c66112b0833e929e51530515 35480 android-arm64/lib64/libapklayer_sensorservice.so out/soong/.intermediates/vendor/apklayer/hals/sensors/services/libapklayer_sensorservice/android_arm64_armv8-a_shared/libapklayer_sensorservice.so apklayer
 f0fbb33fcd2ebee40cc8fbb9f2699609ef967244358802c60e4f6cb7543010f3 136352 android-arm64/lib64/libapklayer_servicemanager.so out/target/product/generic_arm64/system/lib64/libapklayer_servicemanager.so same
 fda5f46345f15cae22180009489c58d28e589613e488ca2a655d478ee35f061f 36016 android-arm64/lib64/libapklayer_servicetool.so out/soong/.intermediates/vendor/apklayer/tools/libapklayer_servicetool/android_arm64_armv8-a_shared/libapklayer_servicetool.so apklayer
 00a824d578fc4414d9d0695d10a669173e8fdbc7663ba4318860feb606aa453d 51632 android-arm64/lib64/libapklayer_sftest.so out/soong/.intermediates/vendor/apklayer/tools/libapklayer_sftest/android_arm64_armv8-a_shared/libapklayer_sftest.so apklayer
 a156fd1cbfdf42707795b93629ae6112995cb1b26b158d7e552b2a740800eaf2 10566488 android-arm64/lib64/libapklayer_surfaceflinger.so out/target/product/generic_arm64/system/lib64/libapklayer_surfaceflinger.so same
 5a940f1a0c404dc5cfef77465b03309ea9a2f7b3c666492b3bda9f05d4d9403b 52104 android-arm64/lib64/libapklayer_vdisplay.so out/soong/.intermediates/vendor/apklayer/hals/graphics/vdisplay/libapklayer_vdisplay/android_arm64_armv8-a_shared/libapklayer_vdisplay.so apklayer
+0ddd9bd9425ad0d7cc9c3f657f927cf485b8ae641b6f8addf7475599164e2fe6 85952 android-arm64/lib64/libapklayer_vibrator.so out/soong/.intermediates/vendor/apklayer/hals/vibrator/libapklayer_vibrator/android_arm64_armv8-a_shared/libapklayer_vibrator.so apklayer
 521912285a5ed3af715f6bff47eda1d2a07fec3d5185e571aff80b997a284416 52320 android-arm64/lib64/libapklayer_vktest.so out/apklayer-vulkan/libapklayer_vktest/libapklayer_vktest.so apklayer
 3d5fe972ac2108e4453e128f7ffa6bf52a5851e28480b4e220fc464307ab8cc3 324328 android-arm64/lib64/libapklayer_vulkan.so out/target/product/generic_arm64/system/lib64/libvulkan.so (renamed; patches/aosp/frameworks/native/0003-vulkan-host-dispatch.patch) patched
 b9eb573f5f02b96f085ce9458d5a21383846526ab84c46e23d2df3692effe19f 85312 android-arm64/lib64/libappfuse.so out/target/product/generic_arm64/system/lib64/libappfuse.so same
@@ -184,7 +201,7 @@ cfd333e42c6cb7c9ef25e25162b94081600b9a652f62fe6a1d8ef52a87b4f5e9 52704 android-a
 f6cb42f27f33f0a05658b957eaeace665f58eab2721c9d54c57401e0c0bb6a70 308968 android-arm64/lib64/libaudiofoundation.so out/target/product/generic_arm64/system/lib64/libaudiofoundation.so same
 8aef176cb22004c3b4834d59d03e09eebe4ba596d92bae76e92ce168bee9246c 52448 android-arm64/lib64/libaudiohal.so out/target/product/generic_arm64/system/lib64/libaudiohal.so same
 21dfdf0c5d5b1514e4b345d0433ca348ddcb58f6608811a5d0419774f3e24387 1702832 android-arm64/lib64/libaudiohal@aidl.so out/target/product/generic_arm64/system/lib64/libaudiohal@aidl.so same
-874414fd7a76cfac47cd9f281d04167a8666477afbfb9bee8ebe563015ff13fc 51984 android-arm64/lib64/libaudiomanager.so out/target/product/generic_arm64/system/lib64/libaudiomanager.so same
+874414fd7a76cfac47cd9f281d04167a8666477afbfb9bee8ebe563015ff13fc 51984 android-arm64/lib64/libaudiomanager.so out/target/product/generic_arm64/system/lib64/libaudiomanager.so patched
 9eff35b6444ecce9e68728e4ffe524a293317afc9594867440a3d9c0529a08a7 170104 android-arm64/lib64/libaudiopermission.so out/target/product/generic_arm64/system/lib64/libaudiopermission.so same
 a6478d8fbe653cab97ffbc78200514ae7113fd8036ac0faba33915d73296c3a2 108360 android-arm64/lib64/libaudiopolicy.so out/target/product/generic_arm64/system/lib64/libaudiopolicy.so same
 1db8490c333fa696ec3f4a4dfbb948ad7b232e376c33092efc43702cb8da9d10 706600 android-arm64/lib64/libaudiopolicycomponents.so out/target/product/generic_arm64/system/lib64/libaudiopolicycomponents.so same
@@ -196,10 +213,11 @@ db5c2b10e44bfa882997b38fa7aaa2bc3ae67d4881f46f5343739d87d344da7c 51920 android-a
 1260c46c6b40ba7e0e7b36f711f0ac3b2388f75e70143575e1f128090beabceb 415880 android-arm64/lib64/libaudioutils.so out/target/product/generic_arm64/system/lib64/libaudioutils.so same
 13ff7274921890c46301aeaf94f29763f29c6e9f4ea493f8f8cbef68d170a83e 218504 android-arm64/lib64/libbase.so out/target/product/generic_arm64/system/lib64/libbase.so same
 538fe45fed34bc2a70228730fd60287da0a4c6d9d7e12c90bf16fa99f379ae76 35784 android-arm64/lib64/libbattery.so out/target/product/generic_arm64/system/lib64/libbattery.so same
-6ec018ed23fa2d60fc97503cab46ccc9eac4fbafc98a6b7e56a0cdf96efd9012 970680 android-arm64/lib64/libbinder.so out/target/product/generic_arm64/system/lib64/libbinder.so same
+cb931632d8f24879620f47da4a16b34398600bbefd52364008961603b10010e6 51904 android-arm64/lib64/libbatterystats_aidl.so out/target/product/generic_arm64/system/lib64/libbatterystats_aidl.so same
+6ec018ed23fa2d60fc97503cab46ccc9eac4fbafc98a6b7e56a0cdf96efd9012 970680 android-arm64/lib64/libbinder.so out/target/product/generic_arm64/system/lib64/libbinder.so patched
 e035c706157ea4d94a5ffecd74eaa907db9033f40ef780fa36d71c16edbf905f 987016 android-arm64/lib64/libbinder.so.orig - unresolved
 a6de122c3bec6117ea25331b98954e86c9a473a4bf34c93ea78c56b42a579c6d 970664 android-arm64/lib64/libbinder.so.patched - unresolved
-71261933031f5787dd0bbe4e16dc42d0ac60d90fd4911411ba2cce0ea2674b56 188984 android-arm64/lib64/libbinder_ndk.so out/target/product/generic_arm64/system/lib64/libbinder_ndk.so same
+71261933031f5787dd0bbe4e16dc42d0ac60d90fd4911411ba2cce0ea2674b56 188984 android-arm64/lib64/libbinder_ndk.so out/target/product/generic_arm64/system/lib64/libbinder_ndk.so patched
 e9e92fcc52aeb1ad732e55f015881d3060557e8d5970eeb0e2f5ada75b0e05d3 102888 android-arm64/lib64/libbinderdebug.so out/target/product/generic_arm64/system/lib64/libbinderdebug.so same
 9d42d67e622d36424588091318b8c91a244a2a5fda01d83dc5046362c6388c5f 84768 android-arm64/lib64/libbpf_bcc.so out/target/product/generic_arm64/system/lib64/libbpf_bcc.so same
 1c9d73b624c3ee3ef61d154e08c9e19c900ecaa7abe9a723bfcbcc111b47c899 68208 android-arm64/lib64/libbpf_minimal.so out/target/product/generic_arm64/system/lib64/libbpf_minimal.so same
@@ -269,7 +287,7 @@ a86453f9fd1f8baa0b78fcf07f977f6f18e091eab284e98ae418e628c7471839 102024 android-
 6390d913a4e8910fb33cdfaa8e875c419ce6f1af96a2ffc99268f86828208528 2415112 android-arm64/lib64/libdng_sdk.so out/target/product/generic_arm64/system/lib64/libdng_sdk.so same
 0527c2c9c9162c1c06e4fee9872b9d8b9a6f129c77aca0db57b2bdb1c673a9b7 68200 android-arm64/lib64/libdrmframework.so out/target/product/generic_arm64/system/lib64/libdrmframework.so same
 9c9038564363bee1a743e63ddcf10f5563700d333a943a0a32810250ad99c0ae 134464 android-arm64/lib64/libdrmframeworkcommon.so out/target/product/generic_arm64/system/lib64/libdrmframeworkcommon.so same
-2cfe6d309dc1081234eb06428b8815ce035359200232c14b1f63f33bad30b0a0 102816 android-arm64/lib64/libeffectconfig.so out/soong/.intermediates/hardware/interfaces/audio/aidl/default/libeffectconfig/android_vendor_arm64_armv8-a_shared/libeffectconfig.so patched
+2cfe6d309dc1081234eb06428b8815ce035359200232c14b1f63f33bad30b0a0 102816 android-arm64/lib64/libeffectconfig.so out/target/product/generic_arm64/vendor/lib64/libeffectconfig.so patched
 06759f82cd040549839cee0354c56cf3bedb2bc277e6c9c1b1811d8d87b1c127 69120 android-arm64/lib64/libeffectsconfig.so out/target/product/generic_arm64/system/lib64/libeffectsconfig.so same
 da9aac13e73876acb901f4b6fff011703cd583c21af233a931cf219f8a1975f2 51616 android-arm64/lib64/libegl_flags.so out/target/product/generic_arm64/system/lib64/libegl_flags.so same
 61e4c4a7d1a4fd9954cb36f579083ee2663d191d1f62342e0e8b324c23e534ea 184920 android-arm64/lib64/libexpat.so out/target/product/generic_arm64/system/lib64/libexpat.so same
@@ -277,7 +295,7 @@ e803a3c2ce36365416f6d5d7c63b82c9e9dada1f91c918cbb96bba8bbb869e94 136720 android-
 00e632341277e399c8a9e83719364e076b6fd8a7142b3ce0655d22b98c207d48 51752 android-arm64/lib64/libfmq.so out/target/product/generic_arm64/system/lib64/libfmq.so same
 729c16619982883be63aa8f49276978ca7c9d6d9866099fc5a2532e38e5f2631 655000 android-arm64/lib64/libft2.so out/target/product/generic_arm64/system/lib64/libft2.so same
 e7c988c678fd5df7bd0368917683bf154ff95bd29c43e15bf1ba6ea965c7f02e 101592 android-arm64/lib64/libgralloctypes.so out/target/product/generic_arm64/system/lib64/libgralloctypes.so same
-3023d019a45262f45da43bbc417fbb8d74456b265652735125ac0a18dd3d9d44 85760 android-arm64/lib64/libgraphicsenv.so out/target/product/generic_arm64/system/lib64/libgraphicsenv.so same
+3023d019a45262f45da43bbc417fbb8d74456b265652735125ac0a18dd3d9d44 85760 android-arm64/lib64/libgraphicsenv.so out/target/product/generic_arm64/system/lib64/libgraphicsenv.so patched
 7c0543b45a8d4b2eebb714f33a67120b16d9f202f6050553f77b07652d015fde 1815856 android-arm64/lib64/libgui.so out/target/product/generic_arm64/system/lib64/libgui.so same
 a289dddf37400199dad038d743ca3bc694934c8d606911bb663e89fbc82ae364 51584 android-arm64/lib64/libguiflags.so out/target/product/generic_arm64/system/lib64/libguiflags.so same
 fed07ed0c65c5540c0ce23af7a25b515a86dba37c5b0ed154f1166e7a962105f 35576 android-arm64/lib64/libhardware.so out/target/product/generic_arm64/system/lib64/libhardware.so same
@@ -307,7 +325,7 @@ a81fec345aef78e0258c8ed6cae400ee5a933e4f956bb9035d7075204c41fbdc 4612064 android
 9c4565e766f08359c2e1eaebd7b9bcea28b27ad537bc40aa69c123428e5cd5e9 107440 android-arm64/lib64/libkeymaster4support.so out/target/product/generic_arm64/system/lib64/libkeymaster4support.so same
 2fab0829789a1cb38501759bd301e6c7fa4571cf80201d2acf1a41d156a763c3 134632 android-arm64/lib64/libkeymaster_messages.so out/target/product/generic_arm64/system/lib64/libkeymaster_messages.so same
 dfdde1f36ba730d0ac52a2402fd77156bdbbf2dbb59f230e51578e7f41d3a98a 568904 android-arm64/lib64/libkeymaster_portable.so out/target/product/generic_arm64/system/lib64/libkeymaster_portable.so same
-a8bbd5c6685cab97a84305a9c37d52fe035d4740e1cafbe8b7693b7f1cc7bcc4 171456 android-arm64/lib64/libkeymint.so - unresolved
+a8bbd5c6685cab97a84305a9c37d52fe035d4740e1cafbe8b7693b7f1cc7bcc4 171456 android-arm64/lib64/libkeymint.so out/target/product/generic_arm64/vendor/lib64/libkeymint.so same
 962e97cb3f0418adf3b20ec4c241b3519a52ed5a87dd9be9e484f4dc2a300483 171544 android-arm64/lib64/libkeymint_fake_latest.so out/target/product/generic_arm64/system/lib64/libkeymint_fake_latest.so same
 6182ca2e2dda4f5177677536a989ecfa1a01207d6eb2b375325d6737363d8979 157184 android-arm64/lib64/libkeymint_support.so out/target/product/generic_arm64/system/lib64/libkeymint_support.so same
 0e84b5e411bd7aca1dcf35ff066fd809902a99e5b8ec867de1a22d9999687765 52120 android-arm64/lib64/libkeystore-attestation-application-id.so out/target/product/generic_arm64/system/lib64/libkeystore-attestation-application-id.so same
@@ -350,7 +368,7 @@ cce358be60868101def54ef760059d8b12451e95c60c8f14d3aa17f6eda591b8 371984 android-
 955a5660d05df378dd9ec111c399d75299b613a6a85bd3b72a094d13d5841a61 152200 android-arm64/lib64/libnativedisplay.so out/target/product/generic_arm64/system/lib64/libnativedisplay.so same
 7efd9a0b8d0c78a35c20a66256ea6d4e434d8d13dc6f2218b10f6c84c7a7f81d 51488 android-arm64/lib64/libnativehelper.so out/target/product/generic_arm64/apex/com.android.art.debug/lib64/libnativehelper.so patched
 df3c6985add3ef3496591c4455c69e31dc7bdea7834e8c87eb544e19cf3da227 51584 android-arm64/lib64/libnativeloader_lazy.so out/target/product/generic_arm64/system/lib64/libnativeloader_lazy.so same
-6df20d6d8f69d33f38653489882222c664d416ad831b08c8b4e3a7842c35f9c6 68280 android-arm64/lib64/libnativewindow.so out/target/product/generic_arm64/system/lib64/libnativewindow.so same
+6df20d6d8f69d33f38653489882222c664d416ad831b08c8b4e3a7842c35f9c6 68280 android-arm64/lib64/libnativewindow.so out/target/product/generic_arm64/system/lib64/libnativewindow.so patched
 b265671857eda274bb9026841f287770283b9cc220d286f6eb392d4399610c22 84752 android-arm64/lib64/libnbaio.so out/target/product/generic_arm64/system/lib64/libnbaio.so same
 f3a1a919d416b98f874e42f701d6166318f1240b467ad10154816b417ed61776 52304 android-arm64/lib64/libnetd_client.so out/target/product/generic_arm64/system/lib64/libnetd_client.so same
 246e4ce43d4d094f0be99e7dc169f6e302c69fb26a06a2c201455e7dd5a33b75 119912 android-arm64/lib64/libnetdutils.so out/target/product/generic_arm64/system/lib64/libnetdutils.so same
@@ -361,9 +379,10 @@ d55beceb9dd4045f956b5ab2cbb45a3f194df99da9effc9e4d7b7ddffdca654b 51648 android-a
 98fc6298afdead171f29a3f0ab68f0c6f3642b773ed6e5a14ef889f2dcb6f930 5000304 android-arm64/lib64/libpdfium.so out/target/product/generic_arm64/system/lib64/libpdfium.so same
 094bb02f4e848fdbda86f3cd3957744c72e83c1d882e2d26b353455bc8388cff 999568 android-arm64/lib64/libperfetto_c.so out/target/product/generic_arm64/system/lib64/libperfetto_c.so same
 4e011cfb7454272e0573d1c0aa1e7883ba3dd8b088f40fc46c3ffdd831e37dbc 53560 android-arm64/lib64/libperfetto_framework_jni.so out/target/product/generic_arm64/system/lib64/libperfetto_framework_jni.so same
-e742c4bf7b84440edeeb64ac97aa309c5389ad7f1f9742daacdcbfff78f4f2d8 85432 android-arm64/lib64/libpermission.so out/target/product/generic_arm64/system/lib64/libpermission.so same
+e742c4bf7b84440edeeb64ac97aa309c5389ad7f1f9742daacdcbfff78f4f2d8 85432 android-arm64/lib64/libpermission.so out/target/product/generic_arm64/system/lib64/libpermission.so patched
 4ebc250ce043133d970e45a0a4b92c0a0eedfcc201574aff59119068cd831e51 119320 android-arm64/lib64/libpiex.so out/target/product/generic_arm64/system/lib64/libpiex.so same
 46841ec107e6ada6cd3dc08aa14fea87fb2aa6768dbf63069d58511d23c78f40 218904 android-arm64/lib64/libpng.so out/target/product/generic_arm64/system/lib64/libpng.so same
+5eee0aa752749f26105fb36d123cf2541ccf6e09d1e62741cc429fdb68ccb414 52240 android-arm64/lib64/libpower.so out/target/product/generic_arm64/system/lib64/libpower.so same
 23996bfde38935fb86b79013fccc7bd43c841aba2d89fc9bc458c265cde73378 350776 android-arm64/lib64/libpowermanager.so out/target/product/generic_arm64/system/lib64/libpowermanager.so same
 814694a3a1c3ea4c28fdea9fe9263bcdb462503000cbc9980b36363b6951cbef 383664 android-arm64/lib64/libprocessgroup.so out/target/product/generic_arm64/system/lib64/libprocessgroup.so same
 5bba00b4cedc1f581dd9af28c119e9a95865b49377761dd048751a2d0e7e37fb 51576 android-arm64/lib64/libprocessgroup_flags_c.so out/target/product/generic_arm64/system/lib64/libprocessgroup_flags_c.so same
@@ -372,11 +391,13 @@ e742c4bf7b84440edeeb64ac97aa309c5389ad7f1f9742daacdcbfff78f4f2d8 85432 android-a
 422c0f93c28a3801a50dcfc1753840e440e86ef63b1a62b722098d9e58afe3f0 3338416 android-arm64/lib64/libprotobuf-cpp-full-6.33.5.so out/target/product/generic_arm64/system/lib64/libprotobuf-cpp-full-6.33.5.so same
 dea3c47b8e9e3554828b950b8d72fd38945b7f759ef2ca1569b831449b5d08aa 1448456 android-arm64/lib64/libprotobuf-cpp-lite-6.33.5.so out/target/product/generic_arm64/system/lib64/libprotobuf-cpp-lite-6.33.5.so same
 7be6c4aa031d287e55957bd25bdd829b45052034d5c4948a856765070339530e 69464 android-arm64/lib64/libprotolog.so out/target/product/generic_arm64/system/lib64/libprotolog.so same
+7afdbca6a175309792e5cc1d90e0873b0a0d6b56783efacf31ffc7dd25e2f204 68032 android-arm64/lib64/libprotoutil.so out/target/product/generic_arm64/system/lib64/libprotoutil.so same
 574673359bee1786cebbc5b61bfa08bb7ff6903a54926edc22de785c2f98dc6e 136208 android-arm64/lib64/libpuresoftkeymasterdevice.so out/target/product/generic_arm64/system/lib64/libpuresoftkeymasterdevice.so same
 f0f00452505095f08f762093438f8e01ddcbe0bce4280074af7129a08ecfbd2c 302256 android-arm64/lib64/libresourcemanagerservice.so out/target/product/generic_arm64/system/lib64/libresourcemanagerservice.so same
 014a3b72d0b175b72f97a5157c94366f4cec0c4116a469a3d4faec1ee5c558ac 135400 android-arm64/lib64/libselinux.so out/target/product/generic_arm64/system/lib64/libselinux.so same
 0144623f396c8f2b3a987c8414a83b77878fcb320aaafa82ac263b2959d03e34 135344 android-arm64/lib64/libsensor.so out/target/product/generic_arm64/system/lib64/libsensor.so same
 a739742924e665f2b453bb150c22e7ae468a8a8f3fe84870f52a23683df4fe6e 85224 android-arm64/lib64/libsensorprivacy.so out/target/product/generic_arm64/system/lib64/libsensorprivacy.so same
+c1492b7371ae7ec426fe65c4da8eed4028123cd1902fca3d564c753d219157d5 466720 android-arm64/lib64/libsensorservice.so out/target/product/generic_arm64/system/lib64/libsensorservice.so same
 527578034b5b9162b9aaa918efbbee59a361b7f78406a12a898bddb7dda3cd18 995936 android-arm64/lib64/libsfplugin_ccodec.so out/target/product/generic_arm64/system/lib64/libsfplugin_ccodec.so same
 2f0ac71506ae580f22c4f88f6d6f86c543e907f8ff4903531299e71c0d3da6d3 653416 android-arm64/lib64/libsfplugin_ccodec_utils.so out/target/product/generic_arm64/system/lib64/libsfplugin_ccodec_utils.so same
 9c9f01d68fef12dc4d6bd8020ca7566b7ad9c4617d2002327f4af599f1e87397 35912 android-arm64/lib64/libshmemcompat.so out/target/product/generic_arm64/system/lib64/libshmemcompat.so same
@@ -395,7 +416,7 @@ c17be2b4215e54556a2ac0b2ca38b45007621d948e9796e38c40317eb6b5d5c2 219296 android-
 27ff90cde23e89816de1147168170b3efc1af02d197507f259bcc1f50148c985 85736 android-arm64/lib64/libstagefright_codecbase.so out/target/product/generic_arm64/system/lib64/libstagefright_codecbase.so same
 4231aa037bd4b6262d125127903aadda95dc986ac6ef8f8dc91bf445f956967d 35384 android-arm64/lib64/libstagefright_enc_common.so out/target/product/generic_arm64/apex/com.android.media.swcodec/lib64/libstagefright_enc_common.so same
 7d1bf92d6a05b78f66b9a62de90fff002cb456b56e67f7da3c953f85ee7c969d 152208 android-arm64/lib64/libstagefright_flacdec.so out/target/product/generic_arm64/apex/com.android.media.swcodec/lib64/libstagefright_flacdec.so same
-a7a85f0bd89bcba82b5dc29eb77e33f4064b012985aa91b5a37fb9ea359ce6aa 252944 android-arm64/lib64/libstagefright_foundation.so out/target/product/generic_arm64/system/lib64/libstagefright_foundation.so same
+a7a85f0bd89bcba82b5dc29eb77e33f4064b012985aa91b5a37fb9ea359ce6aa 252944 android-arm64/lib64/libstagefright_foundation.so out/target/product/generic_arm64/system/lib64/libstagefright_foundation.so patched
 8bf5ad9a63bdebf2c12caa3ea31590f59f159310701906644ba887057885e386 204384 android-arm64/lib64/libstagefright_framecapture_utils.so out/target/product/generic_arm64/system/lib64/libstagefright_framecapture_utils.so same
 c436b7b5345e0f0e16a0d012bf31611a17ab30ff73c97766fd89acd48109f582 52312 android-arm64/lib64/libstagefright_graphicbuffersource_aidl.so out/target/product/generic_arm64/system/lib64/libstagefright_graphicbuffersource_aidl.so same
 f7c1173f4e98f05c9e1384f1926ac0159a037b1fa115509e18d0718f8ed022ff 35592 android-arm64/lib64/libstagefright_http_support.so out/target/product/generic_arm64/system/lib64/libstagefright_http_support.so same
@@ -433,12 +454,12 @@ c1772cdf51eeaa200df15a72e71469e792ba9fc069b21a66a80e759b271919ac 2109096 android
 6cf422850138898e7318c97474c311e9ac2f8f4e8f70114f1f35ee57bee686ec 86744 android-arm64/lib64/mapper.apklayer.so out/soong/.intermediates/vendor/apklayer/hals/graphics/mapper/mapper.apklayer/android_arm64_armv8-a_shared/mapper.apklayer.so apklayer
 5f5b29c5fe95ef4d83bd2df5aebbec606318ac047606e8add6dd257714d873f2 167912 android-arm64/lib64/media_quality_aidl_interface-cpp.so out/target/product/generic_arm64/system/lib64/media_quality_aidl_interface-cpp.so same
 82acb947ef7ff580f001465eed75b062407bad93ba3fa5477cf51b7d59305581 85752 android-arm64/lib64/mediametricsservice-aidl-V1-cpp.so out/target/product/generic_arm64/system/lib64/mediametricsservice-aidl-V1-cpp.so same
-07adbc39786525e94ab71172e7ad43d12d34a1e0c6fb81ae0bee743b613e7151 85432 android-arm64/lib64/packagemanager_aidl-cpp.so out/target/product/generic_arm64/system/lib64/packagemanager_aidl-cpp.so same
-86ff7d88404ae69a63b11f96e4dd2f55ea8b75b6c3c6ce6507ff18f0f7799e19 51920 android-arm64/lib64/process_info_service_aidl-cpp.so out/target/product/generic_arm64/system/lib64/process_info_service_aidl-cpp.so same
+07adbc39786525e94ab71172e7ad43d12d34a1e0c6fb81ae0bee743b613e7151 85432 android-arm64/lib64/packagemanager_aidl-cpp.so out/target/product/generic_arm64/system/lib64/packagemanager_aidl-cpp.so patched
+86ff7d88404ae69a63b11f96e4dd2f55ea8b75b6c3c6ce6507ff18f0f7799e19 51920 android-arm64/lib64/process_info_service_aidl-cpp.so out/target/product/generic_arm64/system/lib64/process_info_service_aidl-cpp.so patched
 33ba97897f1a309ec854b4e546409b660c4973bb7863c044528f0271626fd5cb 51864 android-arm64/lib64/pw_allocator.so out/target/product/generic_arm64/system/lib64/pw_allocator.so same
 7d37d735e31b2009768112ab4e4e189d688f5106f99e57629f06433e54711069 36320 android-arm64/lib64/server_configurable_flags.so out/target/product/generic_arm64/system/lib64/server_configurable_flags.so same
 eb4063fce9b7978113485387f3c8bc760e339a17775dc6e45edafcf1ba7cf9a5 35656 android-arm64/lib64/shared-file-region-aidl-cpp.so out/target/product/generic_arm64/system/lib64/shared-file-region-aidl-cpp.so same
-a1b7d20f8fddaf0eab061f19563f20975ba4e044431457993944c62a516a2785 101896 android-arm64/lib64/spatializer-aidl-cpp.so out/target/product/generic_arm64/system/lib64/spatializer-aidl-cpp.so same
+a1b7d20f8fddaf0eab061f19563f20975ba4e044431457993944c62a516a2785 101896 android-arm64/lib64/spatializer-aidl-cpp.so out/target/product/generic_arm64/system/lib64/spatializer-aidl-cpp.so patched
 12d8ab9631d7d0d958c21ba8cfa000142e8f06d34b40ee88aa5446d2f96f201a 51872 android-arm64/lib64/volumegroupcallback-aidl-cpp.so out/target/product/generic_arm64/system/lib64/volumegroupcallback-aidl-cpp.so same
 1d06d9909da97134872dccd067bf951b00ac823bbdf9b3c11b67e791f869fda6 69360 android-arm64/lib64/vulkan.apklayer.so out/apklayer-vulkan/vulkan.apklayer/vulkan.apklayer.so apklayer
 462cc40ec0aebe6433e1654fb171c8843df6f9bde0d420c5d16ea94765b34dec 6148 arm64-native/android-root/.DS_Store bridge/native/android-root/.DS_Store apklayer
@@ -1007,5 +1028,5 @@ d6e2f06e71173153d526c46c49adb9e1462cc6bbb218a4e0a1238cf2993b2170 22349 arm64-nat
 0fdbecd90b1adcbe6a5a64a8aef7d53c8b6e8e9895d9d4c5ebaf181849415ffc 559 arm64-native/android-root/vendor/etc/vintf/manifest.xml bridge/native/android-root/vendor/etc/vintf/manifest.xml apklayer
 0fdbecd90b1adcbe6a5a64a8aef7d53c8b6e8e9895d9d4c5ebaf181849415ffc 559 arm64-native/android-root/vendor/etc/vintf/manifest/apklayer.xml (staged from the tree's build outputs, see CHANGELOG.md) same
 e125e6198315e5860c39f3c07432268eb65076be123f59e0548766507076c3a0 111724552 arm64-native/aosp/Robolectric_all.jar (staged from the tree's build outputs, see CHANGELOG.md) same
-7bbe8e383adcef7e82d18edb99aa7cd6a835854d172ce43989e1efe8195ebbdb 170093148 arm64-native/aosp/android-all/android-all-16-robolectric-13921718.jar (tree framework with apklayer JNI shim; tools/build native) patched
-fd321a4f05e632ceee38e34aa87b4742fd6fc2ea4dafe44b7a63718c6b99269b 170093148 arm64-native/aosp/android-all/android-all-current-robolectric-r0.jar (tree framework with apklayer JNI shim; tools/build native) patched
+029f952846b794656cec42be797efce426ea5df1d9121134e85b9a6ec13358e3 170107784 arm64-native/aosp/android-all/android-all-16-robolectric-13921718.jar (tree framework with apklayer JNI shim; tools/build native) patched
+e188ee8a9dc7c5c0be721546c89869ec3da2a9616adf368dbea3c2f5a57bf728 170107784 arm64-native/aosp/android-all/android-all-current-robolectric-r0.jar (tree framework with apklayer JNI shim; tools/build native) patched
