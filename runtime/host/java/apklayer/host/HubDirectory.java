@@ -454,6 +454,7 @@ final class HubDirectory extends Binder {
                 android.os.ParcelFileDescriptor[] pipes;
                 try { pipes = bluetooth.open(caller, address, uuid); } catch (IOException failure) { throw new IllegalStateException("Bluetooth: " + failure, failure); }
                 reply.writeNoException(); for (var pipe : pipes) reply.writeTypedObject(pipe, android.os.Parcelable.PARCELABLE_WRITE_RETURN_VALUE); return true;
+            }
             case HubProtocol.USB_PERMISSION -> {
                 Peer caller = caller(); String device = request.readString(); boolean ask = request.readBoolean(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeBoolean(usb.permission(caller.name(), device, ask)); return true;
