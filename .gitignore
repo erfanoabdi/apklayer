@@ -5,3 +5,4 @@ tests/corpus/shots/
 tests/corpus/logs/
 .claude/
 tests/corpus/apps.txt
+tests/corpus/results-subset.md

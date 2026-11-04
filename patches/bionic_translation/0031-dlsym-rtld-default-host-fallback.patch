@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Wed, 4 Nov 2026 00:00:00 +0000
+Subject: [PATCH] linker: dlsym(RTLD_DEFAULT) falls back to the host libraries
+
+On Android dlsym(RTLD_DEFAULT, "calloc") finds libc's symbol. Here libc is glibc (behind libc_bio), which is not in the bionic
+linker's solist, so RTLD_DEFAULT found only symbols with a bionic_ wrapper or in bionic-loaded libraries. Dart's FFI resolves
+native functions without an asset by that process lookup (package:ffi's calloc): FluffyChat could not open its database, never
+reached runApp and showed a black window. The same fallback patch 0017 gives RTLD_NEXT.
+
+apklayer patch 0031 of patches/bionic_translation.
+---
+ linker/dlfcn.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/linker/dlfcn.c b/linker/dlfcn.c
+--- a/linker/dlfcn.c
++++ b/linker/dlfcn.c
+@@ -173,6 +173,13 @@
+
+ 	if (handle == RTLD_DEFAULT) {
+ 		sym = apkenv_lookup(symbol, &found, NULL);
++		if (!sym) { /* apklayer patch: the host libraries too, as Android's RTLD_DEFAULT finds libc's symbols (glibc's here) */
++			void *host = dlsym(RTLD_DEFAULT, symbol);
++			if (host) {
++				pthread_mutex_unlock(&apkenv_dl_lock);
++				return wrapper_create(symbol, host);
++			}
++		}
+ 	} else if (handle == RTLD_NEXT) {
+ 		void *ret_addr = __builtin_return_address(0);
+ 		soinfo *si = apkenv_find_containing_library(ret_addr);

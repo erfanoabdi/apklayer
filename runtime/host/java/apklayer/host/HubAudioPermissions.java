@@ -22,7 +22,8 @@ final class HubAudioPermissions {
     private static final String POLICY = "media.audio_policy";
     private static final Map<String, Object> fed = new HashMap<>();  // package -> its parsed package in the last feed (HubPackages parses anew after every install)
 
-    /** Runs for the hub's life: feeds each audioserver as it registers, again after one died and its successor came. */
+    /** Runs for the hub's life: feeds each audioserver as it registers (permissions, then the stream volumes AudioService would set), again after one
+     * died and its successor came. */
     static void watch(HubPackages packages) {
         while (true) {
             IBinder policy = RealBinder.await(POLICY, 30_000);
@@ -31,6 +32,7 @@ final class HubAudioPermissions {
             try { policy.linkToDeath(gone::countDown, 0); }
             catch (android.os.RemoteException dead) { continue; }  // the dead one is still listed: a later wait returns its successor
             feed(packages);
+            System.out.println("[apklayer-hub] stream volumes " + (NativeAudio.initVolumes() ? "set" : "refused"));
             try { gone.await(); } catch (InterruptedException interrupted) { return; }
         }
     }

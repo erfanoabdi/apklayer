@@ -32,10 +32,12 @@ def available():
     return int(out or 0)
 
 
-# the host classes (runtime/) rebuilt when a source is newer than the last build's stamp: merged Java changes are what the groups test
+# the runtime rebuilt when a source is newer than the last build's stamp: the host classes (runtime/) and the native runtime (bridge/: the JNI
+# shim the host classes call, bionic_translation's copies) move together, or merged changes go untested and the two drift apart (a host class
+# calling a shim native the staged shim lacks)
 HOST_CLASSES = ('{ [ -f ~/.config/apklayer/env ] && . ~/.config/apklayer/env; N=${APKLAYER_NATIVE:-$HOME/arm64-native}; '
-                'if [ -n "$(find runtime -newer "$N/aosp/host-classes.stamp" -print -quit 2>/dev/null)" ] || [ ! -f "$N/aosp/host-classes.stamp" ]; then '
-                'tools/build host "$N" >/dev/null 2>&1 && touch "$N/aosp/host-classes.stamp"; fi; }')
+                'if [ ! -f "$N/aosp/host-classes.stamp" ] || [ -n "$(find runtime bridge -newer "$N/aosp/host-classes.stamp" -print -quit 2>/dev/null)" ]; then '
+                'tools/build native "$N" >/dev/null 2>&1 && tools/build host "$N" >/dev/null 2>&1 && touch "$N/aosp/host-classes.stamp"; fi; }')
 
 
 def prepare(groups, slots):

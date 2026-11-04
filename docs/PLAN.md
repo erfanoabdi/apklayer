@@ -1,192 +1,85 @@
 # apklayer: plan
 
-Decisions that hold, the roadmap, and what is open. History: `CHANGELOG.md`, `docs/history/` (the previous long plan is `docs/history/PLAN-2026-10-28-full.md`).
-If a decision changes, change it here in the same commit as the code.
+What is decided, what is done, what comes next and what is open. Dated history: `CHANGELOG.md`; earlier plans: `docs/history/` (the full plan
+before this rewrite is `docs/history/PLAN-2026-11-04-full.md`). If a decision changes, change it here in the same commit as the code.
 
 ## Decisions
 | Topic | Decision |
 |---|---|
-| Framework | Unmodified AOSP `android-all` (the LineageOS tree's: Android 17, SDK 37) on the JVM with Robolectric shadows; never edit android-all, Robolectric, dex2jvm or bionic_translation (thin, listed patches only: `docs/PATCHES.md`). |
-| Native side | Android's own arm64 libraries from a LineageOS 24 `gsi_arm64 userdebug` build run under bionic_translation on kernel binderfs: servicemanager, SurfaceFlinger, HWUI, media, audio. apklayer's HALs (`aosp/`, `bridge/hals/`) back them with GBM/EGL/Vulkan, PipeWire, GStreamer. No CPU-only route, no stand-ins. |
-| Apps | dex2jvm (upstream kksimp, Apache-2.0) converts DEX; one JVM per app; windows go to one per-session `apklayer-shell` (Wayland), one virtual display per app. |
-| Cross-app | The instance hub (real Binder between app JVMs): bound/started services, broadcasts, providers, activities, notifications, pending intents. System services stay Robolectric shadows (no system_server) except where a process boundary exists. |
-| WebView | The Chromium WebView provider APK, as on a device. |
-| CLI and build | C++ tool in `cli/`; Meson for native code; pinned Java deps in `deps/deps.lock`. |
-| Readiness | Properties of the instance (`apklayer.stack.ready`, `apklayer.hub.ready`) waited on with `aprop wait`; no polling, no timers. |
-| License | AGPL-3.0-or-later for everyone plus a paid commercial license (`COMMERCIAL.md`, audit in `docs/THIRD_PARTY.md`). |
-| Hosts | arm64 Linux today. x86_64 needs an x86_64 build of the Android libraries (a second product/out dir: ask first). |
-| Distribution | Flatpak first, deb/rpm/AUR/AppImage later. |
-| Verification | Every feature has a scripted check on the test VM with real input and a screenshot (`tests/vm/`); run only the groups for the code you changed. |
-| Builds in `~/los24` | Incremental only, never clean `out/`; rules in `docs/AOSP-BUILDS.md`. |
+| Framework | Unmodified AOSP `android-all` (the LineageOS tree's: Android 17, SDK 37) on HotSpot with Robolectric shadows. No system_server, no zygote. Upstream code (android-all, Robolectric, dex2jvm, bionic_translation, AOSP) changes only through thin patch files (`patches/`, `docs/PATCHES.md`). |
+| Native side | Android's own arm64 libraries from a LineageOS 24 `gsi_arm64 userdebug` build under bionic_translation on binderfs: servicemanager, SurfaceFlinger, HWUI, media, audio, keystore2. apklayer's HALs (`aosp/hals`, `bridge/hals`) back them with GBM/EGL/Vulkan, PipeWire, GStreamer. No CPU-only route, no stand-ins. |
+| Apps | dex2jvm converts DEX; one JVM per Android process, named as Android names it; per-app class loaders and linker namespaces; windows go to one per-session Wayland shell, one virtual display per app. |
+| Cross-app | The instance hub (real Binder between app JVMs) implements services, broadcasts, providers, activities, notifications, pending intents, accounts, package installs, caller identity. System services stay Robolectric shadows except where a process boundary exists; system_server services are not ported into the hub (assessment in CHANGELOG 2026-11-03). |
+| System apps | The tree's real providers and apps (SettingsProvider, MediaProvider, Contacts, Calendar, Downloads, DocumentsUI, WebView) installed as apklayer apps. |
+| Instances | Each instance has its own binder devices, /data, /storage, app data, properties, shell session and hub (`APKLAYER_INSTANCE`). Tests run one instance per group, several at a time. |
+| Readiness | Instance properties (`apklayer.stack.ready`, `apklayer.hub.ready`) waited on with `aprop wait`; no polling, no timers. |
+| CLI and build | C++ CLI in `cli/`; Meson for native code; `tools/build`, `tools/stage`; pinned Java deps in `deps/deps.lock`, staged tree files in `deps/android-tree-files.lock`. |
+| UI | `apklayer-manager` (`manager/`, Slint C++, Material 3) over the CLI's managing commands; phone and desktop layouts. |
+| License | AGPL-3.0-or-later plus a paid commercial license (`COMMERCIAL.md`, audit in `docs/THIRD_PARTY.md`). |
+| Hosts | arm64 Linux today; x86_64 staged (`docs/X86_64.md`), never run on hardware. Distribution: Flatpak first. |
+| Verification | Every feature has a scripted check with real input and a per-instance SurfaceFlinger screenshot (`tests/run <group>`, `tests/groups.toml`); run only the groups for the code you changed. Compatibility is measured by the corpus (`tests/corpus/`) with current app versions. CTS strictly last. |
+| Builds in `~/los24` | Incremental `gsi_arm64 userdebug` only, never clean `out/` (`CLAUDE.md`, `docs/AOSP-BUILDS.md`). |
 
-## Storage volumes (done 2026-10-28; user's design)
-Each instance has its own `/storage`: `$XDG_DATA_HOME/apklayer/<n>/storage` (n = 0 for the default instance, 1 for a second one; `Instance::storageDir`, passed to every JVM as `-Dapklayer.storage`). The storage service (`ShadowHostStorageManager`, `HostVolumes`) lists three volumes:
-1. **Internal storage**: the emulated primary volume `<storage>/emulated/0` (the instance's `/sdcard`; `Environment.getExternalStorageDirectory()` returns it). DocumentsUI root id `primary`.
-2. **Home**: the Linux user's home (stub volume `linux-home`; `home` is DocumentsUI's own Documents-folder id).
-3. **Linux root**: `/` (stub volume `linux-root`); apklayer reads what its user may read and writes what it may.
-The Android root is known to the runtime already. Open: which volumes ordinary apps (not DocumentsUI) get through the file APIs (today no app path reaches Home or `/` except through DocumentsUI and the grants it hands out); runtime-permission rules for storage (`READ_EXTERNAL_STORAGE`, `MANAGE_EXTERNAL_STORAGE`); the real MediaProvider (today `HostMediaStub` answers "nothing indexed").
-
-## Plan: the real Android keystore (decided 2026-10-28, not started)
-Replace `HostKeyStoreProvider` (software JCE keys; no attestation, no `KeyInfo`, no enforcement of purposes/digests, no auth-bound keys) with Android's own stack on the device libraries:
-1. **HAL services from AOSP, not rewritten**: build the reference software KeyMint (`hardware/interfaces/security/keymint/aidl/default`, backed by `libkeymint_fake_latest` / libkeymaster, already in the tree) and the software Gatekeeper (`hardware/interfaces/gatekeeper/aidl/default`) as vendor modules (`aosp/hals/security/`, thin Android.bp that points at those sources and the tree\'s libraries, like the other HALs). The tree already has `system/bin/keystore2` and `gatekeeperd`. Needs one build-graph regeneration (new modules): ask the user first.
-2. **Stack**: the stack daemon starts `keystore2` (its database under the instance state dir through the path layer: `/data/misc/keystore`), the KeyMint HAL and the Gatekeeper HAL next to the other services; their VINTF fragments go in `bridge/native/android-root/vendor/etc/vintf`; `servicemanager` registers `android.system.keystore2.IKeystoreService/default`.
-3. **Framework side**: drop the host KeyStore provider; Android\'s own `AndroidKeyStoreProvider` (keystore2 client in the framework jar) talks to the real service through the real Binder already used by the other services. Per-app uid: keys are owned by the calling Android uid (the work-source uid fix gives oneway calls an identity; keystore2 reads the kernel uid, which is one Linux uid for all apps, so keystore2 needs the hub\'s uid-of-pid mapping or one keystore2 namespace per app JVM).
-4. **Attestation**: software KeyMint attests with its built-in test key: a real chain of the right structure and software security level, not Google-rooted (apps that need a Google-rooted chain stay out of reach).
-5. **Tests**: `tests/vm/keystore.sh` keeps its AES/HMAC/RSA/EC checks; add `KeyInfo`, purpose enforcement, attestation chain, auth-bound key with the software Gatekeeper.
-Open: how keystore2 learns the caller uid (point 3); gatekeeper password enrolment on a desktop (no lock screen: an empty-credential enrolment).
-
-## Roadmap
+## Phases (code comments cite them: "PLAN P7.1")
 | Phase | State |
 |---|---|
-| P1 CLI, install cache, shell protocol, SDK 36 | done |
-| P2 window and input (resize, wheel, touch, clipboard, IME, lifecycle) | done |
-| P3 compatibility corpus | **empty**: the old harness went with the CPU route; to be rebuilt on this route |
-| P4 native `.so` in apps | done (OTR2 renders) |
-| P5 platform services | WebView, media, audio done; microG, portals, camera, sensors, GNSS, Bluetooth open |
-| P6 apps talking to each other (hub) | done for services, broadcasts, providers, activities, notifications, pending intents; system apps/providers on every instance open |
-| P7 GPU route | GL done; Vulkan implemented, opt-in, blocked on the UTM host stack (`APKLAYER_VULKAN_PRESENT=1`) |
-| P8 ship (Flatpak, x86_64) | not started; needs the x86_64 Android libraries |
-| P9 several phone instances | deferred by the user |
+| P1 CLI, install cache, shell protocol | done |
+| P2 windows and input (resize, wheel, touch, clipboard, IME, lifecycle, fractional scale) | done |
+| P3 compatibility corpus (`tests/corpus/`) | running; rounds with current F-Droid apps |
+| P4 native `.so` in apps (native loader, linker namespaces) | done |
+| P5 platform services (WebView, media, audio, keystore, accounts, installer, location, network, portals) | done for these; camera, sensors, Bluetooth parked |
+| P6 apps talking to each other (hub) | done |
+| P7 GPU route (P7.0 btload, P7.1 our SurfaceFlinger/HWC/gralloc/EGL on dmabuf) | GL done; Vulkan presentation needs a real GPU |
+| P8 ship (Flatpak, x86_64) | x86_64 staged, untested; Flatpak not started |
+| P9 instances (own binder, data, storage, shell, hub) | done for tests and side-by-side apps; whole phones as a product deferred |
 | P10 CTS | strictly last |
-| SystemUI | a yardstick, never a design driver |
 
-## Parked: things to revisit (collected from the old plan and notes; details in `docs/history/`)
-**Broken or failing today**
-- Vulkan presentation: opt-in, Venus aborts on imported virgl dmabufs on the UTM host; needs a real-GPU host or a Venus-allocated swapchain bridge.
-- Camera: not implemented (no camera HAL; apps see no camera).
-- `codec2.sh` passes its decoding checks but its last greps fail (`tool.log` is gone by then); `activities.sh` fails now and then in the `again` phase (the caller JVM exits at once with status 0, nothing printed); WireGuard aborts (SIGABRT) in its native code; OTR2 hits the app-side WebView glue (`android.webkit.WebViewFactoryProvider` not visible to the provider's classes) and takes longer than the corpus patience; Nextcloud: `NativeLoader.setLibraryPath` is not bound when the app's own Conscrypt loads in `Application.onCreate`; Telegram: converted jar lacks `ConnectionsManager` (a class dropped by the converter); WhatsApp: SoLoader cannot find `liblog.so`; drminfo: Firebase init throws.
+## Done (summary; details in CHANGELOG.md)
+- **Runtime**: per-app class loaders and linker namespaces; processes carry their Android process name and run services in their declared process; Build values from the instance's property store before any app class (release identity: user/release-keys); one platform certificate per instance; a spare component host per instance (host start 1.2-1.3 s -> 0.46-0.6 s); hosts finish due work and their loopers' running work before they exit (settings survive `stop`).
+- **Hub**: services, broadcasts, providers, activities, notifications, pending intents, accounts (AccountManager through the hub), package installer (sessions, preapproval, legacy intents, splits/bundles, update checks), caller identity checked against the hub's registry, system settings written at boot, audio permission feed and stream volumes for every audioserver, permission_checker for the native services.
+- **System apps**: real SettingsProvider, MediaProvider, Contacts, Calendar, Downloads, UserDictionary, DocumentsUI, WebView; keystore2 with the software KeyMint (Android's AndroidKeyStore provider).
+- **Graphics and windows**: our SurfaceFlinger route with dmabuf to Wayland at real vsync; EGL with Android's per-context hook tables; GLES1 through gfxstream's translator; hardware bitmaps, TextureView, SurfaceView; windows follow wp_fractional_scale_v1/wp_viewporter, first size fitted to the compositor's bounds; Adwaita-style header bar; splash until the first frame. Vulkan implemented (presentation opt-in).
+- **Media and audio**: Codec2 software codecs (AVC, VP8/9, AAC, MP3, Opus...), MediaCodec into Surfaces, MediaPlayer, AudioTrack/AudioRecord/MediaRecorder through the real AudioFlinger/AudioPolicy to PipeWire; recording works.
+- **Tooling**: `tests/run` (each group its own instance, UTM or Parallels, rebuilds the runtime when sources change), per-instance screenshots, scripted input into one instance's windows (`instance.inject`), corpus runner per instance, all upstream edits as patch files (bionic_translation 0001-0031, robolectric 0001-0015, aosp per project).
+- **Manager**: apps (install, open, stop, clear data, uninstall, permissions with grant/revoke), instances (create, remove), properties, device info; CLI errors shown.
+- **Compatibility** (tests/corpus/results.md, 2026-11-04): over 40 apps draw, among them current F-Droid versions of Feeder, Tusky, Breezy Weather, Auxio, KeePassDX, Tasks.org, Thunderbird, mpv, Organic Maps, OsmAnd, LocalSend and FluffyChat (Flutter), Standard Notes (React Native), Element, VLC, LibreTube, Material Files, Nextcloud, Shelter, GPSTest, Unciv; also Telegram, NewPipe 0.29 (lists and plays), Fennec (pages, audio), OpenTTD (GLES1), Conversations, AnkiDroid, Joplin, Lemuroid, microG.
+- Latest full suite (UTM, 2026-11-04): 40 of 42 groups; vulkan-present fails on both VMs (no Vulkan presentation: needs a real GPU); native-surface's failure (kernel keys beside other instances) is fixed.
 
-**The user asked to revisit**
-- The user's other test apps in `~/TestApps` (some fail: converter, classpath conflicts such as NewPipe's R8-merged `kotlin.math.MathKt`): record app/status/cause and fix by cause.
-- Desktop notifications: popup policy is done; per-app mute, closing a popup when the app cancels, and notification actions are open.
-- OTR2: input and audio in the game are unchecked; `AChoreographer: No JVM provided` (harmless so far). P2: 2x HiDPI output and a real IME were never exercised.
+## Next phase (in order)
+1. **Fennec video** (in progress): YouTube audio plays, the video stays at 0:00 with a spinner although the AVC decoder renders 24 frames/s into the GPU process's SurfaceTexture. Done when fennec-media checks that video time advances and frames reach the GPU process, plus a test app decoding into a SurfaceTexture owned by another process.
+2. **Launching a running app** (in progress): `apklayer run` of an app whose process runs must deliver the intent to that process (onNewIntent / new activity per launchMode, task brought forward) instead of starting a second copy. Done with an `activities` scenario.
+3. **Media leftovers**: audio-aidl's left channel; fennec-media on a fresh profile (Fenix onboarding); m.youtube.com/watch cookie-consent dialog in the test; the HAL output ring (~100-140 ms behind the mixer against a reported 45 ms) measured and sized; native-audio without audio mode stalls after Back.
+4. **Startup**: Robolectric's setUpApplicationState (1.3-1.5 s), the keystore2 probe (0.6-0.9 s), fonts/ICU copied out of jars on every start (0.4-0.7 s: port Robolectric's keyed shared cache), classes preloaded in the spare host (~0.13 s), a second spare for provider bursts, cold starts waiting ~2 s for the hub. Measured with `tests/vm/startup.sh`.
+5. **Correctness gaps**: native mkdir/rename under /storage not mapped (the bionic path hook covers open/stat only); two instances in one data home share app data dirs; an unbind followed by an immediate rebind can get a host that is exiting; the hub accepts apps while it shuts down; the getAuthToken grant dialog (refused today); `ro.build.version.incremental` from the tree (a dev build's `eng.<user>` shows in the fingerprint).
+6. **Installer leftovers**: tests for .xapk/.apkm and for dropping splits of another ABI; an installer updating itself; sessions and preapprovals across a hub restart; SessionCallback.onFinished; package broadcasts to manifest receivers (apps targeting below 26); unsigned updates accepted (shortcut).
+7. **Cleanup**: the `shortcut:` markers (22: `grep -rn "shortcut:"`) fixed or confirmed as limits; files over ~600 lines (`ShadowWindowManagerGlobal`, `Egl.cpp`); dead code and flags.
+8. **Corpus rounds**: more current F-Droid apps (tests/corpus/fdroid.py and the F-Droid index), both VMs, generic fixes only.
 
-**Missing features**
-- System apps and providers on every instance (Settings, Contacts, Calendar, Download, Telephony, UserDictionary, DocumentsUI, MediaProvider) hosted in an instance system JVM.
-- Hub gaps: several bindings per connection, filter-specific rebind, signature/runtime permission grants.
-- Keystore: key pairs exist; attestation, `KeyInfo` and user-authentication-bound keys do not. Hardware domains (`aosp/hals/README.md`): network, battery, USB, location (GeoClue) and the file chooser portal are host-backed Java shims now (`tests/vm/devices.sh`, `portal.sh`); camera, a real GNSS receiver, ModemManager ("no SIM" is the honest answer today), screen capture portal are open. **Not this round** (user, 2026-10-28): Bluetooth (BlueZ bridge), NFC, biometrics, sensors, vibrator/haptics and game controllers. Decided: backlight and thermal are the host's; accounts the Android way.
-- microG; per-app/instance sandbox (bwrap is blocked by Ubuntu's userns restriction); other codecs, higher-bit-depth VP9, hardware decoder dmabuf import.
-- Compatibility corpus (P3): runner and first results exist (`tests/corpus/`); triage and more apps are the next task in `STATUS.md`.
+## Open by area (not in the next phase yet)
+- **Graphics**: a plain RGB8 eglChooseConfig puts a 10-bit XR30 config first and the present path cannot read XR30/AB4H/XB4H back; the ES1 translator reports "Android Emulator OpenGL ES Translator" as renderer; ES1 on x86_64 needs a reserved TLS slot; the host-ES1 path is untested; OpenTTD's SDL logs `Invalid texture` endlessly after a focus loss when desktop audio is unreachable.
+- **Windows**: xdg-decoration on non-GNOME desktops; a real-session scale switch check; landscape windows are not grown to the screen.
+- **Storage**: which volumes ordinary apps (not DocumentsUI) reach through the file APIs; files carry no SELinux label (getfilecon ENODATA).
+- **Settings**: a hanging GeoClue call can delay an app's first provider request up to 10 s; the IME choice applies at the next instance start and no IME binds to input yet; DEVICE_PROVISIONED/USER_SETUP_COMPLETE are 1 everywhere.
+- **Manager**: apps installed before 2026-11-04 need a reinstall before their permissions show; a grant reaches the app's own check at its next start; signature grants approximated from the build's allow-lists; ui.sh has no permission step; binder devices of a removed instance stay until reboot.
+- **Notifications**: per-app mute, closing a popup when the app cancels, notification actions.
+- **Keystore**: attestation chain checks, KeyInfo, auth-bound keys with a software Gatekeeper; all app JVMs share one Linux uid (keystore2 namespaces follow the carried uid).
+- **dex2jvm**: Open Sudoku's `CREATE TABLE` repeats a column (suspected register reuse, unconfirmed); a per-class conversion failure blocks the install; JdkScan leads (`DatagramSocket.getFileDescriptor$`, SharedMemory's `DirectByteBuffer`, `Cipher/Mac/Signature.getCurrentSpi`, `sun.misc.Cleaner`).
+- **Apps**: Go runtime apps (WireGuard, Rethink DNS: cgo TLS under the bionic TLS emulation); Godot 4 needs Vulkan presentation; Meet's Google sign-in through microG needs a human check.
 
-**Before a public release**
-- COMMERCIAL.md contact and terms, a CLA and ownership of the agent-written commits, NOTICE/legal files for everything shipped, the Android SDK `android.jar` terms if bundled.
-- x86_64 build of the Android libraries (needs approval for a second out dir), Flatpak, replacing the ninja-replay build scripts, per-run test temp dirs.
-- Files over 600 lines: `ShadowWindowManagerGlobal` (patched upstream overlay), `Egl.cpp` (needs a build-graph change).
-- Robolectric's instrumentation of `android.app.AuthenticationRequiredException` crashes in ASM (`Frame.merge` NegativeArraySizeException) when DocumentsUI first loads it (after a directory load that raised any exception). Not fixed: avoid the exception; find the instrumentation failure when it matters.
-- Per-app class loaders (2026-11-03): an app class placed in a framework package to reach package-private members gets IllegalAccessError now (another runtime package); none of the tested apps does it. Meet draws its welcome screen ("Failed to load accounts" until the microG sign-in works); its earlier exits were shells killed by other instances' stop (fixed).
+## Needs real hardware or a person
+- **x86_64 PC**: the staged x86_64 route (`tools/stage x86_64`, `docs/X86_64.md`) has never run.
+- **A real GPU**: Vulkan presentation (vulkan-present, Godot); Fennec page text (virgl drops ints set in shader branches on UTM, `tests/vm/gles-int-branch.c`; report to virglrenderer).
+- **A person**: the portal file chooser and pkexec prompt in the manager; the Google sign-in in Meet/microG; playback quality by ear and eye.
 
+## Before a public release
+Flatpak; per-app sandbox with kernel-attested uids (a privileged launcher; bwrap is blocked by Ubuntu's userns restriction); COMMERCIAL.md terms and contact, a CLA and ownership of agent-written commits, NOTICE files for everything shipped.
 
-## Open after the compatibility pass of 2026-10-28 (details per app in `tests/corpus/results.md`)
-- **Black or half-drawn windows** (Unciv, TIC-80, Lemuroid, Logseq): the content rectangle is smaller than the window (Logseq: 460x816 inside a 720-wide frame) or never drawn; Klooni, Mindustry and Shattered Pixel Dungeon (also GLSurfaceView) draw. Look at the surface/window size handshake (`hostResize`, orientation requests) before anything app-specific.
-- **Open Sudoku**: its `CREATE TABLE puzzles` string comes out with `rating_level` twice. The statement is built by `StringBuilder.append(Object)` of column enum values held in locals; suspected miscompiled register reuse in the vendored dex2jvm converter (not confirmed).
-- **Go runtime apps** (WireGuard, Rethink DNS): cgo `inittls` cannot find the pthread key under the bionic TLS emulation.
-- **Joplin**: React Native QuickCrypto bundles OpenSSL `libssl`/`libcrypto`, which clash with the device's BoringSSL `libcrypto.so` in the single linker namespace.
-- **Fennec**: crash in `libmozglue` `GeckoLoader.putenv` (mozglue replaces libc symbols).
-- **Godot 4 (Pomodorot)**: needs Vulkan presentation (`VK_KHR_android_surface`), blocked on the UTM host stack.
-- **OpenTTD**: after the libc fortify fix, "Couldn't find any suitable video driver" from its SDL 1.2 Android port.
-- **AnkiDroid**: crash after launch hidden by ACRA; **Puzzles**: anti-piracy redirect; **NewPipe**: empty Trending; **Sensors Multitool**: relaunches its MainActivity.
-- Keystore, Google accounts: still waiting for the real keystore2 + software KeyMint plan above.
+## Parked (owner's decision)
+- Camera over PipeWire: last priority.
+- Not now: Bluetooth (BlueZ), NFC, biometrics, sensors, vibrator/haptics, game controllers, ModemManager ("no SIM" is the honest answer), screen capture portal. Backlight and thermal are the host's.
+- Several phone instances as a product (P9) and SystemUI: yardsticks, not goals. CTS strictly last.
 
-- **Fennec** (2026-10-28): past mozglue's putenv interposer (dlsym RTLD_NEXT fallback in the translated linker). GeckoThread runs, loads sqlite and nss, then "Could not find profile folder" and the runtime shuts down; no native message reaches the log. Next: Gecko's stderr/android log, its child-process services through the hub, the profile directory.
-- **Joplin**: with the bundled OpenSSL libraries renamed (`the removed rename script (replaced by the per-app linker namespace, bt patch 0026)`, not yet run by `install`) the JS bundle runs, then the process aborts: `libc++abi: Fatal error: glibc detected an invalid stdio handle` (a C++ terminate message written through a bionic FILE).
-- **Conversations**: aborts at start; `NativeCrypto: could not find field descriptor` (a Conscrypt JNI lookup of `FileDescriptor.descriptor`, which is `fd` in the JDK).
-
-## Adwaita window decoration (decision)
-- libadwaita and GTK4 are not on the VM and a GTK window cannot take our dmabuf subsurface path without reworking it, so option (a): the shell draws the header bar itself.
-- bridge/shell/decor_draw.c draws it with cairo (new dependency libcairo2-dev): 46 px bar, Adwaita colours, round buttons (Back left; minimize, maximize, close right), bold centred title, rounded top corners.
-- Light/dark is read from gsettings color-scheme when a window is created (no live switch yet; the portal Settings would give that).
-- Hit testing, drag, double-click maximize and content-relative input are unchanged (DECOR_H 32 -> 46).
-- Title is the window title, or the package name when the title is the internal apklayer:pid:instance:pkg one.
-## Splash screen (shell)
-Until an app presents its first frame, `bridge/shell/splash.c` fills the window with the app logo (installed `icon.png`) on a colour derived from it. Tested with `tests/vm/splash.py` (stand-in client, private XDG_RUNTIME_DIR; a second full Android stack cannot run next to another because of the single /dev/binder). Not done: fade-in/out, re-draw on resize before the first frame, a real-app run (needs the default stack free).
-
-
-## Task order (2026-10-29, set by the user before going offline)
-1. **Firefox (Fennec) must work, whatever it takes.** State (2026-10-29): starts, shows onboarding and home page, loads pages over the network (a local http server sees the GET), content processes (GeckoChildProcessServices tabN) run through the hub and report back (page security state in the toolbar); the **page area stays white**: the parent's WebRender never gets a transaction (Renderer thread: Resume and one UpdateAndRender(0) only, WR worker threads idle), whichever compositor (EGL, SW-WR + GL, plain SW-WR). Fixed on the way: mozglue putenv (RTLD_NEXT), MOZ_APP_DATA, Gecko's SIGSEGV handler (bt step 13), own-package services in other processes (hub peers per child, `HubServices.ownProcess`), component hosts exit with their last service, rebinding a connection, `updateServiceGroup`, process name + skipped `Application.onCreate` in secondary processes (`HostProcessName`), browser role (`HostRoles`), `kill` from a service host is EPERM (bt step 14: a Gecko child SIGKILLed the app), readdir hides `.` and `..` (bt step 16: Classifier::ScanStoreDir recursed into `.` forever), `eglSwapBuffersWithDamageEXT` is ours (libapklayer_egl), profile `user.js` without a GPU process (a Surface sent to another JVM gives `ANativeWindow_fromSurface` = null, then MOZ_CRASH Fallback configurations exhausted). Tools: a Fennec VIEW probe (removed) (VIEW intent through `APKLAYER_INTENT_FILE`, local web server), a Fennec navigation probe (removed), `tools/debug/egl-trace.bt` (uprobes on host libEGL and libandroid), Gecko logging through profile prefs (`logging.config.LOG_FILE`, `logging.config.sync`, `logging.<module>`: MOZ_LOG does not reach Gecko; modules that exist: RenderThread, nsRefreshDriver, DocLoader, PresShell, nsHttp, ipc, WebRender, Widget, GeckoViewSupport). Next: why the parent's WebRenderBridge gets no display list (chrome document paint of geckoview.xhtml, nsWindow size/visibility, compositor session), and whether a cross-process Surface can work (Surface parcel through the hub) so the GPU process could be used.
-2. **The other broken apps**: Joplin (C++ terminate behind "invalid stdio handle"), Conversations (Conscrypt `FileDescriptor.descriptor`), Unciv / Lemuroid / Rocks 'n' Diamonds (black window; Unciv's GL thread idles), OpenTTD (SDL 1.2 video driver), Puzzles (anti-piracy redirect), Device Info HW, Sensors Multitool (relaunch loop). Ignored by the user: NewPipe (just needs waiting), Vulkan (Pomodorot), Rethink DNS, Open Sudoku (app bug).
-3. **Real Android keystore**: keystore2 plus the AOSP software KeyMint and Gatekeeper HALs from `hardware/interfaces` (security/keymint/aidl/default, gatekeeper/aidl/default), as in the plan above. The user built Robolectric and the whole GSI for **x86_64** in OrbStack and says we may take what we need from it and build our own pieces; an EGL build there failed because its assembly is arm-only (the EGL module must stay arm64).
-4. **Test the Google apps again** (microG sign-in, Meet accounts, Device Attestation) once the keystore exists.
-5. **Proper tests of the preinstalled system apps and services**: `tests/apps/hello-system` (one APK, scenario per service: contacts, calendar, downloads, settings, media, documents, userdict, telephony, notifications, alarms, jobs) and its runner `tests/vm/system-apps.sh [scenario...]` (2026-10-29: 10 of 11 pass). What it found and fixed: other apps' activities and services were missing from an app's PackageManager (hub package info lacked the direct-boot match flags; filters were not registered) and carried uid -1 (AppOps checkPackage, DownloadProvider's userOwnsPackage), `getPackagesForUid`, `ContentResolver.getType` threw instead of answering null (calendar PROVIDER_CHANGED), jobs and alarms never ran (`HostJobs`, RTC alarms in the Robolectric shadow overlay), DownloadManager only recorded requests, the download thread needed a network in the job parameters and the JDK's connections, external files dirs were temp directories, `Application.getProcessName()` was null. **Open: media.** MediaProvider (installed from its APEX by `tools/stage sysapps`) now starts (Robolectric's fake media provider off for its host, DRM, statsd and xattr shadows, `/data/media/0` link, getCallingUid recursion) and takes inserts, but opening the new item fails ("No item at content://media/external/file/N", "Didn't find any volume for getVolume(/storage/emulated/0)": its volume cache is built before HostStorage adds the primary volume, or from a path that differs from the instance's real one). The hub test groups were rerun after the package-info and provider changes (2026-10-29): providers, broadcasts, pendingintents and activities all pass.
-6. Finish the shell work: first-run check of the merged header bar, window size and splash with real apps; Alt-Tab/overview names; light/dark live switching; `rename-bundled-system-libs.py` into `install`; the VM-only files (android-system-stubs symlinks, libc_bio/libdl_bio deployments) into the build scripts.
-
-### Additions from the user (2026-10-29, final)
-- **x86_64 readiness**: take Robolectric (android-all jars) and the native libraries from the user's OrbStack tree `~/los24/` (x86_64 GSI and Robolectric builds) and make the x86_64 route as ready as the arm64 one (scripts, staging dir layout, bionic_translation for x86_64, the EGL/graphics HAL modules built for x86_64 from the arm64 sources minus arm assembly), so the user can try it on a real x86 PC later. Nothing can be run on x86 hardware here; verify by building, by file/ELF checks and by the staging scripts.
-- **Leftover "check header bar, window size and splash with real apps"**: counted as done.
-- **System apps and services**: instead of only scripts, write small test APPS (under tests/apps/) that use the providers and services (contacts, calendar, downloads, settings, media, documents, user dictionary, telephony, notifications, alarms, jobs) and a runner that installs and runs them.
-- Order otherwise unchanged: Fennec first, other apps, keystore, Google apps, system-service test apps, x86_64.
-
-### Fennec state (2026-10-29, later): pages draw, page text does not
-- Fixed generically: the sandbox clock now follows CLOCK_MONOTONIC (`HostClock`; it ran at 4 s while native code read 107000 s); the launcher no longer sets `layout.frame_rate`. Content, gradients, shadows, images, boxes and the toolbar draw (probe pages (removed), `PAGE=c.html a Fennec VIEW probe (removed)`).
-- Open: **text fills in page content are missing** (stroked text draws). about:support: Compositing = WebRender on virgl, GLES 3.2. Text appears with `gfx.text.subpixel-position.force-disabled=true`, with `gfx.text.disable-aa=true`, or with software WebRender; desktop Firefox on the same VM and GPU draws it even with subpixel positioning forced. Not the cause: dual-source blending, PBO/batched uploads, optimized shaders, subpixel AA, WR multithreading, GLES version override. Next: why subpixel-positioned glyphs vanish in Android Gecko's GL WebRender (glyph keys / atlas lookup), not a pref.
-- Exit criterion: remove the `lib/libxul.so` block of `cli/run.cpp` (profiles.ini, user.js with the GPU process off, prefs.js stripping) by fixing the causes (a Surface sent to another JVM must stay a window; Gecko makes its own profile).
-
-### Keystore (2026-10-29): native services run, the Java side does not reach them yet
-- Done: `libapklayer_keymint` (software KeyMint) and `libapklayer_keystore2` start in the stack and register (needed: bt step 18 for bionic's regcomp ABI, `ro.vendor.build.security_patch`, keystore2's argc/argv and database directory, a framework vintf declaration for `android.system.keystore2` and the system `manifest.xml` in the Android root). `tests/vm/keystore.sh` phases pass with the software provider.
-- Open: the sandbox's `ServiceManager` is Robolectric's table (`BinderInternal.getContextObject` gives a proxy with no remote), so `AndroidKeyStoreProvider` cannot see keystore2. Needs a JNI hook in the runtime shim: `AServiceManager_getService` + `AIBinder_toJavaBinder` behind the shadowed `ServiceManager` for services the device's service manager declares. Then the caller-uid question (all app JVMs share one Linux uid).
-- A stack service that exits ends the whole stack and its tmp directory (`runStackDaemon`): a crashing optional service takes the apps down; decide whether optional services (keymint, keystore2) should be restarted instead.
-- Keystore namespaces: keystore2 keys apps by the kernel's calling uid, and every app JVM runs as the one Linux uid, so all apps would share a key namespace. The sender's app uid already travels as the work source of each transaction (`ShadowHostRealBinder.getCallingUid`); keystore2 reads the kernel's, so the mapping belongs in the patched libbinder (`IPCThreadState::getCallingUid` from the work source when the caller is an app JVM).
-
-- Keystore (later, 2026-10-29): DONE for the Java side. Apps get Android's own AndroidKeyStore provider over keystore2 and the software KeyMint (`HostKeyStore`, `RealBinder.await`, patched libbinder without kernel security contexts, bt steps 18-19, rebuilt btload/preload); `tests/vm/keystore.sh` phases pass with `AndroidKeyStore: keystore2`. Left: the shared-uid key namespace (above); the hub launch retries when the previous hub is going down (`HubStartup`).
-
-- Document pickers (2026-10-29): ACTION_OPEN_DOCUMENT/_TREE/GET_CONTENT/CREATE_DOCUMENT go to the installed DocumentsUI through the hub (`AppHost`), the desktop's file chooser portal answers only when no installed app does; the launched activity gets the requester as its calling package (`HubActivityClient.CALLER`). Logseq: choose a folder -> DocumentsUI -> Allow -> its journal opens.
-
-### Other apps re-checked (2026-10-29, after the clock/vsync fix)
-- Fixed by it: Joplin (notes list), Lemuroid (splash), Rocks 'n' Diamonds (menu, SDL), microG add account (sign-in page; the crash was my provider-first detection, fixed).
-- Unciv: libgdx in RENDERMODE_WHEN_DIRTY: 5 frames (clear only), then the GLThread waits forever (`mRequestRender=false`, surface valid, 804x452); the log stops after "Loaded 2 rulesets". Nothing asks for a redraw: find what Unciv's loading waits on (diag: `-Dapklayer.geckodiag=true` now prints the GLThread's fields).
-- OpenTTD: pelya's libSDL, `SDL: Couldn't allocate a window to draw on` (Rocks 'n' Diamonds uses the same SDL and works): check the requested video mode.
-- Sensors Multitool: opens on an empty "Battery" screen (no list); relaunch loop not reproduced.
-- Fennec: page text still missing (above).
-
-## Systematic compatibility (2026-11-03)
-- Fix order comes from `tests/corpus/fakes.md` (fakes ranked by how many apps hit them), not from the app in front of us. Robolectric-shadowed managers (window, display) appear in every app: read them apart from binder-method hits.
-- JdkScan leads still open, framework code that can run: `DatagramSocket.getFileDescriptor$` (VpnService.protect), `DirectByteBuffer.<init>(IJFileDescriptor,Runnable,Z)` (SharedMemory), `Cipher/Mac/Signature/KeyAgreement.getCurrentSpi` (keystore), `sun.misc.Cleaner` checkcasts. Out of reach on HotSpot: ART internals (`Thread.nativePeer`, `Method.dexMethodIndex`, `Class.accessFlags`).
-- Done (2026-11-04): Build in place before any app class (static initialisers); a release identity (user/release-keys, derived display id/flavor/description); one platform certificate per instance. Open: `ro.build.version.incremental` comes from the tree (a dev build's `eng.<user>` shows in the fingerprint); WebView provider creation sees Build.TYPE userdebug (its switch file).
-- system_server services standalone in the hub: not worth it (AlarmManagerService assessment in CHANGELOG 2026-11-03); keep the hub's own implementations, bounded by CTS-derived scenarios.
-- Open from this round: the late-install path (install while a component host runs) has no test; a per-class dex2jvm failure now blocks the install.
-
-## Startup (2026-11-03, `tests/vm/startup.sh`)
-- Cold start: the hub JVM now boots alongside the app (UiBench cold 5.9 s -> 3.7 s, Telegram 6.9 s -> 4.5 s); warm starts unchanged (UiBench ~3.4 s, Telegram ~4.2 s). Stack and shell already stayed up between apps.
-- Warm breakdown (UiBench): JVM to main 45 ms, sandbox 150 ms, Robolectric setUpApplicationState 1.3-1.5 s, keystore2 probe + lazy Application 0.6 s, runtime and hub attach 0.2 s, first activity 0.5-0.65 s, first frame 0.16 s.
-- Next: (1) the overlay DefaultNativeRuntimeLoader copies fonts/ICU out of jars on every start (~0.4-0.7 s): Robolectric's `sharedAssetDirectory` has a keyed shared cache to port; its `maybeCopyFonts` also overrides the CLI's `-Drobolectric.nativeruntime.fontdir`. (2) the keystore2 probe (0.6-0.9 s). (3) CDS: 0.5 s possible, but JDK 21 dynamic archives of sandbox-loader classes crashed Telegram; a static archive of built-in-loader classes only is untested. Risk: a hub slower than HubStartup's 5 s wait means relaunches.
-- Parallel instances: every stop used to `pkill -x apklayer-shell` (all sessions); now only this session's shell (SO_PEERCRED on its socket).
-
-## After the 2026-11-03 round (graphics, system providers)
-- Done: inactive windows stay resumed (they only lose window focus, as Android multi-window); the vdisplay installs its configure callback after the display exists (first window size takes); shell readiness is a flock plus a ready pipe (no `shell unavailable` race); hardware bitmaps work (the shadows that turned them off are gone; tests/apps/hello-hwbitmap); TextureView draws (black no longer reproduces; earlier cause not found). The real MediaProvider and SettingsProvider are the default; /data and /storage are per instance in the path layer; the hub writes boot settings as the system.
-- Open: Unciv draws nothing into its own GL surface (its frames are 0,0,0,0); (fixed later the same day: Lemuroid's WorkManager deadlock, startService from another thread returns before onCreate; TIC-80's crash was a stale build); 
-- Open (settings): the hub as system settings writer for LOCATION_MODE and ENABLED_INPUT_METHODS (GeoClue location regressed: network provider off; no Android IME can be enabled); two instances in one data home share app data dirs; the bionic path hook maps only open/stat (native mkdir/rename under /storage not mapped).
-
-## Fennec (2026-11-03, end of round)
-- Exit criterion met: Gecko makes its own profile (bionic_translation patch 0028: `getenv("HOME")` returned NULL, so "Could not find profile folder"), the GPU process gets a window (robolectric patch 0014: real Surface parcel natives), Application.onCreate runs in every process (the process name is set before the Application is attached); the `lib/libxul.so` block in cli/run.cpp, APKLAYER_GECKO_PREFS, the MOZ_* env and HostGeckoDiag are gone. Check: `tests/run fennec` (optional): page fetched, GPU process has a window, page drew.
-- Page text fills: a virgl bug on the UTM host, not apklayer's: ints set inside if/else branches of a shader come back as NaN bits (WebRender's packed subpixel glyphs), reproduced with plain host EGL/GLES in `tests/vm/gles-int-branch.c`; llvmpipe draws the same trace. To report against virglrenderer; fine on real GPUs. Needs a human check on a PC: text in Fennec. Open: navigation beyond the VIEW intent; the check needs an onboarded profile.
-
-## Identity and GL (2026-11-03, late)
-- Caller identity is the carried uid checked against the hub's registry; kernel-attested identity needs per-app Linux uids (a privileged launcher; the desktop sockets in /run/user are 0700), part of the per-app sandbox item. Open: the getAuthToken grant dialog (refused today, stricter than Android); a test for the pre-O GET_ACCOUNTS rule; an unbind followed by an immediate rebind can get the binder of a component host that is exiting.
-- GL: OpenTTD end to end on the ES1 translator needs the built libapklayer_egl installed and a screenshot on both VMs. A plain RGB8 eglChooseConfig puts a 10-bit XR30 config first on both VMs and the present path cannot read XR30/AB4H/XB4H back: a native app taking the first config would show black (cause open). The translator reports "Android Emulator OpenGL ES Translator" as its renderer (emulator sniffers see it). ES1 on x86_64 needs a reserved TLS slot first. On Parallels a landscape request gave an 870x223 window (check the fit logic).
-
-## Open after the 2026-11-04 night round
-- The host-ES1 path (the host driver's own ES 1 instead of the translator) is untested (no Mesa with ES1 on the VMs). OpenTTD's SDL prints `Invalid texture` endlessly after a focus loss when desktop audio is unreachable (cause unknown).
-- Settings: the default-instance app-data migration ran on no real data yet; a hanging GeoClue call can delay an app's first provider request up to 10 s; the IME choice applies at the next instance start; no IME binding to input yet; DEVICE_PROVISIONED/USER_SETUP_COMPLETE are 1 everywhere.
-- Window shape on Parallels: NewPipe opened as a 329x1280 strip, OpenTTD's landscape request as 870x223 (windowing round in progress).
-- NewPipe 0.20.1 (2021) cannot parse today's YouTube: the corpus needs current app versions (F-Droid index + tests/corpus/fdroid.py); NewPipe 0.28 lists videos.
-
-## Windows (2026-11-04)
-- The bar is 46 logical px, drawn at the window's scale and shown through wp_viewporter. Windows follow wp_fractional_scale_v1 (the app gets the logical size and the scale; the vdisplay renders size x scale px). The first size is the display's shape fitted to 85% of xdg_toplevel.configure_bounds; maximized/fullscreen/tiled take the compositor's size; all outputs are tracked. Checked by `tests/run window-geometry`; other scales with tools/debug/nested-gnome.py. Open: xdg-decoration on non-GNOME desktops; a real-session scale switch check; landscape windows are not grown to the screen.
-
-## Manager (2026-11-04)
-- Done: per-app permissions (runtime ones granted/revoked per instance: `apklayer permissions`, the instance's permissions-revoked file read by HostSystemConfig, HubPackages and HostPortals), CLI errors in a snackbar, Slint's library installed with the binary ($ORIGIN rpath), x86_64 hashes, removing an instance leaves other instances' windows, phone and desktop layouts checked.
-- Open: apps installed before 2026-11-04 need a reinstall before their permissions show; a grant reaches the app's own check only at its next start; signature grants are approximated from the build's allow-list files; the install rpath assumes bindir `bin`; ui.sh has no permission step; binder devices of a removed instance stay until reboot. Needs a human check: the portal file chooser and the pkexec prompt.
-- Open (cli): `apklayer run` of an app that already runs starts a second copy (two Geckos on one profile shut each other down) instead of delivering the intent to the running process as Android does.
-
-## Media (2026-11-04)
-- Done: the audio permission feed follows audioserver restarts, hub installs and apps that register later; the hub publishes permission_checker (recording was denied after a 20 s wait); the audio-track probe plays out its tail (47760/47760).
-- Open: the HAL output ring is rate/10 (4800 frames) plus the PipeWire quantum, ~100-140 ms behind the mixer against a reported 45 ms route latency (a smaller ring gave gaps before: needs its own measured pass); the feed for a newly registering app runs synchronously in registration (a hung audioserver delays that app); native-audio without audio mode stalls after Back (not investigated).
-- Open: m.youtube.com/watch pages show a cookie-consent dialog (the test uses YouTube's embedded player in a local page); fennec-media needs a profile past Fenix's onboarding on a fresh install (being fixed).
-
-## Package installer (2026-11-04)
-- Done: sessions, preapproval, legacy intents, splits/bundles, update checks. Open: .xapk/.apkm and dropping splits of another ABI have no test; an installer updating itself; preapprovals and sessions do not survive a hub or app restart; SessionCallback.onFinished is never posted; package broadcasts skip manifest receivers (apps targeting below 26); the confirmation is a fixed 440x200 at 100% scale; unsigned updates are accepted (shortcut); legacy intents get no startActivityForResult result; the `view` group lacks `needs` for com.android.externalstorage.
-
-## Corpus with current apps (2026-11-04)
-- 18 current F-Droid apps added and 5 old entries refreshed (tests/corpus/results.md); all draw except FluffyChat (Flutter Impeller picks Vulkan: no Vulkan presentation on the VMs; generic option: do not advertise Vulkan surfaces when the host cannot present) and Material Files (list stays "Loading" on UTM, "6 folders" without rows on Parallels: not investigated). Standard Notes needs the WebView app in the data home. VLC sends stdout to its own log, so the runner's "started" check reports a false launch FAIL.
-
-## Component hosts (2026-11-04)
-- The hub keeps one spare component host per instance (HubSpare/ComponentSpare: JVM, sandbox, native runtime loaded): start -> registered 1.2-1.3 s -> 0.46-0.6 s; DocumentsUI's first roots load no longer times out. Cost ~330 MB PSS per running instance (tests/run budgets 1300 MB per instance). Next: preload classes in the spare (~-130 ms, needs a SandboxClassLoader patch recording defined classes); a second spare for provider bursts; the first host after hub start still pays the spare's preparation (~0.7 s); WebView/Fennec hosts without the APK on the sandbox classpath are untested. sysprov's settings scenario writes an unknown System key as a non-privileged app (SettingsProvider refuses it rightly: fix the test).
+## Design notes that still hold
+- **Storage volumes** (user's design, 2026-10-28): each instance has its own `/storage` (`$XDG_DATA_HOME/apklayer/<n>/storage`); volumes Internal storage (`<storage>/emulated/0`, `/sdcard`), Home (`linux-home`) and Linux root (`linux-root`).
+- **Window decoration**: the shell draws an Adwaita-style header bar itself (`bridge/shell/decor_draw.c`, cairo): 46 logical px, Back on the left, minimize/maximize/close on the right; light/dark from gsettings when a window opens.
+- **Splash**: until an app presents its first frame, `bridge/shell/splash.c` shows its icon on a colour taken from it.
