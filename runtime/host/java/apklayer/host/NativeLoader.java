@@ -45,12 +45,18 @@ public final class NativeLoader {
 
     private static native void skipNativeExitHandlers();
     private static native void setProcessName(String name);
+    private static native void mapOwnData(String pkg, String root);
     /** An app spare's launch (spare_target.c): the message on fd, whose stdout and stderr replace this process's; null when the holder is gone. */
     static native String receiveTarget(int fd);
 
     /** The process's command line and name as Android's Process.setArgV0 sets them (native code reads /proc/self/cmdline). */
     static void nameProcess(String name) {
         try { setProcessName(name); } catch (LinkageError noShim) { /* no native runtime in this process */ }
+    }
+
+    /** The app's own /data/data/<pkg>, /data/user/0/<pkg> (root/app) and /data/user_de/0/<pkg> (root/device) for Java's and native file calls (bridge/native/paths.c). */
+    static void mapOwnDataDirs(String pkg, String root) {
+        try { mapOwnData(pkg, root); } catch (LinkageError noShim) { /* no native runtime in this process */ }
     }
 
     /** The process is about to exit: it ends as Android ends an app process (killed), without the native libraries' static destructors (native_loader.c). */

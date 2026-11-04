@@ -24,6 +24,8 @@ static int debug_env;
 
 static const char *copy_env(const char *name, const char *fallback) { const char *v = getenv(name); return v ? strdup(v) : fallback; }
 
+static void own_data_from_env(void);
+
 __attribute__((constructor)) static void read_env(void)
 {
     const char *e = getenv("APKLAYER_ANDROID_ROOT"), *n = getenv("APKLAYER_NATIVE");
@@ -34,6 +36,7 @@ __attribute__((constructor)) static void read_env(void)
     storage_env = copy_env("APKLAYER_STORAGE", "");
     data_env = copy_env("APKLAYER_DATA", "");
     debug_env = getenv("APKLAYER_PATHS_DEBUG") != NULL;
+    own_data_from_env();
 }
 
 static const char *root(void) { return root_buf; }
@@ -85,12 +88,62 @@ static bool data_path(char **path)
     return true;
 }
 
+/* The app's own data directories under Android's spellings (/data/data/<pkg>, /data/user/0/<pkg>, /data/user_de/0/<pkg>): apps and their native code
+ * hard-code them. Set once the process knows its package (apklayer_map_own_data: AppEnvironment through the shim; a spare learns it late), and
+ * inherited by the programs it runs through APKLAYER_OWN_DATA=<pkg>:<root> (exec_preload.c adds it to every exec). <root> is the app's data tree
+ * (cli/layout appData): app/ is its data dir, device/ its device-protected one. Other packages' stay in the instance's /data (data_path), where
+ * they do not exist. */
+struct own_data { char *env, *pkg, *dir, *device; };
+static struct own_data *own_data;
+
+void apklayer_map_own_data(const char *pkg, const char *root)
+{
+    struct own_data *o = calloc(1, sizeof *o);
+    if (!o || strchr(pkg, ':') || asprintf(&o->env, "APKLAYER_OWN_DATA=%s:%s", pkg, root) < 0 || !(o->pkg = strdup(pkg))
+        || asprintf(&o->dir, "%s/app", root) < 0 || asprintf(&o->device, "%s/device", root) < 0) return;
+    __atomic_store_n(&own_data, o, __ATOMIC_RELEASE);  /* every thread's file calls read it: published whole, an earlier one stays allocated (a reader may hold it) */
+}
+
+/* "APKLAYER_OWN_DATA=<pkg>:<root>" for a child's environment, or NULL */
+const char *apklayer_own_data_env(void)
+{
+    const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
+    return o ? o->env : NULL;
+}
+
+static void own_data_from_env(void)
+{
+    char *v = getenv("APKLAYER_OWN_DATA"), *colon = v ? strchr(v, ':') : NULL;
+    if (!colon || colon == v || !colon[1]) return;
+    char *pkg = strndup(v, (size_t)(colon - v));
+    if (pkg) apklayer_map_own_data(pkg, colon + 1);
+    free(pkg);
+}
+
+static bool own_data_path(char **path)
+{
+    static const char *const spellings[] = { "/data/data/", "/data/user/0/", "/data/user_de/0/" };
+    const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
+    if (!o) return false;
+    for (int i = 0; i < 3; i++) {
+        size_t n = strlen(spellings[i]), k = strlen(o->pkg);
+        if (strncmp(*path, spellings[i], n)) continue;
+        const char *rest = *path + n;
+        if (strncmp(rest, o->pkg, k) || (rest[k] && rest[k] != '/')) return false;
+        char *mapped;
+        if (asprintf(&mapped, "%s%s", i == 2 ? o->device : o->dir, rest + k) < 0) return false;
+        *path = mapped;
+        return true;
+    }
+    return false;
+}
+
 static bool from_root(const char *r, char **path);
 
 bool apklayer_apply_path_overrides(char **path)
 {
     if (debug_env) fprintf(stderr, "[paths] %s (root %s)\n", *path, root());
-    if (binder_device(path) || storage_path(path) || data_path(path)) return true;
+    if (binder_device(path) || storage_path(path) || own_data_path(path) || data_path(path)) return true;
     /* what one instance's stack stages for itself (the vintf fragments of the HALs it runs, cli/stack.cpp) comes before the shared root */
     const char *own = own_env;
     return (own && own[0] && from_root(own, path)) || from_root(root(), path);

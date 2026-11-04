@@ -173,6 +173,7 @@ final class AppEnvironment {
                 if (Files.exists(dir, LinkOption.NOFOLLOW_LINKS)) continue;
                 Files.createSymbolicLink(dir, Files.createDirectories(Path.of(root, link[1])));
             }
+            NativeLoader.mapOwnDataDirs(pkg, root);  // the app's hard-coded /data/data/<pkg> ... (the links above created app/ and device/)
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

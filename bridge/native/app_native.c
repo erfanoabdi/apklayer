@@ -15,6 +15,16 @@ extern jint Java_apklayer_host_NativeLoader_registerNative(JNIEnv *, jclass, jcl
 extern void Java_apklayer_host_NativeLoader_skipNativeExitHandlers(JNIEnv *, jclass);
 extern void Java_apklayer_host_NativeLoader_setProcessName(JNIEnv *, jclass, jstring);
 extern jstring Java_apklayer_host_NativeLoader_receiveTarget(JNIEnv *, jclass, jint);
+extern void apklayer_map_own_data(const char *pkg, const char *root);  /* paths.c (the preload's copy comes first in lookup) */
+
+static void map_own_data(JNIEnv *env, jclass cls, jstring pkg, jstring root)
+{
+    (void)cls;
+    const char *p = (*env)->GetStringUTFChars(env, pkg, NULL), *r = (*env)->GetStringUTFChars(env, root, NULL);
+    if (p && r) apklayer_map_own_data(p, r);
+    if (p) (*env)->ReleaseStringUTFChars(env, pkg, p);
+    if (r) (*env)->ReleaseStringUTFChars(env, root, r);
+}
 
 int apklayer_register_nativeloader(JNIEnv *env, jclass loader)
 {
@@ -28,6 +38,7 @@ int apklayer_register_nativeloader(JNIEnv *env, jclass loader)
         {"skipNativeExitHandlers", "()V", (void *)Java_apklayer_host_NativeLoader_skipNativeExitHandlers},
         {"setProcessName", "(Ljava/lang/String;)V", (void *)Java_apklayer_host_NativeLoader_setProcessName},
         {"receiveTarget", "(I)Ljava/lang/String;", (void *)Java_apklayer_host_NativeLoader_receiveTarget},
+        {"mapOwnData", "(Ljava/lang/String;Ljava/lang/String;)V", (void *)map_own_data},
     };
     if ((*env)->RegisterNatives(env, loader, methods, sizeof methods / sizeof *methods) != 0) {
         fprintf(stderr, "[runtime] cannot register the NativeLoader natives\n");
