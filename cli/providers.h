@@ -21,11 +21,11 @@ struct ProviderService {
 };
 
 std::string providersFile(const Instance& instance);
-// The file's domains; a missing file is no domains. Dies with the line on a syntax error.
+// The file's domains; a missing file is no domains, a malformed line is reported and skipped.
 std::vector<ProviderConfig> readProviders(const std::string& file);
 // The services of the configured domains that can run here (front staged, backend present); a domain that cannot is reported on stderr.
 std::vector<ProviderService> providerServices(const Layout& layout, const Instance& instance);
-// The domains apklayer has fronts for (also the stack's slots: one per domain).
+// The domains apklayer has fronts for (a reload of the stack compares each).
 const std::vector<std::string>& providerDomains();
 // `apklayer providers [set <domain> <backend> [opt=val...] | unset <domain>]`
 int providersCommand(const Layout& layout, const Instance& instance, const std::vector<std::string>& args);

@@ -73,11 +73,14 @@ std::vector<ProviderConfig> readProviders(const std::string& file) {
     int number = 0;
     for (const std::string& raw : split(*text, '\n')) {
         number++;
-        std::string line = trim(raw.substr(0, raw.find('#')));
-        if (line.empty()) continue;
+        std::string line = trim(raw);
+        if (line.empty() || line.front() == '#') continue;  // whole-line comments only: a value may hold '#'
         if (line.front() == '[' && line.back() == ']') { domains.push_back({trim(line.substr(1, line.size() - 2)), "apklayer", "", {}}); continue; }
         size_t eq = line.find('=');
-        if (eq == std::string::npos || domains.empty()) die(file + ":" + std::to_string(number) + ": expected [domain] or key = \"value\"");
+        if (eq == std::string::npos || domains.empty()) {  // reported, not fatal: a running stack re-reads the file
+            fprintf(stderr, "%s:%d: expected [domain] or key = \"value\" (line ignored)\n", file.c_str(), number);
+            continue;
+        }
         std::string key = trim(line.substr(0, eq)), v = value(line.substr(eq + 1));
         ProviderConfig& d = domains.back();
         if (key == "provider") d.provider = v;

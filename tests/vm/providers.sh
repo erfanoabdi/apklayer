@@ -33,6 +33,9 @@ grep -a "vibrator:" $APKLY_STATE/vibrator.log
 grep -aq '^\[hw\] PASS' $out || fail "hello.hardware"
 grep -aq "on 100 ms amplitude 1.00" $APKLY_STATE/vibrator.log && grep -aq "on 200 ms amplitude 0.50" $APKLY_STATE/vibrator.log || fail "the app's waveform did not reach the vibrator backend"
 grep -aq '^\[hw\] gps fix 48.85840 2.29450 accuracy 3.0' $out || fail "the app's gps fix is not the configured one"
+# SensorManager over SensorService: 50 Hz for 2 s (about 100 events), the configured value
+events=$(grep -a -o '^\[hw\] accelerometer [0-9]* events' $out | grep -o '[0-9][0-9]*')
+[ "${events:-0}" -ge 60 ] && grep -aq '^\[hw\] accelerometer .* last 0.500 9.500 1.250' $out || fail "the app's accelerometer: ${events:-no} events, not the configured value"
 
 # 3. a changed option restarts only that domain's service (the stack the app started still runs)
 bin/apklayer providers set gnss fake location=1.5,2.5 accuracy=7
