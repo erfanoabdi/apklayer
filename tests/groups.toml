@@ -67,7 +67,7 @@ run = ["python3 -u tests/vm/hub.py providers basic", "python3 -u tests/vm/hub.py
 [services]
 apps = ["hello-svc-target", "hello-svc-caller", "hello-svc-late"]  # hello-svc-late: installed again by the late phase while a host runs
 run = ["python3 -u tests/vm/hub.py services start", "python3 -u tests/vm/hub.py services selfstop", "python3 -u tests/vm/hub.py services sticky",
-       "python3 -u tests/vm/hub.py services private", "python3 -u tests/vm/hub.py services filters",
+       "python3 -u tests/vm/hub.py services private", "python3 -u tests/vm/hub.py services filters", "python3 -u tests/vm/hub.py services own",
        "python3 -u tests/vm/hub.py services late", "python3 -u tests/vm/hub.py services oneway"]
 
 [installer]

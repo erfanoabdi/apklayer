@@ -259,12 +259,19 @@ public final class Services {
         };
     }
 
+    /** A bind made through the context (framework code, which the converter does not route here): our service, or false, as Android answers a bind nothing resolves (Robolectric's own would connect a null binder). */
+    static boolean bindHere(Context ctx, Intent intent, ServiceConnection conn, int flags) {
+        return resolve(ctx, intent) != null && bindService(ctx, intent, conn, flags);
+    }
+
     public static void unbindService(Context ctx, ServiceConnection conn) {
+        if (!unbindHere(conn)) ctx.unbindService(conn);
+    }
+
+    /** Ends the connection's bindings to services of this process; false when it has none. */
+    static boolean unbindHere(ServiceConnection conn) {
         java.util.List<Bound> pairs = CONNECTIONS.remove(conn);
-        if (pairs == null) {
-            ctx.unbindService(conn);
-            return;
-        }
+        if (pairs == null) return false;
         for (Bound pair : pairs) onMain(() -> {
             Running r = RUNNING.get(pair.service());
             if (r == null) return null;
@@ -274,5 +281,6 @@ public final class Services {
             if (--r.connections == 0 && !r.started) destroy(pair.service(), r);
             return null;
         });
+        return true;
     }
 }

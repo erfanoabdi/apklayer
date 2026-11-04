@@ -28,11 +28,18 @@ final class HubServices {
     private static final Map<ServiceConnection, Connection> connections = new IdentityHashMap<>();
     private HubServices() {}
     static boolean external(Context context, Intent intent) {
+        intent = explicit(context, intent);
         String target = intent.getComponent() == null ? intent.getPackage() : intent.getComponent().getPackageName();
         if (target == null) return false;
         if (!target.equals(context.getPackageName())) return true;
         // a service of the app's own package that runs in another process (android:process, isolatedProcess: GeckoView's child processes) gets that process, hosted through the hub
         return ownProcess(context, intent) != null;
+    }
+    /** The intent with the component resolveService picks when it names none (an action and a package: microG binds its own ":unstable" DroidGuard so): Android resolves it before it picks the process. */
+    static Intent explicit(Context context, Intent intent) {
+        if (intent.getComponent() != null) return intent;
+        android.content.pm.ResolveInfo found = context.getPackageManager().resolveService(intent, 0);
+        return found == null || found.serviceInfo == null ? intent : new Intent(intent).setComponent(new android.content.ComponentName(found.serviceInfo.packageName, found.serviceInfo.name));
     }
     /** The process of an own-package service that has one of its own (each GeckoView child is a process): its own hub peer, as an isolated instance is. Null for the app's process. */
     private static String ownProcess(Context context, Intent intent) {
@@ -51,8 +58,9 @@ final class HubServices {
     private static Handler main;
     private static synchronized Handler main() { if (main == null) main = new Handler(Looper.getMainLooper()); return main; }
     static boolean bind(Context context, Intent intent, int flags, Executor executor, ServiceConnection connection) { return bind(context, intent, flags, executor, connection, null); }
-    static boolean bind(Context context, Intent intent, int flags, Executor executor, ServiceConnection connection, String requested) {
+    static boolean bind(Context context, Intent requestedIntent, int flags, Executor executor, ServiceConnection connection, String requested) {
         java.util.Objects.requireNonNull(connection);
+        Intent intent = explicit(context, requestedIntent);
         final String instance = requested != null ? requested : ownProcess(context, intent);
         LoadedApk loaded = ReflectionHelpers.getField(context, "mPackageInfo");
         if (loaded == null) throw new IllegalStateException("No package dispatcher in this context");

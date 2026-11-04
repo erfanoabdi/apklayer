@@ -85,6 +85,7 @@ public class Main extends Activity {
                 System.out.println("[svc] PASS sticky: restarted after the kill with a null intent, new pid " + after[3]);
             }
             case "filters" -> filters();
+            case "own" -> own();
             case "late" -> late();
             case "oneway" -> {
                 String[] answers = probe(0, IBinder.FLAG_ONEWAY);
@@ -201,6 +202,44 @@ public class Main extends Activity {
         require((int) got[0] == 1 && "late".equals(got[1]) && (int) got[3] != (int) host[3], "late package's service " + java.util.Arrays.toString(got) + " host " + java.util.Arrays.toString(host));
         require(stopService(new Intent().setComponent(late)) && stopService(new Intent().setComponent(COUNTER)), "stopService");
         System.out.println("[svc] PASS late: a package installed while a component host ran is known (" + installed.packageName + ") and its service runs in its own process (pid " + got[3] + ")");
+    }
+
+    /** Own-package services bound by action and package (as microG binds its ":unstable" DroidGuard) and by component, in this process and in ":other"; binds nothing resolves return false and never connect. */
+    private void own() throws Exception {
+        int me = android.os.Process.myPid();
+        int here = pidOf(new Intent("hello.svccaller.PID").setPackage(getPackageName()));
+        int other = pidOf(new Intent("hello.svccaller.OTHER_PID").setPackage(getPackageName()));
+        int otherByName = pidOf(new Intent().setComponent(new ComponentName(this, OtherPidService.class)));
+        require(here == me, "in-process service runs in pid " + here + ", not " + me);
+        // the ":other" host ends with its last binding (pidOf unbinds), so the two binds may see two pids
+        require(other > 0 && other != me && otherByName > 0 && otherByName != me, "\":other\" service pids " + other + " / " + otherByName + " (this process " + me + ")");
+        CountDownLatch called = new CountDownLatch(1);
+        ServiceConnection none = new ServiceConnection() {
+            @Override public void onServiceConnected(ComponentName name, IBinder service) { System.out.println("[svc] connected to a missing service: " + name + " " + service); called.countDown(); }
+            @Override public void onServiceDisconnected(ComponentName name) { }
+        };
+        require(!bindService(new Intent().setComponent(new ComponentName(this, "hello.svccaller.Missing")), none, Context.BIND_AUTO_CREATE), "bind of a missing own component returned true");
+        require(!bindService(new Intent("hello.svccaller.NOBODY").setPackage(getPackageName()), none, Context.BIND_AUTO_CREATE), "bind of an unresolved own action returned true");
+        require(!bindService(new Intent().setComponent(new ComponentName("hello.nosuchpackage", "hello.Missing")), none, Context.BIND_AUTO_CREATE), "bind of a missing package returned true");
+        require(!called.await(2, TimeUnit.SECONDS), "a refused bind connected");
+        System.out.println("[svc] PASS own: in-process service pid " + here + ", \":other\" service pid " + other + " by action and by name; three unresolved binds returned false");
+    }
+
+    private int pidOf(Intent intent) throws Exception {
+        CountDownLatch connected = new CountDownLatch(1);
+        IBinder[] binder = new IBinder[1];
+        ServiceConnection connection = new ServiceConnection() {
+            @Override public void onServiceConnected(ComponentName name, IBinder service) { binder[0] = service; connected.countDown(); }
+            @Override public void onServiceDisconnected(ComponentName name) { }
+        };
+        require(bindService(intent, connection, Context.BIND_AUTO_CREATE), "bind " + intent);
+        try {
+            require(connected.await(15, TimeUnit.SECONDS), "no connection for " + intent);
+            require(binder[0] != null, "null binder for " + intent);
+            Parcel data = Parcel.obtain(), reply = Parcel.obtain();
+            try { require(binder[0].transact(1, data, reply, 0), "transact"); return reply.readInt(); }
+            finally { data.recycle(); reply.recycle(); }
+        } finally { unbindService(connection); }
     }
 
     private static Object[] binding(IBinder binder) throws Exception {
