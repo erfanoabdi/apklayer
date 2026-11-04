@@ -54,6 +54,9 @@ run = ["tests/vm/providers.sh"]
 apps = ["hello-usb"]
 run = ["tests/vm/usb.py"]
 
+[host-binder]
+run = ["python3 tests/vm/host-binder.py"]  # libbinder's host context (frameworks/native 0006): a second instance plays the device
+
 [files]
 apps = ["hello-files"]
 setup = ["""f=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/system/etc/permissions/apklayer-test-hello-files.xml; [ -e $f ] || printf '<permissions><privapp-permissions package="hello.files"><permission name="android.permission.MANAGE_DOCUMENTS"/></privapp-permissions></permissions>\\n' > $f"""]

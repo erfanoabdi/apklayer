@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Wed, 4 Nov 2026 00:00:00 +0000
+Subject: [PATCH] linker: no /vendor/lib and /system/lib default search paths
+
+apklayer patch (docs/HALIUM.md). The default library paths are apkenv's 32-bit Android ones. On a desktop they do not exist, but on
+a Halium host they are the device's own Android (Ubuntu Touch: /system/lib/libc.so, 32-bit ARM): the linker read it in place of the
+library from BIONIC_LD_LIBRARY_PATH and every program crashed (SIGSEGV parsing the 32-bit ELF). Libraries come from
+BIONIC_LD_LIBRARY_PATH (apklayer's Android libraries) and the instance's Android root only; the device's vendor libraries, when
+they are needed, get their own namespace path.
+
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -850,8 +850,6 @@
+ #define SOPATH_MAX 8
+
+ static const char *apkenv_sopaths[SOPATH_MAX + 1] = {
+-	"/vendor/lib",
+-	"/system/lib",
+ 	/* APKENV_PREFIX "/lib/" APKENV_TARGET "/bionic/", */
+ #ifdef APKENV_LOCAL_BIONIC_PATH
+ 	APKENV_LOCAL_BIONIC_PATH,
