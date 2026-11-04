@@ -135,6 +135,19 @@ void Cli::launch(const std::string& package, std::function<void(const std::strin
     }).detach();
 }
 
+std::string summary(const Result& r) {
+    std::string text = r.status == 0 ? r.out : (r.err.empty() ? r.out : r.err), line;
+    for (size_t end = text.size(); end > 0 && line.empty();) {
+        size_t start = text.rfind('\n', end - 1);
+        start = start == std::string::npos ? 0 : start + 1;
+        line = text.substr(start, end - start);
+        end = start > 0 ? start - 1 : 0;
+    }
+    if (line.rfind("apklayer: ", 0) == 0) line = line.substr(10);
+    if (!line.empty()) line[0] = static_cast<char>(toupper(static_cast<unsigned char>(line[0])));
+    return line.empty() ? (r.status == 0 ? "Done" : "Failed (status " + std::to_string(r.status) + ")") : line;
+}
+
 std::string fileUriPath(const std::string& uri) {
     const std::string scheme = "file://";
     std::string s = uri.rfind(scheme, 0) == 0 ? uri.substr(scheme.size()) : uri, path;

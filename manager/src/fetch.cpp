@@ -41,7 +41,8 @@ std::string wget(const std::string& url, const std::string& out, const Progress&
         int devnull = open("/dev/null", O_RDWR);
         dup2(devnull, 0);
         dup2(devnull, 1);
-        execlp("wget", "wget", "-q", "--show-progress", "--progress=bar:force:noscroll", "--compression=auto", "-O", out.c_str(), "--", url.c_str(), nullptr);
+        // a stalled server fails in minutes, not wget's default of 20 tries of 15 minutes each
+        execlp("wget", "wget", "-q", "--tries=3", "--timeout=30", "--show-progress", "--progress=bar:force:noscroll", "--compression=auto", "-O", out.c_str(), "--", url.c_str(), nullptr);
         _exit(127);
     }
     close(err[1]);
@@ -93,12 +94,24 @@ std::string sha256File(const std::string& path) {
     return r.status == 0 && r.out.size() >= 64 ? r.out.substr(0, 64) : "";
 }
 
+namespace {
+std::string get(const std::string& url, const std::string& part, const Progress& progress) {
+    if (std::string e = mkdirs(part.substr(0, part.rfind('/'))); !e.empty()) return e;
+    return url.rfind("file://", 0) == 0 ? copyFile(fileUriPath(url), part, progress)
+         : url.rfind("https://", 0) == 0 || url.rfind("http://", 0) == 0 ? wget(url, part, progress) : "not a download URL: " + url;
+}
+}  // namespace
+
+std::string download(const std::string& url, const std::string& dest, const Progress& progress) {
+    std::string part = dest + ".part", e = get(url, part, progress);
+    if (e.empty() && rename(part.c_str(), dest.c_str()) != 0) e = "cannot rename " + part;
+    if (!e.empty()) unlink(part.c_str());
+    return e;
+}
+
 std::string fetch(const std::string& url, const std::string& sha256, const std::string& dest, const Progress& progress) {
     if (sha256.size() != 64) return "no SHA256 for " + url;  // nothing unverified is used
-    if (std::string e = mkdirs(dest.substr(0, dest.rfind('/'))); !e.empty()) return e;
-    std::string part = dest + ".part";
-    std::string e = url.rfind("file://", 0) == 0 ? copyFile(fileUriPath(url), part, progress)
-                  : url.rfind("https://", 0) == 0 || url.rfind("http://", 0) == 0 ? wget(url, part, progress) : "not a download URL: " + url;
+    std::string part = dest + ".part", e = get(url, part, progress);
     if (e.empty()) {
         std::string got = sha256File(part), want = sha256;
         for (char& c : want) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));

@@ -185,7 +185,11 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
     return pkg;
 }
 
-bool isStale(const std::string& info) { return atoi(property(info, "converterAbi").c_str()) < kConverterAbi; }  // none recorded: before the number
+// none recorded: converted before the number existed, which is ABI 1 (installs from then are not stale under 1)
+bool isStale(const std::string& info) {
+    std::string abi = property(info, "converterAbi");
+    return (abi.empty() ? 1 : atoi(abi.c_str())) < kConverterAbi;
+}
 
 int reconvert(const Layout& l, const Instance& inst, const std::string& target) {
     std::vector<std::string> packages;

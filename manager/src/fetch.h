@@ -16,6 +16,8 @@ std::string runtimeRoot();
 // url (http(s) through wget, file:// copied) to dest, written as dest.part and renamed when complete, then checked against sha256 (a mismatch
 // removes it). Empty when it worked, else what failed.
 std::string fetch(const std::string& url, const std::string& sha256, const std::string& dest, const Progress& progress);
+// the same without a checksum: an index (releases.json, a repository's), whose own entries carry the checksums
+std::string download(const std::string& url, const std::string& dest, const Progress& progress);
 std::string sha256File(const std::string& path);
 // the version current points at, "" when no runtime is installed
 std::string installedRuntime(const std::string& root);

@@ -20,6 +20,9 @@ run = ["tests/vm/properties.sh"]
 [install-verify]
 run = ["tests/vm/install-verify.sh"]
 
+[reconvert]
+run = ["tests/vm/reconvert.sh"]
+
 [keystore]
 apps = ["hello-keystore", "hello-keystore-other"]
 run = ["tests/vm/keystore.sh"]
