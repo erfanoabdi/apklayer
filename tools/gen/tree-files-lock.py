@@ -41,12 +41,12 @@ print("Resolving build-output origins", flush=True)
 # the tree's sha256 of the candidate origins, computed once in OrbStack
 names = sorted({p.split("/")[-1] for p in sums if p.startswith(LIBS)})
 orb = sh("cd ~/los24 && for n in %s; do f=%s/system/lib64/$n; [ -f $f ] && sha256sum $f; done; "
-         "for n in %s; do for f in %s/apex/*/lib64/$n %s/apex/*/lib64/extractors/$n; do [ -f $f ] && sha256sum $f; done; done; "
+         "for n in %s; do for f in %s/apex/*/lib64/$n %s/apex/*/lib64/extractors/$n %s/vendor/lib64/$n; do [ -f $f ] && sha256sum $f; done; done; "
          "find out/soong/.intermediates/vendor/apklayer -name '*.so' -path '*android*_%s_shared/*' -not -path '*_x86_x86_64_*' -not -path '*unstripped*' -not -path '*before_final*' | xargs sha256sum; "
          "find out/apklayer-vulkan%s -maxdepth 2 -name '*.so' -type f 2>/dev/null | xargs -r sha256sum; "
          "sha256sum out/soong/.intermediates/hardware/interfaces/audio/aidl/default/libeffectconfig/android_vendor_%s_shared/libeffectconfig.so; "
          "sha256sum frameworks/av/services/audiopolicy/config/audio_policy_volumes.xml frameworks/av/services/audiopolicy/config/default_volume_tables.xml; "
-         "grep -m3 'ro.build.fingerprint=\\|ro.build.date=\\|ro.build.version.release=' %s/system/build.prop" % (" ".join(names), OUT, " ".join(names), OUT, OUT, VARIANT, "-x86_64" if X86 else "", VARIANT, OUT), orb=True)
+         "grep -m3 'ro.build.fingerprint=\\|ro.build.date=\\|ro.build.version.release=' %s/system/build.prop" % (" ".join(names), OUT, " ".join(names), OUT, OUT, OUT, VARIANT, "-x86_64" if X86 else "", VARIANT, OUT), orb=True)
 tree, apk, ident = {}, {}, []
 for line in orb.splitlines():
     if line.startswith("ro."): ident.append(line); continue

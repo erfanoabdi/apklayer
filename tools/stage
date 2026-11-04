@@ -53,8 +53,8 @@ stage_root() {
     $ORB tar cf - -C "$OUT/system" --transform='s,^build.prop$,system_build.prop,' build.prop | sink props
     # Original audio policy tables are source XML assets, not generated libraries.
     $ORB tar cf - -C "$tree/frameworks/av/services/audiopolicy/config" --transform='s,^,vendor/etc/,' audio_policy_volumes.xml default_volume_tables.xml | sink .
-    # apklayer's own half of the device configuration (features the host layers provide).
-    COPYFILE_DISABLE=1 tar cf - -C "$repo/bridge/native/android-root" vendor/etc/permissions | sink .
+    # apklayer's own half of the device configuration (features the host layers provide, the codec list, the vendor manifest).
+    COPYFILE_DISABLE=1 tar cf - --exclude .DS_Store -C "$repo/bridge/native/android-root" vendor/etc | sink .
     # Protection levels of the framework's permissions (normal ones are granted at install, signature ones to platform-signed system apps).
     tsv="$(mktemp -d)"
     $ORB cat "$tree/frameworks/base/core/res/AndroidManifest.xml" | python3 "$here/gen/permission-levels.py" > "$tsv/apklayer-permission-levels.tsv"
