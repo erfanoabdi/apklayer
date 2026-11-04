@@ -1,6 +1,44 @@
 {
-  "latest": "0.2.1",
+  "latest": "0.3.0",
   "releases": [
+    {
+      "version": "0.3.0",
+      "date": "2026-11-04",
+      "notes_url": "https://github.com/erfanoabdi/apklayer/releases/tag/v0.3.0",
+      "converter_abi": 2,
+      "data_format": 1,
+      "runtime": {
+        "version": "0.2.1",
+        "assets": {
+          "arm64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.3.0/apklayer-runtime-arm64-0.2.1.tar.zst",
+            "sha256": "756b62fd684fd54c21ca0d3f795e7aa470290f5fe1f2183e123eac55c79bd7ae"
+          }
+        }
+      },
+      "debs": {
+        "noble": {
+          "amd64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.3.0/apklayer_0.3.0-1.noble1_amd64.deb",
+            "sha256": "5c3880bfe4bf1374d35f5e884018e31428a685b227d4a041ee831bf731fa0bb4"
+          },
+          "arm64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.3.0/apklayer_0.3.0-1.noble1_arm64.deb",
+            "sha256": "9082c85c32e6a7a3658c0f7f269d5ce4a82e1453f7dbb1d1261cc222dba83d52"
+          }
+        },
+        "trixie": {
+          "amd64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.3.0/apklayer_0.3.0-1.trixie1_amd64.deb",
+            "sha256": "c6de08a9dc67bf7fe1f1a01941eb4da419efe5010879c0dbc292ae8f504edef8"
+          },
+          "arm64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.3.0/apklayer_0.3.0-1.trixie1_arm64.deb",
+            "sha256": "3f0b2f5c715aa9ec0ddfc12671ea2f34cdd21063eccd4ee29e0a38c8f481a7db"
+          }
+        }
+      }
+    },
     {
       "version": "0.2.1",
       "date": "2026-11-04",
