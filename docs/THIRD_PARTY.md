@@ -61,3 +61,4 @@ Not blocking but open: collect NOTICE/legal files for everything shipped (AOSP l
 
 - Digitalis (digitalisx64.github.io, Apache-2.0, derived from AOSP Berberis): its `binary_translation` fork, android17 `abefbe2b`, checked out in the LineageOS tree (not vendored).
 - `aosp/hals/{sensors,gnss,vibrator}` build AOSP's example HALs (`hardware/interfaces/<domain>/aidl/default`, Apache-2.0) through the patches above; `aosp/hals/sensors/services/Service.cpp` is AOSP's `main_sensorservice.cpp` as a library.
+- `aosp/hals/camera/goldfish/`: device/generic/goldfish/hals/camera and hals/lib/debug/include/debug.h (Apache-2.0), unmodified apart from the patch in PATCHES.md (CameraDeviceSession.cpp 645 and CameraDevice.cpp 606 lines, as upstream).
