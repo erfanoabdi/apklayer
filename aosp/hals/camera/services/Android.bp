@@ -1,0 +1,18 @@
+// cameraserver (frameworks/av/camera/cameraserver) as a library run by btload --main: the original CameraService from libcameraservice.
+cc_library_shared {
+    name: "libapklayer_cameraserver",
+    defaults: ["libcameraservice_deps"],
+    srcs: ["Service.cpp"],
+    header_libs: ["libmedia_headers"],
+    shared_libs: [
+        "libhidlbase",
+        "android.hardware.camera.common@1.0",
+        "android.hardware.camera.device@1.0",
+        "android.hardware.camera.device@3.2",
+        "android.hardware.camera.device@3.4",
+    ],
+    static_libs: ["libcameraservice"],
+    version_script: "exports.map",
+    compile_multilib: "64",
+    cflags: ["-Wall", "-Werror", "-Wno-main"],
+}
