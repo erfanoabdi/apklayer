@@ -160,15 +160,21 @@ long syscall(long nr, ...)
     long a[6];
     for (int i = 0; i < 6; i++) a[i] = va_arg(ap, long);
     va_end(ap);
-    int at = nr == SYS_openat || nr == SYS_newfstatat || nr == SYS_faccessat || nr == SYS_readlinkat || nr == SYS_statx
+    int at = nr == SYS_openat || nr == SYS_newfstatat || nr == SYS_faccessat || nr == SYS_readlinkat || nr == SYS_statx || nr == SYS_mkdirat ||
+             nr == SYS_unlinkat || nr == SYS_fchmodat || nr == SYS_fchownat || nr == SYS_utimensat || nr == SYS_mknodat ||
+             nr == SYS_renameat || nr == SYS_renameat2 || nr == SYS_linkat
 #ifdef SYS_faccessat2
              || nr == SYS_faccessat2
 #endif
              ;
-    const char *path = at ? (const char *)a[1] : NULL;
+    int two = nr == SYS_renameat || nr == SYS_renameat2 || nr == SYS_linkat;  /* (fd, path, fd, path, ...) */
+    const char *path = at ? (const char *)a[1] : NULL, *path2 = two ? (const char *)a[3] : NULL;
     MAP(m, path && path[0] == '/' ? path : NULL);
+    MAP(m2, path2 && path2[0] == '/' ? path2 : NULL);
     if (m) a[1] = (long)m;
+    if (m2) a[3] = (long)m2;
     long r = ((long (*)(long, ...))REAL(syscall))(nr, a[0], a[1], a[2], a[3], a[4], a[5]);
     DONE(m);
+    DONE(m2);
     return r;
 }
