@@ -10,6 +10,9 @@ cd "$repo"
 step="$1" W="$(mkdir -p "$2" && cd "$2" && pwd)"
 case "$(uname -m)" in aarch64) cpu=arm64;; x86_64) cpu=x86_64;; *) echo "package.sh: no prebuilts for $(uname -m)" >&2; exit 1;; esac
 P="${APKLAYER_PREBUILTS:?}" N="$W/native" bt="$W/bionic_translation/b"
+# the flags the tree is built and tested with (meson's), not dpkg-buildflags' (LTO, Ubuntu's -Bsymbolic-functions): the path layer and
+# bionic_translation interpose symbols across libraries
+unset CFLAGS CXXFLAGS CPPFLAGS LDFLAGS OBJCFLAGS OBJCXXFLAGS FFLAGS FCFLAGS
 export APKLAYER_BUILD="$W/b" APKLAYER_BT="$bt" APKLAYER_ANDROID_LIBS="$P/$cpu/android-libs/lib64" APKLAYER_DEPS="${APKLAYER_DEPS:?}" APKLAYER_NO_INSTRUMENT=1
 
 build() {

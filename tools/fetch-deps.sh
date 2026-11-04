@@ -38,6 +38,7 @@ get_maven() {
 fetched=0 local=0 ok=0
 while read -r hash dest src; do
     case "$hash" in ''|'#'*) continue ;; esac
+    case "$dest" in ${APKLAYER_DEPS_SKIP:-/}) continue ;; esac  # e.g. 'android-all/*': the package build needs no Maven framework jar
     out="$DEST/$dest"
     if [ -f "$out" ] && [ "$(sha "$out")" = "$hash" ]; then ok=$((ok + 1)); continue; fi
     mkdir -p "$(dirname "$out")"

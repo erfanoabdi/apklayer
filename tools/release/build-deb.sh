@@ -15,7 +15,7 @@ deb="$version-1~${codename}1"
 bt_rev="$(cat patches/bionic_translation/REVISION)"
 [ -d "$IN/bionic_translation/.git" ] || git clone -q https://gitlab.com/android_translation_layer/bionic_translation "$IN/bionic_translation"
 git -C "$IN/bionic_translation" checkout -q "$bt_rev"
-APKLAYER_DEPS_LOCAL="$P/common" tools/fetch-deps.sh "$IN/deps"
+APKLAYER_DEPS_LOCAL="$P/common" APKLAYER_DEPS_SKIP='android-all/*' tools/fetch-deps.sh "$IN/deps"
 manager/fetch-slint.sh "$IN/slint"
 
 # per-release differences: Ubuntu keeps binder_linux in linux-modules-extra, which only its kernel metapackages pull in; Debian builds it into its kernel
