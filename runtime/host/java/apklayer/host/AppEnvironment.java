@@ -184,16 +184,21 @@ final class AppEnvironment {
     }
 
     /**
-     * Android creates every ContentProvider the manifest declares (highest initOrder first) before the first
-     * activity; libraries like androidx.startup (WorkManager, emoji2, ProcessLifecycleOwner) initialise through them.
+     * Android creates the ContentProviders the manifest declares for a process (highest initOrder first) before Application.onCreate, in each process
+     * of the app (ActivityManagerService.generateApplicationProvidersLocked: the provider's process name, or multiprocess); libraries like androidx.startup
+     * (WorkManager, emoji2, ProcessLifecycleOwner) initialise through them. Here the package's process hosts all of them (the hub sends every provider
+     * of the package there: MediaProvider's "android.process.media" too); a service's process of its own (HostProcessName) hosts only its own.
      */
     static void installProviders(Application app) {
+        // the package's process, or a service's own (an isolated instance: apklayer.isolated; its process name from HostProcessName, if it has one)
+        String process = System.getProperty("apklayer.isolated") == null ? null : System.getProperty("apklayer.processname", "");
         try {
             android.content.pm.ProviderInfo[] providers = app.getPackageManager()
                     .getPackageInfo(app.getPackageName(), android.content.pm.PackageManager.GET_PROVIDERS).providers;
             if (providers == null) return;
             java.util.Arrays.sort(providers, java.util.Comparator.comparingInt((android.content.pm.ProviderInfo p) -> p.initOrder).reversed());
             for (android.content.pm.ProviderInfo info : providers) {
+                if (process != null && !info.multiprocess && !process.equals(info.processName)) continue;  // shortcut: an isolated process gets multiprocess providers too (Android: none); upgrade when one breaks there
                 try {
                     Robolectric.buildContentProvider(Class.forName(info.name).asSubclass(android.content.ContentProvider.class)).create(info);
                 } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
