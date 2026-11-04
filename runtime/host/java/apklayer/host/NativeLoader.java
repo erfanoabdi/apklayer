@@ -158,9 +158,10 @@ public final class NativeLoader {
         systemPath = (provider == null ? "" : provider + "/lib") + (androidLibs != null ? (provider == null ? "" : ":") + androidLibs : "");
         setLibraryPath(systemPath, appPath); // the WebView provider's libs, then Android's
         if (BRIDGE != null) {  // the bridge library (an Android library of this CPU, on the system path) and the app's guest namespace
+            long start = System.nanoTime();
             String error = bridgeInit("libberberis_" + BRIDGE + ".so", BRIDGE, appPath, "/data/user/0/" + System.getProperty("apklayer.package", "") + "/code_cache");
             if (error != null) throw new UnsatisfiedLinkError("native bridge: " + error);
-            System.out.println("[apklayer] native bridge " + BRIDGE + " ready");
+            System.out.println("[apklayer] native bridge " + BRIDGE + " ready (" + (System.nanoTime() - start) / 1_000_000 + " ms)");
         }
         ready = true;
     }
