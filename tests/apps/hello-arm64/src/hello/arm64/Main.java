@@ -10,6 +10,7 @@ public class Main extends Activity {
     private static native double work(int n);
     private static native int callJava(int v);
     private static native int threadCall(int v);
+    private static native int gl();
 
     static int twice(int v) { return 2 * v; }
 
@@ -45,6 +46,10 @@ public class Main extends Activity {
         log("translated code mappings " + memfdMappings());
         boolean ok = "aarch64".equals(cpu) && first == warm && call == 42 && thread == 100;
         log(ok ? "PASS" : "FAIL first=" + first + " warm=" + warm);
+        long t7 = System.nanoTime();
+        int px = gl();  // EGL pbuffer cleared to (1, 0.5, 0, 1): 0xff0080ff, read back as RGBA bytes
+        log("GL " + ((px & 0xffffff) == 0x0080ff || (px & 0xffffff) == 0x007fff ? "PASS" : "FAIL") + " pixel 0x" + Integer.toHexString(px)
+                + " (" + (System.nanoTime() - t7) / 1000 + " us)");
         TextView v = new TextView(this);
         v.setText("arm64 JNI: " + (ok ? "PASS" : "FAIL"));
         setContentView(v);
