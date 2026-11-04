@@ -16,6 +16,8 @@ void sandboxSpawn(const Layout& layout, const Instance& instance, Spawn& spec, c
 int sandboxExec(const Layout& layout, const Instance& instance, const std::vector<std::string>& args);
 // Makes path (a file or folder the user picked) visible at the same path in process pid's mount view (an app's). False with the reason printed.
 bool grantPath(const Instance& instance, int pid, const std::string& path);
+// `apklayer home-access <package> on|off`: the app's sandbox view gets the user's whole home, read-write (the opt-in beside the picker)
+int homeAccessCommand(const Layout& layout, const Instance& instance, const std::string& package, const std::string& state);
 // The user owns dir again (an app's data after the sandbox ran it as its own uid): before it is removed, or used without the sandbox.
 void reclaim(const std::string& dir);
 

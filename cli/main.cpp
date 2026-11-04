@@ -41,6 +41,7 @@ int usage() {
           "  env                    print the environment of Android's processes\n"
           "  daemon                 apklayerd: every command (and every app process) then runs under it (tools/host-setup/apklayerd.service);\n"
           "                         APKLAYER_SANDBOX=1: apps run sandboxed, each as its own uid (docs/PLAN.md), and the daemon starts on demand\n"
+          "  home-access <package> on|off  with the sandbox: the app sees the user's whole home (else only what the picker hands it)\n"
           "  portal pick open|save|directory [--multiple] [--name N] | open <uri>  the desktop's file dialog or link opener (a sandboxed app's)\n"
           "  --version              version, converterAbi, dataFormat (key<TAB>value)\n",
           stderr);
@@ -85,6 +86,7 @@ int main(int argc, char** argv) {
     if (cmd == "app-spare" && n == 3 && args[1] == "--after") return runAppSpare(layout, inst, atoi(args[2].c_str()));  // started by a launch (cli/spare.cpp)
     if (cmd == "app-spare" && n == 1) { wakeAppSpare(layout, inst); return 0; }  // the hub's, at its start
     if (cmd == "sandbox-exec") return sandboxExec(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
+    if (cmd == "home-access" && n == 3) return homeAccessCommand(layout, inst, args[1], args[2]);
     if (cmd == "portal") return portalCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "hub") return runHub(layout, inst);
     if (cmd == "wait" && n == 2 && args[1] == "hub") return waitHub(layout, inst);

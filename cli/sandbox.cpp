@@ -127,6 +127,13 @@ void apply(const std::vector<Step>& steps) {
 
 // What an app process sees: its own data, the instance's shared storage and /data, the runtime read-only; the user's home, /tmp and runtime directory
 // are empty tmpfs, the other apps' data is not there. Everything at the host's paths, so no path changes.
+std::string homeAccessFile(const Instance& inst) { return join(inst.root, "home-access"); }  // the packages granted the user's home, one per line
+
+bool homeAccess(const Instance& inst, const std::string& package) {
+    for (const std::string& p : split(readFile(homeAccessFile(inst)).value_or(""), '\n')) if (p == package) return true;
+    return false;
+}
+
 std::vector<Step> appView(const Layout& l, const Instance& inst, const std::string& package, uid_t uid, const std::string& java) {
     std::string home = realPath(homeDir()), runtime = realPath(l.runtimeHome);
     std::vector<std::string> hidden = {home, "/tmp"};
@@ -148,9 +155,10 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
         steps.push_back({Step::Bind, path, cloneTree(source, writable), file});
     };
     for (const std::string& h : hidden) steps.push_back({Step::Tmpfs, h});
+    if (homeAccess(inst, package)) { bind(home, home, true); ro.push_back(home); }  // the user's opt-in (`apklayer home-access`), as Flatpak's --filesystem=home
     std::string last;
     for (const std::string& r : ro)
-        if (last.empty() || !under(r, last)) { bind(r, r, false); last = r; }
+        if (r != home && (last.empty() || !under(r, last))) { bind(r, r, false); last = r; }
     // what holds every instance's and app's data, where such a tree has it inside (a source tree with its tests' data): empty again,
     // then only this instance's parts
     for (const std::string& all : {join(realPath(l.dataHome), "apklayer"), join(realPath(l.stateHome), "apklayer"), runtime})
@@ -173,6 +181,17 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
     return steps;
 }
 }  // namespace
+
+int homeAccessCommand(const Layout& l, const Instance& inst, const std::string& package, const std::string& state) {
+    if (!exists(join(appDir(l, package), "info.properties"))) die("not installed: " + package);
+    if (state != "on" && state != "off") die("home-access <package> on|off");
+    std::string kept;
+    for (const std::string& p : split(readFile(homeAccessFile(inst)).value_or(""), '\n')) if (!p.empty() && p != package) kept += p + "\n";
+    if (state == "on") kept += package + "\n";
+    writeFile(homeAccessFile(inst), kept);
+    printf("apklayer: %s %s the user's home in instance %s (with the sandbox, from its next start)\n", package.c_str(), state == "on" ? "sees" : "no longer sees", inst.id.c_str());
+    return 0;
+}
 
 void enterInstanceUserNs() {
     int go[2];
