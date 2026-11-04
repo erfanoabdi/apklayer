@@ -171,6 +171,7 @@ int providersCommand(const Layout& l, const Instance& inst, const std::vector<st
         kept.push_back(d);
     }
     writeProviders(file, kept);
+    writeHostHals(inst);  // processes started from now on (apps, `apklayer exec`) reach a device domain's HAL; the stack writes it at start too
     // a running stack restarts only this domain's service (SIGHUP: runStackDaemon re-reads the file)
     auto pid = readFile(inst.pidFile());
     bool running = pid && alive(atoi(pid->c_str())) && kill(atoi(pid->c_str()), SIGHUP) == 0;
