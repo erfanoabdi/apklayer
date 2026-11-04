@@ -26,7 +26,9 @@ public class ShadowHostServiceManager extends ShadowServiceManager {
 
     /** System services the instance hub serves for every app: "account" (HubAccounts). Null for the others, or when no hub is running. */
     private static IBinder hub(String name) {
-        return android.content.Context.ACCOUNT_SERVICE.equals(name) ? RealBinder.lookup(HubAccounts.SERVICE) : null;
+        if (!android.content.Context.ACCOUNT_SERVICE.equals(name)) return null;
+        HubClient.attachEarly();  // the accounts service knows its callers by their registration (an app may ask from attachBaseContext)
+        return RealBinder.lookup(HubAccounts.SERVICE);
     }
 
     private static IBinder report(String name, IBinder binder) {

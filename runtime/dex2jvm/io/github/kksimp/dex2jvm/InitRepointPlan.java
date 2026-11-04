@@ -211,6 +211,9 @@ final class InitRepointPlan {
         // Candidate (startClass, namedOwner, descriptor) triples. Sorted so a
         // debug dump is stable; correctness does not depend on the order.
         final Map<String, Candidate> candidates = new TreeMap<>();
+        // apklayer patch: "class desc" -> the classes naming class.<init>(desc), for the constructors R8 names but
+        // deleted (see the resolution below the scan)
+        final Map<String, java.util.TreeSet<String>> named = new TreeMap<>();
         for (DexClass c : byName.values()) {
             // Released at the bottom of this iteration. transientCode below is
             // careful not to memoize a code_item for the same reason, but that
@@ -238,6 +241,14 @@ final class InitRepointPlan {
                                     k -> new Candidate(start, owner, desc))
                               .referrers.add(c.name());
                 });
+                for (Instruction in : decoded) {
+                    if (in.isPayload() || (in.opcode() != 0x70 && in.opcode() != 0x76)) continue;
+                    DexFile.MethodRef ref;
+                    try { ref = c.dex().methodRef(in.index()); } catch (RuntimeException e) { continue; }
+                    if (ref == null || !"<init>".equals(ref.name())) continue;
+                    named.computeIfAbsent(DexFile.internalName(ref.declaringClass()) + ' ' + ref.proto().descriptor(),
+                            k -> new java.util.TreeSet<>()).add(c.name());
+                }
             }
             c.releaseMembers();
         }
@@ -247,6 +258,21 @@ final class InitRepointPlan {
         Map<String, TreeMap<String, String>> synth = new HashMap<>();
         Map<String, String> authorised = new HashMap<>();
         Builder b = new Builder(byName, synth);
+        // apklayer patch: R8 also deletes a trivial constructor and keeps call sites naming it on its own class
+        // (Shelter's androidx.fragment.app.u0: `new u0; u0.<init>()V`, no u0.<init> at all): ART resolves the
+        // invoke-direct through the superclasses (ClassLinker::ResolveMethod), the JVM throws NoSuchMethodError.
+        // The chain from that class up to the ancestor resolution reaches is one more candidate.
+        for (Map.Entry<String, java.util.TreeSet<String>> e : named.entrySet()) {
+            String cls = e.getKey().substring(0, e.getKey().indexOf(' ')), desc = e.getKey().substring(cls.length() + 1);
+            DexClass nc = byName.get(cls);
+            if (nc == null || nc.isInterface() || b.findConstructor(nc, desc) != null) continue;
+            String owner = nc.superclassName();
+            while (owner != null && byName.containsKey(owner) && b.findConstructor(byName.get(owner), desc) == null)
+                owner = byName.get(owner).superclassName();
+            if (owner == null) continue;
+            String resolved = owner;
+            candidates.computeIfAbsent(cls + ' ' + resolved + ' ' + desc, k -> new Candidate(cls, resolved, desc)).referrers.addAll(e.getValue());
+        }
         // Candidates are walked in sorted order so that the rare case of two of
         // them competing for one synthesised descriptor resolves identically on
         // every run.

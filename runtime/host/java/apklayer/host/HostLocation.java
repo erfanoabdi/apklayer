@@ -21,6 +21,7 @@ final class HostLocation {
     static void install(Application app) {
         LocationManager manager = app.getSystemService(LocationManager.class);
         ShadowLocationManager shadow = Shadows.shadowOf(manager);
+        shadow.setGnssCapabilities(new android.location.GnssCapabilities.Builder().build());  // never null on Android (none here: no GNSS receiver); Robolectric's default is null
         // Robolectric's location fake keeps its state in Settings.Secure (LOCATION_MODE, LOCATION_PROVIDERS_ALLOWED), which only the system writes once the
         // real SettingsProvider answers: the hub writes them at boot from the host's location service (HubBootSettings). The app's own provider state
         // follows them, so the fake writes nothing (it writes only a state the settings do not have yet).
