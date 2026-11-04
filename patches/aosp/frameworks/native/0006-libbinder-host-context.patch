@@ -8,9 +8,10 @@ its context, Parcels received through it (by buffer address) or carrying its pro
 BackendUnifiedServiceManager falls back to the host's servicemanager for names listed in /data/apklayer/host_hals.conf
 (written per instance from the provider choice) and reports them declared. Ported from Waydroid's frameworks/native 0015
 (Android 13) to Android 16, with two additions for older hosts (Halium 9-13): the host lookup uses getService (transaction 1
-since Android 11; checkService moved in 14), and binder stability travels as a Category (version | level << 24) to and from
-a host that writes it so. Not ported: 0009 (host uid as system uid; for host processes calling into ours).
-ABI kept: the Parcel flag sits in KernelFields padding, new functions are overloads. Rebuild: `m libbinder`.
+since Android 11; checkService moved in 14), and binder stability travels as a Category (version | level << 24): read in
+either form, and written so (null binders too) once a host reply showed it. Not ported: 0009 (host uid as system uid; for
+host processes calling into ours).
+ABI kept: the Parcel flag sits in KernelFields padding (64-bit only: 32-bit has none and knows received parcels only), new functions are overloads. Rebuild: `m libbinder`.
 Against frameworks/native 46018f54b424 (REVISION), after 0001-0005. Apply: patches/apply aosp <LineageOS tree>.
 ---
 diff --git a/libs/binder/BackendUnifiedServiceManager.cpp b/libs/binder/BackendUnifiedServiceManager.cpp
@@ -347,42 +348,7 @@ diff --git a/libs/binder/IPCThreadState.cpp b/libs/binder/IPCThreadState.cpp
      clearCaller();
      mHasExplicitIdentity = false;
      mIn.setDataCapacity(256);
-@@ -1368,6 +1384,25 @@
-     return err;
- }
- 
-+extern std::atomic<bool> gHostCategoryStability;  // apklayer patch (Parcel.cpp)
-+
-+// apklayer patch: binders sent to a host that reads stability as a Category get it in that form (Parcel.cpp)
-+static void toHostStability(uintptr_t buffer, size_t size, uintptr_t offsets, size_t count) {
-+    if (!gHostCategoryStability.load(std::memory_order_relaxed)) return;
-+    uint8_t* bytes = reinterpret_cast<uint8_t*>(buffer);
-+    const binder_size_t* objects = reinterpret_cast<const binder_size_t*>(offsets);
-+    for (size_t i = 0; bytes && i < count; i++) {
-+        const auto* flat = reinterpret_cast<const flat_binder_object*>(bytes + objects[i]);
-+        size_t at = objects[i] + sizeof(flat_binder_object);
-+        if ((flat->hdr.type != BINDER_TYPE_BINDER && flat->hdr.type != BINDER_TYPE_HANDLE) || at + sizeof(int32_t) > size) continue;
-+        uint32_t level;
-+        memcpy(&level, bytes + at, sizeof level);
-+        if (level > 0xffff) continue;  // already a Category
-+        level = 1u | (level << 24);
-+        memcpy(bytes + at, &level, sizeof level);
-+    }
-+}
-+
- status_t IPCThreadState::writeTransactionData(int32_t cmd, uint32_t binderFlags,
-     int32_t handle, uint32_t code, const Parcel& data, status_t* statusBuffer)
- {
-@@ -1383,6 +1418,8 @@
- 
-     const status_t err = data.errorCheck();
-     if (err == NO_ERROR) {
-+        if (mProcess->isHost())  // apklayer patch
-+            toHostStability(data.ipcData(), data.ipcDataSize(), data.ipcObjects(), data.ipcObjectsCount());
-         tr.data_size = data.ipcDataSize();
-         tr.data.ptr.buffer = data.ipcData();
-         tr.offsets_size = data.ipcObjectsCount()*sizeof(binder_size_t);
-@@ -1866,7 +1903,7 @@
+@@ -1866,7 +1882,7 @@
          ALOGI("%s", message.c_str());
      }
      ALOG_ASSERT(data != NULL, "Called with NULL data");
@@ -394,23 +360,38 @@ diff --git a/libs/binder/IPCThreadState.cpp b/libs/binder/IPCThreadState.cpp
 diff --git a/libs/binder/Parcel.cpp b/libs/binder/Parcel.cpp
 --- a/libs/binder/Parcel.cpp
 +++ b/libs/binder/Parcel.cpp
-@@ -221,6 +221,15 @@
+@@ -221,10 +221,30 @@
      LOG_ALWAYS_FATAL_IF(mSession == nullptr);
  }
  
-+// apklayer patch: a host before Android 14 (Halium 9-13) writes a binder's stability as a Category (version 1 in the low byte,
-+// the level in the high byte); seen in a host reply, IPCThreadState writes ours that way into what goes to the host.
++// apklayer patch: a host before Android 14 (Halium 9-13) reads and writes a binder's stability as a Category (version 1 in the low
++// byte, the level in the high byte). Seen in a host reply, this process writes every binder's (null ones too) that way: the host
++// needs it, and our own libbinder reads both forms.
 +std::atomic<bool> gHostCategoryStability{false};
 +
++// Received through the host context (its buffer lies in that context's mmap), or (64-bit) carrying its proxies.
 +bool Parcel::hostContext() const {
++#ifdef BINDER_WITH_KERNEL_IPC
++    if (ProcessState::isHostBuffer(mData)) return true;
++#endif
++#ifdef __LP64__
 +    const auto* kernelFields = maybeKernelFields();
 +    return kernelFields != nullptr && kernelFields->mHost;
++#else
++    return false;
++#endif
 +}
 +
  status_t Parcel::finishFlattenBinder(const sp<IBinder>& binder)
  {
      internal::Stability::tryMarkCompilationUnit(binder.get());
-@@ -234,6 +243,10 @@
+     int16_t rep = internal::Stability::getRepr(binder.get());
++    if (gHostCategoryStability.load(std::memory_order_relaxed))  // apklayer patch
++        return writeInt32(static_cast<int32_t>(1u | (static_cast<uint32_t>(static_cast<uint16_t>(rep)) << 24)));
+     return writeInt32(rep);
+ }
+ 
+@@ -234,6 +254,10 @@
      int32_t stability;
      status_t status = readInt32(&stability);
      if (status != OK) return status;
@@ -421,15 +402,17 @@ diff --git a/libs/binder/Parcel.cpp b/libs/binder/Parcel.cpp
  
      status = internal::Stability::setRepr(binder.get(), static_cast<int16_t>(stability),
                                            true /*log*/);
-@@ -300,6 +313,7 @@
+@@ -300,6 +324,9 @@
                  }
              }
              const int32_t handle = proxy ? proxy->getPrivateAccessor().binderHandle() : 0;
++#ifdef __LP64__
 +            if (proxy && proxy->isHostBinder()) maybeKernelFields()->mHost = true;  // apklayer patch
++#endif
              obj.hdr.type = BINDER_TYPE_HANDLE;
              obj.binder = 0; /* Don't pass uninitialized stack data to a remote process */
              obj.flags = 0;
-@@ -468,8 +482,9 @@
+@@ -468,8 +495,9 @@
                  return finishUnflattenBinder(binder, out);
              }
              case BINDER_TYPE_HANDLE: {
@@ -441,17 +424,19 @@ diff --git a/libs/binder/Parcel.cpp b/libs/binder/Parcel.cpp
                  return finishUnflattenBinder(binder, out);
              }
          }
-@@ -677,7 +692,8 @@
+@@ -677,7 +705,10 @@
              }
          }
          if (numObjects > 0) {
 -            const sp<ProcessState> proc(ProcessState::self());
-+            kernelFields->mHost |= otherKernelFields->mHost;  // apklayer patch
++#ifdef __LP64__
++            kernelFields->mHost |= parcel->hostContext();  // apklayer patch
++#endif
 +            const sp<ProcessState> proc(ProcessState::self(hostContext()));
              // grow objects
              if (kernelFields->mObjectsCapacity < kernelFields->mObjectsSize + numObjects) {
                  if ((size_t)numObjects > SIZE_MAX - kernelFields->mObjectsSize) {
-@@ -1968,7 +1984,7 @@
+@@ -1968,7 +1999,7 @@
          // Need to write meta-data?
          if (nullMetaData || val.binder != 0) {
              kernelFields->mObjects[kernelFields->mObjectsSize] = mDataPos;
@@ -460,15 +445,7 @@ diff --git a/libs/binder/Parcel.cpp b/libs/binder/Parcel.cpp
              kernelFields->mObjectsSize++;
              // Clear sorted flag if we aren't appending to the end.
              kernelFields->mObjectsSorted &= mDataPos == mDataSize;
-@@ -3036,6 +3052,7 @@
-     mDataSize = mDataCapacity = dataSize;
-     kernelFields->mObjects = const_cast<binder_size_t*>(objects);
-     kernelFields->mObjectsSize = kernelFields->mObjectsCapacity = objectsCount;
-+    kernelFields->mHost = ProcessState::isHostBuffer(data);  // apklayer patch: received through the host binder context
-     mOwner = relFunc;
- 
- #ifdef BINDER_WITH_KERNEL_IPC
-@@ -3225,7 +3242,7 @@
+@@ -3225,7 +3256,7 @@
      if (i == 0) {
          return;
      }
@@ -477,7 +454,7 @@ diff --git a/libs/binder/Parcel.cpp b/libs/binder/Parcel.cpp
      uint8_t* const data = mData;
      binder_size_t* const objects = kernelFields->mObjects;
      while (i > 0) {
-@@ -3250,7 +3267,7 @@
+@@ -3250,7 +3281,7 @@
      if (i == 0) {
          return;
      }
@@ -486,7 +463,7 @@ diff --git a/libs/binder/Parcel.cpp b/libs/binder/Parcel.cpp
      uint8_t* const data = mData;
      binder_size_t* const objects = kernelFields->mObjects;
      while (i > 0) {
-@@ -3534,7 +3551,7 @@
+@@ -3534,7 +3565,7 @@
          if (kernelFields && objectsSize < kernelFields->mObjectsSize) {
  #ifdef BINDER_WITH_KERNEL_IPC
              // Need to release refs on any objects we are dropping.
@@ -675,11 +652,13 @@ diff --git a/libs/binder/include/binder/Parcel.h b/libs/binder/include/binder/Pa
      friend class RpcState;
  
  public:
-@@ -1387,6 +1388,7 @@
+@@ -1387,6 +1388,9 @@
          mutable bool mObjectsSorted = false;
          mutable bool mFdsKnown = true;
          mutable bool mHasFds = false;
-+        mutable bool mHost = false;  // apklayer patch: its binder handles are the host binder context's (in padding: no size change)
++#ifdef __LP64__  // apklayer patch: carries host binder context handles (in padding: no size change; 32-bit has none)
++        mutable bool mHost = false;
++#endif
      };
      // Fields only needed when parcelling for RPC Binder.
      struct RpcFields {
