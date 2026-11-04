@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Dialogs at the bottom of the screen take taps where they are (hello.input's Sheet, -Dhello.sheet): a floating dialog with gravity BOTTOM
 (its button, a tap outside cancels, Back cancels) and a Material-style bottom sheet (a full-screen dimmed dialog: its button, a tap on the
-area outside the sheet cancels, a downward drag on its handle dismisses). Google Meet's "Share this joining info" sheet ate every tap."""
+area outside the sheet cancels, a downward drag on its handle dismisses). Google Meet's "Share this joining info" sheet ate every tap,
+and stayed above the green room that its Join started (a newer activity covers an older one's dialogs)."""
 import os
 from pathlib import Path
 import re
@@ -69,6 +70,13 @@ try:
                     if stage == 3: shown = level(instance.capture('sheet shown', PKG))
                     if stage == 6: over = level(instance.capture('sheet over popup', PKG))
                     outside = act(stage, x, y, w, h)
+                elif 'covering activity shown' in line:  # stage 5: the newer activity is above the older one's sheet, for the screen and for taps
+                    im = pixels.rgb(instance.capture('activity over the sheet', PKG))
+                    r, g, b = im.getpixel((im.width // 2, im.height * 470 // 600))[:3]
+                    assert r > 150 and g < 90 and b < 90, 'the sheet of the activity below is drawn over the covering activity: %s' % ((r, g, b),)
+                    instance.inject(PKG, 'tap:240,560')
+                elif 'covering activity tapped' in line:
+                    done.add('covering tapped')
                 elif outside and re.search(r'sheet [1356] button tapped', line):
                     done.add(line.split()[2] + ' button')
                     instance.inject(PKG, outside)
@@ -78,14 +86,14 @@ try:
                 elif 'sheet stages done' in line:
                     gone = level(instance.capture('sheet gone', PKG))
                     instance.stop()
-    want = {'1 button', '1 cancelled', '2 cancelled', '3 button', '3 cancelled', '4 dragged', '5 button', '5 cancelled', '6 button', '6 cancelled'}
+    want = {'1 button', '1 cancelled', '2 cancelled', '3 button', '3 cancelled', '4 dragged', 'covering tapped', '5 button', '5 cancelled', '6 button', '6 cancelled'}
     assert done == want, 'missing: %s' % (want - done)
     assert not any('popup under the sheet tapped' in l for l in seen), 'a tap on the sheet reached a popup of the activity below it'
     print('brightness at the handle of sheet 3: %d, after the sheets: %d' % (shown, gone), flush=True)
     assert shown > gone + 40, 'the sheet stays on the screen after the dialogs went away'
     print('brightness at the handle of sheet 6 over the popup: %d' % over, flush=True)
     assert abs(over - shown) < 10, 'the popup of the activity is drawn over the sheet'
-    print('PASS bottom dialogs: button taps, an outside tap and Back cancel, a downward drag dismisses the sheet; the sheet is gone from the screen; a popup of the activity below the sheet gets none of its taps', flush=True)
+    print('PASS bottom dialogs: button taps, an outside tap and Back cancel, a downward drag dismisses the sheet; the sheet is gone from the screen; a popup of the activity below the sheet gets none of its taps; a newer activity covers the sheet', flush=True)
 finally:
     instance.stop()
     if app.poll() is None: os.killpg(app.pid, signal.SIGKILL)

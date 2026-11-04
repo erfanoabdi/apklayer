@@ -17,8 +17,8 @@ import android.widget.LinearLayout;
  * tests/vm/bottom-sheet.py: dialogs that sit at the bottom of the screen (Google Meet's "Share this joining info" sheet). Stage 1 and 2: a
  * floating dialog with gravity BOTTOM and WRAP height (its button, an outside tap, Back). Stage 3 and 4: what Material's
  * BottomSheetDialog builds from plain views: a full-screen dimmed dialog whose outside area cancels on a click and whose sheet sits at the
- * bottom (stage 3: its button and an outside click, the sheet sliding out on animation frames; 4: a downward drag on its handle; 5: its
- * button and Back after another activity covered and left it). Each stage shows the next one when its dialog goes away.
+ * bottom (stage 3: its button and an outside click, the sheet sliding out on animation frames; 4: a downward drag on its handle; 5: another
+ * activity covers it, above the sheet and taking its taps (Meet's green room over the link sheet), then leaves; the sheet's button and Back). Each stage shows the next one when its dialog goes away.
  */
 final class Sheet {
     private Sheet() {}
@@ -85,7 +85,7 @@ final class Sheet {
             w.getDecorView().getLocationOnScreen(win);
             System.out.println("[hello-input] sheet " + stage + " shown sheet=" + at[0] + "," + at[1] + "," + sheet.getWidth() + "," + sheet.getHeight()
                     + " window=" + win[0] + "," + win[1] + "," + w.getDecorView().getWidth() + "," + w.getDecorView().getHeight());
-        }, stage == 5 ? 2500 : 800);
+        }, stage == 5 ? 3500 : 800);
     }
 
     /**
