@@ -1,4 +1,5 @@
 #include "manage.h"
+#include "sandbox.h"
 
 #include "desktop.h"
 
@@ -7,6 +8,7 @@
 #include <cstring>
 #include <ftw.h>
 #include <map>
+#include <regex>
 #include <set>
 #include <unistd.h>
 
@@ -118,6 +120,7 @@ int stopApp(const Layout& l, const Instance& inst, const std::string& package) {
 int clearData(const Layout& l, const Instance& inst, const std::string& package) {
     if (!isDir(appDir(l, package))) die("not installed: " + package);
     stopApp(l, inst, package);
+    reclaim(inst.appData(package));  // files the sandbox's app uid owns
     removeTree(inst.appData(package));
     if (inst.id == "default") removeTree(join(appDir(l, package), "data"));  // the shared place before data was per instance (appDataDir would move it back in)
     printf("apklayer: cleared the data of %s in instance %s\n", package.c_str(), inst.id.c_str());
@@ -147,6 +150,8 @@ int instanceCommand(const Layout& l, const std::string& action, const std::strin
     if (!isDir(join(l.dataHome, "apklayer/" + id))) die("no such instance: " + id);
     Instance inst = Instance::open(l, id);
     if (stackRunning(inst)) stopStack(l, inst);
+    for (const std::string& app : listDir(join(inst.root, "app-data"))) reclaim(join(inst.root, "app-data/" + app));  // the sandbox's app uids own these
+    for (const std::string& tmp : listDir(inst.tmpDir())) reclaim(join(inst.tmpDir(), tmp));
     for (const std::string& dir : {inst.root, join(l.stateHome, "apklayer/" + id), inst.runtimeDir}) removeTree(dir);  // not $APKLAYER_LOGS: a test's own directory
     printf("apklayer: removed instance %s (its binder devices stay until the next reboot)\n", id.c_str());
     return 0;
@@ -178,6 +183,38 @@ int propCommand(const Layout& l, const Instance& inst, const std::vector<std::st
     if (action == "set") text += key + "=" + args[2] + "\n";
     if (!writeFile(file, text)) die("cannot write " + file);
     printf("apklayer: %s %s for instance %s (from its next start)\n", key.c_str(), action == "set" ? "set" : "unset", inst.id.c_str());
+    return 0;
+}
+
+int settingsCommand(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {
+    const std::string file = join(inst.root, "settings");  // read by the hub (apklayer.host.HubHostSettings), which lays it over the desktop's
+    static const std::map<std::string, std::regex> keys = {  // what each value may be (the hub reads them as such)
+        {"night", std::regex("yes|no")}, {"accent", std::regex("#?[0-9a-fA-F]{6}")}, {"contrast", std::regex("high|normal")},
+        {"animations", std::regex("on|off")}, {"font-scale", std::regex("[0-3](\\.[0-9]+)?")}, {"locale", std::regex("[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*")},
+        {"timezone", std::regex("[A-Za-z0-9_+/-]+")}, {"time-format", std::regex("12|24")}};
+    auto own = propLines(file);
+    if (args.empty() || (args[0] == "list" && args.size() == 1)) {
+        for (const auto& [k, v] : own) printf("%s\t%s\n", clean(k).c_str(), clean(v).c_str());
+        return 0;
+    }
+    const std::string& action = args[0];
+    if (!((action == "set" && args.size() == 3) || (action == "unset" && args.size() == 2)) || !keys.count(args[1]))
+        die("settings [list] | set KEY VALUE | unset KEY; keys: night yes|no, accent #rrggbb, contrast high|normal, animations on|off, "
+            "font-scale <float>, locale <BCP-47>, timezone <tz id>, time-format 12|24");
+    if (action == "set" && !std::regex_match(args[2], keys.at(args[1]))) die("not a value for " + args[1] + ": " + args[2]);
+    std::string text;
+    for (const auto& [k, v] : own) if (k != args[1]) text += k + "=" + v + "\n";
+    if (action == "set") text += args[1] + "=" + args[2] + "\n";
+    if (!writeFile(file, text)) die("cannot write " + file);
+    bool live = false;
+    if (stackRunning(inst)) {  // HubProtocol.SETTINGS_CHANGED (43): the hub rereads the file and the running apps get the new configuration
+        Spawn call;
+        call.argv = {l.btload(), l.androidLibs, "libapklayer_servicetool.so", "--main", "call", "apklayer.instance", "43", "apklayer.IInstanceHub"};
+        call.env = nativeEnv(l, inst).env;
+        call.logFile = join(inst.logs(), "settings.log");
+        live = runAndWait(call) == 0;
+    }
+    printf("apklayer: %s %s for instance %s (%s)\n", args[1].c_str(), action == "set" ? "set" : "unset", inst.id.c_str(), live ? "applied now" : "from its next start");
     return 0;
 }
 
@@ -230,6 +267,7 @@ int status(const Layout& l, const Instance& inst) {
     for (const auto& [pkg, records] : launches(l, inst)) pkgs += (pkgs.empty() ? "" : ",") + pkg;
     printf("instance\t%s\nstack\t%s\nbinder\t%s\napps\t%s\nabi\t%s\n", inst.id.c_str(), stackRunning(inst) ? "running" : "stopped",
            exists(binderDevice(inst.id)) ? "ok" : "missing", pkgs.c_str(), kAbi);
+    printf("gpu node\t%s\n", ne.env.count("APKLAYER_RENDER_NODE") ? ne.env["APKLAYER_RENDER_NODE"].c_str() : "none");
     Spawn egl;
     egl.argv = {"eglinfo", "-B", "-p", "gbm"};
     egl.env = currentEnv();  // the host driver as it is, without the version claim nativeEnv adds

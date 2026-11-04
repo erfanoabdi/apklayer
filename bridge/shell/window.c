@@ -182,12 +182,23 @@ void window_attach_input(struct client *c, int own_id, const char *title)
         w->proxy_id = own_id;
         clipboard_push(w);
         fprintf(stderr, "[shell] %s takes the input of window \"%s\" (as its window %d)\n", c->pkg, title, own_id);
+        if (c->dark) window_set_dark(w, c->dark == 2);
         if (w->configured) {  // its size, scale and state, now that someone listens
             window_send_configure(w);
             send_state(w);
         }
         return;
     }
+}
+
+/* The title bar follows the colour scheme of the app's instance (MSG_DECOR_DARK), redrawn at once. */
+void window_set_dark(struct window *w, int dark)
+{
+    if (w->decor.dark == dark) return;
+    w->decor.dark = dark;
+    w->decor.focused = -1;  /* force the redraw */
+    fprintf(stderr, "[shell] %s: title bar %s\n", w->title, dark ? "dark" : "light");
+    if (w->decor.lw > 0) decor_update(&w->decor, w->decor.lw, window_scale(w), w->maximized, w->bar_hover, w->activated);
 }
 
 void window_drop_proxy(struct client *c)

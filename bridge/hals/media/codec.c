@@ -169,8 +169,9 @@ int apklayer_codec_open(const struct apklayer_codec_config *cfg, struct apklayer
     GstCaps *caps = input_caps(cfg->mime);
     gst_caps_set_simple(caps, "width", G_TYPE_INT, (int)cfg->width, "height", G_TYPE_INT, (int)cfg->height, NULL);
     codec_data(caps, cfg->codec_data, cfg->codec_data_size);
-    int result = open_caps(caps, "appsrc name=input format=time ! decodebin ! appsink name=output sync=false max-buffers=8",
-                           "video/x-raw;video/x-raw(memory:DMABuf)", out);
+    // I420 in system memory, what the Codec2 side copies: a hardware decoder decodebin prefers (VA on Intel: NV12) is converted, a software one passes through
+    int result = open_caps(caps, "appsrc name=input format=time ! decodebin ! videoconvert ! appsink name=output sync=false max-buffers=8",
+                           "video/x-raw,format=I420", out);
     gst_caps_unref(caps);
     return result;
 }

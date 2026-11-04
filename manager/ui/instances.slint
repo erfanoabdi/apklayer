@@ -1,5 +1,5 @@
 // Instances: each an Android of its own (binder devices, /data, /storage, property store). Selecting one points every other page at it.
-import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, ScrollView, IconButton, OutlinedCard } from "@material";
+import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, ScrollView, IconButton, OutlinedCard, DropDownMenu } from "@material";
 import { Backend, AppIcons } from "backend.slint";
 import { Row, Tag, Heading } from "widgets.slint";
 
@@ -31,6 +31,15 @@ export component InstancesPage {
                     if !inst.binder : IconButton { icon: AppIcons.admin; tooltip: "Set up binder devices"; clicked => { Backend.setup-binder(inst.id); } }
                     if inst.running : IconButton { icon: AppIcons.stop; tooltip: "Stop"; clicked => { Backend.stop-instance(inst.id); } }
                     if inst.id != "default" : IconButton { icon: AppIcons.delete; tooltip: "Remove"; enabled: !Backend.busy; clicked => { root.confirm("remove-instance", inst.id); } }
+                }
+                // the selected instance's GPU (several GPUs: iGPU + dGPU); a change restarts its Android services
+                if Backend.gpus.length > 1 : DropDownMenu {
+                    label: "GPU of " + Backend.instance + (Backend.gpu-index >= 0 ? ": " + Backend.gpus[Backend.gpu-index].text : "");  // DropDownMenu shows no text before a selection
+                    leading_icon: AppIcons.memory;
+                    enabled: !Backend.busy;
+                    items: Backend.gpus;
+                    current_index: Backend.gpu-index;
+                    selected(i) => { Backend.set-gpu(i); }
                 }
             }
         }

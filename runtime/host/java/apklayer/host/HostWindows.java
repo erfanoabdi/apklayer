@@ -81,15 +81,18 @@ final class HostWindows {
 
     /**
      * The window an input event should go to: among the visible, attached windows (containing the
-     * point when x >= 0), the highest window type wins (dialogs and popups sit above the activity
-     * window), then the most recently added. Without a point (keys, the IME) only windows that take
+     * point when x >= 0), the one stacked highest wins (WindowOrder, the screen's order: dialogs above
+     * the activity window, a popup with its parent window). Without a point (keys, the IME) only windows that take
      * key focus count, as WindowManagerService's focused window: a FLAG_NOT_FOCUSABLE popup (the
      * selection's floating toolbar, text handles, a dropdown) leaves keys with the window below.
      */
     static View topWindow(List<View> views, int x, int y) {
+        List<android.view.WindowManager.LayoutParams> params = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mParams");
+        long[] keys = org.robolectric.shadows.WindowOrder.keys(views, params);
         View best = null;
-        int bestType = -1;
-        for (View v : views) {
+        long bestKey = -1;
+        for (int i = 0; i < views.size(); i++) {
+            View v = views.get(i);
             if (v.getVisibility() != View.VISIBLE || !v.isAttachedToWindow()) continue;
             if (x >= 0) {
                 int[] loc = new int[2];
@@ -98,10 +101,9 @@ final class HostWindows {
             }
             android.view.WindowManager.LayoutParams lp = v.getLayoutParams() instanceof android.view.WindowManager.LayoutParams p ? p : null;
             if (x < 0 && lp != null && (lp.flags & android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) != 0) continue;
-            int type = lp != null ? lp.type : 0;
-            if (type >= bestType) { // >=: later windows win ties
+            if (keys[i] > bestKey) {
                 best = v;
-                bestType = type;
+                bestKey = keys[i];
             }
         }
         return best;

@@ -38,15 +38,16 @@ public class Main extends Activity {
         };
         field.setCustomSelectionActionModeCallback(toolbar);
         field.setCustomInsertionActionModeCallback(toolbar);
-        layout.addView(field, new LinearLayout.LayoutParams(-1, 80));
+        float dp = getResources().getDisplayMetrics().density;  // heights in dp: the tests tap logical (dp) coordinates at any host scale
+        layout.addView(field, new LinearLayout.LayoutParams(-1, (int) (80 * dp)));
         Button copy = new Button(this);
         copy.setText("Copy Android text");
         copy.setOnClickListener(v -> clipboard.setPrimaryClip(ClipData.newPlainText("test", "android-copy")));
-        layout.addView(copy, new LinearLayout.LayoutParams(-1, 64));
+        layout.addView(copy, new LinearLayout.LayoutParams(-1, (int) (64 * dp)));
         Button paste = new Button(this);
         paste.setText("Paste host text");
         paste.setOnClickListener(v -> field.onTextContextMenuItem(android.R.id.paste));
-        layout.addView(paste, new LinearLayout.LayoutParams(-1, 64));
+        layout.addView(paste, new LinearLayout.LayoutParams(-1, (int) (64 * dp)));
         Button longCopy = new Button(this);
         longCopy.setText("Copy long text");
         longCopy.setOnClickListener(v -> {
@@ -54,7 +55,7 @@ public class Main extends Activity {
             java.util.Arrays.fill(data, 'L');
             clipboard.setPrimaryClip(ClipData.newPlainText("long", new String(data)));
         });
-        layout.addView(longCopy, new LinearLayout.LayoutParams(-1, 64));
+        layout.addView(longCopy, new LinearLayout.LayoutParams(-1, (int) (64 * dp)));
         clipboard.addPrimaryClipChangedListener(() -> {
             ClipData clip = clipboard.getPrimaryClip();
             if (clip != null && clip.getItemCount() > 0) {
@@ -68,6 +69,7 @@ public class Main extends Activity {
         setContentView(layout);
         field.requestFocus();
         if (System.getProperty("hello.covered") != null) Covered.coverWithDialog(this);
+        if (System.getProperty("hello.sheet") != null) field.postDelayed(() -> Sheet.show(this, 1), 1500);
         if (System.getProperty("hello.magnifier") != null) {
             field.setText("magnify me");
             field.postDelayed(() -> magnify(field), 2000);

@@ -35,6 +35,8 @@ public class ShadowHostRealBinder {
         }
         Integer known = APP_UIDS.get(pid);
         if (known != null) return known;
+        int kernel = kernelUid(pid);
+        if (kernel >= Process.FIRST_APPLICATION_UID && kernel <= Process.LAST_APPLICATION_UID) { APP_UIDS.put(pid, kernel); return kernel; }  // a sandboxed app: the kernel's word
         if (Boolean.TRUE.equals(RESOLVING.get())) return ShadowHostProcess.realUidValue();  // the hub call below went through a proxy transaction listener (MediaProvider's) that asks the calling uid again
         RESOLVING.set(true);
         int uid;
@@ -43,6 +45,18 @@ public class ShadowHostRealBinder {
         if (uid < 0) return ShadowHostProcess.realUidValue();
         APP_UIDS.put(pid, uid);
         return uid;
+    }
+
+    /**
+     * The effective uid of a process as this one's user namespace names it (/proc/<pid>/status), -1 if unknown. In the sandbox (cli/sandbox.cpp) every app
+     * process runs as its own app uid, as the binder driver reports it: the calling pid is the kernel's, and so is its uid.
+     */
+    static int kernelUid(int pid) {
+        try {
+            for (String line : java.nio.file.Files.readAllLines(java.nio.file.Path.of("/proc/" + pid + "/status")))
+                if (line.startsWith("Uid:")) return Integer.parseInt(line.split("\\s+")[2]);
+        } catch (java.io.IOException | RuntimeException gone) { /* ended, or no /proc */ }
+        return -1;
     }
 
     /**

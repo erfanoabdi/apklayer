@@ -163,6 +163,9 @@ public final class NativeLoader {
             if (error != null) throw new UnsatisfiedLinkError("native bridge: " + error);
             System.out.println("[apklayer] native bridge " + bridge() + " ready (" + (System.nanoTime() - start) / 1_000_000 + " ms)");
         }
+        // `apklayer stop` (SIGTERM) and System.exit end the JVM through exit() on its VM thread too: without this the app libraries' static destructors
+        // run there (OpenTTD's terminate()d, SIGSEGV in vm_exit); the hooks run before exit(), so the skip is still registered last
+        Runtime.getRuntime().addShutdownHook(new Thread(NativeLoader::endWithoutNativeDestructors, "apklayer-native-exit"));
         ready = true;
     }
 

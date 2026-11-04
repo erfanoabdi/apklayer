@@ -100,11 +100,18 @@ public final class NestPlan {
     public static void apply(ClassFileWriter cw, DexClass cls, NestIndex nestIndex) {
         String host = outermostEnclosing(cls, nestIndex);
         if (host != null) {
-            cw.setNestHost(host);
+            if (samePackage(host, cls.name())) cw.setNestHost(host);
             return;
         }
-        List<String> members = transitivelyEnclosed(cls, nestIndex);
+        // apklayer patch: a nest is one run-time package (JVMS 5.4.4). A class R8 moved to another package (a "-$$LambdaGroup" in the
+        // default package) keeps its EnclosingClass annotation; listing it makes NestMembers malformed (ASM's CheckClassAdapter refuses it).
+        List<String> members = new ArrayList<>();
+        for (String m : transitivelyEnclosed(cls, nestIndex)) if (samePackage(m, cls.name())) members.add(m);
         if (!members.isEmpty()) cw.setNestMembers(members);
+    }
+
+    static boolean samePackage(String a, String b) {
+        return a.substring(0, Math.max(0, a.lastIndexOf('/'))).equals(b.substring(0, Math.max(0, b.lastIndexOf('/'))));
     }
 
     /**

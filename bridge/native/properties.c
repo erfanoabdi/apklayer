@@ -46,6 +46,7 @@ struct prop_area {
 #define MAX_RECORDS ((AREA_SIZE - sizeof(struct prop_area)) / sizeof(struct prop_info))
 
 static struct prop_area *area;
+static int area_readonly; /* a sandboxed app (cli/sandbox.cpp) reads the instance's properties, as an Android app does; only the instance's own processes write */
 
 static int mkdirs(char *path)
 {
@@ -70,19 +71,22 @@ static struct prop_area *open_area(void)
         snprintf(path, sizeof path, "%s/apklayer/%s/properties", rt ? rt : "/tmp", inst ? inst : "default");
     }
     mkdirs(path);
-    int fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0600);
+    int fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0644);
+    int readonly = fd < 0 && (errno == EACCES || errno == EROFS);
+    if (readonly) fd = open(path, O_RDONLY | O_CLOEXEC);
     if (fd < 0) return NULL;
     struct stat st;
-    if (fstat(fd, &st) == 0 && st.st_size < AREA_SIZE) {
+    if (!readonly && fstat(fd, &st) == 0 && st.st_size < AREA_SIZE) {
         if (ftruncate(fd, AREA_SIZE) < 0) { close(fd); return NULL; }
     }
-    void *p = mmap(NULL, AREA_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    void *p = mmap(NULL, AREA_SIZE, readonly ? PROT_READ : PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     close(fd);
     if (p == MAP_FAILED) return NULL;
     struct prop_area *a = p;
     uint32_t zero = 0;
     /* the first process to see the zeroed file stamps it */
-    if (atomic_compare_exchange_strong((_Atomic uint32_t *)&a->magic, &zero, MAGIC)) a->version = 1;
+    if (!readonly && atomic_compare_exchange_strong((_Atomic uint32_t *)&a->magic, &zero, MAGIC)) a->version = 1;
+    area_readonly = readonly;
     area = a;
     return a;
 }
@@ -166,7 +170,7 @@ int __system_property_set(const char *name, const char *value)
 {
     struct prop_area *a = open_area();
     size_t nlen = name ? strlen(name) : 0, vlen = value ? strlen(value) : 0;
-    if (!a || nlen == 0 || nlen >= PROP_NAME_MAX || vlen >= PROP_VALUE_MAX) return -1;
+    if (!a || area_readonly || nlen == 0 || nlen >= PROP_NAME_MAX || vlen >= PROP_VALUE_MAX) return -1;
     lock_area(a);
     struct prop_info *pi = (struct prop_info *)__system_property_find(name);
     int r = 0;

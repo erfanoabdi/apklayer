@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 
+#include "DeviceSelect.h"
 #include "gralloc_handle.h"
 
 namespace {
@@ -481,7 +482,18 @@ VkResult createInstance(const VkInstanceCreateInfo* info, const VkAllocationCall
     return fn(&host, allocator, instance);
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL enumeratePhysicalDevices(VkInstance instance, uint32_t* count, VkPhysicalDevice* out) {
+    return apklayer::vulkan::enumeratePhysicalDevices(host<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr"), instance, count, out);
+}
+VKAPI_ATTR VkResult VKAPI_CALL enumeratePhysicalDeviceGroups(VkInstance instance, uint32_t* count, VkPhysicalDeviceGroupProperties* out) {
+    return apklayer::vulkan::enumeratePhysicalDeviceGroups(host<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr"), instance, count, out);
+}
+
 PFN_vkVoidFunction getInstanceProcAddr(VkInstance instance, const char* name) {
+    // the instance's GPU only (DeviceSelect.cpp)
+    if (!strcmp(name, "vkEnumeratePhysicalDevices")) return reinterpret_cast<PFN_vkVoidFunction>(enumeratePhysicalDevices);
+    if (!strcmp(name, "vkEnumeratePhysicalDeviceGroups") || !strcmp(name, "vkEnumeratePhysicalDeviceGroupsKHR"))
+        return reinterpret_cast<PFN_vkVoidFunction>(enumeratePhysicalDeviceGroups);
     if (!strcmp(name, "vkEnumerateDeviceExtensionProperties"))
         return reinterpret_cast<PFN_vkVoidFunction>(enumerateDeviceExtensions);
     if (!strcmp(name, "vkCreateDevice")) return reinterpret_cast<PFN_vkVoidFunction>(createDevice);

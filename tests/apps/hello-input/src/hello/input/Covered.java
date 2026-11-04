@@ -37,6 +37,11 @@ public class Covered extends Activity {
             }
         });
         setContentView(button);
+        if (getIntent().getBooleanExtra("finish", false)) { // Sheet's stage 5: a round trip; red, and above the sheet of the activity below
+            button.setBackgroundColor(android.graphics.Color.RED);
+            button.postDelayed(() -> System.out.println("[hello-input] covering activity shown"), 500);
+            button.postDelayed(this::finish, 1800);
+        }
     }
 
     @Override protected void onResume() { super.onResume(); System.out.println("[hello-input] covering activity resumed"); }

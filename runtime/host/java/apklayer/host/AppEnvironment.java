@@ -43,7 +43,13 @@ final class AppEnvironment {
         HostCompat.install();  // behavior changes by the app's target SDK (PendingIntent mutability, ...)
         org.robolectric.shadows.ShadowAlarmManager.setAutoSchedule(true);  // an alarm fires its PendingIntent or listener when its time comes (Robolectric only records it otherwise)
         HostLibraryPath.install();  // before the app's own code runs: SoLoader finds the system libraries it looks up by name
-        if (Boolean.getBoolean("apklayer.logcat")) org.robolectric.shadows.ShadowLog.stream = System.out; // android.util.Log output (-Dapklayer.logcat=true, APKLAYER_LOGCAT=1)
+        // android.util.Log output: the terminal too with -Dapklayer.logcat=true (APKLAYER_LOGCAT=1), else only the launch's app log (`apklayer logs`)
+        String appLog = System.getProperty("apklayer.applog");
+        if (Boolean.getBoolean("apklayer.logcat")) org.robolectric.shadows.ShadowLog.stream = System.out;
+        else if (appLog != null) {
+            try { org.robolectric.shadows.ShadowLog.stream = new java.io.PrintStream(new java.io.FileOutputStream(appLog, true), true); }
+            catch (java.io.IOException e) { System.out.println("[apklayer] app log " + appLog + ": " + e); }
+        }
         AndroidManifest manifest = apk == null ? new AndroidManifest(null, null, null, "apklayer.hub")
                 : new AndroidManifest(null, null, null, null, "", apk);
         // an app that is itself the MediaStore provider answers for "media": no stand-in (Robolectric's fake one, HostMediaStub) in front of it.

@@ -1,3 +1,5 @@
+<p align="center"><img src="data/apklayer.svg" width="180" alt="apklayer logo: an Android robot in layered glass"></p>
+
 # apklayer
 
 Run Android APKs natively on Linux: real Android userspace, no emulator, no VM.
@@ -31,6 +33,7 @@ tools/build native ~/arm64-native [shards]   # stage the native runtime: ninja's
 sudo tools/host-setup/binder.sh              # kernel binderfs
 bin/apklayer install app.apk | run <package|app.apk> | list | uninstall <package> | screenshot <package> <out.png> | stop
 bin/apklayer instances | instance create|remove <id> | prop [set KEY VALUE | unset KEY] | info | clear-data | permissions [grant|revoke] | stop <package> | status
+bin/apklayer gpus | gpu set <id>|unset         # the host's GPUs; the instance runs on the chosen one (default: the desktop compositor's)
 ```
 
 **apklayer-manager** (`manager/`): a Material 3 window over the CLI for phones and desktops: apps (install, open, stop, clear data, uninstall,
@@ -38,6 +41,14 @@ info), instances, per-instance Android property overrides, what the instance see
 ```sh
 manager/fetch-slint.sh && meson setup manager/b manager && ninja -C manager/b && manager/b/apklayer-manager
 ```
+
+## Logs and bug reports
+Every launch of an app writes its log, from the desktop's app grid as well as from a terminal: the app's output, its `android.util.Log` lines and native logs.
+- `apklayer logs <package>`: the log of the app's last launch (`--previous`: the launch before). `apklayer logs` lists all log files of the instance (`~/.local/state/apklayer/<instance>/`).
+- `APKLAYER_LOGCAT=1 apklayer run <package>`: the same log live in the terminal, Android log included.
+- `apklayer report <package>`: one archive (`apklayer-report-<package>.tar.gz`) with the apklayer version, your distribution, desktop and GPU, the app's info and permissions, its last two launch logs and the instance's service logs.
+
+To report a bug: open the app again, reproduce the problem, run `apklayer report <package>` and attach the archive to a [new issue](https://github.com/erfanoabdi/apklayer/issues/new/choose) together with the app's link and version and the steps to reproduce. Look through the archive first: logs can contain account names, URLs and file names.
 
 ## Layout
 `cli/` the tool · `runtime/` app host, dex2jvm, Robolectric overlays · `bridge/` JNI shim, shell, host HALs · `aosp/` Android-side modules · `tools/` builds (`tools/build`), staging from the tree (`tools/stage`), generators, host setup ·

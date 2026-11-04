@@ -1,6 +1,7 @@
 """Mac side of the tests: the test VM (tests/vm/local.conf through tests/vm/config.py), commands on it, copying the repo tree and APKs there,
 and the environment of one apklayer instance per test group (own binder devices, own XDG_RUNTIME_DIR and with it its own window shell)."""
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -30,7 +31,10 @@ def push():
                            env=dict(os.environ, COPYFILE_DISABLE='1'))
     tar.stdin.write(names)  # the list fits the pipe: tar reads it while ssh takes its output
     tar.stdin.close()
-    remote = ssh('mkdir -p %s && tar xf - -C %s' % (ROOT, ROOT), stdin=tar.stdout)
+    # tar keeps the local modification times; after a push from another checkout (a worktree, a bisect) the VM's files may be newer than this
+    # tree's and ninja would skip real changes: then every file gets the extraction time once (tar -m), a full rebuild
+    remote = ssh('mkdir -p %s && if [ "$(cat %s/.pushed-from 2>/dev/null)" = %s ]; then tar xf - -C %s; else tar xmf - -C %s && echo %s > %s/.pushed-from; fi'
+                 % (ROOT, ROOT, shlex.quote(str(REPO)), ROOT, ROOT, shlex.quote(str(REPO)), ROOT), stdin=tar.stdout)
     assert tar.wait() == 0 and remote.returncode == 0, 'pushing the tree failed'
 
 

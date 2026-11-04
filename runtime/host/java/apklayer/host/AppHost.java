@@ -190,6 +190,7 @@ public final class AppHost implements Runnable {
         }
         StartTrace.mark("window configured by the shell");
         this.shell = shell;
+        if (shell != null && HostConfiguration.night() != null) shell.sendDecorDark(HostConfiguration.night());
         text.shell = shell;
         app.getSystemService(android.content.ClipboardManager.class).addPrimaryClipChangedListener(text::onAppClipboardChanged);
         HostKeyStore.install();
@@ -352,9 +353,15 @@ public final class AppHost implements Runnable {
 
     /** An intent another app sent here through the hub: started like one of our own, its result goes to the sender's receiver. */
     private void startForHub(Intent intent, android.os.ResultReceiver resultTo) {
+        if (launching) { waitingForHub.add(new Object[] {intent, resultTo}); return; }  // planned once the activity being built is on the stack
         launch(intent);
         if (resultTo != null && !stack.isEmpty()) hubResults.put(stack.peek().get(), resultTo);
     }
+
+    /** A launch runs the activity's lifecycle, which runs the main looper: a hub intent coming then (a second `apklayer run` for a singleTask
+     *  activity) would be planned against a stack without the activity being built and start a second one instead of reaching onNewIntent. */
+    private boolean launching;
+    private final Deque<Object[]> waitingForHub = new ArrayDeque<>();
 
     private static ActivityInfo resolved(Intent intent) throws android.content.pm.PackageManager.NameNotFoundException {
         android.content.pm.ResolveInfo found = RuntimeEnvironment.getApplication().getPackageManager().resolveActivity(intent, 0);
@@ -369,6 +376,17 @@ public final class AppHost implements Runnable {
 
     /** @param request the start's record, with its request code: startActivityForResult is only recorded by Robolectric, the host delivers the result (PLAN P5.3) */
     private void launch(Intent intent, ShadowActivity.IntentForResult request) {
+        boolean outer = !launching;
+        launching = true;
+        try {
+            launchNow(intent, request);
+        } finally {
+            if (outer) launching = false;
+        }
+        if (outer) while (!launching && !waitingForHub.isEmpty()) { Object[] next = waitingForHub.poll(); startForHub((Intent) next[0], (android.os.ResultReceiver) next[1]); }
+    }
+
+    private void launchNow(Intent intent, ShadowActivity.IntentForResult request) {
         if (Boolean.getBoolean("apklayer.tracestart")) System.out.println("[apklayer] launch " + intent + " flags=0x" + Integer.toHexString(intent.getFlags()));
         boolean wantsResult = request != null && request.requestCode >= 0;
         Class<? extends Activity> cls;
@@ -557,6 +575,30 @@ public final class AppHost implements Runnable {
     }
 
 
+    /** A host settings change (HostConfiguration.update, on the main thread) in the running app: its activities, and the shell's title bar. */
+    static void configurationChanged(int changes) {
+        AppHost host = running;
+        if (host == null) return;  // before the first launch: the activities start with it
+        if (host.shell != null && HostConfiguration.night() != null) host.shell.sendDecorDark(HostConfiguration.night());
+        ActivityController<? extends Activity> top = stack.peek();
+        HostConfiguration.dispatch(new ArrayList<>(stack), a -> host.stopped.contains(a) || (host.stoppedByMinimize && top != null && a == top.get()), changes,
+                (c, old) -> {
+                    host.recreated(old, c.get());
+                    setVisible(c.visible(), true);  // ActivityController's recreation leaves the new window unattached
+                    if (c == top) HostWindows.focus(c, host.windowActive);
+                });
+    }
+
+    /** What was kept for an activity that configurationChange replaced follows the new instance. */
+    private void recreated(Activity old, Activity now) {
+        for (java.util.Map<Activity, ?> kept : List.<java.util.Map<Activity, ?>>of(resultFor, hubResults)) if (kept.containsKey(old)) move(kept, old, now);
+        if (incomingActivity == old) incomingActivity = now;
+        if (taskRoot == old) taskRoot = now;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <V> void move(java.util.Map<Activity, V> map, Activity from, Activity to) { map.put(to, map.remove(from)); }
+
     /**
      * Window state from the shell (PLAN P2.9), as in Android's freeform multi-window: an inactive window stays resumed and only
      * loses window focus and top-resumed (SDL and game loops pause on onPause); a minimized one is stopped, restored it restarts.
@@ -592,24 +634,7 @@ public final class AppHost implements Runnable {
         logicalScale = scalePct;
         System.out.println("[apklayer] configure " + w + "x" + h + " @" + scalePct + "% -> " + wdp
                 + "x" + hdp + "dp @" + dpi + "dpi");
-        RuntimeEnvironment.setQualifiers("w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi");
-        // Applied in place, like an activity that handles the change itself: new resources
-        // configuration, onConfigurationChanged, and the window roots relayout at the new size.
-        // (Android would recreate activities that don't declare it; recreation doesn't re-attach
-        // windows in this sandbox yet, and the startup scale is applied before any launch.)
-        android.content.res.Resources appRes = RuntimeEnvironment.getApplication().getResources();
-        for (ActivityController<? extends Activity> c : new ArrayList<>(stack)) {
-            try {
-                Activity a = c.get();
-                a.getResources().updateConfiguration(appRes.getConfiguration(), appRes.getDisplayMetrics());
-                a.onConfigurationChanged(appRes.getConfiguration());
-                android.view.ViewRootImpl root = a.getWindow().getDecorView().getViewRootImpl();
-                if (root != null) root.updateConfiguration(Display.INVALID_DISPLAY);
-            } catch (Throwable e) {
-                System.out.println("[apklayer] configuration change failed: " + e);
-                e.printStackTrace(System.out);
-            }
-        }
+        HostConfiguration.resize("w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi", new ArrayList<>(stack));
         Object wmg = android.view.WindowManagerGlobal.getInstance();
         List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
         for (View v : views) { // force a fresh frame at the new size

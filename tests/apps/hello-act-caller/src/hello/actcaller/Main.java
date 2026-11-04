@@ -61,7 +61,13 @@ public class Main extends Activity {
             try {
                 require(first != null && first != this && first.isDestroyed(), "the old parent was not replaced");
                 require(UpChild.last != null && UpChild.last.isDestroyed(), "the child was not destroyed");
-                System.out.println("[act] PASS up: false without a parent in the task; CLEAR_TOP recreated the standard parent with the up-intent");
+                // the app's own task as ActivityManager reports it (Meet's TaskMonitor ends the call when its task is missing)
+                android.app.ActivityManager am = getSystemService(android.app.ActivityManager.class);
+                java.util.List<android.app.ActivityManager.RunningTaskInfo> running = am.getRunningTasks(5);
+                require(running.size() == 1 && getComponentName().equals(running.get(0).topActivity) && running.get(0).taskId == getTaskId(), "running tasks " + running);
+                java.util.List<android.app.ActivityManager.AppTask> tasks = am.getAppTasks();
+                require(tasks.size() == 1 && tasks.get(0).getTaskInfo().taskId == getTaskId(), "app tasks " + tasks);
+                System.out.println("[act] PASS up: false without a parent in the task; CLEAR_TOP recreated the standard parent with the up-intent; the task is reported running");
             } catch (Throwable failure) { System.out.println("[act] FAIL " + failure); }
         }, 1000);
     }

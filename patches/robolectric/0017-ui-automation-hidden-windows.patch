@@ -1,11 +1,20 @@
-apklayer patch: input skips hidden windows (a stopped activity's dialogs and popups get no input on Android either).
+apklayer patch: input skips hidden windows (a stopped activity's dialogs and popups get no input on Android either), and goes
+through the windows in the window manager's stacking (WindowOrder: a popup of the activity below a dialog over it), not by type alone.
 Against external/robolectric 87aa52b08 (REVISION). Applied by tools/build overlay onto the staged
 upstream sources (<native>/aosp/robolectric-src); the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
 ---
 diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUiAutomation.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUiAutomation.java
 --- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUiAutomation.java
 +++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUiAutomation.java
-@@ -277,6 +277,9 @@
+@@ -45,6 +45,7 @@
+ import com.google.common.collect.ImmutableList;
+ import java.util.ArrayList;
+ import java.util.Arrays;
++import java.util.Comparator;
+ import java.util.List;
+ import java.util.Set;
+ import java.util.concurrent.FutureTask;
+@@ -277,15 +278,18 @@
      for (int i = 0; i < viewRootImpls.size(); i++) {
        Root root = new Root(viewRootImpls.get(i), params.get(i), i);
        // TODO: Should we also filter out sub-windows of non-started application windows?
@@ -15,3 +24,16 @@ diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUiAut
        if (root.getType() != WindowManager.LayoutParams.TYPE_BASE_APPLICATION
            || startedActivityTokens.contains(root.impl.getView().getApplicationWindowToken())) {
          roots.add(root);
+       }
+     }
+-    roots.sort(
+-        comparingInt(Root::getType)
+-            .reversed()
+-            .thenComparing(comparingInt(Root::getIndex).reversed()));
++    // apklayer patch: the window manager's stacking (WindowOrder), the screen's too: a sub-window stacks with its parent window,
++    // so a popup of the activity stays below a dialog over the activity
++    long[] keys = WindowOrder.keys(viewRootImpls.stream().map(ViewRootImpl::getView).collect(toList()), params);
++    roots.sort(Comparator.comparingLong((Root r) -> keys[r.getIndex()]).reversed());
+     return ImmutableList.copyOf(roots);
+   }
+ 
