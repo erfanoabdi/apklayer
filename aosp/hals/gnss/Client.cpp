@@ -5,7 +5,9 @@
 #include <aidl/android/hardware/gnss/IGnss.h>
 #include <android/binder_manager.h>
 #include <android-base/logging.h>
+#include <sys/prctl.h>
 #include <condition_variable>
+#include <csignal>
 #include <cstdio>
 #include <mutex>
 
@@ -38,6 +40,7 @@ struct Callback : public BnGnssCallback {
 }  // namespace
 
 int gnssClient(int fixes) {
+    prctl(PR_SET_PDEATHSIG, SIGTERM);  // ends with its reader (an app JVM through `apklayer exec`)
     auto gnss = IGnss::fromBinder(ndk::SpAIBinder(AServiceManager_waitForService("android.hardware.gnss.IGnss/default")));
     CHECK(gnss && AIBinder_isRemote(gnss->asBinder().get()));
     auto callback = ndk::SharedRefBase::make<Callback>();

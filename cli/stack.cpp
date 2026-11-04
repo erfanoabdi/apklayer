@@ -284,7 +284,11 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         keystoreDir(inst);
         start("keystore2", "libapklayer_keystore2.so", {"/data/misc/keystore"});  // as keystore2.rc: the database directory, through the path layer
     }
-    for (const ProviderService& p : providers) start(p.name, p.front, p.options, p.backend);
+    for (const ProviderService& p : providers) {
+        start(p.name, p.front, p.options, p.backend);
+        // system_server's SensorService, over the sensors HAL: what SensorManager in apps talks to (HostSensorShadows)
+        if (p.name == "sensors" && staged(l, "libapklayer_sensorservice.so")) start("sensorservice", "libapklayer_sensorservice.so", {});
+    }
     start("surfaceflinger", "libapklayer_surfaceflinger.so", {});
     if (!tool.empty()) {
         // smoke tools draw on stack 0: give them the same virtual-display sink an app uses
@@ -376,6 +380,8 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
                     s.pidfd = pidfdOpen(s.pid);
                     fds[k].fd = s.pidfd;
                     fprintf(stderr, "providers: %s restarted with its new configuration\n", domain.c_str());
+                    for (const Service& client : running)  // SensorService connects to the HAL once: it restarts (as a crashed service) with it
+                        if (domain == "sensors" && client.name == "sensorservice" && client.pid > 0) kill(client.pid, SIGTERM);
                 }
             }
         }

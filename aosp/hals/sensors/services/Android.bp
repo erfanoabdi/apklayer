@@ -1,0 +1,15 @@
+// SensorService as a process of the stack (AOSP's sensorservice binary as a btload library).
+cc_library_shared {
+    name: "libapklayer_sensorservice",
+    srcs: ["Service.cpp"],
+    include_dirs: ["frameworks/native/services"],
+    shared_libs: [
+        "libbinder",
+        "libsensorprivacy",
+        "libsensorservice",
+        "libutils",
+    ],
+    version_script: "exports.map",
+    compile_multilib: "64",
+    cflags: ["-Wall", "-Werror", "-Wextra", "-Wno-main"],
+}

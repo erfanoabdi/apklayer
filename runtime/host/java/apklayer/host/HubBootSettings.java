@@ -44,12 +44,15 @@ final class HubBootSettings {
             String current = Settings.Secure.getString(resolver, Settings.Secure.DEFAULT_INPUT_METHOD);
             List<String> ids = enabled.isEmpty() ? List.of() : List.of(enabled.split(":"));
             if (current == null || !ids.contains(current)) put(resolver, Settings.Secure.DEFAULT_INPUT_METHOD, ids.isEmpty() ? "" : ids.get(0));
-            boolean located = locationReady(location);
+            boolean located = locationReady(location), gnss = HostLocation.gnssDeclared();
             // LOCATION_PROVIDERS_ALLOWED: gone from Android's own settings (version 193), but Robolectric's LocationManager keeps provider state in it
-            // (HostLocation): the network provider is GeoClue's
-            put(resolver, Settings.Secure.LOCATION_MODE, Integer.toString(located ? Settings.Secure.LOCATION_MODE_HIGH_ACCURACY : Settings.Secure.LOCATION_MODE_OFF));
-            put(resolver, Settings.Secure.LOCATION_PROVIDERS_ALLOWED, located ? android.location.LocationManager.NETWORK_PROVIDER : "");
-            System.out.println("[apklayer-hub] boot count " + boots + ", location " + (located ? "on" : "off") + ", input methods [" + enabled + "]");
+            // (HostLocation): the network provider is GeoClue's, the gps provider the GNSS HAL's (providers.toml)
+            List<String> allowed = new ArrayList<>();
+            if (gnss) allowed.add(android.location.LocationManager.GPS_PROVIDER);
+            if (located) allowed.add(android.location.LocationManager.NETWORK_PROVIDER);
+            put(resolver, Settings.Secure.LOCATION_MODE, Integer.toString(allowed.isEmpty() ? Settings.Secure.LOCATION_MODE_OFF : Settings.Secure.LOCATION_MODE_HIGH_ACCURACY));
+            put(resolver, Settings.Secure.LOCATION_PROVIDERS_ALLOWED, String.join(",", allowed));
+            System.out.println("[apklayer-hub] boot count " + boots + ", location [" + String.join(",", allowed) + "], input methods [" + enabled + "]");
         } catch (RuntimeException failed) {
             System.out.println("[apklayer-hub] boot settings not written: " + failed);
         } finally {

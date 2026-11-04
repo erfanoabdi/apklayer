@@ -331,6 +331,7 @@ static int register_classes(JNIEnv *env, JavaVM *vm, void *rt)
         "register_android_opengl_jni_GLES31", "register_android_opengl_jni_GLES31Ext", "register_android_opengl_jni_GLES32",
         "register_android_opengl_classes",
         "register_android_net_LocalSocketImpl", /* not GL: LocalSocket's natives, also absent from HostRuntime's list */
+        "register_android_hardware_SensorManager", /* not GL: SystemSensorManager's, used over the stack's SensorService (HostSensorShadows) */
         NULL
     };
     for (int i = 0; device_gl[i]; i++) {

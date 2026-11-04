@@ -1,0 +1,44 @@
+#!/bin/bash
+# providers.sh: the hardware providers (docs/PLAN.md "Plan: hardware providers") with their fake backends, deterministic values from providers.toml:
+# each HAL front through its AIDL interface (the fronts' own probes on a stack), then through Android's APIs from hello.hardware, then a changed
+# backend option (`apklayer providers set`) restarting only that domain's service. On the VM, in the group's instance (tests/run providers).
+: "${APKLY_STATE:=${XDG_STATE_HOME:-$HOME/.local/state}/apklayer/${APKLAYER_INSTANCE:-default}}"
+mkdir -p "$APKLY_STATE"
+status=0
+fail() { echo "FAIL: $*"; status=1; }
+bin/apklayer stop >/dev/null 2>&1
+trap 'bin/apklayer stop >/dev/null 2>&1; for d in sensors vibrator gnss; do bin/apklayer providers unset $d >/dev/null; done' EXIT
+bin/apklayer providers set sensors fake accel=0.5,9.5,1.25 >/dev/null
+bin/apklayer providers set vibrator fake >/dev/null
+bin/apklayer providers set gnss fake location=48.8584,2.2945 accuracy=3 >/dev/null
+bin/apklayer providers
+
+# 1. each HAL over remote AIDL, as its framework client uses it (the stack ends with the probe)
+out=$APKLY_STATE/providers-hal.out
+bin/apklayer stack libapklayer_sensors.so --probe > $out 2>&1
+grep -a "^sensor \|accelerometer:\|PASS" $out
+grep -aq "PASS sensors AIDL" $out && grep -aq "last 0.500 9.500 1.250" $out || fail "sensors AIDL: no accelerometer events with the configured value"
+bin/apklayer stack libapklayer_vibrator.so --probe > $out 2>&1
+grep -a "PASS" $out; grep -a "vibrator:" $APKLY_STATE/vibrator.log
+grep -aq "PASS vibrator AIDL" $out && grep -aq "vibrator: on 120 ms amplitude 0.50" $APKLY_STATE/vibrator.log || fail "vibrator AIDL: the backend did not get on 120 ms at 0.5"
+bin/apklayer stack libapklayer_gnss.so --client 2 > $out 2>&1
+grep -a "^location\|PASS" $out
+grep -aq "PASS gnss AIDL" $out && grep -aq "^location 48.8584000 2.2945000 3.0" $out || fail "gnss AIDL: no fix at the configured location"
+
+# 2. through Android's APIs: Vibrator (the hub's vibrator_manager over the HAL), LocationManager's gps provider, SensorManager
+out=$APKLY_STATE/providers-app.out
+grep -aq -m1 '^\[hw\] \(PASS\|FAIL\)' < <(APKLAYER_JOPTS="-Dapklayer.runms=40000" bin/apklayer run hello.hardware 2>&1 | tee $out)
+grep -a '\[hw\]' $out
+grep -a "vibrator:" $APKLY_STATE/vibrator.log
+grep -aq '^\[hw\] PASS' $out || fail "hello.hardware"
+grep -aq "on 100 ms amplitude 1.00" $APKLY_STATE/vibrator.log && grep -aq "on 200 ms amplitude 0.50" $APKLY_STATE/vibrator.log || fail "the app's waveform did not reach the vibrator backend"
+grep -aq '^\[hw\] gps fix 48.85840 2.29450 accuracy 3.0' $out || fail "the app's gps fix is not the configured one"
+
+# 3. a changed option restarts only that domain's service (the stack the app started still runs)
+bin/apklayer providers set gnss fake location=1.5,2.5 accuracy=7
+bin/apklayer exec libapklayer_gnss.so --client 1 > $out 2>&1
+grep -a "^location\|PASS" $out
+grep -aq "^location 1.5000000 2.5000000 7.0" $out || fail "gnss: the new location did not reach the client"
+grep -a "providers:\|restarted" $APKLY_STATE/stack.log
+grep -aq "providers: gnss restarted" $APKLY_STATE/stack.log && ! grep -aq "providers: \(sensors\|vibrator\)" $APKLY_STATE/stack.log || fail "not only gnss restarted"
+exit $status

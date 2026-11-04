@@ -2,6 +2,7 @@
 
 #include <dlfcn.h>
 #include <signal.h>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 

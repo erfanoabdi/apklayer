@@ -26,6 +26,7 @@ public final class HubHost {
         if (!HubPermissionChecker.publish(directory.packages()))
             throw new IllegalStateException("Cannot publish the permission checker");
         HostBattery.installHub(directory::sendSystem);
+        new Thread(() -> HubVibrator.publishIfProvided(directory.packages()::uidHolds), "hub-vibrator").start();  // waits for the HAL a stack declared
         System.out.println("[apklayer-hub] READY pid=" + android.os.Process.myPid());
         new Thread(() -> HubBootSettings.write(RuntimeEnvironment.getApplication(), directory), "hub-boot-settings").start();  // the hub is the instance's system (uid 1000)
         Thread audio = new Thread(() -> HubAudioPermissions.watch(directory.packages()), "hub-audio-permissions");
