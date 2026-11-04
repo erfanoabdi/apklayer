@@ -27,7 +27,7 @@ libc = ctypes.CDLL(None, use_errno=True)
 notify = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
 assert notify >= 0 and libc.inotify_add_watch(notify, os.fsencode(logs), 0x102) >= 0
 app = None
-seen = []; captured = False
+seen = []; captured = focused = False
 try:
     app = subprocess.Popen(['bin/apklayer', 'run', 'hello.vulkan'], env=env,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
@@ -54,11 +54,14 @@ try:
                         print(line, flush=True)
                     assert not any(tag in line for tag in ('FATAL EXCEPTION', 'fatal error has been detected')), line
             if finished: break
+            if not focused and any('[hello-vulkan] FRAME' in line for line in seen):  # the shell's test input activates the window (the desktop's
+                instance.inject('hello.vulkan', 'focus')                              # focus belongs to whichever instance mapped a window last)
+                focused = True
             if not captured and any('[hello-vulkan] PASS' in line for line in seen) and any('[hello-vulkan] FRAME' in line for line in seen) and any('window state active=true' in line for line in seen):
                 assert sum('PASS cycle ' in line for line in seen) == 6
                 assert any(('android_swapchain=1' in line and 'dma_buf=1 drm_modifier=1 semaphore_fd=1' in line) or 'android_swapchain=0' in line for line in seen)
                 instance.capture('Vulkan probe result')
-                instance.inject('hello.vulkan', 'focus', 'key:1')  # Back into this instance's window: other instances share the desktop's focus
+                instance.inject('hello.vulkan', 'key:1')  # Back into this instance's window: other instances share the desktop's focus
                 captured = True
     assert captured and any('finished hello.vulkan.Main depth=0' in line for line in seen)
     print('PASS APK Vulkan readback, native capability reporting and physical Back cleanup', flush=True)
