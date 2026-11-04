@@ -56,6 +56,7 @@ void *android_create_namespace(const char *a, const char *b, const char *c, uint
 { (void)a; (void)b; (void)c; (void)d; (void)e; (void)f; return NULL; }
 void *android_get_exported_namespace(const char *name) { (void)name; return NULL; }
 bool android_link_namespaces(void *a, void *b, const char *c) { (void)a; (void)b; (void)c; return true; }
+bool android_init_anonymous_namespace(const char *a, const char *b) { (void)a; (void)b; return true; }
 bool android_dlwarning(void *obj, void (*cb)(void *, const char *)) { (void)obj; (void)cb; return false; }
 /* fdsan: bionic's file-descriptor ownership checks. The functions are weak imports that libcutils (native_handle_close) calls
  * unconditionally, so unresolved they were a null call. There is no tracking here: owner tags are computed as bionic does and

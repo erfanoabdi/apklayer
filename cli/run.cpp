@@ -85,6 +85,8 @@ std::vector<std::string> packageJvmArgs(const Layout& l, const Instance& inst, c
     std::vector<std::string> a = {"-Dapklayer.data=" + appDataDir(l, inst, package), "-Dapklayer.package=" + package, "-Dapklayer.uid=" + property(join(dir, "info.properties"), "uid"),
                                   "-Dapklayer.libdir=" + join(dir, "lib")};
     if (property(join(dir, "info.properties"), "system") == "true") a.push_back("-Dapklayer.system=true");  // ApplicationInfo.FLAG_SYSTEM of its own package
+    if (std::string route = property(join(dir, "info.properties"), "nativeRoute"); route.rfind("bridge-", 0) == 0)
+        a.push_back("-Dapklayer.nativebridge=" + route.substr(7));  // its libraries load through the native bridge (NativeLoader)
     if (!getenvOr("APKLAYER_ISOLATED", "").empty()) a.push_back("-Dapklayer.isolated=" + getenvOr("APKLAYER_ISOLATED", ""));
     a.push_back(join(dir, "base.apk"));
     a.push_back(join(dir, "classes.jar"));
