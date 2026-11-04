@@ -110,6 +110,7 @@ int apklayer_audio_open(const struct apklayer_audio_config *config, struct apkla
     audio->format = config->format == APKLAYER_AUDIO_S16 ? SPA_AUDIO_FORMAT_S16 : SPA_AUDIO_FORMAT_F32;
     audio->stride = config->channels * (config->format == APKLAYER_AUDIO_S16 ? 2 : 4);
     audio->active = true;
+    // shortcut: the ring holds two quanta only up to 2400 frames each (PipeWire's default max-quantum is 2048); grow it when a graph runs larger
     audio->ring_cap = (config->rate / 10 > 4096 ? config->rate / 10 : 4096) * audio->stride;
     audio->ring = malloc(audio->ring_cap);
     if (!audio->ring) { free(audio); return -ENOMEM; }
