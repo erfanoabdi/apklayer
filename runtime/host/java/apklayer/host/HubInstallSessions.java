@@ -54,7 +54,7 @@ final class HubInstallSessions {
             }
             case OPEN_WRITE -> {
                 int id = request.readInt(); String name = request.readString(); long offset = request.readLong(); request.enforceNoDataAvail();
-                if (!name.matches("[A-Za-z0-9_.-]+") || name.equals("session.properties")) throw new IllegalArgumentException("Invalid name: " + name);
+                if (!name.matches("[A-Za-z0-9_.-]+") || name.matches("\\.\\.?|session\\.properties.*")) throw new IllegalArgumentException("Invalid name: " + name);
                 Path dir = owned(caller, id);
                 try (RandomAccessFile file = new RandomAccessFile(dir.resolve(name).toFile(), "rw")) {
                     file.seek(Math.max(0, offset));  // the descriptor shares this position: writing goes on from the offset, as the session's file on Android
@@ -67,7 +67,7 @@ final class HubInstallSessions {
             }
             case REMOVE -> {
                 int id = request.readInt(); String name = request.readString(); request.enforceNoDataAvail();
-                if (name.matches("[A-Za-z0-9_.-]+") && !name.equals("session.properties")) Files.deleteIfExists(owned(caller, id).resolve(name));
+                if (name.matches("[A-Za-z0-9_.-]+") && !name.matches("\\.\\.?|session\\.properties.*")) Files.deleteIfExists(owned(caller, id).resolve(name));
                 reply.writeNoException();
             }
             case ABANDON -> {
