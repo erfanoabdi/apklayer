@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# webview-setup: one-time host setup for the WebView provider route (needs sudo once).
+# webview-setup [provider.apk]: one-time host setup for the WebView provider route (needs sudo once); with an APK (com.android.webview) also installs it
+# into the current instance's data home (XDG_DATA_HOME), which the webview test group needs.
 # Chromium's renderer runs inside an app JVM (an isolated service process of the hub), where its seccomp-bpf sandbox cannot work: the filter applies to the whole
 # process and kills the JVM (SIGSYS) on its first syscall outside the renderer's allow-list. The sandbox is therefore switched off for the provider route
 # (user decision, 2026-10-27: "Disable the seccomp sandbox totally"); every app JVM shares one Linux uid anyway, so Chromium's sandbox could not be claimed.
@@ -10,3 +11,4 @@ sudo chmod 1777 /data /data/local /data/local/tmp
 echo "webview --no-sandbox --disable-seccomp-filter-sandbox" | sudo tee /data/local/tmp/webview-command-line >/dev/null
 sudo chmod 644 /data/local/tmp/webview-command-line
 echo "webview-setup: /data/local/tmp/webview-command-line written (seccomp sandbox off)"
+[ $# -eq 0 ] || "$(dirname "$0")/../../bin/apklayer" install "$1"

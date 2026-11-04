@@ -4,7 +4,7 @@
 
 | Path | Origin | License |
 |---|---|---|
-| `runtime/dex2jvm/` (`io.github.kksimp.dex2jvm`) | kksimp/dex2jvm (https://github.com/kksimp/dex2jvm, commit in `.dex2jvm-commit`), copied unchanged, plus apklayer's own `HostDefaults.java`; its LICENSE and NOTICE are beside it | Apache-2.0 |
+| `runtime/dex2jvm/` (`io.github.kksimp.dex2jvm`) | kksimp/dex2jvm (https://github.com/kksimp/dex2jvm, commit in `.dex2jvm-commit`), copied with one marked patch (interface checkcasts, docs/PATCHES.md) plus apklayer's own `HostDefaults.java`; its LICENSE and NOTICE are beside it | Apache-2.0 |
 | `tests/uibench/uibench.apk` | AOSP UiBench test app | Apache-2.0 |
 | `archive/**` (removed; git tag `archive-last`) | AOSP (Apache-2.0) and Mac.apk (AGPL-3.0) code from earlier milestones; not built | as marked in each origin |
 
