@@ -37,6 +37,16 @@ public final class HubClient {
         System.out.println("[apklayer] hub registered " + context.getPackageName() + " pid=" + pid);
     }
     private static int register(Context context, IBinder hub, HubEndpoint endpoint) {
+        // the first call waits for the hub's boot (1.4 s on an idle machine, several seconds on a busy one): say so every 2 s, the launch is not hung
+        long since = System.nanoTime();
+        java.util.concurrent.ScheduledExecutorService ticker = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "hub-wait"); t.setDaemon(true); return t; });
+        ticker.scheduleAtFixedRate(() -> System.out.println("[apklayer] waiting for the instance hub (" + (System.nanoTime() - since) / 1_000_000_000 + " s)"),
+                2, 2, java.util.concurrent.TimeUnit.SECONDS);
+        try { return registerNow(context, hub, endpoint); } finally { ticker.shutdownNow(); }
+    }
+
+    private static int registerNow(Context context, IBinder hub, HubEndpoint endpoint) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.REGISTER, request -> {
             request.writeString(context.getPackageName()); request.writeStrongBinder(endpoint); request.writeBoolean(Boolean.getBoolean("apklayer.componenthost"));
             request.writeStrongBinder(((android.app.IApplicationThread) android.app.ActivityThread.currentActivityThread().getApplicationThread()).asBinder());
