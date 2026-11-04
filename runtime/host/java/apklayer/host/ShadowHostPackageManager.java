@@ -116,14 +116,14 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
     private android.content.pm.Signature fakeSignature(String packageName) {
         if (!"com.google.android.gms".equals(packageName) && !"com.android.vending".equals(packageName)) return null;
         android.content.pm.Signature[] real = HostCertificate.of(packageName);
-        if (real.length != 1 || !MICROG_REAL_SHA256.equals(android.util.PackageUtils.computeSha256Digest(real[0].toByteArray()))) return null;
+        if (real.length != 1 || !MICROG_REAL_SHA256.equalsIgnoreCase(android.util.PackageUtils.computeSha256Digest(real[0].toByteArray()))) return null;
         try {
             android.content.pm.PackageInfo full = super.getPackageInfo(packageName, PackageManager.GET_META_DATA);
             android.os.Bundle metaData = full == null || full.applicationInfo == null ? null : full.applicationInfo.metaData;
             String hex = metaData == null ? null : metaData.getString("fake-signature");
             if (hex == null || hex.isEmpty()) return null;
             android.content.pm.Signature fake = new android.content.pm.Signature(hex);
-            return MICROG_FAKE_SHA256.equals(android.util.PackageUtils.computeSha256Digest(fake.toByteArray())) ? fake : null;
+            return MICROG_FAKE_SHA256.equalsIgnoreCase(android.util.PackageUtils.computeSha256Digest(fake.toByteArray())) ? fake : null;
         } catch (PackageManager.NameNotFoundException | RuntimeException none) { return null; }
     }
 
