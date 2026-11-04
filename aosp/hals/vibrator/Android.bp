@@ -1,0 +1,23 @@
+// The vibrator HAL front: AOSP's IVibrator example from its own sources (hardware/interfaces patch 0002) plus the instance's backend.
+cc_library_shared {
+    name: "libapklayer_vibrator",
+    srcs: ["Service.cpp", ":apklayer_vibrator_example_sources"],
+    include_dirs: ["hardware/interfaces/vibrator/aidl/default/include"],
+    local_include_dirs: ["host-include"],
+    shared_libs: [
+        "libbase",
+        "libbinder_ndk",
+        "libcutils",
+        "libfmq",
+        "liblog",
+        "libutils",
+        "android.hardware.vibrator-V4-ndk",
+        "android.hardware.common-V2-ndk",
+        "android.hardware.common.fmq-V1-ndk",
+        "android.media.audio.common.types-V5-ndk",
+    ],
+    version_script: "exports.map",
+    allow_undefined_symbols: true, // apklayer_vibrator_*: the backend, a host library (APKLAYER_HOST_LIBS)
+    compile_multilib: "64",
+    cflags: ["-Wall", "-Werror", "-Wno-main"],
+}

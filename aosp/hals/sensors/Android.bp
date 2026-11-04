@@ -1,0 +1,23 @@
+// The sensors HAL front: AOSP's ISensors example from its own sources (hardware/interfaces patch 0002) with the backend's sensors.
+cc_library_shared {
+    name: "libapklayer_sensors",
+    srcs: ["Service.cpp", "Probe.cpp", ":apklayer_sensors_example_sources"],
+    include_dirs: ["hardware/interfaces/sensors/aidl/default/include"],
+    local_include_dirs: ["host-include"],
+    shared_libs: [
+        "libbase",
+        "libbinder_ndk",
+        "libcutils",
+        "libfmq",
+        "liblog",
+        "libpower",
+        "libutils",
+        "android.hardware.sensors-V3-ndk",
+        "android.hardware.common-V2-ndk",
+        "android.hardware.common.fmq-V1-ndk",
+    ],
+    version_script: "exports.map",
+    allow_undefined_symbols: true, // apklayer_sensors_*: the backend, a host library (APKLAYER_HOST_LIBS)
+    compile_multilib: "64",
+    cflags: ["-Wall", "-Werror", "-Wno-main"],
+}

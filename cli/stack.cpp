@@ -1,5 +1,7 @@
 #include "stack.h"
 
+#include "providers.h"
+
 #include <fcntl.h>
 #include <cerrno>
 #include <poll.h>
@@ -224,6 +226,9 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     stageManifest(inst, l, staged(l, "libapklayer_audioserver.so"), "apklayer-audio-effects.xml", "aosp/hals/audio/effects-manifest.xml");
     stageManifest(inst, l, staged(l, "libapklayer_keymint.so"), "apklayer-keymint.xml", "aosp/hals/security/manifest.xml");
     stageManifest(inst, l, staged(l, "libapklayer_keystore2.so"), "apklayer-keystore2.xml", "aosp/hals/security/keystore2-manifest.xml", "system");  // a framework HAL: keystore2 may register its service
+    // the hardware providers of providers.toml: their HALs are declared for this stack's lifetime (servicemanager reads the manifests once)
+    std::vector<ProviderService> providers = providerServices(l, inst);
+    for (const ProviderService& p : providers) stageManifest(inst, l, true, "apklayer-" + p.name + ".xml", p.manifest);
     std::vector<std::string> propFiles = {join(l.root, "bridge/native/apklayer.prop"), join(n, "android-root/props/system_build.prop")};
     // the instance's own overrides (`apklayer prop set`): first, as ro.* is write-once (and the fingerprint is derived from them), and again last, as
     // every other property keeps the last value loaded
@@ -245,12 +250,17 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     if (getenvOr("APKLAYER_START_SHELL", "1") == "1") ensureShell(l, inst, ne);  // `run` asks again and fails on its own when this did not work
 
     std::vector<Service> running;
-    auto start = [&](const std::string& name, const std::string& lib, std::vector<std::string> args) {
+    auto spec = [&](const std::string& name, const std::string& lib, const std::vector<std::string>& args, const std::string& backend = "") {
         Spawn s;
         s.argv = {l.btload(), l.androidLibs, lib, "--main"};
         s.argv.insert(s.argv.end(), args.begin(), args.end());
         s.env = ne.env;
+        if (!backend.empty()) s.env["APKLAYER_HOST_LIBS"] += (s.env["APKLAYER_HOST_LIBS"].empty() ? "" : ":") + backend;  // a HAL front's backend (bridge/hals/<domain>)
         s.logFile = join(inst.logs(), name + ".log");
+        return s;
+    };
+    auto start = [&](const std::string& name, const std::string& lib, const std::vector<std::string>& args, const std::string& backend = "") {
+        Spawn s = spec(name, lib, args, backend);
         int pid = spawn(s);
         running.push_back({name, pid, pidfdOpen(pid), s});
     };
@@ -274,6 +284,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         keystoreDir(inst);
         start("keystore2", "libapklayer_keystore2.so", {"/data/misc/keystore"});  // as keystore2.rc: the database directory, through the path layer
     }
+    for (const ProviderService& p : providers) start(p.name, p.front, p.options, p.backend);
     start("surfaceflinger", "libapklayer_surfaceflinger.so", {});
     if (!tool.empty()) {
         // smoke tools draw on stack 0: give them the same virtual-display sink an app uses
@@ -304,6 +315,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     sigemptyset(&sigs);
     sigaddset(&sigs, SIGTERM);
     sigaddset(&sigs, SIGINT);
+    sigaddset(&sigs, SIGHUP);  // `apklayer providers set|unset` changed providers.toml
     sigprocmask(SIG_BLOCK, &sigs, nullptr);
     int sfd = signalfd(-1, &sigs, SFD_CLOEXEC);
     fds.push_back({sfd, POLLIN, 0});
@@ -342,7 +354,29 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
                     setProperty(l, ne, kReadyProperty, "1");
                 }
             } else {
-                run = false;  // asked to stop
+                signalfd_siginfo info{};
+                if (read(sfd, &info, sizeof info) != sizeof info || info.ssi_signo != SIGHUP) { run = false; continue; }  // asked to stop
+                // providers.toml changed: a running domain whose backend or options differ restarts with them, a removed one stops, the
+                // other services keep running. A domain this stack did not start with waits for the next start (its HAL is not declared).
+                std::vector<ProviderService> wanted = providerServices(l, inst);
+                for (const std::string& domain : providerDomains()) {
+                    const ProviderService* want = nullptr;
+                    for (const ProviderService& p : wanted) if (p.name == domain) want = &p;
+                    size_t k = 0;
+                    while (k < nServices && running[k].name != domain) k++;
+                    if (k == nServices) { if (want) fprintf(stderr, "providers: %s starts with the instance's next start\n", domain.c_str()); continue; }
+                    Service& s = running[k];
+                    Spawn fresh = want ? spec(want->name, want->front, want->options, want->backend) : Spawn{};
+                    if (want && s.pid > 0 && fresh.argv == s.spec.argv && fresh.env == s.spec.env) continue;  // unchanged
+                    if (s.pid > 0) { kill(s.pid, SIGTERM); waitpid(s.pid, nullptr, 0); close(s.pidfd); s.pid = 0; fds[k].fd = -1; }
+                    if (!want) { fprintf(stderr, "providers: %s stopped\n", domain.c_str()); continue; }
+                    s.spec = fresh;
+                    s.restarts = 0;
+                    s.pid = spawn(fresh);
+                    s.pidfd = pidfdOpen(s.pid);
+                    fds[k].fd = s.pidfd;
+                    fprintf(stderr, "providers: %s restarted with its new configuration\n", domain.c_str());
+                }
             }
         }
     }

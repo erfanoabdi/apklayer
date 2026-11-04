@@ -1,0 +1,82 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: sensors, vibrator, gnss: the example HALs' sources as filegroups
+
+Exposes the unchanged example implementations (hardware/interfaces/<domain>/aidl/default) to apklayer's
+HAL fronts (vendor/apklayer/hals/<domain>, system-side shared libraries loaded by btload): a filegroup each
+(the example static libraries are vendor-only or private to their package). Two members become protected so
+a front can subclass: the sensors example's members (it replaces the example sensors with its backend's)
+and Gnss::getLocationFromHW (virtual: the front's backend supplies the fix).
+Against hardware/interfaces 13fc23dae0dc (REVISION). Apply: patches/apply aosp <LineageOS tree>.
+---
+--- a/gnss/aidl/default/Android.bp
++++ b/gnss/aidl/default/Android.bp
+@@ -103,3 +103,10 @@
+         "android.hardware.location.gps.prebuilt.xml", // permission
+     ],
+ }
++
++// apklayer patch: the example's sources for apklayer's gnss HAL (vendor/apklayer/hals/gnss), a system-side shared library
++filegroup {
++    name: "apklayer_gnss_example_sources",
++    srcs: ["AGnssRil.cpp", "AGnss.cpp", "Gnss.cpp", "GnssAntennaInfo.cpp", "GnssAssistanceInterface.cpp", "GnssBatching.cpp", "GnssDebug.cpp", "GnssGeofence.cpp", "GnssNavigationMessageInterface.cpp", "GnssPowerIndication.cpp", "GnssPsds.cpp", "GnssConfiguration.cpp", "GnssMeasurementInterface.cpp", "GnssVisibilityControl.cpp", "MeasurementCorrectionsInterface.cpp"],
++    visibility: ["//visibility:public"],
++}
+--- a/gnss/aidl/default/Gnss.h
++++ b/gnss/aidl/default/Gnss.h
+@@ -96,6 +96,10 @@
+     std::shared_ptr<GnssPowerIndication> mGnssPowerIndication;
+     std::shared_ptr<GnssMeasurementInterface> mGnssMeasurementInterface;
+ 
++  // apklayer patch: a subclass supplies the location (the example reads /dev/gnss0)
++  protected:
++    virtual std::unique_ptr<GnssLocation> getLocationFromHW();
++
+   private:
+     void reportLocation(const GnssLocation&);
+     void reportSvStatus(const std::vector<IGnssCallback::GnssSvInfo>& svInfoList) const;
+@@ -103,7 +107,6 @@
+     void reportNmea() const;
+     std::vector<IGnssCallback::GnssSvInfo> filterBlocklistedSatellites(
+             std::vector<IGnssCallback::GnssSvInfo> gnssSvInfoList) const;
+-    std::unique_ptr<GnssLocation> getLocationFromHW();
+ 
+     static std::shared_ptr<IGnssCallback> sGnssCallback;
+ 
+--- a/sensors/aidl/default/Android.bp
++++ b/sensors/aidl/default/Android.bp
+@@ -100,3 +100,10 @@
+         "sensors-default.xml", // vintf fragment
+     ],
+ }
++
++// apklayer patch: the example's sources for apklayer's sensors HAL (vendor/apklayer/hals/sensors), a system-side shared library
++filegroup {
++    name: "apklayer_sensors_example_sources",
++    srcs: ["Sensors.cpp", "Sensor.cpp"],
++    visibility: ["//visibility:public"],
++}
+--- a/sensors/aidl/default/include/sensors-impl/Sensors.h
++++ b/sensors/aidl/default/include/sensors-impl/Sensors.h
+@@ -195,7 +195,8 @@
+         }
+     }
+ 
+-  private:
++  // apklayer patch: protected, so a subclass can replace the example sensors with its own
++  protected:
+     // The Event FMQ where sensor events are written
+     std::unique_ptr<AidlMessageQueue<Event, SynchronizedReadWrite>> mEventQueue;
+     // The Wake Lock FMQ that is read to determine when the framework has handled WAKE_UP events
+--- a/vibrator/aidl/default/Android.bp
++++ b/vibrator/aidl/default/Android.bp
+@@ -88,3 +88,10 @@
+         ],
+     },
+ }
++
++// apklayer patch: the example's sources for apklayer's vibrator HAL (vendor/apklayer/hals/vibrator), a system-side shared library
++filegroup {
++    name: "apklayer_vibrator_example_sources",
++    srcs: ["VibrationSession.cpp", "Vibrator.cpp", "VibratorManager.cpp"],
++    visibility: ["//visibility:public"],
++}
