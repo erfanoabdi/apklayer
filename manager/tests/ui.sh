@@ -34,6 +34,11 @@ expect=()
 "$cli" instances | grep -q "^$spare	" || { echo "FAIL the new instance is not listed"; exit 1; }
 echo "ok   instance created through its dialog (and the binder setup offered when its devices are missing)"
 "$cli" instance remove "$spare" >/dev/null
+"$cli" providers set sensors fake >/dev/null  # the Hardware page: a backend's option typed in, Apply (the card must be in view: 900 px)
+"$m" --screenshot "$shots/ui-6-hardware.png" --size 1100x900 --page 4 --type "sensors accel=1,2,3" --click "Apply sensors" --wait-refresh 1
+"$cli" providers | grep -q "^sensors	apklayer	fake	accel=1,2,3$" || { echo "FAIL the Hardware page did not set the sensors option"; exit 1; }
+"$cli" providers unset sensors >/dev/null
+echo "ok   a provider option set through the Hardware page"
 "$cli" stop >/dev/null
 echo "PASS manager UI"
 "$(dirname "${BASH_SOURCE[0]}")/ui-updater.sh" "$@"

@@ -14,6 +14,8 @@ struct apklayer_gnss_fix {
 
 /* <0: not usable on this host; 0: usable but never chosen by default (fake); >0: quality, the highest is the default */
 int apklayer_gnss_probe(void);
+/* optional (the manager's fields, `apklayer providers`): the options init takes, a line "key\tdefault\tkind" each, kind text or file */
+extern const char apklayer_gnss_options[];
 /* the domain's options from providers.toml, "key=value" each; 0 or -errno */
 int apklayer_gnss_init(int count, const char *const *options);
 /* the next fix (the front asks once per reporting interval): 0, or -EAGAIN while there is none */

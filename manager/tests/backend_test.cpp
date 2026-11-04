@@ -85,6 +85,16 @@ int main(int argc, char** argv) {
     CHECK(cli.run({"clear-data", pkg}).status == 0, "clear data");
     CHECK(cli.run({"uninstall", pkg}).status == 0 && !hasRow(cli.rows({"list", "--tsv"}), pkg), "uninstall");
     CHECK(cli.run({"stop"}).status == 0, "stop the instance");
+
+    // the Hardware page's Apply: the camera set to the fake backend with a source (an empty option is the backend's default, left out), then unset
+    const std::string source = "/tmp/apklayer manager/camera source.png";
+    CHECK(cli.run(providerArgs("camera", "fake", {{"source", source}, {"fps", ""}})).status == 0 &&
+          hasRow(cli.rows({"providers"}), "camera", 3, "source=" + source) && hasRow(cli.rows({"providers"}), "camera", 2, "fake"),
+          "providers set camera fake source=...: listed with its source");
+    bool declared = false;  // the backend's option rows the page builds its fields from
+    for (const auto& r : cli.rows({"providers"})) declared = declared || (r.size() == 6 && r[0] == "option" && r[1] == "camera" && r[2] == "fake" && r[3] == "source" && r[5] == "file");
+    CHECK(declared, "providers lists the fake camera's source option as a file");
+    CHECK(cli.run(providerArgs("camera", "", {})).status == 0 && !hasRow(cli.rows({"providers"}), "camera"), "providers unset camera");
     puts("PASS manager backend");
     return 0;
 }

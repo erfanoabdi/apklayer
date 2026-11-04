@@ -38,6 +38,8 @@ struct apklayer_camera_info {
 
 /* <0: not usable on this host; 0: usable but never chosen by default (fake); >0: quality, the highest is the default */
 int apklayer_camera_probe(void);
+/* optional (the manager's fields, `apklayer providers`): the options init takes, a line "key\tdefault\tkind" each, kind text or file */
+extern const char apklayer_camera_options[];
 /* the backend's options ("key=value" each); 0 or -errno */
 int apklayer_camera_init(int count, const char *const *options);
 /* the cameras, at most `max`; returns how many, or -errno */

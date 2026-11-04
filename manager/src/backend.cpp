@@ -160,4 +160,18 @@ std::string fileUriPath(const std::string& uri) {
     return path;
 }
 
+std::string chosenFile(const Result& chooser) {
+    for (const auto& row : parseRows(chooser.out))
+        if (!row.empty() && row[0].rfind("uri ", 0) == 0) return fileUriPath(row[0].substr(4));
+    return "";
+}
+
+std::vector<std::string> providerArgs(const std::string& domain, const std::string& backend, const std::vector<std::pair<std::string, std::string>>& options) {
+    if (backend.empty()) return {"providers", "unset", domain};
+    std::vector<std::string> args = {"providers", "set", domain, backend};
+    for (const auto& [key, value] : options)
+        if (!value.empty()) args.push_back(key + "=" + value);
+    return args;
+}
+
 }  // namespace manager
