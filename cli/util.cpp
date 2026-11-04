@@ -6,7 +6,6 @@
 #include <poll.h>
 #include <pwd.h>
 #include <signal.h>
-#include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
@@ -256,7 +255,6 @@ char** toEnvp(const Env& env, std::vector<std::string>& storage, std::vector<cha
 namespace {
 [[noreturn]] void execChild(const Spawn& spec) {
     if (spec.newSession) setsid();
-    if (spec.endWithParent) prctl(PR_SET_PDEATHSIG, SIGKILL);
     if (!spec.cwd.empty() && chdir(spec.cwd.c_str()) != 0) _exit(126);
     if (!spec.logFile.empty()) {
         int fd = open(spec.logFile.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);

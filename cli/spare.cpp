@@ -205,7 +205,8 @@ int runAppSpare(const Layout& l, const Instance& inst, int afterFd) {
     jvm.env = ne.env;
     jvm.env["APKLAYER_SPARE_FD"] = std::to_string(pair[1]);
     jvm.cwd = l.appsDir;
-    jvm.endWithParent = true;  // a holder killed (`stop` during its wait) takes the spare along
+    // no PR_SET_PDEATHSIG: the JVM's primordial thread keeps it (the Java main thread cannot clear it), so it would end the app born from the spare;
+    // a spare whose holder ended exits instead once prepared (its socket's EOF: AppSpare), `apklayer stop` ends both (the record)
     int pid = spawn(jvm);
     close(pair[1]);
     writeFile(record, std::to_string(pid) + "\n" + std::to_string(getpid()) + "\n");

@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/prctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -47,7 +46,6 @@ jstring Java_apklayer_host_NativeLoader_receiveTarget(JNIEnv *env, jclass cls, j
     while ((n = recvmsg(fd, &msg, MSG_CMSG_CLOEXEC)) < 0 && errno == EINTR) {}
     close(fd);
     if (n <= 0) return NULL;
-    prctl(PR_SET_PDEATHSIG, 0);  /* the launch's process from here on: it outlives its holder, as an app outlives the zygote that forked it */
     text[prefix + n] = 0;
     char *start = text + prefix;
     set_launch_env(start);
