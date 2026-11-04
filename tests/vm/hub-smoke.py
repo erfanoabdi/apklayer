@@ -22,7 +22,7 @@ try:
     with selectors.DefaultSelector() as events, open(os.environ.get('APKLY_OUT', '/tmp') + '/apklayer-hub-smoke.out', 'wb') as log:
         events.register(proc.stdout, selectors.EVENT_READ)
         while not ready:
-            assert time.monotonic() < end and events.select(3), 'hub startup stalled'
+            assert time.monotonic() < end and events.select(10), 'hub startup stalled'  # the stack starts first: silent for over 3 s on a 4-CPU host beside other groups
             chunk = os.read(proc.stdout.fileno(), 65536)
             assert chunk, 'hub exited before READY'
             log.write(chunk); log.flush()

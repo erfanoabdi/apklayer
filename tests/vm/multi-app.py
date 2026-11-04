@@ -48,7 +48,7 @@ try:
         processes[package] = p
         logs[package] = open('/tmp/multi-' + package + '.log', 'wb')
         selector.register(p.stdout, selectors.EVENT_READ, package)
-    deadline = time.monotonic() + 35
+    deadline = time.monotonic() + 60  # 22 s of run time each, a close and a relaunch: a 4-CPU host beside other groups took over 35 s
     gone = None
     survivor = None
     while selector.get_map():
