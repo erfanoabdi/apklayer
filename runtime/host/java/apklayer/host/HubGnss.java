@@ -13,7 +13,7 @@ import java.util.List;
  * The GNSS HAL's one client for every app (the HAL keeps one IGnssCallback, as on Android, where only the system's GnssLocationProvider holds it):
  * the HAL's client (`libapklayer_gnss.so --client`) runs here while any app follows the gps provider, and each of its lines (`ready`, then
  * `location LAT LON ACCURACY`) goes to every follower's pipe (HostLocation reads it as from its own helper). A follower is dropped when its
- * process dies or its pipe is closed; the client ends with the last follower.
+ * process asks (its last gps request went), dies, or closes its pipe; the client ends with the last follower.
  */
 final class HubGnss {
     private final HubDirectory directory;
@@ -76,7 +76,7 @@ final class HubGnss {
         followers.clear();
     }
 
-    /** An app process died: its pipe goes, and the client with the last one. */
+    /** An app process died or has no gps request left: its pipes end, and the client with the last one. */
     synchronized void died(HubDirectory.Peer peer) {
         if (!followers.removeIf(f -> f.pid == peer.pid() && close(f.out)) || !followers.isEmpty() || client == null) return;
         end(client);

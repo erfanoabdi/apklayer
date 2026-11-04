@@ -55,21 +55,19 @@ final class HostLocation {
         t.setDaemon(true);
         return t;
     });
-    private static android.os.ParcelFileDescriptor gpsFixes;  // the hub's pipe while a gps request is active (the GPS thread only)
+    private static boolean gpsFollowed;  // whether the hub sends this process gps fixes (the GPS thread only)
 
+    /** The first gps request: the hub's fixes; the last one gone: the hub ends the pipe (its reader sees the end and closes it, on its own thread). */
     private static void gps(ShadowLocationManager shadow, boolean active) {
-        if (!active || gpsFixes != null) {
-            if (!active && gpsFixes != null) { closeQuietly(gpsFixes); gpsFixes = null; }  // the hub drops the follower, the client with the last one
-            return;
-        }
-        android.os.ParcelFileDescriptor fixes;
-        try { fixes = HubClient.current().gnss(); }
+        if (active == gpsFollowed) return;
+        android.os.ParcelFileDescriptor pipe;
+        try { pipe = HubClient.current().gnss(active); }
         catch (RuntimeException none) { System.out.println("[apklayer] location: gps: " + none.getMessage()); return; }  // no permission or no hub: no fixes
-        gpsFixes = fixes;
-        follow(shadow, LocationManager.GPS_PROVIDER, new android.os.ParcelFileDescriptor.AutoCloseInputStream(fixes), () -> closeQuietly(fixes));
+        gpsFollowed = active;
+        if (!active) return;
+        java.io.InputStream fixes = new android.os.ParcelFileDescriptor.AutoCloseInputStream(pipe);
+        follow(shadow, LocationManager.GPS_PROVIDER, fixes, () -> { try { fixes.close(); } catch (IOException ignored) { } });
     }
-
-    private static void closeQuietly(android.os.ParcelFileDescriptor fd) { try { fd.close(); } catch (IOException ignored) { } }
 
     /** Whether this stack declares the GNSS HAL (cli/stack.cpp stages its manifest when providers.toml configures it). */
     static boolean gnssDeclared() {
@@ -119,7 +117,8 @@ final class HostLocation {
                 location.setElapsedRealtimeNanos(android.os.SystemClock.elapsedRealtimeNanos());
                 new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> shadow.simulateLocation(location));
             }
-        } catch (IOException ended) { /* GeoClue went away */ }
+        } catch (IOException ended) { /* the source went away */ }
+        try { in.close(); } catch (IOException ignored) { }
     }
 
     /** A helper of bridge/portal (geoclue.py, settings.py) above the CLI, as installed or in the tree. */

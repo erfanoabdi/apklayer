@@ -24,7 +24,7 @@ final class HubProtocol {
             SETTINGS_CHANGED = 43,  // `apklayer settings set|unset` (the CLI, through servicetool call): {} -> the hub rereads the instance's overrides  // the input method binding (HubInputMethods): {IRemoteInputConnection, EditorInfo} / {}  // {intent} -> 1 when an installed app (or the installer's confirmation) handles it: startActivity's ActivityNotFoundException
             BLUETOOTH = 44,  // {address, uuid} (both null: a session) -> two descriptors to a BlueZ helper (HubBluetooth)
             USB_PERMISSION = 45,  // {device name, ask} -> whether the caller may open the USB device (HubUsb); ask: the person decides now
-            GNSS = 46;  // {} -> a pipe of the gps fixes from the hub's one GNSS HAL client (HubGnss)
+            GNSS = 46;  // {follow} -> true: a pipe of the gps fixes from the hub's one GNSS HAL client (HubGnss); false: the caller's pipes end (null)
             // RELAUNCH: `apklayer run` of a running app (the CLI, through servicetool call): {package, intent file or ""} -> 0 delivered, 1 not running
     static final int ENDPOINT_BIND = 1, ENDPOINT_UNBIND = 2, ENDPOINT_START = 3, ENDPOINT_STOP = 4, ENDPOINT_GET_PROVIDER = 5, ENDPOINT_NOTIFY = 6, ENDPOINT_START_ACTIVITY = 7, ENDPOINT_EXIT_IF_IDLE = 8, ENDPOINT_PACKAGE_CHANGED = 9, ENDPOINT_CONFIGURATION = 10;
     private HubProtocol() {}

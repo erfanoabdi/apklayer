@@ -23,11 +23,11 @@ run() { APKLAYER_JOPTS="-Dapklayer.runms=$2" bin/apklayer run "$1" > "$APKLY_STA
 
 # 1. one app: GeoClue's point through the backend, the HAL and the hub's client, which ends with the app's request (removeUpdates after 5
 # fixes), before the app does
-hub_before=$(cat "$APKLY_STATE/hub.log" 2>/dev/null | wc -l)
 run hello.gps 20000
-first_event=$(tail -n +$((hub_before + 1)) "$APKLY_STATE/hub.log" | grep -a -o "gnss: client started\|gnss: client ended\|died hello.gps" | head -3 | tr '\n' ',')
-echo "hub: $first_event"
-[ "$first_event" = "gnss: client started,gnss: client ended,died hello.gps," ] || fail "the hub's GNSS client did not run only while hello.gps had its request"
+# the hub's events from its last client start on (this run's: the stack was stopped before it)
+events=$(grep -a -o "gnss: client started\|gnss: client ended\|died hello.gps" "$APKLY_STATE/hub.log" | awk '/started/ { e = "" } { e = e $0 "," } END { print e }')
+echo "hub: $events"
+[ "$events" = "gnss: client started,gnss: client ended,died hello.gps," ] || fail "the hub's GNSS client did not run only while hello.gps had its request"
 grep -aq "^\[gps\] hello.gps fix 47.37690 8.54170 accuracy 6.0" "$APKLY_STATE/gnss-hello.gps.out" && grep -aq "^\[gps\] hello.gps PASS" "$APKLY_STATE/gnss-hello.gps.out" ||
     fail "hello.gps did not get GeoClue's fixes"
 grep -a "gnss geoclue:" "$APKLY_STATE"/*.log | tail -3
