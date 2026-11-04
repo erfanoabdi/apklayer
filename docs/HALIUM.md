@@ -47,18 +47,28 @@ Consequences:
   another instance's binder). No variable: no host context.
 - **Not needed now**: Waydroid 0009 (host uid as system uid) only matters when host processes call into our services; 0002/0003
   (SELinux off in servicemanager, no TXN_SECURITY_CTX) we already have (our 0001).
-- **HIDL, libhwbinder + libhidl** (camera provider, media.c2 and OMX are HIDL on both phones): the same shape for `/dev/host_hwbinder`:
-  libhwbinder 0001 (ProcessState/IPCThreadState/BpHwBinder per context, as above), 0002 (no TXN_SECURITY_CTX: our libhwbinder needs it
-  too); libhidl 0001-0003, 0007 (getService(useHostHwBinder) through the host hwservicemanager, no waiting on it), 0004 (always renew the
-  service manager), 0005 (keep the ABI), 0008 (the allow-list: use the same `host_hals.conf`, fqnames), 0006 (vendor passthrough paths;
-  ours: bionic_translation's sphal namespace). Not started.
-- **Allow-list generation**: the stack writes `host_hals.conf` from `providers.toml` (a domain set to `device` lists its interfaces and
-  does not start its apklayer front); until providers.toml exists the file is written by hand or by the test.
+- **HIDL, libhwbinder + libhidl** (camera provider, media.c2 and OMX are HIDL on both phones; done 2026-11-05):
+  `patches/aosp/system/libhwbinder/0001-host-hwbinder-context.patch` is libbinder's 0006 for `/dev/host_hwbinder` (second ProcessState,
+  IPCThreadState per context, BpHwBinder and Parcel carry it, buffers freed by address; the host pool starts without waiting for a local
+  hwservicemanager) plus Waydroid libhwbinder 0002 (no TXN_SECURITY_CTX). `patches/aosp/system/libhidl/0001-host-hals.patch`:
+  getRawServiceInternal (every `IFoo::getService`) asks the host's hwservicemanager first for HALs listed in `host_hals.conf` (an
+  fqName, or a package for every version), with IServiceManager 1.0's `get()` (every hwservicemanager since Android 8). It replaces
+  Waydroid's libhidl 0001-0005, 0007 (they switch one ProcessState between drivers and wait for/re-new the service manager; apklayer runs
+  no hwservicemanager, so a listed HAL goes to the host first) and 0008 (their `/system/etc/hosthals.xml`). Not ported: 0006 (vendor
+  passthrough paths; ours will be bionic_translation's sphal namespace). The HIDL interface library ABI is unchanged.
+- **Allow-list generation** (done 2026-11-05): `apklayer providers set <domain> device` (vibrator, camera; refused for sensors and gnss)
+  records `provider = "device"`; the CLI (at once) and the stack (at start and reload) write `<instance data>/apklayer/host_hals.conf`
+  with that domain's AIDL interfaces and HIDL packages and start no apklayer front for it; with that file present the CLI's
+  environment points the host contexts at `/dev/binderfs/binder` and `/dev/binderfs/hwbinder` unless `APKLAYER_HOST_BINDER` /
+  `APKLAYER_HOST_HWBINDER` say otherwise. Open: cameraserver and the codec2 client find HIDL providers through hwservicemanager's
+  `listManifestByInterface`/notifications, which apklayer does not run: they need a host-aware listing next.
 
 ## Tests
 - `tests/vm/host-binder.py` (group `host-binder`): a second instance (`<instance>-dev`) runs its servicemanager and registers
   `apklayer.test.IHostEcho/default`; this instance finds it only through the host context, transacts on it (dump), and does not
-  ask the host for an unlisted name.
+  ask the host for an unlisted name. HIDL: `hidltool device` is the device instance's hwservicemanager serving `atrace@1.0`
+  (a small HIDL interface still in the tree: vibrator@1.0 is gone); this instance's `IAtraceDevice::getService` reaches it through
+  the host hwbinder context and calls it (strings and vectors in both directions).
 - Ubuntu Touch phone: an `apklayer exec` of `servicetool` in an instance with `APKLAYER_HOST_BINDER=/dev/binderfs/binder` calls the
   device's `android.hardware.vibrator.IVibrator/default` (`getCapabilities`, a 50 ms `on`).
 
