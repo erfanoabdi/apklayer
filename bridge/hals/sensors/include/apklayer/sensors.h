@@ -18,6 +18,7 @@ enum {
     APKLAYER_SENSOR_LIGHT = 5,
     APKLAYER_SENSOR_PRESSURE = 6,
     APKLAYER_SENSOR_PROXIMITY = 8,
+    APKLAYER_SENSOR_DEVICE_ORIENTATION = 27, /* the screen rotation 0..3, as WindowManager reads it */
 };
 
 struct apklayer_sensor_info {
