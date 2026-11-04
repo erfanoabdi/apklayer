@@ -213,7 +213,7 @@ final class HubDirectory extends Binder {
                     peers.put(pid, peer);
                 }
                 System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " registered " + name + " pid=" + pid + " uid=" + uid + " t=" + System.nanoTime() / 1_000_000);
-                synchronized (failures) { failures.remove(name); }
+                synchronized (failures) { failures.remove(key(peer)); }  // launches are counted per host (package#process): a host that registered did not fail
                 HubAudioPermissions.registered(packages, name);  // before the reply: the app's first track finds its package
                 bindings.registered(peer);
                 broadcasts.registered(peer);
