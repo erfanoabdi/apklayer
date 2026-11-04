@@ -4,7 +4,7 @@ drm_dep = dependency('libdrm', required: false)
 if gbm_dep.found() and drm_dep.found()
   gfx_inc = include_directories('include')
   libgfx = shared_library('apklayer-hal-graphics', ['graphics.c', 'display.c'],
-    include_directories: gfx_inc, dependencies: [gbm_dep, drm_dep, dependency('threads')], install: true)
+    include_directories: gfx_inc, dependencies: [gbm_dep, drm_dep, dependency('threads')], install: true, install_dir: native_dir)
   executable('graphics-test', '../../../tests/hals/graphics-test.c',
     include_directories: gfx_inc, dependencies: [drm_dep], link_with: libgfx)
   executable('display-test', '../../../tests/hals/display-test.c',

@@ -6,7 +6,7 @@ gst_alloc = dependency('gstreamer-allocators-1.0', version: '>=1.24', required: 
 if gst_app.found() and gst_video.found() and gst_alloc.found() and gst_audio.found()
   codec_inc = include_directories('include')
   libcodec = shared_library('apklayer-hal-media', 'codec.c',
-    include_directories: codec_inc, dependencies: [gst_app, gst_video, gst_alloc, gst_audio], install: true)
+    include_directories: codec_inc, dependencies: [gst_app, gst_video, gst_alloc, gst_audio], install: true, install_dir: native_dir)
   executable('codec-test', '../../../tests/hals/codec-test.c',
     include_directories: codec_inc, dependencies: [gst_app, gst_video], link_with: libcodec)
   executable('codec-reorder-test', '../../../tests/hals/codec-reorder-test.c',

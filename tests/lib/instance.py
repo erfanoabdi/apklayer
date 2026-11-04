@@ -20,7 +20,8 @@ ENV = dict(os.environ)
 ENV.setdefault('XDG_RUNTIME_DIR', SESSION)
 ENV.setdefault('WAYLAND_DISPLAY', SESSION + '/wayland-0')
 ENV.setdefault('APKLAYER_TEST_INPUT', '1')  # the shell takes test input (inject) from this instance's tests
-ENV.setdefault('APKLAYER_NATIVE', str(Path.home() / 'arm64-native'))
+# the native dir `meson install` made beside the tree (tests/run: <repo>/inst), as the CLI finds it (cli/layout.cpp)
+ENV.setdefault('APKLAYER_NATIVE', str(ROOT / 'inst/lib/apklayer/native') if (ROOT / 'inst/lib/apklayer/native').is_dir() else str(Path.home() / 'arm64-native'))
 NATIVE = Path(ENV['APKLAYER_NATIVE'])
 STATE = Path(ENV.get('XDG_STATE_HOME', Path.home() / '.local/state')) / 'apklayer' / INSTANCE
 LOGDIR = str(STATE)  # the instance's logs (shell.log, hub.log, tool.log, app-<package>.log, ...)

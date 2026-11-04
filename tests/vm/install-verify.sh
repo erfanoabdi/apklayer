@@ -5,7 +5,7 @@ set -uo pipefail
 N=${APKLAYER_NATIVE:-$HOME/arm64-native} R=$PWD
 app=${XDG_DATA_HOME:-$HOME/.local/share}/apklayer/apps/com.android.test.uibench
 w=$(mktemp -d "$HOME/.install-verify.XXXXXX"); trap 'rm -rf "$w"' EXIT
-verify() { java -Xbootclasspath/a:$N/aosp/Robolectric_all.jar -cp $N/aosp/host-classes:$R/b/runtime/dex2jvm/dex2jvm.jar apklayer.tools.VerifyInstall $app/base.apk "$1"; }
+verify() { java -Xbootclasspath/a:$N/aosp/Robolectric_all.jar -cp $N/aosp/host-classes.jar:$R/b/runtime/dex2jvm/dex2jvm.jar apklayer.tools.VerifyInstall $app/base.apk "$1"; }
 classes=$(unzip -Z1 $app/classes.jar | grep '\.class$')
 cp $app/classes.jar $w/dropped.jar && zip -q -d $w/dropped.jar "$(sed -n 100p <<<"$classes")"
 victim=$(sed -n 200p <<<"$classes")

@@ -6,3 +6,6 @@ tests/corpus/logs/
 .claude/
 tests/corpus/apps.txt
 tests/corpus/results-subset.md
+/subprojects/*/
+/b/
+/inst/

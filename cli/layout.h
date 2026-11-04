@@ -24,7 +24,7 @@ struct Layout {
     void setUpBundle() const;
     void requireRuntime() const;  // installed: dies with what to do while the runtime bundle is missing
     std::string btload() const { return join(native, "bin/btload"); }
-    std::string hostClasses() const { return join(native, "aosp/host-classes"); }
+    std::string hostClasses() const { return join(native, "aosp/host-classes.jar"); }
     std::string frameworkDir() const { return join(native, "aosp/android-all"); }
     std::string dex2jvmJar() const { return join(build, "runtime/dex2jvm/dex2jvm.jar"); }
     std::string shellBinary() const { return join(build, "bridge/shell/apklayer-shell"); }

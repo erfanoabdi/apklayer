@@ -46,10 +46,15 @@ Layout Layout::detect() {
     bool installed = !l.runtimeVersion.empty();
     std::string runtimes = join(l.dataHome, "apklayer/runtime");
     std::string bundle = join(runtimes, exists(join(runtimes, "current/runtime.json")) ? "current" : l.runtimeVersion);
-    l.native = getenvOr("APKLAYER_NATIVE", installed ? bundle : join(homeDir(), "arm64-native"));
-    l.androidLibs = getenvOr("APKLAYER_ANDROID_LIBS", installed ? join(l.native, "android-libs") : join(homeDir(), "android-arm64/lib64"));
-    l.bionic = getenvOr("APKLAYER_BT", installed ? join(l.build, "bionic_translation/b") : join(homeDir(), "bt-arm/bionic_translation/b"));
-    l.deps = getenvOr("APKLAYER_DEPS", installed ? l.native : join(homeDir(), ".cache/apklayer/deps"));
+    // `meson install` (meson.build): <lib>/native is the runtime's native dir, complete (with the Android half) unless the build left that to the
+    // bundle (the deb); a source tree's CLI uses its build's install
+    std::string lib = installed ? l.build : APKLAYER_LIB;
+    bool complete = isDir(join(lib, "native/aosp/android-all"));
+    bool ours = installed || isDir(join(lib, "native"));
+    l.native = getenvOr("APKLAYER_NATIVE", complete || !installed ? (ours ? join(lib, "native") : join(homeDir(), "arm64-native")) : bundle);
+    l.androidLibs = getenvOr("APKLAYER_ANDROID_LIBS", ours ? join(l.native, "android-libs") : join(homeDir(), "android-arm64/lib64"));
+    l.bionic = getenvOr("APKLAYER_BT", ours ? join(lib, "bionic_translation/b") : join(homeDir(), "bt-arm/bionic_translation/b"));
+    l.deps = getenvOr("APKLAYER_DEPS", ours ? l.native : join(homeDir(), ".cache/apklayer/deps"));
     if (installed && l.native == bundle) l.setUpBundle();
     l.appsDir = join(l.dataHome, "apklayer/apps");
     l.stateHome = getenvOr("XDG_STATE_HOME", join(homeDir(), ".local/state"));
@@ -57,14 +62,14 @@ Layout Layout::detect() {
     return l;
 }
 
-// The package's half of the runtime (<build>/native) linked into the unpacked bundle, the JNI shim put into its framework jars, the library
-// mapping and the instrumented framework made (tools/build runtime, under a lock): again whenever the package's native-runtime.jar changes.
+// The package's half of the runtime (<build>/native) linked into the unpacked bundle, the JNI shim put into its framework jars and the instrumented
+// framework made (tools/setup-runtime.sh, under a lock): again whenever the package's native-runtime.jar changes.
 void Layout::setUpBundle() const {
     if (!exists(join(native, "runtime.json"))) return;  // not downloaded yet: nativeEnv says so when something needs it
     struct stat made{}, jar{};
     if (stat(join(build, "native/native-runtime.jar").c_str(), &jar) == 0 && stat(join(native, ".setup").c_str(), &made) == 0 && made.st_mtime == jar.st_mtime) return;
     Spawn setup;
-    setup.argv = {"sh", join(root, "tools/build"), "runtime", native, join(build, "native")};
+    setup.argv = {"sh", join(root, "tools/setup-runtime.sh"), native, join(build, "native")};
     setup.env = currentEnv();
     setup.env["APKLAYER_BT"] = bionic;
     setup.env["APKLAYER_ANDROID_LIBS"] = androidLibs;

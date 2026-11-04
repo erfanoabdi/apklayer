@@ -8,7 +8,7 @@
 namespace apklayer {
 
 namespace {
-// The framework jars as tools/build instrument left them (apklayer.tools.PreInstrument: the sandbox loader's own instrumentation, done once) while each is
+// The framework jars as the build instrumented them (runtime/android-all-instrumented) (apklayer.tools.PreInstrument: the sandbox loader's own instrumentation, done once) while each is
 // at least as new as what it was made from; else the plain jars, which the sandbox loader instruments class by class on every start.
 std::string frameworkDependencyDir(const Layout& l) {
     std::string dir = join(l.native, "aosp/android-all-instrumented");

@@ -32,19 +32,18 @@ def available():
     return int(out or 0)
 
 
-# the runtime rebuilt when a source is newer than the last build's stamp: the host classes (runtime/) and the native runtime (bridge/: the JNI
-# shim the host classes call, bionic_translation's copies) move together, or merged changes go untested and the two drift apart (a host class
-# calling a shim native the staged shim lacks)
-HOST_CLASSES = ('{ [ -f ~/.config/apklayer/env ] && . ~/.config/apklayer/env; N=${APKLAYER_NATIVE:-$HOME/arm64-native}; '
-                'if [ ! -f "$N/aosp/host-classes.stamp" ] || [ -n "$(find runtime bridge -newer "$N/aosp/host-classes.stamp" -print -quit 2>/dev/null)" ]; then '
-                'tools/build native "$N" >/dev/null 2>&1 && tools/build host "$N" >/dev/null 2>&1 && rm -f "$N/aosp/host-classes.stamp" && touch "$N/aosp/host-classes.stamp"; fi; }  # rm first: a native dir made with cp -al shares the file')
+# the runtime built and staged by Meson into <repo copy>/inst (docs/INSTALL.md): ninja rebuilds exactly what changed; the tree's CLI (bin/apklayer)
+# uses that install. -Dprebuilts comes from $APKLAYER_PREBUILTS (APKLY_VM_ENV).
+BUILD = ('{ [ -f b/build.ninja ] || meson setup b --prefix "$PWD/inst" >/dev/null; } && '
+         '{ grep -q "\\"$PWD/inst\\"" b/meson-info/intro-buildoptions.json || meson configure b --prefix "$PWD/inst" >/dev/null; } && '
+         'ninja -C b && meson install -C b --skip-subprojects --only-changed --quiet >/dev/null')
 
 
 def prepare(groups, slots):
     t = time.monotonic()
     vm.push()
-    build = vm.ssh(vm.instance_env(slots[0]) + '{ [ -d b ] || meson setup b >/dev/null; } && ninja -C b >/dev/null && '
-                   'sudo -n sh tools/host-setup/binder.sh %s >/dev/null && ' % ' '.join(slots) + HOST_CLASSES, capture_output=True, text=True)
+    build = vm.ssh(vm.instance_env(slots[0]) + BUILD + ' && sudo -n sh tools/host-setup/binder.sh %s >/dev/null' % ' '.join(slots),
+                   capture_output=True, text=True)
     assert build.returncode == 0, 'VM build failed:\n' + build.stdout[-3000:] + build.stderr[-3000:]
     apps = sorted({a for g in groups for a in GROUPS[g].get('apps', [])})
     if apps:

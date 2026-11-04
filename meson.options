@@ -1,6 +1,12 @@
-option('bionic_translation', type: 'string', value: '',
-  description: 'bionic_translation build dir (tools/build bt); empty: $APKLAYER_BT, else ~/bt-arm/bionic_translation/b')
+option('prebuilts', type: 'string', value: '',
+  description: 'a joined checkout of the prebuilts branch (common/, <cpu>/: docs/INSTALL.md); empty: $APKLAYER_PREBUILTS. Without it only the native parts build')
 option('android_libs', type: 'string', value: '',
-  description: 'the staged Android libraries; empty: $APKLAYER_ANDROID_LIBS, else ~/android-arm64/lib64')
+  description: 'Android\'s libraries the runtime uses; empty: <prebuilts>/<cpu>/android-libs/lib64')
+option('android_runtime', type: 'boolean', value: true,
+  description: 'install the Android half too (framework jar with the JNI shim and instrumented, Robolectric, android-root): a complete runtime; the deb sets false (the runtime bundle brings it)')
+option('gfxstream', type: 'string', value: '',
+  description: 'gfxstream\'s source (the tree\'s hardware/google/gfxstream) for libapklayer-gles1.so, OpenGL ES 1 on hosts without it; empty: not built')
 option('package_version', type: 'string', value: '',
   description: 'what `apklayer --version` prints (the release builds pass the package version); empty: the project version')
+option('bionic_translation', type: 'string', value: '', deprecated: true,
+  description: 'unused: bionic_translation is a subproject (subprojects/bionic_translation.wrap)')
