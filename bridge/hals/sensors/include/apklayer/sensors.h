@@ -14,7 +14,6 @@ extern "C" {
 enum {
     APKLAYER_SENSOR_ACCELEROMETER = 1,
     APKLAYER_SENSOR_MAGNETIC_FIELD = 2,
-    APKLAYER_SENSOR_ORIENTATION = 3,         /* azimuth, pitch, roll in degrees (deprecated in Android; a compass heading) */
     APKLAYER_SENSOR_GYROSCOPE = 4,
     APKLAYER_SENSOR_LIGHT = 5,
     APKLAYER_SENSOR_PRESSURE = 6,

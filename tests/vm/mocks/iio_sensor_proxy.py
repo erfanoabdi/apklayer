@@ -1,5 +1,5 @@
 """python-dbusmock template: iio-sensor-proxy (net.hadess.SensorProxy, system bus) with an orientation, a lux light sensor, proximity and
-a compass, for tests/vm/providers-host.sh. Values change with org.freedesktop.DBus.Mock.UpdateProperties (PropertiesChanged, as the proxy)."""
+a compass (which the backend does not list), for tests/vm/providers-host.sh. Values change with org.freedesktop.DBus.Mock.UpdateProperties (PropertiesChanged, as the proxy)."""
 import dbus
 
 BUS_NAME = 'net.hadess.SensorProxy'

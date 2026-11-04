@@ -69,6 +69,7 @@ public final class Main extends Activity {
         Sensor accel = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         System.out.println("[hw] sensors " + sm.getSensorList(Sensor.TYPE_ALL).size() + " accelerometer=" + (accel == null ? null : accel.getName()));
         for (Sensor s : sm.getSensorList(Sensor.TYPE_ALL)) {  // every sensor's range and a value (the host backends' mapping: tests/vm/providers-host.sh)
+            System.out.println("[hw] listening type=" + s.getType() + " name=" + s.getName());
             float[] v = listen(sm, s, 1000);
             System.out.println(String.format(java.util.Locale.ROOT, "[hw] sensor type=%d name=%s max=%.2f mindelay=%d value=%s", s.getType(), s.getName(),
                 s.getMaximumRange(), s.getMinDelay(), v == null ? "none" : String.format(java.util.Locale.ROOT, "%.3f %.3f %.3f", v[0], v.length > 1 ? v[1] : 0f, v.length > 2 ? v[2] : 0f)));

@@ -1,7 +1,8 @@
 /* uinput-ff: a uinput force-feedback (FF_RUMBLE) device for the vibrator ff backend's test (tests/vm/providers-host.sh). Needs /dev/uinput
- * (root). Prints its event node, makes it writable for the test's user, then logs every effect upload and play until <seconds> have passed:
+ * (root). Makes its event node writable for the test's user, prints "<node> <pid>" and returns; that pid logs every effect upload and
+ * play into <log> until <seconds> have passed (or it is killed):
  *   upload id=<id> strong=<magnitude> length=<ms>      play id=<id> value=<1 start|0 stop>
- * Usage: uinput-ff <seconds> */
+ * Usage: uinput-ff <seconds> <log> */
 #include <fcntl.h>
 #include <linux/uinput.h>
 #include <poll.h>
@@ -15,7 +16,8 @@
 
 int main(int argc, char **argv)
 {
-    int seconds = argc > 1 ? atoi(argv[1]) : 60;
+    if (argc != 3) { fprintf(stderr, "usage: uinput-ff <seconds> <log>\n"); return 2; }
+    int seconds = atoi(argv[1]);
     int fd = open("/dev/uinput", O_RDWR);
     if (fd < 0) { perror("/dev/uinput"); return 1; }
     ioctl(fd, UI_SET_EVBIT, EV_FF);
@@ -35,10 +37,12 @@ int main(int argc, char **argv)
     pclose(ls);
     event[strcspn(event, "\n")] = 0;
     snprintf(node, sizeof node, "/dev/input/%s", event);
-    for (int i = 0; i < 100 && access(node, F_OK); i++) usleep(10000);  /* udev creates the node */
+    if (system("udevadm settle")) fprintf(stderr, "udevadm settle failed\n");  /* udev creates the node and sets its mode: ours comes after */
     chmod(node, 0666);
-    printf("node %s\n", node);
-    fflush(stdout);
+    if (!freopen(argv[2], "w", stdout)) { perror(argv[2]); return 1; }
+    pid_t child = fork();
+    if (child) { fprintf(stderr, "%s %d\n", node, (int)child); return child < 0; }  /* the caller's line; the child serves the device */
+    close(STDERR_FILENO);  /* the caller's $(...) ends with the parent */
     time_t end = time(NULL) + seconds;
     while (time(NULL) < end) {
         struct pollfd p = {fd, POLLIN, 0};

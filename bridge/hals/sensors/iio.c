@@ -5,8 +5,8 @@
  *   finds none, as on an Android device without one, instead of made-up m/s^2.
  * - Ambient light: LIGHT, only when the proxy reports lux (LightLevelUnit "vendor" is a driver scale, not lux: then no light sensor).
  * - Proximity: PROXIMITY as Android's binary sensors report it: 0 cm near, the 5 cm maximum far.
- * - Compass: ORIENTATION (type 3, deprecated but the only Android type that carries a heading): azimuth is the heading, pitch and roll are 0
- *   (the proxy has none). The proxy's policy lets only geoclue claim the compass on most systems, so it is usually absent.
+ * - Compass: not listed. The proxy gives a heading only; Android's types need a field vector (MAGNETIC_FIELD) or azimuth with pitch and roll
+ *   (the deprecated ORIENTATION), so either would carry made-up values. (Its policy lets only geoclue claim it on most systems anyway.)
  * Values are cached from PropertiesChanged on a thread of our own; the HAL front samples them at the rate an app asks for.
  * shortcut: every available sensor is claimed at init and held while the front runs (the backend ABI has no activate); claim per sensor on
  * activation when the ABI gets one. */
@@ -19,7 +19,6 @@
 
 #define BUS "net.hadess.SensorProxy"
 #define PATH "/net/hadess/SensorProxy"
-#define COMPASS_PATH PATH "/Compass"
 
 static GDBusConnection *bus;
 static GMutex lock;
@@ -28,7 +27,7 @@ static struct sensor {
     const char *iface, *property;  /* the property holding its value */
     int count;
     float values[3];
-} sensors[4];
+} sensors[3];
 static int n_sensors;
 
 static GVariant *get(const char *path, const char *iface, const char *property)
@@ -57,9 +56,8 @@ static void apply(struct sensor *s, GVariant *v)
         for (int i = 0; i < 4; i++) if (!strcmp(o, rotation[i])) s->values[0] = i;
     } else if (!strcmp(s->property, "ProximityNear")) {
         s->values[0] = g_variant_get_boolean(v) ? 0.0f : s->info.max_range;
-    } else {  /* LightLevel (lux), CompassHeading (degrees, -1 unknown) */
-        double d = g_variant_get_double(v);
-        if (d >= 0) s->values[0] = d;
+    } else {  /* LightLevel (lux) */
+        s->values[0] = g_variant_get_double(v);
     }
 }
 
@@ -102,7 +100,7 @@ static void add(const char *path, const char *iface, const char *claim, const ch
     if (!r) { fprintf(stderr, "sensors iio: %s: %s\n", claim, error->message); g_error_free(error); return; }
     g_variant_unref(r);
     struct sensor *s = &sensors[n_sensors++];
-    *s = (struct sensor){info, iface, property, info.type == APKLAYER_SENSOR_ORIENTATION ? 3 : 1, {0}};
+    *s = (struct sensor){info, iface, property, 1, {0}};
     GVariant *v = get(path, iface, property);
     if (v) { apply(s, v); g_variant_unref(v); }
 }
@@ -134,9 +132,6 @@ int apklayer_sensors_init(int count, const char *const *options)
     if (has(PATH, BUS, "HasProximity"))
         add(PATH, BUS, "ClaimProximity", "ProximityNear",
             (struct apklayer_sensor_info){APKLAYER_SENSOR_PROXIMITY, "iio-sensor-proxy proximity", "iio-sensor-proxy", 5, 5, 0.1f, 200000, 1});
-    if (has(COMPASS_PATH, BUS ".Compass", "HasCompass"))
-        add(COMPASS_PATH, BUS ".Compass", "ClaimCompass", "CompassHeading",
-            (struct apklayer_sensor_info){APKLAYER_SENSOR_ORIENTATION, "iio-sensor-proxy compass (heading only)", "iio-sensor-proxy", 360, 1, 0.1f, 200000, 1});
     g_mutex_unlock(&lock);
     g_thread_new("iio-sensor-proxy", loop, context);
     return 0;
