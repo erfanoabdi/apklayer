@@ -28,6 +28,10 @@ public final class HubHost {
         HostBattery.installHub(directory::sendSystem);
         System.out.println("[apklayer-hub] READY pid=" + android.os.Process.myPid());
         new Thread(() -> HubBootSettings.write(RuntimeEnvironment.getApplication(), directory), "hub-boot-settings").start();  // the hub is the instance's system (uid 1000)
+        directory.hostSettings = new HubHostSettings(RuntimeEnvironment.getApplication(), directory);
+        Thread settings = new Thread(directory.hostSettings::watch, "hub-host-settings");
+        settings.setDaemon(true);
+        settings.start();
         Thread audio = new Thread(() -> HubAudioPermissions.watch(directory.packages()), "hub-audio-permissions");
         audio.setDaemon(true);
         audio.start();

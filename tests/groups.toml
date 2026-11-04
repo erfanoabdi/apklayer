@@ -27,6 +27,11 @@ run = ["tests/vm/reconvert.sh"]
 apps = ["hello-keystore", "hello-keystore-other"]
 run = ["tests/vm/keystore.sh"]
 
+[settings]
+alone = true  # flips the desktop's colour scheme for a few seconds: every instance's apps follow it (their screenshots too)
+apps = ["hello-settings"]
+run = ["tests/vm/settings.sh"]
+
 [devices]
 apps = ["hello-devices"]
 run = ["tests/vm/devices.sh"]

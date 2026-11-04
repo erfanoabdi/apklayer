@@ -21,6 +21,8 @@ final class HubDirectory extends Binder {
     }
     record Peer(int pid, int uid, String name, IBinder endpoint, IBinder appThread, boolean headless, int appUid, String instance) {}
     private final HubPackages packages;
+    /** The instance's host settings (set by HubHost once it runs). */
+    volatile HubHostSettings hostSettings;
     private final Map<Integer, Peer> peers = new HashMap<>();
     private final HubServiceBindings bindings;
     private final HubBroadcasts broadcasts;
@@ -390,6 +392,17 @@ final class HubDirectory extends Binder {
                 String name = request.readString(), file = request.readString(); request.enforceNoDataAvail();
                 if (!sameUser(Binder.getCallingPid())) throw new SecurityException("Relaunch from another user");
                 reply.writeNoException(); reply.writeInt(activities.relaunch(name, file == null || file.isEmpty() ? null : Path.of(file)) ? 0 : 1); return true;
+            }
+            case HubProtocol.HOST_SETTINGS -> {
+                request.enforceNoDataAvail(); HubHostSettings settings = hostSettings;
+                reply.writeNoException(); reply.writeBundle(settings == null ? new android.os.Bundle() : settings.current()); return true;
+            }
+            case HubProtocol.SETTINGS_CHANGED -> {  // from the CLI, as RELAUNCH
+                request.enforceNoDataAvail();
+                if (!sameUser(Binder.getCallingPid())) throw new SecurityException("Settings change from another user");
+                HubHostSettings settings = hostSettings;
+                if (settings != null) settings.changed();
+                reply.writeNoException(); return true;
             }
             case HubProtocol.TAKE_LAUNCH -> {
                 Peer caller = caller(); request.enforceNoDataAvail();

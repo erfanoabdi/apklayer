@@ -69,6 +69,8 @@ export global Backend {
     callback stop-instance(string);
     callback set-prop(string, string);
     callback unset-prop(string);
+    in property <string> night-setting;    // the instance's colour scheme override (`apklayer settings`): "" follows the desktop, "yes" dark, "no" light
+    callback set-setting(string, string);  // key, value ("" unsets): applied at once in a running instance
 }
 
 export global AppIcons {

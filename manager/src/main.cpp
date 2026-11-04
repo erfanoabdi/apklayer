@@ -32,7 +32,7 @@ struct Detail {
 };
 
 struct Snapshot {
-    Rows apps, instances, props, status;
+    Rows apps, instances, props, settings, status;
     std::optional<Detail> detail;
     std::string error;  // the first CLI call that failed: the snackbar shows it instead of leaving its page empty
 };
@@ -56,6 +56,7 @@ Snapshot load(const Cli& cli, const std::string& current) {
     s.apps = rows(cli, {"list", "--tsv"}, s.error);
     s.instances = rows(cli, {"instances"}, s.error);
     s.props = rows(cli, {"prop"}, s.error);
+    s.settings = rows(cli, {"settings"}, s.error);
     s.status = rows(cli, {"status"}, s.error);
     if (!current.empty()) s.detail = loadDetail(cli, current);
     return s;
@@ -117,6 +118,9 @@ public:
             props->push_back(e);
         }
         b.set_props(props);
+        std::string night;
+        for (const auto& r : s.settings) if (field(r, 0) == "night") night = field(r, 1);
+        b.set_night_setting(slint::SharedString(night));
         b.set_status(info(s.status));
         if (!current_.empty() && s.detail) showDetail(*s.detail);
         b.set_load_error(slint::SharedString(s.error));
@@ -307,6 +311,10 @@ private:
         b.on_stop_instance([this](slint::SharedString id) { action("Stopping the instance", {"stop"}, std::string(id)); });
         b.on_set_prop([this](slint::SharedString k, slint::SharedString v) { action("Saving", {"prop", "set", std::string(k), std::string(v)}); });
         b.on_unset_prop([this](slint::SharedString k) { action("Saving", {"prop", "unset", std::string(k)}); });
+        b.on_set_setting([this](slint::SharedString k, slint::SharedString v) {
+            if (v.empty()) action("Saving", {"settings", "unset", std::string(k)});
+            else action("Saving", {"settings", "set", std::string(k), std::string(v)});
+        });
     }
 
     slint::ComponentHandle<AppWindow> ui_;
