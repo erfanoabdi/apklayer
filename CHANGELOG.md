@@ -59,6 +59,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-04 — m libapklayer_egl: Egl.cpp split, debug switches removed (cleanup agent)
+- Why: Egl.cpp was 744 lines; the window and pbuffer surfaces move to EglWindow.cpp (shared helpers in EglHost.h), and the temporary APKLAYER_EGL_PROBE / APKLAYER_EGL_CPUCOPY / APKLAYER_EGL_NOFENCE experiments go (no behaviour change without them set). A new source file changes Android.bp: Soong regenerates its graph.
+- Command (OrbStack, under `flock -n ~/los24-build.lock`): only `hals/graphics/egl/{Egl.cpp,EglWindow.cpp,EglHost.h,Gles1.cpp,Android.bp}` copied into `vendor/apklayer` (the tree's copies were identical to main's), then `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_egl`; the output goes only into this agent's `~/wt/cleanup3/lib64` on UTM.
 ### 2026-11-04 — libapklayer_servicetool: `call` subcommand (relaunch agent)
 - Why: `apklayer run` of an app already running in the instance hands the launch to the hub (a numbered hub transaction) instead of starting a second process; the CLI has no binder client, servicetool gets `service call`'s `call NAME CODE DESCRIPTOR s16|i32 ...`.
 - Command (OrbStack, under `flock -n ~/los24-build.lock`): only `tools/servicetool.cpp` copied into `vendor/apklayer` (the tree's copy was identical to main's), then `python3 tools/lib/orb-build-module.py libapklayer_servicetool tools servicetool.cpp`.

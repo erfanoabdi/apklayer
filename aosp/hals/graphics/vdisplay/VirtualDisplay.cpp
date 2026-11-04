@@ -57,7 +57,7 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         if (mToken == nullptr) { ALOGE("createVirtualDisplay failed"); return false; }
         applyDisplay();
         // the display's token under a name, for `apklayer screenshot` (aosp/tools/screenshot.cpp: SurfaceFlinger's own captureDisplay of this display).
-        // shortcut: the entry outlives this process (its death link is SurfaceFlinger's); names are per-launch pids, so a stale one is never looked up
+        // The entry outlives this process (its death link is SurfaceFlinger's); names are per-launch pids, so a stale one is never looked up
         std::string name = "apklayer.vdisplay." + std::to_string(stack);
         if (defaultServiceManager()->addService(String16(name.c_str()), mToken) != OK) ALOGW("cannot register %s (no screenshots)", name.c_str());
         ALOGI("virtual display \"%s\": layer stack %u, %ux%u", title, stack, w, h);

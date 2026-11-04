@@ -2,7 +2,8 @@
 # accounts.sh: one account store per instance (the hub's account service). hello-system adds its account into a fresh store and makes it visible to
 # hello-accounts, which (another app, its own JVM) lists it and gets a token from hello-system's authenticator; hello-accountshidden (a third app, not
 # shown the account) lists none and asks a token: its user is asked (the hub's dialog), denies it and it gets none, then allows it and gets one and
-# the account; hello-system's next run finds the account and its visibility persisted.
+# the account; hello-system's next run finds the account and its visibility persisted;
+# then removeAccount asks the authenticator (it refuses one account, allows another).
 # On the VM, in the group's instance (tests/run accounts): APKLAYER_INSTANCE, APKLY_STATE (its logs); the apps installed by the runner. Each run ends itself (runms).
 set -uo pipefail
 : "${APKLY_STATE:=${XDG_STATE_HOME:-$HOME/.local/state}/apklayer/${APKLAYER_INSTANCE:-default}}"
@@ -18,7 +19,7 @@ answered() {
     wait $answer || echo "[accounts] FAIL the hub's question was not answered ($1): $(tail -1 $APKLY_STATE/accounts-answer-$4.out)"
 }
 out=$(run hello.system -Dhello.sys=accounts add; run hello.accounts "" other; answered no hello.accountshidden "" hidden
-      answered yes hello.accountshidden -Dhello.grant=true granted; run hello.system -Dhello.sys=accounts again)
+      answered yes hello.accountshidden -Dhello.grant=true granted; run hello.system -Dhello.sys=accounts again; run hello.system -Dhello.sys=accountremoval removal)
 echo "$out"
 ! echo "$out" | grep -q "FAIL" && echo "$out" | grep -q "PASS accounts persisted=false" && echo "$out" | grep -q "^\[accounts\] PASS [0-9]" &&
-    echo "$out" | grep -q "^\[accounts\] PASS hidden" && echo "$out" | grep -q "^\[accounts\] PASS granted" && echo "$out" | grep -q "PASS accounts persisted=true"
+    echo "$out" | grep -q "^\[accounts\] PASS hidden" && echo "$out" | grep -q "^\[accounts\] PASS granted" && echo "$out" | grep -q "PASS accounts persisted=true" && echo "$out" | grep -q "PASS accountremoval"

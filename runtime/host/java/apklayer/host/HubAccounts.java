@@ -75,7 +75,7 @@ final class HubAccounts extends IAccountManager.Stub {
      * AccountManagerService.resolveAccountVisibility: the system and the authenticator's package always see an account; then what was set for the
      * package; else the legacy default: visible ("user managed") to a package signed like the authenticator, to an app targeting before O that holds
      * GET_ACCOUNTS and to holders of GET_ACCOUNTS_PRIVILEGED, not visible to others.
-     * shortcut: READ_CONTACTS does not open contacts-managing account types (accountTypeManagesContacts); model it with a contacts sync adapter that needs it.
+     * Limit: READ_CONTACTS does not open contacts-managing account types (accountTypeManagesContacts: no contacts sync adapter is modelled).
      */
     private int visibility(Account account, String pkg) {
         String authenticator = authenticator(account.type);
@@ -201,14 +201,15 @@ final class HubAccounts extends IAccountManager.Stub {
         if (removed) changed(account);
         return removed;
     }
-    /** shortcut: removed without asking the authenticator's getAccountRemovalAllowed (every authenticator here allows it); ask it when one refuses. */
+    /** AccountManagerService.RemoveAccountSession: the authenticator's getAccountRemovalAllowed decides; an allowed removal answers whether the store had it. */
     @Override public void removeAccountAsUser(IAccountManagerResponse response, Account account, boolean expectActivityLaunch, int userId) {
         owner(account.type);
-        boolean removed = store.remove(account);
-        if (removed) changed(account);
-        Bundle result = new Bundle();
-        result.putBoolean(AccountManager.KEY_BOOLEAN_RESULT, removed);
-        reply(response, result);
+        session(account.type, response, (a, r) -> a.getAccountRemovalAllowed(r, account), result -> {
+            if (!result.getBoolean(AccountManager.KEY_BOOLEAN_RESULT) || result.containsKey(AccountManager.KEY_INTENT)) return;
+            boolean removed = store.remove(account);
+            if (removed) changed(account);
+            result.putBoolean(AccountManager.KEY_BOOLEAN_RESULT, removed);
+        });
     }
     @Override public void invalidateAuthToken(String accountType, String authToken) { store.invalidate(accountType, authToken); }
     @Override public String peekAuthToken(Account account, String authTokenType) { owner(account.type); return store.read(account, e -> e.tokens.get(authTokenType)); }
@@ -353,7 +354,7 @@ final class HubAccounts extends IAccountManager.Stub {
     @Override public void isCredentialsUpdateSuggested(IAccountManagerResponse response, Account account, String statusToken) {
         session(account.type, response, (a, r) -> a.isCredentialsUpdateSuggested(r, account, statusToken), null);
     }
-    /** shortcut: the required features are not checked with the authenticator (hasFeatures per account); ask it when an app filters by features. */
+    /** Limit: the required features are not checked with the authenticator (its hasFeatures per account): every visible account of the type is returned. */
     @Override public void getAccountsByFeatures(IAccountManagerResponse response, String accountType, String[] features, String opPackageName) {
         Bundle result = new Bundle();
         result.putParcelableArray(AccountManager.KEY_ACCOUNTS, visible(accountType, caller().name(), false));

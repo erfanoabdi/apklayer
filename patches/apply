@@ -7,7 +7,7 @@
 # copy of the touched files (a later patch can change an earlier one's context, so each is not checked alone).
 # A patch that then does not apply is an error. git apply also serves a plain directory: GIT_CEILING_DIRECTORIES
 # keeps it from using an enclosing repository.
-# shortcut: paths with spaces are not supported (word-split lists), fine for our trees.
+# Paths with spaces are not supported (word-split lists); none of our trees has one.
 set -e
 eval "tree=\${$#}"
 tree="$(cd "$tree" && pwd -P)"

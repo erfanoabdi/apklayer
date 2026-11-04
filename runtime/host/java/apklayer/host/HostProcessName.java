@@ -17,9 +17,15 @@ final class HostProcessName {
     static void install(java.nio.file.Path apk) {
         String service = System.getProperty("apklayer.isolated");
         if (apk == null || service == null || !Boolean.getBoolean("apklayer.componenthost")) return;
-        for (PackageParser.Service s : ShadowPackageParser.callParsePackage(apk).services)  // the framework's parser resolves ":name" to "<package>:name"
-            if (service.equals(s.info.name) && s.info.processName != null) set(s.info.processName);
+        for (PackageParser.Service s : ShadowPackageParser.callParsePackage(apk).services) {  // the framework's parser resolves ":name" to "<package>:name"
+            if (!service.equals(s.info.name)) continue;
+            if (s.info.processName != null) set(s.info.processName);
+            isolated = (s.info.flags & android.content.pm.ServiceInfo.FLAG_ISOLATED_PROCESS) != 0;
+        }
     }
+
+    /** Whether this component host runs an android:isolatedProcess service (Android gives such a process no content providers). */
+    static boolean isolated;
 
     private static void set(String name) { System.setProperty("apklayer.processname", name); }  // ShadowActivityThread.currentProcessName answers it
 }

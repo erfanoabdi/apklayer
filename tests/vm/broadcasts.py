@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 import instance  # noqa: E402  (changes into the repo root)
 LOGDIR = instance.LOGDIR
 PHASE = sys.argv[1]
-BASE = '-Dapklayer.realbinder=true -Dapklayer.instancehub=true -Dapklayer.runms=60000' + (' -Dhello.trace=1' if os.environ.get('BC_TRACE') else '')
+BASE = '-Dapklayer.runms=60000' + (' -Dhello.trace=1' if os.environ.get('BC_TRACE') else '')
 ENV = dict(instance.ENV, APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400', APKLAYER_JOPTS=BASE)
 ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-media.so'
 LOGS = Path(LOGDIR)
