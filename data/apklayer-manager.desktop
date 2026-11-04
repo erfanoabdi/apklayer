@@ -5,5 +5,5 @@ Comment=Android apps on Linux: install, open and manage them
 Exec=apklayer-manager
 Icon=apklayer
 Terminal=false
-Categories=System;Utility;
+Categories=Utility;
 StartupWMClass=apklayer-manager
