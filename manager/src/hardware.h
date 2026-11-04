@@ -13,7 +13,8 @@ class Hardware {
 public:
     using Action = std::function<void(const std::string& what, std::vector<std::string> args)>;
     // cli: the manager's (its instance follows the selection); root: the tree of the CLI (the portal's file chooser)
-    Hardware(slint::ComponentHandle<AppWindow> ui, const Cli& cli, std::string root, Action action, std::function<void(const std::string&)> message);
+    Hardware(slint::ComponentHandle<AppWindow> ui, const Cli& cli, std::string root, Action action, std::function<void()> refresh,
+             std::function<void(const std::string&)> message);
     void show(const Rows& providers);
 
 private:
@@ -21,6 +22,7 @@ private:
     const Cli& cli_;
     std::string root_;
     Action action_;
+    std::function<void()> refresh_;
     std::function<void(const std::string&)> message_;
 };
 

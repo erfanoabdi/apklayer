@@ -10,7 +10,8 @@ component OptionField {
     in property <string> domain;
     in property <int> backend;
     changed option => { if !field.has-focus { field.text = root.option.value; } }
-    field := TextField {
+    // a layout fills the component (a bare TextField would keep its preferred width)
+    HorizontalLayout { field := TextField {
         label: root.option.key;
         accessible-label: root.domain + " " + root.option.key;
         supporting_text: root.option.default-value != "" ? "Default: " + root.option.default-value : root.option.file ? "A file" : "";
@@ -18,7 +19,7 @@ component OptionField {
         trailing_icon: root.option.file ? AppIcons.folder : @image-url("");
         trailing_icon_clicked => { Backend.provider-file(root.domain, root.backend, root.option.key); }
         edited(t) => { Backend.provider-option(root.domain, root.backend, root.option.key, t); }
-    }
+    } }
 }
 
 component DomainCard {
@@ -34,7 +35,7 @@ component DomainCard {
         AppIcons.board
     }
 
-    OutlinedCard {
+    VerticalLayout { OutlinedCard {
         VerticalLayout {
             padding: MaterialStyleMetrics.padding_16;
             spacing: MaterialStyleMetrics.spacing_12;
@@ -82,7 +83,7 @@ component DomainCard {
                 }
             }
         }
-    }
+    } }
 }
 
 export component HardwarePage {

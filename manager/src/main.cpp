@@ -74,7 +74,7 @@ public:
         wire();
         setup_ = std::make_unique<manager::Setup>(ui_, cli_, root_, [this] { refresh(); }, [this](const std::string& m) { message(m); });
         hardware_ = std::make_unique<manager::Hardware>(ui_, cli_, root_, [this](const std::string& what, std::vector<std::string> args) { action(what, std::move(args)); },
-                                                        [this](const std::string& m) { message(m); });
+                                                        [this] { refresh(); }, [this](const std::string& m) { message(m); });
     }
     manager::Setup& setup() { return *setup_; }
 

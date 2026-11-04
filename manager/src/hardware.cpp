@@ -70,6 +70,8 @@ std::shared_ptr<slint::VectorModel<HwDomain>> model(const Rows& rows) {
             d.options.assign(r.begin() + std::min<size_t>(3, r.size()), r.end());
         }
     }
+    auto rank = [](const Domain& d) { const Known* k = known(d.name); return k ? static_cast<size_t>(k - kKnown) : std::size(kKnown); };  // a fixed order, configured or not
+    std::stable_sort(domains.begin(), domains.end(), [&](const Domain& a, const Domain& b) { return rank(a) < rank(b); });
     auto out = std::make_shared<slint::VectorModel<HwDomain>>();
     for (Domain& d : domains) {
         if (!d.backend.empty() && std::none_of(d.backends.begin(), d.backends.end(), [&](const auto& b) { return b.first == d.backend; }))
@@ -138,8 +140,9 @@ void setOption(const std::shared_ptr<slint::Model<HwOption>>& opts, const std::s
 }
 }  // namespace
 
-Hardware::Hardware(slint::ComponentHandle<AppWindow> ui, const Cli& cli, std::string root, Action action, std::function<void(const std::string&)> message)
-    : ui_(ui), cli_(cli), root_(std::move(root)), action_(std::move(action)), message_(std::move(message)) {
+Hardware::Hardware(slint::ComponentHandle<AppWindow> ui, const Cli& cli, std::string root, Action action, std::function<void()> refresh,
+                   std::function<void(const std::string&)> message)
+    : ui_(ui), cli_(cli), root_(std::move(root)), action_(std::move(action)), refresh_(std::move(refresh)), message_(std::move(message)) {
     auto& b = ui_->global<Backend>();
     b.on_provider_option([this](slint::SharedString domain, int backend, slint::SharedString key, slint::SharedString value) {
         setOption(options(ui_->global<Backend>().get_hardware(), std::string(domain), backend), std::string(key), std::string(value));
@@ -182,6 +185,7 @@ Hardware::Hardware(slint::ComponentHandle<AppWindow> ui, const Cli& cli, std::st
                 if (shown.rfind("PASS ", 0) == 0) shown = shown.substr(5);
                 if (!shown.empty()) shown[0] = static_cast<char>(toupper(static_cast<unsigned char>(shown[0])));
                 message_(shown);
+                refresh_();  // the instance may have changed (a service that failed); the screenshot mode waits for it
             });
         }).detach();
     });
