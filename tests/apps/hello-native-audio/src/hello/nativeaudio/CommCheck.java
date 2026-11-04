@@ -42,6 +42,7 @@ final class CommCheck {
         try {
             require(audio.getMode() == AudioManager.MODE_IN_COMMUNICATION, "mode " + audio.getMode());
             RecordCheck.run(AudioAttributes.USAGE_VOICE_COMMUNICATION, MediaRecorder.AudioSource.VOICE_COMMUNICATION, "COMM");
+            VoipCheck.run(audio);
         } finally {
             audio.clearCommunicationDevice();
             audio.setMode(AudioManager.MODE_NORMAL);

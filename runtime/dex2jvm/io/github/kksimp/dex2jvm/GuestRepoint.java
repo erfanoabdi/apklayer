@@ -53,6 +53,14 @@ public final class GuestRepoint {
     public static Target lookup(boolean isStatic, boolean isVirtual,
                                 String owner, String name, String desc) {
         String exitTarget = Options.exitRedirect;
+        // apklayer patch: an app's direct ByteBuffers carry an array as on Android (libcore backs allocateDirect with a non-movable
+        // byte[]; WebRTC's audio capture refuses a buffer without one). HostDefaults.REDIRECT_BUFFER, receiver prepended.
+        if ("java/nio/ByteBuffer".equals(owner) && HostDefaults.REDIRECT_BUFFER != null) {
+            if (isStatic && "allocateDirect".equals(name) && "(I)Ljava/nio/ByteBuffer;".equals(desc))
+                return new Target(HostDefaults.REDIRECT_BUFFER, name, desc);
+            if (isVirtual && desc.startsWith("()") && ("hasArray".equals(name) || "array".equals(name) || "arrayOffset".equals(name)))
+                return new Target(HostDefaults.REDIRECT_BUFFER, name, "(Ljava/nio/ByteBuffer;" + desc.substring(1));
+        }
         if (isVirtual) {
             if (UnsafeRepoint.OWNER.equals(owner)) {
                 String d = UnsafeRepoint.repoint(name, desc);

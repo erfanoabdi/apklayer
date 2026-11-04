@@ -112,6 +112,7 @@ try:
         assert '[hello-native-audio] RECORD PASS' in text
         assert '[hello-native-audio] RECORDER PASS' in text
         assert '[hello-native-audio] COMM PASS' in text  # devices, communication device, a call's playback and capture
+        assert '[hello-native-audio] VOIP PASS' in text  # WebRTC's call audio: direct buffers with an array, mono capture, effects, ByteBuffer I/O
         capture.verify()
     if late:
         hub_text = hub_log.read_text(errors='replace')  # fed again when the app registered (the hub's start knew no hello.nativeaudio)
