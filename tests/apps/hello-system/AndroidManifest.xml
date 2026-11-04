@@ -14,7 +14,7 @@
   <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
   <uses-permission android:name="android.permission.READ_USER_DICTIONARY"/>
   <uses-permission android:name="android.permission.WRITE_USER_DICTIONARY"/>
-  <application android:label="system-check" android:usesCleartextTraffic="true">
+  <application android:name=".App" android:label="system-check" android:usesCleartextTraffic="true">
     <activity android:name=".Main" android:exported="true">
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
     </activity>

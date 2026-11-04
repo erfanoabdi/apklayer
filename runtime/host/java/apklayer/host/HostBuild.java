@@ -30,7 +30,7 @@ final class HostBuild {
     private static final Map<String, String> VERSION = Map.of("INCREMENTAL", "ro.build.version.incremental", "RELEASE", "ro.build.version.release",
             "RELEASE_OR_CODENAME", "ro.build.version.release_or_codename", "RELEASE_OR_PREVIEW_DISPLAY", "ro.build.version.release_or_preview_display",
             "BASE_OS", "ro.build.version.base_os", "SECURITY_PATCH", "ro.build.version.security_patch", "CODENAME", "ro.build.version.codename");
-    private static final String[] OTHER_KEYS = {"ro.product.cpu.abi", "ro.product.cpu.abilist", "ro.product.cpu.abilist64", "ro.product.cpu.abilist32", "ro.build.date.utc"};
+    private static final String[] OTHER_KEYS = {"ro.product.cpu.abi", "ro.product.cpu.abilist", "ro.product.cpu.abilist64", "ro.product.cpu.abilist32", "ro.build.date.utc", "ro.debuggable", "ro.secure"};
 
     static void install() {
         String getter;
@@ -56,6 +56,11 @@ final class HostBuild {
         set(Build.class, "SUPPORTED_32_BIT_ABIS", abis32);
         set(Build.class, "CPU_ABI", ABI);
         set(Build.class, "CPU_ABI2", abis32.length > 0 ? abis32[0] : "");
+        // what Build's class initialiser derives from TYPE and ro.debuggable (root and debug detection reads them)
+        set(Build.class, "IS_ENG", "eng".equals(Build.TYPE));
+        set(Build.class, "IS_USERDEBUG", "userdebug".equals(Build.TYPE));
+        set(Build.class, "IS_USER", "user".equals(Build.TYPE));
+        set(Build.class, "IS_DEBUGGABLE", android.os.SystemProperties.getInt("ro.debuggable", 0) == 1);
     }
 
     /** The property store's value (the real SystemProperties native, as libandroid_runtime registers it), "" when unset. */

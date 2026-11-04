@@ -3,7 +3,7 @@ package hello.system;
 import android.content.Context;
 import android.os.Build;
 
-/** The device identity as detection code reads it: each Build field equals its ro.* property (android.os.SystemProperties, by reflection as apps do), and nothing names a test harness or emulator. */
+/** The device identity as detection code reads it: each Build field equals its ro.* property (android.os.SystemProperties, by reflection as apps do), and nothing names a test harness or emulator; a static initialiser (App) saw the same before Application.onCreate; a release build (user/release-keys). */
 final class BuildCheck implements Check {
     @Override public String run(Context context) throws Exception {
         java.lang.reflect.Method get = Class.forName("android.os.SystemProperties").getMethod("get", String.class);
@@ -23,6 +23,20 @@ final class BuildCheck implements Check {
             for (String bad : new String[] {"robolectric", "unknown", "generic", "emulator", "sdk_gphone", "goldfish", "ranchu", "test-harness"})
                 if (lower.contains(bad)) wrong.append(p[0]).append(" names '").append(bad).append("'; ");
         }
+        // as a static initialiser saw them, before Application.onCreate; and a release build, as root detectors expect of a shipped device
+        Object[][] early = {{"static FINGERPRINT", App.STATIC_FINGERPRINT, "ro.build.fingerprint"}, {"static TAGS", App.STATIC_TAGS, "ro.build.tags"},
+            {"static TYPE", App.STATIC_TYPE, "ro.build.type"}, {"static MODEL", App.STATIC_MODEL, "ro.product.model"}};
+        for (Object[] p : early) {
+            String prop = (String) get.invoke(null, p[2]);
+            System.out.println("[sys] build " + p[0] + "='" + p[1] + "' " + p[2] + "='" + prop + "'");
+            if (!prop.equals(p[1])) wrong.append(p[0]).append(" differs from ").append(p[2]).append("; ");
+        }
+        if (!"release-keys".equals(Build.TAGS) || !"user".equals(Build.TYPE)) wrong.append("not a release build: ").append(Build.TYPE).append('/').append(Build.TAGS).append("; ");
+        for (String key : new String[] {"ro.build.display.id", "ro.build.description", "ro.build.flavor", "ro.system.build.fingerprint"}) {
+            String value = (String) get.invoke(null, key);
+            if (value.contains("test-keys") || value.contains("userdebug")) wrong.append(key).append("='").append(value).append("'; ");
+        }
+        if (!"0".equals(get.invoke(null, "ro.debuggable"))) wrong.append("ro.debuggable is not 0; ");
         Check.require(wrong.length() == 0, wrong.toString());
         return Build.FINGERPRINT;
     }

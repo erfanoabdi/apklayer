@@ -151,7 +151,7 @@ static std::string keystoreDir(const Instance& inst) {
     return dir;
 }
 
-// What Android's init derives at boot (property_service.cpp): the fingerprint of the product the instance presents (bridge/native/apklayer.prop over
+// What Android's init derives at boot (property_service.cpp): the fingerprint (and the build's display id, flavor, description) of the product the instance presents (bridge/native/apklayer.prop over
 // the tree's build.prop, whose own fingerprint names the GSI's "generic" product) and the ABI lists of this machine's CPU. Set before the files
 // are loaded: ro.* is write-once, so these win and every reader (natives, apklayer.host.HostBuild) sees one device.
 static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std::vector<std::string>& files) {
@@ -164,6 +164,13 @@ static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std
                               "/" + get("ro.build.id") + "/" + get("ro.build.version.incremental") + ":" + get("ro.build.type") + "/" + get("ro.build.tags");
     std::string abis = std::string(kAbi) + (*kAbi32 ? std::string(",") + kAbi32 : "");
     setProperty(l, ne, "ro.build.fingerprint", fingerprint.c_str());
+    setProperty(l, ne, "ro.system.build.fingerprint", fingerprint.c_str());
+    // as the build system writes them for the build type and tags the instance presents (apklayer.prop), not the tree's "userdebug ... test-keys"
+    std::string flavor = get("ro.product.name") + "-" + get("ro.build.type");
+    setProperty(l, ne, "ro.build.display.id", (get("ro.build.id") + " " + get("ro.build.tags")).c_str());
+    setProperty(l, ne, "ro.build.flavor", flavor.c_str());
+    setProperty(l, ne, "ro.build.description", (flavor + " " + get("ro.build.version.release_or_codename") + " " + get("ro.build.id") + " " +
+                                                get("ro.build.version.incremental") + " " + get("ro.build.tags")).c_str());
     setProperty(l, ne, "ro.product.cpu.abi", kAbi);
     setProperty(l, ne, "ro.product.cpu.abilist", abis.c_str());
     setProperty(l, ne, "ro.product.cpu.abilist64", kAbi);
