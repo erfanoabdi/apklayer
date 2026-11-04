@@ -196,7 +196,10 @@ static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std
     bool bridge = *kBridgeAbi && exists(join(l.androidLibs, kBridgeLib));
     std::string abis64 = std::string(kAbi) + (bridge ? std::string(",") + kBridgeAbi : "");
     std::string abis = abis64 + (*kAbi32 ? std::string(",") + kAbi32 : "");
-    if (bridge) setProperty(l, ne, "ro.dalvik.vm.native.bridge", kBridgeLib);
+    if (bridge) {
+        setProperty(l, ne, "ro.dalvik.vm.native.bridge", kBridgeLib);
+        setProperty(l, ne, "ro.berberis.flags", "glibc-host-thread-id-handoff");  // bionic_translation's thread slots are glibc's (native_bridge.c)
+    }
     setProperty(l, ne, "ro.build.fingerprint", fingerprint.c_str());
     setProperty(l, ne, "ro.system.build.fingerprint", fingerprint.c_str());
     // as the build system writes them for the build type and tags the instance presents (apklayer.prop), not the tree's "userdebug ... test-keys"

@@ -27,7 +27,7 @@ public final class NativeLoader {
     private static boolean ready;
     private static String systemPath = "", appPath = "";
     /** The CPU the app's libraries are for when it is not this one ("arm64" on x86_64): they load through the native bridge (native_bridge.c, set at install). */
-    private static final String BRIDGE = System.getProperty("apklayer.nativebridge");
+    private static String bridge() { return System.getProperty("apklayer.nativebridge"); }  // read when used: a spare-born process gets it with its launch
 
     private NativeLoader() {}
 
@@ -97,7 +97,7 @@ public final class NativeLoader {
     }
 
     private static void loadLibrary(String name, ClassLoader loader) {
-        String path = BRIDGE == null ? findLibrary(name) : bridgeLibrary(name);
+        String path = bridge() == null ? findLibrary(name) : bridgeLibrary(name);
         if (path == null) throw new UnsatisfiedLinkError("no " + name + " in "
                 + System.getProperty("apklayer.libdir", "") + " (ABI not in the APK?)");
         load(path, loader);
@@ -123,14 +123,14 @@ public final class NativeLoader {
         synchronized (NativeLoader.class) {
             if (LOADED.containsKey(path)) return;
             init();
-            long handle = BRIDGE != null ? bridgeLoad(path) : dlopen(path); // by path: a library in an app directory goes into the app's namespace
-            if (handle == 0 && BRIDGE == null && path.startsWith("/")) {  // a library elsewhere (SoLoader's decompressed SuperPack libraries in the app's data): its directory joins the app's path
+            long handle = bridge() != null ? bridgeLoad(path) : dlopen(path); // by path: a library in an app directory goes into the app's namespace
+            if (handle == 0 && bridge() == null && path.startsWith("/")) {  // a library elsewhere (SoLoader's decompressed SuperPack libraries in the app's data): its directory joins the app's path
                 try { appPath += ":" + new File(path).getParentFile().getCanonicalPath(); setLibraryPath(systemPath, appPath); } catch (java.io.IOException unreadable) { /* the error below says so */ }
                 handle = dlopen(path);
             }
-            if (handle == 0) throw new UnsatisfiedLinkError(path + ": " + (BRIDGE != null ? bridgeError() : dlerror()));
+            if (handle == 0) throw new UnsatisfiedLinkError(path + ": " + (bridge() != null ? bridgeError() : dlerror()));
             LOADED.put(path, handle);
-            long onLoad = BRIDGE != null ? bridgeSymbol(handle, "JNI_OnLoad", null) : dlsym(handle, "JNI_OnLoad");
+            long onLoad = bridge() != null ? bridgeSymbol(handle, "JNI_OnLoad", null) : dlsym(handle, "JNI_OnLoad");
             if (onLoad != 0) {
                 int version = callOnLoad(onLoad, loader);
                 if (version < 0) throw new UnsatisfiedLinkError(path + ": JNI_OnLoad failed");
@@ -157,11 +157,11 @@ public final class NativeLoader {
         // only Android (bionic) libraries: apklayer's native dir holds glibc ones, which bionic_translation's dlopen leaves to glibc (LD_LIBRARY_PATH) when they are not here
         systemPath = (provider == null ? "" : provider + "/lib") + (androidLibs != null ? (provider == null ? "" : ":") + androidLibs : "");
         setLibraryPath(systemPath, appPath); // the WebView provider's libs, then Android's
-        if (BRIDGE != null) {  // the bridge library (an Android library of this CPU, on the system path) and the app's guest namespace
+        if (bridge() != null) {  // the bridge library (an Android library of this CPU, on the system path) and the app's guest namespace
             long start = System.nanoTime();
-            String error = bridgeInit("libberberis_" + BRIDGE + ".so", BRIDGE, appPath, "/data/user/0/" + System.getProperty("apklayer.package", "") + "/code_cache");
+            String error = bridgeInit("libberberis_" + bridge() + ".so", bridge(), appPath, "/data/user/0/" + System.getProperty("apklayer.package", "") + "/code_cache");
             if (error != null) throw new UnsatisfiedLinkError("native bridge: " + error);
-            System.out.println("[apklayer] native bridge " + BRIDGE + " ready (" + (System.nanoTime() - start) / 1_000_000 + " ms)");
+            System.out.println("[apklayer] native bridge " + bridge() + " ready (" + (System.nanoTime() - start) / 1_000_000 + " ms)");
         }
         ready = true;
     }
@@ -174,12 +174,12 @@ public final class NativeLoader {
             try {
                 String[] parts = demangle(symbol);
                 Class<?> cls = Class.forName(parts[0], false, cl);
-                long fn = BRIDGE != null ? 0 : dlsym(handle, symbol);
+                long fn = bridge() != null ? 0 : dlsym(handle, symbol);
                 for (Method m : cls.getDeclaredMethods()) {
                     if (!java.lang.reflect.Modifier.isNative(m.getModifiers()) || !m.getName().equals(parts[1])) continue;
                     String sig = descriptor(m);
                     if (parts[2] != null && !sig.startsWith("(" + parts[2])) continue; // overload suffix
-                    if (BRIDGE != null) fn = bridgeSymbol(handle, symbol, shorty(m)); // a trampoline per signature
+                    if (bridge() != null) fn = bridgeSymbol(handle, symbol, shorty(m)); // a trampoline per signature
                     if (registerNative(cls, m.getName(), sig, fn) == 0) bound++;
                 }
             } catch (ClassNotFoundException | LinkageError e) {
