@@ -110,8 +110,6 @@ bool HwCamera::compressJpeg(const Rect<uint16_t> imageSize,
     const size_t compressedSize = jpeg::compressYUV(imageYcbcr, imageSize, metadata,
                                                     jpegData, jpegImageDataCapacity);
 
-    LOG_ALWAYS_FATAL_IF(gbm.unlock(jpegBuffer) != NO_ERROR);
-
     const bool success = (compressedSize > 0);
     if (success) {
         struct camera3_jpeg_blob blob;
@@ -120,6 +118,9 @@ bool HwCamera::compressJpeg(const Rect<uint16_t> imageSize,
         memcpy(static_cast<uint8_t*>(jpegData) + jpegImageDataCapacity,
                &blob, sizeof(blob));
     }
+
+    // apklayer patch: unlocked after the blob header is written (a mapper may unmap the buffer on unlock; Goldfish's keeps it mapped)
+    LOG_ALWAYS_FATAL_IF(gbm.unlock(jpegBuffer) != NO_ERROR);
 
     return success;
 }
