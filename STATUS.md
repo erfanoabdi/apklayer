@@ -16,7 +16,7 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): 
   Second VM: `APKLY_VM_CONF=parallels`; named instances: `APKLY_SLOTS="a b"` (space-separated). Corpus: `CORPUS_INSTANCE=<id> python3 tests/corpus/run.py <app>`.
 - Screenshots: `apklayer [--instance ID] screenshot <package> <out.png>` (the app's own SurfaceFlinger picture). Input into one instance's window:
   `instance.inject` (tests/lib/instance.py); kernel keys (`instance.keys`) go to the shared desktop's focus and are only for input-desktop.
-- CLI (`cli/`): `install | run | list | uninstall | stop [<package>] | hub | wait hub | screenshot | info | clear-data | permissions [grant|revoke] | instances |
+- CLI (`cli/`): `--version | reconvert <pkg>|--all-stale | launcher show|hide | install [--system] | run | list | uninstall | stop [<package>] | hub | wait hub | screenshot | info | clear-data | permissions [grant|revoke] | instances |
   instance create|remove | prop [set|unset] | status | ime enable|disable`. State and logs: `~/.local/state/apklayer/<instance>/`.
 - Manager UI: `manager/fetch-slint.sh && meson setup manager/b manager && ninja -C manager/b`.
 
