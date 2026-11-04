@@ -44,7 +44,7 @@ int main() {
     CHECK(r.deb.sha256 == "cc" && !r.runtime.found(), "another CPU: its deb, no runtime asset");
     error.clear();
     r = parseLatest(kReleases, "bookworm", {"arm64"}, error);
-    CHECK(!r.deb.found() && error.find("bookworm") != std::string::npos, "an unknown codename: no deb, and the error names it");
+    CHECK(!r.deb.found() && r.version == "0.2.0" && error.empty(), "an unknown codename: the release without a deb");
     error.clear();
     r = parseLatest(R"({"releases": [{"version": "0.9.0"}, {"version": "0.10.0"}, {"version": "0.10.0-rc1"}]})", "noble", {"arm64"}, error);
     CHECK(r.version == "0.10.0", "no latest: the newest of the list");

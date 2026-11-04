@@ -24,6 +24,7 @@ void post(std::function<void()> f) { slint::invoke_from_event_loop(std::move(f))
 std::string field(const std::vector<std::string>& row, size_t i) { return i < row.size() ? row[i] : ""; }
 std::string baseName(const std::string& url) { return url.substr(url.rfind('/') + 1); }
 std::string readText(const std::string& path) { std::stringstream s; s << std::ifstream(path, std::ios::binary).rdbuf(); return s.str(); }
+std::string sentence(std::string s) { if (!s.empty()) s[0] = static_cast<char>(toupper(static_cast<unsigned char>(s[0]))); return s; }
 std::string envOr(const char* name, const char* fallback) { const char* v = getenv(name); return v && *v ? v : fallback; }
 std::string marker() { std::string r = runtimeRoot(); return r.substr(0, r.rfind('/')) + "/setup-done"; }  // beside runtime/ in the data home
 
@@ -100,9 +101,9 @@ void Setup::firstRun(bool force) {
         steps_->push_back(SetupStep{id, title, slint::SharedString(detail), done ? "Done" : "", false});
     };
     add("binder", "Binder devices", binder ? "Ready for instance " + cli_.instance : "Missing for instance " + cli_.instance, binder);
-    add("runtime", "Android runtime", runtime.empty() ? "Downloaded from the current release" : "Version " + runtime, !runtime.empty());
-    add("instance", "Default instance", "Instance " + cli_.instance + ": its own Android data and storage", false);
-    add("system-apps", "System apps", "Android's providers, the documents UI and the WebView, from the runtime", false);
+    add("runtime", "Android runtime", runtime.empty() ? "From the current release" : "Version " + runtime, !runtime.empty());
+    add("instance", "Default instance", "Instance " + cli_.instance, false);
+    add("system-apps", "System apps", "Providers, documents and the WebView", false);
     auto& b = ui_->global<Backend>();
     b.set_setup_steps(steps_);
     b.set_first_run(true);
@@ -121,6 +122,8 @@ void Setup::check(bool now) {
 void Setup::show(const State& s) {
     state_ = std::make_shared<State>(s);
     if (!s.error.empty()) fprintf(stderr, "apklayer-manager: update check: %s\n", s.error.c_str());
+    else if (!s.release.deb.found() && compareVersions(s.release.version, s.version.empty() ? "0" : s.version) > 0)
+        fprintf(stderr, "apklayer-manager: release %s has no package for %s on %s\n", s.release.version.c_str(), osCodename().c_str(), cpuNames()[0].c_str());
     std::string title, detail, action, notes;
     if (s.debNewer()) {
         title = "apklayer " + s.release.version + " is available";
@@ -134,7 +137,7 @@ void Setup::show(const State& s) {
         notes = s.release.notesUrl;
     } else if (!s.stale.empty()) {
         title = s.stale.size() == 1 ? "1 app needs converting again" : std::to_string(s.stale.size()) + " apps need converting again";
-        detail = "apklayer's converter changed since they were installed; their data stays.";
+        detail = s.stale.size() == 1 ? "apklayer's converter changed since it was installed; its data stays." : "apklayer's converter changed since they were installed; their data stays.";
         action = "Convert again";
     }
     auto& b = ui_->global<Backend>();
@@ -176,8 +179,8 @@ void Setup::runUpdate(Cli cli, std::shared_ptr<State> s) {
     post([this, e, next] {
         ui_->global<Backend>().set_updating(false);
         show(next);
-        if (!e.empty()) ui_->global<Backend>().set_update_detail(slint::SharedString(e));  // the banner keeps what failed
-        message_(e.empty() ? "Updated" : e);
+        if (!e.empty()) ui_->global<Backend>().set_update_detail(slint::SharedString(sentence(e)));  // the banner keeps what failed
+        message_(e.empty() ? "Updated" : sentence(e));
         refresh_();
     });
 }
@@ -199,7 +202,7 @@ void Setup::runSetup(Cli cli, bool microg, bool fdroid) {
     if (s.runtimeNewer()) {
         std::string what = "Downloading runtime " + s.release.runtimeVersion;
         stepLater("runtime", "", what, true);
-        if (std::string e = getRuntime(s.release, progress); !e.empty()) { stepLater("runtime", "Failed", e, false); finish(false); return; }
+        if (std::string e = getRuntime(s.release, progress); !e.empty()) { stepLater("runtime", "Failed", sentence(e), false); finish(false); return; }
         s.runtime = s.release.runtimeVersion;
     } else if (s.runtime.empty()) {
         stepLater("runtime", "Failed", s.error.empty() ? "The release has no runtime for " + cpuNames()[0] : s.error, false);
@@ -228,7 +231,7 @@ void Setup::runSetup(Cli cli, bool microg, bool fdroid) {
 
     auto extra = [&](const char* id, const std::string& index, const std::vector<std::string>& packages) {
         std::string e = installFromIndex(cli, index, packages, [&](const std::string& text, double p) { stepLater(id, "", text, true); progress(p); });
-        stepLater(id, e.empty() ? "Done" : "Failed", e.empty() ? "Installed" : e, false);
+        stepLater(id, e.empty() ? "Done" : "Failed", e.empty() ? "Installed" : sentence(e), false);
     };
     if (microg) extra("microg", envOr("APKLAYER_MICROG_INDEX", "https://microg.org/fdroid/repo/index-v1.json"), {"com.google.android.gms", "com.android.vending"});
     if (fdroid) extra("fdroid", envOr("APKLAYER_FDROID_INDEX", "https://f-droid.org/repo/index-v1.json"), {"org.fdroid.fdroid"});
@@ -237,12 +240,11 @@ void Setup::runSetup(Cli cli, bool microg, bool fdroid) {
 
 void Setup::wire() {
     auto& b = ui_->global<Backend>();
-    b.on_setup_start([this] {
+    b.on_setup_start([this](bool microg, bool fdroid) {
         auto& b = ui_->global<Backend>();
-        bool microg = b.get_want_microg(), fdroid = b.get_want_fdroid();
         for (size_t i = steps_->row_count(); i-- > 0;)  // a retry: the extras as chosen now
             if (auto row = steps_->row_data(i); row && (row->id == "microg" || row->id == "fdroid")) steps_->erase(i);
-        if (microg) steps_->push_back(SetupStep{"microg", "microG Services and Companion", "From microG's repository", "", false});
+        if (microg) steps_->push_back(SetupStep{"microg", "microG", "Services and Companion", "", false});
         if (fdroid) steps_->push_back(SetupStep{"fdroid", "F-Droid", "From f-droid.org", "", false});
         b.set_setup_running(true);
         std::thread([this, cli = cli_, microg, fdroid] { runSetup(cli, microg, fdroid); }).detach();

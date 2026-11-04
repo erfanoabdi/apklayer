@@ -79,8 +79,7 @@ Release parseLatest(const std::string& text, const std::string& codename, const 
     std::string_view runtime = json::member(chosen, "runtime");
     r.runtimeVersion = json::str(json::member(runtime, "version"));
     r.runtime = asset(json::member(runtime, "assets"), cpus);
-    r.deb = asset(json::member(json::member(chosen, "debs"), codename), cpus);
-    if (!r.deb.found()) error = "release " + r.version + " has no package for " + (codename.empty() ? "this system" : codename) + " on " + cpus[0];
+    r.deb = asset(json::member(json::member(chosen, "debs"), codename), cpus);  // none: this OS or CPU has no package (the caller says so when it matters)
     return r;
 }
 

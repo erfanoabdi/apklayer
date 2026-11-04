@@ -61,31 +61,27 @@ export component FirstRunPage {
                     }
                 }
                 Heading { text: "Optional"; }
-                CheckBoxTile {
-                    text: "microG Services and Companion";
-                    supporting-text: "Google's app services for apps that need them (from microG's repository)";
+                microg-box := CheckBoxTile {
+                    text: "microG";
+                    supporting-text: "Google's services, for apps that need them";
                     accessible-label: "microG";
                     accessible-role: checkbox;
                     accessible-action-default => { self.clicked(); }
                     enabled: !Backend.setup-running && !Backend.setup-done;
-                    check-state: Backend.want-microg ? CheckState.checked : CheckState.unchecked;
-                    checked-state-changed(s) => { Backend.want-microg = s == CheckState.checked; }
                 }
-                CheckBoxTile {
+                fdroid-box := CheckBoxTile {
                     text: "F-Droid";
-                    supporting-text: "An app store of free software (from f-droid.org)";
+                    supporting-text: "A store of free software apps";
                     accessible-label: "F-Droid";
                     accessible-role: checkbox;
                     accessible-action-default => { self.clicked(); }
                     enabled: !Backend.setup-running && !Backend.setup-done;
-                    check-state: Backend.want-fdroid ? CheckState.checked : CheckState.unchecked;
-                    checked-state-changed(s) => { Backend.want-fdroid = s == CheckState.checked; }
                 }
                 HorizontalLayout {
                     alignment: end;
                     spacing: MaterialStyleMetrics.spacing_8;
                     if !Backend.setup-done : TextButton { text: "Skip"; enabled: !Backend.setup-running; clicked => { Backend.setup-finish(); } }
-                    if !Backend.setup-done : FilledButton { text: "Set up"; enabled: !Backend.setup-running; clicked => { Backend.setup-start(); } }
+                    if !Backend.setup-done : FilledButton { text: "Set up"; enabled: !Backend.setup-running; clicked => { Backend.setup-start(microg-box.check-state == CheckState.checked, fdroid-box.check-state == CheckState.checked); } }
                     if Backend.setup-done : FilledButton { text: "Start"; clicked => { Backend.setup-finish(); } }
                 }
             }
@@ -95,24 +91,30 @@ export component FirstRunPage {
 
 // M3 banner: an update, or apps to convert again after one; its progress while it runs
 export component UpdateBanner {
-    FilledCard {
-        VerticalLayout {
-            padding: MaterialStyleMetrics.padding_16;
-            spacing: MaterialStyleMetrics.spacing_8;
-            MaterialText { text: Backend.update-title; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; wrap: word-wrap; }
-            if Backend.update-detail != "" : MaterialText {
-                text: Backend.update-detail;
-                style: MaterialTypography.body_medium;
-                color: MaterialPalette.on_surface_variant;
-                wrap: word-wrap;
-            }
-            if Backend.updating : LinearProgressIndicator { height: MaterialStyleMetrics.size_4; progress: Backend.update-progress; indeterminate: Backend.update-progress < 0; }
-            HorizontalLayout {
-                alignment: end;
+    VerticalLayout {
+        FilledCard {
+            VerticalLayout {
+                padding: MaterialStyleMetrics.padding_16;
                 spacing: MaterialStyleMetrics.spacing_8;
-                if Backend.update-notes-url != "" : TextButton { text: "What's new"; clicked => { Backend.open-notes(); } }
-                if !Backend.updating : TextButton { text: "Later"; clicked => { Backend.dismiss-update(); } }
-                if !Backend.updating && Backend.update-action != "" : FilledButton { text: Backend.update-action; clicked => { Backend.update-now(); } }
+                MaterialText { text: Backend.update-title; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; wrap: word-wrap; }
+                if Backend.update-detail != "" : MaterialText {
+                    text: Backend.update-detail;
+                    style: MaterialTypography.body_medium;
+                    color: MaterialPalette.on_surface_variant;
+                    wrap: word-wrap;
+                }
+                if Backend.updating : LinearProgressIndicator {
+                    height: MaterialStyleMetrics.size_4;
+                    progress: Backend.update-progress;
+                    indeterminate: Backend.update-progress < 0;
+                }
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: MaterialStyleMetrics.spacing_8;
+                    if Backend.update-notes-url != "" : TextButton { text: "What's new"; clicked => { Backend.open-notes(); } }
+                    if !Backend.updating : TextButton { text: "Later"; clicked => { Backend.dismiss-update(); } }
+                    if !Backend.updating && Backend.update-action != "" : FilledButton { text: Backend.update-action; clicked => { Backend.update-now(); } }
+                }
             }
         }
     }

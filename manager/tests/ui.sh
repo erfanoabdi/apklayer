@@ -36,3 +36,4 @@ echo "ok   instance created through its dialog (and the binder setup offered whe
 "$cli" instance remove "$spare" >/dev/null
 "$cli" stop >/dev/null
 echo "PASS manager UI"
+"$(dirname "${BASH_SOURCE[0]}")/ui-updater.sh" "$@"

@@ -26,7 +26,7 @@ std::string osCodename(const std::string& osRelease = "/etc/os-release");
 std::vector<std::string> cpuNames();
 // Android's name of this CPU (arm64-v8a, x86_64)
 std::string androidAbi();
-// releases.json's latest release (or the newest of its list), with the deb and runtime of codename/cpus; error says what is missing
+// releases.json's latest release (or the newest of its list), with the deb and runtime of codename/cpus (empty when it has none); error: no release
 Release parseLatest(const std::string& json, const std::string& codename, const std::vector<std::string>& cpus, std::string& error);
 // -1, 0, 1 as a sorts before, with, after b: dotted numbers ("0.10" after "0.9"), and a version with a suffix ("0.2.0-rc1") before the same without
 int compareVersions(const std::string& a, const std::string& b);

@@ -18,9 +18,7 @@ export global Backend {
     in property <bool> setup-running;
     in property <bool> setup-done;
     in property <float> setup-progress;    // of the running step: 0..1, negative while its size is unknown
-    in-out property <bool> want-microg;
-    in-out property <bool> want-fdroid;
-    callback setup-start();
+    callback setup-start(bool, bool);  // with microG, with F-Droid
     callback setup-finish();
     // the update banner (UpdateBanner): an update of apklayer or its runtime, or stale apps to convert again; title "" hides it
     in property <string> update-title;
