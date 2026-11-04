@@ -20,8 +20,8 @@
 | Element 1.6.62 | Kotlin, Rust | UTM, Parallels | draws (welcome) | fixed: AndroidKeyStore getEntry(alias, null) |
 | VLC 3.7.2 | native player | UTM | draws (welcome) | fixed: liblog's own stderr copy (VLC reads fd 2 back: the JVM hung); the runner's "launch" check misses it (VLC sends stdout to its log) |
 | LibreTube 32.1 | media3 | UTM | draws (Home, loading) | |
-| Material Files 1.7.5 | file manager | UTM, Parallels | draws, list stays "Loading" on UTM | fixed: provider context, Os.strerror, dex2jvm re-point; Parallels says "6 folders" without rows (open) |
-| FluffyChat 2.11.3 | Flutter (Impeller) | UTM, Parallels | black | Impeller picks Vulkan; neither VM presents Vulkan (open) |
+| Material Files 1.7.5 | file manager | UTM, Parallels | draws (Internal storage, 5 folders with rows) | needs a native runtime with the real Os.strerror (`tools/build native`): with an older shim every getfilecon ENODATA threw UnsatisfiedLinkError on its AsyncTask (no rows / "Loading") |
+| FluffyChat 2.11.3 | Flutter (Impeller) | UTM, Parallels | draws (welcome screen), second launch too | Impeller falls back to GLES by itself; black was Dart FFI: dlsym(RTLD_DEFAULT, "calloc") failed (bt 0031); dart:io TLS needs system/etc/security/cacerts (tools/stage root) |
 | Nextcloud 35.0.2 (was 3.27, 2026-01) | Java | UTM, Parallels | draws (login) | fixed: hub attach at the first account use (attachBaseContext) |
 | OpenVPN 0.7.69 (was 196, 2022) | native | UTM | draws (profiles) | |
 | Shelter 1.9.1 (was 20, 2022) | Kotlin | UTM, Parallels | draws | fixed: dex2jvm constructors R8 names but deleted |
