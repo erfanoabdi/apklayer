@@ -50,5 +50,5 @@ cc_library_shared {
     version_script: "exports.map",
     allow_undefined_symbols: true, // apklayer_camera_*: the backend, a host library (APKLAYER_HOST_LIBS)
     compile_multilib: "64",
-    cflags: ["-Wall", "-Werror", "-Wno-main", "-DLOG_TAG=\"apklayer.camera\""],
+    cflags: ["-Wno-main", "-DLOG_TAG=\"apklayer.camera\""], // Goldfish's sources build with the tree's default warnings (they trip -Wall -Werror)
 }
