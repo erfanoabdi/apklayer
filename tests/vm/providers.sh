@@ -51,4 +51,9 @@ grep -aq "^location 1.5000000 2.5000000 7.0" $APKLY_STATE/providers-client.out |
 reload=$(tail -n +$((before + 1)) $APKLY_STATE/stack.log | grep -a "providers:")
 echo "$reload"
 grep -q "providers: gnss restarted" <<<"$reload" && ! grep -q "providers: \(sensors\|vibrator\)" <<<"$reload" || fail "not only gnss restarted"
+# `stop` ends the restarted service too (a service the daemon restarts must not inherit its blocked SIGTERM)
+bin/apklayer stop >/dev/null 2>&1
+for p in $(pgrep -f '[l]ibapklayer_(gnss|sensors|vibrator)\.so --main'); do
+    tr '\0' '\n' < /proc/$p/environ 2>/dev/null | grep -qx "APKLAYER_INSTANCE=${APKLAYER_INSTANCE:-default}" && { fail "provider service $p outlived stop"; kill -9 $p; }
+done
 exit $status

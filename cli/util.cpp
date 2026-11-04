@@ -254,6 +254,11 @@ char** toEnvp(const Env& env, std::vector<std::string>& storage, std::vector<cha
 
 namespace {
 [[noreturn]] void execChild(const Spawn& spec) {
+    // a child gets the default signal mask: the stack daemon blocks SIGTERM/SIGHUP for its signalfd, and a service it restarts would inherit that
+    // (then `stop` cannot end it: the daemon is SIGKILLed after 5 s and the service is left running)
+    sigset_t none;
+    sigemptyset(&none);
+    sigprocmask(SIG_SETMASK, &none, nullptr);
     if (spec.newSession) setsid();
     if (!spec.cwd.empty() && chdir(spec.cwd.c_str()) != 0) _exit(126);
     if (!spec.logFile.empty()) {
