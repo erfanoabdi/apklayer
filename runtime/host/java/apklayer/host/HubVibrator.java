@@ -44,7 +44,8 @@ final class HubVibrator extends IVibratorManagerService.Stub {
     static void publishIfProvided(BiPredicate<Integer, String> holds) {
         String root = System.getenv("APKLAYER_INSTANCE_ROOT");
         if (root == null || !new java.io.File(root, "vendor/etc/vintf/manifest/apklayer-vibrator.xml").exists()) return;
-        if (RealBinder.await(HAL, 5000) == null) { System.out.println("[apklayer-hub] the vibrator HAL is declared but not running: no vibrator"); return; }
+        // the stack starts the HAL before SurfaceFlinger, whose registration makes it ready: normally there already
+        if (RealBinder.lookup(HAL) == null && RealBinder.await(HAL, 5000) == null) { System.out.println("[apklayer-hub] the vibrator HAL is declared but not running: no vibrator"); return; }
         if (!RealBinder.publish(SERVICE, new HubVibrator(holds))) System.out.println("[apklayer-hub] cannot publish " + SERVICE);
     }
 
