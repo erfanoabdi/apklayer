@@ -18,6 +18,8 @@ subdir('bridge/hals/graphics')
 subdir('bridge/hals/media')
 
 subdir('bridge/hals/audio')
+# the camera provider's backends (docs/PLAN.md "Plan: hardware providers")
+subdir('bridge/hals/camera')
 
 # The native runtime (bridge/native, bridge/ndk): built where bionic_translation (tools/build bt) and the staged Android libraries are.
 fs = import('fs')

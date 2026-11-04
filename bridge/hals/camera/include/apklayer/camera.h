@@ -1,6 +1,7 @@
-/* apklayer camera HAL, host side: the host's cameras through PipeWire (the desktop's own arbiter: shared with other apps, permission
- * aware, V4L2/libcamera/portal behind it), plain C for the Android-side camera provider HAL (aosp/hals/camera). Frames are handed over
- * as the negotiated raw format with the real capture timestamp; nothing is invented (no synthetic frames, no fake clock). */
+/* apklayer camera HAL, host side: what the Android-side camera provider (aosp/hals/camera, Goldfish's AIDL ICameraProvider with a camera
+ * fed by a backend) calls. A backend is a library libapklayer-camera-<backend>.so exporting these (one per provider process, chosen per
+ * instance: APKLAYER_CAMERA, docs/PLAN.md "Plan: hardware providers"): fake (test pattern, image, video file), pipewire (the desktop's
+ * cameras through PipeWire). Plain C, no Android types; frames are handed over in a raw format with their capture time. */
 #ifndef APKLAYER_CAMERA_H
 #define APKLAYER_CAMERA_H
 
@@ -12,22 +13,34 @@ extern "C" {
 #endif
 
 #define APKLAYER_CAMERA_MAX_PLANES 4
+#define APKLAYER_CAMERA_MAX_SIZES 8
 
-/* DRM fourcc codes of the raw formats a camera can deliver here (what Android's YUV_420_888 / YCbCr_422_I / RGBX need). */
+/* DRM fourcc codes of the raw formats a backend can deliver (the provider converts them to what the app's streams need). */
 enum {
-    APKLAYER_CAM_NV12 = 0x3231564e,  /* 'NV12' */
+    APKLAYER_CAM_I420 = 0x32315559,  /* 'YU12': Y, U, V planes */
+    APKLAYER_CAM_NV12 = 0x3231564e,  /* 'NV12': Y plane, interleaved UV */
     APKLAYER_CAM_YUYV = 0x56595559,  /* 'YUYV' */
-    APKLAYER_CAM_I420 = 0x32315559,  /* 'YU12' */
     APKLAYER_CAM_XRGB = 0x34325258,  /* 'XR24' (B,G,R,X in memory) */
 };
 
+/* Android's LENS_FACING values */
+enum { APKLAYER_CAM_FRONT = 0, APKLAYER_CAM_BACK = 1, APKLAYER_CAM_EXTERNAL = 2 };
+
 struct apklayer_camera_info {
-    char id[64];            /* stable id of the camera for this host session (the PipeWire node name) */
+    char id[64];            /* stable id of the camera for this host session */
     char name[128];         /* human name ("MacBook Pro Camera") */
-    int facing;             /* 0 front, 1 back, 2 external: from the device's location property, external when unknown */
+    int facing;             /* APKLAYER_CAM_FRONT/BACK/EXTERNAL */
+    int orientation;        /* sensor orientation in degrees (0, 90, 180, 270) */
+    int max_fps;
+    int num_sizes;          /* 1..APKLAYER_CAMERA_MAX_SIZES */
+    uint32_t sizes[APKLAYER_CAMERA_MAX_SIZES][2];   /* width, height the camera can stream */
 };
 
-/* The cameras of the host, at most `max`; returns how many (0 if none or PipeWire is not running), or -errno. */
+/* <0: not usable on this host; 0: usable but never chosen by default (fake); >0: quality, the highest is the default */
+int apklayer_camera_probe(void);
+/* the backend's options ("key=value" each); 0 or -errno */
+int apklayer_camera_init(int count, const char *const *options);
+/* the cameras, at most `max`; returns how many, or -errno */
 int apklayer_camera_list(struct apklayer_camera_info *out, int max);
 
 struct apklayer_camera;
@@ -52,8 +65,8 @@ struct apklayer_camera_callbacks {
 struct apklayer_camera *apklayer_camera_open(const char *id, const struct apklayer_camera_callbacks *callbacks);
 void apklayer_camera_close(struct apklayer_camera *camera);
 
-/* Streams `width`x`height` at about `fps` in the first of `fourccs` (0-terminated, preference order) the camera can give, converting
- * where PipeWire's adapter can. Blocks until the format is negotiated; returns 0 or -errno. Actual values: apklayer_camera_format(). */
+/* Streams about `width`x`height` at about `fps` in the first of `fourccs` (0-terminated, preference order) the camera can give.
+ * Blocks until the format is negotiated; returns 0 or -errno. Actual values: apklayer_camera_format(). */
 int apklayer_camera_start(struct apklayer_camera *camera, uint32_t width, uint32_t height, uint32_t fps, const uint32_t *fourccs);
 int apklayer_camera_stop(struct apklayer_camera *camera);
 void apklayer_camera_format(const struct apklayer_camera *camera, uint32_t *fourcc, uint32_t *width, uint32_t *height, uint32_t *fps);
