@@ -38,12 +38,12 @@ install_tree() {
     # /usr/lib/apklayer mirrors a build dir (cli/layout.cpp finds it from the CLI's own path)
     for f in cli/apklayer bridge/shell/apklayer-shell runtime/dex2jvm/dex2jvm.jar; do install -D "$W/b/$f" "$L/$f"; done
     mkdir -p "$L/bionic_translation/b" "$L/native/aosp" "$D/usr/bin" "$S/runtime/host" "$S/bridge/native" "$S/tools" "$D/usr/lib/modules-load.d" "$D/usr/share/applications"
-    cp -a "$bt"/lib*_bio.so* "$L/bionic_translation/b/"
+    find "$bt" -maxdepth 1 -name 'lib*_bio.so*' ! -type d -exec cp -a {} "$L/bionic_translation/b/" \;  # the libraries, not their object dirs
     cp -r "$W/bionic_translation/cfg.d" "$L/bionic_translation/"
     # the package's half of the native dir (tools/build runtime links it into the user's runtime bundle)
     cp -a "$N/bin" "$N/android-system-stubs" "$N/native-runtime.jar" "$N/jdk-patch" "$N"/lib*.so* "$L/native/"
     cp -a "$N/aosp/host-classes" "$L/native/aosp/"
-    cp -r "$APKLAYER_DEPS/libs" "$L/native/"  # the Maven jars an install runs (apklayer.tools.DenyInstrument)
+    mkdir -p "$L/native/libs" && cp "$APKLAYER_DEPS"/libs/asm-*.jar "$L/native/libs/"  # what an install runs (apklayer.tools.DenyInstrument: ASM)
     # the share dir is the CLI's root: what it and the runtime read from the tree
     cp tools/release/versions "$S/versions"
     cp -r tools/build tools/sysapps.list tools/host-setup "$S/tools/"
