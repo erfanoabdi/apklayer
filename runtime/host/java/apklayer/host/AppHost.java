@@ -353,9 +353,15 @@ public final class AppHost implements Runnable {
 
     /** An intent another app sent here through the hub: started like one of our own, its result goes to the sender's receiver. */
     private void startForHub(Intent intent, android.os.ResultReceiver resultTo) {
+        if (launching) { waitingForHub.add(new Object[] {intent, resultTo}); return; }  // planned once the activity being built is on the stack
         launch(intent);
         if (resultTo != null && !stack.isEmpty()) hubResults.put(stack.peek().get(), resultTo);
     }
+
+    /** A launch runs the activity's lifecycle, which runs the main looper: a hub intent coming then (a second `apklayer run` for a singleTask
+     *  activity) would be planned against a stack without the activity being built and start a second one instead of reaching onNewIntent. */
+    private boolean launching;
+    private final Deque<Object[]> waitingForHub = new ArrayDeque<>();
 
     private static ActivityInfo resolved(Intent intent) throws android.content.pm.PackageManager.NameNotFoundException {
         android.content.pm.ResolveInfo found = RuntimeEnvironment.getApplication().getPackageManager().resolveActivity(intent, 0);
@@ -370,6 +376,17 @@ public final class AppHost implements Runnable {
 
     /** @param request the start's record, with its request code: startActivityForResult is only recorded by Robolectric, the host delivers the result (PLAN P5.3) */
     private void launch(Intent intent, ShadowActivity.IntentForResult request) {
+        boolean outer = !launching;
+        launching = true;
+        try {
+            launchNow(intent, request);
+        } finally {
+            if (outer) launching = false;
+        }
+        if (outer) while (!launching && !waitingForHub.isEmpty()) { Object[] next = waitingForHub.poll(); startForHub((Intent) next[0], (android.os.ResultReceiver) next[1]); }
+    }
+
+    private void launchNow(Intent intent, ShadowActivity.IntentForResult request) {
         if (Boolean.getBoolean("apklayer.tracestart")) System.out.println("[apklayer] launch " + intent + " flags=0x" + Integer.toHexString(intent.getFlags()));
         boolean wantsResult = request != null && request.requestCode >= 0;
         Class<? extends Activity> cls;
