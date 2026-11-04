@@ -27,8 +27,9 @@ final class HostInputMethods {
             if (!"android.permission.BIND_INPUT_METHOD".equals(service.serviceInfo.permission)) continue;
             InputMethodInfo info;
             try { info = new InputMethodInfo(app, service); }  // reads the IME's metadata (subtypes, settings activity)
-            catch (Exception | LinkageError unreadable) {  // another app's resources: the plain entry
-                info = new InputMethodInfo(service.serviceInfo.packageName, service.serviceInfo.name, service.loadLabel(app.getPackageManager()), null);
+            catch (Exception | LinkageError unreadable) {  // another app's resources: the plain entry, labelled without them (loadLabel would log a NotFoundException per IME)
+                CharSequence label = service.serviceInfo.nonLocalizedLabel != null ? service.serviceInfo.nonLocalizedLabel : service.serviceInfo.name;
+                info = new InputMethodInfo(service.serviceInfo.packageName, service.serviceInfo.name, label, null);
             }
             all.add(info);
             if (ids.contains(info.getId())) enabled.add(info);
