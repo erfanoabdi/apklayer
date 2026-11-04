@@ -34,6 +34,7 @@ cc_library_shared {
         "libgralloctypes",
         "libjpeg",
         "liblog",
+        "libprocessgroup",
         "libsync",
         "libui",
         "libutils",

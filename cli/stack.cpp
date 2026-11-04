@@ -302,7 +302,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     // "server died"). One waiter per service blocks in waitForService; the daemon sets the ready property after all of them returned.
     std::vector<std::string> waitFor = {"SurfaceFlingerAIDL"};
     if (staged(l, "libapklayer_audioserver.so")) waitFor.push_back("media.audio_policy");
-    if (cameraOn) waitFor.push_back("android.hardware.camera.provider.ICameraProvider/internal/1"), waitFor.push_back("media.camera");  // an app's first camera list
+    if (cameraOn) waitFor.push_back("media.camera");  // an app's first camera list (the provider joins cameraserver whenever it registers)
     std::vector<int> waiters;
     for (const std::string& svc : waitFor) {
         Spawn w;
