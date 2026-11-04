@@ -1,0 +1,19 @@
+<manifest version="2.0" type="device">
+    <hal format="aidl">
+        <name>android.hardware.graphics.allocator</name>
+        <version>2</version>
+        <fqname>IAllocator/default</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.graphics.composer3</name>
+        <version>5</version>
+        <fqname>IComposer/default</fqname>
+    </hal>
+    <hal format="native">
+        <name>mapper</name>
+        <version>5.0</version>
+        <interface>
+            <instance>apklayer</instance>
+        </interface>
+    </hal>
+</manifest>
