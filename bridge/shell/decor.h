@@ -21,7 +21,7 @@ struct decor {
     void *map;
     size_t map_len;
     int lw, scale, maximized, hover, focused; /* what the current buffer shows */
-    int dark;        /* desktop colour scheme at creation */
+    int dark;        /* desktop colour scheme at creation, then the instance's (window_set_dark) */
     char title[64];
 };
 

@@ -37,7 +37,7 @@ final class HostLocation {
         shadow.setProviderEnabled(LocationManager.NETWORK_PROVIDER, network);
         if (!network || !manager.isLocationEnabled()) return;  // the host has no location service
         try {
-            Process helper = new ProcessBuilder(HostProcess.dying("python3", script())).redirectError(ProcessBuilder.Redirect.INHERIT).start();
+            Process helper = new ProcessBuilder(HostProcess.dying("python3", script("geoclue.py"))).redirectError(ProcessBuilder.Redirect.INHERIT).start();
             Runtime.getRuntime().addShutdownHook(new Thread(helper::destroy));
             BufferedReader in = new BufferedReader(new InputStreamReader(helper.getInputStream()));
             String first = in.readLine();  // `ready`, or why GeoClue is not usable
@@ -70,12 +70,13 @@ final class HostLocation {
         } catch (IOException ended) { /* GeoClue went away */ }
     }
 
-    static String script() {
+    /** A helper of bridge/portal (geoclue.py, settings.py) above the CLI, as installed or in the tree. */
+    static String script(String name) {
         java.io.File cli = new java.io.File(System.getProperty("apklayer.cli", ""));
         for (java.io.File dir = cli.getAbsoluteFile().getParentFile(); dir != null; dir = dir.getParentFile()) {
-            java.io.File candidate = new java.io.File(dir, "bridge/portal/geoclue.py");
+            java.io.File candidate = new java.io.File(dir, "bridge/portal/" + name);
             if (candidate.exists()) return candidate.getPath();
         }
-        return "bridge/portal/geoclue.py";
+        return "bridge/portal/" + name;
     }
 }

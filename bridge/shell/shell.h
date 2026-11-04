@@ -80,6 +80,7 @@ enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
 #define MSG_VSYNC_REQUEST 7
 #define MSG_TEST_INPUT 11    /* test -> shell (testinput.c) */
 #define MSG_TEST_DONE 115    /* shell -> test: {i32 result} */
+#define MSG_DECOR_DARK 13    /* app -> shell: {own window id, 1 light | 2 dark}: the instance's colour scheme (its host settings), for the title bar */
 #define MSG_ACTIVATE 12      /* `apklayer run` of a running app -> shell: {utf8 window title "\0" utf8 xdg-activation token or ""} (activation.c) */
 /* TEST_INPUT kinds: focus; key {evdev, down}; pointer {x, y, button (0 move, +code press, -code release)}; touch {action, x, y};
  * text {preedit} + utf8; resize {logical w, h}; scale {percent}: the compositor's preferred scale;
@@ -103,6 +104,7 @@ struct client {
     int nfds;
     char attach_title[64];     /* MSG_ATTACH_INPUT waiting for a window of that title to appear */
     int attach_id;
+    int dark;                  /* MSG_DECOR_DARK: 0 not said (the bar keeps the desktop's), 1 light, 2 dark */
 };
 struct window {
     struct client *client;
@@ -192,6 +194,7 @@ struct window *window_for_surface(struct wl_surface *s);  /* window.c */
 struct window *window_find(struct client *c, int id);
 struct window *window_find_input(struct client *c, int id);  /* window.c */
 void window_layout(struct window *w);  /* geometry.c */
+void window_set_dark(struct window *w, int dark);  /* the title bar's colour scheme */
 /* geometry.c: configures, scale, the app's CONFIGURE */
 int window_scale(const struct window *w);  /* the scale the window is drawn at (percent) */
 void window_scale_changed(struct window *w, int pref);  /* the compositor prefers another scale (pref percent, 0 = output_scale) */

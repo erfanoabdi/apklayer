@@ -181,6 +181,35 @@ int propCommand(const Layout& l, const Instance& inst, const std::vector<std::st
     return 0;
 }
 
+int settingsCommand(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {
+    const std::string file = join(inst.root, "settings");  // read by the hub (apklayer.host.HubHostSettings), which lays it over the desktop's
+    static const std::set<std::string> keys = {"night", "accent", "contrast", "animations", "font-scale", "locale", "timezone", "time-format"};
+    auto own = propLines(file);
+    if (args.empty() || (args[0] == "list" && args.size() == 1)) {
+        for (const auto& [k, v] : own) printf("%s\t%s\n", clean(k).c_str(), clean(v).c_str());
+        return 0;
+    }
+    const std::string& action = args[0];
+    if (!((action == "set" && args.size() == 3) || (action == "unset" && args.size() == 2)) || !keys.count(args[1]))
+        die("settings [list] | set KEY VALUE | unset KEY; keys: night yes|no, accent #rrggbb, contrast high|normal, animations on|off, "
+            "font-scale <float>, locale <BCP-47>, timezone <tz id>, time-format 12|24");
+    if (action == "set" && (args[2].empty() || args[2].find_first_of("\n\r=") != std::string::npos)) die("a setting is one line");
+    std::string text;
+    for (const auto& [k, v] : own) if (k != args[1]) text += k + "=" + v + "\n";
+    if (action == "set") text += args[1] + "=" + args[2] + "\n";
+    if (!writeFile(file, text)) die("cannot write " + file);
+    bool live = false;
+    if (stackRunning(inst)) {  // HubProtocol.SETTINGS_CHANGED (43): the hub rereads the file and the running apps get the new configuration
+        Spawn call;
+        call.argv = {l.btload(), l.androidLibs, "libapklayer_servicetool.so", "--main", "call", "apklayer.instance", "43", "apklayer.IInstanceHub"};
+        call.env = nativeEnv(l, inst).env;
+        call.logFile = join(inst.logs(), "settings.log");
+        live = runAndWait(call) == 0;
+    }
+    printf("apklayer: %s %s for instance %s (%s)\n", args[1].c_str(), action == "set" ? "set" : "unset", inst.id.c_str(), live ? "applied now" : "from its next start");
+    return 0;
+}
+
 int permissionsCommand(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {
     if (!((args.size() == 1) || (args.size() == 3 && (args[0] == "grant" || args[0] == "revoke")))) die("permissions <package> | grant|revoke <package> <permission>");
     const std::string& pkg = args.size() == 1 ? args[0] : args[1];
