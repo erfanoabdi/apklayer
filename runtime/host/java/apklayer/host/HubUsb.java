@@ -32,7 +32,7 @@ final class HubUsb {
     private final Path apps;
     private final Set<String> grants = ConcurrentHashMap.newKeySet();  // "package\tdevice name"
     private final ExecutorService dialogs = Executors.newSingleThreadExecutor(r -> { Thread t = new Thread(r, "hub-usb-dialogs"); t.setDaemon(true); return t; });  // one question at a time
-    private Map<String, UsbDevice> attached = Map.of();
+    private volatile Map<String, UsbDevice> attached = Map.of();
 
     HubUsb(HubDirectory directory, HubPackages packages, Path apps) { this.directory = directory; this.packages = packages; this.apps = apps; }
 
