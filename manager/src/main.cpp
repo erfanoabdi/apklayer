@@ -384,6 +384,7 @@ int main(int argc, char** argv) {
         else if (a == "--first-run") firstRun = true;
         else { fprintf(stderr, "usage: apklayer-manager [--instance ID] [--first-run] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG] [--dialog NAME] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--expect LABEL]...]\n"); return 2; }
     }
+    slint::set_xdg_app_id("apklayer-manager");  // the Wayland app id: GNOME matches the window to apklayer-manager.desktop (its icon, its dock entry)
     auto ui = AppWindow::create();
     Manager m(ui, cli);
     if (width > 0 && height > 0) ui->window().set_size(slint::LogicalSize({static_cast<float>(width), static_cast<float>(height)}));

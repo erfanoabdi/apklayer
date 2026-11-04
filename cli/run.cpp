@@ -1,4 +1,5 @@
 #include "run.h"
+#include "logs.h"
 #include "manage.h"
 #include "sandbox.h"
 #include "spare.h"
@@ -137,6 +138,10 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     trace("stack ready");
     if (!ensureShell(l, inst, ne)) return 1;
     if (mode == RunMode::App && relaunch(l, inst, ne, package)) return 0;
+    if (mode == RunMode::App) {  // the launch's output and the app's android.util.Log go to <logs>/app-<package>.log too (`apklayer logs`, `apklayer report`)
+        teeLaunchOutput(inst, package);
+        own.push_back("-Dapklayer.applog=" + appLogPath(inst, package));
+    }
     if (mode == RunMode::App) {
         // the hub's JVM boots alongside the app's instead of after its Application.onCreate (HubStartup then finds it); an `apklayer hub` that finds
         // hub.lock taken (the hub is up) returns at once

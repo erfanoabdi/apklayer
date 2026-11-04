@@ -1,0 +1,14 @@
+name: Feature or app support request
+description: Something apklayer should do, or an app that needs a feature apklayer lacks
+labels: [enhancement]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What you would like and why
+    validations:
+      required: true
+  - type: input
+    id: app
+    attributes:
+      label: App it is for (name, package, link), if any
