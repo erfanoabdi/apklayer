@@ -6,35 +6,62 @@ upstream sources (<native>/aosp/robolectric-src); the result is compiled into na
 diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowLocationManager.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowLocationManager.java
 --- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowLocationManager.java
 +++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowLocationManager.java
-@@ -1511,7 +1511,30 @@
+@@ -1672,6 +1672,7 @@
+         if (!transport.invokeOnProviderEnabled(name, enabled)) {
+           synchronized (this) {
+             Iterables.removeIf(locationTransports, current -> current == transport);
++            requestsChanged();  // apklayer patch
+           }
+         }
+       }
+@@ -1703,6 +1704,7 @@
+         if (!transport.invokeOnLocations(locations)) {
+           synchronized (this) {
+             Iterables.removeIf(locationTransports, current -> current == transport);
++            requestsChanged();  // apklayer patch
+           }
+         }
+       }
+@@ -1758,6 +1760,7 @@
+       synchronized (this) {
+         Iterables.removeIf(locationTransports, current -> current.getKey() == transport.getKey());
+         locationTransports.add(transport);
++        requestsChanged();  // apklayer patch
+         invokeOnProviderEnabled = !enabled;
+       }
  
-     @GuardedBy("this")
-     private final CopyOnWriteArrayList<LocationTransport<?>> locationTransports =
--        new CopyOnWriteArrayList<>();
-+        new CopyOnWriteArrayList<LocationTransport<?>>() {  // apklayer patch: every change reaches LocationRequests
-+          @Override
-+          public boolean add(LocationTransport<?> transport) {
-+            boolean added = super.add(transport);
-+            requestsChanged();
-+            return added;
-+          }
+@@ -1765,13 +1768,26 @@
+         if (!transport.invokeOnProviderEnabled(name, false)) {
+           synchronized (this) {
+             Iterables.removeIf(locationTransports, current -> current == transport);
++            requestsChanged();  // apklayer patch
+           }
+         }
+       }
+     }
+ 
++    // apklayer patch: LocationRequests (runtime/patches) hears when this provider's first request comes and its last goes; with the lock held
++    @GuardedBy("this")
++    private boolean requested;
 +
-+          @Override
-+          public boolean removeIf(java.util.function.Predicate<? super LocationTransport<?>> filter) {
-+            boolean removed = super.removeIf(filter);
-+            requestsChanged();
-+            return removed;
-+          }
-+        };
-+
-+    private boolean requested;  // apklayer patch: what LocationRequests last heard
-+
-+    private void requestsChanged() {
++    private synchronized void requestsChanged() {
 +      boolean now = !locationTransports.isEmpty();
 +      if (now == requested) return;
 +      requested = now;
 +      LocationRequests.changed(name, now);
 +    }
++
+     public synchronized void removeListener(Object key) {
+       Iterables.removeIf(locationTransports, transport -> transport.getKey() == key);
++      requestsChanged();  // apklayer patch
+     }
  
-     @GuardedBy("this")
-     @Nullable
+     public void requestFlush(Object key, int requestCode) {
+@@ -1787,6 +1803,7 @@
+       if (!transport.invokeOnFlush(requestCode)) {
+         synchronized (this) {
+           Iterables.removeIf(locationTransports, current -> current == transport);
++          requestsChanged();  // apklayer patch
+         }
+       }
+     }
