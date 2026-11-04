@@ -6,8 +6,8 @@ cc_library_shared {
     cflags: ["-Wall", "-Werror", "-Wno-main"],
 }
 
-// HIDL through the host hwbinder context (docs/HALIUM.md): the device role of the two-instance test, and HIDL clients that list a
-// device's vibrator, cameras and codecs.
+// HIDL through the host hwbinder context (docs/HALIUM.md): the device role of the two-instance test (atrace@1.0 as the test HAL), and
+// HIDL clients that list a device's cameras and codecs.
 cc_library_shared {
     name: "libapklayer_hidltool",
     srcs: ["hidltool.cpp"],
@@ -15,7 +15,7 @@ cc_library_shared {
         "libhidlbase",
         "libutils",
         "liblog",
-        "android.hardware.vibrator@1.0",
+        "android.hardware.atrace@1.0",
         "android.hardware.camera.provider@2.4",
         "android.hardware.camera.common@1.0",
         "android.hardware.media.c2@1.0",

@@ -1,13 +1,13 @@
 // hidltool: HIDL through the host hwbinder context (docs/HALIUM.md).
 //   device              plays the device in the two-instance test: becomes this instance's hwbinder context manager (a minimal
-//                       hwservicemanager that serves one android.hardware.vibrator@1.0::IVibrator/default) and stays alive
-//   vibrator [INSTANCE] IVibrator@1.0: supportsAmplitudeControl, a 50 ms on()
+//                       hwservicemanager that serves one android.hardware.atrace@1.0::IAtraceDevice/default) and stays alive
+//   atrace [INSTANCE]   IAtraceDevice@1.0 (the test HAL: a small HIDL interface still in the tree): its categories, enableCategories
 //   cameras [INSTANCE]  ICameraProvider@2.4 (default instance internal/0): the camera ids (getCameraIdList only, nothing opened)
 //   codecs [INSTANCE]   media.c2@1.0 IComponentStore (default "default"): the component names (listComponents only)
 // The client commands find the HAL like any HIDL client (IFoo::getService); libhidl asks the host for names in host_hals.conf.
 #include <android/hardware/camera/provider/2.4/ICameraProvider.h>
 #include <android/hardware/media/c2/1.0/IComponentStore.h>
-#include <android/hardware/vibrator/1.0/IVibrator.h>
+#include <android/hardware/atrace/1.0/IAtraceDevice.h>
 #include <android/hidl/manager/1.0/IServiceManager.h>
 #include <hidl/HidlBinderSupport.h>
 #include <hidl/HidlTransportSupport.h>
@@ -22,27 +22,35 @@ using android::hardware::hidl_string;
 using android::hardware::hidl_vec;
 using android::hardware::Return;
 using android::hardware::Void;
-namespace V1_0 = android::hardware::vibrator::V1_0;
+namespace V1_0 = android::hardware::atrace::V1_0;
 using android::hidl::base::V1_0::IBase;
 using IServiceManager = android::hidl::manager::V1_0::IServiceManager;
 
 namespace {
-struct TestVibrator : V1_0::IVibrator {
-    Return<V1_0::Status> on(uint32_t ms) override { printf("device: on(%u)\n", ms); fflush(stdout); return V1_0::Status::OK; }
-    Return<V1_0::Status> off() override { return V1_0::Status::OK; }
-    Return<bool> supportsAmplitudeControl() override { return true; }
-    Return<V1_0::Status> setAmplitude(uint8_t) override { return V1_0::Status::OK; }
-    Return<void> perform(V1_0::Effect, V1_0::EffectStrength, perform_cb cb) override { cb(V1_0::Status::UNSUPPORTED_OPERATION, 0); return Void(); }
+struct TestAtrace : V1_0::IAtraceDevice {
+    Return<void> listCategories(listCategories_cb cb) override {
+        hidl_vec<V1_0::TracingCategory> categories(1);
+        categories[0].name = "apklayer";
+        categories[0].description = "served by the device instance";
+        cb(categories);
+        return Void();
+    }
+    Return<V1_0::Status> enableCategories(const hidl_vec<hidl_string>& categories) override {
+        printf("device: enableCategories %s\n", categories.size() ? categories[0].c_str() : "");
+        fflush(stdout);
+        return V1_0::Status::SUCCESS;
+    }
+    Return<V1_0::Status> disableAllCategories() override { return V1_0::Status::SUCCESS; }
 };
 
 // What a host's hwservicemanager does for a client's getService: get() of one registered service; the rest is not needed here
 struct TestManager : IServiceManager {
-    sp<IBase> vibrator = new TestVibrator();
+    sp<IBase> atrace = new TestAtrace();
     Return<sp<IBase>> get(const hidl_string& fqName, const hidl_string& name) override {
-        bool ours = fqName == V1_0::IVibrator::descriptor && name == "default";
+        bool ours = fqName == V1_0::IAtraceDevice::descriptor && name == "default";
         printf("device: get %s/%s: %s\n", fqName.c_str(), name.c_str(), ours ? "served" : "none");
         fflush(stdout);
-        return ours ? vibrator : nullptr;
+        return ours ? atrace : nullptr;
     }
     Return<bool> add(const hidl_string&, const sp<IBase>&) override { return false; }
     Return<Transport> getTransport(const hidl_string&, const hidl_string&) override { return Transport::HWBINDER; }
@@ -67,14 +75,19 @@ extern "C" int main(int argc, char** argv) {
         android::hardware::IPCThreadState::self()->joinThreadPool();
         return 0;
     }
-    if (!strcmp(cmd, "vibrator")) {
-        sp<V1_0::IVibrator> v = V1_0::IVibrator::getService(argc > 2 ? argv[2] : "default");
-        if (v == nullptr) { printf("vibrator: not found\n"); return 1; }
-        Return<bool> amplitude = v->supportsAmplitudeControl();
-        Return<V1_0::Status> on = v->on(50);
-        printf("vibrator: supportsAmplitudeControl %s, on(50) %s\n", amplitude.isOk() ? (amplitude ? "true" : "false") : "failed",
-               on.isOk() ? V1_0::toString(static_cast<V1_0::Status>(on)).c_str() : "failed");
-        return amplitude.isOk() && on.isOk() && on == V1_0::Status::OK ? 0 : 1;
+    if (!strcmp(cmd, "atrace")) {
+        sp<V1_0::IAtraceDevice> a = V1_0::IAtraceDevice::getService(argc > 2 ? argv[2] : "default");
+        if (a == nullptr) { printf("atrace: not found\n"); return 1; }
+        std::string names;
+        Return<void> list = a->listCategories([&](const hidl_vec<V1_0::TracingCategory>& categories) {
+            for (const auto& c : categories) names += std::string(c.name) + " (" + std::string(c.description) + ") ";
+        });
+        hidl_vec<hidl_string> enable(1);
+        enable[0] = "apklayer";
+        Return<V1_0::Status> enabled = a->enableCategories(enable);
+        bool ok = list.isOk() && enabled.isOk() && enabled == V1_0::Status::SUCCESS;
+        printf("atrace: categories %s; enableCategories %s\n", names.c_str(), ok ? "SUCCESS" : "failed");
+        return ok && !names.empty() ? 0 : 1;
     }
     if (!strcmp(cmd, "cameras")) {
         using android::hardware::camera::provider::V2_4::ICameraProvider;
@@ -101,6 +114,6 @@ extern "C" int main(int argc, char** argv) {
         printf("codecs: %zu\n", n);
         return r.isOk() && n > 0 ? 0 : 1;
     }
-    fprintf(stderr, "usage: hidltool device | vibrator [INSTANCE] | cameras [INSTANCE] | codecs [INSTANCE]\n");
+    fprintf(stderr, "usage: hidltool device | atrace [INSTANCE] | cameras [INSTANCE] | codecs [INSTANCE]\n");
     return 2;
 }
