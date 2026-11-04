@@ -91,6 +91,13 @@ public class Main extends Activity {
                 require(pids.size() >= 2, "the service process never ended: " + pids);
                 System.out.println("[svc] PASS respawn: 8 bindings in a row connected, the service ran in " + pids.size() + " processes");
             }
+            case "stoplock" -> {  // stopSelf from a thread holding a lock that onDestroy takes: no deadlock (the destroy runs later on the main thread)
+                startService(new Intent(this, LockService.class));
+                new Thread(() -> {
+                    try { require(LockService.DESTROYED.await(10, TimeUnit.SECONDS), "the service was not destroyed: stopSelf waited for onDestroy (deadlock)"); System.out.println("[svc] PASS stoplock: stopSelf from a lock-holding thread returned, onDestroy ran on the main thread"); }
+                    catch (Throwable failure) { System.out.println("[svc] FAIL stoplock " + failure); }
+                }, "stoplock-check").start();
+            }
             case "filters" -> filters();
             case "own" -> own();
             case "rebind" -> {  // unbind and bind again at once: the ":other" host, which ends with its last binding, never hands out its binder while it exits
@@ -105,7 +112,8 @@ public class Main extends Activity {
                 Object started = start.invoke(getBaseContext(), pid);
                 require(new ComponentName(this, PidService.class).equals(started), "startService returned " + started);
                 require(PidService.STARTED.await(10, TimeUnit.SECONDS), "onStartCommand never ran");
-                require((Boolean) stop.invoke(getBaseContext(), pid) && PidService.destroyed == 1, "stopService: destroyed " + PidService.destroyed + " times");
+                require((Boolean) stop.invoke(getBaseContext(), pid), "stopService returned false");
+                require(PidService.DESTROYED.await(10, TimeUnit.SECONDS) && PidService.destroyed == 1, "stopService: destroyed " + PidService.destroyed + " times");  // later, on the main thread, as on Android
                 System.out.println("[svc] PASS framework: a same-process service started and stopped through ContextImpl ran onStartCommand and onDestroy here");
             }
             case "late" -> late();

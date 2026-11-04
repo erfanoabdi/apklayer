@@ -39,7 +39,7 @@ public final class Services {
 
     private static final class Filter { IBinder binder; int clients; boolean rebind, received; }
 
-    private static final Map<String, Running> RUNNING = new HashMap<>();
+    private static final Map<String, Running> RUNNING = new java.util.concurrent.ConcurrentHashMap<>();  // read off the main thread too (stopSelf, stopService)
     /** The services each connection is bound to (one ServiceConnection may be bound to several, as on Android). */
     private record Bound(String service, Intent.FilterComparison filter) {}
     private static final Map<ServiceConnection, java.util.List<Bound>> CONNECTIONS = new IdentityHashMap<>();
@@ -190,13 +190,18 @@ public final class Services {
 
     /** Service.stopSelf / stopSelfResult: stops when no newer start command arrived (start id -1 always stops) and nothing is bound. */
     static boolean stopSelf(ComponentName cn, int id) {
-        return onMain(() -> {
+        // As ActivityManager: the answer now, onDestroy later on the main thread. A caller off the main thread never waits for it (it may hold a lock
+        // that the service's onDestroy takes: Meet's background thread stopped a service whose onDestroy waited for that thread's lock).
+        Running seen = RUNNING.get(className(cn));
+        boolean stops = seen != null && (id < 0 || id == seen.lastStartId);
+        Runnable stop = () -> {
             Running r = RUNNING.get(className(cn));
-            if (r == null || (id >= 0 && id != r.lastStartId)) return false;
+            if (r == null || (id >= 0 && id != r.lastStartId)) return;
             r.started = false;
-            if (r.connections == 0) { destroy(className(cn), r); }
-            return true;
-        });
+            if (r.connections == 0) destroy(className(cn), r);
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) stop.run(); else new Handler(Looper.getMainLooper()).post(stop);
+        return stops;
     }
 
     public static ComponentName startForegroundService(Context ctx, Intent intent) {
@@ -206,15 +211,15 @@ public final class Services {
     public static boolean stopService(Context ctx, Intent intent) {
         ComponentName cn = resolve(ctx, intent);
         if (cn == null) return ctx.stopService(intent);
-        return onMain(() -> {
+        boolean running = RUNNING.get(className(cn)) != null;  // the answer now, the destroy on the main thread (stopSelf above says why)
+        Runnable stop = () -> {
             Running r = RUNNING.get(className(cn));
-            if (r == null) return false;
+            if (r == null) return;
             r.started = false;
-            if (r.connections == 0) {
-                destroy(className(cn), r);
-            }
-            return true;
-        });
+            if (r.connections == 0) destroy(className(cn), r);
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) stop.run(); else new Handler(Looper.getMainLooper()).post(stop);
+        return running;
     }
 
     public static boolean bindService(Context ctx, Intent intent, ServiceConnection conn, int flags) {

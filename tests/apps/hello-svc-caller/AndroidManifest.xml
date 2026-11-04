@@ -5,6 +5,7 @@
     <activity android:name=".Main" android:exported="true">
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
     </activity>
+    <service android:name=".LockService" android:exported="false"/>
     <service android:name=".PidService" android:exported="false">
       <intent-filter><action android:name="hello.svccaller.PID"/></intent-filter>
     </service>

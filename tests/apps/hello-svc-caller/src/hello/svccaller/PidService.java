@@ -11,8 +11,9 @@ public class PidService extends Service {
     /** Scenario "framework": start commands and destroys of the in-process instance. */
     static final java.util.concurrent.CountDownLatch STARTED = new java.util.concurrent.CountDownLatch(1);
     static volatile int destroyed;
+    static final java.util.concurrent.CountDownLatch DESTROYED = new java.util.concurrent.CountDownLatch(1);
     @Override public int onStartCommand(Intent intent, int flags, int startId) { STARTED.countDown(); return START_NOT_STICKY; }
-    @Override public void onDestroy() { destroyed++; }
+    @Override public void onDestroy() { destroyed++; DESTROYED.countDown(); }
     @Override public IBinder onBind(Intent intent) {
         return new Binder() {
             @Override protected boolean onTransact(int code, Parcel data, Parcel reply, int flags) {

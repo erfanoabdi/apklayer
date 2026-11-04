@@ -73,7 +73,7 @@ apps = ["hello-svc-target", "hello-svc-caller", "hello-svc-late"]  # hello-svc-l
 run = ["python3 -u tests/vm/hub.py services start", "python3 -u tests/vm/hub.py services selfstop", "python3 -u tests/vm/hub.py services sticky",
        "python3 -u tests/vm/hub.py services private", "python3 -u tests/vm/hub.py services filters", "python3 -u tests/vm/hub.py services own",
        "python3 -u tests/vm/hub.py services late", "python3 -u tests/vm/hub.py services oneway", "python3 -u tests/vm/hub.py services respawn",
-       "python3 -u tests/vm/hub.py services rebind", "python3 -u tests/vm/hub.py services framework"]
+       "python3 -u tests/vm/hub.py services rebind", "python3 -u tests/vm/hub.py services framework", "python3 -u tests/vm/hub.py services stoplock"]
 
 [installer]
 apps = ["hello-installer", "hello-legacy-receiver"]  # hello-installer carries the payload APKs (hello-payload with config and ABI splits, hello-payload2, hello-payload-other, hello-installer2) as assets
