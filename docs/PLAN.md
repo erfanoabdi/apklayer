@@ -68,6 +68,7 @@ before this rewrite is `docs/history/PLAN-2026-11-04-full.md`). If a decision ch
 - **dex2jvm**: Open Sudoku's `CREATE TABLE` repeats a column (suspected register reuse, unconfirmed); a per-class conversion failure blocks the install; JdkScan leads (`DatagramSocket.getFileDescriptor$`, SharedMemory's `DirectByteBuffer`, `Cipher/Mac/Signature.getCurrentSpi`, `sun.misc.Cleaner`).
 - **Services**: webview-input failed once under 4-way load (passes alone and on reruns).
 - **microG**: Google apps (Meet) need microG Companion (com.android.vending) installed beside Services in the instance; Meet 377 needs Play services 261200000, microG 0.3.17 is 252432034. DroidGuard answers only with device registration on (microG's setting); text committed through test input reaches the sign-in page's input check only after a real key press.
+- **Apps (corpus 2026-11-04 round 2)**: Termux hard-codes `/data/data/com.termux/files` (needs a per-app `/data/data/<pkg>` and `/data/user/0/<pkg>` view for JVM file I/O and native syscalls); SimpleX links its libraries now but starts no activity (Haskell runtime start suspected); Fossify Camera draws its controls over a black preview (no camera HAL); the F-Droid client stays on "Fetching app repositories"; Amaze counts 8 folders for 4.
 - **Apps**: Go runtime apps (WireGuard, Rethink DNS: cgo TLS under the bionic TLS emulation); Godot 4 needs Vulkan presentation; Meet's Google sign-in through microG needs a human check.
 
 ## Needs real hardware or a person
