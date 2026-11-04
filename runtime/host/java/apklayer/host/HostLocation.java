@@ -32,7 +32,8 @@ final class HostLocation {
             shadow.removeProvider(LocationManager.NETWORK_PROVIDER);
             return;
         }
-        boolean network = allowed.contains(LocationManager.NETWORK_PROVIDER), gps = allowed.contains(LocationManager.GPS_PROVIDER);
+        // gps also needs this stack's GNSS HAL: the settings persist across stacks, and the hub may not have rewritten them yet
+        boolean network = allowed.contains(LocationManager.NETWORK_PROVIDER), gps = allowed.contains(LocationManager.GPS_PROVIDER) && gnssDeclared();
         shadow.setProviderEnabled(LocationManager.GPS_PROVIDER, gps);
         shadow.setProviderEnabled(LocationManager.NETWORK_PROVIDER, network);
         if (!manager.isLocationEnabled()) return;  // the host has no location service

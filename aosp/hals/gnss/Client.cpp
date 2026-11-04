@@ -41,10 +41,17 @@ struct Callback : public BnGnssCallback {
 
 int gnssClient(int fixes) {
     prctl(PR_SET_PDEATHSIG, SIGTERM);  // ends with its reader (an app JVM through `apklayer exec`)
-    auto gnss = IGnss::fromBinder(ndk::SpAIBinder(AServiceManager_waitForService("android.hardware.gnss.IGnss/default")));
-    CHECK(gnss && AIBinder_isRemote(gnss->asBinder().get()));
     auto callback = ndk::SharedRefBase::make<Callback>();
-    CHECK(gnss->setCallback(callback).isOk());
+    std::shared_ptr<IGnss> gnss;
+    bool connected = false;
+    for (int attempt = 0; attempt < 2 && !connected; attempt++) {  // a HAL restarting (providers set) answers DEAD_OBJECT once: look it up again
+        gnss = IGnss::fromBinder(ndk::SpAIBinder(AServiceManager_waitForService("android.hardware.gnss.IGnss/default")));
+        connected = gnss && gnss->setCallback(callback).isOk();
+    }
+    CHECK(connected && AIBinder_isRemote(gnss->asBinder().get()));
+    // the framework's GnssNative takes the extensions before it starts: the example's start() uses the measurement interface it makes then
+    std::shared_ptr<IGnssMeasurementInterface> measurement;
+    CHECK(gnss->getExtensionGnssMeasurement(&measurement).isOk());
     IGnss::PositionModeOptions mode;
     mode.mode = IGnss::GnssPositionMode::STANDALONE;
     mode.recurrence = IGnss::GnssPositionRecurrence::RECURRENCE_PERIODIC;

@@ -51,9 +51,7 @@ class BackendSensor final : public Base {
 
 class BackendSensors final : public Sensors {
   public:
-    BackendSensors() {
-        mSensors.clear();  // the example's own sensors (their threads end here)
-        mNextHandle = 1;
+    BackendSensors() : Sensors(false) {  // without the example's sensors (patch 0003)
         apklayer_sensor_info infos[32];
         int n = apklayer_sensors_list(infos, 32);
         for (int i = 0; i < n; i++) {
