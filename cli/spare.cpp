@@ -134,6 +134,9 @@ int runAppSpare(const Layout& l, const Instance& inst, int afterFd) {
     if (lock < 0 || flock(lock, LOCK_EX | LOCK_NB) != 0) return 0;  // one spare per instance
     if (ftruncate(1, 0) != 0) {}  // app-spare.log (startAppSpare) holds the current spare's output only
     // a JVM preparing beside a starting app slows its start: the spare starts once that launch's first activity is up (or it ended)
+    // `apklayer stop` ends the holder (and with it the spare JVM) with the instance's launches
+    std::string record = join(inst.stateDir, "run." + std::to_string(getpid()));
+    writeFile(record, std::to_string(getpid()) + "\n");
     char started;
     if (afterFd >= 0) { while (read(afterFd, &started, 1) < 0 && errno == EINTR) {} close(afterFd); }
     NativeEnv ne = nativeEnv(l, inst);
@@ -148,10 +151,10 @@ int runAppSpare(const Layout& l, const Instance& inst, int afterFd) {
     jvm.env = ne.env;
     jvm.env["APKLAYER_SPARE_FD"] = std::to_string(pair[1]);
     jvm.cwd = l.appsDir;
+    jvm.endWithParent = true;  // a holder killed (`stop` during its wait) takes the spare along
     int pid = spawn(jvm);
     close(pair[1]);
-    std::string record = join(inst.stateDir, "run." + std::to_string(getpid()));  // `apklayer stop` ends the spare with the instance's launches
-    writeFile(record, std::to_string(pid) + "\n");
+    writeFile(record, std::to_string(pid) + "\n" + std::to_string(getpid()) + "\n");
     unlink(socketPath(inst).c_str());
     int server = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
     sockaddr_un addr{};
