@@ -110,6 +110,7 @@ final class HubServiceBindings {
         } catch (RuntimeException failure) {
             synchronized (bindings) { if (binding.target == target) binding.target = null; }
             System.out.println("[apklayer-hub] bind delivery failed: " + binding.intent.getComponent() + ": " + failure);
+            directory.ensureHost(binding.key);  // the host ended under the delivery: a new one, if its exit and death were already handled
         }
     }
     private void detach(Binding binding) {
@@ -123,19 +124,16 @@ final class HubServiceBindings {
     }
     void died(HubDirectory.Peer peer) {
         List<Binding> detached = new ArrayList<>();
-        List<String> restart = new ArrayList<>();
         synchronized (bindings) {
             for (Binding binding : List.copyOf(bindings.values())) {
                 if (binding.caller.pid() == peer.pid()) {
                     bindings.remove(key(binding)); detached.add(binding);
                 } else if (binding.target != null && binding.target.pid() == peer.pid()) {
-                    binding.target = null;
-                    // LoadedApk's original death monitor delivers onServiceDisconnected.
-                    if ((binding.flags & Context.BIND_AUTO_CREATE) != 0) restart.add(HubDirectory.key(peer));
+                    binding.target = null;  // LoadedApk's original death monitor delivers onServiceDisconnected.
                 }
             }
         }
         for (Binding binding : detached) commands.execute(() -> detach(binding));
-        for (String name : restart.stream().distinct().toList()) directory.launch(name);
+        directory.ensureHost(HubDirectory.key(peer));  // its auto-create bindings (one whose delivery to it failed just before too) get a new host
     }
 }

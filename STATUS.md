@@ -5,7 +5,6 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): 
 ## State (2026-11-04)
 - Over 40 real apps draw and run, current F-Droid versions included (`tests/corpus/results.md`). Full suite on UTM: 40 of 42 groups pass; vulkan-present cannot
   pass on either VM (no Vulkan presentation), input-desktop needs the desktop to itself.
-- In progress: Fennec's YouTube video (audio plays, frames do not reach the GPU process's SurfaceTexture).
 - Next phase, in order: `docs/PLAN.md` "Next phase".
 
 ## How to work here
