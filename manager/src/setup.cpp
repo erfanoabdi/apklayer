@@ -110,8 +110,9 @@ void Setup::firstRun(bool force) {
 }
 
 void Setup::binder(bool ready) {
-    if (!ui_->global<Backend>().get_first_run() || ui_->global<Backend>().get_setup_running()) return;
-    step("binder", ready ? "Done" : "", ready ? "Ready for instance " + cli_.instance : "Missing for instance " + cli_.instance, false);
+    // only a setup's success shows: a run that just failed on missing devices keeps its "Failed"
+    if (!ready || !ui_->global<Backend>().get_first_run() || ui_->global<Backend>().get_setup_running()) return;
+    step("binder", "Done", "Ready for instance " + cli_.instance, false);
 }
 
 void Setup::check(bool now) {

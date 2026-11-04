@@ -172,7 +172,6 @@ Result installDeb(const std::string& path) {
         if (r.status == 0) return r;
     }
     // shortcut: a person who declined PackageKit's prompt is asked again by pkexec (the status cannot tell a refusal from a backend failure); untested: no pkcon on the VMs
-
     return runProgram({"pkexec", "apt-get", "install", "-y", path});
 }
 

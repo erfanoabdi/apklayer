@@ -39,19 +39,6 @@ export component FirstRunPage {
                                 clickable: false;
                                 if step.state != "" : Tag { text: step.state; strong: step.state == "Done"; }
                             }
-                            if step.id == "binder" && step.state != "Done" : VerticalLayout {
-                                padding-left: 72px;
-                                padding-right: MaterialStyleMetrics.padding_16;
-                                padding-bottom: MaterialStyleMetrics.padding_8;
-                                spacing: MaterialStyleMetrics.spacing_8;
-                                MaterialText {
-                                    wrap: word-wrap;
-                                    style: MaterialTypography.body_small;
-                                    color: MaterialPalette.on_surface_variant;
-                                    text: "Each instance needs binder devices from the kernel: the binder_linux module (Ubuntu: the linux-modules-extra package of your kernel) and a binderfs mount at /dev/binderfs. Making them needs an administrator; Set up asks for your password (polkit).";
-                                }
-                                HorizontalLayout { alignment: start; TextButton { text: "Set up binder"; icon: AppIcons.admin; enabled: !Backend.setup-running; clicked => { Backend.setup-binder(Backend.instance); } } }
-                            }
                             if step.running : LinearProgressIndicator {
                                 height: MaterialStyleMetrics.size_4;
                                 progress: Backend.setup-progress;
@@ -59,6 +46,17 @@ export component FirstRunPage {
                             }
                         }
                     }
+                }
+                // outside the card: a wrapped text inside it does not grow the card (its height is measured unwrapped)
+                if Backend.setup-steps.length > 0 && Backend.setup-steps[0].state != "Done" : VerticalLayout {
+                    spacing: MaterialStyleMetrics.spacing_8;
+                    MaterialText {
+                        wrap: word-wrap;
+                        style: MaterialTypography.body_medium;
+                        color: MaterialPalette.on_surface_variant;
+                        text: "Each instance needs binder devices from the kernel: the binder_linux module (Ubuntu: the linux-modules-extra package of your kernel) and a binderfs mount at /dev/binderfs. Making them needs an administrator; Set up binder asks for your password (polkit).";
+                    }
+                    HorizontalLayout { alignment: start; TextButton { text: "Set up binder"; icon: AppIcons.admin; enabled: !Backend.setup-running; clicked => { Backend.setup-binder(Backend.instance); } } }
                 }
                 Heading { text: "Optional"; }
                 microg-box := CheckBoxTile {
