@@ -14,8 +14,8 @@
 
 namespace android::hardware::camera::provider::implementation::hw {
 
-BackendCamera::BackendCamera(const Parameters& params, std::string backendId)
-    : BaseQemuCamera(params), mBackendId(std::move(backendId)) {}
+BackendCamera::BackendCamera(const Parameters& params, std::string backendId, std::vector<Rect<uint16_t>> nativeSizes)
+    : BaseQemuCamera(params), mBackendId(std::move(backendId)), mNativeSizes(std::move(nativeSizes)) {}
 
 BackendCamera::~BackendCamera() { close(); }
 
@@ -65,7 +65,7 @@ void BackendCamera::onError(void* user, int error) {
 }
 
 bool BackendCamera::configure(const CameraMetadata& sessionParams, const size_t nStreams, const Stream* streams, const HalStream* halStreams) {
-    Rect<uint16_t> largest = {0, 0};
+    Rect<uint16_t> need = {0, 0};  // the widest and the tallest stream
     mStreams.resize(nStreams);
     for (size_t i = 0; i < nStreams; ++i, ++streams, ++halStreams) {
         LOG_ALWAYS_FATAL_IF(streams->id != halStreams->id);
@@ -75,9 +75,12 @@ bool BackendCamera::configure(const CameraMetadata& sessionParams, const size_t 
         si.size.height = streams->height;
         si.blobBufferSize = streams->bufferSize;
         si.format = halStreams->overrideFormat;
-        if (si.size.area() > largest.area()) largest = si.size;
+        need = {std::max(need.width, si.size.width), std::max(need.height, si.size.height)};
     }
-    // the backend streams at the largest stream's size; smaller streams are scaled from it
+    // the backend streams at the smallest of its own sizes that covers every stream (else its largest); the streams are scaled from it
+    Rect<uint16_t> source = mNativeSizes.empty() ? need : mNativeSizes.back();
+    for (auto it = mNativeSizes.rbegin(); it != mNativeSizes.rend(); ++it)
+        if (it->width >= need.width && it->height >= need.height) source = *it;
     if (!mCamera) {
         const apklayer_camera_callbacks callbacks = {this, onFrame, onError};
         mCamera = apklayer_camera_open(mBackendId.c_str(), &callbacks);
@@ -90,7 +93,7 @@ bool BackendCamera::configure(const CameraMetadata& sessionParams, const size_t 
         mFailed = false;
     }
     static const uint32_t fourccs[] = {APKLAYER_CAM_I420, APKLAYER_CAM_NV12, APKLAYER_CAM_YUYV, APKLAYER_CAM_XRGB, 0};
-    mStreaming = largest.area() > 0 && apklayer_camera_start(mCamera, largest.width, largest.height, 30, fourccs) == 0;
+    mStreaming = need.area() > 0 && apklayer_camera_start(mCamera, source.width, source.height, 30, fourccs) == 0;
     if (!mStreaming) return FAILURE(false);
     applyMetadata(sessionParams);
     return true;

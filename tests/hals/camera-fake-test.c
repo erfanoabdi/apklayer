@@ -30,8 +30,12 @@ int main(void)
 {
     const char *bad[] = {"cameras=side"};
     assert(apklayer_camera_init(1, bad) < 0);
-    const char *opts[] = {"cameras=back,front", "fps=30"};
-    assert(apklayer_camera_init(2, opts) == 0);
+    const char *sized[] = {"sizes=640x480,1760x1328"}, *odd[] = {"sizes=641x480"};
+    assert(apklayer_camera_init(1, odd) < 0 && apklayer_camera_init(1, sized) == 0);
+    struct apklayer_camera_info one[2];
+    assert(apklayer_camera_list(one, 2) == 2 && one[0].num_sizes == 2 && one[0].sizes[1][0] == 1760 && one[0].sizes[1][1] == 1328);
+    const char *opts[] = {"cameras=back,front", "fps=30", "sizes=320x240,640x480,1280x720,1920x1080"};
+    assert(apklayer_camera_init(3, opts) == 0);
     struct apklayer_camera_info info[4];
     assert(apklayer_camera_list(info, 4) == 2);
     assert(info[0].facing == APKLAYER_CAM_BACK && info[1].facing == APKLAYER_CAM_FRONT && info[0].num_sizes > 0);

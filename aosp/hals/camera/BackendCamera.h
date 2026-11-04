@@ -14,7 +14,8 @@
 namespace android::hardware::camera::provider::implementation::hw {
 
 struct BackendCamera : public BaseQemuCamera {
-    BackendCamera(const Parameters& params, std::string backendId);
+    // nativeSizes: what the backend streams (smallest first); the other advertised sizes are scaled from one of them
+    BackendCamera(const Parameters& params, std::string backendId, std::vector<Rect<uint16_t>> nativeSizes);
     ~BackendCamera() override;
 
     bool configure(const CameraMetadata& sessionParams, size_t nStreams, const Stream* streams, const HalStream* halStreams) override;
@@ -48,6 +49,7 @@ struct BackendCamera : public BaseQemuCamera {
     DelayedStreamBuffer captureJpeg(const StreamInfo& si, CachedStreamBuffer* csb);
 
     const std::string mBackendId;
+    const std::vector<Rect<uint16_t>> mNativeSizes;
     apklayer_camera* mCamera = nullptr;
     bool mStreaming = false;
     std::vector<StreamInfo> mStreams;
