@@ -2,11 +2,7 @@ package apklayer.host;
 
 import android.os.Build;
 import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.TreeSet;
 import org.robolectric.shadow.api.Shadow;
-import org.robolectric.shadows.ShadowSystemProperties;
 import org.robolectric.util.ReflectionHelpers;
 import org.robolectric.util.ReflectionHelpers.ClassParameter;
 
@@ -30,22 +26,12 @@ final class HostBuild {
     private static final Map<String, String> VERSION = Map.of("INCREMENTAL", "ro.build.version.incremental", "RELEASE", "ro.build.version.release",
             "RELEASE_OR_CODENAME", "ro.build.version.release_or_codename", "RELEASE_OR_PREVIEW_DISPLAY", "ro.build.version.release_or_preview_display",
             "BASE_OS", "ro.build.version.base_os", "SECURITY_PATCH", "ro.build.version.security_patch", "CODENAME", "ro.build.version.codename");
-    private static final String[] OTHER_KEYS = {"ro.product.cpu.abi", "ro.product.cpu.abilist", "ro.product.cpu.abilist64", "ro.product.cpu.abilist32", "ro.build.date.utc", "ro.debuggable", "ro.secure"};
 
     static void install() {
         String getter;
         try { getter = Shadow.directNativeMethodName("android.os.SystemProperties", "native_get"); store("ro.build.id", getter); }
         catch (RuntimeException | LinkageError unavailable) { System.out.println("[apklayer] Build: no property store (" + unavailable + "), Robolectric's values stay"); return; }
-        // every key both know (Robolectric's build.prop and Build's own) answers as in the natives
-        android.os.SystemProperties.get("ro.build.id");  // loads Robolectric's build.prop
-        Set<String> keys = new TreeSet<>(((Properties) ReflectionHelpers.getStaticField(ShadowSystemProperties.class, "buildProperties")).stringPropertyNames());
-        keys.addAll(BUILD.values());
-        keys.addAll(VERSION.values());
-        keys.addAll(java.util.List.of(OTHER_KEYS));
-        for (String key : keys) {
-            String value = store(key, getter);
-            if (!value.isEmpty() || key.startsWith("ro.product.cpu.")) ShadowSystemProperties.override(key, value);  // an empty ABI list is a value (no 32-bit ABIs on x86_64)
-        }
+        // SystemProperties answers from the store (ShadowHostSystemProperties); Build's fields were computed from Robolectric's build.prop
         BUILD.forEach((field, key) -> setFrom(Build.class, field, key));
         VERSION.forEach((field, key) -> setFrom(Build.VERSION.class, field, key));
         String date = android.os.SystemProperties.get("ro.build.date.utc");
