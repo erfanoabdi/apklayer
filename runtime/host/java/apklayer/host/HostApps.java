@@ -167,16 +167,21 @@ final class HostApps {
     /** The intent another app handed to this process at start (null for a normal launch). */
     static Intent incoming() {
         String path = System.getenv(INTENT_ENV);
-        if (path == null) return null;
+        return path == null ? null : read(Path.of(path), RuntimeEnvironment.getApplication().getPackageName());
+    }
+
+    /** An intent file (consumed) for the package: its component, or without one the package's activity that resolves it; null if unreadable. */
+    static Intent read(Path file, String pkg) {
         Properties p = new Properties();
-        try (InputStream in = Files.newInputStream(Path.of(path))) {
+        try (InputStream in = Files.newInputStream(file)) {
             p.load(in);
-            Files.deleteIfExists(Path.of(path));
+            Files.deleteIfExists(file);
         } catch (IOException e) {
             return null;
         }
         Intent intent = fromProperties(p);
-        intent.setComponent(new ComponentName(RuntimeEnvironment.getApplication().getPackageName(), p.getProperty("component")));
+        if (p.getProperty("component") != null) intent.setComponent(new ComponentName(pkg, p.getProperty("component")));
+        else intent.setPackage(pkg);
         return intent;
     }
 }

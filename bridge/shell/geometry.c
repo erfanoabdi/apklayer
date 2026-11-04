@@ -93,6 +93,7 @@ static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t c
     w->constrained = constrained;
     w->activated = activated;
     if (activated) w->minimized = 0;
+    if (active_changed && debug_input) fprintf(stderr, "[shell] \"%s\" %s\n", w->title, activated ? "activated" : "deactivated");
     if (w->configured && active_changed) send_state(w);
 }
 static void top_bounds(void *d, struct xdg_toplevel *t, int32_t bw, int32_t bh)

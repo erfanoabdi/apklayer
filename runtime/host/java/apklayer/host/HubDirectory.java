@@ -104,6 +104,10 @@ final class HubDirectory extends Binder {
             return peer;
         }
     }
+    private static boolean sameUser(int pid) {
+        try { return Files.getAttribute(Path.of("/proc/" + pid), "unix:uid").equals(Files.getAttribute(Path.of("/proc/self"), "unix:uid")); }
+        catch (IOException | UnsupportedOperationException gone) { return false; }
+    }
     /** After a start or stop: a component host left without services ends now that its reply is in (Services.exitIfIdle). */
     void exitIfIdle(Peer target) {
         if (!target.headless) return;
@@ -367,6 +371,11 @@ final class HubDirectory extends Binder {
                 caller(); int pid = request.readInt(); request.enforceNoDataAvail();
                 Peer peer = peerByPid(pid);
                 reply.writeNoException(); reply.writeInt(peer == null ? -1 : peer.appUid()); return true;
+            }
+            case HubProtocol.RELAUNCH -> {  // from the CLI, not a registered peer: the instance's binder device is the boundary, plus the same Linux user
+                String name = request.readString(), file = request.readString(); request.enforceNoDataAvail();
+                if (!sameUser(Binder.getCallingPid())) throw new SecurityException("Relaunch from another user");
+                reply.writeNoException(); reply.writeInt(activities.relaunch(name, file == null || file.isEmpty() ? null : Path.of(file)) ? 0 : 1); return true;
             }
             case HubProtocol.TAKE_LAUNCH -> {
                 Peer caller = caller(); request.enforceNoDataAvail();

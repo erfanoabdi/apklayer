@@ -105,6 +105,9 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         if (len >= 4) client_vsync_request(c, v[0]);
         break;
     }
+    case MSG_ACTIVATE:
+        activate_message(p, len);
+        break;
     case MSG_TEST_INPUT:
         test_input(c, p, len);
         break;

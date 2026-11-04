@@ -377,7 +377,9 @@ public final class AppHost implements Runnable {
             return;
         }
         // task rules: reuse an instance already on the stack, clear what is above it, or clear everything
-        LaunchRules.Plan plan = LaunchRules.plan(task().stream().<Class<?>>map(a -> a == null ? null : a.getClass()).toList(), cls, intent.getFlags(), info.launchMode);
+        List<Class<?>> classes = task().stream().<Class<?>>map(a -> a == null ? null : a.getClass()).toList();
+        if (LaunchRules.bringsForward(classes, cls, intent)) { System.out.println("[apklayer] brought forward " + cls.getName() + " depth=" + stack.size()); return; }
+        LaunchRules.Plan plan = LaunchRules.plan(classes, cls, intent.getFlags(), info.launchMode);
         if (plan.clearAll()) {
             while (!stack.isEmpty()) destroyTop();
         } else if (plan.above() >= 0) {

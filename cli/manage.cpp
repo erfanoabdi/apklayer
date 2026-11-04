@@ -10,9 +10,6 @@
 
 namespace apklayer {
 
-namespace {
-// The launches of this instance (run.<pid> records: the JVM first, then the window sink; a component host has its launcher, which became the JVM),
-// by package: the JVM's command line names it (-Dapklayer.package=), or once the runtime renamed the process as Android does, it is the process name.
 std::map<std::string, std::vector<std::string>> launches(const Layout& l, const Instance& inst) {
     std::map<std::string, std::vector<std::string>> byPackage;
     for (const std::string& f : listDir(inst.stateDir)) {
@@ -31,6 +28,7 @@ std::map<std::string, std::vector<std::string>> launches(const Layout& l, const 
     return byPackage;
 }
 
+namespace {
 long long treeSize;
 int addSize(const char*, const struct stat* st, int type, FTW*) { if (type == FTW_F) treeSize += st->st_size; return 0; }
 long long dirSize(const std::string& dir) {

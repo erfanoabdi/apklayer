@@ -23,6 +23,13 @@ final class LaunchRules {
         static final Plan NONE = new Plan(false, -1, false);
     }
 
+    /** A launcher start of the running task (NEW_TASK, MAIN/LAUNCHER of its root activity): Android brings the task forward as it is and starts nothing. */
+    static boolean bringsForward(List<Class<?>> stackTopFirst, Class<?> cls, Intent intent) {
+        int flags = intent.getFlags();
+        return !stackTopFirst.isEmpty() && stackTopFirst.get(stackTopFirst.size() - 1) == cls && (flags & Intent.FLAG_ACTIVITY_NEW_TASK) != 0
+                && (flags & (Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP)) == 0 && Intent.ACTION_MAIN.equals(intent.getAction()) && intent.hasCategory(Intent.CATEGORY_LAUNCHER);
+    }
+
     /** @param stackTopFirst the classes of the activities in the task, the top one first; null for a finishing one (never the top to reuse) */
     static Plan plan(List<Class<?>> stackTopFirst, Class<?> cls, int flags, int launchMode) {
         if ((flags & Intent.FLAG_ACTIVITY_CLEAR_TASK) != 0 && (flags & Intent.FLAG_ACTIVITY_NEW_TASK) != 0) return new Plan(true, -1, false);

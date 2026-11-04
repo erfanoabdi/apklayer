@@ -1,13 +1,17 @@
 #include "run.h"
+#include "manage.h"
 
 #include <cerrno>
+#include <cstdint>
 #include <cstring>
 #include <dirent.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
 #include <sys/file.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -24,6 +28,49 @@ bool webviewSandboxOff(const Instance& inst) {
     if (!text || text->find("--no-sandbox") == std::string::npos) return false;
     std::string own = join(inst.dataDir, std::string(kWebviewCommandLine).substr(strlen("/data/")));
     if (readFile(own) != text) { makeDirs(dirName(own)); writeFile(own, *text); }
+    return true;
+}
+
+// The title of a launch's window (its virtual display's): identifies instance and launch. Cut to the host display HAL's title limit.
+std::string windowTitle(const Instance& inst, const std::string& launcher, const std::string& package) {
+    return ("apklayer:" + launcher + ":" + inst.id + ":" + package).substr(0, 60);
+}
+
+// The launcher pid (its run.<pid> record, the layer stack) of a running window JVM of the package; empty: none (component hosts have no window sink).
+std::string windowLaunch(const Layout& l, const Instance& inst, const std::string& package) {
+    std::string found;
+    auto running = launches(l, inst);  // kept: a range-for over a member of a temporary would outlive it
+    for (const std::string& record : running[package]) {
+        std::vector<std::string> pids = split(readFile(join(inst.stateDir, record)).value_or(""), '\n');
+        if (pids.size() >= 2 && atoi(pids[1].c_str()) > 0) found = record.substr(strlen("run."));
+    }
+    return found;
+}
+
+// `apklayer run` of an app whose window JVM runs in this instance (Android: a launcher or `am start` reaches the running process, never a second
+// one): the hub hands the intent (APKLAYER_INTENT_FILE) or a launcher start to it, and the shell raises its window. False: start a process.
+bool relaunch(const Layout& l, const Instance& inst, const NativeEnv& ne, const std::string& package) {
+    std::string launcher = windowLaunch(l, inst, package);
+    if (launcher.empty()) return false;
+    std::string window = windowTitle(inst, launcher, package);
+    std::string intent = getenvOr("APKLAYER_INTENT_FILE", "");
+    if (!intent.empty()) intent = realPath(intent);
+    Spawn call;  // HubProtocol.RELAUNCH (37) of apklayer.IInstanceHub: 0 when the running app has it
+    call.argv = {l.btload(), l.androidLibs, "libapklayer_servicetool.so", "--main", "call", "apklayer.instance", "37", "apklayer.IInstanceHub", "s16", package, "s16", intent};
+    call.env = ne.env;
+    call.logFile = join(inst.logs(), "relaunch.log");
+    if (runAndWait(call) != 0) return false;
+    // MSG_ACTIVATE (bridge/shell/activation.c) with the token a desktop launcher gave this command, if any
+    std::string payload = window + std::string(1, '\0') + getenvOr("XDG_ACTIVATION_TOKEN", "");
+    uint32_t header[2] = {12, (uint32_t)payload.size()};
+    int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    sockaddr_un addr{};
+    addr.sun_family = AF_UNIX;
+    snprintf(addr.sun_path, sizeof addr.sun_path, "%s", l.shellSocket().c_str());
+    bool raised = connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof addr) == 0 && write(fd, header, sizeof header) == sizeof header
+                  && write(fd, payload.data(), payload.size()) == (ssize_t)payload.size();
+    close(fd);
+    printf("apklayer: %s runs in instance %s: launch handed to it%s\n", package.c_str(), inst.id.c_str(), raised ? "" : " (its window not raised: no shell)");
     return true;
 }
 }  // namespace
@@ -63,6 +110,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     if (!ensureStack(l, inst)) return 1;
     trace("stack ready");
     if (!ensureShell(l, inst, ne)) return 1;
+    if (mode == RunMode::App && relaunch(l, inst, ne, package)) return 0;
     if (mode == RunMode::App) {
         // the hub's JVM boots alongside the app's instead of after its Application.onCreate (HubStartup then finds it); an `apklayer hub` that finds
         // hub.lock taken (the hub is up) returns at once
@@ -81,7 +129,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     // launch. The primary display is headless, so the sink is required (a component host has no window).
     if (mode == RunMode::App) {
         if (!exists(join(l.androidLibs, "libapklayer_vdisplay.so"))) die("the runtime needs libapklayer_vdisplay.so (the primary display is headless)");
-        std::string title = ("apklayer:" + std::to_string(self) + ":" + inst.id + ":" + package).substr(0, 60);  // the host display HAL's title limit
+        std::string title = windowTitle(inst, std::to_string(self), package);
         Spawn sink;
         sink.argv = {l.btload(), l.androidLibs, "libapklayer_vdisplay.so", "--main", title, std::to_string(self), getenvOr("APKLAYER_DISPLAY_WIDTH", "720"), getenvOr("APKLAYER_DISPLAY_HEIGHT", "1280")};
         sink.env = ne.env;
@@ -207,16 +255,7 @@ int waitHub(const Layout& l, const Instance& inst) {
 int screenshot(const Layout& l, const Instance& inst, const std::string& target, std::string out) {
     std::string stack = target;
     if (target.empty() || target.find_first_not_of("0123456789") != std::string::npos) {
-        stack.clear();
-        for (const std::string& f : listDir(inst.stateDir)) {
-            if (f.rfind("run.", 0) != 0) continue;
-            auto record = readFile(join(inst.stateDir, f));
-            std::vector<std::string> pids = record ? split(*record, '\n') : std::vector<std::string>();
-            if (pids.size() < 2 || atoi(pids[1].c_str()) <= 0) continue;  // a component host: no window
-            auto cmd = readFile("/proc/" + pids[0] + "/cmdline");
-            // the JVM's command line names the package, or (once the runtime named the process as Android does) is the process name
-            if (cmd && (cmd->find("-Dapklayer.package=" + target + std::string(1, '\0')) != std::string::npos || cmd->rfind(target + std::string(1, '\0'), 0) == 0)) stack = f.substr(4);
-        }
+        stack = windowLaunch(l, inst, target);
         if (stack.empty()) { fprintf(stderr, "apklayer: no window of %s in instance %s\n", target.c_str(), inst.id.c_str()); return 1; }
     }
     if (out.empty() || out[0] != '/') { char cwd[4096]; if (getcwd(cwd, sizeof cwd)) out = join(cwd, out); }

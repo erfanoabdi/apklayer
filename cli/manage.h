@@ -4,8 +4,13 @@
 
 #include "apps.h"
 
+#include <map>
+
 namespace apklayer {
 
+// The launches of this instance (run.<pid> records: the JVM first, then the window sink, 0 for a component host, whose launcher became the JVM),
+// by package: the JVM's command line names it (-Dapklayer.package=), or once the runtime renamed the process as Android does, it is the process name.
+std::map<std::string, std::vector<std::string>> launches(const Layout& layout, const Instance& instance);
 // `list --tsv`: package, label, version, app directory, uid, running ("1" when a window or host of it runs in this instance)
 void listAppsTsv(const Layout& layout, const Instance& instance);
 // `info <package>`: key<TAB>value rows (info.properties' description, code and data size in bytes, directories)

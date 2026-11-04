@@ -1,6 +1,7 @@
 /* Wayland globals: seat, output (HiDPI scale), registry binding. */
 #include "shell.h"
 #include "text-input-v3-client-protocol.h"
+#include "xdg-activation-v1-client-protocol.h"
 
 uint32_t dmabuf_linear[DMABUF_LINEAR_MAX];
 int dmabuf_linear_n;
@@ -132,6 +133,8 @@ static void registry(void *d, struct wl_registry *r, uint32_t name, const char *
         viewporter = wl_registry_bind(r, name, &wp_viewporter_interface, 1);
     else if (!strcmp(iface, wp_fractional_scale_manager_v1_interface.name))
         fscale_mgr = wl_registry_bind(r, name, &wp_fractional_scale_manager_v1_interface, 1);
+    else if (!strcmp(iface, xdg_activation_v1_interface.name))
+        activation = wl_registry_bind(r, name, &xdg_activation_v1_interface, 1);
 }
 static void registry_rm(void *d, struct wl_registry *r, uint32_t n)
 {

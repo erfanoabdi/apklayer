@@ -80,6 +80,7 @@ enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
 #define MSG_VSYNC_REQUEST 7
 #define MSG_TEST_INPUT 11    /* test -> shell (testinput.c) */
 #define MSG_TEST_DONE 115    /* shell -> test: {i32 result} */
+#define MSG_ACTIVATE 12      /* `apklayer run` of a running app -> shell: {utf8 window title "\0" utf8 xdg-activation token or ""} (activation.c) */
 /* TEST_INPUT kinds: focus; key {evdev, down}; pointer {x, y, button (0 move, +code press, -code release)}; touch {action, x, y};
  * text {preedit} + utf8; resize {logical w, h}; scale {percent}: the compositor's preferred scale;
  * maximize {on, w, h}: the compositor's (un)maximize to window geometry w x h (0 = the size is the client's). x, y: logical content pixels, y < 0 = the title bar. */
@@ -216,6 +217,8 @@ void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int
 void window_dmabuf_destroy(struct window *w);  /* dmabuf.c */
 /* test input (testinput.c): the seat's and the compositor's events, injected into one window */
 void test_input(struct client *c, const uint8_t *p, uint32_t len);
+void activate_message(const uint8_t *p, uint32_t len);  /* activation.c */
+extern struct xdg_activation_v1 *activation;  /* activation.c */
 void keyboard_inject_focus(struct window *w);  /* keyboard.c */
 void keyboard_inject_key(struct window *w, uint32_t evdev, int down);  /* keyboard.c */
 void pointer_inject(struct window *w, int x, int y, int button);  /* pointer.c */

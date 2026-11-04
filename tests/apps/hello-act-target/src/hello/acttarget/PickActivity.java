@@ -29,11 +29,11 @@ public class PickActivity extends Activity {
         int[] numbers = intent.getIntArrayExtra("numbers");
         Uri uri = intent.getParcelableExtra("uri", Uri.class);
         System.out.println("[act-t] " + how + " pid=" + Process.myPid() + " text=" + intent.getStringExtra("text") + " numbers=" + (numbers == null ? null : numbers.length)
-                + " uri=" + uri + " nested=" + (nested == null ? null : nested.getString("k") + "/" + nested.getLong("l")));
+                + " uri=" + uri + " nested=" + (nested == null ? null : nested.getString("k") + "/" + nested.getLong("l")) + " data=" + intent.getData());
         Intent result = new Intent("hello.act.RESULT").putExtra("pid", Process.myPid()).putExtra("echo", intent.getStringExtra("text") + "!")
                 .putExtra("sum", numbers == null ? -1 : java.util.Arrays.stream(numbers).sum()).putExtra("uri", uri).putExtra("how", how)
                 .putExtra("nested", nested);
-        if (intent.getBooleanExtra("stay", false)) return;
+        if (intent.getBooleanExtra("stay", false) || intent.getStringExtra("keep") != null) return;  // keep: an intent file's (string extras only)
         new Handler(Looper.getMainLooper()).postDelayed(() -> { setResult(RESULT_OK, result); finish(); }, 800);
     }
 }

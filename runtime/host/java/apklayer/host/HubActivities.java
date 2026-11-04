@@ -33,7 +33,7 @@ final class HubActivities {
         Intent resolved = new Intent(intent).setComponent(new ComponentName(info.packageName, info.name));
         HubDirectory.Peer target = directory.appPeer(info.packageName);
         if (target != null) {
-            HubProtocol.call(target.endpoint(), HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_START_ACTIVITY, request -> { request.writeTypedObject(resolved, 0); request.writeTypedObject(resultTo, 0); }, reply -> null);
+            deliver(target, resolved, resultTo);
         } else {
             synchronized (pending) { pending.computeIfAbsent(info.packageName, key -> new ArrayDeque<>()).add(new Launch(resolved, resultTo)); }
             directory.launchApp(info.packageName);
@@ -42,14 +42,33 @@ final class HubActivities {
         return true;
     }
 
+    /**
+     * `apklayer run` of a package whose app process runs (Android: a launcher or `am start` reaches the running process): the intent from the file, or a
+     * launcher start, goes to that process, which applies its task rules (AppHost.launch). The CLI asks only while the app's window JVM runs: one that
+     * has not registered yet is still starting and takes it as its first launch (TAKE_LAUNCH). False when the intent file cannot be read.
+     */
+    boolean relaunch(String name, java.nio.file.Path intentFile) {
+        Intent intent = intentFile != null ? HostApps.read(intentFile, name)
+                : new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+        if (intent == null) return false;
+        HubDirectory.Peer target = directory.appPeer(name);
+        if (target != null) deliver(target, intent, null);
+        else synchronized (pending) { pending.computeIfAbsent(name, key -> new ArrayDeque<>()).add(new Launch(intent, null)); }
+        System.out.println("[apklayer-hub] relaunch " + name + ": " + intent);
+        return true;
+    }
+
+    private static void deliver(HubDirectory.Peer target, Intent intent, ResultReceiver resultTo) {
+        HubProtocol.call(target.endpoint(), HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_START_ACTIVITY, request -> { request.writeTypedObject(intent, 0); request.writeTypedObject(resultTo, 0); }, reply -> null);
+    }
+
     /** The launch waiting for a freshly started app process, if any; later ones that came while it started go to it as to a running app. */
     Launch take(HubDirectory.Peer app) {
         Deque<Launch> queue;
         synchronized (pending) { queue = pending.remove(app.name()); }
         if (queue == null) return null;
         Launch first = queue.poll();
-        for (Launch later : queue)  // the app keeps them until its first activity is up (HubActivityClient.setStarter)
-            HubProtocol.call(app.endpoint(), HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_START_ACTIVITY, request -> { request.writeTypedObject(later.intent(), 0); request.writeTypedObject(later.resultTo(), 0); }, reply -> null);
+        for (Launch later : queue) deliver(app, later.intent(), later.resultTo());  // the app keeps them until its first activity is up (HubActivityClient.setStarter)
         return first;
     }
 }
