@@ -48,7 +48,8 @@ public class Main extends Activity {
         log(ok ? "PASS" : "FAIL first=" + first + " warm=" + warm);
         long t7 = System.nanoTime();
         int px = gl();  // EGL pbuffer cleared to (1, 0.5, 0, 1): 0xff0080ff, read back as RGBA bytes
-        log("GL " + ((px & 0xffffff) == 0x0080ff || (px & 0xffffff) == 0x007fff ? "PASS" : "FAIL") + " pixel 0x" + Integer.toHexString(px)
+        int green = (px >> 8) & 0xff;  // drivers round 0.5 differently (ANV: 0x82)
+        log("GL " + ((px & 0xff00ff) == 0x0000ff && green > 0x70 && green < 0x90 ? "PASS" : "FAIL") + " pixel 0x" + Integer.toHexString(px)
                 + " (" + (System.nanoTime() - t7) / 1000 + " us)");
         TextView v = new TextView(this);
         v.setText("arm64 JNI: " + (ok ? "PASS" : "FAIL"));
