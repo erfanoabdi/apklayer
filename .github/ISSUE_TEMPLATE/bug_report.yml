@@ -1,0 +1,79 @@
+name: Bug report
+description: An app does not start, draws wrong, crashes or misbehaves, or apklayer itself fails
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. A report can only be worked on with **logs**, **the app** and **steps to reproduce**.
+        Get the logs in one archive: open the app again, reproduce the problem, then run
+        ```
+        apklayer report <package>
+        ```
+        (the package name is in `apklayer list`) and attach the `apklayer-report-<package>.tar.gz` it writes below.
+        Look through it first: logs can contain account names, URLs and file names. Details: README, "Logs and bug reports".
+  - type: input
+    id: version
+    attributes:
+      label: apklayer version
+      description: Output of `apklayer --version` (the first line), or the deb version (`dpkg -s apklayer | grep Version`)
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: app
+    attributes:
+      label: App, its version and where it comes from
+      description: Name, package, version and a link (F-Droid, Play Store, the project's releases, ...). For an APK from elsewhere, say where.
+      placeholder: "Organic Maps, app.organicmaps 2025.10.21, https://f-droid.org/packages/app.organicmaps/"
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Distribution, desktop and CPU
+      placeholder: "Ubuntu 24.04, GNOME 46 Wayland, arm64 (or: amd64)"
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU and driver
+      description: From `apklayer gpus`, or e.g. "Intel UHD (Mesa 25.0)", "virtio-gpu in a VM"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: From a fresh start of the app; what you tap or type, in order
+      placeholder: |
+        1. apklayer run app.organicmaps
+        2. Tap Search
+        3. Type "cafe"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected and what happened instead
+      description: Screenshots help (`apklayer screenshot <package> out.png` takes the app's window)
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Attach the archive from `apklayer report <package>` (drag it here). If you cannot, paste the output of `apklayer logs <package>`.
+      placeholder: Drop apklayer-report-<package>.tar.gz here
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I reproduced it after starting the app again, and the logs above are from that run
+          required: true
+        - label: I searched the existing issues for this app
+          required: true

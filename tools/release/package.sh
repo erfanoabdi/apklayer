@@ -54,7 +54,9 @@ install_tree() {
     ln -sfn ../lib/apklayer/cli/apklayer "$D/usr/bin/apklayer"
     DESTDIR="$D" meson install -C "$W/m" --no-rebuild >/dev/null
     echo binder_linux > "$D/usr/lib/modules-load.d/apklayer.conf"
-    cp debian/apklayer-manager.desktop "$D/usr/share/applications/"
+    cp data/apklayer-manager.desktop "$D/usr/share/applications/"
+    install -Dm644 data/apklayer.svg "$D/usr/share/icons/hicolor/scalable/apps/apklayer.svg"
+    install -Dm644 data/apklayer-256.png "$D/usr/share/icons/hicolor/256x256/apps/apklayer.png"
 }
 
 case "$step" in
