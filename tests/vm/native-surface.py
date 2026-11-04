@@ -29,7 +29,7 @@ notify = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
 assert notify >= 0 and libc.inotify_add_watch(notify, os.fsencode(logs), 0x102) >= 0
 app = None
 seen = []
-committed = captured = False
+committed = captured = focused = False
 try:
     app = subprocess.Popen(['bin/apklayer', 'run', 'hello.nativesurface'], env=ENV,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
@@ -64,11 +64,15 @@ try:
                     if '[hello-native-surface] AVC rendered pts=3600000366666' in line:
                         committed = True
             # Capture after the real HWUI commit callback and a visible active window.
+            # the shell's test input activates the window (the desktop's focus belongs to whichever instance mapped a window last)
+            if committed and not focused:
+                instance.inject('hello.nativesurface', 'focus')
+                focused = True
             if committed and not captured and any('window state active=true' in s for s in seen):
                 with open(os.environ.get('APKLY_OUT', '/tmp') + '/apklayer-native-surface-layers.txt', 'wb') as dump:
                     subprocess.run(['bin/apklayer', 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger'], env=ENV, stdout=dump, stderr=subprocess.STDOUT, check=True)
                 pixels.red_surface(instance.capture('native SurfaceView result', 'hello.nativesurface'))
-                instance.inject('hello.nativesurface', 'focus', 'key:1')  # Back into this instance's window: other instances share the desktop's focus
+                instance.inject('hello.nativesurface', 'key:1')  # Back into this instance's window: other instances share the desktop's focus
                 captured = True
     text = '\n'.join(seen)
     assert '[runtime] Android media JNI registered' in text

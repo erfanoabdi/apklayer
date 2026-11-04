@@ -39,7 +39,7 @@ notify = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
 assert notify >= 0 and libc.inotify_add_watch(notify, os.fsencode(logs), 0x102) >= 0
 app = hub = None
 seen = []
-committed = captured = False
+committed = captured = focused = False
 try:
     if audio_mode:
         capture = AudioCapture(ENV)
@@ -92,9 +92,13 @@ try:
                     if '[hello-native-audio] FRAME PASS' in line:
                         committed = True
             # Capture after the real HWUI commit callback and a visible active window.
+            # the shell's test input activates the window (the desktop's focus belongs to whichever instance mapped a window last)
+            if committed and not focused:
+                instance.inject('hello.nativeaudio', 'focus')
+                focused = True
             if committed and not captured and any('window state active=true' in s for s in seen):
                 instance.capture('native AudioTrack JNI result' if audio_mode else 'native attribution result', 'hello.nativeaudio')
-                instance.inject('hello.nativeaudio', 'focus', 'key:1')  # Back into this instance's window: other instances share the desktop's focus
+                instance.inject('hello.nativeaudio', 'key:1')  # Back into this instance's window: other instances share the desktop's focus
                 captured = True
     text = '\n'.join(seen)
     assert '[runtime] native attribution Parcel adapter registered' in text
