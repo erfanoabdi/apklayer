@@ -53,7 +53,7 @@ build_host() { # Call only while app JVMs are stopped; the previous build stays 
     find runtime/host/java -name '*.java' ! -name '._*' | sort > "$work/sources"
     echo "Compiling $(wc -l < "$work/sources") tree host sources"
     javac -nowarn --add-exports java.base/sun.net.util=ALL-UNNAMED --add-exports java.base/sun.security.tools.keytool=ALL-UNNAMED --add-exports java.base/sun.security.x509=ALL-UNNAMED -d "$work/classes" \
-        -cp "$work/classes:$native/aosp/sim-classes:$native/aosp/Robolectric_all.jar:$native/aosp/android-all/*:$B/runtime/dex2jvm/dex2jvm.jar" "@$work/sources"
+        -cp "$work/classes:$native/aosp/sim-classes:$native/native-runtime.jar:$native/aosp/Robolectric_all.jar:$native/aosp/android-all/*:$B/runtime/dex2jvm/dex2jvm.jar" "@$work/sources"
     cp -R runtime/host/resources/. "$work/classes/"
     [ ! -d "$native/aosp/host-classes" ] || mv "$native/aosp/host-classes" "$work/previous"
     mv "$work/classes" "$native/aosp/host-classes"

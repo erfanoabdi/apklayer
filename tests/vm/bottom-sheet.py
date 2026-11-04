@@ -20,7 +20,7 @@ ENV = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1', APKLAYER_DISPLAY_WIDTH='480
 SHOWN = re.compile(r'sheet (\d) shown sheet=(-?\d+),(-?\d+),(\d+),(\d+) window=(-?\d+),(-?\d+),(\d+),(\d+)')
 seen = []
 done = set()
-dimmed = gone = None
+shown = gone = over = None
 
 
 def level(shot):
@@ -66,7 +66,8 @@ try:
                 if m:
                     stage, x, y, w, h = (int(n) for n in m.groups()[:5])
                     assert y > 300, 'sheet %d is not at the bottom: %s' % (stage, line)
-                    if stage == 3: dimmed = level(instance.capture('sheet shown', PKG))
+                    if stage == 3: shown = level(instance.capture('sheet shown', PKG))
+                    if stage == 6: over = level(instance.capture('sheet over popup', PKG))
                     outside = act(stage, x, y, w, h)
                 elif outside and re.search(r'sheet [1356] button tapped', line):
                     done.add(line.split()[2] + ' button')
@@ -80,8 +81,10 @@ try:
     want = {'1 button', '1 cancelled', '2 cancelled', '3 button', '3 cancelled', '4 dragged', '5 button', '5 cancelled', '6 button', '6 cancelled'}
     assert done == want, 'missing: %s' % (want - done)
     assert not any('popup under the sheet tapped' in l for l in seen), 'a tap on the sheet reached a popup of the activity below it'
-    print('brightness at the handle of sheet 3: %d, after the sheets: %d' % (dimmed, gone), flush=True)
-    assert gone > dimmed + 40, 'the sheet stays on the screen after the dialogs went away'
+    print('brightness at the handle of sheet 3: %d, after the sheets: %d' % (shown, gone), flush=True)
+    assert shown > gone + 40, 'the sheet stays on the screen after the dialogs went away'
+    print('brightness at the handle of sheet 6 over the popup: %d' % over, flush=True)
+    assert abs(over - shown) < 10, 'the popup of the activity is drawn over the sheet'
     print('PASS bottom dialogs: button taps, an outside tap and Back cancel, a downward drag dismisses the sheet; the sheet is gone from the screen; a popup of the activity below the sheet gets none of its taps', flush=True)
 finally:
     instance.stop()
