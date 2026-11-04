@@ -132,18 +132,15 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
     std::vector<std::string> hidden = {home, "/tmp"};
     if (!under(runtime, home)) hidden.push_back(runtime);
     auto isHidden = [&](const std::string& p) { return std::any_of(hidden.begin(), hidden.end(), [&](const std::string& h) { return under(p, h); }); };
-    // never a directory that holds other apps' or instances' data (an env entry such as $HOME/lib would bring the whole home back)
-    std::vector<std::string> keepOut = {join(realPath(l.dataHome), "apklayer"), join(realPath(l.stateHome), "apklayer"), join(runtime, "apklayer"), home};
-    std::vector<std::string> shared = {l.root, l.build, l.native, l.androidLibs, l.bionic, l.deps, l.appsDir, inst.stateDir, inst.root, dirName(dirName(realPath(java)))};
+    // the runtime's code and libraries (an entry that is the home itself or above it is left out: it would bring the whole home back)
+    std::vector<std::string> shared = {l.root, l.build, l.native, l.androidLibs, l.bionic, l.deps, dirName(dirName(realPath(java)))};
     for (const char* var : {"LD_LIBRARY_PATH", "BIONIC_LD_LIBRARY_PATH", "LD_PRELOAD", "APKLAYER_HOST_LIBS"})
         for (const std::string& entry : split(getenvOr(var, ""), ':'))
             if (!entry.empty() && entry[0] == '/') shared.push_back(isDir(entry) ? entry : dirName(entry));
     std::vector<std::string> ro;
     for (const std::string& p : shared) {
         std::string r = realPath(p);
-        if (r.empty() || !exists(r) || !isHidden(r)) continue;
-        if (std::any_of(keepOut.begin(), keepOut.end(), [&](const std::string& k) { return under(k, r); })) continue;
-        ro.push_back(r);
+        if (!r.empty() && exists(r) && isHidden(r) && !under(home, r)) ro.push_back(r);
     }
     std::sort(ro.begin(), ro.end());
     std::vector<Step> steps;
@@ -154,6 +151,12 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
     std::string last;
     for (const std::string& r : ro)
         if (last.empty() || !under(r, last)) { bind(r, r, false); last = r; }
+    // what holds every instance's and app's data, where such a tree has it inside (a source tree with its tests' data): empty again,
+    // then only this instance's parts
+    for (const std::string& all : {join(realPath(l.dataHome), "apklayer"), join(realPath(l.stateHome), "apklayer"), join(runtime, "apklayer")})
+        if (isDir(all) && std::any_of(ro.begin(), ro.end(), [&](const std::string& r) { return under(all, r); })) steps.push_back({Step::Tmpfs, all});
+    for (const std::string& own : {l.appsDir, inst.stateDir, inst.root})
+        if (isHidden(realPath(own))) bind(realPath(own), own, false);
     std::string data = realPath(appDataDir(l, inst, package)), tmp = join(inst.tmpDir(), "sandbox-" + std::to_string(uid));
     makeDirs(tmp);
     if (chown(tmp.c_str(), uid, uid) != 0) die("cannot give " + tmp + " to the app");
