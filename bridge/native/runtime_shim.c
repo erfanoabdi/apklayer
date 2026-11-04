@@ -30,8 +30,10 @@ void apklayer_log_to_stderr(void), apklayer_crash_trace(void); /* android_platfo
 
 static int runtime_debug(void)
 {
-    const char *value = getenv("APKLAYER_RUNTIME_DEBUG");
-    return value && !strcmp(value, "1");
+    /* read once (at startReg, one thread): a later getenv races with an app thread's setenv (Gecko's) and read a freed environ */
+    static int debug = -1;
+    if (debug < 0) { const char *value = getenv("APKLAYER_RUNTIME_DEBUG"); debug = value && !strcmp(value, "1"); }
+    return debug;
 }
 
 static jclass class_class;

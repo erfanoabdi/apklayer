@@ -82,6 +82,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 Older dated notes (GPU follow-up, TextureView, MC3, Vulkan checkpoints, OTR2, route cleanups): `docs/history/CHANGELOG-2026-10-27-notes.md`.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-04 — libapklayer_servicetool: `wait NAME` (fennecvideo agent)
+- Why: the staged libs on both VMs (`~/android-arm64`, Parallels `~/apklayer-rt`) got out/'s 2026-10-27 servicetool at 06:51 (no `wait`): the stack never sets apklayer.stack.ready and every `apklayer run` blocks. The vendor tree has the source with `wait` (commit 434720b) but it was never built.
+- Command (OrbStack): `flock -n ~/los24-build.lock` around `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_servicetool`; the output goes only into the agent's own lib64 copies.
 ### 2026-11-04 — libapklayer_audioserver: the --track probe plays out what follows the marker (audio agent)
 - Why: audio-track counted 47601 of the tone's 47760 non-silent frames: its last 161 frames were still in the HAL ring and PipeWire (~100 ms past the mixer's marker) when the probe stopped and the stack exited. The probe now keeps writing silence until the presented timestamp passes the tone.
 - Command (OrbStack, under `flock -n ~/los24-build.lock`): only `hals/audio/services/TrackProbe.h` copied into `vendor/apklayer` (the tree's copy was identical to main's), then `python3 tools/lib/orb-build-module.py libapklayer_audioserver hals/audio/services Service.cpp`: compiled, link failed (libaudioflinger.a and libaudiopolicyservice.a are not in out/). Second command: `flock -n ~/los24-build.lock -c 'cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_audioserver'`.
