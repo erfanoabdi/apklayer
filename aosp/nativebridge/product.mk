@@ -1,5 +1,5 @@
 # apklayer: Digitalis (the arm64 guest of AOSP's Berberis translator) in a gsi_x86_64 build, only when the build's environment has
-# APKLAYER_NATIVE_BRIDGE=arm64 (docs/NATIVE-BRIDGE.md). Included through LineageOS's vendor/extra/product.mk hook; without the variable
+# APKLAYER_NATIVE_BRIDGE=arm64 (docs/X86_64.md "arm64-only apps"). Included through LineageOS's vendor/extra/product.mk hook; without the variable
 # the product is unchanged, so other builds of the tree are not affected.
 # Only the build half of frameworks/libs/binary_translation/enable_arm64_to_x86_64.mk: its packages and ro.* properties would break the
 # GSI's artifact path requirement, and apklayer stages the outputs itself (`m <module>` builds a module that is not in PRODUCT_PACKAGES).

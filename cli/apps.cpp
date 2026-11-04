@@ -111,7 +111,8 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
 
     // base.apk and split_<name>.apk, as a device installs a package (apklayer.tools.ApkSet: one APK, a base and its splits, or an .apks/.xapk/.apkm)
     Spawn stage;
-    stage.argv = {"java", "-cp", l.hostClasses(), "apklayer.tools.ApkSet", tmp, kAbi};
+    bool bridge = *kBridgeAbi && exists(join(l.androidLibs, kBridgeLib));  // a staged native bridge runs apps of its ABI too (extractLibs prefers the CPU's own)
+    stage.argv = {"java", "-cp", l.hostClasses(), "apklayer.tools.ApkSet", tmp, bridge ? std::string(kAbi) + "," + kBridgeAbi : std::string(kAbi)};
     stage.argv.insert(stage.argv.end(), apks.begin(), apks.end());
     stage.env = currentEnv();
     if (runAndWait(stage) != 0) die("not an installable package: " + apks[0]);
