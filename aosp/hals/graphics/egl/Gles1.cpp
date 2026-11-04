@@ -89,7 +89,7 @@ void setThreadHooks(const Hooks* h) {
 #if defined(__aarch64__)
     reinterpret_cast<const void**>(__builtin_thread_pointer())[4] = h;  // TLS_SLOT_OPENGL_API: bridge/native/bionic_tls.c reserves it per thread
 #else
-    (void)h;  // shortcut: x86_64's bionic slots are glibc's TCB words (bridge/native/bionic_tls.c); ES 1 apps need a reserved slot there first
+    (void)h;  // no ES 1 hooks on x86_64: its bionic slots are glibc's TCB words (bridge/native/bionic_tls.c), none is reserved for them
 #endif
 }
 
@@ -166,7 +166,7 @@ void gles1DestroyContext(EGLDisplay dpy, EGLContext ctx) {
     EGLDisplay curDpy = eglGetCurrentDisplay();
     EGLContext cur = eglGetCurrentContext();
     EGLSurface draw = eglGetCurrentSurface(EGL_DRAW), read = eglGetCurrentSurface(EGL_READ);
-    if (cur != ctx) eglMakeCurrent(dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, ctx);  // shortcut: fails if another thread holds ctx; then the objects leak with it
+    if (cur != ctx) eglMakeCurrent(dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, ctx);  // fails if another thread holds ctx: its objects then leak with it
     translator()->destroy(translated);
     {
         std::lock_guard<std::mutex> l(lock);

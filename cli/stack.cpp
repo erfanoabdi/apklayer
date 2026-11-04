@@ -348,7 +348,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     }
     unlink(inst.pidFile().c_str());
     // the JVMs of this stack are gone: their extracted native runtimes too (the directory stays: a JVM about to start has it as java.io.tmpdir), but not the
-    // fonts and ICU data they share (robolectric patch 0001). shortcut: a copy keyed by an older framework jar stays until the state dir is removed.
+    // fonts and ICU data they share (robolectric patch 0001). A copy keyed by an older framework jar stays until the state dir is removed.
     for (const std::string& name : listDir(inst.tmpDir()))
         if (name != "robolectric-nativeruntime-assets") removeTree(join(inst.tmpDir(), name));
     endShellUnlessShared(l, inst.id);

@@ -75,7 +75,7 @@ final class HubAccounts extends IAccountManager.Stub {
      * AccountManagerService.resolveAccountVisibility: the system and the authenticator's package always see an account; then what was set for the
      * package; else the legacy default: visible ("user managed") to a package signed like the authenticator, to an app targeting before O that holds
      * GET_ACCOUNTS and to holders of GET_ACCOUNTS_PRIVILEGED, not visible to others.
-     * shortcut: READ_CONTACTS does not open contacts-managing account types (accountTypeManagesContacts); model it with a contacts sync adapter that needs it.
+     * Limit: READ_CONTACTS does not open contacts-managing account types (accountTypeManagesContacts: no contacts sync adapter is modelled).
      */
     private int visibility(Account account, String pkg) {
         String authenticator = authenticator(account.type);

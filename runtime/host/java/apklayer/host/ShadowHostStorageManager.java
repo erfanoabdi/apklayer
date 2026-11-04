@@ -35,7 +35,7 @@ public class ShadowHostStorageManager extends ShadowStorageManager {
     /**
      * What ExtServices' CacheQuotaService gives the app in the foreground when it is the only one with usage (its fair share is the whole
      * reserve): the framework's cache reserve of the volume the app's data is on, from that volume's real size and free space.
-     * shortcut: no usage history to share the reserve among apps; split it by foreground time if apps start to compete for cache.
+     * Limit: there is no usage history to share the reserve among apps, so every app is given the whole of it.
      */
     @Implementation
     protected long getCacheQuotaBytes(java.util.UUID storageUuid) {
