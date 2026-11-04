@@ -14,21 +14,28 @@ public final class HubHost {
         // Application.onCreate waits for, is then warm by the time it is asked for (none starts when the instance has one)
         try { new ProcessBuilder(System.getProperty("apklayer.cli"), "app-spare").redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start(); }
         catch (java.io.IOException failure) { System.out.println("[apklayer-hub] cannot start the instance's spare: " + failure); }
+        StartTrace.mark("hub: spare started");
         AppEnvironment.setUpApplication(sandbox, null, false);
         RuntimeEnvironment.getApplication();
+        StartTrace.mark("hub: application");
         RealBinder.init();
+        StartTrace.mark("hub: binder");
         HostCertificate.signatures();  // the instance's platform certificate exists before any app registers: a sandboxed app cannot make it (cli/sandbox.cpp)
+        StartTrace.mark("hub: certificate");
         Path apps = Path.of(System.getProperty("apklayer.apps"));
         HubDirectory directory = new HubDirectory(apps);
+        StartTrace.mark("hub: directory");
         if (!RealBinder.publish(HubProtocol.SERVICE, directory))
             throw new IllegalStateException("Cannot publish instance hub");
         if (!RealBinder.publish(HubAccounts.SERVICE, directory.accounts()))
             throw new IllegalStateException("Cannot publish the account service");
         if (!HubPermissionChecker.publish(directory.packages()))
             throw new IllegalStateException("Cannot publish the permission checker");
+        StartTrace.mark("hub: published");
         HostBattery.installHub(directory::sendSystem);
         HubVibrator.publishIfProvided(directory.packages()::uidHolds);  // before READY: an app's SystemVibratorManager looks it up once
         directory.usb.watch();
+        StartTrace.mark("hub: battery, vibrator, usb");
         System.out.println("[apklayer-hub] READY pid=" + android.os.Process.myPid());
         new Thread(() -> HubBootSettings.write(RuntimeEnvironment.getApplication(), directory), "hub-boot-settings").start();  // the hub is the instance's system (uid 1000)
         directory.hostSettings = new HubHostSettings(RuntimeEnvironment.getApplication(), directory);
