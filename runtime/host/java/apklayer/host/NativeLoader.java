@@ -45,6 +45,8 @@ public final class NativeLoader {
 
     private static native void skipNativeExitHandlers();
     private static native void setProcessName(String name);
+    /** An app spare's launch (spare_target.c): the message on fd, whose stdout and stderr replace this process's; null when the holder is gone. */
+    static native String receiveTarget(int fd);
 
     /** The process's command line and name as Android's Process.setArgV0 sets them (native code reads /proc/self/cmdline). */
     static void nameProcess(String name) {

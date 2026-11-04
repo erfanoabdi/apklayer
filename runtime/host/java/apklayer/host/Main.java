@@ -15,14 +15,12 @@ import org.robolectric.simulator.SandboxBuilder;
  * the app is not run: its metadata and launcher icon are written to out-dir (install time).
  */
 public final class Main {
-    /** The APK (its resources.arsc), plus the arm64 native runtime jar (bin/apklayer, PLAN P7) whose library Robolectric's loader extracts. The app's classes are
-     *  not the sandbox's: they get a loader of their own ({@link AppClassLoader}). */
-    private static List<Path> sandboxJars(Path apk) {
+    /** The arm64 native runtime jar (bin/apklayer, PLAN P7) whose library Robolectric's loader extracts. The app's classes and APK are not the sandbox's:
+     *  they get a loader of their own ({@link AppClassLoader}), its resources come from the manifest's APK path. Every process kind shares one sandbox. */
+    private static AndroidSandbox sandbox() {
         String nativeJar = System.getProperty("apklayer.nativejar");
-        List<Path> jars = new java.util.ArrayList<>();
-        if (apk != null) jars.add(apk);
-        if (nativeJar != null) jars.add(Path.of(nativeJar));
-        return jars;
+        return SandboxBuilder.newBuilder().addClasspathEntries(nativeJar == null ? List.of() : List.of(Path.of(nativeJar)))
+                .setSdkVersion(Integer.getInteger("apklayer.sdk", 36)).build();
     }
 
     /** The app's class loader (its classes, and the APK for its java resources), a child of the sandbox, known inside the sandbox and to its loader's fallback. */
@@ -36,10 +34,7 @@ public final class Main {
     public static void main(String[] args) {
         StartTrace.mark("jvm main");
         if (args.length == 1 && args[0].equals("--hub")) {
-            String nativeJar = System.getProperty("apklayer.nativejar");
-            AndroidSandbox sandbox = SandboxBuilder.newBuilder()
-                    .addClasspathEntries(nativeJar == null ? List.of() : List.of(Path.of(nativeJar)))
-                    .setSdkVersion(Integer.getInteger("apklayer.sdk", 36)).build();
+            AndroidSandbox sandbox = sandbox();
             try {
                 sandbox.runOnMainThread(() -> {
                     try { sandbox.bootstrappedClass(HubHost.class).getMethod("run", AndroidSandbox.class).invoke(null, sandbox); }
@@ -49,6 +44,7 @@ public final class Main {
             return;
         }
         boolean spare = args.length == 1 && args[0].equals("--component-spare");  // a component host started before its package is known (ComponentSpare)
+        boolean appSpare = args.length == 1 && args[0].equals("--app-spare");  // a window JVM started before its launch is known (AppSpare)
         boolean componentHost = spare || args.length == 3 && args[0].equals("--component-host");
         if (componentHost) { args = spare ? args : new String[]{args[1], args[2]}; System.setProperty("apklayer.componenthost", "true"); }
         Path describe = null;
@@ -56,18 +52,14 @@ public final class Main {
             describe = Path.of(args[1]);
             args = new String[] {args[2], args[3]};
         }
-        if (!spare && args.length != 2) {
+        if (!spare && !appSpare && args.length != 2) {
             System.err.println("usage: apklayer.host.Main [--describe <out-dir>] <app.apk> <app-classes.jar>");
             System.exit(2);
         }
-        String[] files = spare ? null : args;
+        String[] files = spare || appSpare ? null : args;
         Path out = describe;
-        if (!componentHost && describe == null) RunDeadline.start();
-        // An app's APK is on the classpath (its resources.arsc as a resource); a component host's sandbox is the same for every package (a spare builds it ahead)
-        AndroidSandbox sandbox = SandboxBuilder.newBuilder()
-                .addClasspathEntries(sandboxJars(componentHost ? null : Path.of(args[0])))
-                .setSdkVersion(Integer.getInteger("apklayer.sdk", 36))
-                .build();
+        if (!componentHost && !appSpare && describe == null) RunDeadline.start();
+        AndroidSandbox sandbox = sandbox();
         StartTrace.mark("sandbox built");
         try {
             sandbox.runOnMainThread(() -> {
@@ -77,6 +69,11 @@ public final class Main {
                         Thread.currentThread().setContextClassLoader(sandbox.getRobolectricClassLoader());  // the native runtime's resources (build.prop, ICU) are the sandbox's
                         sandbox.bootstrappedClass(ComponentHost.class).getMethod("prepare").invoke(null);
                         target = ComponentSpare.awaitTarget();
+                    }
+                    if (appSpare) {
+                        Thread.currentThread().setContextClassLoader(sandbox.getRobolectricClassLoader());
+                        target = (String[]) sandbox.bootstrappedClass(AppSpare.class).getMethod("awaitTarget").invoke(null);
+                        RunDeadline.start();  // the launch's runms
                     }
                     Path apk = Path.of(target[0]), classes = Path.of(target[1]);
                     Thread.currentThread().setContextClassLoader(appLoader(sandbox, apk, classes));
