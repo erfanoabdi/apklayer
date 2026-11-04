@@ -1,0 +1,13 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="hello.installer" android:versionCode="2">
+  <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="34"/>
+  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+  <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES"/>
+  <application android:label="Hello Installer">
+    <activity android:name=".Main" android:exported="true">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+    </activity>
+    <receiver android:name=".SelfUpdated" android:exported="false">
+      <intent-filter><action android:name="android.intent.action.MY_PACKAGE_REPLACED"/></intent-filter>
+    </receiver>
+  </application>
+</manifest>

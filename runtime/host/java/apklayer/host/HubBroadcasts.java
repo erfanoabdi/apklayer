@@ -149,8 +149,10 @@ final class HubBroadcasts {
         if ((intent.getFlags() & Intent.FLAG_RECEIVER_REGISTERED_ONLY) == 0) for (HubPackages.Receiver receiver : packages.receivers(intent, onlyPackage)) {
             ActivityInfo info = receiver.info();
             if (!info.enabled || !info.applicationInfo.enabled) continue;
+            // BroadcastSkipPolicy: FLAG_RECEIVER_EXCLUDE_BACKGROUND keeps it from the manifest receivers of apps targeting 26+ (background execution limits)
+            if ((intent.getFlags() & Intent.FLAG_RECEIVER_EXCLUDE_BACKGROUND) != 0 && info.applicationInfo.targetSdkVersion >= android.os.Build.VERSION_CODES.O) continue;
             boolean same = info.packageName.equals(sender.name());
-            if (!same && !info.exported) continue;
+            if (!same && !info.exported && sender.appUid() != 1000) continue;  // unexported: its own app and the system (MY_PACKAGE_REPLACED, ...)
             if (!same && info.permission != null && !info.permission.isEmpty() && !packages.holds(sender.name(), info.permission)) {
                 System.out.println("[apklayer-hub] " + sender.name() + " lacks " + info.permission + " for " + info.packageName + "/" + info.name); continue;
             }

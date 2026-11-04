@@ -391,13 +391,18 @@ final class HubDirectory extends Binder {
                 reply.writeNoException(); reply.writeStrongBinder(provider); return true;
             }
             case HubProtocol.INSTALL_COMMIT -> {
-                Peer caller = caller(); int sessionId = request.readInt(); String expected = request.readString(), label = request.readString();
+                Peer caller = caller();
                 java.util.List<String> names = new java.util.ArrayList<>(); java.util.List<android.os.ParcelFileDescriptor> files = new java.util.ArrayList<>();
                 for (int n = request.readInt(); n > 0; n--) { names.add(request.readString()); files.add(request.readFileDescriptor()); }
-                IBinder status = request.readStrongBinder(); boolean now = request.readBoolean(); request.enforceNoDataAvail();
-                try { installer.commit(caller, sessionId, expected, label, names, files, status, now); }
-                catch (IOException failure) { throw new IllegalStateException("Cannot stage the session's APKs", failure); }
+                IBinder status = request.readStrongBinder(); request.enforceNoDataAvail();
+                try { installer.commit(caller, names, files, status); }
+                catch (IOException failure) { throw new IllegalStateException("Cannot stage the APK", failure); }
                 reply.writeNoException(); return true;
+            }
+            case HubProtocol.INSTALL_SESSION -> {
+                try { installer.sessions().transact(caller(), request, reply); }
+                catch (IOException failure) { throw new IllegalStateException("Install session: " + failure, failure); }
+                return true;
             }
             case HubProtocol.INSTALL_PREAPPROVE -> {
                 Peer caller = caller(); int sessionId = request.readInt(); String pkg = request.readString(), label = request.readString(); IBinder status = request.readStrongBinder();

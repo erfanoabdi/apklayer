@@ -22,8 +22,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * The instance's package installer, the part PackageInstallerService and the PackageInstaller app play on a phone. A committed session's APKs come
- * here (the app's PackageInstaller, ShadowHostPackageInstaller), are installed by the host's own `apklayer install` (conversion, verification,
+ * The instance's package installer, the part PackageInstallerService and the PackageInstaller app play on a phone. A committed session's APKs (written
+ * into the hub's session, HubInstallSessions, by the app's PackageInstaller: ShadowHostPackageInstaller) are installed by the host's own `apklayer install` (conversion, verification,
  * signature and version checks: cli/apps.cpp), then every running app's package manager learns the change and PACKAGE_ADDED/REPLACED/REMOVED go out.
  * As on Android: an installer that does not hold INSTALL_PACKAGES / DELETE_PACKAGES never installs or removes silently. Its commit answers
  * STATUS_PENDING_USER_ACTION with a confirmation intent; when the installer starts it the hub asks the person (HubInstallDialog), first whether this
@@ -43,8 +43,7 @@ final class HubInstaller {
     private final HubPendingIntents pendingIntents;
     private final Path staging, sources;
     private final Map<String, Request> pending = new HashMap<>();
-    /** Sessions whose installer had the person approve the package beforehand (requestUserPreapproval): "installer#session" -> package. */
-    private final Map<String, String> preapproved = new HashMap<>();
+    private final HubInstallSessions sessions;
     private final ExecutorService queue = Executors.newSingleThreadExecutor(run -> { Thread t = new Thread(run, "hub-installer"); t.setDaemon(true); return t; });
     private final AtomicInteger busy = new AtomicInteger(), tokens = new AtomicInteger();
 
@@ -52,20 +51,36 @@ final class HubInstaller {
         this.directory = directory; this.packages = packages; this.pendingIntents = pendingIntents;
         staging = instanceData.resolve("install-staging"); sources = instanceData.resolve("install-sources");
         delete(staging);  // what an earlier hub left staged when it ended mid-install
+        sessions = new HubInstallSessions(instanceData, this);
     }
+
+    HubInstallSessions sessions() { return sessions; }
 
     /** An install or a question is in progress (the hub stays up for it). */
     boolean busy() { return busy.get() > 0; }
 
-    /** A committed session (or a legacy install intent, {@code now}: the installer's activity is the confirmation): the APKs are copied out of the app's files. */
-    void commit(HubDirectory.Peer caller, int sessionId, String expected, String label, List<String> names, List<ParcelFileDescriptor> files, IBinder status, boolean now) throws IOException {
-        Path dir = Files.createDirectories(staging.resolve(caller.name() + "-" + sessionId + "-" + tokens.incrementAndGet()));
+    /** A legacy install intent (the installer's activity is the confirmation): the APK is copied out of what the app opened. */
+    void commit(HubDirectory.Peer caller, List<String> names, List<ParcelFileDescriptor> files, IBinder status) throws IOException {
+        Path dir = Files.createDirectories(staging.resolve(caller.name() + "-0-" + tokens.incrementAndGet()));
         for (int i = 0; i < files.size(); i++) {
             try (var in = new ParcelFileDescriptor.AutoCloseInputStream(files.get(i))) {
                 String name = names.get(i).replaceAll("[^A-Za-z0-9_.-]", "_");
                 Files.copy(in, dir.resolve(i + "-" + (name.endsWith(".apk") ? name : name + ".apk")));
             }
         }
+        staged(caller, 0, null, null, null, dir, files.size(), status, true);
+    }
+
+    /** A committed session: its APKs move from the session to the staging directory (the session is done with). */
+    void commitSession(HubDirectory.Peer caller, int sessionId, String expected, String label, String approved, Path session, List<Path> apks, IBinder status) throws IOException {
+        Path dir = Files.createDirectories(staging.resolve(caller.name() + "-" + sessionId + "-" + tokens.incrementAndGet()));
+        int n = 0;
+        for (Path apk : apks) Files.move(apk, dir.resolve(n++ + "-" + apk.getFileName()));
+        delete(session);
+        staged(caller, sessionId, expected, label, approved, dir, apks.size(), status, false);
+    }
+
+    private void staged(HubDirectory.Peer caller, int sessionId, String expected, String label, String approved, Path dir, int count, IBinder status, boolean now) throws IOException {
         String pkg = null;
         try (var listing = Files.list(dir)) {
             for (Path apk : listing.toList()) {
@@ -78,10 +93,8 @@ final class HubInstaller {
         String denied = mayRequest(caller.name(), REQUEST_INSTALL, 26);
         if (denied != null) { finish(dir, status, sessionId, pkg, PackageInstaller.STATUS_FAILURE, denied); return; }
         Request request = new Request(Kind.INSTALL, caller.name(), sessionId, pkg, label != null ? label : labelOf(pkg, pkg), dir, status);
-        String approved;
-        synchronized (pending) { approved = preapproved.remove(caller.name() + "#" + sessionId); }
         boolean silent = packages.holds(caller.name(), INSTALL_PACKAGES) || pkg.equals(approved);
-        System.out.println("[apklayer-hub] install of " + pkg + " committed by " + caller.name() + " (session " + sessionId + ", " + files.size() + " APKs" + (silent ? ", no question needed" : "") + ")");
+        System.out.println("[apklayer-hub] install of " + pkg + " committed by " + caller.name() + " (session " + sessionId + ", " + count + " APKs" + (silent ? ", no question needed" : "") + ")");
         if (silent) submit(() -> install(request));
         else if (now) submit(() -> confirmed(request));
         else askLater(request);
@@ -89,6 +102,7 @@ final class HubInstaller {
 
     /** requestUserPreapproval: the person approves the package before the installer downloads it; the commit then needs no question. */
     void preapprove(HubDirectory.Peer caller, int sessionId, String pkg, String label, IBinder status) {
+        if (!sessions.owns(caller.name(), sessionId)) throw new SecurityException("Caller has no access to session " + sessionId);
         String denied = mayRequest(caller.name(), REQUEST_INSTALL, 26);
         if (denied != null) { send(status, sessionId, pkg, PackageInstaller.STATUS_FAILURE, denied, null); return; }
         askLater(new Request(Kind.PREAPPROVE, caller.name(), sessionId, pkg, label != null ? label : labelOf(pkg, pkg), null, status));
@@ -146,7 +160,7 @@ final class HubInstaller {
             case INSTALL -> install(request);
             case UNINSTALL -> remove(request);
             case PREAPPROVE -> {
-                synchronized (pending) { preapproved.put(request.installer + "#" + request.sessionId, request.pkg); }
+                sessions.preapproved(request.installer, request.sessionId, request.pkg);
                 send(request.status, request.sessionId, request.pkg, PackageInstaller.STATUS_SUCCESS, null, null);
             }
         }
@@ -189,7 +203,7 @@ final class HubInstaller {
         String output = run(command, exit);
         delete(request.staged);
         if (exit[0] != 0) {
-            int status = exit[0] == 3 ? PackageInstaller.STATUS_FAILURE_CONFLICT : exit[0] == 4 ? PackageInstaller.STATUS_FAILURE_INVALID : PackageInstaller.STATUS_FAILURE;  // cli/apps.h kInstall*
+            int status = exit[0] == 3 ? PackageInstaller.STATUS_FAILURE_CONFLICT : exit[0] == 4 || exit[0] == 5 ? PackageInstaller.STATUS_FAILURE_INVALID : PackageInstaller.STATUS_FAILURE;  // cli/apps.h kInstall*
             send(request.status, request.sessionId, request.pkg, status, output, null);
             return;
         }
@@ -220,9 +234,12 @@ final class HubInstaller {
         send(request.status, 0, request.pkg, PackageInstaller.STATUS_SUCCESS, null, null);
     }
 
-    /** A package broadcast as the package manager sends it; to registered receivers only (manifest receivers of apps targeting 26+ do not get these on Android). */
+    /**
+     * A package broadcast as the package manager sends it: to registered receivers and to the manifest receivers of apps targeting below 26 (Android's
+     * background limits keep implicit broadcasts like these from the others; the hub applies that limit through FLAG_RECEIVER_EXCLUDE_BACKGROUND).
+     */
     private void broadcast(String action, String pkg, int uid, boolean replacing) {
-        Intent intent = new Intent(action, Uri.fromParts("package", pkg, null)).putExtra(Intent.EXTRA_UID, uid).addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
+        Intent intent = new Intent(action, Uri.fromParts("package", pkg, null)).putExtra(Intent.EXTRA_UID, uid).addFlags(Intent.FLAG_RECEIVER_EXCLUDE_BACKGROUND);
         if (replacing) intent.putExtra(Intent.EXTRA_REPLACING, true);
         if (action.equals(Intent.ACTION_PACKAGE_REMOVED) && !replacing) intent.putExtra(Intent.EXTRA_DATA_REMOVED, true);
         directory.sendSystem(intent, false);
@@ -257,7 +274,17 @@ final class HubInstaller {
         if (pkg != null) fill.putExtra(PackageInstaller.EXTRA_PACKAGE_NAME, pkg);
         if (message != null) fill.putExtra(PackageInstaller.EXTRA_STATUS_MESSAGE, message);
         if (confirmation != null) fill.putExtra(Intent.EXTRA_INTENT, confirmation);
+        else fill.putExtra(PackageInstaller.EXTRA_LEGACY_STATUS, legacy(code, message));
         if (pendingIntents.send(status, 0, fill, null, null) != 0) System.out.println("[apklayer-hub] the install status receiver is gone");
+    }
+
+    /** The PackageManager INSTALL_* / DELETE_* code a final status stands for (what legacy installs return): the one its message starts with, as the cli and the hub name them. */
+    private static int legacy(int code, String message) {
+        if (code == PackageInstaller.STATUS_SUCCESS) return android.content.pm.PackageManager.INSTALL_SUCCEEDED;
+        java.util.regex.Matcher name = java.util.regex.Pattern.compile("^((?:INSTALL|DELETE)_[A-Z_]+)").matcher(message == null ? "" : message);
+        try { if (name.find()) return android.content.pm.PackageManager.class.getField(name.group(1)).getInt(null); }
+        catch (ReflectiveOperationException unknown) { /* a name the platform lacks: the general code */ }
+        return code == PackageInstaller.STATUS_FAILURE_ABORTED ? android.content.pm.PackageManager.INSTALL_FAILED_ABORTED : android.content.pm.PackageManager.INSTALL_FAILED_INTERNAL_ERROR;
     }
 
     private void submit(Runnable work) {
@@ -277,7 +304,7 @@ final class HubInstaller {
         return info.getProperty("label", fallback);
     }
 
-    private static void delete(Path dir) {
+    static void delete(Path dir) {
         if (dir == null || !Files.exists(dir)) return;
         try (var files = Files.walk(dir)) { for (Path p : files.sorted(java.util.Comparator.reverseOrder()).toList()) Files.deleteIfExists(p); }
         catch (IOException failure) { System.out.println("[apklayer-hub] cannot remove " + dir + ": " + failure); }
