@@ -15,7 +15,7 @@ import pixels  # noqa: E402
 LOGDIR = instance.LOGDIR
 env = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1', APKLAYER_LOGCAT='1',
     APKLAYER_JOPTS='-Dapklayer.nativeresources=true -Dapklayer.nativemedia=true -Dapklayer.realbinder=true -Dapklayer.instancehub=true -Dapklayer.runms=20000')
-intent = Path('/tmp/apklayer-otr2-intent.properties')
+intent = Path(os.environ.get('APKLY_OUT', '/tmp') + '/apklayer-otr2-intent.properties')
 intent.write_text('component=com.dogbytegames.otrnext.OTRNext\n')
 env['APKLAYER_INTENT_FILE'] = str(intent)
 
@@ -33,7 +33,7 @@ try:
     app = subprocess.Popen(['bin/apklayer', 'run', 'com.dogbytegames.otrnext'], env=env,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
     end = time.monotonic() + 25
-    with selectors.DefaultSelector() as events, open('/tmp/apklayer-otr2.out', 'wb') as log:
+    with selectors.DefaultSelector() as events, open(os.environ.get('APKLY_OUT', '/tmp') + '/apklayer-otr2.out', 'wb') as log:
         events.register(app.stdout, selectors.EVENT_READ); events.register(notify, selectors.EVENT_READ)
         pending = b''
         while True:

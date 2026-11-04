@@ -34,7 +34,7 @@ committed = captured = focused = False
 try:
     app = subprocess.Popen(['bin/apklayer', 'run', 'hello.nativecodec'], env=ENV,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
-    with selectors.DefaultSelector() as events, Path('/tmp/apklayer-native-media.out').open('wb') as log:
+    with selectors.DefaultSelector() as events, Path(os.environ.get('APKLY_OUT', '/tmp') + '/apklayer-native-media.out').open('wb') as log:
         events.register(app.stdout, selectors.EVENT_READ)
         events.register(notify, selectors.EVENT_READ)
         pending = b''

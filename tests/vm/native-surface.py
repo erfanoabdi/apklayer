@@ -33,7 +33,7 @@ committed = captured = False
 try:
     app = subprocess.Popen(['bin/apklayer', 'run', 'hello.nativesurface'], env=ENV,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
-    with selectors.DefaultSelector() as events, Path('/tmp/apklayer-native-surface.out').open('wb') as log:
+    with selectors.DefaultSelector() as events, Path(os.environ.get('APKLY_OUT', '/tmp') + '/apklayer-native-surface.out').open('wb') as log:
         events.register(app.stdout, selectors.EVENT_READ)
         events.register(notify, selectors.EVENT_READ)
         pending = b''
@@ -65,7 +65,7 @@ try:
                         committed = True
             # Capture after the real HWUI commit callback and a visible active window.
             if committed and not captured and any('window state active=true' in s for s in seen):
-                with open('/tmp/apklayer-native-surface-layers.txt', 'wb') as dump:
+                with open(os.environ.get('APKLY_OUT', '/tmp') + '/apklayer-native-surface-layers.txt', 'wb') as dump:
                     subprocess.run(['bin/apklayer', 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger'], env=ENV, stdout=dump, stderr=subprocess.STDOUT, check=True)
                 pixels.red_surface(instance.capture('native SurfaceView result', 'hello.nativesurface'))
                 instance.keys(*['key:1'],
@@ -77,7 +77,7 @@ try:
     assert '[hello-native-surface] created valid=true' in text
     assert '[hello-native-surface] AVC PASS reordered 12 Surface pictures, exact PTS/EOS' in text
     assert '[hello-native-surface] AVC rendered pts=3600000366666' in text
-    assert 'SurfaceView[hello.nativesurface' in Path('/tmp/apklayer-native-surface-layers.txt').read_text()
+    assert 'SurfaceView[hello.nativesurface' in Path(os.environ.get('APKLY_OUT', '/tmp') + '/apklayer-native-surface-layers.txt').read_text()
     assert committed and captured
     assert 'finished hello.nativesurface.Main depth=0' in text and 'depth=0' in text
     assert (logs / 'shell.log').read_text(errors='replace').count('dmabuf frame') > 0

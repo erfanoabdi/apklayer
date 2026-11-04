@@ -56,7 +56,7 @@ try:
         assert 'installed' in out.stdout + out.stderr, out.stdout[-2000:] + out.stderr[-2000:]
     app = subprocess.Popen(['bin/apklayer', 'run', 'hello.nativeaudio'], env=ENV,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
-    with selectors.DefaultSelector() as events, Path('/tmp/apklayer-native-audio.out').open('wb') as log:
+    with selectors.DefaultSelector() as events, Path(os.environ.get('APKLY_OUT', '/tmp') + '/apklayer-native-audio.out').open('wb') as log:
         events.register(app.stdout, selectors.EVENT_READ)
         events.register(notify, selectors.EVENT_READ)
         if capture: capture.register(events)
@@ -75,7 +75,8 @@ try:
                     continue
                 data = os.read(app.stdout.fileno(), 65536)
                 if not data:
-                    assert app.wait() == 0, 'native media JVM failed'
+                    rc = app.wait()
+                    assert rc == 0, 'native media JVM failed: status %d' % rc
                     done = True
                     break
                 log.write(data)

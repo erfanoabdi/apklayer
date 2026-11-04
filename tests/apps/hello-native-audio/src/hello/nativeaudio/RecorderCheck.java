@@ -73,8 +73,8 @@ final class RecorderCheck {
         } finally {
             recorder.release();
             track.stop();
+            player.join(8000);  // the player sees its write end before the track goes (a write after release throws, as on Android)
             track.release();
-            player.join(8000);
         }
         require(file.length() > 8000, "recorded file size " + file.length());
         // read it back

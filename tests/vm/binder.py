@@ -117,6 +117,6 @@ with selectors.DefaultSelector() as events:
             except ProcessLookupError:
                 pass
             proc.stdout.close()
-            Path('/tmp/apklayer-binder-' + name + '.out').write_text('\n'.join(logs[name]))
+            Path(os.environ.get('APKLY_OUT', '/tmp') + '/apklayer-binder-' + name + '.out').write_text('\n'.join(logs[name]))
         left = instance.mine('[a]pklayer.host.Main|[b]tload|[a]pklayer-shell')
         assert not left, left

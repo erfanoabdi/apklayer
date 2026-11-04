@@ -19,7 +19,7 @@ try:
     pending = b''
     ready = False
     end = time.monotonic() + 30
-    with selectors.DefaultSelector() as events, open('/tmp/apklayer-hub-smoke.out', 'wb') as log:
+    with selectors.DefaultSelector() as events, open(os.environ.get('APKLY_OUT', '/tmp') + '/apklayer-hub-smoke.out', 'wb') as log:
         events.register(proc.stdout, selectors.EVENT_READ)
         while not ready:
             assert time.monotonic() < end and events.select(3), 'hub startup stalled'

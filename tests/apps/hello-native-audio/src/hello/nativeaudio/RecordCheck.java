@@ -82,8 +82,8 @@ final class RecordCheck {
         } finally {
             record.release();
             track.stop();
+            player.join(5000);  // the player sees its write end before the track goes (a write after release throws, as on Android)
             track.release();
-            player.join(5000);
         }
     }
 
