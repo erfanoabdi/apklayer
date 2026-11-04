@@ -185,8 +185,29 @@ public final class HubClient {
     }
 
     static synchronized HubClient attach(Context context) {
-        if (current == null) current = new HubClient(context.getApplicationContext());
+        Context app = context.getApplicationContext();  // null while Application.attach runs (LoadedApk has no Application yet): the Application itself
+        if (current == null) current = new HubClient(app != null ? app : context);
         return current;
+    }
+
+    private static boolean attaching;
+
+    /**
+     * Android attaches a process to the system (attachApplication) before any of its code runs; callApplicationOnCreate attaches here, which is later
+     * than Application.attachBaseContext: an app reaching a system service there (Nextcloud's accounts, Wikipedia's PendingIntent) joins the hub at that
+     * first use. False outside an app process, while installing, or while the attachment is under way.
+     */
+    static synchronized boolean attachEarly() {
+        if (current == null && !attaching && System.getProperty("apklayer.apps") != null && System.getProperty("apklayer.package") != null && !AppEnvironment.installing) {
+            android.app.Application app = android.app.ActivityThread.currentApplication();
+            if (app != null) {
+                attaching = true;
+                try { attach(app); }
+                catch (RuntimeException failure) { System.out.println("[apklayer] hub not available yet: " + failure); }
+                finally { attaching = false; }
+            }
+        }
+        return current != null;
     }
     static boolean connected() { return current != null; }
     static HubClient current() {

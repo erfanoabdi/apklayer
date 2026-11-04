@@ -211,6 +211,9 @@ final class InitRepointPlan {
         // Candidate (startClass, namedOwner, descriptor) triples. Sorted so a
         // debug dump is stable; correctness does not depend on the order.
         final Map<String, Candidate> candidates = new TreeMap<>();
+        // apklayer patch: "class desc" -> the classes naming class.<init>(desc), for the constructors R8 names but
+        // deleted (see the resolution below the scan)
+        final Map<String, java.util.TreeSet<String>> named = new TreeMap<>();
         for (DexClass c : byName.values()) {
             // Released at the bottom of this iteration. transientCode below is
             // careful not to memoize a code_item for the same reason, but that
@@ -238,6 +241,14 @@ final class InitRepointPlan {
                                     k -> new Candidate(start, owner, desc))
                               .referrers.add(c.name());
                 });
+                for (Instruction in : decoded) {
+                    if (in.isPayload() || (in.opcode() != 0x70 && in.opcode() != 0x76)) continue;
+                    DexFile.MethodRef ref;
+                    try { ref = c.dex().methodRef(in.index()); } catch (RuntimeException e) { continue; }
+                    if (ref == null || !"<init>".equals(ref.name())) continue;
+                    named.computeIfAbsent(DexFile.internalName(ref.declaringClass()) + ' ' + ref.proto().descriptor(),
+                            k -> new java.util.TreeSet<>()).add(c.name());
+                }
             }
             c.releaseMembers();
         }
@@ -247,6 +258,21 @@ final class InitRepointPlan {
         Map<String, TreeMap<String, String>> synth = new HashMap<>();
         Map<String, String> authorised = new HashMap<>();
         Builder b = new Builder(byName, synth);
+        // apklayer patch: R8 also deletes a trivial constructor and keeps call sites naming it on its own class
+        // (Shelter's androidx.fragment.app.u0: `new u0; u0.<init>()V`, no u0.<init> at all): ART resolves the
+        // invoke-direct through the superclasses (ClassLinker::ResolveMethod), the JVM throws NoSuchMethodError.
+        // The chain from that class up to the ancestor resolution reaches is one more candidate.
+        for (Map.Entry<String, java.util.TreeSet<String>> e : named.entrySet()) {
+            String cls = e.getKey().substring(0, e.getKey().indexOf(' ')), desc = e.getKey().substring(cls.length() + 1);
+            DexClass nc = byName.get(cls);
+            if (nc == null || nc.isInterface() || b.findConstructor(nc, desc) != null) continue;
+            String owner = nc.superclassName();
+            while (owner != null && byName.containsKey(owner) && b.findConstructor(byName.get(owner), desc) == null)
+                owner = byName.get(owner).superclassName();
+            if (owner == null) continue;
+            String resolved = owner;
+            candidates.computeIfAbsent(cls + ' ' + resolved + ' ' + desc, k -> new Candidate(cls, resolved, desc)).referrers.addAll(e.getValue());
+        }
         // Candidates are walked in sorted order so that the rare case of two of
         // them competing for one synthesised descriptor resolves identically on
         // every run.
@@ -844,17 +870,13 @@ final class InitRepointPlan {
             }
             if (op == 0x07 || op == 0x08 || op == 0x09) {   // move-object[/from16,/16]
                 String src = allocated.get(in.b());
-                if (src == null) allocated.remove(in.a()); else allocated.put(in.a(), src);
-                continue;
+                if (src != null) allocated.put(in.a(), src);
             }
-            int dest = destinationRegister(op, in);
-            if (dest >= 0) {
-                allocated.remove(dest);
-                // Only a wide write owns vA+1. Clearing it unconditionally made
-                // `const/4 v3` forget the allocation in v4, which silently
-                // dropped most of the sites this whole class exists to find.
-                if (in.isWideA()) allocated.remove(dest + 1);
-            }
+            // apklayer patch: other writes do not forget an allocation. The scan is linear, the code is
+            // not: a write laid out between new-instance and <init> may sit on another branch (Material
+            // Files' nv.<clinit>: `new er2` @53, other values in that register @361..509 on other paths,
+            // Object.<init> on the er2 @800 failed to verify). A stale pairing is dropped by
+            // Translator.invalidRepoints, which checks every site against the real type inference.
         }
     }
 
@@ -863,43 +885,6 @@ final class InitRepointPlan {
             return dex.typeDescriptor(index);
         } catch (RuntimeException e) {
             return null;
-        }
-    }
-
-    /**
-     * The register an instruction writes, or -1.
-     *
-     * Every Dalvik instruction that defines a register puts the destination in
-     * vA, so the family alone decides whether there is one. This mirrors
-     * TypeInference.destinationRegister; being wrong in the "forgets too much"
-     * direction only costs a missed re-point.
-     */
-    private static int destinationRegister(int op, Instruction in) {
-        switch (TypeInference.familyOf(op)) {
-            case TypeInference.F_MOVE:
-            case TypeInference.F_MOVE_WIDE:
-            case TypeInference.F_MOVE_RESULT:
-            case TypeInference.F_CONST32:
-            case TypeInference.F_CONST64:
-            case TypeInference.F_CONST_STRING:
-            case TypeInference.F_CONST_CLASS:
-            case TypeInference.F_CHECK_CAST:
-            case TypeInference.F_INSTANCE_OF:
-            case TypeInference.F_ARRAY_LEN:
-            case TypeInference.F_NEW_INSTANCE:
-            case TypeInference.F_NEW_ARRAY:
-            case TypeInference.F_CMP:
-            case TypeInference.F_ARRAY_GET:
-            case TypeInference.F_INSTANCE_GET:
-            case TypeInference.F_STATIC_GET:
-            case TypeInference.F_UNARY_OP:
-            case TypeInference.F_BINARY_OP:
-            case TypeInference.F_BINARY_OP_CONST:
-            case TypeInference.F_CONST_METHOD_HANDLE:
-            case TypeInference.F_CONST_METHOD_TYPE:
-                return in.a();
-            default:
-                return -1;
         }
     }
 

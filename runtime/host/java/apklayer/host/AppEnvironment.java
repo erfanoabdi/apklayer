@@ -217,7 +217,14 @@ final class AppEnvironment {
             for (android.content.pm.ProviderInfo info : providers) {
                 if (process != null && !info.multiprocess && !process.equals(info.processName)) continue;  // shortcut: an isolated process gets multiprocess providers too (Android: none); upgrade when one breaks there
                 try {
-                    Robolectric.buildContentProvider(Class.forName(info.name).asSubclass(android.content.ContentProvider.class)).create(info);
+                    // as ContentProviderController.create, but attached to the Application itself: ActivityThread.installProvider gives a provider of the
+                    // app's own package mInitialApplication (apps cast getContext() to their Application class), Robolectric its base ContextImpl
+                    android.content.ContentProvider provider = Class.forName(info.name).asSubclass(android.content.ContentProvider.class).getDeclaredConstructor().newInstance();
+                    app.getPackageManager().setComponentEnabledSetting(new android.content.ComponentName(app, info.name),
+                            PackageManager.COMPONENT_ENABLED_STATE_ENABLED, 0);
+                    provider.attachInfo(app, info);
+                    for (String authority : info.authority.split(";"))
+                        org.robolectric.shadows.ShadowContentResolver.registerProviderInternal(authority, provider);
                 } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
                     System.out.println("[apklayer] provider " + info.name + " not started: " + e);
                 }

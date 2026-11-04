@@ -2,11 +2,11 @@
 """Compatibility corpus runner (on the Mac, drives the test VM): for every app in apps.txt install it, launch it, wait for the first GPU frame the shell receives
 (inotify on the VM, no timers beyond a patience limit), take a screenshot of its window (`apklayer screenshot`, from SurfaceFlinger: no desktop capture), check it shows content (content.py), launch it a second time, stop it, and write
 tests/corpus/results.md (results-subset.md when names are given) plus the fake-service ranking tests/corpus/fakes.md (the app's "[fake]" lines, FakeLog).
-Each app's install and runs hold the VM's Android-stack lock (~/apklayer-vm.lock, flock -n): a busy lock is reported as "lock busy", nothing waits for it.
+Each app's install and runs hold the instance's lock (~/apklayer-vm.lock, ~/apklayer-vm-<instance>.lock with CORPUS_INSTANCE; flock -n): a busy lock is reported as "lock busy", nothing waits for it.
 Usage: tests/corpus/run.py [name ...]   (no names: every app);  run.py --report name...  rebuilds the tables from tests/corpus/logs/*.json
 Environment: CORPUS_PATIENCE (seconds per launch), CORPUS_VM_REPO (repo copy on the VM, default ~/apklayer), CORPUS_VM_NATIVE (APKLAYER_NATIVE on the VM),
-CORPUS_SECOND=0 (skip the second launch), CORPUS_VM_ENV (more VM exports, e.g. APKLAYER_INSTANCE=x XDG_RUNTIME_DIR=.. XDG_STATE_HOME=.. XDG_DATA_HOME=..: another instance)
-with CORPUS_VM_STATE (that instance's state dir, default ~/.local/state/apklayer/default)."""
+CORPUS_SECOND=0 (skip the second launch), CORPUS_INSTANCE=<id> (run in that apklayer instance, tests/lib/vm.py's environment: several runners in parallel,
+one instance each; the repo copy is APKLY_VM_ROOT, the VM APKLY_VM_CONF, extra environment APKLY_VM_ENV)."""
 import json
 import os
 import re
@@ -25,14 +25,22 @@ import vmcapture  # noqa: E402
 import content  # noqa: E402  (tests/corpus is on sys.path as the script's directory)
 
 SSH = config.auth('ssh') + [config.VM]
-STATE = os.environ.get('CORPUS_VM_STATE', '~/.local/state/apklayer/default')
-REPO = os.environ.get('CORPUS_VM_REPO', '~/apklayer')
-NATIVE = os.environ.get('CORPUS_VM_NATIVE')
-ENV = 'cd %s; export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 APKLAYER_ROOT=%s%s %s; ' % (
-    REPO, REPO, ' APKLAYER_NATIVE=' + NATIVE if NATIVE else '', os.environ.get('CORPUS_VM_ENV', ''))
+INSTANCE = os.environ.get('CORPUS_INSTANCE')
+if INSTANCE:
+    sys.path.insert(0, str(ROOT / 'tests/lib'))
+    import vm  # noqa: E402
+    REPO = config.ROOT
+    ENV = vm.instance_env(INSTANCE)
+    STATE = '${XDG_STATE_HOME:-$HOME/.local/state}/apklayer/' + INSTANCE
+else:
+    STATE = '~/.local/state/apklayer/default'
+    REPO = os.environ.get('CORPUS_VM_REPO', '~/apklayer')
+    NATIVE = os.environ.get('CORPUS_VM_NATIVE')
+    ENV = 'cd %s; export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 APKLAYER_ROOT=%s%s; ' % (REPO, REPO, ' APKLAYER_NATIVE=' + NATIVE if NATIVE else '')
+TAG = '-' + INSTANCE if INSTANCE else ''  # the instance's own lock, marker and APK copies
 PATIENCE = int(os.environ.get('CORPUS_PATIENCE', '30'))  # seconds to the first frame; a static screen draws only a few, so one frame plus a live process is the bar
 SECOND = os.environ.get('CORPUS_SECOND', '1') != '0'
-AGAIN = '/tmp/apklayer-corpus-again'  # present when a run ends: the VM script launches the app once more
+AGAIN = '/tmp/apklayer-corpus-again' + TAG  # present when a run ends: the VM script launches the app once more
 BUSY = 75  # flock's exit status when the lock is held by someone else
 CAUSES = ['UnsatisfiedLinkError', 'ClassNotFoundException', 'NoSuchMethodError', 'SecurityException', 'NullPointerException', 'Fatal signal', 'SIGSEGV', 'Exception', 'Error']
 FAKE = re.compile(r'\[fake\] (\S+) (\S+)')
@@ -65,12 +73,12 @@ def script(name):
     """The VM side of one app, under the stack lock: install, then one or two runs, each preceded by the shell.log offset its frames count from."""
     cli = 'b/cli/apklayer'
     offset = 'echo "OFFSET $(stat -c %s ' + STATE + '/shell.log 2>/dev/null || echo 0)"; '
-    body = ('echo LOCKED; read go; ' + cli + ' stop >/dev/null 2>&1; rm -f ' + AGAIN + '; out=$(' + cli + ' install ~/corpus-' + name + '.apk 2>&1); echo "$out"; '
+    body = ('echo LOCKED; read go; ' + cli + ' stop >/dev/null 2>&1; rm -f ' + AGAIN + '; out=$(' + cli + ' install ~/corpus' + TAG + '-' + name + '.apk 2>&1); echo "$out"; '
             'pkg=$(echo "$out" | sed -n "s/.*installed \\([^ ]*\\).*/\\1/p" | head -n1); [ -n "$pkg" ] || exit 3; '
             + offset + cli + ' run $pkg 2>&1; '
             'if [ -e ' + AGAIN + ' ]; then rm -f ' + AGAIN + '; echo SECOND; ' + offset + cli + ' run $pkg 2>&1; fi; '
             + cli + ' stop >/dev/null 2>&1; echo CORPUS-END')
-    return "flock -n -o -E %d ~/apklayer-vm.lock sh -c '%s'" % (BUSY, body.replace("'", "'\\''"))
+    return "flock -n -o -E %d ~/apklayer-vm%s.lock sh -c '%s'" % (BUSY, TAG, body.replace("'", "'\\''"))
 
 
 class Stream:
@@ -101,13 +109,13 @@ def end_run(again):
     # by the pids the instance records for each launch (run.<pid>: the app JVM and its window sink), never by a name pattern: the JVM's command
     # line is its Android process name, and a pattern also matches this script's own command line; `run` returns once its JVM is gone
     ends = 'for f in %s/run.*; do [ -f "$f" ] && kill $(cat "$f") 2>/dev/null; done; ' % STATE
-    ssh(('touch ' + AGAIN + '; ' if again else '') + ends + 'true')
+    ssh(ENV + ('touch ' + AGAIN + '; ' if again else '') + ends + 'true')
 
 
 def launch(name, stream, at, row, key, before):
     """One launch from the OFFSET line at index `at`: a steady picture (20 frames while still running), a screenshot, its content check."""
     offset = stream.lines[at].split()[1]
-    frame = ssh('python3 %s/tests/corpus/first-frame.py %s/shell.log %s %d 1' % (REPO, STATE, offset, PATIENCE))
+    frame = ssh(ENV + 'python3 %s/tests/corpus/first-frame.py %s/shell.log %s %d 1' % (REPO, STATE, offset, PATIENCE))
     running = not any(l.startswith(('SECOND', 'CORPUS-END')) for l in stream.lines[at:])  # the run command has not returned
     if 'FRAME' not in frame.stdout or not running:
         row[key] = 'FAIL'
@@ -133,7 +141,7 @@ def run_one(name, spec, kind):
     apk = fetch(name, spec)
     if apk is None:
         row['note'] = 'no apk'; return row
-    subprocess.run(config.auth('scp') + ['-q', str(apk), config.VM + ':corpus-' + name + '.apk'], check=True)
+    subprocess.run(config.auth('scp') + ['-q', str(apk), config.VM + ':corpus' + TAG + '-' + name + '.apk'], check=True)
     proc = subprocess.Popen(SSH + [ENV + script(name)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors='replace')
     stream = Stream(proc)
     before = None  # no desktop capture: the app's own window (apklayer screenshot) is judged
