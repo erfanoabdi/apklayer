@@ -1,0 +1,28 @@
+From: apklayer
+Subject: [PATCH] apklayer: gnss: a subclass without a fix reports none (not the example's mock location)
+
+A real receiver (apklayer's GeoClue backend) has no fix until its source answers; the example reports
+Utils::getMockLocation() whenever getLocationFromHW() returns null. reportsMockLocation() (virtual, true
+as before) lets a subclass skip that report.
+
+--- a/gnss/aidl/default/Gnss.h
++++ b/gnss/aidl/default/Gnss.h
+@@ -100,5 +100,7 @@
+   protected:
+     virtual std::unique_ptr<GnssLocation> getLocationFromHW();
++    // apklayer patch: whether an interval without a fix (getLocationFromHW null) reports the mock location
++    virtual bool reportsMockLocation() const { return true; }
+
+   private:
+     void reportLocation(const GnssLocation&);
+--- a/gnss/aidl/default/Gnss.cpp
++++ b/gnss/aidl/default/Gnss.cpp
+@@ -127,7 +127,7 @@
+                 mGnssPowerIndication->notePowerConsumption();
+                 if (currentLocation != nullptr) {
+                     this->reportLocation(*currentLocation);
+-                } else {
++                } else if (reportsMockLocation()) {  // apklayer patch: see Gnss.h
+                     const auto location = Utils::getMockLocation();
+                     this->reportLocation(location);
+                 }

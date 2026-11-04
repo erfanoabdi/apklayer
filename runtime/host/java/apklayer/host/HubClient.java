@@ -179,6 +179,10 @@ public final class HubClient {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.BLUETOOTH, request -> { request.writeString(address); request.writeString(uuid); },
                 reply -> new android.os.ParcelFileDescriptor[] {reply.readTypedObject(android.os.ParcelFileDescriptor.CREATOR), reply.readTypedObject(android.os.ParcelFileDescriptor.CREATOR)});
     }
+    /** The gps fixes from the hub's GNSS HAL client (HubGnss): a pipe of `ready` and `location LAT LON ACCURACY` lines. */
+    android.os.ParcelFileDescriptor gnss() {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.GNSS, request -> {}, reply -> reply.readTypedObject(android.os.ParcelFileDescriptor.CREATOR));
+    }
     int checkPermission(int pid, int uid, String permission) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CHECK_PERMISSION, request -> { request.writeInt(pid); request.writeInt(uid); request.writeString(permission); }, reply -> reply.readInt());
     }

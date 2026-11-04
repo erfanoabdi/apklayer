@@ -41,10 +41,16 @@ final class HostLocation {
         shadow.setProviderEnabled(LocationManager.NETWORK_PROVIDER, network);
         if (!manager.isLocationEnabled()) return;  // the host has no location service
         if (network) follow(shadow, LocationManager.NETWORK_PROVIDER, HostProcess.dying("python3", script("geoclue.py")));
-        // the GNSS HAL (providers.toml) through its client, which speaks the same lines; shortcut: Robolectric's LocationManager stays the framework side
-        // (no LocationManagerService/GnssLocationProvider in the hub), fed with the HAL's fixes; the HAL keeps one callback, so with two apps
-        // locating at once only the later one gets fixes, until one client in the hub serves them all
-        if (gps) follow(shadow, LocationManager.GPS_PROVIDER, HostProcess.dying(System.getProperty("apklayer.cli", "apklayer"), "exec", "libapklayer_gnss.so", "--client"));
+        // the GNSS HAL (providers.toml) through the hub's one client of it (HubGnss), whose pipe speaks the same lines; Robolectric's LocationManager
+        // stays the framework side (no LocationManagerService/GnssLocationProvider in the hub), fed with the HAL's fixes.
+        // shortcut: the app follows the fixes from its start, not only while it has a gps request (Robolectric's request bookkeeping is private): the
+        // HAL runs while any app with ACCESS_FINE_LOCATION runs; a LocationManager shadow tracking requests would end it between them
+        if (gps) {
+            android.os.ParcelFileDescriptor fixes;
+            try { fixes = HubClient.current().gnss(); }
+            catch (RuntimeException none) { System.out.println("[apklayer] location: gps: " + none.getMessage()); return; }  // no permission or no hub: the provider stays, without fixes
+            follow(shadow, LocationManager.GPS_PROVIDER, new android.os.ParcelFileDescriptor.AutoCloseInputStream(fixes), () -> { try { fixes.close(); } catch (IOException ignored) { } });
+        }
     }
 
     /** Whether this stack declares the GNSS HAL (cli/stack.cpp stages its manifest when providers.toml configures it). */
@@ -53,25 +59,32 @@ final class HostLocation {
         return root != null && new java.io.File(root, "vendor/etc/vintf/manifest/apklayer-gnss.xml").exists();
     }
 
-    /** Runs a location source (`ready`, then `location LAT LON ACCURACY` lines) and reports its fixes as the provider's. */
+    /** Runs a location helper and follows it. */
     private static void follow(ShadowLocationManager shadow, String provider, java.util.List<String> command) {
         try {
             Process helper = new ProcessBuilder(command).redirectError(ProcessBuilder.Redirect.INHERIT).start();
             Runtime.getRuntime().addShutdownHook(new Thread(helper::destroy));
-            BufferedReader in = new BufferedReader(new InputStreamReader(helper.getInputStream()));
+            follow(shadow, provider, helper.getInputStream(), helper::destroy);
+        } catch (IOException noHelper) { System.out.println("[apklayer] location: " + provider + ": " + noHelper.getMessage() + ", provider removed"); shadow.removeProvider(provider); }
+    }
+
+    /** Reports a location source's fixes (`ready`, then `location LAT LON ACCURACY` lines) as the provider's. */
+    private static void follow(ShadowLocationManager shadow, String provider, java.io.InputStream source, Runnable close) {
+        try {
+            BufferedReader in = new BufferedReader(new InputStreamReader(source));
             String first = in.readLine();  // `ready`, or why the source is not usable
             // btload's own line, and the GNSS client's session status (it may come before its `ready`)
             while (first != null && (first.startsWith("LOADED ") || first.startsWith("status "))) first = in.readLine();
             if (first == null || !first.equals("ready")) {  // it went away since the hub asked: no such provider here (a disabled one would be a settings write)
                 System.out.println("[apklayer] location: " + provider + ": " + (first == null ? "no helper" : first) + ", provider removed");
-                helper.destroy();
+                close.run();
                 shadow.removeProvider(provider);
                 return;
             }
             Thread follower = new Thread(() -> follow(in, shadow, provider), "apklayer-location-" + provider);
             follower.setDaemon(true);
             follower.start();
-        } catch (IOException noHelper) { System.out.println("[apklayer] location: " + provider + ": " + noHelper.getMessage() + ", provider removed"); shadow.removeProvider(provider); }
+        } catch (IOException ended) { System.out.println("[apklayer] location: " + provider + ": " + ended.getMessage() + ", provider removed"); close.run(); shadow.removeProvider(provider); }
     }
 
     private static void follow(BufferedReader in, ShadowLocationManager shadow, String provider) {
