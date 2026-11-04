@@ -94,7 +94,7 @@ int gpusCommand(const Layout& l, const Instance& inst) {
     for (const Gpu& g : gpus) {
         std::string name = pciName(g.vendorDevice);
         printf("%s\t%s\t%s\t%s\t%s\t%s\t%s\n", g.id.c_str(), g.node.c_str(), g.driver.c_str(), g.vendorDevice.empty() ? "-" : g.vendorDevice.c_str(),
-               g.compositor ? "yes" : "no", &g == chosen ? "yes" : "no", (name.empty() ? g.driver : name).c_str());
+               g.compositor ? "yes" : "no", &g == chosen ? "yes" : "no", (!name.empty() ? name : g.vendorDevice.empty() ? baseName(g.device) : g.driver).c_str());
     }
     return 0;
 }

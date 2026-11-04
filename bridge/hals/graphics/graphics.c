@@ -37,26 +37,13 @@ static bool other_device(int fd, const char *path)
     return differ;
 }
 
-/* A device without a GPU driver (vgem; Mesa drives it with kms_swrast and renders with llvmpipe) allocates dumb buffers, which its
- * render node refuses: such a device is used through its primary node. */
-static struct gbm_device *create_device(int *fd)
+/* A device without a GPU driver (vgem: Mesa gives it kms_swrast, whose dumb buffers its render node refuses, and the primary node shares
+ * none across processes) allocates nothing: refused here with a reason rather than failing in a renderer later. */
+static bool allocates(struct gbm_device *gbm)
 {
-    struct gbm_device *gbm = gbm_create_device(*fd);
-    struct gbm_bo *probe = gbm ? gbm_bo_create(gbm, 1, 1, GBM_FORMAT_ARGB8888, GBM_BO_USE_RENDERING) : NULL;
-    if (probe || !gbm) { if (probe) gbm_bo_destroy(probe); return gbm; }
-    drmDevicePtr dev = NULL;
-    int primary = -1;
-    if (drmGetDevice2(*fd, 0, &dev) == 0 && (dev->available_nodes & (1 << DRM_NODE_PRIMARY)) && drmGetNodeTypeFromFd(*fd) == DRM_NODE_RENDER)
-        primary = open_node(dev->nodes[DRM_NODE_PRIMARY]);
-    drmFreeDevice(&dev);
-    if (primary < 0) return gbm;
-    struct gbm_device *other = gbm_create_device(primary);
-    if (!other) { close(primary); return gbm; }
-    fprintf(stderr, "apklayer-gfx: the render node allocates no buffers: using the device's primary node\n");
-    gbm_device_destroy(gbm);
-    close(*fd);
-    *fd = primary;
-    return other;
+    struct gbm_bo *probe = gbm_bo_create(gbm, 1, 1, GBM_FORMAT_ARGB8888, GBM_BO_USE_RENDERING);
+    if (probe) gbm_bo_destroy(probe);
+    return probe != NULL;
 }
 
 struct apklayer_gfx *apklayer_gfx_open(const char *render_node)
@@ -75,10 +62,16 @@ struct apklayer_gfx *apklayer_gfx_open(const char *render_node)
     if (fd < 0) return NULL;
     struct apklayer_gfx *gfx = calloc(1, sizeof *gfx);
     if (!gfx) { close(fd); errno = ENOMEM; return NULL; }
-    gfx->gbm = create_device(&fd);
     gfx->fd = fd;
+    gfx->gbm = gbm_create_device(fd);
+    if (gfx->gbm && !allocates(gfx->gbm)) {
+        fprintf(stderr, "apklayer-gfx: %s allocates no buffers (no GPU driver): choose another GPU (apklayer gpus)\n", render_node ? render_node : "the render node");
+        gbm_device_destroy(gfx->gbm);
+        gfx->gbm = NULL;
+    }
     if (!gfx->gbm) { close(fd); free(gfx); errno = ENODEV; return NULL; }
     gfx->other_gpu = other_device(fd, getenv("APKLAYER_COMPOSITOR_NODE"));  /* set by the CLI from the compositor's dmabuf feedback */
+    if (gfx->other_gpu) fprintf(stderr, "apklayer-gfx: %s is not the compositor's GPU: window buffers are LINEAR\n", render_node ? render_node : "the render node");
     return gfx;
 }
 

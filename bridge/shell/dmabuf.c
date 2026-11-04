@@ -31,7 +31,8 @@ void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int
     if (nfds > 0 || getenv("APKLAYER_RUNTIME_DEBUG")) {  /* a buffer import (a window's first frames) always: tests wait for it; every frame with the debug flag */
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
-        fprintf(stderr, "[shell] t=%ld.%03ld dmabuf frame %u (buffer %d, %dx%d, %d fds)\n", (long)(ts.tv_sec % 1000), ts.tv_nsec / 1000000, ++frames, buf, m[3], m[4], nfds);
+        fprintf(stderr, "[shell] t=%ld.%03ld dmabuf frame %u (buffer %d, %dx%d, %d fds, modifier 0x%08x%08x)\n", (long)(ts.tv_sec % 1000), ts.tv_nsec / 1000000, ++frames,
+                buf, m[3], m[4], nfds, (uint32_t)m[7], (uint32_t)m[6]);
     }
     if (buf < 0 || buf >= DBUF_MAX) return;
     if (nfds > 0) {

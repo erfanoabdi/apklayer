@@ -33,7 +33,12 @@ struct table_entry { uint32_t format, pad; uint64_t modifier; };
 static const struct table_entry *table;
 static size_t table_n;
 
-static void fb_done(void *d, struct zwp_linux_dmabuf_feedback_v1 *f) { (void)d; (void)f; }
+static void fb_done(void *d, struct zwp_linux_dmabuf_feedback_v1 *f)
+{
+    (void)d; (void)f;
+    if (getenv("APKLAYER_RUNTIME_DEBUG"))
+        fprintf(stderr, "[shell] dmabuf feedback: main device %u:%u, %d formats with LINEAR\n", major(dmabuf_main_device), minor(dmabuf_main_device), dmabuf_linear_n);
+}
 static void fb_table(void *d, struct zwp_linux_dmabuf_feedback_v1 *f, int32_t fd, uint32_t size)
 {
     (void)d; (void)f;
