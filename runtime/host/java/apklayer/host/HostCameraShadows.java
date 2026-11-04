@@ -34,6 +34,7 @@ final class HostCameraShadows {
                 Map.entry("android.hardware.Camera", Camera.class.getName()),
                 Map.entry("android.hardware.Camera.Parameters", CameraParameters.class.getName()),
                 Map.entry("android.media.ImageReader", ImageReader.class.getName()),
+                Map.entry("android.media.PublicFormatUtils", PublicFormatUtils.class.getName()),
                 Map.entry("android.media.ImageReader.SurfaceImage", SurfaceImage.class.getName()));
     }
 
@@ -50,6 +51,7 @@ final class HostCameraShadows {
     @Implements(className = "android.hardware.camera2.impl.CameraMetadataNative", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class CameraMetadataNative {}
     @Implements(className = "android.hardware.Camera", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class Camera {}
     @Implements(className = "android.hardware.Camera$Parameters", isInAndroidSdk = false) public static final class CameraParameters {}
+    @Implements(className = "android.media.PublicFormatUtils", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class PublicFormatUtils {}
     @Implements(className = "android.media.ImageReader", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class ImageReader {}
     @Implements(className = "android.media.ImageReader$SurfaceImage", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class SurfaceImage {}
 }
