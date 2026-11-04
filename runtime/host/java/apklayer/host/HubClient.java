@@ -149,6 +149,10 @@ public final class HubClient {
             request.writeString(pkg); request.writeString(tag); request.writeInt(id); request.writeTypedObject(notification, 0); request.writeInt(importance);
         }, reply -> null);
     }
+    void startInput(IBinder remoteInputConnection, android.view.inputmethod.EditorInfo editor) {
+        HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.START_INPUT, request -> { request.writeStrongBinder(remoteInputConnection); request.writeTypedObject(editor, 0); }, reply -> null);
+    }
+    void finishInput() { HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.FINISH_INPUT, request -> {}, reply -> null); }
     void cancelNotification(String tag, int id, boolean all) {
         HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.NOTIFY_CANCEL, request -> { request.writeString(tag); request.writeInt(id); request.writeBoolean(all); }, reply -> null);
     }

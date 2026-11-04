@@ -18,7 +18,8 @@ final class HubProtocol {
             INSTALL_COMMIT = 33, INSTALL_PREAPPROVE = 34, UNINSTALL = 35, INSTALL_SOURCE = 36,  // the package installer (HubInstaller)
             RELAUNCH = 37,
             INSTALL_SESSION = 38,  // the PackageInstaller sessions (HubInstallSessions): {op, arguments}
-            RESOLVE_ACTIVITY = 39;  // {intent} -> 1 when an installed app (or the installer's confirmation) handles it: startActivity's ActivityNotFoundException
+            RESOLVE_ACTIVITY = 39,
+            START_INPUT = 40, FINISH_INPUT = 41;  // the input method binding (HubInputMethods): {IRemoteInputConnection, EditorInfo} / {}  // {intent} -> 1 when an installed app (or the installer's confirmation) handles it: startActivity's ActivityNotFoundException
             // RELAUNCH: `apklayer run` of a running app (the CLI, through servicetool call): {package, intent file or ""} -> 0 delivered, 1 not running
     static final int ENDPOINT_BIND = 1, ENDPOINT_UNBIND = 2, ENDPOINT_START = 3, ENDPOINT_STOP = 4, ENDPOINT_GET_PROVIDER = 5, ENDPOINT_NOTIFY = 6, ENDPOINT_START_ACTIVITY = 7, ENDPOINT_EXIT_IF_IDLE = 8, ENDPOINT_PACKAGE_CHANGED = 9;
     private HubProtocol() {}

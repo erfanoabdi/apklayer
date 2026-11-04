@@ -71,7 +71,6 @@ class Apps:
 
 
 stop()
-HUB_START = len((LOGS / "hub.log").read_text(errors="replace")) if (LOGS / "hub.log").exists() else 0  # hub.log is appended to: this run's part
 apps = Apps()
 try:
     if PHASE == 'manifest':
@@ -79,7 +78,7 @@ try:
         apps.wait_for('sender', '[bcs] done')
         # the receiver's package was not running: the hub started it headless and delivered
         wait_file(LOGS / "component-hello.bcreceiver.log", "[bcr] manifest hello.bc.MANIFEST", 15)
-        wait_file(LOGS / "hub.log", "background execution not allowed: hello.bc.MANIFEST to hello.bcreceiver/", 5, HUB_START)
+        wait_file(LOGS / "hub.log", "background execution not allowed: hello.bc.MANIFEST to hello.bcreceiver/", 5)
         assert 'extra=implicit' not in (LOGS / "component-hello.bcreceiver.log").read_text(errors='replace'), 'an implicit broadcast reached a target-34 manifest receiver'
         print('PASS manifest receiver of a package that was not running; the implicit broadcast skipped it (background execution limit)', flush=True)
     elif PHASE == 'basic':
@@ -94,7 +93,7 @@ try:
         apps.wait_for('receiver', '[bcr] guarded dynamic hello.bc.GUARDED')
         assert not apps.settle('receiver', 'PRIVATE reached', 2), 'a private manifest receiver was reached from another app'
         assert not apps.settle('receiver', 'extra=implicit', 1), 'an implicit broadcast reached a manifest receiver of an app targeting 34'
-        wait_file(LOGS / "hub.log", "background execution not allowed: hello.bc.MANIFEST to hello.bcreceiver/", 5, HUB_START)
+        wait_file(LOGS / "hub.log", "background execution not allowed: hello.bc.MANIFEST to hello.bcreceiver/", 5)
         assert not apps.settle('receiver', 'INTERNAL reached', 1), 'a not-exported dynamic receiver was reached from another app'
         before = (apps.count('receiver', 'protected hello.bc.PROTECTED'), apps.count('receiver', 'guarded dynamic'), apps.count('receiver', 'dynamic hello.bc.DYNAMIC'))
         apps.start('denied', 'hello.bcdenied', 'basic')

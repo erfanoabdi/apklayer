@@ -150,8 +150,8 @@ if __name__ == '__main__':  # for shell tests: python3 tests/lib/instance.py sto
 _libc = ctypes.CDLL(None, use_errno=True)
 
 
-def wait_file(path, needle, seconds, offset=0):
-    """Block on inotify (no polling) until the file contains the needle past `offset` (a log the instance appends to); returns that text."""
+def wait_file(path, needle, seconds):
+    """Block on inotify (no polling) until the file contains the needle; returns the text."""
     fd = _libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
     os.makedirs(path.parent, exist_ok=True)
     assert _libc.inotify_add_watch(fd, os.fsencode(path.parent), 0x102) >= 0  # IN_MODIFY | IN_CREATE in the directory
@@ -159,7 +159,7 @@ def wait_file(path, needle, seconds, offset=0):
     with selectors.DefaultSelector() as events:
         events.register(fd, selectors.EVENT_READ)
         while _time.monotonic() < end:
-            text = path.read_text(errors='replace')[offset:] if path.exists() else ''
+            text = path.read_text(errors='replace') if path.exists() else ''
             if needle in text: os.close(fd); return text
             if events.select(min(2, max(0.1, end - _time.monotonic()))): os.read(fd, 65536)
     os.close(fd)

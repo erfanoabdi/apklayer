@@ -34,10 +34,7 @@ if TEST == 'webview':
     env.update(APKLAYER_WEBVIEW_PROVIDER='com.android.webview', APKLAYER_LOGCAT='1')
     if os.environ.get('WV_RTDEBUG'): env['APKLAYER_RUNTIME_DEBUG'] = '1'
 log = Path(LOGDIR)
-HUB_START = len((log / 'hub.log').read_text(errors='replace')) if (log / 'hub.log').exists() else 0  # hub.log is appended to: this run's part
-
-
-def hub_wait(needle, seconds): return instance.wait_file(log / 'hub.log', needle, seconds, HUB_START)
+def hub_wait(needle, seconds): return instance.wait_file(log / 'hub.log', needle, seconds)  # the stack's logs start empty
 
 
 def wait_popup():

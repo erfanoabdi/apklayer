@@ -25,8 +25,7 @@ public class ShadowHostNotificationManager extends ShadowNotificationManager {
     @Implementation @Override protected int getImportance() { return muted() ? NotificationManager.IMPORTANCE_NONE : NotificationManager.IMPORTANCE_UNSPECIFIED; }
 
     @Implementation @Override protected void notify(String tag, int id, Notification notification) {
-        if (muted()) return;  // NotificationManagerService drops it: nothing posted, nothing active
-        super.notify(tag, id, notification);
+        if (!muted()) super.notify(tag, id, notification);  // muted: NotificationManagerService drops it (the hub too), nothing becomes active
         if (!hub()) return;
         Context context = RuntimeEnvironment.getApplication();
         NotificationChannel channel = notification.getChannelId() == null ? null : getNotificationChannel(notification.getChannelId());
