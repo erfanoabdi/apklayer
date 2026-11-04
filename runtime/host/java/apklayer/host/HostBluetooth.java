@@ -110,9 +110,21 @@ final class HostBluetooth {
     /** Android 12+: the runtime permission a call needs (apps targeting older releases hold the install-time BLUETOOTH/BLUETOOTH_ADMIN). */
     static void require(String permission) {
         Context app = RuntimeEnvironment.getApplication();
-        if (app.getApplicationInfo().targetSdkVersion < Build.VERSION_CODES.S) return;
+        if (targetSdk() < Build.VERSION_CODES.S) return;
         if (app.checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED)
             throw new SecurityException("Need " + permission + " permission for " + app.getAttributionSource() + ": Bluetooth");
+    }
+
+    private static int target = -1;
+    // shortcut: ApplicationInfo.targetSdkVersion is Robolectric's manifest default (23) for every apklayer app (AppEnvironment's AndroidManifest has no
+    // manifest file): the APK's own value is read here; drop this once AppEnvironment sets the real one
+    static synchronized int targetSdk() {
+        if (target < 0) {
+            Context app = RuntimeEnvironment.getApplication();
+            try { target = android.content.pm.PackageParser.parseApkLite(new java.io.File(app.getPackageCodePath()), 0).targetSdkVersion; }
+            catch (Exception unreadable) { target = app.getApplicationInfo().targetSdkVersion; }
+        }
+        return target;
     }
 
     static void onMain(Runnable action) { new Handler(Looper.getMainLooper()).post(action); }

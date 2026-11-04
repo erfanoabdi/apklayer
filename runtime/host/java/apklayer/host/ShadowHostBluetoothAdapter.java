@@ -70,7 +70,7 @@ public class ShadowHostBluetoothAdapter extends ShadowBluetoothAdapter {
     private boolean power(boolean on) {
         HostBluetooth.require(CONNECT);
         HostBluetooth session = HostBluetooth.get();
-        if (session == null || RuntimeEnvironment.getApplication().getApplicationInfo().targetSdkVersion >= Build.VERSION_CODES.TIRAMISU) return false;
+        if (session == null || HostBluetooth.targetSdk() >= Build.VERSION_CODES.TIRAMISU) return false;
         session.send("op", "power", "on", on);
         return true;
     }
