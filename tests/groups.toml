@@ -45,7 +45,7 @@ run = ["tests/vm/devices.sh"]
 apps = ["hello-bluetooth"]
 run = ["tests/vm/bluetooth.sh"]
 
-[providers]
+[hardware]
 # the hardware providers' fake backends (providers.toml): sensors, GNSS and vibrator over AIDL, then through Android's APIs
 apps = ["hello-hardware"]
 run = ["tests/vm/providers.sh"]
