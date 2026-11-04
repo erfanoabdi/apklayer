@@ -7,6 +7,7 @@
 #include "daemon.h"
 #include "desktop.h"
 #include "gpus.h"
+#include "logs.h"
 #include "portal.h"
 #include "sandbox.h"
 #include "manage.h"
@@ -40,6 +41,9 @@ int usage() {
           "  settings [list] | set KEY VALUE | unset KEY  the instance's own values over the desktop's settings (night yes|no, accent #rrggbb,\n"
           "                         contrast high|normal, animations on|off, font-scale, locale, timezone, time-format 12|24); live in a running instance\n"
           "  permissions <package> | grant|revoke <package> <permission>  what the app requests (permission, level, granted); a runtime one granted or revoked\n"
+          "  logs [<package> [--previous]]  the app's log of its last launch (its output and android.util.Log; --previous: the launch before);\n"
+          "                         without a package: the instance's log files\n"
+          "  report <package> [out.tar.gz]  one archive for a bug report: versions, host, the app's info, its logs and the instance's service logs\n"
           "  status                 the instance's stack, running apps, GPU, audio, battery, location\n"
           "  gpus                   the host's GPUs (id, node, driver, vendor:device, compositor's, this instance's, name)\n"
           "  gpu set <id|node> | unset  the instance's GPU (default: the compositor's; from its next start)\n"
@@ -99,6 +103,8 @@ int main(int argc, char** argv) {
     if (cmd == "list" && n == 2 && args[1] == "--tsv") { listAppsTsv(layout, inst); return 0; }
     if (cmd == "list") { listApps(layout); return 0; }
     if (cmd == "info" && n == 2) return appInfo(layout, inst, args[1]);
+    if (cmd == "logs") return logsCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
+    if (cmd == "report") return reportCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "clear-data" && n == 2) return clearData(layout, inst, args[1]);
     if (cmd == "stop" && n == 2) return stopApp(layout, inst, args[1]);
     if (cmd == "instances") { listInstances(layout); return 0; }
