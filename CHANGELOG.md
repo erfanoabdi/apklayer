@@ -84,8 +84,8 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 ### 2026-11-04 — libapklayer_egl: framebuffers checked before the present blit (lead)
-- Why: Meet's remote video stayed black: our eglSwapBuffers blit into one window's buffer hit an incomplete framebuffer (Mesa: GL_INVALID_FRAMEBUFFER_OPERATION in glBlitFramebuffer) and left the error in the app's context; Meet's renderer checks glGetError and dropped every frame. EglWindow.cpp now checks both sides and names the window once.
-- Command (OrbStack, `flock -n ~/los24-build.lock`): `python3 tools/lib/orb-build-module.py libapklayer_egl hals/graphics/egl EglWindow.cpp`.
+- Why: Meet's remote video stayed black: our eglSwapBuffers blit into one window's buffer hit an incomplete framebuffer (Mesa: GL_INVALID_FRAMEBUFFER_OPERATION in glBlitFramebuffer) and left the error in the app's context; Meet's renderer checks glGetError and dropped every frame. EglWindow.cpp now checks both sides and names the window once; Egl.cpp's eglChooseConfig puts configs of at most 8 bits per channel first unless more was asked for (a plain RGB8 request got a 10-bit XR30 config first, which the present cannot read).
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `python3 tools/lib/orb-build-module.py libapklayer_egl hals/graphics/egl Egl.cpp EglWindow.cpp`.
 ### 2026-11-04 — vulkan.apklayer: the instance's GPU only (gpusel agent)
 - Why: apps must see the Vulkan device of the instance's GPU ($APKLAYER_RENDER_NODE, matched by VK_EXT_physical_device_drm; docs/PLAN.md "GPU per instance"): `hals/graphics/vulkan/DeviceSelect.h` (header only, no graph change) and Driver.cpp's vkEnumeratePhysicalDevices/Groups.
 - Command (OrbStack, under `flock -n ~/los24-build.lock`): only Driver.cpp and DeviceSelect.h copied into `vendor/apklayer/hals/graphics/vulkan`, then `python3 tools/lib/orb-build-vulkan.py` and the same with `APKLAYER_ARCH=x86_64` (replay the existing compile/link commands; never clean).

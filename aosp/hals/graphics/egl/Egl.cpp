@@ -14,6 +14,7 @@
 #include <cstring>
 #include <initializer_list>
 #include <mutex>
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -239,6 +240,27 @@ EGLBoolean eglChooseConfig(EGLDisplay dpy, const EGLint* attribs, EGLConfig* cfg
         std::string list;
         for (size_t i = 0; i + 1 < a.size(); i += 2) list += " 0x" + std::to_string(a[i]) + "=" + std::to_string(a[i + 1]);
         ALOGW("eglChooseConfig found no config for:%s", list.c_str());
+    }
+    // EGL sorts deeper colour first, so a plain RGB8 request gets a 10-bit (XR30) or float config at the top; Android's drivers give the 8-bit
+    // ones, and the window present cannot read 10-bit/float buffers back (Meet's video renderer: an incomplete framebuffer on every frame).
+    // Unless more than 8 bits were asked for, the configs of at most 8 bits per channel come first, the deeper ones after them.
+    bool deep = false;
+    for (size_t i = 0; i + 1 < a.size(); i += 2)
+        if ((a[i] == EGL_RED_SIZE || a[i] == EGL_GREEN_SIZE || a[i] == EGL_BLUE_SIZE || a[i] == EGL_ALPHA_SIZE) && a[i + 1] > 8) deep = true;
+    if (ok && !deep && num && *num > 0) {
+        auto choose = host<PFNEGLCHOOSECONFIGPROC>("eglChooseConfig");
+        auto attrib = host<PFNEGLGETCONFIGATTRIBPROC>("eglGetConfigAttrib");
+        EGLint all = 0;
+        choose(dpy, a.data(), nullptr, 0, &all);
+        std::vector<EGLConfig> found(all > 0 ? all : 0), ordered;
+        if (all > 0 && choose(dpy, a.data(), found.data(), all, &all)) {
+            found.resize(all);
+            auto deepConfig = [&](EGLConfig c) { EGLint r = 0; attrib(dpy, c, EGL_RED_SIZE, &r); return r > 8; };
+            for (EGLConfig c : found) if (!deepConfig(c)) ordered.push_back(c);
+            for (EGLConfig c : found) if (deepConfig(c)) ordered.push_back(c);
+            *num = cfgs ? std::min<EGLint>(size, (EGLint)ordered.size()) : (EGLint)ordered.size();
+            if (cfgs) std::copy(ordered.begin(), ordered.begin() + *num, cfgs);
+        }
     }
     return ok;
 }
