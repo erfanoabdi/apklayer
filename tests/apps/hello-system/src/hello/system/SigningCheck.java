@@ -27,6 +27,9 @@ final class SigningCheck implements Check {
                 gms = "spoofed certificate matched";
             }
         } catch (PackageManager.NameNotFoundException absent) { /* microG not installed in this instance */ }
-        return "own certificate matched, a different one refused; microG: " + gms;
+        // the framework's certificate is one per device: the same in every process of the app
+        String platform = OtherProcess.platformCertificate(context), inOther = OtherProcess.ask(context)[1];
+        Check.require(platform.equals(inOther), "android certificate " + platform + " here, " + inOther + " in :other");
+        return "own certificate matched, a different one refused; microG: " + gms + "; android " + platform;
     }
 }

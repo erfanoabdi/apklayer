@@ -118,11 +118,14 @@ bool waitForProperty(const Layout& l, const NativeEnv& ne, const char* name, con
 }
 
 // Returns with the session's shell listening. One start at a time (the stack daemon and `run` both ask; two shells would each own half the
-// clients), and the started shell reports readiness itself: it writes to APKLAYER_SHELL_READY_FD after listen() (EOF: it died first).
-void ensureShell(const Layout& l, const Instance& inst, const NativeEnv& env) {
+// clients), and the started shell reports readiness itself: it writes to APKLAYER_SHELL_READY_FD after listen() (EOF: it died first). A shell
+// that neither listens nor dies (a compositor that does not answer its roundtrips) is ended after kShellStartMs: callers fail instead of blocking.
+static const int kShellStartMs = 10000;
+bool ensureShell(const Layout& l, const Instance& inst, const NativeEnv& env) {
     makeDirs(join(l.runtimeHome, "apklayer"));
     int lock = open(join(l.runtimeHome, "apklayer/shell.lock").c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
     flock(lock, LOCK_EX);
+    bool ok = true;
     if (shellPid(l) == 0) {
         unlink(l.shellSocket().c_str());
         int ready[2];
@@ -135,13 +138,22 @@ void ensureShell(const Layout& l, const Instance& inst, const NativeEnv& env) {
         shell.logFile = join(inst.logs(), "shell.log");
         shell.newSession = true;  // outlives any instance; instances never stop it
         shell.detach = true;
-        spawn(shell);
+        int pid = spawn(shell);
         close(ready[1]);
+        pollfd p{ready[0], POLLIN, 0};
+        int n;
+        while ((n = poll(&p, 1, kShellStartMs)) < 0 && errno == EINTR) {}
         char c;
-        while (read(ready[0], &c, 1) < 0 && errno == EINTR) {}
+        ok = n > 0 && read(ready[0], &c, 1) == 1;
         close(ready[0]);
+        if (!ok) {
+            fprintf(stderr, "apklayer: the window shell %s (Wayland display %s); log: %s\n",
+                    n > 0 ? "exited before it listened" : ("did not listen within " + std::to_string(kShellStartMs / 1000) + " s").c_str(), getenvOr("WAYLAND_DISPLAY", "unset").c_str(), shell.logFile.c_str());
+            if (n == 0) terminate(pid);
+        }
     }
     close(lock);
+    return ok;
 }
 
 // keystore2 keeps its database in /data/misc/keystore, which the path layer serves from the instance's /data
@@ -151,7 +163,7 @@ static std::string keystoreDir(const Instance& inst) {
     return dir;
 }
 
-// What Android's init derives at boot (property_service.cpp): the fingerprint of the product the instance presents (bridge/native/apklayer.prop over
+// What Android's init derives at boot (property_service.cpp): the fingerprint (and the build's display id, flavor, description) of the product the instance presents (bridge/native/apklayer.prop over
 // the tree's build.prop, whose own fingerprint names the GSI's "generic" product) and the ABI lists of this machine's CPU. Set before the files
 // are loaded: ro.* is write-once, so these win and every reader (natives, apklayer.host.HostBuild) sees one device.
 static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std::vector<std::string>& files) {
@@ -164,6 +176,13 @@ static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std
                               "/" + get("ro.build.id") + "/" + get("ro.build.version.incremental") + ":" + get("ro.build.type") + "/" + get("ro.build.tags");
     std::string abis = std::string(kAbi) + (*kAbi32 ? std::string(",") + kAbi32 : "");
     setProperty(l, ne, "ro.build.fingerprint", fingerprint.c_str());
+    setProperty(l, ne, "ro.system.build.fingerprint", fingerprint.c_str());
+    // as the build system writes them for the build type and tags the instance presents (apklayer.prop), not the tree's "userdebug ... test-keys"
+    std::string flavor = get("ro.product.name") + "-" + get("ro.build.type");
+    setProperty(l, ne, "ro.build.display.id", (get("ro.build.id") + " " + get("ro.build.tags")).c_str());
+    setProperty(l, ne, "ro.build.flavor", flavor.c_str());
+    setProperty(l, ne, "ro.build.description", (flavor + " " + get("ro.build.version.release_or_codename") + " " + get("ro.build.id") + " " +
+                                                get("ro.build.version.incremental") + " " + get("ro.build.tags")).c_str());
     setProperty(l, ne, "ro.product.cpu.abi", kAbi);
     setProperty(l, ne, "ro.product.cpu.abilist", abis.c_str());
     setProperty(l, ne, "ro.product.cpu.abilist64", kAbi);
@@ -205,7 +224,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     prop.argv = {join(n, "bin/aprop"), "set", "service.sf.cache_dir_available", "1"};
     runAndWait(prop);
 
-    if (getenvOr("APKLAYER_START_SHELL", "1") == "1") ensureShell(l, inst, ne);
+    if (getenvOr("APKLAYER_START_SHELL", "1") == "1") ensureShell(l, inst, ne);  // `run` asks again and fails on its own when this did not work
 
     std::vector<Service> running;
     auto start = [&](const std::string& name, const std::string& lib, std::vector<std::string> args) {

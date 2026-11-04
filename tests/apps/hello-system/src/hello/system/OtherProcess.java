@@ -13,7 +13,7 @@ import android.provider.Settings;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-/** A service in a process of its own (":other"): transaction 1 answers that process's name and its Settings.Secure.ANDROID_ID. */
+/** A service in a process of its own (":other"): transaction 1 answers that process's name, its Settings.Secure.ANDROID_ID and the "android" package's certificate. */
 public class OtherProcess extends Service {
     @Override public IBinder onBind(Intent intent) {
         return new Binder() {
@@ -21,13 +21,25 @@ public class OtherProcess extends Service {
                 if (code != 1) return false;
                 reply.writeString(Application.getProcessName());
                 reply.writeString(Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID));
+                reply.writeString(platformCertificate(OtherProcess.this));
                 return true;
             }
         };
     }
 
-    /** The other process's ANDROID_ID (bound, asked, unbound); off the main thread. */
-    static String androidId(Context context) throws Exception {
+    /** The SHA-256 of the "android" package's signing certificate as this process sees it. */
+    static String platformCertificate(Context context) {
+        try {
+            byte[] cert = context.getPackageManager().getPackageInfo("android", android.content.pm.PackageManager.GET_SIGNATURES).signatures[0].toByteArray();
+            return new java.math.BigInteger(1, java.security.MessageDigest.getInstance("SHA-256").digest(cert)).toString(16);
+        } catch (Exception failure) { return failure.toString(); }
+    }
+
+    /** The other process's ANDROID_ID. */
+    static String androidId(Context context) throws Exception { return ask(context)[0]; }
+
+    /** The other process's ANDROID_ID and "android" certificate (bound, asked, unbound); off the main thread. */
+    static String[] ask(Context context) throws Exception {
         ArrayBlockingQueue<IBinder> bound = new ArrayBlockingQueue<>(1);
         ServiceConnection connection = new ServiceConnection() {
             @Override public void onServiceConnected(ComponentName name, IBinder service) { bound.offer(service); }
@@ -42,7 +54,7 @@ public class OtherProcess extends Service {
                 service.transact(1, data, reply, 0);
                 String process = reply.readString();
                 Check.require((context.getPackageName() + ":other").equals(process), "process name " + process);
-                return reply.readString();
+                return new String[] {reply.readString(), reply.readString()};
             } finally { data.recycle(); reply.recycle(); }
         } finally { context.unbindService(connection); }
     }

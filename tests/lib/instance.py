@@ -50,12 +50,19 @@ def assert_clean():
 
 
 def stop():
-    """The instance's stack, hub, apps and shell, then anything of this instance the stop missed."""
+    """The instance's stack, hub, apps and shell, then anything of this instance the stop missed. Returns the services that did not end
+    cleanly at this stop (the stack daemon's "stopped: NAME (status N)" lines: SIGSEGV is 139)."""
+    log = STATE / 'stack.log'
+    seen = log.stat().st_size if log.exists() else 0
     subprocess.run(['bin/apklayer', 'stop'], env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     kill('[c]omponent-host')
     for line in mine('java', exact=True):  # the app and service JVMs the stop missed (by name: their command lines are process names)
         try: os.kill(int(line.split()[0]), signal.SIGTERM)
         except (OSError, ValueError): pass
+    if not log.exists(): return []
+    with open(log, 'rb') as f:
+        f.seek(seen)
+        return [line for line in f.read().decode(errors='replace').splitlines() if line.startswith('stopped:')]
 
 
 def capture(name, app=None):

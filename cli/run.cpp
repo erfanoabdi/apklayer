@@ -62,7 +62,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     NativeEnv ne = nativeEnv(l, inst);
     if (!ensureStack(l, inst)) return 1;
     trace("stack ready");
-    ensureShell(l, inst, ne);
+    if (!ensureShell(l, inst, ne)) return 1;
     if (mode == RunMode::App) {
         // the hub's JVM boots alongside the app's instead of after its Application.onCreate (HubStartup then finds it); an `apklayer hub` that finds
         // hub.lock taken (the hub is up) returns at once

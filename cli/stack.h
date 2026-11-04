@@ -29,7 +29,7 @@ bool waitForProperty(const Layout& layout, const NativeEnv& env, const char* nam
 bool alive(int pid);
 // SIGTERM, then SIGKILL after 5 s; returns once the process is gone (only a process whose command line names apklayer: a recycled pid is not ours).
 void terminate(int pid);
-// Starts the session's window shell when none listens on its socket.
-void ensureShell(const Layout& layout, const Instance& instance, const NativeEnv& env);
+// Starts the session's window shell when none listens on its socket; false (and the reason printed) when it does not listen within a few seconds.
+bool ensureShell(const Layout& layout, const Instance& instance, const NativeEnv& env);
 
 }  // namespace apklayer

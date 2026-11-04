@@ -56,6 +56,10 @@ final class AppEnvironment {
         HostClock.alignToMonotonic();  // after the clock's reset by the state setup
         HostProcessName.install(apk);  // before the Application is attached: Application.onCreate runs in every process, and apps check which one they are in
         NativeProcess.install();
+        // before any class of the app is initialised (the lazy Application among them): static initialisers read Build (OpenVPN returns from
+        // Application.onCreate when FINGERPRINT is Robolectric's "robolectric")
+        HostBuild.install();
+        HostSystemConfigService.install();  // before the manifest providers (ShadowHostInstrumentation): SettingsProvider's first upgrade reads it
         StartTrace.mark("native process installed");
         persistDataDirs();
         provideExternalStorage();
@@ -235,8 +239,6 @@ final class AppEnvironment {
         // as ActivityThread.handleBindApplication: Process.setArgV0(processName); a secondary process has its own name (HostProcessName)
         NativeLoader.nameProcess(System.getProperty("apklayer.processname", app.getPackageName()));
         if (Boolean.getBoolean("apklayer.logcat")) for (String name : new String[] {"alarm", "jobscheduler", "notification", "connectivity"}) System.out.println("[apklayer] service " + name + " = " + app.getSystemService(name));
-        HostBuild.install();
-        HostSystemConfigService.install();
         HostContentService.install();
         HostNetwork.install(app);
         HostBattery.install(app);

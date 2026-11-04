@@ -67,17 +67,35 @@ final class HostCertificate {
         return first != signatures() && second != signatures() && java.util.Arrays.equals(first, second);
     }
 
+    /** The platform certificate: one per instance (every process of it sees the same "android" signer), made once in the instance's directory (beside accounts.json). */
     static synchronized Signature[] signatures() {
         if (signatures == null) {
+            String storage = System.getProperty("apklayer.storage");
+            java.nio.file.Path file = storage == null ? null : java.nio.file.Path.of(storage).resolveSibling("platform-certificate.der");
             try {
-                sun.security.tools.keytool.CertAndKeyGen generator = new sun.security.tools.keytool.CertAndKeyGen("EC", "SHA256withECDSA");
-                generator.generate(256);
-                java.security.cert.X509Certificate certificate = generator.getSelfCertificate(new sun.security.x509.X500Name("CN=apklayer"), 25L * 365 * 24 * 3600);
-                signatures = new Signature[] {new Signature(certificate.getEncoded())};
+                if (file == null) return signatures = new Signature[] {new Signature(generate())};
+                if (!java.nio.file.Files.isRegularFile(file)) {
+                    // only the certificate is kept (nothing is signed with its key); a private 0600 file, linked into place so a racing process keeps the first one
+                    java.nio.file.Path tmp = java.nio.file.Files.createTempFile(file.getParent(), "platform-certificate", ".tmp",
+                            java.nio.file.attribute.PosixFilePermissions.asFileAttribute(java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")));
+                    try {
+                        java.nio.file.Files.write(tmp, generate());
+                        java.nio.file.Files.createLink(file, tmp);
+                    } catch (java.nio.file.FileAlreadyExistsException another) { /* another process made it first */ }
+                    finally { java.nio.file.Files.deleteIfExists(tmp); }
+                }
+                signatures = new Signature[] {new Signature(java.nio.file.Files.readAllBytes(file))};
             } catch (Exception failure) {
-                throw new IllegalStateException("cannot make the package certificate", failure);
+                throw new IllegalStateException("cannot make the package certificate " + file, failure);
             }
         }
         return signatures;
+    }
+
+    /** A real parseable self-signed certificate (EC P-256). */
+    private static byte[] generate() throws Exception {
+        sun.security.tools.keytool.CertAndKeyGen generator = new sun.security.tools.keytool.CertAndKeyGen("EC", "SHA256withECDSA");
+        generator.generate(256);
+        return generator.getSelfCertificate(new sun.security.x509.X500Name("CN=apklayer"), 25L * 365 * 24 * 3600).getEncoded();
     }
 }
