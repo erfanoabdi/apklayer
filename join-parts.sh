@@ -8,4 +8,4 @@ for first in $(find . -name '*.part000' | sort); do
     rm -f "$base".part???
     echo "joined $base"
 done
-shasum -a 256 -c SHA256SUMS-split
+if command -v sha256sum >/dev/null; then sha256sum -c SHA256SUMS-split; else shasum -a 256 -c SHA256SUMS-split; fi

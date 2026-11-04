@@ -1,0 +1,7 @@
+prebuilts for apklayer main 62ae0b4d9608756d5fb997e45f3cc2f7d319fff9 (2026-11-04)
+verified from scratch on Ubuntu 24.04 arm64 (Parallels) with docs/INSTALL.md of branch install-guide da7b1bc7, which needs its tools/build (overlays compile against <native>/aosp/android-all)
+arm64: from the UTM VM's staged runtime on 2026-11-04 (~/android-arm64/lib64, ~/arm64-native/android-root, ~/arm64-native/aosp)
+arm64 libraries: the 439 files of deps/android-tree-files.lock at that commit; every sha256 matches the lock
+tree: ro.build.fingerprint=generic/lineage_gsi_arm64/generic_arm64:17/CP2A.260605.016/eng.erfana:userdebug/test-keys; ro.build.date=Mon Oct 26 11:53:32 +0330 2026
+webview: com.android.webview 156.0.8078.47 (versionCode 807804701), sha256 1d2f61832b2596b0046cb82cf3634609ea866098d097a83fac27c35272ac726a
+x86_64: unchanged since 2026-10-29 (commit ef42d519), stale
