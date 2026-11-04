@@ -69,6 +69,8 @@ public final class HostShadowProvider implements ShadowProvider {
                 // a SurfaceView owns a real BLAST-backed window: native code (NDK, Vulkan, EGL) needs an ANativeWindow
                 Map.entry("android.view.SurfaceView", ShadowHostNativeSurfaceView.class.getName()),
                 Map.entry("android.view.TextureView", ShadowHostRealTextureView.class.getName()),
+                Map.entry("android.view.SurfaceSession", HostPlainShadows.SurfaceSession.class.getName()),
+                Map.entry("android.view.PixelCopy", HostPlainShadows.PixelCopy.class.getName()),
                 Map.entry("android.graphics.SurfaceTexture", HostGLShadows.SurfaceTexture.class.getName()),
                 Map.entry("android.graphics.TextureLayer", HostGLShadows.TextureLayer.class.getName()),
                 Map.entry("android.opengl.GLES20", HostGLShadows.GLES20.class.getName()),

@@ -136,6 +136,10 @@ run = ["python3 -u tests/vm/vulkan-present.py"]
 apps = ["hello-input"]
 run = ["python3 -u tests/vm/input-inject.py"]
 
+[magnifier]
+apps = ["hello-input"]
+run = ["tests/vm/magnifier.sh"]
+
 [input-desktop]
 apps = ["hello-input"]
 alone = true
