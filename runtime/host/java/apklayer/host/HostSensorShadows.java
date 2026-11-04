@@ -17,10 +17,12 @@ import org.robolectric.shadows.ShadowLooper;
 final class HostSensorShadows {
     private HostSensorShadows() {}
 
-    /** Whether this stack declares the sensors HAL (cli/stack.cpp stages its manifest and runs SensorService only then). */
+    /** Whether this stack runs SensorService over a sensors HAL: cli/stack.cpp declares the HAL (providers.toml) and starts SensorService when its
+     *  library is staged. Both, or libsensor would wait 300 s for a "sensorservice" that never comes. */
     static boolean declared() {
         String root = System.getenv("APKLAYER_INSTANCE_ROOT");
-        return root != null && new java.io.File(root, "vendor/etc/vintf/manifest/apklayer-sensors.xml").exists();
+        return root != null && new java.io.File(root, "vendor/etc/vintf/manifest/apklayer-sensors.xml").exists()
+                && new java.io.File(System.getProperty("apklayer.androidlibs", ""), "libapklayer_sensorservice.so").exists();
     }
 
     @Implements(className = "android.hardware.SensorManager", isInAndroidSdk = false) public static final class SensorManager {}

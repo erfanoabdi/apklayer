@@ -13,22 +13,23 @@ bin/apklayer providers set vibrator fake >/dev/null
 bin/apklayer providers set gnss fake location=48.8584,2.2945 accuracy=3 >/dev/null
 bin/apklayer providers
 
-# 1. each HAL over remote AIDL, as its framework client uses it (the stack ends with the probe)
-out=$APKLY_STATE/providers-hal.out
-bin/apklayer stack libapklayer_sensors.so --probe > $out 2>&1
-grep -a "^sensor \|accelerometer:\|PASS" $out
-grep -aq "PASS sensors AIDL" $out && grep -aq "last 0.500 9.500 1.250" $out || fail "sensors AIDL: no accelerometer events with the configured value"
-bin/apklayer stack libapklayer_vibrator.so --probe > $out 2>&1
-grep -a "PASS" $out; grep -a "vibrator:" $APKLY_STATE/vibrator.log
-grep -aq "PASS vibrator AIDL" $out && grep -aq "vibrator: on 120 ms amplitude 0.50" $APKLY_STATE/vibrator.log || fail "vibrator AIDL: the backend did not get on 120 ms at 0.5"
-bin/apklayer stack libapklayer_gnss.so --client 2 > $out 2>&1
-grep -a "^location\|PASS" $out
-grep -aq "PASS gnss AIDL" $out && grep -aq "^location 48.8584000 2.2945000 3.0" $out || fail "gnss AIDL: no fix at the configured location"
+# 1. each HAL over remote AIDL, as its framework client uses it: the stack runs the probe as its tool (output in tool.log; the next stack removes it)
+tool=$APKLY_STATE/tool.log
+bin/apklayer stack libapklayer_sensors.so --probe >/dev/null 2>&1
+grep -a "^sensor \|accelerometer:\|PASS\|Check failed" $tool
+grep -aq "PASS sensors AIDL" $tool && grep -aq "last 0.500 9.500 1.250" $tool || fail "sensors AIDL: no accelerometer events with the configured value"
+bin/apklayer stack libapklayer_vibrator.so --probe >/dev/null 2>&1
+grep -a "PASS\|Check failed" $tool; grep -a "vibrator:" $APKLY_STATE/vibrator.log
+grep -aq "PASS vibrator AIDL" $tool && grep -aq "vibrator: on 120 ms amplitude 0.50" $APKLY_STATE/vibrator.log || fail "vibrator AIDL: the backend did not get on 120 ms at 0.5"
+bin/apklayer stack libapklayer_gnss.so --client 2 >/dev/null 2>&1
+grep -a "^location\|PASS\|Check failed" $tool
+grep -aq "PASS gnss AIDL" $tool && grep -aq "^location 48.8584000 2.2945000 3.0" $tool || fail "gnss AIDL: no fix at the configured location"
 
-# 2. through Android's APIs: Vibrator (the hub's vibrator_manager over the HAL), LocationManager's gps provider, SensorManager
+# 2. through Android's APIs: Vibrator (the hub's vibrator_manager over the HAL), LocationManager's gps provider, SensorManager over SensorService
 out=$APKLY_STATE/providers-app.out
 grep -aq -m1 '^\[hw\] \(PASS\|FAIL\)' < <(APKLAYER_JOPTS="-Dapklayer.runms=40000" bin/apklayer run hello.hardware 2>&1 | tee $out)
-grep -a '\[hw\]' $out
+grep -a '\[hw\]\|\[runtime\] registering\|no registration function' $out
+grep -a "location \[" $APKLY_STATE/hub.log
 grep -a "vibrator:" $APKLY_STATE/vibrator.log
 grep -aq '^\[hw\] PASS' $out || fail "hello.hardware"
 # the waveform's two steps, then the click (the example HAL's 100 ms effect), in this order
@@ -38,12 +39,14 @@ grep -aq '^\[hw\] gps fix 48.85840 2.29450 accuracy 3.0' $out || fail "the app's
 # SensorManager over SensorService: 50 Hz for 2 s (about 100 events), the configured value
 events=$(grep -a -o '^\[hw\] accelerometer [0-9]* events' $out | grep -o '[0-9][0-9]*')
 [ "${events:-0}" -ge 60 ] && grep -aq '^\[hw\] accelerometer .* last 0.500 9.500 1.250' $out || fail "the app's accelerometer: ${events:-no} events, not the configured value"
+bin/apklayer stop hello.hardware >/dev/null 2>&1
+wait $! 2>/dev/null
 
 # 3. a changed option restarts only that domain's service (the stack the app started still runs)
 bin/apklayer providers set gnss fake location=1.5,2.5 accuracy=7
-bin/apklayer exec libapklayer_gnss.so --client 1 > $out 2>&1
-grep -a "^location\|PASS" $out
-grep -aq "^location 1.5000000 2.5000000 7.0" $out || fail "gnss: the new location did not reach the client"
+bin/apklayer exec libapklayer_gnss.so --client 1 > $APKLY_STATE/providers-client.out 2>&1
+grep -a "^location\|PASS" $APKLY_STATE/providers-client.out
+grep -aq "^location 1.5000000 2.5000000 7.0" $APKLY_STATE/providers-client.out || fail "gnss: the new location did not reach the client"
 grep -a "providers:\|restarted" $APKLY_STATE/stack.log
 grep -aq "providers: gnss restarted" $APKLY_STATE/stack.log && ! grep -aq "providers: \(sensors\|vibrator\)" $APKLY_STATE/stack.log || fail "not only gnss restarted"
 exit $status
