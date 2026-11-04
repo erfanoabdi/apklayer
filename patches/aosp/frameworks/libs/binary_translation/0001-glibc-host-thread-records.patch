@@ -6,7 +6,7 @@ Under bionic_translation the host thread slots Berberis copies into a guest thre
 and bionic_tls of its own. Base: Digitalis android17 (github.com/DigitalisX64/platform_frameworks_libs_binary_translation), REVISION.
 
 diff --git a/guest_os_primitives/guest_thread.cc b/guest_os_primitives/guest_thread.cc
-index fc14da7a..1ed287bd 100644
+index fc14da7a..3acc5bc2 100644
 --- a/guest_os_primitives/guest_thread.cc
 +++ b/guest_os_primitives/guest_thread.cc
 @@ -22,6 +22,7 @@
@@ -15,20 +15,22 @@ index fc14da7a..1ed287bd 100644
  #include "private/bionic_tls.h"
 +#include "bionic/pthread_internal.h"  // apklayer patch: pthread_internal_t (glibc host records)
  #endif
- 
+
  #include "berberis/base/bit_util.h"
-@@ -53,6 +54,10 @@ void InitState();
- 
+@@ -53,6 +54,12 @@ void InitState();
+
  NativeBridgeStaticTlsConfig g_static_tls_config;
- 
+
++#if defined(__BIONIC__)
 +// apklayer patch: the records a glibc host gives each guest thread (InitStaticTls): a pthread_internal_t, then a bionic_tls.
 +const size_t kGlibcHostThreadRecordSize = AlignUpPageSize(sizeof(pthread_internal_t));
 +const size_t kGlibcHostRecordsSize = kGlibcHostThreadRecordSize + AlignUpPageSize(sizeof(bionic_tls));
++#endif
 +
  namespace {
- 
+
  const size_t kGuestThreadPageAlignedSize = AlignUpPageSize(sizeof(GuestThread));
-@@ -188,6 +193,9 @@ void GuestThread::Destroy(GuestThread* thread) {
+@@ -188,6 +195,9 @@ void GuestThread::Destroy(GuestThread* thread) {
    if (thread->static_tls_ != nullptr) {
      MunmapOrDie(thread->static_tls_, AlignUpPageSize(g_static_tls_config.size));
    }
@@ -38,7 +40,7 @@ index fc14da7a..1ed287bd 100644
    if (thread->scs_region_ != nullptr) {
      MunmapOrDie(thread->scs_region_, SCS_GUARD_REGION_SIZE);
    }
-@@ -372,12 +380,23 @@ void GuestThread::InitStaticTls() {
+@@ -372,12 +382,23 @@ void GuestThread::InitStaticTls() {
    // pthread_internal_t*. Such a host seeds a synthetic bionic pthread record in
    // TLS_SLOT_NATIVE_BRIDGE_GUEST_STATE; take the thread id from there and let
    // the store below replace it with the live GuestThread pointer.
@@ -73,10 +75,10 @@ index ac845aba..e1ba7504 100644
 +++ b/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h
 @@ -130,6 +130,8 @@ class GuestThread {
    GuestAddr stack_top_ = {};
- 
+
    void* static_tls_ = nullptr;
 +  // apklayer patch: on a glibc host, this thread's own bionic records (pthread_internal_t, bionic_tls); see InitStaticTls.
 +  void* glibc_host_records_ = nullptr;
- 
+
    // Shadow call stack.
    void* scs_region_ = nullptr;
