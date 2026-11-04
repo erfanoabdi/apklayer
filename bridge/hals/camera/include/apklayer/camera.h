@@ -30,7 +30,8 @@ struct apklayer_camera_info {
     char id[64];            /* stable id of the camera for this host session */
     char name[128];         /* human name ("MacBook Pro Camera") */
     int facing;             /* APKLAYER_CAM_FRONT/BACK/EXTERNAL */
-    int orientation;        /* sensor orientation in degrees (0, 90, 180, 270) */
+    int orientation;        /* Android's sensor orientation (0, 90, 180, 270): relative to the instance's portrait-natural display, so a camera whose
+                               picture is upright on a landscape desktop (a webcam, a phone's sensor) is 90, a front one 270 */
     int max_fps;
     int num_sizes;          /* 1..APKLAYER_CAMERA_MAX_SIZES */
     uint32_t sizes[APKLAYER_CAMERA_MAX_SIZES][2];   /* width, height the camera can stream */
