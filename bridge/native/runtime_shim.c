@@ -483,6 +483,10 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
         binder_failed = apklayer_register_binder(env, rt);
     }
     if (binder_failed) audio_failed = 1;
+    {   /* USB is optional: an app without it still runs */
+        extern int apklayer_register_usb(JNIEnv *, void *);
+        if (apklayer_register_usb(env, rt) != 0) (*env)->ExceptionClear(env);
+    }
     if (audio_failed) { (*ti)->SetJNIFunctionTable(ti, orig); return -1; }
     int media_failed = audio_failed;
     {

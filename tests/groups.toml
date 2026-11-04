@@ -50,6 +50,10 @@ run = ["tests/vm/bluetooth.sh"]
 apps = ["hello-hardware"]
 run = ["tests/vm/providers.sh"]
 
+[usb]  # Gadget Zero over usbip on the machine itself (tests/vm/usb-gadget.sh: modprobe, a udev rule, usbipd): the attach, permission dialog, transfers
+apps = ["hello-usb"]
+run = ["tests/vm/usb.py"]
+
 [files]
 apps = ["hello-files"]
 setup = ["""f=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/system/etc/permissions/apklayer-test-hello-files.xml; [ -e $f ] || printf '<permissions><privapp-permissions package="hello.files"><permission name="android.permission.MANAGE_DOCUMENTS"/></privapp-permissions></permissions>\\n' > $f"""]

@@ -28,6 +28,7 @@ public final class HubHost {
             throw new IllegalStateException("Cannot publish the permission checker");
         HostBattery.installHub(directory::sendSystem);
         HubVibrator.publishIfProvided(directory.packages()::uidHolds);  // before READY: an app's SystemVibratorManager looks it up once
+        directory.usb.watch();
         System.out.println("[apklayer-hub] READY pid=" + android.os.Process.myPid());
         new Thread(() -> HubBootSettings.write(RuntimeEnvironment.getApplication(), directory), "hub-boot-settings").start();  // the hub is the instance's system (uid 1000)
         directory.hostSettings = new HubHostSettings(RuntimeEnvironment.getApplication(), directory);
