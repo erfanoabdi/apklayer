@@ -1,0 +1,17 @@
+processor	: 0
+BogoMIPS	: 1.00
+Features	: fp asimd aes pmull crc32 atomics
+CPU implementer	: 0x41
+CPU architecture: 8
+CPU variant	: 0x6
+CPU part	: 0x802
+CPU revision	: 13
+
+processor	: 1
+BogoMIPS	: 1.00
+Features	: fp asimd aes pmull crc32 atomics
+CPU implementer	: 0x41
+CPU architecture: 8
+CPU variant	: 0x6
+CPU part	: 0x802
+CPU revision	: 13
