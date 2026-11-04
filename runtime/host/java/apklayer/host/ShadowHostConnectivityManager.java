@@ -28,6 +28,7 @@ public class ShadowHostConnectivityManager extends ShadowConnectivityManager {
             NetworkCapabilities caps = HostNetwork.capabilities(state);
             callback.onAvailable(network);
             callback.onCapabilitiesChanged(network, caps);
+            callback.onLinkPropertiesChanged(network, state.link());
         });
     }
 
