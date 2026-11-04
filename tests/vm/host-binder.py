@@ -6,7 +6,6 @@ import os
 import selectors
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -16,13 +15,13 @@ import instance  # noqa: E402  (changes into the repo root)
 DEV = instance.INSTANCE + '-dev'
 NAME = 'apklayer.test.IHostEcho/default'
 subprocess.run(['sudo', '-n', 'sh', 'tools/host-setup/binder.sh', DEV], check=True, stdout=subprocess.DEVNULL)
-data = Path(tempfile.mkdtemp(prefix='host-binder-', dir=str(instance.OUT)))
-(data / 'apklayer').mkdir()
-(data / 'apklayer/host_hals.conf').write_text('# test\napklayer.test.IHostEcho\n')
+# the instance's /data (cli/layout.cpp): the stack writes this list from the provider choice; the test writes it itself
+conf = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'apklayer' / instance.INSTANCE / 'data/apklayer/host_hals.conf'
+conf.parent.mkdir(parents=True, exist_ok=True)
+conf.write_text('# test\napklayer.test.IHostEcho\n')
 base = dict(instance.ENV)
-dev_env = dict(base, APKLAYER_INSTANCE=DEV, APKLAYER_DATA=str(data / 'dev'))
-app_env = dict(base, APKLAYER_DATA=str(data), APKLAYER_HOST_BINDER='/dev/binderfs/binder-' + DEV)
-(data / 'dev').mkdir()
+dev_env = dict(base, APKLAYER_INSTANCE=DEV)
+app_env = dict(base, APKLAYER_HOST_BINDER='/dev/binderfs/binder-' + DEV)
 procs = []
 
 
@@ -57,7 +56,7 @@ def tool(env, *args):
 
 try:
     start(dev_env, 'libapklayer_servicemanager.so', '/dev/binder')
-    start(base | {'APKLAYER_DATA': str(data)}, 'libapklayer_servicemanager.so', '/dev/binder')
+    start(base, 'libapklayer_servicemanager.so', '/dev/binder')
     line_of(start(dev_env, 'libapklayer_servicetool.so', 'add', NAME, '--stay'), 'add %s: 0' % NAME)
     local = tool(base, 'check', NAME)  # no host context: this instance's servicemanager alone has no such name
     assert local.returncode == 1 and 'not found' in local.stdout, local.stdout
@@ -69,6 +68,7 @@ try:
     assert other.returncode == 1, other.stdout
     print('host-binder: OK')
 finally:
+    conf.unlink()
     for p in procs:
         try: os.killpg(p.pid, 15)
         except ProcessLookupError: pass

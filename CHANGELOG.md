@@ -84,6 +84,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-04 — libbinder: the host binder context (halium agent)
+- Why: device HALs of a Halium phone (and of a second instance in the test) through `/dev/host_binder` (patch frameworks/native 0006, docs/HALIUM.md). First compiled and linked outside the tree (the five changed sources with the tree's own commands, `~/apklayer-dev/out`); the VM's host-binder test passed with that library.
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `patches/apply aosp ~/los24` (adds 0006 to frameworks/native), then `m libbinder` (gsi_arm64 userdebug). The patch changes libbinder headers (ABI kept): later builds of modules that include them recompile those objects.
 ### 2026-11-04 — libapklayer_egl: framebuffers checked before the present blit (lead)
 - Why: Meet's remote video stayed black: our eglSwapBuffers blit into one window's buffer hit an incomplete framebuffer (Mesa: GL_INVALID_FRAMEBUFFER_OPERATION in glBlitFramebuffer) and left the error in the app's context; Meet's renderer checks glGetError and dropped every frame. EglWindow.cpp now checks both sides and names the window once; Egl.cpp's eglChooseConfig puts configs of at most 8 bits per channel first unless more was asked for (a plain RGB8 request got a 10-bit XR30 config first, which the present cannot read).
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `python3 tools/lib/orb-build-module.py libapklayer_egl hals/graphics/egl Egl.cpp EglWindow.cpp`.
