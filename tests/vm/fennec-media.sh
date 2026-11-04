@@ -3,7 +3,8 @@
 # side by side, opened through a VIEW intent; it beacons each video's state (/r?src=..&t=..&w=..) to the local server once a second.
 # Checks: each video's currentTime advances and it has a size and no error, two app screenshots differ (frames change), and PipeWire got
 # an output stream from the instance. MEDIA_URL=<url> opens that page instead and checks frames and audio only; YOUTUBE=<video id>: that
-# video in YouTube's embedded player (tests/vm/www/youtube.html), whose current time must advance. TAP=x,y: where the tap goes (default 160,400).
+# video in YouTube's embedded player (tests/vm/www/youtube.html), whose current time must advance; WATCH=<video id>: its m.youtube.com watch page
+# (frames, picture and sound checked). TAP=x,y: where the tap goes (default 160,400, a watch page's player 224,240).
 # Usage (on the VM, in the caller's instance: APKLAYER_INSTANCE and the XDG_* dirs as for any run): tests/vm/fennec-media.sh
 #   FENNEC_SECS (playing time before the checks, default 40). A fresh install works: a first start makes the profile, Fenix's own
 #   preferences mark its first-run screen done.
@@ -12,6 +13,7 @@ pkg=org.mozilla.fennec_fdroid; port=${PORT:-18091}; secs=${FENNEC_SECS:-40}
 work=$(mktemp -d "${XDG_STATE_HOME:-$HOME/.local/state}/fennec-media.XXXXXX"); trap 'rm -rf "$work"' EXIT
 cp tests/vm/www/video.html tests/vm/www/youtube.html "$work/"
 [ -n "$YOUTUBE" ] && MEDIA_URL="http://127.0.0.1:$port/youtube.html?v=$YOUTUBE"  # its embedded player in a local page
+[ -n "$WATCH" ] && MEDIA_URL="https://m.youtube.com/watch?v=$WATCH" && : "${TAP:=224,240}"  # the tap starts the player with sound
 inst=${APKLAYER_INSTANCE:-default}; [ "$inst" = default ] && inst=0  # app data per instance (cli/layout.h)
 prof=$(ls -d "${XDG_DATA_HOME:-$HOME/.local/share}/apklayer/$inst/app-data/$pkg/app/files/mozilla/"*.default* 2>/dev/null | head -1)
 if [ -z "$prof" ]; then  # a fresh install: Gecko makes its own profile on the first start
@@ -30,6 +32,22 @@ sp="$prof/../../../shared_prefs"; now=$(date +%s%3N)
 setpref "$sp/fenix.onboarding.xml" int fenix.onboarding.last_version 1
 for e in "boolean pref_key_terms_accepted true" "int pref_key_terms_accepted_version 5" "long pref_key_terms_accepted_date $now" \
     "long pref_key_onboarding_completed_timestamp $now" "boolean pref_key_is_first_run false"; do setpref "$sp/fenix_preferences.xml" $e; done
+# YouTube's cookie-consent page (EU addresses) stands before a watch page: the cookie its "Reject all" sets (SOCS=CAI, as yt-dlp does)
+python3 - "$prof/cookies.sqlite" <<'EOF' || { echo "FAIL cannot set the consent cookie in the profile"; exit 1; }
+import sqlite3, sys, time
+db = sqlite3.connect(sys.argv[1])
+if not db.execute("select 1 from sqlite_master where name = 'moz_cookies'").fetchone():  # no cookie yet: Gecko's schema 17 table
+    db.execute('pragma user_version = 17')
+    db.execute("""create table moz_cookies (id INTEGER PRIMARY KEY, originAttributes TEXT NOT NULL DEFAULT '', name TEXT, value TEXT, host TEXT, path TEXT, expiry INTEGER, lastAccessed INTEGER, creationTime INTEGER, isSecure INTEGER, isHttpOnly INTEGER, inBrowserElement INTEGER DEFAULT 0, sameSite INTEGER DEFAULT 0, schemeMap INTEGER DEFAULT 0, isPartitionedAttributeSet INTEGER DEFAULT 0, updateTime INTEGER, CONSTRAINT moz_uniqueid UNIQUE (name, host, path, originAttributes))""")
+now = int(time.time() * 1e6)  # expiry in ms (Gecko's schema 16+), the others in us
+db.execute("delete from moz_cookies where name = 'SOCS' and host = '.youtube.com'")
+cols = {r[1] for r in db.execute('pragma table_info(moz_cookies)')}
+row = dict(originAttributes='', name='SOCS', value='CAI', host='.youtube.com', path='/', expiry=now // 1000 + 400 * 86400000, lastAccessed=now,
+           creationTime=now, isSecure=1, isHttpOnly=0, sameSite=0, schemeMap=2, updateTime=now)
+row = {k: v for k, v in row.items() if k in cols}
+db.execute('insert into moz_cookies (%s) values (%s)' % (','.join(row), ','.join('?' * len(row))), list(row.values()))
+db.commit()
+EOF
 # Gecko's media logs go to the work dir (MOZ_LOG does not reach Gecko)
 { grep -v 'fennec-media.sh' "$prof/user.js" 2>/dev/null
   for p in "\"logging.config.LOG_FILE\", \"$work/gecko.log\"" '"logging.config.sync", true' \
@@ -79,7 +97,8 @@ if [ -n "$YOUTUBE" ]; then  # the player's clock advances only while it presents
     check "YouTube plays ($times distinct currentTime values, last state playing)" "$(grep -q '&state=1&' <<< "$last" && [ "$times" -ge 5 ] && echo 1)"
 fi
 diff=$(python3 tests/vm/media-check.py frames "$work/a.png" "$work/b.png")
-check "frames change between screenshots ($diff px differ)" "$([ "$diff" -gt 2000 ] && echo 1)"
+least=2000; [ -n "$WATCH" ] && least=20000  # a watch page's player is ~110k px: a spinner or a control fading is not a playing video
+check "frames change between screenshots ($diff px differ)" "$([ "$diff" -gt $least ] && echo 1)"
 # the frames reached the GPU process's compositor: a screenshot shows a picture, not only the player's spinner and controls (one of the two:
 # a looping video's restart shows the spinner for a moment)
 colour=$(for s in a b; do python3 tests/vm/media-check.py picture "$work/$s.png"; done | sort -n | tail -1)

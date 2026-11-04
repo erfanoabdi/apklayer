@@ -219,9 +219,10 @@ needs = ["org.mozilla.fennec_fdroid"]
 run = ["tests/vm/fennec.sh"]
 
 [fennec-media]
-optional = true  # needs Fennec past its onboarding in the group's instance
+optional = true  # YouTube needs the network
 needs = ["org.mozilla.fennec_fdroid"]
-run = ["tests/vm/fennec-media.sh", "YOUTUBE=jNQXAC9IVRw tests/vm/fennec-media.sh"]  # local WebM/MP4, then YouTube's embedded player (network)
+# local WebM/MP4 (a fresh install's first start included), YouTube's embedded player, an m.youtube.com watch page (Big Buck Bunny, past the consent page)
+run = ["tests/vm/fennec-media.sh", "YOUTUBE=jNQXAC9IVRw tests/vm/fennec-media.sh", "WATCH=aqz-KE-bpKQ tests/vm/fennec-media.sh"]
 
 [newpipe-media]
 optional = true  # needs the network (YouTube)
