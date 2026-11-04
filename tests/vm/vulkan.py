@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 import instance  # noqa: E402  (changes into the repo root)
 LOGDIR = instance.LOGDIR
 env = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1', APKLAYER_LOGCAT='1',
-    APKLAYER_JOPTS='-Dapklayer.realbinder=true -Dapklayer.instancehub=true -Dapklayer.runms=20000')
+    APKLAYER_JOPTS='-Dapklayer.runms=20000')
 intent = Path('/tmp/apklayer-vulkan-intent.properties')
 intent.write_text('component=hello.vulkan.Main\n')
 env['APKLAYER_INTENT_FILE'] = str(intent)

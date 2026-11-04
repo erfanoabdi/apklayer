@@ -29,6 +29,7 @@ public final class Main extends Activity {
         CHECKS.put("display", new DisplayCheck());
         CHECKS.put("storage", new StorageCheck());
         CHECKS.put("accounts", new AccountsCheck());
+        CHECKS.put("accountremoval", new AccountRemovalCheck());
         CHECKS.put("location", new LocationCheck());
         CHECKS.put("ime", new ImeCheck());
     }

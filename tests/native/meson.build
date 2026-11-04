@@ -9,6 +9,9 @@ if fs.exists(libc_bio)
     test(name, executable(name + '-test', name + '.c', dependencies: [native_dl, native_threads], c_args: ['-Wno-unused-parameter']),
       args: [libc_bio], env: ['LD_LIBRARY_PATH=' + bt_dir], suite: 'bionic', timeout: 30)
   endforeach
+  # bionic code's path functions through the path layer (paths.c, as the shim installs it)
+  test('bionic-paths', executable('bionic-paths-test', ['bionic-paths.c', '../../bridge/native/paths.c'], dependencies: [native_dl], c_args: ['-U_FILE_OFFSET_BITS']),
+    args: [libc_bio], env: ['LD_LIBRARY_PATH=' + bt_dir], suite: 'bionic', timeout: 30)
 endif
 # the path layer's LD_PRELOAD library (bridge/native/paths_preload.c): /storage mapped for the functions glibc does not route through open/stat
 if is_variable('apklayer_preload')

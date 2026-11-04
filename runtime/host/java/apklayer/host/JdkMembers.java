@@ -24,7 +24,7 @@ final class JdkMembers {
             catch (java.net.UnknownHostException e) { throw new IllegalArgumentException("Not a numeric address: " + address, e); }
         }
 
-        /** ActivityThread / ConnectivityManager on network changes. shortcut: the JDK's address cache is kept (30 s positive TTL); flush it if apps see stale DNS. */
+        /** ActivityThread / ConnectivityManager on network changes. The JDK has no call to flush its address cache: entries expire by its own TTL (30 s positive). */
         public static void clearDnsCache() {}
     }
 
@@ -45,7 +45,7 @@ final class JdkMembers {
     }
 
     static final class ByteBuffer {
-        /** MediaCodec hides a queued buffer's ByteBuffer. shortcut: the JDK buffer stays usable (Android throws IllegalStateException on access); enforce it if an app depends on that. */
+        /** MediaCodec hides a queued buffer's ByteBuffer. A JDK buffer cannot be made inaccessible: it stays usable where Android's throws IllegalStateException. */
         public void setAccessible(boolean value) {}
 
         public boolean isAccessible() { return true; }

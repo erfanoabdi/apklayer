@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Cross-app tests through the instance hub, one phase per run: `hub.py <test> <phase>`. The test app prints `[<tag>] PASS|FAIL|KILL <pid>`;
-every JVM is owned and reaped. Tests: providers (basic denied death observe files grant), services (start selfstop sticky private filters own late oneway respawn),
+every JVM is owned and reaped. Tests: providers (basic denied death observe files grant), services (start selfstop sticky private filters own late oneway respawn rebind framework),
 activities (result explicit again private up), pendingintents (broadcast targets cancel), notifications (click), webview (probe). HUB_VERBOSE=1: all lines."""
 import os
 import selectors
@@ -26,7 +26,7 @@ TESTS = {
 package, prop, tag, shown, seconds = TESTS[TEST]
 if isinstance(package, dict): package = package.get(PHASE, 'hello.cpclient')
 shown = ('[%s]' % tag, '[apklayer-hub]') + shown
-jopts = '-Dapklayer.realbinder=true -Dapklayer.instancehub=true -Dapklayer.runms=%d' % (90000 if TEST == 'webview' else 60000)
+jopts = '-Dapklayer.runms=%d' % (90000 if TEST == 'webview' else 60000)
 env = dict(ENV, APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400', APKLAYER_HOST_LIBS=HOST_LIBS,
            APKLAYER_JOPTS=jopts + (' -D%s=%s' % (prop, PHASE) if prop else ' ' + os.environ.get('WV_JOPTS', '')))
 if TEST == 'webview':

@@ -1,0 +1,109 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Wed, 4 Nov 2026 00:00:00 +0000
+Subject: [PATCH] linker: symbol lookup also searches the load group of the library being dlopen()ed
+
+Android's linker resolves a library's symbols in the global group and then in the local group of the dlopen() root, its whole
+dependency tree breadth first. This linker searched only the library itself, the preloads, its own direct DT_NEEDED and the
+main executable: a dependency that uses a sibling's symbols failed to link. SimpleX's libapp-lib.so needs libsimplex.so (the
+Haskell runtime) and libsupport.so, whose rts_*/stg_* symbols are libsimplex's (it names only libc and libm): "failed to link
+libsupport.so", UnsatisfiedLinkError, the app exited before its first frame. The root's tree is now searched last, so every
+symbol that resolved before resolves to the same definition.
+
+apklayer patch 0032 of patches/bionic_translation.
+---
+diff --git a/linker/linker.c b/linker/linker.c
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -562,6 +562,10 @@
+ }
+ 
+ const char *apkenv_last_library_used = NULL;
++
++/* apklayer patch: the library whose dlopen() is being linked (apkenv_link_image) and its dependency tree's lookup */
++static soinfo *apkenv_load_root;
++static ElfW(Sym) *apkenv_lookup_in_load_group(soinfo **found, struct symbol_name *symbol_name);
+ 
+ static ElfW(Sym) *
+     apkenv__do_lookup(soinfo *si, const char *name, ElfW(Addr) * base)
+@@ -622,6 +626,16 @@
+ 		s = apkenv__elf_lookup(lsi, &symbol_name);
+ 	}
+ #endif
++
++	/* apklayer patch: last the local group of the library being dlopen()ed, its dependency tree breadth first, as Android's linker
++	 * searches it: a dependency may use a sibling's symbols (SimpleX's libsupport.so the Haskell runtime of libsimplex.so, both
++	 * needed by libapp-lib.so).
++	 * shortcut: dependencies are linked depth first as they load, so only the siblings loaded before are found (Android loads the
++	 * whole group, then relocates); load the group first if an app needs a later sibling */
++	if (s == NULL && apkenv_load_root) {
++		lsi = apkenv_load_root;
++		s = apkenv_lookup_in_load_group(&lsi, &symbol_name);
++	}
+ 
+ done:
+ 	if (s != NULL) {
+@@ -649,6 +663,36 @@
+ 		return -1;
+ }
+ 
++/* apklayer patch: breadth first from *found; DT_NEEDED entries not loaded yet (still string offsets, the root's later ones) are skipped */
++static ElfW(Sym) *apkenv_lookup_in_load_group(soinfo **found, struct symbol_name *symbol_name)
++{
++	soinfo *queue[SO_MAX + 1];
++	bool visited[SO_MAX + 1] = { false };
++	size_t head = 0, tail = 0;
++	int root = apkenv_soinfo_slot(*found);
++
++	if (root < 0)
++		return NULL;
++	visited[root] = true;
++	queue[tail++] = *found;
++	while (head < tail) {
++		soinfo *si = queue[head++];
++		ElfW(Sym) *s = apkenv__elf_lookup(si, symbol_name);
++		if (s) {
++			*found = si;
++			return s;
++		}
++		for (ElfW(Dyn) *d = si->dynamic; d && d->d_tag != DT_NULL; d++) {
++			int slot = d->d_tag == DT_NEEDED ? apkenv_soinfo_slot((soinfo *)d->d_un.d_val) : -1;
++			if (slot >= 0 && !visited[slot]) {
++				visited[slot] = true;
++				queue[tail++] = (soinfo *)d->d_un.d_val;
++			}
++		}
++	}
++	return NULL;
++}
++
+ /* This is used by dl_sym().  It performs symbol lookup only within the
+    specified soinfo object and its dependencies in breadth first order.
+  */
+@@ -2612,7 +2656,7 @@
+ 	}
+ }
+ 
+-static int apkenv_link_image(soinfo *si, /*unused...?*/ unsigned wr_offset)
++static int apkenv_link_image_one(soinfo *si, /*unused...?*/ unsigned wr_offset)
+ {
+ 	ElfW(Phdr) *phdr = si->phdr;
+ 	int phnum = si->phnum;
+@@ -2984,6 +3028,17 @@
+ 	return -1;
+ }
+ 
++/* apklayer patch: the outermost library being linked is the root of the load group symbol lookups also search */
++static int apkenv_link_image(soinfo *si, unsigned wr_offset)
++{
++	soinfo *outer = apkenv_load_root;
++	if (!outer)
++		apkenv_load_root = si;
++	int ret = apkenv_link_image_one(si, wr_offset);
++	apkenv_load_root = outer;
++	return ret;
++}
++
+ static void apkenv_parse_paths(const char *path, char *delim, char *apkenv_ldpaths_buf, const char **apkenv_ldpaths)
+ {
+ 	size_t len;
