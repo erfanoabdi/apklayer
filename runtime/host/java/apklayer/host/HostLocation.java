@@ -32,34 +32,52 @@ final class HostLocation {
             shadow.removeProvider(LocationManager.NETWORK_PROVIDER);
             return;
         }
-        boolean network = allowed.contains(LocationManager.NETWORK_PROVIDER);
-        shadow.setProviderEnabled(LocationManager.GPS_PROVIDER, allowed.contains(LocationManager.GPS_PROVIDER));
+        // gps also needs this stack's GNSS HAL: the settings persist across stacks, and the hub may not have rewritten them yet
+        boolean network = allowed.contains(LocationManager.NETWORK_PROVIDER), gps = allowed.contains(LocationManager.GPS_PROVIDER) && gnssDeclared();
+        shadow.setProviderEnabled(LocationManager.GPS_PROVIDER, gps);
         shadow.setProviderEnabled(LocationManager.NETWORK_PROVIDER, network);
-        if (!network || !manager.isLocationEnabled()) return;  // the host has no location service
-        try {
-            Process helper = new ProcessBuilder(HostProcess.dying("python3", script("geoclue.py"))).redirectError(ProcessBuilder.Redirect.INHERIT).start();
-            Runtime.getRuntime().addShutdownHook(new Thread(helper::destroy));
-            BufferedReader in = new BufferedReader(new InputStreamReader(helper.getInputStream()));
-            String first = in.readLine();  // `ready`, or why GeoClue is not usable
-            if (first == null || !first.equals("ready")) {  // GeoClue went away since the hub asked: no network provider here (a disabled one would be a settings write)
-                System.out.println("[apklayer] location: " + (first == null ? "no helper" : first) + ", location is off");
-                helper.destroy();
-                shadow.removeProvider(LocationManager.NETWORK_PROVIDER);
-                return;
-            }
-            Thread follower = new Thread(() -> follow(in, shadow), "apklayer-location");
-            follower.setDaemon(true);
-            follower.start();
-        } catch (IOException noPython) { System.out.println("[apklayer] location: " + noPython.getMessage() + ", location is off"); shadow.removeProvider(LocationManager.NETWORK_PROVIDER); }
+        if (!manager.isLocationEnabled()) return;  // the host has no location service
+        if (network) follow(shadow, LocationManager.NETWORK_PROVIDER, HostProcess.dying("python3", script("geoclue.py")));
+        // the GNSS HAL (providers.toml) through its client, which speaks the same lines; shortcut: Robolectric's LocationManager stays the framework side
+        // (no LocationManagerService/GnssLocationProvider in the hub), fed with the HAL's fixes; the HAL keeps one callback, so with two apps
+        // locating at once only the later one gets fixes, until one client in the hub serves them all
+        if (gps) follow(shadow, LocationManager.GPS_PROVIDER, HostProcess.dying(System.getProperty("apklayer.cli", "apklayer"), "exec", "libapklayer_gnss.so", "--client"));
     }
 
-    private static void follow(BufferedReader in, ShadowLocationManager shadow) {
+    /** Whether this stack declares the GNSS HAL (cli/stack.cpp stages its manifest when providers.toml configures it). */
+    static boolean gnssDeclared() {
+        String root = System.getenv("APKLAYER_INSTANCE_ROOT");
+        return root != null && new java.io.File(root, "vendor/etc/vintf/manifest/apklayer-gnss.xml").exists();
+    }
+
+    /** Runs a location source (`ready`, then `location LAT LON ACCURACY` lines) and reports its fixes as the provider's. */
+    private static void follow(ShadowLocationManager shadow, String provider, java.util.List<String> command) {
+        try {
+            Process helper = new ProcessBuilder(command).redirectError(ProcessBuilder.Redirect.INHERIT).start();
+            Runtime.getRuntime().addShutdownHook(new Thread(helper::destroy));
+            BufferedReader in = new BufferedReader(new InputStreamReader(helper.getInputStream()));
+            String first = in.readLine();  // `ready`, or why the source is not usable
+            // btload's own line, and the GNSS client's session status (it may come before its `ready`)
+            while (first != null && (first.startsWith("LOADED ") || first.startsWith("status "))) first = in.readLine();
+            if (first == null || !first.equals("ready")) {  // it went away since the hub asked: no such provider here (a disabled one would be a settings write)
+                System.out.println("[apklayer] location: " + provider + ": " + (first == null ? "no helper" : first) + ", provider removed");
+                helper.destroy();
+                shadow.removeProvider(provider);
+                return;
+            }
+            Thread follower = new Thread(() -> follow(in, shadow, provider), "apklayer-location-" + provider);
+            follower.setDaemon(true);
+            follower.start();
+        } catch (IOException noHelper) { System.out.println("[apklayer] location: " + provider + ": " + noHelper.getMessage() + ", provider removed"); shadow.removeProvider(provider); }
+    }
+
+    private static void follow(BufferedReader in, ShadowLocationManager shadow, String provider) {
         Pattern update = Pattern.compile("location (\\S+) (\\S+) (\\S+)");
         try {
             for (String line; (line = in.readLine()) != null; ) {
                 Matcher m = update.matcher(line);
                 if (!m.matches()) continue;
-                Location location = new Location(LocationManager.NETWORK_PROVIDER);
+                Location location = new Location(provider);
                 location.setLatitude(Double.parseDouble(m.group(1)));
                 location.setLongitude(Double.parseDouble(m.group(2)));
                 location.setAccuracy((float) Double.parseDouble(m.group(3)));

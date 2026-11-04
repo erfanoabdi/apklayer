@@ -114,6 +114,11 @@ public final class HostShadowProvider implements ShadowProvider {
             entries.add(Map.entry("android.webkit.WebStorage", HostPlainShadows.WebStorage.class.getName()));
             entries.add(Map.entry("android.webkit.WebViewDatabase", HostPlainShadows.WebViewDatabase.class.getName()));
         }
+        if (HostSensorShadows.declared()) {  // the stack runs SensorService over the sensors HAL (providers.toml)
+            entries.add(Map.entry("android.hardware.SensorManager", HostSensorShadows.SensorManager.class.getName()));
+            entries.add(Map.entry("android.hardware.SystemSensorManager", HostSensorShadows.SystemSensorManager.class.getName()));
+            entries.add(Map.entry("android.hardware.SystemSensorManager.BaseEventQueue", HostSensorShadows.BaseEventQueue.class.getName()));
+        }
         if (systemApp("com.android.providers.settings")) {
             // the tree's SettingsProvider is installed: Settings.* talk to it through the hub like on a device, not to Robolectric's in-memory tables.
             // Keys of nested classes are canonical names (ShadowMap looks them up by Class.getCanonicalName()).

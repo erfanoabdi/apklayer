@@ -10,12 +10,18 @@ side translates Android calls and types; everything that touches the desktop liv
 | `graphics/composer` | `android.hardware.graphics.composer3` | `graphics/` over Wayland `zwp_linux_dmabuf_v1`, real vsync | planned (P7.1) |
 | `media` | `android.hardware.media.c2` | `media/` over native GStreamer | VP8/VP9/AVC native, AIDL, app MediaCodec and SurfaceView tested; other codecs/audio next |
 | `camera` | `android.hardware.camera.provider` | PipeWire / V4L2 | planned |
-| `gnss` | `android.hardware.gnss` | GeoClue / gpsd | planned |
-| `vibrator` | `android.hardware.vibrator` | force feedback (evdev FF), logind haptics | planned |
-| `sensors` | `android.hardware.sensors` | iio-sensor-proxy / IIO | planned |
+| `gnss` | `android.hardware.gnss` (AOSP's IGnss example, its fixes from a backend; `--client` feeds HostLocation's gps provider) | `gnss/`: fake (fixed point, GPX replay); GeoClue / gpsd next | fake tested (`tests/vm/providers.sh`, 2026-11-04) |
+| `vibrator` | `android.hardware.vibrator` (AOSP's IVibrator example plus a backend; the hub's `vibrator_manager` plays app vibrations on it) | `vibrator/`: fake (logs every command); feedbackd / evdev FF next | fake tested (`tests/vm/providers.sh`, 2026-11-04) |
+| `sensors` | `android.hardware.sensors` (AOSP's ISensors example with a backend's sensors); `sensors/services`: AOSP's SensorService as a stack process | `sensors/`: fake (fixed values); iio-sensor-proxy / sensorfw next | fake tested (`tests/vm/providers.sh`, 2026-11-04) |
 | `power`, `thermal`, `health` | optional answers for SurfaceFlinger and the framework | UPower, thermal zones | later |
 | `input` | InputFlinger inputs | evdev / the shell's Wayland input | later |
 | `audio` | `android.hardware.audio.core` | PipeWire | host S16/F32 PCM and real AIDL/FMQ output verified; AudioFlinger/Policy and app JNI next |
+
+## Hardware providers (sensors, gnss, vibrator)
+Each front is AOSP's example HAL built from its own sources (hardware/interfaces patch 0002) with one subclass that asks a backend library through a
+small C ABI (`bridge/hals/<domain>/include/apklayer/<domain>.h`, `probe()` for availability). The stack starts a front only for a domain configured in
+`<instance root>/providers.toml` (`apklayer providers set <domain> <backend> [key=value...]`), with that backend on the front's `APKLAYER_HOST_LIBS`, and
+declares its vintf fragment for that stack; a changed backend or option restarts only that front (SIGHUP to the stack daemon).
 
 ## `graphics/vdisplay` (not a HAL: a per-app virtual display sink)
 One process per app window: a SurfaceFlinger virtual display whose output BufferQueue it consumes, handing the finished dmabufs to
