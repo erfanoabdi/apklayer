@@ -16,8 +16,8 @@ import pixels  # noqa: E402
 PKG = 'hello.input'
 ENV = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1', APKLAYER_DEBUG_INPUT='1', APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='600')
 FIELD, COPY = (240, 82), (240, 154)  # content pixels of hello.input's field and "Copy Android text" button (below the action bar)
-ENV['APKLAYER_JOPTS'] = '-Dapklayer.runms=15000 -Dapklayer.debugkeys=true -Dapklayer.script=' + '+'.join(
-    '%d:hover:%d,0' % (t, step) for t, step in ((3000, 1), (6000, 2), (7000, 3), (9000, 4), (11000, 5), (13000, 6)))
+ENV['APKLAYER_JOPTS'] = '-Dapklayer.runms=25000 -Dapklayer.debugkeys=true -Dapklayer.script=' + '+'.join(
+    '%d:hover:%d,0' % (t, step) for t, step in ((3000, 1), (6000, 2), (7000, 3), (9000, 4), (11000, 5), (13000, 6), (14000, 7), (16000, 8), (17000, 9), (18000, 10), (20000, 11), (21000, 12), (23000, 13)))
 seen = []
 checks = set()
 
@@ -65,10 +65,30 @@ try:
                     checks.add('tap')
                     shot = instance.capture('verified input', PKG)
                     assert pixels.colors(shot) > 50, 'flat app window'
+                # a long press: the selection's floating toolbar (a PopupWindow, FLAG_NOT_FOCUSABLE) must leave keys and the IME on the field
+                elif 'script: hover:6,0' in line or 'script: hover:9,0' in line:
+                    instance.inject(PKG, 'press:%d,%d' % FIELD)
+                elif 'script: hover:7,0' in line or 'script: hover:10,0' in line:
+                    instance.inject(PKG, 'release:%d,%d' % FIELD)
+                elif 'script: hover:8,0' in line:
+                    assert saw('[hello-input] action mode started'), 'a long press started no selection action mode'
+                    instance.inject(PKG, 'key:45')  # x replaces the selected word
+                elif 'script: hover:11,0' in line:
+                    assert saw('[hello-input] text=x'), 'a key during the selection toolbar did not reach the field'
+                    assert sum('action mode started' in l for l in seen) >= 2, 'the second long press started no action mode'
+                    instance.inject(PKG, 'text:yz')  # IME commit: text input stays on for the field
+                elif 'script: hover:12,0' in line:
+                    assert saw('[hello-input] text=yz'), 'IME text during the selection toolbar did not reach the field'
+                    instance.inject(PKG, 'press:%d,%d' % FIELD)
+                elif 'script: hover:13,0' in line:
+                    instance.inject(PKG, 'release:%d,%d' % FIELD, 'key:1')  # Esc is Back: it ends the action mode
     assert app.wait() == 0, 'input app failed'
-    assert checks == {'typing', 'ime', 'tap'}, checks
     assert saw('[hello-input] text=ni'), 'IME preedit did not reach the field'
-    print('PASS touch, keys, Ctrl+A, IME preedit/commit and a touch tap through the shell\'s test input', flush=True)
+    last = seen[max(i for i, l in enumerate(seen) if 'hover:13,0' in l):]
+    assert sum('action mode started' in l for l in seen) >= 3 and any('action mode finished' in l for l in last), 'Back did not end the action mode'
+    checks.add('long-press')
+    assert checks == {'typing', 'ime', 'tap', 'long-press'}, checks
+    print('PASS touch, keys, Ctrl+A, IME preedit/commit, a touch tap, and keys, IME and Back during a long press selection toolbar through the shell test input', flush=True)
 finally:
     instance.stop()
     if app.poll() is None: os.killpg(app.pid, signal.SIGKILL)
