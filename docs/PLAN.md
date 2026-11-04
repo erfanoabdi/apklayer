@@ -65,6 +65,8 @@ before this rewrite is `docs/history/PLAN-2026-11-04-full.md`). If a decision ch
 - **Notifications**: per-app mute, closing a popup when the app cancels, notification actions.
 - **Keystore**: attestation chain checks, KeyInfo, auth-bound keys with a software Gatekeeper; all app JVMs share one Linux uid (keystore2 namespaces follow the carried uid).
 - **dex2jvm**: Open Sudoku's `CREATE TABLE` repeats a column (suspected register reuse, unconfirmed); a per-class conversion failure blocks the install; JdkScan leads (`DatagramSocket.getFileDescriptor$`, SharedMemory's `DirectByteBuffer`, `Cipher/Mac/Signature.getCurrentSpi`, `sun.misc.Cleaner`).
+- **Services**: startService/stopService of a same-process intent still use Robolectric's path; the Executor/BindServiceFlags bindService variants deliver on the main thread; webview-input failed once under 4-way load (passes alone and on reruns).
+- **microG**: DroidGuard answers only with device registration on (microG's setting); DroidGuardChimeraService finds no "SurfaceFlinger" service by that name (caught NPE); text committed through test input reaches the sign-in page's input check only after a real key press.
 - **Apps**: Go runtime apps (WireGuard, Rethink DNS: cgo TLS under the bionic TLS emulation); Godot 4 needs Vulkan presentation; Meet's Google sign-in through microG needs a human check.
 
 ## Needs real hardware or a person
