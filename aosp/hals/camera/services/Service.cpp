@@ -41,6 +41,9 @@ extern "C" int main(int, char**) {
     sp<ProcessState> proc(ProcessState::self());
     defaultServiceManager()->addService(String16("media.camera.proxy"), sp<CameraServiceProxy>::make());
     CameraService::instantiate();
+    // the foreground user, as CameraServiceProxy.java reports it at boot and on user switches: apps of other users are refused
+    auto service = interface_cast<hardware::ICameraService>(defaultServiceManager()->checkService(String16("media.camera")));
+    if (service == nullptr || !service->notifySystemEvent(hardware::ICameraService::EVENT_USER_SWITCHED, {0}).isOk()) return 1;
     fprintf(stderr, "cameraserver: media.camera registered\n");
     ProcessState::self()->startThreadPool();
     IPCThreadState::self()->joinThreadPool();
