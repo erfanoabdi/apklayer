@@ -53,7 +53,7 @@ final class AppMetadata {
             info.setProperty("package", app.getPackageName());
             info.setProperty("label", label(app));
             info.setProperty("launcher", launcher == null ? "" : launcher.activityInfo.name);
-            info.setProperty("versionName", String.valueOf(pkg.versionName));
+            info.setProperty("versionName", pkg.versionName == null ? "" : pkg.versionName);  // no android:versionName: none, not "null"
             info.setProperty("versionCode", String.valueOf(pkg.getLongVersionCode()));
             info.setProperty("targetSdk", String.valueOf(app.getApplicationInfo().targetSdkVersion));
             List<ManifestFilters.Filter> filters = ManifestFilters.read(app);

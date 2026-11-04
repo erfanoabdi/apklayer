@@ -32,7 +32,7 @@ component AppDetail {
                     alignment: center;
                     MaterialText { text: root.app.label; style: MaterialTypography.headline_small; color: MaterialPalette.on_surface; overflow: elide; }
                     MaterialText { text: root.app.package; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; overflow: elide; }
-                    MaterialText { text: "Version " + root.app.version; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; overflow: elide; }
+                    if root.app.version != "" : MaterialText { text: "Version " + root.app.version; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; overflow: elide; }
                 }
             }
             HorizontalLayout {
@@ -46,14 +46,6 @@ component AppDetail {
                 alignment: start;
                 OutlineButton { text: "Clear data…"; icon: AppIcons.clean; enabled: !Backend.busy; clicked => { root.confirm("clear-data", root.app.package); } }
                 OutlineButton { text: "Uninstall…"; icon: AppIcons.delete; enabled: !Backend.busy; clicked => { root.confirm("uninstall", root.app.package); } }
-            }
-            Heading { text: "App info"; }
-            OutlinedCard {
-                VerticalLayout {
-                    padding-top: MaterialStyleMetrics.padding_8;
-                    padding-bottom: MaterialStyleMetrics.padding_8;
-                    for row in Backend.app-info : Row { text: row.key; supporting-text: row.value; clickable: false; }
-                }
             }
             Heading { text: "Permissions"; }
             if Backend.permissions-note != "" : MaterialText {
@@ -70,6 +62,7 @@ component AppDetail {
                         if p.runtime : VerticalLayout {
                             alignment: center;
                             Switch {
+                                width: MaterialStyleMetrics.size_52;  // M3's track: the component only sets a minimum and would fill the row
                                 checked: p.granted;
                                 enabled: !Backend.busy;
                                 accessible-label: "Allow " + p.title;
@@ -78,6 +71,14 @@ component AppDetail {
                         }
                         if !p.runtime : Tag { text: p.state; }
                     }
+                }
+            }
+            Heading { text: "App info"; }
+            OutlinedCard {
+                VerticalLayout {
+                    padding-top: MaterialStyleMetrics.padding_8;
+                    padding-bottom: MaterialStyleMetrics.padding_8;
+                    for row in Backend.app-info : Row { text: row.key; supporting-text: row.value; clickable: false; }
                 }
             }
         }
@@ -97,8 +98,9 @@ export component AppsPage {
             if Backend.apps.length == 0 : VerticalLayout {
                 alignment: center;
                 padding: MaterialStyleMetrics.padding_24;
-                MaterialText { text: "No apps installed"; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; horizontal-alignment: center; }
-                MaterialText { text: "Install an .apk file with the button below."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant;
+                MaterialText { text: Backend.load-error != "" ? "Could not list the apps" : "No apps installed"; style: MaterialTypography.title_medium;
+                               color: MaterialPalette.on_surface; horizontal-alignment: center; }
+                MaterialText { text: Backend.load-error != "" ? Backend.load-error : "Install an .apk file with the button below."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant;
                                horizontal-alignment: center; wrap: word-wrap; }
             }
             ScrollView {
@@ -108,7 +110,7 @@ export component AppsPage {
                     alignment: start;
                     for app in Backend.apps : Row {
                         text: app.label;
-                        supporting-text: app.package + " · " + app.version;
+                        supporting-text: app.package + (app.version == "" ? "" : " · " + app.version);
                         picture: app.icon;
                         selected: root.two-pane && Backend.has-current-app && app.package == Backend.current-app.package;
                         clicked => { Backend.select-app(app.package); root.detail-open = true; }

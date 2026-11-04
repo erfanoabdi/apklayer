@@ -123,6 +123,7 @@ public:
         b.set_props(props);
         b.set_status(info(s.status));
         if (!current_.empty() && s.detail) showDetail(*s.detail);
+        b.set_load_error(slint::SharedString(s.error));
         if (!s.error.empty()) message(s.error);
         else if (s.detail && !s.detail->error.empty()) message(s.detail->error);
         if (applied) applied();

@@ -1,5 +1,5 @@
 // The manager's backend against the real CLI, in the instance $APKLAYER_INSTANCE (never the default one): instance create/remove, install,
-// info, property overrides, open (detached launch) and stop, clear data, uninstall. Usage: backend-test <app.apk>
+// info, permissions, property overrides, open (detached launch) and stop, clear data, uninstall. Usage: backend-test <app.apk>
 #include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
@@ -39,6 +39,11 @@ int main(int argc, char** argv) {
     CHECK(!pkg.empty(), ("the installed package is listed: " + pkg).c_str());
     Rows info = cli.rows({"info", pkg});
     CHECK(hasRow(info, "package", 1, pkg) && hasRow(info, "running", 1, "0"), "info");
+    Result perms = cli.run({"permissions", pkg});
+    bool levels = perms.status == 0;  // every row: permission, level, granted (a normal one granted)
+    for (const auto& r : parseRows(perms.out)) levels = levels && r.size() == 3 && (r[1] != "normal" || r[2] == "1");
+    CHECK(levels, "permissions lists what the app requests");
+    CHECK(cli.run({"permissions", "revoke", pkg, "android.permission.INTERNET"}).status != 0, "only a requested runtime permission is revoked");
 
     CHECK(cli.run({"prop", "set", "debug.apklayer.manager", "on"}).status == 0 && hasRow(cli.rows({"prop"}), "debug.apklayer.manager", 2, "instance"), "prop set");
     CHECK(cli.run({"prop", "set", "bad key", "1"}).status != 0, "prop set refuses a bad name");

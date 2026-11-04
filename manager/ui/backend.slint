@@ -22,7 +22,8 @@ export global Backend {
     in property <bool> busy;               // a long action (install, uninstall, instance setup) runs
     in property <string> busy-text;
     in property <string> message;          // the latest result, shown in the snackbar
-    in property <int> message-serial;      // bumped with every message (the same text twice shows twice)
+    in property <int> message-serial;
+    in property <string> load-error;       // the last refresh's failing CLI call: an empty list is then no empty state      // bumped with every message (the same text twice shows twice)
     in property <string> binder-command;   // set when a new instance still needs its binder devices
     in property <string> binder-instance;
     in property <int> binder-serial;       // bumped to show the binder dialog
