@@ -18,7 +18,6 @@ info() { $cli info $pkg | awk -F'\t' -v k=$1 '$1 == k { print $2 }'; }
 
 abi=$($cli --version | awk -F'\t' '$1 == "converterAbi" { print $2 }')
 [ -n "$abi" ] || fail "apklayer --version names no converterAbi"
-had=$([ -d $apps/$pkg ] && echo yes)  # the UiBench groups need it installed: left as it was found
 $cli install tests/uibench/uibench.apk >/dev/null
 props=$apps/$pkg/info.properties
 grep -qx "converterAbi=$abi" $props || fail "the install did not record converterAbi=$abi"
