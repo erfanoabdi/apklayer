@@ -56,6 +56,9 @@ bin/apklayer providers | grep -a "^backend	gnss	lomiri"
 run hello.gps 15000
 cat "$APKLY_STATE/gnss-lomiri-mock.out"
 grep -aq "^\[gps\] hello.gps fix 41.90280 12.49640 accuracy 4.0" "$APKLY_STATE/gnss-hello.gps.out" || fail "hello.gps did not get lomiri-location-service's fix"
+# the backend alone (as on the phone): altitude, velocity and heading too
+b/bridge/hals/gnss/gnss-backend-fixes "$APKLAYER_NATIVE/libapklayer-gnss-lomiri.so" 10 2>&1 | tee "$APKLY_STATE/gnss-lomiri-backend.out"
+grep -q "^fix 41.9028000 12.4964000 alt 35.0 accuracy 4.0 speed 1.50 bearing 90.0" "$APKLY_STATE/gnss-lomiri-backend.out" || fail "the lomiri backend's fix lacks altitude, speed or bearing"
 bin/apklayer stop >/dev/null 2>&1
 kill $mockpid; wait $mockpid 2>/dev/null
 

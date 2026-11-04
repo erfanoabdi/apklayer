@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """A stand-in lomiri-location-service on $DBUS_SYSTEM_BUS_ADDRESS for tests/vm/gnss.sh (python-dbusmock cannot see a caller, which this
 protocol needs): CreateSessionForCriteria(Criteria flattened, bbbbdbbb) -> /sessions/N; StartPositionUpdates there calls UpdatePosition back
-on the caller at that path with one Update<Position> as dbus-cpp encodes it (lat, lon, Optional altitude: absent, Optional horizontal
-accuracy: present, Optional vertical: absent, time). Usage: lomiri-location-mock.py LAT LON ACCURACY"""
+on the caller at that path with one Update<Position> as dbus-cpp encodes it (lat, lon, then the Optionals altitude, horizontal and vertical
+accuracy, each a boolean and the value when true, then the time), then UpdateVelocity and UpdateHeading. Usage: lomiri-location-mock.py LAT LON ACCURACY"""
 import sys
 from gi.repository import Gio, GLib
 
@@ -29,9 +29,12 @@ def on_call(connection, sender, path, interface, method, parameters, invocation)
         return
     invocation.return_value(None)
     if method == 'StartPositionUpdates':
-        update = GLib.Variant('(ddbbdbx)', (lat, lon, False, True, accuracy, False, GLib.get_real_time() * 1000))
-        connection.call(sender, path, SERVICE + '.Session', 'UpdatePosition', update, None, Gio.DBusCallFlags.NONE, 1000, None,
-                        lambda c, result: print('UpdatePosition answered: %s' % (c.call_finish(result),), flush=True))
+        now = GLib.get_real_time() * 1000
+        # as the Ubuntu Touch phone's service sends them: altitude and horizontal accuracy present, then velocity and heading unasked
+        for member, update in (('UpdatePosition', GLib.Variant('(ddbdbdbx)', (lat, lon, True, 35.0, True, accuracy, False, now))),
+                               ('UpdateVelocity', GLib.Variant('(dx)', (1.5, now))), ('UpdateHeading', GLib.Variant('(dx)', (90.0, now)))):
+            connection.call(sender, path, SERVICE + '.Session', member, update, None, Gio.DBusCallFlags.NONE, 1000, None,
+                            lambda c, result, m=member: print('%s answered: %s' % (m, c.call_finish(result)), flush=True))
 
 
 bus.register_object('/com/lomiri/location/Service', info.interfaces[0], on_call, None, None)

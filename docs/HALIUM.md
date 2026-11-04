@@ -74,3 +74,15 @@ Consequences:
   libbinder and servicetool built in ~/los24 (sha1 217d29ae... and c1018ac3...); the script is `~/apklayer-dev/ut-vibrator.py` there.
 - Not yet: an app (JVM) on the phone: the window shell needs `android_wlegl` (no dmabuf there) and a JDK in the user's directory;
   the Java path is the same native lookup (ShadowHostServiceManager -> AServiceManager_checkService).
+
+## Location on the phones (2026-11-05)
+Never the GNSS HAL (its one client is the OS's location service): a GNSS backend over that service (bridge/hals/gnss, `providers set gnss <backend>`).
+- Ubuntu Touch: no GeoClue (`org.freedesktop.GeoClue2` is not activatable; the geoclue backend's probe() is -1); `com.lomiri.location.Service`
+  on the system bus (lomiri-location-serviced, dbus-cpp). The `lomiri` backend (probe 10) gets real fixes there as an unconfined client:
+  CreateSessionForCriteria -> `/sessions/0`, StartPositionUpdates, then the service calls UpdatePosition (`ddbdbdbx`: altitude and horizontal
+  accuracy present, vertical absent), UpdateVelocity and UpdateHeading (`dx`) about once a second; first fix ~10 s, 6.5-10 m. Checked with
+  `tests/hals/gnss-backend-fixes` (built on Parallels) and dbus-monitor, in `~/apklayer-loc` (removed afterwards).
+- Sailfish OS (read only): GeoClue 1 (geoclue 0.12) `org.freedesktop.Geoclue.Master` on the session bus, activatable, with the hybris and
+  MLS providers; no GeoClue 2. The `geoclue1` backend's names and GetPosition signature come from the binaries' dbus-glib data
+  (MasterClient.SetRequirements(iibi), PositionStart; Position.GetPosition -> `(iiddd(idd))`); tested only against a stand-in
+  (tests/vm/geoclue1-mock.py): a Sailfish build is needed to run it there (glibc 2.30).

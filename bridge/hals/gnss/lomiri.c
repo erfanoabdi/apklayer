@@ -3,7 +3,9 @@
  * check (trust store, the location indicator's switch) decides. Its protocol is dbus-cpp's encoding (lomiri-location-service's codec.h):
  * CreateSessionForCriteria(Criteria as flat arguments) -> /sessions/N; StartPositionUpdates on that path; the service then calls
  * UpdatePosition on the client's connection at that path, with the Update<Position> flattened: latitude d, longitude d, then Optional<>s
- * (altitude, horizontal and vertical accuracy) each as a boolean followed by the value when true, then the time (x). Sessions: session.c. */
+ * (altitude, horizontal and vertical accuracy) each as a boolean followed by the value when true, then the time (x); UpdateVelocity and
+ * UpdateHeading (d, x: m/s, degrees) follow each position, unasked. Checked against the Ubuntu Touch phone's service (docs/HALIUM.md).
+ * Sessions: session.c. */
 #include "session.h"
 
 #include <errno.h>
@@ -14,6 +16,8 @@
 #define SESSION SERVICE ".Session"
 
 static char *session_path;
+static struct apklayer_gnss_fix last;  /* the latest position, velocity and heading together (GDBus's worker thread only) */
+static int have_last;
 
 /* the next Optional<double> at *i: its value, or `none` */
 static double optional(GVariant *body, gsize *i, double none)
@@ -48,19 +52,36 @@ static int parse(GVariant *body, struct apklayer_gnss_fix *fix)
     return ok ? 0 : -1;
 }
 
-/* GDBus's worker thread: the service's UpdatePosition calls on our session (their signature varies with the Optional<>s, so no registered
+/* an Update<double> (UpdateVelocity, UpdateHeading): its value, or -1 */
+static double update_value(GVariant *body)
+{
+    double v;
+    return body && g_variant_is_of_type(body, G_VARIANT_TYPE("(dx)")) ? (g_variant_get(body, "(dx)", &v, NULL), v) : -1;
+}
+
+/* GDBus's worker thread: the service's Update* calls on our session (UpdatePosition's signature varies with the Optional<>s, so no registered
  * object can take them), answered here */
 static GDBusMessage *filter(GDBusConnection *bus, GDBusMessage *message, gboolean incoming, gpointer data)
 {
-    if (!incoming || g_dbus_message_get_message_type(message) != G_DBUS_MESSAGE_TYPE_METHOD_CALL ||
-        g_strcmp0(g_dbus_message_get_member(message), "UpdatePosition") || g_strcmp0(g_dbus_message_get_path(message), data))
+    const char *member = g_dbus_message_get_member(message);
+    if (!incoming || g_dbus_message_get_message_type(message) != G_DBUS_MESSAGE_TYPE_METHOD_CALL || g_strcmp0(g_dbus_message_get_path(message), data) ||
+        g_strcmp0(g_dbus_message_get_interface(message), SESSION))
         return message;
+    GVariant *body = g_dbus_message_get_body(message);
     struct apklayer_gnss_fix fix;
-    GDBusMessage *reply;
-    if (!parse(g_dbus_message_get_body(message), &fix)) {
-        gnss_session_report(&fix);
-        reply = g_dbus_message_new_method_reply(message);
-    } else reply = g_dbus_message_new_method_error_literal(message, SESSION ".ErrorParsingUpdate", "not an Update<Position>");
+    int ok = 1;
+    double v = update_value(body);
+    if (!g_strcmp0(member, "UpdateVelocity")) last.speed = v >= 0 ? v : 0;
+    else if (!g_strcmp0(member, "UpdateHeading")) last.bearing = v >= 0 ? v : 0;
+    else if (!g_strcmp0(member, "UpdatePosition") && (ok = !parse(body, &fix))) {
+        fix.speed = last.speed;
+        fix.bearing = last.bearing;
+        last = fix;
+        have_last = 1;
+    }
+    if (have_last) gnss_session_report(&last);  /* velocity and heading come after their position */
+    GDBusMessage *reply = ok ? g_dbus_message_new_method_reply(message)
+                             : g_dbus_message_new_method_error_literal(message, SESSION ".ErrorParsingUpdate", "not an Update<Position>");
     g_dbus_connection_send_message(bus, reply, G_DBUS_SEND_MESSAGE_FLAGS_NONE, NULL, NULL);
     g_object_unref(reply);
     g_object_unref(message);
@@ -70,6 +91,7 @@ static GDBusMessage *filter(GDBusConnection *bus, GDBusMessage *message, gboolea
 int gnss_source_start(GDBusConnection *bus)
 {
     GError *error = NULL;
+    have_last = 0;  /* no update of the last session is reported (none arrives before the new session exists) */
     /* Criteria: requires position (not altitude, heading, velocity), 10 m horizontally, no vertical, velocity or heading accuracy */
     GVariant *created = g_dbus_connection_call_sync(bus, SERVICE, "/com/lomiri/location/Service", SERVICE, "CreateSessionForCriteria",
                                                     g_variant_new("(bbbbdbbb)", TRUE, FALSE, FALSE, FALSE, 10.0, FALSE, FALSE, FALSE),

@@ -9,4 +9,5 @@ if gio.found()
     shared_library('apklayer-gnss-' + backend, backend + '.c', 'session.c', include_directories: include_directories('include'),
       dependencies: [gio, dependency('threads')], install: true, install_dir: native_dir)
   endforeach
+  executable('gnss-backend-fixes', '../../../tests/hals/gnss-backend-fixes.c', include_directories: include_directories('include'))
 endif
