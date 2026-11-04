@@ -82,5 +82,10 @@ Consequences:
   `IVibrator/default` is found, `getCapabilities` answers (0: no optional capabilities), and `on(50 ms, null callback)` succeeds once
   our binder stability goes as a Category (with the plain Android 14+ word the A12 HAL refused the parcel with BAD_TYPE). Run with the
   libbinder and servicetool built in ~/los24 (sha1 217d29ae... and c1018ac3...); the script is `~/apklayer-dev/ut-vibrator.py` there.
+- HIDL (2026-11-05): `apklayer providers set camera device` wrote the instance's `host_hals.conf` and the CLI pointed the host contexts
+  at the phone's binder devices; `hidltool cameras internal/0` got the device's HIDL camera provider@2.4 from its hwservicemanager and
+  listed 3 cameras (`device@3.6/internal/0..2`, getCameraIdList only); with `android.hardware.media.c2` added by hand, `hidltool codecs`
+  listed the device's 16 MediaTek Codec2 components (listComponents only). Libraries: libhidlbase, hidltool, atrace@1.0,
+  camera.provider@2.4, hidl.manager@1.0 from ~/los24 (the phone's older runtime copy also lacked camera.device@1.0, copied from UTM).
 - Not yet: an app (JVM) on the phone: the window shell needs `android_wlegl` (no dmabuf there) and a JDK in the user's directory;
   the Java path is the same native lookup (ShadowHostServiceManager -> AServiceManager_checkService).
