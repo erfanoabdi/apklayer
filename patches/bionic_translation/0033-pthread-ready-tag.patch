@@ -1,0 +1,133 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Wed, 4 Nov 2026 00:00:00 +0000
+Subject: [PATCH] pthread: a readiness tag on mutexes and condition variables instead of mincore() on every call
+
+Every bionic mutex lock, unlock and condition wait asked the kernel whether the object's glibc copy is mapped (is_mapped: mincore),
+the check that tells a statically initialised or zeroed object from one this wrapper set up. perf of a cold app start: ~6% of the
+app JVM's CPU in its first 1.5 s (JNI_OnLoad's startReg, fonts), ~3% over a whole run. An object that passed the check now carries
+a tag beside its glibc pointer (the pointer inverted; the 64-bit structs have the room): later calls compare it. Untagged objects
+(static initializers, zeroed or foreign memory) take the old check first; destroy clears the tag.
+
+--- a/pthread_wrapper/libpthread.c
++++ b/pthread_wrapper/libpthread.c
+@@ -153,6 +153,20 @@
+ // For handling static initialization.
+ #define INIT_IF_NOT_MAPPED(x, init) do { if (!IS_MAPPED(x)) init(x); } while(0)
+ 
++/* apklayer patch: a mutex or condition variable this wrapper has checked carries a tag beside its glibc pointer (the pointer, inverted): lock,
++ * unlock and wait compare it instead of asking the kernel (mincore) on every call. An object without the tag (static initializer, zeroed or
++ * foreign memory) takes the mapping check as before, then gets it; destroy clears it. The 64-bit structs have the room (40 and 48 bytes). */
++#if defined(__LP64__)
++#define READY_TAG(x) (((uintptr_t *)(x))[1])
++#define INIT_IF_NOT_READY(x, init) do { \
++	if (!(x)->glibc || READY_TAG(x) != ~(uintptr_t)(x)->glibc) { INIT_IF_NOT_MAPPED(x, init); READY_TAG(x) = ~(uintptr_t)(x)->glibc; } \
++} while (0)
++#define CLEAR_READY(x) (READY_TAG(x) = 0)
++#else
++#define INIT_IF_NOT_READY(x, init) INIT_IF_NOT_MAPPED(x, init)
++#define CLEAR_READY(x) ((void)0)
++#endif
++
+ static bool is_mapped(void *mem, const size_t sz)
+ {
+ 	const size_t ps = sysconf(_SC_PAGESIZE);
+@@ -525,6 +539,7 @@
+ 	if (IS_MAPPED(mutex)) {
+ 		ret = pthread_mutex_destroy(mutex->glibc);
+ 		munmap(mutex->glibc, sizeof(*mutex->glibc));
++		CLEAR_READY(mutex);
+ 	}
+ 	return ret;
+ }
+@@ -543,14 +558,14 @@
+ bionic_pthread_mutex_lock(bionic_mutex_t *mutex)
+ {
+ 	assert(mutex);
+-	INIT_IF_NOT_MAPPED(mutex, default_pthread_mutex_init);
++	INIT_IF_NOT_READY(mutex, default_pthread_mutex_init);
+ 	return pthread_mutex_lock(mutex->glibc);
+ }
+ 
+ int bionic_pthread_mutex_trylock(bionic_mutex_t *mutex)
+ {
+ 	assert(mutex);
+-	INIT_IF_NOT_MAPPED(mutex, default_pthread_mutex_init);
++	INIT_IF_NOT_READY(mutex, default_pthread_mutex_init);
+ 	return pthread_mutex_trylock(mutex->glibc);
+ }
+ 
+@@ -558,14 +573,14 @@
+ int bionic_pthread_mutex_timedlock(bionic_mutex_t *mutex, const struct timespec *abstime)
+ {
+ 	assert(mutex);
+-	INIT_IF_NOT_MAPPED(mutex, default_pthread_mutex_init);
++	INIT_IF_NOT_READY(mutex, default_pthread_mutex_init);
+ 	return pthread_mutex_timedlock(mutex->glibc, abstime);
+ }
+ 
+ int bionic_pthread_mutex_unlock(bionic_mutex_t *mutex)
+ {
+ 	assert(mutex);
+-	INIT_IF_NOT_MAPPED(mutex, default_pthread_mutex_init);
++	INIT_IF_NOT_READY(mutex, default_pthread_mutex_init);
+ 	return pthread_mutex_unlock(mutex->glibc);
+ }
+ 
+@@ -640,6 +655,7 @@
+ 		struct apklayer_cond *native = (void *)cond->glibc;
+ 		unsigned old = __atomic_fetch_or(&native->state, APKLAYER_COND_DESTROYED, __ATOMIC_ACQ_REL);
+ 		if (old == 0) apklayer_cond_free(native);
++		CLEAR_READY(cond);
+ 	}
+ 	return 0;
+ }
+@@ -657,22 +673,22 @@
+ int bionic_pthread_cond_broadcast(bionic_cond_t *cond)
+ {
+ 	assert(cond);
+-	INIT_IF_NOT_MAPPED(cond, default_pthread_cond_init);
++	INIT_IF_NOT_READY(cond, default_pthread_cond_init);
+ 	return pthread_cond_broadcast(cond->glibc);
+ }
+ 
+ int bionic_pthread_cond_signal(bionic_cond_t *cond)
+ {
+ 	assert(cond);
+-	INIT_IF_NOT_MAPPED(cond, default_pthread_cond_init);
++	INIT_IF_NOT_READY(cond, default_pthread_cond_init);
+ 	return pthread_cond_broadcast(cond->glibc); /* apklayer patch: see scripts/patch-bionic-translation.sh step 10 */
+ }
+ 
+ int
+ bionic_pthread_cond_wait(bionic_cond_t *cond, bionic_mutex_t *mutex) {
+ 	assert(cond && mutex);
+-	INIT_IF_NOT_MAPPED(cond, default_pthread_cond_init);
+-	INIT_IF_NOT_MAPPED(mutex, default_pthread_mutex_init);
++	INIT_IF_NOT_READY(cond, default_pthread_cond_init);
++	INIT_IF_NOT_READY(mutex, default_pthread_mutex_init);
+ 	int ret;
+ 	APKLAYER_COND_WAIT(ret, pthread_cond_wait(cond->glibc, mutex->glibc));
+ 	return ret;
+@@ -680,8 +696,8 @@
+ 
+ int bionic_pthread_cond_clockwait(bionic_cond_t *cond, bionic_mutex_t *mutex, clockid_t clock_id, const struct timespec *abs_timeout) {
+ 	assert(cond && mutex);
+-	INIT_IF_NOT_MAPPED(cond, default_pthread_cond_init);
+-	INIT_IF_NOT_MAPPED(mutex, default_pthread_mutex_init);
++	INIT_IF_NOT_READY(cond, default_pthread_cond_init);
++	INIT_IF_NOT_READY(mutex, default_pthread_mutex_init);
+ #ifdef __GLIBC__
+ 	int ret;
+ 	APKLAYER_COND_WAIT(ret, pthread_cond_clockwait(cond->glibc, mutex->glibc, clock_id, abs_timeout));
+@@ -704,8 +720,8 @@
+ int bionic_pthread_cond_timedwait(bionic_cond_t *cond, bionic_mutex_t *mutex, const struct timespec *abs_timeout)
+ {
+ 	assert(cond && mutex);
+-	INIT_IF_NOT_MAPPED(cond, default_pthread_cond_init);
+-	INIT_IF_NOT_MAPPED(mutex, default_pthread_mutex_init);
++	INIT_IF_NOT_READY(cond, default_pthread_cond_init);
++	INIT_IF_NOT_READY(mutex, default_pthread_mutex_init);
+ 	int ret;
+ 	APKLAYER_COND_WAIT(ret, pthread_cond_timedwait(cond->glibc, mutex->glibc, abs_timeout));
+ 	return ret;

@@ -58,6 +58,11 @@ std::string hostGles(const Layout& layout, const Env& env) {
         fprintf(stderr, "apklayer: the host GLES is %s; apps get a 3.2 claim (APKLAYER_GLES_OVERRIDE=off to disable)\n", version.c_str());
     return version;
 }
+
+// dir first in a search path, once: a launch from inside the instance (the hub's) already has it there, and its spare key must equal a desktop launch's
+std::string prepend(const std::string& dir, const std::string& path) {
+    return path == dir || path.rfind(dir + ":", 0) == 0 ? path : dir + ":" + path;
+}
 }  // namespace
 
 NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
@@ -76,8 +81,8 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     env["APKLAYER_DATA"] = realPath(instance.dataDir);  // and the rest of /data
     // bionic_translation's libraries first (the patched ones), then ours; the path layer and bionic's TLS slots come first in every lookup
     env["LD_LIBRARY_PATH"] = layout.bionic + ":" + n;
-    env["PATH"] = join(n, "bin") + ":" + getenvOr("PATH", "/usr/local/bin:/usr/bin:/bin");  // getprop for the apps that run it
-    env["XDG_DATA_DIRS"] = join(n, "share") + ":" + getenvOr("XDG_DATA_DIRS", "/usr/local/share:/usr/share");
+    env["PATH"] = prepend(join(n, "bin"), getenvOr("PATH", "/usr/local/bin:/usr/bin:/bin"));  // getprop for the apps that run it
+    env["XDG_DATA_DIRS"] = prepend(join(n, "share"), getenvOr("XDG_DATA_DIRS", "/usr/local/share:/usr/share"));
     env["LD_PRELOAD"] = join(n, "libapklayer-preload.so") + ":libgcc_s.so.1";
     if (const char* extra = getenv("APKLAYER_PRELOAD_EXTRA")) env["LD_PRELOAD"] += std::string(":") + extra;  // e.g. the JVM's libjsig.so for apps whose native code installs signal handlers
     env["BIONIC_LD_LIBRARY_PATH"] = l;

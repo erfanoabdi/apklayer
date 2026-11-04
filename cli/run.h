@@ -5,11 +5,10 @@
 
 namespace apklayer {
 
-// Spare: a component host JVM before it has a package (the hub hands it one: HubSpare); package is empty then
-enum class RunMode { App, Component, Spare };
+// Component: a package's headless component host (the hub starts it); both kinds take the instance's spare JVM when one waits (cli/spare.cpp)
+enum class RunMode { App, Component };
 int runApp(const Layout& layout, const Instance& instance, const std::string& package, RunMode mode);
-int printPackageArgs(const Layout& layout, const Instance& instance, const std::string& package);
-// A window JVM's command line up to apklayer.host.Main without the launch's own options (package, window, runms; sets env as hostJvmArgs): what an app spare starts with.
+// A host JVM's command line up to apklayer.host.Main without the launch's own options (package, window, runms; sets env as hostJvmArgs): what the spare starts with.
 std::vector<std::string> windowJvmArgs(const Layout& layout, const Instance& instance, NativeEnv& env);
 int waitHub(const Layout& layout, const Instance& instance);
 int runHub(const Layout& layout, const Instance& instance);

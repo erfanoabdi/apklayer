@@ -37,11 +37,9 @@ final class HubDirectory extends Binder {
     private final Map<String, Integer> failures = new HashMap<>();
     static final Path LOGS = Path.of(System.getenv().getOrDefault("APKLAYER_LOGS", System.getProperty("user.home") + "/.local/state/apklayer/default"));
     private final Path logs = LOGS;
-    private final HubSpare spare;
     private static final long IDLE_EXIT_MS = 10_000;
     private volatile boolean stopping;
-    HubDirectory(Path apps, HubSpare spare) {
-        this.spare = spare;
+    HubDirectory(Path apps) {
         packages = new HubPackages(apps); bindings = new HubServiceBindings(this, packages); broadcasts = new HubBroadcasts(this, packages); providers = new HubProviders(this, packages, broadcasts); activities = new HubActivities(this, packages, providers); startedServices = new HubStartedServices(this, packages, broadcasts); pendingIntents = new HubPendingIntents(this, broadcasts, activities, startedServices);
         notifications = new HubNotifications(packages, pendingIntents);
         inputMethods = new HubInputMethods(bindings, packages);
@@ -52,7 +50,6 @@ final class HubDirectory extends Binder {
         exitWhenIdle(60_000); // nobody ever connected
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             stopping = true;
-            spare.stop();
             java.util.List<ProcessHandle> ending;
             synchronized (hosts) { ending = java.util.stream.Stream.concat(hosts.values().stream(), appProcesses.values().stream()).map(Process::toHandle).toList(); }
             end(ending, 4000);  // a component host saves its due work on SIGTERM (ComponentHost); `apklayer stop` kills the hub after 5 s
@@ -170,17 +167,13 @@ final class HubDirectory extends Binder {
             try {
                 Path log = logs.resolve("component-" + name.replace('#', '-') + ".log");
                 Files.createDirectories(log.getParent());
-                Process process = spare.take(pkg, instance, log);  // the spare host becomes this one (its JVM and native runtime are up); a new spare follows
-                boolean warm = process != null;
-                if (!warm) {
-                    ProcessBuilder command = new ProcessBuilder(System.getProperty("apklayer.cli"), "component-host", pkg)
-                            .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(log.toFile()));
-                    if (instance != null) command.environment().put("APKLAYER_ISOLATED", instance);
-                    process = command.start();
-                }
-                spare.start();
+                // the launcher takes the instance's spare JVM when one waits (cli/spare.cpp), as zygote forks an app process
+                ProcessBuilder command = new ProcessBuilder(System.getProperty("apklayer.cli"), "component-host", pkg)
+                        .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(log.toFile()));
+                if (instance != null) command.environment().put("APKLAYER_ISOLATED", instance);
+                Process process = command.start();
                 hosts.put(name, process);
-                System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " starting " + name + (warm ? " (spare)" : "") + " launcherPid=" + process.pid() + " t=" + System.nanoTime() / 1_000_000);
+                System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " starting " + name + " launcherPid=" + process.pid() + " t=" + System.nanoTime() / 1_000_000);
                 Process started = process;
                 process.onExit().thenAccept(exited -> {
                     System.out.println("[apklayer-hub] host " + name + " exited with " + exited.exitValue());

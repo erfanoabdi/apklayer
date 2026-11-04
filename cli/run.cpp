@@ -77,7 +77,7 @@ bool relaunch(const Layout& l, const Instance& inst, const NativeEnv& ne, const 
 }  // namespace
 
 // The JVM options that make a host JVM this package's process (its data, uid, library dir), then its APK and classes jar: an app launch and a component
-// host start with them; a spare component host takes them when the hub hands it its target (`apklayer component-host --args <package>`).
+// host start with them; the instance's spare takes them with its launch (cli/spare.cpp).
 std::vector<std::string> packageJvmArgs(const Layout& l, const Instance& inst, const std::string& package) {
     std::string dir = appDir(l, package);
     if (!exists(join(dir, "info.properties"))) die("not installed: " + package + " (apklayer install <app.apk>)");
@@ -89,11 +89,6 @@ std::vector<std::string> packageJvmArgs(const Layout& l, const Instance& inst, c
     a.push_back(join(dir, "base.apk"));
     a.push_back(join(dir, "classes.jar"));
     return a;
-}
-
-int printPackageArgs(const Layout& l, const Instance& inst, const std::string& package) {
-    for (const std::string& a : packageJvmArgs(l, inst, package)) printf("%s\n", a.c_str());
-    return 0;
 }
 
 std::vector<std::string> windowJvmArgs(const Layout& l, const Instance& inst, NativeEnv& ne) {
@@ -127,12 +122,13 @@ std::vector<std::string> launchOptions(const std::vector<std::string>& window, c
 }  // namespace
 
 int runApp(const Layout& l, const Instance& inst, const std::string& package, RunMode mode) {
-    std::vector<std::string> own = mode == RunMode::Spare ? std::vector<std::string>() : packageJvmArgs(l, inst, package);
-    std::vector<std::string> files(own.end() - (own.empty() ? 0 : 2), own.end());  // the APK and classes jar: Main's arguments
+    std::vector<std::string> own = packageJvmArgs(l, inst, package);
+    std::vector<std::string> files(own.end() - 2, own.end());  // the APK and classes jar: Main's arguments
     own.resize(own.size() - files.size());
-    std::string dir = mode == RunMode::Spare ? l.appsDir : appDir(l, package);
+    if (mode == RunMode::Component) own.push_back("-Dapklayer.componenthost=true");
+    std::string dir = appDir(l, package);
 
-    trace("run " + (mode == RunMode::Spare ? std::string("spare component host") : package));
+    trace("run " + package);
     NativeEnv ne = nativeEnv(l, inst);
     if (!ensureStack(l, inst)) return 1;
     trace("stack ready");
@@ -150,7 +146,8 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     }
 
     std::vector<std::string> jvm = windowJvmArgs(l, inst, ne), window;
-    std::string spareKey = mode == RunMode::App ? appSpareKey(l, inst, jvm, ne.env) : "";
+    if (mode == RunMode::Component) ne.env["APKLAYER_COMPONENT_HOST"] = "1";  // the launch's own environment (a spare gets it with its target)
+    std::string spareKey = appSpareKey(l, inst, jvm, ne.env);
     int vdisplay = 0;
     int self = getpid();
     // one virtual display per app window (its own layer stack and sink per launch); pid-based ids cannot collide, and the title identifies instance and
@@ -167,43 +164,38 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     }
     std::vector<std::string> late = launchOptions(window, own);
     std::string record = join(inst.stateDir, "run." + std::to_string(self));
-    int conn = -1, jvmPid = -1, started[2] = {-1, -1};  // started: the launch's first activity is up (AppSpare.launchStarted)
-    if (mode == RunMode::App && pipe2(started, O_CLOEXEC) == 0) {  // the instance's app spare takes the launch when it matches (cli/spare.cpp)
+    // started: the launch's process is up (AppSpare.launchStarted), upon which the next spare prepares, as zygote forks the next app process
+    int conn = -1, jvmPid = -1, started[2] = {-1, -1};
+    if (pipe2(started, O_CLOEXEC) == 0) {  // the instance's spare takes the launch when it matches (cli/spare.cpp)
         std::vector<std::string> target = late;
         target.insert(target.end(), files.begin(), files.end());
-        jvmPid = takeAppSpare(inst, spareKey, target, started[1], &conn);
+        jvmPid = takeAppSpare(inst, spareKey, target, ne.env, started[1], &conn);
         if (jvmPid > 0) trace("app spare taken");
     }
     jvm.insert(jvm.end() - 3, late.begin(), late.end());
-    if (mode == RunMode::Component) jvm.push_back("--component-host");
-    if (mode == RunMode::Spare) jvm.push_back("--component-spare");  // prepares what every package shares, then waits for its target (ComponentSpare)
     jvm.insert(jvm.end(), files.begin(), files.end());
 
     Spawn app;
     app.argv = jvm;
     app.env = ne.env;
-    if (mode != RunMode::App) app.env["APKLAYER_COMPONENT_HOST"] = "1";
     app.cwd = dir;
-    app.keepStdin = mode == RunMode::Spare;
-    if (mode != RunMode::App) {
-        // a service host has no window sink to clean up: become the JVM, so the launcher dies exactly when the host does (the hub restarts
+    if (jvmPid <= 0 && started[1] >= 0) { fcntl(started[1], F_SETFD, 0); app.env["APKLAYER_STARTED_FD"] = std::to_string(started[1]); }
+    if (started[0] >= 0) { startAppSpare(l, inst, started[0]); close(started[0]); }
+    if (mode == RunMode::Component && jvmPid <= 0) {
+        // a cold service host has no window sink to clean up: become the JVM, so the launcher dies exactly when the host does (the hub restarts
         // a killed host as soon as its launcher is gone)
-        writeFile(join(inst.stateDir, "run." + std::to_string(self)), std::to_string(self) + "\n");
+        writeFile(record, std::to_string(self) + "\n");
         execReplace(app);
     }
     if (jvmPid <= 0) {
-        if (started[1] >= 0) { fcntl(started[1], F_SETFD, 0); app.env["APKLAYER_STARTED_FD"] = std::to_string(started[1]); }
         jvmPid = spawn(app);
         trace("app jvm spawned");
     }
+    if (started[1] >= 0) close(started[1]);
     // `apklayer stop` ends what this launch started: the JVM and its window sink
     writeFile(record, std::to_string(jvmPid) + "\n" + std::to_string(vdisplay) + "\n");
-    if (started[0] >= 0) {  // for the next launch, as zygote forks the next app process
-        close(started[1]);
-        startAppSpare(l, inst, started[0]);
-        close(started[0]);
-    }
     int status = 0;
+    // shortcut: SIGKILL to this waiter (the hub's stuck-host path) leaves a spare-born JVM to `apklayer stop` (its record); upgrade when the hub tracks JVM pids
     if (conn >= 0) status = awaitAppSpare(conn, jvmPid);
     else {
         while (waitpid(jvmPid, &status, 0) < 0 && errno == EINTR) {}

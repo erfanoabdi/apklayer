@@ -18,7 +18,7 @@ import vm  # noqa: E402
 GROUPS = tomllib.loads((vm.REPO / 'tests/groups.toml').read_text())
 LOGS = vm.REPO / 'build/tests'
 print_lock = threading.Lock()
-INSTANCE_MB = 1650  # what one running instance (stack, hub, app JVMs, shell, the component and app spares: ~340 MB each) takes
+INSTANCE_MB = 1350  # what one running instance (stack, hub, app JVMs, shell, the instance spare: ~340 MB) takes
 MIN_FREE_MB = 3000  # a group starts only while the VM has this much available (room for the other users of the VM)
 
 

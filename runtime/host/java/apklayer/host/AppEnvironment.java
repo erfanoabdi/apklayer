@@ -94,8 +94,20 @@ final class AppEnvironment {
 
     /**
      * The native runtime (Robolectric's libandroid_runtime, fonts, hyphenation), which setUpApplicationState loads once per sandbox: a spare
-     * component host loads it ahead (ComponentSpare), as zygote preloads. Its shadow pickers read the configuration, set here as the state setup sets it.
+     * loads it ahead (AppSpare), as zygote preloads. Its shadow pickers read the configuration, set here as the state setup sets it.
      */
+    /**
+     * A spare's dry run of the state setup, then Robolectric's own cleanup between two tests (tearDownApplication, resetState): what it loads and
+     * initialises (the sandbox's Instrumentation, Looper and MessageQueue classes, the security providers: most of a spare-born process's setup)
+     * is ready for the real one, as zygote preloads classes. The placeholder manifest has no package: no application is created.
+     */
+    static void preloadState(AndroidSandbox sandbox) {
+        org.robolectric.internal.TestEnvironment environment = sandbox.getTestEnvironment();
+        environment.setUpApplicationState("apklayer", configuration(false), new AndroidManifest(null, null, null, "apklayer.spare"));
+        environment.tearDownApplication();
+        environment.resetState();
+    }
+
     static void loadNativeRuntime() {
         org.robolectric.config.ConfigurationRegistry.instance = new org.robolectric.config.ConfigurationRegistry(configuration(false).map());
         org.robolectric.nativeruntime.DefaultNativeRuntimeLoader.injectAndLoad();
