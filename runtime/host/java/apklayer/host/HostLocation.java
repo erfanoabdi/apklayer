@@ -38,7 +38,8 @@ final class HostLocation {
         if (!manager.isLocationEnabled()) return;  // the host has no location service
         if (network) follow(shadow, LocationManager.NETWORK_PROVIDER, HostProcess.dying("python3", script()));
         // the GNSS HAL (providers.toml) through its client, which speaks the same lines; shortcut: Robolectric's LocationManager stays the framework side
-        // (no LocationManagerService/GnssLocationProvider in the hub), fed with the HAL's fixes
+        // (no LocationManagerService/GnssLocationProvider in the hub), fed with the HAL's fixes; the HAL keeps one callback, so with two apps
+        // locating at once only the later one gets fixes, until one client in the hub serves them all
         if (gps) follow(shadow, LocationManager.GPS_PROVIDER, HostProcess.dying(System.getProperty("apklayer.cli", "apklayer"), "exec", "libapklayer_gnss.so", "--client"));
     }
 

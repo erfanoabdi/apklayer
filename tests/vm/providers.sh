@@ -31,7 +31,9 @@ grep -aq -m1 '^\[hw\] \(PASS\|FAIL\)' < <(APKLAYER_JOPTS="-Dapklayer.runms=40000
 grep -a '\[hw\]' $out
 grep -a "vibrator:" $APKLY_STATE/vibrator.log
 grep -aq '^\[hw\] PASS' $out || fail "hello.hardware"
-grep -aq "on 100 ms amplitude 1.00" $APKLY_STATE/vibrator.log && grep -aq "on 200 ms amplitude 0.50" $APKLY_STATE/vibrator.log || fail "the app's waveform did not reach the vibrator backend"
+# the waveform's two steps, then the click (the example HAL's 100 ms effect), in this order
+[ "$(grep -a -o 'vibrator: on [0-9]* ms amplitude [0-9.]*' $APKLY_STATE/vibrator.log | tail -3 | tr '\n' ' ')" = \
+  "vibrator: on 100 ms amplitude 1.00 vibrator: on 200 ms amplitude 0.50 vibrator: on 100 ms amplitude 0.50 " ] || fail "the app's waveform and click did not reach the vibrator backend"
 grep -aq '^\[hw\] gps fix 48.85840 2.29450 accuracy 3.0' $out || fail "the app's gps fix is not the configured one"
 # SensorManager over SensorService: 50 Hz for 2 s (about 100 events), the configured value
 events=$(grep -a -o '^\[hw\] accelerometer [0-9]* events' $out | grep -o '[0-9][0-9]*')

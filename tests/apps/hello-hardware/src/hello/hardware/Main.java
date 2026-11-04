@@ -40,7 +40,9 @@ public final class Main extends Activity {
         if (!vibrator.hasVibrator()) return false;
         vibrator.vibrate(VibrationEffect.createWaveform(new long[] {0, 100, 50, 200}, new int[] {0, 255, 0, 128}, -1));
         Thread.sleep(500);  // the pattern is 350 ms
-        System.out.println("[hw] vibrator pattern played");
+        vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK));
+        Thread.sleep(300);
+        System.out.println("[hw] vibrator pattern and click played");
         return true;
     }
 

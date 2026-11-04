@@ -13,6 +13,7 @@ import android.os.VibrationEffect;
 import android.os.VibratorInfo;
 import android.os.vibrator.IHapticGeneratorSessionCallback;
 import android.os.vibrator.IVibrationSessionCallback;
+import android.os.vibrator.PrebakedSegment;
 import android.os.vibrator.StepSegment;
 import android.os.vibrator.VibrationEffectSegment;
 import java.util.function.BiPredicate;
@@ -29,7 +30,7 @@ final class HubVibrator extends IVibratorManagerService.Stub {
     private static final String HAL_DESCRIPTOR = "android.hardware.vibrator.IVibrator";
     // IVibrator's transactions (hardware/interfaces/vibrator/aidl/aidl_api/.../4/IVibrator.aidl, in declaration order) and capabilities
     private static final int GET_CAPABILITIES = IBinder.FIRST_CALL_TRANSACTION, OFF = GET_CAPABILITIES + 1, ON = GET_CAPABILITIES + 2,
-            SET_AMPLITUDE = GET_CAPABILITIES + 5;
+            PERFORM = GET_CAPABILITIES + 3, SET_AMPLITUDE = GET_CAPABILITIES + 5;
     private static final int CAP_AMPLITUDE_CONTROL = 4;
 
     private final BiPredicate<Integer, String> holds;  // uid, permission
@@ -96,10 +97,20 @@ final class HubVibrator extends IVibratorManagerService.Stub {
         player.start();
     }
 
-    // shortcut: step segments only (createOneShot, createWaveform); prebaked, primitive and ramp segments are skipped, and a repeating waveform plays once
+    // shortcut: step segments (createOneShot, createWaveform) and prebaked effects (createPredefined) only; primitive and ramp segments are skipped,
+    // and a repeating waveform plays once
     private void play(VibrationEffect.Composed effect) {
         try {
             for (VibrationEffectSegment segment : effect.getSegments()) {
+                if (segment instanceof PrebakedSegment prebaked) {  // IVibrator.perform: Effect and EffectStrength share the framework's values
+                    Parcel args = ints(prebaked.getEffectId());
+                    args.writeByte((byte) prebaked.getEffectStrength());
+                    args.writeStrongBinder(null);
+                    int ms;
+                    try { ms = hal(PERFORM, args); } catch (UnsupportedOperationException unsupported) { continue; }  // an effect the HAL has not
+                    Thread.sleep(ms);
+                    continue;
+                }
                 if (!(segment instanceof StepSegment step) || step.getDuration() <= 0) continue;
                 float amplitude = step.getAmplitude() == VibrationEffect.DEFAULT_AMPLITUDE ? 1f : step.getAmplitude();
                 if (amplitude > 0) {
