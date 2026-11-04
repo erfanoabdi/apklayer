@@ -32,11 +32,17 @@ def available():
     return int(out or 0)
 
 
+# the host classes (runtime/) rebuilt when a source is newer than the last build's stamp: merged Java changes are what the groups test
+HOST_CLASSES = ('{ [ -f ~/.config/apklayer/env ] && . ~/.config/apklayer/env; N=${APKLAYER_NATIVE:-$HOME/arm64-native}; '
+                'if [ -n "$(find runtime -newer "$N/aosp/host-classes.stamp" -print -quit 2>/dev/null)" ] || [ ! -f "$N/aosp/host-classes.stamp" ]; then '
+                'tools/build host "$N" >/dev/null 2>&1 && touch "$N/aosp/host-classes.stamp"; fi; }')
+
+
 def prepare(groups, slots):
     t = time.monotonic()
     vm.push()
     build = vm.ssh(vm.instance_env(slots[0]) + '{ [ -d b ] || meson setup b >/dev/null; } && ninja -C b >/dev/null && '
-                   'sudo -n sh tools/host-setup/binder.sh %s >/dev/null' % ' '.join(slots), capture_output=True, text=True)
+                   'sudo -n sh tools/host-setup/binder.sh %s >/dev/null && ' % ' '.join(slots) + HOST_CLASSES, capture_output=True, text=True)
     assert build.returncode == 0, 'VM build failed:\n' + build.stdout[-3000:] + build.stderr[-3000:]
     apps = sorted({a for g in groups for a in GROUPS[g].get('apps', [])})
     if apps:
