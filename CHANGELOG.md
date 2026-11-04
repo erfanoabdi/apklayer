@@ -92,6 +92,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-05 — libapklayer_graltool (halium agent)
+- Why: plan step (e), Halium graphics: the device's allocator@4.0 through the host hwbinder context and a buffer shown through the shell's android_wlegl path (docs/HALIUM.md). Every shared_lib name checked in the tree first.
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "..." tools` (copies the host graphics headers too: display.h gains apklayer_display_present_native), then `m libapklayer_graltool`.
 ### 2026-11-05 — libhidlbase: the host hwbinder context; libapklayer_hidltool (halium agent)
 - Why: the device's HIDL HALs (camera provider, media.c2) through `/dev/host_hwbinder` (patches system/libhwbinder 0001, system/libhidl 0001, docs/HALIUM.md); hidltool plays the device in the two-instance test and lists a device's cameras and codecs. The five changed sources were compile-checked first outside the tree with the tree's own commands (arm64 and arm).
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `patches/apply` of system/libhwbinder and system/libhidl, `tools/sync-aosp.sh "..." tools`, then `m libhidlbase libapklayer_hidltool` (gsi_arm64 userdebug). libhwbinder's headers change (ABI kept: Parcel's size unchanged): modules that include them recompile those objects at their next build.
