@@ -238,15 +238,9 @@ public final class AppHost implements Runnable {
             long t = Long.getLong("apklayer.autotap.ms", 4500);
             script.put(t, "tap:first");
         }
-        // runms must be honoured in headless mode too (tests schedule taps at absolute times and rely on the run ending on schedule).
-        // Headless runs must advance PAUSED clocks by the scheduled deadline (Simulator
-        // does this with ShadowSystemClock::advanceTo + idleFor); wall-clock waiting only
-        // works with a live window (shell mode), where real time drives the frame clock.
+        // runms holds in headless mode too, on the sandbox clock step() advances (Simulator's advanceTo + idleFor); with a window real time drives it
         pausedMode = shell == null;
         runMs = Long.getLong("apklayer.runms", pausedMode ? 3000 : Long.MAX_VALUE);
-        // Schedule clock: in headless (PAUSED) mode the sandbox clock is stepped by the loop
-        // below, so schedule script times on it — a "6 s" run then completes in well
-        // under a second of real time. In shell mode real time drives everything.
         clockNanos = perfAt = System.nanoTime();
         perfUptime = SystemClock.uptimeMillis();
         loopStart = pausedMode ? SystemClock.uptimeMillis() : System.nanoTime() / 1_000_000;
@@ -293,10 +287,7 @@ public final class AppHost implements Runnable {
         long nextVsync = ShadowChoreographer.getNextVsyncTime();
         long timeout = nextTask == 0 || nextVsync == 0 ? max(nextTask, nextVsync) : min(nextTask, nextVsync);
         if (pausedMode) {
-            // PAUSED looper mode: scheduled Runnables and vsync callbacks only run
-            // when the (paused) clock is advanced. Step it to the next deadline and
-            // drain — wall time is irrelevant here, so a "6 s" run completes in well
-            // under a second of real time (the scripted ms are scheduler time).
+            // PAUSED looper mode: the clock steps to the next deadline (scripted ms are scheduler time, a "6 s" run takes well under a second)
             if (timeout != 0) {
                 ShadowSystemClock.advanceBy(Duration.ofMillis(max(1, timeout - SystemClock.uptimeMillis())));
             } else {
