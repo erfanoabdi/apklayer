@@ -68,7 +68,7 @@ run = ["python3 -u tests/vm/hub.py providers basic", "python3 -u tests/vm/hub.py
 apps = ["hello-svc-target", "hello-svc-caller", "hello-svc-late"]  # hello-svc-late: installed again by the late phase while a host runs
 run = ["python3 -u tests/vm/hub.py services start", "python3 -u tests/vm/hub.py services selfstop", "python3 -u tests/vm/hub.py services sticky",
        "python3 -u tests/vm/hub.py services private", "python3 -u tests/vm/hub.py services filters", "python3 -u tests/vm/hub.py services own",
-       "python3 -u tests/vm/hub.py services late", "python3 -u tests/vm/hub.py services oneway"]
+       "python3 -u tests/vm/hub.py services late", "python3 -u tests/vm/hub.py services oneway", "python3 -u tests/vm/hub.py services respawn"]
 
 [installer]
 apps = ["hello-installer"]  # carries the payload APKs (hello-payload with a config split, hello-payload2, hello-payload-other) as assets
@@ -97,6 +97,11 @@ run = ["python3 -u tests/vm/broadcasts.py manifest", "python3 -u tests/vm/broadc
 apps = ["hello-wvprobe"]
 needs = ["com.android.webview"]  # tools/host-setup/webview.sh <the provider APK>, in the data home the runner uses
 run = ["python3 -u tests/vm/hub.py webview probe"]
+
+[webview-input]
+apps = ["hello-wvprobe"]
+needs = ["com.android.webview"]
+run = ["python3 -u tests/vm/webview-input.py"]
 
 [splash]
 needs = ["com.android.test.uibench"]

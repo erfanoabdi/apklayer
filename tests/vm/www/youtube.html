@@ -1,8 +1,16 @@
 <html><head><meta name="viewport" content="width=device-width"></head><body style="background:#fff;margin:0">
-<!-- ?v=<video id>: YouTube's embedded player filling the page, started by a tap (with sound); an embed opened as the top page refuses to play (error 153) -->
+<!-- ?v=<video id>: YouTube's embedded player (IFrame API) filling the page, started by a tap (with sound); an embed opened as the top page refuses to
+     play (error 153). Like video.html it beacons the player's state once a second: /r?src=yt&t=<current time>&state=<YT player state, 1 = playing> -->
+<div id="p"></div>
 <script>
-var v = new URLSearchParams(location.search).get('v'), f = document.createElement('iframe');
-f.src = 'https://www.youtube.com/embed/' + v + '?loop=1&playlist=' + v + '&playsinline=1';
-f.allow = 'autoplay; encrypted-media'; f.style = 'width:100%;height:90vh;border:0';
-document.body.appendChild(f);
+var v = new URLSearchParams(location.search).get('v'), player, s = document.createElement('script');
+s.src = 'https://www.youtube.com/iframe_api'; document.head.appendChild(s);
+function onYouTubeIframeAPIReady() {
+  player = new YT.Player('p', {videoId: v, width: '100%', height: Math.round(innerHeight * 0.9),
+    playerVars: {loop: 1, playlist: v, playsinline: 1}});
+}
+setInterval(function() {
+  var ok = player && player.getCurrentTime;
+  new Image().src = '/r?src=yt&t=' + (ok ? player.getCurrentTime().toFixed(2) : '') + '&state=' + (ok ? player.getPlayerState() : '') + '&n=' + Math.random();
+}, 1000);
 </script></body></html>

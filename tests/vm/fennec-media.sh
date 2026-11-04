@@ -3,7 +3,7 @@
 # side by side, opened through a VIEW intent; it beacons each video's state (/r?src=..&t=..&w=..) to the local server once a second.
 # Checks: each video's currentTime advances and it has a size and no error, two app screenshots differ (frames change), and PipeWire got
 # an output stream from the instance. MEDIA_URL=<url> opens that page instead and checks frames and audio only; YOUTUBE=<video id>: that
-# video in YouTube's embedded player (tests/vm/www/youtube.html).
+# video in YouTube's embedded player (tests/vm/www/youtube.html), whose current time must advance. TAP=x,y: where the tap goes (default 160,400).
 # Usage (on the VM, in the caller's instance: APKLAYER_INSTANCE and the XDG_* dirs as for any run): tests/vm/fennec-media.sh
 #   FENNEC_SECS (playing time before the checks, default 40). A fresh install works: a first start makes the profile, Fenix's own
 #   preferences mark its first-run screen done.
@@ -51,8 +51,9 @@ printf 'action=android.intent.action.VIEW\ndata=%s\ncomponent=org.mozilla.fenix.
 APKLAYER_TEST_INPUT=1 APKLAYER_INTENT_FILE="$work/intent.properties" APKLAYER_JOPTS="-Dapklayer.logcat=true -Dapklayer.runms=$(( (secs * 3 / 2 + 12) * 1000 ))" bin/apklayer run $pkg > "$work/run.out" 2>&1 &
 app=$!
 sleep $((secs / 2))  # then a tap in the page: sound plays only after a user gesture (Fenix blocks audible autoplay)
-for i in $(seq $((secs / 2))); do { [ -n "$MEDIA_URL" ] || grep -q "GET /r?" "$work/www.log"; } && break; sleep 1; done  # a cold first start shows the page later
-python3 -c 'import sys; sys.path.insert(0, "tests/lib"); import instance; instance.inject(sys.argv[1], "tap:160,400")' $pkg > "$work/tap.out" 2>&1
+ready="GET /r?"; [ -n "$YOUTUBE" ] && ready="GET /r?src=yt&t=[0-9]"  # the page reports (YouTube: its player is ready)
+for i in $(seq $((secs / 2))); do { [ -n "$MEDIA_URL" ] && [ -z "$YOUTUBE" ] || grep -q "$ready" "$work/www.log"; } && break; sleep 1; done  # a cold first start shows the page later
+python3 -c 'import sys; sys.path.insert(0, "tests/lib"); import instance; instance.inject(sys.argv[1], "tap:" + sys.argv[2])' $pkg "${TAP:-160,400}" > "$work/tap.out" 2>&1
 sleep $((secs - secs / 2))
 bin/apklayer screenshot $pkg "$work/a.png" > "$work/shot.out" 2>&1
 pw-dump 2>/dev/null > "$work/pw.json"
@@ -71,8 +72,18 @@ if [ -z "$MEDIA_URL" ]; then
             "$(grep -q '&w=320&h=240&' <<< "$last" && grep -q '&err=&' <<< "$last" && grep -q '&paused=false&' <<< "$last" && [ "$times" -ge 5 ] && echo 1)"
     done
 fi
+if [ -n "$YOUTUBE" ]; then  # the player's clock advances only while it presents video frames (a stalled video sink shows a spinner at 0:00)
+    last=$(grep -o "GET /r?src=yt&t=[0-9][^ ]*" "$work/www.log" | tail -1)
+    times=$(grep -o "GET /r?src=yt&t=[0-9.]*" "$work/www.log" | sed 's/.*t=//' | sort -u | wc -l)
+    echo "  YouTube last report: ${last#GET /r?}"
+    check "YouTube plays ($times distinct currentTime values, last state playing)" "$(grep -q '&state=1&' <<< "$last" && [ "$times" -ge 5 ] && echo 1)"
+fi
 diff=$(python3 tests/vm/media-check.py frames "$work/a.png" "$work/b.png")
 check "frames change between screenshots ($diff px differ)" "$([ "$diff" -gt 2000 ] && echo 1)"
+# the frames reached the GPU process's compositor: a screenshot shows a picture, not only the player's spinner and controls (one of the two:
+# a looping video's restart shows the spinner for a moment)
+colour=$(for s in a b; do python3 tests/vm/media-check.py picture "$work/$s.png"; done | sort -n | tail -1)
+check "a screenshot shows video ($colour distinct colours)" "$([ "$colour" -gt 150 ] && echo 1)"
 streams=$(python3 tests/vm/media-check.py pipewire "$work/pw.json" "${APKLAYER_INSTANCE:-default}")
 check "PipeWire plays an output stream from the instance ($streams running)" "$([ "$streams" -gt 0 ] && echo 1)"
 d="${XDG_STATE_HOME:-$HOME/.local/state}/fennec-media-last"; rm -rf "$d"; cp -r "$work" "$d"; echo "  screenshots, logs and reports: $d"

@@ -82,7 +82,9 @@ final class HostWindows {
     /**
      * The window an input event should go to: among the visible, attached windows (containing the
      * point when x >= 0), the highest window type wins (dialogs and popups sit above the activity
-     * window), then the most recently added.
+     * window), then the most recently added. Without a point (keys, the IME) only windows that take
+     * key focus count, as WindowManagerService's focused window: a FLAG_NOT_FOCUSABLE popup (the
+     * selection's floating toolbar, text handles, a dropdown) leaves keys with the window below.
      */
     static View topWindow(List<View> views, int x, int y) {
         View best = null;
@@ -94,8 +96,9 @@ final class HostWindows {
                 v.getLocationOnScreen(loc);
                 if (x < loc[0] || y < loc[1] || x >= loc[0] + v.getWidth() || y >= loc[1] + v.getHeight()) continue;
             }
-            int type = v.getLayoutParams() instanceof android.view.WindowManager.LayoutParams
-                    ? ((android.view.WindowManager.LayoutParams) v.getLayoutParams()).type : 0;
+            android.view.WindowManager.LayoutParams lp = v.getLayoutParams() instanceof android.view.WindowManager.LayoutParams p ? p : null;
+            if (x < 0 && lp != null && (lp.flags & android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) != 0) continue;
+            int type = lp != null ? lp.type : 0;
             if (type >= bestType) { // >=: later windows win ties
                 best = v;
                 bestType = type;

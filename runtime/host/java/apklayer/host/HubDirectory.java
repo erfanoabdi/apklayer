@@ -154,6 +154,9 @@ final class HubDirectory extends Binder {
             } catch (IOException failure) { throw new IllegalStateException("Cannot launch app " + name, failure); }
         }
     }
+    /** A new host for `name` when a binding waits for one and none is registered. A host's end shows three ways in any order (its process exits,
+     * its binder dies, a bind delivery to it fails): each asks, and the last finds the old host gone (launch skips one still running). */
+    void ensureHost(String name) { if (!stopping && peer(name) == null && bindings.needsHost(name)) launch(name); }
     void launch(String name) {
         if (stopping || peer(name) != null) return;
         int hash = name.indexOf('#');
@@ -217,7 +220,7 @@ final class HubDirectory extends Binder {
                     peers.put(pid, peer);
                 }
                 System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " registered " + name + " pid=" + pid + " uid=" + uid + " t=" + System.nanoTime() / 1_000_000);
-                synchronized (failures) { failures.remove(name); }
+                synchronized (failures) { failures.remove(key(peer)); }  // launches are counted per host (package#process): a host that registered did not fail
                 HubAudioPermissions.registered(packages, name);  // before the reply: the app's first track finds its package
                 bindings.registered(peer);
                 broadcasts.registered(peer);

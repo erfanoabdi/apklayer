@@ -84,6 +84,13 @@ public class Main extends Activity {
                 require((int) after[3] != (int) before[3] && (int) after[0] == 1 && "(null)".equals(after[1]), "after the kill " + java.util.Arrays.toString(after));
                 System.out.println("[svc] PASS sticky: restarted after the kill with a null intent, new pid " + after[3]);
             }
+            case "respawn" -> {  // a service process that ends after each unbind starts again for every new binding (the hub must not count those exits as failures)
+                ComponentName exit = new ComponentName(this, ExitService.class);
+                java.util.Set<Integer> pids = new java.util.HashSet<>();
+                for (int round = 0; round < 8; round++) pids.add(respawnedPid(exit));
+                require(pids.size() >= 2, "the service process never ended: " + pids);
+                System.out.println("[svc] PASS respawn: 8 bindings in a row connected, the service ran in " + pids.size() + " processes");
+            }
             case "filters" -> filters();
             case "own" -> own();
             case "late" -> late();
@@ -102,6 +109,28 @@ public class Main extends Activity {
             }
             default -> System.out.println("[svc] unknown scenario");
         }
+    }
+
+    /** The pid of the service process through one binding. A bind that lands while the last process ends may connect to it (Android hands out the
+     * cached binder too): the call then fails with DeadObjectException and the binding is connected again to the restarted service. */
+    private int respawnedPid(ComponentName service) throws Exception {
+        java.util.concurrent.BlockingQueue<IBinder> connected = new java.util.concurrent.LinkedBlockingQueue<>();
+        ServiceConnection connection = new ServiceConnection() {
+            @Override public void onServiceConnected(ComponentName name, IBinder binder) { connected.add(binder); }
+            @Override public void onServiceDisconnected(ComponentName name) { }
+        };
+        require(bindService(new Intent().setComponent(service), connection, Context.BIND_AUTO_CREATE), "bind");
+        try {
+            for (int attempt = 0; attempt < 2; attempt++) {
+                IBinder binder = connected.poll(15, TimeUnit.SECONDS);
+                require(binder != null, "no connection within 15 s");
+                Parcel data = Parcel.obtain(), reply = Parcel.obtain();
+                try { binder.transact(1, data, reply, 0); reply.readInt(); reply.readString(); reply.readInt(); return reply.readInt(); }
+                catch (android.os.DeadObjectException ended) { System.out.println("[svc] connected to the ending process, waiting for the restart"); }
+                finally { data.recycle(); reply.recycle(); }
+            }
+            throw new AssertionError("the restarted service is dead too");
+        } finally { unbindService(connection); }
     }
 
     /** EchoService's PROBE once per flags (0 or oneway), in one binding: the caller's pid, uid and both permission checks as the service saw them. */
