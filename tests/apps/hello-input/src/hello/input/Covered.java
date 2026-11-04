@@ -16,7 +16,7 @@ public class Covered extends Activity {
         Dialog dialog = new Dialog(below);
         Button button = new Button(below);
         button.setText("Dialog of the covered activity");
-        button.setOnClickListener(v -> System.out.println("[hello-input] covered dialog tapped, fragments stopped="
+        button.setOnClickListener(v -> System.out.println("[hello-input] covered dialog tapped, stateSaved="
                 + below.getFragmentManager().isStateSaved()));
         dialog.setContentView(button);
         dialog.show();
@@ -29,7 +29,7 @@ public class Covered extends Activity {
         Button button = new Button(this);
         button.setText("Covering activity");
         button.setOnClickListener(v -> {
-            System.out.println("[hello-input] covering activity tapped, fragments stopped=" + getFragmentManager().isStateSaved());
+            System.out.println("[hello-input] covering activity tapped, stateSaved=" + getFragmentManager().isStateSaved());
             try {
                 startActivity(new Intent("hello.input.NOBODY_HANDLES_THIS"));
             } catch (android.content.ActivityNotFoundException e) {

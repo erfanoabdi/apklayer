@@ -48,7 +48,7 @@ try:
                     instance.inject(PKG, 'tap:%d,%d' % CENTER)
     assert app.wait() == 0, 'input app failed'
     assert not count('covered dialog tapped'), 'a tap reached the stopped activity\'s dialog'
-    assert count('covering activity tapped, fragments stopped=false') == 2, 'the taps did not reach the covering activity'
+    assert count('covering activity tapped, stateSaved=false') == 2, 'the taps did not reach the covering activity'
     assert not count('covering activity paused') and not count('covering activity stopped'), 'the unhandled start changed the lifecycle'
     print('PASS taps go to the covering activity, not to the stopped one\'s dialog; an unhandled start leaves the lifecycle as it is', flush=True)
 finally:
