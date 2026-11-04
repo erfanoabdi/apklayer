@@ -16,8 +16,9 @@ import pixels  # noqa: E402
 PKG = 'hello.input'
 ENV = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1', APKLAYER_DEBUG_INPUT='1', APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='600')
 FIELD, COPY = (240, 82), (240, 154)  # content pixels of hello.input's field and "Copy Android text" button (below the action bar)
-ENV['APKLAYER_JOPTS'] = '-Dapklayer.runms=25000 -Dapklayer.debugkeys=true -Dapklayer.script=' + '+'.join(
-    '%d:hover:%d,0' % (t, step) for t, step in ((3000, 1), (6000, 2), (7000, 3), (9000, 4), (11000, 5), (13000, 6), (14000, 7), (16000, 8), (17000, 9), (18000, 10), (20000, 11), (21000, 12), (23000, 13)))
+WORD = (20, 82)  # on the field's text: a long press there selects a word
+ENV['APKLAYER_JOPTS'] = '-Dapklayer.runms=26000 -Dapklayer.debugkeys=true -Dapklayer.script=' + '+'.join(
+    '%d:hover:%d,0' % (t, step) for t, step in ((3000, 1), (6000, 2), (7000, 3), (9000, 4), (11000, 5), (13000, 6), (14000, 7), (16000, 8), (17000, 9), (18000, 10), (20000, 11), (21000, 12), (23000, 13), (24000, 14)))
 seen = []
 checks = set()
 
@@ -67,25 +68,27 @@ try:
                     assert pixels.colors(shot) > 50, 'flat app window'
                 # a long press: the selection's floating toolbar (a PopupWindow, FLAG_NOT_FOCUSABLE) must leave keys and the IME on the field
                 elif 'script: hover:6,0' in line or 'script: hover:9,0' in line:
-                    instance.inject(PKG, 'press:%d,%d' % FIELD)
+                    instance.inject(PKG, 'press:%d,%d' % WORD)
                 elif 'script: hover:7,0' in line or 'script: hover:10,0' in line:
-                    instance.inject(PKG, 'release:%d,%d' % FIELD)
+                    instance.inject(PKG, 'release:%d,%d' % WORD)
                 elif 'script: hover:8,0' in line:
                     assert saw('[hello-input] action mode started'), 'a long press started no selection action mode'
                     instance.inject(PKG, 'key:45')  # x replaces the selected word
                 elif 'script: hover:11,0' in line:
                     assert saw('[hello-input] text=x'), 'a key during the selection toolbar did not reach the field'
                     assert sum('action mode started' in l for l in seen) >= 2, 'the second long press started no action mode'
-                    instance.inject(PKG, 'text:yz')  # IME commit: text input stays on for the field
+                    instance.inject(PKG, 'text:yz')  # IME commit (past the one letter: the insertion toolbar): text input stays on for the field
                 elif 'script: hover:12,0' in line:
-                    assert saw('[hello-input] text=yz'), 'IME text during the selection toolbar did not reach the field'
-                    instance.inject(PKG, 'press:%d,%d' % FIELD)
+                    assert saw('[hello-input] text=xyz'), 'IME text during the selection toolbar did not reach the field'
+                    instance.inject(PKG, 'press:%d,%d' % WORD)
                 elif 'script: hover:13,0' in line:
-                    instance.inject(PKG, 'release:%d,%d' % FIELD, 'key:1')  # Esc is Back: it ends the action mode
+                    instance.inject(PKG, 'release:%d,%d' % WORD)
+                elif 'script: hover:14,0' in line:
+                    assert sum('action mode started' in l for l in seen) >= 3, 'the third long press started no action mode'
+                    instance.inject(PKG, 'key:1')  # Esc is Back: it ends the action mode
     assert app.wait() == 0, 'input app failed'
     assert saw('[hello-input] text=ni'), 'IME preedit did not reach the field'
-    last = seen[max(i for i, l in enumerate(seen) if 'hover:13,0' in l):]
-    assert sum('action mode started' in l for l in seen) >= 3 and any('action mode finished' in l for l in last), 'Back did not end the action mode'
+    assert any('action mode finished' in l for l in seen[max(i for i, l in enumerate(seen) if 'hover:14,0' in l):]), 'Back did not end the action mode'
     checks.add('long-press')
     assert checks == {'typing', 'ime', 'tap', 'long-press'}, checks
     print('PASS touch, keys, Ctrl+A, IME preedit/commit, a touch tap, and keys, IME and Back during a long press selection toolbar through the shell test input', flush=True)

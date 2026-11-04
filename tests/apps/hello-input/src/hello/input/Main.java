@@ -27,7 +27,7 @@ public class Main extends Activity {
             }
             public void afterTextChanged(Editable s) {}
         });
-        field.setCustomSelectionActionModeCallback(new android.view.ActionMode.Callback() { // a long press's floating toolbar
+        android.view.ActionMode.Callback toolbar = new android.view.ActionMode.Callback() { // a long press's floating toolbar (selection or insertion)
             public boolean onCreateActionMode(android.view.ActionMode mode, android.view.Menu menu) {
                 System.out.println("[hello-input] action mode started");
                 return true;
@@ -35,7 +35,9 @@ public class Main extends Activity {
             public boolean onPrepareActionMode(android.view.ActionMode mode, android.view.Menu menu) { return false; }
             public boolean onActionItemClicked(android.view.ActionMode mode, android.view.MenuItem item) { return false; }
             public void onDestroyActionMode(android.view.ActionMode mode) { System.out.println("[hello-input] action mode finished"); }
-        });
+        };
+        field.setCustomSelectionActionModeCallback(toolbar);
+        field.setCustomInsertionActionModeCallback(toolbar);
         layout.addView(field, new LinearLayout.LayoutParams(-1, 80));
         Button copy = new Button(this);
         copy.setText("Copy Android text");
