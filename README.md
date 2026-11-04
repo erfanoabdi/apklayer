@@ -1,3 +1,5 @@
+<p align="center"><img src="data/apklayer.svg" width="180" alt="apklayer logo: an Android robot in layered glass"></p>
+
 # apklayer
 
 Run Android APKs natively on Linux: real Android userspace, no emulator, no VM.

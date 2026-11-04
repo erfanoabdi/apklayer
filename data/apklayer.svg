@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="APKLayer logo: Android package in floating glass layers">
+ <defs>
+  <linearGradient id="rear" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#b8f8ff" stop-opacity=".76"/><stop offset=".5" stop-color="#6c9cf9" stop-opacity=".27"/><stop offset="1" stop-color="#7458d7" stop-opacity=".48"/></linearGradient>
+  <linearGradient id="middle" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e2ffff" stop-opacity=".82"/><stop offset=".42" stop-color="#6ed4ec" stop-opacity=".28"/><stop offset="1" stop-color="#4e74c6" stop-opacity=".38"/></linearGradient>
+  <linearGradient id="front" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e5ffff" stop-opacity=".60"/><stop offset=".36" stop-color="#65d7ee" stop-opacity=".18"/><stop offset=".75" stop-color="#618de7" stop-opacity=".18"/><stop offset="1" stop-color="#f5ffff" stop-opacity=".44"/></linearGradient>
+  <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1"><stop stop-color="white" stop-opacity=".95"/><stop offset=".4" stop-color="#ccfdff" stop-opacity=".55"/><stop offset="1" stop-color="#9eaffe" stop-opacity=".75"/></linearGradient>
+  <linearGradient id="android" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#e2ffba"/><stop offset=".45" stop-color="#a7ed61"/><stop offset="1" stop-color="#5fcf99"/></linearGradient>
+  <linearGradient id="androidShade" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#9eea69"/><stop offset="1" stop-color="#23b8ab"/></linearGradient>
+  <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="25"/></filter>
+  <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="14"/></filter>
+  <filter id="iconshadow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#153d51" flood-opacity=".35"/></filter>
+ </defs>
+ <!-- transparent background; ambient glass shadow -->
+ <ellipse cx="508" cy="796" rx="300" ry="66" fill="#248cc7" opacity=".17" filter="url(#shadow)"/>
+ <!-- offset glass sheets -->
+ <g transform="rotate(-13 512 512)">
+  <rect x="225" y="276" width="574" height="574" rx="104" fill="#6aa7e7" opacity=".22" filter="url(#shadow)"/>
+  <rect x="224" y="267" width="574" height="574" rx="105" fill="url(#rear)" stroke="#a0b9ff" stroke-opacity=".72" stroke-width="7"/>
+  <path d="M275 284H739Q782 284 782 327V385" fill="none" stroke="white" stroke-opacity=".65" stroke-width="10" stroke-linecap="round"/>
+  <rect x="180" y="206" width="574" height="574" rx="104" fill="url(#middle)" stroke="#b3fcff" stroke-opacity=".83" stroke-width="8"/>
+  <path d="M236 222H692Q738 222 738 268" fill="none" stroke="white" stroke-opacity=".84" stroke-width="9" stroke-linecap="round"/>
+  <rect x="142" y="139" width="574" height="574" rx="104" fill="url(#front)" stroke="url(#rim)" stroke-width="10"/>
+  <path d="M198 156H657Q698 156 698 196V251" fill="none" stroke="white" stroke-opacity=".85" stroke-width="10" stroke-linecap="round"/>
+  <path d="M158 579V611Q158 696 240 696H316" fill="none" stroke="#c9faff" stroke-opacity=".67" stroke-width="9" stroke-linecap="round"/>
+  <!-- inner surface light streak -->
+  <path d="M214 205L445 173" stroke="white" stroke-width="18" stroke-linecap="round" opacity=".12"/>
+ </g>
+ <!-- android robot, readable at icon scale, on center of upper sheet -->
+ <g filter="url(#iconshadow)" transform="translate(37 -5) rotate(-13 425 437)">
+  <path d="M333 336 306 291M520 336 547 291" stroke="#b8f58a" stroke-width="14" stroke-linecap="round"/>
+  <path d="M297 421a131 131 0 0 1 262 0Z" fill="url(#android)"/>
+  <rect x="296" y="435" width="264" height="169" rx="24" fill="url(#androidShade)"/>
+  <rect x="269" y="440" width="20" height="128" rx="10" fill="#9ae97b"/>
+  <rect x="567" y="440" width="20" height="128" rx="10" fill="#70dca0"/>
+  <rect x="343" y="594" width="27" height="65" rx="13" fill="#67cf99"/>
+  <rect x="485" y="594" width="27" height="65" rx="13" fill="#48beaa"/>
+  <circle cx="371" cy="390" r="9" fill="#18464d"/>
+  <circle cx="484" cy="390" r="9" fill="#18464d"/>
+  <path d="M318 457H537" stroke="#edffdb" stroke-opacity=".28" stroke-width="5"/>
+  <path d="M320 474V558" stroke="#efffe0" opacity=".22" stroke-width="10" stroke-linecap="round"/>
+ </g>
+ <circle cx="732" cy="257" r="11" fill="white" opacity=".7" filter="url(#glow)"/>
+ <circle cx="728" cy="255" r="5" fill="white" opacity=".85"/>
+</svg>
