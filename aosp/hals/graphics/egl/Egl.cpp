@@ -574,6 +574,12 @@ EGLBoolean eglQueryContext(EGLDisplay dpy, EGLContext ctx, EGLint attribute, EGL
     return host<EGLBoolean (*)(EGLDisplay, EGLContext, EGLint, EGLint*)>("eglQueryContext")(dpy, ctx, attribute, value);
 }
 
+EGLBoolean eglReleaseThread() {
+    EGLBoolean ok = host<EGLBoolean (*)()>("eglReleaseThread")();
+    apklayer::egl::gles1MadeCurrent(EGL_NO_CONTEXT);  // no context on the thread now: the no-context GL hooks, as Android's eglReleaseThread sets
+    return ok;
+}
+
 EGLSurface eglGetCurrentSurface(EGLint which) {
     return appSurface(host<EGLSurface (*)(EGLint)>("eglGetCurrentSurface")(which));
 }
@@ -657,7 +663,7 @@ EGLBoolean eglPresentationTimeANDROID(EGLDisplay, EGLSurface, EGLnsecsANDROID) {
     X(eglDestroySync) X(eglDestroySyncKHR) X(eglDupNativeFenceFDANDROID) X(eglGetConfigs) \
     X(eglGetCurrentContext) X(eglGetCurrentDisplay) X(eglGetSyncAttrib) X(eglGetSyncAttribKHR) \
     X(eglQueryAPI) X(eglReleaseTexImage) \
-    X(eglReleaseThread) X(eglSignalSyncKHR) \
+    X(eglSignalSyncKHR) \
     X(eglSwapInterval) X(eglWaitClient) X(eglWaitGL) X(eglWaitNative) \
     X(eglWaitSync) X(eglWaitSyncKHR) X(eglLockSurfaceKHR) X(eglUnlockSurfaceKHR)
 
