@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 import instance  # noqa: E402  (changes into the repo root)
 import pixels  # noqa: E402
 LOGDIR = instance.LOGDIR
-env = dict(instance.ENV, APKLAYER_VULKAN_PRESENT='1', APKLAYER_RUNTIME_DEBUG='1', APKLAYER_LOGCAT='1', APKLAYER_JOPTS='-Dapklayer.nativemedia=true -Dapklayer.realbinder=true -Dapklayer.instancehub=true -Dapklayer.runms=25000')
+env = dict(instance.ENV, APKLAYER_VULKAN_PRESENT='1', APKLAYER_RUNTIME_DEBUG='1', APKLAYER_LOGCAT='1', APKLAYER_JOPTS='-Dapklayer.runms=25000')
 intent = Path('/tmp/apklayer-vulkan-present-intent.properties')
 intent.write_text('component=hello.vulkan.Present\n')
 env['APKLAYER_INTENT_FILE'] = str(intent)

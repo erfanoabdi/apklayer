@@ -183,8 +183,15 @@ static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std
             if (std::string v = property(f, key); !v.empty()) return v;
         return std::string();
     };
+    // a build without BUILD_NUMBER numbers itself after its builder (eng.<user>[.<date>]); a device's incremental is a build number: the build's time
+    std::string incremental = get("ro.build.version.incremental");
+    if (incremental.empty() || incremental.rfind("eng.", 0) == 0) {
+        incremental = get("ro.build.date.utc");
+        setProperty(l, ne, "ro.build.version.incremental", incremental.c_str());
+        setProperty(l, ne, "ro.system.build.version.incremental", incremental.c_str());
+    }
     std::string fingerprint = get("ro.product.brand") + "/" + get("ro.product.name") + "/" + get("ro.product.device") + ":" + get("ro.build.version.release_or_codename") +
-                              "/" + get("ro.build.id") + "/" + get("ro.build.version.incremental") + ":" + get("ro.build.type") + "/" + get("ro.build.tags");
+                              "/" + get("ro.build.id") + "/" + incremental + ":" + get("ro.build.type") + "/" + get("ro.build.tags");
     std::string abis = std::string(kAbi) + (*kAbi32 ? std::string(",") + kAbi32 : "");
     setProperty(l, ne, "ro.build.fingerprint", fingerprint.c_str());
     setProperty(l, ne, "ro.system.build.fingerprint", fingerprint.c_str());
@@ -193,7 +200,7 @@ static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std
     setProperty(l, ne, "ro.build.display.id", (get("ro.build.id") + " " + get("ro.build.tags")).c_str());
     setProperty(l, ne, "ro.build.flavor", flavor.c_str());
     setProperty(l, ne, "ro.build.description", (flavor + " " + get("ro.build.version.release_or_codename") + " " + get("ro.build.id") + " " +
-                                                get("ro.build.version.incremental") + " " + get("ro.build.tags")).c_str());
+                                                incremental + " " + get("ro.build.tags")).c_str());
     setProperty(l, ne, "ro.product.cpu.abi", kAbi);
     setProperty(l, ne, "ro.product.cpu.abilist", abis.c_str());
     setProperty(l, ne, "ro.product.cpu.abilist64", kAbi);
@@ -348,7 +355,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     }
     unlink(inst.pidFile().c_str());
     // the JVMs of this stack are gone: their extracted native runtimes too (the directory stays: a JVM about to start has it as java.io.tmpdir), but not the
-    // fonts and ICU data they share (robolectric patch 0001). shortcut: a copy keyed by an older framework jar stays until the state dir is removed.
+    // fonts and ICU data they share (robolectric patch 0001). A copy keyed by an older framework jar stays until the state dir is removed.
     for (const std::string& name : listDir(inst.tmpDir()))
         if (name != "robolectric-nativeruntime-assets") removeTree(join(inst.tmpDir(), name));
     endShellUnlessShared(l, inst.id);

@@ -20,9 +20,16 @@ import org.robolectric.util.ReflectionHelpers;
 public class ShadowHostServiceManager extends ShadowServiceManager {
     private static final Set<IBinder> wrapped = ConcurrentHashMap.newKeySet();
 
-    @Implementation protected static IBinder getService(String name) { IBinder hub = hub(name); return hub != null ? hub : report(name, ShadowServiceManager.getService(name)); }
-    @Implementation protected static IBinder checkService(String name) { IBinder hub = hub(name); return hub != null ? hub : report(name, ShadowServiceManager.checkService(name)); }
-    @Implementation protected static IBinder waitForService(String name) throws InterruptedException { IBinder hub = hub(name); return hub != null ? hub : report(name, ShadowServiceManager.waitForService(name)); }
+    @Implementation protected static IBinder getService(String name) { IBinder hub = hub(name); return hub != null ? hub : orNative(name, report(name, ShadowServiceManager.getService(name))); }
+    @Implementation protected static IBinder checkService(String name) { IBinder hub = hub(name); return hub != null ? hub : orNative(name, report(name, ShadowServiceManager.checkService(name))); }
+    @Implementation protected static IBinder waitForService(String name) throws InterruptedException { IBinder hub = hub(name); return hub != null ? hub : orNative(name, report(name, ShadowServiceManager.waitForService(name))); }
+
+    /** A name Robolectric has no service for: the one the instance's own service manager has under it (the native stack's "SurfaceFlinger", "media.audio_policy"...), as on a device. */
+    private static IBinder orNative(String name, IBinder fake) {
+        if (fake != null || name == null) return fake;
+        try { return RealBinder.lookup(name); }
+        catch (Throwable noBinder) { return null; }  // a JVM without the native runtime (no kernel binder) has only Robolectric's services
+    }
 
     /** System services the instance hub serves for every app: "account" (HubAccounts). Null for the others, or when no hub is running. */
     private static IBinder hub(String name) {

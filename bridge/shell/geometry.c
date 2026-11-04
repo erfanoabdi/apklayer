@@ -32,7 +32,7 @@ void window_layout(struct window *w)
 {
     int lw = w->cfg_w > 0 ? w->cfg_w : w->w, lh = w->cfg_h > 0 ? w->cfg_h : w->h;
     if (w->viewport) wp_viewport_set_destination(w->viewport, lw, lh);
-    else  /* shortcut: without wp_viewporter only whole multiples of the logical size are shown at their size; every desktop compositor has it */
+    else  /* without wp_viewporter only whole multiples of the logical size are shown at their size (every desktop compositor has it) */
         wl_surface_set_buffer_scale(w->surface, w->w % lw == 0 && w->h % lh == 0 && w->w / lw == w->h / lh ? w->w / lw : 1);
     w->scale = w->w * 100 / lw;
     decor_update(&w->decor, lw, window_scale(w), w->maximized, w->bar_hover, w->activated);

@@ -37,6 +37,9 @@ final class BuildCheck implements Check {
             if (value.contains("test-keys") || value.contains("userdebug")) wrong.append(key).append("='").append(value).append("'; ");
         }
         if (!"0".equals(get.invoke(null, "ro.debuggable"))) wrong.append("ro.debuggable is not 0; ");
+        // a build number, not the builder's name a build without BUILD_NUMBER writes (eng.<user>)
+        if (Build.VERSION.INCREMENTAL.startsWith("eng.") || Build.FINGERPRINT.contains("/eng.") || ((String) get.invoke(null, "ro.build.description")).contains(" eng."))
+            wrong.append("a builder's name in the build number: ").append(Build.VERSION.INCREMENTAL).append("; ");
         Check.require(wrong.length() == 0, wrong.toString());
         return Build.FINGERPRINT;
     }

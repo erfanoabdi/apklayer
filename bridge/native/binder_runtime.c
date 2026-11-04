@@ -1,4 +1,4 @@
-/* Real android.os.Binder / BinderProxy in the app JVM (-Dapklayer.realbinder=true): the framework's own JNI registration (register_android_os_Binder), the
+/* Real android.os.Binder / BinderProxy in the app JVM (always on): the framework's own JNI registration (register_android_os_Binder), the
  * binder thread pool, and a small helper to hand a Java binder to the service manager and fetch one back (AIBinder_fromJavaBinder / toJavaBinder), so two
  * JVMs of an instance can call each other over the kernel binder like two processes on a phone. */
 #include <jni.h>

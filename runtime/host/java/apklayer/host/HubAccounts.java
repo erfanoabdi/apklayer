@@ -75,7 +75,7 @@ final class HubAccounts extends IAccountManager.Stub {
      * AccountManagerService.resolveAccountVisibility: the system and the authenticator's package always see an account; then what was set for the
      * package; else the legacy default: visible ("user managed") to a package signed like the authenticator, to an app targeting before O that holds
      * GET_ACCOUNTS and to holders of GET_ACCOUNTS_PRIVILEGED, not visible to others.
-     * shortcut: READ_CONTACTS does not open contacts-managing account types (accountTypeManagesContacts); model it with a contacts sync adapter that needs it.
+     * Limit: READ_CONTACTS does not open contacts-managing account types (accountTypeManagesContacts: no contacts sync adapter is modelled).
      */
     private int visibility(Account account, String pkg) {
         String authenticator = authenticator(account.type);
@@ -134,7 +134,9 @@ final class HubAccounts extends IAccountManager.Stub {
 
     /** AccountManagerService.Session: binds the type's authenticator through the hub, runs one call, hands its answer to the client and unbinds. */
     private void session(String type, IAccountManagerResponse response, Call call, java.util.function.Consumer<Bundle> onResult) {
-        HubDirectory.Peer caller = caller();
+        session(caller(), type, response, call, onResult);
+    }
+    private void session(HubDirectory.Peer caller, String type, IAccountManagerResponse response, Call call, java.util.function.Consumer<Bundle> onResult) {
         HubAuthenticators.Authenticator authenticator = type == null ? null : authenticators.all().get(type);
         if (authenticator == null) { error(response, AccountManager.ERROR_CODE_BAD_ARGUMENTS, "no authenticator for account type " + type); return; }
         IServiceConnection.Stub connection = new IServiceConnection.Stub() {
@@ -199,14 +201,15 @@ final class HubAccounts extends IAccountManager.Stub {
         if (removed) changed(account);
         return removed;
     }
-    /** shortcut: removed without asking the authenticator's getAccountRemovalAllowed (every authenticator here allows it); ask it when one refuses. */
+    /** AccountManagerService.RemoveAccountSession: the authenticator's getAccountRemovalAllowed decides; an allowed removal answers whether the store had it. */
     @Override public void removeAccountAsUser(IAccountManagerResponse response, Account account, boolean expectActivityLaunch, int userId) {
         owner(account.type);
-        boolean removed = store.remove(account);
-        if (removed) changed(account);
-        Bundle result = new Bundle();
-        result.putBoolean(AccountManager.KEY_BOOLEAN_RESULT, removed);
-        reply(response, result);
+        session(account.type, response, (a, r) -> a.getAccountRemovalAllowed(r, account), result -> {
+            if (!result.getBoolean(AccountManager.KEY_BOOLEAN_RESULT) || result.containsKey(AccountManager.KEY_INTENT)) return;
+            boolean removed = store.remove(account);
+            if (removed) changed(account);
+            result.putBoolean(AccountManager.KEY_BOOLEAN_RESULT, removed);
+        });
     }
     @Override public void invalidateAuthToken(String accountType, String authToken) { store.invalidate(accountType, authToken); }
     @Override public String peekAuthToken(Account account, String authTokenType) { owner(account.type); return store.read(account, e -> e.tokens.get(authTokenType)); }
@@ -274,16 +277,34 @@ final class HubAccounts extends IAccountManager.Stub {
     // Through the authenticator
 
     /**
-     * shortcut: an account the caller does not see gets no token (Android asks its user, GrantCredentialsPermissionActivity, which does not exist here); one it
-     * sees gets one without asking (updateAppPermission). Show that prompt as a desktop dialog when an app needs another app's account it was not shown.
+     * AccountManagerService.getAuthToken's grant check: an authenticator with custom tokens decides itself; the account's authenticator and an app that sees
+     * the account get a token (shortcut: Android asks an app that sees it too unless its user granted that token type before; ask when an app relies on
+     * the question); any other app's user is asked, as GrantCredentialsPermissionActivity does, in a desktop dialog of the hub (HubInstallDialog).
+     * Allowed: the account becomes visible to the app (shortcut: Android keeps the grant per token type in its grants table, apart from visibility; keep it
+     * apart when an app tells the two apart). Denied: ERROR_CODE_CANCELED, as that activity answers.
      */
     @Override public void getAuthToken(IAccountManagerResponse response, Account account, String authTokenType, boolean notifyOnAuthFailure, boolean expectActivityLaunch, Bundle options) {
-        if (account != null && !java.util.Arrays.asList(visible(account.type, caller().name(), false)).contains(account)) {
-            error(response, AccountManager.ERROR_CODE_BAD_ARGUMENTS, caller().name() + " cannot see the account it asks a token of");
-            return;
-        }
+        HubDirectory.Peer caller = caller();
         HubAuthenticators.Authenticator authenticator = account == null ? null : authenticators.all().get(account.type);
         boolean custom = authenticator != null && authenticator.description().customTokens;
+        if (account != null && !custom && !java.util.Arrays.asList(visible(account.type, caller.name(), false)).contains(account)) {
+            if (!store.has(account)) { error(response, AccountManager.ERROR_CODE_BAD_ARGUMENTS, "no account " + account.name + " of type " + account.type); return; }
+            String label = HubInstaller.labelOf(caller.name(), caller.name());
+            Thread ask = new Thread(() -> {  // the person's answer takes its time: never on a binder thread of the hub
+                if (!HubInstallDialog.ask("Allow " + label + " to use your account?", label + " (" + caller.name() + ") asks for access to " + account.name + " (" + account.type + ").", "Allow", "Deny")) {
+                    error(response, AccountManager.ERROR_CODE_CANCELED, "canceled");
+                    return;
+                }
+                if (store.update(account, e -> e.visibility.put(caller.name(), AccountManager.VISIBILITY_USER_MANAGED_VISIBLE))) changed(null);
+                token(caller, response, account, authTokenType, options, false);
+            }, "hub-account-grant");
+            ask.setDaemon(true);
+            ask.start();
+            return;
+        }
+        token(caller, response, account, authTokenType, options, custom);
+    }
+    private void token(HubDirectory.Peer caller, IAccountManagerResponse response, Account account, String authTokenType, Bundle options, boolean custom) {
         String cached = custom ? null : store.read(account, e -> e.tokens.get(authTokenType));
         if (cached != null) {
             Bundle result = accountResult(account);
@@ -291,8 +312,8 @@ final class HubAccounts extends IAccountManager.Stub {
             reply(response, result);
             return;
         }
-        Bundle o = withCaller(options, caller());
-        session(account == null ? null : account.type, response, (a, r) -> a.getAuthToken(r, account, authTokenType, o), result -> {
+        Bundle o = withCaller(options, caller);
+        session(caller, account == null ? null : account.type, response, (a, r) -> a.getAuthToken(r, account, authTokenType, o), result -> {
             String token = result.getString(AccountManager.KEY_AUTHTOKEN);
             if (!custom && token != null) store.update(account, e -> e.tokens.put(authTokenType, token));  // AccountManagerService.saveAuthTokenToDatabase
         });
@@ -333,7 +354,7 @@ final class HubAccounts extends IAccountManager.Stub {
     @Override public void isCredentialsUpdateSuggested(IAccountManagerResponse response, Account account, String statusToken) {
         session(account.type, response, (a, r) -> a.isCredentialsUpdateSuggested(r, account, statusToken), null);
     }
-    /** shortcut: the required features are not checked with the authenticator (hasFeatures per account); ask it when an app filters by features. */
+    /** Limit: the required features are not checked with the authenticator (its hasFeatures per account): every visible account of the type is returned. */
     @Override public void getAccountsByFeatures(IAccountManagerResponse response, String accountType, String[] features, String opPackageName) {
         Bundle result = new Bundle();
         result.putParcelableArray(AccountManager.KEY_ACCOUNTS, visible(accountType, caller().name(), false));

@@ -42,7 +42,7 @@ public class ShadowHostApkAssets extends ShadowArscApkAssets9 {
             synchronized (loaded) {
                 long[] old = loaded.get(key);
                 if (old != null && old[0] == file.lastModified() && old[1] == file.length()) return old[2];
-                // shortcut: the replaced file's assets are never destroyed (Robolectric keeps every one); fine for the few updates of a session
+                // the replaced file's native assets stay allocated (an AssetManager may still hold them; Robolectric never frees one either)
                 long ptr = org.robolectric.util.reflector.Reflector.reflector(Load.class).nativeLoad(format, path, flags, asset);
                 if (ptr > 0) loaded.put(key, new long[] {file.lastModified(), file.length(), ptr});
                 return ptr;

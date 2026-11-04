@@ -14,7 +14,7 @@ import instance  # noqa: E402  (changes into the repo root)
 import pixels  # noqa: E402
 LOGDIR = instance.LOGDIR
 env = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1', APKLAYER_LOGCAT='1',
-    APKLAYER_JOPTS='-Dapklayer.nativeresources=true -Dapklayer.nativemedia=true -Dapklayer.realbinder=true -Dapklayer.instancehub=true -Dapklayer.runms=20000')
+    APKLAYER_JOPTS='-Dapklayer.runms=20000')
 intent = Path(os.environ.get('APKLY_OUT', '/tmp') + '/apklayer-otr2-intent.properties')
 intent.write_text('component=com.dogbytegames.otrnext.OTRNext\n')
 env['APKLAYER_INTENT_FILE'] = str(intent)
