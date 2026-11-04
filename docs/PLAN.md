@@ -51,7 +51,7 @@ before this rewrite is `docs/history/PLAN-2026-11-04-full.md`). If a decision ch
 3. **Android rules not enforced yet**: implicit broadcasts skip manifest receivers of apps targeting 26+; the IME binds to input; notification actions, per-app mute, closing a popup when the app cancels.
 4. **Startup and memory**: one spare JVM for app and component starts (~340 MB per instance); the remaining 100-150 ms costs (setUpApplicationState in spare-born processes, JNI_OnLoad, Hyphenator).
 5. **Corpus rounds** with current F-Droid apps, both VMs, generic fixes only.
-6. **Waiting for the owner**: the per-app sandbox (`apklayerd`, below); real hardware (x86_64 PC with a GPU).
+6. **Waiting for the owner** (designed below, not to start yet): host integration settings, hardware providers, the per-app sandbox (`apklayerd`); real hardware (x86_64 PC with a GPU; a Halium/Sailfish device).
 
 ## Done in the morning round (2026-11-04)
 1. **Media** (done 2026-11-04: m.youtube.com watch pages past the consent dialog in fennec-media, fresh profiles, HAL ring at two PipeWire quanta (41-62 ms), short buffers padded, native-audio window activation). Open: one-off Fennec H.264 MEDIA_ERR_DECODE beside another instance; a stack whose servicemanager had aborted survived `apklayer stop` once; audio quality under load needs a human check.
@@ -82,10 +82,35 @@ before this rewrite is `docs/history/PLAN-2026-11-04-full.md`). If a decision ch
 ## Needs real hardware or a person
 - **x86_64 PC**: the staged x86_64 route (`tools/stage x86_64`, `docs/X86_64.md`) has never run.
 - **A real GPU**: Vulkan presentation (vulkan-present, Godot); Fennec page text (virgl drops ints set in shader branches on UTM, `tests/vm/gles-int-branch.c`; report to virglrenderer).
+- **A Halium/Sailfish device**: the host binder contexts against real vendor HALs; the `android_wlegl` buffer path; device sensors, camera and vibrator.
 - **A person**: the window raise of a relaunched app (the shell asks with the launcher's XDG_ACTIVATION_TOKEN; mutter refuses the shell's own token, no test has a launcher token); what the text magnifier draws; the portal file chooser and pkexec prompt in the manager; the Google sign-in in Meet/microG; playback quality by ear and eye.
 
 ## Before a public release
 Flatpak; the per-app sandbox below; COMMERCIAL.md terms and contact, a CLA and ownership of agent-written commits, NOTICE files for everything shipped.
+
+## Plan: host integration settings (decided 2026-11-04 by the owner, not started)
+The desktop's settings become Android's system settings, read live through the xdg Settings portal (`org.freedesktop.appearance` and friends) on every desktop that has it:
+1. **Night mode**: `color-scheme` -> `Configuration.uiMode` NIGHT_YES/NO and `UiModeManager` night mode; running apps get a configuration change (no restart).
+2. **More of the same**: accent colour (`accent-color` -> the Android 12+ dynamic colour seed), contrast, reduced motion (animator scale 0), text scaling (font scale), locale, time zone, 24-hour clock.
+3. **Overrides**: the manager can pin any of these per instance (e.g. always dark).
+4. **Tests**: flip each setting on the host; a running test app sees the new Configuration and redraws.
+
+## Plan: hardware providers (decided 2026-11-04 by the owner, not started)
+**Principle**: Android's own HAL interfaces (AIDL or HIDL, as the framework expects them) are the only interface: no apklayer-specific front. Per domain a *provider* serves that interface; a per-instance configuration picks it.
+1. **Providers**: *device* (the real device's HAL on Halium/Sailfish, through the host binder contexts below); *apklayer* (our implementations of the standard interfaces, the fronts we have today, with plugin backends); *fake* (fixed or scripted values from the manager; tests).
+2. **Device HALs through host binder contexts** (Waydroid's approach, thin patches in `patches/aosp/`): libbinder gets a host context for AIDL (`/dev/host_binder` style, Waydroid frameworks/native 0015: ProcessState/IPCThreadState per context, BpBinder remembers its context, IServiceManager falls back to the host servicemanager for names not served locally); libhwbinder/libhidl the same for HIDL (`host_hwbinder`, Waydroid libhwbinder 0001/0002, libhidl 0001-0008: the host-HAL allow-list, vendor passthrough paths). Host HALs see our processes as the host uid (Waydroid frameworks/native 0009). Version differences: the framework's own compatibility support (Treble); no version adapters. apklayer opens the device's binder devices from outside the Halium container as Waydroid does. The allow-list is generated from the provider choice (a domain set to "device" is listed and its apklayer front not started). Passthrough HALs and vendor libraries (gralloc mapper, the GPU driver behind EGL) load through bionic_translation's linker in the vendor (sphal) namespace.
+3. **apklayer providers on desktops and non-Halium devices**: the fronts are apklayer's implementations of the standard interfaces (as today: allocator, composer3, audio core, Codec2; next: sensors, GNSS, vibrator, camera provider), with backends behind them as plugins: `libapklayer-<domain>-<backend>.so`, a small C ABI (as `bridge/hals` is), `probe()` reporting availability and quality; the best available is the default.
+   - Sensors: fake, iio-sensor-proxy (D-Bus), sensorfw (as waydroid-sensors), Qt Sensors.
+   - Location (GNSS): fake (fixed point, GPX replay), GeoClue, Ubuntu Touch platform-api, Qt Positioning, gpsd.
+   - Camera: fake (video file or still image), PipeWire / camera portal (libcamera), V4L2.
+   - Vibrator: fake, feedbackd, Linux force-feedback input devices, sysfs LED/timed_output.
+   - Audio: PipeWire (today), PulseAudio. Media codecs: Codec2 software (today), GStreamer/VA-API.
+   - Telephony: none (today), ModemManager, oFono. Battery: UPower. Network: NetworkManager. Bluetooth: BlueZ.
+4. **Graphics**: apklayer's own HWC (composer3, windows on Wayland) on every host, devices included; the device's hwcomposer is never used. Allocator, mapper and GPU drivers come from the provider (GBM/EGL on desktops; the device's gralloc and EGL on Halium). The HWC hands buffers to the compositor through linux-dmabuf (`zwp_linux_dmabuf_v1`) on desktops, and through libhybris's `android_wlegl` protocol on Halium (`create_handle`/`create_buffer`: the gralloc native_handle's fds and ints, wrapped as a `wl_buffer` by Lomiri/Mir or Lipstick; there is no dmabuf there; reference: Waydroid's `android_hardware_waydroid/hwcomposer/wayland-android.xml`). Chosen by what the compositor advertises.
+5. **Configuration and UI**: per instance `<instance root>/providers.toml` (domain -> provider and backend, backend options such as a fake location or a video file); the stack starts the configured services; a change restarts only that domain's service. Manager: a Hardware page, one row per domain (provider/backend dropdown filled from `probe()`, options, live test values for fake providers).
+6. **Tests**: every backend through its Android interface from a test app (sensor events at a set rate, a location fix, a vibration pattern, camera frames); fake providers make each group deterministic. The host-context path on the VMs: a second instance plays "the device" and registers HALs on its binder devices; the first reaches them through the host context. A real Halium/Sailfish device check goes under "Needs real hardware".
+7. **Order**: (a) fake providers for sensors, GNSS, vibrator and camera behind the existing fronts, with the provider config and tests; (b) the manager Hardware page; (c) real backends (iio, sensorfw, GeoClue, feedbackd, PipeWire camera); (d) the host binder contexts (AIDL, HIDL) with the two-instance test; (e) the Halium graphics path (device gralloc, `android_wlegl`).
+8. **Parked**: a userspace binder transport (RPC binder over Unix sockets as a fallback for hosts without binder_linux and for Flatpak): revisit later.
 
 ## Plan: per-app sandbox with `apklayerd` (decided 2026-11-04 by the owner, not started)
 Today every app JVM runs as the desktop user: apps can read each other's data and the user's home, and caller identity rests on the hub's pid registry.
