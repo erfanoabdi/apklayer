@@ -48,6 +48,19 @@ public class ShadowHostWebViewFactory {
         return loader;
     }
 
+    /**
+     * Chromium reads its switch file (/data/local/tmp/webview-command-line, tools/host-setup/webview.sh: the seccomp sandbox off) only on an eng or userdebug
+     * build, while the provider initialises (CommandLineUtil.initCommandLine). The device is a release build (HostBuild): debuggable for that call only.
+     * shortcut: another thread reading Build.TYPE during the provider's creation sees userdebug; feed the switches to org.chromium.base.CommandLine
+     * directly if one does.
+     */
+    @Implementation protected static android.webkit.WebViewFactoryProvider getProvider() throws ClassNotFoundException {
+        String type = android.os.Build.TYPE;
+        org.robolectric.util.ReflectionHelpers.setStaticField(android.os.Build.class, "TYPE", "userdebug");
+        try { return org.robolectric.shadow.api.Shadow.directlyOn(Class.forName("android.webkit.WebViewFactory"), "getProvider"); }
+        finally { org.robolectric.util.ReflectionHelpers.setStaticField(android.os.Build.class, "TYPE", type); }
+    }
+
     @Implementation protected static synchronized Class<?> getProviderClass() {
         if (providerClass != null) return providerClass;
         String dir = System.getProperty("apklayer.webviewprovider");

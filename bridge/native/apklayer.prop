@@ -18,6 +18,12 @@ ro.product.device=desktop
 ro.product.name=lineage_desktop
 ro.product.board=apklayer
 ro.bootloader=apklayer
+# a release build, as a shipped device reports (the tree is userdebug/test-keys, which root detectors flag); ro.debuggable is the tree's 0. The display id,
+# flavor and description that embed them are derived at stack start (cli/stack.cpp).
+ro.build.type=user
+ro.build.tags=release-keys
+ro.system.build.type=user
+ro.system.build.tags=release-keys
 # a phone-class device (the GSI's system build.prop has none; Robolectric's says "robolectric", an emulator image "emulator")
 ro.build.characteristics=default
 # SurfaceFlinger pre-compiles shaders at startup by rendering into dummy buffers of many formats; one of them cannot be wrapped as a
