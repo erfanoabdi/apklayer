@@ -97,7 +97,7 @@ void listAppsTsv(const Layout& l, const Instance& inst) {
 int appInfo(const Layout& l, const Instance& inst, const std::string& package) {
     std::string dir = appDir(l, package), f = join(dir, "info.properties");
     if (!exists(f)) die("not installed: " + package);
-    for (const char* key : {"package", "label", "versionName", "versionCode", "targetSdk", "launcher", "uid"}) printf("%s\t%s\n", key, clean(property(f, key)).c_str());
+    for (const char* key : {"package", "label", "versionName", "versionCode", "targetSdk", "launcher", "uid", "nativeRoute"}) printf("%s\t%s\n", key, clean(property(f, key)).c_str());
     printf("system\t%d\ninDrawer\t%d\n", isSystemApp(f) ? 1 : 0, inDrawer(f) ? 1 : 0);
     printf("dir\t%s\ncodeSize\t%lld\n", dir.c_str(), dirSize(dir) - dirSize(join(dir, "data")));
     printf("dataDir\t%s\ndataSize\t%lld\n", inst.appData(package).c_str(), dirSize(inst.appData(package)));
