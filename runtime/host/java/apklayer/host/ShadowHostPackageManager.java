@@ -104,18 +104,26 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
         if (app.nativeLibraryDir == null) app.nativeLibraryDir = new java.io.File(dir, "lib").getPath();
     }
 
+    /** SHA-256 of the certificates in LineageOS's ComputerEngine: MICROG_REAL_SIGNATURE (microG's NOGAPPS key) and MICROG_FAKE_SIGNATURE (Google's, the only one that may be faked). */
+    private static final String MICROG_REAL_SHA256 = "9bd06727e62796c0130eb6dab39b73157451582cbd138e86c468acc395d14165";
+    private static final String MICROG_FAKE_SHA256 = "f0fd6c5b410f25cb25c3b53346c8972fae30f8ee7411df910480ad6b2d60db83";
+
     /**
-     * Signature spoofing for microG, the policy of the LineageOS patches (ComputerEngine.generateFakeSignature): only microG Services (com.google.android.gms) and its
-     * Companion (com.android.vending) are spoofed, with the certificate their manifest names in the "fake-signature" meta-data (Google's, which Google apps and Play
-     * Services clients check). Signatures of installed apps are not verified here, so the meta-data is the only condition.
+     * Signature spoofing for microG, the rule of LineageOS (ComputerEngine.isMicrogSigned and generateFakeSignature): microG Services (com.google.android.gms) and
+     * its Companion (com.android.vending) show the certificate their manifest names in the "fake-signature" meta-data, when their APK is signed with microG's own
+     * key alone and that certificate is Google's. LineageOS also needs a debuggable build (ANDROID_DEBUGGABLE at compile time: our userdebug tree has it).
      */
     private android.content.pm.Signature fakeSignature(String packageName) {
         if (!"com.google.android.gms".equals(packageName) && !"com.android.vending".equals(packageName)) return null;
+        android.content.pm.Signature[] real = HostCertificate.of(packageName);
+        if (real.length != 1 || !MICROG_REAL_SHA256.equalsIgnoreCase(android.util.PackageUtils.computeSha256Digest(real[0].toByteArray()))) return null;
         try {
             android.content.pm.PackageInfo full = super.getPackageInfo(packageName, PackageManager.GET_META_DATA);
             android.os.Bundle metaData = full == null || full.applicationInfo == null ? null : full.applicationInfo.metaData;
             String hex = metaData == null ? null : metaData.getString("fake-signature");
-            return hex == null || hex.isEmpty() ? null : new android.content.pm.Signature(hex);
+            if (hex == null || hex.isEmpty()) return null;
+            android.content.pm.Signature fake = new android.content.pm.Signature(hex);
+            return MICROG_FAKE_SHA256.equalsIgnoreCase(android.util.PackageUtils.computeSha256Digest(fake.toByteArray())) ? fake : null;
         } catch (PackageManager.NameNotFoundException | RuntimeException none) { return null; }
     }
 
