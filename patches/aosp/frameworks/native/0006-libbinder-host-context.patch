@@ -35,7 +35,7 @@ diff --git a/libs/binder/BackendUnifiedServiceManager.cpp b/libs/binder/BackendU
 +// servicemanager when this one has none: one name or interface ("android.hardware.vibrator.IVibrator" covers its "/default")
 +// per line of /data/apklayer/host_hals.conf, written by the stack from the instance's provider choice (Waydroid's hostaidls.conf).
 +static bool isHostService(const std::string& name) {
-+    static const std::vector<std::string> names = [] {
++    [[clang::no_destroy]] static const std::vector<std::string> names = [] {
 +        std::string text;
 +        android::base::ReadFileToString("/data/apklayer/host_hals.conf", &text);
 +        std::vector<std::string> out;
