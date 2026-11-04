@@ -125,12 +125,12 @@ public final class NativeLoader {
 
     private static void init() {
         if (ready) return;
-        String dir = System.getProperty("apklayer.native");
         String provider = System.getProperty("apklayer.webviewprovider");
         String androidLibs = System.getProperty("apklayer.androidlibs"); // the device-library route: Android's own libraries stay on the path (set by the runtime shim)
-        appPath = System.getProperty("apklayer.libdir", dir);
-        systemPath = (provider == null ? "" : provider + "/lib:") + (androidLibs != null ? androidLibs + ":" : "") + dir;
-        setLibraryPath(systemPath, appPath); // the WebView provider's libs, Android's, then the bionic_translation libs
+        appPath = System.getProperty("apklayer.libdir", "");
+        // only Android (bionic) libraries: apklayer's native dir holds glibc ones, which bionic_translation's dlopen leaves to glibc (LD_LIBRARY_PATH) when they are not here
+        systemPath = (provider == null ? "" : provider + "/lib") + (androidLibs != null ? (provider == null ? "" : ":") + androidLibs : "");
+        setLibraryPath(systemPath, appPath); // the WebView provider's libs, then Android's
         ready = true;
     }
 
