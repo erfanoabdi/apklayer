@@ -52,9 +52,9 @@ final class VoipCheck {
             long start = System.nanoTime(), level = 0;
             out.order(ByteOrder.LITTLE_ENDIAN);
             in.order(ByteOrder.LITTLE_ENDIAN);
-            for (int chunk = 0, n = 0; chunk < 150; chunk++) {  // 1.5 s in 10 ms steps: play a 440 Hz tone, capture the call's input
+            for (int chunk = 0, n = 0; chunk < 150; chunk++) {  // 1.5 s in 10 ms steps: play a 660 Hz tone (apart from the session capture's 440/880 Hz check), capture the call's input
                 out.clear();
-                for (int i = 0; i < frames; i++, n++) out.putShort((short) (Math.sin(2 * Math.PI * 440 * n / rate) * 6000));
+                for (int i = 0; i < frames; i++, n++) out.putShort((short) (Math.sin(2 * Math.PI * 660 * n / rate) * 6000));
                 out.flip();
                 require(track.write(out, out.remaining(), AudioTrack.WRITE_BLOCKING) == frames * 2, "AudioTrack.write(ByteBuffer)");
                 int read = record.read(in, in.capacity());
