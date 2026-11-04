@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>apklayer</title>
+<meta name="description" content="Run Android apps on Linux in Wayland windows.">
+<style>
+  :root { --bg: #fdfdfc; --fg: #1d1d1b; --muted: #5d5d58; --line: #e3e2dc; --code: #f1f0ea; --link: #1f5fbf; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161615; --fg: #ecebe6; --muted: #a3a29b; --line: #2f2e2b; --code: #22211f; --link: #8ab4f8; }
+  }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.55 system-ui, sans-serif; }
+  main { max-width: 42rem; margin: 0 auto; padding: 3rem 16px 4rem; }
+  h1 { font-size: 2.2rem; margin: 0 0 .25rem; letter-spacing: -.02em; }
+  h2 { font-size: 1.15rem; margin: 2.2rem 0 .6rem; }
+  p.lead { color: var(--muted); margin: 0 0 1.5rem; font-size: 1.1rem; }
+  a { color: var(--link); }
+  code, pre { font: .92em/1.5 ui-monospace, monospace; background: var(--code); border-radius: 6px; }
+  code { padding: .1em .35em; }
+  pre { padding: .8rem 1rem; overflow-x: auto; }
+  ol { padding-left: 1.3rem; } li { margin: .4rem 0; }
+  #latest { color: var(--muted); }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>apklayer</h1>
+  <p class="lead">Run Android apps on Linux. Each app is an ordinary Linux process with its own Wayland window: its code is converted once to run on the JVM, and Android's own libraries run unchanged.</p>
+
+  <h2>Install</h2>
+  <p id="latest">Ubuntu 24.04 (noble) and Debian 13 (trixie), arm64. A Wayland desktop and a Mesa GPU driver are needed.</p>
+  <ol>
+    <li>Download the <code>.deb</code> for your system from the <a id="release" href="https://github.com/erfanoabdi/apklayer/releases/latest">latest release</a>
+      (<code>noble</code> for Ubuntu, <code>trixie</code> for Debian).</li>
+    <li>Install it:<pre>sudo apt install ./apklayer_*.deb</pre></li>
+    <li>Open <strong>apklayer</strong> (<code>apklayer-manager</code>) from your app menu. On its first start it downloads the Android runtime and sets everything up.</li>
+  </ol>
+
+  <h2>More</h2>
+  <ul>
+    <li><a href="https://github.com/erfanoabdi/apklayer">Source code on GitHub</a></li>
+    <li><a href="https://github.com/erfanoabdi/apklayer/blob/main/docs/INSTALL.md">docs/INSTALL.md</a>: building from source, the command line, troubleshooting</li>
+    <li><a href="releases.json">releases.json</a>: every release, for apklayer-manager's updater</li>
+  </ul>
+  <footer>apklayer is free software (AGPL-3.0-or-later).</footer>
+</main>
+<script>
+  // names the latest version from releases.json; the page reads fine without it
+  fetch('releases.json').then(r => r.json()).then(d => {
+    if (!d.latest) return;
+    document.getElementById('release').textContent = 'release ' + d.latest;
+    document.getElementById('release').href = 'https://github.com/erfanoabdi/apklayer/releases/tag/v' + d.latest;
+  }).catch(() => {});
+</script>
+</body>
+</html>
