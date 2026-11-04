@@ -13,7 +13,8 @@ import org.robolectric.shadows.ShadowLocationManager;
 
 /**
  * LocationManager from the host's location service (GeoClue over D-Bus, bridge/portal/geoclue.py): with GeoClue the network provider reports its location and follows its
- * updates; without it location is off and no provider is enabled (a machine without a GNSS receiver says so instead of inventing a position).
+ * updates; without it location is off and no provider is enabled (a machine without a GNSS receiver says so instead of inventing a position). The gps provider
+ * is the instance's GNSS HAL (providers.toml; the geoclue backend on a desktop) through the hub's one client of it (HubGnss).
  */
 final class HostLocation {
     private HostLocation() {}

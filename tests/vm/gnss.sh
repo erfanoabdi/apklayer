@@ -24,6 +24,7 @@ run hello.gps 20000
 grep -aq "^\[gps\] hello.gps fix 47.37690 8.54170 accuracy 6.0" "$APKLY_STATE/gnss-hello.gps.out" && grep -aq "^\[gps\] hello.gps PASS" "$APKLY_STATE/gnss-hello.gps.out" ||
     fail "hello.gps did not get GeoClue's fixes"
 grep -a "gnss geoclue:" "$APKLY_STATE"/*.log | tail -3
+grep -aq "fix 37.42200 -122.08406" "$APKLY_STATE/gnss-hello.gps.out" && fail "the HAL reported the AOSP example's mock location before GeoClue's fix"
 
 # 2. two apps locating at once: both get fixes from the one client
 run hello.gps 25000 & first=$!
