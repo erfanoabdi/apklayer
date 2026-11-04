@@ -17,7 +17,7 @@ PKG = 'hello.wvprobe'
 AT = (30, 150)  # on the field's text (the field fills the page)
 ENV = dict(instance.ENV, APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400', APKLAYER_HOST_LIBS=instance.HOST_LIBS,
            APKLAYER_WEBVIEW_PROVIDER='com.android.webview', APKLAYER_LOGCAT='1', APKLAYER_RUNTIME_DEBUG='1', APKLAYER_DEBUG_INPUT='1')
-ENV['APKLAYER_JOPTS'] = '-Dapklayer.realbinder=true -Dapklayer.instancehub=true -Dapklayer.runms=90000 -Dhello.wvinput=1 -Dapklayer.debugkeys=true -Dapklayer.script=' + '+'.join(
+ENV['APKLAYER_JOPTS'] = '-Dapklayer.runms=90000 -Dhello.wvinput=1 -Dapklayer.debugkeys=true -Dapklayer.script=' + '+'.join(
     '%d:hover:%d,0' % (t * 1000, t) for t in range(2, 88))
 seen = []
 pressed = [0.0]  # when the last press went in

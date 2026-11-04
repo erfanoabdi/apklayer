@@ -220,8 +220,13 @@ public final class Services {
     public static boolean bindService(Context ctx, Intent intent, ServiceConnection conn, int flags) {
         ComponentName cn = resolve(ctx, intent);
         if (cn == null) return ctx.bindService(intent, conn, flags);
+        return bind(ctx, cn, intent, conn, flags, null);
+    }
+
+    /** Binds to our service; onServiceConnected runs on the executor when there is one (bindService(Intent, int, Executor, ServiceConnection)), else on the main thread. */
+    private static boolean bind(Context ctx, ComponentName cn, Intent intent, ServiceConnection conn, int flags, java.util.concurrent.Executor executor) {
         return onMain(() -> {
-            if (creating) { DEFERRED.add(() -> bindService(ctx, intent, conn, flags)); return true; }
+            if (creating) { DEFERRED.add(() -> bind(ctx, cn, intent, conn, flags, executor)); return true; }
             try {
                 Running r = instance(cn, intent);
                 Bound pair = new Bound(className(cn), new Intent.FilterComparison(new Intent(intent)));
@@ -240,7 +245,8 @@ public final class Services {
                 IBinder shown = filter.binder;
                 if (Boolean.getBoolean("apklayer.tracebind") && shown != null) { if (r.traced == null) r.traced = traced(shown); shown = r.traced; } // one IBinder for every connection, as on Android
                 IBinder binder = shown;
-                new Handler(Looper.getMainLooper()).post(() -> conn.onServiceConnected(cn, binder));
+                Runnable connected = () -> conn.onServiceConnected(cn, binder);
+                if (executor != null) executor.execute(connected); else new Handler(Looper.getMainLooper()).post(connected);
                 for (Runnable next; (next = DEFERRED.poll()) != null; ) next.run();
                 return true;
             } catch (ClassNotFoundException e) {
@@ -249,7 +255,7 @@ public final class Services {
         });
     }
 
-    /** Debugging (-Dapklayer.logcat): a Binder in front of the service's that prints every transaction it gets and how it ended. */
+    /** Debugging (-Dapklayer.tracebind=true): a Binder in front of the service's that prints every transaction it gets and how it ended. */
     private static IBinder traced(IBinder original) {
         if (original == null) return null;
         return new android.os.Binder() {
@@ -265,9 +271,14 @@ public final class Services {
     }
 
     /** A bind made through the context (framework code, which the converter does not route here): our service, or false, as Android answers a bind nothing resolves (Robolectric's own would connect a null binder). */
-    static boolean bindHere(Context ctx, Intent intent, ServiceConnection conn, int flags) {
-        return resolve(ctx, intent) != null && bindService(ctx, intent, conn, flags);
+    static boolean bindHere(Context ctx, Intent intent, ServiceConnection conn, int flags, java.util.concurrent.Executor executor) {
+        ComponentName cn = resolve(ctx, intent);
+        return cn != null && bind(ctx, cn, intent, conn, flags, executor);
     }
+
+    /** A start or stop made through the context (framework code, which the converter does not route here): our service's answer, or null when it is not ours. */
+    static ComponentName startHere(Context ctx, Intent intent) { return resolve(ctx, intent) != null ? startService(ctx, intent) : null; }
+    static Boolean stopHere(Context ctx, Intent intent) { return resolve(ctx, intent) != null ? stopService(ctx, intent) : null; }
 
     public static void unbindService(Context ctx, ServiceConnection conn) {
         if (!unbindHere(conn)) ctx.unbindService(conn);

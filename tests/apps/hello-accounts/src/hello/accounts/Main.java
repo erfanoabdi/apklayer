@@ -20,11 +20,21 @@ public final class Main extends Activity {
                 if (!getPackageName().equals("hello.accounts")) {
                     if (accounts.length != 0 || java.util.Arrays.stream(am.getAccounts()).anyMatch(a -> a.type.equals("hello.system.account")))
                         throw new AssertionError("hello-system's account is visible to " + getPackageName());
+                    // its user is asked (the hub's dialog; tests/vm/accounts.sh answers -Dhello.grant): denied, no token; allowed, a token and the account
+                    Account hidden = new Account("check", "hello.system.account");
+                    if (Boolean.getBoolean("hello.grant")) {
+                        String token = am.getAuthToken(hidden, "cross", null, false, null, null).getResult().getString(AccountManager.KEY_AUTHTOKEN);
+                        // the token hello.accounts got before: AccountManagerService caches one per account and type, whoever asked
+                        if (token == null || !token.startsWith("token-cross-")) throw new AssertionError("token after the grant " + token);
+                        if (am.getAccountsByType("hello.system.account").length != 1) throw new AssertionError("the granted account is not listed");
+                        System.out.println("[accounts] PASS granted: " + getPackageName() + " was allowed the account it did not see, token " + token);
+                        return;
+                    }
                     try {
-                        am.getAuthToken(new Account("check", "hello.system.account"), "cross", null, false, null, null).getResult();
+                        am.getAuthToken(hidden, "cross", null, false, null, null).getResult();
                         throw new AssertionError("a token of an account this app does not see");
-                    } catch (android.accounts.AuthenticatorException | IllegalArgumentException refused) { /* expected */ }
-                    System.out.println("[accounts] PASS hidden: " + getPackageName() + " sees no account of hello.system.account and gets no token");
+                    } catch (android.accounts.OperationCanceledException denied) { /* its user said no */ }
+                    System.out.println("[accounts] PASS hidden: " + getPackageName() + " sees no account of hello.system.account and gets no token when its user denies it");
                     return;
                 }
                 if (accounts.length == 0) throw new AssertionError("hello-system's account is not listed");

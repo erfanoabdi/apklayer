@@ -77,7 +77,7 @@ void decor_update(struct decor *d, int logical_w, int scale, int maximized, int 
         d->map = map;
         d->map_len = len;
         if (d->viewport) wp_viewport_set_destination(d->viewport, logical_w, DECOR_H);
-        else wl_surface_set_buffer_scale(d->surface, (s + 50) / 100);  /* shortcut: exact at integer scales only (no wp_viewporter) */
+        else wl_surface_set_buffer_scale(d->surface, (s + 50) / 100);  /* without wp_viewporter: exact at integer scales only */
     }
     d->lw = logical_w;
     d->scale = scale;

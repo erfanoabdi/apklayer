@@ -56,20 +56,26 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
     }
     @Implementation @Override protected boolean bindService(Intent intent, ServiceConnection connection, int flags) {
         if (HubServices.external(real, intent)) return HubServices.bind(real, intent, flags, null, connection);
-        return Services.bindHere(real, intent, connection, flags);
+        return Services.bindHere(real, intent, connection, flags, null);
     }
     @Implementation @Override protected boolean bindService(Intent intent, int flags, Executor executor, ServiceConnection connection) {
         if (HubServices.external(real, intent)) return HubServices.bind(real, intent, flags, executor, connection);
-        return Services.bindHere(real, intent, connection, flags);  // shortcut: callbacks on the main thread, not the executor; upgrade when a caller needs its executor
+        return Services.bindHere(real, intent, connection, flags, executor);
     }
     @Implementation @Override protected android.content.ComponentName startService(Intent intent) {
-        return HubServices.external(real, intent) ? HubServices.start(real, intent) : super.startService(intent);
+        if (HubServices.external(real, intent)) return HubServices.start(real, intent);
+        android.content.ComponentName own = Services.startHere(real, intent);
+        return own != null ? own : super.startService(intent);
     }
     @Implementation @Override protected android.content.ComponentName startForegroundService(Intent intent) {
-        return HubServices.external(real, intent) ? HubServices.start(real, intent) : super.startForegroundService(intent);
+        if (HubServices.external(real, intent)) return HubServices.start(real, intent);
+        android.content.ComponentName own = Services.startHere(real, intent);
+        return own != null ? own : super.startForegroundService(intent);
     }
     @Implementation @Override protected boolean stopService(Intent intent) {
-        return HubServices.external(real, intent) ? HubServices.stop(real, intent) : super.stopService(intent);
+        if (HubServices.external(real, intent)) return HubServices.stop(real, intent);
+        Boolean own = Services.stopHere(real, intent);
+        return own != null ? own : super.stopService(intent);
     }
     /** The hub does not rank processes: a binding it holds has nothing to update (the dispatcher lookup of ContextImpl does not know those bindings, and Gecko's priority changes must not throw). */
     @Implementation public void updateServiceGroup(ServiceConnection connection, int group, int importance) {
@@ -88,7 +94,7 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
     }
     @Implementation public boolean bindService(Intent intent, Context.BindServiceFlags flags, Executor executor, ServiceConnection connection) {
         if (HubServices.external(real, intent)) return HubServices.bind(real, intent, (int) flags.getValue(), executor, connection);
-        return Services.bindHere(real, intent, connection, (int) flags.getValue());  // shortcut: callbacks on the main thread, not the executor; upgrade when a caller needs its executor
+        return Services.bindHere(real, intent, connection, (int) flags.getValue(), executor);
     }
     @Implementation @Override protected void unbindService(ServiceConnection connection) {
         if (!HubServices.unbind(connection) && !Services.unbindHere(connection)) super.unbindService(connection);

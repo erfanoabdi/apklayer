@@ -270,7 +270,7 @@ final class HubInstaller {
     }
 
     /** The label an installed package's launcher shows (its info.properties), or the fallback. */
-    private String labelOf(String pkg, String fallback) {
+    static String labelOf(String pkg, String fallback) {
         Properties info = new Properties();
         try (var in = Files.newBufferedReader(Path.of(System.getProperty("apklayer.apps"), pkg, "info.properties"))) { info.load(in); }
         catch (IOException | RuntimeException none) { return fallback; }
