@@ -28,8 +28,8 @@ ui = custom_target('app.h',
             '--depfile', '@DEPFILE@', '-o', '@OUTPUT@', '@INPUT@'],
   env: {'SLINT_EMIT_DEBUG_INFO': '1'})  # element ids for slint-testing.h's lookups (the scripted input)
 
-backend = static_library('backend', 'src/backend.cpp')
-executable('apklayer-manager', 'src/main.cpp', ui,
+backend = static_library('backend', 'src/backend.cpp', 'src/json.cpp', 'src/releases.cpp', 'src/fetch.cpp')
+executable('apklayer-manager', 'src/main.cpp', 'src/setup.cpp', ui,
   dependencies: [slint_dep, dependency('libpng'), dependency('threads')],
   link_with: backend,
   build_rpath: slint / 'cpp/lib',
@@ -37,4 +37,5 @@ executable('apklayer-manager', 'src/main.cpp', ui,
   install: true)
 
 backend_test = executable('backend-test', 'tests/backend_test.cpp', link_with: backend, dependencies: dependency('threads'))
+test('updater', executable('updater-test', 'tests/updater_test.cpp', link_with: backend))  # no CLI, no network: runs anywhere
 test('backend', backend_test, args: [meson.current_source_dir() / '../tests/uibench/uibench.apk'], timeout: 600)

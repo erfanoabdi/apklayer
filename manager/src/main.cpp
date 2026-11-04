@@ -1,5 +1,5 @@
 // apklayer-manager: the Slint UI (ui/app.slint) over the apklayer CLI (src/backend.h). The CLI runs on worker threads; results come back to the
-// UI thread with slint::invoke_from_event_loop. Usage: apklayer-manager [--instance ID] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG]
+// UI thread with slint::invoke_from_event_loop. Usage: apklayer-manager [--instance ID] [--first-run] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG]
 // [--dialog install|instance|prop|uninstall] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--expect LABEL]...] (the screenshot mode: presses the labelled
 // elements, waits for N refreshes when asked (the actions' results), renders once, writes the PNG and exits: the tests' view and input).
 #include <png.h>
@@ -14,28 +14,16 @@
 #include "app.h"
 #include "slint-testing.h"
 #include "backend.h"
+#include "setup.h"
 
 using manager::Cli;
 using manager::Result;
 using manager::Rows;
+using manager::summary;
 
 namespace {
 
 std::string field(const std::vector<std::string>& row, size_t i) { return i < row.size() ? row[i] : ""; }
-
-// "apklayer: installed x" -> "Installed x": the last line the CLI printed (stdout on success, its error otherwise)
-std::string summary(const Result& r) {
-    std::string text = r.status == 0 ? r.out : (r.err.empty() ? r.out : r.err), line;
-    for (size_t end = text.size(); end > 0 && line.empty();) {
-        size_t start = text.rfind('\n', end - 1);
-        start = start == std::string::npos ? 0 : start + 1;
-        line = text.substr(start, end - start);
-        end = start > 0 ? start - 1 : 0;
-    }
-    if (line.rfind("apklayer: ", 0) == 0) line = line.substr(10);
-    if (!line.empty()) line[0] = static_cast<char>(toupper(static_cast<unsigned char>(line[0])));
-    return line.empty() ? (r.status == 0 ? "Done" : "Failed (status " + std::to_string(r.status) + ")") : line;
-}
 
 // What the selected app's detail shows besides the list's row: `info` and `permissions` (whose failure, an install older than the list, is a note there)
 struct Detail {
@@ -80,7 +68,9 @@ public:
         if (size_t bin = exe.rfind("/bin/"); bin != std::string::npos) root_ = exe.substr(0, bin);
         if (access((root_ + "/share/apklayer/tools").c_str(), F_OK) == 0) root_ += "/share/apklayer";  // installed (/usr/bin/apklayer)
         wire();
+        setup_ = std::make_unique<manager::Setup>(ui_, cli_, root_, [this] { refresh(); }, [this](const std::string& m) { message(m); });
     }
+    manager::Setup& setup() { return *setup_; }
 
     void apply(const Snapshot& s) {
         auto& b = ui_->global<Backend>();
@@ -103,8 +93,9 @@ public:
         b.set_has_current_app(!current_.empty());
         b.set_apps(apps);
         auto instances = std::make_shared<slint::VectorModel<InstanceEntry>>();
-        bool running = false;
+        bool running = false, binder = false;
         for (const auto& r : s.instances) {
+            if (field(r, 0) == cli_.instance) binder = field(r, 2) == "1";
             InstanceEntry e;
             e.id = slint::SharedString(field(r, 0));
             e.running = field(r, 1) == "1";
@@ -115,6 +106,7 @@ public:
         }
         b.set_instances(instances);
         b.set_instance_running(running);
+        if (setup_) setup_->binder(binder);
         auto props = std::make_shared<slint::VectorModel<PropEntry>>();
         for (const auto& r : s.props) {
             PropEntry e;
@@ -321,6 +313,7 @@ private:
     Cli cli_;
     std::string root_;     // the tree of the CLI (bin/apklayer): its portal helper and binder setup script
     std::string current_;  // the selected app (UI thread)
+    std::unique_ptr<manager::Setup> setup_;  // the first run and the updates (src/setup.cpp)
 };
 
 bool writePng(const std::string& path, const slint::SharedPixelBuffer<slint::Rgba8Pixel>& pixels) {
@@ -340,6 +333,7 @@ int main(int argc, char** argv) {
     std::string shot, app, dialog;
     std::vector<std::string> input, expect;
     int width = 0, height = 0, page = 0, dark = -1, waitRefreshes = 0, refreshes = 0;
+    bool firstRun = false;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         bool more = i + 1 < argc;
@@ -353,18 +347,22 @@ int main(int argc, char** argv) {
         else if ((a == "--click" || a == "--type") && more) input.push_back(argv[++i]);
         else if (a == "--wait-refresh" && more) waitRefreshes = atoi(argv[++i]);
         else if (a == "--expect" && more) expect.push_back(argv[++i]);
-        else { fprintf(stderr, "usage: apklayer-manager [--instance ID] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG] [--dialog NAME] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--expect LABEL]...]\n"); return 2; }
+        else if (a == "--first-run") firstRun = true;
+        else { fprintf(stderr, "usage: apklayer-manager [--instance ID] [--first-run] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG] [--dialog NAME] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--expect LABEL]...]\n"); return 2; }
     }
     auto ui = AppWindow::create();
     Manager m(ui, cli);
     if (width > 0 && height > 0) ui->window().set_size(slint::LogicalSize({static_cast<float>(width), static_cast<float>(height)}));
     ui->set_page(page);
+    m.setup().firstRun(firstRun);
     if (shot.empty()) {
         m.refresh();
+        m.setup().check(false);
         ui->run();
         return 0;
     }
     if (!app.empty()) { m.select(app); ui->set_app_detail_open(true); } else m.refreshNow();
+    if (getenv("APKLAYER_RELEASES_URL")) m.setup().check(true);  // the screenshot mode reads releases.json only when a test names one
     ui->show();
     if (!dialog.empty()) ui->invoke_show_dialog(slint::SharedString(dialog));
     int status = 1;

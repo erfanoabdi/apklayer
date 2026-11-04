@@ -84,7 +84,7 @@ jobs:
         # GitHub would rename the debs' ~ (apklayer_X.Y.Z-1~noble1_arm64.deb) to . in asset names: do it here, so the names below are the URLs
         run: cd dist && for f in *~*; do mv "$f" "${f//\~/.}"; done && sha256sum -- * > ../SHA256SUMS && mv ../SHA256SUMS . && cat SHA256SUMS
       - name: releases.json
-        run: python3 src/tools/release/releases-json.py pages/releases.json "${VERSION#v}" dist "$GITHUB_REPOSITORY" src/tools/release/versions
+        run: python3 src/tools/release/releases-json.py pages/releases.json "${VERSION#v}" dist "$GITHUB_REPOSITORY" src
       - name: GitHub Release
         if: github.event_name == 'push'
         env: {GH_TOKEN: '${{ github.token }}'}

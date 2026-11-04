@@ -1,0 +1,119 @@
+// The first run (binder, the Android runtime, the default instance, the system apps, optional app stores) and the update banner over the pages.
+import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, ScrollView, OutlinedCard, FilledCard, FilledButton, TextButton,
+         CheckBoxTile, CheckState, LinearProgressIndicator } from "@material";
+import { Backend, AppIcons } from "backend.slint";
+import { Row, Tag, Heading } from "widgets.slint";
+
+export component FirstRunPage {
+    function icon(id: string) -> image {
+        if id == "binder" { return AppIcons.admin; }
+        if id == "runtime" { return AppIcons.board; }
+        if id == "instance" { return AppIcons.layers; }
+        AppIcons.apps
+    }
+
+    ScrollView {
+        HorizontalLayout {
+            alignment: center;
+            VerticalLayout {
+                max-width: 640px;
+                padding: MaterialStyleMetrics.padding_24;
+                spacing: MaterialStyleMetrics.spacing_16;
+                alignment: start;
+                MaterialText { text: "Welcome to apklayer"; style: MaterialTypography.headline_small; color: MaterialPalette.on_surface; }
+                MaterialText {
+                    text: "Android apps run here in instances of their own. A few things are set up once: the kernel's binder devices, the Android runtime, the default instance and Android's own system apps.";
+                    wrap: word-wrap;
+                    style: MaterialTypography.body_medium;
+                    color: MaterialPalette.on_surface_variant;
+                }
+                OutlinedCard {
+                    VerticalLayout {
+                        padding-top: MaterialStyleMetrics.padding_8;
+                        padding-bottom: MaterialStyleMetrics.padding_8;
+                        for step in Backend.setup-steps : VerticalLayout {
+                            Row {
+                                text: step.title;
+                                supporting-text: step.detail;
+                                icon: root.icon(step.id);
+                                clickable: false;
+                                if step.state != "" : Tag { text: step.state; strong: step.state == "Done"; }
+                            }
+                            if step.running : LinearProgressIndicator {
+                                height: MaterialStyleMetrics.size_4;
+                                progress: Backend.setup-progress;
+                                indeterminate: Backend.setup-progress < 0;
+                            }
+                        }
+                    }
+                }
+                // outside the card: a wrapped text inside it does not grow the card (its height is measured unwrapped)
+                if Backend.setup-steps.length > 0 && Backend.setup-steps[0].state != "Done" : VerticalLayout {
+                    spacing: MaterialStyleMetrics.spacing_8;
+                    MaterialText {
+                        wrap: word-wrap;
+                        style: MaterialTypography.body_medium;
+                        color: MaterialPalette.on_surface_variant;
+                        text: "Each instance needs binder devices from the kernel: the binder_linux module (Ubuntu: the linux-modules-extra package of your kernel) and a binderfs mount at /dev/binderfs. Making them needs an administrator; Set up binder asks for your password (polkit).";
+                    }
+                    HorizontalLayout { alignment: start; TextButton { text: "Set up binder"; icon: AppIcons.admin; enabled: !Backend.setup-running; clicked => { Backend.setup-binder(Backend.instance); } } }
+                }
+                Heading { text: "Optional"; }
+                microg-box := CheckBoxTile {
+                    text: "microG";
+                    supporting-text: "Google's services, for apps that need them";
+                    accessible-label: "microG";
+                    accessible-role: checkbox;
+                    accessible-action-default => { self.clicked(); }
+                    enabled: !Backend.setup-running && !Backend.setup-done;
+                }
+                fdroid-box := CheckBoxTile {
+                    text: "F-Droid";
+                    supporting-text: "A store of free software apps";
+                    accessible-label: "F-Droid";
+                    accessible-role: checkbox;
+                    accessible-action-default => { self.clicked(); }
+                    enabled: !Backend.setup-running && !Backend.setup-done;
+                }
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: MaterialStyleMetrics.spacing_8;
+                    if !Backend.setup-done : TextButton { text: "Skip"; enabled: !Backend.setup-running; clicked => { Backend.setup-finish(); } }
+                    if !Backend.setup-done : FilledButton { text: "Set up"; enabled: !Backend.setup-running; clicked => { Backend.setup-start(microg-box.check-state == CheckState.checked, fdroid-box.check-state == CheckState.checked); } }
+                    if Backend.setup-done : FilledButton { text: "Start"; clicked => { Backend.setup-finish(); } }
+                }
+            }
+        }
+    }
+}
+
+// M3 banner: an update, or apps to convert again after one; its progress while it runs
+export component UpdateBanner {
+    VerticalLayout {
+        FilledCard {
+            VerticalLayout {
+                padding: MaterialStyleMetrics.padding_16;
+                spacing: MaterialStyleMetrics.spacing_8;
+                MaterialText { text: Backend.update-title; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; wrap: word-wrap; }
+                if Backend.update-detail != "" : MaterialText {
+                    text: Backend.update-detail;
+                    style: MaterialTypography.body_medium;
+                    color: MaterialPalette.on_surface_variant;
+                    wrap: word-wrap;
+                }
+                if Backend.updating : LinearProgressIndicator {
+                    height: MaterialStyleMetrics.size_4;
+                    progress: Backend.update-progress;
+                    indeterminate: Backend.update-progress < 0;
+                }
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: MaterialStyleMetrics.spacing_8;
+                    if Backend.update-notes-url != "" : TextButton { text: "What's new"; clicked => { Backend.open-notes(); } }
+                    if !Backend.updating : TextButton { text: "Later"; clicked => { Backend.dismiss-update(); } }
+                    if !Backend.updating && Backend.update-action != "" : FilledButton { text: Backend.update-action; clicked => { Backend.update-now(); } }
+                }
+            }
+        }
+    }
+}

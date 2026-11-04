@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""releases-json.py <releases.json> <version> <dist dir> <owner/repo> <versions file>: adds (or replaces) the release <version> in the pages
-branch's releases.json from the files the release workflow uploads (docs/RELEASES.md has the schema), and makes it the latest."""
+"""releases-json.py <releases.json> <version> <dist dir> <owner/repo> <source tree>: adds (or replaces) the release <version> in the pages
+branch's releases.json from the files the release workflow uploads (docs/RELEASES.md has the schema), and makes it the latest. The runtime
+version comes from tools/release/versions, converter_abi and data_format from cli/version.h."""
 import datetime, hashlib, json, os, re, sys
 
-path, version, dist, repo, versions_file = sys.argv[1:]
+path, version, dist, repo, tree = sys.argv[1:]
 base = f"https://github.com/{repo}/releases/download/v{version}/"
-versions = dict(line.strip().split("=", 1) for line in open(versions_file) if "=" in line and not line.startswith("#"))
+versions = dict(line.strip().split("=", 1) for line in open(os.path.join(tree, "tools/release/versions")) if "=" in line and not line.startswith("#"))
+header = open(os.path.join(tree, "cli/version.h")).read()
+versions.update({key: re.search(rf"\b{name} = (\d+);", header)[1] for key, name in (("converter_abi", "kConverterAbi"), ("data_format", "kDataFormat"))})
 
 
 def asset(name):

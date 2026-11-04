@@ -40,10 +40,12 @@ Layout Layout::detect() {
     std::string own = dirName(dirName(exe));
     l.build = getenvOr("APKLAYER_BUILD", exists(join(own, "bridge/shell/apklayer-shell")) ? own : join(l.root, "b"));
     l.dataHome = getenvOr("XDG_DATA_HOME", join(homeDir(), ".local/share"));
-    // installed (debian/): the Android runtime bundle of the version the package names, unpacked per user (docs/RELEASES.md)
+    // installed (debian/): the Android runtime bundle unpacked per user, runtime/current as the manager switches it, else the version the
+    // package names (docs/RELEASES.md)
     l.runtimeVersion = property(join(l.root, "versions"), "runtime");
     bool installed = !l.runtimeVersion.empty();
-    std::string bundle = join(l.dataHome, "apklayer/runtime/" + l.runtimeVersion);
+    std::string runtimes = join(l.dataHome, "apklayer/runtime");
+    std::string bundle = join(runtimes, exists(join(runtimes, "current/runtime.json")) ? "current" : l.runtimeVersion);
     l.native = getenvOr("APKLAYER_NATIVE", installed ? bundle : join(homeDir(), "arm64-native"));
     l.androidLibs = getenvOr("APKLAYER_ANDROID_LIBS", installed ? join(l.native, "android-libs") : join(homeDir(), "android-arm64/lib64"));
     l.bionic = getenvOr("APKLAYER_BT", installed ? join(l.build, "bionic_translation/b") : join(homeDir(), "bt-arm/bionic_translation/b"));

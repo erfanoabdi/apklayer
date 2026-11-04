@@ -89,8 +89,8 @@ void listAppsTsv(const Layout& l, const Instance& inst) {
     for (const std::string& app : listDir(l.appsDir)) {
         std::string f = join(appDir(l, app), "info.properties");
         if (!exists(f)) continue;
-        printf("%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\n", clean(property(f, "package")).c_str(), clean(property(f, "label")).c_str(), clean(property(f, "versionName")).c_str(),
-               appDir(l, app).c_str(), property(f, "uid").c_str(), running.count(app) ? 1 : 0, isSystemApp(f) ? 1 : 0, inDrawer(f) ? 1 : 0);
+        printf("%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%d\n", clean(property(f, "package")).c_str(), clean(property(f, "label")).c_str(), clean(property(f, "versionName")).c_str(),
+               appDir(l, app).c_str(), property(f, "uid").c_str(), running.count(app) ? 1 : 0, isSystemApp(f) ? 1 : 0, inDrawer(f) ? 1 : 0, isStale(f) ? 1 : 0);
     }
 }
 

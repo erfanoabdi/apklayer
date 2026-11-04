@@ -8,7 +8,29 @@ export struct InfoEntry { key: string, value: string }
 // `apklayer permissions`: runtime ones (dangerous) can be granted and revoked; state: what the others' grant is ("Granted", "Not granted", ...)
 export struct PermEntry { name: string, title: string, runtime: bool, granted: bool, state: string }
 
+// a first-run step (src/setup.cpp): id binder|runtime|instance|system-apps|microg|fdroid; state: "", "Done", "Failed", "Skipped"
+export struct SetupStep { id: string, title: string, detail: string, state: string, running: bool }
+
 export global Backend {
+    // the first run's checklist (FirstRunPage) and its choices
+    in property <bool> first-run;
+    in property <[SetupStep]> setup-steps;
+    in property <bool> setup-running;
+    in property <bool> setup-done;
+    in property <float> setup-progress;    // of the running step: 0..1, negative while its size is unknown
+    callback setup-start(bool, bool);  // with microG, with F-Droid
+    callback setup-finish();
+    // the update banner (UpdateBanner): an update of apklayer or its runtime, or stale apps to convert again; title "" hides it
+    in property <string> update-title;
+    in property <string> update-detail;
+    in property <string> update-action;    // the button: "Update", "Convert again", "" none
+    in property <string> update-notes-url;
+    in property <bool> updating;
+    in property <float> update-progress;
+    callback update-now();
+    callback open-notes();
+    callback dismiss-update();
+
     in property <[AppEntry]> apps;
     in property <[InstanceEntry]> instances;
     in property <[PropEntry]> props;

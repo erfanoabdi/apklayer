@@ -4,6 +4,7 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): 
 
 ## State (2026-11-04)
 - About 60 real apps draw and run, current F-Droid versions included (`tests/corpus/results.md`); Google apps through microG (sign-in, Meet accounts). Full suite on UTM (2026-11-04, after the startup/media/installer/cleanup rounds): 43 of 44 groups pass; vulkan-present cannot pass on either VM (no Vulkan presentation: needs a real GPU).
+- Known regression (2026-11-04, being fixed): the codec2 group hangs (the `--probe` sleeps in a poll loop); the media/audio groups after it were not run in the last full suite.
 - Next phase, in order: `docs/PLAN.md` "Next phase".
 
 ## How to work here
@@ -15,7 +16,7 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): 
   Second VM: `APKLY_VM_CONF=parallels`; named instances: `APKLY_SLOTS="a b"` (space-separated). Corpus: `CORPUS_INSTANCE=<id> python3 tests/corpus/run.py <app>`.
 - Screenshots: `apklayer [--instance ID] screenshot <package> <out.png>` (the app's own SurfaceFlinger picture). Input into one instance's window:
   `instance.inject` (tests/lib/instance.py); kernel keys (`instance.keys`) go to the shared desktop's focus and are only for input-desktop.
-- CLI (`cli/`): `install | run | list | uninstall | stop [<package>] | hub | wait hub | screenshot | info | clear-data | permissions [grant|revoke] | instances |
+- CLI (`cli/`): `--version | reconvert <pkg>|--all-stale | launcher show|hide | install [--system] | run | list | uninstall | stop [<package>] | hub | wait hub | screenshot | info | clear-data | permissions [grant|revoke] | instances |
   instance create|remove | prop [set|unset] | status | ime enable|disable`. State and logs: `~/.local/state/apklayer/<instance>/`.
 - Manager UI: `manager/fetch-slint.sh && meson setup manager/b manager && ninja -C manager/b`.
 

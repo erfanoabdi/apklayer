@@ -37,6 +37,8 @@ private:
 
 // Any program with arguments to completion (the portal's file chooser, pkexec for the binder setup)
 Result runProgram(const std::vector<std::string>& argv);
+// "apklayer: installed x" -> "Installed x": the last line the CLI printed (stdout on success, its error otherwise)
+std::string summary(const Result& r);
 // file:///a%20b.apk -> /a b.apk
 std::string fileUriPath(const std::string& uri);
 
