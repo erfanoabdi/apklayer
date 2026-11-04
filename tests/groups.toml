@@ -123,6 +123,7 @@ needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/texture-view.py"]
 
 [vulkan]
+# alone: beside other groups it stalls them and itself (one host GPU: Venus)
 apps = ["hello-vulkan"]
 alone = true
 run = ["python3 -u tests/vm/vulkan.py"]
@@ -193,6 +194,7 @@ alone = true
 run = ["tests/vm/audio-system.sh"]
 
 [otr2]
+# alone: its GPU load stalls gpu-window beside it (virgl)
 needs = ["com.dogbytegames.otrnext"]
 alone = true
 run = ["python3 -u tests/vm/otr2-run.py"]
