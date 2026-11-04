@@ -4,7 +4,7 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): 
 
 ## State (2026-11-04)
 - About 60 real apps draw and run, current F-Droid versions included (`tests/corpus/results.md`); Google apps through microG (sign-in, Meet accounts). Full suite on UTM (2026-11-04, after the startup/media/installer/cleanup rounds): 43 of 44 groups pass; vulkan-present cannot pass on either VM; it passes on the owner's x86_64 PC (real GPU), where the x86_64 route runs.
-- v0.1.0 released 2026-11-04 (tag v0.1.0, prebuilts-v0.1.0). Meet: calls join and stay, sound works; remote video is black (docs/PLAN.md Graphics).
+- v0.1.0 released 2026-11-04 (tag v0.1.0, prebuilts-v0.1.0). Meet works in a call: join, sound, remote video (owner checked, 2026-11-04).
 - Next phase, in order: `docs/PLAN.md` "Next phase".
 
 ## How to work here
