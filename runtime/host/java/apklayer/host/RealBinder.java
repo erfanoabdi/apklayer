@@ -4,7 +4,7 @@ import android.os.IBinder;
 import org.robolectric.annotation.internal.DoNotInstrument;
 
 /**
- * Real kernel-binder access from an app JVM ({@code -Dapklayer.realbinder=true}): the binder thread pool, and publishing / looking up a Java binder
+ * Real kernel-binder access from an app JVM (always on): the binder thread pool, and publishing / looking up a Java binder
  * by name in the instance's service manager. The natives are registered by the shim (bridge/native/binder_runtime.c).
  */
 @DoNotInstrument

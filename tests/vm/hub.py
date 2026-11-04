@@ -26,7 +26,7 @@ TESTS = {
 package, prop, tag, shown, seconds = TESTS[TEST]
 if isinstance(package, dict): package = package.get(PHASE, 'hello.cpclient')
 shown = ('[%s]' % tag, '[apklayer-hub]') + shown
-jopts = '-Dapklayer.realbinder=true -Dapklayer.instancehub=true -Dapklayer.runms=%d' % (90000 if TEST == 'webview' else 60000)
+jopts = '-Dapklayer.runms=%d' % (90000 if TEST == 'webview' else 60000)
 env = dict(ENV, APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400', APKLAYER_HOST_LIBS=HOST_LIBS,
            APKLAYER_JOPTS=jopts + (' -D%s=%s' % (prop, PHASE) if prop else ' ' + os.environ.get('WV_JOPTS', '')))
 if TEST == 'webview':
