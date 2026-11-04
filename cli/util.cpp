@@ -278,17 +278,23 @@ void execReplace(const Spawn& spec) { execChild(spec); }
 
 int spawn(const Spawn& spec) {
     if (spec.detach) {
+        int report[2];  // the middle process tells the detached pid before it exits
+        if (pipe2(report, O_CLOEXEC) != 0) die("pipe failed");
         pid_t first = fork();
         if (first < 0) die("fork failed");
         if (first == 0) {
             pid_t second = fork();
-            if (second != 0) _exit(0);
+            if (second != 0) { (void)!write(report[1], &second, sizeof second); _exit(0); }
             Spawn detached = spec;
             detached.newSession = true;
             execChild(detached);
         }
+        close(report[1]);
         waitpid(first, nullptr, 0);
-        return 0;
+        pid_t pid = 0;
+        if (read(report[0], &pid, sizeof pid) != sizeof pid || pid < 0) pid = 0;
+        close(report[0]);
+        return pid;
     }
     pid_t pid = fork();
     if (pid < 0) die("fork failed");

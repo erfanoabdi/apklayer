@@ -45,7 +45,7 @@ struct Spawn {
     bool keepStdin = false;        // stdin stays (a spare component host reads its target there); /dev/null otherwise
 };
 
-// Starts a process; returns its pid (0 for a detached one). The caller owns waiting for it.
+// Starts a process; returns its pid. The caller owns waiting for it (not for a detached one: init reaps it).
 int spawn(const Spawn& spec);
 // Replaces this process by the command (no return): the launcher's pid is then the program's.
 [[noreturn]] void execReplace(const Spawn& spec);
