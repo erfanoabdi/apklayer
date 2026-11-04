@@ -3,7 +3,7 @@
 Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): `docs/PLAN.md`. History: `CHANGELOG.md`.
 
 ## State (2026-11-04)
-- About 60 real apps draw and run, current F-Droid versions included (`tests/corpus/results.md`); Google apps through microG (sign-in, Meet accounts). Full suite on UTM (2026-11-04, after the startup/media/installer/cleanup rounds): 43 of 44 groups pass; vulkan-present cannot
+- About 60 real apps draw and run, current F-Droid versions included (`tests/corpus/results.md`); Google apps through microG (sign-in, Meet accounts). Full suite on UTM (2026-11-04, after the startup/media/installer/cleanup rounds): 43 of 44 groups pass; vulkan-present cannot pass on either VM (no Vulkan presentation: needs a real GPU).
 - Next phase, in order: `docs/PLAN.md` "Next phase".
 
 ## How to work here
