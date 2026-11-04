@@ -123,6 +123,7 @@ int apklayer_camera_stop(struct apklayer_camera *c)
 {
     if (!c->loop) return 0;
     pw_thread_loop_lock(c->loop);
+    c->ready = -ECANCELED;  /* the disconnect below is not a stream failure */
     if (c->stream) pw_stream_destroy(c->stream);
     c->stream = NULL;
     pw_thread_loop_unlock(c->loop);

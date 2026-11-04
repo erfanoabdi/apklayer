@@ -7,5 +7,6 @@ if gst_app.found() and gst_video.found()
     include_directories: camera_inc, link_with: libcamera_fake), timeout: 30)
 endif
 if pipewire.found()
-  shared_library('apklayer-camera-pipewire', 'pipewire.c', 'pipewire-list.c', include_directories: camera_inc, dependencies: pipewire, install: true)
+  libcamera_pw = shared_library('apklayer-camera-pipewire', 'pipewire.c', 'pipewire-list.c', include_directories: camera_inc, dependencies: pipewire, install: true)
+  executable('camera-pipewire-test', '../../../tests/hals/camera-pipewire-test.c', include_directories: camera_inc, link_with: libcamera_pw)
 endif
