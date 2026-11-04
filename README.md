@@ -31,6 +31,7 @@ tools/build native ~/arm64-native [shards]   # stage the native runtime: ninja's
 sudo tools/host-setup/binder.sh              # kernel binderfs
 bin/apklayer install app.apk | run <package|app.apk> | list | uninstall <package> | screenshot <package> <out.png> | stop
 bin/apklayer instances | instance create|remove <id> | prop [set KEY VALUE | unset KEY] | info | clear-data | permissions [grant|revoke] | stop <package> | status
+bin/apklayer gpus | gpu set <id>|unset         # the host's GPUs; the instance runs on the chosen one (default: the desktop compositor's)
 ```
 
 **apklayer-manager** (`manager/`): a Material 3 window over the CLI for phones and desktops: apps (install, open, stop, clear data, uninstall,

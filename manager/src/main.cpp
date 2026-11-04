@@ -32,7 +32,7 @@ struct Detail {
 };
 
 struct Snapshot {
-    Rows apps, instances, props, settings, status;
+    Rows apps, instances, props, settings, status, gpus;
     std::optional<Detail> detail;
     std::string error;  // the first CLI call that failed: the snackbar shows it instead of leaving its page empty
 };
@@ -58,6 +58,7 @@ Snapshot load(const Cli& cli, const std::string& current) {
     s.props = rows(cli, {"prop"}, s.error);
     s.settings = rows(cli, {"settings"}, s.error);
     s.status = rows(cli, {"status"}, s.error);
+    s.gpus = rows(cli, {"gpus"}, s.error);
     if (!current.empty()) s.detail = loadDetail(cli, current);
     return s;
 }
@@ -122,6 +123,21 @@ public:
         for (const auto& r : s.settings) if (field(r, 0) == "night") night = field(r, 1);
         b.set_night_setting(slint::SharedString(night));
         b.set_status(info(s.status));
+        auto gpus = std::make_shared<slint::VectorModel<MenuItem>>();
+        gpuIds_.clear();
+        int chosen = -1;
+        for (const auto& r : s.gpus) {  // id, node, driver, vendor:device, compositor, instance, name (the first row: the header)
+            if (field(r, 0) == "id") continue;
+            if (field(r, 5) == "yes") chosen = static_cast<int>(gpuIds_.size());
+            gpuIds_.push_back(field(r, 0));
+            MenuItem m;
+            m.text = slint::SharedString(field(r, 6));
+            m.trailing_text = slint::SharedString(field(r, 1) + (field(r, 4) == "yes" ? " (desktop)" : ""));
+            m.enabled = true;
+            gpus->push_back(m);
+        }
+        b.set_gpus(gpus);
+        b.set_gpu_index(chosen);
         if (!current_.empty() && s.detail) showDetail(*s.detail);
         b.set_load_error(slint::SharedString(s.error));
         if (!s.error.empty()) message(s.error);
@@ -309,6 +325,15 @@ private:
                   });
         });
         b.on_stop_instance([this](slint::SharedString id) { action("Stopping the instance", {"stop"}, std::string(id)); });
+        b.on_set_gpu([this](int i) {
+            if (i < 0 || i >= static_cast<int>(gpuIds_.size())) return;
+            auto& b = ui_->global<Backend>();
+            b.set_busy(true);
+            b.set_busy_text("Changing the GPU");
+            // the choice applies from the stack's next start: stop it, the next app launch starts it on the new GPU
+            later([cli = cli_, id = gpuIds_[i]] { Result r = cli.run({"gpu", "set", id}); if (r.status == 0) cli.run({"stop"}); return r; },
+                  [this](const Result& r) { ui_->global<Backend>().set_busy(false); message(summary(r)); refresh(); });
+        });
         b.on_set_prop([this](slint::SharedString k, slint::SharedString v) { action("Saving", {"prop", "set", std::string(k), std::string(v)}); });
         b.on_unset_prop([this](slint::SharedString k) { action("Saving", {"prop", "unset", std::string(k)}); });
         b.on_set_setting([this](slint::SharedString k, slint::SharedString v) {
@@ -318,6 +343,7 @@ private:
     }
 
     slint::ComponentHandle<AppWindow> ui_;
+    std::vector<std::string> gpuIds_;  // the GPU menu's ids, in its order
     Cli cli_;
     std::string root_;     // the tree of the CLI (bin/apklayer): its portal helper and binder setup script
     std::string current_;  // the selected app (UI thread)

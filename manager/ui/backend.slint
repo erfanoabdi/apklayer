@@ -1,4 +1,5 @@
 // What the C++ side (src/main.cpp) fills in and answers: the rows of the apklayer CLI and the actions on them.
+import { MenuItem } from "@material";
 
 // system: a system app (`apklayer install --system`); in-drawer: its launcher shows in the desktop's app drawer
 export struct AppEntry { package: string, label: string, version: string, icon: image, running: bool, system: bool, in-drawer: bool }
@@ -35,6 +36,8 @@ export global Backend {
     in property <[InstanceEntry]> instances;
     in property <[PropEntry]> props;
     in property <[InfoEntry]> status;
+    in property <[MenuItem]> gpus;         // `apklayer gpus`: the selected instance's choice is gpu-index
+    in property <int> gpu-index: -1;
     in property <AppEntry> current-app;   // the app selected with select-app, and its info rows
     in property <bool> has-current-app;
     in property <[InfoEntry]> app-info;
@@ -67,6 +70,7 @@ export global Backend {
     callback remove-instance(string);
     callback setup-binder(string);         // pkexec the setup script
     callback stop-instance(string);
+    callback set-gpu(int);                 // index into gpus: `apklayer gpu set`, then the instance's stack restarts
     callback set-prop(string, string);
     callback unset-prop(string);
     in property <string> night-setting;    // the instance's colour scheme override (`apklayer settings`): "" follows the desktop, "yes" dark, "no" light

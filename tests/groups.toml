@@ -129,6 +129,10 @@ run = ["tests/vm/startup.sh com.android.test.uibench"]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/gpu-smoke.py"]
 
+[gpu-select]
+# apklayer gpus / gpu set|unset and the node the instance's processes get (no app: rendering on a choice is gpu/gpu-window with APKLAYER_GPU)
+run = ["python3 -u tests/vm/gpu-select.py"]
+
 [gpu-window]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/gpu-window-run.py"]

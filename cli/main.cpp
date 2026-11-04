@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include "desktop.h"
+#include "gpus.h"
 #include "manage.h"
 #include "migrate.h"
 #include "run.h"
@@ -36,6 +37,8 @@ int usage() {
           "                         contrast high|normal, animations on|off, font-scale, locale, timezone, time-format 12|24); live in a running instance\n"
           "  permissions <package> | grant|revoke <package> <permission>  what the app requests (permission, level, granted); a runtime one granted or revoked\n"
           "  status                 the instance's stack, running apps, GPU, audio, battery, location\n"
+          "  gpus                   the host's GPUs (id, node, driver, vendor:device, compositor's, this instance's, name)\n"
+          "  gpu set <id|node> | unset  the instance's GPU (default: the compositor's; from its next start)\n"
           "  env                    print the environment of Android's processes\n"
           "  --version              version, converterAbi, dataFormat (key<TAB>value)\n",
           stderr);
@@ -85,6 +88,8 @@ int main(int argc, char** argv) {
     if (cmd == "prop") return propCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "permissions" && n >= 2) return permissionsCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "status") return status(layout, inst);
+    if (cmd == "gpus" && n == 1) return gpusCommand(layout, inst);
+    if (cmd == "gpu" && n >= 2) return gpuCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "uninstall" && n == 2) { uninstallApp(layout, args[1]); return 0; }
     if (cmd == "launcher" && n == 3) return launcherCommand(layout, args[1], args[2]);
     if (cmd == "ime" && n == 3) return inputMethod(layout, inst, args[1], args[2]);

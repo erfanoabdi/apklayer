@@ -210,8 +210,10 @@ void client_vsync_request(struct client *c, int id); /* vsync.c */
 void client_vsync_forget(struct client *c);
 void vsync_source_changed(void);
 #define DMABUF_LINEAR_MAX 64
-extern uint32_t dmabuf_linear[DMABUF_LINEAR_MAX]; /* formats the compositor takes with the linear modifier (registry.c) */
+extern uint32_t dmabuf_linear[DMABUF_LINEAR_MAX]; /* formats the compositor takes with the linear modifier (feedback.c) */
 extern int dmabuf_linear_n;
+void dmabuf_bind(struct wl_registry *r, uint32_t name, uint32_t ver);  /* feedback.c */
+int print_compositor_gpu(void);  /* feedback.c: the compositor's main device (--compositor-gpu) */
 void window_request_size(struct window *w, int lw, int lh);
 void window_attach_input(struct client *c, int own_id, const char *title);  /* window.c */
 void window_drop_proxy(struct client *c);  /* window.c */
