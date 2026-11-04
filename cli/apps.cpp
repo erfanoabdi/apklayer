@@ -47,16 +47,22 @@ std::vector<std::string> apkFiles(const std::string& dir) {
 void extractLibs(const std::string& dir) {  // from the base and its splits (an ABI split carries them)
     removeTree(join(dir, "lib"));
     const std::string prefix = std::string("lib/") + kAbi + "/";
+    bool otherAbi = false;
     for (const std::string& apk : apkFiles(dir)) {
         Spawn list;
         list.argv = {"unzip", "-Z1", join(dir, apk)};
         list.env = currentEnv();
         int st = 0;
         std::string names = runCapture(list, &st);
-        if (names.find("\n" + prefix) == std::string::npos && names.rfind(prefix, 0) != 0) continue;
+        if (names.find("\n" + prefix) == std::string::npos && names.rfind(prefix, 0) != 0) {
+            otherAbi |= names.find("\nlib/") != std::string::npos || names.rfind("lib/", 0) == 0;
+            continue;
+        }
         makeDirs(join(dir, "lib"));
         sh({"unzip", "-o", "-j", "-q", join(dir, apk), prefix + "*.so", "-d", join(dir, "lib")});
     }
+    // Android refuses such an APK (INSTALL_FAILED_NO_MATCHING_ABIS); here its Java part may still run, so a warning
+    if (!isDir(join(dir, "lib")) && otherAbi) std::cerr << "apklayer: warning: the APK has native libraries but none for " << kAbi << ": its native code cannot load\n";
     if (isDir(join(dir, "lib"))) sh({"chmod", "-R", "0755", join(dir, "lib")});  // as Android's installer leaves them: some apps run a bundled lib*.so as a program (Puzzles' libpuzzlesgen.so)
 }
 }  // namespace
