@@ -22,6 +22,7 @@ struct Layout {
 
     static Layout detect();
     void setUpBundle() const;
+    void requireRuntime() const;  // installed: dies with what to do while the runtime bundle is missing
     std::string btload() const { return join(native, "bin/btload"); }
     std::string hostClasses() const { return join(native, "aosp/host-classes"); }
     std::string frameworkDir() const { return join(native, "aosp/android-all"); }

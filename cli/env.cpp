@@ -66,9 +66,7 @@ std::string prepend(const std::string& dir, const std::string& path) {
 }  // namespace
 
 NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
-    if (!layout.runtimeVersion.empty() && !exists(join(layout.native, "runtime.json")))
-        die("no Android runtime " + layout.runtimeVersion + " in " + layout.native + ": open apklayer-manager, or unpack apklayer-runtime-<cpu>-" +
-            layout.runtimeVersion + ".tar.zst there (docs/RELEASES.md)");
+    layout.requireRuntime();
     NativeEnv result;
     Env& env = result.env;
     env = currentEnv();

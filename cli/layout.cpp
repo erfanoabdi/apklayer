@@ -69,6 +69,12 @@ void Layout::setUpBundle() const {
     if (runAndWait(setup) != 0) die("could not set up the Android runtime in " + native);
 }
 
+void Layout::requireRuntime() const {
+    if (!runtimeVersion.empty() && !exists(join(native, "runtime.json")))
+        die("no Android runtime " + runtimeVersion + " in " + native + ": open apklayer-manager, or unpack apklayer-runtime-<cpu>-" + runtimeVersion +
+            ".tar.zst there (docs/RELEASES.md)");
+}
+
 std::string Layout::cliBinary() const { return realPath("/proc/self/exe"); }
 
 Instance Instance::open(const Layout& layout, const std::string& id) {

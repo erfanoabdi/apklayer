@@ -83,6 +83,7 @@ std::string hostClasspath(const Layout& l) {  // no app classes: they get a load
 
 std::string installApp(const Layout& l, const Instance& inst, const std::vector<std::string>& apks, bool allowDowngrade, bool system) {
     for (const std::string& apk : apks) if (!exists(apk)) die("no such file: " + apk);
+    l.requireRuntime();
     if (!isDir(l.hostClasses()) || !exists(l.dex2jvmJar()))
         die("not built: run 'meson setup b && ninja -C b' and tools/build host " + l.native + " in " + l.root);
     makeDirs(l.appsDir);
