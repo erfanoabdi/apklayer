@@ -1,0 +1,102 @@
+# Binary releases (docs/RELEASES.md): a tag vX.Y.Z on main builds the debs (OS release x CPU) and the Android runtime bundle, makes the
+# GitHub Release and adds it to releases.json on the pages branch. Run by hand (workflow_dispatch) it is a dry run: it builds and
+# shows the releases.json entry, nothing is released.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: version the dry run builds (X.Y.Z)
+        default: 0.0.0
+        required: true
+      prebuilts:
+        description: ref of the prebuilts branch to build from
+        default: prebuilts
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  VERSION: ${{ github.event_name == 'push' && github.ref_name || inputs.version }}  # vX.Y.Z on a tag; the v is dropped below
+  PREBUILTS_REF: ${{ github.event_name == 'push' && format('prebuilts-{0}', github.ref_name) || inputs.prebuilts }}
+  BUNDLE_CPUS: arm64  # x86_64 joins once the prebuilts branch's x86_64 is fresh
+
+jobs:
+  deb:
+    name: deb ${{ matrix.os.codename }} ${{ matrix.cpu.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - {codename: noble, image: 'ubuntu:24.04'}
+          - {codename: trixie, image: 'debian:trixie'}
+        cpu:
+          - {arch: arm64, runner: ubuntu-24.04-arm, experimental: false}
+          - {arch: amd64, runner: ubuntu-24.04, experimental: true}  # never run on x86_64 hardware (docs/X86_64.md)
+    runs-on: ${{ matrix.cpu.runner }}
+    continue-on-error: ${{ matrix.cpu.experimental }}
+    container: ${{ matrix.os.image }}
+    steps:
+      - name: Tools
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git ca-certificates curl dpkg-dev zstd >/dev/null
+      - uses: actions/checkout@v4
+        with: {path: src}
+      - uses: actions/checkout@v4
+        with: {path: prebuilts, ref: '${{ env.PREBUILTS_REF }}'}
+      - name: Build-Depends
+        run: DEBIAN_FRONTEND=noninteractive apt-get build-dep -y -qq ./src >/dev/null
+      - name: Build
+        run: sh src/tools/release/build-deb.sh ${{ matrix.os.codename }} "${VERSION#v}" prebuilts out
+      - uses: actions/upload-artifact@v4
+        with: {name: 'deb-${{ matrix.os.codename }}-${{ matrix.cpu.arch }}', path: out/*.deb, if-no-files-found: error}
+
+  bundle:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: {path: src}
+      - uses: actions/checkout@v4
+        with: {path: prebuilts, ref: '${{ env.PREBUILTS_REF }}'}
+      - name: Runtime bundle
+        run: for cpu in $BUNDLE_CPUS; do sh src/tools/release/runtime-bundle.sh prebuilts "$cpu" out; done
+      - uses: actions/upload-artifact@v4
+        with: {name: runtime, path: out/apklayer-runtime-*, if-no-files-found: error}
+
+  release:
+    needs: [deb, bundle]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write  # the GitHub Release and the pages branch commit
+    steps:
+      - uses: actions/checkout@v4
+        with: {path: src}
+      - uses: actions/checkout@v4
+        with: {path: pages, ref: pages}
+      - uses: actions/download-artifact@v4
+        with: {path: dist, merge-multiple: true}
+      - name: SHA256SUMS
+        # GitHub would rename the debs' ~ (apklayer_X.Y.Z-1~noble1_arm64.deb) to . in asset names: do it here, so the names below are the URLs
+        run: cd dist && for f in *~*; do mv "$f" "${f//\~/.}"; done && sha256sum -- * > ../SHA256SUMS && mv ../SHA256SUMS . && cat SHA256SUMS
+      - name: releases.json
+        run: python3 src/tools/release/releases-json.py pages/releases.json "${VERSION#v}" dist "$GITHUB_REPOSITORY" src/tools/release/versions
+      - name: GitHub Release
+        if: github.event_name == 'push'
+        env: {GH_TOKEN: '${{ github.token }}'}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "apklayer ${VERSION#v}" --verify-tag \
+            --notes "Install: download the deb for your OS and CPU, \`sudo apt install ./apklayer_*.deb\`, then open apklayer-manager. SHA256SUMS lists every file."
+      - name: Publish releases.json
+        if: github.event_name == 'push'
+        working-directory: pages
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          git add releases.json
+          git commit -m "releases.json: ${VERSION#v}"
+          git push origin HEAD:pages

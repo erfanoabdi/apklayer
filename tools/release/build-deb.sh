@@ -5,9 +5,8 @@
 # (<version>-1~<codename>1) and debian/<codename>.substvars, then runs dpkg-buildpackage; the deb lands in <out dir>.
 set -eu
 [ $# -eq 4 ] || { sed -n '2,5p' "$0" >&2; exit 2; }
-repo="$(cd "$(dirname "$0")/../.." && pwd)"
-cd "$repo"
 codename="$1" version="$2" P="$(cd "$3" && pwd)" out="$(mkdir -p "$4" && cd "$4" && pwd)"
+cd "$(dirname "$0")/../.."
 IN="${APKLAYER_RELEASE_INPUTS:-$HOME/.cache/apklayer/release}"
 mkdir -p "$IN"
 deb="$version-1~${codename}1"
