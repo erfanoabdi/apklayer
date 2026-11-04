@@ -20,12 +20,11 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan: `docs/PLAN.md`. His
 
 ## NEXT TASKS
 Open work is listed in `docs/PLAN.md` (sections from "After the 2026-11-03 round" on). In order:
-1. Store installs: Android's package installer linked to `apklayer install` (sessions, split APKs/bundles; F-Droid client) — in progress 2026-11-04.
+1. Compatibility with current app versions (corpus from the F-Droid index, both VMs) — in progress 2026-11-04.
 2. audio-aidl's left channel; fennec-media on a fresh profile (onboarding); m.youtube.com consent dialog.
-3. NativeLoader puts the native dir on the app's bionic search path (glibc libraries get linked as bionic: libapklayer-gles1 uses dlmopen as a workaround).
-4. Startup: sandbox class define/init (~0.7 s), cold starts wait ~2 s for the hub.
-5. Before release: x86_64 PC run, Vulkan on a real GPU, Flatpak, COMMERCIAL.md terms, CLA, per-app sandbox (kernel-attested uids).
-6. Last priority (owner): camera HAL.
+3. Startup: sandbox class define/init (~0.7 s), cold starts wait ~2 s for the hub; classes preloaded in the spare component host.
+4. Before release: x86_64 PC run, Vulkan on a real GPU, Flatpak, COMMERCIAL.md terms, CLA, per-app sandbox (kernel-attested uids).
+5. Last priority (owner): camera HAL.
 
 ## Test VM (UTM)
 Host and password: `tests/vm/local.conf` (untracked; `local.conf.example`). Ubuntu 26.04 arm64, GNOME Wayland, Venus Vulkan 1.4, virgl ES 3.0 (apklayer claims 3.2). Passwordless sudo.

@@ -5,7 +5,8 @@ tests/corpus/results.md (results-subset.md when names are given) plus the fake-s
 Each app's install and runs hold the VM's Android-stack lock (~/apklayer-vm.lock, flock -n): a busy lock is reported as "lock busy", nothing waits for it.
 Usage: tests/corpus/run.py [name ...]   (no names: every app);  run.py --report name...  rebuilds the tables from tests/corpus/logs/*.json
 Environment: CORPUS_PATIENCE (seconds per launch), CORPUS_VM_REPO (repo copy on the VM, default ~/apklayer), CORPUS_VM_NATIVE (APKLAYER_NATIVE on the VM),
-CORPUS_SECOND=0 (skip the second launch)."""
+CORPUS_SECOND=0 (skip the second launch), CORPUS_VM_ENV (more VM exports, e.g. APKLAYER_INSTANCE=x XDG_RUNTIME_DIR=.. XDG_STATE_HOME=.. XDG_DATA_HOME=..: another instance)
+with CORPUS_VM_STATE (that instance's state dir, default ~/.local/state/apklayer/default)."""
 import json
 import os
 import re
@@ -24,10 +25,11 @@ import vmcapture  # noqa: E402
 import content  # noqa: E402  (tests/corpus is on sys.path as the script's directory)
 
 SSH = config.auth('ssh') + [config.VM]
-STATE = '~/.local/state/apklayer/default'
+STATE = os.environ.get('CORPUS_VM_STATE', '~/.local/state/apklayer/default')
 REPO = os.environ.get('CORPUS_VM_REPO', '~/apklayer')
 NATIVE = os.environ.get('CORPUS_VM_NATIVE')
-ENV = 'cd %s; export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 APKLAYER_ROOT=%s%s; ' % (REPO, REPO, ' APKLAYER_NATIVE=' + NATIVE if NATIVE else '')
+ENV = 'cd %s; export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 APKLAYER_ROOT=%s%s %s; ' % (
+    REPO, REPO, ' APKLAYER_NATIVE=' + NATIVE if NATIVE else '', os.environ.get('CORPUS_VM_ENV', ''))
 PATIENCE = int(os.environ.get('CORPUS_PATIENCE', '30'))  # seconds to the first frame; a static screen draws only a few, so one frame plus a live process is the bar
 SECOND = os.environ.get('CORPUS_SECOND', '1') != '0'
 AGAIN = '/tmp/apklayer-corpus-again'  # present when a run ends: the VM script launches the app once more
