@@ -82,7 +82,8 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 ### 2026-11-04 — vulkan.apklayer: the instance's GPU only (gpusel agent)
 - Why: apps must see the Vulkan device of the instance's GPU ($APKLAYER_RENDER_NODE, matched by VK_EXT_physical_device_drm; docs/PLAN.md "GPU per instance"): `hals/graphics/vulkan/DeviceSelect.h` (header only, no graph change) and Driver.cpp's vkEnumeratePhysicalDevices/Groups.
-- Command (OrbStack, under `flock -n ~/los24-build.lock`): only Driver.cpp and DeviceSelect.h copied into `vendor/apklayer/hals/graphics/vulkan`, then `python3 tools/lib/orb-build-vulkan.py` (replays the existing arm64 compile/link commands; never cleans).
+- Command (OrbStack, under `flock -n ~/los24-build.lock`): only Driver.cpp and DeviceSelect.h copied into `vendor/apklayer/hals/graphics/vulkan`, then `python3 tools/lib/orb-build-vulkan.py` and the same with `APKLAYER_ARCH=x86_64` (replay the existing compile/link commands; never clean).
+- First run: link failed (duplicate symbols): the script swapped every object of libapklayer_egl's link for vulkan.apklayer's one, and Egl.cpp's split made that three copies; fixed in the script (the first object replaced, the others dropped).
 
 ### 2026-11-04 — gsi_x86_64: apklayer's modules and the patched tree libraries for the x86_64 prebuilts (x86b agent)
 - Why: the x86_64 prebuilts (2026-10-29) lack libapklayer_screenshot, vulkan.apklayer, libapklayer_vktest and the Vulkan loader, and the other modules and patched libraries predate a week of changes; first incremental `gsi_x86_64` build (allowed by the owner 2026-11-04). The x86_64 graph is from 2026-10-29 and regenerates (new modules).
