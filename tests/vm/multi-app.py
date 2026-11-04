@@ -82,13 +82,13 @@ try:
                     continue
                 lines[package].append(line)
                 print(package + ': ' + line, flush=True)
-                if 'script: clipcopy:' + package + '-1000' in line:
+                if 'script: clipcopy:' + package + '-3000' in line:  # 3 s in: a slower host (4 CPUs, two JVMs) has no layer yet at 1 s
                     ready.add(package)
                 if 'script: clipcopy:' + package + '-11000' in line:
                     late.add(package)
                 if ready == set(PACKAGES) and not focus_checked:
                     snapshot = layers()
-                    assert all('VRI-' + p + '/' in snapshot for p in PACKAGES), 'missing app layer'
+                    assert all('VRI-' + p + '/' in snapshot for p in PACKAGES), 'missing app layer:\n' + snapshot
                     for p in PACKAGES: instance.inject(p, 'focus')  # the last one keeps it
                     focus_checked = True
                     for p in PACKAGES: instance.capture('window of ' + p, p)
