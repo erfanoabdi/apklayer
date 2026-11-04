@@ -11,8 +11,9 @@ public final class AppSpare {
     private AppSpare() {}
 
     /** Prepares, then blocks until the holder hands over a launch (exits when the holder is gone first); returns the APK and the classes jar. */
-    public static String[] awaitTarget() {
+    public static String[] awaitTarget(org.robolectric.internal.AndroidSandbox sandbox) {
         AppEnvironment.loadNativeRuntime();
+        AppEnvironment.preloadState(sandbox);
         StartTrace.mark("spare prepared");
         System.out.flush();
         System.err.flush();

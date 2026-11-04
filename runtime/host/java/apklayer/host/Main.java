@@ -64,7 +64,7 @@ public final class Main {
                     String[] target = files;
                     if (spare) {
                         Thread.currentThread().setContextClassLoader(sandbox.getRobolectricClassLoader());  // the native runtime's resources (build.prop, ICU) are the sandbox's
-                        target = (String[]) sandbox.bootstrappedClass(AppSpare.class).getMethod("awaitTarget").invoke(null);
+                        target = (String[]) sandbox.bootstrappedClass(AppSpare.class).getMethod("awaitTarget", AndroidSandbox.class).invoke(null, sandbox);
                         if (!Boolean.getBoolean("apklayer.componenthost")) RunDeadline.start();  // the launch's runms
                     }
                     // an app's window process, or a package's headless component host (the hub's `apklayer component-host`: -Dapklayer.componenthost)
