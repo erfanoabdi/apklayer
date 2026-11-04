@@ -1,0 +1,38 @@
+#!/usr/bin/make -f
+# The apklayer deb (docs/RELEASES.md). tools/release/build-deb.sh fetches the inputs (network), writes debian/changelog and the
+# codename's substvars, then runs dpkg-buildpackage; this file builds offline through tools/release/package.sh.
+export APKLAYER_VERSION ?= $(shell dpkg-parsechangelog -S Version)
+W := $(CURDIR)/debian/work
+
+%:
+	dh $@
+
+override_dh_auto_configure override_dh_auto_test:
+
+override_dh_auto_build:
+	sh tools/release/package.sh build $(W)
+
+override_dh_auto_install:
+	sh tools/release/package.sh install $(W) $(CURDIR)/debian/apklayer
+
+override_dh_auto_clean:
+	rm -rf $(W)
+
+override_dh_installsystemd:
+	dh_installsystemd --name=apklayer-binder
+
+# private libraries: bionic_translation's, and Android's (the native runtime links against them; the runtime bundle brings them)
+override_dh_shlibdeps:
+	dh_shlibdeps -l$(CURDIR)/debian/apklayer/usr/lib/apklayer/bionic_translation/b:$(APKLAYER_PREBUILTS)/$(if $(filter arm64,$(DEB_HOST_ARCH)),arm64,x86_64)/android-libs/lib64 -- --ignore-missing-info
+
+# the OS release's own dependencies (tools/release/build-deb.sh writes debian/<codename>.substvars)
+override_dh_gencontrol:
+	cat debian/$(shell dpkg-parsechangelog -S Distribution).substvars >> debian/apklayer.substvars
+	dh_gencontrol
+
+override_dh_makeshlibs:
+
+override_dh_strip:
+	dh_strip --no-automatic-dbgsym
+
+override_dh_dwz:

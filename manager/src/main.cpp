@@ -9,6 +9,7 @@
 #include <functional>
 #include <optional>
 #include <thread>
+#include <unistd.h>
 
 #include "app.h"
 #include "slint-testing.h"
@@ -77,6 +78,7 @@ public:
     Manager(slint::ComponentHandle<AppWindow> ui, Cli cli) : ui_(ui), cli_(std::move(cli)) {
         std::string exe = cli_.exe();
         if (size_t bin = exe.rfind("/bin/"); bin != std::string::npos) root_ = exe.substr(0, bin);
+        if (access((root_ + "/share/apklayer/tools").c_str(), F_OK) == 0) root_ += "/share/apklayer";  // installed (/usr/bin/apklayer)
         wire();
     }
 

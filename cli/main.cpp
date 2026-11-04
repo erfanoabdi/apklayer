@@ -12,7 +12,7 @@ using namespace apklayer;
 
 namespace {
 int usage() {
-    fputs("usage: apklayer [--instance ID] <command>\n"
+    fputs("usage: apklayer [--instance ID] <command> | --version\n"
           "  install [-d] [--system] <app.apk> [split.apk...]  convert + describe + install (menu entry, icon, .apk handler); also .apks/.xapk/.apkm;\n"
           "                         an update keeps the data, needs the same signer and a version no lower (-d: allow a downgrade);\n"
           "                         --system: a system app (FLAG_SYSTEM, not in the app drawer unless shown)\n"
@@ -41,6 +41,7 @@ int main(int argc, char** argv) {
     std::string id = getenvOr("APKLAYER_INSTANCE", "default");
     if (args.size() >= 2 && args[0] == "--instance") { id = args[1]; args.erase(args.begin(), args.begin() + 2); }
     if (args.empty()) return usage();
+    if (args[0] == "--version") { puts("apklayer " APKLAYER_VERSION); return 0; }
     Layout layout = Layout::detect();
     Instance inst = Instance::open(layout, id);
     const std::string& cmd = args[0];

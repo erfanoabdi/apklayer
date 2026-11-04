@@ -18,8 +18,10 @@ struct Layout {
     std::string appsDir;      // <dataHome>/apklayer/apps/<package>: code, converted classes, info.properties
     std::string stateHome;    // ~/.local/state
     std::string runtimeHome;  // $XDG_RUNTIME_DIR
+    std::string runtimeVersion;  // installed: the Android runtime bundle this package needs (<root>/versions); empty in a source tree
 
     static Layout detect();
+    void setUpBundle() const;
     std::string btload() const { return join(native, "bin/btload"); }
     std::string hostClasses() const { return join(native, "aosp/host-classes"); }
     std::string frameworkDir() const { return join(native, "aosp/android-all"); }

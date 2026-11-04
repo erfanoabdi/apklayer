@@ -1,0 +1,28 @@
+Source: apklayer
+Section: utils
+Priority: optional
+Maintainer: Erfan Abdi <erfangplus@gmail.com>
+Build-Depends: debhelper-compat (= 13), meson, ninja-build, pkg-config, python3, zip, unzip, binutils,
+ openjdk-21-jdk-headless,
+ libwayland-dev, wayland-protocols, libxkbcommon-dev, libcairo2-dev, libpng-dev,
+ libdrm-dev, libgbm-dev, libegl-dev, libgles-dev,
+ libpipewire-0.3-dev, libgstreamer1.0-dev, libgstreamer-plugins-base1.0-dev,
+ libelf-dev, libunwind-dev, libbsd-dev
+Standards-Version: 4.7.0
+Homepage: https://github.com/erfanoabdi/apklayer
+Vcs-Git: https://github.com/erfanoabdi/apklayer.git
+Rules-Requires-Root: no
+
+Package: apklayer
+Architecture: arm64 amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}, ${apklayer:Depends},
+ openjdk-21-jre-headless, python3, zip, unzip
+Recommends: mesa-utils, pkexec, xdg-utils, desktop-file-utils,
+ gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, gstreamer1.0-libav
+Description: run Android apps on Linux in Wayland windows
+ apklayer runs Android apps (APKs) as Linux processes: the app's dex code is
+ converted to JVM classes once, Android's own native libraries run through
+ bionic_translation, and each app opens a Wayland window. This package holds
+ the command line tool, the window shell, the native runtime and
+ apklayer-manager; the Android runtime bundle (Android's libraries and
+ framework) is downloaded per user by apklayer-manager.

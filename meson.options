@@ -2,3 +2,5 @@ option('bionic_translation', type: 'string', value: '',
   description: 'bionic_translation build dir (tools/build bt); empty: $APKLAYER_BT, else ~/bt-arm/bionic_translation/b')
 option('android_libs', type: 'string', value: '',
   description: 'the staged Android libraries; empty: $APKLAYER_ANDROID_LIBS, else ~/android-arm64/lib64')
+option('package_version', type: 'string', value: '',
+  description: 'what `apklayer --version` prints (the release builds pass the package version); empty: the project version')

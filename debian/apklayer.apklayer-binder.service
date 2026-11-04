@@ -1,0 +1,12 @@
+[Unit]
+Description=apklayer: binderfs and the default instance's binder devices
+Documentation=https://github.com/erfanoabdi/apklayer/blob/main/docs/INSTALL.md
+After=systemd-modules-load.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh /usr/share/apklayer/tools/host-setup/binder.sh
+
+[Install]
+WantedBy=multi-user.target

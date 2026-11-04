@@ -1,0 +1,17 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: apklayer
+Source: https://github.com/erfanoabdi/apklayer
+Comment: Third-party components and their licenses: docs/THIRD_PARTY.md of the source.
+ bionic_translation (https://gitlab.com/android_translation_layer/bionic_translation) is built from
+ the revision in patches/bionic_translation/REVISION with apklayer's patches. apklayer-manager ships
+ the prebuilt Slint C++ library 1.18.1 (GPLv3, or Slint's royalty-free/commercial licence).
+
+Files: *
+Copyright: 2026 apklayer contributors
+License: AGPL-3.0-or-later
+ The full text is in LICENSE of the source (Debian ships no common-licenses copy of the AGPL).
+
+Files: runtime/dex2jvm/*
+Copyright: kksimp and contributors
+License: Apache-2.0
+ On Debian systems the full text is in /usr/share/common-licenses/Apache-2.0.

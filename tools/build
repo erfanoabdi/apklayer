@@ -8,6 +8,8 @@
 #   tools/build cfg <native>                  only bionic_translation's library mapping (after staging libraries)
 #   tools/build gles1 <native>                OpenGL ES 1 for hosts without it: gfxstream's GLES_CM translator (staged source, see build_gles1) as <native>/libapklayer-gles1.so
 #   tools/build instrument <native>           only the framework jar instrumented ahead of time (also the last step of host, native and overlay)
+#   tools/build runtime <bundle> <package>    installed layout (docs/RELEASES.md): an unpacked Android runtime bundle becomes the native dir: the package's
+#                                             half linked in, its JNI shim in the framework jars, the library mapping, the instrumented framework
 # Inputs: APKLAYER_BT (bionic_translation's build dir, default ~/bt-arm/bionic_translation/b), APKLAYER_ANDROID_LIBS (the staged Android libraries,
 # default ~/android-arm64/lib64), APKLAYER_BUILD (the meson build dir, default b). The javac shards are the framework's javac output
 # (~/los24/out/soong/.intermediates/frameworks/base/framework-minus-apex/android_common/javac/framework.jar<N>, copied here).
@@ -89,6 +91,7 @@ build_overlay() { # build_overlay <native> [dir with the shim and critical-nativ
 build_instrument() { # the framework jars instrumented once (apklayer.tools.PreInstrument), which app JVMs take while they are newer than their inputs (cli/env.cpp)
     native="$(realpath "$1")"; out="$native/aosp/android-all-instrumented"
     [ -d "$native/aosp/host-classes" ] || { echo "tools/build: no host classes yet, framework jar not instrumented"; return 0; }
+    [ -z "${APKLAYER_NO_INSTRUMENT:-}" ] || return 0  # a package build (tools/release/package.sh): the user's machine instruments (build_runtime)
     rm -rf "$out" && mkdir -p "$out"
     done_jar=""
     entries() { unzip -lv "$1" | awk 'NR > 3 { print $1, $7, $8 }'; }  # size, CRC and name of every entry
@@ -137,6 +140,25 @@ build_gles1() { # gfxstream's GLES_CM translator (staged from the tree's hardwar
     echo "Staged $native/libapklayer-gles1.so"
 }
 
+build_runtime() { # the CLI runs it (cli/layout.cpp) on first use and after a package update; what build_native stages, from the package's half
+    native="$(realpath "$1")" half="$(realpath "$2")"
+    exec 9>"$native/.setup.lock" && flock 9
+    [ "$(stat -c %Y "$native/.setup" 2>/dev/null)" != "$(stat -c %Y "$half/native-runtime.jar")" ] || return 0  # another CLI did it meanwhile
+    echo "apklayer: setting up the Android runtime in $native (after each update, a few minutes)" >&2
+    for f in "$half"/* "$half"/aosp/*; do  # links to the package's files, so an update reaches them; the bundle's own files stay
+        t="$native/${f#"$half"/}"
+        [ "$f" = "$half/aosp" ] || { [ -e "$t" ] && [ ! -L "$t" ]; } || ln -sfn "$f" "$t"
+    done
+    cp -r --remove-destination bridge/native/android-root/. "$native/android-root/"  # apklayer's own files of the Android root
+    tmp="$(mktemp -d)" && scratch="$scratch $tmp"
+    (cd "$tmp" && unzip -q "$half/native-runtime.jar" 'native/linux/*' && for j in "$native"/aosp/android-all/*.jar; do
+        zip -q -O "$j.new" "$j" native/linux/x86_64/libandroid_runtime.so native/linux/aarch64/libandroid_runtime.so && mv -f "$j.new" "$j"
+    done)
+    build_cfg "$native"
+    build_instrument "$native"
+    touch -r "$half/native-runtime.jar" "$native/.setup"
+}
+
 build_native() {
     native="$(realpath "$1")" shards="${2:-}"
     patches/apply bionic_translation "$(dirname "$bt")"
@@ -180,7 +202,7 @@ build_native() {
     echo "Staged the native runtime in $native"
 }
 
-[ $# -ge 2 ] || { sed -n '2,13p' "$0" >&2; exit 2; }
+[ $# -ge 2 ] || { sed -n '2,15p' "$0" >&2; exit 2; }
 step="$1"; shift
 case "$step" in
     bt) build_bt "$@";;
@@ -188,6 +210,7 @@ case "$step" in
     native) build_native "$@";;
     overlay) build_overlay "$@"; build_instrument "$1";;
     instrument) build_instrument "$@";;
+    runtime) build_runtime "$@";;
     cfg) build_cfg "$@";;
     gles1) build_gles1 "$@";;
     *) die "unknown step $step";;

@@ -1,0 +1,7 @@
+# what a release names (docs/RELEASES.md); installed as /usr/share/apklayer/versions
+# runtime: the Android runtime bundle the package needs (bump when the prebuilts branch changes)
+runtime=0.1.0
+# converter_abi: bumped when dex2jvm, the instrumentation or the converted-class format changes (installed apps are converted again)
+converter_abi=1
+# data_format: bumped when app-data or instance layouts change (with migration steps)
+data_format=1

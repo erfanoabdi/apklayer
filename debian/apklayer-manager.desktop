@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=apklayer
+Comment=Android apps on Linux: install, open and manage them
+Exec=apklayer-manager
+Terminal=false
+Categories=System;Utility;
