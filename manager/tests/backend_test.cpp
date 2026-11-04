@@ -39,6 +39,19 @@ int main(int argc, char** argv) {
     CHECK(!pkg.empty(), ("the installed package is listed: " + pkg).c_str());
     Rows info = cli.rows({"info", pkg});
     CHECK(hasRow(info, "package", 1, pkg) && hasRow(info, "running", 1, "0"), "info");
+    // the app drawer: a user app has a launcher there, a system app (install --system) none unless shown (`launcher show|hide`)
+    const char* dataHome = getenv("XDG_DATA_HOME");
+    std::string desktop = (dataHome && *dataHome ? std::string(dataHome) : std::string(getenv("HOME")) + "/.local/share") + "/applications/apklayer-" + pkg + ".desktop";
+    auto hidden = [&] { Result r = runProgram({"grep", "-qx", "NoDisplay=true", desktop}); return r.status == 0; };
+    CHECK(hasRow(cli.rows({"list", "--tsv"}), pkg, 6, "0") && hasRow(cli.rows({"list", "--tsv"}), pkg, 7, "1") && !hidden(), "a user app: not system, in the app drawer");
+    CHECK(cli.run({"launcher", "hide", pkg}).status == 0 && hasRow(cli.rows({"list", "--tsv"}), pkg, 7, "0") && hidden(), "launcher hide: NoDisplay=true");
+    CHECK(cli.run({"launcher", "show", pkg}).status == 0 && !hidden(), "launcher show");
+    CHECK(cli.run({"launcher", "remove", pkg}).status != 0, "launcher takes show or hide");
+    CHECK(cli.run({"uninstall", pkg}).status == 0 && cli.run({"install", "--system", argv[1]}).status == 0 && hasRow(cli.rows({"list", "--tsv"}), pkg, 6, "1") &&
+          hasRow(cli.rows({"info", pkg}), "system", 1, "1"), "install --system: a system app");
+    CHECK(hidden() && hasRow(cli.rows({"list", "--tsv"}), pkg, 7, "0"), "a system app is out of the app drawer by default: NoDisplay=true");
+    CHECK(cli.run({"install", argv[1]}).status == 0 && hasRow(cli.rows({"list", "--tsv"}), pkg, 6, "1") && hidden(), "an update keeps the system mark");
+    CHECK(cli.run({"launcher", "show", pkg}).status == 0 && !hidden() && hasRow(cli.rows({"list", "--tsv"}), pkg, 7, "1"), "launcher show flips a system app into the drawer");
     Result perms = cli.run({"permissions", pkg});
     bool levels = perms.status == 0;  // every row: permission, level, granted (a normal one granted)
     for (const auto& r : parseRows(perms.out)) levels = levels && r.size() == 3 && (r[1] != "normal" || r[2] == "1");

@@ -90,6 +90,8 @@ public:
             e.version = slint::SharedString(field(r, 2));
             e.icon = slint::Image::load_from_path(slint::SharedString(field(r, 3) + "/icon.png"));
             e.running = field(r, 5) == "1";
+            e.system = field(r, 6) == "1";
+            e.in_drawer = field(r, 7) != "0";
             if (field(r, 0) == current_) b.set_current_app(e);
             apps->push_back(e);
         }
@@ -260,6 +262,9 @@ private:
         b.on_uninstall([this](slint::SharedString pkg) { action("Uninstalling", {"uninstall", std::string(pkg)}); });
         b.on_set_permission([this](slint::SharedString pkg, slint::SharedString permission, bool granted) {
             action(granted ? "Granting" : "Revoking", {"permissions", granted ? "grant" : "revoke", std::string(pkg), std::string(permission)});
+        });
+        b.on_set_drawer([this](slint::SharedString pkg, bool shown) {
+            action(shown ? "Showing in the app drawer" : "Hiding from the app drawer", {"launcher", shown ? "show" : "hide", std::string(pkg)});
         });
         b.on_select_app([this](slint::SharedString pkg) {
             current_ = std::string(pkg);

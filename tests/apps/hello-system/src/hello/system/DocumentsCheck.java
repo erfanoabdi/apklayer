@@ -16,6 +16,10 @@ final class DocumentsCheck implements Check {
             Check.require(context.getPackageManager().resolveActivity(intent, 0) != null, "nothing answers " + action + " (" + context.getPackageManager().queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_ALL).size() + " by query, "
                     + context.getPackageManager().queryIntentActivities(new Intent(action).setType("*/*"), android.content.pm.PackageManager.MATCH_ALL).size() + " without the category)");
         }
+        // the document picker is a system app (apklayer install --system), this app is not: apps check FLAG_SYSTEM
+        int flag = android.content.pm.ApplicationInfo.FLAG_SYSTEM;
+        Check.require((context.getPackageManager().getApplicationInfo("com.android.documentsui", 0).flags & flag) != 0, "com.android.documentsui lacks FLAG_SYSTEM");
+        Check.require((context.getApplicationInfo().flags & flag) == 0, "this app has FLAG_SYSTEM");
         List<StorageVolume> volumes = context.getSystemService(StorageManager.class).getStorageVolumes();
         Check.require(!volumes.isEmpty() && volumes.get(0).isPrimary(), "volumes " + volumes);
         Check.require(DocumentsContract.isDocumentUri(context, DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Download")), "document uri not recognised");

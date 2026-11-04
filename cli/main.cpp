@@ -3,6 +3,7 @@
 #include <cstring>
 #include <unistd.h>
 
+#include "desktop.h"
 #include "manage.h"
 #include "run.h"
 #include "spare.h"
@@ -12,10 +13,12 @@ using namespace apklayer;
 namespace {
 int usage() {
     fputs("usage: apklayer [--instance ID] <command>\n"
-          "  install [-d] <app.apk> [split.apk...]  convert + describe + install (menu entry, icon, .apk handler); also .apks/.xapk/.apkm;\n"
-          "                         an update keeps the data, needs the same signer and a version no lower (-d: allow a downgrade)\n"
+          "  install [-d] [--system] <app.apk> [split.apk...]  convert + describe + install (menu entry, icon, .apk handler); also .apks/.xapk/.apkm;\n"
+          "                         an update keeps the data, needs the same signer and a version no lower (-d: allow a downgrade);\n"
+          "                         --system: a system app (FLAG_SYSTEM, not in the app drawer unless shown)\n"
           "  run <package|app.apk>  run an installed app (an .apk path is installed first)\n"
-          "  list [--tsv]           installed apps (--tsv: package, label, version, dir, uid, running in this instance)\n"
+          "  list [--tsv]           installed apps (--tsv: package, label, version, dir, uid, running in this instance, system app, in the app drawer)\n"
+          "  launcher show|hide <package>  the app's launcher in the desktop's app drawer (system apps are hidden by default)\n"
           "  info <package>         the app's description, sizes and directories (key<TAB>value)\n"
           "  clear-data <package>   remove the app's files in this instance\n"
           "  uninstall <package>    remove an app and its data\n"
@@ -43,9 +46,11 @@ int main(int argc, char** argv) {
     const std::string& cmd = args[0];
     size_t n = args.size();
     if (cmd == "install" && n >= 2) {
-        bool downgrade = args[1] == "-d";
-        if (n == 2 && downgrade) return usage();
-        installApp(layout, inst, std::vector<std::string>(args.begin() + 1 + downgrade, args.end()), downgrade);
+        bool downgrade = false, system = false;
+        size_t first = 1;
+        for (; first < n && (args[first] == "-d" || args[first] == "--system"); first++) (args[first] == "-d" ? downgrade : system) = true;
+        if (first == n) return usage();
+        installApp(layout, inst, std::vector<std::string>(args.begin() + first, args.end()), downgrade, system);
         return 0;
     }
     if (cmd == "run" && n == 2) {
@@ -59,6 +64,7 @@ int main(int argc, char** argv) {
     if (cmd == "app-spare" && n == 3 && args[1] == "--after") return runAppSpare(layout, inst, atoi(args[2].c_str()));  // started by `run` (cli/spare.cpp)
     if (cmd == "hub") return runHub(layout, inst);
     if (cmd == "wait" && n == 2 && args[1] == "hub") return waitHub(layout, inst);
+    if (cmd == "list") markSystemApps(layout);  // installs staged before the system mark
     if (cmd == "list" && n == 2 && args[1] == "--tsv") { listAppsTsv(layout, inst); return 0; }
     if (cmd == "list") { listApps(layout); return 0; }
     if (cmd == "info" && n == 2) return appInfo(layout, inst, args[1]);
@@ -70,6 +76,7 @@ int main(int argc, char** argv) {
     if (cmd == "permissions" && n >= 2) return permissionsCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "status") return status(layout, inst);
     if (cmd == "uninstall" && n == 2) { uninstallApp(layout, args[1]); return 0; }
+    if (cmd == "launcher" && n == 3) return launcherCommand(layout, args[1], args[2]);
     if (cmd == "ime" && n == 3) return inputMethod(layout, inst, args[1], args[2]);
     if (cmd == "screenshot" && n == 3) return screenshot(layout, inst, args[1], args[2]);
     if (cmd == "stop") { stopStack(layout, inst); return 0; }

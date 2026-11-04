@@ -1,6 +1,7 @@
 // What the C++ side (src/main.cpp) fills in and answers: the rows of the apklayer CLI and the actions on them.
 
-export struct AppEntry { package: string, label: string, version: string, icon: image, running: bool }
+// system: a system app (`apklayer install --system`); in-drawer: its launcher shows in the desktop's app drawer
+export struct AppEntry { package: string, label: string, version: string, icon: image, running: bool, system: bool, in-drawer: bool }
 export struct InstanceEntry { id: string, running: bool, binder: bool, root: string }
 export struct PropEntry { key: string, value: string, source: string, live: string }
 export struct InfoEntry { key: string, value: string }
@@ -37,6 +38,7 @@ export global Backend {
     callback clear-data(string);
     callback uninstall(string);
     callback set-permission(string, string, bool);  // package, permission, granted
+    callback set-drawer(string, bool);     // package, shown in the app drawer (`apklayer launcher show|hide`)
     callback select-app(string);
     callback select-instance(string);
     callback create-instance(string);
