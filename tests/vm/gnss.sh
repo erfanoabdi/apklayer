@@ -1,7 +1,9 @@
 #!/bin/bash
-# gnss.sh: the GeoClue GNSS backend (libapklayer-gnss-geoclue.so) against a python-dbusmock GeoClue (tests/vm/geoclue2-mock.py) on a private
-# "system bus", and the hub's one GNSS HAL client (HubGnss) serving two apps at once: hello.gps alone gets the mock's point as gps fixes; then
-# hello.gps and hello.gps2 together both get them; then with the desktop's agent refusing (deny) the provider stays without fixes.
+# gnss.sh: the D-Bus GNSS backends against stand-in location services on private buses, and the hub's one GNSS HAL client (HubGnss) serving
+# two apps at once. GeoClue 2 (libapklayer-gnss-geoclue.so, python-dbusmock template tests/vm/geoclue2-mock.py): hello.gps alone gets the
+# mock's point as gps fixes; hello.gps and hello.gps2 together both get them; with the desktop's agent refusing (deny) the provider stays
+# without fixes. Then lomiri-location-service (Ubuntu Touch, tests/vm/lomiri-location-mock.py) and GeoClue 1 on the session bus (Sailfish OS,
+# tests/vm/geoclue1-mock.py): hello.gps gets each one's point.
 # On the VM, in the group's instance (tests/run gnss). Needs python3-dbusmock (apt).
 : "${APKLY_STATE:=${XDG_STATE_HOME:-$HOME/.local/state}/apklayer/${APKLAYER_INSTANCE:-default}}"
 mkdir -p "$APKLY_STATE"
@@ -11,7 +13,7 @@ fail() { echo "FAIL: $*"; status=1; }
 read -r address daemon < <(dbus-daemon --session --fork --print-address=1 --print-pid=1 | paste -sd' ')
 export DBUS_SYSTEM_BUS_ADDRESS=$address
 mock() { python3 -m dbusmock --system --template tests/vm/geoclue2-mock.py -p "$1" >/dev/null 2>&1 & mockpid=$!; gdbus wait --system --timeout 10 org.freedesktop.GeoClue2; }
-trap 'bin/apklayer stop >/dev/null 2>&1; bin/apklayer providers unset gnss >/dev/null; kill $mockpid $daemon 2>/dev/null' EXIT
+trap 'bin/apklayer stop >/dev/null 2>&1; bin/apklayer providers unset gnss >/dev/null; kill $mockpid $daemon $session 2>/dev/null' EXIT
 mock '{"latitude": 47.3769, "longitude": 8.5417, "accuracy": 6}' || { echo "FAIL: no mock GeoClue"; exit 1; }
 bin/apklayer stop >/dev/null 2>&1
 bin/apklayer providers set gnss geoclue >/dev/null
@@ -43,5 +45,28 @@ run hello.gps 12000
 grep -aq "^\[gps\] hello.gps gps=true" "$APKLY_STATE/gnss-hello.gps.out" && ! grep -aq "^\[gps\] hello.gps fix" "$APKLY_STATE/gnss-hello.gps.out" ||
     fail "with GeoClue refusing, hello.gps should see the gps provider without fixes"
 grep -a "gnss geoclue:.*disallowed" "$APKLY_STATE"/*.log | tail -1 | grep -q . || fail "the backend did not report GeoClue's refusal"
+bin/apklayer stop >/dev/null 2>&1
+kill $mockpid; wait $mockpid 2>/dev/null
+
+# 4. lomiri-location-service (its own protocol: a session whose updates the service calls on the client)
+python3 tests/vm/lomiri-location-mock.py 41.9028 12.4964 4 > "$APKLY_STATE/gnss-lomiri-mock.out" 2>&1 & mockpid=$!
+gdbus wait --system --timeout 10 com.lomiri.location.Service || fail "no stand-in lomiri-location-service"
+bin/apklayer providers set gnss lomiri >/dev/null
+bin/apklayer providers | grep -a "^backend	gnss	lomiri"
+run hello.gps 15000
+cat "$APKLY_STATE/gnss-lomiri-mock.out"
+grep -aq "^\[gps\] hello.gps fix 41.90280 12.49640 accuracy 4.0" "$APKLY_STATE/gnss-hello.gps.out" || fail "hello.gps did not get lomiri-location-service's fix"
+bin/apklayer stop >/dev/null 2>&1
+kill $mockpid; wait $mockpid 2>/dev/null
+
+# 5. GeoClue 1 on the session bus (the stack starts on a private one for this step)
+read -r session_address session < <(dbus-daemon --session --fork --print-address=1 --print-pid=1 | paste -sd' ')
+DBUS_SESSION_BUS_ADDRESS=$session_address python3 -m dbusmock --template tests/vm/geoclue1-mock.py -p '{"latitude": 60.1699, "longitude": 24.9384, "accuracy": 9}' >/dev/null 2>&1 & mockpid=$!
+DBUS_SESSION_BUS_ADDRESS=$session_address gdbus wait --session --timeout 10 org.freedesktop.Geoclue.Master || fail "no mock GeoClue 1"
+bin/apklayer providers set gnss geoclue1 >/dev/null
+DBUS_SESSION_BUS_ADDRESS=$session_address bin/apklayer providers | grep -a "^backend	gnss	geoclue1"
+(export DBUS_SESSION_BUS_ADDRESS=$session_address; run hello.gps 15000)
+grep -aq "^\[gps\] hello.gps fix 60.16990 24.93840 accuracy 9.0" "$APKLY_STATE/gnss-hello.gps.out" || fail "hello.gps did not get GeoClue 1's fix"
+grep -a "gnss \(lomiri\|geoclue1\):" "$APKLY_STATE"/*.log | tail -4
 [ $status = 0 ] && echo "gnss: PASS"
 exit $status
