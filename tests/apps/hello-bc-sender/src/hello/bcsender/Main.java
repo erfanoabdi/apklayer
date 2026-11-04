@@ -24,8 +24,13 @@ public class Main extends Activity {
         new Handler(Looper.getMainLooper()).postDelayed(() -> run(scenario), 500);
     }
 
-    private void send(String action, String note) {
-        Intent intent = new Intent(action);
+    // the receiver's package named: manifest receivers of apps targeting 26+ get no implicit broadcasts (the background execution limit)
+    private static final String RECEIVER = "hello.bcreceiver";
+
+    private void send(String action, String note) { send(action, note, RECEIVER); }
+
+    private void send(String action, String note, String pkg) {
+        Intent intent = new Intent(action).setPackage(pkg);
         intent.putExtra("note", note);
         sendBroadcast(intent);
         System.out.println("[bcs] sent " + action);
@@ -34,10 +39,14 @@ public class Main extends Activity {
     private void run(String scenario) {
         try {
             switch (scenario) {
-                case "manifest" -> send("hello.bc.MANIFEST", "to a package that is not running");
+                case "manifest" -> {
+                    send("hello.bc.MANIFEST", "implicit", null);
+                    send("hello.bc.MANIFEST", "to a package that is not running");
+                }
                 case "basic" -> {
-                    send("hello.bc.DYNAMIC", "dynamic");
-                    send("hello.bc.MANIFEST", "manifest");
+                    send("hello.bc.DYNAMIC", "dynamic", null);  // implicit: registered receivers still get it
+                    send("hello.bc.MANIFEST", "implicit", null);
+                    send("hello.bc.MANIFEST", "package");
                     send("hello.bc.PROTECTED", "needs the permission");
                     send("hello.bc.GUARDED", "dynamic receiver with a permission");
                     send("hello.bc.PRIVATE", "private manifest receiver");
@@ -48,14 +57,14 @@ public class Main extends Activity {
                     System.out.println("[bcs] sent explicit");
                 }
                 case "ordered" -> {
-                    Intent intent = new Intent("hello.bc.ORDERED");
+                    Intent intent = new Intent("hello.bc.ORDERED").setPackage(RECEIVER);
                     BroadcastReceiver last = new BroadcastReceiver() {
                         @Override public void onReceive(Context context, Intent i) {
                             System.out.println("[bcs] ordered result code=" + getResultCode() + " data=" + getResultData());
                         }
                     };
                     sendOrderedBroadcast(intent, null, last, null, 0, "start", null);
-                    Intent abort = new Intent("hello.bc.ABORT");
+                    Intent abort = new Intent("hello.bc.ABORT").setPackage(RECEIVER);
                     BroadcastReceiver lastAbort = new BroadcastReceiver() {
                         @Override public void onReceive(Context context, Intent i) {
                             System.out.println("[bcs] abort result code=" + getResultCode() + " data=" + getResultData());
@@ -69,7 +78,7 @@ public class Main extends Activity {
                             System.out.println("[bcs] async result code=" + getResultCode() + " data=" + getResultData());
                         }
                     };
-                    sendOrderedBroadcast(new Intent("hello.bc.ASYNC"), null, last, null, 0, "start", null);
+                    sendOrderedBroadcast(new Intent("hello.bc.ASYNC").setPackage(RECEIVER), null, last, null, 0, "start", null);
                 }
                 case "once" -> { send("hello.bc.ONCE", "first"); send("hello.bc.ONCE", "second"); }
                 case "sticky" -> {

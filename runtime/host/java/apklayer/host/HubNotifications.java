@@ -28,6 +28,7 @@ final class HubNotifications {
 
     void post(HubDirectory.Peer caller, String pkg, String tag, int id, Notification notification, int importance) {
         if (!caller.name().equals(pkg)) throw new SecurityException(caller.name() + " cannot post notifications for " + pkg);
+        if (muted(pkg)) { System.out.println("[apklayer-hub] notification " + pkg + " " + tag + "/" + id + " dropped: notifications of " + pkg + " are off"); return; }
         Key key = new Key(pkg, tag, id);
         Posted record;
         synchronized (posted) { record = posted.computeIfAbsent(key, k -> new Posted()); record.notification = notification; }
@@ -43,6 +44,9 @@ final class HubNotifications {
         System.out.println("[apklayer-hub] notification popup=" + popup);
     }
 
+    /** The user turned the app's notifications off (NotificationManagerService.areNotificationsEnabledForPackage): its POST_NOTIFICATIONS revoked. */
+    static boolean muted(String pkg) { return HostRevokedPermissions.revoked(pkg, android.Manifest.permission.POST_NOTIFICATIONS); }
+
     void cancel(HubDirectory.Peer caller, String tag, int id, boolean all) {
         List<Posted> gone = new ArrayList<>();
         synchronized (posted) {
@@ -52,7 +56,7 @@ final class HubNotifications {
                 return match;
             });
         }
-        for (Posted record : gone) if (record.desktopId != 0) desktop.close(record.desktopId);
+        for (Posted record : gone) if (record.desktopId != 0) { System.out.println("[apklayer-hub] notification cancelled, popup " + record.desktopId + " closed"); desktop.close(record.desktopId); }
     }
 
     private Posted byDesktop(int id, Key[] key) {
@@ -84,6 +88,7 @@ final class HubNotifications {
     }
 
     private void dismissed(int id, int reason) {
+        System.out.println("[apklayer-hub] popup " + id + " closed by the desktop, reason " + reason);
         Key[] key = new Key[1];
         Posted record = byDesktop(id, key);
         if (record == null || reason != DISMISSED_BY_USER) return;

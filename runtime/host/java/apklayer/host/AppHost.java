@@ -336,6 +336,12 @@ public final class AppHost implements Runnable {
         if (resultTo != null && !stack.isEmpty()) hubResults.put(stack.peek().get(), resultTo);
     }
 
+    private static ActivityInfo resolved(Intent intent) throws android.content.pm.PackageManager.NameNotFoundException {
+        android.content.pm.ResolveInfo found = RuntimeEnvironment.getApplication().getPackageManager().resolveActivity(intent, 0);
+        if (found == null) throw new android.content.pm.PackageManager.NameNotFoundException("no activity of this app handles it");
+        return found.activityInfo;
+    }
+
     /** Builds and fully starts the activity, as the simulator does (Robolectric.setupActivity). */
     private void launch(Intent intent) {
         launch(intent, stack.isEmpty() ? null : ((ShadowActivity) Shadow.extract(stack.peek().get())).getNextStartedActivityForResult());
@@ -350,7 +356,7 @@ public final class AppHost implements Runnable {
         try {
             info = intent.getComponent() != null
                     ? RuntimeEnvironment.getApplication().getPackageManager().getActivityInfo(intent.getComponent(), 0)
-                    : RuntimeEnvironment.getApplication().getPackageManager().resolveActivity(intent, 0).activityInfo;
+                    : resolved(intent);
             // an <activity-alias> names its real class in targetActivity
             cls = Class.forName(info.targetActivity != null ? info.targetActivity : info.name)
                     .asSubclass(Activity.class);
@@ -527,6 +533,7 @@ public final class AppHost implements Runnable {
      */
     private static void setVisible(ActivityController<? extends Activity> c, boolean visible) {
         c.get().getWindow().getDecorView().setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
+        HostWindows.setAttachedVisible(c.get(), visible);
     }
 
 

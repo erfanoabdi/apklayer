@@ -1,11 +1,14 @@
 """VM side of every test (tests/vm/*.py): the apklayer instance tests/run gave this group, its environment and logs, cleanup that ends only
 this instance's processes, screenshots, test input into this instance's windows and real key input. Importing it changes into the repo root."""
+import ctypes
 import os
+import selectors
 import socket
 import struct
 import signal
 import subprocess
 import sys
+import time as _time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -142,3 +145,22 @@ def inject(window, *steps):
 
 if __name__ == '__main__':  # for shell tests: python3 tests/lib/instance.py stop|clean
     {'stop': stop, 'clean': assert_clean}[sys.argv[1]]()
+
+
+_libc = ctypes.CDLL(None, use_errno=True)
+
+
+def wait_file(path, needle, seconds):
+    """Block on inotify (no polling) until the file contains the needle; returns the text."""
+    fd = _libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
+    os.makedirs(path.parent, exist_ok=True)
+    assert _libc.inotify_add_watch(fd, os.fsencode(path.parent), 0x102) >= 0  # IN_MODIFY | IN_CREATE in the directory
+    end = _time.monotonic() + seconds
+    with selectors.DefaultSelector() as events:
+        events.register(fd, selectors.EVENT_READ)
+        while _time.monotonic() < end:
+            text = path.read_text(errors='replace') if path.exists() else ''
+            if needle in text: os.close(fd); return text
+            if events.select(min(2, max(0.1, end - _time.monotonic()))): os.read(fd, 65536)
+    os.close(fd)
+    raise AssertionError('timed out waiting for ' + needle + ' in ' + str(path) + '\n' + (path.read_text(errors='replace')[-2000:] if path.exists() else '(no file)'))

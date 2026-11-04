@@ -208,7 +208,8 @@ int permissionsCommand(const Layout& l, const Instance& inst, const std::vector<
         return 0;
     }
     const std::string& perm = args[2];
-    if (std::find(requested.begin(), requested.end(), perm) == requested.end()) die(pkg + " does not request " + perm);
+    // POST_NOTIFICATIONS is also the per-app notification switch for apps that do not request it (below 33: NotificationManagerService blocks the package)
+    if (std::find(requested.begin(), requested.end(), perm) == requested.end() && perm != "android.permission.POST_NOTIFICATIONS") die(pkg + " does not request " + perm);
     if (levels[perm] != "dangerous") die(perm + " is not a runtime permission (only dangerous ones are granted or revoked)");
     std::string text;
     for (const std::string& line : revoked) if (line != pkg + "\t" + perm) text += line + "\n";

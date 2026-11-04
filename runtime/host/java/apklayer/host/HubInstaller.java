@@ -230,16 +230,17 @@ final class HubInstaller {
         if (exit[0] != 0) { send(request.status, 0, request.pkg, PackageInstaller.STATUS_FAILURE, output, null); return; }
         directory.packageChanged(request.pkg, true);
         broadcast(Intent.ACTION_PACKAGE_REMOVED, request.pkg, uid, false);
-        directory.sendSystem(new Intent(Intent.ACTION_PACKAGE_FULLY_REMOVED, Uri.fromParts("package", request.pkg, null)).putExtra(Intent.EXTRA_UID, uid), false);  // exempt from the background limits: manifest receivers too
+        directory.sendSystem(new Intent(Intent.ACTION_PACKAGE_FULLY_REMOVED, Uri.fromParts("package", request.pkg, null)).putExtra(Intent.EXTRA_UID, uid)
+                .addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND), false);  // as BroadcastHelper sends it: manifest receivers too
         send(request.status, 0, request.pkg, PackageInstaller.STATUS_SUCCESS, null, null);
     }
 
     /**
-     * A package broadcast as the package manager sends it: to registered receivers and to the manifest receivers of apps targeting below 26 (Android's
-     * background limits keep implicit broadcasts like these from the others; the hub applies that limit through FLAG_RECEIVER_EXCLUDE_BACKGROUND).
+     * A package broadcast as the package manager sends it: implicit, so it reaches registered receivers and the manifest receivers of apps targeting below 26
+     * (HubBroadcasts applies the background limit to the others).
      */
     private void broadcast(String action, String pkg, int uid, boolean replacing) {
-        Intent intent = new Intent(action, Uri.fromParts("package", pkg, null)).putExtra(Intent.EXTRA_UID, uid).addFlags(Intent.FLAG_RECEIVER_EXCLUDE_BACKGROUND);
+        Intent intent = new Intent(action, Uri.fromParts("package", pkg, null)).putExtra(Intent.EXTRA_UID, uid);
         if (replacing) intent.putExtra(Intent.EXTRA_REPLACING, true);
         if (action.equals(Intent.ACTION_PACKAGE_REMOVED) && !replacing) intent.putExtra(Intent.EXTRA_DATA_REMOVED, true);
         directory.sendSystem(intent, false);

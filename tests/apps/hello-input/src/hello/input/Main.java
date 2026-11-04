@@ -67,6 +67,7 @@ public class Main extends Activity {
         });
         setContentView(layout);
         field.requestFocus();
+        if (System.getProperty("hello.covered") != null) Covered.coverWithDialog(this);
         if (System.getProperty("hello.magnifier") != null) {
             field.setText("magnify me");
             field.postDelayed(() -> magnify(field), 2000);

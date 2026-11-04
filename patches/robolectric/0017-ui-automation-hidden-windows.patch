@@ -1,0 +1,17 @@
+apklayer patch: input skips hidden windows (a stopped activity's dialogs and popups get no input on Android either).
+Against external/robolectric 87aa52b08 (REVISION). Applied by tools/build overlay onto the staged
+upstream sources (<native>/aosp/robolectric-src); the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
+---
+diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUiAutomation.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUiAutomation.java
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUiAutomation.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUiAutomation.java
+@@ -277,6 +277,9 @@
+     for (int i = 0; i < viewRootImpls.size(); i++) {
+       Root root = new Root(viewRootImpls.get(i), params.get(i), i);
+       // TODO: Should we also filter out sub-windows of non-started application windows?
++      // apklayer patch: a window whose root view is not VISIBLE is hidden (ViewRootImpl relayouts it so) and takes no input;
++      // the host hides a stopped activity's dialogs and popups so (AppHost.setVisible)
++      if (root.impl.getView().getVisibility() != View.VISIBLE) continue;
+       if (root.getType() != WindowManager.LayoutParams.TYPE_BASE_APPLICATION
+           || startedActivityTokens.contains(root.impl.getView().getApplicationWindowToken())) {
+         roots.add(root);
