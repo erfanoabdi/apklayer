@@ -332,6 +332,7 @@ static int register_classes(JNIEnv *env, JavaVM *vm, void *rt)
         "register_android_opengl_classes",
         "register_android_net_LocalSocketImpl", /* not GL: LocalSocket's natives, also absent from HostRuntime's list */
         "register_android_hardware_SensorManager", /* not GL: SystemSensorManager's, used over the stack's SensorService (HostSensorShadows) */
+        "register_android_os_MessageQueue", /* not GL: the NativeMessageQueue a sensor event queue needs (HostSensorShadows); Robolectric's queue keeps its shadow */
         NULL
     };
     for (int i = 0; device_gl[i]; i++) {

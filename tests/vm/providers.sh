@@ -13,11 +13,11 @@ bin/apklayer providers set vibrator fake >/dev/null
 bin/apklayer providers set gnss fake location=48.8584,2.2945 accuracy=3 >/dev/null
 bin/apklayer providers
 
-# 1. each HAL over remote AIDL, as its framework client uses it: the stack runs the probe as its tool (output in tool.log; the next stack removes it)
+# 1. each HAL as its framework client uses it (sensors: NDK ASensorManager through SensorService, since the HAL serves one client): the stack runs the probe as its tool (output in tool.log; the next stack removes it)
 tool=$APKLY_STATE/tool.log
 bin/apklayer stack libapklayer_sensors.so --probe >/dev/null 2>&1
-grep -a "^sensor \|accelerometer:\|PASS\|Check failed" $tool
-grep -aq "PASS sensors AIDL" $tool && grep -aq "last 0.500 9.500 1.250" $tool || fail "sensors AIDL: no accelerometer events with the configured value"
+grep -a "^sensor type\|accelerometer:\|PASS\|Check failed" $tool
+grep -aq "PASS sensors through SensorService" $tool && grep -aq "last 0.500 9.500 1.250" $tool || fail "sensors (NDK over SensorService and the HAL): no accelerometer events with the configured value"
 bin/apklayer stack libapklayer_vibrator.so --probe >/dev/null 2>&1
 grep -a "PASS\|Check failed" $tool; grep -a "vibrator:" $APKLY_STATE/vibrator.log
 grep -aq "PASS vibrator AIDL" $tool && grep -aq "vibrator: on 120 ms amplitude 0.50" $APKLY_STATE/vibrator.log || fail "vibrator AIDL: the backend did not get on 120 ms at 0.5"

@@ -20,10 +20,11 @@ struct Callback : public BnGnssCallback {
     std::condition_variable changed;
     int fixes = 0;
     ScopedAStatus gnssSetCapabilitiesCb(int32_t) override { return ScopedAStatus::ok(); }
-    ScopedAStatus gnssStatusCb(GnssStatusValue status) override { printf("status %d\n", static_cast<int>(status)); return ScopedAStatus::ok(); }
+    ScopedAStatus gnssStatusCb(GnssStatusValue status) override { printf("status %d\n", static_cast<int>(status)); fflush(stdout); return ScopedAStatus::ok(); }
     ScopedAStatus gnssSvStatusCb(const std::vector<GnssSvInfo>&) override { return ScopedAStatus::ok(); }
     ScopedAStatus gnssLocationCb(const GnssLocation& l) override {
         printf("location %.7f %.7f %.1f\n", l.latitudeDegrees, l.longitudeDegrees, l.horizontalAccuracyMeters);
+        fflush(stdout);  // a line protocol: the reader waits for each line
         std::lock_guard<std::mutex> hold(lock);
         fixes++;
         changed.notify_all();
@@ -49,9 +50,6 @@ int gnssClient(int fixes) {
         connected = gnss && gnss->setCallback(callback).isOk();
     }
     CHECK(connected && AIBinder_isRemote(gnss->asBinder().get()));
-    // the framework's GnssNative takes the extensions before it starts: the example's start() uses the measurement interface it makes then
-    std::shared_ptr<IGnssMeasurementInterface> measurement;
-    CHECK(gnss->getExtensionGnssMeasurement(&measurement).isOk());
     IGnss::PositionModeOptions mode;
     mode.mode = IGnss::GnssPositionMode::STANDALONE;
     mode.recurrence = IGnss::GnssPositionRecurrence::RECURRENCE_PERIODIC;
@@ -59,6 +57,7 @@ int gnssClient(int fixes) {
     CHECK(gnss->setPositionMode(mode).isOk());
     CHECK(gnss->start().isOk());
     puts("ready");
+    fflush(stdout);
     std::unique_lock<std::mutex> hold(callback->lock);
     if (fixes <= 0) for (;;) callback->changed.wait(hold);
     bool got = callback->changed.wait_for(hold, std::chrono::seconds(10 + 2 * fixes), [&] { return callback->fixes >= fixes; });

@@ -10,6 +10,7 @@ cc_library_shared {
         "libcutils",
         "libfmq",
         "liblog",
+        "libandroid",
         "libpower",
         "libutils",
         "android.hardware.sensors-V3-ndk",

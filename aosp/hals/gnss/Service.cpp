@@ -48,6 +48,13 @@ extern "C" int main(int argc, char** argv) {
     if (!apklayer_gnss_init) { fprintf(stderr, "gnss: no backend library (APKLAYER_HOST_LIBS)\n"); return 1; }
     if (int error = apklayer_gnss_init(argc - 1, argv + 1)) { fprintf(stderr, "gnss backend: %s\n", strerror(-error)); return 1; }
     auto gnss = ndk::SharedRefBase::make<BackendGnss>();
+    // the example makes these only when a client asks (the framework's GnssNative does, first) but uses them unchecked from setCallback/start:
+    // made here, so any client order works
+    std::shared_ptr<IGnssConfiguration> configuration;
+    std::shared_ptr<IGnssPowerIndication> power;
+    std::shared_ptr<IGnssMeasurementInterface> measurement;
+    CHECK(gnss->getExtensionGnssConfiguration(&configuration).isOk() && gnss->getExtensionGnssPowerIndication(&power).isOk() &&
+          gnss->getExtensionGnssMeasurement(&measurement).isOk());
     CHECK_EQ(AServiceManager_addService(gnss->asBinder().get(), (std::string(Gnss::descriptor) + "/default").c_str()), STATUS_OK);
     ABinderProcess_joinThreadPool();
     return 1;
