@@ -19,9 +19,11 @@ public class ShadowHostInstrumentation extends ShadowInstrumentation {
     protected void callApplicationOnCreate(Application app) {
         // as Android's bindApplication: the system's and other apps' providers (Settings among them) answer from Application.onCreate on
         if (System.getProperty("apklayer.package") != null && !AppEnvironment.installing) HubClient.attach(app);
+        // before the app's own code in every process, component hosts included: it reads Build in Application.onCreate (an app that returns there when
+        // FINGERPRINT is Robolectric's "robolectric", as OpenVPN does, left its service process half set up)
+        if (System.getProperty("apklayer.package") != null) HostBuild.install();
         if (!providersInstalled && System.getProperty("apklayer.package") != null && !Boolean.getBoolean("apklayer.componenthost")) {  // not in the service hosts (the WebView package's own providers abort the renderer host)
             providersInstalled = true;
-            HostBuild.install();  // before the app's own code: it reads Build in Application.onCreate
             AppEnvironment.androidId(app);
             AppEnvironment.installProviders(app);
         }

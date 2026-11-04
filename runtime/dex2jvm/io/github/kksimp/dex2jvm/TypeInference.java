@@ -1665,6 +1665,10 @@ public final class TypeInference {
                 // case. Ask the oracle instead, and keep the old Object-only
                 // rule when there is no oracle, since without one nothing is
                 // provable and casting on every use would be pure bloat.
+                // apklayer patch: every class, Object included, is assignable to an interface
+                // (JVMS 4.10.1.2), and ART has no cast there: casting threw where the app ran
+                // (R8 drops empty marker interfaces from implementors, e.g. protobuf's ByteArrayCopier).
+                if (hierarchy != null && hierarchy.isInterface(castTarget)) return false;
                 if (DexType.OBJECT_NAME.equals(r.name)) return true;
                 return hierarchy != null && !assignableTo(hierarchy, r.name, castTarget);
             default:
