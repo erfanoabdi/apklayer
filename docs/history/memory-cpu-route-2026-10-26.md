@@ -70,7 +70,7 @@
 - `pkill -f <pattern>` over ssh can kill the ssh shell itself; use `pkill -x` or a `[x]yz` pattern.
 
 ## Testing Linux VM (Parallels on this Mac)
-- `ssh parallels@10.211.55.4`, password `1234` (sshpass on the Mac; sudo = same password).
+- `ssh parallels@10.211.55.4` (sshpass on the Mac; sudo = same password).
 - Ubuntu 24.04, kernel 6.8, **aarch64**, 8 CPUs, ~8 GB RAM, GNOME Wayland (`wayland-0`,
   XDG_RUNTIME_DIR=/run/user/1000). OpenJDK 21 arm64 (`-XX:UseSVE=0`), meson/ninja/gcc,
   libwayland-dev, wayland-protocols. No binder/ashmem in the kernel.
