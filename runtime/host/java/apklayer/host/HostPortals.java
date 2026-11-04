@@ -6,6 +6,7 @@ import android.app.Notification;
 import android.app.NotificationManager;
 import java.io.IOException;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.shadow.api.Shadow;
@@ -16,6 +17,9 @@ import java.util.Set;
 final class HostPortals {
     private HostPortals() {}
 
+    /** In the sandbox (cli/sandbox.cpp) the app reaches neither the session bus nor the user's files: dialogs and links go through apklayerd ({@code apklayer portal}). */
+    private static final boolean SANDBOXED = "1".equals(System.getenv("APKLAYER_SANDBOX"));
+
     private static final Set<String> SCHEMES = Set.of("http", "https", "mailto", "tel", "geo");
 
     /** Opens an ACTION_VIEW of a web-like URI with the desktop's default handler; false if it is not one. */
@@ -23,7 +27,7 @@ final class HostPortals {
         Uri data = intent.getData();
         if (!Intent.ACTION_VIEW.equals(intent.getAction()) || data == null || !SCHEMES.contains(data.getScheme())) return false;
         try {
-            new ProcessBuilder("xdg-open", data.toString()).inheritIO().start();
+            new ProcessBuilder(SANDBOXED ? List.of(System.getProperty("apklayer.cli"), "portal", "open", data.toString()) : List.of("xdg-open", data.toString())).inheritIO().start();
             System.out.println("[apklayer] opened " + data + " on the desktop");
             return true;
         } catch (IOException e) {
@@ -77,7 +81,7 @@ final class HostPortals {
     static Intent pick(Intent intent) {
         if (!isPicker(intent)) return null;
         String action = intent.getAction();
-        if (System.getenv("APKLAYER_PICKER") == null) {  // the desktop's file chooser portal first; zenity when there is no portal
+        if (System.getenv("APKLAYER_PICKER") == null && !SANDBOXED) {  // the desktop's file chooser portal first; zenity when there is no portal
             try {
                 Intent portal = HostFilePortal.pick(intent);
                 return portal;
@@ -93,6 +97,13 @@ final class HostPortals {
         if (intent.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false)) cmd.add("--multiple");
         String override = System.getenv("APKLAYER_PICKER"); // tests: a command printing the chosen path(s)
         if (override != null) cmd = java.util.List.of("sh", "-c", override);
+        if (SANDBOXED) {  // the user's side picks and makes the chosen file (only it) visible here, at its own path
+            cmd = new java.util.ArrayList<>(java.util.List.of(System.getProperty("apklayer.cli"), "portal", "pick",
+                    Intent.ACTION_CREATE_DOCUMENT.equals(action) ? "save" : Intent.ACTION_OPEN_DOCUMENT_TREE.equals(action) ? "directory" : "open"));
+            if (intent.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false)) cmd.add("--multiple");
+            String name = intent.getStringExtra(Intent.EXTRA_TITLE);
+            if (Intent.ACTION_CREATE_DOCUMENT.equals(action) && name != null) { cmd.add("--name"); cmd.add(name); }
+        }
         try {
             Process p = new ProcessBuilder(cmd).redirectError(ProcessBuilder.Redirect.INHERIT).start();
             String out = new String(p.getInputStream().readAllBytes()).trim();

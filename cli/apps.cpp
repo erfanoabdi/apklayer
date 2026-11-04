@@ -1,4 +1,5 @@
 #include "apps.h"
+#include "sandbox.h"
 
 #include "desktop.h"
 #include "version.h"
@@ -240,7 +241,8 @@ void uninstallApp(const Layout& l, const std::string& package) {
     if (!isDir(appDir(l, package))) die("not installed: " + package);
     removeTree(appDir(l, package));
     for (const std::string& instance : listDir(join(l.dataHome, "apklayer"))) {  // the app's data in every instance of this data home
-        if (isDir(join(l.dataHome, "apklayer/" + instance + "/app-data/" + package))) removeTree(join(l.dataHome, "apklayer/" + instance + "/app-data/" + package));
+        std::string data = join(l.dataHome, "apklayer/" + instance + "/app-data/" + package);
+        if (isDir(data)) { reclaim(data); removeTree(data); }  // reclaim: files the sandbox's app uid owns
         // and its revoked permissions (cli/manage.cpp): a reinstall starts with the grants of a new install, as on Android
         std::string revoked = join(l.dataHome, "apklayer/" + instance + "/permissions-revoked"), kept;
         if (!exists(revoked)) continue;

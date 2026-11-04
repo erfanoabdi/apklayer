@@ -91,9 +91,10 @@ final class HostCertificate {
             try {
                 if (file == null) return signatures = new Signature[] {new Signature(generate())};
                 if (!java.nio.file.Files.isRegularFile(file)) {
-                    // only the certificate is kept (nothing is signed with its key); a private 0600 file, linked into place so a racing process keeps the first one
+                    // only the certificate is kept (nothing is signed with its key), public as an Android device's platform certificate: sandboxed apps
+                    // (their own uids, cli/sandbox.cpp) read it too; linked into place so a racing process keeps the first one
                     java.nio.file.Path tmp = java.nio.file.Files.createTempFile(file.getParent(), "platform-certificate", ".tmp",
-                            java.nio.file.attribute.PosixFilePermissions.asFileAttribute(java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")));
+                            java.nio.file.attribute.PosixFilePermissions.asFileAttribute(java.nio.file.attribute.PosixFilePermissions.fromString("rw-r--r--")));
                     try {
                         java.nio.file.Files.write(tmp, generate());
                         java.nio.file.Files.createLink(file, tmp);
@@ -101,6 +102,8 @@ final class HostCertificate {
                     finally { java.nio.file.Files.deleteIfExists(tmp); }
                 }
                 signatures = new Signature[] {new Signature(java.nio.file.Files.readAllBytes(file))};
+                try { java.nio.file.Files.setPosixFilePermissions(file, java.nio.file.attribute.PosixFilePermissions.fromString("rw-r--r--")); }
+                catch (java.io.IOException notOwner) { /* a sandboxed app's process: the user's processes made it readable */ }  // one made 0600 before
             } catch (Exception failure) {
                 throw new IllegalStateException("cannot make the package certificate " + file, failure);
             }

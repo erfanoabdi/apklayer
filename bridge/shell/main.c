@@ -34,6 +34,7 @@ static int listen_socket(const char *path)
         fprintf(stderr, "[shell] cannot listen on %s: %s\n", path, strerror(errno));
         exit(1);
     }
+    chmod(path, 0666);  /* sandboxed apps (their own uids) connect too: the runtime directory (0700) is the gate, as for Wayland's socket */
     return fd;
 }
 

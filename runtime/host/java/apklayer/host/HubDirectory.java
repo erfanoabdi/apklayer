@@ -204,6 +204,9 @@ final class HubDirectory extends Binder {
                 int installedUid = packages.uid(name);  // what others know this process by (UID_OF_PID, oneway callers): the installed uid, not one it claims
                 if (installedUid >= 0 && appUid != installedUid) throw new SecurityException(name + " is uid " + installedUid + ", not " + appUid);
                 int pid = Binder.getCallingPid(), uid = Binder.getCallingUid();
+                int kernel = ShadowHostRealBinder.kernelUid(pid);  // sandboxed (cli/sandbox.cpp): the process runs as its app uid, which it cannot choose
+                if (kernel >= android.os.Process.FIRST_APPLICATION_UID && kernel <= android.os.Process.LAST_APPLICATION_UID && kernel != installedUid)
+                    throw new SecurityException(name + " is uid " + installedUid + ", its process runs as " + kernel);
                 Peer peer = new Peer(pid, uid, name, endpoint, appThread, headless, appUid, instance);
                 synchronized (peers) {
                     if (stopping) throw new IllegalStateException(HubProtocol.EXITING);
@@ -215,7 +218,7 @@ final class HubDirectory extends Binder {
                     endpoint.linkToDeath(() -> remove(peer), 0);
                     peers.put(pid, peer);
                 }
-                System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " registered " + name + " pid=" + pid + " uid=" + uid + " t=" + System.nanoTime() / 1_000_000);
+                System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " registered " + name + " pid=" + pid + " uid=" + uid + " kernel-uid=" + kernel + " t=" + System.nanoTime() / 1_000_000);
                 synchronized (failures) { failures.remove(key(peer)); }  // launches are counted per host (package#process): a host that registered did not fail
                 HubAudioPermissions.registered(packages, name);  // before the reply: the app's first track finds its package
                 bindings.registered(peer);

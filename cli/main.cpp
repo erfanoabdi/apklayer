@@ -1,9 +1,13 @@
 // apklayer: run Android apps on Linux. install | run | list | uninstall | screenshot | stop | hub | component-host | env (see README.md).
 #include <cstdio>
 #include <cstring>
+#include <set>
 #include <unistd.h>
 
+#include "daemon.h"
 #include "desktop.h"
+#include "portal.h"
+#include "sandbox.h"
 #include "manage.h"
 #include "migrate.h"
 #include "run.h"
@@ -35,6 +39,9 @@ int usage() {
           "  permissions <package> | grant|revoke <package> <permission>  what the app requests (permission, level, granted); a runtime one granted or revoked\n"
           "  status                 the instance's stack, running apps, GPU, audio, battery, location\n"
           "  env                    print the environment of Android's processes\n"
+          "  daemon                 apklayerd: every command (and every app process) then runs under it (tools/host-setup/apklayerd.service);\n"
+          "                         APKLAYER_SANDBOX=1: apps run sandboxed, each as its own uid (docs/PLAN.md), and the daemon starts on demand\n"
+          "  portal pick open|save|directory [--multiple] [--name N] | open <uri>  the desktop's file dialog or link opener (a sandboxed app's)\n"
           "  --version              version, converterAbi, dataFormat (key<TAB>value)\n",
           stderr);
     return 2;
@@ -43,11 +50,18 @@ int usage() {
 
 int main(int argc, char** argv) {
     std::vector<std::string> args(argv + 1, argv + argc);
+    bool inDaemon = !args.empty() && args[0] == "--no-daemon";  // apklayerd's own child: runs here
+    if (inDaemon) args.erase(args.begin());
+    std::vector<std::string> full = args;
     std::string id = getenvOr("APKLAYER_INSTANCE", "default");
     if (args.size() >= 2 && args[0] == "--instance") { id = args[1]; args.erase(args.begin(), args.begin() + 2); }
     if (args.empty()) return usage();
     if (args[0] == "--version") { printf("version\t%s\nconverterAbi\t%d\ndataFormat\t%d\n", kVersion, kConverterAbi, kDataFormat); return 0; }
     Layout layout = Layout::detect();
+    // a command runs in apklayerd when it runs (its processes are then the daemon's); the internal ones and the daemon itself stay here
+    static const std::set<std::string> kLocal = {"daemon", "stack-daemon", "stack", "exec", "sandbox-exec", "app-spare", "env"};
+    if (int status = 0; !inDaemon && !kLocal.count(args[0]) && forwardToDaemon(layout, full, &status)) return status;
+    if (args[0] == "daemon") return runDaemon(layout, args.size() == 2 && args[1] == "--on-demand");
     migrateData(layout);
     Instance inst = Instance::open(layout, id);
     const std::string& cmd = args[0];
@@ -67,8 +81,11 @@ int main(int argc, char** argv) {
         return runApp(layout, inst, target, RunMode::App);
     }
     if (cmd == "component-host" && n == 2) return runApp(layout, inst, args[1], RunMode::Component);
+    if (cmd == "app-spare" && sandboxOn()) return 0;  // a spare JVM is nobody's yet: the sandbox starts each app process as its own uid
     if (cmd == "app-spare" && n == 3 && args[1] == "--after") return runAppSpare(layout, inst, atoi(args[2].c_str()));  // started by a launch (cli/spare.cpp)
     if (cmd == "app-spare" && n == 1) { wakeAppSpare(layout, inst); return 0; }  // the hub's, at its start
+    if (cmd == "sandbox-exec") return sandboxExec(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
+    if (cmd == "portal") return portalCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "hub") return runHub(layout, inst);
     if (cmd == "wait" && n == 2 && args[1] == "hub") return waitHub(layout, inst);
     if (cmd == "list") markSystemApps(layout);  // installs staged before the system mark
