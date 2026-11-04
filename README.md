@@ -16,8 +16,8 @@ Android services as host processes: servicemanager, SurfaceFlinger, gralloc, HWC
 apklayer-shell ──> one Wayland window per app                                                       (bridge/shell)
 ```
 
-**Works:** UiBench with GPU rendering and input, WebView, SurfaceView/TextureView, native games (Off The Road 2), media and audio, apps talking to each other through the instance hub.
-**Host:** arm64 Linux (needs the staged Android libraries); x86_64 is the next step. **In progress:** Vulkan presentation (opt-in), more hardware domains. Status: `STATUS.md`.
+**Works:** over 40 real apps draw and run (current F-Droid versions of Thunderbird, Element, Organic Maps, OsmAnd, VLC, mpv, FluffyChat, Telegram, NewPipe, Firefox (Fennec) and more: `tests/corpus/results.md`): GPU rendering, WebView, SurfaceView/TextureView, native games, media and audio (record and play), the system's own providers (settings, media, contacts, calendar, downloads, documents), keystore2, app installs from stores, apps talking to each other through the instance hub, several instances side by side.
+**Host:** arm64 Linux (needs the staged Android libraries); x86_64 is staged but untested. **In progress:** Vulkan presentation (needs a real GPU), startup time. Status: `STATUS.md`, plan: `docs/PLAN.md`.
 
 ## Build and run
 The Android side comes from a LineageOS tree built once; `CHANGELOG.md` logs the incremental builds, rules in `docs/AOSP-BUILDS.md`.
