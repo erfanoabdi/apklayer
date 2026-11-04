@@ -13,20 +13,27 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 import instance  # noqa: E402  (changes into the repo root)
+import pixels  # noqa: E402
 PKG = 'hello.input'
 ENV = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1', APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='600',
            APKLAYER_JOPTS='-Dhello.sheet=1 -Dapklayer.runms=30000')
 SHOWN = re.compile(r'sheet (\d) shown sheet=(-?\d+),(-?\d+),(\d+),(\d+) window=(-?\d+),(-?\d+),(\d+),(\d+)')
 seen = []
 done = set()
+dimmed = gone = None
+
+
+def level(shot):
+    """Brightness where the sheet's handle is while it is up (light gray over the dark activity)."""
+    im = pixels.rgb(shot)
+    return sum(im.getpixel((im.width // 2, im.height * 470 // 600))) // 3
 
 
 def act(stage, x, y, w, h):
     button = (x + w // 2, y + h - 50)  # the button: the dialog's last 100 pixels
-    outside = (240, 40)
-    if stage in (1, 3):
-        instance.inject(PKG, 'tap:%d,%d' % button)
-        return outside
+    if stage in (1, 3, 5, 6):
+        instance.inject(PKG, '%s:%d,%d' % ('click' if stage == 3 else 'tap', *button))  # the mouse (the pointer path) in stage 3
+        return 'key:1' if stage >= 5 else '%s:240,40' % ('click' if stage == 3 else 'tap')  # then outside the sheet, or Back
     if stage == 2:
         instance.inject(PKG, 'key:1')  # Esc is Back
     else:  # the handle (the sheet's first 60 pixels), dragged down
@@ -59,18 +66,23 @@ try:
                 if m:
                     stage, x, y, w, h = (int(n) for n in m.groups()[:5])
                     assert y > 300, 'sheet %d is not at the bottom: %s' % (stage, line)
+                    if stage == 3: dimmed = level(instance.capture('sheet shown', PKG))
                     outside = act(stage, x, y, w, h)
-                elif outside and re.search(r'sheet [13] button tapped', line):
+                elif outside and re.search(r'sheet [1356] button tapped', line):
                     done.add(line.split()[2] + ' button')
-                    instance.inject(PKG, 'tap:%d,%d' % outside)
+                    instance.inject(PKG, outside)
                     outside = None
                 elif re.search(r'sheet \d (cancelled|dragged)', line):
                     done.add(' '.join(line.split()[2:4]))
                 elif 'sheet stages done' in line:
+                    gone = level(instance.capture('sheet gone', PKG))
                     instance.stop()
-    want = {'1 button', '1 cancelled', '2 cancelled', '3 button', '3 cancelled', '4 dragged'}
+    want = {'1 button', '1 cancelled', '2 cancelled', '3 button', '3 cancelled', '4 dragged', '5 button', '5 cancelled', '6 button', '6 cancelled'}
     assert done == want, 'missing: %s' % (want - done)
-    print('PASS bottom dialogs: button taps, an outside tap and Back cancel, a downward drag dismisses the sheet', flush=True)
+    assert not any('popup under the sheet tapped' in l for l in seen), 'a tap on the sheet reached a popup of the activity below it'
+    print('brightness at the handle of sheet 3: %d, after the sheets: %d' % (dimmed, gone), flush=True)
+    assert gone > dimmed + 40, 'the sheet stays on the screen after the dialogs went away'
+    print('PASS bottom dialogs: button taps, an outside tap and Back cancel, a downward drag dismisses the sheet; the sheet is gone from the screen; a popup of the activity below the sheet gets none of its taps', flush=True)
 finally:
     instance.stop()
     if app.poll() is None: os.killpg(app.pid, signal.SIGKILL)
