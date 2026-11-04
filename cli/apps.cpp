@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <iostream>
 #include <cstdlib>
+#include <sys/stat.h>
 #include <unistd.h>
 
 namespace apklayer {
@@ -169,7 +170,10 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
     makeDirs(dir);
     std::string oldUid = property(old, "uid");
     for (const std::string& f : apkFiles(dir)) if (f != "base.apk") unlink(join(dir, f).c_str());  // the update's own splits replace the old ones
-    for (const std::string& f : apkFiles(tmp)) sh({"mv", "-f", join(tmp, f), join(dir, f)});
+    for (const std::string& f : apkFiles(tmp)) {
+        sh({"mv", "-f", join(tmp, f), join(dir, f)});
+        chmod(join(dir, f).c_str(), 0644);  // readable by every app, as Android's /data/app (a sandboxed app's own uid too); a copy keeps its source's 0600
+    }
     for (const char* f : {"classes.jar", "key", "icon.png"}) sh({"mv", "-f", join(tmp, f), join(dir, f)});
     extractLibs(dir);
     // info.properties, with its uid, is the commit: a hub or JVM that meets the package while it is installed sees all of it or none

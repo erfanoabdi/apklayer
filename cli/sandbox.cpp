@@ -217,6 +217,8 @@ int sandboxExec(const Layout& l, const Instance& inst, const std::vector<std::st
         struct stat st{};
         if (::stat(data.c_str(), &st) == 0 && st.st_uid != uid) chownTree(data, uid);  // the app's files are its own uid's (data from before the sandbox too)
         chmod(data.c_str(), 0700);
+        for (const std::string& f : listDir(appDir(l, package)))  // its APKs readable by its uid (installs before cli/apps.cpp made them 0644)
+            if (f.size() > 4 && f.substr(f.size() - 4) == ".apk") chmod(join(appDir(l, package), f).c_str(), 0644);
         apply(appView(l, inst, package, uid, argv[0]));
         if (chdir(dir.c_str()) != 0 && chdir("/") != 0) die("no working directory in the sandbox");  // by path again: the old one is a handle into the hidden tree
         if (setresgid(uid, uid, uid) != 0 || setresuid(uid, uid, uid) != 0) die("cannot become uid " + std::to_string(uid));
