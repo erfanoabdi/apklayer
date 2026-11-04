@@ -1,0 +1,74 @@
+From: apklayer
+Subject: [PATCH] libhidl: getService asks the host's hwservicemanager for listed HALs
+
+apklayer patch (docs/PATCHES.md, docs/HALIUM.md). getRawServiceInternal (every IFoo::getService) first asks the host's
+hwservicemanager, through libhwbinder's host context (system/libhwbinder 0001), for HALs listed in /data/apklayer/host_hals.conf
+(an fqName, or a package for every version; the file libbinder reads for AIDL names, written per instance from the provider
+choice). The instance runs no hwservicemanager, so a listed HAL is asked on the host first and the local path is not waited on.
+The host lookup is IServiceManager 1.0's get(), which every hwservicemanager since Android 8 answers. Replaces Waydroid's libhidl
+0001-0005, 0007 (switching the process between drivers, not waiting for the host hwservicemanager, re-new the service manager, ABI)
+and 0008 (its /system/etc/hosthals.xml allow-list); not ported: 0006 (vendor_extra passthrough path). Rebuild: `m libhidlbase`.
+Against system/libhidl 061055fc4dad (REVISION). Apply: patches/apply aosp <LineageOS tree>.
+---
+File dev-hidl-a/.clang-format is a unknown type while file dev-hidl-b/.clang-format is a unknown type
+File dev-hidl-a/.git is a unknown type while file dev-hidl-b/.git is a unknown type
+diff --git a/transport/ServiceManagement.cpp b/transport/ServiceManagement.cpp
+--- a/transport/ServiceManagement.cpp
++++ b/transport/ServiceManagement.cpp
+@@ -890,11 +890,56 @@
+     return false;
+ }
+ 
++// apklayer patch: HALs the instance has chosen the device for (hardware providers, docs/HALIUM.md) come from the host's
++// hwservicemanager through the host hwbinder context (/dev/host_hwbinder): one fqName ("android.hardware.camera.provider@2.4::
++// ICameraProvider") or package ("android.hardware.camera.provider", any version) per line of /data/apklayer/host_hals.conf, the
++// list libbinder reads for AIDL names (Waydroid libhidl 0001-0003, 0007, 0008). Asked first: the instance runs no hwservicemanager.
++static bool isHostHal(const std::string& fqName) {
++    static const std::vector<std::string>& names = *new std::vector<std::string>([] {
++        std::string text;
++        android::base::ReadFileToString("/data/apklayer/host_hals.conf", &text);
++        std::vector<std::string> out;
++        for (auto& line : android::base::Split(text, "\n")) {
++            std::string n = android::base::Trim(line.substr(0, line.find('#')));
++            if (!n.empty()) out.push_back(n);
++        }
++        return out;
++    }());
++    for (const auto& n : names)
++        if (fqName == n || (android::base::StartsWith(fqName, n) && fqName[n.size()] == '@')) return true;
++    return false;
++}
++
++static sp<IBase> hostHal(const std::string& descriptor, const std::string& instance) {
++    using android::hidl::manager::V1_2::BnHwServiceManager;
++    using android::hidl::manager::V1_2::BpHwServiceManager;
++    if (!isHostHal(descriptor)) return nullptr;
++    sp<ProcessState> host = ProcessState::self(true);
++    if (host == nullptr) {
++        ALOGW("%s/%s: listed for the host, but there is no host hwbinder context", descriptor.c_str(), instance.c_str());
++        return nullptr;
++    }
++    static std::once_flag pool;
++    std::call_once(pool, [&] { host->startThreadPool(); });  // callbacks and death notices from the host
++    // get() is IServiceManager 1.0's: every host since Android 8 answers it
++    sp<IServiceManager1_2> sm = fromBinder<IServiceManager1_2, BpHwServiceManager, BnHwServiceManager>(host->getContextObject(nullptr));
++    if (sm == nullptr) return nullptr;
++    Return<sp<IBase>> ret = sm->get(descriptor, instance);
++    sp<IBase> base = ret.isOk() ? static_cast<sp<IBase>>(ret) : nullptr;
++    ALOGI("%s/%s: %s on the host", descriptor.c_str(), instance.c_str(), base ? "found" : "not found");
++    if (base == nullptr) return nullptr;
++    Return<bool> canCast = details::canCastInterface(base.get(), descriptor.c_str(), true /* emitError */);
++    return canCast.isOk() && canCast ? base : nullptr;
++}
++
+ sp<::android::hidl::base::V1_0::IBase> getRawServiceInternal(const std::string& descriptor,
+                                                              const std::string& instance,
+                                                              bool retry, bool getStub) {
+     using Transport = IServiceManager1_0::Transport;
+     sp<Waiter> waiter;
++    if (!kIsRecovery && !getStub) {  // apklayer patch
++        if (sp<IBase> host = hostHal(descriptor, instance)) return host;
++    }
+ 
+     sp<IServiceManager1_1> sm;
+     Transport transport = Transport::EMPTY;

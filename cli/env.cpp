@@ -1,6 +1,7 @@
 #include "env.h"
 
 #include "gpus.h"
+#include "providers.h"
 
 #include <glob.h>
 #include <sys/stat.h>
@@ -81,6 +82,12 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     env["APKLAYER_INSTANCE_ROOT"] = join(instance.runtimeDir, "android-root");  // what this instance's stack stages for itself (cli/stack.cpp), before the shared root
     env["APKLAYER_STORAGE"] = realPath(instance.storageDir);  // the path layer serves Android's /storage, /sdcard and /data/media/0 from it (bridge/native/paths.c)
     env["APKLAYER_DATA"] = realPath(instance.dataDir);  // and the rest of /data
+    // a domain set to the device (providers.toml): libbinder's and libhwbinder's host contexts are the machine's own binder devices
+    // (a Halium device's; docs/HALIUM.md), unless the environment names others
+    if (exists(hostHalsFile(instance))) {
+        if (!env.count("APKLAYER_HOST_BINDER")) env["APKLAYER_HOST_BINDER"] = "/dev/binderfs/binder";
+        if (!env.count("APKLAYER_HOST_HWBINDER")) env["APKLAYER_HOST_HWBINDER"] = "/dev/binderfs/hwbinder";
+    }
     // bionic_translation's libraries first (the patched ones), then ours; the path layer and bionic's TLS slots come first in every lookup
     env["LD_LIBRARY_PATH"] = layout.bionic + ":" + n;
     env["PATH"] = prepend(join(n, "bin"), getenvOr("PATH", "/usr/local/bin:/usr/bin:/bin"));  // getprop for the apps that run it

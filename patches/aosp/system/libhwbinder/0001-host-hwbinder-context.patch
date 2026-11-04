@@ -1,0 +1,498 @@
+From: apklayer
+Subject: [PATCH] libhwbinder: a host hwbinder context (Waydroid's host_hwbinder) for device HALs
+
+apklayer patch (docs/PATCHES.md, docs/HALIUM.md). As libbinder's (frameworks/native 0006) for HIDL: a second ProcessState on
+/dev/host_hwbinder (apklayer's path layer maps it to $APKLAYER_HOST_HWBINDER: a Halium device's own /dev/hwbinder, or another
+instance's hwbinder in the two-instance test), IPCThreadState::self(true) with its own TLS key and thread pool (started without
+waiting for a local hwservicemanager), BpHwBinder remembers its context, Parcels received through it (by buffer address) or
+carrying its proxies (64-bit: a flag in padding; 32-bit has none) use it, buffers are freed through it. Also Waydroid libhwbinder
+0002: no FLAT_BINDER_FLAG_TXN_SECURITY_CTX on our binders (no kernel security context here; libbinder's is our frameworks/native
+0001). Ported from Waydroid's libhwbinder 0001 (Android 13), which switched one ProcessState between the two drivers instead.
+ABI kept: Parcel's size is unchanged, BpHwBinder/ProcessState/IPCThreadState are only made by libhwbinder. Rebuild: `m libhidlbase`.
+Against system/libhwbinder 2f5282448223 (REVISION). Apply: patches/apply aosp <LineageOS tree>.
+---
+File dev-hw-a/.git is a unknown type while file dev-hw-b/.git is a unknown type
+diff --git a/BpHwBinder.cpp b/BpHwBinder.cpp
+--- a/BpHwBinder.cpp
++++ b/BpHwBinder.cpp
+@@ -87,16 +87,19 @@
+ 
+ // ---------------------------------------------------------------------------
+ 
+-BpHwBinder::BpHwBinder(int32_t handle)
++BpHwBinder::BpHwBinder(int32_t handle) : BpHwBinder(handle, false) {}
++
++BpHwBinder::BpHwBinder(int32_t handle, bool host)  // apklayer patch: host is the host hwbinder context's
+     : mHandle(handle)
+     , mAlive(1)
+     , mObitsSent(0)
+     , mObituaries(nullptr)
++    , mHost(host)
+ {
+     ALOGV("Creating BpHwBinder %p handle %d\n", this, mHandle);
+ 
+     extendObjectLifetime(OBJECT_LIFETIME_WEAK);
+-    IPCThreadState::self()->incWeakHandle(handle, this);
++    IPCThreadState::self(mHost)->incWeakHandle(handle, this);
+ }
+ 
+ status_t BpHwBinder::transact(
+@@ -104,7 +107,7 @@
+ {
+     // Once a binder has died, it will never come back to life.
+     if (mAlive) {
+-        status_t status = IPCThreadState::self()->transact(
++        status_t status = IPCThreadState::self(mHost)->transact(
+             mHandle, code, data, reply, flags);
+ 
+         if (status == ::android::OK && callback != nullptr) {
+@@ -140,7 +143,7 @@
+                 }
+                 ALOGV("Requesting death notification: %p handle %d\n", this, mHandle);
+                 getWeakRefs()->incWeak(this);
+-                IPCThreadState* self = IPCThreadState::self();
++                IPCThreadState* self = IPCThreadState::self(mHost);
+                 self->requestDeathNotification(mHandle, this);
+                 self->flushCommands();
+             }
+@@ -174,7 +177,7 @@
+             mObituaries->removeAt(i);
+             if (mObituaries->size() == 0) {
+                 ALOGV("Clearing death notification: %p handle %d\n", this, mHandle);
+-                IPCThreadState* self = IPCThreadState::self();
++                IPCThreadState* self = IPCThreadState::self(mHost);
+                 self->clearDeathNotification(mHandle, this);
+                 self->flushCommands();
+                 delete mObituaries;
+@@ -199,7 +202,7 @@
+     Vector<Obituary>* obits = mObituaries;
+     if(obits != nullptr) {
+         ALOGV("Clearing sent death notification: %p handle %d\n", this, mHandle);
+-        IPCThreadState* self = IPCThreadState::self();
++        IPCThreadState* self = IPCThreadState::self(mHost);
+         self->clearDeathNotification(mHandle, this);
+         self->flushCommands();
+         mObituaries = nullptr;
+@@ -224,7 +227,7 @@
+ // -1 in case of failure.
+ ssize_t BpHwBinder::getNodeStrongRefCount()
+ {
+-    return ProcessState::self()->getStrongRefCountForNodeByHandle(mHandle);
++    return ProcessState::self(mHost)->getStrongRefCountForNodeByHandle(mHandle);
+ }
+ 
+ void BpHwBinder::reportOneDeath(const Obituary& obit)
+@@ -267,7 +270,7 @@
+ {
+     ALOGV("Destroying BpHwBinder %p handle %d\n", this, mHandle);
+ 
+-    IPCThreadState* ipc = IPCThreadState::self();
++    IPCThreadState* ipc = IPCThreadState::self(mHost);
+ 
+     if (ipc) {
+         ipc->expungeHandle(mHandle, this);
+@@ -278,7 +281,7 @@
+ void BpHwBinder::onFirstRef()
+ {
+     ALOGV("onFirstRef BpHwBinder %p handle %d\n", this, mHandle);
+-    IPCThreadState* ipc = IPCThreadState::self();
++    IPCThreadState* ipc = IPCThreadState::self(mHost);
+     if (ipc) ipc->incStrongHandle(mHandle, this);
+ }
+ 
+@@ -288,7 +291,7 @@
+     IF_ALOGV() {
+         printRefs();
+     }
+-    IPCThreadState* ipc = IPCThreadState::self();
++    IPCThreadState* ipc = IPCThreadState::self(mHost);
+     if (ipc) {
+         ipc->decStrongHandle(mHandle);
+         ipc->flushCommands();
+@@ -318,7 +321,7 @@
+ bool BpHwBinder::onIncStrongAttempted(uint32_t /*flags*/, const void* /*id*/)
+ {
+     ALOGV("onIncStrongAttempted BpHwBinder %p handle %d\n", this, mHandle);
+-    IPCThreadState* ipc = IPCThreadState::self();
++    IPCThreadState* ipc = IPCThreadState::self(mHost);
+     return ipc ? ipc->attemptIncStrongHandle(mHandle) == NO_ERROR : false;
+ }
+ 
+diff --git a/IPCThreadState.cpp b/IPCThreadState.cpp
+--- a/IPCThreadState.cpp
++++ b/IPCThreadState.cpp
+@@ -34,6 +34,7 @@
+ #include "TextOutput.h"
+ 
+ #include <atomic>
++#include <mutex>
+ #include <errno.h>
+ #include <inttypes.h>
+ #include <linux/sched.h>
+@@ -314,6 +315,21 @@
+     goto restart;
+ }
+ 
++// apklayer patch: a thread's state in the host hwbinder context (ProcessState::self(true)) is a second IPCThreadState under its own
++// TLS key; null when there is no host context.
++IPCThreadState* IPCThreadState::self(bool host)
++{
++    if (!host) return self();
++    static pthread_key_t key;
++    static std::once_flag once;
++    std::call_once(once, []() { pthread_key_create(&key, threadDestructor); });
++    if (auto* st = static_cast<IPCThreadState*>(pthread_getspecific(key))) return st;
++    if (ProcessState::self(true) == nullptr) return nullptr;
++    auto* st = new IPCThreadState(true);
++    pthread_setspecific(key, st);
++    return st;
++}
++
+ IPCThreadState* IPCThreadState::selfOrNull()
+ {
+     if (gHaveTLS.load(std::memory_order_acquire)) {
+@@ -764,15 +780,15 @@
+     return NO_ERROR;
+ }
+ 
+-IPCThreadState::IPCThreadState()
+-    : mProcess(ProcessState::self()),
++IPCThreadState::IPCThreadState(bool host)
++    : mProcess(ProcessState::self(host)),
+       mServingStackPointer(nullptr),
+       mStrictModePolicy(0),
+       mLastTransactionBinderFlags(0),
+       mIsLooper(false),
+       mIsPollingThread(false),
+       mCallRestriction(mProcess->mCallRestriction) {
+-    pthread_setspecific(gTLS, this);
++    if (!host) pthread_setspecific(gTLS, this);  // apklayer patch: a host context state is stored by self(true)
+     clearCaller();
+     mIn.setDataCapacity(256);
+     mOut.setDataCapacity(256);
+@@ -1329,7 +1345,7 @@
+     }
+     ALOG_ASSERT(data != nullptr, "Called with NULL data");
+     if (parcel != nullptr) parcel->closeFileDescriptors();
+-    IPCThreadState* state = self();
++    IPCThreadState* state = self(ProcessState::isHostBuffer(data));  // apklayer patch: freed through the context it came from
+     state->mOut.writeInt32(BC_FREE_BUFFER);
+     state->mOut.writePointer((uintptr_t)data);
+ }
+diff --git a/Parcel.cpp b/Parcel.cpp
+--- a/Parcel.cpp
++++ b/Parcel.cpp
+@@ -205,9 +205,8 @@
+             obj.flags = priority & FLAT_BINDER_FLAG_PRIORITY_MASK;
+             obj.flags |= FLAT_BINDER_FLAG_ACCEPTS_FDS | FLAT_BINDER_FLAG_INHERIT_RT;
+             obj.flags |= (policy & 3) << FLAT_BINDER_FLAG_SCHED_POLICY_SHIFT;
+-            if (local->isRequestingSid()) {
+-                obj.flags |= FLAT_BINDER_FLAG_TXN_SECURITY_CTX;
+-            }
++            // apklayer patch: no kernel security context on these hosts (Waydroid libhwbinder 0002, our libbinder 0001)
++            (void)local->isRequestingSid();
+             obj.hdr.type = BINDER_TYPE_BINDER;
+             obj.binder = reinterpret_cast<uintptr_t>(local->getWeakRefs());
+             obj.cookie = reinterpret_cast<uintptr_t>(local);
+@@ -574,9 +573,22 @@
+     }
+     return err;
+ }
++// apklayer patch: received through the host hwbinder context (its buffer lies in that context's mmap), or (64-bit) carrying its proxies
++bool Parcel::hostContext() const {
++    if (ProcessState::isHostBuffer(mData)) return true;
++#ifdef __LP64__
++    return mHost;
++#else
++    return false;
++#endif
++}
++
+ status_t Parcel::writeStrongBinder(const sp<IBinder>& val)
+ {
+-    return flatten_binder(ProcessState::self(), val, this);
++#ifdef __LP64__
++    if (val != nullptr && val->remoteBinder() != nullptr && val->remoteBinder()->isHostBinder()) mHost = true;  // apklayer patch
++#endif
++    return flatten_binder(ProcessState::self(hostContext()), val, this);
+ }
+ 
+ template <typename T>
+@@ -597,7 +609,7 @@
+                 const flat_binder_object *fbo = reinterpret_cast<const flat_binder_object*>(hdr);
+                 if (fbo->binder != 0) {
+                     mObjects[mObjectsSize++] = mDataPos;
+-                    acquire_binder_object(ProcessState::self(), *fbo, this);
++                    acquire_binder_object(ProcessState::self(hostContext()), *fbo, this);
+                 }
+                 break;
+             }
+@@ -1154,7 +1166,7 @@
+ 
+ status_t Parcel::readNullableStrongBinder(sp<IBinder>* val) const
+ {
+-    return unflatten_binder(ProcessState::self(), *this, val);
++    return unflatten_binder(ProcessState::self(hostContext()), *this, val);
+ }
+ 
+ sp<IBinder> Parcel::readStrongBinder() const
+@@ -1652,7 +1664,7 @@
+ 
+ void Parcel::releaseObjects()
+ {
+-    const sp<ProcessState> proc(ProcessState::self());
++    const sp<ProcessState> proc(ProcessState::self(hostContext()));
+     size_t i = mObjectsSize;
+     uint8_t* const data = mData;
+     binder_size_t* const objects = mObjects;
+@@ -1666,7 +1678,7 @@
+ 
+ void Parcel::acquireObjects()
+ {
+-    const sp<ProcessState> proc(ProcessState::self());
++    const sp<ProcessState> proc(ProcessState::self(hostContext()));
+     size_t i = mObjectsSize;
+     uint8_t* const data = mData;
+     binder_size_t* const objects = mObjects;
+@@ -1816,7 +1828,7 @@
+     } else if (mData) {
+         if (objectsSize < mObjectsSize) {
+             // Need to release refs on any objects we are dropping.
+-            const sp<ProcessState> proc(ProcessState::self());
++            const sp<ProcessState> proc(ProcessState::self(hostContext()));
+             for (size_t i=objectsSize; i<mObjectsSize; i++) {
+                 const flat_binder_object* flat
+                     = reinterpret_cast<flat_binder_object*>(mData+mObjects[i]);
+@@ -1913,6 +1925,9 @@
+     mFdsKnown = true;
+     mAllowFds = true;
+     mDeallocZero = false;
++#ifdef __LP64__
++    mHost = false;  // apklayer patch
++#endif
+     mOwner = nullptr;
+     clearCache();
+ 
+diff --git a/ProcessState.cpp b/ProcessState.cpp
+--- a/ProcessState.cpp
++++ b/ProcessState.cpp
+@@ -39,6 +39,7 @@
+ #include <sys/stat.h>
+ #include <sys/types.h>
+ 
++#include <atomic>
+ #include <mutex>
+ 
+ #define DEFAULT_BINDER_VM_SIZE ((1 * 1024 * 1024) - sysconf(_SC_PAGE_SIZE) * 2)
+@@ -53,19 +54,20 @@
+ class PoolThread : public Thread
+ {
+ public:
+-    explicit PoolThread(bool isMain)
+-        : mIsMain(isMain)
++    explicit PoolThread(bool isMain, bool host = false)
++        : mIsMain(isMain), mHost(host)
+     {
+     }
+ 
+ protected:
+     virtual bool threadLoop()
+     {
+-        IPCThreadState::self()->joinThreadPool(mIsMain);
++        IPCThreadState::self(mHost)->joinThreadPool(mIsMain);
+         return false;
+     }
+ 
+     const bool mIsMain;
++    const bool mHost;  // apklayer patch: a thread of the host context's pool
+ };
+ 
+ sp<ProcessState> ProcessState::self()
+@@ -73,6 +75,33 @@
+     return init(DEFAULT_BINDER_VM_SIZE, false /*requireMmapSize*/);
+ }
+ 
++// apklayer patch: the host hwbinder context (Waydroid's host_hwbinder, libhwbinder 0001; libbinder's is frameworks/native 0006): a
++// second ProcessState on /dev/host_hwbinder (apklayer's path layer maps it to $APKLAYER_HOST_HWBINDER), absent when that is not there.
++static std::atomic<uintptr_t> gHostVMStart{0};
++static size_t gHostVMSize = 0;
++
++sp<ProcessState> ProcessState::self(bool host) {
++    if (!host) return self();
++    [[clang::no_destroy]] static sp<ProcessState> gHost;
++    [[clang::no_destroy]] static std::once_flag once;
++    std::call_once(once, []() {
++        const char* driver = "/dev/host_hwbinder";
++        if (access(driver, R_OK | W_OK) == -1) return;
++        sp<ProcessState> p = new ProcessState(DEFAULT_BINDER_VM_SIZE, driver);
++        if (p->mDriverFD < 0) return;
++        p->mHost = true;
++        gHostVMSize = p->mMmapSize;
++        gHostVMStart.store(reinterpret_cast<uintptr_t>(p->mVMStart), std::memory_order_release);
++        gHost = p;
++    });
++    return gHost;
++}
++
++bool ProcessState::isHostBuffer(const void* data) {
++    uintptr_t start = gHostVMStart.load(std::memory_order_acquire), p = reinterpret_cast<uintptr_t>(data);
++    return start != 0 && p >= start && p - start < gHostVMSize;
++}
++
+ sp<ProcessState> ProcessState::selfOrNull() {
+     return init(0, false /*requireMmapSize*/);
+ }
+@@ -106,7 +135,7 @@
+ 
+ void ProcessState::startThreadPool()
+ {
+-    if (!isHwbinderSupportedBlocking()) {
++    if (!mHost && !isHwbinderSupportedBlocking()) {  // apklayer patch: the host context has no local hwservicemanager to wait for
+         ALOGW("HwBinder is not supported on this device. Not starting threadpool.");
+         return;
+     }
+@@ -204,7 +233,7 @@
+ }
+ 
+ void ProcessState::setCallRestriction(CallRestriction restriction) {
+-    LOG_ALWAYS_FATAL_IF(IPCThreadState::selfOrNull() != nullptr,
++    LOG_ALWAYS_FATAL_IF(!mHost && IPCThreadState::selfOrNull() != nullptr,  // apklayer patch: the host context's own
+         "Call restrictions must be set before the threadpool is started.");
+ 
+     mCallRestriction = restriction;
+@@ -237,7 +266,7 @@
+         // in getWeakProxyForHandle() for more info about this.
+         IBinder* b = e->binder;
+         if (b == nullptr || !e->refs->attemptIncWeak(this)) {
+-            b = new BpHwBinder(handle);
++            b = new BpHwBinder(handle, mHost);  // apklayer patch
+             e->binder = b;
+             if (b) e->refs = b->getWeakRefs();
+             result = b;
+@@ -271,7 +300,7 @@
+         // arriving from the driver.
+         IBinder* b = e->binder;
+         if (b == nullptr || !e->refs->attemptIncWeak(this)) {
+-            b = new BpHwBinder(handle);
++            b = new BpHwBinder(handle, mHost);  // apklayer patch
+             result = b;
+             e->binder = b;
+             if (b) e->refs = b->getWeakRefs();
+@@ -309,7 +338,7 @@
+     if (mThreadPoolStarted) {
+         String8 name = makeBinderThreadName();
+         ALOGV("Spawning new pooled thread, name=%s\n", name.c_str());
+-        sp<Thread> t = new PoolThread(isMain);
++        sp<Thread> t = new PoolThread(isMain, mHost);  // apklayer patch
+         t->run(name.c_str());
+     }
+ }
+@@ -372,9 +401,9 @@
+     androidSetThreadName( makeBinderThreadName().c_str() );
+ }
+ 
+-static int open_driver()
++static int open_driver(const char* driver)
+ {
+-    int fd = open("/dev/hwbinder", O_RDWR | O_CLOEXEC);
++    int fd = open(driver, O_RDWR | O_CLOEXEC);
+     if (fd >= 0) {
+         int vers = 0;
+         status_t result = ioctl(fd, BINDER_VERSION, &vers);
+@@ -404,8 +433,8 @@
+     return fd;
+ }
+ 
+-ProcessState::ProcessState(size_t mmapSize)
+-    : mDriverFD(open_driver())
++ProcessState::ProcessState(size_t mmapSize, const char* driver)
++    : mDriverFD(open_driver(driver))
+     , mVMStart(MAP_FAILED)
+     , mThreadCountLock(PTHREAD_MUTEX_INITIALIZER)
+     , mExecutingThreadsCount(0)
+diff --git a/include/hwbinder/BpHwBinder.h b/include/hwbinder/BpHwBinder.h
+--- a/include/hwbinder/BpHwBinder.h
++++ b/include/hwbinder/BpHwBinder.h
+@@ -33,6 +33,7 @@
+ {
+ public:
+                         BpHwBinder(int32_t handle);
++                        BpHwBinder(int32_t handle, bool host);  // apklayer patch
+ 
+     inline  int32_t     handle() const { return mHandle; }
+ 
+@@ -119,6 +120,10 @@
+             Vector<Obituary>*   mObituaries;
+             ObjectManager       mObjects;
+     mutable String16            mDescriptorCache;
++public:
++    bool isHostBinder() const { return mHost; }  // apklayer patch: a proxy of the host hwbinder context
++private:
++    bool                        mHost = false;   // apklayer patch (only libhwbinder makes BpHwBinders)
+ };
+ 
+ } // namespace hardware
+diff --git a/include/hwbinder/IPCThreadState.h b/include/hwbinder/IPCThreadState.h
+--- a/include/hwbinder/IPCThreadState.h
++++ b/include/hwbinder/IPCThreadState.h
+@@ -43,6 +43,7 @@
+ public:
+     static  IPCThreadState*     self();
+     static  IPCThreadState*     selfOrNull();  // self(), but won't instantiate
++    static  IPCThreadState*     self(bool host);  // apklayer patch: this thread's state in the host hwbinder context
+ 
+             sp<ProcessState>    process();
+ 
+@@ -110,7 +111,7 @@
+             void addPostCommandTask(const std::function<void(void)>& task);
+ 
+            private:
+-            IPCThreadState();
++            explicit IPCThreadState(bool host = false);  // apklayer patch: host hwbinder context
+             ~IPCThreadState();
+ 
+             status_t            sendReply(const Parcel& reply, uint32_t flags);
+diff --git a/include/hwbinder/Parcel.h b/include/hwbinder/Parcel.h
+--- a/include/hwbinder/Parcel.h
++++ b/include/hwbinder/Parcel.h
+@@ -302,6 +302,10 @@
+     // if this parcelable is involved in a secure transaction, force the
+     // data to be overridden with zero when deallocated
+     mutable bool        mDeallocZero;
++#ifdef __LP64__  // apklayer patch: carries host hwbinder context handles (in padding: no size change; 32-bit has none)
++    mutable bool        mHost;
++#endif
++    bool                hostContext() const;  // apklayer patch
+ 
+     release_func        mOwner;
+     void*               mOwnerCookie;
+diff --git a/include/hwbinder/ProcessState.h b/include/hwbinder/ProcessState.h
+--- a/include/hwbinder/ProcessState.h
++++ b/include/hwbinder/ProcessState.h
+@@ -85,9 +85,16 @@
+ 
+ private:
+     static  sp<ProcessState>    init(size_t mmapSize, bool requireMmapSize);
++public:
++    // apklayer patch: host == true is the host hwbinder context (/dev/host_hwbinder: a Halium device's own hwbinder, or another
++    // instance's), null when that device does not exist; isHostBuffer: a received buffer of its mmap.
++    static  sp<ProcessState>    self(bool host);
++    static  bool                isHostBuffer(const void* data);
++            bool                isHost() const { return mHost; }
++private:
+ 
+     friend class IPCThreadState;
+-            explicit            ProcessState(size_t mmapSize);
++            explicit            ProcessState(size_t mmapSize, const char* driver = "/dev/hwbinder");  // apklayer patch: driver
+                                 ~ProcessState();
+ 
+                                 ProcessState(const ProcessState& o);
+@@ -124,6 +131,8 @@
+             const size_t        mMmapSize;
+ 
+             CallRestriction     mCallRestriction;
++
++            bool                mHost = false;  // apklayer patch
+ };
+ 
+ } // namespace hardware

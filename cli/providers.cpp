@@ -2,6 +2,7 @@
 
 #include <dlfcn.h>
 #include <signal.h>
+#include <unistd.h>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -11,13 +12,17 @@
 namespace apklayer {
 
 namespace {
-// The domains apklayer has an Android-side front for: front library, vintf fragment (repo path)
-struct Domain { const char* name; const char* front; const char* manifest; };
+// The domains apklayer has an Android-side front for: front library, vintf fragment (repo path), and for the "device" provider the
+// device's HAL names reached through the host binder contexts (AIDL interfaces, HIDL packages: docs/HALIUM.md). Sensors and GNSS have
+// none: those HALs take one client, which on a Halium device is the OS's own (sensorfw, its location service).
+struct Domain { const char* name; const char* front; const char* manifest; const char* device; };
 const Domain kDomains[] = {
-    {"sensors", "libapklayer_sensors.so", "aosp/hals/sensors/manifest.xml"},
-    {"gnss", "libapklayer_gnss.so", "aosp/hals/gnss/manifest.xml"},
-    {"vibrator", "libapklayer_vibrator.so", "aosp/hals/vibrator/manifest.xml"},
-    {"camera", "libapklayer_camera.so", "aosp/hals/camera/manifest.xml"},
+    {"sensors", "libapklayer_sensors.so", "aosp/hals/sensors/manifest.xml", nullptr},
+    {"gnss", "libapklayer_gnss.so", "aosp/hals/gnss/manifest.xml", nullptr},
+    {"vibrator", "libapklayer_vibrator.so", "aosp/hals/vibrator/manifest.xml",
+     "android.hardware.vibrator.IVibrator android.hardware.vibrator.IVibratorManager android.hardware.vibrator"},
+    {"camera", "libapklayer_camera.so", "aosp/hals/camera/manifest.xml",
+     "android.hardware.camera.provider.ICameraProvider android.hardware.camera.provider"},
 };
 
 const Domain* findDomain(const std::string& name) {
@@ -96,8 +101,8 @@ std::vector<ProviderService> providerServices(const Layout& l, const Instance& i
     for (const ProviderConfig& c : readProviders(providersFile(inst))) {
         const Domain* d = findDomain(c.domain);
         if (!d) { fprintf(stderr, "providers: no domain %s\n", c.domain.c_str()); continue; }
-        // shortcut: only apklayer's own fronts; the "device" provider (the device's HAL through the host binder contexts) is plan step 7(d)
-        if (c.provider != "apklayer") { fprintf(stderr, "providers: %s: provider %s is not supported yet\n", d->name, c.provider.c_str()); continue; }
+        if (c.provider == "device") continue;  // the device's own HAL: no front here (writeHostHals lists it)
+        if (c.provider != "apklayer") { fprintf(stderr, "providers: %s: no provider %s\n", d->name, c.provider.c_str()); continue; }
         std::string backend = backendLib(l, c.domain, c.backend);
         if (!exists(join(l.androidLibs, d->front)) || !exists(backend)) {
             fprintf(stderr, "providers: %s: %s or %s is not staged\n", d->name, d->front, backend.c_str());
@@ -106,6 +111,24 @@ std::vector<ProviderService> providerServices(const Layout& l, const Instance& i
         services.push_back({d->name, d->front, backend, c.options, d->manifest});
     }
     return services;
+}
+
+std::string hostHalsFile(const Instance& inst) { return join(inst.dataDir, "apklayer/host_hals.conf"); }
+
+bool writeHostHals(const Instance& inst) {
+    std::string text;
+    for (const ProviderConfig& c : readProviders(providersFile(inst))) {
+        const Domain* d = findDomain(c.domain);
+        if (c.provider != "device" || !d) continue;
+        if (!d->device) { fprintf(stderr, "providers: %s: the device provider is not offered (one client: the OS's own)\n", d->name); continue; }
+        text += std::string("# ") + d->name + "\n";
+        for (const std::string& name : split(d->device, ' ')) text += name + "\n";
+    }
+    if (text.empty()) { unlink(hostHalsFile(inst).c_str()); return false; }
+    makeDirs(join(inst.dataDir, "apklayer"));
+    if (!writeFile(hostHalsFile(inst), "# written by the stack from providers.toml (domains with provider = \"device\")\n" + text))
+        die("cannot write " + hostHalsFile(inst));
+    return true;
 }
 
 int providersCommand(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {
@@ -129,11 +152,15 @@ int providersCommand(const Layout& l, const Instance& inst, const std::vector<st
     }
     const std::string& action = args[0];
     if (!((action == "set" && args.size() >= 3) || (action == "unset" && args.size() == 2)))
-        die("providers [set <domain> <backend> [key=value...] | unset <domain>]");
+        die("providers [set <domain> <backend> [key=value...] | set <domain> device | unset <domain>]");
     if (!findDomain(args[1])) die("no hardware domain " + args[1] + " (sensors, gnss, vibrator, camera)");
     std::vector<ProviderConfig> kept;
     for (const ProviderConfig& d : domains) if (d.domain != args[1]) kept.push_back(d);
-    if (action == "set") {
+    if (action == "set" && args[2] == "device") {  // the device's own HAL through the host binder contexts (a Halium device)
+        if (!findDomain(args[1])->device) die("the device provider is not offered for " + args[1] + " (one client: the OS's own)");
+        if (args.size() > 3) die("the device provider takes no options");
+        kept.push_back({args[1], "device", "", {}});
+    } else if (action == "set") {
         if (!exists(backendLib(l, args[1], args[2]))) die("no backend " + backendLib(l, args[1], args[2]));
         ProviderConfig d{args[1], "apklayer", args[2], {}};
         for (size_t i = 3; i < args.size(); i++) {
