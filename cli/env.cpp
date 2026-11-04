@@ -111,6 +111,9 @@ std::vector<std::string> hostJvmArgs(const Layout& l, const Instance& inst, Nati
     std::string nr = join(n, "android-root");
     makeDirs(inst.tmpDir());
     std::vector<std::string> a = {ne.java, "-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC",
+                                  // C1 only gets a 48 MB code cache; Meet filled it in a call ("Out of space in CodeCache for method handle intrinsic", the
+                                  // JVM exits). 240 MB is the tiered default; it is reserved address space, committed as code is compiled
+                                  "-XX:ReservedCodeCacheSize=240m",
                                   // a JVM defines ~5400 framework classes at start: with the default 32K buckets the symbol lookups of their constant pools
                                   // take about half of the class definition time (perf: SymbolTable::do_lookup), the table grows only later
                                   "-XX:+UnlockExperimentalVMOptions", "-XX:SymbolTableSize=262144",
