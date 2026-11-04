@@ -41,10 +41,9 @@ def progress():
 
 fixture = sys.argv[1] if len(sys.argv) > 1 else '/tmp/apklayer-vp8.ivf'
 mode = sys.argv[2:]
-probe = '--reorder-probe' if mode == ['reorder'] else '--remote-probe'
-if probe == '--reorder-probe': mode = []
-proc = subprocess.Popen(['bin/apklayer', 'stack', 'libapklayer_codec2.so', probe,
-    fixture, *mode], stdout=subprocess.PIPE,
+# interface: the in-process store probe (no fixture), on a stack too: the soft codecs ask the gralloc allocator through servicemanager
+probe = {'reorder': ['--reorder-probe', fixture], 'interface': ['--probe']}.get(' '.join(mode), ['--remote-probe', fixture, *mode])
+proc = subprocess.Popen(['bin/apklayer', 'stack', 'libapklayer_codec2.so', *probe], stdout=subprocess.PIPE,
     stderr=subprocess.STDOUT, start_new_session=True)
 try:
     with selectors.DefaultSelector() as events:

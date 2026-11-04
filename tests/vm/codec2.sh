@@ -9,8 +9,9 @@ ninja -C b bridge/hals/media/codec-test bridge/hals/media/codec-reorder-test
 cp --remove-destination b/bridge/hals/media/libapklayer-hal-media.so "$APKLAYER_NATIVE/"
 b/bridge/hals/media/codec-test /tmp/apklayer-vp8.ivf /tmp/apklayer-vp9.ivf
 b/bridge/hals/media/codec-reorder-test /tmp/apklayer-h264.au
-b/cli/apklayer exec libapklayer_codec2.so --probe > /tmp/apklayer-codec2-interface.log 2>&1 || true  # the verdict is the PASS lines
-grep -a 'codec2: PASS' /tmp/apklayer-codec2-interface.log
+python3 -u tests/vm/codec2-run.py - interface || true  # the verdict is the PASS lines (bounded: codec2-run ends a stalled stack)
+grep -a 'codec2: PASS' $APKLY_STATE/tool.log
+test ! -e "$XDG_RUNTIME_DIR/apklayer/$APKLAYER_INSTANCE/properties"  # a stopped stack's properties end with it (no servicemanager.ready=true left)
 python3 -u tests/vm/codec2-run.py
 grep -a 'codec2: PASS' $APKLY_STATE/tool.log
 grep -aq 'codec2: registered' $APKLY_STATE/codec2.log

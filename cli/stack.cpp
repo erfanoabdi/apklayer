@@ -353,6 +353,9 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         if (s.pid > 0 && waitpid(s.pid, &st, 0) == s.pid && !(WIFSIGNALED(st) && WTERMSIG(st) == SIGTERM) && !(WIFEXITED(st) && WEXITSTATUS(st) == 0))
             fprintf(stderr, "stopped: %s (status %d)\n", s.name.c_str(), WIFEXITED(st) ? WEXITSTATUS(st) : 128 + WTERMSIG(st));  // a clean stop is SIGTERM's default action
     }
+    // the store ends with its services: a later tool must not find servicemanager.ready=true with no servicemanager (it waits forever).
+    // Before the pid file goes: a stack started after that makes its own store here.
+    removeTree(inst.runtimeDir);
     unlink(inst.pidFile().c_str());
     // the JVMs of this stack are gone: their extracted native runtimes too (the directory stays: a JVM about to start has it as java.io.tmpdir), but not the
     // fonts and ICU data they share (robolectric patch 0001). A copy keyed by an older framework jar stays until the state dir is removed.
