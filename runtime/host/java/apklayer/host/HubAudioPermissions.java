@@ -6,9 +6,7 @@ import android.os.Process;
 import android.os.UserHandle;
 import com.android.media.permission.UidPackageState.PackageState;
 import com.android.server.audio.AudioServerPermissionProvider;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -53,18 +51,15 @@ final class HubAudioPermissions {
     private static void feed(HubPackages packages, IBinder policy) {
         fed.clear();
         Map<Integer, Map<String, PackageState>> byAppId = new HashMap<>();
-        Map<Integer, List<String>> byUid = new HashMap<>();
         add(byAppId, Process.SYSTEM_UID, "android", Build.VERSION.SDK_INT, true);  // the framework package: the system uid holds every permission
         for (String name : packages.installed()) {
             int uid = packages.uid(name);
             var parsed = packages.get(name);
             if (uid < 0 || parsed == null) continue;
             add(byAppId, UserHandle.getAppId(uid), name, parsed.applicationInfo.targetSdkVersion, parsed.applicationInfo.isAudioPlaybackCaptureAllowed());
-            byUid.computeIfAbsent(UserHandle.getAppId(uid), unused -> new ArrayList<>()).add(name);
             fed.put(name, parsed);
         }
-        var provider = new AudioServerPermissionProvider(byAppId, (uid, permission) -> UserHandle.getAppId(uid) < Process.FIRST_APPLICATION_UID
-                || byUid.getOrDefault(UserHandle.getAppId(uid), List.of()).stream().anyMatch(name -> packages.holds(name, permission)), () -> new int[] {0});
+        var provider = new AudioServerPermissionProvider(byAppId, packages::uidHolds, () -> new int[] {0});
         try {
             provider.onServiceStart(android.media.IAudioPolicyService.Stub.asInterface(policy).getPermissionController());
             System.out.println("[apklayer-hub] audio permissions fed: " + byAppId.size() + " app ids");

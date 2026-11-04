@@ -19,6 +19,8 @@ public final class HubHost {
             throw new IllegalStateException("Cannot publish instance hub");
         if (!RealBinder.publish(HubAccounts.SERVICE, directory.accounts()))
             throw new IllegalStateException("Cannot publish the account service");
+        if (!HubPermissionChecker.publish(directory.packages()))
+            throw new IllegalStateException("Cannot publish the permission checker");
         HostBattery.installHub(directory::sendSystem);
         System.out.println("[apklayer-hub] READY pid=" + android.os.Process.myPid());
         directory.startSpare();  // the first component host starts warm
