@@ -15,6 +15,9 @@ final class HostPlainShadows {
     /** A real SurfaceComposerClient behind a session (Magnifier's layers): without this its native create returned Robolectric's 0. */
     @Implements(className = "android.view.SurfaceSession", callNativeMethodsByDefault = true, isInAndroidSdk = false)
     public static final class SurfaceSession {}
+    /** LocalSocket/LocalServerSocket's natives (bind, connect, read, write: libandroid_runtime's) instead of Robolectric's no-ops. */
+    @Implements(className = "android.net.LocalSocketImpl", callNativeMethodsByDefault = true, isInAndroidSdk = false)
+    public static final class LocalSocketImpl {}
     /** HWUI's readback of the window's real buffers (Magnifier, screenshots) instead of Robolectric's View.draw / ImageReader copy. */
     @Implements(className = "android.view.PixelCopy", isInAndroidSdk = false) public static final class PixelCopy {}
     /** With the real WebView provider: its cookie store, web storage and database (getInstance asks WebViewFactory's provider), not Robolectric's

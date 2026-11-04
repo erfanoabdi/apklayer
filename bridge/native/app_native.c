@@ -148,6 +148,25 @@ static void linux_socketpair(JNIEnv *env, jobject self, jint domain, jint type, 
     (*env)->SetIntField(env, two, fd_field(env), fds[1]);
 }
 
+/* Os.socket/listen/accept/shutdown: LocalServerSocket and LocalSocket (AF_UNIX) run on these and LocalSocketImpl's own natives (SimpleX's stdout pipe) */
+static jobject linux_socket(JNIEnv *env, jobject self, jint domain, jint type, jint protocol)
+{
+    (void)self;
+    int n = socket(domain, type, protocol);
+    if (n < 0) { throw_errno(env, "socket", errno); return NULL; }
+    return fd_make(env, n);
+}
+static void linux_listen(JNIEnv *env, jobject self, jobject fd, jint backlog) { (void)self; if (listen(fd_of(env, fd), backlog) < 0) throw_errno(env, "listen", errno); }
+static void linux_shutdown(JNIEnv *env, jobject self, jobject fd, jint how) { (void)self; if (shutdown(fd_of(env, fd), how) < 0) throw_errno(env, "shutdown", errno); }
+/* shortcut: the peer address is not filled in (LocalSocketImpl passes null); an InetSocketAddress caller gets it unchanged, fill it when one needs it */
+static jobject linux_accept(JNIEnv *env, jobject self, jobject fd, jobject peer)
+{
+    (void)self; (void)peer;
+    int n = accept(fd_of(env, fd), NULL, NULL);
+    if (n < 0) { throw_errno(env, "accept", errno); return NULL; }
+    return fd_make(env, n);
+}
+
 /* Os.poll(StructPollfd[], timeout): what HostFdEvents waits in for a MessageQueue's file descriptor listeners (ParcelFileDescriptor's close listeners among them) */
 #include <poll.h>
 #include <stdlib.h>
@@ -209,6 +228,10 @@ int apklayer_register_linux(JNIEnv *env, jclass libcore_linux)
         {"open", "(Ljava/lang/String;II)Ljava/io/FileDescriptor;", (void *)linux_open},
         {"pipe2", "(I)[Ljava/io/FileDescriptor;", (void *)linux_pipe2},
         {"socketpair", "(IIILjava/io/FileDescriptor;Ljava/io/FileDescriptor;)V", (void *)linux_socketpair},
+        {"socket", "(III)Ljava/io/FileDescriptor;", (void *)linux_socket},
+        {"listen", "(Ljava/io/FileDescriptor;I)V", (void *)linux_listen},
+        {"accept", "(Ljava/io/FileDescriptor;Ljava/net/SocketAddress;)Ljava/io/FileDescriptor;", (void *)linux_accept},
+        {"shutdown", "(Ljava/io/FileDescriptor;I)V", (void *)linux_shutdown},
         {"poll", "([Landroid/system/StructPollfd;I)I", (void *)linux_poll},
         {"readBytes", "(Ljava/io/FileDescriptor;Ljava/lang/Object;II)I", (void *)linux_read_bytes},
         {"writeBytes", "(Ljava/io/FileDescriptor;Ljava/lang/Object;II)I", (void *)linux_write_bytes},
