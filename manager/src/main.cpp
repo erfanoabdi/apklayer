@@ -151,7 +151,7 @@ private:
     // `apklayer info` for people: titles, sizes in MB; package, label and version are in the detail's header already
     static std::shared_ptr<slint::VectorModel<InfoEntry>> appInfo(const Rows& rows) {
         static const std::vector<std::pair<std::string, std::string>> titles = {
-            {"versionCode", "Version code"}, {"targetSdk", "Target SDK"}, {"launcher", "Launcher activity"}, {"uid", "Android user id"},
+            {"versionCode", "Version code"}, {"targetSdk", "Target SDK"}, {"launcher", "Launcher activity"}, {"uid", "Android user id"}, {"nativeRoute", "Native code"},
             {"codeSize", "App size"}, {"dataSize", "Data in this instance"}, {"dir", "Installed in"}, {"dataDir", "Data directory"}};
         Rows out;
         for (const auto& [key, title] : titles)
@@ -162,6 +162,10 @@ private:
                     char mb[32];
                     snprintf(mb, sizeof mb, "%.1f MB", atoll(v.c_str()) / 1e6);
                     v = mb;
+                }
+                if (key == "nativeRoute") {  // install's route (cli/apps.cpp); none recorded before it existed
+                    if (v.empty()) continue;
+                    v = v.rfind("bridge-", 0) == 0 ? v.substr(7) + ", translated" : "this CPU's";
                 }
                 out.push_back({title, v});
             }
