@@ -179,9 +179,8 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
     // what holds every instance's and app's data, where such a tree has it inside (a source tree with its tests' data): empty again,
     // then only this instance's parts
     for (const std::string& all : {join(realPath(l.dataHome), "apklayer"), join(realPath(l.stateHome), "apklayer"), runtime})
-        if (isDir(all) && std::any_of(ro.begin(), ro.end(), [&](const std::string& r) { return under(all, r); })) steps.push_back({Step::Tmpfs, all});
-    for (const std::string& own : {l.appsDir, inst.stateDir, inst.root})
-        if (isHidden(realPath(own))) bind(realPath(own), own, false);
+        if (isDir(all)) steps.push_back({Step::Tmpfs, all});  // also where no hidden directory holds them (a data home on another disk)
+    for (const std::string& own : {l.appsDir, inst.stateDir, inst.root}) bind(realPath(own), own, false);
     std::string data = realPath(appDataDir(l, inst, package)), tmp = join(inst.tmpDir(), "sandbox-" + std::to_string(uid));
     makeDirs(tmp);
     if (chown(tmp.c_str(), uid, uid) != 0) die("cannot give " + tmp + " to the app");
