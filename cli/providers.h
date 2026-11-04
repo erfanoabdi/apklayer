@@ -27,7 +27,11 @@ std::vector<ProviderConfig> readProviders(const std::string& file);
 std::vector<ProviderService> providerServices(const Layout& layout, const Instance& instance);
 // The domains apklayer has fronts for (a reload of the stack compares each).
 const std::vector<std::string>& providerDomains();
-// `apklayer providers [set <domain> <backend> [opt=val...] | unset <domain>]`
+// The device's HAL names for the domains whose provider is "device" into <instance data>/apklayer/host_hals.conf (/data/apklayer/
+// host_hals.conf for libbinder and libhidl: those names come from the host binder contexts); removed when there are none. True if any.
+bool writeHostHals(const Instance& instance);
+std::string hostHalsFile(const Instance& instance);
+// `apklayer providers [set <domain> <backend> [opt=val...] | set <domain> device | unset <domain>]`
 int providersCommand(const Layout& layout, const Instance& instance, const std::vector<std::string>& args);
 
 }  // namespace apklayer

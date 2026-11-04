@@ -6,6 +6,25 @@ cc_library_shared {
     cflags: ["-Wall", "-Werror", "-Wno-main"],
 }
 
+// HIDL through the host hwbinder context (docs/HALIUM.md): the device role of the two-instance test (atrace@1.0 as the test HAL), and
+// HIDL clients that list a device's cameras and codecs.
+cc_library_shared {
+    name: "libapklayer_hidltool",
+    srcs: ["hidltool.cpp"],
+    shared_libs: [
+        "libhidlbase",
+        "libutils",
+        "liblog",
+        "android.hardware.atrace@1.0",
+        "android.hardware.camera.provider@2.4",
+        "android.hardware.camera.common@1.0",
+        "android.hardware.media.c2@1.0",
+        "android.hidl.manager@1.0",
+    ],
+    compile_multilib: "64",
+    cflags: ["-Wall", "-Werror", "-Wno-main"],
+}
+
 // Whole-stack smoke test: a layer with GraphicBuffers shown through SurfaceFlinger.
 cc_library_shared {
     name: "libapklayer_sftest",

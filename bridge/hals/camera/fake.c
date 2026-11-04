@@ -32,6 +32,7 @@ struct apklayer_camera {
 };
 
 int apklayer_camera_probe(void) { return 0; }
+const char apklayer_camera_options[] = "source\tpattern\tfile\ncameras\tback,front\ttext\nfps\t30\ttext\n";
 
 int apklayer_camera_init(int count, const char *const *options)
 {

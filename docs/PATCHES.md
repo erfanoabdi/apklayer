@@ -121,3 +121,6 @@ Behaviour that differs from Android or from stock Robolectric without editing up
 - bionic_translation 0037-linker-no-host-system-lib: no `/vendor/lib`, `/system/lib` default search paths (on Halium they are the device's 32-bit Android).
 - frameworks/av 0003-camera-trust-instance-uid: cameraserver trusts its own Linux uid to name a client (Camera1's native connect carries the kernel uid beside an attribution with the app's uid).
 - Vendored Goldfish `aosp/hals/camera/goldfish/HwCamera.cpp` (marked "apklayer patch"): the JPEG blob header is written before unlock (our mapper unmaps on unlock; the provider crashed on every still).
+- system/libhwbinder 0001-host-hwbinder-context: a host hwbinder context (`/dev/host_hwbinder`, mapped by paths.c), no TXN_SECURITY_CTX (Waydroid libhwbinder 0001/0002). Rebuild: `m libhidlbase`.
+- system/libhidl 0001-host-hals: `getService` asks the host's hwservicemanager first for names in `host_hals.conf` (Waydroid libhidl 0001-0005, 0007, 0008). Rebuild: `m libhidlbase`.
+- bionic_translation 0038-pthread-attr-bionic-fields: pthread attrs keep bionic's stack_size and guard_size filled (the native bridge's proxy pthread_create sizes the guest stack from them). binary_translation 0001 (amended): the guest linker's host pthread is the thread's own bionic record on a glibc host.

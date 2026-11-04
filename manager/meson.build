@@ -29,7 +29,7 @@ ui = custom_target('app.h',
   env: {'SLINT_EMIT_DEBUG_INFO': '1'})  # element ids for slint-testing.h's lookups (the scripted input)
 
 backend = static_library('backend', 'src/backend.cpp', 'src/json.cpp', 'src/releases.cpp', 'src/fetch.cpp')
-executable('apklayer-manager', 'src/main.cpp', 'src/setup.cpp', ui,
+executable('apklayer-manager', 'src/main.cpp', 'src/setup.cpp', 'src/hardware.cpp', ui,
   dependencies: [slint_dep, dependency('libpng'), dependency('threads')],
   link_with: backend,
   build_rpath: slint / 'cpp/lib',

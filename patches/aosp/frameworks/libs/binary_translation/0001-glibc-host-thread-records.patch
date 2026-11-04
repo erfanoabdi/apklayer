@@ -2,11 +2,27 @@ From: Erfan Abdi <erfangplus@gmail.com>
 Subject: [PATCH] apklayer: per-thread bionic records on a glibc host
 
 Under bionic_translation the host thread slots Berberis copies into a guest thread's TLS are glibc's (%fs+0x08 the DTV,
-%fs+0x48 feature_1). With glibc-host-thread-id-handoff each guest thread gets a zeroed pthread_internal_t (its tid set)
-and bionic_tls of its own. Base: Digitalis android17 (github.com/DigitalisX64/platform_frameworks_libs_binary_translation), REVISION.
+%fs+0x48 feature_1), and pthread_self() is glibc's struct pthread. With glibc-host-thread-id-handoff each guest thread gets a zeroed
+pthread_internal_t (its tid and bionic_tls pointer set) and bionic_tls of its own; the guest linker's __native_bridge_get_host_pthread
+returns them too. Base: Digitalis android17 (github.com/DigitalisX64/platform_frameworks_libs_binary_translation), REVISION.
 
+diff --git a/guest_loader/guest_loader.cc b/guest_loader/guest_loader.cc
+index b58297e3..a27c4a07 100644
+--- a/guest_loader/guest_loader.cc
++++ b/guest_loader/guest_loader.cc
+@@ -168,7 +168,9 @@ void GetHostPthreadCallback(HostCode callee, ThreadState* state) {
+   UNUSED(callee);
+ 
+   auto&& [ret] = GuestReturnReference<decltype(pthread_self)>(state);
+-  ret = pthread_self();
++  // apklayer patch: on a glibc host pthread_self() is glibc's struct pthread, not a bionic pthread_internal_t: the guest linker would take
++  // its tid and bionic_tls from glibc's fields (a recursive mutex locked with that "tid" then never let the main thread in again).
++  ret = IsConfigFlagSet(kGlibcHostThreadIdHandoff) ? reinterpret_cast<pthread_t>(state->thread->GlibcHostRecords()) : pthread_self();
+ }
+ 
+ bool InitializeVdso(const LoadedElfFile& vdso_elf_file, std::string* error_msg) {
 diff --git a/guest_os_primitives/guest_thread.cc b/guest_os_primitives/guest_thread.cc
-index fc14da7a..3acc5bc2 100644
+index fc14da7a..48cf4c5d 100644
 --- a/guest_os_primitives/guest_thread.cc
 +++ b/guest_os_primitives/guest_thread.cc
 @@ -22,6 +22,7 @@
@@ -15,12 +31,12 @@ index fc14da7a..3acc5bc2 100644
  #include "private/bionic_tls.h"
 +#include "bionic/pthread_internal.h"  // apklayer patch: pthread_internal_t (glibc host records)
  #endif
-
+ 
  #include "berberis/base/bit_util.h"
 @@ -53,6 +54,12 @@ void InitState();
-
+ 
  NativeBridgeStaticTlsConfig g_static_tls_config;
-
+ 
 +#if defined(__BIONIC__)
 +// apklayer patch: the records a glibc host gives each guest thread (InitStaticTls): a pthread_internal_t, then a bionic_tls.
 +const size_t kGlibcHostThreadRecordSize = AlignUpPageSize(sizeof(pthread_internal_t));
@@ -28,7 +44,7 @@ index fc14da7a..3acc5bc2 100644
 +#endif
 +
  namespace {
-
+ 
  const size_t kGuestThreadPageAlignedSize = AlignUpPageSize(sizeof(GuestThread));
 @@ -188,6 +195,9 @@ void GuestThread::Destroy(GuestThread* thread) {
    if (thread->static_tls_ != nullptr) {
@@ -40,7 +56,7 @@ index fc14da7a..3acc5bc2 100644
    if (thread->scs_region_ != nullptr) {
      MunmapOrDie(thread->scs_region_, SCS_GUARD_REGION_SIZE);
    }
-@@ -372,12 +382,23 @@ void GuestThread::InitStaticTls() {
+@@ -372,12 +382,18 @@ void GuestThread::InitStaticTls() {
    // pthread_internal_t*. Such a host seeds a synthetic bionic pthread record in
    // TLS_SLOT_NATIVE_BRIDGE_GUEST_STATE; take the thread id from there and let
    // the store below replace it with the live GuestThread pointer.
@@ -52,12 +68,7 @@ index fc14da7a..3acc5bc2 100644
 +    // apklayer patch: under bionic_translation the host's thread slots are glibc's (%fs+0x08 the DTV, %fs+0x48 feature_1): there is no
 +    // host pthread_internal_t or bionic_tls to share, and nothing seeds one for threads the JVM made. The thread gets zeroed records of its
 +    // own, with its tid as bionic's pthread_create sets it. Limit: errno set by a proxied host call is glibc's, not the guest's.
-+    if (glibc_host_records_ == nullptr) {
-+      glibc_host_records_ = Mmap(kGlibcHostRecordsSize);
-+      CHECK_NE(glibc_host_records_, MAP_FAILED);
-+      static_cast<pthread_internal_t*>(glibc_host_records_)->tid = GettidSyscall();
-+    }
-+    tls[g_static_tls_config.tls_slot_thread_id] = glibc_host_records_;
++    tls[g_static_tls_config.tls_slot_thread_id] = GlibcHostRecords();
 +    tls[g_static_tls_config.tls_slot_bionic_tls] =
 +        static_cast<char*>(glibc_host_records_) + kGlibcHostThreadRecordSize;
 +  } else {
@@ -69,16 +80,47 @@ index fc14da7a..3acc5bc2 100644
    GetTls()[TLS_SLOT_NATIVE_BRIDGE_GUEST_STATE] = GetThreadStateStorage(*state_);
    SetTlsAddr(*state_, ToGuestAddr(tls));
  #else
+@@ -387,6 +403,19 @@ void GuestThread::InitStaticTls() {
+ #endif
+ }
+ 
++void* GuestThread::GlibcHostRecords() {
++#if defined(__BIONIC__)
++  if (glibc_host_records_ == nullptr) {  // apklayer patch: zeroed, with the tid and bionic_tls pointer bionic's pthread_create sets
++    glibc_host_records_ = Mmap(kGlibcHostRecordsSize);
++    CHECK_NE(glibc_host_records_, MAP_FAILED);
++    auto* thread = static_cast<pthread_internal_t*>(glibc_host_records_);
++    thread->tid = GettidSyscall();
++    thread->bionic_tls = reinterpret_cast<bionic_tls*>(static_cast<char*>(glibc_host_records_) + kGlibcHostThreadRecordSize);
++  }
++#endif
++  return glibc_host_records_;
++}
++
+ void GuestThread::ConfigStaticTls(const NativeBridgeStaticTlsConfig* config) {
+   // This function is called during Bionic linker initialization, before any
+   // guest constructor functions run. It should be safe to omit locking.
 diff --git a/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h b/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h
-index ac845aba..e1ba7504 100644
+index ac845aba..822092c7 100644
 --- a/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h
 +++ b/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h
-@@ -130,6 +130,8 @@ class GuestThread {
+@@ -67,6 +67,10 @@ class GuestThread {
+   // Initialize *current* guest thread.
+   void InitStaticTls();
+ 
++  // apklayer patch: on a glibc host (glibc-host-thread-id-handoff) this thread's own bionic records, a pthread_internal_t followed by
++  // its bionic_tls, made on first use: what the guest takes for the host's thread (InitStaticTls, the linker's host pthread).
++  void* GlibcHostRecords();
++
+   // Configure static tls for *current* *main* guest thread.
+   void ConfigStaticTls(const NativeBridgeStaticTlsConfig* config);
+ 
+@@ -130,6 +134,8 @@ class GuestThread {
    GuestAddr stack_top_ = {};
-
+ 
    void* static_tls_ = nullptr;
 +  // apklayer patch: on a glibc host, this thread's own bionic records (pthread_internal_t, bionic_tls); see InitStaticTls.
 +  void* glibc_host_records_ = nullptr;
-
+ 
    // Shadow call stack.
    void* scs_region_ = nullptr;

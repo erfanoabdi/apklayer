@@ -237,6 +237,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     stageManifest(inst, l, staged(l, "libapklayer_keystore2.so"), "apklayer-keystore2.xml", "aosp/hals/security/keystore2-manifest.xml", "system");  // a framework HAL: keystore2 may register its service
     // the hardware providers of providers.toml: their HALs are declared for this stack's lifetime (servicemanager reads the manifests once)
     std::vector<ProviderService> providers = providerServices(l, inst);
+    writeHostHals(inst);  // domains set to the device: their HALs come from the host binder contexts, no front starts
     for (const ProviderService& p : providers) stageManifest(inst, l, true, "apklayer-" + p.name + ".xml", p.manifest);
     std::vector<std::string> propFiles = {join(l.root, "bridge/native/apklayer.prop"), join(n, "android-root/props/system_build.prop")};
     // the instance's own overrides (`apklayer prop set`): first, as ro.* is write-once (and the fingerprint is derived from them), and again last, as
@@ -376,6 +377,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
                 // providers.toml changed: a running domain whose backend or options differ restarts with them, a removed one stops, the
                 // other services keep running. A domain this stack did not start with waits for the next start (its HAL is not declared).
                 std::vector<ProviderService> wanted = providerServices(l, inst);
+                writeHostHals(inst);  // read once per process: processes started from now on see the change
                 for (const std::string& domain : providerDomains()) {
                     const ProviderService* want = nullptr;
                     for (const ProviderService& p : wanted) if (p.name == domain) want = &p;

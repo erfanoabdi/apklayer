@@ -45,6 +45,8 @@ struct NativeBridgeCallbacks {
     struct native_bridge_namespace_t *(*getExportedNamespace)(const char *name);
     void (*preZygoteFork)(void);
     void *(*getTrampolineWithJNICallType)(void *handle, const char *name, const char *shorty, uint32_t len, int jni_call_type);
+    void *(*getTrampolineForFunctionPointer)(const void *method, const char *shorty, uint32_t len, int jni_call_type);
+    bool (*isNativeBridgeFunctionPointer)(const void *method);
 };
 enum { kJNICallTypeRegular = 1, RTLD_NOW_BIONIC = 2 };
 /* bionic/libc/platform/bionic/dlext_namespaces.h: an app's classloader namespace, isolated and the anonymous one (libnativeloader's first) */
@@ -54,8 +56,26 @@ static struct NativeBridgeCallbacks *nb;
 static struct native_bridge_namespace_t *app_ns;
 static jvmtiEnv *ti;
 
-/* A method's shorty (return type, then parameters; L for any reference), from its JNI signature as JVMTI gives it: Berberis reads the
- * arguments of a translated CallXxxMethod(env, obj, mid, ...) by it. Shorties live as long as the process (one per method, cached). */
+/* A JNI signature's shorty (return type, then parameters; L for any reference), malloc'd */
+static char *shorty_of(const char *sig)
+{
+    char *shorty = malloc(strlen(sig) + 2);
+    if (!shorty || sig[0] != '(') { free(shorty); return NULL; }
+    const char *p = sig + 1;
+    size_t n = 1;
+    for (; *p && *p != ')'; p++) {
+        char c = *p;
+        while (*p == '[') p++;
+        if (*p == 'L') p = strchr(p, ';');
+        shorty[n++] = c == '[' ? 'L' : *p == ';' ? 'L' : *p;
+    }
+    shorty[0] = p[1] == '[' || p[1] == 'L' ? 'L' : p[1];
+    shorty[n] = 0;
+    return shorty;
+}
+
+/* A method's shorty, from its JNI signature as JVMTI gives it: Berberis reads the arguments of a translated CallXxxMethod(env, obj, mid, ...)
+ * by it. Shorties live as long as the process (one per method, cached). */
 static const char *method_shorty(JNIEnv *env, jmethodID mid)
 {
     (void)env;
@@ -67,17 +87,7 @@ static const char *method_shorty(JNIEnv *env, jmethodID mid)
     for (struct entry *e = buckets[b]; e; e = e->next)
         if (e->mid == mid) { pthread_mutex_unlock(&lock); return e->shorty; }
     char *name = NULL, *sig = NULL, *shorty = NULL;
-    if (ti && (*ti)->GetMethodName(ti, mid, &name, &sig, NULL) == JVMTI_ERROR_NONE && (shorty = malloc(strlen(sig) + 2))) {
-        const char *p = sig + 1;  /* after '(' */
-        size_t n = 1;
-        for (; *p && *p != ')'; p++) {
-            char c = *p;
-            while (*p == '[') p++;
-            if (*p == 'L') p = strchr(p, ';');
-            shorty[n++] = c == '[' ? 'L' : *p == ';' ? 'L' : *p;
-        }
-        shorty[0] = p[1] == '[' || p[1] == 'L' ? 'L' : p[1];
-        shorty[n] = 0;
+    if (ti && (*ti)->GetMethodName(ti, mid, &name, &sig, NULL) == JVMTI_ERROR_NONE && (shorty = shorty_of(sig))) {
         struct entry *e = malloc(sizeof *e);
         if (!e) abort();
         *e = (struct entry){mid, shorty, buckets[b]};
@@ -87,6 +97,40 @@ static const char *method_shorty(JNIEnv *env, jmethodID mid)
     if (sig) (*ti)->Deallocate(ti, (unsigned char *)sig);
     pthread_mutex_unlock(&lock);
     return shorty;
+}
+
+/* RegisterNatives as ART does it under a native bridge (art/runtime/jni/jni_internal.cc): a guest function pointer is replaced by its
+ * host-callable trampoline. Translated JNI_OnLoads register their natives through the host's RegisterNatives (Berberis passes the guest's
+ * methods on unchanged), so HotSpot's entry is wrapped for the process (JVMTI's JNI function table, as runtime_shim.c does). */
+static jint (*host_register_natives)(JNIEnv *, jclass, const JNINativeMethod *, jint);
+static jint bridge_register_natives(JNIEnv *env, jclass c, const JNINativeMethod *methods, jint n)
+{
+    JNINativeMethod *own = NULL;
+    for (jint i = 0; nb && i < n; i++) {
+        if (!methods[i].fnPtr || !nb->isNativeBridgeFunctionPointer(methods[i].fnPtr)) continue;
+        if (!own) {
+            if (!(own = malloc((size_t)n * sizeof *own))) return JNI_ERR;
+            memcpy(own, methods, (size_t)n * sizeof *own);
+        }
+        char *shorty = shorty_of(methods[i].signature);  /* kept: the trampoline may refer to it */
+        void *fn = shorty ? nb->getTrampolineForFunctionPointer(methods[i].fnPtr, shorty, (uint32_t)strlen(shorty), kJNICallTypeRegular) : NULL;
+        if (fn) own[i].fnPtr = fn;
+    }
+    jint r = host_register_natives(env, c, own ? own : methods, n);
+    free(own);
+    return r;
+}
+
+static void wrap_register_natives(void)
+{
+    static jniNativeInterface table;
+    const jniNativeInterface *current;
+    if (!ti || host_register_natives || (*ti)->GetJNIFunctionTable(ti, (jniNativeInterface **)&current) != JVMTI_ERROR_NONE) return;
+    table = *current;
+    host_register_natives = table.RegisterNatives;
+    table.RegisterNatives = bridge_register_natives;
+    (*ti)->SetJNIFunctionTable(ti, &table);
+    (*ti)->Deallocate(ti, (unsigned char *)current);
 }
 
 /* What ART lists of a class's native methods; Berberis asks only on paths apklayer does not take (preZygoteFork). */
@@ -136,6 +180,7 @@ JNIEXPORT jstring JNICALL Java_apklayer_host_NativeLoader_bridgeInit(JNIEnv *env
     if (!nb) snprintf(err, sizeof err, "%s: %s", bridge, h ? "no NativeBridgeItf" : bionic_dlerror());
     else if (!nb->initialize(&runtime_cbs, cache, isa)) snprintf(err, sizeof err, "%s: initialize(%s) failed", bridge, isa);
     else {
+        wrap_register_natives();
         char *pub = public_libraries();
         struct native_bridge_namespace_t *system = nb->getExportedNamespace("system");
         app_ns = nb->createNamespace("classloader-namespace", NULL, libdir, kAppNamespaceType, libdir, system);

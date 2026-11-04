@@ -2,6 +2,8 @@
 
 #include <dlfcn.h>
 #include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -11,13 +13,17 @@
 namespace apklayer {
 
 namespace {
-// The domains apklayer has an Android-side front for: front library, vintf fragment (repo path)
-struct Domain { const char* name; const char* front; const char* manifest; };
+// The domains apklayer has an Android-side front for: front library, vintf fragment (repo path), and for the "device" provider the
+// device's HAL names reached through the host binder contexts (AIDL interfaces, HIDL packages: docs/HALIUM.md). Sensors and GNSS have
+// none: those HALs take one client, which on a Halium device is the OS's own (sensorfw, its location service).
+struct Domain { const char* name; const char* front; const char* manifest; const char* device; };
 const Domain kDomains[] = {
-    {"sensors", "libapklayer_sensors.so", "aosp/hals/sensors/manifest.xml"},
-    {"gnss", "libapklayer_gnss.so", "aosp/hals/gnss/manifest.xml"},
-    {"vibrator", "libapklayer_vibrator.so", "aosp/hals/vibrator/manifest.xml"},
-    {"camera", "libapklayer_camera.so", "aosp/hals/camera/manifest.xml"},
+    {"sensors", "libapklayer_sensors.so", "aosp/hals/sensors/manifest.xml", nullptr},
+    {"gnss", "libapklayer_gnss.so", "aosp/hals/gnss/manifest.xml", nullptr},
+    {"vibrator", "libapklayer_vibrator.so", "aosp/hals/vibrator/manifest.xml",
+     "android.hardware.vibrator.IVibrator android.hardware.vibrator.IVibratorManager android.hardware.vibrator"},
+    {"camera", "libapklayer_camera.so", "aosp/hals/camera/manifest.xml",
+     "android.hardware.camera.provider.ICameraProvider android.hardware.camera.provider"},
 };
 
 const Domain* findDomain(const std::string& name) {
@@ -49,14 +55,50 @@ void writeProviders(const std::string& file, const std::vector<ProviderConfig>& 
     if (!writeFile(file, text)) die("cannot write " + file);
 }
 
-// probe() of a backend library: <0 unusable here, 0 usable (never a default), >0 quality; INT32_MIN when it cannot be loaded
-int probe(const std::string& lib, const std::string& domain) {
-    void* handle = dlopen(lib.c_str(), RTLD_NOW | RTLD_LOCAL);
-    if (!handle) return INT32_MIN;
-    auto fn = reinterpret_cast<int (*)()>(dlsym(handle, ("apklayer_" + domain + "_probe").c_str()));
-    int quality = fn ? fn() : INT32_MIN;
-    dlclose(handle);
-    return quality;
+// probe() of a backend library: <0 unusable here, 0 usable (never a default), >0 quality; INT32_MIN when it cannot be loaded. Run in a child
+// process: a backend's probe may start threads (GDBus) or block on a bus, which must not stay in the stack daemon that forks services.
+// options: the backend's apklayer_<domain>_options, a line "key<TAB>default<TAB>kind" per option it takes (kind text or file), "" without
+// (read in this process: a constant string, nothing to start).
+int probe(const std::string& lib, const std::string& domain, std::string& options) {
+    options.clear();
+    if (void* handle = dlopen(lib.c_str(), RTLD_NOW | RTLD_LOCAL)) {
+        if (auto declared = static_cast<const char*>(dlsym(handle, ("apklayer_" + domain + "_options").c_str()))) options = declared;
+        // not dlclose'd before the fork below? The child loads it again: a constructor of the library runs only there
+        dlclose(handle);
+    }
+    pid_t pid = fork();
+    if (pid == 0) {
+        void* handle = dlopen(lib.c_str(), RTLD_NOW | RTLD_LOCAL);
+        auto fn = handle ? reinterpret_cast<int (*)()>(dlsym(handle, ("apklayer_" + domain + "_probe").c_str())) : nullptr;
+        if (!fn) _exit(255);
+        int q = fn();
+        _exit(q < 0 ? 0 : 1 + (q > 253 ? 253 : q));  // exit status: 0 unusable, 1 + quality, 255 unloadable
+    }
+    int st = 0;
+    if (pid < 0 || waitpid(pid, &st, 0) != pid || !WIFEXITED(st) || WEXITSTATUS(st) == 255) return INT32_MIN;
+    return WEXITSTATUS(st) == 0 ? -1 : WEXITSTATUS(st) - 1;
+}
+
+// a domain's staged backends: name -> library
+std::vector<std::pair<std::string, std::string>> backends(const Layout& l, const std::string& domain) {
+    std::vector<std::pair<std::string, std::string>> found;
+    const std::string prefix = "libapklayer-" + domain + "-";
+    for (const std::string& f : listDir(l.native))
+        if (f.rfind(prefix, 0) == 0 && f.size() > prefix.size() + 3 && f.substr(f.size() - 3) == ".so")
+            found.push_back({f.substr(prefix.size(), f.size() - prefix.size() - 3), join(l.native, f)});
+    return found;
+}
+
+// the default of a domain providers.toml does not name: the staged backend with the highest probe() above 0, or "" (the domain stays off)
+std::string defaultBackend(const Layout& l, const std::string& domain) {
+    std::string best;
+    int bestQuality = 0;
+    for (const auto& [name, lib] : backends(l, domain)) {
+        std::string unusedOptions;
+        int q = probe(lib, domain, unusedOptions);
+        if (q > bestQuality) best = name, bestQuality = q;
+    }
+    return best;
 }
 }  // namespace
 
@@ -93,11 +135,18 @@ std::vector<ProviderConfig> readProviders(const std::string& file) {
 
 std::vector<ProviderService> providerServices(const Layout& l, const Instance& inst) {
     std::vector<ProviderService> services;
-    for (const ProviderConfig& c : readProviders(providersFile(inst))) {
+    std::vector<ProviderConfig> configs = readProviders(providersFile(inst));
+    for (const Domain& d : kDomains) {  // a domain the file does not name: the best backend this host has, if any (docs/PLAN.md, providers 3)
+        bool named = false;
+        for (const ProviderConfig& c : configs) named |= c.domain == d.name;
+        std::string backend = named ? "" : defaultBackend(l, d.name);
+        if (!backend.empty()) configs.push_back({d.name, "apklayer", backend, {}});
+    }
+    for (const ProviderConfig& c : configs) {
         const Domain* d = findDomain(c.domain);
         if (!d) { fprintf(stderr, "providers: no domain %s\n", c.domain.c_str()); continue; }
-        // shortcut: only apklayer's own fronts; the "device" provider (the device's HAL through the host binder contexts) is plan step 7(d)
-        if (c.provider != "apklayer") { fprintf(stderr, "providers: %s: provider %s is not supported yet\n", d->name, c.provider.c_str()); continue; }
+        if (c.provider == "device") continue;  // the device's own HAL: no front here (writeHostHals lists it)
+        if (c.provider != "apklayer") { fprintf(stderr, "providers: %s: no provider %s\n", d->name, c.provider.c_str()); continue; }
         std::string backend = backendLib(l, c.domain, c.backend);
         if (!exists(join(l.androidLibs, d->front)) || !exists(backend)) {
             fprintf(stderr, "providers: %s: %s or %s is not staged\n", d->name, d->front, backend.c_str());
@@ -108,32 +157,61 @@ std::vector<ProviderService> providerServices(const Layout& l, const Instance& i
     return services;
 }
 
+std::string hostHalsFile(const Instance& inst) { return join(inst.dataDir, "apklayer/host_hals.conf"); }
+
+bool writeHostHals(const Instance& inst) {
+    std::string text;
+    for (const ProviderConfig& c : readProviders(providersFile(inst))) {
+        const Domain* d = findDomain(c.domain);
+        if (c.provider != "device" || !d) continue;
+        if (!d->device) { fprintf(stderr, "providers: %s: the device provider is not offered (one client: the OS's own)\n", d->name); continue; }
+        text += std::string("# ") + d->name + "\n";
+        for (const std::string& name : split(d->device, ' ')) text += name + "\n";
+    }
+    if (text.empty()) { unlink(hostHalsFile(inst).c_str()); return false; }
+    makeDirs(join(inst.dataDir, "apklayer"));
+    if (!writeFile(hostHalsFile(inst), "# written by apklayer from providers.toml (domains with provider = \"device\")\n" + text))
+        die("cannot write " + hostHalsFile(inst));
+    return true;
+}
+
 int providersCommand(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {
     const std::string file = providersFile(inst);
     auto domains = readProviders(file);
-    if (args.empty()) {  // domain, provider, backend, options; then every backend found with its probe() answer
+    if (args.empty()) {  // domain, provider, backend, its options (a field each); then every backend found with its probe() answer and the options it takes
         for (const ProviderConfig& d : domains) {
-            std::string options;
-            for (const std::string& o : d.options) options += (options.empty() ? "" : " ") + o;
-            printf("%s\t%s\t%s\t%s\n", d.domain.c_str(), d.provider.c_str(), d.backend.c_str(), options.c_str());
+            printf("%s\t%s\t%s", d.domain.c_str(), d.provider.c_str(), d.backend.c_str());
+            for (const std::string& o : d.options) printf("\t%s", o.c_str());
+            printf("\n");
         }
-        for (const Domain& d : kDomains)
-            for (const std::string& f : listDir(l.native)) {
-                std::string prefix = std::string("libapklayer-") + d.name + "-";
-                if (f.rfind(prefix, 0) != 0 || f.size() < prefix.size() + 4 || f.substr(f.size() - 3) != ".so") continue;
-                int q = probe(join(l.native, f), d.name);
-                std::string name = f.substr(prefix.size(), f.size() - prefix.size() - 3);
+        for (const Domain& d : kDomains) {
+            std::string best;
+            int bestQuality = 0;
+            for (const auto& [name, lib] : backends(l, d.name)) {
+                std::string options;
+                int q = probe(lib, d.name, options);
+                if (q > bestQuality) best = name, bestQuality = q;
                 printf("backend\t%s\t%s\t%s\n", d.name, name.c_str(), q == INT32_MIN ? "unloadable" : q < 0 ? "unavailable" : ("quality " + std::to_string(q)).c_str());
+                for (const std::string& o : split(options, '\n'))
+                    if (!o.empty()) printf("option\t%s\t%s\t%s\n", d.name, name.c_str(), o.c_str());
             }
+            bool named = false;
+            for (const ProviderConfig& c : domains) named |= c.domain == d.name;
+            if (!named) printf("default\t%s\t%s\n", d.name, best.empty() ? "(none: off)" : best.c_str());  // what an unset domain runs
+        }
         return 0;
     }
     const std::string& action = args[0];
     if (!((action == "set" && args.size() >= 3) || (action == "unset" && args.size() == 2)))
-        die("providers [set <domain> <backend> [key=value...] | unset <domain>]");
+        die("providers [set <domain> <backend> [key=value...] | set <domain> device | unset <domain>]");
     if (!findDomain(args[1])) die("no hardware domain " + args[1] + " (sensors, gnss, vibrator, camera)");
     std::vector<ProviderConfig> kept;
     for (const ProviderConfig& d : domains) if (d.domain != args[1]) kept.push_back(d);
-    if (action == "set") {
+    if (action == "set" && args[2] == "device") {  // the device's own HAL through the host binder contexts (a Halium device)
+        if (!findDomain(args[1])->device) die("the device provider is not offered for " + args[1] + " (one client: the OS's own)");
+        if (args.size() > 3) die("the device provider takes no options");
+        kept.push_back({args[1], "device", "", {}});
+    } else if (action == "set") {
         if (!exists(backendLib(l, args[1], args[2]))) die("no backend " + backendLib(l, args[1], args[2]));
         ProviderConfig d{args[1], "apklayer", args[2], {}};
         for (size_t i = 3; i < args.size(); i++) {
@@ -144,6 +222,7 @@ int providersCommand(const Layout& l, const Instance& inst, const std::vector<st
         kept.push_back(d);
     }
     writeProviders(file, kept);
+    writeHostHals(inst);  // processes started from now on (apps, `apklayer exec`) reach a device domain's HAL; the stack writes it at start too
     // a running stack restarts only this domain's service (SIGHUP: runStackDaemon re-reads the file)
     auto pid = readFile(inst.pidFile());
     bool running = pid && alive(atoi(pid->c_str())) && kill(atoi(pid->c_str()), SIGHUP) == 0;

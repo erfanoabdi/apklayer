@@ -40,6 +40,7 @@ int usage() {
           "  instance create|remove <id>  make an instance (prints the binder setup it still needs) or remove it with its data\n"
           "  prop [list] | set KEY VALUE | unset KEY  the instance's Android property overrides (from its next start)\n"
           "  providers [set DOMAIN BACKEND [KEY=VALUE...] | unset DOMAIN]  the hardware providers (sensors, gnss, vibrator, camera) and their backends\n"
+          "                         (rows: domain provider backend option...; backend DOMAIN NAME probe; option DOMAIN BACKEND KEY DEFAULT text|file)\n"
           "  settings [list] | set KEY VALUE | unset KEY  the instance's own values over the desktop's settings (night yes|no, accent #rrggbb,\n"
           "                         contrast high|normal, animations on|off, font-scale, locale, timezone, time-format 12|24); live in a running instance\n"
           "  permissions <package> | grant|revoke <package> <permission>  what the app requests (permission, level, granted); a runtime one granted or revoked\n"
