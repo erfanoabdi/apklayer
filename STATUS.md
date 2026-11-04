@@ -4,6 +4,7 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): 
 
 ## State (2026-11-04)
 - About 60 real apps draw and run, current F-Droid versions included (`tests/corpus/results.md`); Google apps through microG (sign-in, Meet accounts). Full suite on UTM (2026-11-04, after the startup/media/installer/cleanup rounds): 43 of 44 groups pass; vulkan-present cannot pass on either VM (no Vulkan presentation: needs a real GPU).
+- Known regression (2026-11-04, being fixed): the codec2 group hangs (the `--probe` sleeps in a poll loop); the media/audio groups after it were not run in the last full suite.
 - Next phase, in order: `docs/PLAN.md` "Next phase".
 
 ## How to work here
