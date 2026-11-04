@@ -20,6 +20,10 @@
  *                                   shell keeps it); nplanes = 0 shows the buffer already created. The window is created with
  *                                   WINDOW_CREATE and an EMPTY shm path (a dmabuf-only window). Zero copy: the compositor gets the
  *                                   dmabufs through zwp_linux_dmabuf_v1.
+ *                 14 GRALLOC_FRAME  {i32 id, buf(0..7), w, h, stride (pixels), android format, usage (low 32 bits), num_fds, num_ints,
+ *                                   damage x,y,w,h, ints[num_ints]} + num_fds fds as SCM_RIGHTS: a device gralloc buffer's native_handle
+ *                                   (Halium: wlegl.c, through libhybris's android_wlegl). As DMABUF_FRAME: first use of `buf` creates
+ *                                   the buffer, num_fds = num_ints = 0 shows it again; released with 114 DMABUF_RELEASE.
  *                  7 VSYNC_REQUEST  {i32 id}: tell me when the compositor shows the next frame of this window
  *                  5 CLIPBOARD_SET  utf8 text: the app copied something; the shell owns the selection
  *                 11 TEST_INPUT     {i32 kind, a, b, c} utf8 window "\0" utf8 text: test input into a window (testinput.c, only with
@@ -73,6 +77,7 @@ enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
        MSG_INPUT = 101, MSG_CLOSE = 103, MSG_RELEASE = 104,
        MSG_KEY = 105, MSG_SCROLL = 106, MSG_CONFIGURE = 107, MSG_STATE = 108, MSG_CLIPBOARD = 109, MSG_IME = 110, MSG_TOUCH = 111, MSG_DISPLAY = 112, MSG_VSYNC = 113, MSG_DMABUF_RELEASE = 114 };
 #define MSG_DMABUF_FRAME 8
+#define MSG_GRALLOC_FRAME 14
 #define MSG_ATTACH_INPUT 9   /* app -> shell: {own window id, title of the window whose input, state and size this app takes over} */
 #define DBUF_MAX 8
 #define CLIENT_MAX_FDS 16
@@ -219,6 +224,8 @@ void window_attach_input(struct client *c, int own_id, const char *title);  /* w
 void window_drop_proxy(struct client *c);  /* window.c */
 void window_dmabuf_show(struct window *w, int buf, const int32_t *damage);
 void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int nfds);  /* dmabuf.c */
+void wlegl_bind(struct wl_registry *r, uint32_t name, uint32_t ver);  /* wlegl.c: libhybris's android_wlegl (Halium compositors) */
+void window_gralloc_frame(struct window *w, const int32_t *m, uint32_t len, const int *fds, int nfds);  /* wlegl.c */
 void window_dmabuf_destroy(struct window *w);  /* dmabuf.c */
 /* test input (testinput.c): the seat's and the compositor's events, injected into one window */
 void test_input(struct client *c, const uint8_t *p, uint32_t len);

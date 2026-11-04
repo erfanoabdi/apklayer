@@ -101,6 +101,16 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         c->nfds -= nplanes;
         break;
     }
+    case MSG_GRALLOC_FRAME: {
+        struct window *w = len >= 52 ? window_find(c, v[0]) : NULL;
+        int nfds = len >= 52 ? v[7] : 0;
+        if (nfds < 0 || nfds > c->nfds) nfds = 0;
+        if (w) window_gralloc_frame(w, v, len, c->fds, nfds);
+        for (int i = 0; i < nfds; i++) close(c->fds[i]);  /* android_wlegl_handle_add_fd sent its own copies */
+        memmove(c->fds, c->fds + nfds, (size_t)(c->nfds - nfds) * sizeof(int));
+        c->nfds -= nfds;
+        break;
+    }
     case MSG_VSYNC_REQUEST: {
         if (len >= 4) client_vsync_request(c, v[0]);
         break;
