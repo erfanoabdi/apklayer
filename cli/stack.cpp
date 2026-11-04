@@ -1,4 +1,5 @@
 #include "stack.h"
+#include "sandbox.h"
 
 #include <fcntl.h>
 #include <cerrno>
@@ -208,6 +209,7 @@ static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std
 }
 
 int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std::string>& tool) {
+    if (sandboxOn()) enterInstanceUserNs();  // first: everything the stack starts is in the instance's user namespace (cli/sandbox.cpp)
     NativeEnv ne = nativeEnv(l, inst);
     const std::string& n = l.native;
     for (const std::string& f : listDir(inst.logs()))

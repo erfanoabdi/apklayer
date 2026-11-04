@@ -1,0 +1,14 @@
+# apklayerd, the user's apklayer daemon (cli/daemon.cpp): every apklayer command, the manager's too, then runs under it, and with it the instances'
+# stacks, hubs and app processes. Install: cp tools/host-setup/apklayerd.service ~/.config/systemd/user/ && systemctl --user enable --now apklayerd
+# (a source tree: ExecStart= its bin/apklayer). Environment=APKLAYER_SANDBOX=1 here and in the session turns the per-app sandbox on (docs/PLAN.md).
+[Unit]
+Description=apklayer daemon (Android instances and their apps)
+After=graphical-session.target
+
+[Service]
+ExecStart=apklayer daemon
+Restart=on-failure
+KillMode=control-group
+
+[Install]
+WantedBy=default.target

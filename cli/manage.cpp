@@ -1,4 +1,5 @@
 #include "manage.h"
+#include "sandbox.h"
 
 #include "desktop.h"
 
@@ -119,6 +120,7 @@ int stopApp(const Layout& l, const Instance& inst, const std::string& package) {
 int clearData(const Layout& l, const Instance& inst, const std::string& package) {
     if (!isDir(appDir(l, package))) die("not installed: " + package);
     stopApp(l, inst, package);
+    reclaim(inst.appData(package));  // files the sandbox's app uid owns
     removeTree(inst.appData(package));
     if (inst.id == "default") removeTree(join(appDir(l, package), "data"));  // the shared place before data was per instance (appDataDir would move it back in)
     printf("apklayer: cleared the data of %s in instance %s\n", package.c_str(), inst.id.c_str());
@@ -148,6 +150,8 @@ int instanceCommand(const Layout& l, const std::string& action, const std::strin
     if (!isDir(join(l.dataHome, "apklayer/" + id))) die("no such instance: " + id);
     Instance inst = Instance::open(l, id);
     if (stackRunning(inst)) stopStack(l, inst);
+    for (const std::string& app : listDir(join(inst.root, "app-data"))) reclaim(join(inst.root, "app-data/" + app));  // the sandbox's app uids own these
+    for (const std::string& tmp : listDir(inst.tmpDir())) reclaim(join(inst.tmpDir(), tmp));
     for (const std::string& dir : {inst.root, join(l.stateHome, "apklayer/" + id), inst.runtimeDir}) removeTree(dir);  // not $APKLAYER_LOGS: a test's own directory
     printf("apklayer: removed instance %s (its binder devices stay until the next reboot)\n", id.c_str());
     return 0;

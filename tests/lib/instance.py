@@ -34,16 +34,31 @@ def kill(*patterns):
     subprocess.run(['sh', 'tests/vm/kill-instance.sh', INSTANCE, *patterns], check=False)
 
 
+def user_ns(pid):
+    try: return os.readlink('/proc/%s/ns/user' % pid)
+    except (OSError, TypeError): return None
+
+
+def stack_pid():
+    try: return (STATE / 'stack.pid').read_text().strip()
+    except OSError: return None
+
+
+def belongs(pid):
+    """Whether process pid is this instance's: APKLAYER_INSTANCE in its environment ("default" without), or, for a sandboxed app process (its own uid,
+    cli/sandbox.cpp: its environment is private), the user namespace its instance's stack made."""
+    try: env = Path('/proc/%s/environ' % pid).read_bytes().split(b'\0')
+    except OSError:
+        ns = user_ns(pid)
+        return ns is not None and ns != user_ns('self') and ns == user_ns(stack_pid())
+    return next((e[18:].decode() for e in env if e.startswith(b'APKLAYER_INSTANCE=')), 'default') == INSTANCE
+
+
 def mine(pattern, exact=False):
     """`pgrep -af pattern` restricted to this instance: the lines of its matching processes. exact: match the process name (`pgrep -x`), for the
     JVMs, whose command line is their Android process name once the runtime has named them."""
     found = subprocess.run(['pgrep', '-a'] + (['-x'] if exact else ['-f']) + [pattern], capture_output=True, text=True).stdout.splitlines()
-    result = []
-    for line in found:
-        try: env = Path('/proc/%s/environ' % line.split()[0]).read_bytes().split(b'\0')
-        except OSError: continue
-        if next((e[18:].decode() for e in env if e.startswith(b'APKLAYER_INSTANCE=')), 'default') == INSTANCE: result.append(line)
-    return result
+    return [line for line in found if belongs(line.split()[0])]
 
 
 def assert_clean():

@@ -17,6 +17,7 @@ public final class HubHost {
         AppEnvironment.setUpApplication(sandbox, null, false);
         RuntimeEnvironment.getApplication();
         RealBinder.init();
+        HostCertificate.signatures();  // the instance's platform certificate exists before any app registers: a sandboxed app cannot make it (cli/sandbox.cpp)
         Path apps = Path.of(System.getProperty("apklayer.apps"));
         HubDirectory directory = new HubDirectory(apps);
         if (!RealBinder.publish(HubProtocol.SERVICE, directory))
