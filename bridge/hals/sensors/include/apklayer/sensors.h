@@ -14,10 +14,12 @@ extern "C" {
 enum {
     APKLAYER_SENSOR_ACCELEROMETER = 1,
     APKLAYER_SENSOR_MAGNETIC_FIELD = 2,
+    APKLAYER_SENSOR_ORIENTATION = 3,         /* azimuth, pitch, roll in degrees (deprecated in Android; a compass heading) */
     APKLAYER_SENSOR_GYROSCOPE = 4,
     APKLAYER_SENSOR_LIGHT = 5,
     APKLAYER_SENSOR_PRESSURE = 6,
     APKLAYER_SENSOR_PROXIMITY = 8,
+    APKLAYER_SENSOR_DEVICE_ORIENTATION = 27, /* the screen rotation 0..3, as WindowManager reads it */
 };
 
 struct apklayer_sensor_info {
