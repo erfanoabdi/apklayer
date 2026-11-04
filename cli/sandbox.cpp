@@ -155,7 +155,23 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
         steps.push_back({Step::Bind, path, cloneTree(source, writable), file});
     };
     for (const std::string& h : hidden) steps.push_back({Step::Tmpfs, h});
-    if (homeAccess(inst, package)) { bind(home, home, true); ro.push_back(home); }  // the user's opt-in (`apklayer home-access`), as Flatpak's --filesystem=home
+    if (homeAccess(inst, package)) {  // the user's opt-in (`apklayer home-access`), as Flatpak's --filesystem=home
+        bind(home, home, true);
+        // a private directory on the way to the runtime (~/.cache, 0700) would stop the app's uid: an empty one there, the runtime's part bound into it
+        auto closed = [](const std::string& dir) {
+            struct stat st{};
+            return ::stat(dir.c_str(), &st) == 0 && !(st.st_mode & S_IXOTH) && !(st.st_gid == getgid() && (st.st_mode & S_IXGRP));
+        };
+        std::vector<std::string> shut;
+        for (const std::string& r : ro)
+            for (size_t at = home.size() + 1; (at = r.find('/', at)) != std::string::npos; at++)
+                if (closed(r.substr(0, at))) {
+                    if (std::find(shut.begin(), shut.end(), r.substr(0, at)) == shut.end()) shut.push_back(r.substr(0, at));
+                    break;
+                }
+        for (const std::string& s : shut) steps.push_back({Step::Tmpfs, s});
+        ro.push_back(home);
+    }
     std::string last;
     for (const std::string& r : ro)
         if (r != home && (last.empty() || !under(r, last))) { bind(r, r, false); last = r; }
