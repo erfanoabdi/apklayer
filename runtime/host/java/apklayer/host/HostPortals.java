@@ -34,15 +34,22 @@ final class HostPortals {
 
     /**
      * Runtime permission requests (Activity.requestPermissions): the desktop has no permission prompts yet (a portal
-     * dialog is the later form), so everything asked for is granted and the result delivered like the system would.
+     * dialog is the later form), so everything asked for is granted, except what the user revoked in the manager (denied as after "Don't allow"),
+     * and the result delivered like the system would.
      */
     static boolean requestPermissions(Intent intent, int requestCode, android.app.Activity requester) {
         if (!"android.content.pm.action.REQUEST_PERMISSIONS".equals(intent.getAction())) return false;
         String[] names = intent.getStringArrayExtra("android.content.pm.extra.REQUEST_PERMISSIONS_NAMES");
         if (names == null) names = new String[0];
-        ((org.robolectric.shadows.ShadowApplication) Shadow.extract(RuntimeEnvironment.getApplication())).grantPermissions(names);
+        String pkg = RuntimeEnvironment.getApplication().getPackageName();
         int[] granted = new int[names.length]; // PERMISSION_GRANTED == 0
-        System.out.println("[apklayer] permissions granted: " + String.join(", ", names));
+        java.util.List<String> allowed = new java.util.ArrayList<>(), denied = new java.util.ArrayList<>();
+        for (int i = 0; i < names.length; i++) {
+            if (HostRevokedPermissions.revoked(pkg, names[i])) { granted[i] = android.content.pm.PackageManager.PERMISSION_DENIED; denied.add(names[i]); }
+            else allowed.add(names[i]);
+        }
+        ((org.robolectric.shadows.ShadowApplication) Shadow.extract(RuntimeEnvironment.getApplication())).grantPermissions(allowed.toArray(new String[0]));
+        System.out.println("[apklayer] permissions granted: " + String.join(", ", allowed) + (denied.isEmpty() ? "" : "; revoked by the user: " + String.join(", ", denied)));
         if (requestCode >= 0) requester.onRequestPermissionsResult(requestCode, names, granted);
         return true;
     }

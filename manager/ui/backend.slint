@@ -4,6 +4,8 @@ export struct AppEntry { package: string, label: string, version: string, icon: 
 export struct InstanceEntry { id: string, running: bool, binder: bool, root: string }
 export struct PropEntry { key: string, value: string, source: string, live: string }
 export struct InfoEntry { key: string, value: string }
+// `apklayer permissions`: runtime ones (dangerous) can be granted and revoked; state: what the others' grant is ("Granted", "Not granted", ...)
+export struct PermEntry { name: string, title: string, runtime: bool, granted: bool, state: string }
 
 export global Backend {
     in property <[AppEntry]> apps;
@@ -13,6 +15,8 @@ export global Backend {
     in property <AppEntry> current-app;   // the app selected with select-app, and its info rows
     in property <bool> has-current-app;
     in property <[InfoEntry]> app-info;
+    in property <[PermEntry]> app-permissions;
+    in property <string> permissions-note;  // why the list is empty (an install that predates the list)
     in property <string> instance: "default";
     in property <bool> instance-running;
     in property <bool> busy;               // a long action (install, uninstall, instance setup) runs
@@ -31,6 +35,7 @@ export global Backend {
     callback stop-app(string);
     callback clear-data(string);
     callback uninstall(string);
+    callback set-permission(string, string, bool);  // package, permission, granted
     callback select-app(string);
     callback select-instance(string);
     callback create-instance(string);

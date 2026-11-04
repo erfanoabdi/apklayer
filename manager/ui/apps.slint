@@ -1,6 +1,6 @@
 // Apps: the M3 list-detail layout. Side by side when the window is expanded (>= 840 dp), else the list, and the detail over it with a back button.
 import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, ScrollView, FilledButton, TonalButton, OutlineButton,
-         IconButton, OutlinedCard, HorizontalDivider, VerticalDivider } from "@material";
+         IconButton, OutlinedCard, HorizontalDivider, VerticalDivider, Switch } from "@material";
 import { Backend, AppIcons, AppEntry } from "backend.slint";
 import { Row, Tag, Heading } from "widgets.slint";
 
@@ -53,6 +53,31 @@ component AppDetail {
                     padding-top: MaterialStyleMetrics.padding_8;
                     padding-bottom: MaterialStyleMetrics.padding_8;
                     for row in Backend.app-info : Row { text: row.key; supporting-text: row.value; clickable: false; }
+                }
+            }
+            Heading { text: "Permissions"; }
+            if Backend.permissions-note != "" : MaterialText {
+                text: Backend.permissions-note; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap;
+            }
+            if Backend.app-permissions.length > 0 : OutlinedCard {
+                VerticalLayout {
+                    padding-top: MaterialStyleMetrics.padding_8;
+                    padding-bottom: MaterialStyleMetrics.padding_8;
+                    for p in Backend.app-permissions : Row {
+                        text: p.title;
+                        supporting-text: p.name;
+                        clickable: false;
+                        if p.runtime : VerticalLayout {
+                            alignment: center;
+                            Switch {
+                                checked: p.granted;
+                                enabled: !Backend.busy;
+                                accessible-label: "Allow " + p.title;
+                                checked-state-changed(on) => { Backend.set-permission(root.app.package, p.name, on); }
+                            }
+                        }
+                        if !p.runtime : Tag { text: p.state; }
+                    }
                 }
             }
         }

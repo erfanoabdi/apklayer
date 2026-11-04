@@ -123,7 +123,7 @@ final class HostSystemConfig {
             boolean ok = "normal".equals(level) || "dangerous".equals(level) || "appop".equals(level)  // normal, dangerous and "appop" (draw over other apps, write settings...) are granted at install: the desktop has no prompts
                     || (system && ("signature".equals(level) || allowed.contains(permission)))  // platform-signed system apps hold signature permissions
                     || defaultGrants.getOrDefault(pkg, Set.of()).contains(permission);
-            if (ok && !blocked.contains(permission)) grant.add(permission);
+            if (ok && !blocked.contains(permission) && !("dangerous".equals(level) && HostRevokedPermissions.revoked(pkg, permission))) grant.add(permission);
         }
         if (system) System.out.println("[apklayer] privileged system app " + pkg);
         if (!grant.isEmpty()) ((org.robolectric.shadows.ShadowApplication) org.robolectric.shadow.api.Shadow.extract(app)).grantPermissions(grant.toArray(new String[0]));

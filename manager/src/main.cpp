@@ -20,20 +20,6 @@ using manager::Rows;
 
 namespace {
 
-struct Snapshot {
-    Rows apps, instances, props, status, info;
-};
-
-Snapshot load(const Cli& cli, const std::string& current) {
-    Snapshot s;
-    s.apps = cli.rows({"list", "--tsv"});
-    s.instances = cli.rows({"instances"});
-    s.props = cli.rows({"prop"});
-    s.status = cli.rows({"status"});
-    if (!current.empty()) s.info = cli.rows({"info", current});
-    return s;
-}
-
 std::string field(const std::vector<std::string>& row, size_t i) { return i < row.size() ? row[i] : ""; }
 
 // "apklayer: installed x" -> "Installed x": the last line the CLI printed (stdout on success, its error otherwise)
@@ -48,6 +34,42 @@ std::string summary(const Result& r) {
     if (line.rfind("apklayer: ", 0) == 0) line = line.substr(10);
     if (!line.empty()) line[0] = static_cast<char>(toupper(static_cast<unsigned char>(line[0])));
     return line.empty() ? (r.status == 0 ? "Done" : "Failed (status " + std::to_string(r.status) + ")") : line;
+}
+
+// What the selected app's detail shows besides the list's row: `info` and `permissions` (whose failure, an install older than the list, is a note there)
+struct Detail {
+    Rows info, permissions;
+    std::string error, permissionsNote;
+};
+
+struct Snapshot {
+    Rows apps, instances, props, status;
+    std::optional<Detail> detail;
+    std::string error;  // the first CLI call that failed: the snackbar shows it instead of leaving its page empty
+};
+
+// the rows of one CLI call; its failure into error (the first one kept)
+Rows rows(const Cli& cli, const std::vector<std::string>& args, std::string& error) {
+    Result r = cli.run(args);
+    if (r.status != 0 && error.empty()) error = r.status == 127 && r.err.empty() ? "Cannot run " + cli.exe() : summary(r);
+    return manager::parseRows(r.out);
+}
+
+Detail loadDetail(const Cli& cli, const std::string& pkg) {
+    Detail d;
+    d.info = rows(cli, {"info", pkg}, d.error);
+    d.permissions = rows(cli, {"permissions", pkg}, d.permissionsNote);
+    return d;
+}
+
+Snapshot load(const Cli& cli, const std::string& current) {
+    Snapshot s;
+    s.apps = rows(cli, {"list", "--tsv"}, s.error);
+    s.instances = rows(cli, {"instances"}, s.error);
+    s.props = rows(cli, {"prop"}, s.error);
+    s.status = rows(cli, {"status"}, s.error);
+    if (!current.empty()) s.detail = loadDetail(cli, current);
+    return s;
 }
 
 class Manager {
@@ -100,7 +122,9 @@ public:
         }
         b.set_props(props);
         b.set_status(info(s.status));
-        if (!current_.empty() && !s.info.empty()) b.set_app_info(appInfo(s.info));
+        if (!current_.empty() && s.detail) showDetail(*s.detail);
+        if (!s.error.empty()) message(s.error);
+        else if (s.detail && !s.detail->error.empty()) message(s.detail->error);
         if (applied) applied();
     }
 
@@ -145,6 +169,32 @@ private:
                 out.push_back({title, v});
             }
         return info(out);
+    }
+
+    void showDetail(const Detail& d) {
+        auto& b = ui_->global<Backend>();
+        b.set_app_info(appInfo(d.info));
+        b.set_permissions_note(slint::SharedString(d.permissionsNote));
+        b.set_app_permissions(permissions(d.permissions));
+    }
+
+    // `apklayer permissions` rows (permission, level, granted): the runtime ones first, each with a title ("ACCESS_FINE_LOCATION" -> "Access fine location")
+    static std::shared_ptr<slint::VectorModel<PermEntry>> permissions(const Rows& rows) {
+        std::vector<PermEntry> runtime, other;
+        for (const auto& r : rows) {
+            PermEntry e;
+            std::string name = field(r, 0), level = field(r, 1), granted = field(r, 2), title = name.substr(name.rfind('.') + 1);
+            for (size_t i = 0; i < title.size(); i++)
+                title[i] = title[i] == '_' ? ' ' : static_cast<char>(i == 0 ? toupper(static_cast<unsigned char>(title[i])) : tolower(static_cast<unsigned char>(title[i])));
+            e.name = slint::SharedString(name);
+            e.title = slint::SharedString(title);
+            e.runtime = level == "dangerous";
+            e.granted = granted == "1";
+            e.state = granted == "1" ? "Granted" : granted == "0" ? (level == "signature" ? "System apps only" : "Not granted") : "Set by the app defining it";
+            (e.runtime ? runtime : other).push_back(e);
+        }
+        runtime.insert(runtime.end(), other.begin(), other.end());
+        return std::make_shared<slint::VectorModel<PermEntry>>(runtime);
     }
 
     // work on a thread, then done(result) on the UI thread
@@ -207,15 +257,20 @@ private:
         b.on_stop_app([this](slint::SharedString pkg) { action("Stopping", {"stop", std::string(pkg)}); });
         b.on_clear_data([this](slint::SharedString pkg) { action("Clearing data", {"clear-data", std::string(pkg)}); });
         b.on_uninstall([this](slint::SharedString pkg) { action("Uninstalling", {"uninstall", std::string(pkg)}); });
+        b.on_set_permission([this](slint::SharedString pkg, slint::SharedString permission, bool granted) {
+            action(granted ? "Granting" : "Revoking", {"permissions", granted ? "grant" : "revoke", std::string(pkg), std::string(permission)});
+        });
         b.on_select_app([this](slint::SharedString pkg) {
             current_ = std::string(pkg);
             auto& b = ui_->global<Backend>();
             for (size_t i = 0; i < b.get_apps()->row_count(); i++)
                 if (auto e = b.get_apps()->row_data(i); e && e->package == pkg) b.set_current_app(*e);
             b.set_has_current_app(true);
-            b.set_app_info(info({}));
-            later([cli = cli_, p = current_] { return cli.rows({"info", p}); }, [this, p = current_](const Rows& rows) {
-                if (p == current_) ui_->global<Backend>().set_app_info(appInfo(rows));
+            showDetail({});
+            later([cli = cli_, p = current_] { return loadDetail(cli, p); }, [this, p = current_](const Detail& d) {
+                if (p != current_) return;
+                showDetail(d);
+                if (!d.error.empty()) message(d.error);
             });
         });
         b.on_select_instance([this](slint::SharedString id) {

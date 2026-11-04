@@ -20,6 +20,9 @@ void listInstances(const Layout& layout);
 int instanceCommand(const Layout& layout, const std::string& action, const std::string& id);
 // `prop [list] | set KEY VALUE | unset KEY`: the instance's overrides, applied at its stack's next start
 int propCommand(const Layout& layout, const Instance& instance, const std::vector<std::string>& args);
+// `permissions <package>`: permission, protection level, granted ("1"/"0", blank: another app defines it) of what the app requests;
+// `permissions grant|revoke <package> <permission>`: a runtime (dangerous) permission in this instance (a revoke stops the app, as on Android)
+int permissionsCommand(const Layout& layout, const Instance& instance, const std::vector<std::string>& args);
 // `status`: key<TAB>value rows: the stack, running apps, GPU, audio, battery, location
 int status(const Layout& layout, const Instance& instance);
 

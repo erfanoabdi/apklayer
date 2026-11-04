@@ -1,5 +1,6 @@
 #include "manage.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstring>
 #include <ftw.h>
@@ -176,6 +177,48 @@ int propCommand(const Layout& l, const Instance& inst, const std::vector<std::st
     if (action == "set") text += key + "=" + args[2] + "\n";
     if (!writeFile(file, text)) die("cannot write " + file);
     printf("apklayer: %s %s for instance %s (from its next start)\n", key.c_str(), action == "set" ? "set" : "unset", inst.id.c_str());
+    return 0;
+}
+
+int permissionsCommand(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {
+    if (!((args.size() == 1) || (args.size() == 3 && (args[0] == "grant" || args[0] == "revoke")))) die("permissions <package> | grant|revoke <package> <permission>");
+    const std::string& pkg = args.size() == 1 ? args[0] : args[1];
+    std::string info = join(appDir(l, pkg), "info.properties");
+    if (!exists(info)) die("not installed: " + pkg);
+    if (readFile(info).value_or("").find("\npermissions=") == std::string::npos) die("reinstall " + pkg + " to list its permissions (installed before apklayer recorded them)");
+    std::string etc = join(l.native, "android-root/system/etc");
+    std::map<std::string, std::string> levels;  // the framework's protection levels (tools/gen/permission-levels.py), as HostSystemConfig reads them
+    for (const std::string& line : split(readFile(join(etc, "apklayer-permission-levels.tsv")).value_or(""), '\n'))
+        if (size_t tab = line.find('\t'); tab != std::string::npos) levels[line.substr(0, tab)] = line.substr(tab + 1);
+    const std::string file = join(inst.root, "permissions-revoked");  // read by the runtime (apklayer.host.HostRevokedPermissions)
+    std::set<std::string> revoked;
+    for (const std::string& line : split(readFile(file).value_or(""), '\n')) if (!line.empty()) revoked.insert(line);
+    std::vector<std::string> requested = split(property(info, "permissions"), ';');
+    if (args.size() == 1) {
+        // signature permissions: a privileged system app (in the build's allowlist) holds them, as HostSystemConfig grants them
+        bool privileged = false;
+        for (const std::string& f : listDir(join(etc, "permissions")))
+            privileged = privileged || readFile(join(etc, "permissions/" + f)).value_or("").find("<privapp-permissions package=\"" + pkg + "\"") != std::string::npos;
+        for (const std::string& p : requested) {
+            if (p.empty()) continue;
+            const std::string level = levels.count(p) ? levels[p] : "";
+            // blank: a permission another app defines, which that app's protection level decides
+            const char* granted = level == "dangerous" ? (revoked.count(pkg + "\t" + p) ? "0" : "1") : level == "normal" || level == "appop" ? "1"
+                                : level == "signature" ? (privileged ? "1" : "0") : "";
+            printf("%s\t%s\t%s\n", clean(p).c_str(), level.c_str(), granted);
+        }
+        return 0;
+    }
+    const std::string& perm = args[2];
+    if (std::find(requested.begin(), requested.end(), perm) == requested.end()) die(pkg + " does not request " + perm);
+    if (levels[perm] != "dangerous") die(perm + " is not a runtime permission (only dangerous ones are granted or revoked)");
+    std::string text;
+    for (const std::string& line : revoked) if (line != pkg + "\t" + perm) text += line + "\n";
+    if (args[0] == "revoke") text += pkg + "\t" + perm + "\n";
+    if (!writeFile(file, text)) die("cannot write " + file);
+    if (args[0] == "revoke") stopApp(l, inst, pkg);  // as Android does: a revoked permission ends the app's processes
+    printf("apklayer: %s %s %s %s in instance %s\n", args[0] == "grant" ? "granted" : "revoked", perm.c_str(), args[0] == "grant" ? "to" : "from", pkg.c_str(),
+           inst.id.c_str());
     return 0;
 }
 

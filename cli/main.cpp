@@ -24,6 +24,7 @@ int usage() {
           "  instances              id, running, binder devices, root of every instance\n"
           "  instance create|remove <id>  make an instance (prints the binder setup it still needs) or remove it with its data\n"
           "  prop [list] | set KEY VALUE | unset KEY  the instance's Android property overrides (from its next start)\n"
+          "  permissions <package> | grant|revoke <package> <permission>  what the app requests (permission, level, granted); a runtime one granted or revoked\n"
           "  status                 the instance's stack, running apps, GPU, audio, battery, location\n"
           "  env                    print the environment of Android's processes\n",
           stderr);
@@ -64,6 +65,7 @@ int main(int argc, char** argv) {
     if (cmd == "instances") { listInstances(layout); return 0; }
     if (cmd == "instance" && n == 3) return instanceCommand(layout, args[1], args[2]);
     if (cmd == "prop") return propCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
+    if (cmd == "permissions" && n >= 2) return permissionsCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "status") return status(layout, inst);
     if (cmd == "uninstall" && n == 2) { uninstallApp(layout, args[1]); return 0; }
     if (cmd == "ime" && n == 3) return inputMethod(layout, inst, args[1], args[2]);

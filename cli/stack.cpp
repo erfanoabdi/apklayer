@@ -61,6 +61,17 @@ int shellPid(const Layout& l) {
     return ok ? peer.pid : 0;
 }
 
+// The session's window shell serves every instance of the session (their runtime directories under it): it ends with the last stack, so stopping
+// or removing one instance leaves the others' windows alone.
+void endShellUnlessShared(const Layout& l, const std::string& leaving) {
+    for (const std::string& id : listDir(join(l.runtimeHome, "apklayer"))) {
+        if (id == leaving || !isDir(join(l.runtimeHome, "apklayer/" + id))) continue;
+        auto pid = readFile(join(l.stateHome, "apklayer/" + id + "/stack.pid"));
+        if (pid && alive(atoi(pid->c_str()))) return;
+    }
+    terminate(shellPid(l));
+}
+
 // Android's way: readiness is a system property of the instance (apklayer.stack.ready=1), waited on with the property store's own wait.
 const char* kReadyProperty = "apklayer.stack.ready";
 
@@ -340,7 +351,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     // fonts and ICU data they share (robolectric patch 0001). shortcut: a copy keyed by an older framework jar stays until the state dir is removed.
     for (const std::string& name : listDir(inst.tmpDir()))
         if (name != "robolectric-nativeruntime-assets") removeTree(join(inst.tmpDir(), name));
-    terminate(shellPid(l));  // the window shell ends with the stack (one instance per session today)
+    endShellUnlessShared(l, inst.id);
     return status;
 }
 
@@ -380,7 +391,7 @@ int execTool(const Layout& l, const Instance& inst, const std::vector<std::strin
 }
 
 void stopStack(const Layout& l, const Instance& inst) {
-    terminate(shellPid(l));  // one instance per session today: the window shell goes with it
+    endShellUnlessShared(l, inst.id);
     for (const std::string& f : listDir(inst.stateDir)) {  // launches of this instance: their JVM and window sink
         if (f.rfind("run.", 0) != 0) continue;
         auto record = readFile(join(inst.stateDir, f));

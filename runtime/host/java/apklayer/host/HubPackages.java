@@ -214,7 +214,7 @@ final class HubPackages {
         }
         switch (definition.protectionLevel & PermissionInfo.PROTECTION_MASK_BASE) {
             case PermissionInfo.PROTECTION_NORMAL: return true;
-            case PermissionInfo.PROTECTION_DANGEROUS: return true;  // the desktop has no permission prompts: what the manifest asks for is granted (HostPortals.requestPermissions)
+            case PermissionInfo.PROTECTION_DANGEROUS: return !HostRevokedPermissions.revoked(name, permission);  // the desktop has no permission prompts: what the manifest asks for is granted unless the user revoked it (HostPortals.requestPermissions)
             case PermissionInfo.PROTECTION_SIGNATURE: return SYSTEM.privileged.containsKey(name);  // platform-signed system apps (the privileged allowlist)
             default: return false;
         }

@@ -60,6 +60,8 @@ final class AppMetadata {
             for (int i = 0; i < filters.size(); i++) info.setProperty("filter." + i, filters.get(i).encode()); // for cross-app intents (PLAN P6)
             android.content.pm.ProviderInfo[] providers = pm.getPackageInfo(app.getPackageName(), PackageManager.GET_PROVIDERS).providers;
             info.setProperty("authorities", providers == null ? "" : String.join(";", java.util.Arrays.stream(providers).map(p -> p.authority).filter(java.util.Objects::nonNull).toList()));  // read at launch before the manifest is parsed (AppEnvironment)
+            String[] requested = pm.getPackageInfo(app.getPackageName(), PackageManager.GET_PERMISSIONS).requestedPermissions;
+            info.setProperty("permissions", requested == null ? "" : String.join(";", requested));  // the manager's permission list (apklayer permissions)
             signer(info, dir, app.getPackageName());
             Files.createDirectories(dir);
             try (Writer out = Files.newBufferedWriter(dir.resolve("info.properties"))) {
