@@ -59,6 +59,7 @@ before this rewrite is `docs/history/PLAN-2026-11-04-full.md`). If a decision ch
 - **Windows**: xdg-decoration on non-GNOME desktops; a real-session scale switch check; landscape windows are not grown to the screen.
 - **Storage**: which volumes ordinary apps (not DocumentsUI) reach through the file APIs; files carry no SELinux label (getfilecon ENODATA).
 - **Settings**: a hanging GeoClue call can delay an app's first provider request up to 10 s; the IME choice applies at the next instance start and no IME binds to input yet; DEVICE_PROVISIONED/USER_SETUP_COMPLETE are 1 everywhere.
+- **Input**: Back in a WebView text selection finishes the activity (Chromium's handling, not checked against a device); the IME target ignores FLAG_ALT_FOCUSABLE_IM windows; input-inject's long press uses app-clock ticks (a stalled app turns it into a tap).
 - **Relaunch**: an intent queued for an app that has a run record but has not registered yet becomes its first launch (its own intent file is then ignored): no test.
 - **Tests**: one tests/run per VM tree at a time (a lock refuses a second: the push and runtime rebuild replace files under running groups); the `view` group fails in a fresh private data dir (null cursor in hello.files).
 - **Manager**: apps installed before 2026-11-04 need a reinstall before their permissions show; a grant reaches the app's own check at its next start; signature grants approximated from the build's allow-lists; ui.sh has no permission step; binder devices of a removed instance stay until reboot.
