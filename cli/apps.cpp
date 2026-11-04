@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <iostream>
 #include <cstdlib>
+#include <sys/wait.h>
 #include <unistd.h>
 
 namespace apklayer {
@@ -196,16 +197,25 @@ int reconvert(const Layout& l, const Instance& inst, const std::string& target) 
     std::vector<std::string> packages;
     if (target != "--all-stale") packages.push_back(target);
     else for (const std::string& app : listDir(l.appsDir)) if (exists(join(appDir(l, app), "info.properties")) && isStale(join(appDir(l, app), "info.properties"))) packages.push_back(app);
+    std::string failed;
     for (const std::string& pkg : packages) {
         std::string dir = appDir(l, pkg);
         if (!exists(join(dir, "base.apk"))) die("not installed: " + pkg);
         std::vector<std::string> apks;
         for (const std::string& f : apkFiles(dir)) apks.push_back(join(dir, f));
-        // an update with the same APKs: the converter ABI is in the cache key, so they convert again; uid, system mark and data stay
-        installApp(l, inst, apks, true);
+        // an update with the same APKs: the converter ABI is in the cache key, so they convert again; uid, system mark and data stay.
+        if (target != "--all-stale") { installApp(l, inst, apks, true); break; }  // its failure message is the command's last line
+        // Each in a child: installApp die()s on a failure, which then ends only this package's attempt (its old install is untouched).
+        fflush(stdout);
+        pid_t child = fork();
+        if (child == 0) { installApp(l, inst, apks, true); fflush(stdout); _exit(0); }
+        int st = -1;
+        if (child < 0 || waitpid(child, &st, 0) != child || !WIFEXITED(st) || WEXITSTATUS(st) != 0) failed += " " + pkg;
     }
     if (packages.empty()) puts("apklayer: no stale apps");
-    return 0;
+    if (failed.empty()) return 0;
+    fprintf(stderr, "apklayer: not converted again (their old install stays):%s\n", failed.c_str());
+    return 1;
 }
 
 std::string appDataDir(const Layout& l, const Instance& inst, const std::string& package) {

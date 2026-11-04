@@ -21,7 +21,6 @@ run = ["tests/vm/properties.sh"]
 run = ["tests/vm/install-verify.sh"]
 
 [reconvert]
-alone = true  # re-installs and re-converts UiBench in the shared data home, which other groups run
 run = ["tests/vm/reconvert.sh"]
 
 [keystore]

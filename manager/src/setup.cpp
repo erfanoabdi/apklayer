@@ -169,13 +169,16 @@ void Setup::runUpdate(Cli cli, std::shared_ptr<State> s) {
     }
     // then the apps the (new) CLI on disk calls stale: converted again from their kept APKs, stopped first as Android stops an updated app
     Rows stale;
+    std::string failed;
     for (const auto& row : cli.rows({"list", "--tsv"})) if (e.empty() && field(row, 8) == "1") stale.push_back(row);
     for (size_t i = 0; i < stale.size(); i++) {
         std::string pkg = field(stale[i], 0), label = field(stale[i], 1).empty() ? pkg : field(stale[i], 1);
         if (field(stale[i], 5) == "1") cli.run({"stop", pkg});
         report("Converting " + label + " again (" + std::to_string(i + 1) + " of " + std::to_string(stale.size()) + ")", static_cast<double>(i) / stale.size());
-        if (Result r = cli.run({"reconvert", pkg}); r.status != 0 && e.empty()) e = label + ": " + summary(r);
+        // a failing app keeps its old install (the CLI leaves it): every one is named, the others still convert
+        if (Result r = cli.run({"reconvert", pkg}); r.status != 0) failed += (failed.empty() ? "" : "; ") + label + ": " + summary(r);
     }
+    if (!failed.empty()) e = "Not converted again, the old version stays: " + failed;
     State next = probe(cli);
     post([this, e, next] {
         ui_->global<Backend>().set_updating(false);
