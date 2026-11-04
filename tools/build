@@ -108,8 +108,8 @@ build_cfg() { # bionic_translation reads every file of <native>/share/bionic_tra
         echo "# mappings that need a staged library"
         [ ! -e "$libs/libapklayer_egl.so" ] || echo "libEGL.so libapklayer_egl.so"  # our EGL (aosp/hals/graphics/egl)
         # Android's GLES 1 trampolines jump through the hook table an EGL stores in TLS_SLOT_OPENGL_API: ours fills it for ES 1 contexts
-        # (Gles1.cpp: the host's ES 1 or libapklayer-gles1.so); an older staged libEGL does not, nor x86_64 (no reserved slot), so their apps get the host's library
-        if [ "$(uname -m)" = aarch64 ] && grep -q apklayer_gles1_create "$libs/libapklayer_egl.so" 2>/dev/null; then echo "libGLESv1_CM.so libGLESv1_CM.so"
+        # (Gles1.cpp: the host's ES 1 or libapklayer-gles1.so); an older staged libEGL does not, so its apps get the host's library
+        if grep -q apklayer_gles1_create "$libs/libapklayer_egl.so" 2>/dev/null; then echo "libGLESv1_CM.so libGLESv1_CM.so"
         else echo "libGLESv1_CM.so libGLESv1_CM.so.1"; fi
         [ ! -f "$libs/libapklayer_vulkan.so" ] || [ ! -f "$libs/vulkan.apklayer.so" ] || echo "libvulkan.so libapklayer_vulkan.so"  # Android's Vulkan loader (renamed copy)
         [ ! -f "$libs/libOpenSLES.so" ] || echo "libOpenSLES.so libOpenSLES.so"  # Android's OpenSL ES engine on the original audio services

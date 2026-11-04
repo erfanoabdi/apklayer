@@ -88,8 +88,10 @@ thread_local bool tTranslated;
 void setThreadHooks(const Hooks* h) {
 #if defined(__aarch64__)
     reinterpret_cast<const void**>(__builtin_thread_pointer())[4] = h;  // TLS_SLOT_OPENGL_API: bridge/native/bionic_tls.c reserves it per thread
-#else
-    (void)h;  // no ES 1 hooks on x86_64: its bionic slots are glibc's TCB words (bridge/native/bionic_tls.c), none is reserved for them
+#elif defined(__x86_64__)
+    const void** tls;  // bionic's __get_tls(): %fs:0 is the thread's own address; slot 4 is glibc's unused sysinfo word there (bridge/native/bionic_tls.c)
+    __asm__("mov %%fs:0, %0" : "=r"(tls));
+    tls[4] = h;
 #endif
 }
 

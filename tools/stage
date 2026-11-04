@@ -93,11 +93,19 @@ stage_x86_64() { # re-runs itself inside the OrbStack machine; every staged ELF 
     stage="$HOME/apklayer-x86_64" out="$tree/out/target/product/generic_x86_64"
     mkdir -p "$stage"
     echo "== libraries"
-    srcs="$out/system/lib64"
+    # first the module outputs of apklayer's modules and the patched tree libraries (the lock's "apklayer"/"patched" names): `m <output file>` builds
+    # them there without installing into system/lib64, whose copies may be older
+    names="$(awk '($5 == "apklayer" || $5 == "patched") && $3 ~ /[.]so$/ { n = $3; sub(".*/", "", n); sub("[.]so$", "", n); printf "-name %s -o ", n }' "$repo/deps/android-tree-files.lock")"
+    srcs=""
+    for d in $(find "$tree/out/soong/.intermediates" -type d \( $names -false \) -prune 2>/dev/null); do
+        for v in android_x86_64_shared android_vendor_x86_64_shared; do [ -d "$d/$v" ] && srcs="$srcs$d/$v:"; done
+    done
+    srcs="$srcs$out/system/lib64"
     for d in "$out"/apex/*/lib64 "$out"/apex/*/lib64/extractors "$out/system_ext/lib64" "$out/vendor/lib64"; do [ -d "$d" ] && srcs="$srcs:$d"; done
-    for d in $(ls -d "$tree"/out/soong/.intermediates/vendor/apklayer/*/*/android_*x86_64_*shared "$tree"/out/soong/.intermediates/vendor/apklayer/*/*/*/android_*x86_64_*shared 2>/dev/null); do srcs="$srcs:$d"; done
     rm -rf "$stage/android-x86_64"; mkdir -p "$stage/android-x86_64/lib64"
-    ANDROID_LIBS_SRC="$srcs" stage_libs "$stage/android-x86_64/lib64" $(grep -v 'vktest\|vulkan.apklayer\|libapklayer_vulkan' "$repo/deps/android-libs.list" | sed 's/aarch64/x86_64/') > "$stage/libs-copied.txt" 2> "$stage/libs-missing.txt"
+    ANDROID_LIBS_SRC="$srcs" stage_libs "$stage/android-x86_64/lib64" $(grep -v libapklayer_vulkan "$repo/deps/android-libs.list" | sed 's/aarch64/x86_64/') > "$stage/libs-copied.txt" 2> "$stage/libs-missing.txt"
+    # the patched Android Vulkan loader also under its own name (the mapping selects it for Vulkan apps, as on arm64: tools/stage vulkan)
+    cp "$stage/android-x86_64/lib64/libvulkan.so" "$stage/android-x86_64/lib64/libapklayer_vulkan.so" && echo libapklayer_vulkan.so >> "$stage/libs-copied.txt"
     echo "$(wc -l < "$stage/libs-copied.txt") libraries copied; missing (see $stage/libs-missing.txt): $(sed 's/.*: //' "$stage/libs-missing.txt" | sort -u | wc -l)"
     echo "== Android root"
     rm -rf "$stage/android-root"

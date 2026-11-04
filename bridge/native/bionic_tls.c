@@ -27,6 +27,7 @@ __attribute__((constructor)) static void check_bionic_tls(void)
 #else
 /* x86_64: glibc's static TLS block is BELOW the thread pointer (variant II), so no module can land at tp+16; and the words bionic calls slots live in glibc's thread control block
  * (fs:0x10 is glibc's own thread pointer, fs:0x18 multiple_threads, fs:0x20 sysinfo, fs:0x30 the pointer guard, fs:0x28 the stack guard bionic and glibc both read). Android code that
- * only reads them (libc's stack protector) works; code that writes TLS_SLOT_APP / OPENGL / OPENGL_API / SANITIZER / ART_THREAD_SELF would corrupt glibc: none of the libraries this runtime
- * loads does (libEGL and the GLES trampolines are replaced by the host's; ART is not present). Revisit when an x86_64 run shows otherwise (docs/X86_64.md). */
+ * only reads them (libc's stack protector) works; code that writes TLS_SLOT_APP / OPENGL / SANITIZER / ART_THREAD_SELF would corrupt glibc: none of the libraries this runtime
+ * loads does (ART is not present). TLS_SLOT_OPENGL_API (fs:0x20) is glibc's `sysinfo`, which only i386 uses: our libEGL keeps the GLES hook table there for Android's
+ * libGLESv1_CM trampolines (aosp/hals/graphics/egl/Gles1.cpp), as on aarch64. */
 #endif

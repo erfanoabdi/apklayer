@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Incremental Vulkan build, reusing existing arm64 Soong compile/link commands.
 Run inside OrbStack after syncing aosp/ and patches/apply aosp ~/los24. Never cleans.
+APKLAYER_ARCH=x86_64 replays the gsi_x86_64 product's commands (default arm64); outputs in out/apklayer-vulkan[-x86_64], ~/apklayer-vulkan-stage[-x86_64].
 The graph need not be regenerated to build the two small new shared tools: their
 Android.bp modules use the same existing device C++ toolchain as libapklayer_egl.
 """
@@ -11,8 +12,10 @@ import shutil
 import subprocess
 
 os.chdir(Path.home() / 'los24')
-ninja = ['prebuilts/build-tools/linux-x86/bin/ninja', '-f', 'out/combined-lineage_gsi_arm64.ninja', '-t', 'commands']
-stage = Path.home() / 'apklayer-vulkan-stage'
+arch = os.environ.get('APKLAYER_ARCH', 'arm64')
+variant, suffix = ('android_x86_64_shared', '-x86_64') if arch == 'x86_64' else ('android_arm64_armv8-a_shared', '')
+ninja = ['prebuilts/build-tools/linux-x86/bin/ninja', '-f', f'out/combined-lineage_gsi_{arch}.ninja', '-t', 'commands']
+stage = Path.home() / ('apklayer-vulkan-stage' + suffix)
 stage.mkdir(exist_ok=True)
 
 def commands(root, name):
@@ -21,7 +24,7 @@ def commands(root, name):
 
 def response(root, name):
     target = root + 'unstripped/' + name + '.so'
-    files = [str(p) for p in Path('out/soong').glob('build.lineage_gsi_arm64.*.ninja')]
+    files = [str(p) for p in Path('out/soong').glob(f'build.lineage_gsi_{arch}.*.ninja')]
     found = subprocess.check_output(['grep', '-l', '-F', target + ':', *files], text=True).splitlines()
     assert len(found) == 1
     text = re.sub(r'\$\n[ \t]*', '', Path(found[0]).read_text())
@@ -30,7 +33,7 @@ def response(root, name):
     flags = next(x.split(' = ', 1)[1] for x in block.splitlines() if x.strip().startswith('libFlags ='))
     return target, explicit + ' ' + flags
 
-root = 'out/soong/.intermediates/frameworks/native/vulkan/libvulkan/libvulkan/android_arm64_armv8-a_shared/'
+root = 'out/soong/.intermediates/frameworks/native/vulkan/libvulkan/libvulkan/' + variant + '/'
 cmds = commands(root, 'libvulkan')
 for c in cmds:
     if ' -c ' in c and ' -o ' + root in c:
@@ -49,12 +52,12 @@ for c in cmds:
         subprocess.run(c, shell=True, check=True)
 shutil.copy2(root + 'libvulkan.so', stage / 'libvulkan.so')
 
-old = 'out/soong/.intermediates/vendor/apklayer/hals/graphics/egl/libapklayer_egl/android_arm64_armv8-a_shared/'
+old = 'out/soong/.intermediates/vendor/apklayer/hals/graphics/egl/libapklayer_egl/' + variant + '/'
 cmds = commands(old, 'libapklayer_egl')
 compile_template = next(c for c in cmds if ' -c ' in c and ' -o ' + old in c)
 old_target, old_rsp = response(old, 'libapklayer_egl')
 for name, source in [('vulkan.apklayer', 'hals/graphics/vulkan/Driver.cpp'), ('libapklayer_vktest', 'tools/vktest.cpp')]:
-    root = 'out/apklayer-vulkan/' + name + '/'
+    root = 'out/apklayer-vulkan' + suffix + '/' + name + '/'
     Path(root + 'unstripped').mkdir(parents=True, exist_ok=True)
     Path(root + 'before_final_validations').mkdir(parents=True, exist_ok=True)
     obj = root + 'obj.o'
