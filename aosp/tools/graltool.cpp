@@ -39,6 +39,7 @@ extern "C" int main(int argc, char** argv) {
     if (allocator == nullptr) { printf("graltool: no allocator@4.0\n"); return 1; }
     uint64_t usage = static_cast<uint64_t>(BufferUsage::CPU_WRITE_OFTEN | BufferUsage::CPU_READ_OFTEN | BufferUsage::GPU_TEXTURE |
                                            BufferUsage::COMPOSER_OVERLAY);
+    if (const char* u = getenv("GRALTOOL_USAGE")) usage = strtoull(u, nullptr, 16);  // to find what the device's allocator accepts
     IMapper::BufferDescriptorInfo info{"apklayer-graltool", w, h, 1, static_cast<PixelFormat>(PixelFormat::RGBA_8888), usage, 0};
     hidl_vec<uint8_t> descriptor;
     if (android::gralloc4::encodeBufferDescriptorInfo(info, &descriptor) != android::OK) { printf("graltool: descriptor\n"); return 1; }
