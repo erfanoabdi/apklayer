@@ -31,6 +31,7 @@ final class HubDirectory extends Binder {
     private final HubNotifications notifications;
     private final HubAccounts accounts;
     private final HubInstaller installer;
+    private final HubInputMethods inputMethods;
     private final Map<String, Process> appProcesses = new HashMap<>();
     private final Map<String, Process> hosts = new HashMap<>();
     private final Map<String, Integer> failures = new HashMap<>();
@@ -43,6 +44,7 @@ final class HubDirectory extends Binder {
         this.spare = spare;
         packages = new HubPackages(apps); bindings = new HubServiceBindings(this, packages); broadcasts = new HubBroadcasts(this, packages); providers = new HubProviders(this, packages, broadcasts); activities = new HubActivities(this, packages, providers); startedServices = new HubStartedServices(this, packages, broadcasts); pendingIntents = new HubPendingIntents(this, broadcasts, activities, startedServices);
         notifications = new HubNotifications(packages, pendingIntents);
+        inputMethods = new HubInputMethods(bindings, packages);
         // the instance's own data directory (the volumes' parent): accounts belong to the instance, as /data/system_ce does to a device
         accounts = new HubAccounts(this, bindings, packages, new HubAuthenticators(apps, packages), Path.of(System.getProperty("apklayer.storage")).getParent().resolve("accounts.json"));
         installer = new HubInstaller(this, packages, pendingIntents, Path.of(System.getProperty("apklayer.storage")).getParent());
@@ -306,6 +308,21 @@ final class HubDirectory extends Binder {
                 boolean found = activities.start(caller, intent, resultTo);
                 reply.writeNoException(); reply.writeInt(found ? 0 : -1); return true;
             }
+            case HubProtocol.START_INPUT -> {
+                Peer caller = caller(); IBinder remote = request.readStrongBinder(); android.view.inputmethod.EditorInfo editor = request.readTypedObject(android.view.inputmethod.EditorInfo.CREATOR);
+                request.enforceNoDataAvail();
+                inputMethods.startInput(caller, remote, editor);
+                reply.writeNoException(); return true;
+            }
+            case HubProtocol.FINISH_INPUT -> {
+                Peer caller = caller(); request.enforceNoDataAvail();
+                inputMethods.finishInput(caller, false);
+                reply.writeNoException(); return true;
+            }
+            case HubProtocol.RESOLVE_ACTIVITY -> {
+                Peer caller = caller(); Intent intent = request.readTypedObject(Intent.CREATOR); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeInt(activities.resolvable(caller, intent) ? 1 : 0); return true;
+            }
             case HubProtocol.START_SERVICE -> {
                 Peer caller = caller(); Intent intent = request.readTypedObject(Intent.CREATOR); request.enforceNoDataAvail();
                 android.content.ComponentName name = startedServices.start(caller, intent);
@@ -428,6 +445,7 @@ final class HubDirectory extends Binder {
     private void remove(Peer peer) {
         synchronized (peers) { if (!peers.remove(peer.pid, peer)) return; }
         System.out.println("[apklayer-hub] died " + peer.name + " pid=" + peer.pid);
+        inputMethods.finishInput(peer, true);
         bindings.died(peer);
         broadcasts.died(peer);
         startedServices.died(peer);

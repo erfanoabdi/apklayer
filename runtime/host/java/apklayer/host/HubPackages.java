@@ -200,18 +200,8 @@ final class HubPackages {
         if (source == null) return false;
         if (source.permissions.stream().anyMatch(declared -> permission.equals(declared.info.name))) return true;
         if (!source.requestedPermissions.contains(permission)) return false;
-        PermissionInfo definition = null;
-        for (String other : installed()) {
-            PackageParser.Package owner = get(other);
-            if (owner == null) continue;
-            definition = owner.permissions.stream().map(declared -> declared.info).filter(info -> permission.equals(info.name)).findFirst().orElse(null);
-            if (definition != null) break;
-        }
-        if (definition == null) definition = frameworkPermission(permission);
-        if (definition == null) {
-            try { definition = RuntimeEnvironment.getApplication().getPackageManager().getPermissionInfo(permission, 0); }
-            catch (PackageManager.NameNotFoundException missing) { System.out.println("[apklayer-hub] permission " + permission + " has no definition"); return false; }
-        }
+        PermissionInfo definition = definition(permission);
+        if (definition == null) { System.out.println("[apklayer-hub] permission " + permission + " has no definition"); return false; }
         switch (definition.protectionLevel & PermissionInfo.PROTECTION_MASK_BASE) {
             case PermissionInfo.PROTECTION_NORMAL: return true;
             case PermissionInfo.PROTECTION_DANGEROUS: return !HostRevokedPermissions.revoked(name, permission);  // the desktop has no permission prompts: what the manifest asks for is granted unless the user revoked it (HostPortals.requestPermissions)
@@ -219,6 +209,33 @@ final class HubPackages {
             default: return false;
         }
     }
+
+    /** The permission's definition: an installed package's, the framework's, or null. */
+    private PermissionInfo definition(String permission) {
+        for (String other : installed()) {
+            PackageParser.Package owner = get(other);
+            if (owner == null) continue;
+            PermissionInfo found = owner.permissions.stream().map(declared -> declared.info).filter(info -> permission.equals(info.name)).findFirst().orElse(null);
+            if (found != null) return found;
+        }
+        PermissionInfo found = frameworkPermission(permission);
+        if (found != null) return found;
+        try { return RuntimeEnvironment.getApplication().getPackageManager().getPermissionInfo(permission, 0); }
+        catch (PackageManager.NameNotFoundException missing) { return null; }
+    }
+
+    /** BroadcastSkipPolicy.isSignaturePerm: every permission given is defined, signature-protected and not privileged (none given: false). */
+    boolean allSignature(String[] permissions) {
+        if (permissions == null || permissions.length == 0) return false;
+        for (String permission : permissions) {
+            PermissionInfo info = permission == null ? null : definition(permission);
+            if (info == null || (info.protectionLevel & (PermissionInfo.PROTECTION_MASK_BASE | PermissionInfo.PROTECTION_FLAG_PRIVILEGED)) != PermissionInfo.PROTECTION_SIGNATURE) return false;
+        }
+        return true;
+    }
+
+    /** The build's allow-implicit-broadcast list (SystemConfig.getAllowImplicitBroadcasts). */
+    boolean implicitAllowed(String action) { return action != null && SYSTEM.implicitBroadcasts.contains(action); }
 
     /** Whether the uid holds the permission: a system uid every one, an app uid what one of its packages holds. */
     boolean uidHolds(int uid, String permission) {

@@ -51,6 +51,13 @@ final class HubActivityClient {
         return found == 0;  // not handled: the caller's fallback (the desktop's file dialog for a picker) answers
     }
 
+    /** Whether an installed app handles the intent (true without the hub: the host's own routing decides then). */
+    static boolean resolvable(Intent intent) {
+        if (!enabled()) return true;
+        return HubProtocol.call(HubClient.current().binder(), HubProtocol.DESCRIPTOR, HubProtocol.RESOLVE_ACTIVITY,
+                parcel -> parcel.writeTypedObject(intent, 0), reply -> reply.readInt()) == 1;
+    }
+
     /** A freshly started app process: the intent another app sent for it before it existed. */
     static Intent incoming() {
         if (!enabled()) return null;

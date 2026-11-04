@@ -11,6 +11,7 @@ final class HostTextBridge {
 
     /** Tells the shell when a text field gets or loses focus, so the IME turns on and off. */
     void followTextInput() {
+        HostInputMethodClient.follow(HostWindows.focusedEditor());
         if (shell == null) return;
         boolean editor = HostWindows.focusedEditor() != null;
         if (editor != imeEnabled) {
