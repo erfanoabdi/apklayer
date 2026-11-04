@@ -82,6 +82,15 @@ int main(int argc, char **argv) {
     }
     int status;
     assert(waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    /* and a script there whose interpreter is there too (Termux's #!/data/data/com.termux/files/usr/bin/sh) */
+    FILE *script = fopen("/data/data/p.kg/files/s", "w");
+    assert(script && fputs("#!/data/data/p.kg/files/sh -e\ntest -e /data/user/0/p.kg/files/x\n", script) >= 0 && fclose(script) == 0);
+    assert(chmod("/data/data/p.kg/files/s", 0700) == 0);
+    if ((child = fork()) == 0) {
+        execvp("/data/data/p.kg/files/s", (char *[]){"s", NULL});
+        _exit(127);
+    }
+    assert(waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 0);
     char cmd[600];
     snprintf(cmd, sizeof cmd, "rm -rf '%s'", tmpl);
     return system(cmd);

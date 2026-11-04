@@ -139,12 +139,55 @@ static int target_done(struct target *t, int r)
     return r;
 }
 
+/* A script whose interpreter is on a mapped path (Termux: #!/data/data/com.termux/files/usr/bin/sh) would have the kernel look the interpreter up
+ * unmapped: it runs as the kernel would run it, "<interpreter> [<arg>] <script> <argv[1]...>", through these wrappers. NULL: run the file as it is. */
+static char **script_argv(const char *file, const char *path, char *const argv[])
+{
+    char line[256];
+    int fd = open(file, O_RDONLY | O_CLOEXEC);
+    ssize_t n = fd < 0 ? -1 : read(fd, line, sizeof line - 1);
+    if (fd >= 0) close(fd);
+    if (n < 3 || line[0] != '#' || line[1] != '!') return NULL;
+    line[n] = 0;
+    char *p = line + 2, *end = strchr(p, '\n'), *arg = NULL;
+    if (!end) return NULL;
+    while (end > p && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r')) end--;
+    *end = 0;
+    p += strspn(p, " \t");
+    char *name = p;
+    p += strcspn(p, " \t");
+    if (*p) { *p++ = 0; p += strspn(p, " \t"); if (*p) arg = p; }  /* the rest of the line is one argument, as the kernel passes it */
+    char *mapped = name;
+    if (!*name || !apklayer_apply_path_overrides(&mapped)) return NULL;  /* an unmapped interpreter: the kernel finds it */
+    free(mapped);
+    size_t argc = 0;
+    while (argv && argv[argc]) argc++;
+    char **a = calloc(1, (argc + 4) * sizeof(char *) + sizeof line);  /* the argv array, then copies of the interpreter's name and argument */
+    if (!a) return NULL;
+    char *strings = (char *)(a + argc + 4), **o = a;
+    *o++ = strcpy(strings, name);
+    if (arg) *o++ = strcpy(strings + strlen(name) + 1, arg);
+    *o++ = (char *)path;
+    for (size_t i = 1; i < argc; i++) *o++ = argv[i];
+    return a;
+}
+
 int execve(const char *path, char *const argv[], char *const envp[])
 {
+    static __thread int depth;  /* a script's interpreter may be a script: the kernel's limit */
     struct command c;
     struct target t;
+    char **sa;
     target(&t, path, envp);
-    return target_done(&t, rewrite(t.path, argv, t.envp, &c) ? exec_command(&c) : ((int (*)(const char *, char *const[], char *const[]))REAL(execve))(t.path, argv, t.envp));
+    if (depth < 4 && (sa = script_argv(t.path, path, argv))) {
+        depth++;
+        int r = execve(sa[0], sa, envp);
+        depth--;
+        free(sa);
+        return target_done(&t, r);
+    }
+    /* btload gets the caller's spelling: its linker maps an absolute program path itself (a mapped one is outside its search path) */
+    return target_done(&t, rewrite(path, argv, t.envp, &c) ? exec_command(&c) : ((int (*)(const char *, char *const[], char *const[]))REAL(execve))(t.path, argv, t.envp));
 }
 
 int execv(const char *path, char *const argv[]) { return execve(path, argv, environ); }
@@ -152,11 +195,10 @@ int execv(const char *path, char *const argv[]) { return execve(path, argv, envi
 /* a name without a slash is searched in PATH: host programs, left to glibc */
 int execvpe(const char *file, char *const argv[], char *const envp[])
 {
-    struct command c;
+    if (strchr(file, '/') && (execve(file, argv, envp), errno != ENOEXEC)) return -1;  /* ENOEXEC (a script without #!): glibc runs it with /bin/sh */
     struct target t;
     target(&t, strchr(file, '/') ? file : NULL, envp);
-    const char *use = t.path ? t.path : file;
-    return target_done(&t, t.path && rewrite(use, argv, t.envp, &c) ? exec_command(&c) : ((int (*)(const char *, char *const[], char *const[]))REAL(execvpe))(use, argv, t.envp));
+    return target_done(&t, ((int (*)(const char *, char *const[], char *const[]))REAL(execvpe))(t.path ? t.path : file, argv, t.envp));
 }
 
 int execvp(const char *file, char *const argv[]) { return execvpe(file, argv, environ); }
@@ -168,7 +210,7 @@ static int spawn(int (*real)(pid_t *, const char *, const posix_spawn_file_actio
     struct target t;
     target(&t, strchr(path, '/') ? path : NULL, envp);
     const char *use = t.path ? t.path : path;
-    if (!t.path || !rewrite(use, argv, t.envp, &c)) return target_done(&t, real(pid, use, actions, attr, argv, t.envp));
+    if (!t.path || !rewrite(path, argv, t.envp, &c)) return target_done(&t, real(pid, use, actions, attr, argv, t.envp));
     int r = real(pid, c.btload, actions, attr, c.argv, c.envp);
     release(&c);
     return target_done(&t, r);

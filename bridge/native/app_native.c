@@ -206,6 +206,44 @@ static jint linux_rw(JNIEnv *env, jobject fd, jobject buffer, jint offset, jint 
 static jint linux_read_bytes(JNIEnv *env, jobject self, jobject fd, jobject buffer, jint offset, jint count) { (void)self; return linux_rw(env, fd, buffer, offset, count, 0); }
 static jint linux_write_bytes(JNIEnv *env, jobject self, jobject fd, jobject buffer, jint offset, jint count) { (void)self; return linux_rw(env, fd, buffer, offset, count, 1); }
 
+/* The file-system natives (Robolectric's stand-ins never fail: their stat calls a missing path whose canonical form differs a symlink, mkdir is mkdirs,
+ * and symlink, rename, remove, chmod do nothing). Paths go through the path layer as every glibc call does. */
+static jobject stat_make(JNIEnv *env, const struct stat *s)
+{
+    jclass cls = (*env)->FindClass(env, "android/system/StructStat");
+    jmethodID init = cls ? (*env)->GetMethodID(env, cls, "<init>", "(JJIJIIJJJJJJJ)V") : NULL;
+    return init ? (*env)->NewObject(env, cls, init, (jlong)s->st_dev, (jlong)s->st_ino, (jint)s->st_mode, (jlong)s->st_nlink, (jint)s->st_uid, (jint)s->st_gid,
+                                    (jlong)s->st_rdev, (jlong)s->st_size, (jlong)s->st_atime, (jlong)s->st_mtime, (jlong)s->st_ctime, (jlong)s->st_blksize, (jlong)s->st_blocks) : NULL;
+}
+
+/* one or two path arguments: the call's result, errno thrown as ErrnoException(name) */
+#define PATH_CALL(name, call, ...) do { \
+    const char *p = path ? (*env)->GetStringUTFChars(env, path, NULL) : NULL, *q = other ? (*env)->GetStringUTFChars(env, other, NULL) : NULL; \
+    int r_ = p && (!other || q) ? (call) : (errno = EFAULT, -1), e_ = errno; \
+    if (p) (*env)->ReleaseStringUTFChars(env, path, p); \
+    if (q) (*env)->ReleaseStringUTFChars(env, other, q); \
+    if (r_ < 0) throw_errno(env, name, e_); \
+    __VA_ARGS__ } while (0)
+
+static jobject linux_stat_any(JNIEnv *env, jstring path, int follow)
+{
+    struct stat s;
+    jstring other = NULL;
+    PATH_CALL(follow ? "stat" : "lstat", follow ? stat(p, &s) : lstat(p, &s), if (r_ < 0) return NULL;);
+    return stat_make(env, &s);
+}
+static jobject linux_stat(JNIEnv *env, jobject self, jstring path) { (void)self; return linux_stat_any(env, path, 1); }
+static jobject linux_lstat(JNIEnv *env, jobject self, jstring path) { (void)self; return linux_stat_any(env, path, 0); }
+static jobject linux_fstat(JNIEnv *env, jobject self, jobject fd) { (void)self; struct stat s; if (fstat(fd_of(env, fd), &s) < 0) { throw_errno(env, "fstat", errno); return NULL; } return stat_make(env, &s); }
+static void linux_mkdir(JNIEnv *env, jobject self, jstring path, jint mode) { (void)self; jstring other = NULL; PATH_CALL("mkdir", mkdir(p, (mode_t)mode)); }
+static void linux_chmod(JNIEnv *env, jobject self, jstring path, jint mode) { (void)self; jstring other = NULL; PATH_CALL("chmod", chmod(p, (mode_t)mode)); }
+static void linux_remove(JNIEnv *env, jobject self, jstring path) { (void)self; jstring other = NULL; PATH_CALL("remove", remove(p)); }
+static jboolean linux_access(JNIEnv *env, jobject self, jstring path, jint mode) { (void)self; jstring other = NULL; PATH_CALL("access", access(p, mode), return r_ == 0;); return JNI_FALSE; }
+/* (old, new): the new path is `path`, the one Android names in the error */
+static void linux_symlink(JNIEnv *env, jobject self, jstring other, jstring path) { (void)self; PATH_CALL("symlink", symlink(q, p)); }
+static void linux_link(JNIEnv *env, jobject self, jstring path, jstring other) { (void)self; PATH_CALL("link", link(p, q)); }
+static void linux_rename(JNIEnv *env, jobject self, jstring path, jstring other) { (void)self; PATH_CALL("rename", rename(p, q)); }
+
 int apklayer_register_linux(JNIEnv *env, jclass libcore_linux)
 {
     JNINativeMethod methods[] = {
@@ -223,6 +261,16 @@ int apklayer_register_linux(JNIEnv *env, jclass libcore_linux)
         {"poll", "([Landroid/system/StructPollfd;I)I", (void *)linux_poll},
         {"readBytes", "(Ljava/io/FileDescriptor;Ljava/lang/Object;II)I", (void *)linux_read_bytes},
         {"writeBytes", "(Ljava/io/FileDescriptor;Ljava/lang/Object;II)I", (void *)linux_write_bytes},
+        {"stat", "(Ljava/lang/String;)Landroid/system/StructStat;", (void *)linux_stat},
+        {"lstat", "(Ljava/lang/String;)Landroid/system/StructStat;", (void *)linux_lstat},
+        {"fstat", "(Ljava/io/FileDescriptor;)Landroid/system/StructStat;", (void *)linux_fstat},
+        {"mkdir", "(Ljava/lang/String;I)V", (void *)linux_mkdir},
+        {"chmod", "(Ljava/lang/String;I)V", (void *)linux_chmod},
+        {"remove", "(Ljava/lang/String;)V", (void *)linux_remove},
+        {"access", "(Ljava/lang/String;I)Z", (void *)linux_access},
+        {"symlink", "(Ljava/lang/String;Ljava/lang/String;)V", (void *)linux_symlink},
+        {"link", "(Ljava/lang/String;Ljava/lang/String;)V", (void *)linux_link},
+        {"rename", "(Ljava/lang/String;Ljava/lang/String;)V", (void *)linux_rename},
     };
     return (*env)->RegisterNatives(env, libcore_linux, methods, sizeof methods / sizeof *methods) == 0 ? 0 : -1;
 }

@@ -54,7 +54,10 @@ __attribute__((noreturn)) static void enter(uintptr_t entry, int argc, char **ar
 
 static int exec_program(const char *path, int argc, char **argv)
 {
-    struct program p = {path, 0, false};
+    extern bool apklayer_apply_path_overrides(char **path);
+    char *named = (char *)path;
+    apklayer_apply_path_overrides(&named);  /* the linker names a program on a mapped path (an app's /data/data/<pkg>/...) by its host path; leaked, the process becomes it */
+    struct program p = {named, 0, false};
     Elf64_Ehdr eh;
     int fd = open(path, O_RDONLY | O_CLOEXEC);
     bool header = fd >= 0 && pread(fd, &eh, sizeof eh, 0) == sizeof eh;

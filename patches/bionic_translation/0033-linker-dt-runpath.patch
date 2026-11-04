@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Wed, 4 Nov 2026 00:00:00 +0000
+Subject: [PATCH] linker: DT_NEEDED libraries are searched in DT_RUNPATH (else DT_RPATH) first
+
+Android's linker looks a library's DT_NEEDED entries up in its DT_RUNPATH directories before the namespace's search path. This
+linker never read DT_RUNPATH: Termux's programs (bash, coreutils) name /data/data/com.termux/files/usr/lib there, their libraries
+(libandroid-support.so, libreadline.so.8, libiconv.so) were not found and bash failed to link ("cannot locate symbol libiconv_close").
+Absolute directories only ($ORIGIN is not expanded); a library not found there is looked up by name as before. The absolute name
+goes through the path layer (apklayer's per-app /data/data/<pkg> view).
+
+apklayer patch 0033 of patches/bionic_translation.
+---
+diff --git a/linker/linker.c b/linker/linker.c
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -2895,12 +2895,30 @@
+ 		}
+ 	}
+ 
++	/* apklayer patch: DT_RUNPATH (else DT_RPATH) directories first, as Android's linker searches them (Termux's programs name
++	 * /data/data/com.termux/files/usr/lib); absolute ones only, no $ORIGIN */
++	const char *runpath = NULL;
++	for (ElfW(Dyn) *d = si->dynamic; d->d_tag != DT_NULL; d++)
++		if (d->d_tag == DT_RUNPATH || (d->d_tag == DT_RPATH && !runpath))
++			runpath = si->strtab + d->d_un.d_val;
++
+ 	for (ElfW(Dyn) *d = si->dynamic; d->d_tag != DT_NULL; d++) {
+ 		if (d->d_tag == DT_NEEDED) {
+ 			DEBUG("%5d %s needs %s\n", apkenv_pid, si->name, si->strtab + d->d_un.d_val);
+ 			soinfo *lsi = NULL;
++			const char *needed = si->strtab + d->d_un.d_val;
++			for (const char *dir = runpath; dir && *dir && !lsi && !strchr(needed, '/');) {
++				size_t n = strcspn(dir, ":");
++				char full[512];
++				if (dir[0] == '/' && !memchr(dir, '$', n) && n + strlen(needed) + 2 <= sizeof(full)) {
++					snprintf(full, sizeof(full), "%.*s/%s", (int)n, dir, needed);
++					lsi = apkenv_find_library(full, si->app_ns, false, RTLD_NOW, NULL);
++				}
++				dir += n + (dir[n] == ':');
++			}
+ 			// if (get_builtin_lib_handle(si->strtab + d->d_un.d_val) == NULL)
+-			lsi = apkenv_find_library(si->strtab + d->d_un.d_val, si->app_ns, true, RTLD_NOW, NULL);
++			if (!lsi)
++				lsi = apkenv_find_library(needed, si->app_ns, true, RTLD_NOW, NULL);
+ 			if (lsi == 0) {
+ 				/**
+ 				 * XXX Dirty Hack Alarm --thp XXX
