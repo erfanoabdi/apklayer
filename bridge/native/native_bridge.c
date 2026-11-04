@@ -60,11 +60,12 @@ static const char *method_shorty(JNIEnv *env, jmethodID mid)
 {
     (void)env;
     static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-    static struct { jmethodID mid; char *shorty; } *cache;
-    static size_t count, cap;
+    struct entry { jmethodID mid; char *shorty; struct entry *next; };
+    static struct entry *buckets[4096];  /* asked on every translated Call*Method: a hash by the method id */
+    size_t b = ((uintptr_t)mid >> 3) % 4096;
     pthread_mutex_lock(&lock);
-    for (size_t i = 0; i < count; i++)
-        if (cache[i].mid == mid) { char *s = cache[i].shorty; pthread_mutex_unlock(&lock); return s; }
+    for (struct entry *e = buckets[b]; e; e = e->next)
+        if (e->mid == mid) { pthread_mutex_unlock(&lock); return e->shorty; }
     char *name = NULL, *sig = NULL, *shorty = NULL;
     if (ti && (*ti)->GetMethodName(ti, mid, &name, &sig, NULL) == JVMTI_ERROR_NONE && (shorty = malloc(strlen(sig) + 2))) {
         const char *p = sig + 1;  /* after '(' */
@@ -77,9 +78,10 @@ static const char *method_shorty(JNIEnv *env, jmethodID mid)
         }
         shorty[0] = p[1] == '[' || p[1] == 'L' ? 'L' : p[1];
         shorty[n] = 0;
-        if (count == cap && !(cache = realloc(cache, (cap = cap ? 2 * cap : 64) * sizeof *cache))) abort();
-        cache[count].mid = mid;
-        cache[count++].shorty = shorty;
+        struct entry *e = malloc(sizeof *e);
+        if (!e) abort();
+        *e = (struct entry){mid, shorty, buckets[b]};
+        buckets[b] = e;
     }
     if (name) (*ti)->Deallocate(ti, (unsigned char *)name);
     if (sig) (*ti)->Deallocate(ti, (unsigned char *)sig);
