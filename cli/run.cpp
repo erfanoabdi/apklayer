@@ -195,6 +195,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     // `apklayer stop` ends what this launch started: the JVM and its window sink
     writeFile(record, std::to_string(jvmPid) + "\n" + std::to_string(vdisplay) + "\n");
     int status = 0;
+    // shortcut: SIGKILL to this waiter (the hub's stuck-host path) leaves a spare-born JVM to `apklayer stop` (its record); upgrade when the hub tracks JVM pids
     if (conn >= 0) status = awaitAppSpare(conn, jvmPid);
     else {
         while (waitpid(jvmPid, &status, 0) < 0 && errno == EINTR) {}
