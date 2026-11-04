@@ -126,7 +126,7 @@ bool writeHostHals(const Instance& inst) {
     }
     if (text.empty()) { unlink(hostHalsFile(inst).c_str()); return false; }
     makeDirs(join(inst.dataDir, "apklayer"));
-    if (!writeFile(hostHalsFile(inst), "# written by the stack from providers.toml (domains with provider = \"device\")\n" + text))
+    if (!writeFile(hostHalsFile(inst), "# written by apklayer from providers.toml (domains with provider = \"device\")\n" + text))
         die("cannot write " + hostHalsFile(inst));
     return true;
 }
