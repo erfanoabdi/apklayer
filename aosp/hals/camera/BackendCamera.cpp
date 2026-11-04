@@ -181,13 +181,13 @@ bool BackendCamera::captureRGBA(const StreamInfo& si, CachedStreamBuffer* csb) {
     if (!csb->waitAcquireFence(mFrameDurationNs / 2000000) || !latestFrame(si.size, &f)) return FAILURE(false);
     const uint32_t w = si.size.width, h = si.size.height;
     void* mem = nullptr;
-    int32_t bytesPerPixel = 0, bytesPerStride = 0;
-    if (GraphicBufferMapper::get().lock(csb->getBuffer(), static_cast<uint32_t>(BufferUsage::CPU_WRITE_OFTEN), {int32_t(w), int32_t(h)}, &mem,
-                                       &bytesPerPixel, &bytesPerStride) != NO_ERROR)
+    uint32_t stride = 0;  // in pixels
+    if (GraphicBufferMapper::get().getStride(csb->getBuffer(), &stride) != NO_ERROR || stride < w) stride = w;
+    if (GraphicBufferMapper::get().lock(csb->getBuffer(), static_cast<uint32_t>(BufferUsage::CPU_WRITE_OFTEN), {int32_t(w), int32_t(h)}, &mem) != NO_ERROR)
         return FAILURE(false);
     const uint8_t *y = f.data.data(), *u = y + w * h, *v = u + w * h / 4;
     // libyuv's ABGR is R, G, B, A in memory: Android's RGBA_8888
-    const int r = libyuv::I420ToABGR(y, w, u, w / 2, v, w / 2, static_cast<uint8_t*>(mem), bytesPerStride > 0 ? bytesPerStride : int(w * 4), w, h);
+    const int r = libyuv::I420ToABGR(y, w, u, w / 2, v, w / 2, static_cast<uint8_t*>(mem), int(stride * 4), w, h);
     LOG_ALWAYS_FATAL_IF(GraphicBufferMapper::get().unlock(csb->getBuffer()) != NO_ERROR);
     return r == 0 ? true : FAILURE(false);
 }
