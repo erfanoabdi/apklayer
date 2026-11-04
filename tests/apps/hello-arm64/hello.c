@@ -39,6 +39,23 @@ JNIEXPORT jint JNICALL Java_hello_arm64_Main_callJava(JNIEnv *env, jclass c, jin
     return m ? (*env)->CallStaticIntMethod(env, c, m, v) : -1;
 }
 
+/* An overloaded getter/setter pair as JavaCPP generates them (field() and field(long)): the getter's long JNI name (__, no arguments) must bind
+ * only field(), never the setter. The setter is registered by JNI_OnLoad, so a binding by name that ignores the empty argument list replaces it
+ * whatever the order of the library's symbols. */
+static jlong field_value = 7;
+JNIEXPORT jlong JNICALL Java_hello_arm64_Main_field__(JNIEnv *env, jclass c)
+{
+    (void)env; (void)c;
+    return field_value;
+}
+
+static jint field_set(JNIEnv *env, jclass c, jlong v)
+{
+    (void)env; (void)c;
+    field_value = v;
+    return 1;
+}
+
 static jclass main_class;
 
 static void *thread_main(void *arg)
@@ -106,7 +123,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *jvm, void *reserved)
     jclass c = (*env)->FindClass(env, "hello/arm64/Main");
     if (!c) return -1;
     main_class = (*env)->NewGlobalRef(env, c);
-    static const JNINativeMethod methods[] = {{"threadCall", "(I)I", (void *)thread_call}};
-    if ((*env)->RegisterNatives(env, c, methods, 1) != 0) return -1;
+    static const JNINativeMethod methods[] = {{"threadCall", "(I)I", (void *)thread_call}, {"field", "(J)I", (void *)field_set}};
+    if ((*env)->RegisterNatives(env, c, methods, 2) != 0) return -1;
     return JNI_VERSION_1_6;
 }
