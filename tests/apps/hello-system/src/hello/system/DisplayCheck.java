@@ -9,9 +9,13 @@ import android.view.Surface;
 /**
  * The display as detection code reads it: a desktop window is the device's whole screen in its natural orientation, so the rotation is 0
  * and the configuration's orientation follows the real size and the display mode's physical size is that size (Device Info HW prints it as the resolution).
+ * The compositor is in the service manager under the name Android registers it with ("SurfaceFlinger", as DroidGuard looks it up) and answers.
  */
 final class DisplayCheck implements Check {
     @Override public String run(Context context) throws Exception {
+        android.os.IBinder flinger = (android.os.IBinder) Class.forName("android.os.ServiceManager").getMethod("getService", String.class).invoke(null, "SurfaceFlinger");
+        Check.require(flinger != null && flinger.pingBinder(), "no \"SurfaceFlinger\" service: " + flinger);
+        Check.require("android.ui.ISurfaceComposer".equals(flinger.getInterfaceDescriptor()), "\"SurfaceFlinger\" is " + flinger.getInterfaceDescriptor());
         Display display = ((android.hardware.display.DisplayManager) context.getSystemService(Context.DISPLAY_SERVICE)).getDisplay(Display.DEFAULT_DISPLAY);
         DisplayMetrics real = new DisplayMetrics();
         display.getRealMetrics(real);
