@@ -1,0 +1,32 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: anonymous function-wrapper region on a glibc host
+
+bionic_translation's android_dlopen_ext has no ANDROID_DLEXT_RESERVED_ADDRESS (nor /system/lib64 for host libraries): with
+glibc-host-thread-id-handoff the function wrappers get the anonymous (memfd) code region, as on Berberis's own glibc builds.
+
+diff --git a/runtime_primitives/exec_region_elf_backed.cc b/runtime_primitives/exec_region_elf_backed.cc
+index d8f78aed..82e087d3 100644
+--- a/runtime_primitives/exec_region_elf_backed.cc
++++ b/runtime_primitives/exec_region_elf_backed.cc
+@@ -16,6 +16,8 @@
+
+ #include "berberis/runtime_primitives/exec_region_elf_backed.h"
+ #include "berberis/tiny_loader/tiny_loader.h"
++#include "berberis/base/config_globals.h"  // apklayer patch
++#include "berberis/runtime_primitives/exec_region_anonymous.h"  // apklayer patch
+
+ #include <android/dlext.h>
+ #include <dlfcn.h>
+@@ -42,6 +44,12 @@ namespace berberis {
+ ExecRegion ExecRegionElfBackedFactory::Create(size_t size) {
+   size = AlignUpPageSize(size);
+
++  // apklayer patch: a glibc host (bionic_translation) has no android_dlopen_ext with ANDROID_DLEXT_RESERVED_ADDRESS to place
++  // libberberis_exec_region.so: the function wrappers go into an anonymous region, as on Berberis's own glibc host builds.
++  if (IsConfigFlagSet(kGlibcHostThreadIdHandoff)) {
++    return ExecRegionAnonymousFactory::Create(size);
++  }
++
+   // Since we cannot force android loader to map library in lower 2G memory we will need
+   // to reserve the space first and then direct the loader to load the library at that address.
+   size_t load_size = TinyLoader::CalculateLoadSize(kExecRegionLibraryPath, nullptr);
