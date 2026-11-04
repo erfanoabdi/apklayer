@@ -564,20 +564,19 @@ public final class AppHost implements Runnable {
         if (host == null) return;  // before the first launch: the activities start with it
         if (host.shell != null && HostConfiguration.night() != null) host.shell.sendDecorDark(HostConfiguration.night());
         ActivityController<? extends Activity> top = stack.peek();
-        for (ActivityController<? extends Activity> c : HostConfiguration.dispatch(new ArrayList<>(stack),
-                a -> host.stopped.contains(a) || (host.stoppedByMinimize && top != null && a == top.get()), changes)) {
-            host.recreated(c.get());
-            setVisible(c.visible(), true);  // ActivityController's recreation leaves the new window unattached
-            if (c == top) HostWindows.focus(c, host.windowActive);
-        }
+        HostConfiguration.dispatch(new ArrayList<>(stack), a -> host.stopped.contains(a) || (host.stoppedByMinimize && top != null && a == top.get()), changes,
+                (c, old) -> {
+                    host.recreated(old, c.get());
+                    setVisible(c.visible(), true);  // ActivityController's recreation leaves the new window unattached
+                    if (c == top) HostWindows.focus(c, host.windowActive);
+                });
     }
 
-    /** What was kept for an activity that configurationChange replaced (it is destroyed now) follows the new instance. */
-    private void recreated(Activity now) {
-        for (java.util.Map<Activity, ?> kept : List.<java.util.Map<Activity, ?>>of(resultFor, hubResults))
-            for (Activity old : new ArrayList<>(kept.keySet())) if (old.isDestroyed()) move(kept, old, now);
-        if (incomingActivity != null && incomingActivity.isDestroyed()) incomingActivity = now;
-        if (taskRoot != null && taskRoot.isDestroyed()) taskRoot = now;
+    /** What was kept for an activity that configurationChange replaced follows the new instance. */
+    private void recreated(Activity old, Activity now) {
+        for (java.util.Map<Activity, ?> kept : List.<java.util.Map<Activity, ?>>of(resultFor, hubResults)) if (kept.containsKey(old)) move(kept, old, now);
+        if (incomingActivity == old) incomingActivity = now;
+        if (taskRoot == old) taskRoot = now;
     }
 
     @SuppressWarnings("unchecked")

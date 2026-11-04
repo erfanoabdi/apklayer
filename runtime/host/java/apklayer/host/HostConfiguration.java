@@ -27,6 +27,15 @@ final class HostConfiguration {
 
     /** The hub's settings (HubClient at registration, HubEndpoint on a change), on the main thread: the configuration bits that changed. */
     static int update(Bundle next) {
+        try { return apply(next); }
+        catch (RuntimeException e) {  // a setting the resources refuse must not end the app
+            System.out.println("[apklayer] host settings not applied: " + e);
+            e.printStackTrace(System.out);
+            return 0;
+        }
+    }
+
+    private static int apply(Bundle next) {
         Configuration before = new Configuration(RuntimeEnvironment.getApplication().getResources().getConfiguration());
         settings = next == null ? new Bundle() : next;
         apply();
@@ -70,33 +79,33 @@ final class HostConfiguration {
 
     /**
      * The new configuration to the application and each activity (ActivityThread.handleConfigurationChanged): an activity that declares the
-     * changes in its configChanges gets onConfigurationChanged, any other is recreated (ActivityController.configurationChange). Returns the
-     * controllers whose activity was recreated. {@code asleep}: stopped activities, which only get the new resources.
+     * changes in its configChanges gets onConfigurationChanged, any other is recreated (ActivityController.configurationChange) and handed to
+     * {@code recreated} with the activity it replaced. {@code asleep}: stopped activities, which only get the new resources.
      */
-    static List<ActivityController<? extends Activity>> dispatch(List<ActivityController<? extends Activity>> controllers, java.util.function.Predicate<Activity> asleep, int changes) {
+    static void dispatch(List<ActivityController<? extends Activity>> controllers, java.util.function.Predicate<Activity> asleep, int changes,
+                         java.util.function.BiConsumer<ActivityController<? extends Activity>, Activity> recreated) {
         android.app.Application app = RuntimeEnvironment.getApplication();
         Configuration config = app.getResources().getConfiguration();
         app.onConfigurationChanged(new Configuration(config));  // its ComponentCallbacks too
-        List<ActivityController<? extends Activity>> recreated = new java.util.ArrayList<>();
-        if (changes == 0) return recreated;
+        if (changes == 0) return;
         for (ActivityController<? extends Activity> c : controllers) {
             Activity old = c.get();
             try {
-                if (asleep.test(old)) {  // shortcut: a stopped activity keeps its views until it is recreated at its restart, as ActivityThread does; not done yet
+                // shortcut: a stopped activity only gets the new resources (its views stay as drawn); relaunch it at its restart as ActivityThread does when an app shows stale colours
+                if (asleep.test(old)) {
                     old.getResources().updateConfiguration(config, app.getResources().getDisplayMetrics());
                     continue;
                 }
                 c.configurationChange(new Configuration(config), app.getResources().getDisplayMetrics(), changes);
                 if (c.get() != old) {
-                    recreated.add(c);
                     System.out.println("[apklayer] configuration change: recreated " + old.getClass().getName());
+                    recreated.accept(c, old);
                 }
             } catch (Throwable e) {
                 System.out.println("[apklayer] configuration change failed: " + e);
                 e.printStackTrace(System.out);
             }
         }
-        return recreated;
     }
 
     /** A new size from the shell (AppHost.hostResize): applied in place, like an activity that handles the change itself. */

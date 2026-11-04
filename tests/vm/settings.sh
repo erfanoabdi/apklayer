@@ -45,6 +45,10 @@ bin/apklayer settings set animations off >/dev/null
 bin/apklayer settings set contrast high >/dev/null
 bin/apklayer settings set accent '#e01b24' >/dev/null
 sleep 2
+aprop=${APKLAYER_NATIVE:-$HOME/arm64-native}/bin/aprop
+check "persist.sys.timezone $($aprop get persist.sys.timezone), persist.sys.locale $($aprop get persist.sys.locale) in the instance's store" \
+  "$([ "$($aprop get persist.sys.timezone)" = Europe/Berlin ] && [ "$($aprop get persist.sys.locale)" = de-DE ] && echo 1)"
+check "a malformed locale is refused" "$(bin/apklayer settings set locale 'de DE' >/dev/null 2>&1 || echo 1)"
 grep -a '\[set\] broadcast' "$out" | sort | uniq -c
 check "ACTION_TIMEZONE_CHANGED with Europe/Berlin" "$(grep -a '\[set\] broadcast android.intent.action.TIMEZONE_CHANGED tz=Europe/Berlin' "$out")"
 check "ACTION_TIME_SET with the 12-hour format" "$(grep -a '\[set\] broadcast android.intent.action.TIME_SET tz=null 24h=0' "$out")"

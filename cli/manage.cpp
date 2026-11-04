@@ -7,6 +7,7 @@
 #include <cstring>
 #include <ftw.h>
 #include <map>
+#include <regex>
 #include <set>
 #include <unistd.h>
 
@@ -183,7 +184,10 @@ int propCommand(const Layout& l, const Instance& inst, const std::vector<std::st
 
 int settingsCommand(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {
     const std::string file = join(inst.root, "settings");  // read by the hub (apklayer.host.HubHostSettings), which lays it over the desktop's
-    static const std::set<std::string> keys = {"night", "accent", "contrast", "animations", "font-scale", "locale", "timezone", "time-format"};
+    static const std::map<std::string, std::regex> keys = {  // what each value may be (the hub reads them as such)
+        {"night", std::regex("yes|no")}, {"accent", std::regex("#?[0-9a-fA-F]{6}")}, {"contrast", std::regex("high|normal")},
+        {"animations", std::regex("on|off")}, {"font-scale", std::regex("[0-3](\\.[0-9]+)?")}, {"locale", std::regex("[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*")},
+        {"timezone", std::regex("[A-Za-z0-9_+/-]+")}, {"time-format", std::regex("12|24")}};
     auto own = propLines(file);
     if (args.empty() || (args[0] == "list" && args.size() == 1)) {
         for (const auto& [k, v] : own) printf("%s\t%s\n", clean(k).c_str(), clean(v).c_str());
@@ -193,7 +197,7 @@ int settingsCommand(const Layout& l, const Instance& inst, const std::vector<std
     if (!((action == "set" && args.size() == 3) || (action == "unset" && args.size() == 2)) || !keys.count(args[1]))
         die("settings [list] | set KEY VALUE | unset KEY; keys: night yes|no, accent #rrggbb, contrast high|normal, animations on|off, "
             "font-scale <float>, locale <BCP-47>, timezone <tz id>, time-format 12|24");
-    if (action == "set" && (args[2].empty() || args[2].find_first_of("\n\r=") != std::string::npos)) die("a setting is one line");
+    if (action == "set" && !std::regex_match(args[2], keys.at(args[1]))) die("not a value for " + args[1] + ": " + args[2]);
     std::string text;
     for (const auto& [k, v] : own) if (k != args[1]) text += k + "=" + v + "\n";
     if (action == "set") text += args[1] + "=" + args[2] + "\n";

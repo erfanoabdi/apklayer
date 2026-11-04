@@ -95,8 +95,8 @@ final class HubHostSettings {
         if (animations != null) b.putFloat("animatorScale", animations.equals("off") ? 0f : 1f);
         Float fontScale = parseFloat(o.getOrDefault("font-scale", host.get("text-scaling-factor")));
         if (fontScale != null && fontScale > 0) b.putFloat("fontScale", fontScale);
-        String locale = o.containsKey("locale") ? o.get("locale") : posixLocale(host.get("locale"));
-        if (locale != null && !locale.isEmpty()) b.putString("locale", locale);
+        String locale = o.containsKey("locale") ? languageTag(o.get("locale")) : posixLocale(host.get("locale"));
+        if (locale != null) b.putString("locale", locale);
         String zone = o.getOrDefault("timezone", host.get("timezone"));
         if (zone != null && !zone.isEmpty()) b.putString("timezone", zone);
         String format = o.getOrDefault("time-format", host.get("clock-format") == null ? null : host.get("clock-format").startsWith("12") ? "12" : "24");
@@ -144,12 +144,12 @@ final class HubHostSettings {
             if (next.containsKey("accent") && differs(before, next, "accent"))  // what ThemeOverlayController (SystemUI) reads for the dynamic colour palette
                 Settings.Secure.putString(resolver, Settings.Secure.THEME_CUSTOMIZATION_OVERLAY_PACKAGES, String.format(
                         "{\"android.theme.customization.system_palette\":\"%08X\",\"android.theme.customization.color_source\":\"preset\"}", next.getInt("accent")));
+            if (next.containsKey("timezone")) android.os.SystemProperties.set("persist.sys.timezone", next.getString("timezone"));
+            if (next.containsKey("locale")) android.os.SystemProperties.set("persist.sys.locale", next.getString("locale"));
         } catch (RuntimeException failed) {
             System.out.println("[apklayer-hub] host settings not written: " + failed);
             failed.printStackTrace(System.out);
         }
-        if (next.containsKey("timezone")) android.os.SystemProperties.set("persist.sys.timezone", next.getString("timezone"));
-        if (next.containsKey("locale")) android.os.SystemProperties.set("persist.sys.locale", next.getString("locale"));
     }
 
     private static boolean differs(Bundle a, Bundle b, String key) { return !java.util.Objects.equals(a.get(key), b.get(key)); }
@@ -194,6 +194,12 @@ final class HubHostSettings {
         if (posix == null) return null;
         String base = posix.split("[.@]", 2)[0];
         if (base.isEmpty() || base.equals("C") || base.equals("POSIX")) return null;
-        return java.util.Locale.forLanguageTag(base.replace('_', '-')).toLanguageTag();
+        return languageTag(base.replace('_', '-'));
+    }
+
+    /** A well-formed BCP-47 tag (what the apps' resource qualifiers can take), or null. */
+    static String languageTag(String text) {
+        String tag = java.util.Locale.forLanguageTag(text.trim()).toLanguageTag();
+        return tag.equals("und") ? null : tag;
     }
 }
