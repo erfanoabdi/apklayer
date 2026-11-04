@@ -61,3 +61,15 @@ Consequences:
   ask the host for an unlisted name.
 - Ubuntu Touch phone: an `apklayer exec` of `servicetool` in an instance with `APKLAYER_HOST_BINDER=/dev/binderfs/binder` calls the
   device's `android.hardware.vibrator.IVibrator/default` (`getCapabilities`, a 50 ms `on`).
+
+## Running apklayer on the Ubuntu Touch phone (2026-11-04)
+- The Parallels build (Ubuntu 24.04, glibc 2.39) runs unchanged: runtime copied to `~/apklayer-dev/rt` (native, android-arm64/lib64,
+  bt, deps), the repo with its meson build in `~/apklayer-dev/repo`, the environment in `~/apklayer-dev/env.sh`. Needed bionic_translation
+  0036: the linker's default `/system/lib` and `/vendor/lib` are the device's 32-bit Android there, and every program crashed on
+  `/system/lib/libc.so`. Our binaries need GLIBC_2.38: Sailfish (2.30) needs its own build.
+- The instance `dev` uses binderfs nodes `binder-dev`, `hwbinder-dev`, `vndbinder-dev` (made with sudo, 0666; gone at reboot).
+- Results: the instance's own servicemanager does not have the vibrator; through the host context the Android 12 device's
+  `IVibrator/default` is found, `getCapabilities` answers, and `on(50 ms, null callback)` succeeds once our binder stability goes as a
+  Category (with the plain Android 14+ word the A12 HAL refused the parcel with BAD_TYPE).
+- Not yet: an app (JVM) on the phone: the window shell needs `android_wlegl` (no dmabuf there) and a JDK in the user's directory;
+  the Java path is the same native lookup (ShadowHostServiceManager -> AServiceManager_checkService).
