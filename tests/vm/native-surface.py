@@ -68,8 +68,7 @@ try:
                 with open(os.environ.get('APKLY_OUT', '/tmp') + '/apklayer-native-surface-layers.txt', 'wb') as dump:
                     subprocess.run(['bin/apklayer', 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger'], env=ENV, stdout=dump, stderr=subprocess.STDOUT, check=True)
                 pixels.red_surface(instance.capture('native SurfaceView result', 'hello.nativesurface'))
-                instance.keys(*['key:1'],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                instance.inject('hello.nativesurface', 'focus', 'key:1')  # Back into this instance's window: other instances share the desktop's focus
                 captured = True
     text = '\n'.join(seen)
     assert '[runtime] Android media JNI registered' in text

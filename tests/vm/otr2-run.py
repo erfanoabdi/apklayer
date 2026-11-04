@@ -69,8 +69,7 @@ try:
                     best = max(best, pixels.game_content(instance.capture('OTR2 GPU output ' + str(captures), 'com.dogbytegames.otrnext')))
                 finally: os.kill(pid, signal.SIGCONT)
                 if captures < 2: continue
-                instance.keys(*['key:1'], check=True,
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                instance.inject('com.dogbytegames.otrnext', 'focus', 'key:1')  # Back into this instance's window: other instances share the desktop's focus
                 captured = True
     print('OTR2 captured stages:', captures, 'Back returned to depth 0:', any('finished com.dogbytegames.otrnext.OTRNext depth=0' in line for line in seen), flush=True)
     print('OTR2 observation complete', flush=True)

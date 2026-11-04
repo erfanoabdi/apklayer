@@ -58,8 +58,7 @@ try:
                 assert sum('PASS cycle ' in line for line in seen) == 6
                 assert any(('android_swapchain=1' in line and 'dma_buf=1 drm_modifier=1 semaphore_fd=1' in line) or 'android_swapchain=0' in line for line in seen)
                 instance.capture('Vulkan probe result')
-                instance.keys(*['key:1'], check=True,
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                instance.inject('hello.vulkan', 'focus', 'key:1')  # Back into this instance's window: other instances share the desktop's focus
                 captured = True
     assert captured and any('finished hello.vulkan.Main depth=0' in line for line in seen)
     print('PASS APK Vulkan readback, native capability reporting and physical Back cleanup', flush=True)

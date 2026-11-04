@@ -94,8 +94,7 @@ try:
             # Capture after the real HWUI commit callback and a visible active window.
             if committed and not captured and any('window state active=true' in s for s in seen):
                 instance.capture('native AudioTrack JNI result' if audio_mode else 'native attribution result', 'hello.nativeaudio')
-                instance.keys(*['key:1'],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                instance.inject('hello.nativeaudio', 'focus', 'key:1')  # Back into this instance's window: other instances share the desktop's focus
                 captured = True
     text = '\n'.join(seen)
     assert '[runtime] native attribution Parcel adapter registered' in text
