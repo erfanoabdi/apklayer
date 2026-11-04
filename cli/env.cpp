@@ -28,11 +28,10 @@ std::string frameworkDependencyDir(const Layout& l) {
 std::string findJava(const Layout&) {
     std::string wanted = getenvOr("APKLAYER_NATIVE_JAVA", "");
     if (!wanted.empty() && isExecutable(wanted)) return wanted;
-    std::string standard = "/usr/lib/jvm/java-21-openjdk-arm64/bin/java";
-    if (isExecutable(standard)) return standard;
     glob_t found{};
     std::string result = "java";
-    if (glob("/usr/lib/jvm/*arm64*/bin/java", 0, nullptr, &found) == 0 && found.gl_pathc > 0) result = found.gl_pathv[0];
+    // JDK 21 first (the tested one; the host patches java.base), any architecture's package name (arm64, amd64)
+    if (glob("/usr/lib/jvm/java-21-openjdk-*/bin/java", 0, nullptr, &found) == 0 && found.gl_pathc > 0) result = found.gl_pathv[0];
     globfree(&found);
     return result;
 }
