@@ -5,7 +5,9 @@
 # On the VM, in the group's instance (tests/run system-apps): APKLAYER_INSTANCE, APKLY_STATE (its logs) and hello-system installed by the runner.
 set -uo pipefail
 : "${APKLY_STATE:=${XDG_STATE_HOME:-$HOME/.local/state}/apklayer/${APKLAYER_INSTANCE:-default}}"
+id=${APKLAYER_INSTANCE:-default}; [ "$id" = default ] && id=0
 bin/apklayer stop >/dev/null 2>&1
+rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/apklayer/$id/accounts.json"  # accounts: a fresh store (a store left by an older run of the instance decided the scenario)
 bin/apklayer ime enable hello.system >/dev/null  # the ime scenario: the user's choice, applied by the hub at the next start
 www=$(mktemp -d) && head -c 40000 /dev/urandom > $www/check.bin
 port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')

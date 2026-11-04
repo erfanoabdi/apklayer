@@ -6,8 +6,8 @@
 set -uo pipefail
 : "${APKLY_STATE:=${XDG_STATE_HOME:-$HOME/.local/state}/apklayer/${APKLAYER_INSTANCE:-default}}"
 id=${APKLAYER_INSTANCE:-default}; [ "$id" = default ] && id=0
+bin/apklayer stop >/dev/null 2>&1  # first: a running hub would write its store again
 rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/apklayer/$id/accounts.json"
-bin/apklayer stop >/dev/null 2>&1
 run() { APKLAYER_JOPTS="-Dapklayer.runms=15000 $2" bin/apklayer run $1 > $APKLY_STATE/accounts-$3.out 2>&1; bin/apklayer stop >/dev/null 2>&1; grep -a "^\[\(sys\|accounts\)\] \(PASS\|FAIL\)" $APKLY_STATE/accounts-$3.out; }
 out=$(run hello.system -Dhello.sys=accounts add; run hello.accounts "" other; run hello.accountshidden "" hidden; run hello.system -Dhello.sys=accounts again)
 echo "$out"
