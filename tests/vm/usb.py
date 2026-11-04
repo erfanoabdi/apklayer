@@ -48,11 +48,13 @@ try:
                 phase = 'done'
             hub = (log / 'hub.log').read_text(errors='replace').split('\n') if (log / 'hub.log').exists() else []
             shown = [l for l in hub if 'dialog shown:' in l]
-            if len(shown) > len(questions) and len(questions) < len(ANSWERS):
-                field = ANSWERS[len(questions)]
-                questions.append(shown[len(questions)].split('dialog shown: ')[1])
-                print('ANSWER %s %s' % (field[:-1], questions[-1]), flush=True)
-                xy = shown[len(questions) - 1].split(field)[1].split()[0]
+            if len(shown) > len(questions):  # other installed apps' device filters may match too: they are told no
+                question = shown[len(questions)].split('dialog shown: ')[1]
+                ours = [q for q in questions if 'usb-check' in q]
+                field = ANSWERS[len(ours)] if 'usb-check' in question and len(ours) < len(ANSWERS) else 'no='
+                questions.append(question)
+                print('ANSWER %s %s' % (field[:-1], question), flush=True)
+                xy = question.split(field)[1].split()[0]
                 for attempt in range(20):  # the window takes input once the compositor configured it
                     try: inject('apklayer.installer', 'click:' + xy); break
                     except AssertionError as missing:
@@ -67,7 +69,7 @@ print('\n'.join(l for l in hub.split('\n') if 'usb' in l), flush=True)
 passed = {l.split('[usb] PASS ')[1].strip() for l in lines if '[usb] PASS ' in l}
 failed = [l.split('[usb] FAIL ')[1].strip() for l in lines if '[usb] FAIL ' in l]
 expected = ['"Open usb-check to handle Gadget Zero?"', '"Allow usb-check to access Gadget Zero?"', '"Open usb-check to handle Gadget Zero?"']
-order_ok = [q.split(' yes=')[0] for q in questions] == expected
+order_ok = [q.split(' yes=')[0] for q in questions if 'usb-check' in q] == expected
 for step in STEPS: print('%s %s' % ('PASS' if step in passed else 'FAIL', step))
 print('%s dialogs %s' % ('PASS' if order_ok else 'FAIL', [q.split(' yes=')[0] for q in questions]))
 if failed: print('FAIL lines: %s' % failed)

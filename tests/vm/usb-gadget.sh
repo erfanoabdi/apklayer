@@ -14,13 +14,14 @@ up)
     sudo -n udevadm control --reload
     sudo -n modprobe -r usbtest 2>/dev/null || true
     sudo -n modprobe usbip-vudc; sudo -n modprobe vhci-hcd; sudo -n modprobe g_zero
-    [ -s "$pidfile" ] && sudo -n kill -0 "$(cat $pidfile)" 2>/dev/null || sudo -n usbipd -D --device --pid "$pidfile"
+    pgrep -f -- "[-]-device --pid $pidfile" >/dev/null || sudo -n usbipd -D --device --pid "$pidfile"
     p=$(port); [ -z "$p" ] || sudo -n usbip detach -p "$p" >/dev/null;;
 attach) sudo -n usbip attach -r 127.0.0.1 -d usbip-vudc.0;;
 detach) p=$(port); [ -n "$p" ] && sudo -n usbip detach -p "$p" >/dev/null;;
 down)
     p=$(port); [ -z "$p" ] || sudo -n usbip detach -p "$p" >/dev/null
-    [ ! -s "$pidfile" ] || { sudo -n kill "$(cat $pidfile)" 2>/dev/null || true; sudo -n rm -f "$pidfile"; }
+    sudo -n pkill -f -- "[-]-device --pid $pidfile" || true  # usbipd and the child it forked for the gadget's connection
+    sudo -n rm -f "$pidfile"
     sudo -n modprobe -r g_zero usbip-vudc 2>/dev/null || true;;
 *) echo "usage: $0 up|attach|detach|down" >&2; exit 2;;
 esac
