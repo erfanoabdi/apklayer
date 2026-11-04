@@ -112,9 +112,12 @@ int __android_log_vprint(int prio, const char *tag, const char *fmt, va_list ap)
 extern void *bionic_dlopen(const char *filename, int flag);
 extern void *bionic_dlsym(void *handle, const char *symbol);
 struct android_log_message { size_t size; int32_t buffer_id; int32_t priority; const char *tag, *file; uint32_t line; const char *message; };
+/* the log's own descriptor (logd's socket on Android), a copy of stderr taken when the logger is installed: an app that points fd 2 at a pipe it reads and
+ * logs (VLC's "VLC-std") would otherwise read its own log lines back, fill the pipe and block every writer of stderr, the JVM's exit included */
+static int log_fd = 2;
 static void stderr_logger(const struct android_log_message *m)
 {
-    if (m->priority >= 5 || getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[log %d] %s: %s\n", m->priority, m->tag, m->message);
+    if (m->priority >= 5 || getenv("APKLAYER_RUNTIME_DEBUG")) dprintf(log_fd, "[log %d] %s: %s\n", m->priority, m->tag, m->message);
     const char *dump = getenv("APKLAYER_DUMP_ON"); /* debug: the first log line containing this text prints the JVM's thread dump and exits */
     if (dump && strstr(m->message, dump)) {
         if (getenv("APKLAYER_DUMP_ABORT")) abort(); /* with -Dapklayer.runtimetrace=true: the native call chain instead */
@@ -128,7 +131,10 @@ void apklayer_log_to_stderr(void)
 {
     void *liblog = bionic_dlopen("liblog.so", 2);
     void (*set_logger)(void (*)(const struct android_log_message *)) = liblog ? bionic_dlsym(liblog, "__android_log_set_logger") : NULL;
-    if (set_logger) set_logger(stderr_logger);
+    if (!set_logger) return;
+    int fd = fcntl(2, F_DUPFD_CLOEXEC, 100);
+    if (fd >= 0) log_fd = fd;
+    set_logger(stderr_logger);
 }
 
 /* Debug aid (-Dapklayer.runtimetrace=true, or APKLAYER_CRASH_TRACE=1 in btload): on SIGABRT/SIGSEGV print the frame-pointer chain of the faulting thread and the
