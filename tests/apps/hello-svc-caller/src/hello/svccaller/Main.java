@@ -95,7 +95,7 @@ public class Main extends Activity {
             case "own" -> own();
             case "rebind" -> {  // unbind and bind again at once: the ":other" host, which ends with its last binding, never hands out its binder while it exits
                 java.util.Set<Integer> pids = new java.util.HashSet<>();
-                for (int round = 0; round < 8; round++) pids.add(pidOf(new Intent().setComponent(new ComponentName(this, OtherPidService.class))));
+                for (int round = 0; round < 8; round++) pids.add(pidOf(new Intent().setComponent(new ComponentName(this, OtherPidService.class)))[0]);
                 require(pids.size() >= 2 && !pids.contains(android.os.Process.myPid()), "the \":other\" host never ended (or ran here): " + pids);
                 System.out.println("[svc] PASS rebind: 8 bind/call/unbind rounds in a row, every call answered, the host ran in " + pids.size() + " processes");
             }
