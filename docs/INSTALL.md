@@ -1,5 +1,7 @@
 # Installing apklayer
 
+Released versions come as a deb (Ubuntu 24.04, Debian 13; arm64): `sudo apt install ./apklayer_*.deb` from the latest GitHub Release, then open apklayer-manager (`docs/RELEASES.md`). This page builds from source.
+
 Step by step, from a fresh Linux machine to an Android app in a window. Tested on Ubuntu 24.04 arm64 (a Parallels VM, GNOME Wayland, Mesa virgl), 2026-11-04, from a fresh clone.
 x86_64 has its own prebuilts but was never run on a real PC (`docs/X86_64.md`); the steps below are written for arm64.
 
@@ -23,7 +25,7 @@ sudo apt install build-essential meson ninja-build pkg-config git python3 curl z
     libdrm-dev libgbm-dev libegl-dev libgles-dev \
     libpipewire-0.3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
     gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav \
-    libelf-dev libunwind-dev libbsd-dev
+    libelf-dev libunwind-dev libbsd-dev libinput-dev   # libinput: the manager's Slint library
 ```
 
 JDK 21 is the tested one (the host patches `java.base`; other versions are untested).
