@@ -255,7 +255,7 @@ public final class Services {
         });
     }
 
-    /** Debugging (-Dapklayer.logcat): a Binder in front of the service's that prints every transaction it gets and how it ended. */
+    /** Debugging (-Dapklayer.tracebind=true): a Binder in front of the service's that prints every transaction it gets and how it ended. */
     private static IBinder traced(IBinder original) {
         if (original == null) return null;
         return new android.os.Binder() {
