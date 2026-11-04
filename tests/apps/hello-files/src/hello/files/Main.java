@@ -14,6 +14,18 @@ public final class Main extends Activity {
         new Thread(() -> {
             try {
                 ContentResolver cr = getContentResolver();
+                if (System.getProperty("hello.owndata") != null) {  // Android's hard-coded spellings of the app's data dir (java.io and libcore's Os), read back through getFilesDir()
+                    String pkg = getPackageName();
+                    getFilesDir().mkdirs();
+                    try (java.io.FileOutputStream out = new java.io.FileOutputStream("/data/data/" + pkg + "/files/java")) { out.write("java".getBytes()); }
+                    java.io.FileDescriptor fd = android.system.Os.open("/data/user/0/" + pkg + "/files/os", android.system.OsConstants.O_CREAT | android.system.OsConstants.O_WRONLY, 0600);
+                    android.system.Os.write(fd, "os".getBytes(), 0, 2);
+                    android.system.Os.close(fd);
+                    String viaJava = new String(java.nio.file.Files.readAllBytes(new java.io.File(getFilesDir(), "java").toPath())), os = new String(java.nio.file.Files.readAllBytes(new java.io.File(getFilesDir(), "os").toPath()));
+                    boolean other = new java.io.File("/data/data/hello.reader").exists() || new java.io.File("/data/user/0/hello.reader").exists();
+                    System.out.println("[files] owndata java=" + viaJava + " os=" + os + " nio=" + java.nio.file.Files.isDirectory(java.nio.file.Path.of("/data/user/0/" + pkg + "/files")) + " other=" + other + " filesDir=" + getFilesDir());
+                    System.out.println("[files] DONE"); finish(); return;
+                }
                 if (System.getProperty("hello.uri") != null) {
                     try (Cursor any = cr.query(Uri.parse(System.getProperty("hello.uri")), null, null, null, null)) { System.out.println("[files] " + System.getProperty("hello.uri") + " -> " + (any == null ? "null" : any.getCount() + " rows, " + any.getClass().getName())); }
                     System.out.println("[files] DONE"); finish(); return;

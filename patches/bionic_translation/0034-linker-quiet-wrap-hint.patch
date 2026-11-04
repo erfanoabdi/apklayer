@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Wed, 4 Nov 2026 00:00:00 +0000
+Subject: [PATCH] linker: the "symbol may need to be wrapped" hint only with linker debugging
+
+The relocation of every pthread_* symbol that resolves to glibc's printed "symbol may need to be wrapped: <name>" to stderr, in
+every process, at every load. A program's stderr is part of its output: Termux's bootstrap script reads `id -u 2>&1` and refused
+the uid "symbol may need to be wrapped: pthread_self ... 1000". The hint is now a LINKER_DEBUG_PRINTF like the lines next to it.
+
+apklayer patch 0034 of patches/bionic_translation.
+---
+diff --git a/linker/linker.c b/linker/linker.c
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -1916,7 +1916,7 @@
+ 				// normal symbol
+ 			} else if ((sym_addr = (uintptr_t)dlsym(RTLD_DEFAULT, sym_name))) {
+ 				if (strstr(sym_name, "pthread_"))
+-					fprintf(stderr, "symbol may need to be wrapped: %s\n", sym_name);
++					LINKER_DEBUG_PRINTF("symbol may need to be wrapped: %s\n", sym_name);  /* apklayer patch: a hint for linker debugging; on stderr it is part of every program's output (`id -u 2>&1` in a script) */
+ 				LINKER_DEBUG_PRINTF("%s hooked symbol %s to %p\n", si->name, sym_name, (void *)sym_addr);
+ 			} else if (!sym_addr && !strncmp(sym_name, "gl", 2)) {
+ 				LINKER_DEBUG_PRINTF("=======================================\n");

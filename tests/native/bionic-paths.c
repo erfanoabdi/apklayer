@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 bool apklayer_apply_path_overrides(char **path);
+void apklayer_map_own_data(const char *pkg, const char *root);
 
 static char real[512];
 static const char *in(const char *rel) { snprintf(real, sizeof real, "%s/emulated/0/%s", getenv("APKLAYER_STORAGE"), rel); return real; }
@@ -46,10 +47,19 @@ int main(int argc, char **argv) {
     create("d/c");
     assert(b_unlink("/data/media/0/d/c") == 0 && !there("d/c"));
     assert(b_rmdir("/sdcard/d") == 0 && !there("d"));
+    /* the app's own /data/data/<pkg> (apklayer_map_own_data): its data tree is a scratch directory below the storage one here */
+    assert(mkdir(in("own"), 0700) == 0 && mkdir(in("own/app"), 0700) == 0);
+    char own[512];
+    snprintf(own, sizeof own, "%s", in("own"));
+    apklayer_map_own_data("p.kg", own);
+    assert(b_mkdir("/data/data/p.kg/d", 0700) == 0 && there("own/app/d"));
+    assert(b_rename("/data/user/0/p.kg/d", "/data/data/p.kg/e") == 0 && there("own/app/e"));
+    assert(b_rmdir("/data/data/p.kg/e") == 0 && !there("own/app/e"));
+    assert(rmdir(in("own/app")) == 0 && rmdir(in("own")) == 0);
     dlclose(libc);
     char cmd[600];
     snprintf(cmd, sizeof cmd, "rm -rf '%s'", tmpl);
     assert(system(cmd) == 0);
-    puts("PASS bionic mkdir, rename, unlinkat, unlink, rmdir of /storage, /sdcard and /data/media/0 in the instance's storage");
+    puts("PASS bionic mkdir, rename, unlinkat, unlink, rmdir of /storage, /sdcard and /data/media/0 in the instance's storage, and of the app's own /data/data/<pkg>");
     return 0;
 }

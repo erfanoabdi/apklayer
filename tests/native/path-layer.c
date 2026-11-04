@@ -3,6 +3,8 @@
 #define _GNU_SOURCE
 #include <assert.h>
 #include <dirent.h>
+#include <dlfcn.h>
+#include <sys/wait.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -57,6 +59,38 @@ int main(int argc, char **argv) {
         assert(getxattr("/storage/t/b", "user.apklayer", buf, sizeof buf) == 1 && removexattr("/storage/t/b", "user.apklayer") == 0);
     else
         assert(errno != ENOENT);
+    /* the app's own /data/data/<pkg>, /data/user/0/<pkg> and /data/user_de/0/<pkg> (paths.c apklayer_map_own_data), not other packages' */
+    void (*map_own)(const char *, const char *) = (void (*)(const char *, const char *))dlsym(RTLD_DEFAULT, "apklayer_map_own_data");
+    assert(map_own);
+    assert(mkdir(in("own"), 0700) == 0 && mkdir(in("own/app"), 0700) == 0 && mkdir(in("own/app/files"), 0700) == 0 && mkdir(in("own/device"), 0700) == 0);
+    char own[512];
+    snprintf(own, sizeof own, "%s/own", tmpl);
+    map_own("p.kg", own);
+    fd = open("/data/data/p.kg/files/x", O_CREAT | O_WRONLY, 0600);
+    assert(fd >= 0 && access(in("own/app/files/x"), F_OK) == 0);
+    close(fd);
+    assert(access("/data/user/0/p.kg/files/x", F_OK) == 0);
+    assert(mkdir("/data/user_de/0/p.kg/d", 0700) == 0 && access(in("own/device/d"), F_OK) == 0);
+    assert(access("/data/data/p.kgx/files/x", F_OK) != 0 && access("/data/data/other/files/x", F_OK) != 0 && access("/data/user/0/other/files/x", F_OK) != 0);
+    /* a program the app runs from its data dir maps them too (exec_preload.c: the path, and APKLAYER_OWN_DATA in its environment) */
+    assert(symlink("/bin/sh", "/data/data/p.kg/files/sh") == 0);
+    pid_t child = fork();
+    if (child == 0) {
+        unsetenv("APKLAYER_OWN_DATA");
+        execv("/data/data/p.kg/files/sh", (char *[]){"sh", "-c", "test -e /data/user/0/p.kg/files/x", NULL});
+        _exit(127);
+    }
+    int status;
+    assert(waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    /* and a script there whose interpreter is there too (Termux's #!/data/data/com.termux/files/usr/bin/sh) */
+    FILE *script = fopen("/data/data/p.kg/files/s", "w");
+    assert(script && fputs("#!/data/data/p.kg/files/sh -e\ntest -e /data/user/0/p.kg/files/x\n", script) >= 0 && fclose(script) == 0);
+    assert(chmod("/data/data/p.kg/files/s", 0700) == 0);
+    if ((child = fork()) == 0) {
+        execvp("/data/data/p.kg/files/s", (char *[]){"s", NULL});
+        _exit(127);
+    }
+    assert(waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 0);
     char cmd[600];
     snprintf(cmd, sizeof cmd, "rm -rf '%s'", tmpl);
     return system(cmd);

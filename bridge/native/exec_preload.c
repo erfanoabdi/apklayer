@@ -108,39 +108,112 @@ static int exec_command(struct command *c)
     return r;
 }
 
+/* Every exec: its path through the path layer (an app's /data/data/<pkg>/..., /storage/...: paths.c), and the app's own-data mapping
+ * (APKLAYER_OWN_DATA, paths.c) in the program's environment in place of any it carries, so the program maps the app's paths as this process does. */
+bool apklayer_apply_path_overrides(char **path);
+const char *apklayer_own_data_env(void);
+
+struct target { char *path; bool mapped; char **envp, **made; };
+
+static void target(struct target *t, const char *path, char *const envp[])
+{
+    t->path = (char *)path;
+    t->mapped = path && path[0] == '/' && apklayer_apply_path_overrides(&t->path);
+    t->envp = (char **)envp, t->made = NULL;
+    const char *own = apklayer_own_data_env();
+    size_t n = 0, o = 0;
+    while (own && envp && envp[n]) n++;
+    if (!own || !(t->made = calloc(n + 2, sizeof(char *)))) return;
+    for (size_t i = 0; i < n; i++)
+        if (strncmp(envp[i], "APKLAYER_OWN_DATA=", 18)) t->made[o++] = envp[i];
+    t->made[o] = (char *)own;
+    t->envp = t->made;
+}
+
+static int target_done(struct target *t, int r)
+{
+    int e = errno;
+    if (t->mapped) free(t->path);
+    free(t->made);
+    errno = e;
+    return r;
+}
+
+/* A script whose interpreter is on a mapped path (Termux: #!/data/data/com.termux/files/usr/bin/sh) would have the kernel look the interpreter up
+ * unmapped: it runs as the kernel would run it, "<interpreter> [<arg>] <script> <argv[1]...>", through these wrappers. NULL: run the file as it is. */
+static char **script_argv(const char *file, const char *path, char *const argv[])
+{
+    char line[256];
+    int fd = open(file, O_RDONLY | O_CLOEXEC);
+    ssize_t n = fd < 0 ? -1 : read(fd, line, sizeof line - 1);
+    if (fd >= 0) close(fd);
+    if (n < 3 || line[0] != '#' || line[1] != '!') return NULL;
+    line[n] = 0;
+    char *p = line + 2, *end = strchr(p, '\n'), *arg = NULL;
+    if (!end) return NULL;
+    while (end > p && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r')) end--;
+    *end = 0;
+    p += strspn(p, " \t");
+    char *name = p;
+    p += strcspn(p, " \t");
+    if (*p) { *p++ = 0; p += strspn(p, " \t"); if (*p) arg = p; }  /* the rest of the line is one argument, as the kernel passes it */
+    char *mapped = name;
+    if (!*name || !apklayer_apply_path_overrides(&mapped)) return NULL;  /* an unmapped interpreter: the kernel finds it */
+    free(mapped);
+    size_t argc = 0;
+    while (argv && argv[argc]) argc++;
+    char **a = calloc(1, (argc + 4) * sizeof(char *) + sizeof line);  /* the argv array, then copies of the interpreter's name and argument */
+    if (!a) return NULL;
+    char *strings = (char *)(a + argc + 4), **o = a;
+    *o++ = strcpy(strings, name);
+    if (arg) *o++ = strcpy(strings + strlen(name) + 1, arg);
+    *o++ = (char *)path;
+    for (size_t i = 1; i < argc; i++) *o++ = argv[i];
+    return a;
+}
+
 int execve(const char *path, char *const argv[], char *const envp[])
 {
+    static __thread int depth;  /* a script's interpreter may be a script: the kernel's limit */
     struct command c;
-    return rewrite(path, argv, envp, &c) ? exec_command(&c) : ((int (*)(const char *, char *const[], char *const[]))REAL(execve))(path, argv, envp);
+    struct target t;
+    char **sa;
+    target(&t, path, envp);
+    if (depth < 4 && (sa = script_argv(t.path, path, argv))) {
+        depth++;
+        int r = execve(sa[0], sa, envp);
+        depth--;
+        free(sa);
+        return target_done(&t, r);
+    }
+    /* btload gets the caller's spelling: its linker maps an absolute program path itself (a mapped one is outside its search path) */
+    return target_done(&t, rewrite(path, argv, t.envp, &c) ? exec_command(&c) : ((int (*)(const char *, char *const[], char *const[]))REAL(execve))(t.path, argv, t.envp));
 }
 
-int execv(const char *path, char *const argv[])
-{
-    struct command c;
-    return rewrite(path, argv, environ, &c) ? exec_command(&c) : ((int (*)(const char *, char *const[]))REAL(execv))(path, argv);
-}
+int execv(const char *path, char *const argv[]) { return execve(path, argv, environ); }
 
 /* a name without a slash is searched in PATH: host programs, left to glibc */
-int execvp(const char *file, char *const argv[])
-{
-    struct command c;
-    return strchr(file, '/') && rewrite(file, argv, environ, &c) ? exec_command(&c) : ((int (*)(const char *, char *const[]))REAL(execvp))(file, argv);
-}
-
 int execvpe(const char *file, char *const argv[], char *const envp[])
 {
-    struct command c;
-    return strchr(file, '/') && rewrite(file, argv, envp, &c) ? exec_command(&c) : ((int (*)(const char *, char *const[], char *const[]))REAL(execvpe))(file, argv, envp);
+    if (strchr(file, '/') && (execve(file, argv, envp), errno != ENOEXEC)) return -1;  /* ENOEXEC (a script without #!): glibc runs it with /bin/sh */
+    struct target t;
+    target(&t, strchr(file, '/') ? file : NULL, envp);
+    return target_done(&t, ((int (*)(const char *, char *const[], char *const[]))REAL(execvpe))(t.path ? t.path : file, argv, t.envp));
 }
+
+int execvp(const char *file, char *const argv[]) { return execvpe(file, argv, environ); }
 
 static int spawn(int (*real)(pid_t *, const char *, const posix_spawn_file_actions_t *, const posix_spawnattr_t *, char *const[], char *const[]),
                  pid_t *pid, const char *path, const posix_spawn_file_actions_t *actions, const posix_spawnattr_t *attr, char *const argv[], char *const envp[])
 {
     struct command c;
-    if (!strchr(path, '/') || !rewrite(path, argv, envp, &c)) return real(pid, path, actions, attr, argv, envp);
+    struct target t;
+    target(&t, strchr(path, '/') ? path : NULL, envp);
+    const char *use = t.path ? t.path : path;
+    if (!t.path || !rewrite(path, argv, t.envp, &c)) return target_done(&t, real(pid, use, actions, attr, argv, t.envp));
     int r = real(pid, c.btload, actions, attr, c.argv, c.envp);
     release(&c);
-    return r;
+    return target_done(&t, r);
 }
 
 int posix_spawn(pid_t *pid, const char *path, const posix_spawn_file_actions_t *actions, const posix_spawnattr_t *attr, char *const argv[], char *const envp[])

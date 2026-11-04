@@ -56,6 +56,18 @@ public class ShadowHostRealLinux extends ShadowLinux {
     @Implementation @Override protected FileDescriptor open(String path, int flags, int mode) {
         return natively("open", ClassParameter.from(String.class, path), ClassParameter.from(int.class, flags), ClassParameter.from(int.class, mode));
     }
+    // the file system as it is (Robolectric's stat never fails and calls a missing path a symlink when its canonical form differs; symlink, rename, remove, chmod do nothing)
+    // shortcut: fstat(fd) stays Robolectric's (mode 0): the real one stopped MediaProvider's scan after a write through openOutputStream (system-apps media: size 0), cause not found yet; upgrade once it is
+    private static ClassParameter<String> path(String path) { return ClassParameter.from(String.class, path); }
+    @Implementation @Override public android.system.StructStat stat(String path) { return natively("stat", path(path)); }
+    @Implementation @Override protected android.system.StructStat lstat(String path) { return natively("lstat", path(path)); }
+    @Implementation @Override public void mkdir(String path, int mode) { natively("mkdir", path(path), ClassParameter.from(int.class, mode)); }
+    @Implementation protected void chmod(String path, int mode) { natively("chmod", path(path), ClassParameter.from(int.class, mode)); }
+    @Implementation protected void remove(String path) { natively("remove", path(path)); }
+    @Implementation protected boolean access(String path, int mode) { return natively("access", path(path), ClassParameter.from(int.class, mode)); }
+    @Implementation protected void symlink(String oldPath, String newPath) { natively("symlink", path(oldPath), path(newPath)); }
+    @Implementation protected void link(String oldPath, String newPath) { natively("link", path(oldPath), path(newPath)); }
+    @Implementation protected void rename(String oldPath, String newPath) { natively("rename", path(oldPath), path(newPath)); }
     @Implementation protected FileDescriptor[] pipe2(int flags) { return natively("pipe2", ClassParameter.from(int.class, flags)); }
     @Implementation protected void socketpair(int domain, int type, int protocol, FileDescriptor one, FileDescriptor two) {
         natively("socketpair", ClassParameter.from(int.class, domain), ClassParameter.from(int.class, type), ClassParameter.from(int.class, protocol),
