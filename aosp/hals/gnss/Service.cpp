@@ -19,7 +19,7 @@ class BackendGnss final : public Gnss {
     // shortcut: a backend without a fix yet (-EAGAIN) gets the example's mock location reported; a real backend needs the example to skip the report
     std::unique_ptr<GnssLocation> getLocationFromHW() override {
         apklayer_gnss_fix fix{};
-        if (apklayer_gnss_fix(&fix)) return nullptr;
+        if (apklayer_gnss_next_fix(&fix)) return nullptr;
         auto location = std::make_unique<GnssLocation>(::android::hardware::gnss::common::Utils::getMockLocation());  // flags and clocks
         location->latitudeDegrees = fix.latitude;
         location->longitudeDegrees = fix.longitude;

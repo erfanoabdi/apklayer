@@ -2,6 +2,7 @@
 // with its motor commands also sent to the instance's backend (bridge/hals/vibrator: libapklayer-vibrator-<backend>.so, providers.toml).
 // The example keeps the timing and the callbacks; the backend only moves (or logs) the motor.
 #include <vibrator-impl/Vibrator.h>
+#include <aidl/android/hardware/vibrator/BnVibratorCallback.h>
 #include <apklayer/vibrator.h>
 #include <android/binder_manager.h>
 #include <android/binder_process.h>

@@ -17,7 +17,7 @@ int apklayer_gnss_probe(void);
 /* the domain's options from providers.toml, "key=value" each; 0 or -errno */
 int apklayer_gnss_init(int count, const char *const *options);
 /* the next fix (the front asks once per reporting interval): 0, or -EAGAIN while there is none */
-int apklayer_gnss_fix(struct apklayer_gnss_fix *fix);
+int apklayer_gnss_next_fix(struct apklayer_gnss_fix *fix);
 
 #ifdef __cplusplus
 }

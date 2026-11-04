@@ -70,7 +70,7 @@ int apklayer_gnss_init(int count, const char *const *options)
     return gpx ? load_gpx(gpx) : 0;
 }
 
-int apklayer_gnss_fix(struct apklayer_gnss_fix *fix)
+int apklayer_gnss_next_fix(struct apklayer_gnss_fix *fix)
 {
     if (!track_len) { *fix = fixed; return 0; }
     *fix = track[track_next];
