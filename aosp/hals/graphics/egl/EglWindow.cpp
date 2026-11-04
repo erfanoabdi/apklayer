@@ -112,8 +112,19 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
         unsigned srcFbo = fboForImage(src, &srcTex), dstFbo = fboForImage(out, &dstTex);
         gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA8 /* GL_READ_FRAMEBUFFER */, srcFbo);
         gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA9 /* GL_DRAW_FRAMEBUFFER */, dstFbo);
-        gl<void (*)(int, int, int, int, int, int, int, int, unsigned, unsigned)>("glBlitFramebuffer")(
-                0, 0, w.width, w.height, 0, 0, dst->width, dst->height, 0x4000 /* GL_COLOR_BUFFER_BIT */, 0x2600 /* GL_NEAREST */);
+        // an incomplete side would leave GL_INVALID_FRAMEBUFFER_OPERATION in the app's context (Meet's video renderer checks glGetError and
+        // gave up on every frame): checked first, the window named once
+        auto status = gl<unsigned (*)(unsigned)>("glCheckFramebufferStatus");
+        unsigned rs = status(0x8CA8), ds = status(0x8CA9);
+        if (rs == 0x8CD5 /* GL_FRAMEBUFFER_COMPLETE */ && ds == 0x8CD5) {
+            gl<void (*)(int, int, int, int, int, int, int, int, unsigned, unsigned)>("glBlitFramebuffer")(
+                    0, 0, w.width, w.height, 0, 0, dst->width, dst->height, 0x4000 /* GL_COLOR_BUFFER_BIT */, 0x2600 /* GL_NEAREST */);
+        } else {
+            static std::set<ANativeWindow*> named;
+            if (named.insert(nw).second)
+                ALOGE("window present %ux%u: framebuffer incomplete (read 0x%x: gbm format 0x%x modifier 0x%llx; draw 0x%x: buffer %dx%d format %d usage 0x%llx)",
+                      w.width, w.height, rs, format, (unsigned long long)modifier, ds, dst->width, dst->height, dst->format, (unsigned long long)dst->usage);
+        }
         gl<void (*)()>("glFlush")();
         auto createSync = host<PFNEGLCREATESYNCKHRPROC>("eglCreateSyncKHR");
         auto dupFence = host<PFNEGLDUPNATIVEFENCEFDANDROIDPROC>("eglDupNativeFenceFDANDROID");
