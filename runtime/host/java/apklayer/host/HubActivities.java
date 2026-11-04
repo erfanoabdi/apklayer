@@ -53,7 +53,8 @@ final class HubActivities {
         if (intent == null) return false;
         HubDirectory.Peer target = directory.appPeer(name);
         if (target != null) deliver(target, intent, null);
-        else synchronized (pending) { pending.computeIfAbsent(name, key -> new ArrayDeque<>()).add(new Launch(intent, null)); }
+        else if (intentFile != null) synchronized (pending) { pending.computeIfAbsent(name, key -> new ArrayDeque<>()).add(new Launch(intent, null)); }
+        // (a launcher start of an app that is starting is that start: nothing to queue)
         System.out.println("[apklayer-hub] relaunch " + name + ": " + intent);
         return true;
     }
