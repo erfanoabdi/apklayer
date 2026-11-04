@@ -344,7 +344,7 @@ static int register_classes(JNIEnv *env, JavaVM *vm, void *rt)
     /* the camera's (android.hardware.Camera, camera2): also absent from HostRuntime's list; used over the stack's cameraserver (HostCameraShadows) */
     static const char *const camera[] = {
         "register_android_hardware_Camera", "register_android_hardware_camera2_CameraMetadata", "register_android_hardware_camera2_CameraDevice",
-        "register_android_hardware_camera2_utils_SurfaceUtils", NULL
+        "register_android_hardware_camera2_utils_SurfaceUtils", "register_android_media_PublicFormatUtils", NULL
     };
     for (int i = 0; camera[i]; i++) {
         int (*fn)(JNIEnv *) = find_register_function(rt, hwui, camera[i]);
