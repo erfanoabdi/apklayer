@@ -1,6 +1,7 @@
 #include "apps.h"
 
 #include "desktop.h"
+#include "version.h"
 
 #include <algorithm>
 #include <iostream>
@@ -22,6 +23,7 @@ int sh(std::vector<std::string> argv, const Env& env = currentEnv(), const std::
 std::string cacheKey(const Layout& l, const std::string& apk, const std::vector<std::string>& splits) {
     std::string text = sha256File(apk);
     for (const std::string& s : splits) text += " " + sha256File(s);  // a split's code converts with the base (dex2jvm reads split_*.apk beside base.apk)
+    text += "\nconverter-abi " + std::to_string(kConverterAbi);
     text += "\npost-processing v14: verified, Android classloader adapter, java.* own classes relocated (no library relocation: apps have their own class loader), static finals written outside clinit, native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke\n";
     std::vector<std::string> jars = listDir(l.frameworkDir());
     std::sort(jars.begin(), jars.end());
@@ -91,8 +93,8 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
     if (!mkdtemp(pattern)) die("cannot create a temporary directory in " + l.appsDir);
     std::string tmp = pattern;
     static std::string pending;  // die() exits without running destructors: the temporary directory goes at exit
+    if (pending.empty()) std::atexit([] { if (!pending.empty()) removeTree(pending); });
     pending = tmp;
-    std::atexit([] { removeTree(pending); });
 
     // base.apk and split_<name>.apk, as a device installs a package (apklayer.tools.ApkSet: one APK, a base and its splits, or an .apks/.xapk/.apkm)
     Spawn stage;
@@ -173,11 +175,32 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
     // an update keeps the system mark and the app drawer choice; --system (the staging of the tree's system apps) marks it
     if (system || isSystemApp(old)) setProperty(info, "system", "true");
     if (std::string drawer = property(old, "drawer"); !drawer.empty()) setProperty(info, "drawer", drawer);
+    setProperty(info, "converterAbi", std::to_string(kConverterAbi));
     ensureUid(l, tmp);
     sh({"mv", "-f", info, join(dir, "info.properties")});
     writeDesktop(l, pkg);
+    removeTree(tmp);  // now, not at exit: reconvert --all-stale installs several in one run
+    pending.clear();
     printf("apklayer: installed %s (%s) -> %s\n", pkg.c_str(), label.c_str(), dir.c_str());
     return pkg;
+}
+
+bool isStale(const std::string& info) { return atoi(property(info, "converterAbi").c_str()) < kConverterAbi; }  // none recorded: before the number
+
+int reconvert(const Layout& l, const Instance& inst, const std::string& target) {
+    std::vector<std::string> packages;
+    if (target != "--all-stale") packages.push_back(target);
+    else for (const std::string& app : listDir(l.appsDir)) if (exists(join(appDir(l, app), "info.properties")) && isStale(join(appDir(l, app), "info.properties"))) packages.push_back(app);
+    for (const std::string& pkg : packages) {
+        std::string dir = appDir(l, pkg);
+        if (!exists(join(dir, "base.apk"))) die("not installed: " + pkg);
+        std::vector<std::string> apks;
+        for (const std::string& f : apkFiles(dir)) apks.push_back(join(dir, f));
+        // an update with the same APKs: the converter ABI is in the cache key, so they convert again; uid, system mark and data stay
+        installApp(l, inst, apks, true);
+    }
+    if (packages.empty()) puts("apklayer: no stale apps");
+    return 0;
 }
 
 std::string appDataDir(const Layout& l, const Instance& inst, const std::string& package) {

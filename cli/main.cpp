@@ -5,8 +5,10 @@
 
 #include "desktop.h"
 #include "manage.h"
+#include "migrate.h"
 #include "run.h"
 #include "spare.h"
+#include "version.h"
 
 using namespace apklayer;
 
@@ -16,8 +18,10 @@ int usage() {
           "  install [-d] [--system] <app.apk> [split.apk...]  convert + describe + install (menu entry, icon, .apk handler); also .apks/.xapk/.apkm;\n"
           "                         an update keeps the data, needs the same signer and a version no lower (-d: allow a downgrade);\n"
           "                         --system: a system app (FLAG_SYSTEM, not in the app drawer unless shown)\n"
+          "  reconvert <package> | --all-stale  convert an installed app again from its kept APKs (its data stays); --all-stale: every app converted\n"
+          "                         with an older converter ABI (the stale column of list --tsv)\n"
           "  run <package|app.apk>  run an installed app (an .apk path is installed first)\n"
-          "  list [--tsv]           installed apps (--tsv: package, label, version, dir, uid, running in this instance, system app, in the app drawer)\n"
+          "  list [--tsv]           installed apps (--tsv: package, label, version, dir, uid, running in this instance, system app, in the app drawer, stale)\n"
           "  launcher show|hide <package>  the app's launcher in the desktop's app drawer (system apps are hidden by default)\n"
           "  info <package>         the app's description, sizes and directories (key<TAB>value)\n"
           "  clear-data <package>   remove the app's files in this instance\n"
@@ -30,7 +34,8 @@ int usage() {
           "  prop [list] | set KEY VALUE | unset KEY  the instance's Android property overrides (from its next start)\n"
           "  permissions <package> | grant|revoke <package> <permission>  what the app requests (permission, level, granted); a runtime one granted or revoked\n"
           "  status                 the instance's stack, running apps, GPU, audio, battery, location\n"
-          "  env                    print the environment of Android's processes\n",
+          "  env                    print the environment of Android's processes\n"
+          "  --version              version, converterAbi, dataFormat (key<TAB>value)\n",
           stderr);
     return 2;
 }
@@ -41,7 +46,9 @@ int main(int argc, char** argv) {
     std::string id = getenvOr("APKLAYER_INSTANCE", "default");
     if (args.size() >= 2 && args[0] == "--instance") { id = args[1]; args.erase(args.begin(), args.begin() + 2); }
     if (args.empty()) return usage();
+    if (args[0] == "--version") { printf("version\t%s\nconverterAbi\t%d\ndataFormat\t%d\n", kVersion, kConverterAbi, kDataFormat); return 0; }
     Layout layout = Layout::detect();
+    migrateData(layout);
     Instance inst = Instance::open(layout, id);
     const std::string& cmd = args[0];
     size_t n = args.size();
@@ -53,6 +60,7 @@ int main(int argc, char** argv) {
         installApp(layout, inst, std::vector<std::string>(args.begin() + first, args.end()), downgrade, system);
         return 0;
     }
+    if (cmd == "reconvert" && n == 2) return reconvert(layout, inst, args[1]);
     if (cmd == "run" && n == 2) {
         std::string target = args[1];
         if (exists(target)) target = installApp(layout, inst, {target});
