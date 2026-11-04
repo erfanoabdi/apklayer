@@ -105,7 +105,7 @@ State: 1-5 and 9 done (2026-11-04; v0.1.0 tagged 2026-11-04 with prebuilts-v0.1.
 Flatpak; the per-app sandbox below; COMMERCIAL.md terms and contact, a CLA and ownership of agent-written commits, NOTICE files for everything shipped.
 
 ## Plan: one build instead of tools/* (decided 2026-11-04 by the owner, after the current round)
-Also in that round: AppHost.java is 646 lines (rule: ~600): move the task stack (stack, stopped, launch/launchNow/launchStarted, destroyTop, followNavigation, the result maps) into its own class, AppHost keeping the run loop and window state.
+Done 2026-11-04: AppHost split (the task stack in ActivityTask.java; AppHost 407 lines).
 `tools/build` (217 lines of shell) hand-rolls javac/jar, zips the JNI shim into the framework jars, patches bionic_translation for old compilers with shell `if`s and stages a "native dir" with copies and symlinks; it caused today's stale shims, half-updated runtimes, the host-classes.stamp in tests/run and the per-user first-start instrumentation. Replace it with Meson end to end (`meson setup b && ninja -C b && meson install`, one layout for development, the deb and CI):
 1. bionic_translation as a Meson subproject at its pinned revision, our patch series applied by Meson; the compat patches as build conditions.
 2. Host classes, the Robolectric overlay and JdkPatch as Meson `jar()` targets with declared classpaths (exact rebuilds: no stamp files).
