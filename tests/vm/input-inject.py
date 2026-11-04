@@ -28,6 +28,7 @@ def saw(text):
 
 
 instance.stop()
+subprocess.run(['bin/apklayer', 'ime', 'disable', 'hello.system'], env=ENV, stdout=subprocess.DEVNULL)  # an ime-bind run that failed may leave it on
 app = subprocess.Popen(['bin/apklayer', 'run', PKG], env=ENV, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
 try:
     selector = selectors.DefaultSelector()
@@ -36,7 +37,8 @@ try:
     pending = b''
     with open(instance.OUT / 'input-inject.log', 'wb') as log:
         while True:
-            assert selector.select(5) and time.monotonic() < end, 'input test stalled'
+            # the hub's start is silent and takes 2 to 6 s on a loaded VM; once the app's packages are registered, 5 s of silence is a stall
+            assert selector.select(5 if any('packages registered' in l for l in seen) else 15) and time.monotonic() < end, 'input test stalled'
             data = os.read(app.stdout.fileno(), 65536)
             if not data: break
             log.write(data)
