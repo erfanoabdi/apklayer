@@ -23,7 +23,7 @@
 #define MANAGER "/SensorManager"
 
 /* the daemon's sample structs (sensorfw datatypes/genericdata.h, orientationdata.h): a 64-bit timestamp, then the values */
-struct timed_xyz { uint64_t timestamp; int32_t x, y, z; };                     /* TimedXyzData */
+struct timed_xyz { uint64_t timestamp; float x, y, z; };  /* TimedXyzData: float since upstream changed it (int in old releases) */
 struct timed_unsigned { uint64_t timestamp; uint32_t value; };                 /* TimedUnsigned */
 struct proximity_data { uint64_t timestamp; uint32_t value; uint8_t within; }; /* ProximityData */
 struct magnetic_data { uint64_t timestamp; int32_t x, y, z, rx, ry, rz, level; };  /* CalibratedMagneticFieldData */
@@ -138,7 +138,7 @@ static void add(const struct plugin *p)
     char path[96];
     snprintf(path, sizeof path, MANAGER "/%s", p->name);
     struct sensor *s = &sensors[n_sensors];
-    *s = (struct sensor){p, {p->type, "", "sensorfw", 0, 0, 0.1f, 200000, p->kind >= UNSIGNED}, session, -1, {0}};
+    *s = (struct sensor){p, {p->type, "", "sensorfw", 0, 0, 0.1f, 200000, p->type == APKLAYER_SENSOR_LIGHT || p->kind == PROXIMITY}, session, -1, {0}};
     snprintf(s->info.name, sizeof s->info.name, "sensorfw %s", p->name);
     double min = 0, max = 0, resolution = 0, fastest = 0;
     if ((r = call(path, p->iface, "getCurrentDataRange", NULL, "((ddd))"))) { g_variant_get(r, "((ddd))", &min, &max, &resolution); g_variant_unref(r); }

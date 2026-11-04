@@ -11,3 +11,5 @@ if dependency('gio-2.0', required: false).found()  # the D-Bus daemons' backends
                    install: true, install_dir: native_dir)
   endforeach
 endif
+# a sensors or vibrator backend on its own, for a device check without Android (tests/hals/backend-probe.c); not installed
+executable('backend-probe', '../../../tests/hals/backend-probe.c', dependencies: meson.get_compiler('c').find_library('dl', required: false))

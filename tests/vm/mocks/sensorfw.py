@@ -19,8 +19,8 @@ RANGES = {'accelerometersensor': (0.0, 8000.0, 1.0), 'alssensor': (0.0, 65535.0,
 
 def frame(session):
     now = int(time.monotonic() * 1e6)
-    if session == 1:  # TimedXyzData: timestamp, x, y, z (mG), padding
-        return struct.pack('<IQiii4x', 1, now, 500, 1000, -250)
+    if session == 1:  # TimedXyzData: timestamp, x, y, z (float, mG), padding
+        return struct.pack('<IQfff4x', 1, now, 500, 1000, -250)
     if session == 2:  # TimedUnsigned (lux)
         return struct.pack('<IQI4x', 1, now, 321)
     return struct.pack('<IQIB3x', 1, now, 0, 1)  # ProximityData: value, withinProximity
