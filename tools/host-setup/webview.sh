@@ -4,7 +4,7 @@
 # Chromium's renderer runs inside an app JVM (an isolated service process of the hub), where its seccomp-bpf sandbox cannot work: the filter applies to the whole
 # process and kills the JVM (SIGSYS) on its first syscall outside the renderer's allow-list. The sandbox is therefore switched off for the provider route
 # (user decision, 2026-10-27: "Disable the seccomp sandbox totally"); every app JVM shares one Linux uid anyway, so Chromium's sandbox could not be claimed.
-# WebView reads extra Chromium switches from /data/local/tmp/webview-command-line on a debuggable build (the runtime reports Build.TYPE userdebug on this route).
+# WebView reads extra Chromium switches from /data/local/tmp/webview-command-line on a debuggable build (the runtime reports Build.TYPE userdebug while the provider initialises, ShadowHostWebViewFactory.getProvider).
 set -euo pipefail
 sudo mkdir -p /data/local/tmp
 sudo chmod 1777 /data /data/local /data/local/tmp
