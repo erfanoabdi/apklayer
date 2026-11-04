@@ -148,3 +148,27 @@ char *mkdtemp(char *path) {
     if (m_alloc) { size_t lp = strlen(path), lm = strlen(m); if (lp >= 6 && lm >= 6) memcpy(path + lp - 6, m + lm - 6, 6); free(m); }
     return r ? path : NULL;
 }
+
+/* Raw syscall() with a path: a native bridge's kernel emulation (Berberis) runs a guest's stat, access, readlink ... as the host syscall, so a
+ * translated library's Android paths (its linker's /system/etc/ld.config.arm64.txt) reach the path layer only here. The *at forms with an
+ * absolute path; the argument stays the caller's for any other number. */
+#include <sys/syscall.h>
+long syscall(long nr, ...)
+{
+    va_list ap;
+    va_start(ap, nr);
+    long a[6];
+    for (int i = 0; i < 6; i++) a[i] = va_arg(ap, long);
+    va_end(ap);
+    int at = nr == SYS_openat || nr == SYS_newfstatat || nr == SYS_faccessat || nr == SYS_readlinkat || nr == SYS_statx
+#ifdef SYS_faccessat2
+             || nr == SYS_faccessat2
+#endif
+             ;
+    const char *path = at ? (const char *)a[1] : NULL;
+    MAP(m, path && path[0] == '/' ? path : NULL);
+    if (m) a[1] = (long)m;
+    long r = ((long (*)(long, ...))REAL(syscall))(nr, a[0], a[1], a[2], a[3], a[4], a[5]);
+    DONE(m);
+    return r;
+}
