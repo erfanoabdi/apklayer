@@ -23,15 +23,17 @@ final class RecordCheck {
         return first * first + second * second - coefficient * first * second;
     }
 
-    static void run() throws Exception {
+    static void run() throws Exception { run(AudioAttributes.USAGE_MEDIA, MediaRecorder.AudioSource.MIC, "RECORD"); }
+
+    static void run(int usage, int source, String tag) throws Exception {
         final int rate = 48000, seconds = 4;
         AudioTrack track = new AudioTrack.Builder()
-                .setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build())
+                .setAudioAttributes(new AudioAttributes.Builder().setUsage(usage).build())
                 .setAudioFormat(new AudioFormat.Builder().setSampleRate(rate).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
                         .setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
                 .setBufferSizeInBytes(rate).setTransferMode(AudioTrack.MODE_STREAM).build();
         AudioRecord record = new AudioRecord.Builder()
-                .setAudioSource(MediaRecorder.AudioSource.MIC)
+                .setAudioSource(source)
                 .setAudioFormat(new AudioFormat.Builder().setSampleRate(rate).setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
                         .setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
                 .setBufferSizeInBytes(rate * 4).build();
@@ -72,13 +74,13 @@ final class RecordCheck {
             int skip = rate / 2, count = total - skip;
             short[] l = java.util.Arrays.copyOfRange(left, skip, total), r = java.util.Arrays.copyOfRange(right, skip, total);
             double l440 = power(l, count, 440, rate), l880 = power(l, count, 880, rate), r880 = power(r, count, 880, rate), r440 = power(r, count, 440, rate);
-            System.out.println("[hello-native-audio] RECORD read " + total + " frames in " + String.format("%.2f", wall) + " s, left 440/880 = "
+            System.out.println("[hello-native-audio] " + tag + " read " + total + " frames in " + String.format("%.2f", wall) + " s, left 440/880 = "
                     + (long) (l440 / Math.max(l880, 1)) + ", right 880/440 = " + (long) (r880 / Math.max(r440, 1)));
             require(wall > 2.0 && wall < 3.6, "recording 2.5 s took " + wall + " s");
             require(l440 > l880 * 50, "left tone lost/swapped");
             require(r880 > r440 * 50, "right tone lost/swapped");
             record.stop();
-            System.out.println("[hello-native-audio] RECORD PASS");
+            System.out.println("[hello-native-audio] " + tag + " PASS");
         } finally {
             record.release();
             track.stop();
