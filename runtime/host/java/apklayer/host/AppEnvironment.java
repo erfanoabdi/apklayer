@@ -198,7 +198,7 @@ final class AppEnvironment {
             if (providers == null) return;
             java.util.Arrays.sort(providers, java.util.Comparator.comparingInt((android.content.pm.ProviderInfo p) -> p.initOrder).reversed());
             for (android.content.pm.ProviderInfo info : providers) {
-                if (process != null && !info.multiprocess && !process.equals(info.processName)) continue;
+                if (process != null && !info.multiprocess && !process.equals(info.processName)) continue;  // shortcut: an isolated process gets multiprocess providers too (Android: none); upgrade when one breaks there
                 try {
                     Robolectric.buildContentProvider(Class.forName(info.name).asSubclass(android.content.ContentProvider.class)).create(info);
                 } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {

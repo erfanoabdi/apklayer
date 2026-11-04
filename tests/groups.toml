@@ -95,7 +95,7 @@ run = ["python3 -u tests/vm/broadcasts.py manifest", "python3 -u tests/vm/broadc
 
 [webview]
 apps = ["hello-wvprobe"]
-needs = ["com.android.webview"]
+needs = ["com.android.webview"]  # tools/host-setup/webview.sh <the provider APK>, in the data home the runner uses
 run = ["python3 -u tests/vm/hub.py webview probe"]
 
 [splash]
