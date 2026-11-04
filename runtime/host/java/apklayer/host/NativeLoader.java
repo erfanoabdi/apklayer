@@ -139,6 +139,9 @@ public final class NativeLoader {
         // only Android (bionic) libraries: apklayer's native dir holds glibc ones, which bionic_translation's dlopen leaves to glibc (LD_LIBRARY_PATH) when they are not here
         systemPath = (provider == null ? "" : provider + "/lib") + (androidLibs != null ? (provider == null ? "" : ":") + androidLibs : "");
         setLibraryPath(systemPath, appPath); // the WebView provider's libs, then Android's
+        // `apklayer stop` (SIGTERM) and System.exit end the JVM through exit() on its VM thread too: without this the app libraries' static destructors
+        // run there (OpenTTD's terminate()d, SIGSEGV in vm_exit); the hooks run before exit(), so the skip is still registered last
+        Runtime.getRuntime().addShutdownHook(new Thread(NativeLoader::endWithoutNativeDestructors, "apklayer-native-exit"));
         ready = true;
     }
 
