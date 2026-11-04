@@ -23,7 +23,9 @@ public final class HubHost {
         System.out.println("[apklayer-hub] READY pid=" + android.os.Process.myPid());
         directory.startSpare();  // the first component host starts warm
         new Thread(() -> HubBootSettings.write(RuntimeEnvironment.getApplication(), directory), "hub-boot-settings").start();  // the hub is the instance's system (uid 1000)
-        new Thread(() -> HubAudioPermissions.feed(directory.packages()), "hub-audio-permissions").start();
+        Thread audio = new Thread(() -> HubAudioPermissions.watch(directory.packages()), "hub-audio-permissions");
+        audio.setDaemon(true);
+        audio.start();
         String ready = System.getenv("APKLAYER_HUB_READY_FD");  // the launcher's pipe (cli runHub): it sets apklayer.hub.ready on this byte
         if (ready != null) {
             try (java.io.OutputStream out = new java.io.FileOutputStream("/proc/self/fd/" + ready)) { out.write('1'); }
