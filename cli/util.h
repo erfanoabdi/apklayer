@@ -42,6 +42,7 @@ struct Spawn {
     std::string logFile;           // stdout and stderr go here (appended); empty: inherit
     bool newSession = false;       // setsid(): the child leads its own process group
     bool detach = false;           // double fork: nobody waits for it
+    bool keepStdin = false;        // stdin stays (a spare component host reads its target there); /dev/null otherwise
 };
 
 // Starts a process; returns its pid (0 for a detached one). The caller owns waiting for it.

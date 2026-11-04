@@ -50,25 +50,8 @@ final class AppEnvironment {
         // Robolectric parses the manifest's providers only when it creates the application, after deciding on its fake: the install recorded them (AppMetadata).
         ownsMediaAuthority = apk != null && java.util.Arrays.asList(installProperty(apk, "authorities").split(";")).contains("media");
         System.setProperty("robolectric.installFakeMediaProvider", "false");  // not Robolectric's fake MediaStore: HostMediaStub until the hub hands out the real one
-        Config.Builder builder = new Config.Builder()
-                .setSdk(Integer.getInteger("apklayer.sdk", 36))
-                .setQualifiers(System.getProperty("apklayer.qualifiers", "w480dp-h800dp"));
-        // Install-time labels/icons need package resources, not the app's startup code.
-        if (describing) builder.setApplication(Application.class);
-        Config config = builder.build();
-        FixedConfiguration configuration = FixedConfiguration.newBuilder()
-                .put(ConscryptMode.Mode.class, ConscryptMode.Mode.OFF)
-                .put(LooperMode.Mode.class, LooperMode.Mode.PAUSED)
-                // Lazy: the package and its storage are set up first, so the data dirs can be
-                // made persistent before Application.onCreate runs (persistDataDirs).
-                .put(LazyApplication.LazyLoad.class, LazyApplication.LazyLoad.ON)
-                .put(GraphicsMode.Mode.class, GraphicsMode.Mode.NATIVE)
-                .put(SQLiteMode.Mode.class, SQLiteMode.Mode.NATIVE)
-                .put(ResourcesMode.Mode.class, ResourcesMode.Mode.NATIVE)
-                .put(Config.class, config)
-                .build();
         StartTrace.mark("manifest and config read");
-        sandbox.getTestEnvironment().setUpApplicationState("apklayer", configuration, manifest);
+        sandbox.getTestEnvironment().setUpApplicationState("apklayer", configuration(describing), manifest);
         StartTrace.mark("robolectric application state set up");
         HostClock.alignToMonotonic();  // after the clock's reset by the state setup
         HostProcessName.install(apk);  // before the Application is attached: Application.onCreate runs in every process, and apps check which one they are in
@@ -82,6 +65,36 @@ final class AppEnvironment {
         // before the application exists: the hub attaches in Application.onCreate's place (ShadowHostInstrumentation) and replaces it with the installed MediaProvider
         if (!ownsMediaAuthority) org.robolectric.shadows.ShadowContentResolver.registerProviderInternal("media", new HostMediaStub());
         HostKeyStore.install();  // apps open it in Application.onCreate (a call into keystore2 may create the lazy application: after its data dirs are persistent); needs the sandbox's shadows
+    }
+
+    /** The sandbox configuration of every apklayer process (the same for every package; an install's description runs no Application of the app). */
+    private static FixedConfiguration configuration(boolean describing) {
+        Config.Builder builder = new Config.Builder()
+                .setSdk(Integer.getInteger("apklayer.sdk", 36))
+                .setQualifiers(System.getProperty("apklayer.qualifiers", "w480dp-h800dp"));
+        // Install-time labels/icons need package resources, not the app's startup code.
+        if (describing) builder.setApplication(Application.class);
+        Config config = builder.build();
+        return FixedConfiguration.newBuilder()
+                .put(ConscryptMode.Mode.class, ConscryptMode.Mode.OFF)
+                .put(LooperMode.Mode.class, LooperMode.Mode.PAUSED)
+                // Lazy: the package and its storage are set up first, so the data dirs can be
+                // made persistent before Application.onCreate runs (persistDataDirs).
+                .put(LazyApplication.LazyLoad.class, LazyApplication.LazyLoad.ON)
+                .put(GraphicsMode.Mode.class, GraphicsMode.Mode.NATIVE)
+                .put(SQLiteMode.Mode.class, SQLiteMode.Mode.NATIVE)
+                .put(ResourcesMode.Mode.class, ResourcesMode.Mode.NATIVE)
+                .put(Config.class, config)
+                .build();
+    }
+
+    /**
+     * The native runtime (Robolectric's libandroid_runtime, fonts, hyphenation), which setUpApplicationState loads once per sandbox: a spare
+     * component host loads it ahead (ComponentSpare), as zygote preloads. Its shadow pickers read the configuration, set here as the state setup sets it.
+     */
+    static void loadNativeRuntime() {
+        org.robolectric.config.ConfigurationRegistry.instance = new org.robolectric.config.ConfigurationRegistry(configuration(false).map());
+        org.robolectric.nativeruntime.DefaultNativeRuntimeLoader.injectAndLoad();
     }
 
     /** A value of the install metadata next to the installed APK (info.properties, AppMetadata.describe); "" when there is none. */

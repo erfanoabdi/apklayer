@@ -34,6 +34,8 @@ final class HubDirectory extends Binder {
     private final Map<String, Process> appProcesses = new HashMap<>();
     private final Map<String, Process> hosts = new HashMap<>();
     private final Map<String, Integer> failures = new HashMap<>();
+    private final Path logs = Path.of(System.getenv().getOrDefault("APKLAYER_LOGS", System.getProperty("user.home") + "/.local/state/apklayer/default"));
+    private final HubSpare spare = new HubSpare(logs);
     private static final long IDLE_EXIT_MS = 10_000;
     private volatile boolean stopping;
     HubDirectory(Path apps) {
@@ -46,6 +48,7 @@ final class HubDirectory extends Binder {
         exitWhenIdle(60_000); // nobody ever connected
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             stopping = true;
+            spare.stop();
             synchronized (hosts) {
                 for (Process host : java.util.stream.Stream.concat(hosts.values().stream(), appProcesses.values().stream()).toList()) {
                     host.descendants().forEach(child -> child.destroyForcibly()); host.destroyForcibly();
@@ -72,6 +75,7 @@ final class HubDirectory extends Binder {
     }
     java.util.List<Peer> peersExcept(Peer one) { synchronized (peers) { return peers.values().stream().filter(peer -> peer != one).toList(); } }
     HubAccounts accounts() { return accounts; }
+    void startSpare() { if (!stopping) spare.start(); }
     HubProviders providers() { return providers; }
     HubPackages packages() { return packages; }
     HubInstaller installer() { return installer; }
@@ -150,16 +154,23 @@ final class HubDirectory extends Binder {
             Process old = hosts.get(name);
             if (old != null && old.isAlive()) return;
             try {
-                Path log = Path.of(System.getenv().getOrDefault("APKLAYER_LOGS", System.getProperty("user.home") + "/.local/state/apklayer/default"), "component-" + name.replace('#', '-') + ".log");
+                Path log = logs.resolve("component-" + name.replace('#', '-') + ".log");
                 Files.createDirectories(log.getParent());
-                ProcessBuilder command = new ProcessBuilder(System.getProperty("apklayer.cli"), "component-host", pkg)
-                        .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(log.toFile()));
-                if (instance != null) command.environment().put("APKLAYER_ISOLATED", instance);
-                Process process = command.start(); hosts.put(name, process);
-                System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " starting " + name + " launcherPid=" + process.pid());
+                Process process = spare.take(pkg, instance, log);  // the spare host becomes this one (its JVM and native runtime are up); a new spare follows
+                boolean warm = process != null;
+                if (!warm) {
+                    ProcessBuilder command = new ProcessBuilder(System.getProperty("apklayer.cli"), "component-host", pkg)
+                            .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(log.toFile()));
+                    if (instance != null) command.environment().put("APKLAYER_ISOLATED", instance);
+                    process = command.start();
+                }
+                spare.start();
+                hosts.put(name, process);
+                System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " starting " + name + (warm ? " (spare)" : "") + " launcherPid=" + process.pid() + " t=" + System.nanoTime() / 1_000_000);
+                Process started = process;
                 process.onExit().thenAccept(exited -> {
                     System.out.println("[apklayer-hub] host " + name + " exited with " + exited.exitValue());
-                    synchronized (hosts) { hosts.remove(name, process); }
+                    synchronized (hosts) { hosts.remove(name, started); }
                     if (!stopping && peer(name) == null && bindings.needsHost(name)) {
                         int failed;
                         synchronized (failures) { failed = failures.merge(name, 1, Integer::sum); }
@@ -197,7 +208,7 @@ final class HubDirectory extends Binder {
                     endpoint.linkToDeath(() -> remove(peer), 0);
                     peers.put(pid, peer);
                 }
-                System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " registered " + name + " pid=" + pid + " uid=" + uid);
+                System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " registered " + name + " pid=" + pid + " uid=" + uid + " t=" + System.nanoTime() / 1_000_000);
                 synchronized (failures) { failures.remove(name); }
                 bindings.registered(peer);
                 broadcasts.registered(peer);

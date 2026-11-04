@@ -10,7 +10,6 @@ import org.robolectric.shadows.ShadowProcess;
 public class ShadowHostProcess extends ShadowProcess {
     private static final int PID = (int) ProcessHandle.current().pid();
     private static final int REAL_UID = realUid();
-    private static final int UID = Integer.getInteger("apklayer.uid", REAL_UID); // the package's Android app uid (bin/apklayer), the desktop user's uid without one
 
     static int realUidValue() { return REAL_UID; }
 
@@ -19,5 +18,6 @@ public class ShadowHostProcess extends ShadowProcess {
     }
 
     @Implementation protected static int myPid() { return PID; }
-    @Implementation protected static int myUid() { return UID; }
+    // the package's Android app uid (bin/apklayer), the desktop user's uid without one; read per call: a spare component host learns it late (ComponentSpare)
+    @Implementation protected static int myUid() { return Integer.getInteger("apklayer.uid", REAL_UID); }
 }

@@ -28,10 +28,29 @@ bool webviewSandboxOff(const Instance& inst) {
 }
 }  // namespace
 
-int runApp(const Layout& l, const Instance& inst, const std::string& package, RunMode mode) {
+// The JVM options that make a host JVM this package's process (its data, uid, library dir), then its APK and classes jar: an app launch and a component
+// host start with them; a spare component host takes them when the hub hands it its target (`apklayer component-host --args <package>`).
+std::vector<std::string> packageJvmArgs(const Layout& l, const Instance& inst, const std::string& package) {
     std::string dir = appDir(l, package);
     if (!exists(join(dir, "info.properties"))) die("not installed: " + package + " (apklayer install <app.apk>)");
     ensureUid(l, dir);
+    std::vector<std::string> a = {"-Dapklayer.data=" + appDataDir(l, inst, package), "-Dapklayer.package=" + package, "-Dapklayer.uid=" + property(join(dir, "info.properties"), "uid"),
+                                  "-Dapklayer.libdir=" + join(dir, "lib")};
+    if (!getenvOr("APKLAYER_ISOLATED", "").empty()) a.push_back("-Dapklayer.isolated=" + getenvOr("APKLAYER_ISOLATED", ""));
+    a.push_back(join(dir, "base.apk"));
+    a.push_back(join(dir, "classes.jar"));
+    return a;
+}
+
+int printPackageArgs(const Layout& l, const Instance& inst, const std::string& package) {
+    for (const std::string& a : packageJvmArgs(l, inst, package)) printf("%s\n", a.c_str());
+    return 0;
+}
+
+int runApp(const Layout& l, const Instance& inst, const std::string& package, RunMode mode) {
+    std::vector<std::string> own = mode == RunMode::Spare ? std::vector<std::string>() : packageJvmArgs(l, inst, package);
+    auto files = own.end() - (own.empty() ? 0 : 2);  // the APK and classes jar: Main's arguments
+    std::string dir = mode == RunMode::Spare ? l.appsDir : appDir(l, package);
     // the Chromium WebView provider is the default WebView once installed and tools/host-setup/webview.sh ran; APKLAYER_WEBVIEW_PROVIDER=none disables it
     std::string provider = getenvOr("APKLAYER_WEBVIEW_PROVIDER", "\x01");
     if (provider == "\x01") provider = exists(join(l.appsDir, "com.android.webview/classes.jar")) && webviewSandboxOff(inst) ? "com.android.webview" : "";
@@ -39,7 +58,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     if (!provider.empty() && !webviewSandboxOff(inst))
         die("the WebView provider route needs tools/host-setup/webview.sh once (Chromium's seccomp sandbox cannot run inside an app JVM and is switched off; needs sudo)");
 
-    trace("run " + package);
+    trace("run " + (mode == RunMode::Spare ? std::string("spare component host") : package));
     NativeEnv ne = nativeEnv(l, inst);
     if (!ensureStack(l, inst)) return 1;
     trace("stack ready");
@@ -72,24 +91,24 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         jvm.push_back("-Dapklayer.displaywindow=" + title);
     }
     ne.env["LD_LIBRARY_PATH"] = l.native + ":" + join(l.native, "glibc") + ":" + ne.env["LD_LIBRARY_PATH"];  // bionic linker + its libs
-    for (const std::string& o : {"-Dapklayer.data=" + appDataDir(l, inst, package), "-Dapklayer.package=" + package, "-Dapklayer.uid=" + property(join(dir, "info.properties"), "uid"),
-                                 "-Dapklayer.libdir=" + join(dir, "lib"), "-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary()})
-        jvm.push_back(o);
+    jvm.insert(jvm.end(), own.begin(), files);
+    jvm.push_back("-Dapklayer.apps=" + l.appsDir);
+    jvm.push_back("-Dapklayer.cli=" + l.cliBinary());
     if (!provider.empty()) jvm.push_back("-Dapklayer.webviewprovider=" + join(l.appsDir, provider));  // its classes get a loader of their own (ShadowHostWebViewFactory)
-    if (!getenvOr("APKLAYER_ISOLATED", "").empty()) jvm.push_back("-Dapklayer.isolated=" + getenvOr("APKLAYER_ISOLATED", ""));
     if (!getenvOr("APKLAYER_LOGCAT", "").empty()) jvm.push_back("-Dapklayer.logcat=true");
     for (const std::string& o : split(getenvOr("APKLAYER_JOPTS", ""), ' ')) if (!o.empty()) jvm.push_back(o);
     jvm.insert(jvm.end(), {"-cp", hostClasspath(l), "apklayer.host.Main"});
     if (mode == RunMode::Component) jvm.push_back("--component-host");
-    jvm.push_back(join(dir, "base.apk"));
-    jvm.push_back(join(dir, "classes.jar"));
+    if (mode == RunMode::Spare) jvm.push_back("--component-spare");  // prepares what every package shares, then waits for its target (ComponentSpare)
+    jvm.insert(jvm.end(), files, own.end());
 
     Spawn app;
     app.argv = jvm;
     app.env = ne.env;
-    if (mode == RunMode::Component) app.env["APKLAYER_COMPONENT_HOST"] = "1";
+    if (mode != RunMode::App) app.env["APKLAYER_COMPONENT_HOST"] = "1";
     app.cwd = dir;
-    if (mode == RunMode::Component) {
+    app.keepStdin = mode == RunMode::Spare;
+    if (mode != RunMode::App) {
         // a service host has no window sink to clean up: become the JVM, so the launcher dies exactly when the host does (the hub restarts
         // a killed host as soon as its launcher is gone)
         writeFile(join(inst.stateDir, "run." + std::to_string(self)), std::to_string(self) + "\n");

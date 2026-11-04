@@ -15,13 +15,22 @@ public final class ComponentHost implements Runnable {
     private final AndroidSandbox sandbox;
     private final Path apk;
     public ComponentHost(AndroidSandbox sandbox, Path apk, Path ignored) { this.sandbox = sandbox; this.apk = apk; }
+    /** What a spare component host does before it knows its package (ComponentSpare). */
+    public static void prepare() {
+        AppEnvironment.loadNativeRuntime();
+    }
     @Override public void run() {
         Thread.currentThread().setContextClassLoader(AppClassLoader.app != null ? AppClassLoader.app : sandbox.getRobolectricClassLoader());  // the app's own loader, as on Android
+        StartTrace.mark("componenthost run");
         AppEnvironment.setUpApplication(sandbox, apk, false);
+        StartTrace.mark("application set up");
         Application app = RuntimeEnvironment.getApplication();
+        StartTrace.mark("application created (onCreate done)");
         AppEnvironment.startRuntime(app);
+        StartTrace.mark("runtime started");
         AppEnvironment.installSystemPackage(app);
         HubClient client = HubClient.attach(app);
+        StartTrace.mark("hub attached");
         System.out.println("[apklayer] component-host READY " + app.getPackageName() + " pid=" + android.os.Process.myPid());
         ShadowPausedLooper looper = Shadow.extract(Looper.getMainLooper());
         while (client.alive() && !stopping) step(looper);
