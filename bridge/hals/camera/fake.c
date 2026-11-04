@@ -1,7 +1,7 @@
 /* The fake camera backend (libapklayer-camera-fake.so): deterministic frames for tests and for apps that need a camera to start.
  * Options: source=pattern (default: 100% colour bars over the top three quarters, a white square moving across black below) or the path
  * of a still image or a video file (decoded by GStreamer, fake-file.c, looped); cameras=back,front (the facings, one camera each);
- * fps=30. Frames are I420 at the size the provider asks for. */
+ * sizes=WxH,... (the sizes it streams; default 320x240,640x480,1280x720,1920x1080); fps=30. Frames are I420 at the size the provider asks for. */
 #include "apklayer/camera.h"
 #include "fake.h"
 
@@ -15,6 +15,8 @@
 static char source[1024] = "pattern";
 static int facings[2] = {APKLAYER_CAM_BACK, APKLAYER_CAM_FRONT}, n_facings = 2;
 static int max_fps = 30;
+static uint32_t sizes[APKLAYER_CAMERA_MAX_SIZES][2] = {{320, 240}, {640, 480}, {1280, 720}, {1920, 1080}};
+static int n_sizes = 4;
 
 /* BT.601 limited-range Y, U, V of the bars: white, yellow, cyan, green, magenta, red, blue, black (tests/apps/hello-camera checks them) */
 static const uint8_t bars[8][3] = {
@@ -42,6 +44,15 @@ int apklayer_camera_init(int count, const char *const *options)
         size_t key = eq - options[i];
         const char *v = eq + 1;
         if (key == 6 && !strncmp(options[i], "source", 6)) snprintf(source, sizeof source, "%s", v);
+        else if (key == 5 && !strncmp(options[i], "sizes", 5)) {  /* WxH,WxH...: the sizes the camera streams (a real camera's list) */
+            n_sizes = 0;
+            for (const char *p = v; *p && n_sizes < APKLAYER_CAMERA_MAX_SIZES; p += strcspn(p, ",") + (p[strcspn(p, ",")] == ',')) {
+                unsigned w, h;
+                if (sscanf(p, "%ux%u", &w, &h) != 2 || w < 16 || h < 16 || (w | h) & 1) return -EINVAL;
+                sizes[n_sizes][0] = w, sizes[n_sizes++][1] = h;
+            }
+            if (!n_sizes) return -EINVAL;
+        }
         else if (key == 3 && !strncmp(options[i], "fps", 3)) { max_fps = atoi(v); if (max_fps < 1 || max_fps > 120) return -EINVAL; }
         else if (key == 7 && !strncmp(options[i], "cameras", 7)) {
             n_facings = 0;
@@ -61,7 +72,6 @@ int apklayer_camera_init(int count, const char *const *options)
 
 int apklayer_camera_list(struct apklayer_camera_info *out, int max)
 {
-    static const uint32_t sizes[][2] = {{320, 240}, {640, 480}, {1280, 720}, {1920, 1080}};
     int n = 0;
     for (int i = 0; i < n_facings && n < max; i++, n++) {
         struct apklayer_camera_info *c = &out[n];
@@ -72,8 +82,8 @@ int apklayer_camera_list(struct apklayer_camera_info *out, int max)
         c->facing = facings[i];
         c->orientation = back ? 90 : 270;  /* a phone's: the sensor's long side along the device's short side */
         c->max_fps = max_fps;
-        c->num_sizes = sizeof sizes / sizeof *sizes;
-        memcpy(c->sizes, sizes, sizeof sizes);
+        c->num_sizes = n_sizes;
+        memcpy(c->sizes, sizes, sizeof c->sizes);
     }
     return n;
 }
