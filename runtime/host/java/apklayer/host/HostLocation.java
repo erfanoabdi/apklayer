@@ -42,17 +42,34 @@ final class HostLocation {
         shadow.setProviderEnabled(LocationManager.NETWORK_PROVIDER, network);
         if (!manager.isLocationEnabled()) return;  // the host has no location service
         if (network) follow(shadow, LocationManager.NETWORK_PROVIDER, HostProcess.dying("python3", script("geoclue.py")));
-        // the GNSS HAL (providers.toml) through the hub's one client of it (HubGnss), whose pipe speaks the same lines; Robolectric's LocationManager
-        // stays the framework side (no LocationManagerService/GnssLocationProvider in the hub), fed with the HAL's fixes.
-        // shortcut: the app follows the fixes from its start, not only while it has a gps request (Robolectric's request bookkeeping is private): the
-        // HAL runs while any app with ACCESS_FINE_LOCATION runs; a LocationManager shadow tracking requests would end it between them
-        if (gps) {
-            android.os.ParcelFileDescriptor fixes;
-            try { fixes = HubClient.current().gnss(); }
-            catch (RuntimeException none) { System.out.println("[apklayer] location: gps: " + none.getMessage()); return; }  // no permission or no hub: the provider stays, without fixes
-            follow(shadow, LocationManager.GPS_PROVIDER, new android.os.ParcelFileDescriptor.AutoCloseInputStream(fixes), () -> { try { fixes.close(); } catch (IOException ignored) { } });
-        }
+        // the GNSS HAL (providers.toml) through the hub's one client of it (HubGnss), whose pipe speaks the same lines, while this app has a gps
+        // request (LocationRequests, robolectric 0018); Robolectric's LocationManager stays the framework side (no LocationManagerService or
+        // GnssLocationProvider in the hub), fed with the HAL's fixes
+        if (gps) org.robolectric.shadows.LocationRequests.listener = (provider, active) -> {
+            if (LocationManager.GPS_PROVIDER.equals(provider)) GPS.execute(() -> gps(shadow, active));  // the listener runs under the provider's lock
+        };
     }
+
+    private static final java.util.concurrent.ExecutorService GPS = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "apklayer-location-gps-requests");
+        t.setDaemon(true);
+        return t;
+    });
+    private static android.os.ParcelFileDescriptor gpsFixes;  // the hub's pipe while a gps request is active (the GPS thread only)
+
+    private static void gps(ShadowLocationManager shadow, boolean active) {
+        if (!active || gpsFixes != null) {
+            if (!active && gpsFixes != null) { closeQuietly(gpsFixes); gpsFixes = null; }  // the hub drops the follower, the client with the last one
+            return;
+        }
+        android.os.ParcelFileDescriptor fixes;
+        try { fixes = HubClient.current().gnss(); }
+        catch (RuntimeException none) { System.out.println("[apklayer] location: gps: " + none.getMessage()); return; }  // no permission or no hub: no fixes
+        gpsFixes = fixes;
+        follow(shadow, LocationManager.GPS_PROVIDER, new android.os.ParcelFileDescriptor.AutoCloseInputStream(fixes), () -> closeQuietly(fixes));
+    }
+
+    private static void closeQuietly(android.os.ParcelFileDescriptor fd) { try { fd.close(); } catch (IOException ignored) { } }
 
     /** Whether this stack declares the GNSS HAL (cli/stack.cpp stages its manifest when providers.toml configures it). */
     static boolean gnssDeclared() {
