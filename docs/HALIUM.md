@@ -69,7 +69,8 @@ Consequences:
   `/system/lib/libc.so`. Our binaries need GLIBC_2.38: Sailfish (2.30) needs its own build.
 - The instance `dev` uses binderfs nodes `binder-dev`, `hwbinder-dev`, `vndbinder-dev` (made with sudo, 0666; gone at reboot).
 - Results: the instance's own servicemanager does not have the vibrator; through the host context the Android 12 device's
-  `IVibrator/default` is found, `getCapabilities` answers, and `on(50 ms, null callback)` succeeds once our binder stability goes as a
-  Category (with the plain Android 14+ word the A12 HAL refused the parcel with BAD_TYPE).
+  `IVibrator/default` is found, `getCapabilities` answers (0: no optional capabilities), and `on(50 ms, null callback)` succeeds once
+  our binder stability goes as a Category (with the plain Android 14+ word the A12 HAL refused the parcel with BAD_TYPE). Run with the
+  libbinder and servicetool built in ~/los24 (sha1 217d29ae... and c1018ac3...); the script is `~/apklayer-dev/ut-vibrator.py` there.
 - Not yet: an app (JVM) on the phone: the window shell needs `android_wlegl` (no dmabuf there) and a JDK in the user's directory;
   the Java path is the same native lookup (ShadowHostServiceManager -> AServiceManager_checkService).
