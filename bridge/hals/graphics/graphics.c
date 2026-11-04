@@ -12,15 +12,51 @@
 #include <sys/mman.h>
 #include <string.h>
 #include <unistd.h>
+#include <xf86drm.h>
 
 struct apklayer_gfx {
     int fd;
     struct gbm_device *gbm;
+    bool other_gpu;  /* not the compositor's GPU: window buffers must be importable there */
 };
 
 static int open_node(const char *path)
 {
     return open(path, O_RDWR | O_CLOEXEC);
+}
+
+/* Whether fd and the node at path belong to different DRM devices (any node of a device: primary or render). */
+static bool other_device(int fd, const char *path)
+{
+    int other = path ? open_node(path) : -1;
+    drmDevicePtr a = NULL, b = NULL;
+    bool differ = other >= 0 && drmGetDevice2(fd, 0, &a) == 0 && drmGetDevice2(other, 0, &b) == 0 && !drmDevicesEqual(a, b);
+    drmFreeDevice(&a);
+    drmFreeDevice(&b);
+    if (other >= 0) close(other);
+    return differ;
+}
+
+/* A device without a GPU driver (vgem; Mesa drives it with kms_swrast and renders with llvmpipe) allocates dumb buffers, which its
+ * render node refuses: such a device is used through its primary node. */
+static struct gbm_device *create_device(int *fd)
+{
+    struct gbm_device *gbm = gbm_create_device(*fd);
+    struct gbm_bo *probe = gbm ? gbm_bo_create(gbm, 1, 1, GBM_FORMAT_ARGB8888, GBM_BO_USE_RENDERING) : NULL;
+    if (probe || !gbm) { if (probe) gbm_bo_destroy(probe); return gbm; }
+    drmDevicePtr dev = NULL;
+    int primary = -1;
+    if (drmGetDevice2(*fd, 0, &dev) == 0 && (dev->available_nodes & (1 << DRM_NODE_PRIMARY)) && drmGetNodeTypeFromFd(*fd) == DRM_NODE_RENDER)
+        primary = open_node(dev->nodes[DRM_NODE_PRIMARY]);
+    drmFreeDevice(&dev);
+    if (primary < 0) return gbm;
+    struct gbm_device *other = gbm_create_device(primary);
+    if (!other) { close(primary); return gbm; }
+    fprintf(stderr, "apklayer-gfx: the render node allocates no buffers: using the device's primary node\n");
+    gbm_device_destroy(gbm);
+    close(*fd);
+    *fd = primary;
+    return other;
 }
 
 struct apklayer_gfx *apklayer_gfx_open(const char *render_node)
@@ -39,9 +75,10 @@ struct apklayer_gfx *apklayer_gfx_open(const char *render_node)
     if (fd < 0) return NULL;
     struct apklayer_gfx *gfx = calloc(1, sizeof *gfx);
     if (!gfx) { close(fd); errno = ENOMEM; return NULL; }
+    gfx->gbm = create_device(&fd);
     gfx->fd = fd;
-    gfx->gbm = gbm_create_device(fd);
     if (!gfx->gbm) { close(fd); free(gfx); errno = ENODEV; return NULL; }
+    gfx->other_gpu = other_device(fd, getenv("APKLAYER_COMPOSITOR_NODE"));  /* set by the CLI from the compositor's dmabuf feedback */
     return gfx;
 }
 
@@ -55,12 +92,14 @@ void apklayer_gfx_close(struct apklayer_gfx *gfx)
 
 struct gbm_device *apklayer_gfx_gbm_device(struct apklayer_gfx *gfx) { return gfx->gbm; }
 
-static uint32_t gbm_flags(uint32_t usage)
+static uint32_t gbm_flags(struct apklayer_gfx *gfx, uint32_t usage)
 {
     uint32_t f = 0;
     /* APKLAYER_GFX_SAMPLE needs no flag: GBM has no texturing bit, any allocated buffer can be imported as a texture */
     if (usage & APKLAYER_GFX_RENDER) f |= GBM_BO_USE_RENDERING;
-    if (usage & APKLAYER_GFX_SCANOUT) f |= GBM_BO_USE_SCANOUT;
+    /* shortcut: window buffers rendered on another GPU are LINEAR (what every compositor GPU imports; its GPU scans out); a modifier
+     * both share (the compositor's dmabuf feedback tranches against this device's) would keep tiling: worth it for dGPU frame times */
+    if (usage & APKLAYER_GFX_SCANOUT) f |= gfx->other_gpu ? GBM_BO_USE_LINEAR : GBM_BO_USE_SCANOUT;
     if (usage & (APKLAYER_GFX_CPU_READ | APKLAYER_GFX_CPU_WRITE)) f |= GBM_BO_USE_LINEAR; /* the CPU needs a linear layout */
     return f;
 }
@@ -88,13 +127,13 @@ static const struct pack_spec *find_pack(uint32_t fourcc)
 
 bool apklayer_gfx_supports(struct apklayer_gfx *gfx, uint32_t fourcc, uint32_t usage)
 {
-    if (gbm_device_is_format_supported(gfx->gbm, fourcc, gbm_flags(usage)) != 0) return true;
+    if (gbm_device_is_format_supported(gfx->gbm, fourcc, gbm_flags(gfx, usage)) != 0) return true;
     const struct pack_spec *sp = find_pack(fourcc);
     if (!sp) return false;
     for (int p = 0; p < sp->planes; p++) {
         uint32_t fmt = !p || sp->plane[p].stride_div == 2 ? sp->base :
             sp->base == DRM_FORMAT_R16 ? DRM_FORMAT_GR1616 : DRM_FORMAT_GR88;
-        if (!gbm_device_is_format_supported(gfx->gbm, fmt, gbm_flags(usage) | GBM_BO_USE_LINEAR)) return false;
+        if (!gbm_device_is_format_supported(gfx->gbm, fmt, gbm_flags(gfx, usage) | GBM_BO_USE_LINEAR)) return false;
     }
     return true;
 }
@@ -127,7 +166,7 @@ static int alloc_packed(struct apklayer_gfx *gfx, struct apklayer_gfx_buffer *ou
     for (int p = 0; p < sp->planes; p++) {
         uint32_t width = out->width / (p ? 2 : 1);
         uint32_t height = out->height * sp->plane[p].num / sp->plane[p].den;
-        struct gbm_bo *bo = gbm_bo_create(gfx->gbm, width, height, plane_format(sp, p), gbm_flags(usage) | GBM_BO_USE_LINEAR);
+        struct gbm_bo *bo = gbm_bo_create(gfx->gbm, width, height, plane_format(sp, p), gbm_flags(gfx, usage) | GBM_BO_USE_LINEAR);
         if (!bo) return errno ? -errno : -ENOMEM;
         out->fd[p] = gbm_bo_get_fd(bo);
         out->stride[p] = gbm_bo_get_stride(bo);
@@ -145,9 +184,9 @@ int apklayer_gfx_alloc(struct apklayer_gfx *gfx, uint32_t width, uint32_t height
     if (!apklayer_gfx_supports(gfx, fourcc, usage)) return -ENOTSUP;
     buffer_init(out, width, height, fourcc);
     int r = 0;
-    if (gbm_device_is_format_supported(gfx->gbm, fourcc, gbm_flags(usage))) {
-        struct gbm_bo *bo = gbm_bo_create(gfx->gbm, width, height, fourcc, gbm_flags(usage));
-        if (!bo) { fprintf(stderr, "apklayer-gfx: gbm_bo_create %ux%u fourcc 0x%x flags 0x%x failed: %s\n", width, height, fourcc, gbm_flags(usage), strerror(errno)); return errno ? -errno : -ENOMEM; }
+    if (gbm_device_is_format_supported(gfx->gbm, fourcc, gbm_flags(gfx, usage))) {
+        struct gbm_bo *bo = gbm_bo_create(gfx->gbm, width, height, fourcc, gbm_flags(gfx, usage));
+        if (!bo) { fprintf(stderr, "apklayer-gfx: gbm_bo_create %ux%u fourcc 0x%x flags 0x%x failed: %s\n", width, height, fourcc, gbm_flags(gfx, usage), strerror(errno)); return errno ? -errno : -ENOMEM; }
         out->modifier = gbm_bo_get_modifier(bo);
         out->num_planes = gbm_bo_get_plane_count(bo);
         r = out->num_planes < 1 || out->num_planes > APKLAYER_GFX_MAX_PLANES ? -ENOTSUP : 0;

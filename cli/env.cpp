@@ -1,5 +1,7 @@
 #include "env.h"
 
+#include "gpus.h"
+
 #include <glob.h>
 #include <sys/stat.h>
 
@@ -99,9 +101,19 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     }
     env["APKLAYER_HOST_LIBS"] = libs;
     result.java = findJava(layout);
+    // the instance's GPU (cli/gpus.cpp): the graphics HAL's GBM device and with it EGL's (Egl.cpp), Vulkan's device (vulkan/Driver.cpp),
+    // the codecs' VA device (bridge/hals/media); the compositor's node tells the HAL when window buffers cross GPUs (graphics.c)
+    std::vector<Gpu> gpus = listGpus(layout);
+    if (const Gpu* gpu = instanceGpu(gpus, instance)) {
+        env["APKLAYER_RENDER_NODE"] = gpu->node;
+        env["GST_VAAPI_DRM_DEVICE"] = gpu->node;  // gstreamer-vaapi; GStreamer's va plugin is ranked by the node in codec.c
+        for (const Gpu& g : gpus)
+            if (g.compositor) env["APKLAYER_COMPOSITOR_NODE"] = g.node;
+    }
     if (!env.count("MESA_GLES_VERSION_OVERRIDE") && getenvOr("APKLAYER_GLES_OVERRIDE", "auto") != "off") {
         std::string version = hostGles(layout, env);
-        if (version.rfind("2.", 0) == 0 || version == "3.0") env["MESA_GLES_VERSION_OVERRIDE"] = "3.2";
+        // eglinfo probes a device of its own choosing: with several GPUs the claim is made anyway (a no-op on a 3.2 driver)
+        if (version.rfind("2.", 0) == 0 || version == "3.0" || gpus.size() > 1) env["MESA_GLES_VERSION_OVERRIDE"] = "3.2";
     }
     return result;
 }

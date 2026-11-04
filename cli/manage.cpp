@@ -230,6 +230,7 @@ int status(const Layout& l, const Instance& inst) {
     for (const auto& [pkg, records] : launches(l, inst)) pkgs += (pkgs.empty() ? "" : ",") + pkg;
     printf("instance\t%s\nstack\t%s\nbinder\t%s\napps\t%s\nabi\t%s\n", inst.id.c_str(), stackRunning(inst) ? "running" : "stopped",
            exists(binderDevice(inst.id)) ? "ok" : "missing", pkgs.c_str(), kAbi);
+    printf("gpu node\t%s\n", ne.env.count("APKLAYER_RENDER_NODE") ? ne.env["APKLAYER_RENDER_NODE"].c_str() : "none");
     Spawn egl;
     egl.argv = {"eglinfo", "-B", "-p", "gbm"};
     egl.env = currentEnv();  // the host driver as it is, without the version claim nativeEnv adds
