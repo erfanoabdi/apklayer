@@ -175,6 +175,23 @@ static bool from_root(const char *r, char **path)
     return false;
 }
 
+/* A file the overlay served (under the instance's or the shared Android root) spelled as Android's again, in place (readlink's buffer, n bytes,
+ * no terminator): what /proc/self/fd/N links to. bionic's realpath (O_PATH, then readlink of the fd) in translated code reads it, and the guest
+ * linker matches the result against its config's /system sections. Returns the new length. */
+long apklayer_android_spelling(char *buf, long n)
+{
+    const char *roots[2] = { own_env, root() };
+    for (int i = 0; i < 2; i++) {
+        long k = roots[i] ? (long)strlen(roots[i]) : 0;
+        if (!k || n <= k || strncmp(buf, roots[i], (size_t)k) || buf[k] != '/') continue;
+        for (int j = 0; prefixes[j]; j++) {
+            long p = (long)strlen(prefixes[j]);
+            if (n - k >= p && !strncmp(buf + k, prefixes[j], (size_t)p)) { memmove(buf, buf + k, (size_t)(n - k)); return n - k; }
+        }
+    }
+    return n;
+}
+
 /* Hands the override function to bionic_translation's libc (loaded as a glibc library once Android code is). */
 void apklayer_install_path_layer(void)
 {
