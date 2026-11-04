@@ -98,6 +98,11 @@ apps = ["hello-wvprobe"]
 needs = ["com.android.webview"]  # tools/host-setup/webview.sh <the provider APK>, in the data home the runner uses
 run = ["python3 -u tests/vm/hub.py webview probe"]
 
+[webview-input]
+apps = ["hello-wvprobe"]
+needs = ["com.android.webview"]
+run = ["python3 -u tests/vm/webview-input.py"]
+
 [splash]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/splash.py"]
