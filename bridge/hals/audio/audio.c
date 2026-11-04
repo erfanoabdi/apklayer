@@ -21,6 +21,7 @@ struct apklayer_audio {
     uint64_t written, position, pending;
     uint8_t *ring;
     size_t ring_cap, ring_head, ring_fill; /* bytes: not yet handed to PipeWire */
+    size_t quantum; /* frames the graph asks for per cycle (0 until its first cycle): the ring is kept at two of them */
     bool running, active, drained, drain_requested;
 };
 static pthread_once_t initialized = PTHREAD_ONCE_INIT;
@@ -39,6 +40,7 @@ static void process(void *opaque) {
             size_t max = data->maxsize / audio->stride;
             size_t frames = buffer->requested ? buffer->requested : max;
             if (frames > max) frames = max;
+            audio->quantum = frames;
             if (frames > audio->ring_fill / audio->stride) frames = audio->ring_fill / audio->stride;
             if (data->data && data->chunk && frames) {
                 size_t bytes = frames * audio->stride, first = audio->ring_cap - audio->ring_head;
@@ -47,6 +49,10 @@ static void process(void *opaque) {
                 memcpy((char *)data->data + first, audio->ring, bytes - first);
                 audio->ring_head = (audio->ring_head + bytes) % audio->ring_cap;
                 audio->ring_fill -= bytes;
+                /* a short buffer is padded to the cycle with silence: PipeWire held a short one back a cycle and played a quantum of
+                 * silence before it (a hole before a stream's last frames) */
+                size_t want = audio->quantum * audio->stride;
+                if (want > bytes) { memset((char *)data->data + bytes, 0, want - bytes); bytes = want; frames = audio->quantum; }
                 data->chunk->offset = 0; data->chunk->stride = audio->stride; data->chunk->size = bytes;
                 buffer->size = frames;
             } else if (data->chunk) {
@@ -146,7 +152,9 @@ ssize_t apklayer_audio_write(struct apklayer_audio *audio, const void *pcm, size
     int status = !audio->active ? -EAGAIN : audio->drain_requested ? -EBUSY : 0;
     while (done < frames && status >= 0) {
         if (audio->state == PW_STREAM_STATE_ERROR || audio->state == PW_STREAM_STATE_UNCONNECTED) { status = -EPIPE; break; }
-        size_t space = audio->ring_cap - audio->ring_fill;
+        /* two graph cycles: one being handed over, one to absorb the writer's wakeup; the whole ring (rate/10) held ~100 ms more than that */
+        size_t limit = audio->quantum && audio->quantum * 2 * audio->stride < audio->ring_cap ? audio->quantum * 2 * audio->stride : audio->ring_cap;
+        size_t space = limit > audio->ring_fill ? limit - audio->ring_fill : 0;
         if (space < audio->stride) { status = wait_event(audio, &end); continue; }
         size_t bytes = (frames - done) * audio->stride;
         if (bytes > space) bytes = space / audio->stride * audio->stride;

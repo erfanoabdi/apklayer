@@ -12,6 +12,7 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 import instance  # noqa: E402  (changes into the repo root)
+from audio_capture import gaps  # noqa: E402
 LOGDIR = instance.LOGDIR
 env = dict(instance.ENV)
 system = sys.argv[1:] == ['system']
@@ -90,6 +91,12 @@ try:
     active = sum(abs(l) + abs(r) > 100 for l, r in zip(left, right))
     assert active > (47700 if system else 47500 if aidl else 52000), f'PCM missing: {active} non-silent frames'  # the whole tone: 47760
     print(f'PASS monitor captured {"F32 mono 440" if mono else "S16 stereo 440/880"} Hz PCM, {active} non-silent frames', flush=True)
+    if aidl:  # the probes' first tone is continuous (the native producer pauses on purpose)
+        out = Path(os.environ.get('APKLY_OUT', '/tmp')); out.mkdir(parents=True, exist_ok=True)
+        (out / 'monitor.s16').write_bytes(pcm)  # what the sink got, for a look at a failure
+        holes = gaps(left, right, 47000)
+        assert not holes, f'gaps in the tone (frame, length): {holes[:10]}'
+        print('PASS no gaps in the continuous tone', flush=True)
 finally:
     for proc in (producer, recorder):
         if proc is None: continue

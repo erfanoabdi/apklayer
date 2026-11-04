@@ -7,6 +7,19 @@ import selectors
 import signal
 import subprocess
 
+def gaps(left, right, tone_frames):
+    """Silent runs over 1 ms inside the first `tone_frames` non-silent frames of a continuous tone, as (frames after the tone began, length) (a starved output ring shows as one)."""
+    found, run, seen, first = [], 0, 0, 0
+    for n, (l, r) in enumerate(zip(left, right)):
+        if abs(l) + abs(r) > 100:
+            if run > 48 and seen: found.append((n - run - first, run))
+            if not seen: first = n
+            run = 0; seen += 1
+            if seen >= tone_frames: break
+        else: run += 1
+    return found
+
+
 class AudioCapture:
     def __init__(self, env):
         self.env = env
