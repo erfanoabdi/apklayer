@@ -3,7 +3,7 @@
 Step by step, from a fresh Linux machine to an Android app in a window. Tested on Ubuntu 24.04 arm64 (a Parallels VM, GNOME Wayland, Mesa virgl), 2026-11-04, from a fresh clone.
 x86_64 has its own prebuilts but was never run on a real PC (`docs/X86_64.md`); the steps below are written for arm64.
 
-What you need: arm64 Linux with **Ubuntu 24.04 or newer, or Debian 13**, a **Wayland** desktop session (GNOME, KDE), a GPU with Mesa (GBM, EGL, GLES), PipeWire for audio,
+What you need: arm64 Linux with **Ubuntu 24.04 or newer** (tested; Debian 13 should take the same packages, untested), a **Wayland** desktop session (GNOME, KDE), a GPU with Mesa (GBM, EGL, GLES), PipeWire for audio,
 about 3 GB of disk for the sources, prebuilts and build, and `sudo` once per boot (kernel binder devices).
 Nothing here needs the LineageOS tree: the Android parts come from the `prebuilts` branch of this repository.
 
