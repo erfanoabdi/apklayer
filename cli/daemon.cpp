@@ -147,6 +147,7 @@ int startRequest(const Layout& l, int conn, const std::string& exe, const sigset
     pid_t child = fork();
     if (child == 0) {
         sigprocmask(SIG_SETMASK, &oldMask, nullptr);
+        setpgid(0, 0);  // the command's processes are a group, as they were the client's: its signals reach all of them
         for (int i = 0; i < 3; i++) dup2(fds[i], i);
         if (chdir(cwd.c_str()) != 0 && chdir("/") != 0) _exit(1);
         std::vector<std::string> argv = {exe, "--no-daemon"};
@@ -159,6 +160,7 @@ int startRequest(const Layout& l, int conn, const std::string& exe, const sigset
         execve(av[0], av.data(), ev.data());
         _exit(127);
     }
+    if (child > 0) setpgid(child, child);  // also here: a signal forwarded at once finds the group
     for (int fd : fds) close(fd);
     return child;
 }
@@ -200,8 +202,8 @@ int runDaemon(const Layout& l, bool onDemand) {
             for (auto& [child, conn] : connOf) {
                 if (conn != fds[i].fd) continue;
                 std::string m = receive(conn);
-                if (m.rfind("signal ", 0) == 0) kill(child, atoi(m.c_str() + 7));
-                else if (m.empty()) { kill(child, SIGKILL); close(conn); conn = -1; }  // the client is gone, as a killed launcher would be
+                if (m.rfind("signal ", 0) == 0) kill(-child, atoi(m.c_str() + 7));
+                else if (m.empty()) { kill(-child, SIGKILL); close(conn); conn = -1; }  // the client is gone (killed): so is what it ran
             }
         }
         if (fds[1].revents & POLLIN) {
