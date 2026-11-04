@@ -41,5 +41,9 @@ Result runProgram(const std::vector<std::string>& argv);
 std::string summary(const Result& r);
 // file:///a%20b.apk -> /a b.apk
 std::string fileUriPath(const std::string& uri);
+// the path the portal's file chooser (bridge/portal/file-chooser.py open) printed, "" when none was chosen
+std::string chosenFile(const Result& chooser);
+// `providers set <domain> <backend> key=value...` (options with an empty value left out: the backend's default), `providers unset <domain>` for backend ""
+std::vector<std::string> providerArgs(const std::string& domain, const std::string& backend, const std::vector<std::pair<std::string, std::string>>& options);
 
 }  // namespace manager

@@ -15,6 +15,7 @@
 #include "slint-testing.h"
 #include "backend.h"
 #include "setup.h"
+#include "hardware.h"
 
 using manager::Cli;
 using manager::Result;
@@ -32,7 +33,7 @@ struct Detail {
 };
 
 struct Snapshot {
-    Rows apps, instances, props, settings, status, gpus;
+    Rows apps, instances, props, settings, status, gpus, providers;
     std::optional<Detail> detail;
     std::string error;  // the first CLI call that failed: the snackbar shows it instead of leaving its page empty
 };
@@ -59,6 +60,7 @@ Snapshot load(const Cli& cli, const std::string& current) {
     s.settings = rows(cli, {"settings"}, s.error);
     s.status = rows(cli, {"status"}, s.error);
     s.gpus = rows(cli, {"gpus"}, s.error);
+    s.providers = rows(cli, {"providers"}, s.error);
     if (!current.empty()) s.detail = loadDetail(cli, current);
     return s;
 }
@@ -71,6 +73,8 @@ public:
         if (access((root_ + "/share/apklayer/tools").c_str(), F_OK) == 0) root_ += "/share/apklayer";  // installed (/usr/bin/apklayer)
         wire();
         setup_ = std::make_unique<manager::Setup>(ui_, cli_, root_, [this] { refresh(); }, [this](const std::string& m) { message(m); });
+        hardware_ = std::make_unique<manager::Hardware>(ui_, cli_, root_, [this](const std::string& what, std::vector<std::string> args) { action(what, std::move(args)); },
+                                                        [this](const std::string& m) { message(m); });
     }
     manager::Setup& setup() { return *setup_; }
 
@@ -138,6 +142,7 @@ public:
         }
         b.set_gpus(gpus);
         b.set_gpu_index(chosen);
+        if (hardware_) hardware_->show(s.providers);
         if (!current_.empty() && s.detail) showDetail(*s.detail);
         b.set_load_error(slint::SharedString(s.error));
         if (!s.error.empty()) message(s.error);
@@ -254,8 +259,7 @@ private:
         b.on_install_chooser([this] {
             if (root_.empty()) { message("No file chooser: type the path of the .apk"); return; }
             later([chooser = root_ + "/bridge/portal/file-chooser.py"] { return manager::runProgram({"python3", chooser, "open"}); }, [this](const Result& r) {
-                for (const auto& row : manager::parseRows(r.out))
-                    if (row[0].rfind("uri ", 0) == 0) { ui_->global<Backend>().set_chosen_path(slint::SharedString(manager::fileUriPath(row[0].substr(4)))); return; }
+                if (std::string path = manager::chosenFile(r); !path.empty()) { ui_->global<Backend>().set_chosen_path(slint::SharedString(path)); return; }
                 message(r.out.find("unavailable") != std::string::npos ? "No file chooser portal: type the path of the .apk" : "No file chosen");
             });
         });
@@ -352,6 +356,7 @@ private:
     std::string root_;     // the tree of the CLI (bin/apklayer): its portal helper and binder setup script
     std::string current_;  // the selected app (UI thread)
     std::unique_ptr<manager::Setup> setup_;  // the first run and the updates (src/setup.cpp)
+    std::unique_ptr<manager::Hardware> hardware_;  // the Hardware page (src/hardware.cpp)
 };
 
 bool writePng(const std::string& path, const slint::SharedPixelBuffer<slint::Rgba8Pixel>& pixels) {
