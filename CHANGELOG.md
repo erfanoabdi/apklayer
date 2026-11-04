@@ -4,6 +4,7 @@ Dated entries, newest first by section; this is where status history lives (STAT
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
 ## 2026-11-04: parallel rounds (instances, windows, manager, media, installer, identity, corpus with current apps)
+- A stopped activity's dialogs and popups are hidden with it and take no input (Meet's green-room crash: taps reached HomeActivity's stopped fragments through its still-visible dialog); test stopped-windows (input group).
 - AudioManager answers devices, communication devices, the communication device and speakerphone from the real audio policy's ports, as AudioDeviceBroker computes them (Meet's call start found no communication devices: Robolectric's empty lists); native-audio COMM scenario (VOICE_COMMUNICATION playback and capture in MODE_IN_COMMUNICATION).
 - Startup: app spare (`apklayer app-spare`, zygote's role) and one sandbox for every process kind; the hub's spare starts before its setup: warm UiBench 2.5 -> 1.3 s, Telegram 2.9 -> 1.9 s; cold 4.1 -> 3.4 s and 4.6 -> 4.0 s (UTM, medians of 4). tests/run budgets 1650 MB per instance.
 - Audio: HAL ring kept at two PipeWire quanta (HAL latency 101-117 -> 41-62 ms), short buffers padded (a 1024-frame hole before a stream's end); gap check in audio-aidl/audio-track; fennec-media WATCH (m.youtube.com past consent); native-audio/native-surface/vulkan activate their window through test input; tests/run stops the install stack.
