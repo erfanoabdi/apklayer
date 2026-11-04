@@ -1,8 +1,10 @@
 // frameworks/av/camera/cameraserver/main_cameraserver.cpp as a btload entry point: CameraService finds the camera providers (aosp/hals/camera)
 // declared in the instance's VINTF manifests and serves "media.camera" to the apps' CameraManager and android.hardware.Camera.
 // With it "media.camera.proxy", the part of system_server's CameraServiceProxy that CameraService asks (apklayer runs no system_server):
-// without it every open is refused ("Camera disabled by device policy").
+// without it every open is refused ("Camera disabled by device policy"); and "processinfo" (ActivityManager's process states, which a
+// connect needs to rank camera clients).
 #include <android/hardware/BnCameraServiceProxy.h>
+#include <android/os/BnProcessInfoService.h>
 #include <binder/IServiceManager.h>
 #include <hidl/HidlTransportSupport.h>
 
@@ -33,6 +35,21 @@ class CameraServiceProxy : public hardware::BnCameraServiceProxy {
     binder::Status notifyWatchdog(int32_t, bool) override { return binder::Status::ok(); }
     binder::Status notifyCameraDistractionRestriction(hardware::camera2::ICameraDeviceUser::AudioRestriction) override { return binder::Status::ok(); }
 };
+
+// Every client counts as a foreground app (PROCESS_STATE_TOP, oom score 0): the instance's apps are the user's open windows.
+class ProcessInfo : public os::BnProcessInfoService {
+  public:
+    binder::Status getProcessStatesFromPids(const std::vector<int32_t>& pids, std::vector<int32_t>* states) override {
+        states->assign(pids.size(), 2);
+        return binder::Status::ok();
+    }
+    binder::Status getProcessStatesAndOomScoresFromPids(const std::vector<int32_t>& pids, std::vector<int32_t>* states,
+                                                        std::vector<int32_t>* scores) override {
+        states->assign(pids.size(), 2);
+        scores->assign(pids.size(), 0);
+        return binder::Status::ok();
+    }
+};
 }  // namespace
 
 extern "C" int main(int, char**) {
@@ -40,6 +57,8 @@ extern "C" int main(int, char**) {
     hardware::configureRpcThreadpool(5, /*willjoin*/ false);
     sp<ProcessState> proc(ProcessState::self());
     defaultServiceManager()->addService(String16("media.camera.proxy"), sp<CameraServiceProxy>::make());
+    if (defaultServiceManager()->checkService(String16("processinfo")) == nullptr)
+        defaultServiceManager()->addService(String16("processinfo"), sp<ProcessInfo>::make());
     CameraService::instantiate();
     // the foreground user, as CameraServiceProxy.java reports it at boot and on user switches: apps of other users are refused
     auto service = interface_cast<hardware::ICameraService>(defaultServiceManager()->checkService(String16("media.camera")));
