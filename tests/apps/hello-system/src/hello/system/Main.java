@@ -8,7 +8,7 @@ import java.util.Map;
 
 /**
  * The system apps and services an app depends on, each used from an app's point of view (-Dhello.sys=name, or "all"): contacts, calendar, downloads, settings,
- * media, documents, userdict, telephony, notifications, alarms, jobs, build, signing, display, storage, storagestats, vibrator, toast, accounts, location, ime. Each prints "[sys] PASS|FAIL name detail"; tests/vm/system-apps.sh runs them one by one.
+ * media, documents, userdict, telephony, notifications, alarms, jobs, build, signing, display, storage, storagestats, vibrator, toast, sysprops, accounts, location, ime. Each prints "[sys] PASS|FAIL name detail"; tests/vm/system-apps.sh runs them one by one.
  */
 public final class Main extends Activity {
     private static final Map<String, Check> CHECKS = new LinkedHashMap<>();
@@ -31,6 +31,7 @@ public final class Main extends Activity {
         CHECKS.put("storagestats", new StorageStatsCheck());
         CHECKS.put("vibrator", new VibratorCheck());
         CHECKS.put("toast", new ToastCheck());
+        CHECKS.put("sysprops", new SysPropsCheck());
         CHECKS.put("accounts", new AccountsCheck());
         CHECKS.put("accountremoval", new AccountRemovalCheck());
         CHECKS.put("location", new LocationCheck());
