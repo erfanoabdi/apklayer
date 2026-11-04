@@ -20,7 +20,8 @@ apklayer-shell ──> one Wayland window per app                               
 **Host:** arm64 Linux (needs the staged Android libraries); x86_64 is staged but untested. **In progress:** Vulkan presentation (needs a real GPU), startup time. Status: `STATUS.md`, plan: `docs/PLAN.md`.
 
 ## Build and run
-The Android side comes from a LineageOS tree built once; `CHANGELOG.md` logs the incremental builds, rules in `docs/AOSP-BUILDS.md`.
+**Installing on a new machine: `docs/INSTALL.md`** (step by step, with the Android parts from the `prebuilts` branch; no LineageOS tree needed).
+For development, the Android side comes from a LineageOS tree built once; `CHANGELOG.md` logs the incremental builds, rules in `docs/AOSP-BUILDS.md`.
 ```sh
 tools/fetch-deps.sh                          # pinned Java deps -> ~/.cache/apklayer/deps
 tools/build bt ~/bt-arm/bionic_translation   # bionic_translation, patched (patches/apply), for this machine

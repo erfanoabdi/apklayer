@@ -7,6 +7,7 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): 
 - Next phase, in order: `docs/PLAN.md` "Next phase".
 
 ## How to work here
+- A new machine: `docs/INSTALL.md` (prebuilts branch, build, first app).
 - Build: `meson setup b && ninja -C b`; `tools/build bt|host|native|overlay|instrument|cfg|gles1 <native>`; `tools/fetch-deps.sh`; staging from the tree: `tools/stage`.
 - Upstream edits are patch files only (`patches/`, applied by `patches/apply`; index in `docs/PATCHES.md`). Android-side modules: edit `aosp/`, `tools/sync-aosp.sh`,
   incremental builds in `~/los24` (`docs/AOSP-BUILDS.md`), then install the output on both VMs (take a module's library from `out/soong/.intermediates/vendor/apklayer/...`: `m <module>` does not refresh `system/lib64`) and run `tools/gen/tree-files-lock.py`.
