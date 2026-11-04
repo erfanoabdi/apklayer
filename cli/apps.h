@@ -9,7 +9,8 @@ namespace apklayer {
 // An update keeps the app's data and its system mark (system: mark it a system app, FLAG_SYSTEM); another signer exits kInstallIncompatible, a lower versionCode kInstallDowngrade unless allowDowngrade, an unsigned APK kInstallUnsigned.
 inline constexpr int kInstallIncompatible = 3, kInstallDowngrade = 4, kInstallUnsigned = 5;
 std::string installApp(const Layout& layout, const Instance& instance, const std::vector<std::string>& apks, bool allowDowngrade = false, bool system = false);
-// `reconvert <package> | --all-stale`: install again from the kept base.apk and splits (data, uid, system mark kept)
+// `reconvert <package> | --all-stale`: install again from the kept base.apk and splits (data, uid, system mark kept); a failing app keeps its old
+// install and the others still convert (exit status 1 names the failed ones)
 int reconvert(const Layout& layout, const Instance& instance, const std::string& target);
 // converted with an older converter ABI (cli/version.h) than this apklayer's
 bool isStale(const std::string& info);

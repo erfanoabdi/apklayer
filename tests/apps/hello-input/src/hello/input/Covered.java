@@ -37,6 +37,7 @@ public class Covered extends Activity {
             }
         });
         setContentView(button);
+        if (getIntent().getBooleanExtra("finish", false)) button.postDelayed(this::finish, 800); // Sheet's stage 5: a round trip
     }
 
     @Override protected void onResume() { super.onResume(); System.out.println("[hello-input] covering activity resumed"); }
