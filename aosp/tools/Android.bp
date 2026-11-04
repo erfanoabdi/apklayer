@@ -37,6 +37,6 @@ cc_library_shared {
     name: "libapklayer_vktest",
     srcs: ["vktest.cpp"],
     header_libs: ["vulkan_headers", "hwvulkan_headers", "jni_headers", "libnativewindow_headers", "libarect_headers"],  // vk_android_native_buffer.h, android/hardware_buffer.h and its android/rect.h
-    shared_libs: ["libdl"],
+    shared_libs: ["libdl", "libnativewindow"],  // AHardwareBuffer_allocate/describe/getNativeHandle
     cflags: ["-Wall", "-Werror", "-Wno-main", "-Wno-missing-field-initializers"],
 }
