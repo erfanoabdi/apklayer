@@ -12,6 +12,7 @@
 #include "sandbox.h"
 #include "manage.h"
 #include "migrate.h"
+#include "providers.h"
 #include "run.h"
 #include "spare.h"
 #include "version.h"
@@ -38,6 +39,7 @@ int usage() {
           "  instances              id, running, binder devices, root of every instance\n"
           "  instance create|remove <id>  make an instance (prints the binder setup it still needs) or remove it with its data\n"
           "  prop [list] | set KEY VALUE | unset KEY  the instance's Android property overrides (from its next start)\n"
+          "  providers [set DOMAIN BACKEND [KEY=VALUE...] | unset DOMAIN]  the hardware providers (sensors, gnss, vibrator, camera) and their backends\n"
           "  settings [list] | set KEY VALUE | unset KEY  the instance's own values over the desktop's settings (night yes|no, accent #rrggbb,\n"
           "                         contrast high|normal, animations on|off, font-scale, locale, timezone, time-format 12|24); live in a running instance\n"
           "  permissions <package> | grant|revoke <package> <permission>  what the app requests (permission, level, granted); a runtime one granted or revoked\n"
@@ -109,6 +111,7 @@ int main(int argc, char** argv) {
     if (cmd == "stop" && n == 2) return stopApp(layout, inst, args[1]);
     if (cmd == "instances") { listInstances(layout); return 0; }
     if (cmd == "instance" && n == 3) return instanceCommand(layout, args[1], args[2]);
+    if (cmd == "providers") return providersCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "settings") return settingsCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "prop") return propCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "permissions" && n >= 2) return permissionsCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));

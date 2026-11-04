@@ -110,6 +110,14 @@ stage_x86_64() { # re-runs itself inside the OrbStack machine; every staged ELF 
     echo "== Android root"
     rm -rf "$stage/android-root"
     ORB=env ANDROID_PRODUCT=generic_x86_64 STAGE_DEST="$stage/android-root" stage_root
+    if ls "$out"/system/lib64/libberberis_arm64.so >/dev/null 2>&1; then  # the native bridge for arm64-only apps, when built (docs/X86_64.md "arm64-only apps")
+        echo "== native bridge (Digitalis)"
+        cp "$out"/system/lib64/libberberis_*.so "$stage/android-x86_64/lib64/"
+        mkdir -p "$stage/android-root/system/lib64" "$stage/android-root/system/bin" "$stage/android-root/system/etc"
+        cp -r "$out/system/lib64/arm64" "$stage/android-root/system/lib64/" && cp -r "$out/system/bin/arm64" "$stage/android-root/system/bin/"
+        cp "$out/system/etc/ld.config.arm64.txt" "$stage/android-root/system/etc/"
+        cp "$tree/frameworks/libs/binary_translation/prebuilt/cpuinfo.arm64" "$stage/android-root/system/etc/cpuinfo.arm64.txt"  # the guest's /proc/cpuinfo
+    fi
     echo "== Robolectric"
     mkdir -p "$stage/aosp" && cp "$tree/out/host/linux-x86/framework/Robolectric_all.jar" "$stage/aosp/"
     echo "== framework javac shards (tools/build native lists the @CriticalNative methods from them)"

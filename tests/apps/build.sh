@@ -13,9 +13,11 @@ trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/cls" "$W/aidl" "$(dirname "$OUT")"
 LIBS=""
 if ls *.c >/dev/null 2>&1; then
-  mkdir -p "$W/lib/x86_64"
-  "$(ls "$NDK"/toolchains/llvm/prebuilt/*/bin/x86_64-linux-android26-clang)" -shared -fPIC -O2 -o "$W/lib/x86_64/libhello.so" *.c -lEGL -lGLESv2 -landroid -llog
-  LIBS="lib/x86_64/libhello.so"
+  ABI=x86_64; [ ! -f lib.abi ] || read -r ABI < lib.abi  # lib.abi: the one ABI of the library (arm64-v8a: an app only a native bridge runs on x86_64)
+  TRIPLE=x86_64; [ "$ABI" != arm64-v8a ] || TRIPLE=aarch64
+  mkdir -p "$W/lib/$ABI"
+  "$(ls "$NDK"/toolchains/llvm/prebuilt/*/bin/$TRIPLE-linux-android26-clang)" -shared -fPIC -O2 -o "$W/lib/$ABI/libhello.so" *.c -Wl,--as-needed -lEGL -lGLESv2 -landroid -llog -lm
+  LIBS="lib/$ABI/libhello.so"
 fi
 if [ -f aidl.list ]; then
   while IFS= read -r source; do

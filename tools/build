@@ -180,7 +180,7 @@ build_native() {
     for f in btload aprop; do put "$B/bridge/native/$f" "$native/bin/$f"; done
     put bridge/native/getprop "$native/bin/getprop" && chmod 755 "$native/bin/getprop"
     put "$B/bridge/native/libapklayer-preload.so" "$native/libapklayer-preload.so"
-    for f in "$B"/bridge/ndk/lib*.so "$B"/bridge/hals/*/libapklayer-hal-*.so "$B"/bridge/hals/camera/libapklayer-camera-*.so; do [ ! -e "$f" ] || put "$f" "$native/$(basename "$f")"; done
+    for f in "$B"/bridge/ndk/lib*.so "$B"/bridge/hals/*/libapklayer-*.so; do [ ! -e "$f" ] || put "$f" "$native/$(basename "$f")"; done
     # the patched bionic_translation libraries: a stale copy in $native made the JVM spin in the property reader
     for f in "$bt"/lib*_bio.so*; do [ ! -f "$f" ] || put "$f" "$native/$(basename "$f")"; done
     # @CriticalNative methods (apklayer.host.CriticalNatives) from the javac shards, plus the ones of classes the shards lack (bridge/native/critical-natives-extra.txt)

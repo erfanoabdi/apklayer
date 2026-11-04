@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Linux's Gadget Zero (NetChip 0525:a4a0), the test device tests/vm/usb.py makes -->
+<resources>
+  <usb-device vendor-id="1317" product-id="42144"/>
+</resources>

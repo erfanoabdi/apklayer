@@ -37,7 +37,7 @@ def available():
 # calling a shim native the staged shim lacks)
 HOST_CLASSES = ('{ [ -f ~/.config/apklayer/env ] && . ~/.config/apklayer/env; N=${APKLAYER_NATIVE:-$HOME/arm64-native}; '
                 'if [ ! -f "$N/aosp/host-classes.stamp" ] || [ -n "$(find runtime bridge -newer "$N/aosp/host-classes.stamp" -print -quit 2>/dev/null)" ]; then '
-                'tools/build native "$N" >/dev/null 2>&1 && tools/build host "$N" >/dev/null 2>&1 && touch "$N/aosp/host-classes.stamp"; fi; }')
+                'tools/build native "$N" >/dev/null 2>&1 && tools/build host "$N" >/dev/null 2>&1 && rm -f "$N/aosp/host-classes.stamp" && touch "$N/aosp/host-classes.stamp"; fi; }  # rm first: a native dir made with cp -al shares the file')
 
 
 def prepare(groups, slots):

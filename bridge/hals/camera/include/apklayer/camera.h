@@ -1,6 +1,6 @@
 /* apklayer camera HAL, host side: what the Android-side camera provider (aosp/hals/camera, Goldfish's AIDL ICameraProvider with a camera
  * fed by a backend) calls. A backend is a library libapklayer-camera-<backend>.so exporting these (one per provider process, chosen per
- * instance: APKLAYER_CAMERA, docs/PLAN.md "Plan: hardware providers"): fake (test pattern, image, video file), pipewire (the desktop's
+ * instance in providers.toml, docs/PLAN.md "Plan: hardware providers"): fake (test pattern, image, video file), pipewire (the desktop's
  * cameras through PipeWire). Plain C, no Android types; frames are handed over in a raw format with their capture time. */
 #ifndef APKLAYER_CAMERA_H
 #define APKLAYER_CAMERA_H

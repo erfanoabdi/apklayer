@@ -331,6 +331,8 @@ static int register_classes(JNIEnv *env, JavaVM *vm, void *rt)
         "register_android_opengl_jni_GLES31", "register_android_opengl_jni_GLES31Ext", "register_android_opengl_jni_GLES32",
         "register_android_opengl_classes",
         "register_android_net_LocalSocketImpl", /* not GL: LocalSocket's natives, also absent from HostRuntime's list */
+        "register_android_hardware_SensorManager", /* not GL: SystemSensorManager's, used over the stack's SensorService (HostSensorShadows) */
+        "register_android_os_MessageQueue", /* not GL: the NativeMessageQueue a sensor event queue needs (HostSensorShadows); Robolectric's queue keeps its shadow */
         NULL
     };
     for (int i = 0; device_gl[i]; i++) {
@@ -491,6 +493,10 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
         binder_failed = apklayer_register_binder(env, rt);
     }
     if (binder_failed) audio_failed = 1;
+    {   /* USB is optional: an app without it still runs */
+        extern int apklayer_register_usb(JNIEnv *, void *);
+        if (apklayer_register_usb(env, rt) != 0) (*env)->ExceptionClear(env);
+    }
     if (audio_failed) { (*ti)->SetJNIFunctionTable(ti, orig); return -1; }
     int media_failed = audio_failed;
     {

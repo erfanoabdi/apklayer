@@ -28,4 +28,8 @@ final class HostPlainShadows {
     /** The framework's vibrator over the instance's (absent) vibrator_manager service: hasVibrator() is false on a desktop, where Robolectric's said true. */
     @Implements(className = "android.os.Vibrator", isInAndroidSdk = false) public static final class Vibrator {}
     @Implements(className = "android.os.SystemVibrator", isInAndroidSdk = false) public static final class SystemVibrator {}
+    /** libandroid_runtime's USB natives over libusbhost (usbdevfs ioctls on the node ShadowHostUsbManager.openDevice opens), not Robolectric's piped fakes. */
+    @Implements(className = "android.hardware.usb.UsbDevice", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class UsbDevice {}
+    @Implements(className = "android.hardware.usb.UsbDeviceConnection", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class UsbDeviceConnection {}
+    @Implements(className = "android.hardware.usb.UsbRequest", callNativeMethodsByDefault = true, isInAndroidSdk = false) public static final class UsbRequest {}
 }

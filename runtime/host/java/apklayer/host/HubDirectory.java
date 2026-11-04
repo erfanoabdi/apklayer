@@ -15,10 +15,12 @@ import android.app.IServiceConnection;
 /** Instance-owned process directory. Identities come from the kernel Binder caller. */
 final class HubDirectory extends Binder {
     /** A broadcast from the system itself (battery, power): no sender permissions apply. */
+    private static final Peer SYSTEM = new Peer(-1, 1000, "android", null, null, true, 1000, null);
     void sendSystem(Intent intent, boolean sticky) {
-        Peer system = new Peer(-1, 1000, "android", null, null, true, 1000, null);
-        broadcasts.send(system, intent, null, 0, null, null, null, false, sticky, 0);
+        broadcasts.send(SYSTEM, intent, null, 0, null, null, null, false, sticky, 0);
     }
+    /** An activity the system starts (HubUsb's attach intent). */
+    void startSystem(Intent intent) { activities.start(SYSTEM, intent, null); }
     record Peer(int pid, int uid, String name, IBinder endpoint, IBinder appThread, boolean headless, int appUid, String instance) {}
     private final HubPackages packages;
     /** The instance's host settings (set by HubHost once it runs). */
@@ -34,6 +36,8 @@ final class HubDirectory extends Binder {
     private final HubAccounts accounts;
     private final HubInstaller installer;
     private final HubInputMethods inputMethods;
+    private final HubBluetooth bluetooth = new HubBluetooth(this);
+    final HubUsb usb;
     private final Map<String, Process> appProcesses = new HashMap<>();
     private final Map<String, Process> hosts = new HashMap<>();
     private final Map<String, Integer> failures = new HashMap<>();
@@ -48,6 +52,7 @@ final class HubDirectory extends Binder {
         // the instance's own data directory (the volumes' parent): accounts belong to the instance, as /data/system_ce does to a device
         accounts = new HubAccounts(this, bindings, packages, new HubAuthenticators(apps, packages), Path.of(System.getProperty("apklayer.storage")).getParent().resolve("accounts.json"));
         installer = new HubInstaller(this, packages, pendingIntents, Path.of(System.getProperty("apklayer.storage")).getParent());
+        usb = new HubUsb(this, packages, apps);
         attachInterface(null, HubProtocol.DESCRIPTOR);
         exitWhenIdle(60_000); // nobody ever connected
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -443,6 +448,16 @@ final class HubDirectory extends Binder {
             case HubProtocol.INSTALL_SOURCE -> {
                 Peer caller = caller(); boolean ask = request.readBoolean(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeBoolean(installer.source(caller, ask)); return true;
+            }
+            case HubProtocol.BLUETOOTH -> {
+                Peer caller = caller(); String address = request.readString(), uuid = request.readString(); request.enforceNoDataAvail();
+                android.os.ParcelFileDescriptor[] pipes;
+                try { pipes = bluetooth.open(caller, address, uuid); } catch (IOException failure) { throw new IllegalStateException("Bluetooth: " + failure, failure); }
+                reply.writeNoException(); for (var pipe : pipes) reply.writeTypedObject(pipe, android.os.Parcelable.PARCELABLE_WRITE_RETURN_VALUE); return true;
+            }
+            case HubProtocol.USB_PERMISSION -> {
+                Peer caller = caller(); String device = request.readString(); boolean ask = request.readBoolean(); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeBoolean(usb.permission(caller.name(), device, ask)); return true;
             }
             case HubProtocol.CHECK_PERMISSION -> {
                 caller(); int pid = request.readInt(), uid = request.readInt(); String permission = request.readString(); request.enforceNoDataAvail();

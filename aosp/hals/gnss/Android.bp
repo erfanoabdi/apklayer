@@ -1,0 +1,28 @@
+// The GNSS HAL front: AOSP's IGnss example from its own sources (hardware/interfaces patch 0002) with the backend's fixes; also its
+// client (`--client`), which HostLocation reads for the gps provider.
+cc_library_shared {
+    name: "libapklayer_gnss",
+    defaults: ["gnss_use_latest_hal_aidl_ndk_shared"],
+    srcs: ["Service.cpp", "Client.cpp", ":apklayer_gnss_example_sources"],
+    include_dirs: ["hardware/interfaces/gnss/aidl/default"],
+    local_include_dirs: ["host-include"],
+    shared_libs: [
+        "libbase",
+        "libbinder_ndk",
+        "libcutils",
+        "libhidlbase",
+        "liblog",
+        "libutils",
+        "android.hardware.gnss@2.1",
+        "android.hardware.gnss@2.0",
+        "android.hardware.gnss@1.0",
+        "android.hardware.gnss.measurement_corrections@1.1",
+        "android.hardware.gnss.measurement_corrections@1.0",
+        "android.hardware.gnss.visibility_control@1.0",
+    ],
+    static_libs: ["android.hardware.gnss@common-default-lib"],
+    version_script: "exports.map",
+    allow_undefined_symbols: true, // apklayer_gnss_*: the backend, a host library (APKLAYER_HOST_LIBS)
+    compile_multilib: "64",
+    cflags: ["-Wall", "-Wextra", "-Werror", "-Wno-main", "-Wno-unused-parameter"],
+}

@@ -328,7 +328,7 @@ final class HostWindows {
     private static final java.util.Map<Activity, List<View>> hiddenWith = new java.util.WeakHashMap<>();
 
     /**
-     * The window manager hides an activity's windows while it is stopped: besides its decor (AppHost.setVisible), its dialogs (their
+     * The window manager hides an activity's windows while it is stopped: besides its decor (ActivityTask.setVisible), its dialogs (their
      * token is the activity's) and the popups over those (the parent window's token). Hidden, they take no input (patches/robolectric
      * 0017) and stay out of the screen; the stopped activity's fragments are stopped too and must not see taps. Shown again: only those hidden here.
      */

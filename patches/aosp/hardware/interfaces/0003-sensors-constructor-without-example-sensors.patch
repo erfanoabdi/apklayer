@@ -1,0 +1,40 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: sensors: a Sensors constructor without the example sensors
+
+apklayer's sensors front (vendor/apklayer/hals/sensors) lists its backend's sensors. Destroying the example's sensors after the
+base constructor made them deadlocks (Sensor::~Sensor releases its unique_lock without unlocking and joins the run thread waiting
+for that mutex), so a protected constructor skips them; the public one is unchanged.
+Against hardware/interfaces 13fc23dae0dc (REVISION), after 0002. Apply: patches/apply aosp <LineageOS tree>.
+---
+--- a/sensors/aidl/default/include/sensors-impl/Sensors.h
++++ b/sensors/aidl/default/include/sensors-impl/Sensors.h
+@@ -40,13 +40,19 @@
+     static constexpr const char* kWakeLockName = "SensorsHAL_WAKEUP";
+ 
+   public:
+-    Sensors()
++    Sensors() : Sensors(true) {}
++
++  protected:
++    // apklayer patch: a subclass with sensors of its own starts without the example's (destroying one deadlocks: ~Sensor keeps its
++    // run mutex locked while it joins the thread waiting for it)
++    explicit Sensors(bool exampleSensors)
+         : mEventQueueFlag(nullptr),
+           mNextHandle(1),
+           mOutstandingWakeUpEvents(0),
+           mReadWakeLockQueueRun(false),
+           mAutoReleaseWakeLockTime(0),
+           mHasWakeLock(false) {
++        if (!exampleSensors) return;
+         AddSensor<AccelSensor>();
+         AddSensor<GyroSensor>();
+         AddSensor<AmbientTempSensor>();
+@@ -58,6 +64,8 @@
+         AddSensor<HingeAngleSensor>();
+         AddSensor<LowLatencyOffBodyDetectSensor>();
+     }
++
++  public:
+ 
+     virtual ~Sensors() {
+         deleteEventFlag();

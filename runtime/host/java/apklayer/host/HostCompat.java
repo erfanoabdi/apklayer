@@ -57,7 +57,8 @@ final class HostCompat {
         if (declaredTarget == -2) {
             declaredTarget = -1;
             String apps = System.getProperty("apklayer.apps"), pkg = System.getProperty("apklayer.package");
-            if (apps != null && pkg != null) {
+            if (apps != null && pkg != null) declaredTarget = ApkSdk.target(new File(new File(apps, pkg), "base.apk"));  // the APK's (install records before 2026-11-04 say 23)
+            if (declaredTarget < 0 && apps != null && pkg != null) {
                 try (java.io.BufferedReader in = new java.io.BufferedReader(new java.io.FileReader(new File(new File(apps, pkg), "info.properties")))) {
                     for (String line; (line = in.readLine()) != null; ) if (line.startsWith("targetSdk=")) declaredTarget = Integer.parseInt(line.substring(10).trim());
                 } catch (java.io.IOException | NumberFormatException none) { /* falls back below */ }

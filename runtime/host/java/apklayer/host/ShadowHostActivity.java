@@ -29,7 +29,7 @@ public class ShadowHostActivity extends ShadowActivity {
         } catch (android.content.pm.PackageManager.NameNotFoundException e) {
             info = null;
         }
-        java.util.List<android.app.Activity> task = new java.util.ArrayList<>(AppHost.task());
+        java.util.List<android.app.Activity> task = new java.util.ArrayList<>(ActivityTask.task());
         if (!task.contains(real)) task.add(0, real);  // still being started (its resume ran the looper): it goes on top
         int self = task.indexOf(real), parent = -1;
         String parentClass = info == null ? null : info.targetActivity != null ? info.targetActivity : info.name;  // an <activity-alias> names its class
@@ -38,10 +38,10 @@ public class ShadowHostActivity extends ShadowActivity {
         for (int i = self; i < (parent < 0 ? self + 1 : parent); i++) if (task.get(i) != null) task.get(i).finish();
         if (parent < 0) return false;
         android.app.Activity up = task.get(parent);
-        java.util.List<Class<?>> after = AppHost.task().stream().<Class<?>>map(a -> a == null ? null : a.getClass()).toList();
+        java.util.List<Class<?>> after = ActivityTask.task().stream().<Class<?>>map(a -> a == null ? null : a.getClass()).toList();
         if (!LaunchRules.plan(after, up.getClass(), upIntent.getFlags(), info.launchMode).reuse()) up.finish();  // START_SUCCESS: the new one replaces it
         real.startActivity(new android.content.Intent(upIntent).setComponent(dest));
         return true;
     }
-    @Implementation protected boolean isTaskRoot() { return !Boolean.getBoolean("apklayer.notaskroot") && AppHost.isTaskRoot(real); }
+    @Implementation protected boolean isTaskRoot() { return !Boolean.getBoolean("apklayer.notaskroot") && ActivityTask.isTaskRoot(real); }
 }

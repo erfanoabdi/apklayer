@@ -49,7 +49,7 @@ final class HubActivities {
 
     /**
      * `apklayer run` of a package whose app process runs (Android: a launcher or `am start` reaches the running process): the intent from the file, or a
-     * launcher start, goes to that process, which applies its task rules (AppHost.launch). The CLI asks only while the app's window JVM runs: one that
+     * launcher start, goes to that process, which applies its task rules (ActivityTask.launch). The CLI asks only while the app's window JVM runs: one that
      * has not registered yet is still starting and takes it as its first launch (TAKE_LAUNCH). False when the intent file cannot be read.
      */
     boolean relaunch(String name, java.nio.file.Path intentFile) {

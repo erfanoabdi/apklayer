@@ -10,8 +10,9 @@ trap 'kill $fixture 2>/dev/null' EXIT
 b/bridge/hals/camera/camera-pipewire-test || exit 1
 [ "${CAMERA_APP:-0}" = 1 ] || exit 0
 out=$APKLY_STATE/camera-pipewire.out
-export APKLAYER_CAMERA="pipewire"
 bin/apklayer stop >/dev/null 2>&1
+trap 'kill $fixture 2>/dev/null; bin/apklayer stop >/dev/null 2>&1; bin/apklayer providers unset camera >/dev/null' EXIT
+bin/apklayer providers set camera pipewire >/dev/null
 APKLAYER_JOPTS="-Dapklayer.runms=25000" bin/apklayer run hello.camera > $out 2>&1 || true
 grep -a "\[cam\]" $out
 bin/apklayer stop >/dev/null 2>&1

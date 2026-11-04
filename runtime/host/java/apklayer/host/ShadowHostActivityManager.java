@@ -55,7 +55,7 @@ public class ShadowHostActivityManager extends ShadowActivityManager {
     private static List<Activity> task() {
         for (int attempt = 0; ; attempt++) {
             try {
-                return AppHost.task().stream().filter(Objects::nonNull).toList();
+                return ActivityTask.task().stream().filter(Objects::nonNull).toList();
             } catch (java.util.ConcurrentModificationException e) {
                 if (attempt == 2) return List.of();
             }

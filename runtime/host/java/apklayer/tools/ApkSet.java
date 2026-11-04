@@ -67,10 +67,10 @@ public final class ApkSet {
         if (!splits.isEmpty()) System.out.println("apklayer: " + pkg + " with splits " + String.join(", ", splits.keySet()));
     }
 
-    /** "config.x86" for a machine that is arm64_v8a; the base and feature splits are for every ABI. */
+    /** "config.x86" for a machine that is arm64_v8a (abi: the machine's ABIs, comma-separated: its own, then a native bridge's); the base and feature splits are for every ABI. */
     static boolean otherAbi(String split, String abi) {
         String config = split.startsWith("config.") ? split.substring(7) : split.contains(".config.") ? split.substring(split.indexOf(".config.") + 8) : null;
-        return config != null && ABIS.contains(config) && !config.equals(abi);
+        return config != null && ABIS.contains(config) && !("," + abi + ",").contains("," + config + ",");
     }
 
     /** The APKs of an archive a device would install: a bundletool set's splits (not its standalone alternatives), else every APK at the root. */

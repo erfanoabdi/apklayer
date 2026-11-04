@@ -58,3 +58,6 @@ A commercial license can only cover code the licensor owns or that is permissive
 
 Done 2026-10-28: the Mac.apk-owned files are gone (dex2jvm is upstream Apache-2.0 plus our own `HostDefaults`; `MacApkUnsafe` replaced). Remaining before a commercial license: (1) a CLA/ownership decision, including the agent-written commits; (2) the Android SDK `android.jar` terms if it is ever bundled; (3) contact and terms in `COMMERCIAL.md`.
 Not blocking but open: collect NOTICE/legal files for everything shipped (AOSP libraries, JDK, WebView) before the first package.
+
+- Digitalis (digitalisx64.github.io, Apache-2.0, derived from AOSP Berberis): its `binary_translation` fork, android17 `abefbe2b`, checked out in the LineageOS tree (not vendored).
+- `aosp/hals/{sensors,gnss,vibrator}` build AOSP's example HALs (`hardware/interfaces/<domain>/aidl/default`, Apache-2.0) through the patches above; `aosp/hals/sensors/services/Service.cpp` is AOSP's `main_sensorservice.cpp` as a library.

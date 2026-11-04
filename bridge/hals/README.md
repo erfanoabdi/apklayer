@@ -11,4 +11,8 @@ See `aosp/hals/README.md` for the domain list and `docs/ARCHITECTURE.md`.
 `camera/`: libapklayer-camera-<backend>.so behind the camera provider (aosp/hals/camera), the C ABI in `include/apklayer/camera.h` (probe, init with
 key=value options, list, open/start/stop with frames on the backend's thread). `fake` (colour bars by default; `source=<image or video file>`
 through GStreamer; `cameras=back,front`; `fps=`), `pipewire` (the desktop's Video/Source nodes with media.role Camera, raw formats; `role=any`).
-The instance picks one with `APKLAYER_CAMERA="<backend> [key=value...]"` until providers.toml carries a camera domain.
+The instance picks one in providers.toml: `apklayer providers set camera <backend> [key=value...]`.
+`sensors/`, `gnss/`, `vibrator/`: the hardware providers' backends behind the AOSP-example fronts (`aosp/hals/<domain>`): each a library
+`libapklayer-<domain>-<backend>.so` exporting the domain's C ABI (`include/apklayer/<domain>.h`, with `probe()`: <0 unusable here, 0 usable but
+never a default, >0 quality). Only `fake` exists so far (fixed sensor values, a fixed point or GPX replay, a logged vibrator), configured per
+instance in `providers.toml` (`apklayer providers set`); `meson test -C b providers-fake` checks the fakes' option parsing.

@@ -37,6 +37,16 @@ public final class HubClient {
         System.out.println("[apklayer] hub registered " + context.getPackageName() + " pid=" + pid);
     }
     private static int register(Context context, IBinder hub, HubEndpoint endpoint) {
+        // the first call waits for the hub's boot (1.4 s on an idle machine, several seconds on a busy one): say so every 2 s, the launch is not hung
+        long since = System.nanoTime();
+        java.util.concurrent.ScheduledExecutorService ticker = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "hub-wait"); t.setDaemon(true); return t; });
+        ticker.scheduleAtFixedRate(() -> System.out.println("[apklayer] waiting for the instance hub (" + (System.nanoTime() - since) / 1_000_000_000 + " s)"),
+                2, 2, java.util.concurrent.TimeUnit.SECONDS);
+        try { return registerNow(context, hub, endpoint); } finally { ticker.shutdownNow(); }
+    }
+
+    private static int registerNow(Context context, IBinder hub, HubEndpoint endpoint) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.REGISTER, request -> {
             request.writeString(context.getPackageName()); request.writeStrongBinder(endpoint); request.writeBoolean(Boolean.getBoolean("apklayer.componenthost"));
             request.writeStrongBinder(((android.app.IApplicationThread) android.app.ActivityThread.currentActivityThread().getApplicationThread()).asBinder());
@@ -164,6 +174,11 @@ public final class HubClient {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.UID_OF_PID, request -> request.writeInt(pid), reply -> reply.readInt());
     }
     /** Whether another app's caller holds the permission: the kernel's pid of a synchronous call names it, the uid its header carried a oneway one (pid 0 or -1). */
+    /** A BlueZ helper of this process's own (HubBluetooth): {its stdin, its stdout}; an RFCOMM connection when address and uuid are given. */
+    android.os.ParcelFileDescriptor[] bluetooth(String address, String uuid) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.BLUETOOTH, request -> { request.writeString(address); request.writeString(uuid); },
+                reply -> new android.os.ParcelFileDescriptor[] {reply.readTypedObject(android.os.ParcelFileDescriptor.CREATOR), reply.readTypedObject(android.os.ParcelFileDescriptor.CREATOR)});
+    }
     int checkPermission(int pid, int uid, String permission) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CHECK_PERMISSION, request -> { request.writeInt(pid); request.writeInt(uid); request.writeString(permission); }, reply -> reply.readInt());
     }
@@ -194,6 +209,11 @@ public final class HubClient {
     /** canRequestPackageInstalls; {@code ask}: let the person decide now (ACTION_MANAGE_UNKNOWN_APP_SOURCES). */
     boolean installSource(boolean ask) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.INSTALL_SOURCE, request -> request.writeBoolean(ask), reply -> reply.readBoolean());
+    }
+
+    /** UsbManager.hasPermission ({@code ask} false) and requestPermission ({@code ask} true: waits for the person's answer). */
+    boolean usbPermission(String device, boolean ask) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.USB_PERMISSION, request -> { request.writeString(device); request.writeBoolean(ask); }, reply -> reply.readBoolean());
     }
 
     static synchronized HubClient attach(Context context) {

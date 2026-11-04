@@ -25,7 +25,7 @@ shown = gone = over = None
 
 
 def level(shot):
-    """Brightness where the sheet's handle is while it is up (light gray over the dark activity)."""
+    """Brightness where the sheet's handle is (its gray, or the activity once the sheet is gone)."""
     im = pixels.rgb(shot)
     return sum(im.getpixel((im.width // 2, im.height * 470 // 600))) // 3
 
@@ -90,7 +90,7 @@ try:
     assert done == want, 'missing: %s' % (want - done)
     assert not any('popup under the sheet tapped' in l for l in seen), 'a tap on the sheet reached a popup of the activity below it'
     print('brightness at the handle of sheet 3: %d, after the sheets: %d' % (shown, gone), flush=True)
-    assert shown > gone + 40, 'the sheet stays on the screen after the dialogs went away'
+    assert abs(shown - gone) > 40, 'the sheet stays on the screen after the dialogs went away'  # the gray handle against the activity (its theme decides dark or light)
     print('brightness at the handle of sheet 6 over the popup: %d' % over, flush=True)
     assert abs(over - shown) < 10, 'the popup of the activity is drawn over the sheet'
     print('PASS bottom dialogs: button taps, an outside tap and Back cancel, a downward drag dismisses the sheet; the sheet is gone from the screen; a popup of the activity below the sheet gets none of its taps; a newer activity covers the sheet', flush=True)

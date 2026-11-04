@@ -42,7 +42,10 @@ int lstat(const char *path, struct stat *st) { MAP(m, path); int r = ((int (*)(c
 int lstat64(const char *path, struct stat64 *st) { MAP(m, path); int r = ((int (*)(const char *, struct stat64 *))REAL(lstat64))(m, st); DONE(m); return r; }
 int fstatat(int dirfd, const char *path, struct stat *st, int flags) { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; int r = ((int (*)(int, const char *, struct stat *, int))REAL(fstatat))(dirfd, use, st, flags); DONE(m); return r; }
 DIR *opendir(const char *path) { MAP(m, path); DIR *r = ((DIR * (*)(const char *))REAL(opendir))(m); DONE(m); return r; }
-ssize_t readlink(const char *path, char *buf, size_t n) { MAP(m, path); ssize_t r = ((ssize_t (*)(const char *, char *, size_t))REAL(readlink))(m, buf, n); DONE(m); return r; }
+long apklayer_android_spelling(char *buf, long n);
+/* /proc links (an fd, the executable) to a file the overlay served read as its Android path (paths.c) */
+static ssize_t proc_link(const char *path, char *buf, ssize_t r) { return r > 0 && path && !strncmp(path, "/proc/", 6) ? apklayer_android_spelling(buf, r) : r; }
+ssize_t readlink(const char *path, char *buf, size_t n) { MAP(m, path); ssize_t r = ((ssize_t (*)(const char *, char *, size_t))REAL(readlink))(m, buf, n); DONE(m); return proc_link(path, buf, r); }
 
 /* What Java's file APIs (java.io, NIO) call besides the above, so that a mapped directory (/storage, paths.c) can be written: one path argument,
  * or an absolute one for the *at forms. */
@@ -105,7 +108,11 @@ WRAP(int, mknod, (const char *path, mode_t mode, dev_t dev), (const char *, mode
 WRAPAT(int, mkfifoat, (int dirfd, const char *path, mode_t mode), (int, const char *, mode_t), dirfd, use, mode)
 WRAPAT(int, mknodat, (int dirfd, const char *path, mode_t mode, dev_t dev), (int, const char *, mode_t, dev_t), dirfd, use, mode, dev)
 WRAPAT(int, fchownat, (int dirfd, const char *path, uid_t u, gid_t g, int flags), (int, const char *, uid_t, gid_t, int), dirfd, use, u, g, flags)
-WRAPAT(ssize_t, readlinkat, (int dirfd, const char *path, char *buf, size_t n), (int, const char *, char *, size_t), dirfd, use, buf, n)
+ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t n) { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
+    ssize_t r = ((ssize_t (*)(int, const char *, char *, size_t))REAL(readlinkat))(dirfd, use, buf, n); DONE(m); return proc_link(path, buf, r); }
+/* the fortified spellings (Android code built with FORTIFY: Berberis's guest readlink): the buffer is at least n here */
+ssize_t __readlinkat_chk(int dirfd, const char *path, char *buf, size_t n, size_t buflen) { if (n > buflen) abort(); return readlinkat(dirfd, path, buf, n); }
+ssize_t __readlink_chk(const char *path, char *buf, size_t n, size_t buflen) { if (n > buflen) abort(); return readlink(path, buf, n); }
 WRAPAT(int, symlinkat, (const char *target, int dirfd, const char *path), (const char *, int, const char *), target, dirfd, use)
 WRAP(int, setxattr, (const char *path, const char *name, const void *v, size_t n, int f), (const char *, const char *, const void *, size_t, int), m, name, v, n, f)
 WRAP(int, lsetxattr, (const char *path, const char *name, const void *v, size_t n, int f), (const char *, const char *, const void *, size_t, int), m, name, v, n, f)
@@ -147,4 +154,34 @@ char *mkdtemp(char *path) {
     MAP(m, path); char *r = ((char *(*)(char *))REAL(mkdtemp))(m);
     if (m_alloc) { size_t lp = strlen(path), lm = strlen(m); if (lp >= 6 && lm >= 6) memcpy(path + lp - 6, m + lm - 6, 6); free(m); }
     return r ? path : NULL;
+}
+
+/* Raw syscall() with a path: a native bridge's kernel emulation (Berberis) runs a guest's stat, access, readlink ... as the host syscall, so a
+ * translated library's Android paths (its linker's /system/etc/ld.config.arm64.txt) reach the path layer only here. The *at forms with an
+ * absolute path; the argument stays the caller's for any other number. */
+#include <sys/syscall.h>
+long syscall(long nr, ...)
+{
+    va_list ap;
+    va_start(ap, nr);
+    long a[6];
+    for (int i = 0; i < 6; i++) a[i] = va_arg(ap, long);
+    va_end(ap);
+    int at = nr == SYS_openat || nr == SYS_newfstatat || nr == SYS_faccessat || nr == SYS_readlinkat || nr == SYS_statx || nr == SYS_mkdirat ||
+             nr == SYS_unlinkat || nr == SYS_fchmodat || nr == SYS_fchownat || nr == SYS_utimensat || nr == SYS_mknodat ||
+             nr == SYS_renameat || nr == SYS_renameat2 || nr == SYS_linkat
+#ifdef SYS_faccessat2
+             || nr == SYS_faccessat2
+#endif
+             ;
+    int two = nr == SYS_renameat || nr == SYS_renameat2 || nr == SYS_linkat;  /* (fd, path, fd, path, ...) */
+    const char *path = at ? (const char *)a[1] : NULL, *path2 = two ? (const char *)a[3] : NULL;
+    MAP(m, path && path[0] == '/' ? path : NULL);
+    MAP(m2, path2 && path2[0] == '/' ? path2 : NULL);
+    if (m) a[1] = (long)m;
+    if (m2) a[3] = (long)m2;
+    long r = ((long (*)(long, ...))REAL(syscall))(nr, a[0], a[1], a[2], a[3], a[4], a[5]);
+    DONE(m);
+    DONE(m2);
+    return nr == SYS_readlinkat ? proc_link(path, (char *)a[2], r) : r;
 }

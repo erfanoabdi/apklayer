@@ -51,7 +51,12 @@ final class AppEnvironment {
             catch (java.io.IOException e) { System.out.println("[apklayer] app log " + appLog + ": " + e); }
         }
         AndroidManifest manifest = apk == null ? new AndroidManifest(null, null, null, "apklayer.hub")
-                : new AndroidManifest(null, null, null, null, "", apk);
+                : new AndroidManifest(null, null, null, null, "", apk) {
+                    @Override public int getTargetSdkVersion() {  // the APK's own (ApkSdk): Robolectric's default without a manifest file is 23
+                        int target = ApkSdk.target(apk.toFile());
+                        return target > 0 ? target : super.getTargetSdkVersion();
+                    }
+                };
         // an app that is itself the MediaStore provider answers for "media": no stand-in (Robolectric's fake one, HostMediaStub) in front of it.
         // Robolectric parses the manifest's providers only when it creates the application, after deciding on its fake: the install recorded them (AppMetadata).
         ownsMediaAuthority = apk != null && java.util.Arrays.asList(installProperty(apk, "authorities").split(";")).contains("media");
@@ -153,7 +158,7 @@ final class AppEnvironment {
             Object bound = org.robolectric.util.ReflectionHelpers.getField(RuntimeEnvironment.getActivityThread(), "mBoundApplication");
             android.content.pm.ApplicationInfo info = org.robolectric.util.ReflectionHelpers.getField(bound, "appInfo");
             info.nativeLibraryDir = libdir;
-            info.primaryCpuAbi = HostBuild.ABI;
+            info.primaryCpuAbi = HostBuild.appAbi();
             markSystem(info);
             ShadowHostPackageManager.installedPaths(info);  // its splits, before LoadedApk reads them for the app's resources
         } catch (RuntimeException notBoundYet) { /* the context path (ShadowHostContextImpl.getApplicationInfo) covers it */ }
@@ -278,7 +283,6 @@ final class AppEnvironment {
         HostBattery.install(app);
         // no doze on the desktop: an app is never held back by battery optimization
         org.robolectric.Shadows.shadowOf((android.os.PowerManager) app.getSystemService(android.content.Context.POWER_SERVICE)).setIgnoringBatteryOptimizations(app.getPackageName(), true);
-        HostUsb.install(app);
         HostStorage.install(app);
         HostTrust.install();  // the default trust manager with the host-aware check Android's callers (Chromium, X509TrustManagerExtensions) need
         HostLocation.install(app);

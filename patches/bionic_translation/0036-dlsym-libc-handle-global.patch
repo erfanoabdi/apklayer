@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Wed, 4 Nov 2026 00:00:00 +0000
+Subject: [PATCH] dlsym on bionic libc's handle finds the process's global symbols too
+
+A native bridge's proxy libc (Berberis) looks each host function up with dlsym on the libc.so handle (libc_bio): functions
+Android's libc has but apklayer provides elsewhere (__system_property_* in its runtime) were not found and became Bad thunk aborts.
+
+apklayer patch: 0036 of patches/bionic_translation.
+---
+--- a/linker/dlfcn.c
++++ b/linker/dlfcn.c
+@@ -15,6 +15,7 @@
+  */
+ #include <dlfcn.h>
+ #include <gelf.h>
++#include <link.h>
+ #include <pthread.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -158,6 +159,14 @@
+ 			return wrapper_create(symbol, sym);
+ 		}
+
++		/* apklayer patch: bionic's libc (libc_bio) answers what Android's libc has and the process provides elsewhere (apklayer's
++		 * __system_property_* store): a native bridge's proxy libc looks its host functions up on this handle */
++		struct link_map *lm = NULL;
++		if (dlinfo(handle, RTLD_DI_LINKMAP, &lm) == 0 && lm && lm->l_name && strstr(lm->l_name, "libc_bio") && (sym = dlsym(RTLD_DEFAULT, symbol))) {
++			pthread_mutex_unlock(&apkenv_dl_lock);
++			return wrapper_create(symbol, sym);
++		}
++
+ 		/* it's not our handle, so unless it's a special value might as well bail now */
+ 		set_dlerror(DL_ERR_SYMBOL_NOT_FOUND);
+ 	}

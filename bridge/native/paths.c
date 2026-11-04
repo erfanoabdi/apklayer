@@ -19,7 +19,7 @@ static const char *const prefixes[] = {
 /* The environment is read once, when this library loads: the path layer runs inside every stat/open, also while another thread's setenv
  * (GeckoView's mozglue sets variables from its own threads) reallocates environ, and a getenv walking the freed array crashed the JVM. */
 static char root_buf[PATH_MAX];
-static const char *inst_env, *own_env, *storage_env = "", *data_env = "";
+static const char *inst_env, *own_env, *storage_env = "", *data_env = "", *host_binder_env;
 static int debug_env;
 
 static const char *copy_env(const char *name, const char *fallback) { const char *v = getenv(name); return v ? strdup(v) : fallback; }
@@ -32,6 +32,7 @@ __attribute__((constructor)) static void read_env(void)
     if (e) snprintf(root_buf, sizeof root_buf, "%s", e);
     else if (n) snprintf(root_buf, sizeof root_buf, "%s/android-root", n);
     inst_env = copy_env("APKLAYER_INSTANCE", NULL);
+    host_binder_env = copy_env("APKLAYER_HOST_BINDER", NULL);
     own_env = copy_env("APKLAYER_INSTANCE_ROOT", NULL);
     storage_env = copy_env("APKLAYER_STORAGE", "");
     data_env = copy_env("APKLAYER_DATA", "");
@@ -42,11 +43,13 @@ __attribute__((constructor)) static void read_env(void)
 static const char *root(void) { return root_buf; }
 
 /* An instance other than "default" has its own binder contexts: /dev/<name> is /dev/binderfs/<name>-<instance>
- * (created by tools/host-setup/binder.sh <instance>), so two instances never share a servicemanager. */
+ * (created by tools/host-setup/binder.sh <instance>), so two instances never share a servicemanager.
+ * /dev/host_binder is libbinder's host context (patch 0006, docs/HALIUM.md): the device's binder named by $APKLAYER_HOST_BINDER. */
 static bool binder_device(char **path)
 {
     static const char *const names[] = { "binder", "hwbinder", "vndbinder", NULL };
     const char *inst = inst_env;
+    if (!strcmp(*path, "/dev/host_binder") && host_binder_env && host_binder_env[0]) return (*path = strdup(host_binder_env)) != NULL;
     if (!inst || !inst[0] || !strcmp(inst, "default") || strncmp(*path, "/dev/", 5)) return false;
     for (int i = 0; names[i]; i++) {
         if (strcmp(*path + 5, names[i])) continue;
@@ -154,7 +157,8 @@ static bool from_root(const char *r, char **path)
     const char *p = *path;
     if (!r[0] || p[0] != '/') return false;
     for (int i = 0; prefixes[i]; i++) {
-        if (strncmp(p, prefixes[i], strlen(prefixes[i]))) continue;
+        size_t n = strlen(prefixes[i]);  /* "/system/..." and the directory itself, "/system" (the guest linker's config sections test it); not the host's /etc */
+        if (strncmp(p, prefixes[i], n) && (strncmp(p, prefixes[i], n - 1) || p[n - 1] || !strcmp(prefixes[i], "/etc/"))) continue;
         /* /etc is a symlink to /system/etc on Android */
         const char *tries[2] = { "", !strcmp(prefixes[i], "/etc/") ? "/system" : NULL };
         for (int t = 0; t < 2 && tries[t]; t++) {
@@ -173,6 +177,23 @@ static bool from_root(const char *r, char **path)
         return false;
     }
     return false;
+}
+
+/* A file the overlay served (under the instance's or the shared Android root) spelled as Android's again, in place (readlink's buffer, n bytes,
+ * no terminator): what /proc/self/fd/N links to. bionic's realpath (O_PATH, then readlink of the fd) in translated code reads it, and the guest
+ * linker matches the result against its config's /system sections. Returns the new length. */
+long apklayer_android_spelling(char *buf, long n)
+{
+    const char *roots[2] = { own_env, root() };
+    for (int i = 0; i < 2; i++) {
+        long k = roots[i] ? (long)strlen(roots[i]) : 0;
+        if (!k || n <= k || strncmp(buf, roots[i], (size_t)k) || buf[k] != '/') continue;
+        for (int j = 0; prefixes[j]; j++) {
+            long p = (long)strlen(prefixes[j]);  /* the directory itself too ("/system": n - k == p - 1) */
+            if (n - k >= p - 1 && !strncmp(buf + k, prefixes[j], (size_t)(n - k >= p ? p : p - 1))) { memmove(buf, buf + k, (size_t)(n - k)); return n - k; }
+        }
+    }
+    return n;
 }
 
 /* Hands the override function to bionic_translation's libc (loaded as a glibc library once Android code is). */

@@ -7,16 +7,18 @@ import org.robolectric.annotation.Implements;
 /**
  * The framework's camera classes (camera2's CameraManager and CameraDeviceImpl, android.hardware.Camera, their JNI in libandroid_runtime)
  * and the real ImageReader (libmedia_jni) over the stack's cameraserver and camera provider (aosp/hals/camera), used instead of
- * Robolectric's in-memory fakes when this stack declares the camera HAL (cli/stack.cpp, APKLAYER_CAMERA): HostShadowProvider maps these then.
+ * Robolectric's in-memory fakes when this stack declares the camera HAL (providers.toml, cli/stack.cpp): HostShadowProvider maps these then.
  * Each shadow is empty: the original code runs, natives included.
  */
 final class HostCameraShadows {
     private HostCameraShadows() {}
 
-    /** Whether this stack runs cameraserver over a camera provider: cli/stack.cpp declares the HAL when it starts both. */
+    /** Whether this stack runs cameraserver over a camera provider: cli/stack.cpp declares the HAL (providers.toml's camera domain) and starts
+     *  cameraserver when its library is staged. Both, or CameraManager would find no "media.camera". */
     static boolean declared() {
         String root = System.getenv("APKLAYER_INSTANCE_ROOT");
-        return root != null && new java.io.File(root, "vendor/etc/vintf/manifest/apklayer-camera.xml").exists();
+        return root != null && new java.io.File(root, "vendor/etc/vintf/manifest/apklayer-camera.xml").exists()
+                && new java.io.File(System.getProperty("apklayer.androidlibs", ""), "libapklayer_cameraserver.so").exists();
     }
 
     static List<Map.Entry<String, String>> entries() {

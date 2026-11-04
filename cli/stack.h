@@ -6,12 +6,19 @@
 namespace apklayer {
 
 // The device ABIs are those of this machine's CPU: apps run the code of that ABI (install extracts lib/<kAbi>, ro.product.cpu.abilist*).
+// kBridgeAbi: the ABI of apps that have no library of kAbi and run through a native bridge, when it is staged (kBridgeLib among the Android libraries).
 #if defined(__x86_64__)
 inline constexpr const char* kAbi = "x86_64";
 inline constexpr const char* kAbi32 = "";
+inline constexpr const char* kBridgeAbi = "arm64-v8a";
+inline constexpr const char* kBridgeIsa = "arm64";
+inline constexpr const char* kBridgeLib = "libberberis_arm64.so";
 #else
 inline constexpr const char* kAbi = "arm64-v8a";
 inline constexpr const char* kAbi32 = "armeabi-v7a,armeabi";
+inline constexpr const char* kBridgeAbi = "";
+inline constexpr const char* kBridgeIsa = "";
+inline constexpr const char* kBridgeLib = "";
 #endif
 
 // Makes sure the instance's stack is up and ready (starts the daemon on demand). Returns false with a message on failure.

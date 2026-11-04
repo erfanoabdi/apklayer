@@ -1,6 +1,8 @@
 #include "stack.h"
 #include "sandbox.h"
 
+#include "providers.h"
+
 #include <fcntl.h>
 #include <cerrno>
 #include <poll.h>
@@ -193,7 +195,14 @@ static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std
     }
     std::string fingerprint = get("ro.product.brand") + "/" + get("ro.product.name") + "/" + get("ro.product.device") + ":" + get("ro.build.version.release_or_codename") +
                               "/" + get("ro.build.id") + "/" + incremental + ":" + get("ro.build.type") + "/" + get("ro.build.tags");
-    std::string abis = std::string(kAbi) + (*kAbi32 ? std::string(",") + kAbi32 : "");
+    // a staged native bridge adds its ABI, as on an x86_64 device with one (ro.dalvik.vm.native.bridge names it; apps pick their libraries by the list)
+    bool bridge = *kBridgeAbi && exists(join(l.androidLibs, kBridgeLib));
+    std::string abis64 = std::string(kAbi) + (bridge ? std::string(",") + kBridgeAbi : "");
+    std::string abis = abis64 + (*kAbi32 ? std::string(",") + kAbi32 : "");
+    if (bridge) {
+        setProperty(l, ne, "ro.dalvik.vm.native.bridge", kBridgeLib);
+        setProperty(l, ne, "ro.berberis.flags", "glibc-host-thread-id-handoff");  // bionic_translation's thread slots are glibc's (native_bridge.c)
+    }
     setProperty(l, ne, "ro.build.fingerprint", fingerprint.c_str());
     setProperty(l, ne, "ro.system.build.fingerprint", fingerprint.c_str());
     // as the build system writes them for the build type and tags the instance presents (apklayer.prop), not the tree's "userdebug ... test-keys"
@@ -204,7 +213,7 @@ static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std
                                                 incremental + " " + get("ro.build.tags")).c_str());
     setProperty(l, ne, "ro.product.cpu.abi", kAbi);
     setProperty(l, ne, "ro.product.cpu.abilist", abis.c_str());
-    setProperty(l, ne, "ro.product.cpu.abilist64", kAbi);
+    setProperty(l, ne, "ro.product.cpu.abilist64", abis64.c_str());
     setProperty(l, ne, "ro.product.cpu.abilist32", kAbi32);
 }
 
@@ -226,14 +235,9 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     stageManifest(inst, l, staged(l, "libapklayer_audioserver.so"), "apklayer-audio-effects.xml", "aosp/hals/audio/effects-manifest.xml");
     stageManifest(inst, l, staged(l, "libapklayer_keymint.so"), "apklayer-keymint.xml", "aosp/hals/security/manifest.xml");
     stageManifest(inst, l, staged(l, "libapklayer_keystore2.so"), "apklayer-keystore2.xml", "aosp/hals/security/keystore2-manifest.xml", "system");  // a framework HAL: keystore2 may register its service
-    // the camera provider (aosp/hals/camera) over a backend (bridge/hals/camera), and cameraserver: APKLAYER_CAMERA="<backend> [key=value...]"
-    // shortcut: an environment variable until the hardware providers' providers.toml (another branch) is merged; then camera is one of its domains
-    std::vector<std::string> camera;
-    for (const std::string& word : split(getenvOr("APKLAYER_CAMERA", ""), ' ')) if (!word.empty()) camera.push_back(word);
-    const std::string cameraBackend = camera.empty() ? "" : join(n, "libapklayer-camera-" + camera[0] + ".so");
-    const bool cameraOn = !camera.empty() && staged(l, "libapklayer_camera.so") && staged(l, "libapklayer_cameraserver.so") && exists(cameraBackend);
-    if (!camera.empty() && !cameraOn) fprintf(stderr, "camera: libapklayer_camera.so, libapklayer_cameraserver.so or %s is not staged\n", cameraBackend.c_str());
-    stageManifest(inst, l, cameraOn, "apklayer-camera.xml", "aosp/hals/camera/manifest.xml");
+    // the hardware providers of providers.toml: their HALs are declared for this stack's lifetime (servicemanager reads the manifests once)
+    std::vector<ProviderService> providers = providerServices(l, inst);
+    for (const ProviderService& p : providers) stageManifest(inst, l, true, "apklayer-" + p.name + ".xml", p.manifest);
     std::vector<std::string> propFiles = {join(l.root, "bridge/native/apklayer.prop"), join(n, "android-root/props/system_build.prop")};
     // the instance's own overrides (`apklayer prop set`): first, as ro.* is write-once (and the fingerprint is derived from them), and again last, as
     // every other property keeps the last value loaded
@@ -255,13 +259,17 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     if (getenvOr("APKLAYER_START_SHELL", "1") == "1") ensureShell(l, inst, ne);  // `run` asks again and fails on its own when this did not work
 
     std::vector<Service> running;
-    auto start = [&](const std::string& name, const std::string& lib, std::vector<std::string> args, const std::string& backend = "") {
+    auto spec = [&](const std::string& name, const std::string& lib, const std::vector<std::string>& args, const std::string& backend = "") {
         Spawn s;
         s.argv = {l.btload(), l.androidLibs, lib, "--main"};
         s.argv.insert(s.argv.end(), args.begin(), args.end());
         s.env = ne.env;
         if (!backend.empty()) s.env["APKLAYER_HOST_LIBS"] += (s.env["APKLAYER_HOST_LIBS"].empty() ? "" : ":") + backend;  // a HAL front's backend (bridge/hals/<domain>)
         s.logFile = join(inst.logs(), name + ".log");
+        return s;
+    };
+    auto start = [&](const std::string& name, const std::string& lib, const std::vector<std::string>& args, const std::string& backend = "") {
+        Spawn s = spec(name, lib, args, backend);
         int pid = spawn(s);
         running.push_back({name, pid, pidfdOpen(pid), s});
     };
@@ -285,9 +293,12 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         keystoreDir(inst);
         start("keystore2", "libapklayer_keystore2.so", {"/data/misc/keystore"});  // as keystore2.rc: the database directory, through the path layer
     }
-    if (cameraOn) {
-        start("camera", "libapklayer_camera.so", std::vector<std::string>(camera.begin() + 1, camera.end()), cameraBackend);
-        start("cameraserver", "libapklayer_cameraserver.so", {});
+    for (const ProviderService& p : providers) {
+        start(p.name, p.front, p.options, p.backend);
+        // system_server's SensorService, over the sensors HAL: what SensorManager in apps talks to (HostSensorShadows)
+        if (p.name == "sensors" && staged(l, "libapklayer_sensorservice.so")) start("sensorservice", "libapklayer_sensorservice.so", {});
+        // cameraserver over the camera provider HAL: what the apps' CameraManager and android.hardware.Camera talk to (HostCameraShadows)
+        if (p.name == "camera" && staged(l, "libapklayer_cameraserver.so")) start("cameraserver", "libapklayer_cameraserver.so", {});
     }
     start("surfaceflinger", "libapklayer_surfaceflinger.so", {});
     if (!tool.empty()) {
@@ -302,7 +313,8 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     // "server died"). One waiter per service blocks in waitForService; the daemon sets the ready property after all of them returned.
     std::vector<std::string> waitFor = {"SurfaceFlingerAIDL"};
     if (staged(l, "libapklayer_audioserver.so")) waitFor.push_back("media.audio_policy");
-    if (cameraOn) waitFor.push_back("media.camera");  // an app's first camera list (the provider joins cameraserver whenever it registers)
+    for (const ProviderService& p : providers)  // an app's first camera list (the provider joins cameraserver whenever it registers)
+        if (p.name == "camera" && staged(l, "libapklayer_cameraserver.so")) waitFor.push_back("media.camera");
     std::vector<int> waiters;
     for (const std::string& svc : waitFor) {
         Spawn w;
@@ -320,6 +332,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     sigemptyset(&sigs);
     sigaddset(&sigs, SIGTERM);
     sigaddset(&sigs, SIGINT);
+    sigaddset(&sigs, SIGHUP);  // `apklayer providers set|unset` changed providers.toml
     sigprocmask(SIG_BLOCK, &sigs, nullptr);
     int sfd = signalfd(-1, &sigs, SFD_CLOEXEC);
     fds.push_back({sfd, POLLIN, 0});
@@ -358,7 +371,31 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
                     setProperty(l, ne, kReadyProperty, "1");
                 }
             } else {
-                run = false;  // asked to stop
+                signalfd_siginfo info{};
+                if (read(sfd, &info, sizeof info) != sizeof info || info.ssi_signo != SIGHUP) { run = false; continue; }  // asked to stop
+                // providers.toml changed: a running domain whose backend or options differ restarts with them, a removed one stops, the
+                // other services keep running. A domain this stack did not start with waits for the next start (its HAL is not declared).
+                std::vector<ProviderService> wanted = providerServices(l, inst);
+                for (const std::string& domain : providerDomains()) {
+                    const ProviderService* want = nullptr;
+                    for (const ProviderService& p : wanted) if (p.name == domain) want = &p;
+                    size_t k = 0;
+                    while (k < nServices && running[k].name != domain) k++;
+                    if (k == nServices) { if (want) fprintf(stderr, "providers: %s starts with the instance's next start\n", domain.c_str()); continue; }
+                    Service& s = running[k];
+                    Spawn fresh = want ? spec(want->name, want->front, want->options, want->backend) : Spawn{};
+                    if (want && s.pid > 0 && fresh.argv == s.spec.argv && fresh.env == s.spec.env) continue;  // unchanged
+                    if (s.pid > 0) { kill(s.pid, SIGTERM); waitpid(s.pid, nullptr, 0); close(s.pidfd); s.pid = 0; fds[k].fd = -1; }
+                    if (!want) { fprintf(stderr, "providers: %s stopped\n", domain.c_str()); continue; }
+                    s.spec = fresh;
+                    s.restarts = 0;
+                    s.pid = spawn(fresh);
+                    s.pidfd = pidfdOpen(s.pid);
+                    fds[k].fd = s.pidfd;
+                    fprintf(stderr, "providers: %s restarted with its new configuration\n", domain.c_str());
+                    for (const Service& client : running)  // SensorService connects to the HAL once: it restarts (as a crashed service) with it
+                        if (domain == "sensors" && client.name == "sensorservice" && client.pid > 0) kill(client.pid, SIGTERM);
+                }
             }
         }
     }

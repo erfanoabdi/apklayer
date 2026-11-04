@@ -39,6 +39,12 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.os.Process", ShadowHostProcess.class.getName()),
                 Map.entry("android.os.ServiceManager", ShadowHostServiceManager.class.getName()),  // reports calls that land on Robolectric's null/deep proxies
                 Map.entry("android.app.NotificationManager", ShadowHostNotificationManager.class.getName()),
+                // Bluetooth over the host's BlueZ (HostBluetooth, HubBluetooth)
+                Map.entry("android.bluetooth.BluetoothAdapter", ShadowHostBluetoothAdapter.class.getName()),
+                Map.entry("android.bluetooth.le.BluetoothLeScanner", ShadowHostBluetoothLeScanner.class.getName()),
+                Map.entry("android.bluetooth.BluetoothDevice", ShadowHostBluetoothDevice.class.getName()),
+                Map.entry("android.bluetooth.BluetoothGatt", ShadowHostBluetoothGatt.class.getName()),
+                Map.entry("android.bluetooth.BluetoothSocket", ShadowHostBluetoothSocket.class.getName()),
                 Map.entry("android.app.JobSchedulerImpl", ShadowHostJobScheduler.class.getName()),
                 Map.entry("android.drm.DrmManagerClient", ShadowHostDrmManagerClient.class.getName()),
                 Map.entry("android.app.StatsManager", ShadowHostStatsManager.class.getName()),
@@ -94,6 +100,11 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.os.Vibrator", HostPlainShadows.Vibrator.class.getName()),
                 Map.entry("android.os.SystemVibrator", HostPlainShadows.SystemVibrator.class.getName()),
                 Map.entry("android.widget.Toast", ShadowHostToast.class.getName()),
+                // USB without a HAL: the host's devices and the framework's own connection code over the device node (HostUsb, HubUsb)
+                Map.entry("android.hardware.usb.UsbManager", ShadowHostUsbManager.class.getName()),
+                Map.entry("android.hardware.usb.UsbDevice", HostPlainShadows.UsbDevice.class.getName()),
+                Map.entry("android.hardware.usb.UsbDeviceConnection", HostPlainShadows.UsbDeviceConnection.class.getName()),
+                Map.entry("android.hardware.usb.UsbRequest", HostPlainShadows.UsbRequest.class.getName()),
                 Map.entry("android.os.SystemProperties", ShadowHostSystemProperties.class.getName()),
                 Map.entry("android.hardware.HardwareBuffer", ShadowHostNativeHardwareBuffer.class.getName()),
                 Map.entry("android.app.DownloadManager", ShadowHostDownloadManager.class.getName()),  // the real one talks to DownloadProvider (DownloadStorageProvider reads it)
@@ -108,6 +119,11 @@ public final class HostShadowProvider implements ShadowProvider {
             entries.add(Map.entry("android.webkit.CookieManager", HostPlainShadows.CookieManager.class.getName()));
             entries.add(Map.entry("android.webkit.WebStorage", HostPlainShadows.WebStorage.class.getName()));
             entries.add(Map.entry("android.webkit.WebViewDatabase", HostPlainShadows.WebViewDatabase.class.getName()));
+        }
+        if (HostSensorShadows.declared()) {  // the stack runs SensorService over the sensors HAL (providers.toml)
+            entries.add(Map.entry("android.hardware.SensorManager", HostSensorShadows.SensorManager.class.getName()));
+            entries.add(Map.entry("android.hardware.SystemSensorManager", HostSensorShadows.SystemSensorManager.class.getName()));
+            entries.add(Map.entry("android.hardware.SystemSensorManager.BaseEventQueue", HostSensorShadows.BaseEventQueue.class.getName()));
         }
         if (systemApp("com.android.providers.settings")) {
             // the tree's SettingsProvider is installed: Settings.* talk to it through the hub like on a device, not to Robolectric's in-memory tables.

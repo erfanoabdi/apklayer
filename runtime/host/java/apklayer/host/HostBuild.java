@@ -17,6 +17,9 @@ final class HostBuild {
     /** arm64-v8a on an aarch64 machine, x86_64 on a PC (the libraries apps run are the ones of that ABI in their APK). */
     static final String ABI = "aarch64".equals(System.getProperty("os.arch")) ? "arm64-v8a" : "x86_64";
 
+    /** The ABI of the app's own libraries: arm64-v8a for an app that runs through the native bridge (as ART reports the app's ISA on a device with one), else ABI. */
+    static String appAbi() { return "arm64".equals(System.getProperty("apklayer.nativebridge")) ? "arm64-v8a" : ABI; }  // a spare-born process gets the property with its launch
+
     /** Build field -> its property, as android.os.Build reads them. */
     private static final Map<String, String> BUILD = Map.ofEntries(Map.entry("ID", "ro.build.id"), Map.entry("DISPLAY", "ro.build.display.id"),
             Map.entry("PRODUCT", "ro.product.name"), Map.entry("DEVICE", "ro.product.device"), Map.entry("BOARD", "ro.product.board"),
