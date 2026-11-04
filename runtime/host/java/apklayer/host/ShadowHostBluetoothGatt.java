@@ -40,7 +40,11 @@ public class ShadowHostBluetoothGatt extends ShadowBluetoothGatt {
 
     /** A BluetoothGatt of this release's constructor (it changes between releases; Robolectric's newInstance knows older ones), its arguments filled by type. */
     static BluetoothGatt create(android.bluetooth.BluetoothDevice device, BluetoothGattCallback callback) {
-        java.lang.reflect.Constructor<?> constructor = BluetoothGatt.class.getDeclaredConstructors()[0];
+        // the one taking the device (getDeclaredConstructors has no defined order: another build picked one without it, and getDevice() was null)
+        java.lang.reflect.Constructor<?> constructor = java.util.Arrays.stream(BluetoothGatt.class.getDeclaredConstructors())
+                .filter(c -> java.util.Arrays.asList(c.getParameterTypes()).contains(android.bluetooth.BluetoothDevice.class))
+                .max(java.util.Comparator.comparingInt(java.lang.reflect.Constructor::getParameterCount))
+                .orElseThrow(() -> new IllegalStateException("BluetoothGatt has no constructor taking a BluetoothDevice"));
         Object[] args = new Object[constructor.getParameterCount()];
         Class<?>[] types = constructor.getParameterTypes();
         try {

@@ -27,7 +27,7 @@ Current authorization (2026-10-27, user): build anything needed in `~/los24` aut
 3. Smallest change that works: few edits, small files. Do not redo finished work.
 
 ## Architecture and maintenance
-- One responsibility per file. Shell: `bridge/shell/*.c`; host: `runtime/host/java/apklayer/host/*`; the device-library stubs `bridge/ndk/*.c` (meson, `bridge/ndk/meson.build`); build and staging entry points `tools/build`, `tools/stage`. Do not grow a file past ~600 lines; split.
+- One responsibility per file. Shell: `bridge/shell/*.c`; host: `runtime/host/java/apklayer/host/*`; the device-library stubs `bridge/ndk/*.c` (meson, `bridge/ndk/meson.build`); build: Meson end to end (`meson setup b -Dprebuilts=... && ninja -C b && meson install -C b`); staging from the LineageOS tree: `tools/stage`. Do not grow a file past ~600 lines; split.
 - Every deviation from upstream is a thin patch marked "apklayer patch" and listed in `docs/PATCHES.md`; vendored code goes in `docs/THIRD_PARTY.md`.
 - Keep `STATUS.md` short (current state only); dated entries go to `CHANGELOG.md`, decisions and open work to `docs/PLAN.md`; commit at every step.
 - Use they/them for people whose pronouns are unknown.

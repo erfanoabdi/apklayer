@@ -2,7 +2,7 @@
 
 Every edit to upstream source is a patch file whose header says what it changes and why: `patches/<project>/NNNN-*.patch`, against the
 commit pinned in the set's `REVISION`, applied idempotently (already-applied patches are skipped) by `patches/apply <project> <tree>`.
-bionic_translation: `tools/build bt` (plus `compat/` for old toolchains); Robolectric: `tools/build overlay` applies `patches/robolectric`
+bionic_translation: the Meson subproject (`subprojects/bionic_translation.wrap`); meson.build runs `patches/apply` at configure time and applies `compat/` as conditions on the toolchain; Robolectric: `runtime/meson.build` applies `patches/robolectric`
 to the tree's external/robolectric sources and compiles them into `native-runtime.jar` ahead of `Robolectric_all.jar`; LineageOS tree:
 `patches/apply aosp ~/los24` (each `patches/aosp/<project path>/` goes onto that project). apklayer's own code is not a patch and is not
 listed per class: the shadows in `runtime/host` (registered by `HostShadowProvider`), the own classes in `runtime/patches`, the java.base
@@ -48,7 +48,7 @@ and list it here. The M1 seed's patch log is in `archive/seed-m1/docs/PATCHES.md
 | compat/libunwind-before-1.8-weak-phdr | weak `unw_set_iterate_phdr_function` |
 
 `compat/include/relr-compat.h` (RELR types for glibc before 2.36) and `compat/include/stdatomic.h` (C11 atomics from C++ for gcc before 12)
-are headers `tools/build bt` adds for old toolchains, not patches.
+are headers meson.build adds for old toolchains, not patches.
 
 ## Robolectric (`patches/robolectric/`, external/robolectric)
 | Patch | Purpose |
@@ -89,7 +89,7 @@ Behaviour that differs from Android or from stock Robolectric without editing up
 - `DenyInstrument` (`runtime/host/java/apklayer/tools/DenyInstrument.java`) rewrites converted apps: `@DoNotInstrument` on every class, app java.* classes to a private package, start/stop/bind/unbindService -> `Services`, `Unsafe.getUnsafe()` (also via `Method.invoke`) -> `UnsafeAccess`, `MultiDex.install` a no-op.
 - java.base additions (`--patch-module`): libcore-only members in `JdkMembers.java` (found by `apklayer.tools.JdkScan`), FileDescriptor `getOwnerId$/getInt$/setInt$` and Android's `ArrayList$Itr` limit in `JdkPatch.java`.
 - dex2jvm: `HostDefaults.REDIRECT_EXIT = null` (an app's `System.exit` really exits) and the Unsafe redirect target `apklayer.loader.ApklayerUnsafe` (`tools/gen/unsafe-redirect.py`).
-- bionic_translation library mappings: `bridge/native/bionic_translation.cfg`, written before upstream's cfg.d by `tools/build cfg` (first line naming a library wins).
+- bionic_translation library mappings: `bridge/native/bionic_translation.cfg`, written before upstream's cfg.d by `bridge/native/meson.build` (`tools/gen/bt-cfg.py`) (first line naming a library wins).
 - libc symbols Android's libraries import that bionic_translation lacks: `bridge/native/android_platform.c`; generated do-nothing stubs: `bridge/native/android_stubs.c` (`tools/gen/android-stubs.py`).
 - SELinux: `bridge/ndk/libselinux.c` allows every check (the kernel has no SELinux).
 - JNI shim `bridge/native/runtime_shim.c`: binder/callback threads attach to the JVM, `@CriticalNative` argument thunk, `GetFieldID(FileDescriptor, "descriptor")` answers OpenJDK's `fd`.

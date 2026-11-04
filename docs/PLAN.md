@@ -13,7 +13,7 @@ before this rewrite is `docs/history/PLAN-2026-11-04-full.md`). If a decision ch
 | System apps | The tree's real providers and apps (SettingsProvider, MediaProvider, Contacts, Calendar, Downloads, DocumentsUI, WebView) installed as apklayer apps. |
 | Instances | Each instance has its own binder devices, /data, /storage, app data, properties, shell session and hub (`APKLAYER_INSTANCE`). Tests run one instance per group, several at a time. |
 | Readiness | Instance properties (`apklayer.stack.ready`, `apklayer.hub.ready`) waited on with `aprop wait`; no polling, no timers. |
-| CLI and build | C++ CLI in `cli/`; Meson for native code; `tools/build`, `tools/stage`; pinned Java deps in `deps/deps.lock`, staged tree files in `deps/android-tree-files.lock`. |
+| CLI and build | C++ CLI in `cli/`; Meson for everything (native, jars, instrumentation, install); `tools/stage`; pinned Java deps in `deps/deps.lock`, staged tree files in `deps/android-tree-files.lock`. |
 | UI | `apklayer-manager` (`manager/`, Slint C++, Material 3) over the CLI's managing commands; phone and desktop layouts. |
 | License | AGPL-3.0-or-later plus a paid commercial license (`COMMERCIAL.md`, audit in `docs/THIRD_PARTY.md`). |
 | Hosts | arm64 Linux today; x86_64 staged (`docs/X86_64.md`), never run on hardware. Distribution: Flatpak first. |
@@ -105,7 +105,7 @@ State: 1-5 and 9 done (2026-11-04; v0.1.0 tagged 2026-11-04 with prebuilts-v0.1.
 Flatpak; the per-app sandbox below; COMMERCIAL.md terms and contact, a CLA and ownership of agent-written commits, NOTICE files for everything shipped.
 
 ## Plan: one build instead of tools/* (decided 2026-11-04 by the owner, after the current round)
-Done 2026-11-04: AppHost split (the task stack in ActivityTask.java; AppHost 407 lines).
+Done 2026-11-04: AppHost split (the task stack in ActivityTask.java; AppHost 407 lines). Done 2026-11-05: items 1-3, 5 and 6 (tools/build, fetch-deps.sh, javac-jar.sh, package.sh removed; tests/run installs into <repo>/inst; debian/rules calls Meson); item 4 done for development and tests (instrumented once by ninja); the deb's per-user bundle setup remains as `tools/release/setup-runtime.sh` until the bundle format is decided (ship the instrumented framework jar in the bundle?).
 `tools/build` (217 lines of shell) hand-rolls javac/jar, zips the JNI shim into the framework jars, patches bionic_translation for old compilers with shell `if`s and stages a "native dir" with copies and symlinks; it caused today's stale shims, half-updated runtimes, the host-classes.stamp in tests/run and the per-user first-start instrumentation. Replace it with Meson end to end (`meson setup b && ninja -C b && meson install`, one layout for development, the deb and CI):
 1. bionic_translation as a Meson subproject at its pinned revision, our patch series applied by Meson; the compat patches as build conditions.
 2. Host classes, the Robolectric overlay and JdkPatch as Meson `jar()` targets with declared classpaths (exact rebuilds: no stamp files).
