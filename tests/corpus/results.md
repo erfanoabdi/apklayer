@@ -1,5 +1,33 @@
 # Compatibility results
 
+## 2026-11-04 (current F-Droid versions; UTM and Parallels, one instance per runner: `CORPUS_INSTANCE=<id> tests/corpus/run.py`; judged on each app's own SurfaceFlinger capture)
+
+| App (version) | Kind | VM | State | Note |
+|---|---|---|---|---|
+| Feeder 2.25.0 | Compose, Room | UTM | draws (All feeds) | |
+| Tusky 33.1 | Kotlin views | UTM | draws (login) | |
+| Breezy Weather 6.2.2 | Compose | UTM | draws (Locations) | |
+| Auxio 4.1.5 | media3 | UTM | draws (Songs) | |
+| Loop Habit Tracker 2.3.2 | SQLite | UTM | draws (welcome) | |
+| KeePassDX 4.5.6 | native crypto | UTM | draws (vault chooser) | |
+| Tasks.org 15.12 | Compose, Room | UTM | draws (welcome) | |
+| Thunderbird 24.0 | Compose | Parallels | draws (welcome) | |
+| mpv 2026-09-17 | native player, GL | Parallels | draws (start screen) | |
+| Organic Maps 2026.09.29 | native maps, GL | Parallels | draws (map download) | |
+| OsmAnd 5.4.11 | maps, GL | Parallels | draws (welcome) | |
+| LocalSend 1.18.2 | Flutter | Parallels | draws (Receive) | |
+| Standard Notes 3.202.11 | React Native + WebView | UTM | draws (notes, account sheet) | needs com.android.webview in the data home (black without it) |
+| Element 1.6.62 | Kotlin, Rust | UTM, Parallels | draws (welcome) | fixed: AndroidKeyStore getEntry(alias, null) |
+| VLC 3.7.2 | native player | UTM | draws (welcome) | fixed: liblog's own stderr copy (VLC reads fd 2 back: the JVM hung); the runner's "launch" check misses it (VLC sends stdout to its log) |
+| LibreTube 32.1 | media3 | UTM | draws (Home, loading) | |
+| Material Files 1.7.5 | file manager | UTM, Parallels | draws, list stays "Loading" on UTM | fixed: provider context, Os.strerror, dex2jvm re-point; Parallels says "6 folders" without rows (open) |
+| FluffyChat 2.11.3 | Flutter (Impeller) | UTM, Parallels | black | Impeller picks Vulkan; neither VM presents Vulkan (open) |
+| Nextcloud 35.0.2 (was 3.27, 2026-01) | Java | UTM, Parallels | draws (login) | fixed: hub attach at the first account use (attachBaseContext) |
+| OpenVPN 0.7.69 (was 196, 2022) | native | UTM | draws (profiles) | |
+| Shelter 1.9.1 (was 20, 2022) | Kotlin | UTM, Parallels | draws | fixed: dex2jvm constructors R8 names but deleted |
+| GPSTest 3.10.6 (was 2020) | location | UTM, Parallels | draws (Status, What's new) | fixed: GnssCapabilities never null |
+| Unciv 4.22.15 | libgdx | Parallels | draws (loading splash) | |
+
 ## 2026-11-03 (UTM VM, after the parallel round; judged on each app's own SurfaceFlinger capture)
 
 | App | State | Note |
