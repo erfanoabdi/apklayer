@@ -38,6 +38,7 @@ public class Main extends Activity {
             AvcCheck.run(this, null);
             ExtractorCheck.run(this);
             ExtractorFdCheck.run(this);
+            RetrieverMuxerCheck.run(this);
             AacCheck.run(this);
             AudioFormatsCheck.run(this);
             MoreCodecsCheck.run(this);

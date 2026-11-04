@@ -22,4 +22,7 @@ final class HostPlainShadows {
     @Implements(className = "android.webkit.CookieManager", isInAndroidSdk = false) public static final class CookieManager {}
     @Implements(className = "android.webkit.WebStorage", isInAndroidSdk = false) public static final class WebStorage {}
     @Implements(className = "android.webkit.WebViewDatabase", isInAndroidSdk = false) public static final class WebViewDatabase {}
+    /** The framework's vibrator over the instance's (absent) vibrator_manager service: hasVibrator() is false on a desktop, where Robolectric's said true. */
+    @Implements(className = "android.os.Vibrator", isInAndroidSdk = false) public static final class Vibrator {}
+    @Implements(className = "android.os.SystemVibrator", isInAndroidSdk = false) public static final class SystemVibrator {}
 }
