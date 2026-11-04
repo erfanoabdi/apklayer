@@ -36,9 +36,18 @@ final class SigningCheck implements Check {
                 gms += ", Companion too";
             }
         } catch (PackageManager.NameNotFoundException absent) { /* microG (or its Companion) not installed in this instance */ }
+        // hello.rotated rotated its key (v3 lineage, as Google Meet): GET_SIGNATURES shows the oldest key (what microG's list of Google apps names), the
+        // signing info the current one and the history, and either key matches it
+        android.content.pm.SigningInfo rotated = pm.getPackageInfo("hello.rotated", PackageManager.GET_SIGNING_CERTIFICATES).signingInfo;
+        Signature[] legacy = pm.getPackageInfo("hello.rotated", PackageManager.GET_SIGNATURES).signatures, history = rotated.getSigningCertificateHistory();
+        Check.require(rotated.hasPastSigningCertificates() && history.length == 2, "hello.rotated has no signing history");
+        Check.require(history[1].equals(rotated.getApkContentsSigners()[0]) && !history[0].equals(history[1]), "hello.rotated's history does not end in its current key");
+        Check.require(legacy.length == 1 && legacy[0].equals(history[0]), "GET_SIGNATURES of hello.rotated is not its oldest key");
+        Check.require(pm.hasSigningCertificate("hello.rotated", history[0].toByteArray(), PackageManager.CERT_INPUT_RAW_X509)
+                && pm.hasSigningCertificate("hello.rotated", history[1].toByteArray(), PackageManager.CERT_INPUT_RAW_X509), "a key of hello.rotated not matched");
         // the framework's certificate is one per device: the same in every process of the app
         String platform = OtherProcess.platformCertificate(context), inOther = OtherProcess.ask(context)[1];
         Check.require(platform.equals(inOther), "android certificate " + platform + " here, " + inOther + " in :other");
-        return "own certificate matched, a different one refused; microG: " + gms + "; android " + platform;
+        return "own certificate matched, a different one refused; rotated key: oldest in GET_SIGNATURES; microG: " + gms + "; android " + platform;
     }
 }

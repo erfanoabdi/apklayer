@@ -10,7 +10,7 @@ import org.robolectric.shadows.ShadowApplicationPackageManager;
 public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
     @org.robolectric.annotation.RealObject private android.app.ApplicationPackageManager real;
 
-    /** As PackageManagerService: the package's signers, as getPackageInfo shows them (microG's spoofed one included), against a raw X.509 certificate or its SHA-256. */
+    /** As PackageManagerService: the package's signers and rotated-away keys, as getPackageInfo shows them (microG's spoofed one included), against a raw X.509 certificate or its SHA-256. */
     @Implementation
     protected boolean hasSigningCertificate(String packageName, byte[] certificate, int type) {
         android.content.pm.PackageInfo info;
@@ -21,6 +21,7 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
         }
         android.content.pm.Signature[] signers = info.signingInfo == null ? null : info.signingInfo.getApkContentsSigners();
         if (signers == null || certificate == null) return false;
+        if (info.signingInfo.hasPastSigningCertificates()) signers = info.signingInfo.getSigningCertificateHistory();  // SigningDetails.hasCertificate: past keys match too
         for (android.content.pm.Signature signer : signers) {
             byte[] mine = signer.toByteArray();
             if (type == PackageManager.CERT_INPUT_SHA256) mine = android.util.PackageUtils.computeSha256DigestBytes(mine);
@@ -61,14 +62,15 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
         if (info == null) return null;
         installedPaths(info.applicationInfo);
         if (info.splitNames == null && info.applicationInfo != null) info.splitNames = info.applicationInfo.splitNames;
-        android.content.pm.Signature[] signatures = HostCertificate.of(info.packageName);
+        android.content.pm.SigningDetails details = HostCertificate.details(info.packageName);
         android.content.pm.Signature fake = fakeSignature(info.packageName);
-        if (fake != null) signatures = new android.content.pm.Signature[] {fake};
-        if ((flags & PackageManager.GET_SIGNATURES) != 0 && (info.signatures == null || info.signatures.length == 0 || fake != null)) info.signatures = signatures;
+        if (fake != null) details = new android.content.pm.SigningDetails(new android.content.pm.Signature[] {fake}, details.getSignatureSchemeVersion(), null, null);
+        if ((flags & PackageManager.GET_SIGNATURES) != 0 && (info.signatures == null || info.signatures.length == 0 || fake != null)) info.signatures = HostCertificate.legacy(details);
         if ((flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0 && (info.signingInfo == null || info.signingInfo.getApkContentsSigners() == null || fake != null))
         {
             android.content.pm.SigningInfo signing = new android.content.pm.SigningInfo();  // Robolectric's shadow of SigningInfo keeps the signers itself
-            org.robolectric.Shadows.shadowOf(signing).setSignatures(signatures);
+            org.robolectric.Shadows.shadowOf(signing).setSignatures(details.getSignatures());
+            org.robolectric.Shadows.shadowOf(signing).setPastSigningCertificates(details.getPastSigningCertificates());
             info.signingInfo = signing;
         }
         return info;

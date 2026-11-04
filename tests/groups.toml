@@ -44,7 +44,7 @@ needs = ["com.android.providers.settings", "com.android.providers.contacts", "co
 run = ["tests/vm/sysprov.sh"]
 
 [system-apps]
-apps = ["hello-system", "hello-accounts", "hello-accounts-hidden"]  # the accounts scenario shows its account to the one and not the other
+apps = ["hello-system", "hello-accounts", "hello-accounts-hidden", "hello-rotated"]  # signing reads hello-rotated; the accounts scenario shows its account to the one and not the other
 needs = ["com.android.providers.contacts", "com.android.documentsui"]
 run = ["tests/vm/system-apps.sh"]
 
