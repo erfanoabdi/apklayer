@@ -269,6 +269,10 @@ public final class Services {
         return resolve(ctx, intent) != null && bindService(ctx, intent, conn, flags);
     }
 
+    /** A start or stop made through the context (framework code, which the converter does not route here): our service's answer, or null when it is not ours. */
+    static ComponentName startHere(Context ctx, Intent intent) { return resolve(ctx, intent) != null ? startService(ctx, intent) : null; }
+    static Boolean stopHere(Context ctx, Intent intent) { return resolve(ctx, intent) != null ? stopService(ctx, intent) : null; }
+
     public static void unbindService(Context ctx, ServiceConnection conn) {
         if (!unbindHere(conn)) ctx.unbindService(conn);
     }

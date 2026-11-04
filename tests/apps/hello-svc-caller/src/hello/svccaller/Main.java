@@ -93,6 +93,21 @@ public class Main extends Activity {
             }
             case "filters" -> filters();
             case "own" -> own();
+            case "rebind" -> {  // unbind and bind again at once: the ":other" host, which ends with its last binding, never hands out its binder while it exits
+                java.util.Set<Integer> pids = new java.util.HashSet<>();
+                for (int round = 0; round < 8; round++) pids.add(pidOf(new Intent().setComponent(new ComponentName(this, OtherPidService.class))));
+                require(pids.size() >= 2 && !pids.contains(android.os.Process.myPid()), "the \":other\" host never ended (or ran here): " + pids);
+                System.out.println("[svc] PASS rebind: 8 bind/call/unbind rounds in a row, every call answered, the host ran in " + pids.size() + " processes");
+            }
+            case "framework" -> {  // start and stop through the context itself, as framework code calls them (the converter routes only the app's own calls)
+                java.lang.reflect.Method start = Context.class.getMethod("startService", Intent.class), stop = Context.class.getMethod("stopService", Intent.class);
+                Intent pid = new Intent(this, PidService.class);
+                Object started = start.invoke(getBaseContext(), pid);
+                require(new ComponentName(this, PidService.class).equals(started), "startService returned " + started);
+                require(PidService.STARTED.await(10, TimeUnit.SECONDS), "onStartCommand never ran");
+                require((Boolean) stop.invoke(getBaseContext(), pid) && PidService.destroyed == 1, "stopService: destroyed " + PidService.destroyed + " times");
+                System.out.println("[svc] PASS framework: a same-process service started and stopped through ContextImpl ran onStartCommand and onDestroy here");
+            }
             case "late" -> late();
             case "oneway" -> {
                 String[] answers = probe(0, IBinder.FLAG_ONEWAY);
