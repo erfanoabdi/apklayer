@@ -103,6 +103,15 @@ State: 1-5 and 9 done (2026-11-04; first real tag pending), 6-8 done (2026-11-04
 ## Before a public release
 Flatpak; the per-app sandbox below; COMMERCIAL.md terms and contact, a CLA and ownership of agent-written commits, NOTICE files for everything shipped.
 
+## Plan: one build instead of tools/* (decided 2026-11-04 by the owner, after the current round)
+`tools/build` (217 lines of shell) hand-rolls javac/jar, zips the JNI shim into the framework jars, patches bionic_translation for old compilers with shell `if`s and stages a "native dir" with copies and symlinks; it caused today's stale shims, half-updated runtimes, the host-classes.stamp in tests/run and the per-user first-start instrumentation. Replace it with Meson end to end (`meson setup b && ninja -C b && meson install`, one layout for development, the deb and CI):
+1. bionic_translation as a Meson subproject at its pinned revision, our patch series applied by Meson; the compat patches as build conditions.
+2. Host classes, the Robolectric overlay and JdkPatch as Meson `jar()` targets with declared classpaths (exact rebuilds: no stamp files).
+3. Derived files as `custom_target`s with real dependencies: critical-natives list, the shim inside the framework jars, the bionic_translation cfg.
+4. Instrumentation once at build time (CI for releases; the runtime bundle ships the instrumented framework jar): `build_runtime` and the per-user setup go.
+5. Staging is `meson install` into a prefix; tests/run, debian/rules and the release workflow call the same commands.
+6. Stays: `tools/stage` (reads the LineageOS tree; rewritten small in Python), `patches/apply`, tools/debug. Goes: `tools/build`, `tools/fetch-deps.sh` (Meson fetches the pinned artifacts), most of `tools/release/*`.
+
 ## Plan: host integration settings (decided 2026-11-04 by the owner, not started)
 The desktop's settings become Android's system settings, read live through the xdg Settings portal (`org.freedesktop.appearance` and friends) on every desktop that has it:
 1. **Night mode**: `color-scheme` -> `Configuration.uiMode` NIGHT_YES/NO and `UiModeManager` night mode; running apps get a configuration change (no restart).
