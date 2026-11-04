@@ -33,8 +33,11 @@ final class HostLocation {
             return;
         }
         // gps also needs this stack's GNSS HAL: the settings persist across stacks, and the hub may not have rewritten them yet
-        boolean network = allowed.contains(LocationManager.NETWORK_PROVIDER), gps = allowed.contains(LocationManager.GPS_PROVIDER) && gnssDeclared();
-        shadow.setProviderEnabled(LocationManager.GPS_PROVIDER, gps);
+        boolean network = allowed.contains(LocationManager.NETWORK_PROVIDER), gpsAllowed = allowed.contains(LocationManager.GPS_PROVIDER), gps = gpsAllowed && gnssDeclared();
+        // settings that allow gps on a stack without a GNSS HAL: no gps provider here, and nothing written (Robolectric's fake writes LOCATION_PROVIDERS_ALLOWED
+        // on a change, which only the system may: the SettingsProvider host died on that denial)
+        if (gpsAllowed && !gps) shadow.removeProvider(LocationManager.GPS_PROVIDER);
+        else shadow.setProviderEnabled(LocationManager.GPS_PROVIDER, gps);
         shadow.setProviderEnabled(LocationManager.NETWORK_PROVIDER, network);
         if (!manager.isLocationEnabled()) return;  // the host has no location service
         if (network) follow(shadow, LocationManager.NETWORK_PROVIDER, HostProcess.dying("python3", script("geoclue.py")));
