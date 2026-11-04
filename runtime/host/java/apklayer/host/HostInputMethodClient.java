@@ -1,11 +1,14 @@
 package apklayer.host;
 
+import android.os.IBinder;
 import android.os.IInterface;
 import android.os.Looper;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import org.robolectric.util.ReflectionHelpers;
 import org.robolectric.util.ReflectionHelpers.ClassParameter;
 
@@ -18,22 +21,27 @@ final class HostInputMethodClient {
     private HostInputMethodClient() {}
 
     private static View served;
+    // off the main thread, in order: the hub reads the settings provider to choose the IME, and a main thread blocked on that stalls the app
+    private static final ExecutorService calls = Executors.newSingleThreadExecutor(task -> {
+        Thread thread = new Thread(task, "input-method-client"); thread.setDaemon(true); return thread;
+    });
 
     /** The focused text field, or null (AppHost's loop asks every turn: only a change reaches the hub). */
     static void follow(View editor) {
         if (editor == served || !HubClient.connected()) return;
         served = editor;
-        if (editor == null) { HubClient.current().finishInput(); return; }
+        if (editor == null) { calls.execute(() -> HubClient.current().finishInput()); return; }
         EditorInfo info = new EditorInfo();
         info.packageName = editor.getContext().getPackageName();
         info.fieldId = editor.getId();
         InputConnection connection = editor.onCreateInputConnection(info);
-        if (connection == null) { HubClient.current().finishInput(); return; }
+        if (connection == null) { calls.execute(() -> HubClient.current().finishInput()); return; }
         try {
             Object remote = ReflectionHelpers.callConstructor(Class.forName("android.view.inputmethod.RemoteInputConnectionImpl"),
                     ClassParameter.from(Looper.class, Looper.getMainLooper()), ClassParameter.from(InputConnection.class, connection),
                     ClassParameter.from(InputMethodManager.class, editor.getContext().getSystemService(InputMethodManager.class)), ClassParameter.from(View.class, editor));
-            HubClient.current().startInput(((IInterface) remote).asBinder(), info);
+            IBinder binder = ((IInterface) remote).asBinder();
+            calls.execute(() -> HubClient.current().startInput(binder, info));
         } catch (ClassNotFoundException | RuntimeException failure) { System.out.println("[apklayer] cannot start input: " + failure); }
     }
 }

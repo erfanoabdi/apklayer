@@ -316,7 +316,7 @@ final class HubDirectory extends Binder {
             }
             case HubProtocol.FINISH_INPUT -> {
                 Peer caller = caller(); request.enforceNoDataAvail();
-                inputMethods.finishInput(caller);
+                inputMethods.finishInput(caller, false);
                 reply.writeNoException(); return true;
             }
             case HubProtocol.RESOLVE_ACTIVITY -> {
@@ -445,7 +445,7 @@ final class HubDirectory extends Binder {
     private void remove(Peer peer) {
         synchronized (peers) { if (!peers.remove(peer.pid, peer)) return; }
         System.out.println("[apklayer-hub] died " + peer.name + " pid=" + peer.pid);
-        inputMethods.finishInput(peer);
+        inputMethods.finishInput(peer, true);
         bindings.died(peer);
         broadcasts.died(peer);
         startedServices.died(peer);

@@ -45,6 +45,7 @@ final class HubInputMethods {
     /** The user's default input method, or the first enabled one; null without one. */
     private ComponentName chosen() {
         String enabled = HubBootSettings.inputMethods(packages);
+        if (enabled.isEmpty()) return null;
         String id = null;
         try { id = Settings.Secure.getString(RuntimeEnvironment.getApplication().getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD); }
         catch (RuntimeException unreadable) { /* the settings provider is not up: the enabled list decides */ }
@@ -74,15 +75,23 @@ final class HubInputMethods {
         if (method != null) start.run(); else whenConnected = start;
     }
 
-    /** The caller's field lost focus, or the caller is gone. */
-    synchronized void finishInput(HubDirectory.Peer caller) {
+    /**
+     * The caller's field lost focus, or the caller is gone ({@code died}): then the IME's binding ends too, so that its process does not keep the
+     * instance up after the last app (the next field that takes focus binds it again).
+     */
+    synchronized void finishInput(HubDirectory.Peer caller, boolean died) {
         if (client == null || client.pid() != caller.pid()) return;
         client = null;
         whenConnected = null;
-        if (method == null) return;
-        try { method.hideSoftInput(null); method.unbindInput(); }
-        catch (RemoteException gone) { /* the IME's process is gone: the next start binds it again */ }
-        System.out.println("[apklayer-hub] input method unbound from " + caller.name());
+        if (method != null) {
+            try { method.hideSoftInput(null); method.unbindInput(); }
+            catch (RemoteException gone) { /* the IME's process is gone: the next start binds it again */ }
+            System.out.println("[apklayer-hub] input method unbound from " + caller.name());
+        }
+        if (died && connection != null) {
+            try { bindings.unbind(SYSTEM, connection.asBinder()); } catch (RuntimeException unbound) { /* already gone with the IME's process */ }
+            connection = null; bound = null; method = null;
+        }
     }
 
     private void bind(ComponentName ime) {
