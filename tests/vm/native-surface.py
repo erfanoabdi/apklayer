@@ -72,6 +72,7 @@ try:
                 captured = True
     text = '\n'.join(seen)
     assert '[runtime] Android media JNI registered' in text
+    assert '[hello-native-surface] TEXTURE PASS' in text
     assert '[hello-native-surface] DECODE PASS' in text
     assert '[hello-native-surface] created valid=true' in text
     assert '[hello-native-surface] AVC PASS reordered 12 Surface pictures, exact PTS/EOS' in text

@@ -80,6 +80,8 @@ if [ -n "$YOUTUBE" ]; then  # the player's clock advances only while it presents
 fi
 diff=$(python3 tests/vm/media-check.py frames "$work/a.png" "$work/b.png")
 check "frames change between screenshots ($diff px differ)" "$([ "$diff" -gt 2000 ] && echo 1)"
+colour=$(python3 tests/vm/media-check.py picture "$work/b.png")  # the frames reached the GPU process's compositor: the last screenshot shows a picture
+check "the last screenshot shows video ($colour distinct colours)" "$([ "$colour" -gt 200 ] && echo 1)"
 streams=$(python3 tests/vm/media-check.py pipewire "$work/pw.json" "${APKLAYER_INSTANCE:-default}")
 check "PipeWire plays an output stream from the instance ($streams running)" "$([ "$streams" -gt 0 ] && echo 1)"
 d="${XDG_STATE_HOME:-$HOME/.local/state}/fennec-media-last"; rm -rf "$d"; cp -r "$work" "$d"; echo "  screenshots, logs and reports: $d"

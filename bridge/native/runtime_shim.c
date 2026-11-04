@@ -320,11 +320,16 @@ static int register_classes(JNIEnv *env, JavaVM *vm, void *rt)
         else if (runtime_debug()) fprintf(stderr, "[runtime] registered %s\n", c);
     }
 
-    /* apklayer patch: device GL producers are absent from HostRuntime's core list. */
+    /* apklayer patch: device GL producers are absent from HostRuntime's core list (all of AndroidRuntime's android.opengl JNI: EGL14 is
+     * what a SurfaceTexture consumer on its own thread makes current with; HostGLShadows lets the classes call these natives). */
     static const char *const device_gl[] = {
         "register_android_graphics_SurfaceTexture", "register_android_view_TextureView",
         "register_com_google_android_gles_jni_GLImpl", "register_com_google_android_gles_jni_EGLImpl",
-        "register_android_opengl_jni_GLES20", "register_android_opengl_classes", NULL
+        "register_android_opengl_jni_EGL14", "register_android_opengl_jni_EGL15", "register_android_opengl_jni_EGLExt",
+        "register_android_opengl_jni_GLES10", "register_android_opengl_jni_GLES10Ext", "register_android_opengl_jni_GLES11",
+        "register_android_opengl_jni_GLES11Ext", "register_android_opengl_jni_GLES20", "register_android_opengl_jni_GLES30",
+        "register_android_opengl_jni_GLES31", "register_android_opengl_jni_GLES31Ext", "register_android_opengl_jni_GLES32",
+        "register_android_opengl_classes", NULL
     };
     for (int i = 0; device_gl[i]; i++) {
         int (*fn)(JNIEnv *) = find_register_function(rt, hwui, device_gl[i]);
