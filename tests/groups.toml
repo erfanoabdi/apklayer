@@ -39,6 +39,7 @@ run = ["tests/vm/files.sh", "OWNDATA=1 tests/vm/files.sh"]
 
 [view]
 apps = ["hello-files", "hello-reader"]
+needs = ["com.android.externalstorage"]  # the linux-home documents provider
 setup = ["""f=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/system/etc/permissions/apklayer-test-hello-files.xml; [ -e $f ] || printf '<permissions><privapp-permissions package="hello.files"><permission name="android.permission.MANAGE_DOCUMENTS"/></privapp-permissions></permissions>\\n' > $f"""]
 run = ["tests/vm/view.sh"]
 
