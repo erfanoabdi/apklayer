@@ -162,12 +162,17 @@ public final class HubClient {
     }
 
     /** A committed install session (ShadowHostPackageInstaller) or a legacy install intent ({@code now}): the APKs go to the hub's installer as file descriptors. */
-    void commitInstall(int sessionId, String expected, String label, java.util.List<String> names, java.util.List<android.os.ParcelFileDescriptor> files, android.content.IntentSender status, boolean now) {
+    /** A legacy install intent's APKs (the hub asks the person at once). */
+    void commitInstall(java.util.List<String> names, java.util.List<android.os.ParcelFileDescriptor> files, android.content.IntentSender status) {
         HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.INSTALL_COMMIT, request -> {
-            request.writeInt(sessionId); request.writeString(expected); request.writeString(label); request.writeInt(files.size());
+            request.writeInt(files.size());
             for (int i = 0; i < files.size(); i++) { request.writeString(names.get(i)); request.writeFileDescriptor(files.get(i).getFileDescriptor()); }
-            request.writeStrongBinder(status == null ? null : status.getTarget().asBinder()); request.writeBoolean(now);
+            request.writeStrongBinder(status == null ? null : status.getTarget().asBinder());
         }, reply -> null);
+    }
+    /** One operation on the hub's install sessions (HubInstallSessions). */
+    <T> T installSession(int op, java.util.function.Consumer<android.os.Parcel> write, java.util.function.Function<android.os.Parcel, T> read) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.INSTALL_SESSION, request -> { request.writeInt(op); write.accept(request); }, read);
     }
     void preapproveInstall(int sessionId, String pkg, String label, android.content.IntentSender status) {
         HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.INSTALL_PREAPPROVE, request -> {

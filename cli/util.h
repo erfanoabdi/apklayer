@@ -43,6 +43,7 @@ struct Spawn {
     bool newSession = false;       // setsid(): the child leads its own process group
     bool detach = false;           // double fork: nobody waits for it
     bool keepStdin = false;        // stdin stays (a spare component host reads its target there); /dev/null otherwise
+    bool endWithParent = false;    // SIGKILL when the spawning process ends (PR_SET_PDEATHSIG)
 };
 
 // Starts a process; returns its pid. The caller owns waiting for it (not for a detached one: init reaps it).

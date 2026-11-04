@@ -160,6 +160,10 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
     std::string dir = appDir(l, pkg);
     std::string old = join(dir, "info.properties");
     // an update as Android allows it (INSTALL_FAILED_UPDATE_INCOMPATIBLE, INSTALL_FAILED_VERSION_DOWNGRADE): the same signer, no lower version unless asked
+    if (property(info, "signer").empty()) {  // PackageManagerService refuses an APK without a readable signing certificate
+        std::cerr << "apklayer: INSTALL_PARSE_FAILED_NO_CERTIFICATES: " << name << " is not signed" << std::endl;
+        std::exit(kInstallUnsigned);
+    }
     if (!property(info, "signerMismatch").empty()) {
         std::cerr << "apklayer: INSTALL_FAILED_UPDATE_INCOMPATIBLE: " << pkg << " is installed with another signature" << std::endl;
         std::exit(kInstallIncompatible);

@@ -18,7 +18,7 @@ import vm  # noqa: E402
 GROUPS = tomllib.loads((vm.REPO / 'tests/groups.toml').read_text())
 LOGS = vm.REPO / 'build/tests'
 print_lock = threading.Lock()
-INSTANCE_MB = 1300  # what one running instance (stack, hub, app JVMs, shell) takes
+INSTANCE_MB = 1650  # what one running instance (stack, hub, app JVMs, shell, the component and app spares: ~340 MB each) takes
 MIN_FREE_MB = 3000  # a group starts only while the VM has this much available (room for the other users of the VM)
 
 
@@ -59,6 +59,9 @@ def prepare(groups, slots):
     setup = [c for g in groups for c in GROUPS[g].get('setup', [])]
     for command in dict.fromkeys(setup):
         assert vm.ssh(vm.instance_env(slots[0]) + command).returncode == 0, 'setup failed: ' + command
+    # the installs start a stack in the first slot: a group there found it running (started without the group's environment), and when
+    # no group takes that slot it stayed up after the run
+    vm.ssh(vm.instance_env(slots[0]) + 'bin/apklayer stop', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     say('prepared (push, build, %d apps) in %.0f s' % (len(apps), time.monotonic() - t))
 
 

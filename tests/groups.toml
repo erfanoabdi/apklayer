@@ -72,7 +72,7 @@ run = ["python3 -u tests/vm/hub.py services start", "python3 -u tests/vm/hub.py 
        "python3 -u tests/vm/hub.py services rebind", "python3 -u tests/vm/hub.py services framework"]
 
 [installer]
-apps = ["hello-installer"]  # carries the payload APKs (hello-payload with a config split, hello-payload2, hello-payload-other) as assets
+apps = ["hello-installer", "hello-legacy-receiver"]  # hello-installer carries the payload APKs (hello-payload with config and ABI splits, hello-payload2, hello-payload-other, hello-installer2) as assets
 run = ["python3 -u tests/vm/installer.py"]
 
 [activities]
@@ -220,9 +220,10 @@ needs = ["org.mozilla.fennec_fdroid"]
 run = ["tests/vm/fennec.sh"]
 
 [fennec-media]
-optional = true  # needs Fennec past its onboarding in the group's instance
+optional = true  # YouTube needs the network
 needs = ["org.mozilla.fennec_fdroid"]
-run = ["tests/vm/fennec-media.sh", "YOUTUBE=jNQXAC9IVRw tests/vm/fennec-media.sh"]  # local WebM/MP4, then YouTube's embedded player (network)
+# local WebM/MP4 (a fresh install's first start included), YouTube's embedded player, an m.youtube.com watch page (Big Buck Bunny, past the consent page)
+run = ["tests/vm/fennec-media.sh", "YOUTUBE=jNQXAC9IVRw tests/vm/fennec-media.sh", "WATCH=aqz-KE-bpKQ tests/vm/fennec-media.sh"]
 
 [newpipe-media]
 optional = true  # needs the network (YouTube)

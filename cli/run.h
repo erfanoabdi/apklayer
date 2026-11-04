@@ -9,6 +9,8 @@ namespace apklayer {
 enum class RunMode { App, Component, Spare };
 int runApp(const Layout& layout, const Instance& instance, const std::string& package, RunMode mode);
 int printPackageArgs(const Layout& layout, const Instance& instance, const std::string& package);
+// A window JVM's command line up to apklayer.host.Main without the launch's own options (package, window, runms; sets env as hostJvmArgs): what an app spare starts with.
+std::vector<std::string> windowJvmArgs(const Layout& layout, const Instance& instance, NativeEnv& env);
 int waitHub(const Layout& layout, const Instance& instance);
 int runHub(const Layout& layout, const Instance& instance);
 // PNG of what SurfaceFlinger shows on an app window (by package or layer stack); 0 when the file was written.

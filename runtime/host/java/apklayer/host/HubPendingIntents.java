@@ -70,9 +70,15 @@ final class HubPendingIntents {
         }
     }
 
-    /** Sends through the sender's own PendingIntent (the sender's fill-in intent, result receiver and permission); the status is negative when it was canceled. */
+    /**
+     * Sends through the sender's own PendingIntent (the sender's fill-in intent, result receiver and permission); the status is negative when it was canceled.
+     * Any other IIntentSender (an app's own, as IntentSender wraps one) gets the call itself, as IntentSender.sendIntent makes it.
+     */
     int send(IBinder sender, int code, Intent fillIn, IBinder finished, String requiredPermission) {
-        return sender instanceof Record record ? dispatch(record, code, fillIn, finished, requiredPermission) : CANCELED;
+        if (sender instanceof Record record) return dispatch(record, code, fillIn, finished, requiredPermission);
+        if (sender == null) return CANCELED;
+        try { IIntentSender.Stub.asInterface(sender).send(code, fillIn, null, null, IIntentReceiver.Stub.asInterface(finished), requiredPermission, null); return 0; }
+        catch (android.os.RemoteException gone) { return CANCELED; }
     }
 
     private int dispatch(Record record, int code, Intent fillIn, IBinder finished, String requiredPermission) {

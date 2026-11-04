@@ -10,11 +10,14 @@ public final class HubHost {
     private HubHost() {}
     public static void run(AndroidSandbox sandbox) {
         Thread.currentThread().setContextClassLoader(sandbox.getRobolectricClassLoader());
+        // before the hub's own setup (~1 s): the first component host, the settings provider an app's Application.onCreate waits for, is then warm by the time it is asked for
+        HubSpare spare = new HubSpare(HubDirectory.LOGS);
+        spare.start();
         AppEnvironment.setUpApplication(sandbox, null, false);
         RuntimeEnvironment.getApplication();
         RealBinder.init();
         Path apps = Path.of(System.getProperty("apklayer.apps"));
-        HubDirectory directory = new HubDirectory(apps);
+        HubDirectory directory = new HubDirectory(apps, spare);
         if (!RealBinder.publish(HubProtocol.SERVICE, directory))
             throw new IllegalStateException("Cannot publish instance hub");
         if (!RealBinder.publish(HubAccounts.SERVICE, directory.accounts()))
@@ -23,7 +26,6 @@ public final class HubHost {
             throw new IllegalStateException("Cannot publish the permission checker");
         HostBattery.installHub(directory::sendSystem);
         System.out.println("[apklayer-hub] READY pid=" + android.os.Process.myPid());
-        directory.startSpare();  // the first component host starts warm
         new Thread(() -> HubBootSettings.write(RuntimeEnvironment.getApplication(), directory), "hub-boot-settings").start();  // the hub is the instance's system (uid 1000)
         Thread audio = new Thread(() -> HubAudioPermissions.watch(directory.packages()), "hub-audio-permissions");
         audio.setDaemon(true);

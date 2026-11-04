@@ -137,6 +137,12 @@ void apklayer_log_to_stderr(void)
     set_logger(stderr_logger);
 }
 
+/* stderr was replaced (an app spare's launch, spare_target.c): the log's copy follows */
+void apklayer_log_follow_stderr(void)
+{
+    if (log_fd != 2) dup3(2, log_fd, O_CLOEXEC);
+}
+
 /* Debug aid (-Dapklayer.runtimetrace=true, or APKLAYER_CRASH_TRACE=1 in btload): on SIGABRT/SIGSEGV print the frame-pointer chain of the faulting thread and the
  * memory map lines of the Android libraries, so addresses can be resolved with readelf/nm (gdb cannot unwind libraries
  * that the bionic linker loaded). Android's arm64 code keeps frame pointers. */
