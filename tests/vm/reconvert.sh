@@ -12,6 +12,7 @@ info() { $cli info $pkg | awk -F'\t' -v k=$1 '$1 == k { print $2 }'; }
 
 abi=$($cli --version | awk -F'\t' '$1 == "converterAbi" { print $2 }')
 [ -n "$abi" ] || fail "apklayer --version names no converterAbi"
+had=$([ -d $apps/$pkg ] && echo yes)  # the UiBench groups need it installed: left as it was found
 $cli install tests/uibench/uibench.apk >/dev/null
 props=$apps/$pkg/info.properties
 grep -qx "converterAbi=$abi" $props || fail "the install did not record converterAbi=$abi"
@@ -42,6 +43,6 @@ XDG_DATA_HOME=$w/fresh $cli list >/dev/null && [ "$(cat $w/fresh/apklayer/data-f
     fail "a fresh data home did not get the current format"
 ok "data format: a newer one is refused, a fresh data home records the current one"
 
-$cli uninstall $pkg >/dev/null
+[ -n "$had" ] || $cli uninstall $pkg >/dev/null
 $cli stop >/dev/null
 echo "PASS reconvert"
