@@ -75,7 +75,15 @@ before this rewrite is `docs/history/PLAN-2026-11-04-full.md`). If a decision ch
 - **A person**: the window raise of a relaunched app (the shell asks with the launcher's XDG_ACTIVATION_TOKEN; mutter refuses the shell's own token, no test has a launcher token); what the text magnifier draws; the portal file chooser and pkexec prompt in the manager; the Google sign-in in Meet/microG; playback quality by ear and eye.
 
 ## Before a public release
-Flatpak; per-app sandbox with kernel-attested uids (a privileged launcher; bwrap is blocked by Ubuntu's userns restriction); COMMERCIAL.md terms and contact, a CLA and ownership of agent-written commits, NOTICE files for everything shipped.
+Flatpak; the per-app sandbox below; COMMERCIAL.md terms and contact, a CLA and ownership of agent-written commits, NOTICE files for everything shipped.
+
+## Plan: per-app sandbox with `apklayerd` (decided 2026-11-04 by the owner, not started)
+Today every app JVM runs as the desktop user: apps can read each other's data and the user's home, and caller identity rests on the hub's pid registry.
+1. **Daemon**: one rootless user daemon, `apklayerd` (`systemctl --user`), grown from today's per-instance stack daemon: it owns the instances (binder devices, stacks, hubs, spare hosts) and starts every app process. The CLI and the manager talk to it over a socket (`SO_PEERCRED` checks the caller). No root daemon (a daemon bug would be a root exploit, docker's known problem; root services also do not fit Flatpak).
+2. **Per-app uids**: each app (per instance) gets its own uid inside a user namespace, mapped to the user's `/etc/subuid` range (rootless podman's model: newuidmap/newgidmap); its own mount namespace shows its `/data` and what it was granted, read-only shared runtime files, nothing of the user's home. Ubuntu 24.04+ restricts unprivileged user namespaces: ship one AppArmor profile for apklayerd. The kernel then attests binder caller uids (keystore2 namespaces, AppOps, permission checks follow the real uid).
+3. **Storage (the owner's choice)**: default is brokered access, Android's and Flatpak's model: an app reaches the user's files only through the picker (DocumentsUI or the desktop's file chooser portal), which runs as the user and hands over the one file or folder chosen. Per-app opt-in in the manager: full Home access (the user's home mounted read-write into that app's view; offered for apps holding `MANAGE_EXTERNAL_STORAGE`, like Flatpak's `--filesystem=home`).
+4. **To solve**: desktop sockets in `/run/user/<uid>` are 0700 (Wayland, PipeWire, D-Bus): apklayerd and the window shell (running as the user) open them and pass descriptors to app processes (the shell already brokers each app's window); GPU render nodes through the `render` group or the namespace mapping; per-uid ownership of app data, with a migration of existing `app-data`; Robolectric's sandbox and the component hosts per uid (one JVM per app process already).
+5. **Tests**: an app cannot read another app's data dir or the user's home; a granted file is readable, a non-granted one is not; binder caller uid equals the app's uid; all groups pass with the sandbox on.
 
 ## Parked (owner's decision)
 - Camera over PipeWire: last priority.
