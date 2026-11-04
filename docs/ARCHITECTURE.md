@@ -85,7 +85,8 @@ side; buffers cross as dmabuf fds and fences as sync_file fds; one directory per
 - Media: Codec2 and the extractor run as separate AOSP services with host GStreamer decoders behind them; YUV reaches SurfaceFlinger as dmabufs. Audio goes through the audio HAL to PipeWire.
 - Instance hub: a headless JVM (`apklayer hub`) owns the package/process directory; app JVMs carry real Binder/Parcel between each other. It reuses the framework's APK parser, launches
   service-only apps through `component-host`, and implements bound and started services, broadcasts, providers, activities, notifications and pending intents. Tests: `tests/run` (groups in `tests/groups.toml`).
-- Spares, zygote's role: every process kind shares one sandbox (no package on its classpath), so a JVM can build it and load the native runtime before it knows its
-  package. The hub keeps a spare component host (`HubSpare`, started before the hub's own setup); `apklayer run` leaves an app spare (`apklayer app-spare`, `cli/spare.cpp`,
-  `AppSpare`) once its first activity is up, which the next launch of the same runtime build and environment takes with its options, stdout and stderr (SCM_RIGHTS).
+- The spare, zygote's role: every process kind shares one sandbox (no package on its classpath), so a JVM can build it, load the native runtime and dry-run the
+  state setup before it knows its package. One per instance, owned by the CLI (`apklayer app-spare`, `cli/spare.cpp`, `AppSpare`): the next app launch or component
+  host start (`apklayer run`, the hub's `apklayer component-host`) of the same runtime build and environment takes it with its options, per-launch environment
+  (`-Dapklayer.env.*`), stdout and stderr (SCM_RIGHTS); it is refilled once that process is up, and the hub wakes it at its own start.
 - Every piece is meant to be per instance (instance root for data, properties, binder device, sockets); several instances at once are deferred (`docs/PLAN.md`).

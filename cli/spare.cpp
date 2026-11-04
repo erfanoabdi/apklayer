@@ -19,7 +19,8 @@
 namespace apklayer {
 
 namespace {
-// One SOCK_SEQPACKET message each way. Launch -> holder: key, NUL, target lines, with fds 1 and 2. Holder -> launch: "pid <n>" (taken) or "stale <why>"
+// One SOCK_SEQPACKET message each way. Launch -> holder: key, NUL, target lines, with fds 1, 2 and its started pipe; or "now" (wakeAppSpare: no
+// answer). Holder -> launch: "pid <n>" (taken) or "stale <why>"
 // (another key: the holder ends, the launcher starts a spare of its own key), later "exit <status>". Holder -> spare JVM: target lines, with the fds.
 std::string socketPath(const Instance& inst) { return join(inst.stateDir, "app-spare.sock"); }
 
