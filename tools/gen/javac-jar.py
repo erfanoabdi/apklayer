@@ -35,7 +35,7 @@ def main():
     a.add_argument('--patched', nargs=2, action='append', default=[])
     a.add_argument('--javac', action='append', default=[])
     a.add_argument('sources', nargs='*')
-    args = a.parse_args()
+    args = a.parse_intermixed_args()  # sources after options (Python before 3.13 stops at the first option otherwise)
     classes = Path(args.classes)
     shutil.rmtree(classes, ignore_errors=True)
     classes.mkdir(parents=True)
