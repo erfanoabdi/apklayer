@@ -150,6 +150,9 @@ final class HubDirectory extends Binder {
             } catch (IOException failure) { throw new IllegalStateException("Cannot launch app " + name, failure); }
         }
     }
+    /** A new host for `name` when a binding waits for one and none is registered. A host's end shows three ways in any order (its process exits,
+     * its binder dies, a bind delivery to it fails): each asks, and the last finds the old host gone (launch skips one still running). */
+    void ensureHost(String name) { if (!stopping && peer(name) == null && bindings.needsHost(name)) launch(name); }
     void launch(String name) {
         if (stopping || peer(name) != null) return;
         int hash = name.indexOf('#');
