@@ -57,7 +57,7 @@ def own_data_dir(pkg):
     want = '/apklayer/%s/app-data/%s' % ('0' if INSTANCE == 'default' else INSTANCE, pkg)
     assert info['dataDir'].endswith(want), 'app data of %s not per instance: %s' % (pkg, info['dataDir'])
     assert Path(info['dataDir'], 'app/app_webview').is_dir(), 'no WebView profile in ' + info['dataDir']
-    assert not Path(info['dir'], 'data').exists(), 'a data dir beside the shared code: ' + info['dir'] + '/data'
+    # an apps/<pkg>/data of before 2026-11-04 may stay: it is the default instance's, moved there at that instance's next run (cli/apps.cpp appDataDir)
     print('[wv] app data per instance: ' + info['dataDir'], flush=True)
 
 
