@@ -24,6 +24,11 @@ final class HubActivities {
 
     HubActivities(HubDirectory directory, HubPackages packages, HubProviders providers) { this.directory = directory; this.packages = packages; this.providers = providers; }
 
+    /** Whether start would find an activity for the intent (the caller's startActivity throws ActivityNotFoundException otherwise). */
+    boolean resolvable(HubDirectory.Peer caller, Intent intent) {
+        return intent.hasExtra(HubInstaller.CONFIRM) || packages.activity(intent, caller.name()) != null;
+    }
+
     /** False when no activity can handle the intent. */
     boolean start(HubDirectory.Peer caller, Intent intent, ResultReceiver resultTo) {
         if (directory.installer().confirm(caller, intent)) return true;  // a confirmation the installer starts (or sends as its PendingIntent) is the hub's own

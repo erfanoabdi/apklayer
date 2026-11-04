@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Cross-app tests through the instance hub, one phase per run: `hub.py <test> <phase>`. The test app prints `[<tag>] PASS|FAIL|KILL <pid>`;
 every JVM is owned and reaped. Tests: providers (basic denied death observe files grant), services (start selfstop sticky private filters own late oneway respawn rebind framework),
-activities (result explicit again private up), pendingintents (broadcast targets cancel), notifications (click), webview (probe). HUB_VERBOSE=1: all lines."""
+activities (result explicit again private up), pendingintents (broadcast targets cancel), notifications (click cancel muted), webview (probe). HUB_VERBOSE=1: all lines."""
 import os
 import selectors
 import signal
@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import instance  # noqa: E402
 from instance import ENV, HOST_LIBS, LOGDIR, INSTANCE, SESSION, capture, stop  # noqa: E402
 
 TEST, PHASE = sys.argv[1], sys.argv[2]
@@ -33,17 +34,23 @@ if TEST == 'webview':
     env.update(APKLAYER_WEBVIEW_PROVIDER='com.android.webview', APKLAYER_LOGCAT='1')
     if os.environ.get('WV_RTDEBUG'): env['APKLAYER_RUNTIME_DEBUG'] = '1'
 log = Path(LOGDIR)
+HUB_START = len((log / 'hub.log').read_text(errors='replace')) if (log / 'hub.log').exists() else 0  # hub.log is appended to: this run's part
+
+
+def hub_wait(needle, seconds): return instance.wait_file(log / 'hub.log', needle, seconds, HUB_START)
+
+
+def wait_popup():
+    """The id of the hub's desktop popup for the posted notification."""
+    found = hub_wait('notification popup=', 15)
+    popup = [l for l in found.split('\n') if 'notification popup=' in l][-1].split('popup=')[1].strip()
+    assert popup and popup != '0', 'the hub showed no desktop notification: ' + str(popup)
+    return popup
 
 
 def notification_clicks():
     """The hub's desktop popup for the posted notification: its default action, its first action button, then dismissed (as the desktop would)."""
-    popup = None
-    for _ in range(15):
-        text = (log / 'hub.log').read_text(errors='replace') if (log / 'hub.log').exists() else ''
-        found = [l for l in text.split('\n') if 'notification popup=' in l]
-        if found: popup = found[-1].split('popup=')[1].strip(); break
-        time.sleep(1)
-    assert popup and popup != '0', 'the hub showed no desktop notification: ' + str(popup)
+    popup = wait_popup()
     print('[nt] desktop popup id ' + popup, flush=True)
     bus = dict(os.environ, DBUS_SESSION_BUS_ADDRESS='unix:path=%s/bus' % SESSION)
     for member, args in (('ActionInvoked', ['uint32 ' + popup, "'default'"]), ('ActionInvoked', ['uint32 ' + popup, "'action0'"]), ('NotificationClosed', ['uint32 ' + popup, 'uint32 2'])):
@@ -64,6 +71,9 @@ def own_data_dir(pkg):
 stop()
 if TEST == 'services' and PHASE == 'late':  # installed only while the test runs
     subprocess.run(['bin/apklayer', 'uninstall', 'hello.svclate'], env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+MUTE = ['bin/apklayer', 'permissions', '%s', 'hello.ntposter', 'android.permission.POST_NOTIFICATIONS']
+if TEST == 'notifications' and PHASE == 'muted':  # the user turns the app's notifications off (granted again afterwards)
+    subprocess.run([a.replace('%s', 'revoke') for a in MUTE], env=ENV, check=True)
 proc = None
 lines = []
 try:
@@ -87,7 +97,16 @@ try:
                     for _ in range(5):
                         if events.select(0.5): lines.extend(os.read(proc.stdout.fileno(), 65536).decode(errors='replace').split('\n'))
                     raise AssertionError(line + '\n' + '\n'.join(l for l in lines[-60:] if 'symbol may' not in l))
-                if line.startswith('[nt] POSTED'): notification_clicks()
+                if line.startswith('[nt] POSTED click'): notification_clicks()
+                if line.startswith('[nt] CANCELLED'):  # the app cancelled it: the hub closes the desktop popup, the desktop confirms (reason 3: CloseNotification)
+                    popup = wait_popup()
+                    hub_wait('notification cancelled, popup %s closed' % popup, 10)
+                    hub_wait('popup %s closed by the desktop, reason 3' % popup, 10)
+                    print('[nt] the app cancelled it: popup %s closed' % popup, flush=True)
+                    print('PASS %s %s' % (TEST, PHASE), flush=True)
+                    raise SystemExit(0)
+                if '[nt] PASS muted' in line:
+                    assert 'notification popup=' not in hub_wait('dropped: notifications of hello.ntposter are off', 10), 'a muted app showed a desktop popup'
                 if line.startswith('[%s] INSTALL ' % tag):  # a package installed while the instance runs (services late)
                     apk = Path(os.environ.get('APKLY_APKS', '.tests/apks')) / (line.split()[2] + '.apk')
                     subprocess.run(['bin/apklayer', 'install', str(apk)], env=ENV, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
@@ -112,3 +131,4 @@ finally:
             if name.exists(): print('--- %s (tail)' % name.name, *[l[:200] for l in name.read_text(errors='replace').split('\n') if 'symbol may' not in l][-25:], sep='\n', flush=True)
     if proc is not None and proc.poll() is None: os.killpg(proc.pid, signal.SIGTERM)
     stop()
+    if TEST == 'notifications' and PHASE == 'muted': subprocess.run([a.replace('%s', 'grant') for a in MUTE], env=ENV, check=True)

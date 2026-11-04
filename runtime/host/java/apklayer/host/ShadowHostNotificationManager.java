@@ -16,7 +16,16 @@ public class ShadowHostNotificationManager extends ShadowNotificationManager {
 
     @Implementation @Override protected void notify(int id, Notification notification) { notify(null, id, notification); }
 
+    private static boolean muted() { return HubNotifications.muted(RuntimeEnvironment.getApplication().getPackageName()); }
+
+    /** The user's switch for the app (HubNotifications.muted), not Robolectric's test flag. */
+    @Implementation @Override protected boolean areNotificationsEnabled() { return !muted(); }
+
+    /** NotificationManagerService.getPackageImportance: IMPORTANCE_NONE when the app's notifications are off, otherwise unspecified (Robolectric answers NONE: "blocked"). */
+    @Implementation @Override protected int getImportance() { return muted() ? NotificationManager.IMPORTANCE_NONE : NotificationManager.IMPORTANCE_UNSPECIFIED; }
+
     @Implementation @Override protected void notify(String tag, int id, Notification notification) {
+        if (muted()) return;  // NotificationManagerService drops it: nothing posted, nothing active
         super.notify(tag, id, notification);
         if (!hub()) return;
         Context context = RuntimeEnvironment.getApplication();

@@ -32,12 +32,18 @@ public class ShadowHostInstrumentation extends ShadowInstrumentation {
         Shadow.directlyOn(real, "android.app.Instrumentation", "callApplicationOnCreate", org.robolectric.util.ReflectionHelpers.ClassParameter.from(Application.class, app));
     }
 
-    /** -Dapklayer.tracestart=true: who started an activity (an app that relaunches itself, a start nobody expected). */
+    /**
+     * Instrumentation.checkStartActivityResult: an implicit intent that no installed app (and none of the host's answers) handles throws
+     * ActivityNotFoundException in the caller, as on Android. -Dapklayer.tracestart=true: who started an activity (an app that relaunches itself, a start nobody expected).
+     */
     @Implementation
     @Override
     protected ActivityResult execStartActivity(android.content.Context who, android.os.IBinder contextThread, android.os.IBinder token, android.app.Activity target,
             android.content.Intent intent, int requestCode, android.os.Bundle options) {
         if (Boolean.getBoolean("apklayer.tracestart")) new Throwable("[apklayer] startActivity " + intent).printStackTrace(System.out);
+        if (intent.getComponent() == null && HubActivityClient.enabled() && !HostPortals.hostAnswers(intent)
+                && who.getPackageManager().resolveActivity(intent, 0) == null && !HubActivityClient.resolvable(intent))
+            throw new android.content.ActivityNotFoundException("No Activity found to handle " + intent);
         return super.execStartActivity(who, contextThread, token, target, intent, requestCode, options);
     }
 }

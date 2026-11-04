@@ -306,6 +306,10 @@ final class HubDirectory extends Binder {
                 boolean found = activities.start(caller, intent, resultTo);
                 reply.writeNoException(); reply.writeInt(found ? 0 : -1); return true;
             }
+            case HubProtocol.RESOLVE_ACTIVITY -> {
+                Peer caller = caller(); Intent intent = request.readTypedObject(Intent.CREATOR); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeInt(activities.resolvable(caller, intent) ? 1 : 0); return true;
+            }
             case HubProtocol.START_SERVICE -> {
                 Peer caller = caller(); Intent intent = request.readTypedObject(Intent.CREATOR); request.enforceNoDataAvail();
                 android.content.ComponentName name = startedServices.start(caller, intent);

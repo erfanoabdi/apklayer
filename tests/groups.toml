@@ -86,7 +86,7 @@ run = ["python3 -u tests/vm/hub.py pendingintents broadcast", "python3 -u tests/
 
 [notifications]
 apps = ["hello-nt-poster"]
-run = ["python3 -u tests/vm/hub.py notifications click"]
+run = ["python3 -u tests/vm/hub.py notifications click", "python3 -u tests/vm/hub.py notifications cancel", "python3 -u tests/vm/hub.py notifications muted"]
 
 [broadcasts]
 apps = ["hello-bc-receiver", "hello-bc-sender", "hello-bc-denied"]
