@@ -4,6 +4,7 @@ Dated entries, newest first by section; this is where status history lives (STAT
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
 ## 2026-11-04: parallel rounds (instances, windows, manager, media, installer, identity, corpus with current apps)
+- 2026-11-05: camera: webcams with only large modes work in Camera1 and Open Camera's camera2 path (common smaller sizes, orientation 90 for desktop cameras, 8 s for a slow first frame). HostLocation keeps the gps provider when a fix arrives before the GNSS client's ready line. Sensors (sensorfw, iio) and vibrator (hfd, feedbackd, force feedback) host backends; an unset domain runs the best probe().
 - 2026-11-05: `apklayer providers` prints options as tab fields and `option` rows; manager Hardware page (backend choice, options, live tests).
 - 2026-11-05: arm64-only apps on x86_64 through the native bridge (Digitalis): the guest start-up stall fixed; hello-arm64 passes and Nextcloud draws on the x86 PC.
 - 2026-11-05: HIDL host context (libhwbinder/libhidl patches): `apklayer providers set camera|vibrator device` uses the phone's own HAL; on the Ubuntu Touch phone an instance lists its 3 cameras and 16 Codec2 codecs.
