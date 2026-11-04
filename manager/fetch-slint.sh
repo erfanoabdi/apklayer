@@ -7,6 +7,8 @@ V=1.18.1 M=1.1.0
 case "$(uname -m)" in
     aarch64) cpp=Slint-cpp-$V-Linux-arm64 cpp_sha=810cfed786c3f63aea9c1b73371a02ed591129d18e077094afa9e024e2d714fd
              comp=slint-compiler-Linux-aarch64 comp_sha=6d704012132ec8c8fadddefb86ba192cd83e09048edbcf61aee457aca300c78c ;;
+    x86_64)  cpp=Slint-cpp-$V-Linux-x86_64 cpp_sha=f0b24ea601b80afe241677d1179bf5215dceae529f2b275b678a0af9a144b255
+             comp=slint-compiler-Linux-x86_64 comp_sha=543091e6102a02db3403aa77c774a11d9f383b31cb03e25cddad63269a1fb779 ;;
     *) echo "fetch-slint: no pinned hashes for $(uname -m) yet: add them from https://github.com/slint-ui/slint/releases/tag/v$V" >&2; exit 1 ;;
 esac
 mkdir -p "$DEST"
