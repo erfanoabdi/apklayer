@@ -56,5 +56,36 @@ public class Main extends Activity {
         });
         setContentView(layout);
         field.requestFocus();
+        if (System.getProperty("hello.magnifier") != null) {
+            field.setText("magnify me");
+            field.postDelayed(() -> magnify(field), 2000);
+        }
+    }
+
+    /** The surfaces a text drag makes (tests/vm/magnifier.sh): a child layer of the window's own layer and the text magnifier. */
+    private void magnify(EditText field) {
+        try {
+            Object root = android.view.View.class.getMethod("getViewRootImpl").invoke(field);
+            android.view.SurfaceControl parent = (android.view.SurfaceControl) root.getClass().getMethod("getSurfaceControl").invoke(root);
+            android.view.SurfaceControl child = new android.view.SurfaceControl.Builder().setName("hello-child").setBufferSize(32, 32)
+                    .setParent(parent).build();
+            System.out.println("[hello-input] child layer valid=" + child.isValid());
+            new android.view.SurfaceControl.Transaction().reparent(child, null).apply();
+            child.release();
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+        android.widget.Magnifier magnifier = new android.widget.Magnifier(field);
+        magnifier.show(field.getWidth() / 4f, field.getHeight() / 2f);
+        System.out.println("[hello-input] magnifier shown");
+        // what the magnifier reads: the window's last frame through PixelCopy
+        android.graphics.Bitmap copy = android.graphics.Bitmap.createBitmap(field.getWidth(), field.getHeight(), android.graphics.Bitmap.Config.ARGB_8888);
+        android.view.PixelCopy.request(getWindow(), copy, result ->
+                System.out.println("[hello-input] pixel copy result=" + result + " corner=" + Integer.toHexString(copy.getPixel(0, 0))),
+                new android.os.Handler(getMainLooper()));
+        field.postDelayed(() -> {
+            magnifier.dismiss();
+            System.out.println("[hello-input] magnifier dismissed");
+        }, 1000);
     }
 }
