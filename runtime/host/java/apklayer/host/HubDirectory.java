@@ -34,6 +34,7 @@ final class HubDirectory extends Binder {
     private final HubAccounts accounts;
     private final HubInstaller installer;
     private final HubInputMethods inputMethods;
+    private final HubBluetooth bluetooth = new HubBluetooth(this);
     private final Map<String, Process> appProcesses = new HashMap<>();
     private final Map<String, Process> hosts = new HashMap<>();
     private final Map<String, Integer> failures = new HashMap<>();
@@ -443,6 +444,12 @@ final class HubDirectory extends Binder {
             case HubProtocol.INSTALL_SOURCE -> {
                 Peer caller = caller(); boolean ask = request.readBoolean(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeBoolean(installer.source(caller, ask)); return true;
+            }
+            case HubProtocol.BLUETOOTH -> {
+                Peer caller = caller(); String address = request.readString(), uuid = request.readString(); request.enforceNoDataAvail();
+                android.os.ParcelFileDescriptor[] pipes;
+                try { pipes = bluetooth.open(caller, address, uuid); } catch (IOException failure) { throw new IllegalStateException("Bluetooth: " + failure, failure); }
+                reply.writeNoException(); for (var pipe : pipes) reply.writeTypedObject(pipe, android.os.Parcelable.PARCELABLE_WRITE_RETURN_VALUE); return true;
             }
             case HubProtocol.CHECK_PERMISSION -> {
                 caller(); int pid = request.readInt(), uid = request.readInt(); String permission = request.readString(); request.enforceNoDataAvail();

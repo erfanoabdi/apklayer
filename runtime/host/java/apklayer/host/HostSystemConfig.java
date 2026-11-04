@@ -38,6 +38,9 @@ final class HostSystemConfig {
         for (String dir : new String[] {"etc/permissions", "etc/sysconfig"}) config.readDir(new File(root, dir), false);
         config.readDir(new File(new File(root).getParentFile(), "vendor/etc/permissions"), false);  // the vendor half: what this device's host layers provide
         config.readDir(new File(root, "etc/default-permissions"), true);
+        String[] adapters = new File("/sys/class/bluetooth").list();  // the host has a Bluetooth adapter: BlueZ through the hub (HubBluetooth)
+        if (adapters != null && adapters.length > 0)
+            config.features.addAll(java.util.List.of("android.hardware.bluetooth", "android.hardware.bluetooth_le"));
         try {
             for (String line : java.nio.file.Files.readAllLines(new File(root, "etc/apklayer-permission-levels.tsv").toPath())) {
                 String[] parts = line.split("\t");
