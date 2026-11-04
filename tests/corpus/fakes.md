@@ -1,6 +1,6 @@
 # Fake services hit by the corpus
 
-Run 2026-11-05 02:43, apps: opencamera
+Run 2026-11-05 02:47, apps: opencamera
 
 First call per process to a Robolectric null/deep proxy, a missing or Robolectric-shadowed manager, or HostMediaStub ("[fake]" lines, FakeLog).
 
@@ -8,6 +8,7 @@ First call per process to a Robolectric null/deep proxy, a missing or Robolectri
 |---|---|---|---|
 | 1 | accessibility | getSystemService=ShadowAccessibilityManager | opencamera |
 | 1 | appops | getSystemService=ShadowAppOpsManager | opencamera |
+| 1 | audio | IAudioService.isCameraSoundForced | opencamera |
 | 1 | autofill | getSystemService=ShadowAutofillManager | opencamera |
 | 1 | batterymanager | getSystemService=ShadowBatteryManager | opencamera |
 | 1 | clipboard | getSystemService=ShadowClipboardManager | opencamera |

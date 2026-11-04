@@ -108,8 +108,8 @@ void BackendCamera::close() {
 
 bool BackendCamera::latestFrame(const Rect<uint16_t> size, Frame* out) {
     std::unique_lock lock(mLock);
-    // the first frame after a start takes a moment (a file decodes, a device opens)
-    if (!mFrameCond.wait_for(lock, std::chrono::seconds(2), [this] { return mLatest.width || mFailed; }) || mFailed) return FAILURE(false);
+    // the first frame after a start takes a moment: a file decodes, a device opens (an iPhone as a webcam over USB: about 4 s)
+    if (!mFrameCond.wait_for(lock, std::chrono::seconds(8), [this] { return mLatest.width || mFailed; }) || mFailed) return FAILURE(false);
     const uint32_t sw = mLatest.width, sh = mLatest.height, dw = size.width, dh = size.height;
     // the centre of the frame at the stream's aspect ratio
     uint32_t cw = sw, ch = sh;
