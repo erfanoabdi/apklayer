@@ -9,7 +9,7 @@ side translates Android calls and types; everything that touches the desktop liv
 | `graphics/allocator`, `graphics/mapper` | `android.hardware.graphics.allocator`, stable-C `IMapper` | `graphics/` over libgbm, dmabuf | host side done and tested (`bridge/hals/graphics`); Android side next (P7.1) |
 | `graphics/composer` | `android.hardware.graphics.composer3` | `graphics/` over Wayland `zwp_linux_dmabuf_v1`, real vsync | planned (P7.1) |
 | `media` | `android.hardware.media.c2` | `media/` over native GStreamer | VP8/VP9/AVC native, AIDL, app MediaCodec and SurfaceView tested; other codecs/audio next |
-| `camera` | `android.hardware.camera.provider` | PipeWire / V4L2 | planned |
+| `camera` | `android.hardware.camera.provider` (AIDL V3, `internal/1`) | `camera/`: backends `fake` (bars, image, video file), `pipewire` | Goldfish's provider (`camera/goldfish/`, copied) with `BackendCamera`; `camera/services` runs cameraserver; `tests/run camera` |
 | `gnss` | `android.hardware.gnss` | GeoClue / gpsd | planned |
 | `vibrator` | `android.hardware.vibrator` | force feedback (evdev FF), logind haptics | planned |
 | `sensors` | `android.hardware.sensors` | iio-sensor-proxy / IIO | planned |
