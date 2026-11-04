@@ -75,6 +75,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 Older dated notes (GPU follow-up, TextureView, MC3, Vulkan checkpoints, OTR2, route cleanups): `docs/history/CHANGELOG-2026-10-27-notes.md`.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-04 — libapklayer_audioserver: the --track probe plays out what follows the marker (audio agent)
+- Why: audio-track counted 47601 of the tone's 47760 non-silent frames: its last 161 frames were still in the HAL ring and PipeWire (~100 ms past the mixer's marker) when the probe stopped and the stack exited. The probe now keeps writing silence until the presented timestamp passes the tone.
+- Command (OrbStack, under `flock -n ~/los24-build.lock`): only `hals/audio/services/TrackProbe.h` copied into `vendor/apklayer` (the tree's copy was identical to main's), then `python3 tools/lib/orb-build-module.py libapklayer_audioserver hals/audio/services Service.cpp`.
 ### 2026-11-04 — m libapklayer_codec2 (full build of the module)
 - Why: the codec2 library rebuilt with tools/lib/orb-build-module.py for the EOS fix linked old objects without SoftCodecs.cpp, so the tree's software decoders (MP3, Opus, ...) were missing (native-media: audio/mpeg NAME_NOT_FOUND). Command: `flock -n ~/los24-build.lock -c 'cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_codec2'`. Result: built (sha256 af4b582b...), installed on both VMs; native-media, codec2, native-player, native-surface pass on UTM, fennec-media and newpipe-media on Parallels.
 

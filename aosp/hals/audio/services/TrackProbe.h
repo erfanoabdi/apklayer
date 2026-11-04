@@ -43,28 +43,34 @@ inline int audioTrackProbe() {
     CHECK(status == OK && track->initCheck() == OK);
     CHECK(track->setMarkerPosition(52800) == OK);
     CHECK(track->start() == OK);
+    auto write = [&](const int16_t* pcm) {
+        size_t done = 0;
+        while (done < 1920 * sizeof *pcm) {
+            ssize_t count = track->write(reinterpret_cast<const char*>(pcm) + done, 1920 * sizeof *pcm - done, true);
+            CHECK(count > 0); done += count;
+        }
+    };
     for (int offset = 0; offset < 57600; offset += 960) {
         int16_t pcm[1920] = {};
         if (offset < 48000) for (int n = 0; n < 960; n++) {
             pcm[n * 2] = std::sin(2 * M_PI * 440 * (offset + n) / 48000) * 6000;
             pcm[n * 2 + 1] = std::sin(2 * M_PI * 880 * (offset + n) / 48000) * 4000;
         }
-        size_t done = 0;
-        while (done < sizeof pcm) {
-            ssize_t count = track->write(reinterpret_cast<char*>(pcm) + done, sizeof pcm - done, true);
-            CHECK(count > 0); done += count;
-        }
+        write(pcm);
         if ((offset + 960) % 9600 == 0) printf("audio: AudioTrack submitted=%d\n", offset + 960);
     }
-    // Actual silence frames after the tone keep the graph alive through presentation;
-    // the real callback, rather than a wall-clock delay, signals completion.
+    // The marker is the mixer's position; the tone is heard once the presented position passes its end. What lies between them (the HAL's
+    // ring and PipeWire's queue, ~100 ms) a stop and exit would drop: silence keeps the stream going until then, at its own (blocking) pace.
     CHECK(callback->wait());
-    uint32_t position = 0;
-    CHECK(track->getPosition(&position) == OK && position >= 52800 && position <= 57600);
     AudioTimestamp timestamp;
+    int written = 57600;
+    const int16_t silence[1920] = {};
+    for (; written < 2 * 57600 && (track->getTimestamp(timestamp) != OK || timestamp.mPosition < 48000); written += 960) write(silence);
+    uint32_t position = 0;
+    CHECK(track->getPosition(&position) == OK && position >= 52800 && position <= (uint32_t)written);
     status = track->getTimestamp(timestamp);
     if (status != OK) fprintf(stderr, "AudioTrack timestamp failed %d\n", status);
-    CHECK(status == OK && timestamp.mPosition > 0 && timestamp.mPosition <= 57600);
+    CHECK(status == OK && timestamp.mPosition >= 48000 && timestamp.mPosition <= (uint32_t)written);
     track->stop(); track->flush(); track.clear();
     printf("PASS original AudioTrack PCM/marker position=%u timestamp=%u, stop/flush/release\n", position, timestamp.mPosition);
     return 0;
