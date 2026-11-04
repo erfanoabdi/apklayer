@@ -220,6 +220,13 @@ final class HubPackages {
         }
     }
 
+    /** Whether the uid holds the permission: a system uid every one, an app uid what one of its packages holds. */
+    boolean uidHolds(int uid, String permission) {
+        int appId = android.os.UserHandle.getAppId(uid);
+        return appId < android.os.Process.FIRST_APPLICATION_UID
+                || installed().stream().anyMatch(name -> android.os.UserHandle.getAppId(uid(name)) == appId && holds(name, permission));
+    }
+
     private static final HostSystemConfig SYSTEM = HostSystemConfig.load();
 
     /** A platform-signed system app (in the privileged allowlist): the package installer does not remove it. */

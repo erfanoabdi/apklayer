@@ -131,6 +131,7 @@ final class HubDirectory extends Binder {
             try { HubProtocol.call(peer.endpoint, HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_PACKAGE_CHANGED, request -> { request.writeString(name); request.writeBoolean(removed); }, reply -> null); }
             catch (IllegalStateException gone) { /* it ended meanwhile */ }
         }
+        HubAudioPermissions.feed(packages);  // AudioService follows ACTION_PACKAGE_ADDED/REMOVED the same way
     }
 
     /** Starts the package as an app (window and all), as "apklayer run" does. */
@@ -213,6 +214,7 @@ final class HubDirectory extends Binder {
                 }
                 System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " registered " + name + " pid=" + pid + " uid=" + uid + " t=" + System.nanoTime() / 1_000_000);
                 synchronized (failures) { failures.remove(name); }
+                HubAudioPermissions.registered(packages, name);  // before the reply: the app's first track finds its package
                 bindings.registered(peer);
                 broadcasts.registered(peer);
                 reply.writeNoException(); reply.writeInt(pid); return true;

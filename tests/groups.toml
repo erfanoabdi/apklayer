@@ -175,6 +175,11 @@ apps = ["hello-native-audio"]
 alone = true
 run = ["python3 -u tests/vm/native-audio.py"]
 
+[audio-late-install]
+apps = ["hello-native-audio"]
+alone = true
+run = ["python3 -u tests/vm/native-audio.py late"]
+
 [audio-aidl]
 alone = true
 run = ["tests/vm/audio-host.sh aidl"]

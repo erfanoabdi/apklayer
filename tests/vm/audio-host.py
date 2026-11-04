@@ -88,7 +88,7 @@ try:
     assert power(left, 440) > power(left, 880) * 50, 'left channel tone lost/swapped'
     assert power(right, 440 if mono else 880) > power(right, 880 if mono else 440) * 50, 'right channel tone lost/swapped'
     active = sum(abs(l) + abs(r) > 100 for l, r in zip(left, right))
-    assert active > (47500 if aidl else 52000), f'PCM missing: {active} non-silent frames'
+    assert active > (47700 if system else 47500 if aidl else 52000), f'PCM missing: {active} non-silent frames'  # the whole tone: 47760
     print(f'PASS monitor captured {"F32 mono 440" if mono else "S16 stereo 440/880"} Hz PCM, {active} non-silent frames', flush=True)
 finally:
     for proc in (producer, recorder):
