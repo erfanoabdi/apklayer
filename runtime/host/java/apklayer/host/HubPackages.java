@@ -25,7 +25,7 @@ final class HubPackages {
     private final Map<String, Cached> cache = new HashMap<>();
     HubPackages(Path root) { this.root = root.toAbsolutePath().normalize(); }
     synchronized PackageParser.Package get(String name) {
-        if (name == null || name.isEmpty()) return null;
+        if (name == null || name.isEmpty() || name.startsWith(".")) return null;
         Path directory = root.resolve(name).normalize();
         if (!root.equals(directory.getParent())) throw new SecurityException("Invalid package name");
         Path apk = directory.resolve("base.apk");
@@ -145,7 +145,8 @@ final class HubPackages {
     List<String> installed() {
         List<String> names = new ArrayList<>();
         try (var stream = Files.list(root)) {
-            stream.filter(directory -> Files.isRegularFile(directory.resolve("base.apk")) && Files.isRegularFile(directory.resolve("info.properties"))).forEach(directory -> names.add(directory.getFileName().toString()));
+            // an install in progress stages in apps/.install.XXXXXX (cli/apps.cpp) before its rename: no package name starts with a dot
+            stream.filter(directory -> !directory.getFileName().toString().startsWith(".") && Files.isRegularFile(directory.resolve("base.apk")) && Files.isRegularFile(directory.resolve("info.properties"))).forEach(directory -> names.add(directory.getFileName().toString()));
         } catch (IOException failure) { throw new IllegalStateException("Cannot list installed packages", failure); }
         return names;
     }

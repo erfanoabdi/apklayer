@@ -20,7 +20,7 @@ mkdir -p "$AL"
 sudo apt install build-essential meson ninja-build pkg-config git python3 curl zip unzip binutils \
     openjdk-21-jdk \
     libwayland-dev wayland-protocols libxkbcommon-dev libcairo2-dev libpng-dev \
-    libdrm-dev libgbm-dev libegl-dev libgles-dev \
+    libdrm-dev libgbm-dev libegl-dev libgles-dev mesa-utils \
     libpipewire-0.3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
     gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav \
     libelf-dev libunwind-dev libbsd-dev

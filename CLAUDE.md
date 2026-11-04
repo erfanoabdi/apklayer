@@ -6,8 +6,10 @@ This file is the single home of the binding rules; other docs point here instead
 ## Builds in `~/los24` (OrbStack VM `ubuntu22-x86`)
 Current authorization (2026-10-27, user): build anything needed in `~/los24` autonomously. This replaces the earlier rule (2026-10-26) to only edit and ask the user to trigger builds.
 - Only incremental builds of `gsi_arm64 userdebug`: `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m <target>`.
-- **NEVER wipe or clean `~/los24/out`** (it took very long to build): no `rm -rf out`, `m clean`/`make clean`/`installclean`/`clobber`, no other product (`lunch`/`breakfast` of anything else), no `OUT_DIR` games, no `git clean`/`repo sync -d` that could remove it.
+- Also allowed (user, 2026-11-04): incremental builds of `gsi_x86_64 userdebug` in the same tree (`breakfast gsi_x86_64 userdebug && m <target>`; its outputs are `out/target/product/generic_x86_64`, beside the arm64 ones). One build at a time (`flock -n ~/los24-build.lock`); the arm64 product stays the default.
+- **NEVER wipe or clean `~/los24/out`** (it took very long to build): no `rm -rf out`, `m clean`/`make clean`/`installclean`/`clobber`, no other product than these two (`lunch`/`breakfast` of anything else), no `OUT_DIR` games, no `git clean`/`repo sync -d` that could remove it.
 - Log each build in `CHANGELOG.md` ("Build log") first; how-to in `docs/AOSP-BUILDS.md`. Edit `aosp/` here and run `tools/sync-aosp.sh "message"` (mirrors into `~/los24/vendor/apklayer`). Install outputs on the VM (`~/android-arm64/lib64`).
+- The owner's x86 PC (`ssh erfan@192.168.41.58`, passwordless sudo): building and installing packages there is allowed (user, 2026-11-04); it is the owner's desktop: work under `~/apklayer-x86/`, close what you start.
 - If the authorization is withdrawn: edit and sync only, ask the user to build the named modules, take outputs from `out/` read-only.
 
 ## Running and testing (user rules, repeated complaints)
