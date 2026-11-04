@@ -527,6 +527,7 @@ public final class AppHost implements Runnable {
      */
     private static void setVisible(ActivityController<? extends Activity> c, boolean visible) {
         c.get().getWindow().getDecorView().setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
+        HostWindows.setAttachedVisible(c.get(), visible);
     }
 
 

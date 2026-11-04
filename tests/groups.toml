@@ -140,7 +140,7 @@ run = ["python3 -u tests/vm/vulkan-present.py"]
 
 [input]
 apps = ["hello-input"]
-run = ["python3 -u tests/vm/input-inject.py"]
+run = ["python3 -u tests/vm/input-inject.py", "python3 -u tests/vm/stopped-windows.py"]
 
 [magnifier]
 apps = ["hello-input"]
