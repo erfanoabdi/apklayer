@@ -35,4 +35,18 @@ final class PendingWork {
         } catch (IllegalAccessException unreadable) { return false; }
         return false;
     }
+
+    /**
+     * Waits until every other looper has finished what it is running now (a message taken off its queue is no longer seen by {@link #dueBefore}, but
+     * the handler may still be writing its file), at most until {@code deadlineNanos} (System.nanoTime).
+     */
+    static void awaitOtherLoopers(long deadlineNanos) {
+        for (Looper looper : ShadowLooper.getAllLoopers()) {
+            if (looper == Looper.getMainLooper() || !looper.getThread().isAlive()) continue;
+            java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+            if (!new android.os.Handler(looper).post(done::countDown)) continue;  // the looper is quitting
+            try { done.await(Math.max(0, deadlineNanos - System.nanoTime()), java.util.concurrent.TimeUnit.NANOSECONDS); }
+            catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); return; }
+        }
+    }
 }

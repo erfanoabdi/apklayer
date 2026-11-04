@@ -20,6 +20,8 @@ public final class ComponentHost implements Runnable {
         AppEnvironment.loadNativeRuntime();
     }
     @Override public void run() {
+        // from here on SIGTERM is an orderly stop; before (a spare host waiting for its package) the JVM's default exit
+        sun.misc.Signal.handle(new sun.misc.Signal("TERM"), signal -> stopping = true);
         Thread.currentThread().setContextClassLoader(AppClassLoader.app != null ? AppClassLoader.app : sandbox.getRobolectricClassLoader());  // the app's own loader, as on Android
         StartTrace.mark("componenthost run");
         AppEnvironment.setUpApplication(sandbox, apk, false);
@@ -39,6 +41,7 @@ public final class ComponentHost implements Runnable {
             long due = android.os.SystemClock.uptimeMillis() + STOP_WORK_MS, deadline = System.nanoTime() + STOP_DEADLINE_MS * 1_000_000L;
             android.app.QueuedWork.waitToFinish();
             while (PendingWork.dueBefore(due) && System.nanoTime() < deadline) step(looper);
+            PendingWork.awaitOtherLoopers(deadline);  // the settings provider saves on its own handler thread
             System.out.println("[apklayer] component-host stopped " + app.getPackageName() + " after " + ((System.nanoTime() - deadline) / 1_000_000 + STOP_DEADLINE_MS) + " ms of due work");
         }
         NativeLoader.endWithoutNativeDestructors();
@@ -46,7 +49,6 @@ public final class ComponentHost implements Runnable {
 
     private static final long STOP_WORK_MS = 2000, STOP_DEADLINE_MS = 3500;  // SettingsState's longest write delay; under `stop`'s 5 s before SIGKILL
     private static volatile boolean stopping;
-    static { sun.misc.Signal.handle(new sun.misc.Signal("TERM"), signal -> stopping = true); }
 
     private static void step(ShadowPausedLooper looper) {
         looper.poll(8);
