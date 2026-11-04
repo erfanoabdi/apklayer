@@ -43,10 +43,12 @@ bin/apklayer stop hello.hardware >/dev/null 2>&1
 wait $! 2>/dev/null
 
 # 3. a changed option restarts only that domain's service (the stack the app started still runs)
+before=$(wc -l < $APKLY_STATE/stack.log)  # stack.log outlives stacks: only the lines from here on
 bin/apklayer providers set gnss fake location=1.5,2.5 accuracy=7
 bin/apklayer exec libapklayer_gnss.so --client 1 > $APKLY_STATE/providers-client.out 2>&1
 grep -a "^location\|PASS" $APKLY_STATE/providers-client.out
 grep -aq "^location 1.5000000 2.5000000 7.0" $APKLY_STATE/providers-client.out || fail "gnss: the new location did not reach the client"
-grep -a "providers:\|restarted" $APKLY_STATE/stack.log
-grep -aq "providers: gnss restarted" $APKLY_STATE/stack.log && ! grep -aq "providers: \(sensors\|vibrator\)" $APKLY_STATE/stack.log || fail "not only gnss restarted"
+reload=$(tail -n +$((before + 1)) $APKLY_STATE/stack.log | grep -a "providers:")
+echo "$reload"
+grep -q "providers: gnss restarted" <<<"$reload" && ! grep -q "providers: \(sensors\|vibrator\)" <<<"$reload" || fail "not only gnss restarted"
 exit $status

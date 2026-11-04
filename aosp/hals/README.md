@@ -10,9 +10,9 @@ side translates Android calls and types; everything that touches the desktop liv
 | `graphics/composer` | `android.hardware.graphics.composer3` | `graphics/` over Wayland `zwp_linux_dmabuf_v1`, real vsync | planned (P7.1) |
 | `media` | `android.hardware.media.c2` | `media/` over native GStreamer | VP8/VP9/AVC native, AIDL, app MediaCodec and SurfaceView tested; other codecs/audio next |
 | `camera` | `android.hardware.camera.provider` | PipeWire / V4L2 | planned |
-| `gnss` | `android.hardware.gnss` (AOSP's IGnss example, its fixes from a backend; `--client` feeds HostLocation's gps provider) | `gnss/`: fake (fixed point, GPX replay); GeoClue / gpsd next | fake, test in progress |
-| `vibrator` | `android.hardware.vibrator` (AOSP's IVibrator example plus a backend; the hub's `vibrator_manager` plays app vibrations on it) | `vibrator/`: fake (logs every command); feedbackd / evdev FF next | fake, test in progress |
-| `sensors` | `android.hardware.sensors` (AOSP's ISensors example with a backend's sensors); `sensors/services`: AOSP's SensorService as a stack process | `sensors/`: fake (fixed values); iio-sensor-proxy / sensorfw next | fake, test in progress |
+| `gnss` | `android.hardware.gnss` (AOSP's IGnss example, its fixes from a backend; `--client` feeds HostLocation's gps provider) | `gnss/`: fake (fixed point, GPX replay); GeoClue / gpsd next | fake tested (`tests/vm/providers.sh`, 2026-11-04) |
+| `vibrator` | `android.hardware.vibrator` (AOSP's IVibrator example plus a backend; the hub's `vibrator_manager` plays app vibrations on it) | `vibrator/`: fake (logs every command); feedbackd / evdev FF next | fake tested (`tests/vm/providers.sh`, 2026-11-04) |
+| `sensors` | `android.hardware.sensors` (AOSP's ISensors example with a backend's sensors); `sensors/services`: AOSP's SensorService as a stack process | `sensors/`: fake (fixed values); iio-sensor-proxy / sensorfw next | fake tested (`tests/vm/providers.sh`, 2026-11-04) |
 | `power`, `thermal`, `health` | optional answers for SurfaceFlinger and the framework | UPower, thermal zones | later |
 | `input` | InputFlinger inputs | evdev / the shell's Wayland input | later |
 | `audio` | `android.hardware.audio.core` | PipeWire | host S16/F32 PCM and real AIDL/FMQ output verified; AudioFlinger/Policy and app JNI next |
