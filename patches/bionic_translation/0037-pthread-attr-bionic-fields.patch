@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Thu, 5 Nov 2026 00:00:00 +0000
+Subject: [PATCH] pthread attr: bionic's stack_size and guard_size fields stay filled
+
+bionic_attr_t keeps a glibc attr pointer over bionic's flags; its stack_size and guard_size fields stayed 0. Code that reads them
+directly (a native bridge's proxy pthread_create sizes the guest thread's stack from them) failed to start threads.
+
+apklayer patch: 0037 of patches/bionic_translation.
+---
+ok
+--- a/pthread_wrapper/libpthread.c
++++ b/pthread_wrapper/libpthread.c
+@@ -367,6 +367,21 @@
+ 	return ret;
+ }
+ 
++/* apklayer patch: bionic's own fields (beside the glibc pointer, which overlays only flags) carry the stack size and guard size, as
++ * bionic's attr functions leave them: code that reads them directly (a native bridge's proxy pthread_create sizes the guest stack
++ * from them) saw 0 and could not start a thread. */
++static int sync_bionic_attr(bionic_attr_t *attr, int ret)
++{
++	if (ret == 0) {
++		size_t size = 0, guard = 0;
++		pthread_attr_getstacksize(attr->glibc, &size);
++		pthread_attr_getguardsize(attr->glibc, &guard);
++		attr->bionic.stack_size = size;
++		attr->bionic.guard_size = guard;
++	}
++	return ret;
++}
++
+ int bionic_pthread_attr_init(bionic_attr_t *attr)
+ {
+ 	assert(attr);
+@@ -374,7 +389,7 @@
+ 	// Calling `pthread_attr_init` on a thread attributes object that has already been initialized results in ud.
+ 	*attr = (bionic_attr_t){0};
+ 	attr->glibc = mmap(NULL, sizeof(*attr->glibc), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+-	return pthread_attr_init(attr->glibc);
++	return sync_bionic_attr(attr, pthread_attr_init(attr->glibc));
+ }
+ 
+ int bionic_pthread_getattr_np(bionic_pthread_t thread, bionic_attr_t *attr)
+@@ -382,7 +397,7 @@
+ 	assert(thread && attr);
+ 	*attr = (bionic_attr_t){0};
+ 	attr->glibc = mmap(NULL, sizeof(*attr->glibc), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+-	return pthread_getattr_np((pthread_t)thread, attr->glibc);
++	return sync_bionic_attr(attr, pthread_getattr_np((pthread_t)thread, attr->glibc));
+ }
+ 
+ int bionic_pthread_attr_settstack(bionic_attr_t *attr, void *stackaddr, size_t stacksize)
+@@ -413,7 +428,7 @@
+ 	if (stacksize < PTHREAD_STACK_MIN)
+ 		stacksize = PTHREAD_STACK_MIN;
+ 
+-	return pthread_attr_setstacksize(attr->glibc, stacksize);
++	return sync_bionic_attr(attr, pthread_attr_setstacksize(attr->glibc, stacksize));
+ }
+ 
+ int bionic_pthread_attr_getstacksize(const bionic_attr_t *attr, size_t *stacksize)
