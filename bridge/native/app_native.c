@@ -234,7 +234,6 @@ static jobject linux_stat_any(JNIEnv *env, jstring path, int follow)
 }
 static jobject linux_stat(JNIEnv *env, jobject self, jstring path) { (void)self; return linux_stat_any(env, path, 1); }
 static jobject linux_lstat(JNIEnv *env, jobject self, jstring path) { (void)self; return linux_stat_any(env, path, 0); }
-static jobject linux_fstat(JNIEnv *env, jobject self, jobject fd) { (void)self; struct stat s; if (fstat(fd_of(env, fd), &s) < 0) { throw_errno(env, "fstat", errno); return NULL; } return stat_make(env, &s); }
 static void linux_mkdir(JNIEnv *env, jobject self, jstring path, jint mode) { (void)self; jstring other = NULL; PATH_CALL("mkdir", mkdir(p, (mode_t)mode)); }
 static void linux_chmod(JNIEnv *env, jobject self, jstring path, jint mode) { (void)self; jstring other = NULL; PATH_CALL("chmod", chmod(p, (mode_t)mode)); }
 static void linux_remove(JNIEnv *env, jobject self, jstring path) { (void)self; jstring other = NULL; PATH_CALL("remove", remove(p)); }
@@ -263,7 +262,6 @@ int apklayer_register_linux(JNIEnv *env, jclass libcore_linux)
         {"writeBytes", "(Ljava/io/FileDescriptor;Ljava/lang/Object;II)I", (void *)linux_write_bytes},
         {"stat", "(Ljava/lang/String;)Landroid/system/StructStat;", (void *)linux_stat},
         {"lstat", "(Ljava/lang/String;)Landroid/system/StructStat;", (void *)linux_lstat},
-        {"fstat", "(Ljava/io/FileDescriptor;)Landroid/system/StructStat;", (void *)linux_fstat},
         {"mkdir", "(Ljava/lang/String;I)V", (void *)linux_mkdir},
         {"chmod", "(Ljava/lang/String;I)V", (void *)linux_chmod},
         {"remove", "(Ljava/lang/String;)V", (void *)linux_remove},
