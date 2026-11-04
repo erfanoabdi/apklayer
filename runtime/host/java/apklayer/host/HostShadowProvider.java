@@ -92,6 +92,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.app.usage.StorageStatsManager", ShadowHostStorageStatsManager.class.getName()),
                 Map.entry("android.os.Vibrator", HostPlainShadows.Vibrator.class.getName()),
                 Map.entry("android.os.SystemVibrator", HostPlainShadows.SystemVibrator.class.getName()),
+                Map.entry("android.widget.Toast", ShadowHostToast.class.getName()),
                 Map.entry("android.hardware.HardwareBuffer", ShadowHostNativeHardwareBuffer.class.getName()),
                 Map.entry("android.app.DownloadManager", ShadowHostDownloadManager.class.getName()),  // the real one talks to DownloadProvider (DownloadStorageProvider reads it)
                 Map.entry("android.util.Xml", ShadowHostXml.class.getName()),
