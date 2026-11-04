@@ -145,6 +145,7 @@ libapklayer_keymint.so
 libapklayer_keystore2.so
 libapklayer_mediaserver.so
 libapklayer_permission.so
+libapklayer_screenshot.so
 libapklayer_servicemanager.so
 libapklayer_servicetool.so
 libapklayer_sftest.so
