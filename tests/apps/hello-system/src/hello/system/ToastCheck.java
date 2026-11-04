@@ -19,6 +19,10 @@ final class ToastCheck implements Check {
         Check.require(shown != null, "no toast window within 3 s");
         long seen = SystemClock.uptimeMillis() - start;
         int width = shown.getWidth(), height = shown.getHeight();
+        Object root = View.class.getMethod("getViewRootImpl").invoke(shown);
+        java.lang.reflect.Field surface = root.getClass().getDeclaredField("mSurface");
+        surface.setAccessible(true);
+        Check.require(((android.view.Surface) surface.get(root)).isValid(), "the toast window has no surface");  // a real layer, not only a laid-out view
         while (toastWindow() != null && SystemClock.uptimeMillis() - start < 6000) Thread.sleep(50);
         long gone = SystemClock.uptimeMillis() - start;
         Check.require(toastWindow() == null && gone >= 1500, "toast window left after " + gone + " ms");

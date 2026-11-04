@@ -54,6 +54,11 @@ final class RetrieverMuxerCheck {
                 require(audioDuration != null && Long.parseLong(audioDuration) > 0 && "yes".equals(retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO)),
                         "audio metadata duration=" + audioDuration);
             }
+            String url;  // a podcast app asking a URL's duration: an exception the app catches, never a dead process
+            try (MediaMetadataRetriever retriever = new MediaMetadataRetriever()) {
+                retriever.setDataSource("http://127.0.0.1:1/missing.mp3", new java.util.HashMap<>());
+                url = "opened";
+            } catch (RuntimeException expected) { url = expected.getClass().getSimpleName(); }
             // remux the H.264 track sample by sample, then read the new file back
             MediaExtractor source = new MediaExtractor();
             int samples = 0;
@@ -84,7 +89,7 @@ final class RetrieverMuxerCheck {
             } finally { back.release(); }
             require(samples > 0 && read == samples, "remuxed " + read + " of " + samples + " samples");
             System.out.println("[hello-native-codec] retriever/muxer PASS video " + duration + " ms " + width + " px " + mime + " (H.264 frame " + avcFrame + "), MPEG-4 frame " + Integer.toHexString(pixel)
-                    + ", audio " + audioDuration + " ms, remuxed " + samples + " samples (" + out.length() + " bytes)");
+                    + ", audio " + audioDuration + " ms, unreachable URL " + url + ", remuxed " + samples + " samples (" + out.length() + " bytes)");
         } finally {
             video.delete();
             audio.delete();

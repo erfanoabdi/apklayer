@@ -33,6 +33,7 @@ public class ShadowHostToast {
         if (custom == null && text == null) throw new IllegalStateException("You must either set a text or a view");
         Handler main = new Handler(Looper.getMainLooper());
         main.post(() -> {
+          try {  // as Toast.TN.handleShow: a toast that cannot be shown (a finished activity's context) never takes the main thread down
             if (hide != null) hide.run();
             ToastPresenter presenter = new ToastPresenter(context, null, INotificationManager.Stub.asInterface(ServiceManager.getService(Context.NOTIFICATION_SERVICE)),
                     context.getOpPackageName());
@@ -42,13 +43,14 @@ public class ShadowHostToast {
             Runnable gone = new Runnable() {
                 @Override public void run() {
                     main.removeCallbacks(this);
-                    presenter.hide(null);
                     if (hide == this) { hide = null; showing = null; }
+                    try { presenter.hide(null); } catch (RuntimeException e) { System.out.println("[apklayer] toast not hidden: " + e); }
                 }
             };
             hide = gone;
             showing = real;
             main.postDelayed(gone, real.getDuration() == Toast.LENGTH_LONG ? LONG_DELAY : SHORT_DELAY);
+          } catch (RuntimeException e) { System.out.println("[apklayer] toast not shown: " + e); }
         });
     }
 
