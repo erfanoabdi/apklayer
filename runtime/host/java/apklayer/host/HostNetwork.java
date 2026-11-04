@@ -49,7 +49,9 @@ final class HostNetwork {
         NetworkCapabilities caps = new NetworkCapabilities();
         caps.addTransportType(state.wifi() ? NetworkCapabilities.TRANSPORT_WIFI : NetworkCapabilities.TRANSPORT_ETHERNET);
         for (int c : new int[] {NetworkCapabilities.NET_CAPABILITY_INTERNET, NetworkCapabilities.NET_CAPABILITY_VALIDATED, NetworkCapabilities.NET_CAPABILITY_NOT_METERED,
-                NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED, NetworkCapabilities.NET_CAPABILITY_NOT_VPN, NetworkCapabilities.NET_CAPABILITY_TRUSTED}) caps.addCapability(c);
+                NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED, NetworkCapabilities.NET_CAPABILITY_NOT_VPN, NetworkCapabilities.NET_CAPABILITY_TRUSTED,
+                NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING, NetworkCapabilities.NET_CAPABILITY_NOT_SUSPENDED, NetworkCapabilities.NET_CAPABILITY_FOREGROUND,
+                NetworkCapabilities.NET_CAPABILITY_NOT_CONGESTED}) caps.addCapability(c);
         return caps;
     }
 
@@ -82,6 +84,7 @@ final class HostNetwork {
         current = next;
         ConnectivityManager manager = app.getSystemService(ConnectivityManager.class);
         ShadowConnectivityManager shadow = Shadow.extract(manager);
+        shadow.setActiveNetworkInfo(null);  // also the legacy per-type NetworkInfo (Robolectric's connected stand-in mobile)
         shadow.clearAllNetworks();
         if (next == null) {
             shadow.setActiveNetworkInfo(null);
