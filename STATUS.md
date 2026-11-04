@@ -12,8 +12,8 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): 
 ## How to work here
 - Build: `meson setup b && ninja -C b`; `tools/build bt|host|native|overlay|instrument|cfg|gles1 <native>`; `tools/fetch-deps.sh`; staging from the tree: `tools/stage`.
 - Upstream edits are patch files only (`patches/`, applied by `patches/apply`; index in `docs/PATCHES.md`). Android-side modules: edit `aosp/`, `tools/sync-aosp.sh`,
-  incremental builds in `~/los24` (`docs/AOSP-BUILDS.md`), then install the output on both VMs and run `tools/gen/tree-files-lock.py`.
-- Tests: `tests/run [-j N] [group...]` (groups in `tests/groups.toml`; each its own instance; it pushes the tree and rebuilds the runtime when sources changed).
+  incremental builds in `~/los24` (`docs/AOSP-BUILDS.md`), then install the output on both VMs (take a module's library from `out/soong/.intermediates/vendor/apklayer/...`: `m <module>` does not refresh `system/lib64`) and run `tools/gen/tree-files-lock.py`.
+- Tests: one `tests/run [-j N] [group...]` per VM tree at a time (a lock refuses a second; put groups in one run with -j) (groups in `tests/groups.toml`; each its own instance; it pushes the tree and rebuilds the runtime when sources changed).
   Second VM: `APKLY_VM_CONF=parallels`; named instances: `APKLY_SLOTS="a b"` (space-separated). Corpus: `CORPUS_INSTANCE=<id> python3 tests/corpus/run.py <app>`.
 - Screenshots: `apklayer [--instance ID] screenshot <package> <out.png>` (the app's own SurfaceFlinger picture). Input into one instance's window:
   `instance.inject` (tests/lib/instance.py); kernel keys (`instance.keys`) go to the shared desktop's focus and are only for input-desktop.

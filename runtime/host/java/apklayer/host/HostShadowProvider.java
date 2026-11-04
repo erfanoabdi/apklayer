@@ -84,6 +84,9 @@ public final class HostShadowProvider implements ShadowProvider {
             entries.add(Map.entry("android.webkit.WebView", ShadowHostRealWebView.class.getName()));
             entries.add(Map.entry("android.webkit.WebViewDelegate", ShadowHostWebViewDelegate.class.getName()));
             entries.add(Map.entry("android.webkit.WebViewFactory", ShadowHostWebViewFactory.class.getName()));
+            entries.add(Map.entry("android.webkit.CookieManager", HostPlainShadows.CookieManager.class.getName()));
+            entries.add(Map.entry("android.webkit.WebStorage", HostPlainShadows.WebStorage.class.getName()));
+            entries.add(Map.entry("android.webkit.WebViewDatabase", HostPlainShadows.WebViewDatabase.class.getName()));
         }
         if (systemApp("com.android.providers.settings")) {
             // the tree's SettingsProvider is installed: Settings.* talk to it through the hub like on a device, not to Robolectric's in-memory tables.

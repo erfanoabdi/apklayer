@@ -92,6 +92,14 @@ def main():
     groups = args.groups or [g for g in GROUPS if not GROUPS[g].get('optional')]
     unknown = [g for g in groups if g not in GROUPS]
     if unknown: parser.error('unknown group(s): %s' % ' '.join(unknown))
+    # one runner per VM: its push and runtime rebuild replace files under another runner's running groups, and both take the same instance names
+    # (parallel groups: -j). An agent with its own tree and instances (APKLY_VM_ROOT, APKLY_SLOTS) is another runner and takes its own lock file.
+    import fcntl
+    LOGS.mkdir(parents=True, exist_ok=True)
+    global RUNNER
+    RUNNER = open(LOGS / ('runner-%s-%s.lock' % (vm.config.VM.replace('@', '_'), vm.ROOT.replace('/', '_').replace('$', ''))), 'w')
+    try: fcntl.flock(RUNNER, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError: parser.error('another tests/run uses %s on %s now: wait for it, or add groups to one run with -j' % (vm.ROOT, vm.config.VM))
     jobs = args.j or max(1, min(4, (available() - MIN_FREE_MB) // INSTANCE_MB + 1))
     prefix = os.environ.get('APKLY_INSTANCES', 'tests')  # instance names: another runner on the same VM (an agent's worktree) takes its own
     slots = (vm.config.SLOTS or [prefix] + ['%s%d' % (prefix, i) for i in range(2, jobs + 1)])[:jobs]  # APKLY_SLOTS: an explicit list of one's own

@@ -17,4 +17,9 @@ final class HostPlainShadows {
     public static final class SurfaceSession {}
     /** HWUI's readback of the window's real buffers (Magnifier, screenshots) instead of Robolectric's View.draw / ImageReader copy. */
     @Implements(className = "android.view.PixelCopy", isInAndroidSdk = false) public static final class PixelCopy {}
+    /** With the real WebView provider: its cookie store, web storage and database (getInstance asks WebViewFactory's provider), not Robolectric's
+     * in-memory ones, so cookies a page set in the WebView are what CookieManager returns (microG's sign-in reads Google's oauth cookie). */
+    @Implements(className = "android.webkit.CookieManager", isInAndroidSdk = false) public static final class CookieManager {}
+    @Implements(className = "android.webkit.WebStorage", isInAndroidSdk = false) public static final class WebStorage {}
+    @Implements(className = "android.webkit.WebViewDatabase", isInAndroidSdk = false) public static final class WebViewDatabase {}
 }
