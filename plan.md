@@ -8,7 +8,7 @@
 - [x] Add an instance-management capture beside the instance documentation.
 - [x] Record app versions, capture methods, host details, and verification scope in `assets/screenshots/README.md`; inspect captures for personal data.
 - [x] Save lossless WebP images with explicit dimensions, useful alt text, lazy loading, and keyboard-accessible links to full-size images.
-- [ ] Add a composed-on-the-desktop wide capture showing several fully visible app windows when interactive VM window positioning is available. Do not substitute a synthetic montage.
+- [x] Add the owner-requested full Parallels desktop capture showing Fennec, microG, OTR2, and Open Camera in separate overlapping windows. Use the whole capture in the hero without a CSS crop.
 - [x] Verify NewPipe playback: changing frames and an active PipeWire audio stream, using the existing upstream media check.
 - [ ] Add a later camera capture using non-personal sample content. OTR2 was dropped at the owner’s request; do not add a stalled game or its consent dialog as a demo.
 - [x] Review the redesigned desktop layout in Firefox. Use an isolated browser for further website QA; do not control the owner’s Mac UI or Parallels.
@@ -28,6 +28,6 @@ Verification: `node --test tests/site.test.cjs` exercises the release feed and f
 
 ## Presentation
 
-The main page leads with a real NewPipe playback image and the retained manager screenshot. Installation comes before the reference sections. Native `details`/`summary` disclosures keep all requested hardware, platform, microG, compatibility, instance, and comparison material available without a long default reading path. No new JavaScript or dependencies are required for the disclosures.
+The main page leads with the real Ubuntu desktop multiwindow capture and the retained manager screenshot. NewPipe playback remains in the expandable app gallery. Installation comes before the reference sections. Native `details`/`summary` disclosures keep all requested hardware, platform, microG, compatibility, instance, and comparison material available without a long default reading path. No new JavaScript or dependencies are required for the disclosures.
 
 Responsive QA: checked an isolated in-app browser at 320, 375, 390, 400, 401, 700, 701, 768, 1000, and 1280 pixels with all disclosures closed and open. Fixed the installation grid’s minimum track sizing at narrow widths. Verified keyboard disclosure toggling, contained keyboard-accessible table scrolling, local assets, section anchors, and release links. No Mac UI or Parallels control was used.

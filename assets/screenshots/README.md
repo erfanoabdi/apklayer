@@ -2,7 +2,7 @@
 
 Captured on 2026-11-05 from the owner's Parallels VM: Ubuntu 24.04 LTS arm64, GNOME Wayland, virgl (Apple M5 Max compatibility renderer), host OpenGL ES 3.0 / Mesa 25.2.8. These are development-tree builds, not a claim that this is the current release UI. The installed manager build predates the Hardware page.
 
-All published files are lossless WebP conversions of PNG captures at their captured dimensions. Decoded RGB pixels were compared with the PNGs before inclusion. No UI was generated, composited, cropped, or retouched. Full-size images are linked from the website. Each capture was visually inspected for private content.
+The individual app and manager images are lossless WebP conversions of PNG captures at their captured dimensions. Decoded RGB pixels were compared with the PNGs before inclusion. No UI was generated, composited, cropped, or retouched. Full-size images are linked from the website. Each capture was visually inspected for private content.
 
 | File | Captured state | Capture method |
 | --- | --- | --- |
@@ -17,8 +17,14 @@ NewPipe playback proof from this session:
 
 - Two SurfaceFlinger captures two seconds apart differed by 21,838 pixels.
 - The media check found one running PipeWire output stream from this instance.
-- The earlier paired captures established playback. A later, sharper 720 × 1280 SurfaceFlinger capture with the film’s characters visible now appears on the website. The full captured pixels are preserved; the hero uses a CSS crop with a link to the full image.
+- The earlier paired captures established playback. A later, sharper 720 × 1280 SurfaceFlinger capture with the film’s characters visible now appears on the website. The full captured pixels are preserved in the expandable app gallery.
 
 Big Buck Bunny is by Blender Foundation, licensed CC BY 3.0. The website includes creator and license links. Source: https://www.youtube.com/watch?v=aqz-KE-bpKQ and https://peach.blender.org/.
 
 The microG image documents the real settings interface, not successful account sign-in, push delivery, or attestation. The instance-management image does not demonstrate two simultaneously running stacks. The LocalSend, Organic Maps onboarding, and KeePassDX app captures were removed. The original manager overview was restored at the owner's request; it shows the real temporary app library, not a transfer or map-navigation demo. OTR2 was dropped at the owner's request; no game capture is published.
+
+## Ubuntu desktop hero
+
+`ubuntu-desktop.webp` is a full 2048 × 1612 Parallels window capture from 5 November 2026, taken at the owner’s request. It shows the Ubuntu desktop and separate windows for Fennec, microG Settings, OTR2 at its main menu, and Open Camera with an existing camera preview. It documents concurrent windows, not game play or browser video playback. No account identity or private messages are visible.
+
+The apps were launched with `/usr/bin/apklayer` (installed version `0.3.0+git20261105-1~noble1`) in the `website` instance. The desktop was already arranged when captured. The computer-use screenshot API supplied JPEG bytes; the WebP preserves those decoded RGB pixels losslessly. No cropping, compositing, or retouching was applied, and the hero displays the entire capture with a link to full size. The camera was already open; this capture did not open or reconfigure it. Earlier provenance about unopened physical cameras applies to the individual app and manager captures.
