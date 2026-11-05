@@ -11,70 +11,72 @@ Against system/libhidl 061055fc4dad (REVISION), after 0001 and 0002. Apply: patc
 diff --git a/transport/ServiceManagement.cpp b/transport/ServiceManagement.cpp
 --- a/transport/ServiceManagement.cpp
 +++ b/transport/ServiceManagement.cpp
-@@ -197,6 +197,10 @@
+@@ -197,6 +197,12 @@
             fqName == IServiceManager1_2::descriptor;
  }
  
 +// apklayer patch: defined below, with the host_hals.conf code
++namespace details {
 +static bool isHostHal(const std::string& fqName);
 +static sp<IServiceManager1_2> hostServiceManager();
++}  // namespace details
 +
  /*
   * A replacement for hwservicemanager when it is not installed on a device.
   *
-@@ -222,6 +226,9 @@
+@@ -222,6 +228,9 @@
      }
  
      Return<Transport> getTransport(const hidl_string& fqName, const hidl_string& name) {
-+        if (isHostHal(fqName)) {  // apklayer patch: the host decides for the device HALs
-+            if (sp<IServiceManager1_2> host = hostServiceManager()) return host->getTransport(fqName, name);
++        if (details::isHostHal(fqName)) {  // apklayer patch: the host decides for the device HALs
++            if (sp<IServiceManager1_2> host = details::hostServiceManager()) return host->getTransport(fqName, name);
 +        }
          // We pretend like IServiceManager is declared for
          // IServiceManager::getService to return this NoHwServiceManager
          // instance
-@@ -239,6 +246,9 @@
+@@ -239,6 +248,9 @@
          return Void();
      }
      Return<void> listByInterface(const hidl_string& fqName, listByInterface_cb _hidl_cb) override {
-+        if (isHostHal(fqName)) {  // apklayer patch
-+            if (sp<IServiceManager1_2> host = hostServiceManager()) return host->listByInterface(fqName, _hidl_cb);
++        if (details::isHostHal(fqName)) {  // apklayer patch
++            if (sp<IServiceManager1_2> host = details::hostServiceManager()) return host->listByInterface(fqName, _hidl_cb);
 +        }
          _hidl_cb({});
          LOG(INFO) << "Cannot list service " << fqName << " without hwservicemanager";
          return Void();
-@@ -265,6 +275,9 @@
+@@ -265,6 +277,9 @@
  
      Return<bool> registerForNotifications(const hidl_string& fqName, const hidl_string& name,
                                            const sp<IServiceNotification>& callback) override {
-+        if (isHostHal(fqName)) {  // apklayer patch: the host's hwservicemanager notifies (at once for what is registered already)
-+            if (sp<IServiceManager1_2> host = hostServiceManager()) return host->registerForNotifications(fqName, name, callback);
++        if (details::isHostHal(fqName)) {  // apklayer patch: the host's hwservicemanager notifies (at once for what is registered already)
++            if (sp<IServiceManager1_2> host = details::hostServiceManager()) return host->registerForNotifications(fqName, name, callback);
 +        }
          LOG(INFO) << "Will not get any notifications for " << fqName << "/" << name
                    << " without hwservicemanager but keeping the callback.";
          if (callback == nullptr) {
-@@ -304,6 +317,9 @@
+@@ -304,6 +319,9 @@
  
      Return<bool> unregisterForNotifications(const hidl_string& fqName, const hidl_string& name,
                                              const sp<IServiceNotification>& callback) override {
-+        if (isHostHal(fqName)) {  // apklayer patch
-+            if (sp<IServiceManager1_2> host = hostServiceManager()) return host->unregisterForNotifications(fqName, name, callback);
++        if (details::isHostHal(fqName)) {  // apklayer patch
++            if (sp<IServiceManager1_2> host = details::hostServiceManager()) return host->unregisterForNotifications(fqName, name, callback);
 +        }
          auto ret = mServiceNotifications[static_cast<std::string>(fqName) + "/" +
                                           static_cast<std::string>(name)]
                             .erase(callback);
-@@ -330,7 +346,10 @@
+@@ -330,7 +348,10 @@
          LOG(INFO) << "Cannot add " << fqName << " with chain without hwservicemanager";
          return false;
      }
 -    Return<void> listManifestByInterface(const hidl_string& fqName, listManifestByInterface_cb) {
 +    Return<void> listManifestByInterface(const hidl_string& fqName, listManifestByInterface_cb _hidl_cb) {
-+        if (isHostHal(fqName)) {  // apklayer patch
-+            if (sp<IServiceManager1_2> host = hostServiceManager()) return host->listManifestByInterface(fqName, _hidl_cb);
++        if (details::isHostHal(fqName)) {  // apklayer patch
++            if (sp<IServiceManager1_2> host = details::hostServiceManager()) return host->listManifestByInterface(fqName, _hidl_cb);
 +        }
          LOG(INFO) << "Cannot list manifest for " << fqName << " without hwservicemanager";
          return Void();
      }
-@@ -910,20 +929,24 @@
+@@ -910,20 +931,24 @@
      return false;
  }
  

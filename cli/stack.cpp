@@ -291,7 +291,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         removeTree(inst.runtimeDir);
         makeDirs(inst.runtimeDir);
     }
-    stageManifest(inst, l, staged(l, "libapklayer_codec2.so"), "apklayer-media.xml", "aosp/hals/media/codec2/manifest.xml");
+    stageManifest(inst, l, staged(l, "libapklayer_codec2.so") && !deviceDomain(inst, "media"), "apklayer-media.xml", "aosp/hals/media/codec2/manifest.xml");
     stageManifest(inst, l, staged(l, "libapklayer_audio.so"), "apklayer-audio.xml", "aosp/hals/audio/manifest.xml");
     stageManifest(inst, l, staged(l, "libapklayer_audioserver.so"), "apklayer-audio-effects.xml", "aosp/hals/audio/effects-manifest.xml");
     stageManifest(inst, l, staged(l, "libapklayer_keymint.so"), "apklayer-keymint.xml", "aosp/hals/security/manifest.xml");
@@ -347,7 +347,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     start("permission", "libapklayer_permission.so", {});  // libbinder's checkPermission() asks this (no system_server PermissionController)
     if (!deviceGraphics(inst)) start("allocator", "libapklayer_allocator.so", {});  // a Halium device's own: the host context
     start("composer", "libapklayer_composer.so", {});
-    if (staged(l, "libapklayer_codec2.so")) start("codec2", "libapklayer_codec2.so", {});
+    if (staged(l, "libapklayer_codec2.so") && !deviceDomain(inst, "media")) start("codec2", "libapklayer_codec2.so", {});  // media = device: the host's Codec2 store
     if (staged(l, "libapklayer_mediaserver.so")) {
         start("media", "libapklayer_mediaserver.so", {});
         start("extractor", "libapklayer_mediaserver.so", {"--extractor"});

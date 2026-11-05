@@ -93,9 +93,23 @@ static GstCaps *input_caps(const char *mime)
     return caps ? gst_caps_from_string(caps) : NULL;
 }
 
-int apklayer_codec_supports(const char *mime)
+/* gst-droid's amc decoders (Ubuntu Touch, Halium phones: the device's MediaCodec through libhybris, "amcvideodec-c2mtkavcdecoder2") rank above the
+ * software ones, and inside these processes they fail with "a general supporting library error" before the first frame. The device's own
+ * codecs belong to the media provider (Codec2 over the host binder context, docs/HALIUM.md); the host path decodes in software, unless
+ * APKLAYER_GST_AMC is set. */
+static void gst_start(void)
 {
     gst_init(NULL, NULL);
+    if (g_getenv("APKLAYER_GST_AMC")) return;
+    GList *all = gst_element_factory_list_get_elements(GST_ELEMENT_FACTORY_TYPE_DECODER, GST_RANK_NONE);
+    for (GList *l = all; l; l = l->next)
+        if (g_str_has_prefix(GST_OBJECT_NAME(l->data), "amc")) gst_plugin_feature_set_rank(GST_PLUGIN_FEATURE(l->data), GST_RANK_NONE);
+    gst_plugin_feature_list_free(all);
+}
+
+int apklayer_codec_supports(const char *mime)
+{
+    gst_start();
     GstCaps *caps = input_caps(mime);
     if (!caps) return 0;
     GList *all = gst_element_factory_list_get_elements(GST_ELEMENT_FACTORY_TYPE_DECODER, GST_RANK_MARGINAL);

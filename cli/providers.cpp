@@ -29,6 +29,9 @@ const Domain kDomains[] = {
     // the stack's own graphics (allocator, mapper, EGL on the host's GPU) need no front here; "device" is a Halium device's gralloc
     // (allocator@4.0 through the host context, the passthrough mapper@4.0) and its GPU driver (docs/HALIUM.md)
     {"graphics", nullptr, nullptr, "android.hardware.graphics.allocator android.hardware.graphics.mapper"},
+    // media codecs: the stack's own Codec2 store (libapklayer_codec2) over the host's decoders; "device" is a Halium device's Codec2 (HIDL
+    // media.c2) and OMX stores through the host hwbinder context, the stack's own store is not started then
+    {"media", nullptr, nullptr, "android.hardware.media.c2 android.hardware.media.omx"},
 };
 
 const Domain* findDomain(const std::string& name) {
@@ -263,7 +266,7 @@ int providersCommand(const Layout& l, const Instance& inst, const std::vector<st
     const std::string& action = args[0];
     if (!((action == "set" && args.size() >= 3) || (action == "unset" && args.size() == 2)))
         die("providers [set <domain> <backend> [key=value...] | set <domain> device | unset <domain>]");
-    if (!findDomain(args[1])) die("no hardware domain " + args[1] + " (sensors, gnss, vibrator, camera, graphics)");
+    if (!findDomain(args[1])) die("no hardware domain " + args[1] + " (sensors, gnss, vibrator, camera, graphics, media)");
     std::vector<ProviderConfig> kept;
     for (const ProviderConfig& d : domains) if (d.domain != args[1]) kept.push_back(d);
     if (action == "set" && args[2] == "device") {  // the device's own HAL through the host binder contexts (a Halium device)
