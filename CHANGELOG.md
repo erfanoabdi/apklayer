@@ -105,6 +105,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-05 - libapklayer_egl (frame pacing agent)
+- Why: per-swap overhead (images and FBOs created and destroyed every swap), eglSwapInterval ignored, eglPresentationTimeANDROID a stub. EglWindow.cpp, Egl.cpp, EglHost.h edited; no new file.
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "..." hals/graphics/egl`, then `breakfast gsi_x86_64 userdebug && m libapklayer_egl libapklayer_composer` (x86_64, for the owner's PC; the arm64 composer above is built).
 ### 2026-11-05 - libapklayer_composer (frame pacing agent)
 - Why: SurfaceFlinger has no vsync timeline (getDisplayKnownVsyncSample UNSUPPORTED, shell frame callbacks do not form a model): windows run at ~50 fps. Composer gets a steady vsync timeline phase-locked to the shell's frames, real sync_file present fences (DRM syncobj), capability PRESENT_FENCE_IS_NOT_RELIABLE. Header-only additions (VsyncTimeline.h, PresentFence.h), no new source file, Android.bp unchanged.
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "..." hals/graphics/composer`, then `tools/lib/orb-build-module.py libapklayer_composer hals/graphics/composer Composer.cpp` (or `m libapklayer_composer`).
