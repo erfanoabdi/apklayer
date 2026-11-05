@@ -166,6 +166,7 @@ static void add(const struct plugin *p)
 }
 
 const int apklayer_plugin_abi = APKLAYER_PLUGIN_ABI;
+const char apklayer_sensors_needs[] = "sensorfwd with a sensor plugin";  /* shown when probe() finds nothing (plugin.h) */
 int apklayer_sensors_probe(void)
 {
     GDBusConnection *c = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, NULL);

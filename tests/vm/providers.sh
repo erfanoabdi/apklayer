@@ -7,7 +7,7 @@ mkdir -p "$APKLY_STATE"
 status=0
 fail() { echo "FAIL: $*"; status=1; }
 bin/apklayer stop >/dev/null 2>&1
-trap 'bin/apklayer stop >/dev/null 2>&1; for d in sensors vibrator gnss; do bin/apklayer providers unset $d >/dev/null; done' EXIT
+trap 'bin/apklayer stop >/dev/null 2>&1; for d in sensors vibrator gnss audio; do bin/apklayer providers unset $d >/dev/null; done' EXIT
 bin/apklayer providers set sensors fake accel=0.5,9.5,1.25 >/dev/null
 bin/apklayer providers set vibrator fake >/dev/null
 bin/apklayer providers set gnss fake location=48.8584,2.2945 accuracy=3 >/dev/null
@@ -16,6 +16,17 @@ bin/apklayer providers | tee $APKLY_STATE/providers.out
 grep -q "^gnss	apklayer	fake	location=48.8584,2.2945	accuracy=3$" $APKLY_STATE/providers.out || fail "providers: the configured options are not a field each"
 grep -q "^option	gnss	fake	gpx		file$" $APKLY_STATE/providers.out && grep -q "^option	sensors	fake	accel	0,9.80665,0	text$" $APKLY_STATE/providers.out \
     || fail "providers: no option rows from the backends"
+# the audio domain: the VM's PipeWire answers (pipewire ranks above pulse, which pipewire-pulse also answers); the choice is the host library
+# every process loads
+grep -q "^default	audio	pipewire$" $APKLY_STATE/providers.out || fail "providers: the automatic audio backend is not pipewire"
+bin/apklayer env | grep -q "^APKLAYER_HOST_LIBS=.*/libapklayer-audio-pipewire.so" || fail "env: the automatic audio backend is not loaded"
+if grep -q "^backend	audio	pulse	quality" $APKLY_STATE/providers.out; then
+    bin/apklayer providers set audio pulse >/dev/null
+    bin/apklayer env | grep -q "^APKLAYER_HOST_LIBS=.*/libapklayer-audio-pulse.so" || fail "env: providers set audio pulse did not reach the processes"
+    bin/apklayer providers unset audio >/dev/null
+fi
+grep -q "^default	graphics	apklayer$" $APKLY_STATE/providers.out && grep -q "^backend	graphics	device	unavailable	(the device's HAL)	not a Halium device" $APKLY_STATE/providers.out \
+    || fail "providers: graphics is not the stack's own, with the device's HAL unavailable"
 
 # 1. each HAL as its framework client uses it (sensors: NDK ASensorManager through SensorService, since the HAL serves one client): the stack runs the probe as its tool (output in tool.log; the next stack removes it)
 tool=$APKLY_STATE/tool.log

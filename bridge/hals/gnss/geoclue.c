@@ -70,6 +70,7 @@ int gnss_source_start(GDBusConnection *bus)
 
 const char apklayer_gnss_options[] = "desktop-id\tapklayer\ttext\n";
 const int apklayer_plugin_abi = APKLAYER_PLUGIN_ABI;
+const char apklayer_gnss_needs[] = "GeoClue 2 on the system bus";  /* shown when probe() finds nothing (plugin.h) */
 int apklayer_gnss_probe(void) { return gnss_session_ping(G_BUS_TYPE_SYSTEM, GEOCLUE, "/org/freedesktop/GeoClue2/Manager") ? 10 : -1; }
 
 int apklayer_gnss_init(int count, const char *const *options)

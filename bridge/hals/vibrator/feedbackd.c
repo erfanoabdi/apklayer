@@ -80,6 +80,7 @@ static int on_bus(GDBusConnection *c, const char *name)
 }
 
 const int apklayer_plugin_abi = APKLAYER_PLUGIN_ABI;
+const char apklayer_vibrator_needs[] = "feedbackd on the session bus";  /* shown when probe() finds nothing (plugin.h) */
 int apklayer_vibrator_probe(void)
 {
     GDBusConnection *c = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, NULL);

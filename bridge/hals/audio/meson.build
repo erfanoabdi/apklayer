@@ -1,31 +1,21 @@
+# The audio domain's backends (include/apklayer/audio.h): libapklayer-audio-<backend>.so, the host library of the Android audio HAL, loaded into
+# every Android process through APKLAYER_HOST_LIBS. Which one an instance uses is a hardware provider choice (cli/providers.cpp: `apklayer
+# providers set audio <backend>`, else the best whose probe answers: PipeWire on a desktop, PulseAudio on Ubuntu Touch).
 pipewire = dependency('libpipewire-0.3', version: '>=1.0.4', required: false)
 pulse = dependency('libpulse-simple', required: false)
 audio_backend = get_option('audio_backend')
-if audio_backend == 'auto'
-  audio_backend = ''
-  if pipewire.found()
-    audio_backend = 'pipewire'
-  elif pulse.found()
-    audio_backend = 'pulse'
-  endif
-endif
-audio_inc = include_directories('include')
-libaudio = disabler()
-if audio_backend == 'pipewire' and pipewire.found()
-  libaudio = shared_library('apklayer-hal-audio', 'audio.c', 'capture.c',
+audio_inc = include_directories('include', '../include')
+audio_libs = []  # the first one built: the HAL tests link it
+if audio_backend in ['auto', 'pipewire'] and pipewire.found()
+  audio_libs += shared_library('apklayer-audio-pipewire', 'audio.c', 'capture.c', 'probe.c',
     include_directories: audio_inc, dependencies: [pipewire, dependency('threads')], install: true, install_dir: native_dir)
-elif audio_backend == 'pulse' and pulse.found()
-  libaudio = shared_library('apklayer-hal-audio', 'pulse.c',
+endif
+if audio_backend in ['auto', 'pulse'] and pulse.found()
+  audio_libs += shared_library('apklayer-audio-pulse', 'pulse.c', 'probe.c', c_args: '-DAPKLAYER_AUDIO_PULSE',
     include_directories: audio_inc, dependencies: [pulse, dependency('threads')], install: true, install_dir: native_dir)
 endif
-# auto with both libraries found: the PulseAudio one too, which the CLI loads instead when the session runs no PipeWire daemon (Ubuntu Touch;
-# cli/halium.cpp audioLibrary)
-if get_option('audio_backend') == 'auto' and audio_backend == 'pipewire' and pulse.found()
-  shared_library('apklayer-hal-audio-pulse', 'pulse.c',
-    include_directories: audio_inc, dependencies: [pulse, dependency('threads')], install: true, install_dir: native_dir)
-endif
-if libaudio.found()
+if audio_libs.length() > 0
   executable('audio-test', '../../../tests/hals/audio-test.c',
-    include_directories: audio_inc, link_with: libaudio,
+    include_directories: audio_inc, link_with: audio_libs[0],
     dependencies: [dependency('threads'), meson.get_compiler('c').find_library('m')])
 endif

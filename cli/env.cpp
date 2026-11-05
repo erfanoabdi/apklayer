@@ -132,9 +132,9 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     env["APKLAYER_INSTANCE_ROOT"] = join(instance.runtimeDir, "android-root");  // what this instance's stack stages for itself (cli/stack.cpp), before the shared root
     env["APKLAYER_STORAGE"] = realPath(instance.storageDir);  // the path layer serves Android's /storage, /sdcard and /data/media/0 from it (bridge/native/paths.c)
     env["APKLAYER_DATA"] = realPath(instance.dataDir);  // and the rest of /data
-    // a domain set to the device (providers.toml): libbinder's and libhwbinder's host contexts are the machine's own binder devices
+    // a domain that is the device's (providers.toml or automatic): libbinder's and libhwbinder's host contexts are the machine's own binder devices
     // (a Halium device's; docs/HALIUM.md), unless the environment names others
-    if (exists(hostHalsFile(instance))) {
+    if (anyDeviceDomain(layout, instance) || exists(hostHalsFile(instance))) {
         if (!env.count("APKLAYER_HOST_BINDER")) env["APKLAYER_HOST_BINDER"] = hostBinder("binder");  // the device's own, not the instance's (cli/binder.cpp)
         if (!env.count("APKLAYER_HOST_HWBINDER")) env["APKLAYER_HOST_HWBINDER"] = hostBinder("hwbinder");
     }
@@ -142,7 +142,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     env["LD_LIBRARY_PATH"] = layout.bionic + ":" + n;
     env["PATH"] = prepend(join(n, "bin"), getenvOr("PATH", "/usr/local/bin:/usr/bin:/bin"));  // getprop for the apps that run it
     env["XDG_DATA_DIRS"] = prepend(join(n, "share"), getenvOr("XDG_DATA_DIRS", "/usr/local/share:/usr/share"));
-    if (deviceGraphics(instance)) deviceGraphicsEnv(instance, env);
+    if (deviceGraphics(layout, instance)) deviceGraphicsEnv(instance, env);
     env["LD_PRELOAD"] = join(n, "libapklayer-preload.so") + ":libgcc_s.so.1";
     if (const char* extra = getenv("APKLAYER_PRELOAD_EXTRA")) env["LD_PRELOAD"] += std::string(":") + extra;  // e.g. the JVM's libjsig.so for apps whose native code installs signal handlers
     env["BIONIC_LD_LIBRARY_PATH"] = l;
@@ -155,7 +155,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     std::string libs;
     for (const char* hal : {"graphics", "media", "audio"}) {
         std::string lib = join(n, std::string("libapklayer-hal-") + hal + ".so");
-        if (std::string(hal) == "audio") lib = audioLibrary(layout);
+        if (std::string(hal) == "audio") lib = audioLibrary(layout, instance);  // the instance's audio provider (cli/providers.cpp)
         if (exists(lib)) libs += (libs.empty() ? "" : ":") + lib;
     }
     env["APKLAYER_HOST_LIBS"] = libs;

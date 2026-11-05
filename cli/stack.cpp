@@ -303,28 +303,28 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         removeTree(inst.runtimeDir);
         makeDirs(inst.runtimeDir);
     }
-    stageManifest(inst, l, staged(l, "libapklayer_codec2.so") && !deviceDomain(inst, "media"), "apklayer-media.xml", "aosp/hals/media/codec2/manifest.xml");
+    stageManifest(inst, l, staged(l, "libapklayer_codec2.so") && !deviceDomain(l, inst, "media"), "apklayer-media.xml", "aosp/hals/media/codec2/manifest.xml");
     stageManifest(inst, l, staged(l, "libapklayer_audio.so"), "apklayer-audio.xml", "aosp/hals/audio/manifest.xml");
     stageManifest(inst, l, staged(l, "libapklayer_audioserver.so"), "apklayer-audio-effects.xml", "aosp/hals/audio/effects-manifest.xml");
     stageManifest(inst, l, staged(l, "libapklayer_keymint.so"), "apklayer-keymint.xml", "aosp/hals/security/manifest.xml");
     stageManifest(inst, l, staged(l, "libapklayer_keystore2.so"), "apklayer-keystore2.xml", "aosp/hals/security/keystore2-manifest.xml", "system");  // a framework HAL: keystore2 may register its service
     // the hardware providers of providers.toml: their HALs are declared for this stack's lifetime (servicemanager reads the manifests once)
     std::vector<ProviderService> providers = providerServices(l, inst);
-    writeHostHals(inst);  // domains set to the device: their HALs come from the host binder contexts, no front starts
+    writeHostHals(l, inst);  // domains set to the device: their HALs come from the host binder contexts, no front starts
     for (const ProviderService& p : providers) stageManifest(inst, l, true, "apklayer-" + p.name + ".xml", p.manifest);
-    if (deviceGraphics(inst)) undeclareOwnGraphics(inst, l);
-    if (deviceDomain(inst, "media")) stageDeviceCodecXml(inst);
+    if (deviceGraphics(l, inst)) undeclareOwnGraphics(inst, l);
+    if (deviceDomain(l, inst, "media")) stageDeviceCodecXml(inst);
     std::vector<std::string> propFiles = {join(l.root, "bridge/native/apklayer.prop"), join(n, "android-root/props/system_build.prop")};
     // the instance's own overrides (`apklayer prop set`): first, as ro.* is write-once (and the fingerprint is derived from them), and again last, as
     // every other property keeps the last value loaded
     if (exists(inst.propOverrides())) { propFiles.insert(propFiles.begin(), inst.propOverrides()); propFiles.push_back(inst.propOverrides()); }
-    if (deviceGraphics(inst)) propFiles.insert(propFiles.begin() + (propFiles.size() > 2), deviceGraphicsProperties(inst));  // after the overrides' first copy
+    if (deviceGraphics(l, inst)) propFiles.insert(propFiles.begin() + (propFiles.size() > 2), deviceGraphicsProperties(inst));  // after the overrides' first copy
     if (int density = displayDensity(l); density > 0 && density != 160) {  // ro.sf.lcd_density: this display's, before apklayer.prop's 160 (write-once)
         std::string file = join(inst.root, "display.prop");
         writeFile(file, "ro.sf.lcd_density=" + std::to_string(density) + "\n");
         propFiles.insert(propFiles.begin() + (exists(inst.propOverrides()) ? 1 : 0), file);
     }
-    if (deviceDomain(inst, "media")) {
+    if (deviceDomain(l, inst, "media")) {
         // the device's Codec2 is HIDL (a Halium 12 vendor): libcodec2's client takes the HAL media.c2.hal.selection names, which apklayer.prop
         // sets to aidl: loaded last (a plain property keeps the last value)
         std::string file = join(inst.runtimeDir, "media-device.prop");
@@ -365,9 +365,9 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     const std::string hals = join(l.root, "aosp/hals/audio");
     start("servicemanager", "libapklayer_servicemanager.so", {"/dev/binder"});
     start("permission", "libapklayer_permission.so", {});  // libbinder's checkPermission() asks this (no system_server PermissionController)
-    if (!deviceGraphics(inst)) start("allocator", "libapklayer_allocator.so", {});  // a Halium device's own: the host context
+    if (!deviceGraphics(l, inst)) start("allocator", "libapklayer_allocator.so", {});  // a Halium device's own: the host context
     start("composer", "libapklayer_composer.so", {});
-    if (staged(l, "libapklayer_codec2.so") && !deviceDomain(inst, "media")) start("codec2", "libapklayer_codec2.so", {});  // media = device: the host's Codec2 store
+    if (staged(l, "libapklayer_codec2.so") && !deviceDomain(l, inst, "media")) start("codec2", "libapklayer_codec2.so", {});  // media = device: the host's Codec2 store
     if (staged(l, "libapklayer_mediaserver.so")) {
         start("media", "libapklayer_mediaserver.so", {});
         start("extractor", "libapklayer_mediaserver.so", {"--extractor"});
@@ -390,7 +390,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         if (p.name == "camera" && staged(l, "libapklayer_cameraserver.so")) start("cameraserver", "libapklayer_cameraserver.so", {});
     }
     // camera = device: the device's HIDL provider through the host hwbinder context, cameraserver over it (libhidl 0003 lists it)
-    if (deviceDomain(inst, "camera") && staged(l, "libapklayer_cameraserver.so")) start("cameraserver", "libapklayer_cameraserver.so", {});
+    if (deviceDomain(l, inst, "camera") && staged(l, "libapklayer_cameraserver.so")) start("cameraserver", "libapklayer_cameraserver.so", {});
     start("surfaceflinger", "libapklayer_surfaceflinger.so", {});
     if (!tool.empty()) {
         // smoke tools draw on stack 0: give them the same virtual-display sink an app uses
@@ -406,7 +406,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     if (staged(l, "libapklayer_audioserver.so")) waitFor.push_back("media.audio_policy");
     for (const ProviderService& p : providers)  // an app's first camera list (the provider joins cameraserver whenever it registers)
         if (p.name == "camera" && staged(l, "libapklayer_cameraserver.so")) waitFor.push_back("media.camera");
-    if (deviceDomain(inst, "camera") && staged(l, "libapklayer_cameraserver.so")) waitFor.push_back("media.camera");
+    if (deviceDomain(l, inst, "camera") && staged(l, "libapklayer_cameraserver.so")) waitFor.push_back("media.camera");
     std::vector<int> waiters;
     for (const std::string& svc : waitFor) {
         Spawn w;
@@ -468,7 +468,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
                 // providers.toml changed: a running domain whose backend or options differ restarts with them, a removed one stops, the
                 // other services keep running. A domain this stack did not start with waits for the next start (its HAL is not declared).
                 std::vector<ProviderService> wanted = providerServices(l, inst);
-                writeHostHals(inst);  // read once per process: processes started from now on see the change
+                writeHostHals(l, inst);  // read once per process: processes started from now on see the change
                 for (const std::string& domain : providerDomains()) {
                     const ProviderService* want = nullptr;
                     for (const ProviderService& p : wanted) if (p.name == domain) want = &p;

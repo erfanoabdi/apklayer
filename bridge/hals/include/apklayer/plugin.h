@@ -10,7 +10,8 @@
  * "refused" by `apklayer providers`, never loaded into a front. The number grows whenever a declaration in these headers changes
  * incompatibly (a struct's layout, a call's arguments or meaning); new optional symbols do not change it.
  *
- * Calls every domain has (<d> is the domain: sensors, gnss, vibrator, camera):
+ * Calls every domain has (<d> is the domain: sensors, gnss, vibrator, camera; apklayer's own audio backends, libapklayer-audio-<backend>.so,
+ * have the ABI number, probe() and needs, but no options or init(): they are the audio HAL's host library, apklayer/audio.h, not installed):
  *   int apklayer_<d>_probe(void)
  *       Is the hardware there? <0: not usable on this host; 0: usable, but never picked by default (fakes, test plugins); >0: quality, the
  *       usable plugin with the highest is the domain's default when providers.toml names none. Called by the apklayer CLI in a forked child
@@ -20,6 +21,9 @@
  *       The options init() takes, for `apklayer providers` and the manager's Hardware page: one line "key\tdefault\tkind" per option, kind
  *       "text" or "file" (a file chooser), lines separated by '\n'. Read as a constant string (the CLI dlopens the plugin in its own
  *       process for this and for the ABI check: no constructors with side effects, no threads started at load).
+ *   extern const char apklayer_<d>_needs[]   (optional)
+ *       What the backend needs on the host, in a few words ("a PipeWire daemon", "GeoClue 2 on the system bus"): shown as "needs ..." when
+ *       probe() answers <0. Read like the options.
  *   int apklayer_<d>_init(int count, const char *const *options)
  *       First call in the front, on its main thread, before any other: the domain's options from providers.toml, `count` strings
  *       "key=value" (valid during the call only). Returns 0, or -errno (the front logs strerror and exits; the stack restarts it a few times, then leaves

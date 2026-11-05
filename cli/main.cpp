@@ -91,7 +91,6 @@ int main(int argc, char** argv) {
     if (args[0] == "daemon") return runDaemon(layout, args.size() == 2 && args[1] == "--on-demand");
     migrateData(layout);
     Instance inst = Instance::open(layout, id);
-    seedHaliumProviders(inst);  // a Halium device's new instance: the device's graphics and camera (cli/halium.cpp)
     const std::string& cmd = args[0];
     size_t n = args.size();
     if (cmd == "install" && n >= 2) {
