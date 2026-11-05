@@ -124,3 +124,5 @@ Behaviour that differs from Android or from stock Robolectric without editing up
 - system/libhwbinder 0001-host-hwbinder-context: a host hwbinder context (`/dev/host_hwbinder`, mapped by paths.c), no TXN_SECURITY_CTX (Waydroid libhwbinder 0001/0002). Rebuild: `m libhidlbase`.
 - system/libhidl 0001-host-hals: `getService` asks the host's hwservicemanager first for names in `host_hals.conf` (Waydroid libhidl 0001-0005, 0007, 0008). Rebuild: `m libhidlbase`.
 - bionic_translation 0038-pthread-attr-bionic-fields: pthread attrs keep bionic's stack_size and guard_size filled (the native bridge's proxy pthread_create sizes the guest stack from them). binary_translation 0001 (amended): the guest linker's host pthread is the thread's own bionic record on a glibc host.
+- hardware/interfaces 0004-gnss-no-mock-fix-from-a-subclass: `Gnss::reportsMockLocation()` (virtual, true); a subclass without a fix reports none.
+- robolectric 0018-location-manager-requests-listener: ProviderEntry tells `LocationRequests` (runtime/patches) when a provider's first request comes and its last goes.
