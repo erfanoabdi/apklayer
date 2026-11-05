@@ -3,7 +3,7 @@ package org.robolectric.shadows;
 import android.app.PendingIntent;
 
 /**
- * apklayer patch (patches/robolectric/0019): where ShadowAlarmManager sends the PendingIntent alarms of an auto-scheduling environment: the instance hub
+ * apklayer patch (patches/robolectric/0020): where ShadowAlarmManager sends the PendingIntent alarms of an auto-scheduling environment: the instance hub
  * (HostAlarms), which holds them beyond the life of the app's process, as AlarmManagerService does.
  */
 public final class PendingAlarms {
