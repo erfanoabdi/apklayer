@@ -96,6 +96,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-05 — libbinder (frameworks/native 0007: the stack's own uid is system) (halium agent)
+- Why: on Ubuntu Touch the desktop user is uid 32011, in Android's app range: the instance's servicemanager refused every addService and no service came up. IPCThreadState.cpp compile-checked outside the tree first (no header change).
+- Command (OrbStack, `flock ~/los24-build.lock`): `patches/apply` of frameworks/native (adds 0007), then `m libbinder`.
 ### 2026-11-05 — libhidlbase (libhidl 0002), libapklayer_vdisplay (halium agent)
 - Why: Halium graphics: a listed HAL the host does not serve is the device's passthrough HAL (the gralloc mapper), not waited for on a local hwservicemanager; the virtual display sink presents the device's gralloc buffers through android_wlegl. ServiceManagement.cpp compile-checked outside the tree first.
 - Command (OrbStack, `flock ~/los24-build.lock`): `patches/apply` of system/libhidl (adds 0002), `tools/sync-aosp.sh "..." hals/graphics`, then `m libhidlbase libapklayer_vdisplay`.
