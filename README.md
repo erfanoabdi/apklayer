@@ -23,6 +23,7 @@ apklayer-shell ──> one Wayland window per app                               
 
 ## Build and run
 **Installing on a new machine: `docs/INSTALL.md`** (step by step, with the Android parts from the `prebuilts` branch; no LineageOS tree needed).
+Writing a hardware plugin (sensors, GNSS, vibrator or camera backend, built out of tree against `apklayer-dev`): `docs/PLUGINS.md`.
 For development, the Android side comes from a LineageOS tree built once; `CHANGELOG.md` logs the incremental builds, rules in `docs/AOSP-BUILDS.md`.
 ```sh
 meson setup b --prefix ~/apklayer-install -Dprebuilts=<prebuilts checkout>   # bionic_translation (subproject, patched), pinned jars: fetched
@@ -50,7 +51,7 @@ To report a bug: open the app again, reproduce the problem, run `apklayer report
 
 ## Layout
 `cli/` the tool · `runtime/` app host, dex2jvm, Robolectric overlays · `bridge/` JNI shim, shell, host HALs · `aosp/` Android-side modules · Meson builds everything (`meson.build`); `tools/` staging from the tree (`tools/stage`), generators, host setup ·
-`tests/` VM tests, sample apps · `docs/` plan, architecture, patches, licenses · `STATUS.md`, `goal.md`, `CLAUDE.md` (agent rules).
+`tests/` VM tests, sample apps · `examples/` an out-of-tree plugin · `docs/` plan, architecture, patches, licenses · `STATUS.md`, `goal.md`, `CLAUDE.md` (agent rules).
 
 ## License
 AGPL-3.0-or-later for everyone (`LICENSE`, `NOTICE`); commercial licenses are available from Navotpala Tech (Bliss Co-Labs), info@navotpala.tech (`COMMERCIAL.md`). Third-party parts keep their licenses (`docs/THIRD_PARTY.md`).
