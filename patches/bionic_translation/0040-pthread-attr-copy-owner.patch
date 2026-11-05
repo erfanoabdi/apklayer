@@ -1,0 +1,94 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Thu, 5 Nov 2026 00:00:00 +0000
+Subject: [PATCH] pthread attr: a byte copy does not own the glibc attr
+
+A native bridge's proxy pthread_create (native_bridge_support pthread_translation.cc) memcpy's the guest's attr, sets the copy's
+stack_base and stack_size fields and destroys the copy. The copy shared the original's glibc attr: its destroy unmapped it, and the
+guest's own pthread_attr_destroy then freed garbage (OTR2 through Berberis on x86_64: SIGSEGV in pthread_attr_destroy at about every
+second start). The glibc attr's page now records the bionic attr that made it: a copy's destroy leaves it alone, and pthread_create
+takes a copy's stack from bionic's fields (where the copier wrote them; the host thread gets the translator's larger stack).
+
+apklayer patch: 0040 of patches/bionic_translation.
+---
+--- a/pthread_wrapper/libpthread.c
++++ b/pthread_wrapper/libpthread.c
+@@ -356,13 +356,35 @@
+ 
+ /* attr */
+ 
++/* apklayer patch: the glibc attr's page also records the bionic attr that made it. A byte copy of a bionic attr (a native bridge's proxy
++ * pthread_create copies the guest's, edits the copy's stack fields and destroys the copy) shares the glibc attr: destroying the copy
++ * unmapped the original's, whose own destroy or next pthread_create then used freed memory (OTR2 under Berberis: SIGSEGV in
++ * pthread_attr_destroy at about every second start). A copy's destroy now leaves the glibc attr alone, and pthread_create takes a
++ * copy's stack fields (bionic's), which is where the copier wrote them. */
++typedef struct {
++	pthread_attr_t glibc;
++	const bionic_attr_t *owner;
++} apklayer_attr_page;
++
++static pthread_attr_t *apklayer_attr_map(bionic_attr_t *attr)
++{
++	apklayer_attr_page *page = mmap(NULL, sizeof(*page), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
++	page->owner = attr;
++	return &page->glibc;
++}
++
++static bool apklayer_attr_is_copy(const bionic_attr_t *attr)
++{
++	return ((const apklayer_attr_page *)attr->glibc)->owner != attr;
++}
++
+ int bionic_pthread_attr_destroy(bionic_attr_t *attr)
+ {
+ 	assert(attr);
+ 	int ret = 0;
+-	if (IS_MAPPED(attr)) {
++	if (IS_MAPPED(attr) && !apklayer_attr_is_copy(attr)) {
+ 		ret = pthread_attr_destroy(attr->glibc);
+-		munmap(attr->glibc, sizeof(*attr->glibc));
++		munmap(attr->glibc, sizeof(apklayer_attr_page));
+ 	}
+ 	return ret;
+ }
+@@ -388,7 +410,7 @@
+ 	// From PTHREAD_ATTR_INIT(3)
+ 	// Calling `pthread_attr_init` on a thread attributes object that has already been initialized results in ud.
+ 	*attr = (bionic_attr_t){0};
+-	attr->glibc = mmap(NULL, sizeof(*attr->glibc), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
++	attr->glibc = apklayer_attr_map(attr);
+ 	return sync_bionic_attr(attr, pthread_attr_init(attr->glibc));
+ }
+ 
+@@ -396,7 +418,7 @@
+ {
+ 	assert(thread && attr);
+ 	*attr = (bionic_attr_t){0};
+-	attr->glibc = mmap(NULL, sizeof(*attr->glibc), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
++	attr->glibc = apklayer_attr_map(attr);
+ 	return sync_bionic_attr(attr, pthread_getattr_np((pthread_t)thread, attr->glibc));
+ }
+ 
+@@ -476,6 +498,22 @@
+ int bionic_pthread_create(bionic_pthread_t *thread, const bionic_attr_t *attr, void* (*start)(void*), void *arg)
+ {
+ 	assert(thread && (!attr || IS_MAPPED(attr)));
++	if (attr && apklayer_attr_is_copy(attr)) {  // apklayer patch: a byte copy's stack is in bionic's fields (see apklayer_attr_page)
++		pthread_attr_t copy;
++		struct sched_param param;
++		int value, ret;
++		pthread_attr_init(&copy);
++		if (!pthread_attr_getdetachstate(attr->glibc, &value)) pthread_attr_setdetachstate(&copy, value);
++		if (!pthread_attr_getinheritsched(attr->glibc, &value)) pthread_attr_setinheritsched(&copy, value);
++		if (!pthread_attr_getschedpolicy(attr->glibc, &value)) pthread_attr_setschedpolicy(&copy, value);
++		if (!pthread_attr_getschedparam(attr->glibc, &param)) pthread_attr_setschedparam(&copy, &param);
++		if (attr->bionic.guard_size) pthread_attr_setguardsize(&copy, attr->bionic.guard_size);
++		if (attr->bionic.stack_base) pthread_attr_setstack(&copy, attr->bionic.stack_base, attr->bionic.stack_size);
++		else if (attr->bionic.stack_size) pthread_attr_setstacksize(&copy, attr->bionic.stack_size);
++		ret = pthread_create((pthread_t*)thread, &copy, start, arg);
++		pthread_attr_destroy(&copy);
++		return ret;
++	}
+ 	return pthread_create((pthread_t*)thread, (attr ? attr->glibc : NULL), start, arg);
+ }
+ 
