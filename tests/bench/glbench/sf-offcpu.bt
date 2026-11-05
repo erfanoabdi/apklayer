@@ -1,0 +1,15 @@
+// Where SurfaceFlinger's main thread (comm "btload", tid == pid) and its RenderEngine thread wait: off-CPU time summed by user stack, per
+// process (trace-android.sh names this instance's SurfaceFlinger pid; other instances' idle ones show up under their own pids). The
+// stacks with the most time are the ones a frame waits on. sudo bpftrace sf-offcpu.bt (no placeholders)
+tracepoint:sched:sched_switch {
+    if ((args.prev_comm == "btload" && args.prev_pid == pid) || args.prev_comm == "RenderEngine") {
+        @start[args.prev_pid] = nsecs; @stk[args.prev_pid] = ustack(12); @proc[args.prev_pid] = pid; @name[args.prev_pid] = args.prev_comm;
+    }
+    $t = args.next_pid;
+    if (@start[$t]) {
+        @offcpu_ms[@proc[$t], @name[$t], @stk[$t]] = sum((nsecs - @start[$t]) / 1000000);
+        delete(@start[$t]);
+    }
+}
+
+END { clear(@start); clear(@stk); clear(@proc); clear(@name); }

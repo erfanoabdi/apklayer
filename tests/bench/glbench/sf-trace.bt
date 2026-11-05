@@ -1,0 +1,25 @@
+// The service side of an apklayer frame, per process (pid; other instances' services count separately: trace-android.sh names this
+// instance's pids): SurfaceFlinger's vsync rate from the composer (the shell's frame callbacks), its composite() and the GPU composition
+// inside it, the window sink's (libapklayer_vdisplay) wait for SurfaceFlinger's fence and its presents to the shell.
+// Placeholders as in swap-trace.bt; @NATIVE@ is the instance's native dir (the host HAL libraries).
+uprobe:@LIBS@/libapklayer_surfaceflinger.so:_ZN7android14SurfaceFlinger18onComposerHalVsyncEmlNSt3__18optionalIjEE,
+uprobe:@LIBS@/libapklayer_surfaceflinger.so:_ZThn48_N7android14SurfaceFlinger18onComposerHalVsyncEmlNSt3__18optionalIjEE {
+    if (@lastvs[pid]) { @sf_vsync_interval_ms[(uint64)pid] = lhist((nsecs - @lastvs[pid]) / 1000000, 0, 40, 2); }
+    @lastvs[pid] = nsecs; @sf_vsyncs[pid] = count(); }
+uprobe:@LIBS@/libapklayer_surfaceflinger.so:_ZN7android14SurfaceFlinger9compositeENS_17PhysicalDisplayIdERKNS_3ftl8SmallMapIS1_PNS_9scheduler13FrameTargeterELm3ENSt3__18equal_toIS1_EEEE,
+uprobe:@LIBS@/libapklayer_surfaceflinger.so:_ZThn56_N7android14SurfaceFlinger9compositeENS_17PhysicalDisplayIdERKNS_3ftl8SmallMapIS1_PNS_9scheduler13FrameTargeterELm3ENSt3__18equal_toIS1_EEEE {
+    @c[tid] = nsecs; @sf_composites[pid] = count(); }
+uretprobe:@LIBS@/libapklayer_surfaceflinger.so:_ZN7android14SurfaceFlinger9compositeENS_17PhysicalDisplayIdERKNS_3ftl8SmallMapIS1_PNS_9scheduler13FrameTargeterELm3ENSt3__18equal_toIS1_EEEE,
+uretprobe:@LIBS@/libapklayer_surfaceflinger.so:_ZThn56_N7android14SurfaceFlinger9compositeENS_17PhysicalDisplayIdERKNS_3ftl8SmallMapIS1_PNS_9scheduler13FrameTargeterELm3ENSt3__18equal_toIS1_EEEE /@c[tid]/ {
+    @sf_composite_us[pid] = avg((nsecs - @c[tid]) / 1000); @sf_composite_max_us[pid] = max((nsecs - @c[tid]) / 1000); }
+uprobe:@LIBS@/libapklayer_surfaceflinger.so:_ZN7android17compositionengine4impl6Output15composeSurfacesERKNS_6RegionENSt3__110shared_ptrINS_12renderengine15ExternalTextureEEERNS_4base14unique_fd_implINSB_13DefaultCloserEEE {
+    @g[tid] = nsecs; }
+uretprobe:@LIBS@/libapklayer_surfaceflinger.so:_ZN7android17compositionengine4impl6Output15composeSurfacesERKNS_6RegionENSt3__110shared_ptrINS_12renderengine15ExternalTextureEEERNS_4base14unique_fd_implINSB_13DefaultCloserEEE /@g[tid]/ {
+    @sf_gpu_compose_us[pid] = avg((nsecs - @g[tid]) / 1000); @sf_gpu_composes[pid] = count(); }
+uprobe:@LIBS@/libui.so:_ZN7android5Fence11waitForeverEPKc { @w[tid] = nsecs; }
+uretprobe:@LIBS@/libui.so:_ZN7android5Fence11waitForeverEPKc /@w[tid]/ { @fence_waitForever_us[pid] = avg((nsecs - @w[tid]) / 1000); @fence_waitForever_max_us[pid] = max((nsecs - @w[tid]) / 1000); }
+uprobe:@NATIVE@/libapklayer-hal-graphics.so:apklayer_display_present {
+    if (@lastp[pid]) { @present_interval_ms[(uint64)pid] = lhist((nsecs - @lastp[pid]) / 1000000, 0, 40, 2); }
+    @lastp[pid] = nsecs; @presents[pid] = count(); }
+uprobe:@NATIVE@/libapklayer-hal-graphics.so:apklayer_display_request_vsync { @vsync_requests[pid] = count(); }
+END { clear(@lastvs); clear(@c); clear(@g); clear(@w); clear(@lastp); }

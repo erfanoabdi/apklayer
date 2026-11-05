@@ -1,0 +1,18 @@
+// Where an Android eglSwapBuffers goes through apklayer (aosp/hals/graphics/egl/EglWindow.cpp swapWindow): on the thread named "glbench"
+// (hello.glbench's render thread), the time of each step, averaged. @LIBS@ is the instance's android-libs directory, @HOST@ the host's
+// library directory: sudo bpftrace <(sed "s|@LIBS@|$L|g; s|@HOST@|/usr/lib/aarch64-linux-gnu|g" swap-trace.bt)
+// Steps: host = the host eglSwapBuffers on the gbm_surface; dequeue = Surface::dequeueBuffer (waits for a free BufferQueue slot);
+// fence = dequeue's return to gbm_bo_get_fd (the acquire-fence poll); copy = gbm_bo_get_fd to gbm_surface_release_buffer (two EGLImages,
+// two FBOs, the blit, flush, the native fence); queue = Surface::queueBuffer.
+uprobe:@LIBS@/libapklayer_egl.so:eglSwapBuffers /comm == "glbench"/ { @t0[tid] = nsecs; }
+uprobe:@HOST@/libEGL.so.1:eglSwapBuffers /comm == "glbench"/ { @h[tid] = nsecs; }
+uretprobe:@HOST@/libEGL.so.1:eglSwapBuffers /comm == "glbench" && @h[tid]/ { @us["1 host swap"] = avg((nsecs - @h[tid]) / 1000); }
+uprobe:@LIBS@/libgui.so:_ZN7android7Surface18hook_dequeueBufferEP13ANativeWindowPP19ANativeWindowBufferPi /comm == "glbench"/ { @d[tid] = nsecs; }
+uretprobe:@LIBS@/libgui.so:_ZN7android7Surface18hook_dequeueBufferEP13ANativeWindowPP19ANativeWindowBufferPi /comm == "glbench" && @d[tid]/ {
+    @us["2 dequeue"] = avg((nsecs - @d[tid]) / 1000); @dmax = max((nsecs - @d[tid]) / 1000); @dq[tid] = nsecs; }
+uprobe:@HOST@/libgbm.so.1:gbm_bo_get_fd /comm == "glbench" && @dq[tid]/ { @us["3 fence wait"] = avg((nsecs - @dq[tid]) / 1000); @f[tid] = nsecs; }
+uprobe:@HOST@/libgbm.so.1:gbm_surface_release_buffer /comm == "glbench" && @f[tid]/ { @us["4 gpu copy setup"] = avg((nsecs - @f[tid]) / 1000); }
+uprobe:@LIBS@/libgui.so:_ZN7android7Surface16hook_queueBufferEP13ANativeWindowP19ANativeWindowBufferi /comm == "glbench"/ { @q[tid] = nsecs; }
+uretprobe:@LIBS@/libgui.so:_ZN7android7Surface16hook_queueBufferEP13ANativeWindowP19ANativeWindowBufferi /comm == "glbench" && @q[tid]/ { @us["5 queue"] = avg((nsecs - @q[tid]) / 1000); }
+uretprobe:@LIBS@/libapklayer_egl.so:eglSwapBuffers /comm == "glbench" && @t0[tid]/ { @us["0 eglSwapBuffers total"] = avg((nsecs - @t0[tid]) / 1000); @swaps = count(); }
+END { clear(@t0); clear(@h); clear(@d); clear(@dq); clear(@f); clear(@q); }
