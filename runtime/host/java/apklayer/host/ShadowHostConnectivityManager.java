@@ -29,6 +29,7 @@ public class ShadowHostConnectivityManager extends ShadowConnectivityManager {
             callback.onAvailable(network);
             callback.onCapabilitiesChanged(network, caps);
             callback.onLinkPropertiesChanged(network, state.link());
+            callback.onBlockedStatusChanged(network, false);  // the service's initial burst ends with it; WorkManager's network constraint waits for it (isBlocked=null: every download cancelled)
         });
     }
 

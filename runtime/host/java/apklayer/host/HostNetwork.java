@@ -106,7 +106,7 @@ final class HostNetwork {
                 ? new Network(previous.wifi() ? ConnectivityManager.TYPE_WIFI : ConnectivityManager.TYPE_ETHERNET) : null;
         for (ConnectivityManager.NetworkCallback callback : shadow.getNetworkCallbacks()) {
             if (lost != null) new Handler(Looper.getMainLooper()).post(() -> callback.onLost(lost));
-            if (next != null && network != null) new Handler(Looper.getMainLooper()).post(() -> { callback.onAvailable(network); callback.onCapabilitiesChanged(network, capabilities(next)); callback.onLinkPropertiesChanged(network, next.link()); });
+            if (next != null && network != null) new Handler(Looper.getMainLooper()).post(() -> { callback.onAvailable(network); callback.onCapabilitiesChanged(network, capabilities(next)); callback.onLinkPropertiesChanged(network, next.link()); callback.onBlockedStatusChanged(network, false); });
         }
     }
 
