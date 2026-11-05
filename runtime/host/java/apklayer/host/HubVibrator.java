@@ -44,10 +44,17 @@ final class HubVibrator extends IVibratorManagerService.Stub {
     /** Publishes the service when the stack declared the vibrator HAL (cli/stack.cpp stages its manifest only then). */
     static void publishIfProvided(BiPredicate<Integer, String> holds) {
         String root = System.getenv("APKLAYER_INSTANCE_ROOT");
-        if (root == null || !new java.io.File(root, "vendor/etc/vintf/manifest/apklayer-vibrator.xml").exists()) return;
+        if (root == null || !(new java.io.File(root, "vendor/etc/vintf/manifest/apklayer-vibrator.xml").exists() || deviceVibrator(root))) return;
         // the stack starts the HAL before SurfaceFlinger, whose registration makes it ready: normally there already
         if (RealBinder.lookup(HAL) == null && RealBinder.await(HAL, 5000) == null) { System.out.println("[apklayer-hub] the vibrator HAL is declared but not running: no vibrator"); return; }
         if (!RealBinder.publish(SERVICE, new HubVibrator(holds))) System.out.println("[apklayer-hub] cannot publish " + SERVICE);
+    }
+
+    /** providers.toml gives the vibrator to the device (a Halium phone's own HAL through the host binder context: host_hals.conf lists it). */
+    private static boolean deviceVibrator(String root) {
+        try {
+            return new String(java.nio.file.Files.readAllBytes(new java.io.File(System.getenv("APKLAYER_DATA"), "apklayer/host_hals.conf").toPath())).contains("android.hardware.vibrator.IVibrator\n");
+        } catch (java.io.IOException none) { return false; }
     }
 
     /** One IVibrator call: its int result (0 for void methods). */

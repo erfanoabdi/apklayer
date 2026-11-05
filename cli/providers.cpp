@@ -209,11 +209,13 @@ std::vector<ProviderService> providerServices(const Layout& l, const Instance& i
 
 std::string hostHalsFile(const Instance& inst) { return join(inst.dataDir, "apklayer/host_hals.conf"); }
 
-bool deviceGraphics(const Instance& inst) {
+bool deviceDomain(const Instance& inst, const std::string& domain) {
     for (const ProviderConfig& c : readProviders(providersFile(inst)))
-        if (c.domain == "graphics" && c.provider == "device") return true;
+        if (c.domain == domain && c.provider == "device") return true;
     return false;
 }
+
+bool deviceGraphics(const Instance& inst) { return deviceDomain(inst, "graphics"); }
 
 bool writeHostHals(const Instance& inst) {
     std::string text;

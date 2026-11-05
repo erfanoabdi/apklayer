@@ -17,8 +17,14 @@ final class HostCameraShadows {
      *  cameraserver when its library is staged. Both, or CameraManager would find no "media.camera". */
     static boolean declared() {
         String root = System.getenv("APKLAYER_INSTANCE_ROOT");
-        return root != null && new java.io.File(root, "vendor/etc/vintf/manifest/apklayer-camera.xml").exists()
+        return root != null && (new java.io.File(root, "vendor/etc/vintf/manifest/apklayer-camera.xml").exists() || deviceCamera(root))
                 && new java.io.File(System.getProperty("apklayer.androidlibs", ""), "libapklayer_cameraserver.so").exists();
+    }
+
+    /** providers.toml gives the camera to the device (a Halium phone's own HIDL provider through the host hwbinder context: host_hals.conf lists it). */
+    private static boolean deviceCamera(String root) {
+        try {
+            return new String(java.nio.file.Files.readAllBytes(new java.io.File(System.getenv("APKLAYER_DATA"), "apklayer/host_hals.conf").toPath())).contains("android.hardware.camera.provider\n");        } catch (java.io.IOException none) { return false; }
     }
 
     static List<Map.Entry<String, String>> entries() {

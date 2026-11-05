@@ -369,6 +369,8 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         // cameraserver over the camera provider HAL: what the apps' CameraManager and android.hardware.Camera talk to (HostCameraShadows)
         if (p.name == "camera" && staged(l, "libapklayer_cameraserver.so")) start("cameraserver", "libapklayer_cameraserver.so", {});
     }
+    // camera = device: the device's HIDL provider through the host hwbinder context, cameraserver over it (libhidl 0003 lists it)
+    if (deviceDomain(inst, "camera") && staged(l, "libapklayer_cameraserver.so")) start("cameraserver", "libapklayer_cameraserver.so", {});
     start("surfaceflinger", "libapklayer_surfaceflinger.so", {});
     if (!tool.empty()) {
         // smoke tools draw on stack 0: give them the same virtual-display sink an app uses
@@ -384,6 +386,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     if (staged(l, "libapklayer_audioserver.so")) waitFor.push_back("media.audio_policy");
     for (const ProviderService& p : providers)  // an app's first camera list (the provider joins cameraserver whenever it registers)
         if (p.name == "camera" && staged(l, "libapklayer_cameraserver.so")) waitFor.push_back("media.camera");
+    if (deviceDomain(inst, "camera") && staged(l, "libapklayer_cameraserver.so")) waitFor.push_back("media.camera");
     std::vector<int> waiters;
     for (const std::string& svc : waitFor) {
         Spawn w;

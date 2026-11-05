@@ -1,0 +1,109 @@
+From: apklayer
+Subject: [PATCH] libhidl: the no-hwservicemanager stand-in forwards listing and notifications for listed HALs to the host
+
+apklayer patch (docs/PATCHES.md, docs/HALIUM.md). Clients find HIDL providers not only with getService but through the default service
+manager's listManifestByInterface, listByInterface, getTransport and registerForNotifications (cameraserver's CameraProviderManager,
+the Codec2 client). The instance runs no hwservicemanager, so libhidl's NoHwServiceManager answers "nothing"; for HALs listed in
+/data/apklayer/host_hals.conf those calls (and unregisterForNotifications) go to the host's hwservicemanager through the host
+hwbinder context, whose notification then arrives for the instance's callback on the host pool. Rebuild: `m libhidlbase`.
+Against system/libhidl 061055fc4dad (REVISION), after 0001 and 0002. Apply: patches/apply aosp <LineageOS tree>.
+---
+diff --git a/transport/ServiceManagement.cpp b/transport/ServiceManagement.cpp
+--- a/transport/ServiceManagement.cpp
++++ b/transport/ServiceManagement.cpp
+@@ -197,6 +197,10 @@
+            fqName == IServiceManager1_2::descriptor;
+ }
+ 
++// apklayer patch: defined below, with the host_hals.conf code
++static bool isHostHal(const std::string& fqName);
++static sp<IServiceManager1_2> hostServiceManager();
++
+ /*
+  * A replacement for hwservicemanager when it is not installed on a device.
+  *
+@@ -222,6 +226,9 @@
+     }
+ 
+     Return<Transport> getTransport(const hidl_string& fqName, const hidl_string& name) {
++        if (isHostHal(fqName)) {  // apklayer patch: the host decides for the device HALs
++            if (sp<IServiceManager1_2> host = hostServiceManager()) return host->getTransport(fqName, name);
++        }
+         // We pretend like IServiceManager is declared for
+         // IServiceManager::getService to return this NoHwServiceManager
+         // instance
+@@ -239,6 +246,9 @@
+         return Void();
+     }
+     Return<void> listByInterface(const hidl_string& fqName, listByInterface_cb _hidl_cb) override {
++        if (isHostHal(fqName)) {  // apklayer patch
++            if (sp<IServiceManager1_2> host = hostServiceManager()) return host->listByInterface(fqName, _hidl_cb);
++        }
+         _hidl_cb({});
+         LOG(INFO) << "Cannot list service " << fqName << " without hwservicemanager";
+         return Void();
+@@ -265,6 +275,9 @@
+ 
+     Return<bool> registerForNotifications(const hidl_string& fqName, const hidl_string& name,
+                                           const sp<IServiceNotification>& callback) override {
++        if (isHostHal(fqName)) {  // apklayer patch: the host's hwservicemanager notifies (at once for what is registered already)
++            if (sp<IServiceManager1_2> host = hostServiceManager()) return host->registerForNotifications(fqName, name, callback);
++        }
+         LOG(INFO) << "Will not get any notifications for " << fqName << "/" << name
+                   << " without hwservicemanager but keeping the callback.";
+         if (callback == nullptr) {
+@@ -304,6 +317,9 @@
+ 
+     Return<bool> unregisterForNotifications(const hidl_string& fqName, const hidl_string& name,
+                                             const sp<IServiceNotification>& callback) override {
++        if (isHostHal(fqName)) {  // apklayer patch
++            if (sp<IServiceManager1_2> host = hostServiceManager()) return host->unregisterForNotifications(fqName, name, callback);
++        }
+         auto ret = mServiceNotifications[static_cast<std::string>(fqName) + "/" +
+                                          static_cast<std::string>(name)]
+                            .erase(callback);
+@@ -330,7 +346,10 @@
+         LOG(INFO) << "Cannot add " << fqName << " with chain without hwservicemanager";
+         return false;
+     }
+-    Return<void> listManifestByInterface(const hidl_string& fqName, listManifestByInterface_cb) {
++    Return<void> listManifestByInterface(const hidl_string& fqName, listManifestByInterface_cb _hidl_cb) {
++        if (isHostHal(fqName)) {  // apklayer patch
++            if (sp<IServiceManager1_2> host = hostServiceManager()) return host->listManifestByInterface(fqName, _hidl_cb);
++        }
+         LOG(INFO) << "Cannot list manifest for " << fqName << " without hwservicemanager";
+         return Void();
+     }
+@@ -910,20 +929,24 @@
+     return false;
+ }
+ 
+-static sp<IBase> hostHal(const std::string& descriptor, const std::string& instance) {
++static sp<IServiceManager1_2> hostServiceManager() {
+     using android::hidl::manager::V1_2::BnHwServiceManager;
+     using android::hidl::manager::V1_2::BpHwServiceManager;
+-    if (!isHostHal(descriptor)) return nullptr;
+     sp<ProcessState> host = ProcessState::self(true);
+-    if (host == nullptr) {
+-        ALOGW("%s/%s: listed for the host, but there is no host hwbinder context", descriptor.c_str(), instance.c_str());
+-        return nullptr;
+-    }
++    if (host == nullptr) return nullptr;
+     static std::once_flag pool;
+     std::call_once(pool, [&] { host->startThreadPool(); });  // callbacks and death notices from the host
++    return fromBinder<IServiceManager1_2, BpHwServiceManager, BnHwServiceManager>(host->getContextObject(nullptr));
++}
++
++static sp<IBase> hostHal(const std::string& descriptor, const std::string& instance) {
++    if (!isHostHal(descriptor)) return nullptr;
+     // get() is IServiceManager 1.0's: every host since Android 8 answers it
+-    sp<IServiceManager1_2> sm = fromBinder<IServiceManager1_2, BpHwServiceManager, BnHwServiceManager>(host->getContextObject(nullptr));
+-    if (sm == nullptr) return nullptr;
++    sp<IServiceManager1_2> sm = hostServiceManager();
++    if (sm == nullptr) {
++        ALOGW("%s/%s: listed for the host, but there is no host hwbinder context", descriptor.c_str(), instance.c_str());
++        return nullptr;
++    }
+     Return<sp<IBase>> ret = sm->get(descriptor, instance);
+     sp<IBase> base = ret.isOk() ? static_cast<sp<IBase>>(ret) : nullptr;
+     ALOGI("%s/%s: %s on the host", descriptor.c_str(), instance.c_str(), base ? "found" : "not found");

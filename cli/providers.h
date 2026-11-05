@@ -33,6 +33,8 @@ bool writeHostHals(const Instance& instance);
 std::string hostHalsFile(const Instance& instance);
 // providers.toml sets graphics to the device: a Halium device's gralloc and GPU driver instead of the stack's own (docs/HALIUM.md)
 bool deviceGraphics(const Instance& instance);
+// providers.toml sets this domain to the device (its HAL through the host contexts, no front)
+bool deviceDomain(const Instance& instance, const std::string& domain);
 // `apklayer providers [set <domain> <backend> [opt=val...] | set <domain> device | unset <domain>]`
 int providersCommand(const Layout& layout, const Instance& instance, const std::vector<std::string>& args);
 

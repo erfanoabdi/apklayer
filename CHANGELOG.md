@@ -113,6 +113,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 ### 2026-11-05 - libapklayer_composer (frame pacing agent)
 - Why: SurfaceFlinger has no vsync timeline (getDisplayKnownVsyncSample UNSUPPORTED, shell frame callbacks do not form a model): windows run at ~50 fps. Composer gets a steady vsync timeline phase-locked to the shell's frames, real sync_file present fences (DRM syncobj), capability PRESENT_FENCE_IS_NOT_RELIABLE. Header-only additions (VsyncTimeline.h, PresentFence.h), no new source file, Android.bp unchanged.
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "..." hals/graphics/composer`, then `tools/lib/orb-build-module.py libapklayer_composer hals/graphics/composer Composer.cpp` (or `m libapklayer_composer`).
+### 2026-11-05 — libhidlbase (libhidl 0003) (camera agent)
+- Why: camera = device: cameraserver finds the HIDL camera provider with listManifestByInterface and registerForNotifications, which the instance's NoHwServiceManager answered with nothing; for listed HALs they now go to the host's hwservicemanager.
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `m libhidlbase` (edit made in the tree, patch 0003 written from the diff).
 ### 2026-11-05 — libbinder (frameworks/native 0007: the stack's own uid is system) (halium agent)
 - Why: on Ubuntu Touch the desktop user is uid 32011, in Android's app range: the instance's servicemanager refused every addService and no service came up. IPCThreadState.cpp compile-checked outside the tree first (no header change).
 - Command (OrbStack, `flock ~/los24-build.lock`): `patches/apply` of frameworks/native (adds 0007), then `m libbinder`.
