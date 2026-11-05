@@ -6,17 +6,19 @@ reaches services as the binder work source of its Java calls (frameworks/native 
 JNI through libcamera_client) carry the kernel uid only, beside an AttributionSource naming the app's uid. A caller with cameraserver's
 own uid is one of the instance's processes, so its client uid is taken as given (as for mediaserver on a device); without this every
 Camera1 open fails with "Untrusted caller ... trying to forward camera access".
+On Ubuntu Touch (uid 32011) libbinder 0007 makes that caller uid AID_SYSTEM, so system is trusted too.
 Against frameworks/av 937eb9047ec2 (REVISION). Apply: patches/apply aosp <LineageOS tree>.
 ---
 diff --git a/services/camera/libcameraservice/utils/AttributionAndPermissionUtils.cpp b/services/camera/libcameraservice/utils/AttributionAndPermissionUtils.cpp
 --- a/services/camera/libcameraservice/utils/AttributionAndPermissionUtils.cpp
 +++ b/services/camera/libcameraservice/utils/AttributionAndPermissionUtils.cpp
-@@ -213,6 +213,8 @@ bool AttributionAndPermissionUtils::isTrustedCallingUid(uid_t uid) {
+@@ -213,6 +213,9 @@ bool AttributionAndPermissionUtils::isTrustedCallingUid(uid_t uid) {
          case AID_RADIO:        // telephony
              return true;
          default:
-+            // apklayer patch: the instance's processes share cameraserver's Linux uid (an app's native calls name their uid in the attribution)
-+            if (uid == getuid()) return true;
++            // apklayer patch: the instance's processes share cameraserver's Linux uid (an app's native calls name their uid in the attribution);
++            // libbinder 0007 reports that uid to a service as AID_SYSTEM (a desktop user in Android's app range, Ubuntu Touch's phablet)
++            if (uid == getuid() || uid == AID_SYSTEM) return true;
              return false;
      }
  }

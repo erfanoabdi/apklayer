@@ -311,6 +311,14 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         writeFile(file, "ro.sf.lcd_density=" + std::to_string(density) + "\n");
         propFiles.insert(propFiles.begin() + (exists(inst.propOverrides()) ? 1 : 0), file);
     }
+    if (deviceDomain(inst, "media")) {
+        // the device's Codec2 is HIDL: libcodec2's client picks AIDL for a vendor api level of 202404 and above (apklayer.prop says 202604), so the
+        // vendor's own level (ro.vendor.build.version.sdk: 31 on Halium 12) goes first, as ro.* is write-once
+        std::string level = deviceProperty("ro.vendor.build.version.sdk");
+        std::string file = join(inst.runtimeDir, "media-device.prop");
+        writeFile(file, "ro.vendor.api_level=" + (level.empty() ? std::string("31") : level) + "\n");
+        propFiles.insert(propFiles.begin() + (propFiles.size() > 2), file);
+    }
     setDerivedProperties(l, ne, propFiles);
     Spawn prop;
     prop.argv = {join(n, "bin/aprop"), "load"};

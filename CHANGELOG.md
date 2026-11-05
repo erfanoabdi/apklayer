@@ -115,7 +115,13 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "..." hals/graphics/composer`, then `tools/lib/orb-build-module.py libapklayer_composer hals/graphics/composer Composer.cpp` (or `m libapklayer_composer`).
 ### 2026-11-05 — libhidlbase (libhidl 0003) (camera agent)
 - Why: camera = device: cameraserver finds the HIDL camera provider with listManifestByInterface and registerForNotifications, which the instance's NoHwServiceManager answered with nothing; for listed HALs they now go to the host's hwservicemanager.
-- Command (OrbStack, `flock -n ~/los24-build.lock`): `m libhidlbase` (edit made in the tree, patch 0003 written from the diff).
+- Command (OrbStack, `flock ~/los24-build.lock`): `m libhidlbase` (edit made in the tree, patch 0003 written from the diff). Result: built (10 min, most of it kati); first attempt failed to compile (forward declarations outside `namespace details`), fixed. Installed in the phone's instance copy.
+### 2026-11-05 — libapklayer_cameraserver (frameworks/av 0003 amended) (camera agent)
+- Why: Camera1 (android.hardware.Camera, Open Camera's default) on Ubuntu Touch: libbinder 0007 reports the stack's own uid (phablet 32011) as AID_SYSTEM, which isCameraserver's trusted-uid test (the instance's own uid) did not accept ("Untrusted caller, UID 1000").
+- Command (OrbStack, `flock ~/los24-build.lock`): `m libapklayer_cameraserver`.
+### 2026-11-05 — libhidlbase (libhidl 0003 amended), libapklayer_codec2 (camera agent)
+- Why: media = device: a Halium device's Codec2 store answers listManifestByInterface for the 1.0 interface with nothing (its c2 services are registered, not in the manifest answer): fall back to listByInterface; and the AAC decoder's last works end empty, not corrupted, when the host decoder (faad) keeps its last frame.
+- Command (OrbStack, `flock ~/los24-build.lock`): `m libhidlbase libapklayer_codec2`, after `tools/sync-aosp.sh ... hals/media/codec2`.
 ### 2026-11-05 — libbinder (frameworks/native 0007: the stack's own uid is system) (halium agent)
 - Why: on Ubuntu Touch the desktop user is uid 32011, in Android's app range: the instance's servicemanager refused every addService and no service came up. IPCThreadState.cpp compile-checked outside the tree first (no header change).
 - Command (OrbStack, `flock ~/los24-build.lock`): `patches/apply` of frameworks/native (adds 0007), then `m libbinder`.

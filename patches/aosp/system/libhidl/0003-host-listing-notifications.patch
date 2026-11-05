@@ -64,19 +64,28 @@ diff --git a/transport/ServiceManagement.cpp b/transport/ServiceManagement.cpp
          auto ret = mServiceNotifications[static_cast<std::string>(fqName) + "/" +
                                           static_cast<std::string>(name)]
                             .erase(callback);
-@@ -330,7 +348,10 @@
+@@ -330,7 +348,19 @@
          LOG(INFO) << "Cannot add " << fqName << " with chain without hwservicemanager";
          return false;
      }
 -    Return<void> listManifestByInterface(const hidl_string& fqName, listManifestByInterface_cb) {
 +    Return<void> listManifestByInterface(const hidl_string& fqName, listManifestByInterface_cb _hidl_cb) {
 +        if (details::isHostHal(fqName)) {  // apklayer patch
-+            if (sp<IServiceManager1_2> host = details::hostServiceManager()) return host->listManifestByInterface(fqName, _hidl_cb);
++            if (sp<IServiceManager1_2> host = details::hostServiceManager()) {
++                // the host's manifest, else what is registered (a Halium device's Codec2 store answers the second only for @1.0 queries)
++                hidl_vec<hidl_string> found;
++                Return<void> ret = host->listManifestByInterface(fqName, [&](const hidl_vec<hidl_string>& names) { found = names; });
++                if (ret.isOk() && found.size() == 0)
++                    ret = host->listByInterface(fqName, [&](const hidl_vec<hidl_string>& names) { found = names; });
++                if (!ret.isOk()) return ret;
++                _hidl_cb(found);
++                return Void();
++            }
 +        }
          LOG(INFO) << "Cannot list manifest for " << fqName << " without hwservicemanager";
          return Void();
      }
-@@ -910,20 +931,24 @@
+@@ -910,20 +940,24 @@
      return false;
  }
  

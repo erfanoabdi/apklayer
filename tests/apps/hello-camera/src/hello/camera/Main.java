@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class Main extends Activity {
     private static final int W = 640, H = 480;
+    private static final String REAL = System.getProperty("hello.real");  // the camera id of a real camera (a phone's): no colour bars to compare
     // the fake backend's bars (bridge/hals/camera/fake.c): BT.601 Y, U, V of white, yellow, cyan, green, magenta, red, blue, black
     private static final int[][] BARS = {{235, 128, 128}, {210, 16, 146}, {170, 166, 16}, {145, 54, 34}, {106, 202, 222}, {81, 90, 240}, {41, 240, 110}, {16, 128, 128}};
 
@@ -71,7 +72,7 @@ public final class Main extends Activity {
         Handler handler = new Handler(thread.getLooper());
         CameraDevice[] device = new CameraDevice[1];
         CountDownLatch opened = new CountDownLatch(1);
-        manager.openCamera(ids[0], new CameraDevice.StateCallback() {
+        manager.openCamera(REAL != null ? REAL : ids[0], new CameraDevice.StateCallback() {
             @Override public void onOpened(CameraDevice d) { device[0] = d; opened.countDown(); }
             @Override public void onDisconnected(CameraDevice d) { System.out.println("[cam] disconnected"); opened.countDown(); }
             @Override public void onError(CameraDevice d, int error) { System.out.println("[cam] open error " + error); opened.countDown(); }
@@ -210,6 +211,11 @@ public final class Main extends Activity {
     /** The Y, U, V of each bar's centre, a quarter down the frame, against the fake pattern's. */
     private static String checkYuv(Image image) {
         Image.Plane[] p = image.getPlanes();
+        if (REAL != null) {  // a real camera (-Dhello.real=<id>): the frame has the asked size and a luminance spread (a lens cap is flat), no bars
+            long sum = 0; int min = 255, max = 0, n = 0;
+            for (int y = 0; y < H; y += 8) for (int x = 0; x < W; x += 8) { int v = at(p[0], x, y); sum += v; min = Math.min(min, v); max = Math.max(max, v); n++; }
+            return (image.getWidth() == W && image.getHeight() == H ? "ok" : "bad") + String.format(" real %dx%d Y mean %d min %d max %d", image.getWidth(), image.getHeight(), sum / n, min, max);
+        }
         StringBuilder seen = new StringBuilder();
         boolean ok = image.getWidth() == W && image.getHeight() == H;
         for (int bar = 0; bar < 8; bar++) {
@@ -233,6 +239,7 @@ public final class Main extends Activity {
         b.get(data);
         Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
         if (bitmap == null) return "bad: does not decode (" + data.length + " bytes)";
+        if (REAL != null) return "ok real " + data.length + " bytes " + bitmap.getWidth() + "x" + bitmap.getHeight();  // any scene
         int red = bitmap.getPixel(11 * W / 16, H / 4), blue = bitmap.getPixel(13 * W / 16, H / 4);
         boolean ok = bitmap.getWidth() == W && bitmap.getHeight() == H && (red >> 16 & 0xff) > 200 && (red & 0xff) < 60 && (blue & 0xff) > 200 && (blue >> 16 & 0xff) < 60;
         return (ok ? "ok" : "bad") + String.format(" %d bytes %dx%d red=#%06x blue=#%06x", data.length, bitmap.getWidth(), bitmap.getHeight(), red & 0xffffff, blue & 0xffffff);

@@ -117,8 +117,9 @@ class AudioDecoder final : public SimpleC2Component {
             int status = apklayer_codec_pull(mCodec, 0, &raw);
             if (status == -EAGAIN) return C2_OK;
             if (status == -ENODATA) {
-                c2_status_t result = mPending.empty() ? C2_OK : C2_CORRUPTED;
-                finishAll(result); return result;
+                // at the end of the stream: a decoder with algorithmic delay (faad, the host's AAC decoder on Ubuntu Touch, keeps its last frame:
+                // "still 1 frames left after draining") has no output for the last inputs; their works end empty, not corrupted
+                finishAll(C2_OK); return C2_OK;
             }
             if (status || mPending.empty()) { if (raw) apklayer_codec_frame_release(raw); finishAll(C2_CORRUPTED); return C2_CORRUPTED; }
             std::unique_ptr<apklayer_codec_frame, decltype(&apklayer_codec_frame_release)> frame(raw, apklayer_codec_frame_release);
