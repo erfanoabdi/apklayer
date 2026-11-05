@@ -110,7 +110,8 @@ tools/host-setup/webview.sh "$AL/prebuilts/arm64/system-apps/webview.apk"
 
 ## 7. The manager
 
-`apklayer-manager` is a window over the CLI: apps (install, open, stop, clear data, uninstall), instances, Android property overrides.
+`apklayer-manager` is a window over the CLI: apps (install, open, stop, clear data, uninstall; the add-ons microG and F-Droid), instances, Android
+property overrides.
 It uses a prebuilt Slint library (no Rust toolchain):
 
 ```sh
@@ -176,6 +177,9 @@ gfxstream's sources (`hardware/google/gfxstream`, also on android.googlesource.c
 
 After `sudo apt install ./apklayer_*.deb` run `apklayer setup` (or open apklayer-manager, which runs it): it downloads the Android runtime bundle for your CPU
 from the release (`--bundle <file>` for an offline copy), installs the system apps and sets the instance up; `apklayer setup --check` shows what is missing.
+microG (Services and Companion, for apps that need Google's services) and the F-Droid client are optional: `apklayer setup --microg --fdroid`, the
+first-run screen's checkboxes, or at any time the "Add-ons" section at the end of the Apps page's list, which shows whether each is
+installed and offers Install, Update (nothing is downloaded beyond the repository index when the installed version is current) and Remove.
 Setup needs no root: what does (binderfs and the instances' binder devices) the package does at install and at every boot (`apklayer-binder.service`).
 Ubuntu Touch (Halium phones): docs/HALIUM.md "The apt install on the phone"; "Choose file…" and Share to apklayer go through Lomiri Content Hub
 (docs/HALIUM.md "Choosing and sharing files on Ubuntu Touch").
