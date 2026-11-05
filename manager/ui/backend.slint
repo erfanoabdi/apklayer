@@ -81,6 +81,7 @@ export global Backend {
     callback set-prop(string, string);
     callback unset-prop(string);
     in property <string> night-setting;    // the instance's colour scheme override (`apklayer settings`): "" follows the desktop, "yes" dark, "no" light
+    in property <string> window-mode-setting;  // the instance's window style (`apklayer settings`): "" automatic (mobile on a phone or in a mobile shell), "mobile", "desktop"
     callback set-setting(string, string);  // key, value ("" unsets): applied at once in a running instance
     in property <[HwDomain]> hardware;
     callback set-provider(string, int);    // domain, index into its backends: `apklayer providers set|unset` with the options typed in

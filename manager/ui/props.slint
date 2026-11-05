@@ -52,6 +52,26 @@ export component PropsPage {
                         }
                     }
                 }
+                FilledCard {
+                    VerticalLayout {
+                        padding: MaterialStyleMetrics.padding_16;
+                        spacing: MaterialStyleMetrics.spacing_12;
+                        MaterialText {
+                            text: "Window style of instance " + Backend.instance + ": mobile (maximized, a navigation bar with Back and Home, no title bar) or desktop (floating windows). Automatic is mobile on a phone or in a mobile shell; applied at once. A single app: apklayer settings set window-mode.<package> ...";
+                            style: MaterialTypography.body_medium;
+                            color: MaterialPalette.on_surface;
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            spacing: MaterialStyleMetrics.spacing_8;
+                            for choice in [{ label: "Automatic", value: "" }, { label: "Mobile", value: "mobile" }, { label: "Desktop", value: "desktop" }] : HorizontalLayout {
+                                if Backend.window-mode-setting == choice.value : FilledButton { text: choice.label; }
+                                if Backend.window-mode-setting != choice.value : TonalButton { text: choice.label; clicked => { Backend.set-setting("window-mode", choice.value); } }
+                            }
+                        }
+                    }
+                }
                 for p in Backend.props : Row {
                     text: p.key;
                     supporting-text: p.value + (p.live != "" && p.live != p.value ? "   (running: " + p.live + ")" : "");

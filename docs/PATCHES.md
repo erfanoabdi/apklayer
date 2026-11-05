@@ -103,6 +103,8 @@ Behaviour that differs from Android or from stock Robolectric without editing up
 - Media store: `HostMediaStub` answers the "media" provider with nothing indexed until the tree's MediaProvider is installed.
 - Cross-app intents: `HostApps`, `ManifestFilters` match other installed apps' filters when the instance hub is off (with the hub, `HubActivityClient` asks it).
 - MessageQueue: `ShadowHostMessageQueue` turns off DeliQueue (Robolectric's scheduler reads the legacy queue).
+- Navigation bar of the shell as the display's navigation bar inset (mobile window style): `runtime/patches/org/robolectric/shadows/NavigationBarInset.java` (sets SystemUi's NavigationBarBehavior; AppHost.hostResize).
+- apklayer patch in `bridge/hals/graphics/display.c`: the window style (`APKLAYER_WINDOW_MODE`) is sent to the shell before the window is created.
 - Window container a window manager would make for each window: `runtime/patches/org/robolectric/shadows/WindowSurface.java`.
 - Codec2: `aosp/hals/media/codec2/SoftCodecs.cpp` loads whichever tree `libcodec2_soft_*` are installed (the platform list aborts on a missing one); codec list `bridge/native/android-root/vendor/etc/media_codecs.xml`.
 - dex2jvm (`runtime/dex2jvm`, marked "apklayer patch"): `TypeInference.needsNarrowingCast` skips the checkcast when the required type is an interface (JVMS 4.10.1.2: any class is assignable to an interface type for the verifier).

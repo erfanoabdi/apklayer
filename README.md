@@ -18,6 +18,8 @@ Android services as host processes: servicemanager, SurfaceFlinger, gralloc, HWC
 apklayer-shell ──> one Wayland window per app                                                       (bridge/shell)
 ```
 
+**Window style:** on a phone or in a mobile shell (Lomiri, Phosh, Plasma Mobile, Sailfish) apps open maximized with an Android navigation bar (Back, Home) and the phone's real density; on a desktop they are normal windows. Change it with `apklayer settings set window-mode auto|mobile|desktop` (or `window-mode.<package>` for one app) or in the manager; it applies at once.
+
 **Works:** over 40 real apps draw and run (current F-Droid versions of Thunderbird, Element, Organic Maps, OsmAnd, VLC, mpv, FluffyChat, Telegram, NewPipe, Firefox (Fennec) and more: `tests/corpus/results.md`): GPU rendering, WebView, SurfaceView/TextureView, native games, media and audio (record and play), the system's own providers (settings, media, contacts, calendar, downloads, documents), keystore2, app installs from stores, apps talking to each other through the instance hub, several instances side by side.
 **Host:** arm64 Linux (needs the staged Android libraries); x86_64 is staged but untested. **In progress:** Vulkan presentation (needs a real GPU), startup time. Status: `STATUS.md`, plan: `docs/PLAN.md`.
 

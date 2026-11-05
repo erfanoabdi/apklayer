@@ -126,6 +126,9 @@ public:
         std::string night;
         for (const auto& r : s.settings) if (field(r, 0) == "night") night = field(r, 1);
         b.set_night_setting(slint::SharedString(night));
+        std::string windowMode;
+        for (const auto& r : s.settings) if (field(r, 0) == "window-mode") windowMode = field(r, 1);
+        b.set_window_mode_setting(slint::SharedString(windowMode));
         b.set_status(info(s.status));
         auto gpus = std::make_shared<slint::VectorModel<MenuItem>>();
         gpuIds_.clear();

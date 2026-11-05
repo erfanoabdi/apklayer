@@ -4,8 +4,8 @@ shell the output is a 6.1" 1080x2340 panel (422 dpi -> bucket 420), the window s
  1. mobile style: maximized, no title bar, 420 dpi, a navigation bar 48 dp high (126 px) told as the navigation bar inset; the app took
     420 dpi and the bar's height; its picture has the window's pixel size (screenshots in the group's output dir);
  2. the compositor's scale 300%: the density stays the panel's 420 (apps are the size they are on that phone), the bar is 42 logical = 126 px;
- 3. a tap on the bar's Back button reaches the shell as a Back (and the app as KEYCODE_BACK);
- 4. `apklayer settings set window-mode desktop`, live: the title bar returns (46 logical), no navigation bar, floating; then `unset`: mobile again.
+ 3. `apklayer settings set window-mode desktop`, live: the title bar returns (46 logical), no navigation bar; then `unset`: mobile again;
+ 4. a tap on the bar's Back button: the shell sends Back, UiBench's root activity finishes and the app ends.
 Also `--display-info` for a few simulated panels (density buckets, style): no app."""
 import os
 from pathlib import Path
@@ -23,8 +23,8 @@ import instance  # noqa: E402  (changes into the repo root)
 PKG = 'com.android.test.uibench'
 ENV = dict(instance.ENV)
 ENV.update(APKLAYER_OUTPUT_MM='66x143', APKLAYER_OUTPUT_PX='1080x2340', APKLAYER_DEBUG_INPUT='1')
-STEPS = ((6000, 'hover:1,0'), (9000, 'hover:2,0'), (12000, 'hover:3,0'), (15000, 'hover:4,0'), (19000, 'hover:5,0'), (23000, 'hover:6,0'))
-ENV['APKLAYER_JOPTS'] = '-Dapklayer.runms=28000 -Dapklayer.script=' + '+'.join('%d:%s' % s for s in STEPS)
+STEPS = ((6000, 'hover:1,0'), (10000, 'hover:2,0'), (15000, 'hover:3,0'), (21000, 'hover:4,0'), (27000, 'hover:5,0'))
+ENV['APKLAYER_JOPTS'] = '-Dapklayer.runms=33000 -Dapklayer.script=' + '+'.join('%d:%s' % s for s in STEPS)
 CONFIGURE = re.compile(r'configure content (\d+)x(\d+) @(\d+)% \((\d+)x(\d+) px\), title bar (\d+) logical = (\d+) px(?:, maximized)?, (\w+) style, (\d+) dpi, '
                        r'navigation bar (\d+) logical = (\d+) px')
 seen, checks = [], []
@@ -59,13 +59,12 @@ def step(name, fn):
 
 
 # the buckets of simulated panels, without an app (the shell's --display-info against the VM's compositor)
-for mm, px, density in (('66x143', '1080x2340', 420), ('68x151', '720x1560', 280), ('62x136', '1080x2400', 440), ('70x150', '1440x3088', 640)):
+for mm, px, density in (('66x143', '1080x2340', 420), ('60x143', '720x1560', 280), ('63x138', '1080x2400', 440), ('70x150', '1440x3088', 560)):
     got = display_info(mm, px)
     assert got == (density, 1), 'panel %s mm %s px: %s, expected density %d mobile' % (mm, px, got, density)
     checks.append('%s px %s mm -> %d dpi' % (px, mm, density))
 print('OK density buckets: %s' % ', '.join(checks), flush=True)
-assert display_info('530x300', '1920x1080')[0] in (160, 200, 240, 320, 120) or True  # a monitor: 160 x the compositor's scale (checked below)
-assert display_info('530x300', '1920x1080')[1] == 0 or 'GNOME' not in os.environ.get('XDG_CURRENT_DESKTOP', '') + 'GNOME', 'a 24" monitor is not mobile'
+assert display_info('530x300', '1920x1080')[1] == 0, 'a 24" monitor is not mobile'
 
 instance.stop()
 SHELL_LOG.unlink(missing_ok=True)
@@ -106,23 +105,24 @@ try:
                     shot = Image.open(instance.capture('mobile300', PKG)).size
                     assert abs(shot[0] - w * 3) <= 1 and abs(shot[1] - h * 3) <= 1, 'picture %s px for %dx%d @300%%' % (shot, w, h)
                     checks.append('scale 300%: still 420 dpi, bar 42 logical')
-                    instance.inject(PKG, 'tap:%d,%d' % (w // 4, h - nav_l // 2))  # Back
-                elif 'script: hover:3,0' in line:
-                    assert 'navigation bar back' in shell_log(), 'a tap on Back did not reach the shell as Back'
-                    checks.append('Back on the navigation bar')
+                    try: instance.capture('mobile-desktop')  # the whole desktop: the shell's navigation bar over the window (a human check of its look)
+                    except Exception as e: print('no desktop screenshot: %s' % e, flush=True)
                     print(apklayer('settings', 'set', 'window-mode', 'desktop').strip(), flush=True)
-                elif 'script: hover:4,0' in line:
+                elif 'script: hover:3,0' in line:
                     w, h, scale, bar, style, dpi, nav_l, nav_px = configures()[-1]
                     assert (style, bar, nav_l) == ('desktop', 46, 0), 'desktop style live: %s' % (configures()[-1],)
                     instance.capture('mobile-desktop-style', PKG)
                     checks.append('live switch to desktop style: title bar %d, dpi %d' % (bar, dpi))
                     print(apklayer('settings', 'unset', 'window-mode').strip(), flush=True)
-                elif 'script: hover:5,0' in line:
+                elif 'script: hover:4,0' in line:
                     w, h, scale, bar, style, dpi, nav_l, nav_px = configures()[-1]
                     assert (style, bar, dpi) == ('mobile', 0, 420), 'back to mobile: %s' % (configures()[-1],)
                     checks.append('live switch back to mobile (auto)')
+                    instance.inject(PKG, 'tap:%d,%d' % (w // 4, h - nav_l // 2))  # Back: UiBench's root activity finishes, the app ends
     assert app.wait() == 0, 'app failed'
-    assert len(checks) >= 10, checks
+    assert 'navigation bar back' in shell_log(), 'a tap on Back did not reach the shell as Back'
+    checks.append('Back on the navigation bar ends the app')
+    assert len(checks) >= 9, checks
     print('PASS mobile style and density: %s' % '; '.join(checks), flush=True)
 finally:
     apklayer('settings', 'unset', 'window-mode')
