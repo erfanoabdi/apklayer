@@ -64,7 +64,7 @@ diff --git a/transport/ServiceManagement.cpp b/transport/ServiceManagement.cpp
          auto ret = mServiceNotifications[static_cast<std::string>(fqName) + "/" +
                                           static_cast<std::string>(name)]
                             .erase(callback);
-@@ -330,7 +348,19 @@
+@@ -330,7 +348,27 @@
          LOG(INFO) << "Cannot add " << fqName << " with chain without hwservicemanager";
          return false;
      }
@@ -78,6 +78,14 @@ diff --git a/transport/ServiceManagement.cpp b/transport/ServiceManagement.cpp
 +                if (ret.isOk() && found.size() == 0)
 +                    ret = host->listByInterface(fqName, [&](const hidl_vec<hidl_string>& names) { found = names; });
 +                if (!ret.isOk()) return ret;
++                if (found.size() == 0) {  // last resort: the instance names a Codec2 store has (what its clients try one by one)
++                    std::vector<hidl_string> probed;
++                    for (const char* name : {"default", "software", "vendor"}) {
++                        Return<sp<IBase>> base = host->get(fqName, name);
++                        if (base.isOk() && static_cast<sp<IBase>>(base) != nullptr) probed.push_back(name);
++                    }
++                    found = hidl_vec<hidl_string>(probed);
++                }
 +                _hidl_cb(found);
 +                return Void();
 +            }
@@ -85,7 +93,7 @@ diff --git a/transport/ServiceManagement.cpp b/transport/ServiceManagement.cpp
          LOG(INFO) << "Cannot list manifest for " << fqName << " without hwservicemanager";
          return Void();
      }
-@@ -910,20 +940,24 @@
+@@ -910,20 +948,24 @@
      return false;
  }
  
