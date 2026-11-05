@@ -276,7 +276,8 @@ final class HostInput {
             i++;
         }
         if (Boolean.getBoolean("apklayer.debugkeys"))
-            System.out.println("[apklayer] touch action=" + MotionEvent.actionToString(action) + " pointers=" + n);
+            System.out.println("[apklayer] touch action=" + MotionEvent.actionToString(action) + " pointers=" + n
+                    + " at " + coords[0].x + "," + coords[0].y);
         inject(MotionEvent.obtain(touchDownTime, now, action, n, props, coords, 0, 0, 1f, 1f, 0, 0,
                 android.view.InputDevice.SOURCE_TOUCHSCREEN, 0));
     }

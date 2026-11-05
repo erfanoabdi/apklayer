@@ -275,6 +275,12 @@ needs = ["com.dogbytegames.otrnext"]
 alone = true
 run = ["python3 -u tests/vm/otr2-run.py"]
 
+[otr2-input]
+# pointer input of a GameActivity game: tap and click dismiss the dialog at scales 100 and 200
+needs = ["com.dogbytegames.otrnext"]
+alone = true
+run = ["python3 -u tests/vm/otr2-input.py"]
+
 [corpus]
 optional = true
 alone = true

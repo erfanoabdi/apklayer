@@ -171,6 +171,9 @@ final class ActivityTask {
         ActivityController<? extends Activity> built = Robolectric.buildActivity(cls, intent);
         String caller = intent.getStringExtra(HubActivityClient.CALLER);  // the app that started it for a result (Activity.getCallingPackage)
         if (caller != null) ((ShadowActivity) Shadow.extract(built.get())).setCallingPackage(caller);
+        // the manifest's screenOrientation is the activity's requested orientation from the start (Robolectric starts it at -1): AppHost.followOrientation
+        // reshapes the window, so a landscape-locked game gets a landscape surface and landscape pointer coordinates
+        if (info.screenOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) built.get().setRequestedOrientation(info.screenOrientation);
         ActivityController<? extends Activity> c = built.create();
         taskRootBuilding = false;
         if (bottom) taskRoot = c.get();
