@@ -5,6 +5,7 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): 
 ## State (2026-11-04)
 - About 60 real apps draw and run, current F-Droid versions included (`tests/corpus/results.md`); Google apps through microG (sign-in, Meet accounts). Full suite on UTM (2026-11-04, after the startup/media/installer/cleanup rounds): 43 of 44 groups pass; vulkan-present cannot pass on either VM; it passes on the owner's x86_64 PC (real GPU), where the x86_64 route runs.
 - Released: v0.1.0, v0.2.0, v0.2.1 (2026-11-04), v0.3.0 (2026-11-05; one Meson build, runtime 0.2.1). Since 0.1.0: Bluetooth, USB, camera, fake sensors/GNSS/vibrator (`providers.toml`), `apklayer logs|report`, the host binder context (Halium), apps' real target SDK. Meet works in a call: join, sound, remote video (owner checked, 2026-11-04).
+- Halium (Volla X23, Ubuntu Touch, 2026-11-05): with `graphics = device` apps and GL games draw on the device's Mali GPU (docs/HALIUM.md); camera = device is next (PLAN (e)).
 - Next phase, in order: `docs/PLAN.md` "Next phase".
 
 ## How to work here

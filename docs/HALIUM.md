@@ -90,6 +90,27 @@ Consequences:
 - Not yet: an app (JVM) on the phone: the window shell needs `android_wlegl` (no dmabuf there) and a JDK in the user's directory;
   the Java path is the same native lookup (ShadowHostServiceManager -> AServiceManager_checkService).
 
+## Graphics on the Ubuntu Touch phone (2026-11-05)
+`apklayer providers set graphics device`: the device's gralloc (allocator@4.0 through the host hwbinder context, the passthrough mapper) and its
+GPU (Mali-G57 through Android's libEGL) in apklayer's processes; the vendor libraries load in bionic_translation's vendor namespace (0039).
+- The vendor namespace's VNDK is the vendor's (`ro.vndk.version` through the device's getprop: 31 on the X23, whose system is 32).
+- The vendor libraries share apklayer's libhidlbase (0041, `BIONIC_VENDOR_SHARED_LIBS=libhidlbase.so`). Found with a stack scan of the hung
+  RenderThread (`/proc/<pid>/task/<tid>/syscall` for sp and pc, the stack read from `/proc/<pid>/mem`, words in executable mappings printed as
+  library+offset): libhwui -> libEGL -> libGLES_mali -> the VNDK's mapper@4.0.so (IMapper::getService) -> the VNDK's libhidlbase -> libbase
+  WaitForProperty. Android 12's libhidl waits for `hwservicemanager.ready` and knows no `hwservicemanager.disabled` (hiding
+  /system/bin/hwservicemanager does not help: it has no "installed" check either). The vendor closure of the driver and the gralloc impls imports
+  149 libhidlbase symbols, all in ours; the VNDK 31 and 34 ABI dumps of libhidlbase have the same records, and libhwbinder 0001 keeps
+  hardware::Parcel's size. The other choice, sending the vendor copy to the device's hwservicemanager, needs a per-caller /dev/hwbinder.
+- The stack loads `device.prop` (cli/stack.cpp) from the device's live properties: ro.hardware.egl/vulkan, ro.board.platform, ro.vendor.*,
+  vendor.*, debug.mediatek.*. MediaTek's mapper and allocator derive a buffer's allocation format the same way, from usage and
+  `debug.mediatek.disp_decompress` (1 on the device): without it SurfaceFlinger's mapper refused the device allocator's AFBC buffers
+  ("Buffer alloc format 0x61900000001 does not match descriptor (derived) alloc format 0x1"). Other debug.* stay apklayer's.
+- Apps that draw (SurfaceFlinger screenshots, `apklayer screenshot`): UiBench, Calculator, Telegram, NewPipe, Shattered Pixel Dungeon and Anuto
+  (libgdx), OTR2 (bgfx, GLES 3.1). Scripts on the phone (`~/apklayer-dev`): `ut-shots.sh <pkg>...` (run 25 s, screenshot at the run's end,
+  stop), `stackscan.py <pid> <tid>` (the stack scan above, `tools/debug/stackscan.py`).
+- Open: camera = device (cameraserver and HIDL provider listing, PLAN (e)); Mali fences give `sync_file_info returned NULL`; the window on
+  Lomiri needs a human check.
+
 ## Location on the phones (2026-11-05)
 Never the GNSS HAL (its one client is the OS's location service): a GNSS backend over that service (bridge/hals/gnss, `providers set gnss <backend>`).
 - Ubuntu Touch: no GeoClue (`org.freedesktop.GeoClue2` is not activatable; the geoclue backend's probe() is -1); `com.lomiri.location.Service`
