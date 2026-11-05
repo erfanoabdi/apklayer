@@ -221,6 +221,9 @@ final class HostInput {
     }
 
     private final java.util.LinkedHashMap<Integer, float[]> fingers = new java.util.LinkedHashMap<>();
+    // the compositor's touch id -> Android's pointer id: the lowest free one from 0, as InputReader assigns them (apps size arrays by it:
+    // Lomiri's large wl_touch ids made ViewDragHelper allocate gigabytes)
+    private final java.util.HashMap<Integer, Integer> pointerIds = new java.util.HashMap<>();
     private long touchDownTime;
 
     /** Finger events -> one multi-pointer MotionEvent stream (DOWN, POINTER_DOWN, MOVE, POINTER_UP, UP). */
@@ -228,11 +231,15 @@ final class HostInput {
         if (action == 3) { // cancel
             if (!fingers.isEmpty()) injectTouch(now, MotionEvent.ACTION_CANCEL);
             fingers.clear();
+            pointerIds.clear();
             return;
         }
         if (action == 0) {
             if (fingers.isEmpty()) touchDownTime = now;
             fingers.put(finger, new float[] {x, y});
+            int free = 0;
+            while (pointerIds.containsValue(free)) free++;
+            pointerIds.put(finger, free);
             int idx = indexOf(finger);
             injectTouch(now, fingers.size() == 1 ? MotionEvent.ACTION_DOWN
                     : MotionEvent.ACTION_POINTER_DOWN | (idx << MotionEvent.ACTION_POINTER_INDEX_SHIFT));
@@ -247,6 +254,7 @@ final class HostInput {
             injectTouch(now, fingers.size() == 1 ? MotionEvent.ACTION_UP
                     : MotionEvent.ACTION_POINTER_UP | (idx << MotionEvent.ACTION_POINTER_INDEX_SHIFT));
             fingers.remove(finger);
+            pointerIds.remove(finger);
         }
     }
 
@@ -266,7 +274,7 @@ final class HostInput {
         int i = 0;
         for (java.util.Map.Entry<Integer, float[]> e : fingers.entrySet()) {
             props[i] = new MotionEvent.PointerProperties();
-            props[i].id = e.getKey();
+            props[i].id = pointerIds.getOrDefault(e.getKey(), 0);
             props[i].toolType = MotionEvent.TOOL_TYPE_FINGER;
             coords[i] = new MotionEvent.PointerCoords();
             coords[i].x = e.getValue()[0];
