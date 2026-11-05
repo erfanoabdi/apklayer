@@ -6,7 +6,7 @@
 //   REDIRECT_UNSAFE   an app's sun.misc.Unsafe calls go to apklayer.loader.ApklayerUnsafe (see runtime/host).
 //   REDIRECT_BUFFER   an app's ByteBuffer.allocateDirect/hasArray/array/arrayOffset go to apklayer.loader.ApklayerBuffers (Android's
 //                     direct buffers have an array).
-//   REDIRECT_EXIT     null: apklayer runs one app per JVM, so System.exit really exits.
+//   REDIRECT_EXIT     an app's System.exit/Runtime.exit/halt go to apklayer.loader.ApklayerExit (an exit that follows an activity start is a restart).
 //   LIBRARY           "classloader": the class hierarchy comes from the framework classes on the converter's own class path (the
 //                     classes the app runs against), never an SDK android.jar or the bundled API index.
 
@@ -18,7 +18,7 @@ public final class HostDefaults {
     public static final String SYNTHETIC_PREFIX = "apklayer";
     public static final String REDIRECT_UNSAFE = "apklayer/loader/ApklayerUnsafe";
     public static final String REDIRECT_BUFFER = "apklayer/loader/ApklayerBuffers";
-    public static final String REDIRECT_EXIT = null;
+    public static final String REDIRECT_EXIT = "apklayer/loader/ApklayerExit";
     public static final String LOG_TAG = "apklayer-dex";
     public static final String LIBRARY = "classloader";
 }
