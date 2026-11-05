@@ -148,4 +148,37 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
         try { return signed(super.getPackageInfo(packageName, flags), flags.getValue()); }
         catch (PackageManager.NameNotFoundException unknown) { if (!registerInstalled(packageName)) throw unknown; return signed(super.getPackageInfo(packageName, flags), flags.getValue()); }
     }
+
+    /** The installed packages with their signatures as getPackageInfo has them (Robolectric's list skips it; F-Droid's update check refused a package without signers). */
+    @Implementation
+    @Override public java.util.List<android.content.pm.PackageInfo> getInstalledPackages(int flags) {
+        java.util.List<android.content.pm.PackageInfo> all = new java.util.ArrayList<>(super.getInstalledPackages(flags));
+        all.replaceAll(info -> signed(info, flags));
+        return all;
+    }
+
+    @Implementation(minSdk = android.os.Build.VERSION_CODES.TIRAMISU)
+    @Override protected java.util.List<android.content.pm.PackageInfo> getInstalledPackages(@org.robolectric.annotation.ClassName("android.content.pm.PackageManager$PackageInfoFlags") Object flags) {
+        long value = ((PackageManager.PackageInfoFlags) flags).getValue();
+        java.util.List<android.content.pm.PackageInfo> all = new java.util.ArrayList<>(super.getInstalledPackages(flags));
+        all.replaceAll(info -> signed(info, value));
+        return all;
+    }
+
+    /**
+     * Another app's icon from its own resources, as ApplicationPackageManager loads it (Robolectric knows only icons a test stored and throws for the rest:
+     * F-Droid's update of an installed app failed on it); the default icon when the package has none or its resources do not load.
+     */
+    @Implementation
+    @Override protected android.graphics.drawable.Drawable getApplicationIcon(String packageName) throws PackageManager.NameNotFoundException {
+        try { return super.getApplicationIcon(packageName); }
+        catch (PackageManager.NameNotFoundException unknown) {
+            android.content.pm.ApplicationInfo app = getPackageInfo(packageName, 0).applicationInfo;  // NameNotFound for a package that is not installed
+            try {
+                android.graphics.drawable.Drawable icon = app == null || app.icon == 0 ? null : real.getDrawable(packageName, app.icon, app);
+                if (icon != null) return icon;
+            } catch (RuntimeException unreadable) { System.out.println("[apklayer] icon of " + packageName + " not loaded: " + unreadable); }
+            return getDefaultActivityIcon();
+        }
+    }
 }
