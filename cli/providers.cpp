@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "device_hals.h"
 #include "stack.h"
 
 #include <apklayer/plugin.h>
@@ -296,7 +297,7 @@ std::string audioLibrary(const Layout& l, const Instance& inst) {
     if (!lib.empty() && refusal(lib).empty()) return lib;
     if (c) fprintf(stderr, "providers: audio: the backend %s is not staged or refused\n", c->backend.c_str());
     // none answers (a session without a sound server yet): the PipeWire one as before, so a server started later is found
-    for (const std::string& name : {"pipewire", "pulse"})
+    for (const char* name : {"pipewire", "pulse"})
         if (std::string fallback = backendLib(l, "audio", name); !fallback.empty()) return fallback;
     return join(l.native, "libapklayer-hal-audio.so");  // a native dir staged before the audio domain
 }
@@ -364,7 +365,7 @@ int providersCommand(const Layout& l, const Instance& inst, const std::vector<st
     // a running stack restarts only this domain's service (SIGHUP: runStackDaemon re-reads the file)
     auto pid = readFile(inst.pidFile());
     bool running = pid && alive(atoi(pid->c_str())) && kill(atoi(pid->c_str()), SIGHUP) == 0;
-    printf("apklayer: %s %s for instance %s%s\n", args[1].c_str(), action == "set" ? "set" : "unset", inst.id.c_str(), running ? " (its service restarts)" : " (from its next start)");
+    printf("apklayer: %s %s for instance %s%s\n", args[1].c_str(), action == "set" ? "set" : "unset", inst.id.c_str(), running && domain.front ? " (its service restarts)" : " (from its next start)");  // audio, graphics, media: the stack starts with them
     return 0;
 }
 

@@ -17,25 +17,42 @@ const Known kKnown[] = {
     {"gnss", "Location (GNSS)", "", "", ""},
     {"vibrator", "Vibrator", "Vibrate", "libapklayer_vibrator.so", "PASS "},
     {"camera", "Camera", "", "", ""},
+    {"audio", "Audio", "", "", ""},
+    {"graphics", "Graphics", "", "", ""},
+    {"media", "Video and audio codecs", "", "", ""},
 };
 const Known* known(const std::string& name) {
     for (const Known& k : kKnown) if (name == k.name) return &k;
     return nullptr;
 }
 
-// the CLI's probe() answer for people
-std::string probeText(const std::string& probe) {
+// the CLI's probe() answer for people; note: the CLI's line on that choice (what it needs, what it is)
+std::string probeText(const std::string& name, const std::string& probe, const std::string& note) {
+    if (name == "device" && probe == "quality 0") return "found, not working yet";  // detected, never the automatic choice
     if (probe == "quality 0") return "available";
     if (probe.rfind("quality ", 0) == 0) return "available, " + probe;
     if (probe.rfind("refused: ", 0) == 0) return probe;  // a plugin built for another apklayer (its ABI)
-    return probe == "unavailable" ? "not available here" : "cannot be loaded";
+    if (probe == "unavailable") return note.empty() ? "not available here" : note;
+    return probe == "not staged" ? probe : "cannot be loaded";
+}
+
+struct Choice { std::string name, probe, note; };
+
+// a choice's name in the status line: the CLI's words, the two that are not backends spelled out
+std::string label(const std::string& name) {
+    if (name == "device") return "device (its own HAL)";
+    if (name == "apklayer") return "apklayer (its own)";
+    return name;
 }
 
 struct Domain {
-    std::string name, provider, backend;
+    std::string name, provider, backend, automatic;
+    bool named = false;                                                // providers.toml names it (else automatic)
     std::vector<std::string> options;                                  // configured "key=value"
-    std::vector<std::pair<std::string, std::string>> backends;         // name, probe
+    std::vector<Choice> backends;                                      // every choice the CLI lists, with its probe answer
     std::vector<std::vector<std::string>> declared;                    // option rows: backend, key, default, kind
+    // the configured choice's name in the backend rows: the backend, "device", or "apklayer" (the stack's own) for a domain without one
+    std::string chosen() const { return provider == "device" ? "device" : backend.empty() ? "apklayer" : backend; }
 };
 
 HwOption option(const std::string& key, const std::string& value, const std::string& def, bool file) {
@@ -58,14 +75,18 @@ std::shared_ptr<slint::VectorModel<HwDomain>> model(const Rows& rows) {
     std::vector<Domain> domains;
     auto get = [&](const std::string& name) -> Domain& {
         for (Domain& d : domains) if (d.name == name) return d;
-        return domains.emplace_back(Domain{name, "", "", {}, {}, {}});
+        Domain d;
+        d.name = name;
+        return domains.emplace_back(d);
     };
-    for (const auto& r : rows) {  // `apklayer providers`: configured domains, then backend and option rows
+    for (const auto& r : rows) {  // `apklayer providers`: configured domains, then backend, option and default (the automatic choice) rows
         if (r.empty()) continue;
-        if (r[0] == "backend") get(field(r, 1)).backends.push_back({field(r, 2), field(r, 3)});
+        if (r[0] == "backend") get(field(r, 1)).backends.push_back({field(r, 2), field(r, 3), field(r, 5)});
         else if (r[0] == "option") get(field(r, 1)).declared.push_back({field(r, 2), field(r, 3), field(r, 4), field(r, 5)});
+        else if (r[0] == "default") get(field(r, 1)).automatic = field(r, 2) == "(none: off)" ? "off" : field(r, 2);
         else {
             Domain& d = get(r[0]);
+            d.named = true;
             d.provider = field(r, 1);
             d.backend = field(r, 2);
             d.options.assign(r.begin() + std::min<size_t>(3, r.size()), r.end());
@@ -75,23 +96,30 @@ std::shared_ptr<slint::VectorModel<HwDomain>> model(const Rows& rows) {
     std::stable_sort(domains.begin(), domains.end(), [&](const Domain& a, const Domain& b) { return rank(a) < rank(b); });
     auto out = std::make_shared<slint::VectorModel<HwDomain>>();
     for (Domain& d : domains) {
-        if (!d.backend.empty() && std::none_of(d.backends.begin(), d.backends.end(), [&](const auto& b) { return b.first == d.backend; }))
-            d.backends.push_back({d.backend, "not staged"});
+        if (d.named && std::none_of(d.backends.begin(), d.backends.end(), [&](const Choice& b) { return b.name == d.chosen(); }))
+            d.backends.push_back({d.chosen(), "not staged", ""});
         auto menu = std::make_shared<slint::VectorModel<MenuItem>>();
         auto backends = std::make_shared<slint::VectorModel<HwBackend>>();
-        MenuItem none;
-        none.text = "Not set";
-        none.enabled = true;
-        menu->push_back(none);
+        auto notes = std::make_shared<slint::VectorModel<slint::SharedString>>();
+        MenuItem automatic;  // `providers unset`: the best this host has, as the CLI picks it (shown with today's pick)
+        automatic.text = "Automatic";
+        automatic.trailing_text = slint::SharedString(d.automatic);
+        automatic.enabled = true;
+        menu->push_back(automatic);
         backends->push_back(backend("", std::make_shared<slint::VectorModel<HwOption>>()));
+        notes->push_back(slint::SharedString("The best this device has, picked again at every start" +
+                                             (d.automatic.empty() ? std::string() : ": now " + d.automatic)));
         int current = 0;
-        for (const auto& [name, probe] : d.backends) {
+        for (const auto& [name, probe, note] : d.backends) {
             MenuItem m;
             m.text = slint::SharedString(name);
-            m.trailing_text = slint::SharedString(probe == "not staged" ? probe : probeText(probe));
-            m.enabled = probe.rfind("quality ", 0) == 0;
+            m.trailing_text = slint::SharedString(probeText(name, probe, note));
+            m.enabled = probe.rfind("quality ", 0) == 0;  // unavailable, refused or unloadable ones are shown with why, never picked
             menu->push_back(m);
-            bool configured = name == d.backend;
+            std::string sentence = note;
+            if (!sentence.empty()) sentence[0] = static_cast<char>(toupper(static_cast<unsigned char>(sentence[0])));
+            notes->push_back(slint::SharedString(sentence));
+            bool configured = d.named && name == d.chosen();
             if (configured) current = static_cast<int>(backends->row_count());
             std::vector<std::string> values = configured ? d.options : std::vector<std::string>();
             auto options = std::make_shared<slint::VectorModel<HwOption>>();
@@ -112,13 +140,17 @@ std::shared_ptr<slint::VectorModel<HwDomain>> model(const Rows& rows) {
         HwDomain h;
         h.name = slint::SharedString(d.name);
         h.title = slint::SharedString(k ? k->title : d.name);
-        std::string configured = d.backend.empty() ? "" : d.provider + " · " + d.backend;
+        // what runs: the user's choice, or the CLI's automatic one
+        std::string inUse = d.named ? d.chosen() : d.automatic;
+        std::string configured = (d.named ? "Chosen: " : "Automatic: ") + label(inUse.empty() ? "off" : inUse);
         for (const std::string& o : d.options) configured += " · " + o;
         h.configured = slint::SharedString(configured);
         h.current = current;
         h.menu = menu;
         h.backends = backends;
-        h.test = slint::SharedString(k && current > 0 ? k->test : "");
+        h.notes = notes;
+        // the live test talks to apklayer's own front: not with the device's HAL, nothing when the domain is off
+        h.test = slint::SharedString(k && !inUse.empty() && inUse != "off" && inUse != "device" ? k->test : "");
         out->push_back(h);
     }
     return out;

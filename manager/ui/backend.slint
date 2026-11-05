@@ -14,10 +14,11 @@ export struct SetupStep { id: string, title: string, detail: string, state: stri
 
 // `apklayer providers` (src/hardware.cpp): an option a backend takes, its value in the instance's configuration ("": the default); file: a path
 export struct HwOption { key: string, value: string, default-value: string, file: bool }
-// backends[i] belongs to menu[i]; the first is "Not set" (name "")
+// backends[i] belongs to menu[i]; the first is "Automatic" (name "": `apklayer providers unset`)
 export struct HwBackend { name: string, options: [HwOption] }
-// a hardware domain: title, its configuration ("" none) and the index of the configured backend; test: its live test's button ("" none)
-export struct HwDomain { name: string, title: string, configured: string, current: int, menu: [MenuItem], backends: [HwBackend], test: string }
+// a hardware domain: title, what it uses ("Automatic: sensorfw", "Chosen: fake · accel=..."), the index of the configured choice (0 automatic),
+// notes[i]: what menu[i] is or why it cannot be picked; test: its live test's button ("" none)
+export struct HwDomain { name: string, title: string, configured: string, current: int, menu: [MenuItem], backends: [HwBackend], notes: [string], test: string }
 
 export global Backend {
     // the first run's checklist (FirstRunPage) and its choices
