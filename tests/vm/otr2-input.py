@@ -53,7 +53,7 @@ def play(scale, mode):
         sel = selectors.DefaultSelector()
         sel.register(app.stdout, selectors.EVENT_READ)
         pending = b''
-        stage, mark = 0, 0
+        stage, mark, tries = 0, 0, 0
         end = time.monotonic() + 100
         with open(instance.OUT / ('otr2-input-%s.log' % name), 'wb') as log:
             while stage < 9 and time.monotonic() < end:
@@ -66,8 +66,14 @@ def play(scale, mode):
                 n = frames()
                 if stage == 0 and saw('started ' + PKG) and n >= 40:
                     instance.inject(PKG, 'focus', 'scale:%d' % scale); stage, mark = 1, n
-                elif stage == 1 and saw('@%d%%' % scale) and n >= mark + 1000:  # the title screen shows after the shaders are compiled
+                elif stage == 1 and saw('@%d%%' % scale) and n >= mark + 1000:  # the title screen shows after the shaders are compiled (longer on a loaded VM)
                     result['before'] = instance.capture('otr2-%s-before' % name, PKG)
+                    if green(result['before'], 1) < 100 and tries < 12:
+                        tries += 1; mark = n - 800  # not there yet: look again in 200 frames
+                        if tries == 2:  # a fresh instance first asks for consent (a Java dialog over the game): its Consent button
+                            width, height = [int(v) for v in re.findall(r'configure (\d+)x(\d+) @%d%%' % scale, '\n'.join(seen))[-1]]
+                            instance.inject(PKG, 'tap:%d,%d' % (round(508 / 797 * width), round(361 / 448 * height)))
+                        continue
                     width, height = [int(v) for v in re.findall(r'configure (\d+)x(\d+) @%d%%' % scale, '\n'.join(seen))[-1]]
                     result['size'] = (width, height)
                     x, y = round(PORTRAIT2[0] * width), round(PORTRAIT2[1] * height)
@@ -102,4 +108,6 @@ try:
         play(scale, mode)
 finally:
     intent.unlink(missing_ok=True)
+instance.stop()  # a second stop: the consent dialog's WebView helper process can start while the first one ends the stack
+instance.kill('[a]pklayer.host.Main')
 instance.assert_clean()
