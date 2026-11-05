@@ -130,6 +130,8 @@ try:
         print('PASS boot: LOCKED_BOOT_COMPLETED then BOOT_COMPLETED woke a closed app once per stack start', flush=True)
     elif PHASE == 'autostart':
         iid = instance.INSTANCE
+        # systemctl --user reaches the user's manager through the real session directory, not the instance's own XDG_RUNTIME_DIR
+        env = dict(env, XDG_RUNTIME_DIR=instance.SESSION, DBUS_SESSION_BUS_ADDRESS='unix:path=%s/bus' % instance.SESSION)
         assert cli('instance', 'autostart', iid).stdout.strip() == 'off'
         on = cli('instance', 'autostart', iid, 'on', '--no-start')
         assert on.returncode == 0, on.stderr
@@ -138,11 +140,11 @@ try:
         assert 'ExecStart=' in unit.read_text() and ' --instance %i hub' in unit.read_text(), unit.read_text()
         listed = [l.split('\t') for l in cli('instances').stdout.splitlines() if l.split('\t')[0] == iid]
         assert listed and listed[0][4] == '1', listed
-        enabled = subprocess.run(['systemctl', '--user', 'is-enabled', 'apklayer-instance@%s.service' % iid], capture_output=True, text=True)
+        enabled = subprocess.run(['systemctl', '--user', 'is-enabled', 'apklayer-instance@%s.service' % iid], capture_output=True, text=True, env=env)
         assert enabled.stdout.strip() == 'enabled', enabled.stdout + enabled.stderr
         assert cli('instance', 'autostart', iid, 'off').returncode == 0
         assert not MARKER.exists() and cli('instance', 'autostart', iid).stdout.strip() == 'off'
-        enabled = subprocess.run(['systemctl', '--user', 'is-enabled', 'apklayer-instance@%s.service' % iid], capture_output=True, text=True)
+        enabled = subprocess.run(['systemctl', '--user', 'is-enabled', 'apklayer-instance@%s.service' % iid], capture_output=True, text=True, env=env)
         assert enabled.stdout.strip() != 'enabled', enabled.stdout
         print('PASS autostart: marker, unit, instances row, off again', flush=True)
     else:

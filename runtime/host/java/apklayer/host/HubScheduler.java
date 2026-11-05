@@ -27,6 +27,10 @@ final class HubScheduler {
     private final ScheduledThreadPoolExecutor timer = new ScheduledThreadPoolExecutor(1, task -> { Thread t = new Thread(task, "hub-scheduler"); t.setDaemon(true); return t; });
     private final ExecutorService firing = Executors.newCachedThreadPool(task -> { Thread t = new Thread(task, "hub-scheduler-fire"); t.setDaemon(true); return t; });
     private final Map<Object, ScheduledFuture<?>> planned = new HashMap<>();
+    // QuotaController's rate limiting window (DEFAULT_RATE_LIMITING_WINDOW_MS, DEFAULT_MAX_JOB_COUNT_PER_RATE_LIMITING_WINDOW): at most 20 job starts per package a minute
+    private static final long RATE_WINDOW_MS = 60_000;
+    private static final int RATE_MAX_STARTS = 20;
+    private final Map<String, java.util.ArrayDeque<Long>> starts = new HashMap<>();
 
     HubScheduler(HubPendingIntents pendingIntents, HubBroadcasts broadcasts) {
         this.pendingIntents = pendingIntents; this.broadcasts = broadcasts; timer.setRemoveOnCancelPolicy(true);
@@ -58,11 +62,30 @@ final class HubScheduler {
     void scheduleJob(HubDirectory.Peer caller, JobInfo job, long delayMs) {
         String pkg = caller.name();
         System.out.println("[apklayer-hub] job " + job.getId() + " of " + pkg + " in " + delayMs + " ms");
-        plan(List.of("job", pkg, job.getId()), Math.max(delayMs, 0), 0, () -> {
+        List<Object> key = List.of("job", pkg, job.getId());
+        plan(key, Math.max(delayMs, 0), 0, () -> {
+            long wait = rateLimited(pkg);
+            if (wait > 0) {  // over the quota: the job waits until the window frees (an app that schedules itself again at once, as WorkManager does with unmet constraints, would loop)
+                System.out.println("[apklayer-hub] job " + job.getId() + " of " + pkg + " over its quota, waits " + wait + " ms");
+                plan(key, wait, 0, () -> scheduleJob(caller, job, 0));
+                return;
+            }
             HubDirectory.Peer target = broadcasts.process(pkg);
             if (target == null) { System.out.println("[apklayer-hub] could not start " + pkg + " for job " + job.getId()); return; }
             HubProtocol.call(target.endpoint(), HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_JOB, request -> request.writeTypedObject(job, 0), reply -> null);
         });
+    }
+
+    /** 0 and the start is counted, or the wait in ms until a start leaves the window. */
+    private long rateLimited(String pkg) {
+        long now = System.currentTimeMillis();
+        synchronized (starts) {
+            java.util.ArrayDeque<Long> times = starts.computeIfAbsent(pkg, key -> new java.util.ArrayDeque<>());
+            while (!times.isEmpty() && times.peekFirst() <= now - RATE_WINDOW_MS) times.removeFirst();
+            if (times.size() >= RATE_MAX_STARTS) return times.peekFirst() + RATE_WINDOW_MS - now;
+            times.addLast(now);
+            return 0;
+        }
     }
 
     void cancelJob(HubDirectory.Peer caller, int jobId) { cancel(List.of("job", caller.name(), jobId)); }
