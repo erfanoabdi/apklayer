@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """OTR2 (androidx GameActivity, native input, manifest screenOrientation sensorLandscape) takes pointer input where it is pointed: the window is
-landscape (the manifest's orientation reaches the host) and a touch tap and a mouse click, at window scales 100 and 200, select the second
-character portrait on the title screen (a green frame moves from the first portrait to it; screenshots before and after in OUT).
-The same path dismisses the "WHAT'S NEW" dialog of a profile that has not seen it. tests/run otr2-input; OTR2 installed by hand."""
+landscape (the manifest's orientation reaches the host) and a touch tap and a mouse click, at window scales 100 and 200, select a character
+portrait on the title screen (a green frame moves to it; screenshots before and after in OUT), also after the window changed size: a drag
+resize, maximize and restore (tests/run otr2-input), or a scale change of the running game, 100 -> 200 -> 100 % (`otr2-input.py scale`, group
+otr2-probe). OTR2 reads its window size only when it gets a window, so before NativeWindowResize a press after a resize landed at old/new of its
+position. The same path dismisses the "WHAT'S NEW" dialog of a profile that has not seen it. OTR2 installed by hand."""
 import os
 from pathlib import Path
 import re
@@ -21,8 +23,11 @@ LOGDIR = Path(instance.LOGDIR)
 PORTRAITS = {1: (366 / 797, 348 / 448), 2: (430 / 797, 348 / 448)}
 MAXIMIZE = (1194, 718)  # window geometry: 16:9 content of 1194x672 under the 46 px title bar
 FRAMES = {1: (343 / 797, 326 / 448, 392 / 797, 372 / 448), 2: (407 / 797, 326 / 448, 456 / 797, 372 / 448)}
-RUNS = [(100, 'tap', False), (200, 'click', True), (200, 'tap', True)]
-env = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1', APKLAYER_LOGCAT='1', APKLAYER_JOPTS='-Dapklayer.runms=300000 -Dapklayer.debugkeys=true -Dapklayer.debugresize=true')
+DRAG = ['resize:880,495', 'resize:960,540', 'resize:1040,585']  # a drag resize (content sizes, 16:9 so the same fractions hit the same buttons)
+RESIZE = [('press', 2), ('resize', DRAG), ('press', 1), ('resize', ['maximize:%d,%d' % MAXIMIZE]), ('press', 2), ('resize', ['unmaximize']), ('press', 1)]
+SCALE = [('press', 2), ('resize', ['scale:200']), ('press', 1), ('resize', ['scale:100']), ('press', 2)]
+RUNS = [(100, 'click', SCALE), (100, 'tap', SCALE)] if sys.argv[1:] == ['scale'] else [(100, 'tap', RESIZE), (200, 'click', RESIZE), (200, 'tap', RESIZE)]
+env = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1', APKLAYER_LOGCAT='1', APKLAYER_JOPTS='-Dapklayer.runms=300000 -Dapklayer.debugkeys=true')
 intent = instance.OUT / 'otr2-intent.properties'
 intent.write_text('component=com.dogbytegames.otrnext.OTRNext\n')
 env['APKLAYER_INTENT_FILE'] = str(intent)
@@ -55,22 +60,21 @@ def consent_dialog(image):
     return pixels.count_image(box, lambda r, g, b: r > 235 and g > 235 and b > 235) > 0.4 * box.size[0] * box.size[1]
 
 
-def play(scale, mode, resize):
-    """One app start: landscape window, scale, wait for the title screen, then press a portrait with `mode` (tap | click) and check that the
-    selection moved; with `resize` the window is also maximized and restored (a 16:9 content of the same shape, so the same fractions hit the
-    same buttons) and pressed again after each."""
+def play(scale, mode, actions):
+    """One app start: landscape window, scale, wait for the title screen, then the actions: ('press', portrait) presses it with `mode`
+    (tap | click) and checks that the selection moved to it; ('resize', steps) injects the steps (a resize, maximize, scale change) and waits
+    until the host handed the game its resized surface (NativeWindowResize)."""
     seen = []
     saw = lambda text: any(text in line for line in seen)
     instance.stop()
     app = subprocess.Popen(['bin/apklayer', 'run', PKG], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
-    name = '%d-%s%s' % (scale, mode, '-resize' if resize else '')
-    actions = [('press', 2)] + ([('maximize', MAXIMIZE), ('press', 1), ('unmaximize', None), ('press', 2)] if resize else [])
+    name = '%d-%s-%s' % (scale, mode, 'scale' if actions is SCALE else 'resize')
     step, phase, mark, tries, stage, shots = 0, 'run', 0, 0, 0, {}
     try:
         sel = selectors.DefaultSelector()
         sel.register(app.stdout, selectors.EVENT_READ)
         pending = b''
-        end = time.monotonic() + 280
+        end = time.monotonic() + 420
         with open(instance.OUT / ('otr2-input-%s.log' % name), 'wb') as log:
             while step < len(actions) and time.monotonic() < end:
                 if sel.select(3):
@@ -103,9 +107,9 @@ def play(scale, mode, resize):
                         instance.inject(PKG, *(['press:%d,%d' % at] if mode == 'tap' else ['click:%d,%d' % at]))
                         phase, mark, target = 'release', n, arg
                     else:
-                        count = sum(l.startswith('[apklayer] configure ') for l in seen)
-                        instance.inject(PKG, 'maximize:%d,%d' % arg if kind == 'maximize' else 'unmaximize')
-                        phase, mark, seen_configures = 'settle', n, count
+                        handovers = sum('surface handed over again' in l for l in seen)
+                        instance.inject(PKG, *arg)
+                        phase, mark = 'settle', n
                 elif phase == 'release' and n >= mark + 10:
                     if mode == 'tap': instance.inject(PKG, 'release:%d,%d' % at)
                     phase, mark = 'check', n
@@ -116,8 +120,7 @@ def play(scale, mode, resize):
                     print('OTR2 %s step %d: %s portrait %d at %s in %dx%d @%d%%: frame pixels (target, other) %s' % (name, step, mode, target, at, *logical(seen, scale), scale, got), flush=True)
                     assert got[0] > 100 and got[1] < 20, 'FAIL OTR2 %s: the %s at %s did not select portrait %d %s' % (name, mode, at, target, got)
                     step, phase = step + 1, 'run'
-                elif phase == 'settle' and n >= mark + 120:
-                    assert sum(l.startswith('[apklayer] configure ') for l in seen) > seen_configures, 'no configure after %s' % actions[step][0]
+                elif phase == 'settle' and n >= mark + 150 and sum('surface handed over again' in l for l in seen) > handovers:
                     step, phase = step + 1, 'run'
         assert step == len(actions), 'OTR2 %s: stopped at step %d of %d (%s)' % (name, step, len(actions), actions[min(step, len(actions) - 1)])
         assert saw('orientation landscape requested'), 'the manifest orientation (sensorLandscape) did not reach the host'
@@ -127,7 +130,7 @@ def play(scale, mode, resize):
         app.wait(); app.stdout.close()
         instance.stop()
         instance.kill('[a]pklayer.host.Main')
-    print('PASS OTR2 %s: %s selected the portraits at %d%%%s' % (name, mode, scale, ', also after maximize and restore' if resize else ''), flush=True)
+    print('PASS OTR2 %s: %s selected the portraits at %d%%, also after %s' % (name, mode, scale, ', '.join(' '.join(a) for k, a in actions if k == 'resize')), flush=True)
 
 
 try:
