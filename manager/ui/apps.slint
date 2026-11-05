@@ -69,6 +69,22 @@ component AppDetail {
                     }
                 }
             }
+            OutlinedCard {
+                VerticalLayout {
+                    padding: MaterialStyleMetrics.padding_16;
+                    spacing: MaterialStyleMetrics.spacing_8;
+                    MaterialText { text: "Window style of this app"; style: MaterialTypography.title_medium; color: MaterialPalette.on_surface; }
+                    MaterialText { text: "Mobile (maximized, navigation bar) or desktop (floating window); the default follows the instance. Applied at once."; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap; }
+                    HorizontalLayout {
+                        alignment: start;
+                        spacing: MaterialStyleMetrics.spacing_8;
+                        for choice in [{ label: "Default", value: "" }, { label: "Mobile", value: "mobile" }, { label: "Desktop", value: "desktop" }] : HorizontalLayout {
+                            if Backend.app-window-mode-setting == choice.value : FilledButton { text: choice.label; }
+                            if Backend.app-window-mode-setting != choice.value : TonalButton { text: choice.label; enabled: !Backend.busy; clicked => { Backend.set-setting("window-mode." + root.app.package, choice.value); } }
+                        }
+                    }
+                }
+            }
             Heading { text: "Permissions"; }
             if Backend.permissions-note != "" : MaterialText {
                 text: Backend.permissions-note; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant; wrap: word-wrap;

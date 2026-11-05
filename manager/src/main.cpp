@@ -2,6 +2,7 @@
 // UI thread with slint::invoke_from_event_loop. Usage: apklayer-manager [--instance ID] [--first-run] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG]
 // [--dialog install|instance|prop|uninstall] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--expect LABEL]...] (the screenshot mode: presses the labelled
 // elements, waits for N refreshes when asked (the actions' results), renders once, writes the PNG and exits: the tests' view and input).
+#include <map>
 #include <png.h>
 
 #include <cstdio>
@@ -129,6 +130,9 @@ public:
         std::string windowMode;
         for (const auto& r : s.settings) if (field(r, 0) == "window-mode") windowMode = field(r, 1);
         b.set_window_mode_setting(slint::SharedString(windowMode));
+        appModes_.clear();  // the apps' own overrides: window-mode.<package>
+        for (const auto& r : s.settings) if (field(r, 0).rfind("window-mode.", 0) == 0) appModes_[field(r, 0).substr(12)] = field(r, 1);
+        b.set_app_window_mode_setting(slint::SharedString(appModes_[current_]));
         b.set_status(info(s.status));
         auto gpus = std::make_shared<slint::VectorModel<MenuItem>>();
         gpuIds_.clear();
@@ -153,6 +157,7 @@ public:
         if (applied) applied();
     }
 
+    std::map<std::string, std::string> appModes_;
     std::function<void()> applied;  // the screenshot mode's event: a refresh reached the window
 
     void refresh() {
@@ -297,6 +302,7 @@ private:
             for (size_t i = 0; i < b.get_apps()->row_count(); i++)
                 if (auto e = b.get_apps()->row_data(i); e && e->package == pkg) b.set_current_app(*e);
             b.set_has_current_app(true);
+            b.set_app_window_mode_setting(slint::SharedString(appModes_[current_]));
             showDetail({});
             later([cli = cli_, p = current_] { return loadDetail(cli, p); }, [this, p = current_](const Detail& d) {
                 if (p != current_) return;
@@ -348,6 +354,7 @@ private:
         b.on_set_prop([this](slint::SharedString k, slint::SharedString v) { action("Saving", {"prop", "set", std::string(k), std::string(v)}); });
         b.on_unset_prop([this](slint::SharedString k) { action("Saving", {"prop", "unset", std::string(k)}); });
         b.on_set_setting([this](slint::SharedString k, slint::SharedString v) {
+            if (std::string(k).rfind("window-mode.", 0) == 0) ui_->global<Backend>().set_app_window_mode_setting(v);
             if (v.empty()) action("Saving", {"settings", "unset", std::string(k)});
             else action("Saving", {"settings", "set", std::string(k), std::string(v)});
         });
