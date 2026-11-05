@@ -41,3 +41,6 @@ sys.use_memfd=true
 ro.vendor.build.security_patch=2026-10-01
 # what init derives on a device (property_service.cpp: the vendor API level); Java read Robolectric's 202604 before SystemProperties used the store
 ro.vendor.api_level=202604
+# no local hwservicemanager (HIDL HALs come from the host, libhidl 0001/0002). libhwbinder takes one as installed when /system/bin/hwservicemanager
+# exists, which on a Halium device is the device's own, and then waits for this property (always_sets_disabled is the tree's): say it is off.
+hwservicemanager.disabled=true

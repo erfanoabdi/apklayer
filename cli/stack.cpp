@@ -243,6 +243,21 @@ static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std
     setProperty(l, ne, "ro.product.cpu.abilist32", kAbi32);
 }
 
+// graphics = device: Android's libEGL and Vulkan loader pick the driver by ro.hardware.egl/vulkan (libGLES_<egl>.so, vulkan.<vulkan>.so);
+// apklayer.prop names its own, so the device's values come first (ro.* is write-once). A Halium device sets them at boot, outside its prop
+// files: libhybris's getprop reads its live property area.
+static void deviceGraphicsProperties(const Layout& l, const NativeEnv& ne) {
+    for (const char* key : {"ro.hardware.egl", "ro.hardware.vulkan"}) {
+        Spawn get;
+        get.argv = {"/usr/bin/getprop", key};
+        get.env = currentEnv();
+        int status = 0;
+        std::string value = trim(runCapture(get, &status));
+        if (status == 0 && !value.empty()) setProperty(l, ne, key, value.c_str());
+        else fprintf(stderr, "apklayer: graphics = device, but the device's %s is unknown\n", key);
+    }
+}
+
 int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std::string>& tool) {
     if (sandboxOn()) enterInstanceUserNs();  // first: everything the stack starts is in the instance's user namespace (cli/sandbox.cpp)
     NativeEnv ne = nativeEnv(l, inst);
@@ -271,6 +286,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     // every other property keeps the last value loaded
     if (exists(inst.propOverrides())) { propFiles.insert(propFiles.begin(), inst.propOverrides()); propFiles.push_back(inst.propOverrides()); }
     setDerivedProperties(l, ne, propFiles);
+    if (deviceGraphics(inst)) deviceGraphicsProperties(l, ne);
     Spawn prop;
     prop.argv = {join(n, "bin/aprop"), "load"};
     prop.argv.insert(prop.argv.end(), propFiles.begin(), propFiles.end());
