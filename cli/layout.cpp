@@ -1,5 +1,7 @@
 #include "layout.h"
 
+#include "env.h"
+
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -73,6 +75,7 @@ bool Layout::setUpBundle(bool fatal) const {
     setup.env = currentEnv();
     setup.env["APKLAYER_BT"] = bionic;
     setup.env["APKLAYER_ANDROID_LIBS"] = androidLibs;
+    setup.env["APKLAYER_JAVA"] = findJava(*this);  // the JVM apps run on (APKLAYER_NATIVE_JAVA...), not just PATH's java
     if (runAndWait(setup) == 0) return true;
     if (fatal) die("could not set up the Android runtime in " + native);
     return false;

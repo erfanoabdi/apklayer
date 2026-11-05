@@ -22,7 +22,7 @@ rm -rf "$out" && mkdir -p "$out"
 entries() { unzip -lv "$1" | awk 'NR > 3 { print $1, $7, $8 }'; }  # size, CRC and name of every entry
 for j in "$native"/aosp/android-all/*.jar; do  # the SDK provider names the jar twice (16 and current): the same entries, instrumented once
     if [ -n "$done_jar" ] && [ "$(entries "$j")" = "$(entries "$done_jar")" ]; then ln "$out/$(basename "$done_jar")" "$out/$(basename "$j")"; continue; fi
-    java -cp "$native/native-runtime.jar:$native/aosp/host-classes.jar:$native/aosp/sim-classes:$native/aosp/Robolectric_all.jar" apklayer.tools.PreInstrument "$j" "$out/$(basename "$j")"
+    "${APKLAYER_JAVA:-java}" -cp "$native/native-runtime.jar:$native/aosp/host-classes.jar:$native/aosp/sim-classes:$native/aosp/Robolectric_all.jar" apklayer.tools.PreInstrument "$j" "$out/$(basename "$j")"
     done_jar="$j"
 done
 touch -r "$half/native-runtime.jar" "$native/.setup"

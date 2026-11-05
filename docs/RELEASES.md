@@ -112,8 +112,13 @@ compiled into both the CLI and the manager.
 apklayer [--instance ID] setup [--check] [--update] [--bundle <file|file://|URL>] [--microg] [--fdroid]
 ```
 
-Output, tab separated: `step <id> <state> <detail>` (ids: binder, runtime, providers, system-apps, webview, microg, fdroid; states: todo, running, done,
+Output, tab separated: `step <id> <state> <detail>` (ids: binder, java, runtime, providers, system-apps, microg, fdroid; states: todo, running, done,
 failed, skipped), `progress <0..1|-1>`, and with `--check` (which changes nothing) `latest <version> <runtime version> <date>`. Idempotent: the runtime
 is fetched when none is installed (`--update`: when the release has a newer one), the system apps once (marker `~/.local/share/apklayer/setup-done`).
 Offline: `--bundle apklayer-runtime-<cpu>-<R>.tar.zst` (a `.sha256` beside it is checked) or `APKLAYER_RUNTIME_BUNDLE`; `APKLAYER_RELEASES_URL` names another releases.json.
 On a Halium device the step `providers` seeds a new instance with graphics and camera = device (docs/HALIUM.md).
+Nothing in it runs as root (no pkexec, no sudo): binder is only checked (the package's `apklayer-binder.service` makes the nodes at boot; a failed step names
+the command), java checks for Java 21 (`APKLAYER_NATIVE_JAVA` names another), and the WebView's switch file is the instance's own. A runtime directory
+missing `android-root/system`, `android-libs` or `aosp/android-all` (a bundle made from a prebuilts checkout of links, before runtime-bundle.sh copied
+through them) counts as not installed: setup unpacks it again, and such a bundle is refused. `apklayer --version` also prints `defaultInstance`
+(`ut` on a Halium device), which the manager uses when no instance is named.

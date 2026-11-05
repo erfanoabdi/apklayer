@@ -101,8 +101,8 @@ for a in SettingsProvider MediaProvider ContactsProvider CalendarProvider Downlo
 done
 ```
 
-WebView (apps that show web pages, sign-in screens): the Chromium provider `com.android.webview`. Its sandbox cannot work inside a JVM, so a one-time setup
-switches it off (needs sudo once; it writes `/data/local/tmp/webview-command-line`) and installs the provider:
+WebView (apps that show web pages, sign-in screens): the Chromium provider `com.android.webview`. Its sandbox cannot work inside a JVM and is switched off
+(the CLI writes Chromium's switch file into the instance's own `/data` at each launch; no root). Install the provider as a system app:
 
 ```sh
 tools/host-setup/webview.sh "$AL/prebuilts/arm64/system-apps/webview.apk"
@@ -161,7 +161,7 @@ which detaches the driver until the device is plugged in again); blacklisting th
 ```sh
 bin/apklayer stop                         # and `--instance <id> stop` for every other instance
 rm -rf "$AL" ~/.config/apklayer ~/.local/share/apklayer ~/.local/state/apklayer ~/.cache/apklayer
-sudo rm -f /data/local/tmp/webview-command-line   # if step 6 ran
+sudo rm -f /data/local/tmp/webview-command-line   # only if an older version's step 6 wrote it (no longer read)
 ```
 
 The binder devices go away at the next reboot. The apt packages from step 1 stay; remove them with `apt` if nothing else needs them.
@@ -176,4 +176,5 @@ gfxstream's sources (`hardware/google/gfxstream`, also on android.googlesource.c
 
 After `sudo apt install ./apklayer_*.deb` run `apklayer setup` (or open apklayer-manager, which runs it): it downloads the Android runtime bundle for your CPU
 from the release (`--bundle <file>` for an offline copy), installs the system apps and sets the instance up; `apklayer setup --check` shows what is missing.
+Setup needs no root: what does (binderfs and the instances' binder devices) the package does at install and at every boot (`apklayer-binder.service`).
 Ubuntu Touch (Halium phones): docs/HALIUM.md "The apt install on the phone".
