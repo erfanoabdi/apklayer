@@ -17,7 +17,7 @@ diff --git a/libs/binder/IPCThreadState.cpp b/libs/binder/IPCThreadState.cpp
 +    // apklayer patch: the stack's own processes (servicemanager, HALs, SurfaceFlinger) run as the desktop user too, and that uid is not
 +    // an app's (Ubuntu Touch's phablet is 32011, in Android's app range: servicemanager refused every addService): it is Android's system
 +    // uid (Waydroid frameworks/native 0009, by the process's own uid instead of a property)
-+    if (mCallingUid.has_value() && mCallingUid.value() == getuid()) return AID_SYSTEM;
++    if (mCallingUid.has_value() && mCallingUid.value() == getuid()) return 1000;  // AID_SYSTEM (not in every variant's headers)
      return mCallingUid.has_value() ? mCallingUid.value() : getuid();
  }
  
