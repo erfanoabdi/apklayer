@@ -409,35 +409,13 @@ public final class AppHost implements Runnable {
         System.out.println("[apklayer] configure " + w + "x" + h + " @" + scalePct + "% -> " + wdp
                 + "x" + hdp + "dp @" + dpi + "dpi, navigation bar " + navPx + " px");
         org.robolectric.shadows.NavigationBarInset.set(navPx);
+        NativeWindowResize.resizing(new ArrayList<>(stack));
         HostConfiguration.resize("w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi", new ArrayList<>(stack));
         Object wmg = android.view.WindowManagerGlobal.getInstance();
         List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
         for (View v : views) { // force a fresh frame at the new size
             v.requestLayout();
             v.invalidate();
-        }
-        if (Boolean.getBoolean("apklayer.debugresize")) {
-            android.graphics.Point real = new android.graphics.Point(), size = new android.graphics.Point();
-            android.view.Display d = android.view.WindowManagerGlobal.getInstance() != null && !stack.isEmpty()
-                    ? stack.peek().get().getWindowManager().getDefaultDisplay() : null;
-            if (d != null) { d.getRealSize(real); d.getSize(size); }
-            android.util.DisplayMetrics m = android.content.res.Resources.getSystem().getDisplayMetrics();
-            System.out.println("[apklayer] resize debug: display real " + real + " size " + size + " metrics " + m.widthPixels + "x" + m.heightPixels
-                    + " d" + m.density + " views " + views.size());
-            for (View v : views) System.out.println("[apklayer] resize debug: root " + v.getClass().getSimpleName() + " " + v.getWidth() + "x" + v.getHeight());
-            java.util.ArrayDeque<View> todo = new java.util.ArrayDeque<>(views);
-            while (!todo.isEmpty()) {
-                View v = todo.poll();
-                if (v instanceof android.view.SurfaceView sv && sv.getTag(0x7f0a0001) == null) {
-                    sv.setTag(0x7f0a0001, Boolean.TRUE);
-                    sv.getHolder().addCallback(new android.view.SurfaceHolder.Callback() {
-                        public void surfaceCreated(android.view.SurfaceHolder h) { System.out.println("[apklayer] debug surfaceCreated"); }
-                        public void surfaceChanged(android.view.SurfaceHolder h, int f, int w, int hh) { System.out.println("[apklayer] debug surfaceChanged " + w + "x" + hh); }
-                        public void surfaceDestroyed(android.view.SurfaceHolder h) { System.out.println("[apklayer] debug surfaceDestroyed"); }
-                    });
-                }
-                if (v instanceof android.view.ViewGroup g) for (int i = 0; i < g.getChildCount(); i++) todo.add(g.getChildAt(i));
-            }
         }
     }
 

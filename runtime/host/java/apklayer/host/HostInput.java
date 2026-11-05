@@ -102,7 +102,6 @@ final class HostInput {
             main.post(() -> HostWindows.longClickAt(ev[1], ev[2]));
         } else if (ev[0] <= 2) {
             if (ev[0] == MotionEvent.ACTION_DOWN) downTime = now;
-            if (ev[0] == MotionEvent.ACTION_DOWN && Boolean.getBoolean("apklayer.debugresize")) debugSurfaces(ev[1], ev[2]);
             inject(MotionEvent.obtain(downTime, now, ev[0], ev[1], ev[2], 0));
         } else if (ev[0] == 12) { // key (xkb): {12, action, android keycode, unicode, meta}
             hostKey(now, ev[1], ev[2], ev[3], ev[4]);
@@ -130,30 +129,6 @@ final class HostInput {
             inject(new KeyEvent(now, now, ev[2] == 1 ? KeyEvent.ACTION_DOWN : KeyEvent.ACTION_UP,
                     KeyEvent.KEYCODE_BACK, 0));
         }
-    }
-
-    /** apklayer.debugresize: the sizes of the top window's views and surfaces when a press arrives. */
-    private void debugSurfaces(float x, float y) {
-        main.post(() -> {
-            Object wmg = android.view.WindowManagerGlobal.getInstance();
-            List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
-            View root = HostWindows.topWindow(views, -1, -1);
-            if (root == null) return;
-            StringBuilder sb = new StringBuilder("[apklayer] press at " + x + "," + y + ": root " + root.getWidth() + "x" + root.getHeight());
-            java.util.ArrayDeque<View> todo = new java.util.ArrayDeque<>();
-            todo.add(root);
-            while (!todo.isEmpty()) {
-                View v = todo.poll();
-                if (v instanceof android.view.SurfaceView sv) {
-                    int[] loc = new int[2];
-                    v.getLocationOnScreen(loc);
-                    sb.append("; SurfaceView ").append(v.getWidth()).append('x').append(v.getHeight()).append(" at ").append(loc[0]).append(',').append(loc[1])
-                            .append(" surface frame ").append(sv.getHolder().getSurfaceFrame());
-                }
-                if (v instanceof android.view.ViewGroup g) for (int i = 0; i < g.getChildCount(); i++) todo.add(g.getChildAt(i));
-            }
-            System.out.println(sb);
-        });
     }
 
     /** A key from the shell: action 0 = down / 1 = up, Android keycode, UTF-32 char (0 = none). */
@@ -300,7 +275,6 @@ final class HostInput {
             coords[i].size = 1f;
             i++;
         }
-        if (action == MotionEvent.ACTION_DOWN && Boolean.getBoolean("apklayer.debugresize")) debugSurfaces(coords[0].x, coords[0].y);
         if (Boolean.getBoolean("apklayer.debugkeys"))
             System.out.println("[apklayer] touch action=" + MotionEvent.actionToString(action) + " pointers=" + n
                     + " at " + coords[0].x + "," + coords[0].y);

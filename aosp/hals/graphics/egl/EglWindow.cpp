@@ -208,12 +208,9 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
 // The Android window's current size: the user's if set, else the consumer's default (what a resize changes).
 bool windowSize(ANativeWindow* nw, uint32_t* w, uint32_t* h) {
     int iw = 0, ih = 0;
-    // apklayer patch: NATIVE_WINDOW_WIDTH asks the producer (the BufferQueue's current default size, what ANativeWindow_getWidth answers); DEFAULT_WIDTH is
-    // the Surface's own copy, refreshed only by a dequeueBuffer, so a window created or queried in surfaceChanged after a resize still reported the old size
-    // (a game that took its input scale from the new surface mapped every touch at old/new of its position)
-    nw->query(nw, 0 /* NATIVE_WINDOW_WIDTH */, &iw);
-    nw->query(nw, 1 /* NATIVE_WINDOW_HEIGHT */, &ih);
-    if (iw <= 0 || ih <= 0) { nw->query(nw, 6 /* DEFAULT_WIDTH */, &iw); nw->query(nw, 7 /* DEFAULT_HEIGHT */, &ih); }
+    nw->query(nw, 6 /* NATIVE_WINDOW_DEFAULT_WIDTH */, &iw);
+    nw->query(nw, 7 /* NATIVE_WINDOW_DEFAULT_HEIGHT */, &ih);
+    if (iw <= 0 || ih <= 0) { nw->query(nw, 0 /* WIDTH */, &iw); nw->query(nw, 1 /* HEIGHT */, &ih); }
     if (iw <= 0 || ih <= 0) return false;
     *w = iw;
     *h = ih;
@@ -287,17 +284,18 @@ EGLSurface eglCreateWindowSurface(EGLDisplay dpy, EGLConfig cfg, EGLNativeWindow
     if (nw == nullptr || nw->common.magic != ANDROID_NATIVE_WINDOW_MAGIC) { tError = EGL_BAD_NATIVE_WINDOW; return EGL_NO_SURFACE; }
     auto* win = new Window{dpy, cfg, nw, nullptr, EGL_NO_SURFACE, 0, 0, 0};
     host<EGLBoolean (*)(EGLDisplay, EGLConfig, EGLint, EGLint*)>("eglGetConfigAttrib")(dpy, cfg, EGL_NATIVE_VISUAL_ID, &win->visual);
-    if (!attachHostSurface(win)) { delete win; tError = EGL_BAD_ALLOC; return EGL_NO_SURFACE; }
+    // the Android side: connect as an EGL producer and ask for buffers the GPU renders to and SurfaceFlinger samples. Connected before the
+    // size is read: Surface keeps its own copy of the window's default size, refreshed by connect and dequeueBuffer only, so a surface created
+    // after a resize (a game's new window in surfaceCreated) read the old size until its first swap
+    bool connected = native_window_api_connect(nw, kApiEgl) == 0;
+    if (!attachHostSurface(win)) {
+        if (connected) native_window_api_disconnect(nw, kApiEgl);
+        delete win; tError = EGL_BAD_ALLOC; return EGL_NO_SURFACE;
+    }
     // apklayer patch: EGL owns the window until eglDestroySurface. EGL10's
     // SurfaceTexture wrapper drops its temporary sp<Surface> after this call.
     nw->common.incRef(&nw->common);
-    // the Android side: connect as an EGL producer and ask for buffers the GPU renders to and SurfaceFlinger samples
-    native_window_api_connect(nw, kApiEgl);
     native_window_set_usage(nw, kUsageRender | kUsageTexture);
-    // apklayer patch: buffers of another size than the window (an app's own render resolution, ANativeWindow_setBuffersGeometry) are scaled to the window by
-    // SurfaceFlinger. With the default FREEZE mode BLASTBufferQueue keeps the destination frame of the last buffer that matched the window, so after a window
-    // resize the smaller picture stayed at its size in the window's corner (OTR2 after a resize: a small picture in a big black window)
-    native_window_set_scaling_mode(nw, NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW);
     native_window_set_buffers_format(nw, 1 /* HAL_PIXEL_FORMAT_RGBA_8888 */);
     std::lock_guard<std::recursive_mutex> lock(windowsLock);
     windows.insert(win);
@@ -356,11 +354,8 @@ EGLBoolean eglQuerySurface(EGLDisplay dpy, EGLSurface surface, EGLint attribute,
     {
         std::lock_guard<std::recursive_mutex> lock(windowsLock);
         if (Window* w = windowOf(surface)) {
-            if (attribute == EGL_WIDTH || attribute == EGL_HEIGHT) {
-                *value = attribute == EGL_WIDTH ? w->width : w->height;
-                static int logged = 0; if (logged++ < 60) ALOGI("eglQuerySurface %p %s = %d", w, attribute == EGL_WIDTH ? "WIDTH" : "HEIGHT", *value);
-                return EGL_TRUE;
-            }
+            if (attribute == EGL_WIDTH) { *value = w->width; return EGL_TRUE; }
+            if (attribute == EGL_HEIGHT) { *value = w->height; return EGL_TRUE; }
             surface = w->host;
         }
     }
