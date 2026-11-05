@@ -63,7 +63,7 @@ def green(image, which):
 
 
 def frame_box(image):
-    """The selected portrait's green frame in a screenshot (pixels): the largest hollow, squarish cluster of frame-green pixels."""
+    """The selected portrait's green frame in a screenshot (pixels): the largest hollow cluster (stretched with the window: the game scales its 16:9 layout to any shape) of frame-green pixels."""
     im = pixels.rgb(image)
     w, h = im.size
     px = im.load()
@@ -84,7 +84,7 @@ def frame_box(image):
         xs, ys = [q[0] for q in part], [q[1] for q in part]
         bw, bh = max(xs) - min(xs) + step, max(ys) - min(ys) + step
         fill = len(part) * step * step / (bw * bh)
-        if bw >= 12 and 0.7 < bw / bh < 1.4 and fill < 0.6 and (best is None or bw * bh > best[2] * best[3]):
+        if bw >= 12 and 0.25 < bw / bh < 4 and fill < 0.6 and (best is None or bw * bh > best[2] * best[3]):
             best = (min(xs), min(ys), bw, bh)
     return best
 
