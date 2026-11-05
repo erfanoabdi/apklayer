@@ -43,8 +43,15 @@ MainView {
         }
     }
 
+    // the service hands a pending transfer over as soon as the handler registers (ContentHub's creation), which can be before this binding exists:
+    // finishedImports keeps it
+    function imported() {
+        var list = ContentHub.finishedImports;
+        if (list.length > 0) root.done(list[list.length - 1]);
+    }
+    Component.onCompleted: if (root.importing) root.imported()
     Connections {
         target: root.importing ? ContentHub : null
-        function onImportRequested(transfer) { root.done(transfer); }
+        function onFinishedImportsChanged() { root.imported(); }
     }
 }

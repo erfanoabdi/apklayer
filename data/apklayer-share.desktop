@@ -7,3 +7,4 @@ Icon=apklayer
 Terminal=false
 NoDisplay=true
 X-Lomiri-Touch=true
+X-Lomiri-Single-Instance=true

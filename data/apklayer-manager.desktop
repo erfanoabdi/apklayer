@@ -8,3 +8,4 @@ Terminal=false
 Categories=Utility;
 StartupWMClass=apklayer-manager
 X-Lomiri-Touch=true
+X-Lomiri-Single-Instance=true
