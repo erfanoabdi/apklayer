@@ -4,6 +4,6 @@ arm64: from the UTM VM's staged runtime on 2026-11-04 (~/android-arm64/lib64, ~/
 arm64 libraries: the 439 files of deps/android-tree-files.lock at that commit; every sha256 matches the lock
 tree: ro.build.fingerprint=generic/lineage_gsi_arm64/generic_arm64:17/CP2A.260605.016/eng.erfana:userdebug/test-keys; ro.build.date=Mon Oct 26 11:53:32 +0330 2026
 webview: com.android.webview 156.0.8078.47 (versionCode 807804701), sha256 1d2f61832b2596b0046cb82cf3634609ea866098d097a83fac27c35272ac726a
-x86_64: from ~/los24 gsi_x86_64 userdebug (incremental build of 2026-11-04, main CHANGELOG "Build log") by tools/stage x86_64 of branch x86-build; libraries per deps/android-tree-files-x86_64.lock; run on the owner's x86_64 PC (Alder Lake-N, Mesa ANV)
+x86_64: from ~/los24 gsi_x86_64 userdebug (incremental builds of 2026-11-04 and 2026-11-05, main CHANGELOG "Build log") by tools/stage x86_64 (main 5b044d5c plus the x86pb branch: the arm64 lock's libraries as roots); libraries per deps/android-tree-files-x86_64.lock (509 files, level with arm64: hardware providers, libbinder host context, libhidlbase host HALs); run on the owner's x86_64 PC (Alder Lake-N, Mesa ANV)
 x86_64 tree: ro.build.fingerprint=Android/lineage_gsi_x86_64/generic_x86_64:17/CP2A.260605.016/eng.erfana:userdebug/test-keys; ro.build.date=Wed Oct 28 04:34:03 +0330 2026
 x86_64 webview: com.android.webview 156.0.8078.47, sha256 a98312a1427ca5c029e30009cc4a002e90affe9370e42b7f93a88ee6425c1278
