@@ -284,12 +284,17 @@ EGLSurface eglCreateWindowSurface(EGLDisplay dpy, EGLConfig cfg, EGLNativeWindow
     if (nw == nullptr || nw->common.magic != ANDROID_NATIVE_WINDOW_MAGIC) { tError = EGL_BAD_NATIVE_WINDOW; return EGL_NO_SURFACE; }
     auto* win = new Window{dpy, cfg, nw, nullptr, EGL_NO_SURFACE, 0, 0, 0};
     host<EGLBoolean (*)(EGLDisplay, EGLConfig, EGLint, EGLint*)>("eglGetConfigAttrib")(dpy, cfg, EGL_NATIVE_VISUAL_ID, &win->visual);
-    if (!attachHostSurface(win)) { delete win; tError = EGL_BAD_ALLOC; return EGL_NO_SURFACE; }
+    // the Android side: connect as an EGL producer and ask for buffers the GPU renders to and SurfaceFlinger samples. Connected before the
+    // size is read: Surface keeps its own copy of the window's default size, refreshed by connect and dequeueBuffer only, so a surface created
+    // after a resize (a game's new window in surfaceCreated) read the old size until its first swap
+    bool connected = native_window_api_connect(nw, kApiEgl) == 0;
+    if (!attachHostSurface(win)) {
+        if (connected) native_window_api_disconnect(nw, kApiEgl);
+        delete win; tError = EGL_BAD_ALLOC; return EGL_NO_SURFACE;
+    }
     // apklayer patch: EGL owns the window until eglDestroySurface. EGL10's
     // SurfaceTexture wrapper drops its temporary sp<Surface> after this call.
     nw->common.incRef(&nw->common);
-    // the Android side: connect as an EGL producer and ask for buffers the GPU renders to and SurfaceFlinger samples
-    native_window_api_connect(nw, kApiEgl);
     native_window_set_usage(nw, kUsageRender | kUsageTexture);
     native_window_set_buffers_format(nw, 1 /* HAL_PIXEL_FORMAT_RGBA_8888 */);
     std::lock_guard<std::recursive_mutex> lock(windowsLock);

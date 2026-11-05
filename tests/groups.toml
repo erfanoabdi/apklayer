@@ -276,7 +276,7 @@ alone = true
 run = ["python3 -u tests/vm/otr2-run.py"]
 
 [otr2-input]
-# pointer input of a GameActivity game: tap and click dismiss the dialog at scales 100 and 200
+# pointer input of a GameActivity game: tap and click select portraits at scales 100 and 200, also after a drag resize, maximize and restore
 needs = ["com.dogbytegames.otrnext"]
 alone = true
 run = ["python3 -u tests/vm/otr2-input.py"]
@@ -306,3 +306,16 @@ run = ["tests/vm/newpipe-media.sh"]
 optional = true  # needs tools/host-setup/sandbox.sh once (uidmap, subordinate ids, the AppArmor profile, render nodes)
 apps = ["hello-sandbox"]
 run = ["tests/vm/sandbox.sh"]
+
+[otr2-probe]
+# the same with the window scale changed while the game runs (100 -> 200 -> 100 %), tap and click
+needs = ["com.dogbytegames.otrnext"]
+alone = true
+run = ["python3 -u tests/vm/otr2-input.py scale"]
+
+[otr2-aspect]
+# the same in windows of other shapes than the game's 16:9 (600x1000, 1600x500, 900x850, 1137x613) after drag resizes, at 100 and 200 %: the
+# portrait to press is located from the drawn frame; prints a table window -> tap -> hit/miss
+needs = ["com.dogbytegames.otrnext"]
+alone = true
+run = ["python3 -u tests/vm/otr2-input.py aspect"]

@@ -409,6 +409,7 @@ public final class AppHost implements Runnable {
         System.out.println("[apklayer] configure " + w + "x" + h + " @" + scalePct + "% -> " + wdp
                 + "x" + hdp + "dp @" + dpi + "dpi, navigation bar " + navPx + " px");
         org.robolectric.shadows.NavigationBarInset.set(navPx);
+        NativeWindowResize.resizing(new ArrayList<>(stack));
         HostConfiguration.resize("w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi", new ArrayList<>(stack));
         Object wmg = android.view.WindowManagerGlobal.getInstance();
         List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
