@@ -57,6 +57,19 @@ State: 1-5 and 9 done (2026-11-04; v0.1.0 tagged 2026-11-04 with prebuilts-v0.1.
 8. **`converter-abi`**: a number bumped when dex2jvm, the instrumentation or the converted-class format changes; each install records the number it was converted with (`info.properties`); after an update the manager re-converts apps with an older number from their kept `base.apk` (data kept). The same pattern for app-data and instance layout changes (`data-format` with migration steps).
 9. **Versions**: tags `vX.Y.Z` on main (first `v0.1.0`); the prebuilts branch tagged to match (`prebuilts-vX.Y.Z`).
 
+**Ubuntu Touch install (2026-11-05, docs/HALIUM.md "The apt install on the phone")**: setup runs without root (binder nodes from the boot unit, the
+WebView switch per instance, no pkexec); the manager follows Lomiri's scale and the CLI's default instance. Open before runtime 0.3.1 ships:
+- the `prebuilts` branch lacks the Halium camera round's arm64 libraries (libhidlbase with libhidl 0001-0003, libbinder with 0006/0007, cameraserver
+  with av 0003: the copies in `~/apklayer-dev-cam/v2/lib64` on the phone and `~/wt/ut-main/prebuilts/arm64/android-libs` on Parallels, from which the
+  tested 0.3.1 bundle was made); commit them, then tag. releases.json still names runtime 0.2.1: a 0.3.x deb's `apklayer setup` without `--bundle`
+  downloads the release's runtime, whatever version the package names (setup should refuse or say so when they differ).
+- Java on Ubuntu Touch: the deb depends on openjdk-21-jre-headless (about 200 MB on a 4 GB rootfs with ~540 MB free, gone with each OTA, like the
+  deb itself); `apklayer setup` now says when Java 21 is missing. A JRE that setup provisions in the user's data home (as the runtime bundle) would
+  make the package installable without it (`Recommends`); not decided.
+- Instances other than `ut` on a phone: their nodes need root (`/etc/apklayer/instances` + `systemctl restart apklayer-binder`, the command the
+  manager shows). Ubuntu Touch has polkitd and Lomiri's polkit agent but no pkexec; a polkit rule allowing active local users to start an
+  `apklayer-binder@<id>.service` template (no password, ids validated by binder.sh) would let the manager do it: not built.
+
 ## After the releases: next phase (in order, set 2026-11-04 afternoon)
 1. **App gaps from the corpus** (done 2026-11-04: an app's `/data/data/<pkg>`, `/data/user/0/<pkg>`, `/data/user_de/0/<pkg>` are its own data dir for Java, native code and the programs it runs; real libcore file natives; the F-Droid client syncs its index in ~50 s). Open: Termux refuses uid 1000 (native code must see the app's Android uid: getuid/geteuid/getresuid and st_uid; an identity decision, see the sandbox plan); /system/bin/sh and getprop missing from android-root; the /data/data mapping is textual (`../../other` reaches another app's tree, moot while all apps share one uid); libcore fstat(fd) stays Robolectric's (shortcut: the real one stopped MediaProvider's scan); (done 2026-11-04: SimpleX, WireGuard and Rethink DNS run). Open: an app's own Looper.loop() on the main thread now carries the run loop (AppHost.step): messages posted in Application.onCreate run before the first activity's onCreate (Android usually runs the launch first); Os.accept does not fill in the peer address; AppHost.java is 614 lines (split).
 2. **Robolectric fakes audit** (done 2026-11-04: MediaMetadataRetriever, MediaMuxer, Vibrator, SystemProperties real; toasts shown through ToastPresenter; StorageStatsManager from the file system; the rest confirmed harmless or host-fed). Open: H.264 frames from MediaMetadataRetriever (c2.apklayer.avc.decoder returns C2_CORRUPTED on a single-sample EOS input); toasts do not queue and Toast.Callback is not called; queryStatsForPackage does not check PACKAGE_USAGE_STATS; window-system gaps (getWindowInsets, attachWindowContextToDisplayArea).

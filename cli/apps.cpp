@@ -2,6 +2,7 @@
 #include "sandbox.h"
 
 #include "desktop.h"
+#include "env.h"  // findJava: the converter and the install tools run on the apps' JVM (a phone names it in ~/.config/apklayer/env)
 #include "version.h"
 
 #include <algorithm>
@@ -119,7 +120,7 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
     // base.apk and split_<name>.apk, as a device installs a package (apklayer.tools.ApkSet: one APK, a base and its splits, or an .apks/.xapk/.apkm)
     Spawn stage;
     bool bridge = *kBridgeAbi && exists(join(l.androidLibs, kBridgeLib));  // a staged native bridge runs apps of its ABI too (extractLibs prefers the CPU's own)
-    stage.argv = {"java", "-cp", l.hostClasses(), "apklayer.tools.ApkSet", tmp, bridge ? std::string(kAbi) + "," + kBridgeAbi : std::string(kAbi)};
+    stage.argv = {findJava(l), "-cp", l.hostClasses(), "apklayer.tools.ApkSet", tmp, bridge ? std::string(kAbi) + "," + kBridgeAbi : std::string(kAbi)};
     stage.argv.insert(stage.argv.end(), apks.begin(), apks.end());
     stage.env = currentEnv();
     if (runAndWait(stage) != 0) die("not an installable package: " + apks[0]);
@@ -141,15 +142,15 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
         env["ANDROID_HOME"] = tmp;
         env["ANDROID_SDK_ROOT"] = tmp;
         Spawn conv;
-        conv.argv = {"java", "-Duser.home=" + tmp, "-cp", l.dex2jvmJar() + ":" + l.frameworkDir() + "/*", "io.github.kksimp.dex2jvm.Main", join(tmp, "base.apk"), join(tmp, "raw.jar")};
+        conv.argv = {findJava(l), "-Duser.home=" + tmp, "-cp", l.dex2jvmJar() + ":" + l.frameworkDir() + "/*", "io.github.kksimp.dex2jvm.Main", join(tmp, "base.apk"), join(tmp, "raw.jar")};
         conv.env = env;
         conv.logFile = join(inst.logs(), "convert.log");
         if (runAndWait(conv) != 0) die("conversion failed (see " + conv.logFile + ")");
-        if (sh({"java", "-cp", l.deps + "/libs/*:" + l.hostClasses(), "apklayer.tools.DenyInstrument", join(tmp, "raw.jar"), join(tmp, "classes.jar")}) != 0)
+        if (sh({findJava(l), "-cp", l.deps + "/libs/*:" + l.hostClasses(), "apklayer.tools.DenyInstrument", join(tmp, "raw.jar"), join(tmp, "classes.jar")}) != 0)
             die("preparing the converted classes failed (a half-written classes.jar is not installed)");
         // every DEX class in a well-formed class file and the APK's java resources reachable: nothing half-converted is installed or cached
         // ASM's CheckClassAdapter comes from Robolectric_all.jar, which lacks asm-analysis: on the boot class path it is not verified, so the data-flow classes it names are never loaded
-        if (sh({"java", "-Xbootclasspath/a:" + l.native + "/aosp/Robolectric_all.jar", "-cp", l.hostClasses() + ":" + l.dex2jvmJar(), "apklayer.tools.VerifyInstall", join(tmp, "base.apk"), join(tmp, "classes.jar")}) != 0)
+        if (sh({findJava(l), "-Xbootclasspath/a:" + l.native + "/aosp/Robolectric_all.jar", "-cp", l.hostClasses() + ":" + l.dex2jvmJar(), "apklayer.tools.VerifyInstall", join(tmp, "base.apk"), join(tmp, "classes.jar")}) != 0)
             die("the converted classes are incomplete or malformed (see above); " + name + " is not installed");
         unlink(join(tmp, "raw.jar").c_str());
     }
