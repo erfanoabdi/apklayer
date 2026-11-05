@@ -41,6 +41,7 @@ static int listen_socket(const char *path)
 int main(int argc, char **argv)
 {
     int query_gpu = argc == 2 && !strcmp(argv[1], "--compositor-gpu");  /* print the compositor's GPU and exit (cli/gpus.cpp) */
+    int query_display = argc == 2 && !strcmp(argv[1], "--display-info");  /* print the density and style apps get, and exit (cli/stack.cpp) */
     const char *rt = getenv("XDG_RUNTIME_DIR");
     if (!rt) { fprintf(stderr, "[shell] XDG_RUNTIME_DIR is not set\n"); return 1; }
     char dir[512], path[600];
@@ -59,7 +60,9 @@ int main(int argc, char **argv)
     wl_display_roundtrip(display);
     wl_display_roundtrip(display); /* bound wl_output objects deliver their initial mode/scale, the dmabuf feedback its events */
     if (query_gpu) return print_compositor_gpu();
+    if (query_display) return print_display_info();
     decor_setup(compositor, subcompositor, shm, viewporter);
+    navbar_setup(compositor, subcompositor, shm, viewporter);
     if (!compositor || !shm || !wm_base) { fprintf(stderr, "[shell] missing Wayland globals\n"); return 1; }
 
     clipboard_init();

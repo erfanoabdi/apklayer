@@ -44,9 +44,14 @@
  *                114 DMABUF_RELEASE {i32 id, buf}: the compositor is done with that dmabuf buffer (it may be drawn into again)
  *                112 DISPLAY        {i32 refresh in mHz}: the output's refresh rate (sent at HELLO and when it changes)
  *                113 VSYNC          {i32 id, i32 ms}: answer to VSYNC_REQUEST, the compositor's frame callback time (ms)
- *                107 CONFIGURE      {i32 id, i32 logical w, i32 logical h, i32 scale*100}
+ *                107 CONFIGURE      {i32 id, i32 logical w, i32 logical h, i32 scale*100, i32 density dpi, i32 navigation bar px}
  *                                    the app renders w*scale x h*scale pixels and re-sends
- *                                    WINDOW_CREATE with the same id to rebuffer in place
+ *                                    WINDOW_CREATE with the same id to rebuffer in place; density: the dpi the app's resources take
+ *                                    (160 * scale on a desktop, the handheld's physical density bucket: mobile.c); navigation bar: the
+ *                                    bottom inset the shell's navigation bar covers in mobile style (navbar.c), 0 without one
+ *   app -> shell  15 WINDOW_MODE    {i32 id, i32 mode}: 0 auto, 1 desktop (floating, title bar), 2 mobile (maximized, navigation bar);
+ *                                   sent before WINDOW_CREATE it sets the new window's style, later it switches it (mobile.c)
+ *                 16 NAVBAR         {i32 id, i32 visible}: the app shows or hides the navigation bar (immersive mode)
  */
 
 #define _GNU_SOURCE
@@ -73,6 +78,7 @@
 #include "viewporter-client-protocol.h"
 #include "fractional-scale-v1-client-protocol.h"
 #include "decor.h"
+#include "navbar.h"
 enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
        MSG_INPUT = 101, MSG_CLOSE = 103, MSG_RELEASE = 104,
        MSG_KEY = 105, MSG_SCROLL = 106, MSG_CONFIGURE = 107, MSG_STATE = 108, MSG_CLIPBOARD = 109, MSG_IME = 110, MSG_TOUCH = 111, MSG_DISPLAY = 112, MSG_VSYNC = 113, MSG_DMABUF_RELEASE = 114 };
@@ -86,6 +92,9 @@ enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
 #define MSG_TEST_INPUT 11    /* test -> shell (testinput.c) */
 #define MSG_TEST_DONE 115    /* shell -> test: {i32 result} */
 #define MSG_DECOR_DARK 13    /* app -> shell: {own window id, 1 light | 2 dark}: the instance's colour scheme (its host settings), for the title bar */
+#define MSG_WINDOW_MODE 15   /* app -> shell: {own window id, WM_*} (mobile.c) */
+#define MSG_NAVBAR 16        /* app -> shell: {own window id, visible}: the app's navigation bar visibility (immersive mode) */
+enum { WM_AUTO = 0, WM_DESKTOP = 1, WM_MOBILE = 2 };
 #define MSG_ACTIVATE 12      /* `apklayer run` of a running app -> shell: {utf8 window title "\0" utf8 xdg-activation token or ""} (activation.c) */
 /* TEST_INPUT kinds: focus; key {evdev, down}; pointer {x, y, button (0 move, +code press, -code release)}; touch {action, x, y};
  * text {preedit} + utf8; resize {logical w, h}; scale {percent}: the compositor's preferred scale;
@@ -110,6 +119,7 @@ struct client {
     char attach_title[64];     /* MSG_ATTACH_INPUT waiting for a window of that title to appear */
     int attach_id;
     int dark;                  /* MSG_DECOR_DARK: 0 not said (the bar keeps the desktop's), 1 light, 2 dark */
+    int window_mode;           /* MSG_WINDOW_MODE before its window exists: WM_* + 1 of the windows it creates or takes over, 0 = not said */
 };
 struct window {
     struct client *client;
@@ -128,7 +138,15 @@ struct window {
     struct wp_fractional_scale_v1 *fscale;
     int text_input_enabled;
     int minimized;              /* set by our Minimize button, cleared when the window is activated again */
-    struct decor decor;         /* title bar subsurface */
+    struct decor decor;         /* title bar subsurface (desktop style only) */
+    int mode;                   /* WM_* asked for (WM_AUTO: by the session and the output, mobile.c) */
+    int mobile;                 /* mobile style: maximized, no title bar, a navigation bar over the content's bottom (navbar.c) */
+    struct navbar nav;
+    int nav_hidden;             /* the app hid the navigation bar (immersive) */
+    int nav_h;                  /* logical height of the navigation bar, 0 without one */
+    int dpi, told_dpi, told_nav;/* density the app is told (mobile.c), and what it was last told */
+    char label[64];             /* the app's name: the title bar's text */
+    int dark;                   /* the bars' colour scheme: the desktop's, then the instance's (window_set_dark) */
     int last_click_ms;          /* double click on the title bar = maximize */
     int bar_hover;              /* DECOR_* under the pointer, DECOR_NONE if none */
     struct wl_surface *surface;
@@ -150,6 +168,8 @@ struct window {
 /* who an input, state or size message about a window goes to, and under which window id */
 #define W_TARGET(w) ((w)->proxy ? (w)->proxy : (w)->client)
 #define W_ID(w) ((w)->proxy ? (w)->proxy_id : (w)->id)
+/* logical height of the title bar above the content: none in mobile style */
+#define W_BAR(w) ((w)->mobile ? 0 : DECOR_H)
 
 /* ---- state shared between the modules (defined in main.c) ---- */
 extern struct wl_display *display;
@@ -168,6 +188,7 @@ extern struct wp_fractional_scale_manager_v1 *fscale_mgr;
 extern int output_refresh_mhz;       /* the output's current mode (wl_output.mode), 60000 until known */
 extern int output_mode_w, output_mode_h;  /* logical size of the largest output, 0 until known (fallback without configure_bounds) */
 extern int output_scale;                  /* percent: the largest integer wl_output scale (fallback without wp_fractional_scale_v1) */
+extern int output_px_w, output_px_h, output_mm_w, output_mm_h;  /* the largest output's mode in pixels and its physical size (0: unknown) */
 extern struct window windows[MAX_WINDOWS];
 extern struct window *pointer_focus, *keyboard_focus;
 extern int debug_input;               /* APKLAYER_DEBUG_INPUT=1: log focus changes and key codes */
@@ -238,6 +259,16 @@ void touch_inject(struct window *w, int action, int x, int y);  /* touch.c */
 int text_input_inject(struct window *w, const char *text, int preedit);  /* textinput.c */
 void window_inject_configure(struct window *w, int cw, int ch, int activated);  /* geometry.c */
 void window_inject_maximize(struct window *w, int on, int gw, int gh);  /* geometry.c */
+/* mobile.c: window style (desktop or mobile) and density */
+int display_density(int scale);                  /* the dpi apps get at that scale (percent): physical bucket on a handheld, else 160 * scale */
+int display_mobile(void);                        /* WM_AUTO's answer: a mobile session or a phone-sized output */
+void window_set_mode(struct window *w, int mode); /* WM_*: (re)applies the style, before the first configure or live */
+void window_display_changed(struct window *w);   /* the outputs changed: style (auto), density and navigation bar follow */
+void window_nav_visible(struct window *w, int visible);  /* MSG_NAVBAR */
+void window_nav_action(struct window *w, int button);    /* a navigation bar button (NAV_*) was pressed */
+void window_send_back(struct window *w);         /* pointer.c: KEYCODE_BACK down and up */
+void window_minimize(struct window *w);          /* pointer.c: the app stops, then the compositor minimizes */
+int print_display_info(void);                    /* --display-info (cli/stack.cpp: ro.sf.lcd_density) */
 extern const struct wl_pointer_listener ptr_listener;  /* pointer.c */
 extern const struct wl_keyboard_listener kb_listener;  /* keyboard.c */
 extern const struct wl_registry_listener registry_listener;  /* registry.c */

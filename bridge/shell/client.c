@@ -122,6 +122,18 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         if (w) window_set_dark(w, c->dark == 2);
         break;
     }
+    case MSG_WINDOW_MODE: {  /* before its window: the style it is created with; later: a live switch */
+        if (len < 8 || v[1] < WM_AUTO || v[1] > WM_MOBILE) return;
+        c->window_mode = v[1] + 1;
+        struct window *w = window_find_input(c, v[0]);
+        if (w && w->mode != v[1]) window_set_mode(w, v[1]);
+        break;
+    }
+    case MSG_NAVBAR: {
+        struct window *w = len >= 8 ? window_find_input(c, v[0]) : NULL;
+        if (w) window_nav_visible(w, v[1]);
+        break;
+    }
     case MSG_ACTIVATE:
         activate_message(p, len);
         break;

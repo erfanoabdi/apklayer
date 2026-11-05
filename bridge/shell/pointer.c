@@ -14,11 +14,12 @@ static int ptr_x, ptr_y, ptr_down;   /* surface-local logical coordinates */
 /* ---- input ---- */
 
 static struct window *pointer_decor_win; /* window whose title bar the pointer is over, if any */
+static struct window *pointer_nav_win;   /* window whose navigation bar the pointer is over, if any */
 
 void pointer_forget_window(struct window *w)
 {
-    if (pointer_focus != w && pointer_decor_win != w) return;
-    pointer_focus = pointer_decor_win = NULL;
+    if (pointer_focus != w && pointer_decor_win != w && pointer_nav_win != w) return;
+    pointer_focus = pointer_decor_win = pointer_nav_win = NULL;
     ptr_down = 0;
     cursor_name_cur = NULL;
 }
@@ -42,19 +43,31 @@ static void ptr_enter(void *d, struct wl_pointer *p, uint32_t s, struct wl_surfa
     if (!cursor_dev && cursor_mgr && p) cursor_dev = wp_cursor_shape_manager_v1_get_pointer(cursor_mgr, p);
     struct window *w = window_for_surface(sf);
     ptr_x = wl_fixed_to_int(x); ptr_y = wl_fixed_to_int(y);
-    if (w && sf == w->decor.surface) { pointer_decor_win = w; pointer_focus = NULL; }
-    else { pointer_decor_win = NULL; pointer_focus = w; }
+    pointer_decor_win = pointer_nav_win = pointer_focus = NULL;
+    if (w && sf == w->decor.surface) pointer_decor_win = w;
+    else if (w && sf == w->nav.surface) pointer_nav_win = w;
+    else pointer_focus = w;
     if (debug_input) fprintf(stderr, "[shell] pointer enter %s at %d,%d\n",
-                             pointer_decor_win ? "title bar" : w ? "content" : "?", ptr_x, ptr_y);
+                             pointer_decor_win ? "title bar" : pointer_nav_win ? "navigation bar" : w ? "content" : "?", ptr_x, ptr_y);
     update_cursor();
 }
+/* A navigation bar button held (NAV_*) or let go (NAV_NONE): its ripple. */
+static void nav_press(struct window *w, int button)
+{
+    if (w->nav.pressed == button) return;
+    w->nav.pressed = button;
+    window_layout(w);
+    wl_surface_commit(w->surface);
+}
+
 static void ptr_leave(void *d, struct wl_pointer *p, uint32_t s, struct wl_surface *sf)
 {
     (void)d; (void)p; (void)s; (void)sf;
     if (ptr_down) { ptr_down = 0; send_input(pointer_focus, EV_UP, ptr_x, ptr_y); }
     if (pointer_decor_win) bar_set_hover(pointer_decor_win, DECOR_NONE);
+    if (pointer_nav_win) nav_press(pointer_nav_win, NAV_NONE);
     pointer_focus = NULL;
-    pointer_decor_win = NULL;
+    pointer_decor_win = pointer_nav_win = NULL;
 }
 static void ptr_motion(void *d, struct wl_pointer *p, uint32_t t, wl_fixed_t x, wl_fixed_t y)
 {
@@ -65,6 +78,7 @@ static void ptr_motion(void *d, struct wl_pointer *p, uint32_t t, wl_fixed_t x, 
         bar_set_hover(pointer_decor_win, decor_hit(&pointer_decor_win->decor, ptr_x, ptr_y));
         return;
     }
+    if (pointer_nav_win) return;
     if (ptr_down) send_input(pointer_focus, EV_MOVE, ptr_x, ptr_y);
     else if (pointer_focus) send_input(pointer_focus, EV_HOVER, ptr_x, ptr_y);
 }
@@ -80,7 +94,7 @@ static uint32_t resize_edge(const struct window *w, int x, int y)
     if (x >= lw - E) e |= XDG_TOPLEVEL_RESIZE_EDGE_RIGHT;
     if (y < E) e |= XDG_TOPLEVEL_RESIZE_EDGE_TOP;
     if (y >= lh - E) e |= XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM;
-    return w->maximized ? 0 : e;
+    return w->maximized || w->mobile ? 0 : e;
 }
 
 /* Cursor names (xcursor) for a resize edge; NULL = the default arrow. */
@@ -127,7 +141,7 @@ static void update_cursor(void)
 {
     struct window *w = pointer_decor_win ? pointer_decor_win : pointer_focus;
     uint32_t edge = 0;
-    if (w) edge = resize_edge(w, ptr_x, ptr_y + (pointer_decor_win ? 0 : DECOR_H));
+    if (w) edge = resize_edge(w, ptr_x, ptr_y + (pointer_decor_win ? 0 : W_BAR(w)));
     const char *name = edge_cursor_name(edge);
     if (name == cursor_name_cur) return; /* string literals: identity compare is enough */
     cursor_name_cur = name;
@@ -151,14 +165,6 @@ static void update_cursor(void)
     }
 }
 
-static void send_back(struct window *w)
-{
-    int32_t down[5] = { W_ID(w), 0, 4 /* KEYCODE_BACK */, 0, 0 };
-    int32_t up[5] = { W_ID(w), 1, 4, 0, 0 };
-    send_msg(W_TARGET(w), MSG_KEY, down, 5);
-    send_msg(W_TARGET(w), MSG_KEY, up, 5);
-}
-
 static void toggle_maximize(struct window *w)
 {
     if (w->maximized) xdg_toplevel_unset_maximized(w->toplevel);
@@ -171,12 +177,8 @@ static void bar_button(struct window *w, uint32_t serial, uint32_t time)
     uint32_t edge = resize_edge(w, ptr_x, ptr_y);
     if (edge) { xdg_toplevel_resize(w->toplevel, seat, serial, edge); return; }
     switch (hit) {
-    case DECOR_BACK: send_back(w); break;
-    case DECOR_MIN:
-        w->minimized = 1;
-        send_state(w); /* the app stops before the window disappears */
-        xdg_toplevel_set_minimized(w->toplevel);
-        break;
+    case DECOR_BACK: window_send_back(w); break;
+    case DECOR_MIN: window_minimize(w); break;
     case DECOR_MAX: toggle_maximize(w); break;
     case DECOR_CLOSE: {
         int32_t v[1] = { W_ID(w) };
@@ -197,6 +199,16 @@ static void ptr_button(void *d, struct wl_pointer *p, uint32_t s, uint32_t t, ui
     last_input_serial = s;
     int pressed = st == WL_POINTER_BUTTON_STATE_PRESSED;
     if (pressed && pointer_decor_win && b == 0x110) { bar_button(pointer_decor_win, s, t); return; }
+    if (pointer_nav_win) {  /* a navigation bar button acts when let go over it, as Android's */
+        struct window *w = pointer_nav_win;
+        int hit = navbar_hit(&w->nav, ptr_x);
+        if (b != 0x110) return;
+        if (pressed) { nav_press(w, hit == NAV_BAR ? NAV_NONE : hit); return; }
+        int held = w->nav.pressed;
+        nav_press(w, NAV_NONE);
+        if (held != NAV_NONE && held == hit) window_nav_action(w, held);
+        return;
+    }
     if (pressed && pointer_focus && (b == 0x110 || b == 0x111)) {
         if (kb_android_meta() & 0x02) {
             /* Alt+left-drag moves, Alt+right-drag resizes (also without the title bar). */
@@ -206,7 +218,7 @@ static void ptr_button(void *d, struct wl_pointer *p, uint32_t s, uint32_t t, ui
             return;
         }
         /* Content edges resize the window instead of reaching the app. */
-        uint32_t edge = b == 0x110 ? resize_edge(pointer_focus, ptr_x, ptr_y + DECOR_H) : 0;
+        uint32_t edge = b == 0x110 ? resize_edge(pointer_focus, ptr_x, ptr_y + W_BAR(pointer_focus)) : 0;
         if (edge) { xdg_toplevel_resize(pointer_focus->toplevel, seat, s, edge); return; }
     }
     if (b == 0x111 && pressed && pointer_focus) { /* right click = long press */
@@ -252,15 +264,16 @@ const struct wl_pointer_listener ptr_listener = {
     .axis = ptr_axis, .frame = ptr_frame, .axis_source = ptr_axis_source,
     .axis_stop = ptr_axis_stop, .axis_discrete = ptr_axis_discrete };
 
-/* Test input: the pointer over w at (x, y) (logical content pixels; y < 0 = the title bar), then a button: 0 none, +code press,
- * -code release (BTN_LEFT 0x110, BTN_RIGHT 0x111). Leave, enter, motion and button go through the wl_pointer handlers. */
+/* Test input: the pointer over w at (x, y) (logical content pixels; y < 0 = the title bar; in mobile style the bottom nav_h pixels are the
+ * navigation bar over the content), then a button: 0 none, +code press, -code release (BTN_LEFT 0x110, BTN_RIGHT 0x111). Leave, enter,
+ * motion and button go through the wl_pointer handlers. */
 void pointer_inject(struct window *w, int x, int y, int button)
 {
-    int bar = y < 0;
-    struct wl_surface *sf = bar ? w->decor.surface : w->surface;
-    wl_fixed_t fx = wl_fixed_from_int(x), fy = wl_fixed_from_int(bar ? y + DECOR_H : y);
-    if ((bar ? pointer_decor_win : pointer_focus) != w) {
-        if (pointer_focus || pointer_decor_win) ptr_leave(NULL, the_pointer, 0, NULL);
+    int bar = y < 0 && !w->mobile, nav = w->mobile && w->nav.shown && y >= w->cfg_h - w->nav_h;
+    struct wl_surface *sf = bar ? w->decor.surface : nav ? w->nav.surface : w->surface;
+    wl_fixed_t fx = wl_fixed_from_int(x), fy = wl_fixed_from_int(bar ? y + DECOR_H : nav ? y - (w->cfg_h - w->nav_h) : y);
+    if ((bar ? pointer_decor_win : nav ? pointer_nav_win : pointer_focus) != w) {
+        if (pointer_focus || pointer_decor_win || pointer_nav_win) ptr_leave(NULL, the_pointer, 0, NULL);
         ptr_enter(NULL, the_pointer, ptr_enter_serial, sf, fx, fy);
     }
     ptr_motion(NULL, the_pointer, 0, fx, fy);

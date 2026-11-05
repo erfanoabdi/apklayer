@@ -11,6 +11,7 @@ static void fit_size(const struct window *w, int lw, int lh, int *fw, int *fh)
 {
     int aw = w->bounds_w, ah = w->bounds_h;
     if (aw <= 0 || ah <= 0) { aw = output_mode_w; ah = output_mode_h > 0 ? output_mode_h - 32 : 0; }  /* no bounds: the output less a top bar */
+    if (w->mobile) { *fw = aw > 0 ? aw : lw; *fh = ah > 0 ? ah : lh; return; }  /* the compositor did not maximize it: the work area */
     int maxw = aw * 85 / 100, maxh = ah * 85 / 100 - DECOR_H;
     *fw = lw; *fh = lh;
     if (maxh > 0 && *fh > maxh) { *fw = *fw * maxh / *fh; *fh = maxh; }
@@ -20,12 +21,15 @@ static void fit_size(const struct window *w, int lw, int lh, int *fw, int *fh)
 /* Tells the app (and the display's owner, when an app took over the window) its logical content size and the scale to render at. */
 void window_send_configure(struct window *w)
 {
-    int s = window_scale(w);
+    int s = window_scale(w), nav = w->mobile ? (w->nav_h * s + 50) / 100 : 0;  /* the bar's height in the app's pixels */
     w->told_scale = s;
-    send_msg(W_TARGET(w), MSG_CONFIGURE, (int32_t[]){ W_ID(w), w->cfg_w, w->cfg_h, s }, 4);
-    if (w->proxy) send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, w->cfg_w, w->cfg_h, s }, 4);
-    fprintf(stderr, "[shell] %s: configure content %dx%d @%d%% (%dx%d px), title bar %d logical = %d px%s\n", w->client->pkg, w->cfg_w, w->cfg_h, s,
-            w->cfg_w * s / 100, w->cfg_h * s / 100, DECOR_H, (DECOR_H * s + 99) / 100, w->maximized ? ", maximized" : w->constrained ? ", tiled" : "");
+    w->told_dpi = w->dpi;
+    w->told_nav = w->nav_h;
+    send_msg(W_TARGET(w), MSG_CONFIGURE, (int32_t[]){ W_ID(w), w->cfg_w, w->cfg_h, s, w->dpi, nav }, 6);
+    if (w->proxy) send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, w->cfg_w, w->cfg_h, s, w->dpi, nav }, 6);
+    fprintf(stderr, "[shell] %s: configure content %dx%d @%d%% (%dx%d px), title bar %d logical = %d px%s, %s style, %d dpi, navigation bar %d logical = %d px\n",
+            w->client->pkg, w->cfg_w, w->cfg_h, s, w->cfg_w * s / 100, w->cfg_h * s / 100, W_BAR(w), (W_BAR(w) * s + 99) / 100,
+            w->maximized ? ", maximized" : w->constrained ? ", tiled" : "", w->mobile ? "mobile" : "desktop", w->dpi, w->nav_h, nav);
 }
 
 void window_layout(struct window *w)
@@ -35,8 +39,10 @@ void window_layout(struct window *w)
     else  /* without wp_viewporter only whole multiples of the logical size are shown at their size (every desktop compositor has it) */
         wl_surface_set_buffer_scale(w->surface, w->w % lw == 0 && w->h % lh == 0 && w->w / lw == w->h / lh ? w->w / lw : 1);
     w->scale = w->w * 100 / lw;
-    decor_update(&w->decor, lw, window_scale(w), w->maximized, w->bar_hover, w->activated);
-    xdg_surface_set_window_geometry(w->xdg_surface, 0, -DECOR_H, lw, lh + DECOR_H);
+    if (!w->mobile) decor_update(&w->decor, lw, window_scale(w), w->maximized, w->bar_hover, w->activated);
+    else if (w->nav_hidden || w->nav_h <= 0) navbar_hide(&w->nav);
+    else navbar_update(&w->nav, lh - w->nav_h, lw, w->nav_h, window_scale(w), w->dark, w->nav.pressed);
+    xdg_surface_set_window_geometry(w->xdg_surface, 0, -W_BAR(w), lw, lh + W_BAR(w));
 }
 
 /* What the last toplevel configure changed, applied at its xdg_surface configure (or right after an injected one). */
@@ -84,7 +90,7 @@ static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t c
     }
     int restored = w->constrained && !constrained, nw = 0, nh = 0;
     if (constrained && !w->constrained && w->cfg_w > 0) { w->float_w = w->cfg_w; w->float_h = w->cfg_h; }
-    if (cw > 0 && ch > DECOR_H && (constrained || resizing || restored || !w->configured)) { nw = cw; nh = ch - DECOR_H; }
+    if (cw > 0 && ch > W_BAR(w) && (constrained || resizing || restored || !w->configured)) { nw = cw; nh = ch - W_BAR(w); }
     else if (restored && w->float_w > 0) { nw = w->float_w; nh = w->float_h; }
     if (nw > 0 && (nw != w->cfg_w || nh != w->cfg_h)) { w->cfg_w = nw; w->cfg_h = nh; w->resized = w->configured; }
     int active_changed = activated != w->activated;
@@ -106,13 +112,11 @@ static void top_close(void *data, struct xdg_toplevel *t)
 }
 static const struct xdg_toplevel_listener top_listener = { .configure = top_configure, .close = top_close, .configure_bounds = top_bounds };
 
-/* The compositor prefers another scale for the window (pref: percent, 0 = follow the outputs): the bar redraws, the app re-renders. */
+/* The compositor prefers another scale for the window (pref: percent, 0 = follow the outputs): the bars redraw, the app re-renders. */
 void window_scale_changed(struct window *w, int pref)
 {
     if (pref) w->pref_scale = pref;
-    if (!w->configured || w->told_scale == window_scale(w)) return;
-    window_layout(w);
-    window_send_configure(w);
+    window_display_changed(w);  /* mobile.c: the density and the navigation bar's height follow the scale */
 }
 static void preferred_scale(void *d, struct wp_fractional_scale_v1 *f, uint32_t s)
 { (void)f; window_scale_changed(d, (int)((s * 100 + 60) / 120)); }  /* s: 120ths */
@@ -168,8 +172,8 @@ static void inject(struct window *w, int cw, int ch, int maximized, int resizing
 }
 void window_inject_configure(struct window *w, int cw, int ch, int activated)
 {
-    if (cw <= 0 || ch <= 0) inject(w, w->cfg_w, w->cfg_h + DECOR_H, w->maximized, 0, activated);
-    else inject(w, cw, ch + DECOR_H, w->maximized, 1, activated);
+    if (cw <= 0 || ch <= 0) inject(w, w->cfg_w, w->cfg_h + W_BAR(w), w->maximized, 0, activated);
+    else inject(w, cw, ch + W_BAR(w), w->maximized, 1, activated);
 }
 void window_inject_maximize(struct window *w, int on, int gw, int gh)
 {

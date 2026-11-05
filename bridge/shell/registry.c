@@ -30,28 +30,33 @@ static const struct wl_seat_listener seat_listener = { .capabilities = seat_caps
 struct wp_viewporter *viewporter;
 struct wp_fractional_scale_manager_v1 *fscale_mgr;
 #define MAX_OUTPUTS 8
-static struct out { struct wl_output *o; uint32_t name; int w, h, scale; } outs[MAX_OUTPUTS];
+static struct out { struct wl_output *o; uint32_t name; int w, h, scale, mm_w, mm_h; } outs[MAX_OUTPUTS];
+int output_px_w, output_px_h, output_mm_w, output_mm_h;
 
 static void outputs_changed(void)
 {
     int scale = 0, mw = 0, mh = 0;
+    output_px_w = output_px_h = output_mm_w = output_mm_h = 0;
     for (int i = 0; i < MAX_OUTPUTS; i++) {
         if (!outs[i].o) continue;
         int s = outs[i].scale > 0 ? outs[i].scale : 1;
         if (s * 100 > scale) scale = s * 100;
-        if (outs[i].w / s * (outs[i].h / s) > mw * mh) { mw = outs[i].w / s; mh = outs[i].h / s; }
+        if (outs[i].w / s * (outs[i].h / s) > mw * mh) {
+            mw = outs[i].w / s; mh = outs[i].h / s;
+            output_px_w = outs[i].w; output_px_h = outs[i].h; output_mm_w = outs[i].mm_w; output_mm_h = outs[i].mm_h;
+        }
     }
     output_scale = scale ? scale : 100;
     output_mode_w = mw;
     output_mode_h = mh;
-    for (int i = 0; i < MAX_WINDOWS; i++)   /* windows without a per-surface preferred scale follow the outputs */
-        if (windows[i].client && !windows[i].pref_scale) window_scale_changed(&windows[i], 0);
+    for (int i = 0; i < MAX_WINDOWS; i++)   /* style (auto), density, scale (without a per-surface preferred one) follow the outputs */
+        if (windows[i].client) window_display_changed(&windows[i]);
 }
 
 static void out_geometry(void *d, struct wl_output *o, int32_t x, int32_t y, int32_t pw,
                          int32_t ph, int32_t sub, const char *make, const char *model,
                          int32_t tf)
-{ (void)d; (void)o; (void)x; (void)y; (void)pw; (void)ph; (void)sub; (void)make; (void)model; (void)tf; }
+{ (void)o; (void)x; (void)y; (void)sub; (void)make; (void)model; (void)tf; ((struct out *)d)->mm_w = pw; ((struct out *)d)->mm_h = ph; }  /* mobile.c: density */
 static void out_mode(void *d, struct wl_output *o, uint32_t f, int32_t w, int32_t h,
                      int32_t refresh)
 {
@@ -111,7 +116,7 @@ static void registry(void *d, struct wl_registry *r, uint32_t name, const char *
     } else if (!strcmp(iface, wl_output_interface.name)) {
         for (int i = 0; i < MAX_OUTPUTS; i++)
             if (!outs[i].o) {
-                outs[i] = (struct out){ wl_registry_bind(r, name, &wl_output_interface, ver < 2 ? ver : 2), name, 0, 0, 1 }; /* scale/done */
+                outs[i] = (struct out){ wl_registry_bind(r, name, &wl_output_interface, ver < 2 ? ver : 2), name, 0, 0, 1, 0, 0 }; /* scale/done */
                 wl_output_add_listener(outs[i].o, &out_listener, &outs[i]);
                 break;
             }

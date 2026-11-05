@@ -3,6 +3,8 @@
 
 static struct window *touch_window;     /* window the current touch sequence started in */
 static int fingers;                     /* fingers currently down */
+static struct window *nav_window;       /* a finger on this window's navigation bar (mobile.c) */
+static int nav_finger;
 
 /* TOUCH {i32 id, i32 action(0 down,1 up,2 move,3 cancel), i32 finger, i32 x, i32 y} (pixels) */
 static void send_touch(int action, int finger, wl_fixed_t fx, wl_fixed_t fy)
@@ -21,6 +23,16 @@ static void t_down(void *d, struct wl_touch *t, uint32_t serial, uint32_t time,
     last_input_serial = serial;
     struct window *w = window_for_surface(sf);
     if (!w || sf == w->decor.surface) return; /* title bar touches are not forwarded */
+    if (sf == w->nav.surface) {  /* the navigation bar: its button acts when the finger lifts */
+        if (nav_window) return;
+        int hit = navbar_hit(&w->nav, wl_fixed_to_int(x));
+        nav_window = w;
+        nav_finger = id;
+        w->nav.pressed = hit == NAV_BAR ? NAV_NONE : hit;
+        window_layout(w);
+        wl_surface_commit(w->surface);
+        return;
+    }
     if (!touch_window) touch_window = w;
     if (w == touch_window) {
         fingers++;
@@ -30,15 +42,28 @@ static void t_down(void *d, struct wl_touch *t, uint32_t serial, uint32_t time,
 static void t_up(void *d, struct wl_touch *t, uint32_t serial, uint32_t time, int32_t id)
 {
     (void)d; (void)t; (void)serial; (void)time;
+    if (nav_window && id == nav_finger) {
+        struct window *w = nav_window;
+        int held = w->nav.pressed;
+        nav_window = NULL;
+        if (!w->client || !w->mobile) return;  /* the window went away or changed style meanwhile */
+        w->nav.pressed = NAV_NONE;
+        window_layout(w);
+        wl_surface_commit(w->surface);
+        if (held != NAV_NONE) window_nav_action(w, held);
+        return;
+    }
     send_touch(1, id, 0, 0);
     if (fingers > 0 && --fingers == 0) touch_window = NULL;
 }
 static void t_motion(void *d, struct wl_touch *t, uint32_t time, int32_t id, wl_fixed_t x, wl_fixed_t y)
-{ (void)d; (void)t; (void)time; send_touch(2, id, x, y); }
+{ (void)d; (void)t; (void)time; if (!(nav_window && id == nav_finger)) send_touch(2, id, x, y); }
 static void t_frame(void *d, struct wl_touch *t) { (void)d; (void)t; }
 static void t_cancel(void *d, struct wl_touch *t)
 {
     (void)d; (void)t;
+    if (nav_window && nav_window->client && nav_window->mobile) { nav_window->nav.pressed = NAV_NONE; window_layout(nav_window); wl_surface_commit(nav_window->surface); }
+    nav_window = NULL;
     send_touch(3, 0, 0, 0);
     touch_window = NULL;
     fingers = 0;
@@ -52,11 +77,13 @@ const struct wl_touch_listener touch_listener = {
     .down = t_down, .up = t_up, .motion = t_motion, .frame = t_frame, .cancel = t_cancel,
     .shape = t_shape, .orientation = t_orientation };
 
-/* Test input: one finger (id 0) on w's content, through the wl_touch handlers. action 0 down, 1 up, 2 move, 3 cancel. */
+/* Test input: one finger (id 0) on w's content (in mobile style its bottom nav_h pixels: the navigation bar), through the wl_touch handlers.
+ * action 0 down, 1 up, 2 move, 3 cancel. */
 void touch_inject(struct window *w, int action, int x, int y)
 {
-    wl_fixed_t fx = wl_fixed_from_int(x), fy = wl_fixed_from_int(y);
-    if (action == 0) t_down(NULL, NULL, last_input_serial, 0, w->surface, 0, fx, fy);
+    int nav = w->mobile && w->nav.shown && y >= w->cfg_h - w->nav_h;
+    wl_fixed_t fx = wl_fixed_from_int(x), fy = wl_fixed_from_int(nav ? y - (w->cfg_h - w->nav_h) : y);
+    if (action == 0) t_down(NULL, NULL, last_input_serial, 0, nav ? w->nav.surface : w->surface, 0, fx, fy);
     else if (action == 1) t_up(NULL, NULL, last_input_serial, 0, 0);
     else if (action == 2) t_motion(NULL, NULL, 0, 0, fx, fy);
     else t_cancel(NULL, NULL);

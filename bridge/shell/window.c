@@ -10,8 +10,8 @@
 struct window *window_for_surface(struct wl_surface *s)
 {
     for (int i = 0; i < MAX_WINDOWS; i++)
-        if (windows[i].client && (windows[i].surface == s
-                                  || (windows[i].decor.surface && windows[i].decor.surface == s)))
+        if (windows[i].client && (windows[i].surface == s || (windows[i].decor.surface && windows[i].decor.surface == s)
+                                  || (windows[i].nav.surface && windows[i].nav.surface == s)))
             return &windows[i];
     return NULL;
 }
@@ -150,20 +150,21 @@ void window_create(struct client *c, int id, int width, int height, const char *
         return;
     }
     w->xdg_surface = xdg_wm_base_get_xdg_surface(wm_base, w->surface);
-    decor_create(&w->decor, w->surface);
     w->bar_hover = DECOR_NONE;
+    w->nav.pressed = NAV_NONE;
+    w->dark = decor_dark();
     const char *package = appinfo_package(title[0] ? title : c->pkg);
     char label[256];
     appinfo_label(package, label, sizeof label);   /* apklayer patch: the window carries the app's real name, and the app id is its package (the desktop entry's StartupWMClass) */
-    decor_set_title(&w->decor, label);
+    snprintf(w->label, sizeof w->label, "%s", label);
     w->toplevel = xdg_surface_get_toplevel(w->xdg_surface);
     window_geometry_init(w);
     snprintf(w->title, sizeof w->title, "%s", title);
     xdg_toplevel_set_title(w->toplevel, label);
     xdg_toplevel_set_app_id(w->toplevel, package);
-    xdg_toplevel_set_min_size(w->toplevel, 160, 160 + DECOR_H);  /* below the smallest fitted size (geometry.c), or the compositor restores a larger one */
+    window_set_mode(w, c->window_mode ? c->window_mode - 1 : WM_AUTO);  /* mobile.c: title bar or navigation bar, min size, maximized */
     wl_surface_commit(w->surface);  /* no buffer: asks for the first configure, whose size and bounds decide the window's (geometry.c) */
-    fprintf(stderr, "[shell] %s: window %d %dx%d \"%s\"\n", c->pkg, id, width, height, title);
+    fprintf(stderr, "[shell] %s: window %d %dx%d \"%s\", %s style\n", c->pkg, id, width, height, title, w->mobile ? "mobile" : "desktop");
     for (int i = 0; i < MAX_CLIENTS; i++)   /* an app that asked for a window of this title before it existed */
         if (clients[i].fd >= 0 && clients[i].attach_title[0] && !strcmp(clients[i].attach_title, w->title))
             window_attach_input(&clients[i], clients[i].attach_id, w->title);
@@ -183,6 +184,7 @@ void window_attach_input(struct client *c, int own_id, const char *title)
         clipboard_push(w);
         fprintf(stderr, "[shell] %s takes the input of window \"%s\" (as its window %d)\n", c->pkg, title, own_id);
         if (c->dark) window_set_dark(w, c->dark == 2);
+        if (c->window_mode && w->mode != c->window_mode - 1) window_set_mode(w, c->window_mode - 1);
         if (w->configured) {  // its size, scale and state, now that someone listens
             window_send_configure(w);
             send_state(w);
@@ -194,11 +196,12 @@ void window_attach_input(struct client *c, int own_id, const char *title)
 /* The title bar follows the colour scheme of the app's instance (MSG_DECOR_DARK), redrawn at once. */
 void window_set_dark(struct window *w, int dark)
 {
-    if (w->decor.dark == dark) return;
-    w->decor.dark = dark;
+    if (w->dark == dark) return;
+    w->dark = w->decor.dark = dark;
     w->decor.focused = -1;  /* force the redraw */
-    fprintf(stderr, "[shell] %s: title bar %s\n", w->title, dark ? "dark" : "light");
+    fprintf(stderr, "[shell] %s: %s %s\n", w->title, w->mobile ? "navigation bar" : "title bar", dark ? "dark" : "light");
     if (w->decor.lw > 0) decor_update(&w->decor, w->decor.lw, window_scale(w), w->maximized, w->bar_hover, w->activated);
+    if (w->mobile && w->configured) { window_layout(w); wl_surface_commit(w->surface); }
 }
 
 void window_drop_proxy(struct client *c)
@@ -219,6 +222,7 @@ void window_destroy(struct window *w)
     if (w->initial_buffer) wl_buffer_destroy(w->initial_buffer);
     window_dmabuf_destroy(w);
     decor_destroy(&w->decor);
+    navbar_destroy(&w->nav);
     window_geometry_destroy(w);
     xdg_toplevel_destroy(w->toplevel);
     xdg_surface_destroy(w->xdg_surface);
@@ -238,3 +242,20 @@ void window_frame(struct window *w, int buf, const int32_t *damage)
     show(w, buf, damage);
 }
 
+
+/* Android's Back: KEYCODE_BACK down and up to the app (the title bar's and the navigation bar's Back). */
+void window_send_back(struct window *w)
+{
+    int32_t down[5] = { W_ID(w), 0, 4 /* KEYCODE_BACK */, 0, 0 };
+    int32_t up[5] = { W_ID(w), 1, 4, 0, 0 };
+    send_msg(W_TARGET(w), MSG_KEY, down, 5);
+    send_msg(W_TARGET(w), MSG_KEY, up, 5);
+}
+
+/* Minimize (the title bar's button, the navigation bar's Home): the app stops before the window disappears. */
+void window_minimize(struct window *w)
+{
+    w->minimized = 1;
+    send_state(w);
+    xdg_toplevel_set_minimized(w->toplevel);
+}
