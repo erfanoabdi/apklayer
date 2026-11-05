@@ -45,6 +45,17 @@ int apklayer_display_request_vsync(struct apklayer_display *d);
  * calls just show the slot. damage in buffer pixels (all zero = whole buffer). The buffer stays the caller's: keep it unchanged
  * until released() for that slot. Returns 0 or -errno. */
 int apklayer_display_present(struct apklayer_display *d, int slot, const struct apklayer_gfx_buffer *buf, int32_t damage[4]);
+/* A device gralloc buffer (Halium: the device's own allocator, docs/HALIUM.md): its native_handle's fds and ints, shown through the
+ * compositor's android_wlegl (the shell's wlegl.c). Slots, damage and release as for apklayer_display_present. */
+struct apklayer_native_buffer {
+    uint32_t width, height, stride, format;  /* stride in pixels; format: the Android HAL pixel format */
+    uint64_t usage;                          /* gralloc usage (the low 32 bits travel) */
+    int num_fds;
+    const int *fds;
+    int num_ints;
+    const int *ints;
+};
+int apklayer_display_present_native(struct apklayer_display *d, int slot, const struct apklayer_native_buffer *buf, int32_t damage[4]);
 void apklayer_display_invalidate_slot(struct apklayer_display *d, int slot);
 
 #ifdef __cplusplus

@@ -26,6 +26,9 @@ const Domain kDomains[] = {
      "android.hardware.vibrator.IVibrator android.hardware.vibrator.IVibratorManager android.hardware.vibrator"},
     {"camera", "libapklayer_camera.so", "aosp/hals/camera/manifest.xml",
      "android.hardware.camera.provider.ICameraProvider android.hardware.camera.provider"},
+    // the stack's own graphics (allocator, mapper, EGL on the host's GPU) need no front here; "device" is a Halium device's gralloc
+    // (allocator@4.0 through the host context, the passthrough mapper@4.0) and its GPU driver (docs/HALIUM.md)
+    {"graphics", nullptr, nullptr, "android.hardware.graphics.allocator android.hardware.graphics.mapper"},
 };
 
 const Domain* findDomain(const std::string& name) {
@@ -189,6 +192,7 @@ std::vector<ProviderService> providerServices(const Layout& l, const Instance& i
         if (!d) { fprintf(stderr, "providers: no domain %s\n", c.domain.c_str()); continue; }
         if (c.provider == "device") continue;  // the device's own HAL: no front here (writeHostHals lists it)
         if (c.provider != "apklayer") { fprintf(stderr, "providers: %s: no provider %s\n", d->name, c.provider.c_str()); continue; }
+        if (!d->front) continue;  // graphics: the stack's own
         std::string backend = backendLib(l, c.domain, c.backend);
         if (!exists(join(l.androidLibs, d->front)) || backend.empty()) {
             fprintf(stderr, "providers: %s: %s or the plugin libapklayer-%s-%s.so is not staged\n", d->name, d->front, d->name, c.backend.c_str());
@@ -204,6 +208,12 @@ std::vector<ProviderService> providerServices(const Layout& l, const Instance& i
 }
 
 std::string hostHalsFile(const Instance& inst) { return join(inst.dataDir, "apklayer/host_hals.conf"); }
+
+bool deviceGraphics(const Instance& inst) {
+    for (const ProviderConfig& c : readProviders(providersFile(inst)))
+        if (c.domain == "graphics" && c.provider == "device") return true;
+    return false;
+}
 
 bool writeHostHals(const Instance& inst) {
     std::string text;
@@ -251,7 +261,7 @@ int providersCommand(const Layout& l, const Instance& inst, const std::vector<st
     const std::string& action = args[0];
     if (!((action == "set" && args.size() >= 3) || (action == "unset" && args.size() == 2)))
         die("providers [set <domain> <backend> [key=value...] | set <domain> device | unset <domain>]");
-    if (!findDomain(args[1])) die("no hardware domain " + args[1] + " (sensors, gnss, vibrator, camera)");
+    if (!findDomain(args[1])) die("no hardware domain " + args[1] + " (sensors, gnss, vibrator, camera, graphics)");
     std::vector<ProviderConfig> kept;
     for (const ProviderConfig& d : domains) if (d.domain != args[1]) kept.push_back(d);
     if (action == "set" && args[2] == "device") {  // the device's own HAL through the host binder contexts (a Halium device)

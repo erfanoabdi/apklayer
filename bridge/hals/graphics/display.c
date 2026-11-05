@@ -17,6 +17,7 @@
 #define MSG_WINDOW_CREATE 2
 #define MSG_VSYNC_REQUEST 7
 #define MSG_DMABUF_FRAME 8
+#define MSG_GRALLOC_FRAME 14
 #define MSG_VSYNC 113
 #define MSG_DISPLAY 112
 #define MSG_DMABUF_RELEASE 114
@@ -40,13 +41,13 @@ struct apklayer_display {
 
 static int send_msg(struct apklayer_display *d, uint32_t type, const void *payload, uint32_t len, const int *fds, int nfds)
 {
-    uint8_t buf[8 + 256];
-    if (len > 256) return -EMSGSIZE;
+    uint8_t buf[8 + 1024];  /* GRALLOC_FRAME carries a native_handle's ints */
+    if (len > 1024 || nfds > 8) return -EMSGSIZE;
     memcpy(buf, &type, 4);
     memcpy(buf + 4, &len, 4);
     if (len) memcpy(buf + 8, payload, len);
     struct iovec iov = { buf, 8 + len };
-    char control[CMSG_SPACE(sizeof(int) * 4)] = { 0 };
+    char control[CMSG_SPACE(sizeof(int) * 8)] = { 0 };
     struct msghdr mh = { .msg_iov = &iov, .msg_iovlen = 1 };
     if (nfds > 0) {
         mh.msg_control = control;
@@ -184,6 +185,29 @@ int apklayer_display_request_vsync(struct apklayer_display *d)
 {
     int32_t id = WINDOW_ID;
     return send_msg(d, MSG_VSYNC_REQUEST, &id, 4, NULL, 0);
+}
+
+int apklayer_display_present_native(struct apklayer_display *d, int slot, const struct apklayer_native_buffer *buf, int32_t damage[4])
+{
+    if (slot < 0 || slot >= SLOTS || buf->num_fds < 0 || buf->num_fds > 8 || buf->num_ints < 0 || buf->num_ints > 240) return -EINVAL;
+    if (d->headless) return 0;
+    int32_t m[13 + 240] = { 0 };
+    int first = !d->sent[slot];
+    m[0] = WINDOW_ID;
+    m[1] = slot;
+    m[2] = (int32_t)buf->width;
+    m[3] = (int32_t)buf->height;
+    m[4] = (int32_t)buf->stride;
+    m[5] = (int32_t)buf->format;
+    m[6] = (int32_t)(uint32_t)buf->usage;
+    m[7] = first ? buf->num_fds : 0;
+    m[8] = first ? buf->num_ints : 0;
+    if (damage && damage[2] && damage[3]) memcpy(m + 9, damage, 16);
+    else { m[11] = (int32_t)buf->width; m[12] = (int32_t)buf->height; }
+    if (first) memcpy(m + 13, buf->ints, sizeof(int32_t) * (size_t)buf->num_ints);
+    int r = send_msg(d, MSG_GRALLOC_FRAME, m, (uint32_t)(13 + m[8]) * 4, first ? buf->fds : NULL, m[7]);
+    if (r == 0) d->sent[slot] = 1;
+    return r;
 }
 
 void apklayer_display_invalidate_slot(struct apklayer_display *d, int slot)

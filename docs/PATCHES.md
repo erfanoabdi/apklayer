@@ -80,6 +80,7 @@ are headers meson.build adds for old toolchains, not patches.
 | frameworks/native/0003-vulkan-host-dispatch | libvulkan keeps the host loader dispatch pointers |
 | frameworks/native/0004-servicemanager-surfaceflinger-as-libraries | servicemanager and SurfaceFlinger as shared libraries |
 | frameworks/native/0005-libbinder-work-source-calling-uid | an app JVM's caller uid is the work source of its request header |
+| frameworks/native/0007-libbinder-own-uid-is-system | a caller with the stack's own uid counts as the system uid 1000 (Ubuntu Touch's phablet is uid 32011, an app uid to Android; Waydroid 0009 by the process uid) |
 | hardware/interfaces/0001-audio-effect-factory-filegroup | audio: the effect factory as a public filegroup |
 | libnativehelper/0001-file-descriptor-hotspot | file descriptor helpers on HotSpot |
 
@@ -121,8 +122,10 @@ Behaviour that differs from Android or from stock Robolectric without editing up
 - bionic_translation 0037-linker-no-host-system-lib: no `/vendor/lib`, `/system/lib` default search paths (on Halium they are the device's 32-bit Android).
 - frameworks/av 0003-camera-trust-instance-uid: cameraserver trusts its own Linux uid to name a client (Camera1's native connect carries the kernel uid beside an attribution with the app's uid).
 - Vendored Goldfish `aosp/hals/camera/goldfish/HwCamera.cpp` (marked "apklayer patch"): the JPEG blob header is written before unlock (our mapper unmaps on unlock; the provider crashed on every still).
-- system/libhwbinder 0001-host-hwbinder-context: a host hwbinder context (`/dev/host_hwbinder`, mapped by paths.c), no TXN_SECURITY_CTX (Waydroid libhwbinder 0001/0002). Rebuild: `m libhidlbase`.
+- system/libhwbinder 0001-host-hwbinder-context: a host hwbinder context (`/dev/host_hwbinder`, mapped by paths.c), no TXN_SECURITY_CTX (Waydroid libhwbinder 0001/0002). A released host proxy is expunged from the host context (IPCThreadState::expungeHandle is static and local). Rebuild: `m libhidlbase`.
 - system/libhidl 0001-host-hals: `getService` asks the host's hwservicemanager first for names in `host_hals.conf` (Waydroid libhidl 0001-0005, 0007, 0008). Rebuild: `m libhidlbase`.
+- system/libhidl 0002-host-hals-passthrough: a listed HAL the host does not serve (the device's gralloc mapper) is loaded as passthrough from /vendor; the local hwservicemanager is never asked. Rebuild: `m libhidlbase`.
 - bionic_translation 0038-pthread-attr-bionic-fields: pthread attrs keep bionic's stack_size and guard_size filled (the native bridge's proxy pthread_create sizes the guest stack from them). binary_translation 0001 (amended): the guest linker's host pthread is the thread's own bionic record on a glibc host.
+- bionic_translation 0039-linker-vendor-namespace: with BIONIC_VENDOR_LD_LIBRARY_PATH, a Halium device's vendor libraries (GPU driver, passthrough mapper) get their own copies of what they need from /vendor and the device's VNDK apex; the LLNDK and libc/libm/libdl stay shared. Unset: unchanged.
 - hardware/interfaces 0004-gnss-no-mock-fix-from-a-subclass: `Gnss::reportsMockLocation()` (virtual, true); a subclass without a fix reports none.
 - robolectric 0018-location-manager-requests-listener: ProviderEntry tells `LocationRequests` (runtime/patches) when a provider's first request comes and its last goes.

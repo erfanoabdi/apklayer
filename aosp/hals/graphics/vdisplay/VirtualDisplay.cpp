@@ -84,11 +84,8 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         if (mConsumer->acquireBuffer(&item, 0) != OK) return;
         if (item.mFence != nullptr) item.mFence->waitForever("apklayer-vdisplay");  // the GPU finished composing it
         HandleData d;
-        if (item.mGraphicBuffer == nullptr || !decode(item.mGraphicBuffer->handle, &d)) {
-            ALOGE("a frame whose buffer is not one of ours");
-            mConsumer->releaseBuffer(item);
-            return;
-        }
+        if (item.mGraphicBuffer == nullptr) { mConsumer->releaseBuffer(item); return; }
+        if (!decode(item.mGraphicBuffer->handle, &d)) return presentDevice(item);
         // An old-size frame can arrive after configure. Never let it change the
         // shell's geometry back to the size we just left.
         if (d.width != mWidth || d.height != mHeight) {
@@ -113,6 +110,23 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         int32_t damage[4] = {0, 0, 0, 0};
         if (apklayer_display_present(mDisplay, slot, &b, damage) != 0) { mConsumer->releaseBuffer(item); return; }
         if (mHeld[slot].mGraphicBuffer != nullptr) mConsumer->releaseBuffer(mHeld[slot]);  // the one it replaces on that slot
+        mHeld[slot] = item;
+        mBusy[slot] = true;
+    }
+
+    // A buffer of the device's own gralloc (a Halium device, docs/HALIUM.md: graphics provider "device"): its native_handle goes to the
+    // shell as it is, which hands it to the compositor through android_wlegl.
+    void presentDevice(BufferItem& item) {
+        const sp<GraphicBuffer>& gb = item.mGraphicBuffer;
+        if (gb->getWidth() != mWidth || gb->getHeight() != mHeight) { mConsumer->releaseBuffer(item); return; }
+        int slot = slotFor(gb->getId());
+        if (slot < 0) { mConsumer->releaseBuffer(item); return; }
+        const native_handle_t* h = gb->handle;
+        apklayer_native_buffer nb{gb->getWidth(), gb->getHeight(), gb->getStride(), static_cast<uint32_t>(gb->getPixelFormat()),
+                                  gb->getUsage(), h->numFds, h->data, h->numInts, h->data + h->numFds};
+        int32_t damage[4] = {0, 0, 0, 0};
+        if (apklayer_display_present_native(mDisplay, slot, &nb, damage) != 0) { mConsumer->releaseBuffer(item); return; }
+        if (mHeld[slot].mGraphicBuffer != nullptr) mConsumer->releaseBuffer(mHeld[slot]);
         mHeld[slot] = item;
         mBusy[slot] = true;
     }

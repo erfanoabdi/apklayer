@@ -1,0 +1,192 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Thu, 5 Nov 2026 00:00:00 +0000
+Subject: [PATCH] linker: a vendor (sphal) namespace for a Halium device's libraries
+
+apklayer patch (docs/HALIUM.md, plan "hardware providers" item 2). A Halium device's vendor libraries (the GPU driver
+/vendor/lib64/egl/libGLES_mali.so, the passthrough gralloc mapper in /vendor/lib64/hw) need the libraries of the vendor's own
+Android version (VNDK: MediaTek's libgralloc_extra needs android::CallStack from Android 12's libutils, libion), which are not
+apklayer's Android 16 ones. As 0026's app namespace: BIONIC_VENDOR_LD_LIBRARY_PATH (e.g. /vendor/lib64:/vendor/lib64/egl:
+/vendor/lib64/hw:/apex/com.android.vndk.v31/lib64) is the vendor namespace; a library loaded from there (an absolute path in it, or
+dlopened or needed by a vendor library) is a separate copy found there first; what is not there (the LLNDK: liblog,
+libnativewindow, libEGL...; libc, libm, libdl through the cfg) is the system's, shared. Without the variable (desktops) nothing
+changes. The requester's namespace reaches apkenv_find_library through apkenv_want_vendor (set just before each lookup, under
+the dl lock), so no signature changes.
+
+diff --git a/linker/dlfcn.c b/linker/dlfcn.c
+--- a/linker/dlfcn.c
++++ b/linker/dlfcn.c
+@@ -75,6 +75,7 @@
+ 	pthread_mutex_lock(&apkenv_dl_lock);
+ 	void *glibc_handle = NULL;
+ 	soinfo *from = apkenv_find_containing_library(caller);
++	apkenv_want_vendor = from && from->vendor_ns;  /* apklayer patch: a vendor library's dlopen looks in the vendor namespace */
+ 	ret = apkenv_find_library(filename, from && from->app_ns, true, flag, &glibc_handle); // flag only used for glibc dlopen
+ 
+ 	if (ret) {
+@@ -422,5 +423,9 @@
+ 	// we don't currently do said check
+ 	if (bionic_ld_library_path) {
+ 		dl_parse_library_path(bionic_ld_library_path, ":");
+-	} // it might make sense to not specify the env, for example translation layer code calls dl_parse_library_path directly with the app's lib dir
++	}
++	const char *vendor = getenv("BIONIC_VENDOR_LD_LIBRARY_PATH");  /* apklayer patch: a Halium device's vendor namespace */
++	if (vendor)
++		dl_parse_vendor_library_path(vendor, ":");
++	// it might make sense to not specify the env, for example translation layer code calls dl_parse_library_path directly with the app's lib dir
+ }
+diff --git a/linker/dlfcn.h b/linker/dlfcn.h
+--- a/linker/dlfcn.h
++++ b/linker/dlfcn.h
+@@ -12,6 +12,7 @@
+ 
+ void dl_parse_library_path(const char *path, char *delim);
+ void dl_parse_app_library_path(const char *path, char *delim);
++void dl_parse_vendor_library_path(const char *path, char *delim);
+ void *bionic_dlopen(const char *filename, int flag);
+ const char *bionic_dlerror(void);
+ void *bionic_dlsym(void *handle, const char *symbol);
+diff --git a/linker/linker.c b/linker/linker.c
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -155,6 +155,13 @@
+ /* apklayer patch: the app's library directories, its own namespace (Android's classloader namespace); apkenv_ldpaths are the system's */
+ static char apkenv_app_ldpaths_buf[LDPATH_BUFSIZE];
+ static const char *apkenv_app_ldpaths[LDPATH_MAX + 1];
++/* apklayer patch: the vendor (sphal) namespace of a Halium device (BIONIC_VENDOR_LD_LIBRARY_PATH: /vendor/lib64..., the VNDK apex of
++ * the vendor's Android version): a library loaded from there, and what such a library needs from there, are separate copies (the
++ * vendor's libutils next to ours); what is not there (the LLNDK: liblog, libnativewindow, libEGL...; libc, libm, libdl) is the
++ * system's, shared. No such path (desktops): no vendor namespace. */
++static char apkenv_vendor_ldpaths_buf[LDPATH_BUFSIZE];
++static const char *apkenv_vendor_ldpaths[LDPATH_MAX + 1];
++bool apkenv_want_vendor;
+ 
+ static const char *apkenv_ldpreload_names[LDPRELOAD_MAX + 1];
+ 
+@@ -1438,10 +1445,10 @@
+ #endif
+ 
+ static soinfo *
+-apkenv_load_library(const char *name, const bool app, const bool try_glibc, int glibc_flag, void **_glibc_handle)
++apkenv_load_library(const char *name, const bool app, const bool vendor, const bool try_glibc, int glibc_flag, void **_glibc_handle)
+ {
+ 	char fullpath[512];
+-	int fd = apkenv_open_library(name, fullpath, app ? apkenv_app_ldpaths : apkenv_ldpaths, !app);
++	int fd = apkenv_open_library(name, fullpath, vendor ? apkenv_vendor_ldpaths : app ? apkenv_app_ldpaths : apkenv_ldpaths, !app && !vendor);
+ 	int cnt;
+ 	size_t ext_sz;
+ 	size_t req_base;
+@@ -1449,8 +1456,8 @@
+ 	soinfo *si = NULL;
+ 	ElfW(Ehdr) * hdr;
+ 
+-	if (fd == -1 && app)
+-		return NULL; /* not the app's: the system namespace is searched next */
++	if (fd == -1 && (app || vendor))
++		return NULL; /* not the app's (or the vendor's): the system namespace is searched next */
+ 	if (fd == -1) {
+ 		if (try_glibc) {
+ 			if (!(glibc_flag & (RTLD_LAZY | RTLD_NOW)))
+@@ -1515,6 +1522,7 @@
+ 		goto fail;
+ 
+ 	si->app_ns = app;
++	si->vendor_ns = vendor;
+ 	/* apkenv */
+ 	strncpy(si->fullpath, fullpath, sizeof(si->fullpath));
+ 	si->fullpath[sizeof(si->fullpath) - 1] = 0;
+@@ -1576,14 +1584,14 @@
+ 
+ extern struct override_map lib_override_map;
+ 
+-/* apklayer patch: is the absolute name in one of the app's library directories? */
+-static bool apkenv_in_app_dir(const char *name)
++/* apklayer patch: is the absolute name in one of these library directories (the app's, the vendor's)? */
++static bool apkenv_in_dirs(const char *name, const char **paths)
+ {
+ 	if (name[0] != '/')
+ 		return false;
+ 	char *tmp = strdup(name), *dir = realpath(dirname(tmp), NULL);
+ 	bool in = false;
+-	for (const char **path = apkenv_app_ldpaths; dir && *path && !in; path++) {
++	for (const char **path = paths; dir && *path && !in; path++) {
+ 		char *real = realpath(*path, NULL);
+ 		in = real && !strcmp(real, dir);
+ 		free(real);
+@@ -1628,11 +1636,14 @@
+ 
+ 	bname = strrchr(name, '/');
+ 	bname = bname ? bname + 1 : name;
+-	app = app || apkenv_in_app_dir(name);
++	app = app || apkenv_in_dirs(name, apkenv_app_ldpaths);
++	/* apklayer patch: a vendor library's needs and dlopens, and a library in a vendor directory, look in the vendor namespace first */
++	bool vendor = apkenv_vendor_ldpaths[0] && !app && (apkenv_want_vendor || apkenv_in_dirs(name, apkenv_vendor_ldpaths));
++	apkenv_want_vendor = false;
+ 
+ again:
+ 	for (si = apkenv_solist; si != 0; si = si->next) {
+-		if (!strcmp(bname, si->name) && si->app_ns == app) {
++		if (!strcmp(bname, si->name) && si->app_ns == app && si->vendor_ns == vendor) {
+ 			if (si->flags & FLAG_ERROR) {
+ 				DL_ERR("%5d '%s' failed to load previously", apkenv_pid, bname);
+ 				return NULL;
+@@ -1645,8 +1656,8 @@
+ 	}
+ 
+ 	TRACE("[ %5d '%s' has not been loaded yet.  Locating...]\n", apkenv_pid, name);
+-	if (!(si = apkenv_load_library(name, app, try_glibc, glibc_flag, glibc_handle)) && app) {
+-		app = false;
++	if (!(si = apkenv_load_library(name, app, vendor, try_glibc && !vendor, glibc_flag, glibc_handle)) && (app || vendor)) {
++		app = vendor = false;
+ 		goto again;
+ 	}
+ 	if (!si || !(si = apkenv_init_library(si)))
+@@ -2911,13 +2922,16 @@
+ 				char full[512];
+ 				if (dir[0] == '/' && !memchr(dir, '$', n) && n + strlen(needed) + 2 <= sizeof(full)) {
+ 					snprintf(full, sizeof(full), "%.*s/%s", (int)n, dir, needed);
++					apkenv_want_vendor = si->vendor_ns;
+ 					lsi = apkenv_find_library(full, si->app_ns, false, RTLD_NOW, NULL);
+ 				}
+ 				dir += n + (dir[n] == ':');
+ 			}
+ 			// if (get_builtin_lib_handle(si->strtab + d->d_un.d_val) == NULL)
+-			if (!lsi)
++			if (!lsi) {
++				apkenv_want_vendor = si->vendor_ns;
+ 				lsi = apkenv_find_library(needed, si->app_ns, true, RTLD_NOW, NULL);
++			}
+ 			if (lsi == 0) {
+ 				/**
+ 				 * XXX Dirty Hack Alarm --thp XXX
+@@ -3088,4 +3102,10 @@
+ void dl_parse_app_library_path(const char *path, char *delim)
+ {
+ 	apkenv_parse_paths(path, delim, apkenv_app_ldpaths_buf, apkenv_app_ldpaths);
++}
++
++/* apklayer patch: the directories of the vendor namespace */
++void dl_parse_vendor_library_path(const char *path, char *delim)
++{
++	apkenv_parse_paths(path, delim, apkenv_vendor_ldpaths_buf, apkenv_vendor_ldpaths);
+ }
+diff --git a/linker/linker.h b/linker/linker.h
+--- a/linker/linker.h
++++ b/linker/linker.h
+@@ -245,6 +245,7 @@
+ 
+ 	struct tls_index_list *tls_index_list;
+ 	bool app_ns; /* apklayer patch: in the app's namespace */
++	bool vendor_ns; /* apklayer patch: in the vendor (sphal) namespace */
+ };
+ 
+ extern soinfo apkenv_libdl_info;
+@@ -274,6 +275,8 @@
+ #endif
+ 
+ soinfo *apkenv_find_library(const char *name, bool app, const bool try_glibc, int glibc_flags, void **glibc_handle);
++/* apklayer patch: the vendor namespace a following apkenv_find_library looks in first (the requester's), see linker.c */
++extern bool apkenv_want_vendor;
+ unsigned apkenv_unload_library(soinfo *si);
+ ElfW(Sym) *apkenv_lookup_in_library(soinfo **found, const char *name);
+ ElfW(Sym) *apkenv_lookup(const char *name, soinfo **found, soinfo *start);

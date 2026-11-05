@@ -6,6 +6,35 @@ cc_library_shared {
     cflags: ["-Wall", "-Werror", "-Wno-main"],
 }
 
+// The device's gralloc shown through the shell (docs/HALIUM.md): allocator@4.0 through the host hwbinder context, a CPU-filled
+// buffer presented as a gralloc frame (android_wlegl). The display API is the host graphics HAL's (APKLAYER_HOST_LIBS).
+cc_library_shared {
+    name: "libapklayer_graltool",
+    srcs: ["graltool.cpp"],
+    header_libs: ["libapklayer_graphics_host_headers"],
+    shared_libs: [
+        "libhidlbase",
+        "libcutils",
+        "libutils",
+        "liblog",
+        "android.hardware.graphics.allocator@4.0",
+        "android.hardware.graphics.mapper@4.0",
+        "android.hardware.graphics.common@1.2",
+    ],
+    compile_multilib: "64",
+    allow_undefined_symbols: true,
+    cflags: ["-Wall", "-Werror", "-Wno-main"],
+}
+
+// Which GPU libEGL gives this instance, and whether it draws: a pbuffer clear read back (docs/HALIUM.md: the device's driver).
+cc_library_shared {
+    name: "libapklayer_gputool",
+    srcs: ["gputool.cpp"],
+    shared_libs: ["libEGL", "libGLESv2"],
+    compile_multilib: "64",
+    cflags: ["-Wall", "-Werror", "-Wno-main"],
+}
+
 // HIDL through the host hwbinder context (docs/HALIUM.md): the device role of the two-instance test (atrace@1.0 as the test HAL), and
 // HIDL clients that list a device's cameras and codecs.
 cc_library_shared {

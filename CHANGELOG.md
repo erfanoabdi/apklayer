@@ -99,6 +99,21 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-05 — libbinder (frameworks/native 0007: the stack's own uid is system) (halium agent)
+- Why: on Ubuntu Touch the desktop user is uid 32011, in Android's app range: the instance's servicemanager refused every addService and no service came up. IPCThreadState.cpp compile-checked outside the tree first (no header change).
+- Command (OrbStack, `flock ~/los24-build.lock`): `patches/apply` of frameworks/native (adds 0007), then `m libbinder`.
+### 2026-11-05 — libhidlbase (libhidl 0002), libapklayer_vdisplay (halium agent)
+- Why: Halium graphics: a listed HAL the host does not serve is the device's passthrough HAL (the gralloc mapper), not waited for on a local hwservicemanager; the virtual display sink presents the device's gralloc buffers through android_wlegl. ServiceManagement.cpp compile-checked outside the tree first.
+- Command (OrbStack, `flock ~/los24-build.lock`): `patches/apply` of system/libhidl (adds 0002), `tools/sync-aosp.sh "..." hals/graphics`, then `m libhidlbase libapklayer_vdisplay`.
+### 2026-11-05 — libhidlbase: libhwbinder 0001 expunges a host proxy from the host context (halium)
+- Why: graltool GRALTOOL_FIRST=hostmiss on the phone: a host lookup that misses, then a second one, crashes; IPCThreadState::expungeHandle is static and always expunged from the local ProcessState, so the host context kept the freed handle-0 proxy (SurfaceFlinger: IMapper then IAllocator getService).
+- Command (OrbStack, `flock -n ~/los24-build.lock`): BpHwBinder.cpp edited in system/libhwbinder (patch 0001 regenerated; applied to a clean checkout it gives the tree), then `m libhidlbase`.
+### 2026-11-05 — libapklayer_graltool: libui's order (halium)
+- Why: SurfaceFlinger on the phone (graphics = device) crashes in the host hwbinder context (ProcessState::getStrongProxyForHandle(0)) on IAllocator::getService after IMapper::getService went host-then-passthrough; GRALTOOL_FIRST (getservice, hostmiss, dlopen) reproduces and splits that order outside SurfaceFlinger.
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "..." tools`, then `m libapklayer_graltool`.
+### 2026-11-05 — libapklayer_graltool (halium agent)
+- Why: plan step (e), Halium graphics: the device's allocator@4.0 through the host hwbinder context and a buffer shown through the shell's android_wlegl path (docs/HALIUM.md). Every shared_lib name checked in the tree first.
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "..." tools` (copies the host graphics headers too: display.h gains apklayer_display_present_native), then `m libapklayer_graltool`.
 ### 2026-11-05 — libapklayer_gnss: no mock fix from a backend without a fix (loc agent)
 - Why: the GeoClue backend has no fix until GeoClue answers; the AOSP example then reports its mock location (Mountain View). hardware/interfaces patch 0004 (`Gnss::reportsMockLocation()`, virtual) and Service.cpp overriding it.
 - Command (OrbStack, under `flock -n ~/los24-build.lock`): `patches/apply patches/aosp/hardware/interfaces/0004-*.patch ~/los24/hardware/interfaces`, `tools/sync-aosp.sh "..." hals/gnss`, then `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_gnss`. Result: success in 19:29 (graph regenerated; ninja 299 steps in 1:15); the library needs the next prebuilts update.

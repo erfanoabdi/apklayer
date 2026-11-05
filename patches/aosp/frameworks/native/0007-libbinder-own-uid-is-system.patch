@@ -1,0 +1,23 @@
+From: apklayer
+Subject: [PATCH] libbinder: the stack's own uid is Android's system uid
+
+apklayer patch (docs/PATCHES.md, docs/HALIUM.md). Every process of an instance runs as the desktop user; a kernel caller with this
+process's own uid (and no app work source, 0005) is one of the stack's services and is reported as AID_SYSTEM. On a desktop whose
+user is uid 1000 nothing changes; Ubuntu Touch's phablet (32011) is in Android's app range, and servicemanager refused every
+addService ("App UIDs cannot add services"). Waydroid frameworks/native 0009 does the same for a uid named by a property.
+Rebuild: `m libbinder`. Against frameworks/native 46018f54b424 (REVISION), after 0001-0006. Apply: patches/apply aosp <LineageOS tree>.
+---
+diff --git a/libs/binder/IPCThreadState.cpp b/libs/binder/IPCThreadState.cpp
+--- a/libs/binder/IPCThreadState.cpp
++++ b/libs/binder/IPCThreadState.cpp
+@@ -482,6 +482,10 @@
+     // propagates itself are not a caller's.
+     if (mCallingUid.has_value() && mCallingUid.value() == getuid() && mWorkSource != kUnsetWorkSource && !mPropagateWorkSource)
+         return static_cast<uid_t>(mWorkSource);
++    // apklayer patch: the stack's own processes (servicemanager, HALs, SurfaceFlinger) run as the desktop user too, and that uid is not
++    // an app's (Ubuntu Touch's phablet is 32011, in Android's app range: servicemanager refused every addService): it is Android's system
++    // uid (Waydroid frameworks/native 0009, by the process's own uid instead of a property)
++    if (mCallingUid.has_value() && mCallingUid.value() == getuid()) return 1000;  // AID_SYSTEM (not in every variant's headers)
+     return mCallingUid.has_value() ? mCallingUid.value() : getuid();
+ }
+ 
