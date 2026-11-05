@@ -125,3 +125,40 @@ Never the GNSS HAL (its one client is the OS's location service): a GNSS backend
 
 ## 2026-11-05: Volla X23 display facts for the mobile window style (read only)
 Read with this branch's `apklayer-shell --display-info` (built on UTM, copied to /tmp on the phone, run once against Lomiri's `wayland-0`, removed afterwards; nothing of `~/apklayer-dev` touched). Lomiri's wl_output: 720x1560 px, 65x140 mm, scale 1 (100%). Panel 6.0" (hypot 65,140 mm = 154 mm), 281 dpi -> density bucket 280 (`handheld_dpi()` is right; no fix needed). Cross-check: Lomiri's `GRID_UNIT_PX=14` (a grid unit is 8 dp: 14/8 = 1.75 = 280/160). `mobile 1`. Lomiri's environment (/proc/<lomiri>/environ): `XDG_CURRENT_DESKTOP=Lomiri`, `XDG_SESSION_DESKTOP=ubuntu-touch`, `DESKTOP_SESSION=ubuntu-touch`, `XDG_SESSION_TYPE=mir`, `QT_QUICK_CONTROLS_MOBILE=1`: `mobile_session()` matches the first two (case-insensitive) when the shell inherits them; started from ssh they are unset and the panel size alone gives mobile. Not checked on the phone (needs a window): Lomiri's maximize and top-bar area, touch on the navigation bar, Home's minimize.
+## Hardware providers on the Ubuntu Touch phone (2026-11-05, Volla X23, instance `cam` in `~/apklayer-dev-cam`)
+Every domain run end to end on the phone in its own instance (binderfs nodes `binder-cam` etc. from `tools/host-setup/binder.sh cam`, sudo once per boot; a copy of the
+install in `~/apklayer-dev-cam/v2`, environment `env.sh`, Parallels builds copied over: the phone has no compiler). Start-check-stop in one command each, ending with `apklayer stop`.
+| Domain | Provider | What ran on the phone | Result |
+|---|---|---|---|
+| graphics | `device` | UiBench, Calculator, Telegram, NewPipe, libgdx and bgfx games (the other agent's work, 2026-11-05), SurfaceView video (below) | draws on the Mali-G57 |
+| camera | `device` | cameraserver over the device's HIDL `camera.provider@2.4` (`internal/0`: 3 cameras, real sizes up to 8000x6000); `hello.camera -Dhello.real=1` (camera2: list, open, preview + YUV + JPEG session, a 4608x3456 still); Open Camera with its camera2 and with its Camera1 API (live preview on screen, front and rear) | works |
+| media | own Codec2 + the host's GStreamer (default) | `hello.nativeplayer` (original MediaPlayer, H.264 into a SurfaceView on the device's gralloc: `PLAYER PASS`, screenshot red) | video works; AAC see below |
+| media | `device` (`providers set media device`) | the host's Codec2 (30 MediaTek components, `hidltool codecs default`) and OMX stores found through the host contexts | listing fixed (libhidl 0003), the codec path itself is not yet working: see PLAN |
+| audio | PulseAudio (`-Daudio_backend=pulse`) | `hello.nativeaudio`: AudioTrack PCM 8 s at 48408 frames/s, 0 underruns, marker, stop/flush; capture of the microphone (120000 frames in 2.5 s) | works (the record-loopback assertion needs a null sink and is not run here) |
+| vibrator | `hfd` (default) and `device` | `hello.hardware`: pattern and click through `Vibrator`/`VibratorManager`; with `device` the real AIDL `IVibrator/default` (`has=true`, no amplitude control) | works |
+| gnss | `lomiri` (default) | `hello.hardware`: LocationManager gps fix (35.68, 51.56, accuracy 20 m, a real fix) | works |
+| sensors | `sensorfw` (default) | `hello.hardware`: 14 sensors (accelerometer, gyro, magnetometer, light, pressure, proximity and the derived ones), a value each, 99 accelerometer events in 2 s at 50 Hz | works |
+
+What was wrong with the camera and what changed:
+- `providers set camera device` started no cameraserver (cli/stack.cpp started it beside an apklayer front only) and the Java side (`HostCameraShadows.declared()`) looked for an apklayer vintf fragment:
+  both now also accept the device domain (`deviceDomain()`; the Java side reads `$APKLAYER_DATA/apklayer/host_hals.conf`). The vibrator manager of the hub (`HubVibrator`) the same.
+- cameraserver finds HIDL providers through the default service manager's `listManifestByInterface` and `registerForNotifications`, which the instance's stand-in
+  (`NoHwServiceManager`) answered with nothing: `patches/aosp/system/libhidl/0003` forwards them (and `getTransport`, `listByInterface`, `unregisterForNotifications`) for listed HALs to the host's
+  hwservicemanager; `listManifestByInterface` falls back to `listByInterface` (the device's Codec2 answers only that).
+- Camera1: libbinder 0007 reports the stack's own uid (phablet 32011) as AID_SYSTEM; cameraserver's trusted uid was the instance's own uid only
+  (`patches/aosp/frameworks/av/0003` amended: AID_SYSTEM too). Without it every `android.hardware.Camera.open` died with "Untrusted caller".
+- Open Camera (and the `hello.camera` check) draw rotated 90 degrees in the phone's landscape window (the sensor orientation is applied against a window that does not turn): a mobile-window-mode question, not the camera's.
+
+Other fixes of this pass:
+- `bridge/hals/media/codec.c`: gst-droid's `amc*` decoders (`amcvideodec-c2mtkavcdecoder2`, the device's MediaCodec through libhybris) rank above the software ones and fail inside the stack's
+  processes ("GStreamer encountered a general supporting library error"): they are ranked NONE (set `APKLAYER_GST_AMC=1` to keep them). H.264 then decodes in software (openh264).
+- Audio: the phone has PulseAudio and no PipeWire daemon (the PipeWire HAL library had no server to talk to: `AHAL_Stream: Failed to initialize the driver`). `bridge/hals/audio/pulse.c` is the
+  same `apklayer/audio.h` over libpulse-simple (`meson -Daudio_backend=pulse`, `auto` picks it when PipeWire's library is missing). The stack's `XDG_RUNTIME_DIR` of this test instance is not the
+  session's: `PULSE_SERVER=unix:/run/user/32011/pulse/native` in `env.sh` (a real user's instance has the session's directory).
+- `providers set media device`: new domain (`android.hardware.media.c2`, `android.hardware.media.omx` listed, the stack's own Codec2 store is not started and its vintf fragment not staged); the stack sets
+  `ro.vendor.api_level` to the vendor's (31) first, because libcodec2's client takes the AIDL HAL for 202404 and above (apklayer.prop says 202604).
+- AAC: faad (the host's AAC decoder here) keeps its last frame ("still 1 frames left after draining"); the Codec2 AudioDecoder ended such works as corrupted: now empty.
+
+How to run each check (on the phone; `. ~/apklayer-dev-cam/env.sh` gives `$A`): `ut-cam.sh [app] [ms]` (camera = device, the app's `[cam]` lines and cameraserver's log tail), `ut-shots.sh <pkg>` (run, screenshot, stop),
+`ut-player.sh red-h264.mp4|red-tone.mp4` (`PLAYER PASS`, `player.png`), `ut-audio.sh` (the audio app's lines), and `apklayer run hello.hardware` with the default providers for vibrator, gnss and sensors.
+Test apps: `tests/apps/build.sh hello-camera hello-hardware hello-native-player hello-native-audio` on the Mac, `apklayer install` on the phone. Open Camera's API: `~/apklayer-dev-cam/ocprefs.py <camera id>` edits its preferences (camera2 or the old API).
