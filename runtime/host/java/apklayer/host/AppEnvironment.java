@@ -207,6 +207,32 @@ final class AppEnvironment {
         }
     }
 
+    private static final java.util.concurrent.ConcurrentHashMap<String, String> stablePaths = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * A data directory of the app by its real path: Robolectric names the links persistDataDirs made in its per-run temp directory
+     * (robolectric-apklayer<random>/<package>-dataDir), a path that is gone at the next launch. Apps keep absolute paths in their own
+     * databases and preferences (JW Library: its MEPS database's path), as /data/user/0/<package> stays the same on Android.
+     */
+    static String stableDataPath(String path) {
+        if (path == null || System.getProperty("apklayer.data") == null) return path;
+        return stablePaths.computeIfAbsent(path, p -> {
+            try {
+                Path temp = RuntimeEnvironment.getTempDirectory().getBasePath();
+                Path dir = Path.of(p);
+                return dir.startsWith(temp) && Files.exists(dir) ? dir.toRealPath().toString() : p;
+            } catch (IOException | RuntimeException unknown) { return p; }
+        });
+    }
+
+    /** The data directories an ApplicationInfo of the app names, by their real paths (stableDataPath). */
+    static void stableDataDirs(android.content.pm.ApplicationInfo info) {
+        if (info == null) return;
+        info.dataDir = stableDataPath(info.dataDir);
+        info.credentialProtectedDataDir = stableDataPath(info.credentialProtectedDataDir);
+        info.deviceProtectedDataDir = stableDataPath(info.deviceProtectedDataDir);
+    }
+
     /** A system app's own ApplicationInfo carries FLAG_SYSTEM (`apklayer install --system`, passed as -Dapklayer.system), as other apps see it from the hub. */
     static void markSystem(android.content.pm.ApplicationInfo info) {
         if (info != null && Boolean.getBoolean("apklayer.system")) info.flags |= android.content.pm.ApplicationInfo.FLAG_SYSTEM;
