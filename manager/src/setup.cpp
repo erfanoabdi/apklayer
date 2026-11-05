@@ -16,7 +16,7 @@ struct Setup::State {
     std::string error, version, runtime;  // the check's failure, the CLI's version ("" when it does not say: older than --version), the runtime in use
     Rows stale;                           // list --tsv rows of the apps converted with an older converter ABI
     bool debNewer() const { return release.deb.found() && compareVersions(release.version, version.empty() ? "0" : version) > 0; }
-    bool runtimeNewer() const { return release.runtime.found() && !release.runtimeVersion.empty() && release.runtimeVersion != runtime; }
+    bool runtimeNewer() const { return release.runtime.found() && !release.runtimeVersion.empty() && compareVersions(release.runtimeVersion, runtime.empty() ? "0" : runtime) > 0; }  // never a downgrade (a release index behind the installed runtime)
 };
 
 namespace {

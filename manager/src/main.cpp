@@ -433,6 +433,7 @@ int main(int argc, char** argv) {
     }
     slint::set_xdg_app_id("apklayer-manager");  // the Wayland app id: GNOME matches the window to apklayer-manager.desktop (its icon, its dock entry)
     auto ui = AppWindow::create();
+    ui->set_frameless(getenv("GRID_UNIT_PX") != nullptr);  // Lomiri (lomiriScale)
     Manager m(ui, cli);
     if (width > 0 && height > 0) ui->window().set_size(slint::LogicalSize({static_cast<float>(width), static_cast<float>(height)}));
     ui->set_page(page);

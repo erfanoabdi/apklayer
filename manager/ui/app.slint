@@ -20,6 +20,9 @@ export component AppWindow inherits MaterialWindow {
     preferred-height: 720px;
     min-width: 320px;
     min-height: 480px;
+    // Lomiri draws no decorations, and winit's own (an Adwaita-style title bar) does not belong on a phone: the shell shows apps full screen
+    in property <bool> frameless;
+    no-frame: frameless;
 
     in-out property <int> page;
     in-out property <bool> app-detail-open;
