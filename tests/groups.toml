@@ -62,6 +62,11 @@ run = ["tests/vm/providers.sh"]
 apps = ["hello-hardware"]
 run = ["tests/vm/providers-host.sh"]
 
+[plugins]
+# an out-of-tree hardware plugin (examples/plugin-vibrator-hello) built against the installed API, loaded from the plugin dir; another ABI refused
+apps = ["hello-hardware"]
+run = ["tests/vm/plugins.sh"]
+
 [gnss]
 # the GeoClue GNSS backend against a python-dbusmock GeoClue, and the hub's one GNSS client serving two apps at once (tests/vm/gnss.sh)
 apps = ["hello-gps", "hello-gps2"]
