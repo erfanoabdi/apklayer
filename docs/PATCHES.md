@@ -68,6 +68,7 @@ are headers meson.build adds for old toolchains, not patches.
 | 0013-instrumentation-acquire-khronos | InstrumentationConfiguration: acquire javax.microedition.khronos |
 | 0014-native-surface-parcel | Surface parcel natives are the real ones (a Surface sent through binder) |
 | 0015-display-change-without-idle | changeDisplay(qualifiers) leaves the display-change messages to the app's run loop |
+| 0019-navigation-bar-visibility-listener | ShadowWindowManagerGlobal.applyInsets tells `NavigationBarInset` when an app hides or shows the navigation bar (immersive mode) |
 
 ## LineageOS tree (`patches/aosp/<project>/`)
 | Patch | Purpose |
@@ -103,7 +104,7 @@ Behaviour that differs from Android or from stock Robolectric without editing up
 - Media store: `HostMediaStub` answers the "media" provider with nothing indexed until the tree's MediaProvider is installed.
 - Cross-app intents: `HostApps`, `ManifestFilters` match other installed apps' filters when the instance hub is off (with the hub, `HubActivityClient` asks it).
 - MessageQueue: `ShadowHostMessageQueue` turns off DeliQueue (Robolectric's scheduler reads the legacy queue).
-- Navigation bar of the shell as the display's navigation bar inset (mobile window style): `runtime/patches/org/robolectric/shadows/NavigationBarInset.java` (sets SystemUi's NavigationBarBehavior; AppHost.hostResize).
+- Navigation bar of the shell as the display's navigation bar inset (mobile window style): `runtime/patches/org/robolectric/shadows/NavigationBarInset.java` (sets SystemUi's NavigationBarBehavior; AppHost.hostResize); robolectric 0019 makes the app's hide/show of the navigation bar (WindowInsetsController, SYSTEM_UI_FLAG_HIDE_NAVIGATION) reach it, AppHost passes it to the shell (MSG_NAVBAR).
 - apklayer patch in `bridge/hals/graphics/display.c`: the window style (`APKLAYER_WINDOW_MODE`) is sent to the shell before the window is created.
 - Window container a window manager would make for each window: `runtime/patches/org/robolectric/shadows/WindowSurface.java`.
 - Codec2: `aosp/hals/media/codec2/SoftCodecs.cpp` loads whichever tree `libcodec2_soft_*` are installed (the platform list aborts on a missing one); codec list `bridge/native/android-root/vendor/etc/media_codecs.xml`.

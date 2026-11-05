@@ -1,0 +1,16 @@
+apklayer patch: ShadowWindowManagerGlobal tells NavigationBarInset (runtime/patches) when an app hides or shows the navigation bar
+(WindowInsetsController hide/show(navigationBars()), SYSTEM_UI_FLAG_HIDE_NAVIGATION: all arrive as the window's requested visible
+types), so the host asks the shell to hide or show its navigation bar (immersive mode, mobile window style).
+Against external/robolectric 87aa52b08 (REVISION). Applied by runtime/meson.build onto the staged
+upstream sources (<native>/aosp/robolectric-src); the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
+---
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java
+@@ -493,6 +493,7 @@
+       boolean navBarVisible = (requestedVisibleTypes & navigationBars()) != 0;
+       if (systemUi.getNavigationBar().isVisible() != navBarVisible) {
+         systemUi.getNavigationBar().setVisible(navBarVisible);
++        NavigationBarInset.visibilityChanged(navBarVisible); // apklayer patch
+         notifyInsetsChanges(systemUi, systemUi.getNavigationBar().getId());
+       }
+     }

@@ -5,7 +5,9 @@ shell the output is a 6.1" 1080x2340 panel (422 dpi -> bucket 420), the window s
     420 dpi and the bar's height; its picture has the window's pixel size (screenshots in the group's output dir);
  2. the compositor's scale 300%: the density stays the panel's 420 (apps are the size they are on that phone), the bar is 42 logical = 126 px;
  3. `apklayer settings set window-mode desktop`, live: the title bar returns (46 logical), no navigation bar; then `unset`: mobile again;
- 4. a tap on the bar's Back button: the shell sends Back, UiBench's root activity finishes and the app ends.
+ 4. immersive mode: the app hides the navigation bar (WindowInsetsController.hide(navigationBars()), the script step `immersive:1`): the shell
+    hides its bar and the app is told no navigation bar inset (0), `immersive:0` brings both back;
+ 5. a tap on the bar's Back button: the shell sends Back, UiBench's root activity finishes and the app ends.
 Also `--display-info` for a few simulated panels (density buckets, style): no app."""
 import os
 from pathlib import Path
@@ -23,8 +25,8 @@ import instance  # noqa: E402  (changes into the repo root)
 PKG = 'com.android.test.uibench'
 ENV = dict(instance.ENV)
 ENV.update(APKLAYER_OUTPUT_MM='66x143', APKLAYER_OUTPUT_PX='1080x2340', APKLAYER_DEBUG_INPUT='1')
-STEPS = ((6000, 'hover:1,0'), (10000, 'hover:2,0'), (15000, 'hover:3,0'), (21000, 'hover:4,0'), (27000, 'hover:5,0'))
-ENV['APKLAYER_JOPTS'] = '-Dapklayer.runms=33000 -Dapklayer.script=' + '+'.join('%d:%s' % s for s in STEPS)
+STEPS = ((6000, 'hover:1,0'), (10000, 'hover:2,0'), (15000, 'hover:3,0'), (21000, 'hover:4,0'), (27000, 'hover:5,0'), (28000, 'navinset'), (29000, 'immersive:1'), (30300, 'navinset'), (30500, 'hover:6,0'), (31500, 'immersive:0'), (32300, 'navinset'), (32500, 'hover:7,0'))
+ENV['APKLAYER_JOPTS'] = '-Dapklayer.runms=36000 -Dapklayer.script=' + '+'.join('%d:%s' % s for s in STEPS)
 CONFIGURE = re.compile(r'configure content (\d+)x(\d+) @(\d+)% \((\d+)x(\d+) px\), title bar (\d+) logical = (\d+) px(?:, maximized)?, (\w+) style, (\d+) dpi, '
                        r'navigation bar (\d+) logical = (\d+) px')
 seen, checks = [], []
@@ -72,7 +74,7 @@ app = subprocess.Popen(['bin/apklayer', 'run', PKG], env=ENV, stdout=subprocess.
 try:
     selector = selectors.DefaultSelector()
     selector.register(app.stdout, selectors.EVENT_READ)
-    end = time.monotonic() + 70
+    end = time.monotonic() + 80
     pending = b''
     with open(instance.OUT / 'mobile.log', 'wb') as log:
         while True:
@@ -118,11 +120,23 @@ try:
                     w, h, scale, bar, style, dpi, nav_l, nav_px = configures()[-1]
                     assert (style, bar, dpi) == ('mobile', 0, 420), 'back to mobile: %s' % (configures()[-1],)
                     checks.append('live switch back to mobile (auto)')
+                elif 'script: hover:6,0' in line:  # immersive:1 ran at 29 s
+                    assert 'navigation bar hidden' in shell_log(), 'the app hid the navigation bar: the shell did not'
+                    assert any('immersive 1' in l for l in seen), 'immersive:1 did not run'
+                    insets = [int(l.split('navinset ')[1]) for l in seen if 'navinset ' in l]
+                    assert insets == [126, 0], 'navigation bar inset before and while immersive: %s' % insets
+                    checks.append('immersive: the shell hid the navigation bar, the inset 126 -> 0')
+                elif 'script: hover:7,0' in line:  # immersive:0 ran at 31.5 s
+                    assert shell_log().rstrip().count('navigation bar shown') >= 1, 'the bar was not shown again'
+                    w, h, scale, bar, style, dpi, nav_l, nav_px = configures()[-1]
+                    insets = [int(l.split('navinset ')[1]) for l in seen if 'navinset ' in l]
+                    assert insets == [126, 0, 126], 'navigation bar inset after immersive: %s' % insets
+                    checks.append('immersive off: the bar and its inset (126 px) are back')
                     instance.inject(PKG, 'tap:%d,%d' % (w // 4, h - nav_l // 2))  # Back: UiBench's root activity finishes, the app ends
     assert app.wait() == 0, 'app failed'
     assert 'navigation bar back' in shell_log(), 'a tap on Back did not reach the shell as Back'
     checks.append('Back on the navigation bar ends the app')
-    assert len(checks) >= 9, checks
+    assert len(checks) >= 11, checks
     print('PASS mobile style and density: %s' % '; '.join(checks), flush=True)
 finally:
     apklayer('settings', 'unset', 'window-mode')

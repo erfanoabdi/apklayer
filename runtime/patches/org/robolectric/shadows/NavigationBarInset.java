@@ -19,6 +19,18 @@ public final class NavigationBarInset {
     @Override public int calculateSize(int displayId) { return px; }
   }
 
+  private static volatile java.util.function.Consumer<Boolean> listener;
+
+  /** Who learns when the app hides or shows the navigation bar (immersive mode): the host tells the shell, which hides its bar. */
+  public static void onVisibility(java.util.function.Consumer<Boolean> l) { listener = l; }
+
+  /** ShadowWindowManagerGlobal.applyInsets (patch 0019): the app's requested visible types changed the navigation bar's visibility. The
+   * inset follows by itself (an invisible bar has no insets); the shell hides or shows the bar. */
+  public static void visibilityChanged(boolean visible) {
+    java.util.function.Consumer<Boolean> l = listener;
+    if (l != null) l.accept(visible);
+  }
+
   /** The navigation bar is px pixels high (0: none, the desktop style). */
   public static void set(int px) {
     SystemUi.systemUiForDefaultDisplay().setNavigationBarBehavior(px > 0 ? new Bar(px) : SystemUi.NO_NAVIGATION_BAR);

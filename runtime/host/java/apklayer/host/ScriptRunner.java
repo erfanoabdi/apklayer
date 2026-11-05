@@ -159,6 +159,16 @@ final class ScriptRunner {
             } catch (ReflectiveOperationException | RuntimeException e) {
                 System.out.println("[apklayer] field " + step + ": " + e);
             }
+        } else if (step.startsWith("immersive:")) { // immersive:0|1: the top window's WindowInsetsController hides (1) or shows (0) the navigation bar
+            java.util.List<android.view.View> views = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mViews");
+            android.view.WindowInsetsController c = views.get(views.size() - 1).getWindowInsetsController();
+            if (step.endsWith("1")) c.hide(android.view.WindowInsets.Type.navigationBars());
+            else c.show(android.view.WindowInsets.Type.navigationBars());
+            System.out.println("[apklayer] immersive " + step.substring(10));
+        } else if (step.equals("navinset")) { // the top window's navigation bar inset (bottom, px), as its app sees it
+            java.util.List<android.view.View> views = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mViews");
+            android.view.WindowInsets wi = views.get(views.size() - 1).getRootWindowInsets();
+            System.out.println("[apklayer] navinset " + (wi == null ? -1 : wi.getInsets(android.view.WindowInsets.Type.navigationBars()).bottom));
         } else if (step.equals("back")) {
             input.inject(new KeyEvent(now, now, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK, 0));
             input.inject(new KeyEvent(now, now, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK, 0));
