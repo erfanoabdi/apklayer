@@ -312,3 +312,10 @@ run = ["tests/vm/sandbox.sh"]
 needs = ["com.dogbytegames.otrnext"]
 alone = true
 run = ["python3 -u tests/vm/otr2-input.py scale"]
+
+[otr2-aspect]
+# the same in windows of other shapes than the game's 16:9 (600x1000, 1600x500, 900x850, 1137x613) after drag resizes, at 100 and 200 %: the
+# portrait to press is located from the drawn frame; prints a table window -> tap -> hit/miss
+needs = ["com.dogbytegames.otrnext"]
+alone = true
+run = ["python3 -u tests/vm/otr2-input.py aspect"]

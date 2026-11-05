@@ -26,7 +26,21 @@ FRAMES = {1: (343 / 797, 326 / 448, 392 / 797, 372 / 448), 2: (407 / 797, 326 / 
 DRAG = ['resize:880,495', 'resize:960,540', 'resize:1040,585']  # a drag resize (content sizes, 16:9 so the same fractions hit the same buttons)
 RESIZE = [('press', 2), ('resize', DRAG), ('press', 1), ('resize', ['maximize:%d,%d' % MAXIMIZE]), ('press', 2), ('resize', ['unmaximize']), ('press', 1)]
 SCALE = [('press', 2), ('resize', ['scale:200']), ('press', 1), ('resize', ['scale:100']), ('press', 2)]
-RUNS = [(100, 'click', SCALE), (100, 'tap', SCALE)] if sys.argv[1:] == ['scale'] else [(100, 'tap', RESIZE), (200, 'click', RESIZE), (200, 'tap', RESIZE)]
+# windows of another shape than the game's 16:9 (`otr2-input.py aspect`, group otr2-aspect): each reached by a drag resize, then the portrait
+# that is not selected is located from the drawn frame in a screenshot (not from fractions of the window) and pressed
+ASPECTS = [(600, 1000), (1600, 500), (900, 850), (1137, 613)]
+
+
+def drag(w, h, to):
+    return ['resize:%d,%d' % (w + (to[0] - w) * i // 3, h + (to[1] - h) * i // 3) for i in (1, 2, 3)]
+
+
+ASPECT = []
+for i, size in enumerate(ASPECTS):
+    ASPECT += [('resize', drag(*([797, 448] if i == 0 else ASPECTS[i - 1]), size)), ('other', size)]
+MODES = {'scale': [(100, 'click', SCALE), (100, 'tap', SCALE)], 'aspect': [(100, 'tap', ASPECT), (200, 'click', ASPECT)]}
+RUNS = MODES.get(sys.argv[1] if sys.argv[1:] else '', [(100, 'tap', RESIZE), (200, 'click', RESIZE), (200, 'tap', RESIZE)])
+TABLE = []
 env = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1', APKLAYER_LOGCAT='1', APKLAYER_JOPTS='-Dapklayer.runms=300000 -Dapklayer.debugkeys=true')
 intent = instance.OUT / 'otr2-intent.properties'
 intent.write_text('component=com.dogbytegames.otrnext.OTRNext\n')
@@ -46,6 +60,33 @@ def green(image, which):
     x0, y0, x1, y1 = FRAMES[which]
     box = im.crop((int(x0 * w), int(y0 * h), int(x1 * w), int(y1 * h)))
     return pixels.count_image(box, lambda r, g, b: g > 120 and g - r > 40 and g - b > 40) / (box.size[0] * box.size[1])
+
+
+def frame_box(image):
+    """The selected portrait's green frame in a screenshot (pixels): the largest hollow, squarish cluster of frame-green pixels."""
+    im = pixels.rgb(image)
+    w, h = im.size
+    px = im.load()
+    step = max(1, w // 800)  # sampled: a 2x window has twice the pixels, the frame twice the width
+    green = {(x, y) for y in range(0, h, step) for x in range(0, w, step)
+             if (lambda r, g, b: g > 120 and g - r > 40 and g - b > 40)(*px[x, y])}
+    best, seen = None, set()
+    for start in green:
+        if start in seen: continue
+        todo, part = [start], []
+        seen.add(start)
+        while todo:
+            x, y = todo.pop()
+            part.append((x, y))
+            for q in ((x + dx * step, y + dy * step) for dx in range(-3, 4) for dy in range(-3, 4)):  # bridges the frame's anti-aliased sides
+                if q in green and q not in seen:
+                    seen.add(q); todo.append(q)
+        xs, ys = [q[0] for q in part], [q[1] for q in part]
+        bw, bh = max(xs) - min(xs) + step, max(ys) - min(ys) + step
+        fill = len(part) * step * step / (bw * bh)
+        if bw >= 12 and 0.7 < bw / bh < 1.4 and fill < 0.6 and (best is None or bw * bh > best[2] * best[3]):
+            best = (min(xs), min(ys), bw, bh)
+    return best
 
 
 def logical(seen, scale):
@@ -69,8 +110,8 @@ def play(scale, mode, actions):
     saw = lambda text: any(text in line for line in seen)
     instance.stop()
     app = subprocess.Popen(['bin/apklayer', 'run', PKG], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
-    name = '%d-%s-%s' % (scale, mode, 'scale' if actions is SCALE else 'resize')
-    step, phase, mark, tries, stage, shots = 0, 'run', 0, 0, 0, {}
+    name = '%d-%s-%s' % (scale, mode, 'scale' if actions is SCALE else 'aspect' if actions is ASPECT else 'resize')
+    step, phase, mark, tries, stage, shots, selected = 0, 'run', 0, 0, 0, {}, 1
     try:
         sel = selectors.DefaultSelector()
         sel.register(app.stdout, selectors.EVENT_READ)
@@ -102,7 +143,17 @@ def play(scale, mode, actions):
                 elif phase == 'run':
                     kind, arg = actions[step]
                     width, height = logical(seen, scale)
-                    if kind == 'press':
+                    if kind == 'other':  # the other portrait, found from the drawn frame: frames are 49 px wide, 64 px apart at 797x448
+                        shots['before'] = instance.capture('otr2-%s-%d-before' % (name, step), PKG)
+                        box = frame_box(shots['before'])
+                        assert box, 'OTR2 %s: no portrait frame in %s' % (name, shots['before'])
+                        sx, sy = pixels.rgb(shots['before']).size[0] / width, pixels.rgb(shots['before']).size[1] / height
+                        direction = 1 if selected == 1 else -1
+                        aim = (box[0] + box[2] / 2 + direction * box[2] * 64 / 49, box[1] + box[3] / 2)
+                        at = (round(aim[0] / sx), round(aim[1] / sy))
+                        instance.inject(PKG, *(['press:%d,%d' % at] if mode == 'tap' else ['click:%d,%d' % at]))
+                        phase, mark, target = 'release', n, 3 - selected
+                    elif kind == 'press':
                         at = (round(PORTRAITS[arg][0] * width), round(PORTRAITS[arg][1] * height))
                         shots['before'] = instance.capture('otr2-%s-%d-before' % (name, step), PKG)
                         instance.inject(PKG, *(['press:%d,%d' % at] if mode == 'tap' else ['click:%d,%d' % at]))
@@ -116,11 +167,20 @@ def play(scale, mode, actions):
                     phase, mark = 'check', n
                 elif phase == 'check' and n >= mark + 60:
                     shots['after'] = instance.capture('otr2-%s-%d-after' % (name, step), PKG)
+                    if actions[step][0] == 'other':
+                        moved = frame_box(shots['after'])
+                        hit = bool(moved) and abs(moved[0] + moved[2] / 2 - aim[0]) < box[2] / 2 and abs(moved[1] + moved[3] / 2 - aim[1]) < box[3] / 2
+                        TABLE.append('%dx%d @%d%% %s: frame at %s, tapped portrait %d at %s (screen %d,%d) -> %s' % (*logical(seen, scale), scale, mode,
+                                     tuple(round(v) for v in box), target, at, *map(round, aim), 'hit' if hit else 'MISS (frame now %s)' % (moved,)))
+                        print('TABLE ' + TABLE[-1], flush=True)
+                        if hit: selected = target
+                        step, phase = step + 1, 'run'
+                        continue
                     other = 1 if target == 2 else 2
                     got = (green(shots['after'], target), green(shots['after'], other))
                     print('OTR2 %s step %d: %s portrait %d at %s in %dx%d @%d%%: green share (target, other) %.3f %.3f' % (name, step, mode, target, at, *logical(seen, scale), scale, *got), flush=True)
                     assert got[0] > 0.04 and got[1] < 0.01, 'FAIL OTR2 %s: the %s at %s did not select portrait %d %s' % (name, mode, at, target, got)
-                    step, phase = step + 1, 'run'
+                    step, phase, selected = step + 1, 'run', target
                 elif phase == 'settle' and n >= mark + 150 and sum('surface handed over again' in l for l in seen) > handovers:
                     step, phase = step + 1, 'run'
         assert step == len(actions), 'OTR2 %s: stopped at step %d of %d (%s)' % (name, step, len(actions), actions[min(step, len(actions) - 1)])
@@ -139,6 +199,8 @@ try:
         play(*run)
 finally:
     intent.unlink(missing_ok=True)
+    if TABLE: print('window -> tap -> result\n' + '\n'.join(TABLE), flush=True)
+assert all(t.endswith('hit') for t in TABLE), 'FAIL OTR2: a press on a located portrait missed'
 instance.stop()  # a second stop: the consent dialog's WebView helper process can start while the first one ends the stack
 instance.kill('[a]pklayer.host.Main')
 instance.assert_clean()
