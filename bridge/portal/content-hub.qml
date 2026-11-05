@@ -1,7 +1,7 @@
 // Lomiri Content Hub (Ubuntu Touch) for file-chooser.py, which runs it with Qt 5's qmlscene when no FileChooser portal answers. Its lines on
 // stderr (QT_MESSAGE_PATTERN=%{message}): `uri <file-uri>` per item, or `cancelled`.
-// [multiple] (pick, the default): the source apps for any content (the file manager, the browser's downloads); the item lands in ~/.cache/$APP_ID/HubIncoming/<n>/,
-// kept for the caller (no finalize, which would delete it). `import` (argument): the destination side, for the apklayer-share peer: waits for the
+// [multiple] (an argument before the file; pick, the default): the source apps for any content (the file manager, the browser's downloads); the item lands in ~/.cache/$APP_ID/HubIncoming/<n>/,
+// kept for the caller (no finalize, which would delete it). `import` (an argument before the file): the destination side, for the apklayer-share peer: waits for the
 // transfer Content Hub hands to $APP_ID (an .apk shared to apklayer from another app) and prints its items.
 import QtQuick 2.4
 import Lomiri.Components 1.3

@@ -212,3 +212,27 @@ First run: `apklayer setup` (docs/RELEASES.md): binder (checked), java (checked)
 non-click app (`liblomiri-app-launch` checks it), and the manager's entry too. Other automatic Halium pieces (formerly `env2.sh`): `cli/halium.cpp`
 detects the device (`/android/system`, binderfs, `/vendor/lib64`), makes `ut` the default instance, seeds its `providers.toml`, sets `PULSE_SERVER` and
 picks the PulseAudio audio HAL; `cli/binder.cpp` probes the host binder nodes.
+
+## Choosing and sharing files on Ubuntu Touch (2026-11-05)
+Ubuntu Touch has no xdg-desktop-portal FileChooser; apps take files from each other through Lomiri Content Hub (`lomiri-content-hub-service`,
+`com.lomiri.content.dbus.Service` on the session bus). `bridge/portal/file-chooser.py` (the manager's "Choose file…", the Hardware page's file
+options, `apklayer portal` and the apps' document pickers through HostFilePortal) falls back to it for `open` when the portal call fails:
+- `content-hub.qml` beside it runs in Qt 5's `qmlscene` (`/usr/lib/qt5/bin/qmlscene`, package qmlscene-ubports; the Qt 5 `Lomiri.Content 1.3`
+  module, qml-module-lomiri-content; the phone has no Qt 6 `qml` runner) with the stock ContentPeerPicker: handler Source, type All (File Manager,
+  Morph Browser, Gallery, Camera, Music, Contacts on the X23). It prints the portal's `uri` lines, so no caller changed.
+- Identity: the client library sends `$APP_ID` and the service trusts it from unconfined processes (it checks only AppArmor-confined ones against their
+  profile, `Service::CreateImportFromPeer`). A manager started by lomiri-app-launch has `APP_ID=apklayer-manager`, inherited by the helper, which
+  registers the import handler (`com.lomiri.content.handler.apklayer_manager`) the service delivers to; without APP_ID (a terminal) the helper uses
+  `apklayer-manager`. On charge the service also calls `lomiri_app_launch_start_application(APP_ID)`: the manager's desktop entry is now
+  `X-Lomiri-Single-Instance=true`, else every pick started a second manager window.
+- Files: the source app's copy lands in `~/.cache/<APP_ID>/HubIncoming/<n>/<name>` (`Transfer::calculateStorePath`); the helper does not call
+  `finalize()` (which deletes it). The manager removes that folder once the install ran; a file chosen for a hardware option stays (the option names it).
+- The File Manager (filemanager.ubports, a click app) shows only Documents, Downloads, Music, Pictures and Videos without unlocking: put the .apk there.
+- Share / "Open with" to apklayer: the deb installs the peer `/usr/share/lomiri-content-hub/peers/apklayer-share` (`{"destination": ["all",
+  "documents"]}`; the file name is the receiving app's id) and the hidden Lomiri app `apklayer-share.desktop` (`apklayer-manager --share`), which
+  opens the install dialog and runs `file-chooser.py import`: the same QML as the transfer's handler, printing the shared file.
+  The manager's Wayland app id is `$APP_ID` when Lomiri sets one: Lomiri gives a window to the app its app id names, and a `--share` manager that
+  said `apklayer-manager` left apklayer-share windowless, so Lomiri suspended it (SIGSTOP) before the transfer arrived. qmlscene takes its last plain
+  argument as the file (others only warn), so the helper's words (`import`, `multiple`) go before the .qml file.
+- Neither portal nor Content Hub (a desktop without a FileChooser backend): the install dialog lists the newest .apk files of ~/Downloads, ~/Documents
+  and the home folder (one level), the Hardware page says to type the path. A desktop with a working portal is unchanged (the portal answers first).

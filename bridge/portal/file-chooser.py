@@ -52,7 +52,8 @@ def content_hub(bus, args):
     env.setdefault('APP_ID', 'apklayer-manager')  # a terminal's apklayer: the manager's identity (its desktop file is a Lomiri app)
     if 'QT_QPA_PLATFORM' not in env: env['QT_QPA_PLATFORM'] = 'ubuntumirclient;wayland-egl;xcb'
     qml = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'content-hub.qml')
-    run = subprocess.run([qmlscene, qml] + args, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+    # the words first: qmlscene loads its last plain argument (it only warns about the others), the QML reads them in Qt.application.arguments
+    run = subprocess.run([qmlscene] + args + [qml], env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                          stderr=subprocess.PIPE, text=True)
     lines = [l for l in run.stderr.splitlines() if l.startswith('uri ') or l == 'cancelled']
     if not lines:

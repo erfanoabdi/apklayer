@@ -177,4 +177,5 @@ gfxstream's sources (`hardware/google/gfxstream`, also on android.googlesource.c
 After `sudo apt install ./apklayer_*.deb` run `apklayer setup` (or open apklayer-manager, which runs it): it downloads the Android runtime bundle for your CPU
 from the release (`--bundle <file>` for an offline copy), installs the system apps and sets the instance up; `apklayer setup --check` shows what is missing.
 Setup needs no root: what does (binderfs and the instances' binder devices) the package does at install and at every boot (`apklayer-binder.service`).
-Ubuntu Touch (Halium phones): docs/HALIUM.md "The apt install on the phone".
+Ubuntu Touch (Halium phones): docs/HALIUM.md "The apt install on the phone"; "Choose file…" and Share to apklayer go through Lomiri Content Hub
+(docs/HALIUM.md "Choosing and sharing files on Ubuntu Touch").

@@ -445,7 +445,10 @@ int main(int argc, char** argv) {
         else if (a == "--share") share = true;
         else { fprintf(stderr, "usage: apklayer-manager [--instance ID] [--first-run] [--share] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG] [--dialog NAME] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--expect LABEL]...]\n"); return 2; }
     }
-    slint::set_xdg_app_id("apklayer-manager");  // the Wayland app id: GNOME matches the window to apklayer-manager.desktop (its icon, its dock entry)
+    // the Wayland app id: GNOME matches the window to apklayer-manager.desktop (its icon, its dock entry). Lomiri gives the window to the app its
+    // app id names: started as apklayer-share (--share) it must say so, or Lomiri counts that app windowless and suspends it
+    const char* lomiriApp = getenv("APP_ID");
+    slint::set_xdg_app_id(slint::SharedString(lomiriApp && *lomiriApp ? lomiriApp : "apklayer-manager"));
     auto ui = AppWindow::create();
     ui->set_frameless(getenv("GRID_UNIT_PX") != nullptr);  // Lomiri (lomiriScale)
     Manager m(ui, cli);
