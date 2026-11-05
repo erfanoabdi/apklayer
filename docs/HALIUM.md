@@ -132,8 +132,8 @@ install in `~/apklayer-dev-cam/v2`, environment `env.sh`, Parallels builds copie
 |---|---|---|---|
 | graphics | `device` | UiBench, Calculator, Telegram, NewPipe, libgdx and bgfx games (the other agent's work, 2026-11-05), SurfaceView video (below) | draws on the Mali-G57 |
 | camera | `device` | cameraserver over the device's HIDL `camera.provider@2.4` (`internal/0`: 3 cameras, real sizes up to 8000x6000); `hello.camera -Dhello.real=1` (camera2: list, open, preview + YUV + JPEG session, a 4608x3456 still); Open Camera with its camera2 and with its Camera1 API (live preview on screen, front and rear) | works |
-| media | own Codec2 + the host's GStreamer (default) | `hello.nativeplayer` (original MediaPlayer, H.264 into a SurfaceView on the device's gralloc: `PLAYER PASS`, screenshot red) | video works; AAC see below |
-| media | `device` (`providers set media device`) | the host's Codec2 (30 MediaTek components, `hidltool codecs default`) and OMX stores found through the host contexts | listing fixed (libhidl 0003), the codec path itself is not yet working: see PLAN |
+| media | own Codec2 + the host's GStreamer (default) | `hello.nativeplayer` (original MediaPlayer, H.264 into a SurfaceView on the device's gralloc: `PLAYER PASS`, screenshot red) and `red-tone.mp4` (AAC through faad into the PulseAudio sink, 19456 frames delivered to the AudioTrack) | works |
+| media | `device` (`providers set media device`) | the host's Codec2 (30 MediaTek components, `hidltool codecs default`) and OMX stores found through the host contexts | `hello.nativeplayer` H.264: the codec list now holds the device's components (`Available Codec2 services: "default" "software"`, 30 MediaTek ones from the device's own `/vendor/etc/media_codecs*.xml`), but creating a decoder fails without a log line ("Failed to create video/avc decoder"): not working yet |
 | audio | PulseAudio (`-Daudio_backend=pulse`) | `hello.nativeaudio`: AudioTrack PCM 8 s at 48408 frames/s, 0 underruns, marker, stop/flush; capture of the microphone (120000 frames in 2.5 s) | works (the record-loopback assertion needs a null sink and is not run here) |
 | vibrator | `hfd` (default) and `device` | `hello.hardware`: pattern and click through `Vibrator`/`VibratorManager`; with `device` the real AIDL `IVibrator/default` (`has=true`, no amplitude control) | works |
 | gnss | `lomiri` (default) | `hello.hardware`: LocationManager gps fix (35.68, 51.56, accuracy 20 m, a real fix) | works |
@@ -155,8 +155,9 @@ Other fixes of this pass:
 - Audio: the phone has PulseAudio and no PipeWire daemon (the PipeWire HAL library had no server to talk to: `AHAL_Stream: Failed to initialize the driver`). `bridge/hals/audio/pulse.c` is the
   same `apklayer/audio.h` over libpulse-simple (`meson -Daudio_backend=pulse`, `auto` picks it when PipeWire's library is missing). The stack's `XDG_RUNTIME_DIR` of this test instance is not the
   session's: `PULSE_SERVER=unix:/run/user/32011/pulse/native` in `env.sh` (a real user's instance has the session's directory).
-- `providers set media device`: new domain (`android.hardware.media.c2`, `android.hardware.media.omx` listed, the stack's own Codec2 store is not started and its vintf fragment not staged); the stack sets
-  `ro.vendor.api_level` to the vendor's (31) first, because libcodec2's client takes the AIDL HAL for 202404 and above (apklayer.prop says 202604).
+- `providers set media device`: new domain (`android.hardware.media.c2`, `android.hardware.media.omx` listed, the stack's own Codec2 store is not started and its vintf fragment not staged); the stack loads
+  `media.c2.hal.selection=hidl` last (apklayer.prop says aidl; a Halium 12 vendor's Codec2 is HIDL) and serves the device's `/vendor/etc/media_codecs*.xml` from the instance's root (the shared root's name apklayer's own components).
+  Next step: the Codec2Client's creation status is not logged (a build with the failing call's status in the log).
 - AAC: faad (the host's AAC decoder here) keeps its last frame ("still 1 frames left after draining"); the Codec2 AudioDecoder ended such works as corrupted: now empty.
 
 How to run each check (on the phone; `. ~/apklayer-dev-cam/env.sh` gives `$A`): `ut-cam.sh [app] [ms]` (camera = device, the app's `[cam]` lines and cameraserver's log tail), `ut-shots.sh <pkg>` (run, screenshot, stop),

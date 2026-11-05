@@ -53,6 +53,16 @@ void stageManifest(const Instance& inst, const Layout& l, bool provided, const s
         if (auto text = readFile(join(l.root, source))) writeFile(join(own, name), *text);
 }
 
+// media = device: the media framework reads /vendor/etc/media_codecs*.xml (the codec list's names, limits, ranks), and the shared android-root's own
+// media_codecs.xml names apklayer's components: the instance serves the device's files (the path layer takes the instance's root first).
+void stageDeviceCodecXml(const Instance& inst) {
+    const std::string own = join(inst.runtimeDir, "android-root/vendor/etc");
+    makeDirs(own);
+    for (const std::string& f : listDir("/vendor/etc"))
+        if (f.rfind("media_codecs", 0) == 0 && f.size() > 4 && f.substr(f.size() - 4) == ".xml")
+            if (auto text = readFile(join("/vendor/etc", f))) writeFile(join(own, f), *text);
+}
+
 // graphics = device (a Halium device, docs/HALIUM.md): the instance's VINTF declares neither apklayer's AIDL allocator nor its mapper
 // (libui then takes the device's gralloc 4: allocator@4.0 through the host context, the passthrough mapper); own copies of the
 // shared manifests without those HALs, which the path layer serves before the shared ones.
@@ -301,6 +311,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     writeHostHals(inst);  // domains set to the device: their HALs come from the host binder contexts, no front starts
     for (const ProviderService& p : providers) stageManifest(inst, l, true, "apklayer-" + p.name + ".xml", p.manifest);
     if (deviceGraphics(inst)) undeclareOwnGraphics(inst, l);
+    if (deviceDomain(inst, "media")) stageDeviceCodecXml(inst);
     std::vector<std::string> propFiles = {join(l.root, "bridge/native/apklayer.prop"), join(n, "android-root/props/system_build.prop")};
     // the instance's own overrides (`apklayer prop set`): first, as ro.* is write-once (and the fingerprint is derived from them), and again last, as
     // every other property keeps the last value loaded
@@ -312,12 +323,11 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         propFiles.insert(propFiles.begin() + (exists(inst.propOverrides()) ? 1 : 0), file);
     }
     if (deviceDomain(inst, "media")) {
-        // the device's Codec2 is HIDL: libcodec2's client picks AIDL for a vendor api level of 202404 and above (apklayer.prop says 202604), so the
-        // vendor's own level (ro.vendor.build.version.sdk: 31 on Halium 12) goes first, as ro.* is write-once
-        std::string level = deviceProperty("ro.vendor.build.version.sdk");
+        // the device's Codec2 is HIDL (a Halium 12 vendor): libcodec2's client takes the HAL media.c2.hal.selection names, which apklayer.prop
+        // sets to aidl: loaded last (a plain property keeps the last value)
         std::string file = join(inst.runtimeDir, "media-device.prop");
-        writeFile(file, "ro.vendor.api_level=" + (level.empty() ? std::string("31") : level) + "\n");
-        propFiles.insert(propFiles.begin() + (propFiles.size() > 2), file);
+        writeFile(file, "media.c2.hal.selection=hidl\n");
+        propFiles.push_back(file);
     }
     setDerivedProperties(l, ne, propFiles);
     Spawn prop;
