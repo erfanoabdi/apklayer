@@ -1,5 +1,72 @@
 # Compatibility results
 
+## 2026-11-05 (current F-Droid versions, index of 2026-11-05; UTM and Parallels, instances corpus1/corpus2, both from this tree's Meson build)
+
+Every app on both VMs: install, launch, the app's own screenshot once its frames settle, a tap at the window centre, Back, a screenshot after each,
+`apklayer logs <pkg>`. "both" = the same result on UTM and Parallels. The 13 apps below the line are new to the corpus. The non-F-Droid entries of
+apps.txt (OTR2, Telegram, WhatsApp, CPU-Z, ...) were not part of this round.
+
+| App (version) | Kind | VM | State | Note |
+|---|---|---|---|---|
+| NewPipe 0.29.1 | Java, media | both | draws (Live list with thumbnails, "Keep Android Open" dialog) | the Trending list fills now; Back leaves the dialog (it is not cancelable) |
+| Nextcloud 35.0.2 | Java, network | both | draws (login) | |
+| GPSTest 3.10.6 | location | both | draws (Status, What's new); Back closes it, "GPS disabled" dialog follows | |
+| OpenVPN 0.7.69 | native | both | draws (profiles) | |
+| Shelter 1.9.1 | Kotlin | both | draws (welcome) | |
+| Unciv 4.22.16 (was 4.22.15) | libgdx | Parallels | draws (language picker); the tap selects a language | |
+| | | UTM | black window | frames arrive, every pixel 0; GL context on virgl (ES 3.2 Mesa 26) and rulesets load, no error (open) |
+| Feeder 2.25.0 | Compose, RSS | both | draws (All feeds); the tap opens an article, Back returns | |
+| Tusky 33.1 | Kotlin views | both | draws (login) | |
+| Breezy Weather 6.2.2 | Compose | both | draws (Locations); the tap opens the search, Back returns | |
+| Auxio 4.1.5 | media3 | both | draws (Songs) | |
+| Loop Habit Tracker 2.3.2 | SQLite | both | draws (welcome); Back reaches the habit list | |
+| LocalSend 1.18.2 | Flutter | both | draws (Receive) | |
+| Standard Notes 3.202.11 | React Native, WebView | both | draws (notes, account sheet) | the first screenshot is black while the WebView starts |
+| KeePassDX 4.5.8 (was 4.5.6) | native crypto | both | draws (create/open database) | |
+| Tasks.org 15.12 | Compose, Room | both | draws (welcome) | |
+| Thunderbird 24.0 | Compose | both | draws (welcome) | |
+| Element 1.6.62 | Rust | both | draws (welcome carousel; the tap moves it) | |
+| VLC 3.7.2 | native player | both | draws (welcome) | |
+| LibreTube 32.1 | media3 | both | draws (Trending); the tap opens a video page | the player stays black, `FileNotFoundException: ""` from media3's FileDataSource (open) |
+| Material Files 1.7.5 | file manager | both | draws (Internal storage); the tap opens a folder | getfilecon ENODATA logged (known: no SELinux labels) |
+| mpv 2026-09-17 | native, GL | both | draws; the tap opens "Open URL" | |
+| Organic Maps 2026.09.29 | native maps | both | draws (map download) | |
+| OsmAnd 5.4.11 | maps | both | draws (welcome) | StrictMode reports MapActivity as a "non-UI Context" (open) |
+| FluffyChat 2.11.4 (was 2.11.3) | Flutter | both | draws (welcome) | |
+| Aurora Store 4.8.4 | Compose | both | draws (welcome) | |
+| F-Droid 2.0.2 | store client | both | draws (Discover, fetching repositories) | |
+| Fossify Gallery 1.14.1 | MediaStore | both | draws (no media) | |
+| Fossify Calendar 1.12.1 | CalendarContract | both | draws (month); the tap opens the day | |
+| Fossify Contacts 1.6.0 | ContactsContract | both | draws (no contacts) | |
+| Fossify File Manager 1.6.3 | file manager | both | draws (Internal); the tap opens Movies | |
+| Catima 2.45.2 | SQLite | both | draws (welcome) | |
+| Fossify Camera 1.5.0 | CameraX | both | draws controls, black preview | no camera on the VMs |
+| AntennaPod 3.12.3 | media3 | both | draws (Home) | |
+| Jellyfin 2.7.3 | WebView | both | draws (Connect to Server); the tap opens Downloads | |
+| Termux 0.119.0-beta.3 | terminal | both | "Bootstrap Error" dialog | known (uid 1000, PLAN next phase 1) |
+| StreetComplete 64.1 (was 64.0) | Compose MP, MapLibre (JavaCPP) | both | draws (welcome); dies when the map renders | fixed: SIGSEGV in MaplibreNativeC event_mask(J) (NativeLoader bound the getter's `__` symbol to the setter); then `Bitmap.createBitmap(Picture)` → Robolectric's createHardwareBitmap gets no ImageReader image (NPE, open) |
+| Amaze 3.11.4 | file manager | both | draws (folders); the tap opens one | logback appenders missing (the app's own log config, harmless) |
+| Etar 1.0.57 | CalendarContract | both | draws (week); the tap adds an event slot | fixed: canScheduleExactAlarms was Robolectric's false, so it opened REQUEST_SCHEDULE_EXACT_ALARM and died on ActivityNotFoundException |
+| DAVx5 4.5.21 | Compose, accounts | both | draws (intro) | |
+| Syncthing-Fork 2.1.7.0 | Go native | both | draws (welcome) | StrictMode "non-UI Context" reports as OsmAnd |
+| Briar 1.5.24 (was 1.5.23) | Tor, H2 | both | splash only | regression since 2026-11-04 (1.5.23 stays on the splash too): NavDrawerActivity's startActivity(StartupActivity) is never launched (open) |
+| QUIK 4.3.7 | SMS | both | dies at start | RoleManager's REQUEST_ROLE (SMS) intent has no handler: ActivityNotFoundException (open) |
+| SimpleX Chat 7.0.4 | Haskell core | both | draws (welcome "Be free") | was a white window on 2026-11-04 |
+| Wikipedia r/50614 | WebView, Room | both | draws (onboarding); Back reaches the Explore feed with articles | |
+| Nextcloud Notes 35.0.0 | notes with sync (SSO) | both | draws (welcome, Choose account); Back reaches the empty list | |
+| Librera Reader 10.0.22 | e-book reader, MuPDF | both | draws (library with the bundled book); Back opens its preferences panel | |
+| Conversations 2.21.0 | XMPP | both | draws (Join the Conversation) | |
+| Andor's Trail 0.8.18 | 2D game, Canvas | both | draws (title; the tap shows its menu) | |
+| Trail Sense 8.2.0 | tool, sensors | both | draws (Explore intro) | |
+| LibreTorrent 4.1.1 | libtorrent | both | draws (No torrents) | |
+| Fulguris 2.1.2 | WebView browser | both | draws (welcome) | |
+| Markor 2026.10.0 | Markdown editor | both | draws (intro) | |
+| OpenTracks 4.29.0 | GPS tracker | both | draws (intro) | |
+| Fossify Voice Recorder 1.7.4 | microphone | both | draws (recorder, folder confirmation dialog) | |
+| CoMaps 2026.10.05 | native maps | both | draws (map download) | |
+| App Manager 4.1.1 | package tool | both | draws (KeyStore password dialog) | fixed: setAccessible on SecretKeySpec.key (java.base was not open to app code) |
+| OpenKeychain 6.0.4 | OpenPGP | both | draws (create key) | |
+
 ## 2026-11-04, second round (current F-Droid versions; UTM instance k3, Parallels k1/k2; screenshot after the frames stop for 3 s)
 
 | App (version) | Kind | VM | State | Note |
@@ -7,11 +74,11 @@
 | Aurora Store 4.8.4 | Compose, store client | Parallels | draws (welcome) | |
 | F-Droid 2.0.2 | store client | Parallels | draws (Discover, "Fetching app repositories") | the index download (foreground worker) had not finished within the run; no error logged |
 | Fossify Gallery 1.14.1 | MediaStore | UTM | draws (folders, "No media files") | |
-| Fossify Calendar 1.12.1 | CalendarContract | UTM | draws (month) | |
-| Fossify Contacts 1.6.0 | ContactsContract | UTM | draws (contacts, empty) | |
+| Fossify Calendar 1.12.1 | CalendarContract | both | draws (month) | |
+| Fossify Contacts 1.6.0 | ContactsContract | both | draws (contacts, empty) | |
 | Fossify File Manager 1.6.3 | file manager | Parallels | draws (Internal, folder list) | |
 | Fossify Camera 1.5.0 | CameraX | Parallels | draws controls, black preview | no camera HAL (parked) |
-| Catima 2.45.2 | SQLite | UTM | draws (welcome) | |
+| Catima 2.45.2 | SQLite | both | draws (welcome) | |
 | AntennaPod 3.12.3 (was 2026-10-28) | media3 | Parallels | draws (Home) | |
 | Jellyfin 2.7.3 | WebView | UTM | draws (Connect to Server) | needs com.android.webview in the data home |
 | Wikipedia r/50614 | WebView, Room | UTM | draws (onboarding) | needs com.android.webview in the data home |
