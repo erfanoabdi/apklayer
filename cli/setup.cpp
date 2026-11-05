@@ -37,6 +37,14 @@ void progress(double p) {
 std::string readText(const std::string& path) { return readFile(path).value_or(""); }
 std::string envOr(const char* name, const char* fallback) { return getenvOr(name, fallback); }
 
+// the providers step's line: every domain is automatic unless chosen (cli/providers.cpp); on a Halium device, which are the device's own
+std::string providersDetail(const Layout& layout, const Instance& instance) {
+    std::string device;
+    for (const char* d : {"graphics", "camera", "vibrator"})
+        if (deviceDomain(layout, instance, d)) device += std::string(device.empty() ? "" : ", ") + d;
+    return device.empty() ? "Automatic: the best this host has" : "Automatic: the device's " + device;
+}
+
 // "" when the JVM apps run on is Java 21 or newer, else what is wrong (the deb depends on openjdk-21-jre-headless; an install that skipped it,
 // as on a phone's small root file system, names another one as APKLAYER_NATIVE_JAVA in ~/.config/apklayer/env)
 std::string javaProblem(const Layout& layout) {
@@ -112,7 +120,7 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
     const bool newer = release.runtime.found() && !release.runtimeVersion.empty() && release.runtimeVersion != have;
     if (o.check) {
         step("runtime", have.empty() ? "todo" : newer ? "todo" : "done", have.empty() ? "Not installed" : newer ? "Version " + release.runtimeVersion + " is available (have " + have + ")" : "Version " + have);
-        step("providers", exists(providersFile(instance)) || !isHalium() ? "done" : "todo", isHalium() ? "Halium device: graphics and camera = device" : "Defaults");
+        step("providers", "done", providersDetail(layout, instance));
         step("system-apps", exists(join(layout.dataHome, "apklayer/setup-done")) ? "done" : "todo", "Providers, documents and the WebView");
         return 0;
     }
@@ -149,9 +157,8 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
     if (!fresh.setUpBundle(false)) { step("runtime", "failed", "Setting up the runtime in " + fresh.native + " failed: apklayer setup in a terminal shows why"); return 1; }
     step("runtime", "done", "Version " + have);
 
-    // 3. the instance's providers: a Halium device's graphics and camera are the device's
-    seedHaliumProviders(instance);
-    step("providers", "done", isHalium() ? "Halium device: " + trim(readText(providersFile(instance)).empty() ? "defaults" : "device providers") : "Defaults");
+    // 3. the instance's providers: automatic (a Halium device's graphics, camera and vibrator are the device's), nothing to write
+    step("providers", "done", providersDetail(fresh, instance));
 
     // 4. the system apps of the bundle (providers, documents, the WebView), once
     const std::string marker = join(layout.dataHome, "apklayer/setup-done");

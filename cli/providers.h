@@ -31,13 +31,19 @@ std::vector<ProviderService> providerServices(const Layout& layout, const Instan
 const std::vector<std::string>& providerDomains();
 // The device's HAL names for the domains whose provider is "device" into <instance data>/apklayer/host_hals.conf (/data/apklayer/
 // host_hals.conf for libbinder and libhidl: those names come from the host binder contexts); removed when there are none. True if any.
-bool writeHostHals(const Instance& instance);
+bool writeHostHals(const Layout& layout, const Instance& instance);
 std::string hostHalsFile(const Instance& instance);
-// providers.toml sets graphics to the device: a Halium device's gralloc and GPU driver instead of the stack's own (docs/HALIUM.md)
-bool deviceGraphics(const Instance& instance);
-// providers.toml sets this domain to the device (its HAL through the host contexts, no front)
-bool deviceDomain(const Instance& instance, const std::string& domain);
-// `apklayer providers [set <domain> <backend> [opt=val...] | set <domain> device | unset <domain>]`
+// graphics is the device's: a Halium device's gralloc and GPU driver instead of the stack's own (docs/HALIUM.md)
+bool deviceGraphics(const Layout& layout, const Instance& instance);
+// this domain is the device's (its HAL through the host contexts, no front): providers.toml says so, or names nothing for the domain and
+// the device's HAL works here (the automatic choice, cli/device_hals.cpp)
+bool deviceDomain(const Layout& layout, const Instance& instance, const std::string& domain);
+// some domain is the device's (the instance's processes need the host binder contexts)
+bool anyDeviceDomain(const Layout& layout, const Instance& instance);
+// The audio HAL's host library for the instance's processes: providers.toml's audio backend, else the best one answering here (PipeWire,
+// PulseAudio), else the PipeWire one.
+std::string audioLibrary(const Layout& layout, const Instance& instance);
+// `apklayer providers [set <domain> <backend> [opt=val...] | set <domain> device|apklayer | unset <domain>]`
 int providersCommand(const Layout& layout, const Instance& instance, const std::vector<std::string>& args);
 
 }  // namespace apklayer
