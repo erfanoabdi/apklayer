@@ -39,12 +39,13 @@ def frames():
 
 
 def green(image, which):
-    """Bright green frame pixels around portrait `which` (the selected one)."""
+    """The share of green frame pixels around portrait `which` (the selected one): a share, not a count, since the window's pixel size
+    differs between hosts (Parallels: 579x325, UTM: 797x448 or twice that)."""
     im = pixels.rgb(image)
     w, h = im.size
     x0, y0, x1, y1 = FRAMES[which]
     box = im.crop((int(x0 * w), int(y0 * h), int(x1 * w), int(y1 * h)))
-    return pixels.count_image(box, lambda r, g, b: g > 170 and r < 150 and b < 90 and g - r > 50)
+    return pixels.count_image(box, lambda r, g, b: g > 120 and g - r > 40 and g - b > 40) / (box.size[0] * box.size[1])
 
 
 def logical(seen, scale):
@@ -90,7 +91,7 @@ def play(scale, mode, actions):
                 elif stage == 1:  # the title screen shows after the shaders are compiled (longer on a loaded VM)
                     if not (saw('@%d%%' % scale) and n >= mark + 1000): continue
                     shots['title'] = instance.capture('otr2-%s-title' % name, PKG)
-                    if green(shots['title'], 1) < 100:
+                    if green(shots['title'], 1) < 0.04:
                         assert tries < 40, 'OTR2 %s: the title screen never came up' % name
                         tries += 1; mark = n - 800  # not there yet: look again in 200 frames
                         if consent_dialog(shots['title']):  # a fresh instance first asks for consent (a Java dialog over the game): its Consent button
@@ -117,8 +118,8 @@ def play(scale, mode, actions):
                     shots['after'] = instance.capture('otr2-%s-%d-after' % (name, step), PKG)
                     other = 1 if target == 2 else 2
                     got = (green(shots['after'], target), green(shots['after'], other))
-                    print('OTR2 %s step %d: %s portrait %d at %s in %dx%d @%d%%: frame pixels (target, other) %s' % (name, step, mode, target, at, *logical(seen, scale), scale, got), flush=True)
-                    assert got[0] > 100 and got[1] < 20, 'FAIL OTR2 %s: the %s at %s did not select portrait %d %s' % (name, mode, at, target, got)
+                    print('OTR2 %s step %d: %s portrait %d at %s in %dx%d @%d%%: green share (target, other) %.3f %.3f' % (name, step, mode, target, at, *logical(seen, scale), scale, *got), flush=True)
+                    assert got[0] > 0.04 and got[1] < 0.01, 'FAIL OTR2 %s: the %s at %s did not select portrait %d %s' % (name, mode, at, target, got)
                     step, phase = step + 1, 'run'
                 elif phase == 'settle' and n >= mark + 150 and sum('surface handed over again' in l for l in seen) > handovers:
                     step, phase = step + 1, 'run'
