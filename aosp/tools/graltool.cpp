@@ -1,12 +1,13 @@
 // graltool: the device's gralloc through the host hwbinder context, shown through the shell (docs/HALIUM.md, plan step (e)).
 //   show W H SECONDS [RRGGBB]   allocates one RGBA_8888 buffer from the device's allocator@4.0 (host_hals.conf lists
-//                               android.hardware.graphics.allocator), fills it through the CPU (mmap of its first fd: a dma-buf),
+//                               android.hardware.graphics.allocator) with a descriptor from the device's own mapper (vendors
+//                               encode descriptors their way: MediaTek's refuses AOSP's encoding), fills it through that mapper's lock,
 //                               opens a display window of the shell and presents it as a gralloc frame (android_wlegl), then
 //                               keeps the window SECONDS seconds and exits. Proves allocation and presentation without the GPU.
 #include <android/hardware/graphics/allocator/4.0/IAllocator.h>
 #include <android/hardware/graphics/mapper/4.0/IMapper.h>
 #include <cutils/native_handle.h>
-#include <gralloctypes/Gralloc4.h>
+#include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,8 +42,16 @@ extern "C" int main(int argc, char** argv) {
                                            BufferUsage::COMPOSER_OVERLAY);
     if (const char* u = getenv("GRALTOOL_USAGE")) usage = strtoull(u, nullptr, 16);  // to find what the device's allocator accepts
     IMapper::BufferDescriptorInfo info{"apklayer-graltool", w, h, 1, static_cast<PixelFormat>(PixelFormat::RGBA_8888), usage, 0};
+    // the device's mapper is a passthrough HAL: loaded here from /vendor (HIDL_FETCH_IMapper, as libhidl's passthrough manager does)
+    const char* mapperLib = getenv("GRALTOOL_MAPPER") ? getenv("GRALTOOL_MAPPER") : "/vendor/lib64/hw/android.hardware.graphics.mapper@4.0-impl-mediatek.so";
+    void* lib = dlopen(mapperLib, RTLD_NOW);
+    auto fetch = lib ? reinterpret_cast<IMapper* (*)(const char*)>(dlsym(lib, "HIDL_FETCH_IMapper")) : nullptr;
+    sp<IMapper> mapper = fetch ? fetch("default") : nullptr;
+    if (mapper == nullptr) { printf("graltool: no mapper from %s (%s)\n", mapperLib, dlerror()); return 1; }
     hidl_vec<uint8_t> descriptor;
-    if (android::gralloc4::encodeBufferDescriptorInfo(info, &descriptor) != android::OK) { printf("graltool: descriptor\n"); return 1; }
+    Error derr = Error::NO_RESOURCES;
+    mapper->createDescriptor(info, [&](Error e, const hidl_vec<uint8_t>& d) { derr = e; descriptor = d; });
+    if (derr != Error::NONE) { printf("graltool: createDescriptor: error %d\n", static_cast<int>(derr)); return 1; }
     native_handle_t* handle = nullptr;
     uint32_t stride = 0;
     auto ret = allocator->allocate(descriptor, 1, [&](Error error, uint32_t s, const hidl_vec<hidl_handle>& buffers) {
@@ -52,14 +61,18 @@ extern "C" int main(int argc, char** argv) {
     });
     if (!ret.isOk() || handle == nullptr) { printf("graltool: allocation failed (%s)\n", ret.description().c_str()); return 1; }
     printf("graltool: allocated %ux%u stride %u: %d fds, %d ints\n", w, h, stride, handle->numFds, handle->numInts);
-    size_t size = static_cast<size_t>(stride) * h * 4;
-    void* pixels = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, handle->data[0], 0);
-    if (pixels == MAP_FAILED) { perror("graltool: mmap of the buffer's first fd"); return 1; }
+    void* imported = nullptr;
+    mapper->importBuffer(handle, [&](Error e, void* b) { if (e == Error::NONE) imported = b; });
+    void* pixels = nullptr;
+    IMapper::Rect all{0, 0, static_cast<int32_t>(w), static_cast<int32_t>(h)};
+    if (imported) mapper->lock(imported, static_cast<uint64_t>(BufferUsage::CPU_WRITE_OFTEN), all, hidl_handle(),
+                               [&](Error e, void* p) { if (e == Error::NONE) pixels = p; });
+    if (pixels == nullptr) { printf("graltool: importBuffer/lock failed\n"); return 1; }
     uint32_t abgr = 0xff000000u | ((rgb & 0xff) << 16) | (rgb & 0xff00) | ((rgb >> 16) & 0xff);  // RGBA_8888 in memory: R, G, B, A
     for (uint32_t y = 0; y < h; y++)
         for (uint32_t x = 0; x < stride; x++)  // a lighter square in the middle: proves orientation and stride
             static_cast<uint32_t*>(pixels)[y * stride + x] = (x > w / 4 && x < 3 * w / 4 && y > h / 4 && y < 3 * h / 4) ? 0xffffffffu : abgr;
-    munmap(pixels, size);
+    mapper->unlock(imported, [](Error, const hidl_handle&) {});
     apklayer_display_callbacks cb{nullptr, vsync, refresh, released};
     apklayer_display* d = apklayer_display_open("apklayer:graltool", w, h, &cb);
     if (d == nullptr) { perror("graltool: display_open"); return 1; }
@@ -72,6 +85,7 @@ extern "C" int main(int argc, char** argv) {
     fflush(stdout);
     sleep(seconds);
     apklayer_display_close(d);
+    mapper->freeBuffer(imported);
     native_handle_close(handle);
     native_handle_delete(handle);
     return r == 0 ? 0 : 1;

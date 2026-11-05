@@ -17,7 +17,6 @@ cc_library_shared {
         "libcutils",
         "libutils",
         "liblog",
-        "libgralloctypes",
         "android.hardware.graphics.allocator@4.0",
         "android.hardware.graphics.mapper@4.0",
         "android.hardware.graphics.common@1.2",
