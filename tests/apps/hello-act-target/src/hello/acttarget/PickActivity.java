@@ -33,6 +33,7 @@ public class PickActivity extends Activity {
         Intent result = new Intent("hello.act.RESULT").putExtra("pid", Process.myPid()).putExtra("echo", intent.getStringExtra("text") + "!")
                 .putExtra("sum", numbers == null ? -1 : java.util.Arrays.stream(numbers).sum()).putExtra("uri", uri).putExtra("how", how)
                 .putExtra("nested", nested);
+        if (intent.getBooleanExtra("now", false)) { setResult(RESULT_OK, result); finish(); return; }  // finish() in onCreate
         if (intent.getBooleanExtra("stay", false) || intent.getStringExtra("keep") != null) return;  // keep: an intent file's (string extras only)
         new Handler(Looper.getMainLooper()).postDelayed(() -> { setResult(RESULT_OK, result); finish(); }, 800);
     }

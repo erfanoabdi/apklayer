@@ -66,7 +66,8 @@ final class HubEndpoint extends Binder {
         }
         if (code == HubProtocol.ENDPOINT_START_ACTIVITY) {
             Intent intent = request.readTypedObject(Intent.CREATOR); android.os.ResultReceiver resultTo = request.readTypedObject(android.os.ResultReceiver.CREATOR); request.enforceNoDataAvail();
-            main.post(() -> HubActivityClient.deliver(intent, resultTo));
+            if (!HubActivityClient.arrive()) { reply.writeException(new IllegalStateException("app exiting")); return true; }  // the hub starts a new process
+            main.post(() -> { HubActivityClient.ARRIVING.decrementAndGet(); HubActivityClient.deliver(intent, resultTo); });
             reply.writeNoException(); return true;
         }
         if (code == HubProtocol.ENDPOINT_START || code == HubProtocol.ENDPOINT_STOP) {

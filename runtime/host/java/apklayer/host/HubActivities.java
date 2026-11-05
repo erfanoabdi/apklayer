@@ -38,8 +38,10 @@ final class HubActivities {
         Intent resolved = new Intent(intent).setComponent(new ComponentName(info.packageName, info.name));
         HubDirectory.Peer target = directory.appPeer(info.packageName);
         if (target != null) {
-            deliver(target, resolved, resultTo);
-        } else {
+            try { deliver(target, resolved, resultTo); }
+            catch (IllegalStateException exiting) { target = null; }  // its last activity finished and it is exiting: a new process takes the launch
+        }
+        if (target == null) {
             synchronized (pending) { pending.computeIfAbsent(info.packageName, key -> new ArrayDeque<>()).add(new Launch(resolved, resultTo)); }
             directory.launchApp(info.packageName);
         }
@@ -67,6 +69,9 @@ final class HubActivities {
     private static void deliver(HubDirectory.Peer target, Intent intent, ResultReceiver resultTo) {
         HubProtocol.call(target.endpoint(), HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_START_ACTIVITY, request -> { request.writeTypedObject(intent, 0); request.writeTypedObject(resultTo, 0); }, reply -> null);
     }
+
+    /** Whether launches wait for the package's app process (a process that was exiting when they came is replaced once it is gone). */
+    boolean waiting(String name) { synchronized (pending) { Deque<Launch> queue = pending.get(name); return queue != null && !queue.isEmpty(); } }
 
     /** The launch waiting for a freshly started app process, if any; later ones that came while it started go to it as to a running app. */
     Launch take(HubDirectory.Peer app) {

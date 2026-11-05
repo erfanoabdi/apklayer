@@ -158,7 +158,10 @@ final class HubDirectory extends Binder {
                 ProcessBuilder command = new ProcessBuilder(System.getProperty("apklayer.cli"), "run", name).redirectErrorStream(true).redirectOutput(log.toFile());
                 Process process = command.start(); appProcesses.put(name, process);
                 System.out.println("[apklayer-hub] starting app " + name + " launcherPid=" + process.pid());
-                process.onExit().thenAccept(exited -> { synchronized (appProcesses) { appProcesses.remove(name, process); } });
+                process.onExit().thenAccept(exited -> {
+                    synchronized (appProcesses) { appProcesses.remove(name, process); }
+                    if (activities.waiting(name)) launchApp(name);  // a launch came while this process was exiting
+                });
             } catch (IOException failure) { throw new IllegalStateException("Cannot launch app " + name, failure); }
         }
     }
@@ -352,6 +355,11 @@ final class HubDirectory extends Binder {
                 caller(); IBinder sender = request.readStrongBinder(); int resultCode = request.readInt(); Intent fillIn = request.readTypedObject(Intent.CREATOR);
                 IBinder finished = request.readStrongBinder(); String permission = request.readString(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeInt(pendingIntents.send(sender, resultCode, fillIn, finished, permission)); return true;
+            }
+            case HubProtocol.PI_SEND_FOR_RESULT -> {
+                caller(); IBinder sender = request.readStrongBinder(); Intent fillIn = request.readTypedObject(Intent.CREATOR);
+                android.os.ResultReceiver resultTo = request.readTypedObject(android.os.ResultReceiver.CREATOR); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeInt(pendingIntents.sendForResult(sender, fillIn, resultTo)); return true;
             }
             case HubProtocol.PI_CANCEL -> {
                 Peer caller = caller(); IBinder sender = request.readStrongBinder(); request.enforceNoDataAvail();

@@ -18,6 +18,15 @@ public class ShadowHostActivity extends ShadowActivity {
         if (requestCode >= 0) real.startActivityForResult(intent, requestCode, options); else real.startActivity(intent, options);
         return true;
     }
+    /** startIntentSenderForResult (Activity's other overloads end here) sends the PendingIntent through the hub and delivers its activity's result. */
+    @Implementation @Override public void startIntentSenderForResult(android.content.IntentSender sender, int requestCode, android.content.Intent fillIn,
+            int flagsMask, int flagsValues, int extraFlags, android.os.Bundle options) throws android.content.IntentSender.SendIntentException {
+        if (!HubActivityClient.enabled() || sender == null || sender.getTarget() == null) {
+            super.startIntentSenderForResult(sender, requestCode, fillIn, flagsMask, flagsValues, extraFlags, options);
+            return;
+        }
+        HubActivityClient.sendForResult(sender, fillIn, real, requestCode);
+    }
     /** navigateUpTo goes to ActivityClient, which nothing answers here: Task.navigateUpTo's rules on the host's task. The activity and those above
      *  the parent (its nearest instance below) finish; the up-intent is then started under the launch rules (a parent that takes it, single-top or
      *  CLEAR_TOP|SINGLE_TOP, gets onNewIntent; otherwise a new one replaces it). Without the parent in the task only this activity finishes: false. */

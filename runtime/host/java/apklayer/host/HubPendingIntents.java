@@ -39,7 +39,7 @@ final class HubPendingIntents {
             return this.creator.equals(creator) && this.type == type && this.requestCode == requestCode && java.util.Objects.equals(this.resultWho, resultWho) && mine.filterEquals(theirs);
         }
         @Override public void send(int code, Intent intent, String resolvedType, IBinder whitelistToken, IIntentReceiver finished, String requiredPermission, Bundle options) {
-            dispatch(this, code, intent, finished == null ? null : finished.asBinder(), requiredPermission);
+            dispatch(this, code, intent, finished == null ? null : finished.asBinder(), requiredPermission, null);
         }
     }
 
@@ -75,13 +75,22 @@ final class HubPendingIntents {
      * Any other IIntentSender (an app's own, as IntentSender wraps one) gets the call itself, as IntentSender.sendIntent makes it.
      */
     int send(IBinder sender, int code, Intent fillIn, IBinder finished, String requiredPermission) {
-        if (sender instanceof Record record) return dispatch(record, code, fillIn, finished, requiredPermission);
+        if (sender instanceof Record record) return dispatch(record, code, fillIn, finished, requiredPermission, null);
         if (sender == null) return CANCELED;
         try { IIntentSender.Stub.asInterface(sender).send(code, fillIn, null, null, IIntentReceiver.Stub.asInterface(finished), requiredPermission, null); return 0; }
         catch (android.os.RemoteException gone) { return CANCELED; }
     }
 
-    private int dispatch(Record record, int code, Intent fillIn, IBinder finished, String requiredPermission) {
+    /**
+     * Activity.startIntentSenderForResult: as send, and an activity PendingIntent's activity answers resultTo when it finishes (Android's resultTo/requestCode
+     * of ActivityTaskManager.startActivityIntentSender). Other types, and senders that are not the hub's, are sent without a result.
+     */
+    int sendForResult(IBinder sender, Intent fillIn, android.os.ResultReceiver resultTo) {
+        if (sender instanceof Record record) return dispatch(record, 0, fillIn, null, null, resultTo);
+        return send(sender, 0, fillIn, null, null);
+    }
+
+    private int dispatch(Record record, int code, Intent fillIn, IBinder finished, String requiredPermission, android.os.ResultReceiver resultTo) {
         synchronized (records) {
             if (record.canceled) return CANCELED;
             if ((record.flags & ONE_SHOT) != 0) { record.canceled = true; records.remove(record); }
@@ -91,7 +100,8 @@ final class HubPendingIntents {
         HubDirectory.Peer creator = new HubDirectory.Peer(-1, record.uid, record.creator, null, null, true, record.uid, null);
         System.out.println("[apklayer-hub] PendingIntent of " + record.creator + " type " + record.type + " sent: " + intent.getAction() + " " + intent.getComponent());
         switch (record.type) {
-            case ACTIVITY -> activities.start(creator, intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), null);
+            // started for a result it stays in the caller's task (Android cancels the result of a NEW_TASK start)
+            case ACTIVITY -> activities.start(creator, resultTo == null ? intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) : intent, resultTo);
             case SERVICE, FOREGROUND_SERVICE -> services.start(creator, intent);
             case BROADCAST -> broadcasts.send(creator, intent, finished, code, null, null, requiredPermission == null ? null : new String[] {requiredPermission}, finished != null, false, 0);
             default -> { return CANCELED; }

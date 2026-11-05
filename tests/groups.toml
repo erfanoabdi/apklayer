@@ -134,7 +134,7 @@ run = ["python3 -u tests/vm/hub.py activities result", "python3 -u tests/vm/hub.
 
 [pendingintents]
 apps = ["hello-pi-holder", "hello-pi-creator", "hello-act-target", "hello-svc-target"]
-run = ["python3 -u tests/vm/hub.py pendingintents broadcast", "python3 -u tests/vm/hub.py pendingintents targets", "python3 -u tests/vm/hub.py pendingintents cancel"]
+run = ["python3 -u tests/vm/hub.py pendingintents broadcast", "python3 -u tests/vm/hub.py pendingintents targets", "python3 -u tests/vm/hub.py pendingintents cancel", "python3 -u tests/vm/hub.py pendingintents forresult"]
 
 [notifications]
 apps = ["hello-nt-poster"]

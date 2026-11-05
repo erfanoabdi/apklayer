@@ -247,7 +247,7 @@ public final class AppHost implements Runnable {
     /** One pass of the run loop; false when the app ends. inAppLoop: the app's own Looper.loop() dispatches the messages, this pass only waits for them. */
     private boolean step(boolean inAppLoop) {
         ShellClient shell = loopShell;
-        if (launched && stack.isEmpty() && System.nanoTime() / 1_000_000 >= task.graceUntilMs) return false;
+        if (launched && stack.isEmpty() && System.nanoTime() / 1_000_000 >= task.graceUntilMs && HubActivityClient.end()) return false;
         long now = System.nanoTime();
         long elapsed = (pausedMode ? SystemClock.uptimeMillis() : System.nanoTime() / 1_000_000) - loopStart;
         // exit when the run time is up (or the window closed) and every scheduled script step has fired

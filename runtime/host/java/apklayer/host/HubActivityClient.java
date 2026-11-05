@@ -24,6 +24,24 @@ final class HubActivityClient {
         for (Object[] waiting; (waiting = early.poll()) != null; ) start.accept((Intent) waiting[0], (ResultReceiver) waiting[1]);
     }
     private static ResultReceiver launchReceiver;
+    /** Activity starts the hub handed to this process that the main thread has not taken yet: the app does not end with an empty task while one waits. */
+    static final java.util.concurrent.atomic.AtomicInteger ARRIVING = new java.util.concurrent.atomic.AtomicInteger();
+    private static volatile boolean ending;
+    /** A start arrives (binder thread); false once the app has decided to end: the hub then gives it to a new process (HubActivities.start). */
+    static boolean arrive() {
+        ARRIVING.incrementAndGet();
+        if (!ending) return true;
+        ARRIVING.decrementAndGet();
+        return false;
+    }
+    /** The main thread ends the app with an empty task unless a start has arrived (then the app goes on and takes it). */
+    static boolean end() {
+        if (ARRIVING.get() != 0) return false;
+        ending = true;
+        if (ARRIVING.get() == 0) return true;
+        ending = false;
+        return false;
+    }
 
     /** Intent extra naming the app that started an activity for a result (AppHost sets it as the activity's calling package). */
     static final String CALLER = "apklayer.callingPackage";
@@ -49,6 +67,23 @@ final class HubActivityClient {
                 parcel -> { parcel.writeTypedObject(intent, 0); parcel.writeTypedObject(resultTo, 0); }, reply -> reply.readInt());
         if (found != 0) System.out.println("[apklayer] no installed app handles " + intent);
         return found == 0;  // not handled: the caller's fallback (the desktop's file dialog for a picker) answers
+    }
+
+    /**
+     * Activity.startIntentSenderForResult (Robolectric's only sends its own test PendingIntents): the hub sends the PendingIntent as its creator, and an activity
+     * it starts answers the requester's onActivityResult(requestCode) when it finishes (Play Games' GamesResolutionActivity waits for that, the game paused below).
+     */
+    static void sendForResult(android.content.IntentSender sender, Intent fillIn, Activity requester, int requestCode) throws android.content.IntentSender.SendIntentException {
+        ResultReceiver receiver = requester == null || requestCode < 0 ? null : new ResultReceiver(new Handler(Looper.getMainLooper())) {
+            @Override protected void onReceiveResult(int code, Bundle data) {
+                Intent result = data == null ? null : data.getParcelable("intent", Intent.class);
+                if (!requester.isDestroyed()) ((ShadowActivity) Shadow.extract(requester)).internalCallDispatchActivityResult(null, requestCode, code, result);
+            }
+        };
+        android.os.IBinder target = sender.getTarget().asBinder();
+        int status = HubProtocol.call(HubClient.current().binder(), HubProtocol.DESCRIPTOR, HubProtocol.PI_SEND_FOR_RESULT,
+                parcel -> { parcel.writeStrongBinder(target); parcel.writeTypedObject(fillIn, 0); parcel.writeTypedObject(receiver, 0); }, reply -> reply.readInt());
+        if (status < 0) throw new android.content.IntentSender.SendIntentException("PendingIntent was canceled");
     }
 
     /** Whether an installed app handles the intent (true without the hub: the host's own routing decides then). */

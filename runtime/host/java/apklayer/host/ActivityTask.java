@@ -51,15 +51,33 @@ final class ActivityTask {
 
     /** The first activity: the app's launcher one, or the one another app started this process for. */
     void launchFirst(Intent intent, boolean incoming) {
+        finishedInCreate = null;
         launch(intent);
-        if (incoming) { incomingActivity = stack.peek().get(); android.os.ResultReceiver answerTo = HubActivityClient.takeReceiver(); if (answerTo != null) hubResults.put(incomingActivity, answerTo); }
+        if (!incoming) { finishedInCreate = null; return; }
+        if (finishedInCreate == null && !stack.isEmpty()) incomingActivity = stack.peek().get();
+        answerWhenDone(HubActivityClient.takeReceiver());
+    }
+
+    /** The activity of the launch under way that finish()ed in onCreate (microG's GamesSignInActivity without an account): its result is final already. */
+    private Activity finishedInCreate;
+
+    /** Where the launched activity's result goes: answered now when it finished in onCreate, else when it finishes (followNavigation). */
+    private void answerWhenDone(android.os.ResultReceiver resultTo) {
+        Activity done = finishedInCreate;
+        finishedInCreate = null;
+        if (resultTo == null) return;
+        if (done != null) {
+            ShadowActivity answered = Shadow.extract(done);
+            HubActivityClient.answer(resultTo, answered.getResultCode(), answered.getResultIntent());
+        } else if (!stack.isEmpty()) hubResults.put(stack.peek().get(), resultTo);
     }
 
     /** An intent another app sent here through the hub: started like one of our own, its result goes to the sender's receiver. */
     void startForHub(Intent intent, android.os.ResultReceiver resultTo) {
         if (launching) { waitingForHub.add(new Object[] {intent, resultTo}); return; }  // planned once the activity being built is on the stack
+        finishedInCreate = null;
         launch(intent);
-        if (resultTo != null && !stack.isEmpty()) hubResults.put(stack.peek().get(), resultTo);
+        answerWhenDone(resultTo);
     }
 
     /** A launch runs the activity's lifecycle, which runs the main looper: a hub intent coming then (a second `apklayer run` for a singleTask
@@ -156,6 +174,7 @@ final class ActivityTask {
         if (c.get().isFinishing()) {  // finish() in onCreate (Telegram starts its intro screen so): Android destroys it without start or resume
             c.destroy();
             System.out.println("[apklayer] finished in onCreate: " + c.get().getClass().getName());
+            if (finishedInCreate == null) finishedInCreate = c.get();
             Intent next = ((ShadowApplication) Shadow.extract(RuntimeEnvironment.getApplication())).getNextStartedActivity();  // what it started before (the intro screen)
             if (next != null) launchStarted(next);
             else if (previous != null) previous.resume();

@@ -62,6 +62,25 @@ public class Main extends Activity {
                 .putExtra("pi1", first).putExtra("pi2", second));
     }
 
+    /** Activity.startIntentSenderForResult with an activity PendingIntent (Play Games' GamesResolutionActivity with microG's): the result comes back, once from
+     *  an activity that finishes later and once from one that finishes in onCreate (microG's sign-in without an account). */
+    private void forResult(boolean now) {
+        Intent activity = new Intent().setComponent(new ComponentName("hello.acttarget", "hello.acttarget.PickActivity")).putExtra("text", now ? "now" : "later").putExtra("now", now);
+        try { startIntentSenderForResult(PendingIntent.getActivity(this, now ? 6 : 5, activity, PendingIntent.FLAG_IMMUTABLE).getIntentSender(), now ? 12 : 11, null, 0, 0, 0); }
+        catch (android.content.IntentSender.SendIntentException failure) { System.out.println("[pi] FAIL " + failure); }
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        String echo = data == null ? null : data.getStringExtra("echo");
+        System.out.println("[pi] result request=" + requestCode + " code=" + resultCode + " echo=" + echo);
+        try {
+            require(resultCode == RESULT_OK && (requestCode == 11 ? "later!" : "now!").equals(echo), "wrong result");
+            if (requestCode == 11) forResult(true);
+            else System.out.println("[pi] PASS forresult: startIntentSenderForResult delivers the activity's result (finished later and in onCreate)");
+        } catch (Throwable failure) { System.out.println("[pi] FAIL " + failure); }
+    }
+
     private void start(String scenario) {
         switch (scenario) {
             case "broadcast" -> {
@@ -105,6 +124,7 @@ public class Main extends Activity {
                 first.cancel();
                 give(first, null);
             }
+            case "forresult" -> forResult(false);
             default -> System.out.println("[pi] unknown scenario");
         }
     }
