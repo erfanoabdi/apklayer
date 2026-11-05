@@ -13,7 +13,8 @@ import org.robolectric.shadows.ShadowLocationManager;
 
 /**
  * LocationManager from the host's location service (GeoClue over D-Bus, bridge/portal/geoclue.py): with GeoClue the network provider reports its location and follows its
- * updates; without it location is off and no provider is enabled (a machine without a GNSS receiver says so instead of inventing a position).
+ * updates; without it location is off and no provider is enabled (a machine without a GNSS receiver says so instead of inventing a position). The gps provider
+ * is the instance's GNSS HAL (providers.toml; the geoclue backend on a desktop) through the hub's one client of it (HubGnss).
  */
 final class HostLocation {
     private HostLocation() {}
@@ -41,10 +42,31 @@ final class HostLocation {
         shadow.setProviderEnabled(LocationManager.NETWORK_PROVIDER, network);
         if (!manager.isLocationEnabled()) return;  // the host has no location service
         if (network) follow(shadow, LocationManager.NETWORK_PROVIDER, HostProcess.dying("python3", script("geoclue.py")));
-        // the GNSS HAL (providers.toml) through its client, which speaks the same lines; shortcut: Robolectric's LocationManager stays the framework side
-        // (no LocationManagerService/GnssLocationProvider in the hub), fed with the HAL's fixes; the HAL keeps one callback, so with two apps
-        // locating at once only the later one gets fixes, until one client in the hub serves them all
-        if (gps) follow(shadow, LocationManager.GPS_PROVIDER, HostProcess.dying(System.getProperty("apklayer.cli", "apklayer"), "exec", "libapklayer_gnss.so", "--client"));
+        // the GNSS HAL (providers.toml) through the hub's one client of it (HubGnss), whose pipe speaks the same lines, while this app has a gps
+        // request (LocationRequests, robolectric 0018); Robolectric's LocationManager stays the framework side (no LocationManagerService or
+        // GnssLocationProvider in the hub), fed with the HAL's fixes
+        if (gps) org.robolectric.shadows.LocationRequests.listener = (provider, active) -> {
+            if (LocationManager.GPS_PROVIDER.equals(provider)) GPS.execute(() -> gps(shadow, active));  // the listener runs under the provider's lock
+        };
+    }
+
+    private static final java.util.concurrent.ExecutorService GPS = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "apklayer-location-gps-requests");
+        t.setDaemon(true);
+        return t;
+    });
+    private static boolean gpsFollowed;  // whether the hub sends this process gps fixes (the GPS thread only)
+
+    /** The first gps request: the hub's fixes; the last one gone: the hub ends the pipe (its reader sees the end and closes it, on its own thread). */
+    private static void gps(ShadowLocationManager shadow, boolean active) {
+        if (active == gpsFollowed) return;
+        android.os.ParcelFileDescriptor pipe;
+        try { pipe = HubClient.current().gnss(active); }
+        catch (RuntimeException none) { System.out.println("[apklayer] location: gps: " + none.getMessage()); return; }  // no permission or no hub: no fixes
+        gpsFollowed = active;
+        if (!active) return;
+        java.io.InputStream fixes = new android.os.ParcelFileDescriptor.AutoCloseInputStream(pipe);
+        follow(shadow, LocationManager.GPS_PROVIDER, fixes, () -> { try { fixes.close(); } catch (IOException ignored) { } });
     }
 
     /** Whether this stack declares the GNSS HAL (cli/stack.cpp stages its manifest when providers.toml configures it). */
@@ -53,26 +75,33 @@ final class HostLocation {
         return root != null && new java.io.File(root, "vendor/etc/vintf/manifest/apklayer-gnss.xml").exists();
     }
 
-    /** Runs a location source (`ready`, then `location LAT LON ACCURACY` lines) and reports its fixes as the provider's. */
+    /** Runs a location helper and follows it. */
     private static void follow(ShadowLocationManager shadow, String provider, java.util.List<String> command) {
         try {
             Process helper = new ProcessBuilder(command).redirectError(ProcessBuilder.Redirect.INHERIT).start();
             Runtime.getRuntime().addShutdownHook(new Thread(helper::destroy));
-            BufferedReader in = new BufferedReader(new InputStreamReader(helper.getInputStream()));
+            follow(shadow, provider, helper.getInputStream(), helper::destroy);
+        } catch (IOException noHelper) { System.out.println("[apklayer] location: " + provider + ": " + noHelper.getMessage() + ", provider removed"); shadow.removeProvider(provider); }
+    }
+
+    /** Reports a location source's fixes (`ready`, then `location LAT LON ACCURACY` lines) as the provider's. */
+    private static void follow(ShadowLocationManager shadow, String provider, java.io.InputStream source, Runnable close) {
+        try {
+            BufferedReader in = new BufferedReader(new InputStreamReader(source));
             String first = in.readLine();  // `ready`, or why the source is not usable
             // btload's own line, and the GNSS client's session status (it may come before its `ready`)
             // shortcut: a fix that comes before `ready` is dropped (a backend that sends one fix only would lose it; the fakes and GeoClue repeat)
             while (first != null && (first.startsWith("LOADED ") || first.startsWith("status ") || first.startsWith("location "))) first = in.readLine();
             if (first == null || !first.equals("ready")) {  // it went away since the hub asked: no such provider here (a disabled one would be a settings write)
                 System.out.println("[apklayer] location: " + provider + ": " + (first == null ? "no helper" : first) + ", provider removed");
-                helper.destroy();
+                close.run();
                 shadow.removeProvider(provider);
                 return;
             }
             Thread follower = new Thread(() -> follow(in, shadow, provider), "apklayer-location-" + provider);
             follower.setDaemon(true);
             follower.start();
-        } catch (IOException noHelper) { System.out.println("[apklayer] location: " + provider + ": " + noHelper.getMessage() + ", provider removed"); shadow.removeProvider(provider); }
+        } catch (IOException ended) { System.out.println("[apklayer] location: " + provider + ": " + ended.getMessage() + ", provider removed"); close.run(); shadow.removeProvider(provider); }
     }
 
     private static void follow(BufferedReader in, ShadowLocationManager shadow, String provider) {
@@ -89,7 +118,8 @@ final class HostLocation {
                 location.setElapsedRealtimeNanos(android.os.SystemClock.elapsedRealtimeNanos());
                 new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> shadow.simulateLocation(location));
             }
-        } catch (IOException ended) { /* GeoClue went away */ }
+        } catch (IOException ended) { /* the source went away */ }
+        try { in.close(); } catch (IOException ignored) { }
     }
 
     /** A helper of bridge/portal (geoclue.py, settings.py) above the CLI, as installed or in the tree. */

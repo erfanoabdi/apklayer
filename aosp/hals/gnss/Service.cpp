@@ -19,7 +19,7 @@ namespace aidl::android::hardware::gnss {
 namespace {
 class BackendGnss final : public Gnss {
   protected:
-    // shortcut: a backend without a fix yet (-EAGAIN) gets the example's mock location reported; a real backend needs the example to skip the report
+    bool reportsMockLocation() const override { return false; }  // a backend without a fix yet (-EAGAIN): no report (patch 0004)
     std::unique_ptr<GnssLocation> getLocationFromHW() override {
         apklayer_gnss_fix fix{};
         if (apklayer_gnss_next_fix(&fix)) return nullptr;

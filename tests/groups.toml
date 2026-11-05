@@ -62,6 +62,11 @@ run = ["tests/vm/providers.sh"]
 apps = ["hello-hardware"]
 run = ["tests/vm/providers-host.sh"]
 
+[gnss]
+# the GeoClue GNSS backend against a python-dbusmock GeoClue, and the hub's one GNSS client serving two apps at once (tests/vm/gnss.sh)
+apps = ["hello-gps", "hello-gps2"]
+run = ["tests/vm/gnss.sh"]
+
 [usb]  # Gadget Zero over usbip on the machine itself (tests/vm/usb-gadget.sh: modprobe, a udev rule, usbipd): the attach, permission dialog, transfers
 apps = ["hello-usb"]
 run = ["tests/vm/usb.py"]
