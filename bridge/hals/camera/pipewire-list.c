@@ -77,6 +77,7 @@ static void on_global(void *data, uint32_t id, uint32_t permissions, const char 
     snprintf(c->id, sizeof c->id, "%s", name ? name : "");
     snprintf(c->name, sizeof c->name, "%s", description ? description : c->id);
     c->facing = location && !strcmp(location, "front") ? APKLAYER_CAM_FRONT : location && !strcmp(location, "back") ? APKLAYER_CAM_BACK : APKLAYER_CAM_EXTERNAL;
+    c->orientation = c->facing == APKLAYER_CAM_FRONT ? 270 : 90;  /* upright on the landscape desktop: camera.h */
     c->max_fps = 30;
     /* its formats: asked now, answered before the next roundtrip ends */
     struct pw_node *node = pw_registry_bind(l->registry, id, type, PW_VERSION_NODE, 0);
@@ -102,6 +103,8 @@ int apklayer_camera_probe(void)
     struct apklayer_camera_info cams[1];
     return apklayer_camera_list(cams, 1) > 0 ? 10 : -1;  /* a real camera beats the fake; no camera: unusable here */
 }
+
+const char apklayer_camera_options[] = "role\tcamera\ttext\n";  /* camera or any (every video source) */
 
 int apklayer_camera_init(int count, const char *const *options)
 {

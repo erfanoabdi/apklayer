@@ -30,14 +30,18 @@ int main(int argc, char **argv)
                info[i].sizes[info[i].num_sizes - 1][0], info[i].sizes[info[i].num_sizes - 1][1]);
     if (n < 1) { puts("FAIL no camera"); return 1; }
     struct apklayer_camera_callbacks cb = {NULL, on_frame, on_error};
-    struct apklayer_camera *cam = apklayer_camera_open(info[0].id, &cb);
     const uint32_t fourccs[] = {APKLAYER_CAM_I420, APKLAYER_CAM_NV12, APKLAYER_CAM_YUYV, APKLAYER_CAM_XRGB, 0};
-    int r = apklayer_camera_start(cam, 640, 480, 30, fourccs);
-    if (r < 0) { printf("FAIL start %d\n", r); return 1; }
-    sleep(1);
-    apklayer_camera_close(cam);
-    printf("%d frames %.4s %ux%u, first byte %u\n", frames, (char *)&fourcc, width, height, y0);
-    if (frames < 5) { puts("FAIL too few frames"); return 1; }
+    for (int i = 0; i < n; i++) {  /* every camera, at its smallest size */
+        struct apklayer_camera *cam = apklayer_camera_open(info[i].id, &cb);
+        frames = 0;
+        int r = apklayer_camera_start(cam, info[i].sizes[0][0], info[i].sizes[0][1], 30, fourccs);
+        if (r < 0) { printf("FAIL %s: start %d\n", info[i].id, r); return 1; }
+        for (int t = 0; t < 100 && !frames; t++) usleep(100000);  /* a camera may take seconds to start (an iPhone over USB: ~4 s) */
+        sleep(1);
+        apklayer_camera_close(cam);
+        printf("%s: %d frames %.4s %ux%u, first byte %u\n", info[i].name, frames, (char *)&fourcc, width, height, y0);
+        if (frames < 5) { puts("FAIL too few frames"); return 1; }
+    }
     puts("PASS camera pipewire: list, stream");
     return 0;
 }

@@ -97,16 +97,26 @@ public final class NativeLoader {
     }
 
     private static void loadLibrary(String name, ClassLoader loader) {
-        String path = bridge() == null ? findLibrary(name) : bridgeLibrary(name);
+        String path = bridge() != null && new File(System.getProperty("apklayer.libdir", ""), "lib" + name + ".so").isFile() ? bridgeLibrary(name) : findLibrary(name);
         if (path == null) throw new UnsatisfiedLinkError("no " + name + " in "
                 + System.getProperty("apklayer.libdir", "") + " (ABI not in the APK?)");
         load(path, loader);
     }
 
-    /** Under the native bridge only the app's own libraries are files: any other name is the guest system's (its namespace finds it). */
+    /** The app's own library under the native bridge (its other names are this CPU's: the WebView provider's, the system's). */
     private static String bridgeLibrary(String name) {
-        File f = new File(System.getProperty("apklayer.libdir", ""), "lib" + name + ".so");
-        return f.isFile() ? f.getAbsolutePath() : "lib" + name + ".so";
+        return new File(System.getProperty("apklayer.libdir", ""), "lib" + name + ".so").getAbsolutePath();
+    }
+
+    /** A library for the bridge's CPU (an AArch64 ELF): it loads through the native bridge; any other (the WebView provider's) natively. */
+    private static boolean guest(String path) {
+        if (bridge() == null) return false;
+        try (java.io.RandomAccessFile f = new java.io.RandomAccessFile(path, "r")) {
+            f.seek(18);
+            return (f.read() | f.read() << 8) == 183;  // e_machine EM_AARCH64
+        } catch (IOException notAFile) {
+            return false;
+        }
     }
 
     public static void load(String path) {
@@ -123,19 +133,20 @@ public final class NativeLoader {
         synchronized (NativeLoader.class) {
             if (LOADED.containsKey(path)) return;
             init();
-            long handle = bridge() != null ? bridgeLoad(path) : dlopen(path); // by path: a library in an app directory goes into the app's namespace
-            if (handle == 0 && bridge() == null && path.startsWith("/")) {  // a library elsewhere (SoLoader's decompressed SuperPack libraries in the app's data): its directory joins the app's path
+            boolean guest = guest(path);
+            long handle = guest ? bridgeLoad(path) : dlopen(path); // by path: a library in an app directory goes into the app's namespace
+            if (handle == 0 && !guest && path.startsWith("/")) {  // a library elsewhere (SoLoader's decompressed SuperPack libraries in the app's data): its directory joins the app's path
                 try { appPath += ":" + new File(path).getParentFile().getCanonicalPath(); setLibraryPath(systemPath, appPath); } catch (java.io.IOException unreadable) { /* the error below says so */ }
                 handle = dlopen(path);
             }
-            if (handle == 0) throw new UnsatisfiedLinkError(path + ": " + (bridge() != null ? bridgeError() : dlerror()));
+            if (handle == 0) throw new UnsatisfiedLinkError(path + ": " + (guest ? bridgeError() : dlerror()));
             LOADED.put(path, handle);
-            long onLoad = bridge() != null ? bridgeSymbol(handle, "JNI_OnLoad", null) : dlsym(handle, "JNI_OnLoad");
+            long onLoad = guest ? bridgeSymbol(handle, "JNI_OnLoad", null) : dlsym(handle, "JNI_OnLoad");
             if (onLoad != 0) {
                 int version = callOnLoad(onLoad, loader);
                 if (version < 0) throw new UnsatisfiedLinkError(path + ": JNI_OnLoad failed");
             }
-            int bound = bindByName(path, handle, loader);
+            int bound = bindByName(path, handle, loader, guest);
             System.out.println("[apklayer] loaded " + new File(path).getName() + " (JNI_OnLoad "
                     + (onLoad != 0 ? "ran" : "absent") + ", " + bound + " natives bound by name)");
         }
@@ -171,18 +182,18 @@ public final class NativeLoader {
 
     // ---- binding Java_* functions by name ----
 
-    private static int bindByName(String path, long handle, ClassLoader cl) {
+    private static int bindByName(String path, long handle, ClassLoader cl, boolean guest) {
         int bound = 0;
         for (String symbol : exportedJavaFunctions(path)) {
             try {
                 String[] parts = demangle(symbol);
                 Class<?> cls = Class.forName(parts[0], false, cl);
-                long fn = bridge() != null ? 0 : dlsym(handle, symbol);
+                long fn = guest ? 0 : dlsym(handle, symbol);
                 for (Method m : cls.getDeclaredMethods()) {
                     if (!java.lang.reflect.Modifier.isNative(m.getModifiers()) || !m.getName().equals(parts[1])) continue;
                     String sig = descriptor(m);
                     if (parts[2] != null && !sig.startsWith("(" + parts[2])) continue; // overload suffix
-                    if (bridge() != null) fn = bridgeSymbol(handle, symbol, shorty(m)); // a trampoline per signature
+                    if (guest) fn = bridgeSymbol(handle, symbol, shorty(m)); // a trampoline per signature
                     if (registerNative(cls, m.getName(), sig, fn) == 0) bound++;
                 }
             } catch (ClassNotFoundException | LinkageError e) {

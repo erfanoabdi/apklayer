@@ -37,6 +37,7 @@ final class HubDirectory extends Binder {
     private final HubInstaller installer;
     private final HubInputMethods inputMethods;
     private final HubBluetooth bluetooth = new HubBluetooth(this);
+    private final HubGnss gnss = new HubGnss(this);
     final HubUsb usb;
     private final Map<String, Process> appProcesses = new HashMap<>();
     private final Map<String, Process> hosts = new HashMap<>();
@@ -455,6 +456,12 @@ final class HubDirectory extends Binder {
                 try { pipes = bluetooth.open(caller, address, uuid); } catch (IOException failure) { throw new IllegalStateException("Bluetooth: " + failure, failure); }
                 reply.writeNoException(); for (var pipe : pipes) reply.writeTypedObject(pipe, android.os.Parcelable.PARCELABLE_WRITE_RETURN_VALUE); return true;
             }
+            case HubProtocol.GNSS -> {
+                Peer caller = caller(); boolean follow = request.readBoolean(); request.enforceNoDataAvail();
+                android.os.ParcelFileDescriptor fixes = null;
+                try { if (follow) fixes = gnss.follow(caller); else gnss.died(caller); } catch (IOException failure) { throw new IllegalStateException("GNSS: " + failure, failure); }
+                reply.writeNoException(); reply.writeTypedObject(fixes, android.os.Parcelable.PARCELABLE_WRITE_RETURN_VALUE); return true;
+            }
             case HubProtocol.USB_PERMISSION -> {
                 Peer caller = caller(); String device = request.readString(); boolean ask = request.readBoolean(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeBoolean(usb.permission(caller.name(), device, ask)); return true;
@@ -473,6 +480,7 @@ final class HubDirectory extends Binder {
         bindings.died(peer);
         broadcasts.died(peer);
         startedServices.died(peer);
+        gnss.died(peer);
         exitWhenIdle(IDLE_EXIT_MS);
     }
 }

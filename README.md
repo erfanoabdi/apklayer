@@ -53,4 +53,4 @@ To report a bug: open the app again, reproduce the problem, run `apklayer report
 `tests/` VM tests, sample apps · `docs/` plan, architecture, patches, licenses · `STATUS.md`, `goal.md`, `CLAUDE.md` (agent rules).
 
 ## License
-AGPL-3.0-or-later for everyone (`LICENSE`, `NOTICE`); a paid commercial license is available (`COMMERCIAL.md`). Third-party parts keep their licenses (`docs/THIRD_PARTY.md`).
+AGPL-3.0-or-later for everyone (`LICENSE`, `NOTICE`); commercial licenses are available from Navotpala Tech (Bliss Co-Labs), info@navotpala.tech (`COMMERCIAL.md`). Third-party parts keep their licenses (`docs/THIRD_PARTY.md`).

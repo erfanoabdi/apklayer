@@ -2,6 +2,7 @@
 
 #include <dlfcn.h>
 #include <signal.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <cstdint>
 #include <cstdio>
@@ -54,14 +55,50 @@ void writeProviders(const std::string& file, const std::vector<ProviderConfig>& 
     if (!writeFile(file, text)) die("cannot write " + file);
 }
 
-// probe() of a backend library: <0 unusable here, 0 usable (never a default), >0 quality; INT32_MIN when it cannot be loaded
-int probe(const std::string& lib, const std::string& domain) {
-    void* handle = dlopen(lib.c_str(), RTLD_NOW | RTLD_LOCAL);
-    if (!handle) return INT32_MIN;
-    auto fn = reinterpret_cast<int (*)()>(dlsym(handle, ("apklayer_" + domain + "_probe").c_str()));
-    int quality = fn ? fn() : INT32_MIN;
-    dlclose(handle);
-    return quality;
+// probe() of a backend library: <0 unusable here, 0 usable (never a default), >0 quality; INT32_MIN when it cannot be loaded. Run in a child
+// process: a backend's probe may start threads (GDBus) or block on a bus, which must not stay in the stack daemon that forks services.
+// options: the backend's apklayer_<domain>_options, a line "key<TAB>default<TAB>kind" per option it takes (kind text or file), "" without
+// (read in this process: a constant string, nothing to start).
+int probe(const std::string& lib, const std::string& domain, std::string& options) {
+    options.clear();
+    if (void* handle = dlopen(lib.c_str(), RTLD_NOW | RTLD_LOCAL)) {
+        if (auto declared = static_cast<const char*>(dlsym(handle, ("apklayer_" + domain + "_options").c_str()))) options = declared;
+        // not dlclose'd before the fork below? The child loads it again: a constructor of the library runs only there
+        dlclose(handle);
+    }
+    pid_t pid = fork();
+    if (pid == 0) {
+        void* handle = dlopen(lib.c_str(), RTLD_NOW | RTLD_LOCAL);
+        auto fn = handle ? reinterpret_cast<int (*)()>(dlsym(handle, ("apklayer_" + domain + "_probe").c_str())) : nullptr;
+        if (!fn) _exit(255);
+        int q = fn();
+        _exit(q < 0 ? 0 : 1 + (q > 253 ? 253 : q));  // exit status: 0 unusable, 1 + quality, 255 unloadable
+    }
+    int st = 0;
+    if (pid < 0 || waitpid(pid, &st, 0) != pid || !WIFEXITED(st) || WEXITSTATUS(st) == 255) return INT32_MIN;
+    return WEXITSTATUS(st) == 0 ? -1 : WEXITSTATUS(st) - 1;
+}
+
+// a domain's staged backends: name -> library
+std::vector<std::pair<std::string, std::string>> backends(const Layout& l, const std::string& domain) {
+    std::vector<std::pair<std::string, std::string>> found;
+    const std::string prefix = "libapklayer-" + domain + "-";
+    for (const std::string& f : listDir(l.native))
+        if (f.rfind(prefix, 0) == 0 && f.size() > prefix.size() + 3 && f.substr(f.size() - 3) == ".so")
+            found.push_back({f.substr(prefix.size(), f.size() - prefix.size() - 3), join(l.native, f)});
+    return found;
+}
+
+// the default of a domain providers.toml does not name: the staged backend with the highest probe() above 0, or "" (the domain stays off)
+std::string defaultBackend(const Layout& l, const std::string& domain) {
+    std::string best;
+    int bestQuality = 0;
+    for (const auto& [name, lib] : backends(l, domain)) {
+        std::string unusedOptions;
+        int q = probe(lib, domain, unusedOptions);
+        if (q > bestQuality) best = name, bestQuality = q;
+    }
+    return best;
 }
 }  // namespace
 
@@ -98,7 +135,14 @@ std::vector<ProviderConfig> readProviders(const std::string& file) {
 
 std::vector<ProviderService> providerServices(const Layout& l, const Instance& inst) {
     std::vector<ProviderService> services;
-    for (const ProviderConfig& c : readProviders(providersFile(inst))) {
+    std::vector<ProviderConfig> configs = readProviders(providersFile(inst));
+    for (const Domain& d : kDomains) {  // a domain the file does not name: the best backend this host has, if any (docs/PLAN.md, providers 3)
+        bool named = false;
+        for (const ProviderConfig& c : configs) named |= c.domain == d.name;
+        std::string backend = named ? "" : defaultBackend(l, d.name);
+        if (!backend.empty()) configs.push_back({d.name, "apklayer", backend, {}});
+    }
+    for (const ProviderConfig& c : configs) {
         const Domain* d = findDomain(c.domain);
         if (!d) { fprintf(stderr, "providers: no domain %s\n", c.domain.c_str()); continue; }
         if (c.provider == "device") continue;  // the device's own HAL: no front here (writeHostHals lists it)
@@ -134,20 +178,27 @@ bool writeHostHals(const Instance& inst) {
 int providersCommand(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {
     const std::string file = providersFile(inst);
     auto domains = readProviders(file);
-    if (args.empty()) {  // domain, provider, backend, options; then every backend found with its probe() answer
+    if (args.empty()) {  // domain, provider, backend, its options (a field each); then every backend found with its probe() answer and the options it takes
         for (const ProviderConfig& d : domains) {
-            std::string options;
-            for (const std::string& o : d.options) options += (options.empty() ? "" : " ") + o;
-            printf("%s\t%s\t%s\t%s\n", d.domain.c_str(), d.provider.c_str(), d.backend.c_str(), options.c_str());
+            printf("%s\t%s\t%s", d.domain.c_str(), d.provider.c_str(), d.backend.c_str());
+            for (const std::string& o : d.options) printf("\t%s", o.c_str());
+            printf("\n");
         }
-        for (const Domain& d : kDomains)
-            for (const std::string& f : listDir(l.native)) {
-                std::string prefix = std::string("libapklayer-") + d.name + "-";
-                if (f.rfind(prefix, 0) != 0 || f.size() < prefix.size() + 4 || f.substr(f.size() - 3) != ".so") continue;
-                int q = probe(join(l.native, f), d.name);
-                std::string name = f.substr(prefix.size(), f.size() - prefix.size() - 3);
+        for (const Domain& d : kDomains) {
+            std::string best;
+            int bestQuality = 0;
+            for (const auto& [name, lib] : backends(l, d.name)) {
+                std::string options;
+                int q = probe(lib, d.name, options);
+                if (q > bestQuality) best = name, bestQuality = q;
                 printf("backend\t%s\t%s\t%s\n", d.name, name.c_str(), q == INT32_MIN ? "unloadable" : q < 0 ? "unavailable" : ("quality " + std::to_string(q)).c_str());
+                for (const std::string& o : split(options, '\n'))
+                    if (!o.empty()) printf("option\t%s\t%s\t%s\n", d.name, name.c_str(), o.c_str());
             }
+            bool named = false;
+            for (const ProviderConfig& c : domains) named |= c.domain == d.name;
+            if (!named) printf("default\t%s\t%s\n", d.name, best.empty() ? "(none: off)" : best.c_str());  // what an unset domain runs
+        }
         return 0;
     }
     const std::string& action = args[0];

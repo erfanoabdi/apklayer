@@ -57,6 +57,16 @@ run = ["tests/vm/bluetooth.sh"]
 apps = ["hello-hardware"]
 run = ["tests/vm/providers.sh"]
 
+[hardware-host]
+# the host backends of sensors and vibrator against mocks (iio-sensor-proxy, sensorfw, feedbackd over python-dbusmock; a uinput rumble device), each the default by probe()
+apps = ["hello-hardware"]
+run = ["tests/vm/providers-host.sh"]
+
+[gnss]
+# the GeoClue GNSS backend against a python-dbusmock GeoClue, and the hub's one GNSS client serving two apps at once (tests/vm/gnss.sh)
+apps = ["hello-gps", "hello-gps2"]
+run = ["tests/vm/gnss.sh"]
+
 [usb]  # Gadget Zero over usbip on the machine itself (tests/vm/usb-gadget.sh: modprobe, a udev rule, usbipd): the attach, permission dialog, transfers
 apps = ["hello-usb"]
 run = ["tests/vm/usb.py"]

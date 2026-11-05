@@ -128,10 +128,83 @@ public final class Main extends Activity {
         check(jpegResult[0].startsWith("ok"), "the JPEG differs");
 
         session[0].close();
-        device[0].close();
         yuv.close();
         jpeg.close();
+        smallPreviewSession(manager, device[0], handler);
+        device[0].close();
+        camera1Preview(handler);
         thread.quitSafely();
+    }
+
+    /** Open Camera's camera2 stream set on a small window: a SurfaceTexture preview no larger than the display (it drops bigger preview sizes;
+     *  with none left it never configures a session) and a JPEG ImageReader at the largest picture size. */
+    private void smallPreviewSession(CameraManager manager, CameraDevice device, Handler handler) throws Exception {
+        android.hardware.camera2.params.StreamConfigurationMap map =
+                manager.getCameraCharacteristics(device.getId()).get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+        android.util.Size preview = null, picture = null;
+        for (android.util.Size s : map.getOutputSizes(SurfaceTexture.class))
+            if (s.getWidth() <= 640 && s.getHeight() <= 360 && (preview == null || s.getWidth() * s.getHeight() > preview.getWidth() * preview.getHeight())) preview = s;
+        for (android.util.Size s : map.getOutputSizes(ImageFormat.JPEG))
+            if (picture == null || s.getWidth() * s.getHeight() > picture.getWidth() * picture.getHeight()) picture = s;
+        System.out.println("[cam] small preview " + preview + ", picture " + picture);
+        check(preview != null, "no preview size fits a 640x360 window");
+        SurfaceTexture texture = new SurfaceTexture(false);
+        texture.setDefaultBufferSize(preview.getWidth(), preview.getHeight());
+        Surface surface = new Surface(texture);
+        ImageReader jpeg = ImageReader.newInstance(picture.getWidth(), picture.getHeight(), ImageFormat.JPEG, 2);
+        CountDownLatch configured = new CountDownLatch(1), still = new CountDownLatch(1);
+        CameraCaptureSession[] session = new CameraCaptureSession[1];
+        String[] size = new String[1];
+        jpeg.setOnImageAvailableListener(r -> {
+            try (Image image = r.acquireLatestImage()) {
+                ByteBuffer b = image.getPlanes()[0].getBuffer();
+                byte[] data = new byte[b.remaining()];
+                b.get(data);
+                BitmapFactory.Options o = new BitmapFactory.Options();
+                o.inJustDecodeBounds = true;
+                BitmapFactory.decodeByteArray(data, 0, data.length, o);
+                size[0] = o.outWidth + "x" + o.outHeight;
+                still.countDown();
+            }
+        }, handler);
+        device.createCaptureSession(Arrays.asList(surface, jpeg.getSurface()), new CameraCaptureSession.StateCallback() {
+            @Override public void onConfigured(CameraCaptureSession s) { session[0] = s; configured.countDown(); }
+            @Override public void onConfigureFailed(CameraCaptureSession s) { configured.countDown(); }
+        }, handler);
+        check(configured.await(10, TimeUnit.SECONDS) && session[0] != null, "the small-preview session was not configured");
+        CaptureRequest.Builder repeating = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+        repeating.addTarget(surface);
+        session[0].setRepeatingRequest(repeating.build(), null, handler);
+        CaptureRequest.Builder capture = device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+        capture.addTarget(jpeg.getSurface());
+        session[0].capture(capture.build(), null, handler);
+        check(still.await(10, TimeUnit.SECONDS), "no JPEG from the small-preview session");
+        System.out.println("[cam] small-preview session jpeg " + size[0]);
+        check(size[0].equals(picture.getWidth() + "x" + picture.getHeight()), "the JPEG is not the picture size");
+        session[0].close();
+        jpeg.close();
+    }
+
+    /** android.hardware.Camera (Open Camera's default API): the parameters build, preview frames reach a preview callback. */
+    @SuppressWarnings("deprecation")
+    private void camera1Preview(Handler handler) throws Exception {
+        android.hardware.Camera[] camera = new android.hardware.Camera[1];
+        CountDownLatch frames = new CountDownLatch(5);
+        handler.post(() -> {  // the camera's events go to the looper of the thread that opens it
+            try {
+                camera[0] = android.hardware.Camera.open(0);
+                android.hardware.Camera.Parameters p = camera[0].getParameters();
+                System.out.println("[cam] camera1 preview " + p.getPreviewSize().width + "x" + p.getPreviewSize().height + " of " + p.getSupportedPreviewSizes().size()
+                        + " sizes, video sizes " + (p.getSupportedVideoSizes() == null ? 0 : p.getSupportedVideoSizes().size()));
+                camera[0].setPreviewTexture(new SurfaceTexture(false));
+                camera[0].setPreviewCallback((data, c) -> frames.countDown());
+                camera[0].startPreview();
+            } catch (Exception failure) { System.out.println("[cam] camera1 " + failure); }
+        });
+        boolean ok = frames.await(10, TimeUnit.SECONDS);
+        handler.post(() -> { if (camera[0] != null) { camera[0].setPreviewCallback(null); camera[0].release(); } });
+        check(ok, "no Camera1 preview frames");
+        System.out.println("[cam] camera1 preview frames arrive");
     }
 
     /** The Y, U, V of each bar's centre, a quarter down the frame, against the fake pattern's. */

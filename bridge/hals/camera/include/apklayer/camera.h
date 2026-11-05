@@ -30,7 +30,8 @@ struct apklayer_camera_info {
     char id[64];            /* stable id of the camera for this host session */
     char name[128];         /* human name ("MacBook Pro Camera") */
     int facing;             /* APKLAYER_CAM_FRONT/BACK/EXTERNAL */
-    int orientation;        /* sensor orientation in degrees (0, 90, 180, 270) */
+    int orientation;        /* Android's sensor orientation (0, 90, 180, 270): relative to the instance's portrait-natural display, so a camera whose
+                               picture is upright on a landscape desktop (a webcam, a phone's sensor) is 90, a front one 270 */
     int max_fps;
     int num_sizes;          /* 1..APKLAYER_CAMERA_MAX_SIZES */
     uint32_t sizes[APKLAYER_CAMERA_MAX_SIZES][2];   /* width, height the camera can stream */
@@ -38,6 +39,8 @@ struct apklayer_camera_info {
 
 /* <0: not usable on this host; 0: usable but never chosen by default (fake); >0: quality, the highest is the default */
 int apklayer_camera_probe(void);
+/* optional (the manager's fields, `apklayer providers`): the options init takes, a line "key\tdefault\tkind" each, kind text or file */
+extern const char apklayer_camera_options[];
 /* the backend's options ("key=value" each); 0 or -errno */
 int apklayer_camera_init(int count, const char *const *options);
 /* the cameras, at most `max`; returns how many, or -errno */

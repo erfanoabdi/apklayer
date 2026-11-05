@@ -34,6 +34,7 @@ public final class HubHost {
         StartTrace.mark("hub: published");
         HostBattery.installHub(directory::sendSystem);
         HubVibrator.publishIfProvided(directory.packages()::uidHolds);  // before READY: an app's SystemVibratorManager looks it up once
+        HubBatteryStats.publishIfSensors();  // SensorService's battery notes: without it every sensor enable and disable waits 5 s
         directory.usb.watch();
         StartTrace.mark("hub: battery, vibrator, usb");
         System.out.println("[apklayer-hub] READY pid=" + android.os.Process.myPid());

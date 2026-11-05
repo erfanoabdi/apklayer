@@ -68,6 +68,12 @@ public final class Main extends Activity {
         SensorManager sm = getSystemService(SensorManager.class);
         Sensor accel = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         System.out.println("[hw] sensors " + sm.getSensorList(Sensor.TYPE_ALL).size() + " accelerometer=" + (accel == null ? null : accel.getName()));
+        for (Sensor s : sm.getSensorList(Sensor.TYPE_ALL)) {  // every sensor's range and a value (the host backends' mapping: tests/vm/providers-host.sh)
+            System.out.println("[hw] listening type=" + s.getType() + " name=" + s.getName());
+            float[] v = listen(sm, s, 1000);
+            System.out.println(String.format(java.util.Locale.ROOT, "[hw] sensor type=%d name=%s max=%.2f mindelay=%d value=%s", s.getType(), s.getName(),
+                s.getMaximumRange(), s.getMinDelay(), v == null ? "none" : String.format(java.util.Locale.ROOT, "%.3f %.3f %.3f", v[0], v.length > 1 ? v[1] : 0f, v.length > 2 ? v[2] : 0f)));
+        }
         if (accel == null) return;
         AtomicInteger events = new AtomicInteger();
         AtomicReference<float[]> last = new AtomicReference<>();
@@ -84,5 +90,21 @@ public final class Main extends Activity {
         float[] v = last.get();
         System.out.println(String.format(java.util.Locale.ROOT, "[hw] accelerometer %d events in 2 s, last %s", events.get(),
                 v == null ? "none" : String.format(java.util.Locale.ROOT, "%.3f %.3f %.3f", v[0], v[1], v[2])));
+    }
+
+    /** the last event of a sensor within ms (an on-change sensor sends its current value when registered) */
+    private static float[] listen(SensorManager sm, Sensor sensor, long ms) throws InterruptedException {
+        AtomicReference<float[]> last = new AtomicReference<>();
+        HandlerThread thread = new HandlerThread("sensor");
+        thread.start();
+        SensorEventListener listener = new SensorEventListener() {
+            @Override public void onSensorChanged(SensorEvent event) { last.set(event.values.clone()); }
+            @Override public void onAccuracyChanged(Sensor s, int accuracy) {}
+        };
+        sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_GAME, new Handler(thread.getLooper()));
+        Thread.sleep(ms);
+        sm.unregisterListener(listener);
+        thread.quitSafely();
+        return last.get();
     }
 }

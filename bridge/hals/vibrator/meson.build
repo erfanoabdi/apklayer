@@ -1,2 +1,15 @@
-# the vibrator HAL's backends (include/apklayer/vibrator.h): libapklayer-vibrator-<backend>.so, one chosen per instance in providers.toml
-shared_library('apklayer-vibrator-fake', 'fake.c', include_directories: include_directories('include'), install: true, install_dir: native_dir)
+# the vibrator HAL's backends (include/apklayer/vibrator.h): libapklayer-vibrator-<backend>.so, one chosen per instance in providers.toml (or the
+# best by probe() when it names none)
+vibrator_inc = include_directories('include')
+shared_library('apklayer-vibrator-fake', 'fake.c', include_directories: vibrator_inc, install: true, install_dir: native_dir)
+if host_machine.system() == 'linux'
+  shared_library('apklayer-vibrator-ff', 'ff.c', include_directories: vibrator_inc, install: true, install_dir: native_dir)
+endif
+if dependency('gio-2.0', required: false).found()  # the D-Bus daemons' backends
+  foreach backend : ['feedbackd', 'hfd']
+    shared_library('apklayer-vibrator-' + backend, backend + '.c', include_directories: vibrator_inc, dependencies: dependency('gio-2.0'),
+                   install: true, install_dir: native_dir)
+  endforeach
+endif
+# a sensors or vibrator backend on its own, for a device check without Android (tests/hals/backend-probe.c); not installed
+executable('backend-probe', '../../../tests/hals/backend-probe.c', dependencies: meson.get_compiler('c').find_library('dl', required: false))
