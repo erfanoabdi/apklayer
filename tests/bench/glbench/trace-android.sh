@@ -22,4 +22,5 @@ import sys, statistics
 ts = [float(l.split("t=")[1].split()[0]) for l in sys.stdin]
 d = [b - a for a, b in zip(ts, ts[1:])]
 d = d[len(d) // 5:]  # skip the first frames (startup)
-if d: print("shell: %d dmabuf frames; steady part: %.1f fps, median interval %.1f ms, %d intervals > 25 ms" % (len(ts), len(d) / sum(d), 1000 * statistics.median(d), sum(x > 0.025 for x in d)))'
+s = sorted(d)
+if d: print("shell: %d dmabuf frames; steady part: %.1f fps, interval median %.1f p95 %.1f max %.1f ms, %d intervals > 25 ms" % (len(ts), len(d) / sum(d), 1000 * statistics.median(d), 1000 * s[int(len(s) * 0.95)], 1000 * s[-1], sum(x > 0.025 for x in d)))'

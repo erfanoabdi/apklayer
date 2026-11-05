@@ -317,7 +317,6 @@ EGLBoolean eglGetCompositorTimingSupportedANDROID(EGLDisplay, EGLSurface, EGLint
 EGLBoolean eglGetCompositorTimingANDROID(EGLDisplay, EGLSurface, EGLint, const EGLint*, EGLnsecsANDROID*) { return fail(EGL_BAD_ACCESS); }
 EGLBoolean eglGetNextFrameIdANDROID(EGLDisplay, EGLSurface, EGLuint64KHR*) { return fail(EGL_BAD_ACCESS); }
 EGLBoolean eglGetFrameTimestampsANDROID(EGLDisplay, EGLSurface, EGLuint64KHR, EGLint, const EGLint*, EGLnsecsANDROID*) { return fail(EGL_BAD_ACCESS); }
-EGLBoolean eglPresentationTimeANDROID(EGLDisplay, EGLSurface, EGLnsecsANDROID) { return EGL_TRUE; }
 
 // ---- forwarded to the host, untouched ----
 // A tail call through a pointer resolved at load: no signature needed.
@@ -329,7 +328,7 @@ EGLBoolean eglPresentationTimeANDROID(EGLDisplay, EGLSurface, EGLnsecsANDROID) {
     X(eglGetCurrentContext) X(eglGetCurrentDisplay) X(eglGetSyncAttrib) X(eglGetSyncAttribKHR) \
     X(eglQueryAPI) X(eglReleaseTexImage) \
     X(eglSignalSyncKHR) \
-    X(eglSwapInterval) X(eglWaitClient) X(eglWaitGL) X(eglWaitNative) \
+    X(eglWaitClient) X(eglWaitGL) X(eglWaitNative) \
     X(eglWaitSync) X(eglWaitSyncKHR) X(eglLockSurfaceKHR) X(eglUnlockSurfaceKHR)
 
 #define DECLARE_SLOT(name) __attribute__((used, visibility("hidden"))) void* host_slot_##name;
@@ -352,7 +351,7 @@ __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char* name) {
         {"eglInitialize", (void*)eglInitialize}, {"eglTerminate", (void*)eglTerminate},
         {"eglCreateImageKHR", (void*)eglCreateImageKHR}, {"eglCreateImage", (void*)eglCreateImage},
         {"eglGetNativeClientBufferANDROID", (void*)eglGetNativeClientBufferANDROID},
-        {"eglSwapBuffersWithDamageKHR", (void*)eglSwapBuffersWithDamageKHR}, {"eglSwapBuffersWithDamageEXT", (void*)eglSwapBuffersWithDamageEXT}, {"eglSetDamageRegionKHR", (void*)eglSetDamageRegionKHR}, {"eglSwapBuffers", (void*)eglSwapBuffers},
+        {"eglSwapBuffersWithDamageKHR", (void*)eglSwapBuffersWithDamageKHR}, {"eglSwapBuffersWithDamageEXT", (void*)eglSwapBuffersWithDamageEXT}, {"eglSetDamageRegionKHR", (void*)eglSetDamageRegionKHR}, {"eglSwapInterval", (void*)eglSwapInterval}, {"eglSwapBuffers", (void*)eglSwapBuffers},
         {"eglQueryStringImplementationANDROID", (void*)eglQueryStringImplementationANDROID},
         {"eglSetBlobCacheFuncsANDROID", (void*)eglSetBlobCacheFuncsANDROID},
         {"eglGetFrameTimestampsANDROID", (void*)eglGetFrameTimestampsANDROID},

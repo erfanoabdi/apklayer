@@ -9,9 +9,11 @@
 #include <log/log.h>
 #include <poll.h>
 #include <system/window.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <mutex>
+#include <optional>
 #include <set>
 #include <vector>
 
@@ -22,6 +24,18 @@ using namespace apklayer::egl;
 namespace {
 
 // The app's EGLSurface is the address of its Window: the host surface behind it is replaced when the Android window changes size.
+// An EGLImage of one buffer with the texture and framebuffer made of it, kept across swaps (a swap used to import both buffers and build
+// and delete two FBOs every frame). The key of a gbm buffer is its dmabuf's inode (the image keeps the dmabuf alive, so it is not reused
+// while cached), of an Android buffer its address (held by a reference while cached).
+struct CachedImage {
+    uint64_t key;
+    ANativeWindowBuffer* ref;  // the Android buffer, referenced; null for a gbm buffer
+    EGLImage image;
+    unsigned tex, fbo;
+    uint64_t used;
+};
+constexpr size_t kCacheMax = 8;
+
 struct Window {
     EGLDisplay dpy;
     EGLConfig cfg;
@@ -30,6 +44,11 @@ struct Window {
     EGLSurface host;
     uint32_t width, height;
     EGLint visual;
+    // the swap's cached images: the GL objects belong to cacheCtx's share group
+    EGLContext cacheCtx = EGL_NO_CONTEXT;
+    std::vector<CachedImage> srcCache, dstCache;
+    uint64_t useCount = 0;
+    int64_t presentationTime = 0;  // eglPresentationTimeANDROID for the next frame (0 = none)
 };
 std::recursive_mutex windowsLock;
 std::set<Window*> windows;
@@ -78,6 +97,42 @@ unsigned fboForImage(EGLImage image, unsigned* tex) {
     return fbo;
 }
 
+void dropCached(EGLDisplay dpy, EGLContext cacheCtx, CachedImage& c) {
+    // the GL objects only while their context is current; otherwise they go with their context (or are leaked: a few names)
+    if (cacheCtx != EGL_NO_CONTEXT && host<EGLContext (*)()>("eglGetCurrentContext")() == cacheCtx) {
+        gl<void (*)(int, unsigned*)>("glDeleteFramebuffers")(1, &c.fbo);
+        gl<void (*)(int, unsigned*)>("glDeleteTextures")(1, &c.tex);
+    }
+    host<PFNEGLDESTROYIMAGEKHRPROC>("eglDestroyImageKHR")(dpy, c.image);
+    if (c.ref) c.ref->common.decRef(&c.ref->common);
+}
+
+void dropCache(Window& w) {
+    for (auto* v : {&w.srcCache, &w.dstCache}) {
+        for (CachedImage& c : *v) dropCached(w.dpy, w.cacheCtx, c);
+        v->clear();
+    }
+}
+
+// The cached image and framebuffer for `key`, made by `make` (an EGLImage) when there is none yet. The framebuffer is left bound to GL_FRAMEBUFFER.
+template <typename Make>
+CachedImage* cachedImage(Window& w, std::vector<CachedImage>& cache, uint64_t key, ANativeWindowBuffer* ref, Make&& make) {
+    for (CachedImage& c : cache) if (c.key == key) { c.used = ++w.useCount; return &c; }
+    EGLImage image = make();
+    if (image == EGL_NO_IMAGE) return nullptr;
+    if (cache.size() >= kCacheMax) {
+        auto oldest = cache.begin();
+        for (auto it = cache.begin(); it != cache.end(); ++it) if (it->used < oldest->used) oldest = it;
+        dropCached(w.dpy, w.cacheCtx, *oldest);
+        cache.erase(oldest);
+    }
+    if (ref) ref->common.incRef(&ref->common);
+    CachedImage c = {key, ref, image, 0, 0, ++w.useCount};
+    c.fbo = fboForImage(image, &c.tex);
+    cache.push_back(c);
+    return &cache.back();
+}
+
 // The frame just swapped into the gbm_surface, copied into a buffer of the Android window and queued.
 void presentToWindow(EGLDisplay dpy, Window& w) {
     ANativeWindow* nw = w.native;
@@ -92,26 +147,33 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
     }
     if (fence >= 0) { pollfd p = {fence, POLLIN, 0}; poll(&p, 1, 1000); close(fence); }
 
+    EGLContext ctx = host<EGLContext (*)()>("eglGetCurrentContext")();
+    if (ctx != w.cacheCtx) { dropCache(w); w.cacheCtx = ctx; }  // other context: other GL objects
     int fd = gbmFn<int (*)(void*)>("gbm_bo_get_fd")(bo);
-    uint32_t stride = gbmFn<uint32_t (*)(void*)>("gbm_bo_get_stride")(bo);
-    uint32_t format = gbmFn<uint32_t (*)(void*)>("gbm_bo_get_format")(bo);
-    uint64_t modifier = gbmFn<uint64_t (*)(void*)>("gbm_bo_get_modifier")(bo);
-    std::vector<EGLint> a = {EGL_WIDTH, (EGLint)w.width, EGL_HEIGHT, (EGLint)w.height, EGL_LINUX_DRM_FOURCC_EXT, (EGLint)format,
-                             EGL_DMA_BUF_PLANE0_FD_EXT, fd, EGL_DMA_BUF_PLANE0_OFFSET_EXT, 0, EGL_DMA_BUF_PLANE0_PITCH_EXT, (EGLint)stride};
-    if (modifier != DRM_FORMAT_MOD_INVALID)
-        a.insert(a.end(), {EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, (EGLint)(modifier & 0xffffffff), EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, (EGLint)(modifier >> 32)});
-    a.push_back(EGL_NONE);
+    struct stat st = {};
+    fstat(fd, &st);
     auto createImage = host<PFNEGLCREATEIMAGEKHRPROC>("eglCreateImageKHR");
-    auto destroyImage = host<PFNEGLDESTROYIMAGEKHRPROC>("eglDestroyImageKHR");
-    EGLImage src = createImage(dpy, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, a.data());
-    EGLImage out = imageFromNativeBuffer(dpy, dst);
+    CachedImage *src = nullptr, *out = nullptr;
+    std::optional<GlState> saved;  // restored when the function ends (creating a cache entry binds a texture and a framebuffer)
+    if (ctx != EGL_NO_CONTEXT) {
+        saved.emplace();
+        src = cachedImage(w, w.srcCache, (uint64_t)st.st_ino, nullptr, [&]() -> EGLImage {
+            uint32_t stride = gbmFn<uint32_t (*)(void*)>("gbm_bo_get_stride")(bo);
+            uint32_t format = gbmFn<uint32_t (*)(void*)>("gbm_bo_get_format")(bo);
+            uint64_t modifier = gbmFn<uint64_t (*)(void*)>("gbm_bo_get_modifier")(bo);
+            std::vector<EGLint> a = {EGL_WIDTH, (EGLint)w.width, EGL_HEIGHT, (EGLint)w.height, EGL_LINUX_DRM_FOURCC_EXT, (EGLint)format,
+                                     EGL_DMA_BUF_PLANE0_FD_EXT, fd, EGL_DMA_BUF_PLANE0_OFFSET_EXT, 0, EGL_DMA_BUF_PLANE0_PITCH_EXT, (EGLint)stride};
+            if (modifier != DRM_FORMAT_MOD_INVALID)
+                a.insert(a.end(), {EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, (EGLint)(modifier & 0xffffffff), EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, (EGLint)(modifier >> 32)});
+            a.push_back(EGL_NONE);
+            return createImage(dpy, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, a.data());
+        });
+        out = cachedImage(w, w.dstCache, (uint64_t)(uintptr_t)dst, dst, [&]() { return imageFromNativeBuffer(dpy, dst); });
+    }
     int outFence = -1;
-    if (src != EGL_NO_IMAGE && out != EGL_NO_IMAGE && host<EGLContext (*)()>("eglGetCurrentContext")() != EGL_NO_CONTEXT) {
-        GlState saved;
-        unsigned srcTex = 0, dstTex = 0;
-        unsigned srcFbo = fboForImage(src, &srcTex), dstFbo = fboForImage(out, &dstTex);
-        gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA8 /* GL_READ_FRAMEBUFFER */, srcFbo);
-        gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA9 /* GL_DRAW_FRAMEBUFFER */, dstFbo);
+    if (src && out) {
+        gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA8 /* GL_READ_FRAMEBUFFER */, src->fbo);
+        gl<void (*)(unsigned, unsigned)>("glBindFramebuffer")(0x8CA9 /* GL_DRAW_FRAMEBUFFER */, out->fbo);
         // an incomplete side would leave GL_INVALID_FRAMEBUFFER_OPERATION in the app's context (Meet's video renderer checks glGetError and
         // gave up on every frame): checked first, the window named once
         auto status = gl<unsigned (*)(unsigned)>("glCheckFramebufferStatus");
@@ -122,30 +184,24 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
         } else {
             static std::set<ANativeWindow*> named;
             if (named.insert(nw).second)
-                ALOGE("window present %ux%u: framebuffer incomplete (read 0x%x: gbm format 0x%x modifier 0x%llx; draw 0x%x: buffer %dx%d format %d usage 0x%llx)",
-                      w.width, w.height, rs, format, (unsigned long long)modifier, ds, dst->width, dst->height, dst->format, (unsigned long long)dst->usage);
+                ALOGE("window present %ux%u: framebuffer incomplete (read 0x%x; draw 0x%x: buffer %dx%d format %d usage 0x%llx)",
+                      w.width, w.height, rs, ds, dst->width, dst->height, dst->format, (unsigned long long)dst->usage);
         }
-        gl<void (*)()>("glFlush")();
         auto createSync = host<PFNEGLCREATESYNCKHRPROC>("eglCreateSyncKHR");
         auto dupFence = host<PFNEGLDUPNATIVEFENCEFDANDROIDPROC>("eglDupNativeFenceFDANDROID");
         EGLSyncKHR sync = createSync && dupFence ? createSync(dpy, EGL_SYNC_NATIVE_FENCE_ANDROID, nullptr) : EGL_NO_SYNC_KHR;
         if (sync != EGL_NO_SYNC_KHR) {
-            gl<void (*)()>("glFlush")();
+            gl<void (*)()>("glFlush")();  // the fence fd exists once the sync is flushed
             outFence = dupFence(dpy, sync);
             host<PFNEGLDESTROYSYNCKHRPROC>("eglDestroySyncKHR")(dpy, sync);
         }
         if (outFence < 0) gl<void (*)()>("glFinish")();  // no native fence: finish the work here
-        gl<void (*)(int, unsigned*)>("glDeleteFramebuffers")(1, &srcFbo);
-        gl<void (*)(int, unsigned*)>("glDeleteFramebuffers")(1, &dstFbo);
-        gl<void (*)(int, unsigned*)>("glDeleteTextures")(1, &srcTex);
-        gl<void (*)(int, unsigned*)>("glDeleteTextures")(1, &dstTex);
     } else {
         ALOGE("window present: images %p %p or no current context", src, out);
     }
-    if (src != EGL_NO_IMAGE) destroyImage(dpy, src);
-    if (out != EGL_NO_IMAGE) destroyImage(dpy, out);
     close(fd);
     gbmFn<void (*)(void*, void*)>("gbm_surface_release_buffer")(w.gbmSurface, bo);
+    if (w.presentationTime) { native_window_set_buffers_timestamp(nw, w.presentationTime); w.presentationTime = 0; }
     nw->queueBuffer(nw, dst, outFence);
 }
 
@@ -194,6 +250,7 @@ void resizeWindow(Window* win) {
     if (wasDraw || wasRead)
         host<PFNEGLMAKECURRENTPROC>("eglMakeCurrent")(cur, wasDraw ? win->host : host<EGLSurface (*)(EGLint)>("eglGetCurrentSurface")(EGL_DRAW),
                                                       wasRead ? win->host : host<EGLSurface (*)(EGLint)>("eglGetCurrentSurface")(EGL_READ), ctx);
+    dropCache(*win);  // the old gbm buffers go with their surface
     host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglDestroySurface")(win->dpy, oldHost);
     gbmFn<void (*)(void*)>("gbm_surface_destroy")(oldGbm);
     ALOGI("window %p resized %ux%u -> %ux%u", win, oldW, oldH, win->width, win->height);
@@ -243,6 +300,24 @@ EGLSurface eglCreateWindowSurface(EGLDisplay dpy, EGLConfig cfg, EGLNativeWindow
 
 EGLBoolean eglSwapBuffers(EGLDisplay dpy, EGLSurface surface) { return swapWindow(dpy, surface); }
 
+// The swap interval of the current draw surface is the Android window's (interval 0 = the BufferQueue's async mode: frames are not held back
+// for SurfaceFlinger's vsync, as with Android's own libEGL); the host's gbm surface has nothing to throttle.
+EGLBoolean eglSwapInterval(EGLDisplay dpy, EGLint interval) {
+    std::lock_guard<std::recursive_mutex> lock(windowsLock);
+    Window* w = windowOf(appSurface(host<EGLSurface (*)(EGLint)>("eglGetCurrentSurface")(EGL_DRAW)));
+    if (!w) return host<EGLBoolean (*)(EGLDisplay, EGLint)>("eglSwapInterval")(dpy, interval);
+    if (w->native && w->native->setSwapInterval) w->native->setSwapInterval(w->native, interval < 0 ? 0 : interval);
+    return EGL_TRUE;
+}
+
+EGLBoolean eglPresentationTimeANDROID(EGLDisplay, EGLSurface surface, EGLnsecsANDROID time) {
+    std::lock_guard<std::recursive_mutex> lock(windowsLock);
+    Window* w = windowOf(surface);
+    if (!w) return fail(EGL_BAD_SURFACE);
+    w->presentationTime = time;
+    return EGL_TRUE;
+}
+
 EGLBoolean eglSwapBuffersWithDamageKHR(EGLDisplay dpy, EGLSurface surface, const EGLint*, EGLint) { return swapWindow(dpy, surface); }
 EGLBoolean eglSwapBuffersWithDamageEXT(EGLDisplay dpy, EGLSurface surface, const EGLint* rects, EGLint n) { return eglSwapBuffersWithDamageKHR(dpy, surface, rects, n); }  // GeckoView asks for the EXT name
 // HWUI announces the frame's damage with it before drawing; every swap here presents the whole buffer, so there is nothing to tell the host
@@ -256,6 +331,7 @@ EGLBoolean eglDestroySurface(EGLDisplay dpy, EGLSurface surface) {
             if (w->native) native_window_api_disconnect(w->native, kApiEgl);
             windows.erase(w);
             if (w->native) w->native->common.decRef(&w->native->common);
+            dropCache(*w);
             EGLBoolean ok = host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglDestroySurface")(dpy, w->host);
             gbmFn<void (*)(void*)>("gbm_surface_destroy")(w->gbmSurface);
             delete w;

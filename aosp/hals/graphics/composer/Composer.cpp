@@ -22,6 +22,8 @@
 #include <vector>
 
 #include "apklayer/display.h"
+#include "PresentFence.h"
+#include "VsyncTimeline.h"
 #include "gralloc_handle.h"
 
 using namespace aidl::android::hardware::graphics::composer3;
@@ -55,8 +57,10 @@ class Client : public BnComposerClient {
         mDisplay = apklayer_display_open_headless("apklayer", &cb);
         LOG_ALWAYS_FATAL_IF(mDisplay == nullptr, "cannot open the display (is apklayer-shell running?)");
         mPeriodNs = mRefreshMhz ? 1000000000000LL / mRefreshMhz : 16666667;
+        mTimeline = std::make_unique<apklayer::composer::VsyncTimeline>(
+            mPeriodNs, [this](int64_t ts, int64_t period) { onTick(ts, period); }, [this] { apklayer_display_request_vsync(mDisplay); });
     }
-    ~Client() override { apklayer_display_close(mDisplay); }
+    ~Client() override { mTimeline.reset(); apklayer_display_close(mDisplay); }
 
     // ---- display description ----
     ScopedAStatus getActiveConfig(int64_t d, int32_t* out) override { if (d != kDisplay) return error(kBadDisplay); *out = 0; return ScopedAStatus::ok(); }
@@ -138,7 +142,11 @@ class Client : public BnComposerClient {
     ScopedAStatus getMaxLayerPictureProfiles(int64_t, int32_t* out) override { *out = 0; return ScopedAStatus::ok(); }
     ScopedAStatus startHdcpNegotiation(int64_t, const aidl::android::hardware::drm::HdcpLevels&) override { return error(kUnsupported); }
     ScopedAStatus getLuts(int64_t, const std::vector<Buffer>&, std::vector<Luts>*) override { return error(kUnsupported); }
-    ScopedAStatus getDisplayKnownVsyncSample(int64_t, VsyncSample*) override { return error(kUnsupported); }
+    ScopedAStatus getDisplayKnownVsyncSample(int64_t d, VsyncSample* out) override {
+        if (d != kDisplay) return error(kBadDisplay);
+        mTimeline->lastVsync(&out->timestampNs, &out->vsyncPeriodNs);
+        return ScopedAStatus::ok();
+    }
 
     ScopedAStatus registerCallback(const std::shared_ptr<IComposerCallback>& callback) override {
         {
@@ -151,8 +159,8 @@ class Client : public BnComposerClient {
 
     ScopedAStatus setVsyncEnabled(int64_t d, bool enabled) override {
         if (d != kDisplay) return error(kBadDisplay);
-        if (enabled && !mVsyncEnabled.exchange(true)) apklayer_display_request_vsync(mDisplay);
-        if (!enabled) mVsyncEnabled = false;
+        mVsyncEnabled = enabled;
+        mTimeline->setEnabled(enabled);
         return ScopedAStatus::ok();
     }
 
@@ -230,7 +238,7 @@ class Client : public BnComposerClient {
     // PresentFence.fence is not nullable in the AIDL: an empty one made every command result fail to parse in SurfaceFlinger
     // ("executeCommands failed UNEXPECTED_NULL", "Invalid present fence" each frame), so it never saw the release fences of the
     // frame. The frame is shown as soon as the compositor takes it, so the fence is one that is always signaled (readable).
-    static ScopedFileDescriptor signaledFence() { return ScopedFileDescriptor(eventfd(1, EFD_CLOEXEC)); }
+    ScopedFileDescriptor signaledFence() { return ScopedFileDescriptor(mFences.get()); }
 
     template <typename Fail>
     void present(std::vector<CommandResultPayload>* out, Fail&& fail) {
@@ -286,19 +294,24 @@ class Client : public BnComposerClient {
     static void onRefreshStatic(void* u, uint32_t mhz) {
         auto* self = static_cast<Client*>(u);
         self->mRefreshMhz = mhz;
-        if (mhz) self->mPeriodNs = 1000000000000LL / mhz;
+        if (mhz) {
+            self->mPeriodNs = 1000000000000LL / mhz;
+            if (self->mTimeline) self->mTimeline->setPeriod(self->mPeriodNs);
+        }
     }
     static void onReleasedStatic(void*, int) {}
 
-    void onVsync(int64_t ts) {
+    // a real frame of the compositor (the shell's frame callback): only the grid's phase
+    void onVsync(int64_t ts) { mTimeline->addSample(ts); }
+
+    // a vsync of the timeline, for SurfaceFlinger
+    void onTick(int64_t ts, int64_t period) {
         std::shared_ptr<IComposerCallback> cb;
         {
             std::lock_guard<std::mutex> l(mLock);
             cb = mCallback;
         }
-        if (!mVsyncEnabled) return;
-        if (cb) cb->onVsync(kDisplay, ts, static_cast<int32_t>(mPeriodNs));
-        apklayer_display_request_vsync(mDisplay);
+        if (cb && mVsyncEnabled) cb->onVsync(kDisplay, ts, static_cast<int32_t>(period));
     }
 
     struct HandleDeleter {
@@ -310,6 +323,8 @@ class Client : public BnComposerClient {
     std::atomic<int64_t> mPeriodNs{16666667};
     std::atomic<uint32_t> mRefreshMhz{0};
     std::atomic<bool> mVsyncEnabled{false};
+    apklayer::composer::SignaledFence mFences;
+    std::unique_ptr<apklayer::composer::VsyncTimeline> mTimeline;
     std::mutex mLock;
     std::shared_ptr<IComposerCallback> mCallback;
     std::map<int64_t, Composition> mLayers;
@@ -327,7 +342,8 @@ class Composer : public BnComposer {
         *out = mClient;
         return ScopedAStatus::ok();
     }
-    ScopedAStatus getCapabilities(std::vector<Capability>* out) override { out->clear(); return ScopedAStatus::ok(); }
+    // the present fence is signaled when the frame is handed over, not at the display's vsync: SurfaceFlinger must not take its time as a vsync
+    ScopedAStatus getCapabilities(std::vector<Capability>* out) override { *out = {Capability::PRESENT_FENCE_IS_NOT_RELIABLE}; return ScopedAStatus::ok(); }
 
   private:
     std::shared_ptr<Client> mClient;
