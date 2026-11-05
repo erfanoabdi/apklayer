@@ -1,0 +1,30 @@
+From: apklayer
+Subject: [PATCH] libhidl: a listed HAL the host does not serve is the device's passthrough HAL
+
+apklayer patch (docs/PATCHES.md, docs/HALIUM.md). A HAL listed in /data/apklayer/host_hals.conf that the host's hwservicemanager
+does not have is a passthrough HAL of the device (the gralloc mapper@4.0, /vendor/lib64/hw): it is loaded through the passthrough
+service manager (bionic_translation 0039 gives it the vendor's own libraries), and the local hwservicemanager, which apklayer does
+not run, is not asked (it would be waited for: a Halium device's /system/bin/hwservicemanager makes libhidl believe in one).
+Waydroid's libhidl 0008 "priority" host HALs, for passthrough ones. Rebuild: `m libhidlbase`.
+Against system/libhidl 061055fc4dad (REVISION), after 0001. Apply: patches/apply aosp <LineageOS tree>.
+---
+File dev-hidl-m/.clang-format is a unknown type while file dev-hidl-b/.clang-format is a unknown type
+File dev-hidl-m/.git is a unknown type while file dev-hidl-b/.git is a unknown type
+diff --git a/transport/ServiceManagement.cpp b/transport/ServiceManagement.cpp
+--- a/transport/ServiceManagement.cpp
++++ b/transport/ServiceManagement.cpp
+@@ -937,8 +937,13 @@
+                                                              bool retry, bool getStub) {
+     using Transport = IServiceManager1_0::Transport;
+     sp<Waiter> waiter;
+-    if (!kIsRecovery && !getStub) {  // apklayer patch
++    if (!kIsRecovery && !getStub && isHostHal(descriptor)) {  // apklayer patch
+         if (sp<IBase> host = hostHal(descriptor, instance)) return host;
++        // not served by the host: a passthrough HAL of the device (its gralloc mapper), loaded here from /vendor (the vendor
++        // namespace of bionic_translation 0039 gives it the vendor's libraries); the local service manager is not asked
++        const sp<IServiceManager1_0> pm = getPassthroughServiceManager();
++        sp<IBase> base = pm != nullptr ? pm->get(descriptor, instance).withDefault(nullptr) : nullptr;
++        return base != nullptr ? wrapPassthrough(base) : nullptr;
+     }
+ 
+     sp<IServiceManager1_1> sm;

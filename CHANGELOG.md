@@ -96,6 +96,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-05 — libhidlbase (libhidl 0002), libapklayer_vdisplay (halium agent)
+- Why: Halium graphics: a listed HAL the host does not serve is the device's passthrough HAL (the gralloc mapper), not waited for on a local hwservicemanager; the virtual display sink presents the device's gralloc buffers through android_wlegl. ServiceManagement.cpp compile-checked outside the tree first.
+- Command (OrbStack, `flock ~/los24-build.lock`): `patches/apply` of system/libhidl (adds 0002), `tools/sync-aosp.sh "..." hals/graphics`, then `m libhidlbase libapklayer_vdisplay`.
 ### 2026-11-05 — libapklayer_graltool (halium agent)
 - Why: plan step (e), Halium graphics: the device's allocator@4.0 through the host hwbinder context and a buffer shown through the shell's android_wlegl path (docs/HALIUM.md). Every shared_lib name checked in the tree first.
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "..." tools` (copies the host graphics headers too: display.h gains apklayer_display_present_native), then `m libapklayer_graltool`.
