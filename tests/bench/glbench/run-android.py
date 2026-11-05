@@ -17,7 +17,7 @@ intent.write('component=hello.glbench.Main\nextra.modes=%s\nextra.scenes=%s\next
 intent.close()
 env = dict(os.environ, APKLAYER_INTENT_FILE=intent.name, APKLAYER_DISPLAY_WIDTH='800', APKLAYER_DISPLAY_HEIGHT='600')
 env['APKLAYER_JOPTS'] = (env.get('APKLAYER_JOPTS', '') + ' -Dapklayer.runms=120000').strip()
-app = subprocess.Popen(['bin/apklayer', 'run', 'hello.glbench'], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
+app = subprocess.Popen([os.environ.get('APKLAYER_BIN', 'bin/apklayer'), 'run', 'hello.glbench'], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
 end = time.monotonic() + 120
 try:
     with selectors.DefaultSelector() as sel:
@@ -39,7 +39,7 @@ try:
                     print(line, flush=True)
                 if os.environ.get('GLBENCH_DUMP') and ('GL_RENDERER' in line or 'glbench: done' in line):  # SurfaceFlinger's state at a mode's start and at the end
                     with open('%s.%d' % (os.environ['GLBENCH_DUMP'], dumps), 'wb') as out:
-                        subprocess.run(['bin/apklayer', 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger'], env=env, stdout=out, stderr=subprocess.STDOUT)
+                        subprocess.run([os.environ.get('APKLAYER_BIN', 'bin/apklayer'), 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger'], env=env, stdout=out, stderr=subprocess.STDOUT)
                     dumps += 1
             if any('glbench: done' in l for l in text):
                 break
@@ -54,7 +54,7 @@ finally:
             continue
         if ('APKLAYER_INSTANCE=' + me).encode() in environ and any(b'libapklayer_' in c for c in cmd):
             print('pid %s %s' % (pid, next(c.decode() for c in cmd if b'libapklayer_' in c)), flush=True)
-    subprocess.run(['bin/apklayer', 'stop'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run([os.environ.get('APKLAYER_BIN', 'bin/apklayer'), 'stop'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if os.path.exists(intent.name): os.unlink(intent.name)  # the CLI may have taken it
     if app.poll() is None:
         app.terminate()
