@@ -6,6 +6,7 @@ All published files are lossless WebP conversions of PNG captures at their captu
 
 | File | Captured state | Capture method |
 | --- | --- | --- |
+| `manager.webp` | LocalSend 1.18.2 app details and permissions; Organic Maps also installed in the temporary `website-gallery` environment | Native manager `--screenshot`, `--app org.localsend.localsend_app`, `--dark`; 958 × 701 |
 | `microg.webp` | microG Settings 0.3.17.252432 showing account and service controls; device registration, Cloud Messaging, and attestation are off | `apklayer --instance website screenshot com.google.android.gms`; 325 × 579 |
 | `newpipe.webp` | NewPipe 0.29.1 playing Big Buck Bunny from the Blender channel, with video and app UI visible | Upstream `tests/vm/newpipe-media.sh aqz-KE-bpKQ` in the `website` instance with `NEWPIPE_SECS=25`; first SurfaceFlinger capture; 325 × 579 |
 | `instances.webp` | Manager Instances page: `website` running and `default` stopped | Native manager `--screenshot`, `--page 1`, `--dark`; 958 × 701 |
@@ -20,4 +21,4 @@ NewPipe playback proof from this session:
 
 Big Buck Bunny is by Blender Foundation, licensed CC BY 3.0. The website includes creator and license links. Source: https://www.youtube.com/watch?v=aqz-KE-bpKQ and https://peach.blender.org/.
 
-The microG image documents the real settings interface, not successful account sign-in, push delivery, or attestation. The instance-management image does not demonstrate two simultaneously running stacks. LocalSend, Organic Maps onboarding, KeePassDX startup, and their manager overview were removed from the gallery at the owner's request. OTR2 was dropped at the owner's request; no game capture is published.
+The microG image documents the real settings interface, not successful account sign-in, push delivery, or attestation. The instance-management image does not demonstrate two simultaneously running stacks. The LocalSend, Organic Maps onboarding, and KeePassDX app captures were removed. The original manager overview was restored at the owner's request; it shows the real temporary app library, not a transfer or map-navigation demo. OTR2 was dropped at the owner's request; no game capture is published.

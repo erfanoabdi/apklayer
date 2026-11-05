@@ -4,6 +4,7 @@
 
 - [x] Capture real apps and manager views from the owner's Parallels VM using fresh app data.
 - [x] Add the screenshot section after application compatibility, with microG Settings and NewPipe actually playing a public demo video. Removed the earlier LocalSend, map-download, and vault-chooser captures.
+- [x] Restore the original manager overview above microG and NewPipe.
 - [x] Add an instance-management capture beside the instance documentation.
 - [x] Record app versions, capture methods, host details, and verification scope in `assets/screenshots/README.md`; inspect captures for personal data.
 - [x] Save lossless WebP images with explicit dimensions, useful alt text, lazy loading, and keyboard-accessible links to full-size images.

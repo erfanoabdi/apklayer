@@ -1299,3 +1299,37 @@ td {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+.screenshot-feature {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.screenshot-feature > a {
+  display: block;
+  padding: 36px 36px 0;
+  background: radial-gradient(ellipse at top, #304b3c, #192421 75%);
+}
+.screenshot-feature img {
+  display: block;
+  width: min(100%, 958px);
+  height: auto;
+  margin: auto;
+  border: 1px solid #4a5a50;
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+}
+.screenshot-feature figcaption {
+  padding: 28px 32px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 700px) {
+  .screenshot-feature > a {
+    padding: 18px 14px 0;
+  }
+  .screenshot-feature figcaption {
+    padding: 22px;
+  }
+}
