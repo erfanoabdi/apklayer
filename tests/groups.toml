@@ -306,3 +306,8 @@ run = ["tests/vm/newpipe-media.sh"]
 optional = true  # needs tools/host-setup/sandbox.sh once (uidmap, subordinate ids, the AppArmor profile, render nodes)
 apps = ["hello-sandbox"]
 run = ["tests/vm/sandbox.sh"]
+
+[otr2-probe]
+needs = ["com.dogbytegames.otrnext"]
+alone = true
+run = ["python3 -u tests/vm/otr2-probe.py"]

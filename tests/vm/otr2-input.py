@@ -18,10 +18,11 @@ import pixels  # noqa: E402
 PKG = 'com.dogbytegames.otrnext'
 LOGDIR = Path(instance.LOGDIR)
 # the second portrait of the title screen and the two portraits' frames, as fractions of the window (measured in a 797x448 screenshot)
-PORTRAIT2 = (430 / 797, 348 / 448)
+PORTRAITS = {1: (366 / 797, 348 / 448), 2: (430 / 797, 348 / 448)}
+MAXIMIZE = (1194, 718)  # window geometry: 16:9 content of 1194x672 under the 46 px title bar
 FRAMES = {1: (343 / 797, 326 / 448, 392 / 797, 372 / 448), 2: (407 / 797, 326 / 448, 456 / 797, 372 / 448)}
-RUNS = [(100, 'tap'), (200, 'click'), (200, 'tap')]
-env = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1', APKLAYER_LOGCAT='1', APKLAYER_JOPTS='-Dapklayer.runms=60000 -Dapklayer.debugkeys=true')
+RUNS = [(100, 'tap', False), (200, 'click', True), (200, 'tap', True)]
+env = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1', APKLAYER_LOGCAT='1', APKLAYER_JOPTS='-Dapklayer.runms=300000 -Dapklayer.debugkeys=true -Dapklayer.debugresize=true')
 intent = instance.OUT / 'otr2-intent.properties'
 intent.write_text('component=com.dogbytegames.otrnext.OTRNext\n')
 env['APKLAYER_INTENT_FILE'] = str(intent)
@@ -41,22 +42,37 @@ def green(image, which):
     return pixels.count_image(box, lambda r, g, b: g > 170 and r < 150 and b < 90 and g - r > 50)
 
 
-def play(scale, mode):
-    """One app start: landscape window, scale, wait for the title screen, press portrait 2 with `mode` (tap | click), compare."""
+def logical(seen, scale):
+    """The window content's logical size of the shell's last configure of this run."""
+    return [int(v) for v in re.findall(r'configure (\d+)x(\d+) @\d+%', '\n'.join(seen))[-1]]
+
+
+def consent_dialog(image):
+    """The UMP consent dialog of a fresh instance: a large white card in the middle of the window."""
+    im = pixels.rgb(image)
+    w, h = im.size
+    box = im.crop((int(0.25 * w), int(0.2 * h), int(0.75 * w), int(0.8 * h)))
+    return pixels.count_image(box, lambda r, g, b: r > 235 and g > 235 and b > 235) > 0.4 * box.size[0] * box.size[1]
+
+
+def play(scale, mode, resize):
+    """One app start: landscape window, scale, wait for the title screen, then press a portrait with `mode` (tap | click) and check that the
+    selection moved; with `resize` the window is also maximized and restored (a 16:9 content of the same shape, so the same fractions hit the
+    same buttons) and pressed again after each."""
     seen = []
     saw = lambda text: any(text in line for line in seen)
     instance.stop()
     app = subprocess.Popen(['bin/apklayer', 'run', PKG], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
-    name = '%d-%s' % (scale, mode)
-    result = {}
+    name = '%d-%s%s' % (scale, mode, '-resize' if resize else '')
+    actions = [('press', 2)] + ([('maximize', MAXIMIZE), ('press', 1), ('unmaximize', None), ('press', 2)] if resize else [])
+    step, phase, mark, tries, stage, shots = 0, 'run', 0, 0, 0, {}
     try:
         sel = selectors.DefaultSelector()
         sel.register(app.stdout, selectors.EVENT_READ)
         pending = b''
-        stage, mark, tries = 0, 0, 0
-        end = time.monotonic() + 100
+        end = time.monotonic() + 280
         with open(instance.OUT / ('otr2-input-%s.log' % name), 'wb') as log:
-            while stage < 9 and time.monotonic() < end:
+            while step < len(actions) and time.monotonic() < end:
                 if sel.select(3):
                     data = os.read(app.stdout.fileno(), 65536)
                     if not data: break
@@ -64,48 +80,59 @@ def play(scale, mode):
                     *lines, pending = (pending + data).split(b'\n')
                     seen += [l.decode(errors='replace') for l in lines]
                 n = frames()
-                if stage == 0 and saw('started ' + PKG) and n >= 40:
-                    instance.inject(PKG, 'focus', 'scale:%d' % scale); stage, mark = 1, n
-                elif stage == 1 and saw('@%d%%' % scale) and n >= mark + 1000:  # the title screen shows after the shaders are compiled (longer on a loaded VM)
-                    result['before'] = instance.capture('otr2-%s-before' % name, PKG)
-                    if green(result['before'], 1) < 100 and tries < 12:
+                if stage == 0:
+                    if saw('started ' + PKG) and n >= 40:
+                        instance.inject(PKG, 'focus', 'scale:%d' % scale); stage, mark = 1, n
+                elif stage == 1:  # the title screen shows after the shaders are compiled (longer on a loaded VM)
+                    if not (saw('@%d%%' % scale) and n >= mark + 1000): continue
+                    shots['title'] = instance.capture('otr2-%s-title' % name, PKG)
+                    if green(shots['title'], 1) < 100:
+                        assert tries < 40, 'OTR2 %s: the title screen never came up' % name
                         tries += 1; mark = n - 800  # not there yet: look again in 200 frames
-                        if tries == 2:  # a fresh instance first asks for consent (a Java dialog over the game): its Consent button
-                            width, height = [int(v) for v in re.findall(r'configure (\d+)x(\d+) @%d%%' % scale, '\n'.join(seen))[-1]]
+                        if consent_dialog(shots['title']):  # a fresh instance first asks for consent (a Java dialog over the game): its Consent button
+                            width, height = logical(seen, scale)
                             instance.inject(PKG, 'tap:%d,%d' % (round(508 / 797 * width), round(361 / 448 * height)))
                         continue
-                    width, height = [int(v) for v in re.findall(r'configure (\d+)x(\d+) @%d%%' % scale, '\n'.join(seen))[-1]]
-                    result['size'] = (width, height)
-                    x, y = round(PORTRAIT2[0] * width), round(PORTRAIT2[1] * height)
-                    if mode == 'tap': instance.inject(PKG, 'press:%d,%d' % (x, y))
-                    else: instance.inject(PKG, 'click:%d,%d' % (x, y))
-                    stage, mark = 2, n
-                    result['at'] = (x, y)
-                elif stage == 2 and n >= mark + 10:
-                    if mode == 'tap': instance.inject(PKG, 'release:%d,%d' % result['at'])
-                    stage, mark = 3, n
-                elif stage == 3 and n >= mark + 60:
-                    result['after'] = instance.capture('otr2-%s-after' % name, PKG); stage = 9
+                    stage = 2
+                elif phase == 'run':
+                    kind, arg = actions[step]
+                    width, height = logical(seen, scale)
+                    if kind == 'press':
+                        at = (round(PORTRAITS[arg][0] * width), round(PORTRAITS[arg][1] * height))
+                        shots['before'] = instance.capture('otr2-%s-%d-before' % (name, step), PKG)
+                        instance.inject(PKG, *(['press:%d,%d' % at] if mode == 'tap' else ['click:%d,%d' % at]))
+                        phase, mark, target = 'release', n, arg
+                    else:
+                        count = sum(l.startswith('[apklayer] configure ') for l in seen)
+                        instance.inject(PKG, 'maximize:%d,%d' % arg if kind == 'maximize' else 'unmaximize')
+                        phase, mark, seen_configures = 'settle', n, count
+                elif phase == 'release' and n >= mark + 10:
+                    if mode == 'tap': instance.inject(PKG, 'release:%d,%d' % at)
+                    phase, mark = 'check', n
+                elif phase == 'check' and n >= mark + 60:
+                    shots['after'] = instance.capture('otr2-%s-%d-after' % (name, step), PKG)
+                    other = 1 if target == 2 else 2
+                    got = (green(shots['after'], target), green(shots['after'], other))
+                    print('OTR2 %s step %d: %s portrait %d at %s in %dx%d @%d%%: frame pixels (target, other) %s' % (name, step, mode, target, at, *logical(seen, scale), scale, got), flush=True)
+                    assert got[0] > 100 and got[1] < 20, 'FAIL OTR2 %s: the %s at %s did not select portrait %d %s' % (name, mode, at, target, got)
+                    step, phase = step + 1, 'run'
+                elif phase == 'settle' and n >= mark + 120:
+                    assert sum(l.startswith('[apklayer] configure ') for l in seen) > seen_configures, 'no configure after %s' % actions[step][0]
+                    step, phase = step + 1, 'run'
+        assert step == len(actions), 'OTR2 %s: stopped at step %d of %d (%s)' % (name, step, len(actions), actions[min(step, len(actions) - 1)])
+        assert saw('orientation landscape requested'), 'the manifest orientation (sensorLandscape) did not reach the host'
     finally:
         try: os.killpg(app.pid, signal.SIGKILL)
         except ProcessLookupError: pass
         app.wait(); app.stdout.close()
         instance.stop()
         instance.kill('[a]pklayer.host.Main')
-    assert 'after' in result, 'OTR2 %s: the title screen never came up' % name
-    assert saw('orientation landscape requested'), 'the manifest orientation (sensorLandscape) did not reach the host'
-    assert result['size'][0] > result['size'][1], 'OTR2 window is not landscape: %s' % (result['size'],)
-    first = (green(result['before'], 1), green(result['before'], 2))
-    last = (green(result['after'], 1), green(result['after'], 2))
-    print('OTR2 %s: at %s in %dx%d; frame pixels (portrait 1, 2) before %s after %s' % (name, result['at'], *result['size'], first, last), flush=True)
-    assert first[0] > 100 and first[1] < 20, 'OTR2 %s: portrait 1 is not the selected one at the start %s' % (name, first)
-    assert last[1] > 100 and last[0] < 20, 'FAIL OTR2 %s: the %s did not select portrait 2 %s' % (name, mode, last)
-    print('PASS OTR2 %s selected portrait 2 at %d%%' % (mode, scale), flush=True)
+    print('PASS OTR2 %s: %s selected the portraits at %d%%%s' % (name, mode, scale, ', also after maximize and restore' if resize else ''), flush=True)
 
 
 try:
-    for scale, mode in RUNS:
-        play(scale, mode)
+    for run in RUNS:
+        play(*run)
 finally:
     intent.unlink(missing_ok=True)
 instance.stop()  # a second stop: the consent dialog's WebView helper process can start while the first one ends the stack

@@ -416,6 +416,29 @@ public final class AppHost implements Runnable {
             v.requestLayout();
             v.invalidate();
         }
+        if (Boolean.getBoolean("apklayer.debugresize")) {
+            android.graphics.Point real = new android.graphics.Point(), size = new android.graphics.Point();
+            android.view.Display d = android.view.WindowManagerGlobal.getInstance() != null && !stack.isEmpty()
+                    ? stack.peek().get().getWindowManager().getDefaultDisplay() : null;
+            if (d != null) { d.getRealSize(real); d.getSize(size); }
+            android.util.DisplayMetrics m = android.content.res.Resources.getSystem().getDisplayMetrics();
+            System.out.println("[apklayer] resize debug: display real " + real + " size " + size + " metrics " + m.widthPixels + "x" + m.heightPixels
+                    + " d" + m.density + " views " + views.size());
+            for (View v : views) System.out.println("[apklayer] resize debug: root " + v.getClass().getSimpleName() + " " + v.getWidth() + "x" + v.getHeight());
+            java.util.ArrayDeque<View> todo = new java.util.ArrayDeque<>(views);
+            while (!todo.isEmpty()) {
+                View v = todo.poll();
+                if (v instanceof android.view.SurfaceView sv && sv.getTag(0x7f0a0001) == null) {
+                    sv.setTag(0x7f0a0001, Boolean.TRUE);
+                    sv.getHolder().addCallback(new android.view.SurfaceHolder.Callback() {
+                        public void surfaceCreated(android.view.SurfaceHolder h) { System.out.println("[apklayer] debug surfaceCreated"); }
+                        public void surfaceChanged(android.view.SurfaceHolder h, int f, int w, int hh) { System.out.println("[apklayer] debug surfaceChanged " + w + "x" + hh); }
+                        public void surfaceDestroyed(android.view.SurfaceHolder h) { System.out.println("[apklayer] debug surfaceDestroyed"); }
+                    });
+                }
+                if (v instanceof android.view.ViewGroup g) for (int i = 0; i < g.getChildCount(); i++) todo.add(g.getChildAt(i));
+            }
+        }
     }
 
 }
