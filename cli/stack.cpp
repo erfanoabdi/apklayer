@@ -51,6 +51,32 @@ void stageManifest(const Instance& inst, const Layout& l, bool provided, const s
         if (auto text = readFile(join(l.root, source))) writeFile(join(own, name), *text);
 }
 
+// graphics = device (a Halium device, docs/HALIUM.md): the instance's VINTF declares neither apklayer's AIDL allocator nor its mapper
+// (libui then takes the device's gralloc 4: allocator@4.0 through the host context, the passthrough mapper); own copies of the
+// shared manifests without those HALs, which the path layer serves before the shared ones.
+void undeclareOwnGraphics(const Instance& inst, const Layout& l) {
+    const std::string own = join(inst.runtimeDir, "android-root/vendor/etc/vintf"), shared = join(l.native, "android-root/vendor/etc/vintf");
+    for (const std::string& f : {std::string("manifest.xml"), std::string("manifest/apklayer.xml")}) {
+        auto text = readFile(join(own, f));
+        if (!text) text = readFile(join(shared, f));
+        if (!text) continue;
+        std::string out;
+        size_t at = 0;
+        for (size_t start; (start = text->find("<hal", at)) != std::string::npos;) {
+            size_t end = text->find("</hal>", start);
+            if (end == std::string::npos) break;
+            end += 6;
+            std::string hal = text->substr(start, end - start);
+            out += text->substr(at, start - at);
+            if (hal.find("android.hardware.graphics.allocator") == std::string::npos && hal.find("<name>mapper</name>") == std::string::npos) out += hal;
+            at = end;
+        }
+        out += text->substr(at);
+        makeDirs(dirName(join(own, f)));
+        writeFile(join(own, f), out);
+    }
+}
+
 // The pid of the shell listening on this session's socket (0: none): what stops it, never a match by name (other sessions' shells run too).
 int shellPid(const Layout& l) {
     int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
@@ -239,6 +265,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     std::vector<ProviderService> providers = providerServices(l, inst);
     writeHostHals(inst);  // domains set to the device: their HALs come from the host binder contexts, no front starts
     for (const ProviderService& p : providers) stageManifest(inst, l, true, "apklayer-" + p.name + ".xml", p.manifest);
+    if (deviceGraphics(inst)) undeclareOwnGraphics(inst, l);
     std::vector<std::string> propFiles = {join(l.root, "bridge/native/apklayer.prop"), join(n, "android-root/props/system_build.prop")};
     // the instance's own overrides (`apklayer prop set`): first, as ro.* is write-once (and the fingerprint is derived from them), and again last, as
     // every other property keeps the last value loaded
@@ -277,7 +304,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     const std::string hals = join(l.root, "aosp/hals/audio");
     start("servicemanager", "libapklayer_servicemanager.so", {"/dev/binder"});
     start("permission", "libapklayer_permission.so", {});  // libbinder's checkPermission() asks this (no system_server PermissionController)
-    start("allocator", "libapklayer_allocator.so", {});
+    if (!deviceGraphics(inst)) start("allocator", "libapklayer_allocator.so", {});  // a Halium device's own: the host context
     start("composer", "libapklayer_composer.so", {});
     if (staged(l, "libapklayer_codec2.so")) start("codec2", "libapklayer_codec2.so", {});
     if (staged(l, "libapklayer_mediaserver.so")) {
