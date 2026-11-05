@@ -40,6 +40,8 @@ final class AppEnvironment {
         if (Thread.getDefaultUncaughtExceptionHandler() == null) Thread.setDefaultUncaughtExceptionHandler((thread, failure) -> { System.out.println("FATAL EXCEPTION: " + thread.getName()); failure.printStackTrace(System.out); });  // like Android's RuntimeInit: an app's own handlers (ACRA, Gecko) still chain to it
         System.setProperty("java.vm.name", "Dalvik");  // libgdx, Netty ... pick their Android code path (native libraries through System.loadLibrary) by these names
         System.setProperty("java.runtime.name", "Android Runtime");
+        System.setProperty("java.specification.vendor", "The Android Project");  // as ART reports it: J2V8 picks its Android library (System.loadLibrary) by this vendor
+        System.setProperty("java.vendor", "The Android Project");
         HostCompat.install();  // behavior changes by the app's target SDK (PendingIntent mutability, ...)
         HostAlarms.install();  // PendingIntent alarms live in the hub, which fires them with no app process running (HubScheduler)
         org.robolectric.shadows.ShadowAlarmManager.setAutoSchedule(true);  // an alarm fires its PendingIntent or listener when its time comes (Robolectric only records it otherwise)
