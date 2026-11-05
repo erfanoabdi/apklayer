@@ -1,10 +1,13 @@
 package apklayer.host;
 
+import android.app.Notification;
+import android.app.NotificationManager;
 import android.app.job.IJobCallback;
 import android.app.job.IJobService;
 import android.app.job.JobInfo;
 import android.app.job.JobParameters;
 import android.app.job.JobScheduler;
+import android.app.job.JobService;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -14,23 +17,26 @@ import android.os.IBinder;
 import android.os.Looper;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.robolectric.RuntimeEnvironment;
 
 /**
  * Runs the jobs an app schedules (the service is bound through Services, as converted app code is; Robolectric's own bindService hands out no binder): after its minimum latency (or its period) the job's service is bound and started the way the system's JobSchedulerService does
- * (IJobService.startJob with parameters whose callback is ours; jobFinished unbinds, reschedules a periodic job or one that asked for it). Constraints count as met, the
+ * (IJobService.startJob with parameters whose callback is ours). The end of the job (jobFinished from any thread, which ShadowHostJobService lets reach us, or onStartJob returning false)
+ * unbinds and plans a periodic job again, or one that asked for it after its backoff. Constraints count as met, the
  * desktop has power and network; the hub holds the jobs (HubScheduler), so they outlive the process (persisted jobs are not restored after the hub ends).
  */
 final class HostJobs {
-    private static final long BACKOFF_MS = 30_000;
     private static final Map<Integer, Runnable> PLANNED = new HashMap<>();
+    private static final Map<Integer, Integer> FAILURES = new HashMap<>();  // job id: how many runs in a row asked to be rescheduled
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
     private HostJobs() {}
 
     static synchronized void plan(JobInfo job, long delayMs) {
         if (HubClient.connected()) { HubClient.current().scheduleJob(job, delayMs); return; }  // the hub holds it: it runs when no process of the app does (HubScheduler)
-        cancel(job.getId());
+        Runnable old = PLANNED.remove(job.getId());
+        if (old != null) MAIN.removeCallbacks(old);
         Runnable start = () -> start(job);
         PLANNED.put(job.getId(), start);
         MAIN.postDelayed(start, Math.max(delayMs, 0));
@@ -39,9 +45,18 @@ final class HostJobs {
     static void plan(JobInfo job) { plan(job, job.isPeriodic() ? job.getIntervalMillis() : job.getMinLatencyMillis()); }
 
     static synchronized void cancel(int jobId) {
+        FAILURES.remove(jobId);
         if (HubClient.connected()) { HubClient.current().cancelJob(jobId); return; }
         Runnable planned = PLANNED.remove(jobId);
         if (planned != null) MAIN.removeCallbacks(planned);
+    }
+
+    /** The delay before a job that asked to be rescheduled runs again: JobSchedulerService.getRescheduleJobForFailureLocked (linear or exponential from the job's initial backoff, at least 10 s, at most 5 h). */
+    private static synchronized long backoff(JobInfo job) {
+        int attempts = FAILURES.merge(job.getId(), 1, Integer::sum);
+        long initial = Math.max(job.getInitialBackoffMillis(), JobInfo.MIN_BACKOFF_MILLIS);
+        long delay = job.getBackoffPolicy() == JobInfo.BACKOFF_POLICY_LINEAR ? initial * attempts : (long) Math.scalb((double) initial, Math.min(attempts - 1, 30));
+        return Math.min(delay, JobInfo.MAX_BACKOFF_DELAY_MILLIS);
     }
 
     /** The hub says the job is due. */
@@ -52,25 +67,39 @@ final class HostJobs {
         Context app = RuntimeEnvironment.getApplication();
         ComponentName service = job.getService();
         ServiceConnection[] connection = new ServiceConnection[1];
+        AtomicBoolean ended = new AtomicBoolean();
+        int[] notification = {0, JobService.JOB_END_NOTIFICATION_POLICY_DETACH};  // the id setNotification posted (0: none) and what happens to it when the job ends
         IJobCallback.Stub callback = new IJobCallback.Stub() {
-            @Override public void jobFinished(int jobId, boolean reschedule) {
+            /** Unbind, then plan the job again or forget it (JobServiceContext, JobSchedulerService.onJobCompletedLocked). Once per run. */
+            private void end(boolean reschedule) {
+                if (ended.getAndSet(true)) return;
                 MAIN.post(() -> {
                     try { Services.unbindService(app, connection[0]); } catch (RuntimeException gone) { /* already unbound */ }
-                    if (job.isPeriodic()) plan(job);
-                    else if (reschedule) plan(job, BACKOFF_MS);
-                    else app.getSystemService(JobScheduler.class).cancel(jobId);
+                    if (notification[0] != 0 && notification[1] == JobService.JOB_END_NOTIFICATION_POLICY_REMOVE) app.getSystemService(NotificationManager.class).cancel(notification[0]);
+                    long backoff = reschedule ? backoff(job) : -1;
+                    if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] job " + job.getId() + " finished" + (reschedule ? ", again in " + backoff + " ms" : job.isPeriodic() ? ", next period" : ""));
+                    if (reschedule) plan(job, backoff);
+                    else {
+                        synchronized (HostJobs.class) { FAILURES.remove(job.getId()); }
+                        if (job.isPeriodic()) plan(job);
+                        else app.getSystemService(JobScheduler.class).cancel(job.getId());
+                    }
                 });
+            }
+            @Override public void jobFinished(int jobId, boolean reschedule) { end(reschedule); }
+            @Override public void acknowledgeStartMessage(int jobId, boolean ongoing) { if (!ongoing) end(false); }  // onStartJob returned false: the job is done
+            @Override public void setNotification(int jobId, int notificationId, Notification shown, int jobEndNotificationPolicy) {
+                app.getSystemService(NotificationManager.class).notify(notificationId, shown);  // a user-initiated job's notification (JobServiceContext posts it for the app)
+                notification[0] = notificationId; notification[1] = jobEndNotificationPolicy;
             }
             @Override public void acknowledgeGetTransferredDownloadBytesMessage(int jobId, int workId, long transferredBytes) {}
             @Override public void acknowledgeGetTransferredUploadBytesMessage(int jobId, int workId, long transferredBytes) {}
-            @Override public void acknowledgeStartMessage(int jobId, boolean ongoing) {}
             @Override public void acknowledgeStopMessage(int jobId, boolean reschedule) {}
             @Override public android.app.job.JobWorkItem dequeueWork(int jobId) { return null; }
             @Override public boolean completeWork(int jobId, int workId) { return true; }
             @Override public void handleAbandonedJob(int jobId) {}
             @Override public void updateEstimatedNetworkBytes(int jobId, android.app.job.JobWorkItem item, long downloadBytes, long uploadBytes) {}
             @Override public void updateTransferredNetworkBytes(int jobId, android.app.job.JobWorkItem item, long downloadBytes, long uploadBytes) {}
-            @Override public void setNotification(int jobId, int notificationId, android.app.Notification notification, int jobEndNotificationPolicy) {}
         };
         connection[0] = new ServiceConnection() {
             @Override public void onServiceConnected(ComponentName name, IBinder binder) {
