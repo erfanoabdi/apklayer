@@ -17,6 +17,8 @@ void migrateData(const Layout& l) {
     const std::string dir = join(l.dataHome, "apklayer"), file = join(dir, "data-format");
     auto text = readFile(file);
     // no record: data from before the record is format 1, a fresh data home starts at the current one
+    // an empty or unreadable record (an interrupted write) counts as no record: atoi gives 0, and kSteps[-1] is out of bounds
+    if (text && atoi(text->c_str()) < 1) text.reset();
     int have = text ? atoi(text->c_str()) : isDir(dir) ? 1 : kDataFormat;
     if (have > kDataFormat) die("the data in " + dir + " is format " + std::to_string(have) + ", from a newer apklayer (this one reads " + std::to_string(kDataFormat) + ")");
     if (text && have == kDataFormat) return;
