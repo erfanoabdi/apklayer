@@ -60,6 +60,9 @@ public class ShadowHostRealLinux extends ShadowLinux {
     // shortcut: fstat(fd) stays Robolectric's (mode 0): the real one stopped MediaProvider's scan after a write through openOutputStream (system-apps media: size 0), cause not found yet; upgrade once it is
     private static ClassParameter<String> path(String path) { return ClassParameter.from(String.class, path); }
     @Implementation @Override public android.system.StructStat stat(String path) { return natively("stat", path(path)); }
+    // Robolectric's fstat(fd) is stat(null): with the real stat above that threw EFAULT for every descriptor IoBridge.open checks
+    // (ParcelFileDescriptor.open, so JW Library's thumbnails never loaded). Its old answer, without the path: mode 0, size 0.
+    @Implementation @Override protected android.system.StructStat fstat(FileDescriptor fd) { return new android.system.StructStat(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0); }
     @Implementation @Override protected android.system.StructStat lstat(String path) { return natively("lstat", path(path)); }
     @Implementation @Override public void mkdir(String path, int mode) { natively("mkdir", path(path), ClassParameter.from(int.class, mode)); }
     @Implementation protected void chmod(String path, int mode) { natively("chmod", path(path), ClassParameter.from(int.class, mode)); }
