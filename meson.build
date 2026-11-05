@@ -17,6 +17,7 @@ jar_put = [python, files('tools/gen/jar-put.py')]
 pkg_lib = get_option('prefix') / 'lib/apklayer'
 native_dir = pkg_lib / 'native'
 share_dir = get_option('prefix') / get_option('datadir') / 'apklayer'
+plugin_dir = get_option('prefix') / get_option('libdir') / 'apklayer/plugins'  # third-party hardware plugins (docs/PLUGINS.md)
 
 # the prebuilts branch (docs/INSTALL.md): the Android framework, Robolectric and Android's libraries the runtime is built against
 prebuilts = get_option('prebuilts')
@@ -42,6 +43,11 @@ subdir('bridge/hals/camera')
 subdir('bridge/hals/sensors')
 subdir('bridge/hals/gnss')
 subdir('bridge/hals/vibrator')
+# the hardware plugin API for out-of-tree plugins (docs/PLUGINS.md; the apklayer-dev package): its headers and apklayer-plugin.pc
+install_headers('bridge/hals/include/apklayer/plugin.h', 'bridge/hals/sensors/include/apklayer/sensors.h', 'bridge/hals/gnss/include/apklayer/gnss.h',
+  'bridge/hals/vibrator/include/apklayer/vibrator.h', 'bridge/hals/camera/include/apklayer/camera.h', subdir: 'apklayer')
+import('pkgconfig').generate(name: 'apklayer-plugin', filebase: 'apklayer-plugin', version: version,
+  description: 'apklayer hardware plugin API (sensors, GNSS, vibrator, camera)', variables: {'plugindir': '${libdir}/apklayer/plugins'})
 
 if host_machine.system() == 'linux'
   # bionic_translation at its pinned revision (subprojects/bionic_translation.wrap) with our series applied (patches/apply, idempotent; an edited

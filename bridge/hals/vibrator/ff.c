@@ -50,6 +50,7 @@ static int find(int *best_rank, char *name, size_t size)
     return best;
 }
 
+const int apklayer_plugin_abi = APKLAYER_PLUGIN_ABI;
 int apklayer_vibrator_probe(void)
 {
     char path[300];

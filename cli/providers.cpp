@@ -10,6 +10,8 @@
 
 #include "stack.h"
 
+#include <apklayer/plugin.h>
+
 namespace apklayer {
 
 namespace {
@@ -31,8 +33,39 @@ const Domain* findDomain(const std::string& name) {
     return nullptr;
 }
 
+// Where plugins (backends) are found, in this order; a name found twice is the first one's (docs/PLUGINS.md): the runtime's native dir
+// (apklayer's own), $APKLAYER_PLUGIN_PATH (colon separated: a plugin under development), the user's, this install's <libdir>/apklayer/plugins
+// (third-party packages: the plugindir of apklayer-plugin.pc)
+std::vector<std::string> pluginDirs(const Layout& l) {
+    std::vector<std::string> dirs = {l.native};
+    for (const std::string& d : split(getenvOr("APKLAYER_PLUGIN_PATH", ""), ':')) if (!d.empty()) dirs.push_back(d);
+    dirs.push_back(join(homeDir(), ".local/lib/apklayer/plugins"));
+    dirs.push_back(APKLAYER_PLUGINDIR);
+    return dirs;
+}
+
+// the library of a domain's backend, "" when no plugin dir has it
 std::string backendLib(const Layout& l, const std::string& domain, const std::string& backend) {
-    return join(l.native, "libapklayer-" + domain + "-" + backend + ".so");
+    for (const std::string& dir : pluginDirs(l))
+        if (exists(join(dir, "libapklayer-" + domain + "-" + backend + ".so"))) return join(dir, "libapklayer-" + domain + "-" + backend + ".so");
+    return "";
+}
+
+// Why a loaded plugin must not be used: built against other headers than this apklayer's (apklayer/plugin.h); "" when it can be
+std::string abiRefusal(void* handle) {
+    auto abi = static_cast<const int*>(dlsym(handle, "apklayer_plugin_abi"));
+    const std::string ours = std::to_string(APKLAYER_PLUGIN_ABI);
+    if (!abi) return "no apklayer_plugin_abi (built for an apklayer before plugin ABI " + ours + ")";
+    return *abi == APKLAYER_PLUGIN_ABI ? "" : "plugin ABI " + std::to_string(*abi) + ", this apklayer takes " + ours;
+}
+
+// "" when the plugin library loads here and has this apklayer's ABI, else why not (it is then never probed nor started)
+std::string refusal(const std::string& lib) {
+    void* handle = dlopen(lib.c_str(), RTLD_NOW | RTLD_LOCAL);
+    if (!handle) return dlerror();
+    std::string why = abiRefusal(handle);
+    dlclose(handle);
+    return why;
 }
 
 // a TOML string or bare value: "a b" -> a b (no escapes: the CLI writes none)
@@ -55,16 +88,20 @@ void writeProviders(const std::string& file, const std::vector<ProviderConfig>& 
     if (!writeFile(file, text)) die("cannot write " + file);
 }
 
-// probe() of a backend library: <0 unusable here, 0 usable (never a default), >0 quality; INT32_MIN when it cannot be loaded. Run in a child
+// probe() of a backend library: <0 unusable here, 0 usable (never a default), >0 quality; INT32_MIN when it cannot be loaded or is refused
+// (refused: why, see abiRefusal; probe() is not called then). Run in a child
 // process: a backend's probe may start threads (GDBus) or block on a bus, which must not stay in the stack daemon that forks services.
 // options: the backend's apklayer_<domain>_options, a line "key<TAB>default<TAB>kind" per option it takes (kind text or file), "" without
 // (read in this process: a constant string, nothing to start).
-int probe(const std::string& lib, const std::string& domain, std::string& options) {
+int probe(const std::string& lib, const std::string& domain, std::string& options, std::string& refused) {
     options.clear();
+    refused.clear();
     if (void* handle = dlopen(lib.c_str(), RTLD_NOW | RTLD_LOCAL)) {
+        refused = abiRefusal(handle);
         if (auto declared = static_cast<const char*>(dlsym(handle, ("apklayer_" + domain + "_options").c_str()))) options = declared;
         // not dlclose'd before the fork below? The child loads it again: a constructor of the library runs only there
         dlclose(handle);
+        if (!refused.empty()) return INT32_MIN;
     }
     pid_t pid = fork();
     if (pid == 0) {
@@ -79,13 +116,18 @@ int probe(const std::string& lib, const std::string& domain, std::string& option
     return WEXITSTATUS(st) == 0 ? -1 : WEXITSTATUS(st) - 1;
 }
 
-// a domain's staged backends: name -> library
+// a domain's backends in the plugin dirs: name -> library (the first of a name)
 std::vector<std::pair<std::string, std::string>> backends(const Layout& l, const std::string& domain) {
     std::vector<std::pair<std::string, std::string>> found;
     const std::string prefix = "libapklayer-" + domain + "-";
-    for (const std::string& f : listDir(l.native))
-        if (f.rfind(prefix, 0) == 0 && f.size() > prefix.size() + 3 && f.substr(f.size() - 3) == ".so")
-            found.push_back({f.substr(prefix.size(), f.size() - prefix.size() - 3), join(l.native, f)});
+    for (const std::string& dir : pluginDirs(l))
+        for (const std::string& f : listDir(dir)) {
+            if (f.rfind(prefix, 0) != 0 || f.size() <= prefix.size() + 3 || f.substr(f.size() - 3) != ".so") continue;
+            std::string name = f.substr(prefix.size(), f.size() - prefix.size() - 3);
+            bool seen = false;
+            for (const auto& b : found) seen |= b.first == name;
+            if (!seen) found.push_back({name, join(dir, f)});
+        }
     return found;
 }
 
@@ -94,8 +136,8 @@ std::string defaultBackend(const Layout& l, const std::string& domain) {
     std::string best;
     int bestQuality = 0;
     for (const auto& [name, lib] : backends(l, domain)) {
-        std::string unusedOptions;
-        int q = probe(lib, domain, unusedOptions);
+        std::string unusedOptions, unusedRefusal;
+        int q = probe(lib, domain, unusedOptions, unusedRefusal);
         if (q > bestQuality) best = name, bestQuality = q;
     }
     return best;
@@ -148,8 +190,12 @@ std::vector<ProviderService> providerServices(const Layout& l, const Instance& i
         if (c.provider == "device") continue;  // the device's own HAL: no front here (writeHostHals lists it)
         if (c.provider != "apklayer") { fprintf(stderr, "providers: %s: no provider %s\n", d->name, c.provider.c_str()); continue; }
         std::string backend = backendLib(l, c.domain, c.backend);
-        if (!exists(join(l.androidLibs, d->front)) || !exists(backend)) {
-            fprintf(stderr, "providers: %s: %s or %s is not staged\n", d->name, d->front, backend.c_str());
+        if (!exists(join(l.androidLibs, d->front)) || backend.empty()) {
+            fprintf(stderr, "providers: %s: %s or the plugin libapklayer-%s-%s.so is not staged\n", d->name, d->front, d->name, c.backend.c_str());
+            continue;
+        }
+        if (std::string why = refusal(backend); !why.empty()) {  // never into a front: a mismatched ABI would crash it
+            fprintf(stderr, "providers: %s: %s refused: %s\n", d->name, backend.c_str(), why.c_str());
             continue;
         }
         services.push_back({d->name, d->front, backend, c.options, d->manifest});
@@ -188,10 +234,11 @@ int providersCommand(const Layout& l, const Instance& inst, const std::vector<st
             std::string best;
             int bestQuality = 0;
             for (const auto& [name, lib] : backends(l, d.name)) {
-                std::string options;
-                int q = probe(lib, d.name, options);
+                std::string options, refused;
+                int q = probe(lib, d.name, options, refused);
                 if (q > bestQuality) best = name, bestQuality = q;
-                printf("backend\t%s\t%s\t%s\n", d.name, name.c_str(), q == INT32_MIN ? "unloadable" : q < 0 ? "unavailable" : ("quality " + std::to_string(q)).c_str());
+                std::string state = !refused.empty() ? "refused: " + refused : q == INT32_MIN ? "unloadable" : q < 0 ? "unavailable" : "quality " + std::to_string(q);
+                printf("backend\t%s\t%s\t%s\t%s\n", d.name, name.c_str(), state.c_str(), lib.c_str());
                 for (const std::string& o : split(options, '\n'))
                     if (!o.empty()) printf("option\t%s\t%s\t%s\n", d.name, name.c_str(), o.c_str());
             }
@@ -212,7 +259,13 @@ int providersCommand(const Layout& l, const Instance& inst, const std::vector<st
         if (args.size() > 3) die("the device provider takes no options");
         kept.push_back({args[1], "device", "", {}});
     } else if (action == "set") {
-        if (!exists(backendLib(l, args[1], args[2]))) die("no backend " + backendLib(l, args[1], args[2]));
+        std::string lib = backendLib(l, args[1], args[2]);
+        if (lib.empty()) {
+            std::string dirs;
+            for (const std::string& dir : pluginDirs(l)) dirs += (dirs.empty() ? "" : ", ") + dir;
+            die("no plugin libapklayer-" + args[1] + "-" + args[2] + ".so in " + dirs);
+        }
+        if (std::string why = refusal(lib); !why.empty()) die(lib + " refused: " + why);
         ProviderConfig d{args[1], "apklayer", args[2], {}};
         for (size_t i = 3; i < args.size(); i++) {
             size_t eq = args[i].find('=');

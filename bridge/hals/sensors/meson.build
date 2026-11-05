@@ -1,6 +1,6 @@
 # the sensors HAL's backends (include/apklayer/sensors.h): libapklayer-sensors-<backend>.so, one chosen per instance in providers.toml (or the
 # best by probe() when it names none)
-sensors_inc = include_directories('include')
+sensors_inc = include_directories('include', '../include')
 libsensors_fake = shared_library('apklayer-sensors-fake', 'fake.c', include_directories: sensors_inc, install: true, install_dir: native_dir)
 gio_dep = dependency('gio-2.0', required: false)
 if gio_dep.found()  # the D-Bus daemons' backends

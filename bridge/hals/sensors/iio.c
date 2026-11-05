@@ -82,6 +82,7 @@ static gpointer loop(gpointer context)
     return NULL;
 }
 
+const int apklayer_plugin_abi = APKLAYER_PLUGIN_ABI;
 int apklayer_sensors_probe(void)
 {
     GDBusConnection *c = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, NULL);

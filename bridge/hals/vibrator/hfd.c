@@ -23,6 +23,7 @@ static int vibrate(int32_t ms)
     return 0;
 }
 
+const int apklayer_plugin_abi = APKLAYER_PLUGIN_ABI;
 int apklayer_vibrator_probe(void)
 {
     GDBusConnection *c = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, NULL);

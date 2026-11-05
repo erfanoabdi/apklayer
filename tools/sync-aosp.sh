@@ -24,6 +24,7 @@ for hal in bridge/hals/*/include; do
     d=$(basename "$(dirname "$hal")")
     orb -m ubuntu22-x86 mkdir -p "$dest/hals/$d/host-include"
     tar cf - -C "$hal" . | orb -m ubuntu22-x86 tar xf - -C "$dest/hals/$d/host-include"
+    tar cf - -C bridge/hals/include . | orb -m ubuntu22-x86 tar xf - -C "$dest/hals/$d/host-include"  # apklayer/plugin.h, which they include
 done
 # the message travels through stdin into a file (any character is safe in it), then git commit -F
 printf '%s\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\n' "$msg" | orb -m ubuntu22-x86 sh -c "cat > /tmp/apklayer-sync-msg"

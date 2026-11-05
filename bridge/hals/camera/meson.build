@@ -1,5 +1,5 @@
 # the camera HAL's backends (include/apklayer/camera.h): libapklayer-camera-<backend>.so, loaded into the camera provider (aosp/hals/camera)
-camera_inc = include_directories('include')
+camera_inc = include_directories('include', '../include')
 if gst_app.found() and gst_video.found()
   libcamera_fake = shared_library('apklayer-camera-fake', 'fake.c', 'fake-file.c', include_directories: camera_inc,
     dependencies: [gst_app, gst_video, dependency('threads')], install: true, install_dir: native_dir)

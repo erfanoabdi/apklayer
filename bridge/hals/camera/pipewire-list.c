@@ -98,6 +98,7 @@ static void on_done(void *data, uint32_t id, int seq)
 
 static const struct pw_core_events core_events = {PW_VERSION_CORE_EVENTS, .done = on_done};
 
+const int apklayer_plugin_abi = APKLAYER_PLUGIN_ABI;
 int apklayer_camera_probe(void)
 {
     struct apklayer_camera_info cams[1];

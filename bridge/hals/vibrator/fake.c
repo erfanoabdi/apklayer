@@ -5,6 +5,7 @@
 
 static float amplitude = 1.0f;
 
+const int apklayer_plugin_abi = APKLAYER_PLUGIN_ABI;
 int apklayer_vibrator_probe(void) { return 0; }
 int apklayer_vibrator_init(int count, const char *const *options) { (void)count; (void)options; return 0; }
 

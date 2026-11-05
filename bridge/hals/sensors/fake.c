@@ -22,6 +22,7 @@ static struct {
 };
 #define N_SENSORS ((int)(sizeof sensors / sizeof *sensors))
 
+const int apklayer_plugin_abi = APKLAYER_PLUGIN_ABI;
 int apklayer_sensors_probe(void) { return 0; }
 const char apklayer_sensors_options[] = "accel\t0,9.80665,0\ttext\ngyro\t0,0,0\ttext\nmagnetic\t0,20,-40\ttext\nlight\t300\ttext\npressure\t1013.25\ttext\n"
                                         "proximity\t5\ttext\n";

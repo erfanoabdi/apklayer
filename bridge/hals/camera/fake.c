@@ -33,6 +33,7 @@ struct apklayer_camera {
     int ready;            /* 0 starting, 1 streaming, <0 -errno */
 };
 
+const int apklayer_plugin_abi = APKLAYER_PLUGIN_ABI;
 int apklayer_camera_probe(void) { return 0; }
 const char apklayer_camera_options[] = "source\tpattern\tfile\ncameras\tback,front\ttext\nfps\t30\ttext\n";
 

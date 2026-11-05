@@ -79,6 +79,7 @@ static int on_bus(GDBusConnection *c, const char *name)
     return found;
 }
 
+const int apklayer_plugin_abi = APKLAYER_PLUGIN_ABI;
 int apklayer_vibrator_probe(void)
 {
     GDBusConnection *c = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, NULL);

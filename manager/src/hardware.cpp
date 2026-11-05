@@ -27,6 +27,7 @@ const Known* known(const std::string& name) {
 std::string probeText(const std::string& probe) {
     if (probe == "quality 0") return "available";
     if (probe.rfind("quality ", 0) == 0) return "available, " + probe;
+    if (probe.rfind("refused: ", 0) == 0) return probe;  // a plugin built for another apklayer (its ABI)
     return probe == "unavailable" ? "not available here" : "cannot be loaded";
 }
 

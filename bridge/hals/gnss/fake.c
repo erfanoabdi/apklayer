@@ -53,6 +53,7 @@ static int load_gpx(const char *path)
     return 0;
 }
 
+const int apklayer_plugin_abi = APKLAYER_PLUGIN_ABI;
 int apklayer_gnss_probe(void) { return 0; }
 const char apklayer_gnss_options[] = "location\t37.4219999,-122.0840575,1.6\ttext\naccuracy\t5\ttext\ngpx\t\tfile\n";
 
