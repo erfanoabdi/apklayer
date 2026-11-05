@@ -1474,41 +1474,6 @@ td {
   color: #c8dece;
   font-size: 12px;
 }
-.compatibility-snapshot {
-  display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  align-items: center;
-  gap: 40px;
-  padding: 27px 30px;
-  border: 1px solid #405642;
-  border-radius: 12px;
-  background: #1b2b21;
-  margin-bottom: 30px;
-}
-.compatibility-number {
-  font-size: 65px;
-  line-height: 1;
-  letter-spacing: -4px;
-  font-weight: 550;
-  color: var(--mint);
-}
-.compatibility-number > span {
-  color: #8aa892;
-  font-size: 34px;
-  letter-spacing: -2px;
-}
-.compatibility-snapshot > div > p {
-  margin: 12px 0 0;
-  font-size: 11px;
-  line-height: 1.6;
-}
-.compatibility-snapshot > p {
-  margin: 0;
-  font-size: 13px;
-}
-.compatibility-snapshot .text-link {
-  white-space: nowrap;
-}
 .technical .instance-boundary {
   margin: 0 0 30px;
   color: #aabbaf;
@@ -1562,13 +1527,6 @@ td {
   }
   .capture-host {
     display: none;
-  }
-  .compatibility-snapshot {
-    grid-template-columns: 1fr 1fr;
-    gap: 25px;
-  }
-  .compatibility-snapshot .text-link {
-    grid-column: 1 / -1;
   }
   .approach-grid {
     gap: 12px;
@@ -1624,11 +1582,6 @@ td {
   }
   .reference-body {
     padding: 18px;
-  }
-  .compatibility-snapshot {
-    grid-template-columns: 1fr;
-    padding: 25px;
-    gap: 20px;
   }
   .capability-list {
     margin-bottom: 25px;
