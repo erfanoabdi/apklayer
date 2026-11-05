@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Thu, 5 Nov 2026 00:00:00 +0000
+Subject: [PATCH] linker: libraries the vendor namespace shares with the system
+
+apklayer patch (docs/HALIUM.md, on 0039). BIONIC_VENDOR_SHARED_LIBS (basenames separated by ':') names libraries the vendor
+namespace never loads its own copy of: a vendor library needing one gets the system's. For libhidlbase: the Mali driver's
+IMapper::getService otherwise ran in the vendor's Android 12 libhidlbase, which waits forever for hwservicemanager.ready (it knows
+no hwservicemanager.disabled) and opens its own hwbinder ProcessState; the system's goes through apklayer's host_hals path. The
+HIDL symbols the vendor libraries import (149 on the Volla X23) are all in ours, and VNDK 31's and 34's ABI dumps of libhidlbase
+have the same records. Unset: unchanged.
+
+diff --git a/linker/linker.c b/linker/linker.c
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -1601,6 +1601,24 @@
+ 	return in;
+ }
+ 
++/* apklayer patch: libraries the vendor namespace never loads its own copy of (BIONIC_VENDOR_SHARED_LIBS: basenames separated
++ * by ':'): the vendor's libraries use the system's, which holds the process-wide state (libhidlbase: one hwbinder ProcessState and
++ * service lookup, apklayer's host context, instead of an Android 12 copy waiting for a hwservicemanager that never comes) */
++static bool apkenv_vendor_shared(const char *bname)
++{
++	static const char *list;
++	static bool read;
++	if (!read) {
++		list = getenv("BIONIC_VENDOR_SHARED_LIBS");
++		read = true;
++	}
++	size_t n = strlen(bname);
++	for (const char *p = list; p && n && (p = strstr(p, bname)); p += n)
++		if ((p == list || p[-1] == ':') && (p[n] == ':' || !p[n]))
++			return true;
++	return false;
++}
++
+ /* apklayer patch: a library asked for from the app's namespace (app) is the app's own copy when it has one, else the system's;
+  * the system namespace never sees the app's libraries (an app's OpenSSL libcrypto.so next to the device's BoringSSL one) */
+ soinfo *apkenv_find_library(const char *name, bool app, const bool try_glibc, int glibc_flag, void **glibc_handle)
+@@ -1639,6 +1657,8 @@
+ 	app = app || apkenv_in_dirs(name, apkenv_app_ldpaths);
+ 	/* apklayer patch: a vendor library's needs and dlopens, and a library in a vendor directory, look in the vendor namespace first */
+ 	bool vendor = apkenv_vendor_ldpaths[0] && !app && (apkenv_want_vendor || apkenv_in_dirs(name, apkenv_vendor_ldpaths));
++	if (vendor && apkenv_vendor_shared(bname))
++		vendor = false, name = bname; /* apklayer patch: the system's copy, by name */
+ 	apkenv_want_vendor = false;
+ 
+ again:

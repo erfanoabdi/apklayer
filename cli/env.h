@@ -18,4 +18,7 @@ std::vector<std::string> hostJvmArgs(const Layout& layout, const Instance& insta
 
 NativeEnv nativeEnv(const Layout& layout, const Instance& instance);
 
+// A property of the machine's own Android (a Halium device's, through /usr/bin/getprop); "" when there is none.
+std::string deviceProperty(const std::string& key);
+
 }  // namespace apklayer

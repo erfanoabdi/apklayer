@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <cerrno>
 #include <poll.h>
+#include <set>
 #include <signal.h>
 #include <sys/file.h>
 #include <sys/signalfd.h>
@@ -243,19 +244,37 @@ static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std
     setProperty(l, ne, "ro.product.cpu.abilist32", kAbi32);
 }
 
-// graphics = device: Android's libEGL and Vulkan loader pick the driver by ro.hardware.egl/vulkan (libGLES_<egl>.so, vulkan.<vulkan>.so);
-// apklayer.prop names its own, so the device's values come first (ro.* is write-once). A Halium device sets them at boot, outside its prop
-// files: libhybris's getprop reads its live property area.
-static void deviceGraphicsProperties(const Layout& l, const NativeEnv& ne) {
-    for (const char* key : {"ro.hardware.egl", "ro.hardware.vulkan"}) {
-        Spawn get;
-        get.argv = {"/usr/bin/getprop", key};
-        get.env = currentEnv();
-        int status = 0;
-        std::string value = trim(runCapture(get, &status));
-        if (status == 0 && !value.empty()) setProperty(l, ne, key, value.c_str());
-        else fprintf(stderr, "apklayer: graphics = device, but the device's %s is unknown\n", key);
+// graphics = device: the device's properties its vendor libraries read, as a prop file loaded before apklayer.prop (ro.* is write-once, so the
+// device's values win). Android's libEGL and Vulkan loader pick the driver by ro.hardware.egl/vulkan (libGLES_<egl>.so, vulkan.<vulkan>.so);
+// MediaTek's gralloc derives a buffer's allocation format (AFBC or not) from ro.board.platform and debug.mediatek.disp_decompress, and the
+// mapper in apklayer's processes refuses a buffer the device's allocator made otherwise. Android's vendor namespaces (ro.vendor., vendor.)
+// come along; other debug.* do not (debug.hwui.*, debug.sf.* would change apklayer's own renderer and compositor). A Halium device sets
+// them at boot, outside its prop files (and /vendor/build.prop is root's): libhybris's getprop lists its live property area.
+static std::string deviceGraphicsProperties(const Instance& inst) {
+    Spawn get;
+    get.argv = {"/usr/bin/getprop"};
+    get.env = currentEnv();
+    int status = 0;
+    std::string out = exists("/usr/bin/getprop") ? runCapture(get, &status) : "", props;
+    std::set<std::string> found;
+    for (size_t at = 0, end; at < out.size(); at = end + 1) {
+        end = out.find('\n', at);
+        if (end == std::string::npos) end = out.size();
+        std::string line = out.substr(at, end - at);  // [key]: [value]
+        size_t k = line.find("]: [");
+        if (line.size() < 6 || line[0] != '[' || k == std::string::npos || line.back() != ']') continue;
+        std::string key = line.substr(1, k - 1), value = line.substr(k + 4, line.size() - k - 5);
+        bool wanted = key == "ro.hardware.egl" || key == "ro.hardware.vulkan" || key == "ro.board.platform";
+        for (const char* prefix : {"ro.vendor.", "vendor.", "debug.mediatek."}) wanted = wanted || key.rfind(prefix, 0) == 0;
+        if (!wanted || value.empty()) continue;
+        props += key + "=" + value + "\n";
+        found.insert(key);
     }
+    for (const char* key : {"ro.hardware.egl", "ro.hardware.vulkan", "ro.board.platform"})
+        if (!found.count(key)) fprintf(stderr, "apklayer: graphics = device, but the device's %s is unknown\n", key);
+    std::string file = join(inst.runtimeDir, "device.prop");
+    writeFile(file, props);
+    return file;
 }
 
 int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std::string>& tool) {
@@ -285,8 +304,8 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     // the instance's own overrides (`apklayer prop set`): first, as ro.* is write-once (and the fingerprint is derived from them), and again last, as
     // every other property keeps the last value loaded
     if (exists(inst.propOverrides())) { propFiles.insert(propFiles.begin(), inst.propOverrides()); propFiles.push_back(inst.propOverrides()); }
+    if (deviceGraphics(inst)) propFiles.insert(propFiles.begin() + (propFiles.size() > 2), deviceGraphicsProperties(inst));  // after the overrides' first copy
     setDerivedProperties(l, ne, propFiles);
-    if (deviceGraphics(inst)) deviceGraphicsProperties(l, ne);
     Spawn prop;
     prop.argv = {join(n, "bin/aprop"), "load"};
     prop.argv.insert(prop.argv.end(), propFiles.begin(), propFiles.end());

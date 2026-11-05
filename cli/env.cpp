@@ -62,6 +62,20 @@ std::string hostGles(const Layout& layout, const Env& env) {
     return version;
 }
 
+}  // namespace
+
+// A property of the machine's own Android (a Halium device): libhybris's getprop reads its live property area; "" when there is none
+std::string deviceProperty(const std::string& key) {
+    if (!exists("/usr/bin/getprop")) return "";
+    Spawn get;
+    get.argv = {"/usr/bin/getprop", key};
+    get.env = currentEnv();
+    int status = 0;
+    std::string value = trim(runCapture(get, &status));
+    return status == 0 ? value : "";
+}
+
+namespace {
 // dir first in a search path, once: a launch from inside the instance (the hub's) already has it there, and its spare key must equal a desktop launch's
 std::string prepend(const std::string& dir, const std::string& path) {
     return path == dir || path.rfind(dir + ":", 0) == 0 ? path : dir + ":" + path;
@@ -72,9 +86,12 @@ std::string prepend(const std::string& dir, const std::string& path) {
 // vendor namespace (0039) with the VNDK of the vendor's Android version, and Android's own libEGL/libGLES (the device's driver from
 // /vendor/lib64/egl) replace apklayer's host-EGL ones: a cfg.d in the instance's directory, first in XDG_DATA_DIRS.
 static void deviceGraphicsEnv(const Instance& instance, Env& env) {
-    std::string vndk;
-    for (const std::string& f : listDir("/apex"))
-        if (f.rfind("com.android.vndk.v", 0) == 0 && isDir(join("/apex", f + "/lib64"))) vndk = join("/apex", f + "/lib64");
+    // the vendor's VNDK (ro.vndk.version: the Volla X23's system is API 32, its vendor 31, and both apexes exist); else the newest apex
+    std::string vndk, version = deviceProperty("ro.vndk.version");
+    if (!version.empty() && isDir("/apex/com.android.vndk.v" + version + "/lib64")) vndk = "/apex/com.android.vndk.v" + version + "/lib64";
+    else
+        for (const std::string& f : listDir("/apex"))
+            if (f.rfind("com.android.vndk.v", 0) == 0 && isDir(join("/apex", f + "/lib64"))) vndk = join("/apex", f + "/lib64");
     // shortcut: the vendor libraries' few system dependencies outside the VNDK (libprocessgroup, libcgrouprc) come from the
     // device's /system; a generated list of them per vendor version when another device needs more
     std::string extra = join(instance.root, "device-graphics/vendor-system");  // the instance root: the runtime directory is made anew per stack
@@ -84,6 +101,9 @@ static void deviceGraphicsEnv(const Instance& instance, Env& env) {
             fprintf(stderr, "apklayer: cannot link %s into %s\n", lib, extra.c_str());
     if (!env.count("BIONIC_VENDOR_LD_LIBRARY_PATH"))
         env["BIONIC_VENDOR_LD_LIBRARY_PATH"] = "/vendor/lib64:/vendor/lib64/egl:/vendor/lib64/hw" + (vndk.empty() ? "" : ":" + vndk) + ":" + extra;
+    // the vendor's libraries use apklayer's libhidlbase (bionic_translation 0041): one hwbinder state and service lookup per process, through
+    // host_hals.conf; the vendor's Android 12 copy waits for a hwservicemanager.ready that never comes (it knows no .disabled)
+    if (!env.count("BIONIC_VENDOR_SHARED_LIBS")) env["BIONIC_VENDOR_SHARED_LIBS"] = "libhidlbase.so";
     std::string share = join(instance.root, "device-graphics/share");
     makeDirs(join(share, "bionic_translation/cfg.d"));
     writeFile(join(share, "bionic_translation/cfg.d/device-graphics.cfg"),
