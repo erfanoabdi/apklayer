@@ -22,6 +22,9 @@ int __system_property_area_init(void); /* properties.c */
 #include <time.h>
 #include <unistd.h>
 
+/* bionic's GNU basename (string.h): older vendor libraries call it by this name (a Halium device's VNDK libunwindstack) */
+char *__gnu_basename(const char *path) { const char *s = strrchr(path, '/'); return (char *)(s ? s + 1 : path); }
+
 /* fortify checks: the buffer-size argument is only for overflow detection */
 ssize_t __pwrite_chk(int fd, const void *buf, size_t n, off_t off, size_t buflen) { (void)buflen; return pwrite(fd, buf, n, off); }
 ssize_t __sendto_chk(int fd, const void *buf, size_t n, size_t buflen, int flags, const struct sockaddr *a, socklen_t l)
