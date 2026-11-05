@@ -5,7 +5,7 @@ apklayer patch (docs/PATCHES.md, docs/HALIUM.md). As libbinder's (frameworks/nat
 /dev/host_hwbinder (apklayer's path layer maps it to $APKLAYER_HOST_HWBINDER: a Halium device's own /dev/hwbinder, or another
 instance's hwbinder in the two-instance test), IPCThreadState::self(true) with its own TLS key and thread pool (started without
 waiting for a local hwservicemanager), BpHwBinder remembers its context, Parcels received through it (by buffer address) or
-carrying its proxies (64-bit: a flag in padding; 32-bit has none) use it, buffers are freed through it. Also Waydroid libhwbinder
+carrying its proxies (64-bit: a flag in padding; 32-bit has none) use it, buffers are freed through it, a host proxy's handle entry is expunged from the host context. Also Waydroid libhwbinder
 0002: no FLAT_BINDER_FLAG_TXN_SECURITY_CTX on our binders (no kernel security context here; libbinder's is our frameworks/native
 0001). Ported from Waydroid's libhwbinder 0001 (Android 13), which switched one ProcessState between the two drivers instead.
 ABI kept: Parcel's size is unchanged, BpHwBinder/ProcessState/IPCThreadState are only made by libhwbinder. Rebuild: `m libhidlbase`.
@@ -13,9 +13,10 @@ Against system/libhwbinder 2f5282448223 (REVISION). Apply: patches/apply aosp <L
 ---
 File dev-hw-a/.git is a unknown type while file dev-hw-b/.git is a unknown type
 diff --git a/BpHwBinder.cpp b/BpHwBinder.cpp
+index 81ce7cc..29794f3 100644
 --- a/BpHwBinder.cpp
 +++ b/BpHwBinder.cpp
-@@ -87,16 +87,19 @@
+@@ -87,16 +87,19 @@ void BpHwBinder::ObjectManager::kill()
  
  // ---------------------------------------------------------------------------
  
@@ -37,7 +38,7 @@ diff --git a/BpHwBinder.cpp b/BpHwBinder.cpp
  }
  
  status_t BpHwBinder::transact(
-@@ -104,7 +107,7 @@
+@@ -104,7 +107,7 @@ status_t BpHwBinder::transact(
  {
      // Once a binder has died, it will never come back to life.
      if (mAlive) {
@@ -46,7 +47,7 @@ diff --git a/BpHwBinder.cpp b/BpHwBinder.cpp
              mHandle, code, data, reply, flags);
  
          if (status == ::android::OK && callback != nullptr) {
-@@ -140,7 +143,7 @@
+@@ -140,7 +143,7 @@ status_t BpHwBinder::linkToDeath(
                  }
                  ALOGV("Requesting death notification: %p handle %d\n", this, mHandle);
                  getWeakRefs()->incWeak(this);
@@ -55,7 +56,7 @@ diff --git a/BpHwBinder.cpp b/BpHwBinder.cpp
                  self->requestDeathNotification(mHandle, this);
                  self->flushCommands();
              }
-@@ -174,7 +177,7 @@
+@@ -174,7 +177,7 @@ status_t BpHwBinder::unlinkToDeath(
              mObituaries->removeAt(i);
              if (mObituaries->size() == 0) {
                  ALOGV("Clearing death notification: %p handle %d\n", this, mHandle);
@@ -64,7 +65,7 @@ diff --git a/BpHwBinder.cpp b/BpHwBinder.cpp
                  self->clearDeathNotification(mHandle, this);
                  self->flushCommands();
                  delete mObituaries;
-@@ -199,7 +202,7 @@
+@@ -199,7 +202,7 @@ void BpHwBinder::sendObituary()
      Vector<Obituary>* obits = mObituaries;
      if(obits != nullptr) {
          ALOGV("Clearing sent death notification: %p handle %d\n", this, mHandle);
@@ -73,7 +74,7 @@ diff --git a/BpHwBinder.cpp b/BpHwBinder.cpp
          self->clearDeathNotification(mHandle, this);
          self->flushCommands();
          mObituaries = nullptr;
-@@ -224,7 +227,7 @@
+@@ -224,7 +227,7 @@ void BpHwBinder::sendObituary()
  // -1 in case of failure.
  ssize_t BpHwBinder::getNodeStrongRefCount()
  {
@@ -82,7 +83,7 @@ diff --git a/BpHwBinder.cpp b/BpHwBinder.cpp
  }
  
  void BpHwBinder::reportOneDeath(const Obituary& obit)
-@@ -267,7 +270,7 @@
+@@ -267,10 +270,12 @@ BpHwBinder::~BpHwBinder()
  {
      ALOGV("Destroying BpHwBinder %p handle %d\n", this, mHandle);
  
@@ -90,8 +91,14 @@ diff --git a/BpHwBinder.cpp b/BpHwBinder.cpp
 +    IPCThreadState* ipc = IPCThreadState::self(mHost);
  
      if (ipc) {
-         ipc->expungeHandle(mHandle, this);
-@@ -278,7 +281,7 @@
+-        ipc->expungeHandle(mHandle, this);
++        // apklayer patch: this proxy's own context (IPCThreadState::expungeHandle is static and always the local one: a host proxy
++        // left its handle entry behind, and the next host lookup of that handle took the freed proxy)
++        ProcessState::self(mHost)->expungeHandle(mHandle, this);
+         ipc->decWeakHandle(mHandle);
+     }
+ }
+@@ -278,7 +283,7 @@ BpHwBinder::~BpHwBinder()
  void BpHwBinder::onFirstRef()
  {
      ALOGV("onFirstRef BpHwBinder %p handle %d\n", this, mHandle);
@@ -100,7 +107,7 @@ diff --git a/BpHwBinder.cpp b/BpHwBinder.cpp
      if (ipc) ipc->incStrongHandle(mHandle, this);
  }
  
-@@ -288,7 +291,7 @@
+@@ -288,7 +293,7 @@ void BpHwBinder::onLastStrongRef(const void* /*id*/)
      IF_ALOGV() {
          printRefs();
      }
@@ -109,7 +116,7 @@ diff --git a/BpHwBinder.cpp b/BpHwBinder.cpp
      if (ipc) {
          ipc->decStrongHandle(mHandle);
          ipc->flushCommands();
-@@ -318,7 +321,7 @@
+@@ -318,7 +323,7 @@ void BpHwBinder::onLastStrongRef(const void* /*id*/)
  bool BpHwBinder::onIncStrongAttempted(uint32_t /*flags*/, const void* /*id*/)
  {
      ALOGV("onIncStrongAttempted BpHwBinder %p handle %d\n", this, mHandle);

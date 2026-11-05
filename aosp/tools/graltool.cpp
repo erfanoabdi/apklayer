@@ -6,6 +6,10 @@
 //                               keeps the window SECONDS seconds and exits. Proves allocation and presentation without the GPU.
 #include <android/hardware/graphics/allocator/4.0/IAllocator.h>
 #include <android/hardware/graphics/mapper/4.0/IMapper.h>
+#include <android/hidl/manager/1.0/BpHwServiceManager.h>
+#include <android/hidl/manager/1.0/BnHwServiceManager.h>
+#include <hidl/HidlBinderSupport.h>
+#include <hwbinder/ProcessState.h>
 #include <cutils/native_handle.h>
 #include <dlfcn.h>
 #include <stdio.h>
@@ -36,6 +40,26 @@ extern "C" int main(int argc, char** argv) {
     if (argc < 5 || strcmp(argv[1], "show")) { fprintf(stderr, "usage: graltool show W H SECONDS [RRGGBB]\n"); return 2; }
     uint32_t w = atoi(argv[2]), h = atoi(argv[3]), seconds = atoi(argv[4]);
     uint32_t rgb = argc > 5 ? strtoul(argv[5], nullptr, 16) : 0x2196f3;
+    // GRALTOOL_FIRST: what happens before the allocator lookup. getservice: libui's order (Gralloc4Mapper before Gralloc4Allocator),
+    // the mapper through libhidl (with both HALs in host_hals.conf: asked on the host, then loaded as passthrough), kept as libui keeps
+    // it; hostmiss: only the host's hwservicemanager asked for the mapper (it has none), the proxy dropped; dlopen: only the vendor
+    // mapper loaded (HIDL_FETCH_IMapper)
+    const char* first = getenv("GRALTOOL_FIRST") ? getenv("GRALTOOL_FIRST") : "";
+    sp<IMapper> earlyMapper;
+    if (!strcmp(first, "getservice")) earlyMapper = IMapper::getService();
+    if (!strcmp(first, "hostmiss")) {
+        using android::hidl::manager::V1_0::IServiceManager;
+        sp<IServiceManager> sm = android::hardware::fromBinder<IServiceManager, android::hidl::manager::V1_0::BpHwServiceManager,
+                                                                android::hidl::manager::V1_0::BnHwServiceManager>(
+                android::hardware::ProcessState::self(true)->getContextObject(nullptr));
+        printf("graltool: host mapper %s\n", sm != nullptr && sm->get(IMapper::descriptor, "default").withDefault(nullptr) ? "found" : "missing");
+    }
+    if (!strcmp(first, "dlopen")) {
+        void* lib = dlopen("/vendor/lib64/hw/android.hardware.graphics.mapper@4.0-impl-mediatek.so", RTLD_NOW);
+        auto fetch = lib ? reinterpret_cast<IMapper* (*)(const char*)>(dlsym(lib, "HIDL_FETCH_IMapper")) : nullptr;
+        earlyMapper = fetch ? fetch("default") : nullptr;
+    }
+    if (*first) { printf("graltool: first %s: mapper %s\n", first, earlyMapper ? "ok" : "null"); fflush(stdout); }
     sp<IAllocator> allocator = IAllocator::getService();
     if (allocator == nullptr) { printf("graltool: no allocator@4.0\n"); return 1; }
     uint64_t usage = static_cast<uint64_t>(BufferUsage::CPU_WRITE_OFTEN | BufferUsage::CPU_READ_OFTEN | BufferUsage::GPU_TEXTURE |
