@@ -1,13 +1,13 @@
 package apklayer.host;
 
 import android.app.PendingIntent;
-import org.robolectric.shadows.ShadowAlarmManager;
+import org.robolectric.shadows.PendingAlarms;
 
 /** PendingIntent alarms go to the instance hub (HubScheduler), which fires them with every app process gone; without a hub they stay in the process. */
-final class HostAlarms implements ShadowAlarmManager.PendingAlarmHook {
+final class HostAlarms implements PendingAlarms.Hook {
     private HostAlarms() {}
 
-    static void install() { ShadowAlarmManager.pendingAlarmHook = new HostAlarms(); }
+    static void install() { PendingAlarms.hook = new HostAlarms(); }
 
     @Override public boolean set(PendingIntent operation, long delayMs, long intervalMs) {
         if (!HubClient.connected()) return false;

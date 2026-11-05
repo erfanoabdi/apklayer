@@ -2,39 +2,22 @@ From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: apklayer <apklayer@localhost>
 Subject: [PATCH] ShadowAlarmManager: PendingIntent alarms go to a hook (the instance hub holds them)
 
-apklayer patch: with auto scheduling a PendingIntent alarm is handed to ShadowAlarmManager.pendingAlarmHook (HubScheduler keeps it, so it fires
+apklayer patch: with auto scheduling a PendingIntent alarm is handed to PendingAlarms.hook (runtime/patches; the hub's HostAlarms, HubScheduler keeps it, so it fires
 after the app process is gone, as AlarmManagerService does) instead of the process-local Handler; deschedule tells the hook to cancel.
 
 Against external/robolectric 87aa52b08 (REVISION), after 0009. Applied by scripts/build-runtime-overlay.sh onto the staged
 upstream sources; the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
 ---
 diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowAlarmManager.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowAlarmManager.java
-index fef54bc..53bff86 100644
+index fef54bc..4f1cd1b 100644
 --- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowAlarmManager.java
 +++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowAlarmManager.java
-@@ -41,6 +41,16 @@ public class ShadowAlarmManager {
-   private static boolean canScheduleExactAlarms;
-   private static boolean autoSchedule;
- 
-+  /** apklayer patch: where PendingIntent alarms go when auto scheduling (the instance hub). */
-+  public interface PendingAlarmHook {
-+    /** True when the hub took the alarm; false: it is scheduled in the process. */
-+    boolean set(PendingIntent operation, long delayMs, long intervalMs);
-+
-+    void cancel(PendingIntent operation);
-+  }
-+
-+  public static volatile PendingAlarmHook pendingAlarmHook;
-+
-   private final Handler schedulingHandler = new Handler(Looper.getMainLooper());
- 
-   @GuardedBy("scheduledAlarms")
-@@ -705,12 +715,17 @@ public class ShadowAlarmManager {
+@@ -705,12 +705,17 @@ public class ShadowAlarmManager {
        if (autoSchedule) {
          // apklayer patch: an RTC alarm's time is a wall-clock time, not elapsed realtime (its delay was years, it never fired)
          long now = type == AlarmManager.RTC || type == AlarmManager.RTC_WAKEUP ? System.currentTimeMillis() : SystemClock.elapsedRealtime();
 +        // apklayer patch: a PendingIntent alarm is held by the hub (outlives the process), which sends it when due
-+        if (operation != null && pendingAlarmHook != null && pendingAlarmHook.set(operation, triggerAtTime - now, interval)) {
++        if (operation != null && PendingAlarms.hook != null && PendingAlarms.hook.set(operation, triggerAtTime - now, interval)) {
 +          return this;
 +        }
          schedulingHandler.postDelayed(this, triggerAtTime - now);
@@ -43,7 +26,7 @@ index fef54bc..53bff86 100644
      }
  
      void deschedule() {
-+      if (autoSchedule && operation != null && pendingAlarmHook != null) pendingAlarmHook.cancel(operation);  // apklayer patch
++      if (autoSchedule && operation != null && PendingAlarms.hook != null) PendingAlarms.hook.cancel(operation);  // apklayer patch
        schedulingHandler.removeCallbacks(this);
      }
  
