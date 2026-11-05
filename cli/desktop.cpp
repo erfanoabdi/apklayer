@@ -46,7 +46,7 @@ void writeDesktop(const Layout& l, const std::string& pkg) {
     std::string cli = l.cliBinary();
     if (hasEntry(info))
         writeFile(entry, "[Desktop Entry]\nType=Application\nName=" + property(info, "label") + "\nComment=Android app (" + pkg + ") via apklayer\nExec=" + cli + " run " + pkg +
-                             "\nIcon=" + appDir(l, pkg) + "/icon.png\nStartupWMClass=" + pkg + "\nCategories=Utility;\n" + (inDrawer(info) ? "" : "NoDisplay=true\n"));
+                             "\nIcon=" + appDir(l, pkg) + "/icon.png\nStartupWMClass=" + pkg + "\nCategories=Utility;\nX-Lomiri-Touch=true\n" + (inDrawer(info) ? "" : "NoDisplay=true\n"));
     else unlink(entry.c_str());
     writeFile(join(apps, "apklayer-open-apk.desktop"),
               "[Desktop Entry]\nType=Application\nName=Android app (apklayer)\nExec=" + cli + " run %f\nMimeType=application/vnd.android.package-archive;\nNoDisplay=true\n");

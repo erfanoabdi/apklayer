@@ -1,6 +1,8 @@
 #include "env.h"
 
 #include "gpus.h"
+#include "binder.h"
+#include "halium.h"
 #include "providers.h"
 
 #include <glob.h>
@@ -121,6 +123,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     const std::string& l = layout.androidLibs;
     env["XDG_RUNTIME_DIR"] = layout.runtimeHome;
     if (!env.count("WAYLAND_DISPLAY")) env["WAYLAND_DISPLAY"] = "wayland-0";
+    haliumEnvDefaults(env, layout);
     env["APKLAYER_INSTANCE"] = instance.id;
     env["APKLAYER_NATIVE"] = n;
     env["APKLAYER_LOGS"] = instance.logs();
@@ -130,8 +133,8 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     // a domain set to the device (providers.toml): libbinder's and libhwbinder's host contexts are the machine's own binder devices
     // (a Halium device's; docs/HALIUM.md), unless the environment names others
     if (exists(hostHalsFile(instance))) {
-        if (!env.count("APKLAYER_HOST_BINDER")) env["APKLAYER_HOST_BINDER"] = "/dev/binderfs/binder";
-        if (!env.count("APKLAYER_HOST_HWBINDER")) env["APKLAYER_HOST_HWBINDER"] = "/dev/binderfs/hwbinder";
+        if (!env.count("APKLAYER_HOST_BINDER")) env["APKLAYER_HOST_BINDER"] = hostBinder("binder");  // the device's own, not the instance's (cli/binder.cpp)
+        if (!env.count("APKLAYER_HOST_HWBINDER")) env["APKLAYER_HOST_HWBINDER"] = hostBinder("hwbinder");
     }
     // bionic_translation's libraries first (the patched ones), then ours; the path layer and bionic's TLS slots come first in every lookup
     env["LD_LIBRARY_PATH"] = layout.bionic + ":" + n;
@@ -150,6 +153,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     std::string libs;
     for (const char* hal : {"graphics", "media", "audio"}) {
         std::string lib = join(n, std::string("libapklayer-hal-") + hal + ".so");
+        if (std::string(hal) == "audio") lib = audioLibrary(layout);
         if (exists(lib)) libs += (libs.empty() ? "" : ":") + lib;
     }
     env["APKLAYER_HOST_LIBS"] = libs;

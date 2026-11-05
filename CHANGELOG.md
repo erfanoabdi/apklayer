@@ -107,6 +107,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-05 - libapklayer_egl, libapklayer_composer for gsi_arm64 (Ubuntu Touch install of main)
+- Why: the frame-pacing sources (merged) were built only for gsi_x86_64; the arm64 egl output is from 2026-11-04 09:19 and the arm64 composer from before the merge. The phone install of main needs both. vendor/apklayer already equals main's aosp/ (checked with a diff, only README differs).
+- Command (OrbStack): `tools/halium/orb-build.sh libapklayer_egl libapklayer_composer` (`flock ~/los24-build.lock`, `breakfast gsi_arm64 userdebug`, incremental).
 ### 2026-11-05 - libapklayer_egl (frame pacing agent)
 - Why: per-swap overhead (images and FBOs created and destroyed every swap), eglSwapInterval ignored, eglPresentationTimeANDROID a stub. EglWindow.cpp, Egl.cpp, EglHost.h edited; no new file.
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "..." hals/graphics/egl`, then `breakfast gsi_x86_64 userdebug && m libapklayer_egl libapklayer_composer` (x86_64, for the owner's PC; the arm64 composer above is built).

@@ -1,4 +1,5 @@
 #include "stack.h"
+#include "binder.h"
 #include "sandbox.h"
 
 #include "providers.h"
@@ -290,6 +291,7 @@ static std::string deviceGraphicsProperties(const Instance& inst) {
 
 int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std::string>& tool) {
     if (sandboxOn()) enterInstanceUserNs();  // first: everything the stack starts is in the instance's user namespace (cli/sandbox.cpp)
+    if (binderDevice(inst.id).empty()) die("instance " + inst.id + ": " + binderDeviceWhy(inst.id));  // cli/binder.cpp: no second instance without binderfs
     NativeEnv ne = nativeEnv(l, inst);
     const std::string& n = l.native;
     for (const std::string& f : listDir(inst.logs()))

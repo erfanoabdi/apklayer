@@ -8,9 +8,9 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include "../src/fetch.h"
-#include "../src/json.h"
-#include "../src/releases.h"
+#include "../../common/fetch.h"
+#include "../../common/json.h"
+#include "../../common/releases.h"
 
 using namespace manager;
 
