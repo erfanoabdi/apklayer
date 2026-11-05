@@ -1151,3 +1151,167 @@ td {
     font-size: 13px;
   }
 }
+
+.hardware-providers {
+  margin-top: 48px;
+}
+.provider-config {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 40px;
+  align-items: center;
+}
+.provider-config > * {
+  min-width: 0;
+}
+.provider-config pre {
+  line-height: 2;
+}
+.microg-support {
+  padding: 30px;
+  background: #19241f;
+  border: 1px solid #32453a;
+  border-radius: 12px;
+  margin-block: 30px;
+}
+.platform-integration {
+  margin-block: 36px;
+}
+.screenshot-section {
+  border-top: 1px solid var(--line);
+}
+.screenshot-section figure, .instance-capture {
+  margin: 0;
+}
+.screenshot-feature {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.screenshot-feature > a {
+  display: block;
+  padding: 36px 36px 0;
+  background: radial-gradient(ellipse at top, #304b3c, #192421 75%);
+}
+.screenshot-feature img {
+  display: block;
+  width: min(100%, 958px);
+  height: auto;
+  margin: auto;
+  border: 1px solid #4a5a50;
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+}
+.screenshot-feature figcaption {
+  padding: 28px 32px;
+  border-top: 1px solid var(--line);
+}
+.screenshot-section h3 {
+  margin: 12px 0 8px;
+  font-weight: 550;
+  font-size: 20px;
+}
+.screenshot-section figcaption p {
+  font-size: 13px;
+  margin: 0;
+}
+.screenshot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 25px;
+  margin-top: 28px;
+}
+.screenshot-grid figure {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--panel);
+}
+.app-capture {
+  display: flex;
+  justify-content: center;
+  padding: 28px 24px;
+  background: #1e2c26;
+  border-bottom: 1px solid var(--line);
+}
+.app-capture img {
+  display: block;
+  width: min(100%, 260px);
+  height: auto;
+  border-radius: 3px;
+  box-shadow: 0 10px 30px #0004;
+}
+.screenshot-grid figcaption {
+  padding: 23px;
+}
+.screenshot-section .technical-note {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 24px;
+}
+.instance-capture {
+  margin-top: 35px;
+  padding: 25px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.instance-capture img {
+  display: block;
+  width: min(100%, 780px);
+  height: auto;
+  margin-inline: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.instance-capture figcaption {
+  margin-top: 18px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+@media (max-width: 900px) {
+  .screenshot-grid {
+    gap: 15px;
+  }
+  .app-capture {
+    padding: 20px 14px;
+  }
+  .screenshot-grid figcaption {
+    padding: 18px;
+  }
+}
+@media (max-width: 700px) {
+  .provider-config, .screenshot-grid {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+  .microg-support {
+    padding: 22px;
+  }
+  .screenshot-feature > a {
+    padding: 18px 14px 0;
+  }
+  .screenshot-feature figcaption {
+    padding: 22px;
+  }
+  .instance-capture {
+    padding: 16px;
+  }
+  .app-capture {
+    padding: 25px;
+  }
+}
+@media (max-width: 400px) {
+  .site-header .brand {
+    font-size: 21px;
+  }
+  .site-header .brand img {
+    width: 30px;
+    height: 30px;
+  }
+  .site-header nav {
+    gap: 10px;
+  }
+}

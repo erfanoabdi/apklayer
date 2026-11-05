@@ -1,13 +1,19 @@
 # Website follow-up
 
-## Screenshots — awaiting images from the project owner
+## Screenshots
 
-- [ ] Add a screenshot section after the app compatibility section once real captures are supplied. Do not use generated images as evidence of running apps.
-- [ ] Lead with a wide Linux desktop capture showing multiple Android apps in separate Wayland windows.
-- [ ] Include apklayer-manager (app library / instance management) and two or three representative app captures, such as maps, messaging, and media.
-- [ ] Confirm app names, versions, desktop, architecture, and compatibility caveats for accurate captions. Remove personal information from captures.
-- [ ] Save optimized images in `assets/screenshots/`, provide meaningful alt text, explicit dimensions, and lazy loading. Keep the gallery responsive and usable by keyboard if adding image enlargement.
-- [ ] Verify desktop and mobile layouts after adding the screenshots.
+- [x] Capture real apps and manager views from the owner's Parallels VM using fresh app data.
+- [x] Add the screenshot section after application compatibility, with a manager overview and LocalSend, Organic Maps, and KeePassDX captures.
+- [x] Add an instance-management capture beside the instance documentation.
+- [x] Record app versions, capture methods, host details, and verification scope in `assets/screenshots/README.md`; inspect captures for personal data.
+- [x] Save lossless WebP images with explicit dimensions, useful alt text, lazy loading, and keyboard-accessible links to full-size images.
+- [ ] Add a composed-on-the-desktop wide capture showing several fully visible app windows when interactive VM window positioning is available. Do not substitute a synthetic montage.
+- [ ] Add later-stage map, media playback, and camera captures using non-personal sample content. Current app screens are explicitly identified as receive, startup, and vault-chooser views.
+- [ ] Visually verify desktop and mobile website layouts when browser preview access is available. Source, assets, release behaviour, and HTTP serving are checked independently.
+
+## Technical content
+
+Hardware coverage includes EGL/GLES, Vulkan caveats, PipeWire camera and audio, media codecs, sensors, vibration, location/GNSS, USB, Bluetooth, keystore2/software KeyMint, battery, and connectivity. Platform coverage includes providers, WebView, accounts, cross-app IPC, installs, microG Services + Companion, host input/settings/portals, tooling, and the opt-in sandbox. Source links distinguish implemented backends, stand-in tests, physical device checks, and remaining gaps. Keep these details aligned with upstream changes.
 
 ## Hosting
 
@@ -15,4 +21,4 @@ The site is plain HTML, CSS, and JavaScript. No build step or dependencies are n
 
 Local preview: `python3 -m http.server 8000` from this directory, then visit `http://localhost:8000`.
 
-Verification: `node --test tests/site.test.cjs` exercises the release feed and fallback links. Technical website content links to the upstream architecture, app corpus, and device integration notes; keep those references current as hardware coverage changes.
+Verification: `node --test tests/site.test.cjs` exercises the release feed and fallback links. Technical website content links to the upstream architecture, app corpus, hardware source and test groups, and device integration notes.
