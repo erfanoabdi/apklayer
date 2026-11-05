@@ -5,19 +5,36 @@
 # Each instance named on the command line gets its own binder-<id>, hwbinder-<id>, vndbinder-<id> (bridge/native/paths.c maps /dev/binder there),
 # so stacks of different instances (apklayer --instance <id>) run side by side.
 set -e
-modprobe binder_linux 2>/dev/null || true
-mkdir -p /dev/binderfs
-mountpoint -q /dev/binderfs || mount -t binder binder /dev/binderfs
+# Waydroid's way (tools/helpers/drivers.py): binderfs is loaded only when the kernel lacks it (modprobe), then mounted; a kernel without binderfs
+# that gives fixed /dev/binder, /dev/hwbinder, /dev/vndbinder nodes (some Halium kernels) has nothing to allocate: one instance (the default) uses those
+awk '$2 == "binder"' /proc/filesystems | grep -q . || modprobe binder_linux 2>/dev/null || true
+if awk '$2 == "binder"' /proc/filesystems | grep -q .; then
+    mkdir -p /dev/binderfs
+    mountpoint -q /dev/binderfs || mount -t binder binder /dev/binderfs
+else
+    echo "apklayer: no binderfs in this kernel: only the fixed /dev/binder nodes, one instance (docs/HALIUM.md)" >&2
+    exit 0
+fi
+# a Halium device (Ubuntu Touch: its Android runs in a container): binder, hwbinder and vndbinder are the device's own, never touched here;
+# only the nodes of the instances in /etc/apklayer/instances (one id per line, default "ut") and of the command line are made (docs/HALIUM.md)
+halium=""
+if [ -d /android/system ]; then
+    halium=1
+    set -- $(grep -hv '^[[:space:]]*#' /etc/apklayer/instances 2>/dev/null) "$@"
+    [ $# -gt 0 ] || set -- ut
+fi
+export APKLAYER_HALIUM=$halium
 python3 - "$@" <<'PY'
 import fcntl, os, struct, sys
 control = os.open('/dev/binderfs/binder-control', os.O_RDWR)
-for name in [b + s for s in [''] + ['-' + i for i in sys.argv[1:]] for b in ('binder', 'hwbinder', 'vndbinder')]:
+for name in [b + s for s in ([] if os.environ.get('APKLAYER_HALIUM') else ['']) + ['-' + i for i in sys.argv[1:]] for b in ('binder', 'hwbinder', 'vndbinder')]:
     if os.path.exists('/dev/binderfs/' + name):
         continue
     # BINDER_CTL_ADD = _IOWR('b', 1, struct binderfs_device { char name[256]; __u32 major, minor; })
     fcntl.ioctl(control, 0xC1086201, struct.pack('256sII', name.encode(), 0, 0))
     os.chmod('/dev/binderfs/' + name, 0o666)
 PY
+[ -z "$halium" ] || exit 0
 chmod 666 /dev/binderfs/binder /dev/binderfs/hwbinder /dev/binderfs/vndbinder
 for n in binder hwbinder vndbinder; do ln -sf /dev/binderfs/$n /dev/$n; done
 ls -la /dev/binder

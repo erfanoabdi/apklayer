@@ -101,3 +101,19 @@ sudo apt-get build-dep ./
 tools/release/build-deb.sh noble 0.1.0 <joined prebuilts checkout> out/
 tools/release/runtime-bundle.sh <prebuilts> arm64 out/
 ```
+
+## First run: `apklayer setup`
+
+One command does the per-user first run and the runtime updates; apklayer-manager runs it and shows its lines (`manager/src/setup.cpp`), the deb's postinst
+downloads nothing. The code that looks releases.json up, downloads with a SHA256 check and unpacks the bundle is `common/` (fetch, releases, json, proc),
+compiled into both the CLI and the manager.
+
+```
+apklayer [--instance ID] setup [--check] [--update] [--bundle <file|file://|URL>] [--microg] [--fdroid]
+```
+
+Output, tab separated: `step <id> <state> <detail>` (ids: binder, runtime, providers, system-apps, webview, microg, fdroid; states: todo, running, done,
+failed, skipped), `progress <0..1|-1>`, and with `--check` (which changes nothing) `latest <version> <runtime version> <date>`. Idempotent: the runtime
+is fetched when none is installed (`--update`: when the release has a newer one), the system apps once (marker `~/.local/share/apklayer/setup-done`).
+Offline: `--bundle apklayer-runtime-<cpu>-<R>.tar.zst` (a `.sha256` beside it is checked) or `APKLAYER_RUNTIME_BUNDLE`; `APKLAYER_RELEASES_URL` names another releases.json.
+On a Halium device the step `providers` seeds a new instance with graphics and camera = device (docs/HALIUM.md).

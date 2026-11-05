@@ -22,6 +22,7 @@ override_dh_auto_build:
 override_dh_auto_install:
 	DESTDIR=$(CURDIR)/debian/apklayer meson install -C $(B) --skip-subprojects --no-rebuild --quiet
 	DESTDIR=$(CURDIR)/debian/apklayer meson install -C $(B)-manager --no-rebuild --quiet
+	install -D -m644 debian/instances debian/apklayer/etc/apklayer/instances
 	# apklayer-dev: the hardware plugin API (headers, apklayer-plugin.pc: docs/PLUGINS.md)
 	mkdir -p debian/apklayer-dev/usr/lib/$(DEB_HOST_MULTIARCH)
 	mv debian/apklayer/usr/include debian/apklayer-dev/usr/

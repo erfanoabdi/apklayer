@@ -171,3 +171,9 @@ The binder devices go away at the next reboot. The apt packages from step 1 stay
 Only rebuilding the Android side: apklayer's modules in `aosp/` (`libapklayer_*`), the tree libraries apklayer patches, the Vulkan loader, and regenerating
 the Android root (`tools/stage root|media|sysapps`); see `docs/AOSP-BUILDS.md`. `-Dgfxstream` (OpenGL ES 1 for hosts whose Mesa lacks it) needs
 gfxstream's sources (`hardware/google/gfxstream`, also on android.googlesource.com).
+
+## Installed package: first run
+
+After `sudo apt install ./apklayer_*.deb` run `apklayer setup` (or open apklayer-manager, which runs it): it downloads the Android runtime bundle for your CPU
+from the release (`--bundle <file>` for an offline copy), installs the system apps and sets the instance up; `apklayer setup --check` shows what is missing.
+Ubuntu Touch (Halium phones): docs/HALIUM.md "The apt install on the phone".

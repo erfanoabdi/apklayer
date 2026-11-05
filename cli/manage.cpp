@@ -1,6 +1,7 @@
 #include "manage.h"
 #include "sandbox.h"
 
+#include "binder.h"
 #include "desktop.h"
 
 #include <algorithm>
@@ -46,7 +47,7 @@ bool stackRunning(const Instance& inst) {
     return pid && alive(atoi(pid->c_str()));
 }
 
-std::string binderDevice(const std::string& id) { return "/dev/binderfs/" + (id == "default" ? std::string("binder") : "binder-" + id); }
+
 
 // what may name an instance: a binder device suffix and a directory name, never one of the data home's own directories
 bool validInstanceId(const std::string& id) {
@@ -143,7 +144,7 @@ int instanceCommand(const Layout& l, const std::string& action, const std::strin
         Instance inst = Instance::open(l, id);
         printf("created\t%s\n", inst.root.c_str());
         if (exists(binderDevice(id))) puts("binder\tok");
-        else printf("binder\tmissing\tsudo sh %s %s\n", join(l.root, "tools/host-setup/binder.sh").c_str(), id.c_str());  // binderfs devices need root
+        else printf("binder\tmissing\t%s\n", binderDeviceWhy(id).c_str());
         return 0;
     }
     if (action != "remove") die("instance create|remove <id>");

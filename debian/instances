@@ -1,0 +1,4 @@
+# apklayer instances whose binderfs nodes (binder-<id>, hwbinder-<id>, vndbinder-<id>) apklayer-binder.service makes at boot; one id per line.
+# Used on a Halium device (Ubuntu Touch), where /dev/binder is the device's own and the default instance is "ut"; a desktop makes the default's
+# nodes besides (tools/host-setup/binder.sh).
+ut

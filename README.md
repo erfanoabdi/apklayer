@@ -51,6 +51,9 @@ Every launch of an app writes its log, from the desktop's app grid as well as fr
 
 To report a bug: open the app again, reproduce the problem, run `apklayer report <package>` and attach the archive to a [new issue](https://github.com/erfanoabdi/apklayer/issues/new/choose) together with the app's link and version and the steps to reproduce. Look through the archive first: logs can contain account names, URLs and file names.
 
+## Community
+Questions and chat: the Telegram group [@apklayer_chat](https://t.me/apklayer_chat). Bugs go to [GitHub issues](https://github.com/erfanoabdi/apklayer/issues/new/choose) (with `apklayer report`, see above).
+
 ## Layout
 `cli/` the tool · `runtime/` app host, dex2jvm, Robolectric overlays · `bridge/` JNI shim, shell, host HALs · `aosp/` Android-side modules · Meson builds everything (`meson.build`); `tools/` staging from the tree (`tools/stage`), generators, host setup ·
 `tests/` VM tests, sample apps · `examples/` an out-of-tree plugin · `docs/` plan, architecture, patches, licenses · `STATUS.md`, `goal.md`, `CLAUDE.md` (agent rules).

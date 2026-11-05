@@ -18,6 +18,12 @@ elif audio_backend == 'pulse' and pulse.found()
   libaudio = shared_library('apklayer-hal-audio', 'pulse.c',
     include_directories: audio_inc, dependencies: [pulse, dependency('threads')], install: true, install_dir: native_dir)
 endif
+# auto with both libraries found: the PulseAudio one too, which the CLI loads instead when the session runs no PipeWire daemon (Ubuntu Touch;
+# cli/halium.cpp audioLibrary)
+if get_option('audio_backend') == 'auto' and audio_backend == 'pipewire' and pulse.found()
+  shared_library('apklayer-hal-audio-pulse', 'pulse.c',
+    include_directories: audio_inc, dependencies: [pulse, dependency('threads')], install: true, install_dir: native_dir)
+endif
 if libaudio.found()
   executable('audio-test', '../../../tests/hals/audio-test.c',
     include_directories: audio_inc, link_with: libaudio,

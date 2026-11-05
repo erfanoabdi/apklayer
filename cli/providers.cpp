@@ -150,6 +150,8 @@ std::string defaultBackend(const Layout& l, const std::string& domain) {
 }
 }  // namespace
 
+void saveProviders(const std::string& file, const std::vector<ProviderConfig>& domains) { writeProviders(file, domains); }
+
 const std::vector<std::string>& providerDomains() {
     static const std::vector<std::string> names = [] { std::vector<std::string> v; for (const Domain& d : kDomains) v.push_back(d.name); return v; }();
     return names;

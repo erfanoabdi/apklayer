@@ -11,6 +11,8 @@ struct ProviderConfig {
     std::vector<std::string> options;  // "key=value", in file order
 };
 
+void saveProviders(const std::string& file, const std::vector<ProviderConfig>& domains);
+
 // What the stack runs for one configured domain: its HAL front (a staged library), the backend library (host side), the manifest it declares.
 struct ProviderService {
     std::string name;      // the domain: its log is <name>.log

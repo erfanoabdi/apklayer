@@ -8,6 +8,8 @@
 #include "daemon.h"
 #include "desktop.h"
 #include "gpus.h"
+#include "halium.h"
+#include "setup.h"
 #include "logs.h"
 #include "portal.h"
 #include "sandbox.h"
@@ -26,6 +28,10 @@ int usage() {
           "  install [-d] [--system] <app.apk> [split.apk...]  convert + describe + install (menu entry, icon, .apk handler); also .apks/.xapk/.apkm;\n"
           "                         an update keeps the data, needs the same signer and a version no lower (-d: allow a downgrade);\n"
           "                         --system: a system app (FLAG_SYSTEM, not in the app drawer unless shown)\n"
+          "  setup [--check] [--update] [--bundle <file|file://|URL>] [--microg] [--fdroid]  first run and runtime updates in one command (the manager runs it):\n"
+          "                         binder check, the Android runtime (releases.json; --bundle or APKLAYER_RUNTIME_BUNDLE offline), the device providers of a Halium\n"
+          "                         device (Ubuntu Touch: default instance \"ut\"), the system apps, optional microG and F-Droid; prints `step <id> <state> <detail>`\n"
+          "                         lines; --check changes nothing\n"
           "  reconvert <package> | --all-stale  convert an installed app again from its kept APKs (its data stays); --all-stale: every app converted\n"
           "                         with an older converter ABI (the stale column of list --tsv)\n"
           "  run <package|app.apk>  run an installed app (an .apk path is installed first)\n"
@@ -70,18 +76,19 @@ int main(int argc, char** argv) {
     bool inDaemon = !args.empty() && args[0] == "--no-daemon";  // apklayerd's own child: runs here
     if (inDaemon) args.erase(args.begin());
     std::vector<std::string> full = args;
-    std::string id = getenvOr("APKLAYER_INSTANCE", "default");
+    std::string id = getenvOr("APKLAYER_INSTANCE", defaultInstanceId());
     if (args.size() >= 2 && args[0] == "--instance") { id = args[1]; args.erase(args.begin(), args.begin() + 2); }
     if (args.empty()) return usage();
     if (args[0] == "--version") { printf("version\t%s\nconverterAbi\t%d\ndataFormat\t%d\n", kVersion, kConverterAbi, kDataFormat); return 0; }
     Layout layout = Layout::detect();
     // a command runs in apklayerd when it runs (its processes are then the daemon's); the internal ones and the daemon itself stay here
     bool autostart = args.size() >= 3 && args[0] == "instance" && args[1] == "autostart";  // systemctl --user is the user's, not apklayerd's
-    static const std::set<std::string> kLocal = {"daemon", "stack-daemon", "stack", "exec", "sandbox-exec", "app-spare", "env"};
+    static const std::set<std::string> kLocal = {"daemon", "stack-daemon", "stack", "exec", "sandbox-exec", "app-spare", "env", "setup"};
     if (int status = 0; !inDaemon && !autostart && !kLocal.count(args[0]) && forwardToDaemon(layout, full, &status)) return status;
     if (args[0] == "daemon") return runDaemon(layout, args.size() == 2 && args[1] == "--on-demand");
     migrateData(layout);
     Instance inst = Instance::open(layout, id);
+    seedHaliumProviders(inst);  // a Halium device's new instance: the device's graphics and camera (cli/halium.cpp)
     const std::string& cmd = args[0];
     size_t n = args.size();
     if (cmd == "install" && n >= 2) {
@@ -92,6 +99,7 @@ int main(int argc, char** argv) {
         installApp(layout, inst, std::vector<std::string>(args.begin() + first, args.end()), downgrade, system);
         return 0;
     }
+    if (cmd == "setup") return setupCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "reconvert" && n == 2) return reconvert(layout, inst, args[1]);
     if (cmd == "run" && n == 2) {
         std::string target = args[1];

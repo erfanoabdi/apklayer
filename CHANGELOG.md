@@ -110,6 +110,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 ### 2026-11-05 - libapklayer_egl (OTR2 input after maximize)
 - Why: windowSize() read NATIVE_WINDOW_DEFAULT_WIDTH, the Surface's cached copy (refreshed only by dequeueBuffer); after a window resize the game's eglCreateWindowSurface in surfaceChanged saw the old size (OTR2: 1594x896 while the surface was 2388x1344) and mapped touches by the ratio. Now NATIVE_WINDOW_WIDTH (the producer's current size). EglWindow.cpp only.
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "..." hals/graphics/egl`, then `tools/lib/orb-build-module.py libapklayer_egl hals/graphics/egl EglWindow.cpp` (arm64), and `breakfast gsi_x86_64 userdebug && m libapklayer_egl` (x86_64, for the owner's PC).
+### 2026-11-05 - libapklayer_egl, libapklayer_composer for gsi_arm64 (Ubuntu Touch install of main)
+- Why: the frame-pacing sources (merged) were built only for gsi_x86_64; the arm64 egl output is from 2026-11-04 09:19 and the arm64 composer from before the merge. The phone install of main needs both. vendor/apklayer already equals main's aosp/ (checked with a diff, only README differs).
+- Command (OrbStack): `tools/halium/orb-build.sh libapklayer_egl libapklayer_composer` (`flock ~/los24-build.lock`, `breakfast gsi_arm64 userdebug`, incremental).
 ### 2026-11-05 - libapklayer_egl (frame pacing agent)
 - Why: per-swap overhead (images and FBOs created and destroyed every swap), eglSwapInterval ignored, eglPresentationTimeANDROID a stub. EglWindow.cpp, Egl.cpp, EglHost.h edited; no new file.
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "..." hals/graphics/egl`, then `breakfast gsi_x86_64 userdebug && m libapklayer_egl libapklayer_composer` (x86_64, for the owner's PC; the arm64 composer above is built).
