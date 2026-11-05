@@ -74,7 +74,6 @@ final class HostJobs {
             private void end(boolean reschedule) {
                 if (ended.getAndSet(true)) return;
                 MAIN.post(() -> {
-                    try { Services.unbindService(app, connection[0]); } catch (RuntimeException gone) { /* already unbound */ }
                     if (notification[0] != 0 && notification[1] == JobService.JOB_END_NOTIFICATION_POLICY_REMOVE) app.getSystemService(NotificationManager.class).cancel(notification[0]);
                     long backoff = reschedule ? backoff(job) : -1;
                     if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] job " + job.getId() + " finished" + (reschedule ? ", again in " + backoff + " ms" : job.isPeriodic() ? ", next period" : ""));
@@ -84,6 +83,9 @@ final class HostJobs {
                         if (job.isPeriodic()) plan(job);
                         else app.getSystemService(JobScheduler.class).cancel(job.getId());
                     }
+                    // last: the job's record is settled first, as JobSchedulerService completes it before JobServiceContext unbinds (the service's
+                    // destroy idles the main looper, and what runs there must see the job ended)
+                    try { Services.unbindService(app, connection[0]); } catch (RuntimeException gone) { /* already unbound */ }
                 });
             }
             @Override public void jobFinished(int jobId, boolean reschedule) { end(reschedule); }
