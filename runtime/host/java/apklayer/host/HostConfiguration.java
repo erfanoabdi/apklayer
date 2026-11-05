@@ -25,6 +25,12 @@ final class HostConfiguration {
     /** The instance's colour scheme; null when the host has none (no portal). */
     static Boolean night() { return settings.containsKey("night") ? settings.getBoolean("night") : null; }
 
+    /** The window style of this app (`apklayer settings set window-mode[.<package>] auto|mobile|desktop`): its own, else the instance's, else auto. */
+    static String windowMode() {
+        String own = settings.getString("windowMode." + RuntimeEnvironment.getApplication().getPackageName());
+        return own != null ? own : settings.getString("windowMode", "auto");
+    }
+
     /** The hub's settings (HubClient at registration, HubEndpoint on a change), on the main thread: the configuration bits that changed. */
     static int update(Bundle next) {
         try { return apply(next); }

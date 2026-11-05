@@ -16,18 +16,28 @@ static void output_mm(int *w, int *h)
     if (sim && sscanf(sim, "%dx%d", w, h) != 2) *w = *h = 0;
 }
 
+/* The largest output's mode in pixels, or APKLAYER_OUTPUT_PX=<w>x<h> with the physical size above (tests/vm/mobile.py). */
+static void output_px(int *w, int *h)
+{
+    const char *sim = getenv("APKLAYER_OUTPUT_PX");
+    *w = output_px_w; *h = output_px_h;
+    if (sim && sscanf(sim, "%dx%d", w, h) != 2) *w = *h = 0;
+}
+
 /* The physical density of a handheld's panel (dpi), 0 when the output is not one (a monitor, a laptop) or reports no usable size. */
 static double handheld_dpi(void)
 {
     int mw, mh;
+    int pw, ph;
     output_mm(&mw, &mh);
-    if (mw < 20 || mh < 20 || output_px_w <= 0 || output_px_h <= 0) return 0;  /* none, or a placeholder (1x1, 16x9 "mm") */
+    output_px(&pw, &ph);
+    if (mw < 20 || mh < 20 || pw <= 0 || ph <= 0) return 0;  /* none, or a placeholder (1x1, 16x9 "mm") */
     double inches = hypot(mw, mh) / 25.4;
     if (inches < 3 || inches > 9.5) return 0;  /* beyond a small tablet: a desktop screen, its logical pixels are the user's chosen size */
     /* pixels per mm alike on both axes, whichever way the mode is turned against the panel: else the size is made up */
-    double a = (double)output_px_w / mw, b = (double)output_px_h / mh, c = (double)output_px_h / mw, d = (double)output_px_w / mh;
+    double a = (double)pw / mw, b = (double)ph / mh, c = (double)ph / mw, d = (double)pw / mh;
     if (fabs(a - b) > 0.2 * fmax(a, b) && fabs(c - d) > 0.2 * fmax(c, d)) return 0;
-    return hypot(output_px_w, output_px_h) / inches;
+    return hypot(pw, ph) / inches;
 }
 
 /* Android's density buckets (DisplayMetrics.DENSITY_*): the one nearest the panel's dpi. */

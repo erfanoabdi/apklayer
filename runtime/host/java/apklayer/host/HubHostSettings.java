@@ -22,7 +22,7 @@ import java.util.Map;
  */
 final class HubHostSettings {
     /** The override keys (`apklayer settings set <key> <value>`) and their values. */
-    static final String KEYS = "night yes|no, accent #rrggbb, contrast high|normal, animations on|off, font-scale <float>, locale <BCP-47>, timezone <tz id>, time-format 12|24";
+    static final String KEYS = "night yes|no, accent #rrggbb, contrast high|normal, animations on|off, font-scale <float>, locale <BCP-47>, timezone <tz id>, time-format 12|24, window-mode[.<package>] auto|mobile|desktop";
     private final Context context;
     private final HubDirectory directory;
     private final Map<String, String> host = new HashMap<>();
@@ -101,6 +101,8 @@ final class HubHostSettings {
         if (zone != null && !zone.isEmpty()) b.putString("timezone", zone);
         String format = o.getOrDefault("time-format", host.get("clock-format") == null ? null : host.get("clock-format").startsWith("12") ? "12" : "24");
         if (format != null) b.putBoolean("time24", !format.startsWith("12"));
+        for (Map.Entry<String, String> e : o.entrySet())  // the window style: the instance's, and an app's own (window-mode.<package>); the shell applies it
+            if (e.getKey().equals("window-mode") || e.getKey().startsWith("window-mode.")) b.putString("windowMode" + e.getKey().substring(11), e.getValue());
         return b;
     }
 

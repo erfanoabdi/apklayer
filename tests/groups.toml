@@ -164,6 +164,10 @@ run = ["python3 -u tests/vm/splash.py"]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/window-geometry.py"]
 
+[mobile]
+needs = ["com.android.test.uibench"]
+run = ["python3 -u tests/vm/mobile.py"]
+
 [startup]
 needs = ["com.android.test.uibench"]
 run = ["tests/vm/startup.sh com.android.test.uibench"]

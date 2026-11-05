@@ -2,6 +2,7 @@
 #include "sandbox.h"
 
 #include "providers.h"
+#include "gpus.h"
 
 #include <fcntl.h>
 #include <cerrno>
@@ -305,6 +306,11 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     // every other property keeps the last value loaded
     if (exists(inst.propOverrides())) { propFiles.insert(propFiles.begin(), inst.propOverrides()); propFiles.push_back(inst.propOverrides()); }
     if (deviceGraphics(inst)) propFiles.insert(propFiles.begin() + (propFiles.size() > 2), deviceGraphicsProperties(inst));  // after the overrides' first copy
+    if (int density = displayDensity(l); density > 0 && density != 160) {  // ro.sf.lcd_density: this display's, before apklayer.prop's 160 (write-once)
+        std::string file = join(inst.root, "display.prop");
+        writeFile(file, "ro.sf.lcd_density=" + std::to_string(density) + "\n");
+        propFiles.insert(propFiles.begin() + (exists(inst.propOverrides()) ? 1 : 0), file);
+    }
     setDerivedProperties(l, ne, propFiles);
     Spawn prop;
     prop.argv = {join(n, "bin/aprop"), "load"};

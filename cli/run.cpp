@@ -165,6 +165,16 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     if (mode == RunMode::App) {
         if (!exists(join(l.androidLibs, "libapklayer_vdisplay.so"))) die("the runtime needs libapklayer_vdisplay.so (the primary display is headless)");
         std::string title = windowTitle(inst, std::to_string(self), package);
+        {   // the window style (`apklayer settings`: window-mode, the app's own window-mode.<package> first), so the window is created in it; changes reach it live (the hub)
+            std::string general, specific;
+            for (const std::string& line : split(readFile(join(inst.root, "settings")).value_or(""), '\n')) {
+                size_t eq = line.find('=');
+                if (eq == std::string::npos) continue;
+                if (line.compare(0, eq, "window-mode") == 0) general = line.substr(eq + 1);
+                else if (line.compare(0, eq, "window-mode." + package) == 0) specific = line.substr(eq + 1);
+            }
+            if (!specific.empty() || !general.empty()) ne.env["APKLAYER_WINDOW_MODE"] = specific.empty() ? general : specific;
+        }
         Spawn sink;
         sink.argv = {l.btload(), l.androidLibs, "libapklayer_vdisplay.so", "--main", title, std::to_string(self), getenvOr("APKLAYER_DISPLAY_WIDTH", "720"), getenvOr("APKLAYER_DISPLAY_HEIGHT", "1280")};
         sink.env = ne.env;

@@ -99,6 +99,18 @@ int gpusCommand(const Layout& l, const Instance& inst) {
     return 0;
 }
 
+int displayDensity(const Layout& l) {
+    if (!isExecutable(l.shellBinary())) return 0;
+    Spawn q;
+    q.argv = {l.shellBinary(), "--display-info"};
+    q.env = currentEnv();
+    int status = 0;
+    std::string out = runCapture(q, &status);
+    int density = 0;
+    if (status != 0 || sscanf(out.c_str(), "density %d", &density) != 1) return 0;
+    return density;
+}
+
 int gpuCommand(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {
     if (args.size() == 1 && args[0] == "unset") {
         removeTree(gpuChoiceFile(inst));

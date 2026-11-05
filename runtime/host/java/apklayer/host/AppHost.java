@@ -50,6 +50,7 @@ public final class AppHost implements Runnable {
     private Handler main;
     private boolean windowActive = true, stoppedByMinimize; // lifecycle driven by the window state
     private final ActivityTask task = new ActivityTask(() -> windowActive);
+    private int logicalDpi; // 0: 160 x scale
     private int logicalW, logicalH, logicalScale = 100; // current window size in dp and scale %
     private int lastOrientation = -2;                    // top activity's requested orientation last applied
     private final HostTextBridge text = new HostTextBridge();
@@ -94,8 +95,8 @@ public final class AppHost implements Runnable {
         main = new Handler(Looper.getMainLooper());
         input = new HostInput(main, InstrumentationRegistry.getInstrumentation().getUiAutomation(), new HostInput.WindowEvents() {
             @Override
-            public void configure(int w, int h, int scalePct) {
-                hostResize(w, h, scalePct);
+            public void configure(int w, int h, int scalePct, int dpi, int navPx) {
+                hostResize(w, h, scalePct, dpi, navPx);
             }
 
             @Override
@@ -159,7 +160,7 @@ public final class AppHost implements Runnable {
                         break;
                     }
                 } else if (ev[0] == 14) {
-                    hostResize(ev[1], ev[2], ev[3]);
+                    hostResize(ev[1], ev[2], ev[3], ev.length > 5 ? ev[4] : 0, ev.length > 5 ? ev[5] : 0);
                     width = display.getWidth();
                     height = display.getHeight();
                     configured = true;
@@ -341,7 +342,7 @@ public final class AppHost implements Runnable {
         if ((landscape && logicalW < logicalH) || (portrait && logicalW > logicalH)) {
             System.out.println("[apklayer] orientation " + (landscape ? "landscape" : "portrait") + " requested");
             if (shell != null) shell.sendWindowSize(logicalH, logicalW);  // the shell fits it to the screen and answers with a configure
-            else hostResize(logicalH, logicalW, logicalScale);
+            else hostResize(logicalH, logicalW, logicalScale, logicalDpi, 0);
         }
     }
 
@@ -351,6 +352,7 @@ public final class AppHost implements Runnable {
         AppHost host = running;
         if (host == null) return;  // before the first launch: the activities start with it
         if (host.shell != null && HostConfiguration.night() != null) host.shell.sendDecorDark(HostConfiguration.night());
+        if (host.shell != null) host.shell.sendWindowMode(HostConfiguration.windowMode());  // live: the shell restyles the window (bridge/shell/mobile.c)
         ActivityController<? extends Activity> top = stack.peek();
         HostConfiguration.dispatch(new ArrayList<>(stack), a -> host.task.stopped.contains(a) || (host.stoppedByMinimize && top != null && a == top.get()), changes,
                 (c, old) -> {
@@ -382,19 +384,30 @@ public final class AppHost implements Runnable {
         HostWindows.focus(top, windowActive);
     }
 
+    /** The dp size whose pixels (Robolectric truncates dp x density / 160) come nearest to px at this density. */
+    private static int dp(int px, int dpi) {
+        int dp = Math.max(1, Math.round(px * 160f / dpi)), best = dp;
+        for (int c = dp - 1; c <= dp + 1; c++)
+            if (c >= 1 && Math.abs((int) (c * (dpi / 160f)) - px) < Math.abs((int) (best * (dpi / 160f)) - px)) best = c;
+        return best;
+    }
+
     /**
-     * Resize / DPI (PLAN P2): logical size and output scale -> sandbox qualifiers (density =
-     * 160 x scale). The screen capture then comes out at the new pixel size and the shell
-     * client rebuffers the window to match (ShellClient.present).
+     * Resize / DPI (PLAN P2): logical size and output scale -> sandbox qualifiers. The density is the shell's (a handheld's physical density
+     * bucket, bridge/shell/mobile.c) or, on a desktop (dpi 0), 160 x scale; the size in dp is the window's pixels at that density, so the
+     * screen capture comes out at the pixel size w x scale and the shell client rebuffers the window to match (ShellClient.present).
+     * navPx: the shell's navigation bar over the window's bottom (mobile style), the display's navigation bar inset.
      */
-    private void hostResize(int w, int h, int scalePct) {
-        int dpi = 160 * scalePct / 100;
-        int wdp = Math.max(1, w), hdp = Math.max(1, h);
+    private void hostResize(int w, int h, int scalePct, int dpi, int navPx) {
+        if (dpi <= 0) dpi = 160 * scalePct / 100;
+        int wdp = dp(w * scalePct / 100, dpi), hdp = dp(h * scalePct / 100, dpi);
         logicalW = w;
         logicalH = h;
         logicalScale = scalePct;
+        logicalDpi = dpi;
         System.out.println("[apklayer] configure " + w + "x" + h + " @" + scalePct + "% -> " + wdp
-                + "x" + hdp + "dp @" + dpi + "dpi");
+                + "x" + hdp + "dp @" + dpi + "dpi, navigation bar " + navPx + " px");
+        org.robolectric.shadows.NavigationBarInset.set(navPx);
         HostConfiguration.resize("w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi", new ArrayList<>(stack));
         Object wmg = android.view.WindowManagerGlobal.getInstance();
         List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");

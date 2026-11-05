@@ -20,7 +20,7 @@ final class ShellClient {
     private static final byte[] DISPLAY_WINDOW = System.getProperty("apklayer.displaywindow", "apklayer").getBytes(StandardCharsets.UTF_8);
     private static final int INPUT = 101, CLOSE = 103, KEY = 105, SCROLL = 106,
             CONFIGURE = 107, STATE = 108, CLIPBOARD = 109, CLIPBOARD_SET = 5, TEXT_INPUT = 6, IME = 110, TOUCH = 111,
-            DISPLAY = 112, VSYNC = 113, VSYNC_REQUEST = 7, DECOR_DARK = 13;
+            DISPLAY = 112, VSYNC = 113, VSYNC_REQUEST = 7, DECOR_DARK = 13, WINDOW_MODE = 15, NAVBAR = 16;
     private static final int WINDOW_ID = 1;
 
     private final SocketChannel channel;
@@ -101,6 +101,24 @@ final class ShellClient {
         }
     }
 
+    /** The window style (HostConfiguration.windowMode of this app: auto, desktop or mobile): the shell lays the window out in it, live. */
+    void sendWindowMode(String mode) {
+        try {
+            send(WINDOW_MODE, buf(8).putInt(WINDOW_ID).putInt(mode.equals("mobile") ? 2 : mode.equals("desktop") ? 1 : 0));
+        } catch (IOException e) {
+            // shell gone: the read loop notices
+        }
+    }
+
+    /** The app hides or shows the navigation bar (immersive mode, WindowInsetsController). */
+    void sendNavigationBar(boolean visible) {
+        try {
+            send(NAVBAR, buf(8).putInt(WINDOW_ID).putInt(visible ? 1 : 0));
+        } catch (IOException e) {
+            // shell gone: the read loop notices
+        }
+    }
+
     /** The instance's colour scheme (HostConfiguration): the shell draws the window's title bar to match. */
     void sendDecorDark(boolean dark) {
         try {
@@ -152,8 +170,9 @@ final class ShellClient {
                     input.add(new int[] {13, body.getInt(4), body.getInt(8), body.getInt(12),
                             body.getInt(16)});
                 } else if (type == CONFIGURE) {
-                    // {14, w, h, scale*100}
-                    input.add(new int[] {14, body.getInt(4), body.getInt(8), body.getInt(12)});
+                    // {14, w, h, scale*100, density dpi (0: 160 x scale), navigation bar px (0: none)}
+                    input.add(new int[] {14, body.getInt(4), body.getInt(8), body.getInt(12),
+                            len >= 24 ? body.getInt(16) : 0, len >= 24 ? body.getInt(20) : 0});
                 } else if (type == TOUCH) {
                     // {16, action, finger, x, y}
                     input.add(new int[] {16, body.getInt(4), body.getInt(8), body.getInt(12), body.getInt(16)});

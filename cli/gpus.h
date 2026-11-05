@@ -22,6 +22,9 @@ std::vector<Gpu> listGpus(const Layout& layout);
 const Gpu* instanceGpu(const std::vector<Gpu>& gpus, const Instance& instance);
 std::string gpuChoiceFile(const Instance& instance);
 // gpus: every GPU (id, node, driver, vendor:device, compositor, chosen for this instance, name); gpu set <id|node> | unset
+// The density (dpi) apps get on the session's display, from the shell's `--display-info` (bridge/shell/mobile.c): a handheld's physical bucket, else
+// 160 x the output's scale. 0: no shell or no Wayland. The stack's ro.sf.lcd_density.
+int displayDensity(const Layout& layout);
 int gpusCommand(const Layout& layout, const Instance& instance);
 int gpuCommand(const Layout& layout, const Instance& instance, const std::vector<std::string>& args);
 
