@@ -18,6 +18,7 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): 
   `instance.inject` (tests/lib/instance.py); kernel keys (`instance.keys`) go to the shared desktop's focus and are only for input-desktop.
 - CLI (`cli/`): `--version | reconvert <pkg>|--all-stale | launcher show|hide | install [--system] | run | list | uninstall | stop [<package>] | hub | wait hub | screenshot | info | clear-data | permissions [grant|revoke] | instances |
   instance create|remove | prop [set|unset] | status | ime enable|disable | settings [list]|set KEY VALUE|unset KEY | gpus | gpu set|unset | daemon | home-access <pkg> on|off | logs [<pkg>] | report <pkg> | providers [set <domain> <backend> [k=v...]|unset <domain>]`. State and logs: `~/.local/state/apklayer/<instance>/`.
+- Hardware plugins (out of tree, `apklayer-dev`): `docs/PLUGINS.md`; example in `examples/`.
 - Manager UI: `manager/fetch-slint.sh && meson setup manager/b manager && ninja -C manager/b`.
 
 ## Test VMs
