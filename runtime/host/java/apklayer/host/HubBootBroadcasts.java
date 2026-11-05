@@ -16,6 +16,9 @@ final class HubBootBroadcasts {
     private HubBootBroadcasts() {}
 
     static void sendOnce(HubDirectory directory) {
+        // only an always-on instance is a phone that boots (at login); an on-demand one starts when an app needs it, and waking every app with a boot
+        // receiver (each its own JVM) for that would cost more than the one app asked for. APKLAYER_BOOT_BROADCASTS=0: not even then.
+        if (!directory.alwaysOn() || "0".equals(System.getenv("APKLAYER_BOOT_BROADCASTS"))) return;
         HubBootSettings.awaitBoot();
         String root = System.getenv("APKLAYER_INSTANCE_ROOT");  // <runtime dir>/android-root
         if (root == null || Path.of(root).getParent() == null) return;

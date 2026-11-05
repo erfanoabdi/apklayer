@@ -7,6 +7,7 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): 
 - Released: v0.1.0, v0.2.0, v0.2.1 (2026-11-04), v0.3.0 (2026-11-05; one Meson build, runtime 0.2.1). Since 0.1.0: Bluetooth, USB, camera, fake sensors/GNSS/vibrator (`providers.toml`), `apklayer logs|report`, the host binder context (Halium), apps' real target SDK. Meet works in a call: join, sound, remote video (owner checked, 2026-11-04).
 - Halium (Volla X23, Ubuntu Touch, 2026-11-05): with `graphics = device` apps and GL games draw on the device's Mali GPU (docs/HALIUM.md); camera = device is next (PLAN (e)).
 - Window style (2026-11-05): mobile (maximized, navigation bar, phone density) or desktop, `apklayer settings set window-mode`; immersive mode done, phone window check pending (docs/PLAN.md "Mobile window style").
+- Background push (2026-11-05): `apklayer instance autostart <id> on` keeps an instance's hub up from login; alarms, jobs and boot broadcasts work with every app closed; a cloud message to a closed app wakes it (group `push`; the real microG/WhatsApp check is in PLAN "Plan: background push").
 - Next phase, in order: `docs/PLAN.md` "Next phase".
 
 ## How to work here
@@ -19,7 +20,7 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): 
 - Screenshots: `apklayer [--instance ID] screenshot <package> <out.png>` (the app's own SurfaceFlinger picture). Input into one instance's window:
   `instance.inject` (tests/lib/instance.py); kernel keys (`instance.keys`) go to the shared desktop's focus and are only for input-desktop.
 - CLI (`cli/`): `--version | reconvert <pkg>|--all-stale | launcher show|hide | install [--system] | run | list | uninstall | stop [<package>] | hub | wait hub | screenshot | info | clear-data | permissions [grant|revoke] | instances |
-  instance create|remove | prop [set|unset] | status | ime enable|disable | settings [list]|set KEY VALUE|unset KEY | gpus | gpu set|unset | daemon | home-access <pkg> on|off | logs [<pkg>] | report <pkg> | providers [set <domain> <backend> [k=v...]|unset <domain>]`. State and logs: `~/.local/state/apklayer/<instance>/`.
+  instance create|remove|autostart <id> [on|off] | prop [set|unset] | status | ime enable|disable | settings [list]|set KEY VALUE|unset KEY | gpus | gpu set|unset | daemon | home-access <pkg> on|off | logs [<pkg>] | report <pkg> | providers [set <domain> <backend> [k=v...]|unset <domain>]`. State and logs: `~/.local/state/apklayer/<instance>/`.
 - Hardware plugins (out of tree, `apklayer-dev`): `docs/PLUGINS.md`; example in `examples/`.
 - Manager UI: `manager/fetch-slint.sh && meson setup manager/b manager && ninja -C manager/b`.
 

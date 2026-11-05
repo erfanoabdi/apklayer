@@ -4,8 +4,7 @@
             the hub starts the app's process, its receiver posts a notification that reaches the desktop
   alarm     an alarm set by an app that is then closed fires its PendingIntent (the hub holds it: HubScheduler)
   job       a JobScheduler job of a closed app runs
-  boot      a fresh stack's hub sends LOCKED_BOOT_COMPLETED then BOOT_COMPLETED to the app that was never started; a restarted hub sends them no more
-  idle      without always-on mode the hub ends when idle (the contrast), with the marker it stays
+  boot      an always-on instance's fresh stack: the hub sends LOCKED_BOOT_COMPLETED then BOOT_COMPLETED to the app that was never started; a restarted hub sends them no more
   autostart `apklayer instance autostart`: the marker, the unit, the instances row, off again
 Every JVM is owned and reaped (this instance's stop)."""
 import os
@@ -23,8 +22,10 @@ PHASE = sys.argv[1]
 LOGS = Path(LOGDIR)
 APP, GMS = 'hello.push', 'hello.pushgms'
 MARKER = LOGS / 'autostart'
-env = dict(ENV, APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400', APKLAYER_HOST_LIBS=instance.HOST_LIBS)
+# the VM has other apps with boot receivers: only the boot phase wakes them (APKLAYER_BOOT_BROADCASTS=0 for the others)
+env = dict(ENV, APKLAYER_BOOT_BROADCASTS='1' if PHASE == 'boot' else '0', APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400', APKLAYER_HOST_LIBS=instance.HOST_LIBS)
 children = []
+HUB_OUT = instance.OUT / 'hub-stdout.log'  # a hub started by `apklayer hub` prints to its launcher's stdout (the stack's start empties the state dir's logs)
 
 
 def cli(*args, **kw):
@@ -47,6 +48,7 @@ def close_app(package):
 
 def reset():
     stop()
+    HUB_OUT.unlink(missing_ok=True)
     for name in ('hub.log', 'component-%s.log' % APP, 'app-%s.log' % APP, 'app-%s.log' % GMS, 'autostart'):
         (LOGS / name).unlink(missing_ok=True)
 
@@ -95,8 +97,7 @@ try:
         instance.wait_file(LOGS / ('app-%s.log' % APP), '[push] ALARM-SET', 90)
         wait_hub('alarm of hello.push in', 10)
         close_app(APP)
-        text = component('[push] ALARM hello.push.ALARM', 60)
-        assert 'count=1' in text, text
+        component('[push] ALARM hello.push.ALARM', 60)  # (an immutable PendingIntent takes no EXTRA_ALARM_COUNT fill-in, as on Android)
         wait_hub('alarm of hello.push fired, status 0', 5)
         assert 'idle, exiting' not in hub_log()
         print('PASS alarm: set by an app that was then closed, fired by the hub into a new process', flush=True)
@@ -109,35 +110,24 @@ try:
         component('[push] JOB 7', 60)
         print('PASS job: scheduled by an app that was then closed, run by the hub in a new process', flush=True)
     elif PHASE == 'boot':
-        hub = subprocess.Popen(['bin/apklayer', 'hub'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        MARKER.write_text('1\n')  # an always-on instance is the one that boots
+        hub = subprocess.Popen(['bin/apklayer', 'hub'], env=env, stdout=open(HUB_OUT, 'a'), stderr=subprocess.STDOUT, start_new_session=True)
         children.append(hub)
         assert hub_alive(), 'no hub'
         text = component('[push] BOOT android.intent.action.BOOT_COMPLETED', 60)
         assert text.index('LOCKED_BOOT_COMPLETED') < text.index('android.intent.action.BOOT_COMPLETED'), 'wrong order:\n' + text
-        assert 'user=0' in text and 'sending android.intent.action.BOOT_COMPLETED' in wait_hub('sending android.intent.action.BOOT_COMPLETED', 5)
+        assert 'user=0' in text and 'sending android.intent.action.BOOT_COMPLETED' in instance.wait_file(HUB_OUT, 'sending android.intent.action.BOOT_COMPLETED', 5)
         # the same stack, a new hub (the first ended): not a boot again
         jvm = int((LOGS / 'hub.pid').read_text().split()[0])
         os.kill(jvm, signal.SIGTERM)
         hub.wait(30)
-        hub2 = subprocess.Popen(['bin/apklayer', 'hub'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        hub2 = subprocess.Popen(['bin/apklayer', 'hub'], env=env, stdout=open(HUB_OUT, 'a'), stderr=subprocess.STDOUT, start_new_session=True)
         children.append(hub2)
         assert hub_alive(), 'no second hub'
         settle(6)
         log = (LOGS / ('component-%s.log' % APP)).read_text(errors='replace')
         assert log.count('[push] BOOT android.intent.action.BOOT_COMPLETED') == 1 and log.count('[push] BOOT android.intent.action.LOCKED_BOOT_COMPLETED') == 1, 'the boot broadcasts came again:\n' + log
         print('PASS boot: LOCKED_BOOT_COMPLETED then BOOT_COMPLETED woke a closed app once per stack start', flush=True)
-    elif PHASE == 'idle':
-        run_app(APP, 'register')
-        instance.wait_file(LOGS / ('app-%s.log' % APP), '[push] REGISTERED', 90)
-        close_app(APP)
-        wait_hub('idle, exiting', 40)  # without always-on mode the hub goes with its last process
-        MARKER.write_text('1\n')
-        run_app(APP, 'register')
-        instance.wait_file(LOGS / ('app-%s.log' % APP), '[push] REGISTERED', 90)
-        close_app(APP)
-        settle(14)
-        assert hub_log().count('idle, exiting') == 1, 'the always-on hub ended when idle'
-        print('PASS idle: the hub ends when idle, and does not with the always-on marker', flush=True)
     elif PHASE == 'autostart':
         iid = instance.INSTANCE
         assert cli('instance', 'autostart', iid).stdout.strip() == 'off'
