@@ -1183,30 +1183,6 @@ td {
 .screenshot-section figure, .instance-capture {
   margin: 0;
 }
-.screenshot-feature {
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel);
-}
-.screenshot-feature > a {
-  display: block;
-  padding: 36px 36px 0;
-  background: radial-gradient(ellipse at top, #304b3c, #192421 75%);
-}
-.screenshot-feature img {
-  display: block;
-  width: min(100%, 958px);
-  height: auto;
-  margin: auto;
-  border: 1px solid #4a5a50;
-  border-bottom: 0;
-  border-radius: 7px 7px 0 0;
-}
-.screenshot-feature figcaption {
-  padding: 28px 32px;
-  border-top: 1px solid var(--line);
-}
 .screenshot-section h3 {
   margin: 12px 0 8px;
   font-weight: 550;
@@ -1218,9 +1194,10 @@ td {
 }
 .screenshot-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 25px;
-  margin-top: 28px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+  max-width: 860px;
+  margin: 28px auto 0;
 }
 .screenshot-grid figure {
   border: 1px solid var(--line);
@@ -1237,7 +1214,7 @@ td {
 }
 .app-capture img {
   display: block;
-  width: min(100%, 260px);
+  width: min(100%, 325px);
   height: auto;
   border-radius: 3px;
   box-shadow: 0 10px 30px #0004;
@@ -1290,12 +1267,6 @@ td {
   .microg-support {
     padding: 22px;
   }
-  .screenshot-feature > a {
-    padding: 18px 14px 0;
-  }
-  .screenshot-feature figcaption {
-    padding: 22px;
-  }
   .instance-capture {
     padding: 16px;
   }
@@ -1314,4 +1285,17 @@ td {
   .site-header nav {
     gap: 10px;
   }
+}
+
+.screenshot-grid .text-link {
+  margin-top: 15px;
+}
+.screenshot-grid .video-credit {
+  margin-top: 12px;
+  font-size: 11px;
+}
+.video-credit a {
+  color: var(--mint);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }

@@ -3,12 +3,13 @@
 ## Screenshots
 
 - [x] Capture real apps and manager views from the owner's Parallels VM using fresh app data.
-- [x] Add the screenshot section after application compatibility, with a manager overview and LocalSend, Organic Maps, and KeePassDX captures.
+- [x] Add the screenshot section after application compatibility, with microG Settings and NewPipe actually playing a public demo video. Removed the earlier LocalSend, map-download, and vault-chooser captures.
 - [x] Add an instance-management capture beside the instance documentation.
 - [x] Record app versions, capture methods, host details, and verification scope in `assets/screenshots/README.md`; inspect captures for personal data.
 - [x] Save lossless WebP images with explicit dimensions, useful alt text, lazy loading, and keyboard-accessible links to full-size images.
 - [ ] Add a composed-on-the-desktop wide capture showing several fully visible app windows when interactive VM window positioning is available. Do not substitute a synthetic montage.
-- [ ] Add later-stage map, media playback, and camera captures using non-personal sample content. Current app screens are explicitly identified as receive, startup, and vault-chooser views.
+- [x] Verify NewPipe playback: changing frames and an active PipeWire audio stream, using the existing upstream media check.
+- [ ] Add a later camera capture using non-personal sample content. OTR2 was dropped at the owner’s request; do not add a stalled game or its consent dialog as a demo.
 - [ ] Visually verify desktop and mobile website layouts when browser preview access is available. Source, assets, release behaviour, and HTTP serving are checked independently.
 
 ## Technical content
