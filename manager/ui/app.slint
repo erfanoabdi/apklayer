@@ -170,7 +170,7 @@ export component AppWindow inherits MaterialWindow {
     confirm-dialog := Dialog {
         x: 0; y: 0; width: root.width; height: root.height;
         title: root.ask-kind == "uninstall" ? "Uninstall " + root.ask-target + "?" : root.ask-kind == "clear-data" ? "Clear the data of " + root.ask-target + "?"
-             : "Remove instance " + root.ask-target + "?";
+             : root.ask-kind == "remove-addon" ? "Remove " + root.ask-target + "?" : "Remove instance " + root.ask-target + "?";
         default-action-text: root.ask-kind == "uninstall" ? "Uninstall" : root.ask-kind == "clear-data" ? "Clear data" : "Remove";
         actions: ["Cancel"];
         MaterialText {
@@ -180,12 +180,14 @@ export component AppWindow inherits MaterialWindow {
             color: MaterialPalette.on_surface_variant;
             text: root.ask-kind == "uninstall" ? "The app and its data in every instance are removed."
                 : root.ask-kind == "clear-data" ? "The app is stopped and its files in instance " + Backend.instance + " are deleted."
+                : root.ask-kind == "remove-addon" ? "Its apps and their data in every instance are removed. Apps that use it may stop working."
                 : "The instance is stopped and its data, storage and app data are deleted.";
         }
         default-action-clicked => {
             if root.ask-kind == "uninstall" { Backend.uninstall(root.ask-target); root.app-detail-open = false; }
             if root.ask-kind == "clear-data" { Backend.clear-data(root.ask-target); }
             if root.ask-kind == "remove-instance" { Backend.remove-instance(root.ask-target); }
+            if root.ask-kind == "remove-addon" { Backend.addon-remove(root.ask-target); }
             self.close();
         }
         action-clicked => { self.close(); }

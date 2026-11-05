@@ -6,7 +6,7 @@ import { Row } from "widgets.slint";
 export component DevicePage {
     function icon(key: string) -> image {
         if key == "stack" || key == "abi" { return AppIcons.board; }
-        if key == "gpu" || key == "gles" || key == "vulkan" { return AppIcons.memory; }
+        if key == "gpu" || key == "gpu node" || key == "gles" || key == "vulkan" { return AppIcons.memory; }
         if key == "audio" { return AppIcons.audio; }
         if key == "battery" { return AppIcons.battery; }
         if key == "location" { return AppIcons.location; }
@@ -20,12 +20,14 @@ export component DevicePage {
         if key == "apps" { return "Running apps"; }
         if key == "abi" { return "CPU ABI"; }
         if key == "gpu" { return "GPU"; }
+        if key == "gpu node" { return "GPU node"; }
         if key == "gles" { return "OpenGL ES"; }
         if key == "vulkan" { return "Vulkan"; }
         if key == "audio" { return "Audio"; }
         if key == "battery" { return "Battery"; }
         if key == "location" { return "Location"; }
-        "Instance"
+        if key == "instance" { return "Instance"; }
+        key  // a row this page does not know yet: its own name
     }
 
     ScrollView {
@@ -33,6 +35,7 @@ export component DevicePage {
             alignment: center;
             VerticalLayout {
                 max-width: 840px;
+                preferred-width: 840px;  // the card fills the width up to the cap as on the other pages (its one-line rows alone are narrow)
                 padding: MaterialStyleMetrics.padding_16;
                 spacing: MaterialStyleMetrics.spacing_8;
                 alignment: start;

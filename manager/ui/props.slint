@@ -37,7 +37,7 @@ export component PropsPage {
                         padding: MaterialStyleMetrics.padding_16;
                         spacing: MaterialStyleMetrics.spacing_12;
                         MaterialText {
-                            text: "Colour scheme of instance " + Backend.instance + ": its apps and title bars, applied at once (apklayer settings has the other host settings).";
+                            text: "Colour scheme of instance " + Backend.instance + ": its apps and title bars. System follows the desktop; applied at once (apklayer settings has the other host settings).";
                             style: MaterialTypography.body_medium;
                             color: MaterialPalette.on_surface;
                             wrap: word-wrap;
@@ -45,7 +45,7 @@ export component PropsPage {
                         HorizontalLayout {
                             alignment: start;
                             spacing: MaterialStyleMetrics.spacing_8;
-                            for choice in [{ label: "Follow the desktop", value: "" }, { label: "Light", value: "no" }, { label: "Dark", value: "yes" }] : HorizontalLayout {
+                            for choice in [{ label: "System", value: "" }, { label: "Light", value: "no" }, { label: "Dark", value: "yes" }] : HorizontalLayout {
                                 if Backend.night-setting == choice.value : FilledButton { text: choice.label; }
                                 if Backend.night-setting != choice.value : TonalButton { text: choice.label; clicked => { Backend.set-setting("night", choice.value); } }
                             }

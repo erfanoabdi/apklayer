@@ -32,7 +32,7 @@ common = '../common'  # shared with the CLI (cli/setup.cpp)
 add_project_arguments('-I' + meson.current_source_dir() / common, language: 'cpp')
 backend = static_library('backend', 'src/backend.cpp', common / 'proc.cpp', common / 'json.cpp', common / 'releases.cpp', common / 'fetch.cpp',
   include_directories: include_directories(common))
-executable('apklayer-manager', 'src/main.cpp', 'src/setup.cpp', 'src/hardware.cpp', ui,
+executable('apklayer-manager', 'src/main.cpp', 'src/setup.cpp', 'src/hardware.cpp', 'src/addons.cpp', ui,
   dependencies: [slint_dep, dependency('libpng'), dependency('threads')],
   link_with: backend,
   build_rpath: slint / 'cpp/lib',

@@ -16,6 +16,7 @@
 #include "halium.h"
 #include "providers.h"
 #include "releases.h"
+#include "util.h"
 
 namespace apklayer {
 
@@ -68,6 +69,9 @@ std::string installFromIndex(const Layout& layout, const Instance& inst, const s
         std::string error;
         manager::IndexApk apk = manager::pickApk(text, pkg, manager::androidAbi(), error);
         if (!error.empty()) return error;
+        // installed at this version or newer: nothing to do (the manager's Update of an add-on that is current)
+        std::string have = property(join(appDir(layout, pkg), "info.properties"), "versionCode");
+        if (!have.empty() && atoll(have.c_str()) >= apk.versionCode) { step(id, "running", pkg + " is up to date"); continue; }
         std::string file = manager::downloadsDir() + "/" + baseName(apk.url);
         step(id, "running", "Downloading " + pkg);
         if (std::string e = manager::fetch(apk.url, apk.sha256, file, progress); !e.empty()) return e;

@@ -10,6 +10,10 @@ export struct InfoEntry { key: string, value: string }
 export struct PermEntry { name: string, title: string, runtime: bool, granted: bool, state: string }
 
 // a first-run step (src/setup.cpp): id binder|runtime|instance|system-apps|microg|fdroid; state: "", "Done", "Failed", "Skipped"
+// an add-on of the Apps page (src/addons.cpp): id microg|fdroid; installed: any of its packages, complete: all of them; detail: what its
+// install or removal is doing; icon: the installed app's
+export struct AddonEntry { id: string, title: string, description: string, detail: string, version: string, icon: image, installed: bool, complete: bool, running: bool }
+
 export struct SetupStep { id: string, title: string, detail: string, state: string, running: bool }
 
 // `apklayer providers` (src/hardware.cpp): an option a backend takes, its value in the instance's configuration ("": the default); file: a path
@@ -28,6 +32,13 @@ export global Backend {
     in property <float> setup-progress;    // of the running step: 0..1, negative while its size is unknown
     callback setup-start(bool, bool);  // with microG, with F-Droid
     callback setup-finish();
+    // the Apps page's add-ons: the first run's optional apps at any time (`apklayer setup --microg|--fdroid`, uninstall to remove)
+    in property <[AddonEntry]> addons;
+    in property <string> addon-running;    // the add-on whose install or removal runs ("" none): one at a time
+    in property <string> addon-detail;
+    in property <float> addon-progress;
+    callback addon-install(string);        // id: install, or update (the CLI skips what is current)
+    callback addon-remove(string);         // id or title
     // the update banner (UpdateBanner): an update of apklayer or its runtime, or stale apps to convert again; title "" hides it
     in property <string> update-title;
     in property <string> update-detail;

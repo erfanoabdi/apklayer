@@ -1,0 +1,60 @@
+// The Apps page's add-ons: the first run's optional apps (microG, F-Droid), offered at any time, each with what is installed and
+// install, update or remove (src/addons.cpp).
+import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, OutlinedCard, TextButton, TonalButton,
+         LinearProgressIndicator } from "@material";
+import { Backend, AppIcons } from "backend.slint";
+import { Row, Tag, Heading } from "widgets.slint";
+
+export component AddonsSection {
+    callback confirm(kind: string, target: string);
+
+    VerticalLayout {
+        padding-left: MaterialStyleMetrics.padding_8;
+        padding-right: MaterialStyleMetrics.padding_8;
+        padding-top: MaterialStyleMetrics.padding_16;
+        spacing: MaterialStyleMetrics.spacing_8;
+        Heading { text: "Add-ons"; }
+        OutlinedCard {
+            VerticalLayout {
+                padding-top: MaterialStyleMetrics.padding_8;
+                padding-bottom: MaterialStyleMetrics.padding_8;
+                for a in Backend.addons : VerticalLayout {
+                    Row {
+                        text: a.title;
+                        supporting-text: a.running ? a.detail : !a.installed ? a.description
+                                       : (a.version != "" ? "Version " + a.version : "Installed") + (a.complete ? "" : " · a part is missing");
+                        icon: AppIcons.apps;
+                        picture: a.icon;
+                        clickable: false;
+                        if a.installed && a.complete && !a.running : Tag { text: "Installed"; }
+                    }
+                    if a.running : LinearProgressIndicator {
+                        height: MaterialStyleMetrics.size_4;
+                        progress: Backend.addon-progress;
+                        indeterminate: Backend.addon-progress < 0;
+                    }
+                    HorizontalLayout {
+                        alignment: end;
+                        padding-left: MaterialStyleMetrics.padding_16;
+                        padding-right: MaterialStyleMetrics.padding_16;
+                        padding-bottom: MaterialStyleMetrics.padding_8;
+                        spacing: MaterialStyleMetrics.spacing_8;
+                        if a.installed : TextButton {
+                            text: "Remove";
+                            accessible-label: "Remove " + a.title;
+                            enabled: Backend.addon-running == "" && !Backend.busy;
+                            clicked => { root.confirm("remove-addon", a.title); }
+                        }
+                        TonalButton {
+                            text: a.installed && a.complete ? "Update" : "Install";
+                            icon: a.installed && a.complete ? AppIcons.refresh : AppIcons.add;
+                            accessible-label: (a.installed && a.complete ? "Update " : "Install ") + a.title;
+                            enabled: Backend.addon-running == "" && !Backend.busy;
+                            clicked => { Backend.addon-install(a.id); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

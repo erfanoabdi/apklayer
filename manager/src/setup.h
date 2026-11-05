@@ -11,6 +11,11 @@
 
 namespace manager {
 
+// `apklayer setup <flags>` (the first run's and the add-ons' one way in): onStep for each `step <id> <state> <detail>` line, onProgress for
+// `progress <p>`, onOther for the rest (a failure's message); the exit status
+int runCliSetup(const Cli& cli, std::vector<std::string> flags, const std::function<void(const std::string&, const std::string&, const std::string&)>& onStep,
+                const std::function<void(double)>& onProgress, const std::function<void(const std::string&)>& onOther = nullptr);
+
 class Setup {
 public:
     // cli: the manager's (its instance follows the selection); root: the tree of the CLI (tools/host-setup); refresh and message: the manager's

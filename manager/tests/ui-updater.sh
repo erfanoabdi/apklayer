@@ -7,7 +7,7 @@
 set -euo pipefail
 b=$1 apk=$2 pkg=$3 shots=$4 store=${5:-$2} storepkg=${6:-}
 [ -n "${APKLAYER_INSTANCE:-}" ] && [ "$APKLAYER_INSTANCE" != default ] || { echo "run in an instance of your own (APKLAYER_INSTANCE)" >&2; exit 2; }
-cli="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/bin/apklayer"
+cli=${APKLAYER_CLI:-"$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/bin/apklayer"}  # APKLAYER_CLI: an installed package's (the manager's too)
 m="$b/apklayer-manager"
 apk=$(realpath "$apk")
 mkdir -p "$shots"
@@ -47,6 +47,18 @@ echo "ok   first run: runtime downloaded and unpacked, the system apps installed
 "$m" --screenshot "$shots/ui-7b-first-run-skip.png" --size 400x840 --first-run --click Skip --wait-refresh 1
 [ -e "$XDG_DATA_HOME/apklayer/setup-done" ] || fail "finishing the first run left no mark"
 echo "ok   the first run's end is remembered"
+
+# the add-ons on the Apps page (the filters off: the section on screen): F-Droid removed and installed again by the first run's path
+if [ "$storepkg" = org.fdroid.fdroid ]; then
+    addons() { "$m" --screenshot "$shots/$1.png" --size 400x840 --click Installed --click System "${@:2}" --wait-refresh 1; }
+    has() { "$cli" list --tsv | grep -q "^org.fdroid.fdroid	"; }
+    addons ui-11-addon-remove --click "Remove F-Droid" --click Remove
+    ! has || fail "Remove F-Droid left org.fdroid.fdroid installed"
+    addons ui-11b-addon-install --click "Install F-Droid"
+    has || fail "Install F-Droid did not install org.fdroid.fdroid"
+    "$m" --screenshot "$shots/ui-11c-addons.png" --size 400x840 --click Installed --click System --expect "Update F-Droid" --expect "Install microG"
+    echo "ok   add-ons: F-Droid removed and installed again from the Apps page"
+fi
 
 # a newer runtime: the banner, its update, and a bundle with a wrong SHA256 refused
 releases r2 "$(sha "$f/rt-r2.tar.zst")"

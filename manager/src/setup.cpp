@@ -39,18 +39,20 @@ Setup::State probe(const Cli& cli) {
 }
 
 
-// `apklayer setup <flags>`: onStep for each `step <id> <state> <detail>` line, onProgress for `progress <p>`; the exit status
+}  // namespace
+
+// setup.h
 int runCliSetup(const Cli& cli, std::vector<std::string> flags, const std::function<void(const std::string&, const std::string&, const std::string&)>& onStep,
-                const std::function<void(double)>& onProgress) {
+                const std::function<void(double)>& onProgress, const std::function<void(const std::string&)>& onOther) {
     flags.insert(flags.begin(), "setup");
     return cli.runLines(flags, [&](const std::string& line) {
         Rows rows = parseRows(line);
         if (rows.empty()) return;
         if (rows[0][0] == "step" && rows[0].size() >= 3) onStep(rows[0][1], rows[0][2], rows[0].size() > 3 ? rows[0][3] : "");
         else if (rows[0][0] == "progress" && rows[0].size() >= 2) onProgress(atof(rows[0][1].c_str()));
+        else if (onOther) onOther(line);
     });
 }
-}  // namespace
 
 Setup::Setup(slint::ComponentHandle<AppWindow> ui, const Cli& cli, std::string root, std::function<void()> refresh, std::function<void(const std::string&)> message)
     : ui_(ui), cli_(cli), root_(std::move(root)), refresh_(std::move(refresh)), message_(std::move(message)), steps_(std::make_shared<slint::VectorModel<SetupStep>>()) {

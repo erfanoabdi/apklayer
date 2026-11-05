@@ -17,6 +17,7 @@
 #include "backend.h"
 #include "setup.h"
 #include "hardware.h"
+#include "addons.h"
 
 using manager::Cli;
 using manager::Result;
@@ -83,6 +84,7 @@ public:
         setup_ = std::make_unique<manager::Setup>(ui_, cli_, root_, [this] { refresh(); }, [this](const std::string& m) { message(m); });
         hardware_ = std::make_unique<manager::Hardware>(ui_, cli_, root_, [this](const std::string& what, std::vector<std::string> args) { action(what, std::move(args)); },
                                                         [this] { refresh(); }, [this](const std::string& m) { message(m); });
+        addons_ = std::make_unique<manager::Addons>(ui_, cli_, [this] { refresh(); }, [this](const std::string& m) { message(m); });
     }
     manager::Setup& setup() { return *setup_; }
 
@@ -158,6 +160,7 @@ public:
         b.set_gpus(gpus);
         b.set_gpu_index(chosen);
         if (hardware_) hardware_->show(s.providers);
+        if (addons_) addons_->show(s.apps);
         if (!current_.empty() && s.detail) showDetail(*s.detail);
         b.set_load_error(slint::SharedString(s.error));
         if (!s.error.empty()) message(s.error);
@@ -395,6 +398,7 @@ private:
     std::string current_;  // the selected app (UI thread)
     std::unique_ptr<manager::Setup> setup_;  // the first run and the updates (src/setup.cpp)
     std::unique_ptr<manager::Hardware> hardware_;  // the Hardware page (src/hardware.cpp)
+    std::unique_ptr<manager::Addons> addons_;  // the Apps page's add-ons (src/addons.cpp)
 };
 
 bool writePng(const std::string& path, const slint::SharedPixelBuffer<slint::Rgba8Pixel>& pixels) {

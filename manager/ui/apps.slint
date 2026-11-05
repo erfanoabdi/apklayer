@@ -3,6 +3,7 @@ import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText
          IconButton, OutlinedCard, HorizontalDivider, VerticalDivider, Switch, FilterChip } from "@material";
 import { Backend, AppIcons, AppEntry } from "backend.slint";
 import { Row, Tag, Heading } from "widgets.slint";
+import { AddonsSection } from "addons.slint";
 
 component AppDetail {
     in property <AppEntry> app;
@@ -166,6 +167,7 @@ export component AppsPage {
                             if app.running : Tag { text: "Running"; strong: true; }
                         }
                     }
+                    AddonsSection { confirm(k, t) => { root.confirm(k, t); } }
                 }
             }
         }
