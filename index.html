@@ -1,58 +1,120 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>apklayer</title>
-<meta name="description" content="Run Android apps on Linux in Wayland windows.">
-<style>
-  :root { --bg: #fdfdfc; --fg: #1d1d1b; --muted: #5d5d58; --line: #e3e2dc; --code: #f1f0ea; --link: #1f5fbf; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #161615; --fg: #ecebe6; --muted: #a3a29b; --line: #2f2e2b; --code: #22211f; --link: #8ab4f8; }
-  }
-  body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.55 system-ui, sans-serif; }
-  main { max-width: 42rem; margin: 0 auto; padding: 3rem 16px 4rem; }
-  h1 { font-size: 2.2rem; margin: 0 0 .25rem; letter-spacing: -.02em; }
-  h2 { font-size: 1.15rem; margin: 2.2rem 0 .6rem; }
-  p.lead { color: var(--muted); margin: 0 0 1.5rem; font-size: 1.1rem; }
-  a { color: var(--link); }
-  code, pre { font: .92em/1.5 ui-monospace, monospace; background: var(--code); border-radius: 6px; }
-  code { padding: .1em .35em; }
-  pre { padding: .8rem 1rem; overflow-x: auto; }
-  ol { padding-left: 1.3rem; } li { margin: .4rem 0; }
-  #latest { color: var(--muted); }
-  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem; }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101719">
+  <meta name="description" content="Android apps. Linux windows. Run Android APKs on Linux with real Android libraries, a JVM, and your Wayland desktop. No emulator. No virtual machine.">
+  <title>apklayer — Android apps. Linux windows.</title>
+  <link rel="icon" href="assets/apklayer.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="site.js" defer></script>
 </head>
 <body>
-<main>
-  <h1>apklayer</h1>
-  <p class="lead">Run Android apps on Linux. Each app is an ordinary Linux process with its own Wayland window: its code is converted once to run on the JVM, and Android's own libraries run unchanged.</p>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header wrap">
+    <a class="brand" href="#" aria-label="apklayer home"><img src="assets/apklayer.svg" width="44" height="44" alt="">apk<span>layer</span><span class="brand-label">FOR LINUX</span></a>
+    <nav aria-label="Main navigation"><a href="#hardware">Hardware</a><a href="#compatibility">Apps</a><a href="https://github.com/erfanoabdi/apklayer/blob/main/docs/INSTALL.md">Docs</a><a class="nav-source" href="https://github.com/erfanoabdi/apklayer">GitHub <span aria-hidden="true">↗</span></a></nav>
+  </header>
+  <main id="main">
+    <section class="hero wrap" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <a class="release-pill" data-release-link href="https://github.com/erfanoabdi/apklayer/releases/latest"><span class="status-dot"></span><span data-release-label>Explore the latest release</span><span aria-hidden="true">↗</span></a>
+        <h1 id="hero-title">Android apps.<br><span>Linux windows.</span></h1>
+        <p class="hero-description">Android’s framework on the JVM. Android’s native libraries on your host. Run APKs in their own Wayland windows, on Linux desktops and phones.</p>
+        <p class="hero-detail">Real Android libraries. No emulator. No virtual machine.</p>
+        <div class="hero-actions"><a class="button button-primary" href="#install">Get apklayer <span aria-hidden="true">↓</span></a><a class="button button-quiet" href="https://github.com/erfanoabdi/apklayer">Explore the source <span aria-hidden="true">↗</span></a></div>
+        <div class="hero-meta"><span class="status-dot"></span>Open source &amp; actively evolving<span class="meta-divider">/</span>AGPL-3.0-or-later</div>
+      </div>
+      <div class="hero-art" role="img" aria-label="The apklayer Android robot in floating glass layers, connecting an APK to a Wayland window">
+        <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+        <span class="art-label label-top"><span class="tiny-square"></span> ANDROID, MEET LINUX</span>
+        <img class="hero-logo" src="assets/apklayer.svg" width="540" height="540" alt="" fetchpriority="high">
+        <div class="art-chip chip-apk"><span aria-hidden="true">↳</span> app.apk</div>
+        <div class="art-chip chip-wayland"><span class="status-dot"></span> Wayland window</div>
+        <div class="art-coordinate">REAL LIBRARIES. A DIFFERENT LAYER.</div>
+      </div>
+    </section>
+    <div class="platform-band"><div class="wrap platform-inner"><span class="eyebrow">BUILT FOR YOUR DESKTOP</span><span>Wayland</span><span>Host EGL / GLES</span><span>PipeWire audio</span><span>arm64 / amd64</span></div></div>
+    <section class="section wrap" id="how-it-works" aria-labelledby="how-title">
+      <div class="section-heading"><div><span class="eyebrow">01 / UNDER THE SURFACE</span><h2 id="how-title">Android inside.<br>Linux underneath.</h2></div><p>DEX becomes JVM bytecode; the AOSP framework runs on HotSpot with Robolectric shadows. Android’s own native libraries and services run as host processes through bionic_translation and kernel Binder.</p></div>
+      <div class="architecture" aria-label="An APK is converted to JVM classes, runs with Android libraries and services, and appears in a Wayland window">
+        <div class="architecture-stage"><span class="stage-number">01</span><span class="stage-symbol" aria-hidden="true">{ }</span><h3>Your APK</h3><p>DEX code is converted once to JVM classes.</p><span class="stage-tag">dex2jvm</span></div>
+        <div class="architecture-arrow" aria-hidden="true">→</div>
+        <div class="architecture-stage"><span class="stage-number">02</span><span class="stage-symbol" aria-hidden="true">▱</span><h3>Real Android</h3><p>AOSP android-all, HWUI, SurfaceFlinger, Binder, and native app libraries.</p><span class="stage-tag">Android + JVM</span></div>
+        <div class="architecture-arrow" aria-hidden="true">→</div>
+        <div class="architecture-stage"><span class="stage-number">03</span><span class="stage-symbol" aria-hidden="true">▣</span><h3>Your desktop</h3><p>DMA-BUF frames to Wayland; host EGL/GLES, PipeWire, and GStreamer below.</p><span class="stage-tag">Linux + Wayland</span></div>
+      </div>
+      <a class="text-link architecture-link" href="https://github.com/erfanoabdi/apklayer/blob/main/docs/ARCHITECTURE.md">Take a closer look at the architecture <span aria-hidden="true">↗</span></a>
+    </section>
+    <section class="possibilities section wrap" aria-labelledby="possibilities-title">
+      <div class="possibilities-intro"><span class="eyebrow">02 / MORE AT HOME</span><h2 id="possibilities-title">Your apps.<br>A little more freedom.</h2><p>From maps and messaging to media and games, apklayer is bringing real Android apps to Linux.</p><a class="text-link" href="https://github.com/erfanoabdi/apklayer/blob/main/tests/corpus/results.md">Explore app compatibility <span aria-hidden="true">↗</span></a></div>
+      <div class="feature-list"><article><span class="feature-index">↗</span><div><h3>Windows, not a virtual phone</h3><p>SurfaceFlinger composes a virtual display for each app. apklayer-shell presents it as a Wayland toplevel and routes pointer, keyboard, touch, clipboard, and IME input.</p></div></article><article><span class="feature-index">⊞</span><div><h3>Room for more than one world</h3><p>Each instance owns its Binder devices, Android services, hub, properties, app data, and storage. Run the same app with different data in parallel. <a class="text-link" href="#instances">Inside an instance ↘</a></p></div></article><article><span class="feature-index">⌘</span><div><h3>A manager. A terminal. Your choice.</h3><p>The Slint-based manager handles apps, instances, permissions, and hardware providers. The CLI exposes the same controls, plus logs, diagnostic reports, screenshots, and GPU selection.</p></div></article></div>
+      <div class="project-note"><span class="status-dot"></span><p><strong>A work in progress, in the open.</strong> Compatibility varies by app and hardware. Check the <a href="https://github.com/erfanoabdi/apklayer/blob/main/STATUS.md">project status</a> for what works and what’s next.</p></div>
+    </section>
 
-  <h2>Install</h2>
-  <p id="latest">Ubuntu 24.04 (noble) and Debian 13 (trixie), arm64. A Wayland desktop and a Mesa GPU driver are needed.</p>
-  <ol>
-    <li>Download the <code>.deb</code> for your system from the <a id="release" href="https://github.com/erfanoabdi/apklayer/releases/latest">latest release</a>
-      (<code>noble</code> for Ubuntu, <code>trixie</code> for Debian).</li>
-    <li>Install it:<pre>sudo apt install ./apklayer_*.deb</pre></li>
-    <li>Open <strong>apklayer</strong> (<code>apklayer-manager</code>) from your app menu. On its first start it downloads the Android runtime and sets everything up.</li>
-  </ol>
+    <section class="technical section wrap" id="hardware" aria-labelledby="hardware-title">
+      <div class="section-heading"><div><span class="eyebrow">03 / THE HARDWARE BOUNDARY</span><h2 id="hardware-title">Android APIs.<br>Host hardware.</h2></div><p>apklayer supplies Android-facing HALs backed by Linux interfaces. Applications keep using Android APIs; the host supplies graphics, camera frames, audio, and media processing.</p></div>
+      <div class="technical-grid">
+        <article class="technical-card"><span class="stage-tag">GRAPHICS / EGL + GLES</span><h3>Your host’s graphics libraries</h3><p>Android EGL/GLES calls cross into the host’s EGL and OpenGL ES libraries. HWUI, native rendering, SurfaceView, and TextureView feed real Android surfaces; SurfaceFlinger and apklayer’s composer pass buffers to the Wayland shell.</p><p><strong>Mesa is not a requirement.</strong> The driver must provide the EGL/GLES functionality and compatible allocation and buffer-sharing interfaces that the selected path needs. The desktop path uses GBM, DRM render nodes, DMA-BUFs, and synchronization fences. A proprietary EGL library alone does not guarantee that these interfaces work together.</p><p>GLES 1 can use gfxstream’s translator when the host lacks it. Vulkan presentation has a separate hardware-dependent path, verified on an Intel PC; it is not available on every virtual GPU.</p></article>
+        <article class="technical-card"><span class="stage-tag">CAPTURE / PIPEWIRE CAMERA</span><h3>A real camera, through Android APIs</h3><p>Camera support uses a PipeWire backend beneath an AIDL camera provider and Android’s cameraserver. Apps use the framework’s Camera1, camera2, and ImageReader APIs. PipeWire video sources can be backed by libcamera, V4L2, or other producers exposed by the host.</p><p>Open Camera has shown a live, upright webcam preview through this path. Select it with <code>apklayer providers set camera pipewire</code>. A fake provider also supplies colour bars, still images, or looping video for repeatable tests.</p><p>Capture currently connects directly to PipeWire; camera-portal integration, MJPEG-only modes, and the NDK camera API remain open work. Available cameras and permissions depend on the host session.</p></article>
+        <article class="technical-card"><span class="stage-tag">MEDIA / CODEC2 + GSTREAMER</span><h3>Android media, Linux backends</h3><p>Android’s media services, extractors, and Codec2 interfaces are retained, with host GStreamer integration underneath. MediaCodec can decode into Surfaces; video buffers reach SurfaceFlinger for composition. Software codec coverage includes AVC/H.264, VP8/VP9, AAC, MP3, and Opus.</p><p>MediaPlayer, native media paths, and surface-backed players are exercised by dedicated tests. Hardware decoding depends on the available backend and driver; EGL rendering support does not imply accelerated decoding for every codec.</p></article>
+        <article class="technical-card"><span class="stage-tag">AUDIO / PIPEWIRE</span><h3>Playback and recording</h3><p>AudioTrack, AudioRecord, and MediaRecorder go through Android’s AudioFlinger and AudioPolicy into the host PipeWire audio backend. This covers output and microphone recording rather than replacing Android audio APIs with empty implementations.</p><p>Playback has been exercised with media apps and browser content. Call routing, mute semantics, and behaviour with multiple audio sinks still have known gaps; codec support and working capture are separate from complete app compatibility.</p></article>
+      </div>
+      <div class="host-matrix"><h3>Desktops, Linux phones, and different driver stacks</h3><p>apklayer works across mainline Linux and Halium-based Linux systems, including <strong>Ubuntu Touch, Droidian, and Sailfish OS</strong>. The host integration follows the available compositor, libraries, and platform services; the Ubuntu and Debian desktop packages are not universal phone packages.</p>
+        <dl class="host-details"><div><dt>Mainline Linux</dt><dd>Use the host EGL/GLES stack, GBM and DMA-BUF on a compatible Wayland desktop, with PipeWire for audio and cameras. Kernel Binder/binderfs is required. arm64 and x86_64 have been exercised on Linux hosts.</dd></div><div><dt>Halium &amp; vendor Android stacks</dt><dd>Device HAL access uses separate host Binder/HwBinder contexts for selected services, while apklayer keeps its own Android services. Vendor gralloc/EGL and the compositor’s <code>android_wlegl</code> path are the integration route where linux-dmabuf is unavailable.</dd></div><div><dt>Ubuntu Touch · Droidian · Sailfish</dt><dd>Phone builds must match the host ABI, glibc, compositor protocols, and device providers. Location can use Lomiri or GeoClue; sensors use OS services rather than taking over their single-client vendor HALs. Device camera and codec access is separate from the desktop PipeWire backend.</dd></div></dl>
+        <p class="technical-note">Device support is not uniform: the public Halium notes record Ubuntu Touch Binder/vibrator checks and camera/codec enumeration; the surveyed Sailfish device needs an older-glibc build, and vendor graphics bring-up has remaining work. See <a href="https://github.com/erfanoabdi/apklayer/blob/main/docs/HALIUM.md">device integration notes ↗</a> for the documented verification scope.</p>
+      </div>
+    </section>
 
-  <h2>More</h2>
-  <ul>
-    <li><a href="https://github.com/erfanoabdi/apklayer">Source code on GitHub</a></li>
-    <li><a href="https://github.com/erfanoabdi/apklayer/blob/main/docs/INSTALL.md">docs/INSTALL.md</a>: building from source, the command line, troubleshooting</li>
-    <li><a href="releases.json">releases.json</a>: every release, for apklayer-manager's updater</li>
-  </ul>
-  <footer>apklayer is free software (AGPL-3.0-or-later).</footer>
-</main>
-<script>
-  // names the latest version from releases.json; the page reads fine without it
-  fetch('releases.json').then(r => r.json()).then(d => {
-    if (!d.latest) return;
-    document.getElementById('release').textContent = 'release ' + d.latest;
-    document.getElementById('release').href = 'https://github.com/erfanoabdi/apklayer/releases/tag/v' + d.latest;
-  }).catch(() => {});
-</script>
+    <section class="technical section wrap" id="compatibility" aria-labelledby="compatibility-title">
+      <div class="section-heading"><div><span class="eyebrow">04 / APPLICATION COMPATIBILITY</span><h2 id="compatibility-title">Real apps.<br>Specific results.</h2></div><p>Around 60 apps draw or run in the project’s November 2026 testing. A rendered screen is evidence of progress, not a promise that every feature in that app works.</p></div>
+      <div class="table-scroll" role="region" aria-label="App compatibility results" tabindex="0"><table><caption>Representative results from the app corpus and follow-up tests, 4–5 November 2026.</caption><thead><tr><th scope="col">Workload</th><th scope="col">Examples</th><th scope="col">What has been observed</th></tr></thead><tbody>
+        <tr><th scope="row">Android UI &amp; storage</th><td>Thunderbird, Feeder, Tasks.org, KeePassDX, Material Files</td><td>Compose and traditional views render; welcome screens, lists, and file or vault choosers are visible. Android providers supply settings, contacts, calendar, media, and documents.</td></tr>
+        <tr><th scope="row">Native code &amp; graphics</th><td>Organic Maps, OsmAnd, VLC, mpv, OpenTTD</td><td>Native libraries load; maps and players draw. OpenTTD renders through GLES 1 on the tested PC, with a known shutdown issue. APK native ABI must match the runtime or use an available native bridge.</td></tr>
+        <tr><th scope="row">Flutter &amp; web-based UI</th><td>FluffyChat, LocalSend, Standard Notes, Logseq</td><td>Flutter apps draw through GLES; React Native and WebView-based screens are exercised. Apps embedding web content need the Android WebView provider installed in the runtime.</td></tr>
+        <tr><th scope="row">Messaging &amp; accounts</th><td>Element, Telegram, Conversations, Google Meet</td><td>Messaging welcome/login screens render. Meet sign-in and a call with sound and remote video have been checked with microG. This does not imply certified Google Play Services or Play Integrity support.</td></tr>
+        <tr><th scope="row">Media &amp; capture</th><td>NewPipe, Fennec, Open Camera</td><td>NewPipe lists and plays video; Fennec has page, audio, and video checks. Open Camera shows live PipeWire camera frames. Browser text rendering has a known virgl-specific GPU issue.</td></tr>
+      </tbody></table></div>
+      <div class="compat-details"><article><h3>Framework coverage matters</h3><p>The AOSP framework, native JNI libraries, real content providers, and instance hub cover more than drawing widgets: Binder calls, services, broadcasts, activities, accounts, permissions, package installs, and cross-app communication are exercised.</p></article><article><h3>Check the exact app and host</h3><p>Compatibility depends on app version, native ABI, GPU, codecs, providers, and optional services. Termux has UID/environment gaps; DRM and integrity-dependent apps need separate verification. arm64-only native code on x86_64 has a developing Digitalis bridge, not universal ABI compatibility.</p></article></div>
+      <a class="text-link" href="https://github.com/erfanoabdi/apklayer/blob/main/tests/corpus/results.md">Read versions, hosts, and per-app results <span aria-hidden="true">↗</span></a>
+    </section>
+
+    <section class="technical section wrap" id="instances" aria-labelledby="instances-title">
+      <div class="section-heading"><div><span class="eyebrow">05 / MULTIPLE INSTANCES</span><h2 id="instances-title">Separate Android state.<br>Side by side.</h2></div><p>Keep personal, work, and test environments running together. Instances are independent Android service stacks and data trees, rather than whole virtual machines.</p></div>
+      <div class="instance-layout"><div><h3>What belongs to an instance?</h3><ul class="technical-list"><li>Its own Binder devices, servicemanager, SurfaceFlinger, audio/media services, and instance hub.</li><li>Separate <code>/data</code> and <code>/storage</code> views, per-app databases and preferences, accounts, Android properties, and hardware-provider configuration.</li><li>Independent app processes and lifecycle: stop one instance without stopping the others; select a GPU per instance where supported.</li></ul><p>Installed APKs are shared across instances, while app data and storage are separate. Apps inside one instance communicate through its hub using Binder, services, providers, intents, and broadcasts.</p><p class="technical-note">Instance separation is not a VM security boundary. The default host setup runs apps under the host user; separate data trees alone do not make untrusted APKs safe.</p></div><div class="instance-code"><span class="stage-tag">COMMAND LINE / NAMED INSTANCE</span><pre><code># Create a separate environment
+apklayer instance create work
+
+# Use an installed app's package ID
+apklayer --instance work run com.example.app
+
+# Inspect all environments
+apklayer instances
+
+# Stop only the work environment
+apklayer --instance work stop</code></pre><p>Replace <code>com.example.app</code> with an installed package. Named instances need their own Binder devices; provision them using the <a href="https://github.com/erfanoabdi/apklayer/blob/main/docs/INSTALL.md#8-instances">instance setup instructions</a>. Use <code>--instance &lt;id&gt;</code> or <code>APKLAYER_INSTANCE</code>; otherwise commands use <code>default</code>. The manager also exposes instance controls.</p></div></div>
+    </section>
+
+    <section class="technical section wrap" id="comparison" aria-labelledby="comparison-title">
+      <div class="section-heading"><div><span class="eyebrow">06 / DIFFERENT CUTS THROUGH THE STACK</span><h2 id="comparison-title">apklayer, Waydroid,<br>and ATL.</h2></div><p>Three approaches to Android on Linux. The useful distinction is which parts of Android each project retains, replaces, or boots.</p></div>
+      <div class="table-scroll" role="region" aria-label="Architecture comparison" tabindex="0"><table class="comparison-table"><caption>An architectural comparison, not a performance benchmark or compatibility ranking.</caption><thead><tr><th scope="col">Layer</th><th scope="col">apklayer</th><th scope="col"><a href="https://waydro.id/">Waydroid ↗</a></th><th scope="col"><a href="https://gitlab.com/android_translation_layer/android_translation_layer">ATL ↗</a></th></tr></thead><tbody>
+        <tr><th scope="row">Execution model</th><td>DEX converted to JVM bytecode; HotSpot hosts the AOSP framework with Robolectric shadows.</td><td>A full Android system boots inside an LXC container, sharing the Linux kernel.</td><td>DEX runs on an Android runtime, against ATL’s replacement Android API implementations.</td></tr>
+        <tr><th scope="row">Framework &amp; services</th><td>AOSP android-all plus real Android native libraries and selected services as host processes; a hub coordinates apps. No system_server or Android zygote.</td><td>The Android framework, ART, and system services run inside the Android container.</td><td>Android APIs are implemented or stubbed by ATL; UI widgets map to GTK, with native shims for app libraries.</td></tr>
+        <tr><th scope="row">Desktop &amp; hardware</th><td>SurfaceFlinger → apklayer composer → Wayland windows; host EGL/GLES, PipeWire, GStreamer, and platform providers.</td><td>Android graphics and HAL integration connect the container to host hardware and Wayland; desktop integration can expose individual app windows.</td><td>GTK owns desktop integration; EGL supports native graphics paths. API coverage grows through project implementations.</td></tr>
+        <tr><th scope="row">Main compatibility dependency</th><td>Bytecode conversion, framework shadows, native library integration, and host HAL/backend coverage.</td><td>The Android image, container/kernel support, GPU/HAL integration, and any required app services.</td><td>Whether ATL implements the framework APIs, widgets, and native interfaces that an app needs.</td></tr>
+      </tbody></table></div>
+      <p class="technical-note">All three avoid a hardware-emulating VM in their normal design. Waydroid also supports app windows; that alone is not the distinction. apklayer retains Android’s rendering and native service stack while changing how Java code is executed and how hardware is reached.</p>
+      <div class="comparison-sources">Architecture sources: <a href="https://github.com/erfanoabdi/apklayer/blob/main/docs/ARCHITECTURE.md">apklayer</a><a href="https://github.com/waydroid/waydroid#overview">Waydroid overview</a><a href="https://gitlab.com/android_translation_layer/android_translation_layer/-/blob/master/doc/Architecture.md">ATL architecture</a></div>
+    </section>
+
+    <section class="install-section" id="install" aria-labelledby="install-title"><div class="wrap install-layout">
+      <div class="install-intro"><span class="eyebrow">07 / MAKE YOURSELF AT HOME</span><h2 id="install-title">Bring a new layer<br>to your desktop.</h2><p>Start with the package for your distribution. The manager takes care of downloading and setting up the Android runtime on first launch.</p><a class="button button-primary" data-release-link href="https://github.com/erfanoabdi/apklayer/releases/latest">Download <span data-download-version>apklayer</span> <span aria-hidden="true">↗</span></a><a class="text-link install-docs" href="https://github.com/erfanoabdi/apklayer/blob/main/docs/INSTALL.md">Prefer to build from source? <span aria-hidden="true">↗</span></a>
+        <div class="requirements"><h3>Before you begin</h3><p>Packages target Ubuntu 24.04 (noble) and Debian 13 (trixie), on arm64 and amd64. You need a Wayland session, kernel Binder support, and compatible host EGL/GLES and buffer-sharing interfaces; Mesa is not mandatory. Use a matching Android runtime bundle for your CPU. See the <a href="#hardware">hardware requirements</a> and <a href="https://github.com/erfanoabdi/apklayer/blob/main/docs/X86_64.md">x86_64 setup notes</a>.</p></div>
+      </div>
+      <ol class="install-steps"><li><span class="step-count">01</span><div><h3>Pick your package</h3><p>Download the <code>.deb</code> for your distribution and CPU from the release page. Choose <code>noble</code> for Ubuntu or <code>trixie</code> for Debian.</p></div></li><li><span class="step-count">02</span><div><h3>Install it</h3><p>Open a terminal in your download folder.</p><pre><code>sudo apt install ./apklayer_*.deb</code></pre></div></li><li><span class="step-count">03</span><div><h3>Let the manager do its thing</h3><p>Open <strong>apklayer</strong> from your app menu, or run <code>apklayer-manager</code>. First-time runtime setup can take a few minutes. Then install an APK and make yourself at home.</p></div></li></ol>
+    </div></section>
+    <section class="community wrap" aria-labelledby="community-title"><div><span class="eyebrow">MADE IN THE OPEN</span><h2 id="community-title">A different layer.<br>A shared effort.</h2><p>Follow development, report a bug, or help make the next app work.</p></div><a class="button button-outline" href="https://github.com/erfanoabdi/apklayer">Join us on GitHub <span aria-hidden="true">↗</span></a></section>
+  </main>
+  <footer class="wrap"><a class="brand footer-brand" href="#"><img src="assets/apklayer.svg" alt="" width="36" height="36">apk<span>layer</span></a><p>Android apps. Linux windows. Free software.</p><nav aria-label="Footer navigation"><a href="https://github.com/erfanoabdi/apklayer/blob/main/LICENSE">License</a><a href="https://github.com/erfanoabdi/apklayer/issues">Issues</a><a href="releases.json">Release feed</a></nav></footer>
 </body>
 </html>
