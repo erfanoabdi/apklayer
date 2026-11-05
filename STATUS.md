@@ -8,6 +8,7 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): 
 - Halium (Volla X23, Ubuntu Touch, 2026-11-05): with `graphics = device` apps and GL games draw on the device's Mali GPU (docs/HALIUM.md); camera = device is next (PLAN (e)).
 - Window style (2026-11-05): mobile (maximized, navigation bar, phone density) or desktop, `apklayer settings set window-mode`; immersive mode done, phone window check pending (docs/PLAN.md "Mobile window style").
 - Background push (2026-11-05): `apklayer instance autostart <id> on` keeps an instance's hub up from login; alarms, jobs and boot broadcasts work with every app closed; a cloud message to a closed app wakes it (group `push`; the real microG/WhatsApp check is in PLAN "Plan: background push").
+- Halium (Volla X23, Ubuntu Touch, 2026-11-05): with `graphics = device` apps and GL games draw on the device's Mali GPU; `camera = device` works (camera2 and Camera1, Open Camera live on both cameras); vibrator, GNSS (lomiri), sensors (sensorfw), audio (PulseAudio backend) and H.264 video all run on the phone; media = device (the device's Codec2) is not working yet (docs/HALIUM.md "Hardware providers", PLAN (e)).
 - Next phase, in order: `docs/PLAN.md` "Next phase".
 
 ## How to work here
