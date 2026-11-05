@@ -38,6 +38,7 @@ std::string frameworkDependencyDir(const Layout& l) {
 std::string hostGles(const Layout& layout, const Env& env) {
     std::string cache = join(layout.runtimeHome, "apklayer-host-gles");
     if (auto cached = readFile(cache); cached && !trim(*cached).empty()) return trim(*cached);
+    if (!exists("/usr/bin/eglinfo")) return "";  // mesa-utils is only recommended (a Halium phone has none, and its GLES is the device's)
     Spawn probe;
     probe.argv = {"eglinfo", "-p", "gbm"};
     probe.env = env;

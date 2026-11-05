@@ -164,9 +164,51 @@ How to run each check (on the phone; `. ~/apklayer-dev-cam/env.sh` gives `$A`): 
 `ut-player.sh red-h264.mp4|red-tone.mp4` (`PLAYER PASS`, `player.png`), `ut-audio.sh` (the audio app's lines), and `apklayer run hello.hardware` with the default providers for vibrator, gnss and sensors.
 Test apps: `tests/apps/build.sh hello-camera hello-hardware hello-native-player hello-native-audio` on the Mac, `apklayer install` on the phone. Open Camera's API: `~/apklayer-dev-cam/ocprefs.py <camera id>` edits its preferences (camera2 or the old API).
 
-## The apt install on the phone (2026-11-05, work in progress)
+## The apt install on the phone (2026-11-05)
 The Volla X23 runs Ubuntu Touch 24.04 (noble, glibc 2.39, arm64): the normal `apklayer` deb (`tools/release/build-deb.sh noble <version> <prebuilts> out/` on the Parallels VM, also noble arm64) installs on it as it is.
-- The rootfs is `/dev/mapper/system_a`, mounted read-only, 4 GB with ~580 MB free: `sudo mount -o remount,rw /` for dpkg (and `mount -o remount,ro /` after). Debs live on the rootfs and are gone with an OTA update (reinstall); `/home` is separate and large, so the Android runtime bundle (330 MB, per user under `~/.local/share/apklayer/runtime`) stays there.
-- **Do not `apt install openjdk-21-jre-headless` on this rootfs without cleaning first**: `apt-get update` (46 MB of lists) plus the downloaded debs filled the rootfs to 100% during the test (recovered with `apt-get clean`, removing the lists and `dpkg -r` of the half-installed packages). The phone previously ran from a JDK under `~/apklayer-dev/jdk`; the test install used `dpkg -i --ignore-depends=openjdk-21-jre-headless` and `APKLAYER_NATIVE_JAVA=<jdk>/bin/java` in `~/.config/apklayer/env`. `zip` (setup-runtime.sh) came from a downloaded 171 kB deb. A JDK in `/home` that apklayer provisions itself is open (docs/PLAN.md).
-- What is automatic now (formerly `env2.sh`, binderfs by hand, symlinks): `apklayer-binder.service` (the deb's postinst enables it) makes `binder-ut`, `hwbinder-ut`, `vndbinder-ut` for the ids in `/etc/apklayer/instances` (default `ut`) and never touches the device's own `/dev/binder`; the CLI detects a Halium device (`cli/halium.cpp`: `/android/system`, binderfs, `/vendor/lib64`), makes `ut` the default instance, seeds its `providers.toml` with graphics (and camera when the vendor manifest lists a camera provider) = device, sets `PULSE_SERVER` from the session, picks the PulseAudio audio HAL (`libapklayer-hal-audio-pulse.so`, built beside the PipeWire one) when the session runs no PipeWire daemon, and finds the host binder nodes by probing (`cli/binder.cpp`). Without binderfs a kernel with only fixed `/dev/binder` nodes serves one (default) instance, never a Halium device's (those nodes are the device's).
-- First run: `apklayer setup` (docs/RELEASES.md): runtime bundle from the release (`--bundle <file>` offline), system apps, providers. Desktop entries of installed apps carry `X-Lomiri-Touch=true`, which Lomiri's drawer needs to list a non-click app (`liblomiri-app-launch` checks it; ciborium's entry has it), and the manager's entry too.
+
+Install (needs root once, as any deb on Ubuntu Touch; the rootfs is read-only and 4 GB with ~540 MB free):
+```sh
+sudo mount -o remount,rw /
+sudo apt install ./apklayer_<version>_arm64.deb     # pulls openjdk-21-jre-headless (~200 MB); `sudo apt-get clean` afterwards
+sudo mount -o remount,ro /
+```
+The rootfs is `/dev/mapper/system_a`: an OTA update replaces it, and the deb (with its Java) must be installed again; `/home` is separate and keeps the
+runtime, the apps and their data. Without the Java dependency (`dpkg -i --ignore-depends=openjdk-21-jre-headless`, as on the test phone) name a Java 21 in
+`~/.config/apklayer/env` (`APKLAYER_NATIVE_JAVA=<jdk>/bin/java`); `apklayer setup` says when there is none.
+
+What needs root, and where it happens (nothing at runtime):
+| Step | Root? | Where |
+|---|---|---|
+| binderfs | no (the device's) | lxc-android-config's `mount-android-partitions` mounts `/dev/binderfs` before sysinit; `apklayer-binder.service` is ordered after it and never mounts a second one |
+| the `ut` instance's binder nodes (`binder-ut`, `hwbinder-ut`, `vndbinder-ut`, 0666) | yes | `apklayer-binder.service` (enabled by the package; runs at install and every boot) for the ids in `/etc/apklayer/instances` (default `ut`); the device's own `/dev/binder` is never touched |
+| another instance's nodes | yes | `echo <id> \| sudo tee -a /etc/apklayer/instances && sudo systemctl restart apklayer-binder` (the command the CLI and the manager print); kept over reboots |
+| kernel modules | no | binder is built into the Halium kernel (CONFIG_ANDROID_BINDERFS=y) |
+| AppArmor | no | apps from the drawer are unconfined legacy apps (lomiri-app-launch); unprivileged user namespaces work (no restriction sysctl in this kernel) |
+| `/dev` permissions | no | the GPU, ion/dma-heap and the binder nodes the device opens to phablet already; the instance nodes are made 0666 by the unit |
+| the WebView's switch file | no (before: pkexec) | the instance's own `/data/local/tmp/webview-command-line`, written by the CLI. The old step ran `webview.sh` through pkexec, which `chmod 1777`ed `/data` (on Ubuntu Touch `/data -> /android/data`, the device's Android userdata); it only did not because the phone has no pkexec |
+| `apklayer setup` | no | everything under `~/.local/share/apklayer`, `~/.cache/apklayer`, `~/.local/share/applications` |
+
+Ubuntu Touch has polkitd and Lomiri's polkit agent (`lomiri-polkit-agent`), but no `pkexec` binary: nothing in apklayer's first run asks for it now; the
+manager's "Set up binder" (another instance, on a desktop) says what to run when pkexec is missing.
+
+What went wrong on the phone with the 0a8d50ef deb (the user's report: the manager was tiny, setup failed and never asked for a password):
+1. The runtime bundle the test install used was made from a prebuilts directory whose `android-root` and `system-apps` were symlinks into another
+   checkout (`~/wt/ut-main/prebuilts` on Parallels); `runtime-bundle.sh` copied the links. Unpacked on the phone, `android-root` pointed at
+   `/home/parallels/...` and `system-apps` was empty: `setup-runtime.sh` failed on `cp ... android-root/`, and since `Layout::detect` sets the runtime up
+   for every command, every command died, `apklayer setup` included. Now the bundle script copies through links and checks its parts, unpacking refuses an
+   incomplete bundle, an incomplete installed runtime counts as none (setup unpacks it again), and `setup` itself skips that automatic setup.
+2. The manager talked to instance `default` (hard-coded), whose binder nodes a Halium phone never has (the CLI's own default there is `ut`): the first
+   run showed "Binder devices: Missing for instance default" and offered "Set up binder", which runs pkexec (absent). `apklayer --version` now prints
+   `defaultInstance` and the manager uses it.
+3. The runtime setup and the installer ran `java` from PATH; the phone's Java is named in `~/.config/apklayer/env`: both now use the JVM apklayer resolves.
+4. Scale: Lomiri leaves the Wayland output at scale 1 (720x1560) and tells its own apps the scale through `GRID_UNIT_PX=14` (a grid unit is 8 dp: 1.75);
+   Slint's winit backend took scale 1, so the manager drew a desktop layout (navigation rail, 720 logical px wide) at desktop size. The manager sets
+   `SLINT_SCALE_FACTOR=GRID_UNIT_PX/8` when Lomiri gives one (a user's own `SLINT_SCALE_FACTOR` wins): 411 logical px wide, the compact layout with the
+   bottom navigation bar that the UI already had for widths under 600 dp.
+
+First run: `apklayer setup` (docs/RELEASES.md): binder (checked), java (checked), runtime bundle from the release (`--bundle <file>` offline), providers
+(graphics and camera = device), system apps. Desktop entries of installed apps carry `X-Lomiri-Touch=true`, which Lomiri's drawer needs to list a
+non-click app (`liblomiri-app-launch` checks it), and the manager's entry too. Other automatic Halium pieces (formerly `env2.sh`): `cli/halium.cpp`
+detects the device (`/android/system`, binderfs, `/vendor/lib64`), makes `ut` the default instance, seeds its `providers.toml`, sets `PULSE_SERVER` and
+picks the PulseAudio audio HAL; `cli/binder.cpp` probes the host binder nodes.
