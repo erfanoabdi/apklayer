@@ -17,8 +17,9 @@ export struct HwOption { key: string, value: string, default-value: string, file
 // backends[i] belongs to menu[i]; the first is "Automatic" (name "": `apklayer providers unset`)
 export struct HwBackend { name: string, options: [HwOption] }
 // a hardware domain: title, what it uses ("Automatic: sensorfw", "Chosen: fake · accel=..."), the index of the configured choice (0 automatic),
-// notes[i]: what menu[i] is or why it cannot be picked; test: its live test's button ("" none)
-export struct HwDomain { name: string, title: string, configured: string, current: int, menu: [MenuItem], backends: [HwBackend], notes: [string], test: string }
+// notes[i]: what menu[i] is; unavailable: the choices that cannot be picked here, a line each with why; test: its live test's button ("" none)
+export struct HwDomain { name: string, title: string, configured: string, current: int, menu: [MenuItem], backends: [HwBackend], notes: [string],
+                         unavailable: string, test: string }
 
 export global Backend {
     // the first run's checklist (FirstRunPage) and its choices

@@ -38,6 +38,7 @@ Every domain has the same three entry points, with `<d>` the domain (`apklayer/p
 | `const int apklayer_plugin_abi` | yes | Set it to `APKLAYER_PLUGIN_ABI` (see [ABI version](#abi-version)). |
 | `int apklayer_<d>_probe(void)` | yes | Is the hardware there? `<0` not usable on this host; `0` usable but never picked by default (fakes, test plugins); `>0` a quality score. When the user picked nothing, the domain's default is the usable plugin with the highest score. |
 | `const char apklayer_<d>_options[]` | no | The options `init` accepts, one line per option: `"key\tdefault\tkind\n"`, where kind is `text` or `file`. `apklayer providers` and the manager's Hardware page show them. |
+| `const char apklayer_<d>_needs[]` | no | What the plugin needs on the host, in a few words (`"GeoClue 2 on the system bus"`). When `probe()` answers `<0`, `apklayer providers` and the Hardware page show it as "needs ..." beside the unavailable plugin. |
 | `int apklayer_<d>_init(int count, const char *const *options)` | yes | The first call in the front: the user's options as `"key=value"` strings. Returns 0 or `-errno`. |
 
 The domain's own calls:

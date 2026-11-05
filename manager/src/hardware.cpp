@@ -101,6 +101,7 @@ std::shared_ptr<slint::VectorModel<HwDomain>> model(const Rows& rows) {
         auto menu = std::make_shared<slint::VectorModel<MenuItem>>();
         auto backends = std::make_shared<slint::VectorModel<HwBackend>>();
         auto notes = std::make_shared<slint::VectorModel<slint::SharedString>>();
+        std::string unavailable;  // the choices that cannot be picked here, a line each with why (the menu has no room for it)
         MenuItem automatic;  // `providers unset`: the best this host has, as the CLI picks it (shown with today's pick)
         automatic.text = "Automatic";
         automatic.trailing_text = slint::SharedString(d.automatic);
@@ -113,8 +114,9 @@ std::shared_ptr<slint::VectorModel<HwDomain>> model(const Rows& rows) {
         for (const auto& [name, probe, note] : d.backends) {
             MenuItem m;
             m.text = slint::SharedString(name);
-            m.trailing_text = slint::SharedString(probeText(name, probe, note));
-            m.enabled = probe.rfind("quality ", 0) == 0;  // unavailable, refused or unloadable ones are shown with why, never picked
+            m.enabled = probe.rfind("quality ", 0) == 0;  // unavailable, refused or unloadable ones are listed with why, never picked
+            m.trailing_text = slint::SharedString(m.enabled ? probeText(name, probe, note) : "not available");
+            if (!m.enabled) unavailable += (unavailable.empty() ? "" : "\n") + name + ": " + probeText(name, probe, note);
             menu->push_back(m);
             std::string sentence = note;
             if (!sentence.empty()) sentence[0] = static_cast<char>(toupper(static_cast<unsigned char>(sentence[0])));
@@ -149,6 +151,7 @@ std::shared_ptr<slint::VectorModel<HwDomain>> model(const Rows& rows) {
         h.menu = menu;
         h.backends = backends;
         h.notes = notes;
+        h.unavailable = slint::SharedString(unavailable);
         // the live test talks to apklayer's own front: not with the device's HAL, nothing when the domain is off
         h.test = slint::SharedString(k && !inUse.empty() && inUse != "off" && inUse != "device" ? k->test : "");
         out->push_back(h);

@@ -76,6 +76,12 @@ component DomainCard {
                 color: MaterialPalette.on_surface_variant;
                 wrap: word-wrap;
             }
+            if root.domain.unavailable != "" : MaterialText {
+                text: "Not available here:\n" + root.domain.unavailable;
+                style: MaterialTypography.body_small;
+                color: MaterialPalette.on_surface_variant;
+                wrap: word-wrap;
+            }
             for o in root.domain.backends[root.chosen].options : OptionField { option: o; domain: root.domain.name; backend: root.chosen; }
             HorizontalLayout {
                 alignment: start;
