@@ -45,6 +45,10 @@ final class HostInstallIntents {
         }
         if (android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES.equals(action)) {
             HubClient.current().installSource(true);
+            // Settings' "install unknown apps" page ends with RESULT_CANCELED whatever the person chose; the app rechecks canRequestPackageInstalls
+            // (Aurora Store's onboarding waits for this result before it moves on)
+            if (requester != null)
+                requester.runOnUiThread(() -> { if (!requester.isDestroyed()) ((ShadowActivity) Shadow.extract(requester)).receiveResult(intent, Activity.RESULT_CANCELED, null); });
             return true;
         }
         return false;
