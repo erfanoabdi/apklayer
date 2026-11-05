@@ -102,6 +102,10 @@ public final class Main extends Activity {
             require(Collections.list(store.aliases()).containsAll(java.util.List.of("aes", "hmac", "rsa", "ec")), "aliases " + Collections.list(store.aliases()));
             store.deleteEntry("hmac");
             require(!store.containsAlias("hmac"), "deleted alias is gone");
+            // Android has no module system: apps reflect into libcore's private fields (App Manager reads SecretKeySpec.key)
+            java.lang.reflect.Field raw = javax.crypto.spec.SecretKeySpec.class.getDeclaredField("key");
+            raw.setAccessible(true);
+            require(((byte[]) raw.get(new javax.crypto.spec.SecretKeySpec(plain, "AES"))).length == plain.length, "SecretKeySpec.key by reflection");
             System.out.println("[ks] PASS first: keys generated, used, listed, one deleted");
         } else {
             SecretKey key = (SecretKey) store.getKey("aes", null);

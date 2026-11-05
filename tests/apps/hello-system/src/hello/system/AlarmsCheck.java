@@ -7,10 +7,12 @@ import android.content.Intent;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-/** AlarmManager: an alarm 1.5 s ahead fires its broadcast; a cancelled one does not. */
+/** AlarmManager: exact alarms allowed for an app that asks for them; an alarm 1.5 s ahead fires its broadcast; a cancelled one does not. */
 final class AlarmsCheck implements Check {
     @Override public String run(Context context) throws Exception {
         AlarmManager alarms = context.getSystemService(AlarmManager.class);
+        // the manifest asks for SCHEDULE_EXACT_ALARM (Etar sends the user to its settings screen when this says no)
+        Check.require(alarms.canScheduleExactAlarms(), "canScheduleExactAlarms is false despite SCHEDULE_EXACT_ALARM");
         Intent intent = new Intent(context, AlarmReceiver.class);
         PendingIntent fire = PendingIntent.getBroadcast(context, 1, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         AlarmReceiver.fired = new CountDownLatch(1);

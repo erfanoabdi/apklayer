@@ -192,7 +192,7 @@ public final class NativeLoader {
                 for (Method m : cls.getDeclaredMethods()) {
                     if (!java.lang.reflect.Modifier.isNative(m.getModifiers()) || !m.getName().equals(parts[1])) continue;
                     String sig = descriptor(m);
-                    if (parts[2] != null && !sig.startsWith("(" + parts[2])) continue; // overload suffix
+                    if (parts[2] != null && !sig.startsWith("(" + parts[2] + ")")) continue; // overload suffix: the whole argument list ("__" is no arguments)
                     if (guest) fn = bridgeSymbol(handle, symbol, shorty(m)); // a trampoline per signature
                     if (registerNative(cls, m.getName(), sig, fn) == 0) bound++;
                 }

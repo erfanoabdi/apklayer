@@ -31,8 +31,20 @@ public final class Main {
         return loader;
     }
 
+    /** Android has no module system: app code reflects into any java.* / javax.* class of libcore (App Manager reads SecretKeySpec.key). Every such
+     *  package of java.base is opened to the unnamed modules (the app's, the sandbox's) as jvm.args opens java.lang for this call. */
+    private static void openJavaBase() {
+        Module base = Object.class.getModule();
+        try {
+            java.lang.reflect.Method open = Module.class.getDeclaredMethod("implAddOpensToAllUnnamed", String.class);
+            open.setAccessible(true);
+            for (String pkg : base.getPackages()) if (pkg.startsWith("java.") || pkg.startsWith("javax.")) open.invoke(base, pkg);
+        } catch (ReflectiveOperationException failure) { throw new IllegalStateException(failure); }
+    }
+
     public static void main(String[] args) {
         StartTrace.mark("jvm main");
+        openJavaBase();
         if (args.length == 1 && args[0].equals("--hub")) {
             AndroidSandbox sandbox = sandbox();
             try {
