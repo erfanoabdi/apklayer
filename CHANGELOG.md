@@ -4,6 +4,7 @@ Dated entries, newest first by section; this is where status history lives (STAT
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
 ## 2026-11-04: parallel rounds (instances, windows, manager, media, installer, identity, corpus with current apps)
+- 2026-11-05: corpus round, 57 current F-Droid apps on both VMs (13 new): 51 draw their first screen on both; generic fixes: java.base packages open to app code (App Manager), JNI overload suffix matches the whole argument list (StreetComplete's MapLibre), canScheduleExactAlarms follows the platform rule (Etar). Results in tests/corpus/results.md; open items in PLAN.
 - 2026-11-05: NativeLoader sends only AArch64 ELF libraries through the native bridge (a bridged app's WebView provider loads natively); OTR2 (arm64-only) runs on the x86 PC through the bridge with GLES.
 - 2026-11-05: GNSS: GeoClue 2, GeoClue 1 and lomiri-location-service backends; one hub GNSS client serving all apps only while they request gps; no mock fix before the first real one; group gnss.
 - 2026-11-05: camera: webcams with only large modes work in Camera1 and Open Camera's camera2 path (common smaller sizes, orientation 90 for desktop cameras, 8 s for a slow first frame). HostLocation keeps the gps provider when a fix arrives before the GNSS client's ready line. Sensors (sensorfw, iio) and vibrator (hfd, feedbackd, force feedback) host backends; an unset domain runs the best probe().
