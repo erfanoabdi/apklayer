@@ -23,7 +23,7 @@ permissions:
 env:
   VERSION: ${{ github.event_name == 'push' && github.ref_name || inputs.version }}  # vX.Y.Z on a tag; the v is dropped below
   PREBUILTS_REF: ${{ github.event_name == 'push' && format('prebuilts-{0}', github.ref_name) || inputs.prebuilts }}
-  BUNDLE_CPUS: arm64  # x86_64 joins once the prebuilts branch's x86_64 is fresh
+  BUNDLE_CPUS: arm64 x86_64  # x86_64: the prebuilts' x86_64 part (2026-11-04 tree build; runs the suite on the owner's PC); experimental like the amd64 debs
 
 jobs:
   deb:

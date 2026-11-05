@@ -7,6 +7,7 @@ import io
 import os
 import shutil
 import sys
+import time
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -25,9 +26,13 @@ def maven(coord):
     m2 = HOME / '.m2/repository' / rel
     if m2.is_file(): return m2.read_bytes()
     for base in (MAVEN, 'https://maven.google.com'):  # androidx.test.* and other Google artifacts are only on Google's
-        try:
-            with urllib.request.urlopen(base + '/' + rel) as r: return r.read()
-        except OSError as e: print('fetch-dep: %s/%s: %s' % (base, rel, e), file=sys.stderr)
+        for attempt in range(5):  # Maven Central answers 429 when parallel jobs fetch at once: back off and try again
+            try:
+                with urllib.request.urlopen(base + '/' + rel) as r: return r.read()
+            except OSError as e:
+                print('fetch-dep: %s/%s: %s' % (base, rel, e), file=sys.stderr)
+                if getattr(e, 'code', None) not in (429, 500, 502, 503, 504): break
+                time.sleep(2 ** attempt)
     raise SystemExit('fetch-dep: %s not found' % coord)
 
 
