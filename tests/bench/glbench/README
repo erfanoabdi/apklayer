@@ -1,0 +1,20 @@
+glbench: the same GLES 2 render loop (bench.c) natively on Linux and on Android through apklayer, to compare GPU frame rates.
+Scenes: clear (a frame's trip only), fill (full-target ALU-heavy shader; GLBENCH_ITER sets its loop, default 400), draws (2000 draw calls).
+One line per scene: fps, ms/frame (avg, p50, p95, max), CPU time drawing, and time in eglSwapBuffers (window) or the fence wait (offscreen).
+
+Native Linux (on the VM, desktop session's Wayland):
+  sh tests/bench/glbench/build-linux.sh /tmp/glbench
+  /tmp/glbench offscreen|window|window-novsync [800x600] [clear,fill,draws] [seconds]
+
+Android (tests/apps/build.sh hello-glbench on the Mac; install build/hello-glbench.apk into an instance on the VM):
+  offscreen, no app process: the APK's lib/arm64-v8a/libhello.so through btload with the instance's environment (`apklayer env`):
+    btload $APKLAYER_NATIVE/android-libs:<dir of libhello.so> libhello.so --main offscreen 800x600 clear,fill,draws 3
+  window (a SurfaceView in an 800x600 app window; SurfaceFlinger, the window sink and the shell show it):
+    python3 tests/bench/glbench/run-android.py [window,window-novsync] [scenes] [seconds]   (ends with apklayer stop)
+  the same with bpftrace attached (sudo): where eglSwapBuffers waits, the window sink's presents, the shell's shown frame rate:
+    sh tests/bench/glbench/trace-android.sh window clear 3
+    GLBENCH_TRACE=sf-offcpu.bt sh tests/bench/glbench/trace-android.sh window clear 3   (SurfaceFlinger threads' off-CPU stacks)
+  SurfaceFlinger's frame timeline: GLBENCH_DUMP=<prefix> with run-android.py, or
+    apklayer exec libapklayer_servicetool.so dump SurfaceFlinger --frametimeline -all
+Known limit: uprobes in libapklayer_surfaceflinger.so (sf-trace.bt's SurfaceFlinger probes) never fired on UTM (libui/libgui ones do);
+use the frame timeline for SurfaceFlinger's side. Results 2026-11-05: docs/PLAN.md "Graphics performance".
