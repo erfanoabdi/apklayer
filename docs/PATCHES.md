@@ -69,6 +69,7 @@ are headers meson.build adds for old toolchains, not patches.
 | 0014-native-surface-parcel | Surface parcel natives are the real ones (a Surface sent through binder) |
 | 0015-display-change-without-idle | changeDisplay(qualifiers) leaves the display-change messages to the app's run loop |
 | 0019-navigation-bar-visibility-listener | ShadowWindowManagerGlobal.applyInsets tells `NavigationBarInset` when an app hides or shows the navigation bar (immersive mode) |
+| 0019-alarm-manager-pending-intent-hook | ShadowAlarmManager: PendingIntent alarms go to a hook (the hub holds them, HubScheduler) |
 
 ## LineageOS tree (`patches/aosp/<project>/`)
 | Patch | Purpose |

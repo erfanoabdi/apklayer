@@ -19,7 +19,7 @@ import org.robolectric.RuntimeEnvironment;
 /**
  * Runs the jobs an app schedules (the service is bound through Services, as converted app code is; Robolectric's own bindService hands out no binder): after its minimum latency (or its period) the job's service is bound and started the way the system's JobSchedulerService does
  * (IJobService.startJob with parameters whose callback is ours; jobFinished unbinds, reschedules a periodic job or one that asked for it). Constraints count as met, the
- * desktop has power and network; jobs live as long as the process (persisted jobs are not restored).
+ * desktop has power and network; the hub holds the jobs (HubScheduler), so they outlive the process (persisted jobs are not restored after the hub ends).
  */
 final class HostJobs {
     private static final long BACKOFF_MS = 30_000;
@@ -29,6 +29,7 @@ final class HostJobs {
     private HostJobs() {}
 
     static synchronized void plan(JobInfo job, long delayMs) {
+        if (HubClient.connected()) { HubClient.current().scheduleJob(job, delayMs); return; }  // the hub holds it: it runs when no process of the app does (HubScheduler)
         cancel(job.getId());
         Runnable start = () -> start(job);
         PLANNED.put(job.getId(), start);
@@ -38,9 +39,13 @@ final class HostJobs {
     static void plan(JobInfo job) { plan(job, job.isPeriodic() ? job.getIntervalMillis() : job.getMinLatencyMillis()); }
 
     static synchronized void cancel(int jobId) {
+        if (HubClient.connected()) { HubClient.current().cancelJob(jobId); return; }
         Runnable planned = PLANNED.remove(jobId);
         if (planned != null) MAIN.removeCallbacks(planned);
     }
+
+    /** The hub says the job is due. */
+    static void run(JobInfo job) { start(job); }
 
     private static void start(JobInfo job) {
         synchronized (HostJobs.class) { PLANNED.remove(job.getId()); }

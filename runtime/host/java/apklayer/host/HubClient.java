@@ -222,6 +222,18 @@ public final class HubClient {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.USB_PERMISSION, request -> { request.writeString(device); request.writeBoolean(ask); }, reply -> reply.readBoolean());
     }
 
+    /** Alarms and jobs live in the hub (HubScheduler). */
+    void setAlarm(android.app.PendingIntent operation, long delayMs, long intervalMs) {
+        HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.ALARM_SET, request -> { request.writeStrongBinder(operation.getTarget().asBinder()); request.writeLong(delayMs); request.writeLong(intervalMs); }, reply -> null);
+    }
+    void cancelAlarm(android.app.PendingIntent operation) {
+        HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.ALARM_CANCEL, request -> request.writeStrongBinder(operation.getTarget().asBinder()), reply -> null);
+    }
+    void scheduleJob(android.app.job.JobInfo job, long delayMs) {
+        HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.JOB_SCHEDULE, request -> { request.writeTypedObject(job, 0); request.writeLong(delayMs); }, reply -> null);
+    }
+    void cancelJob(int jobId) { HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.JOB_CANCEL, request -> request.writeInt(jobId), reply -> null); }
+
     static synchronized HubClient attach(Context context) {
         Context app = context.getApplicationContext();  // null while Application.attach runs (LoadedApk has no Application yet): the Application itself
         if (current == null) current = new HubClient(app != null ? app : context);

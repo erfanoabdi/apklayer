@@ -150,6 +150,8 @@ final class HubBroadcasts {
         if ((intent.getFlags() & Intent.FLAG_RECEIVER_REGISTERED_ONLY) == 0) for (HubPackages.Receiver receiver : packages.receivers(intent, onlyPackage)) {
             ActivityInfo info = receiver.info();
             if (!info.enabled || !info.applicationInfo.enabled) continue;
+            // the user's storage is locked at LOCKED_BOOT_COMPLETED: only direct-boot-aware receivers see it (PackageManager's MATCH_DIRECT_BOOT filtering)
+            if (Intent.ACTION_LOCKED_BOOT_COMPLETED.equals(intent.getAction()) && !info.directBootAware) continue;
             if (info.applicationInfo.targetSdkVersion >= android.os.Build.VERSION_CODES.O && disallowBackgroundStart(intent, required)) {
                 System.out.println("[apklayer-hub] background execution not allowed: " + intent.getAction() + " to " + info.packageName + "/" + info.name); continue;
             }

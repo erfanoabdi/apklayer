@@ -19,7 +19,7 @@ int appInfo(const Layout& layout, const Instance& instance, const std::string& p
 int clearData(const Layout& layout, const Instance& instance, const std::string& package);
 // `stop <package>`: that app's launches in this instance (the window JVMs and their sinks, component hosts)
 int stopApp(const Layout& layout, const Instance& instance, const std::string& package);
-// `instances`: id, running, binder devices present, instance root
+// `instances`: id, running, binder devices present, instance root, always on (instance autostart, cli/autostart.cpp)
 void listInstances(const Layout& layout);
 // `instance create|remove <id>`
 int instanceCommand(const Layout& layout, const std::string& action, const std::string& id);

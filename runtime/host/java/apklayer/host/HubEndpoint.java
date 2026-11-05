@@ -94,6 +94,11 @@ final class HubEndpoint extends Binder {
             main.post(() -> AppHost.configurationChanged(HostConfiguration.update(settings)));
             reply.writeNoException(); return true;
         }
+        if (code == HubProtocol.ENDPOINT_JOB) {
+            android.app.job.JobInfo job = request.readTypedObject(android.app.job.JobInfo.CREATOR); request.enforceNoDataAvail();
+            main.post(() -> HostJobs.run(job));
+            reply.writeNoException(); return true;
+        }
         if (code == HubProtocol.ENDPOINT_EXIT_IF_IDLE) {
             request.enforceNoDataAvail();
             main.post(Services::exitIfIdle);

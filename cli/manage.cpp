@@ -133,7 +133,7 @@ void listInstances(const Layout& l) {
         if (!isDir(join(root, "storage")) && !isDir(join(root, "data"))) continue;  // apps/ and anything else that is not an instance
         std::string id = name == "0" ? "default" : name;
         auto pid = readFile(join(l.stateHome, "apklayer/" + id + "/stack.pid"));
-        printf("%s\t%d\t%d\t%s\n", id.c_str(), pid && alive(atoi(pid->c_str())) ? 1 : 0, exists(binderDevice(id)) ? 1 : 0, root.c_str());
+        printf("%s\t%d\t%d\t%s\t%d\n", id.c_str(), pid && alive(atoi(pid->c_str())) ? 1 : 0, exists(binderDevice(id)) ? 1 : 0, root.c_str(), exists(join(l.stateHome, "apklayer/" + id + "/autostart")) ? 1 : 0);
     }
 }
 

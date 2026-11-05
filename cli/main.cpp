@@ -4,6 +4,7 @@
 #include <set>
 #include <unistd.h>
 
+#include "autostart.h"
 #include "daemon.h"
 #include "desktop.h"
 #include "gpus.h"
@@ -38,6 +39,8 @@ int usage() {
           "  stop [package]         stop the instance's Android services (apps end with them), or one app\n"
           "  instances              id, running, binder devices, root of every instance\n"
           "  instance create|remove <id>  make an instance (prints the binder setup it still needs) or remove it with its data\n"
+          "  instance autostart <id> [on [--no-start]|off]  always-on mode: a systemd user unit starts the instance (stack and hub) at login and keeps it up, its hub never\n"
+          "                         exits when idle (background push, alarms, jobs); without on|off: prints the state\n"
           "  prop [list] | set KEY VALUE | unset KEY  the instance's Android property overrides (from its next start)\n"
           "  providers [set DOMAIN BACKEND [KEY=VALUE...] | unset DOMAIN]  the hardware providers (sensors, gnss, vibrator, camera) and their backends\n"
           "                         (rows: domain provider backend option...; backend DOMAIN NAME probe; option DOMAIN BACKEND KEY DEFAULT text|file)\n"
@@ -73,8 +76,9 @@ int main(int argc, char** argv) {
     if (args[0] == "--version") { printf("version\t%s\nconverterAbi\t%d\ndataFormat\t%d\n", kVersion, kConverterAbi, kDataFormat); return 0; }
     Layout layout = Layout::detect();
     // a command runs in apklayerd when it runs (its processes are then the daemon's); the internal ones and the daemon itself stay here
+    bool autostart = args.size() >= 3 && args[0] == "instance" && args[1] == "autostart";  // systemctl --user is the user's, not apklayerd's
     static const std::set<std::string> kLocal = {"daemon", "stack-daemon", "stack", "exec", "sandbox-exec", "app-spare", "env"};
-    if (int status = 0; !inDaemon && !kLocal.count(args[0]) && forwardToDaemon(layout, full, &status)) return status;
+    if (int status = 0; !inDaemon && !autostart && !kLocal.count(args[0]) && forwardToDaemon(layout, full, &status)) return status;
     if (args[0] == "daemon") return runDaemon(layout, args.size() == 2 && args[1] == "--on-demand");
     migrateData(layout);
     Instance inst = Instance::open(layout, id);
@@ -112,6 +116,7 @@ int main(int argc, char** argv) {
     if (cmd == "clear-data" && n == 2) return clearData(layout, inst, args[1]);
     if (cmd == "stop" && n == 2) return stopApp(layout, inst, args[1]);
     if (cmd == "instances") { listInstances(layout); return 0; }
+    if (cmd == "instance" && n >= 3 && args[1] == "autostart") return autostartCommand(layout, std::vector<std::string>(args.begin() + 2, args.end()));
     if (cmd == "instance" && n == 3) return instanceCommand(layout, args[1], args[2]);
     if (cmd == "providers") return providersCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "settings") return settingsCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));

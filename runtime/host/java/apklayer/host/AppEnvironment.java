@@ -41,6 +41,7 @@ final class AppEnvironment {
         System.setProperty("java.vm.name", "Dalvik");  // libgdx, Netty ... pick their Android code path (native libraries through System.loadLibrary) by these names
         System.setProperty("java.runtime.name", "Android Runtime");
         HostCompat.install();  // behavior changes by the app's target SDK (PendingIntent mutability, ...)
+        HostAlarms.install();  // PendingIntent alarms live in the hub, which fires them with no app process running (HubScheduler)
         org.robolectric.shadows.ShadowAlarmManager.setAutoSchedule(true);  // an alarm fires its PendingIntent or listener when its time comes (Robolectric only records it otherwise)
         HostLibraryPath.install();  // before the app's own code runs: SoLoader finds the system libraries it looks up by name
         // android.util.Log output: the terminal too with -Dapklayer.logcat=true (APKLAYER_LOGCAT=1), else only the launch's app log (`apklayer logs`)

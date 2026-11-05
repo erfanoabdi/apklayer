@@ -21,6 +21,9 @@ final class HubStartedServices {
 
     HubStartedServices(HubDirectory directory, HubPackages packages, HubBroadcasts broadcasts) { this.directory = directory; this.packages = packages; this.broadcasts = broadcasts; }
 
+    /** Whether a started service is running (or waits to restart). */
+    boolean any() { synchronized (started) { return !started.isEmpty(); } }
+
     /** The started service's name; null when there is no such service. */
     ComponentName start(HubDirectory.Peer caller, Intent intent) {
         ServiceInfo info = packages.service(intent);

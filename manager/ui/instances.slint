@@ -1,5 +1,5 @@
 // Instances: each an Android of its own (binder devices, /data, /storage, property store). Selecting one points every other page at it.
-import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, ScrollView, IconButton, OutlinedCard, DropDownMenu } from "@material";
+import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, ScrollView, IconButton, OutlinedCard, DropDownMenu, Switch } from "@material";
 import { Backend, AppIcons } from "backend.slint";
 import { Row, Tag, Heading } from "widgets.slint";
 
@@ -23,12 +23,19 @@ export component InstancesPage {
                 }
                 for inst in Backend.instances : Row {
                     text: inst.id;
-                    supporting-text: (inst.running ? "Running" : "Stopped") + (inst.binder ? "" : " · binder devices missing");
+                    supporting-text: (inst.running ? "Running" : "Stopped") + (inst.autostart ? " · always on" : "") + (inst.binder ? "" : " · binder devices missing");
                     icon: inst.binder ? AppIcons.layers : AppIcons.admin;
                     selected: inst.id == Backend.instance;
                     clicked => { Backend.select-instance(inst.id); }
                     if inst.id == Backend.instance : Tag { text: "Selected"; strong: true; }
                     if !inst.binder : IconButton { icon: AppIcons.admin; tooltip: "Set up binder devices"; clicked => { Backend.setup-binder(inst.id); } }
+                    if inst.binder : Switch {
+                        width: MaterialStyleMetrics.size_52;
+                        checked: inst.autostart;
+                        enabled: !Backend.busy;
+                        accessible-label: "Always on: start " + inst.id + " at login and keep it up (background push, alarms)";
+                        checked-state-changed(on) => { Backend.set-autostart(inst.id, on); }
+                    }
                     if inst.running : IconButton { icon: AppIcons.stop; tooltip: "Stop"; clicked => { Backend.stop-instance(inst.id); } }
                     if inst.id != "default" : IconButton { icon: AppIcons.delete; tooltip: "Remove"; enabled: !Backend.busy; clicked => { root.confirm("remove-instance", inst.id); } }
                 }

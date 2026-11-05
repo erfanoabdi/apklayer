@@ -39,6 +39,9 @@ public final class HubHost {
         StartTrace.mark("hub: battery, vibrator, usb");
         System.out.println("[apklayer-hub] READY pid=" + android.os.Process.myPid());
         new Thread(() -> HubBootSettings.write(RuntimeEnvironment.getApplication(), directory), "hub-boot-settings").start();  // the hub is the instance's system (uid 1000)
+        Thread boot = new Thread(() -> HubBootBroadcasts.sendOnce(directory), "hub-boot-broadcasts");  // after the boot settings, once per stack start
+        boot.setDaemon(true);
+        boot.start();
         directory.hostSettings = new HubHostSettings(RuntimeEnvironment.getApplication(), directory);
         Thread settings = new Thread(directory.hostSettings::watch, "hub-host-settings");
         settings.setDaemon(true);

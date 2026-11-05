@@ -19,6 +19,10 @@ final class HubDirectory extends Binder {
     void sendSystem(Intent intent, boolean sticky) {
         broadcasts.send(SYSTEM, intent, null, 0, null, null, null, false, sticky, 0);
     }
+    /** A broadcast from the system to receivers holding a permission (the boot broadcasts). */
+    void sendSystem(Intent intent, String requiredPermission) {
+        broadcasts.send(SYSTEM, intent, null, 0, null, null, new String[] {requiredPermission}, false, false, 0);
+    }
     /** An activity the system starts (HubUsb's attach intent). */
     void startSystem(Intent intent) { activities.start(SYSTEM, intent, null); }
     record Peer(int pid, int uid, String name, IBinder endpoint, IBinder appThread, boolean headless, int appUid, String instance) {}
@@ -33,6 +37,7 @@ final class HubDirectory extends Binder {
     private final HubStartedServices startedServices;
     private final HubPendingIntents pendingIntents;
     private final HubNotifications notifications;
+    private final HubScheduler scheduler;
     private final HubAccounts accounts;
     private final HubInstaller installer;
     private final HubInputMethods inputMethods;
@@ -49,6 +54,7 @@ final class HubDirectory extends Binder {
     HubDirectory(Path apps) {
         packages = new HubPackages(apps); bindings = new HubServiceBindings(this, packages); broadcasts = new HubBroadcasts(this, packages); providers = new HubProviders(this, packages, broadcasts); activities = new HubActivities(this, packages, providers); startedServices = new HubStartedServices(this, packages, broadcasts); pendingIntents = new HubPendingIntents(this, broadcasts, activities, startedServices);
         notifications = new HubNotifications(packages, pendingIntents);
+        scheduler = new HubScheduler(pendingIntents, broadcasts);
         inputMethods = new HubInputMethods(bindings, packages);
         // the instance's own data directory (the volumes' parent): accounts belong to the instance, as /data/system_ce does to a device
         accounts = new HubAccounts(this, bindings, packages, new HubAuthenticators(apps, packages), Path.of(System.getProperty("apklayer.storage")).getParent().resolve("accounts.json"));
@@ -72,6 +78,8 @@ final class HubDirectory extends Binder {
             catch (Exception stuck) { process.descendants().forEach(ProcessHandle::destroyForcibly); process.destroyForcibly(); }
         }
     }
+    /** `apklayer instance autostart <id> on`: the instance's hub (and what it holds: alarms, jobs, started services) stays up with nobody connected. */
+    boolean alwaysOn() { return Files.exists(logs.resolve("autostart")); }
     /** The hub ends once nothing is connected or being started (an auto-started hub belongs to the apps that use it). */
     private void exitWhenIdle(long delayMs) {
         Thread timer = new Thread(() -> {
@@ -80,6 +88,7 @@ final class HubDirectory extends Binder {
             synchronized (hosts) { busy = hosts.values().stream().anyMatch(Process::isAlive); }
             synchronized (appProcesses) { busy |= appProcesses.values().stream().anyMatch(Process::isAlive); }
             busy |= installer.busy();
+            busy |= startedServices.any() || alwaysOn();  // a started service (microG's push connection) and an always-on instance keep the hub
             synchronized (peers) {  // decided under the registration lock: a process that registers after this is refused and waits for the next hub
                 if (busy || !peers.isEmpty()) return;
                 stopping = true;
@@ -383,6 +392,22 @@ final class HubDirectory extends Binder {
                 Peer caller = caller(); String tag = request.readString(); int id = request.readInt(); boolean all = request.readBoolean(); request.enforceNoDataAvail();
                 notifications.cancel(caller, tag, id, all);
                 reply.writeNoException(); return true;
+            }
+            case HubProtocol.ALARM_SET -> {
+                Peer caller = caller(); IBinder operation = request.readStrongBinder(); long delay = request.readLong(), interval = request.readLong(); request.enforceNoDataAvail();
+                scheduler.setAlarm(caller, operation, delay, interval); reply.writeNoException(); return true;
+            }
+            case HubProtocol.ALARM_CANCEL -> {
+                Peer caller = caller(); IBinder operation = request.readStrongBinder(); request.enforceNoDataAvail();
+                scheduler.cancelAlarm(caller, operation); reply.writeNoException(); return true;
+            }
+            case HubProtocol.JOB_SCHEDULE -> {
+                Peer caller = caller(); android.app.job.JobInfo job = request.readTypedObject(android.app.job.JobInfo.CREATOR); long delay = request.readLong(); request.enforceNoDataAvail();
+                scheduler.scheduleJob(caller, job, delay); reply.writeNoException(); return true;
+            }
+            case HubProtocol.JOB_CANCEL -> {
+                Peer caller = caller(); int id = request.readInt(); request.enforceNoDataAvail();
+                scheduler.cancelJob(caller, id); reply.writeNoException(); return true;
             }
             case HubProtocol.LIST_PACKAGES -> {
                 caller(); request.enforceNoDataAvail();

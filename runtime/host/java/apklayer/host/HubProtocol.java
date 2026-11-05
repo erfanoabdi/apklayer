@@ -25,9 +25,13 @@ final class HubProtocol {
             BLUETOOTH = 44,  // {address, uuid} (both null: a session) -> two descriptors to a BlueZ helper (HubBluetooth)
             USB_PERMISSION = 45,  // {device name, ask} -> whether the caller may open the USB device (HubUsb); ask: the person decides now
             GNSS = 46,  // {follow} -> true: a pipe of the gps fixes from the hub's one GNSS HAL client (HubGnss); false: the caller's pipes end (null)
-            PI_SEND_FOR_RESULT = 47;  // {sender, fill-in, ResultReceiver} -> status: Activity.startIntentSenderForResult (an activity PendingIntent answers the receiver)
+            PI_SEND_FOR_RESULT = 47,  // {sender, fill-in, ResultReceiver} -> status: Activity.startIntentSenderForResult (an activity PendingIntent answers the receiver)
+            ALARM_SET = 48,  // {operation (a hub PendingIntent), delay ms, interval ms}: HubScheduler fires it even when no app process runs
+            ALARM_CANCEL = 49,  // {operation}
+            JOB_SCHEDULE = 50,  // {JobInfo, delay ms}: HubScheduler has the app run the job (ENDPOINT_JOB) when due
+            JOB_CANCEL = 51;  // {job id}
             // RELAUNCH: `apklayer run` of a running app (the CLI, through servicetool call): {package, intent file or ""} -> 0 delivered, 1 not running
-    static final int ENDPOINT_BIND = 1, ENDPOINT_UNBIND = 2, ENDPOINT_START = 3, ENDPOINT_STOP = 4, ENDPOINT_GET_PROVIDER = 5, ENDPOINT_NOTIFY = 6, ENDPOINT_START_ACTIVITY = 7, ENDPOINT_EXIT_IF_IDLE = 8, ENDPOINT_PACKAGE_CHANGED = 9, ENDPOINT_CONFIGURATION = 10;
+    static final int ENDPOINT_BIND = 1, ENDPOINT_UNBIND = 2, ENDPOINT_START = 3, ENDPOINT_STOP = 4, ENDPOINT_GET_PROVIDER = 5, ENDPOINT_NOTIFY = 6, ENDPOINT_START_ACTIVITY = 7, ENDPOINT_EXIT_IF_IDLE = 8, ENDPOINT_PACKAGE_CHANGED = 9, ENDPOINT_CONFIGURATION = 10, ENDPOINT_JOB = 11;
     private HubProtocol() {}
     static <T> T call(IBinder target, String descriptor, int code, Consumer<Parcel> write, Function<Parcel, T> read) {
         Parcel request = Parcel.obtain(), reply = Parcel.obtain();

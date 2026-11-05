@@ -108,6 +108,7 @@ public:
             e.running = field(r, 1) == "1";
             e.binder = field(r, 2) == "1";
             e.root = slint::SharedString(field(r, 3));
+            e.autostart = field(r, 4) == "1";
             instances->push_back(e);
             if (field(r, 0) == cli_.instance) running = field(r, 1) == "1";
         }
@@ -341,6 +342,7 @@ private:
                       refresh();
                   });
         });
+        b.on_set_autostart([this](slint::SharedString id, bool on) { action(on ? "Turning always-on mode on" : "Turning always-on mode off", {"instance", "autostart", std::string(id), on ? "on" : "off"}, std::string(id)); });
         b.on_stop_instance([this](slint::SharedString id) { action("Stopping the instance", {"stop"}, std::string(id)); });
         b.on_set_gpu([this](int i) {
             if (i < 0 || i >= static_cast<int>(gpuIds_.size())) return;

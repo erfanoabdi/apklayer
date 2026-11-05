@@ -3,7 +3,7 @@ import { MenuItem } from "@material";
 
 // system: a system app (`apklayer install --system`); in-drawer: its launcher shows in the desktop's app drawer
 export struct AppEntry { package: string, label: string, version: string, icon: image, running: bool, system: bool, in-drawer: bool }
-export struct InstanceEntry { id: string, running: bool, binder: bool, root: string }
+export struct InstanceEntry { id: string, running: bool, binder: bool, root: string, autostart: bool }
 export struct PropEntry { key: string, value: string, source: string, live: string }
 export struct InfoEntry { key: string, value: string }
 // `apklayer permissions`: runtime ones (dangerous) can be granted and revoked; state: what the others' grant is ("Granted", "Not granted", ...)
@@ -77,6 +77,7 @@ export global Backend {
     callback remove-instance(string);
     callback setup-binder(string);         // pkexec the setup script
     callback stop-instance(string);
+    callback set-autostart(string, bool);  // always-on mode (`apklayer instance autostart`): the instance starts at login and its hub never exits when idle
     callback set-gpu(int);                 // index into gpus: `apklayer gpu set`, then the instance's stack restarts
     callback set-prop(string, string);
     callback unset-prop(string);
