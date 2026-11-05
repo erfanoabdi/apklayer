@@ -18,7 +18,7 @@ ENV = dict(instance.ENV, APKLAYER_NATIVE_MEDIA_PARCELS='1', APKLAYER_DEBUG_INPUT
     APKLAYER_JOPTS='-Dapklayer.nativemedia=true -Dapklayer.nativeaudio=true -Dapklayer.nativeparcels=true -Dapklayer.nativeplayer=true -Dhello.asset=' + os.environ.get('PLAYER_ASSET', 'red-h264.mp4') + ' -Dapklayer.runms=20000')
 extra = Path.home() / '.apklayer-extra-jopts'  # regression runs with a feature flag (e.g. -Dapklayer.realbinder=true): the file holds the extra options
 if extra.exists(): ENV['APKLAYER_JOPTS'] += ' ' + extra.read_text().strip()
-ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-media.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-audio.so'
+ENV['APKLAYER_HOST_LIBS'] = ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-graphics.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-hal-media.so:' + ENV['APKLAYER_NATIVE'] + '/libapklayer-audio-pipewire.so'
 
 def stop():
     subprocess.run(['bin/apklayer', 'stop'], env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
