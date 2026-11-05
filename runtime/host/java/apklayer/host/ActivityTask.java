@@ -69,6 +69,9 @@ final class ActivityTask {
         if (done != null) {
             ShadowActivity answered = Shadow.extract(done);
             HubActivityClient.answer(resultTo, answered.getResultCode(), answered.getResultIntent());
+            // its answer is final and nothing of this process is on screen: no trampoline grace, the process (and its window, still the
+            // splash) ends now, as Android removes the starting window (microG's GamesSignInActivity without an account over OTR2)
+            if (stack.isEmpty()) graceUntilMs = 0;
         } else if (!stack.isEmpty()) hubResults.put(stack.peek().get(), resultTo);
     }
 
