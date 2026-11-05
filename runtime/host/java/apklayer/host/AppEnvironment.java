@@ -316,7 +316,7 @@ final class AppEnvironment {
         HostStorage.install(app);
         HostTrust.install();  // the default trust manager with the host-aware check Android's callers (Chromium, X509TrustManagerExtensions) need
         HostLocation.install(app);
-        HostSystemConfig.load().apply(app);  // features, privileged-permission allowlist and default grants of the build
+        HostSystemConfig.cached().apply(app);  // features, privileged-permission allowlist and default grants of the build
         if (Boolean.getBoolean("apklayer.debugdata")) {
             SharedPreferences prefs = app.getSharedPreferences("apklayer_probe", 0);
             int launches = prefs.getInt("launches", 0) + 1;

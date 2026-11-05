@@ -74,8 +74,9 @@ final class HostSharedLibraries {
     record Resolved(List<Path> jars, List<String> unknown, List<String> absent) {}
 
     static Resolved resolve(Map<String, Boolean> libs) {
-        Map<String, HostSystemConfig.Library> known = HostSystemConfig.load().libraries;
         List<Path> jars = new ArrayList<>();
+        if (libs.isEmpty()) return new Resolved(jars, List.of(), List.of());
+        Map<String, HostSystemConfig.Library> known = HostSystemConfig.cached().libraries;
         List<String> unknown = new ArrayList<>(), absent = new ArrayList<>();
         for (Map.Entry<String, Boolean> lib : libs.entrySet()) add(lib.getKey(), lib.getValue(), known, jars, unknown, absent, 0);
         return new Resolved(jars, unknown, absent);
@@ -84,7 +85,8 @@ final class HostSharedLibraries {
     private static void add(String name, boolean required, Map<String, HostSystemConfig.Library> known, List<Path> jars, List<String> unknown,
             List<String> absent, int depth) {
         HostSystemConfig.Library lib = known.get(name);
-        if (lib == null) { if (required) unknown.add(name); return; }  // an optional library the device lacks is skipped, as Android does
+        // an optional library the device lacks is skipped, as Android does; without a system configuration (no ANDROID_ROOT) nothing is known
+        if (lib == null) { if (required && !known.isEmpty()) unknown.add(name); return; }
         if (depth < 8) for (String dependency : lib.dependencies()) add(dependency, required, known, jars, unknown, absent, depth + 1);
         Path jar = HostSystemConfig.systemPath(lib.file());
         if (jar == null || !jar.toFile().isFile()) { if (required) absent.add(name); return; }

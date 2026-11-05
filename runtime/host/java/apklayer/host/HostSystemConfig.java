@@ -42,6 +42,15 @@ final class HostSystemConfig {
         return java.nio.file.Path.of(root, devicePath.substring("/system/".length()));
     }
 
+    private static volatile HostSystemConfig cached;
+
+    /** This process's configuration, read once (an app process reads it for its shared libraries, then for its features and grants). */
+    static HostSystemConfig cached() {
+        HostSystemConfig config = cached;
+        if (config == null) cached = config = load();
+        return config;
+    }
+
     static HostSystemConfig load() {
         HostSystemConfig config = new HostSystemConfig();
         String root = System.getenv("ANDROID_ROOT");
