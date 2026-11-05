@@ -62,6 +62,10 @@ final class AppMetadata {
             info.setProperty("authorities", providers == null ? "" : String.join(";", java.util.Arrays.stream(providers).map(p -> p.authority).filter(java.util.Objects::nonNull).toList()));  // read at launch before the manifest is parsed (AppEnvironment)
             String[] requested = pm.getPackageInfo(app.getPackageName(), PackageManager.GET_PERMISSIONS).requestedPermissions;
             info.setProperty("permissions", requested == null ? "" : String.join(";", requested));  // the manager's permission list (apklayer permissions)
+            // <uses-library>: install refuses a required one the build does not know (INSTALL_FAILED_MISSING_SHARED_LIBRARY); the CLI reads "missingLibraries"
+            HostSharedLibraries.Resolved libs = HostSharedLibraries.resolve(HostSharedLibraries.used(dir.resolve("base.apk").toFile(), app.getApplicationInfo().targetSdkVersion));
+            info.setProperty("missingLibraries", String.join(";", libs.unknown()));
+            for (String absent : libs.absent()) System.out.println("[apklayer] warning: " + app.getPackageName() + " requires the shared library " + absent + ", which this runtime has no classes for");
             signer(info, dir, app.getPackageName());
             Files.createDirectories(dir);
             try (Writer out = Files.newBufferedWriter(dir.resolve("info.properties"))) {

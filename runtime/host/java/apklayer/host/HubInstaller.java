@@ -203,7 +203,7 @@ final class HubInstaller {
         String output = run(command, exit);
         delete(request.staged);
         if (exit[0] != 0) {
-            int status = exit[0] == 3 ? PackageInstaller.STATUS_FAILURE_CONFLICT : exit[0] == 4 || exit[0] == 5 ? PackageInstaller.STATUS_FAILURE_INVALID : PackageInstaller.STATUS_FAILURE;  // cli/apps.h kInstall*
+            int status = exit[0] == 3 ? PackageInstaller.STATUS_FAILURE_CONFLICT : exit[0] == 4 || exit[0] == 5 ? PackageInstaller.STATUS_FAILURE_INVALID : exit[0] == 6 ? PackageInstaller.STATUS_FAILURE_INCOMPATIBLE : PackageInstaller.STATUS_FAILURE;  // cli/apps.h kInstall*
             send(request.status, request.sessionId, request.pkg, status, output, null);
             return;
         }

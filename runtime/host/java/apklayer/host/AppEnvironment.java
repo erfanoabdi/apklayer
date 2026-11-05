@@ -68,6 +68,7 @@ final class AppEnvironment {
         sandbox.getTestEnvironment().setUpApplicationState("apklayer", configuration(describing), manifest);
         StartTrace.mark("robolectric application state set up");
         HostClock.alignToMonotonic();  // after the clock's reset by the state setup
+        if (!describing) HostSharedLibraries.install(apk);  // before any class of the app loads: <uses-library> jars (org.apache.http.legacy) on its class path
         HostProcessName.install(apk);  // before the Application is attached: Application.onCreate runs in every process, and apps check which one they are in
         NativeProcess.install();
         // before any class of the app is initialised (the lazy Application among them): static initialisers read Build (OpenVPN returns from
@@ -206,6 +207,32 @@ final class AppEnvironment {
         }
     }
 
+    private static final java.util.concurrent.ConcurrentHashMap<String, String> stablePaths = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * A data directory of the app by its real path: Robolectric names the links persistDataDirs made in its per-run temp directory
+     * (robolectric-apklayer<random>/<package>-dataDir), a path that is gone at the next launch. Apps keep absolute paths in their own
+     * databases and preferences (JW Library: its MEPS database's path), as /data/user/0/<package> stays the same on Android.
+     */
+    static String stableDataPath(String path) {
+        if (path == null || System.getProperty("apklayer.data") == null) return path;
+        return stablePaths.computeIfAbsent(path, p -> {
+            try {
+                Path temp = RuntimeEnvironment.getTempDirectory().getBasePath();
+                Path dir = Path.of(p);
+                return dir.startsWith(temp) && Files.exists(dir) ? dir.toRealPath().toString() : p;
+            } catch (IOException | RuntimeException unknown) { return p; }
+        });
+    }
+
+    /** The data directories an ApplicationInfo of the app names, by their real paths (stableDataPath). */
+    static void stableDataDirs(android.content.pm.ApplicationInfo info) {
+        if (info == null) return;
+        info.dataDir = stableDataPath(info.dataDir);
+        info.credentialProtectedDataDir = stableDataPath(info.credentialProtectedDataDir);
+        info.deviceProtectedDataDir = stableDataPath(info.deviceProtectedDataDir);
+    }
+
     /** A system app's own ApplicationInfo carries FLAG_SYSTEM (`apklayer install --system`, passed as -Dapklayer.system), as other apps see it from the hub. */
     static void markSystem(android.content.pm.ApplicationInfo info) {
         if (info != null && Boolean.getBoolean("apklayer.system")) info.flags |= android.content.pm.ApplicationInfo.FLAG_SYSTEM;
@@ -289,7 +316,7 @@ final class AppEnvironment {
         HostStorage.install(app);
         HostTrust.install();  // the default trust manager with the host-aware check Android's callers (Chromium, X509TrustManagerExtensions) need
         HostLocation.install(app);
-        HostSystemConfig.load().apply(app);  // features, privileged-permission allowlist and default grants of the build
+        HostSystemConfig.cached().apply(app);  // features, privileged-permission allowlist and default grants of the build
         if (Boolean.getBoolean("apklayer.debugdata")) {
             SharedPreferences prefs = app.getSharedPreferences("apklayer_probe", 0);
             int launches = prefs.getInt("launches", 0) + 1;

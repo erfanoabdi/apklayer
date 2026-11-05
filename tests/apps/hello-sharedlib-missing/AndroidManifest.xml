@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- requires a library no build has: install refuses it (INSTALL_FAILED_MISSING_SHARED_LIBRARY); carried in hello-sharedlib's assets -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="hello.sharedlib.missing">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34"/>
+  <application android:label="sharedlib-missing">
+    <uses-library android:name="com.example.not.on.this.device"/>
+    <activity android:name="hello.sharedlibmissing.Main" android:exported="true"/>
+  </application>
+</manifest>

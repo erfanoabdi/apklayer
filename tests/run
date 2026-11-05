@@ -5,6 +5,7 @@ Pushes the working tree to the VM and builds it once, builds and installs the gr
 import argparse
 import os
 import concurrent.futures
+import signal
 import subprocess
 import sys
 import threading
@@ -64,6 +65,28 @@ def prepare(groups, slots):
     say('prepared (push, build, %d apps) in %.0f s' % (len(apps), time.monotonic() - t))
 
 
+SILENCE_S = int(os.environ.get('APKLY_SILENCE', 300))  # a group command whose log does not grow this long is hung (groups.toml: silence = N)
+
+
+def run_watched(argv, out, silence):
+    """The command's exit status; a command that writes nothing to its log for `silence` seconds is ended (HUNG in the log, a failure).
+    The instance stop after the group then ends what it left on the VM."""
+    proc = subprocess.Popen(argv, cwd=vm.REPO, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
+    size, quiet_since = -1, time.monotonic()
+    while True:
+        try: return proc.wait(timeout=5)
+        except subprocess.TimeoutExpired: pass
+        now_size = os.fstat(out.fileno()).st_size
+        if now_size != size: size, quiet_since = now_size, time.monotonic()
+        elif time.monotonic() - quiet_since > silence:
+            os.killpg(proc.pid, signal.SIGTERM)
+            try: proc.wait(timeout=10)
+            except subprocess.TimeoutExpired: os.killpg(proc.pid, signal.SIGKILL); proc.wait()
+            out.write('HUNG: no output for %d s, ended (tests/run silence limit; groups.toml silence = N to raise it)\n' % silence)
+            out.flush()
+            return -1
+
+
 def run_group(name, slot):
     group = GROUPS[name]
     t = time.monotonic()
@@ -75,7 +98,7 @@ def run_group(name, slot):
         for command, argv in commands:
             out.write('$ ' + command + '\n')
             out.flush()
-            if subprocess.run(argv, cwd=vm.REPO, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL).returncode != 0:
+            if run_watched(argv, out, group.get('silence', SILENCE_S)) != 0:
                 ok = False
                 break
         vm.ssh(env + 'python3 -c "import sys; sys.path.insert(0, \'tests/lib\'); import instance; instance.stop()"', stdout=out, stderr=subprocess.STDOUT)

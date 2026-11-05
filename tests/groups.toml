@@ -123,6 +123,11 @@ run = ["python3 -u tests/vm/hub.py services start", "python3 -u tests/vm/hub.py 
        "python3 -u tests/vm/hub.py services late", "python3 -u tests/vm/hub.py services oneway", "python3 -u tests/vm/hub.py services respawn",
        "python3 -u tests/vm/hub.py services rebind", "python3 -u tests/vm/hub.py services framework", "python3 -u tests/vm/hub.py services stoplock"]
 
+[sharedlib]
+# <uses-library> and the implicit libraries by target SDK (HostSharedLibraries); hello-sharedlib carries hello-sharedlib-missing (install refuses it)
+apps = ["hello-sharedlib", "hello-sharedlib-old"]
+run = ["tests/vm/sharedlib.sh"]
+
 [installer]
 apps = ["hello-installer", "hello-legacy-receiver"]  # hello-installer carries the payload APKs (hello-payload with config and ABI splits, hello-payload2, hello-payload-other, hello-installer2) as assets
 run = ["python3 -u tests/vm/installer.py"]

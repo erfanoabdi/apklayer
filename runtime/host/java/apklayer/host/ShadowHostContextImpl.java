@@ -143,8 +143,14 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
             info.nativeLibraryDir = libdir;
             info.primaryCpuAbi = HostBuild.appAbi();
         }
-        if (info != null && real.getPackageName().equals(info.packageName)) AppEnvironment.markSystem(info);
+        if (info != null && real.getPackageName().equals(info.packageName)) { AppEnvironment.markSystem(info); HostSharedLibraries.record(info); AppEnvironment.stableDataDirs(info); }
         return info;
+    }
+    /** The app's data directory by its real path (AppEnvironment.stableDataPath): its files, databases and caches keep their paths from launch to launch. */
+    @Implementation protected java.io.File getDataDir() {
+        java.io.File dir = real("getDataDir");
+        String stable = dir == null ? null : AppEnvironment.stableDataPath(dir.getPath());
+        return dir == null || stable.equals(dir.getPath()) ? dir : new java.io.File(stable);
     }
     @Implementation @Override protected void sendBroadcast(Intent intent) {
         if (hub()) real("sendBroadcast", ClassParameter.from(Intent.class, intent)); else super.sendBroadcast(intent);

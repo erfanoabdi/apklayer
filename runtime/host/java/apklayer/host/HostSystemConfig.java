@@ -27,9 +27,29 @@ final class HostSystemConfig {
     final Map<String, Set<String>> defaultGrants = new HashMap<>();
     final Map<String, String> levels = new HashMap<>();  // permission -> normal | dangerous | appop | signature
     final Set<String> implicitBroadcasts = new HashSet<>();  // <allow-implicit-broadcast>: actions that still reach manifest receivers of apps targeting 26+
+    final Map<String, Library> libraries = new HashMap<>();  // <library>: the shared libraries apps may use (HostSharedLibraries)
+
+    /** A {@code <library name file dependency>}: its jar's path on a device, the libraries it needs. */
+    record Library(String file, List<String> dependencies) {}
 
     /** The features of the last configuration applied (ShadowHostPackageManager lists them). */
     static volatile java.util.Set<String> loadedFeatures = java.util.Set.of();
+
+    /** A device path under /system ("/system/framework/x.jar") in this build's root (ANDROID_ROOT: <native>/android-root/system), or null. */
+    static java.nio.file.Path systemPath(String devicePath) {
+        String root = System.getenv("ANDROID_ROOT");
+        if (root == null || devicePath == null || !devicePath.startsWith("/system/")) return null;
+        return java.nio.file.Path.of(root, devicePath.substring("/system/".length()));
+    }
+
+    private static volatile HostSystemConfig cached;
+
+    /** This process's configuration, read once (an app process reads it for its shared libraries, then for its features and grants). */
+    static HostSystemConfig cached() {
+        HostSystemConfig config = cached;
+        if (config == null) cached = config = load();
+        return config;
+    }
 
     static HostSystemConfig load() {
         HostSystemConfig config = new HostSystemConfig();
@@ -65,6 +85,10 @@ final class HostSystemConfig {
         for (Element feature : children(root, "feature")) features.add(feature.getAttribute("name"));
         for (Element feature : children(root, "unavailable-feature")) unavailable.add(feature.getAttribute("name"));
         for (Element broadcast : children(root, "allow-implicit-broadcast")) implicitBroadcasts.add(broadcast.getAttribute("action"));
+        for (Element library : children(root, "library")) {
+            String dependency = library.getAttribute("dependency");
+            libraries.put(library.getAttribute("name"), new Library(library.getAttribute("file"), dependency.isEmpty() ? List.of() : List.of(dependency.split(":"))));
+        }
         for (Element app : children(root, "privapp-permissions")) {
             String pkg = app.getAttribute("package");
             for (Element permission : children(app, "permission")) privileged.computeIfAbsent(pkg, k -> new HashSet<>()).add(permission.getAttribute("name"));

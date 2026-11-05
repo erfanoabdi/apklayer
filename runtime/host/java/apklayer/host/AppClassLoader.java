@@ -25,8 +25,19 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
     private static final String[] PLATFORM = {"java.", "javax.", "android.", "dalvik.", "libcore.", "com.android.", "org.json.", "org.w3c.dom.",
             "org.xml.sax.", "org.xmlpull.", "org.apache.harmony.", "sun.", "jdk.", "org.robolectric.", "apklayer."};
 
+    /** The shared libraries the app uses (HostSharedLibraries: org.apache.http.legacy ...), or null: as on Android their loader comes before the app's. */
+    private volatile AppClassLoader libraries;
+
     public AppClassLoader(String name, Path[] jars, ClassLoader parent) {
         super(name, urls(jars), parent);
+    }
+
+    /**
+     * Puts the app's shared libraries in front of its own classes and of the sandbox: the sandbox's jars carry "Stub!" copies of their classes
+     * (org.apache.http.*, android.net.http.*), which must not win. None of them is a class of the framework itself. Called before any app class loads.
+     */
+    public void addLibraries(Path[] jars) {
+        libraries = new AppClassLoader(getName() + "-libraries", jars, getParent());
     }
 
     private static URL[] urls(Path[] jars) {
@@ -47,8 +58,10 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
         name = name.replace('/', '.');  // ... and binary names with slashes (Paddleboat)
         // No lock of ours is held while the parent loads: a thread in the sandbox's loadClass (holding its lock) may be defining an app class here through
         // apply, whose superclass then comes through this method; apply itself copes with two threads defining one class.
-        Class<?> c;
-        if (platform(name)) {
+        Class<?> c = libraries == null || name.startsWith("java.") ? null : libraries.apply(name);
+        if (c != null) {
+            // a shared library's class
+        } else if (platform(name)) {
             try { c = getParent().loadClass(name); }
             catch (ClassNotFoundException missing) {
                 c = apply(name);  // a platform-named class the platform lacks (android.support.*, javax.inject)
@@ -65,7 +78,10 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
     /** This loader's own class of that name, or null. Takes no lock: the sandbox calls it under its own, while a thread in loadClass may hold ours. */
     @Override
     public Class<?> apply(String name) {
-        Class<?> c = findLoadedClass(name);
+        AppClassLoader libs = libraries;
+        Class<?> c = libs == null ? null : libs.apply(name);
+        if (c != null) return c;
+        c = findLoadedClass(name);
         if (c != null) return c;
         try { return findClass(name); }
         catch (ClassNotFoundException missing) { return null; }
@@ -80,6 +96,7 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
     @Override
     public URL getResource(String name) {
         URL own = findResource(name);
+        if (own == null && libraries != null) own = libraries.findResource(name);
         return own != null ? own : super.getResource(name);
     }
 }

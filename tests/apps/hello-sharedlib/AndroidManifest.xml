@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android's optional shared libraries (HostSharedLibraries): org.apache.http.legacy declared, an unknown optional one skipped -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="hello.sharedlib">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34"/>
+  <application android:label="sharedlib-check">
+    <uses-library android:name="org.apache.http.legacy" android:required="true"/>
+    <uses-library android:name="com.example.not.on.this.device" android:required="false"/>
+    <activity android:name="hello.sharedlib.Main" android:exported="true">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+    </activity>
+  </application>
+</manifest>
