@@ -108,7 +108,7 @@ GPU (Mali-G57 through Android's libEGL) in apklayer's processes; the vendor libr
 - Apps that draw (SurfaceFlinger screenshots, `apklayer screenshot`): UiBench, Calculator, Telegram, NewPipe, Shattered Pixel Dungeon and Anuto
   (libgdx), OTR2 (bgfx, GLES 3.1). Scripts on the phone (`~/apklayer-dev`): `ut-shots.sh <pkg>...` (run 25 s, screenshot at the run's end,
   stop), `stackscan.py <pid> <tid>` (the stack scan above, `tools/debug/stackscan.py`).
-- Open: camera = device (cameraserver and HIDL provider listing, PLAN (e)); Mali fences give `sync_file_info returned NULL`; the window on
+- Open: camera = device (cameraserver and HIDL provider listing, PLAN (e)); `sync_file_info returned NULL` (2026-11-05: these were the composer's present fences, eventfds without a render node; it now passes the composition's GPU fence, a Mali sync_file, and logs `present fences: ...` once; not yet checked on the phone, which was unreachable); the window on
   Lomiri needs a human check.
 
 ## Location on the phones (2026-11-05)

@@ -5,14 +5,14 @@
 //  1. a DRM syncobj, signaled anew at each present (DRM_IOCTL_SYNCOBJ_SIGNAL gives it a fresh stub fence stamped with the current time) and
 //     exported as a sync_file. Exporting the syncobj created signaled again and again gave every fence the composer's start time: SurfaceFlinger's
 //     frame timeline found each present before its frame's start and dropped it ("Unknown jank", present time = end time).
-//  2. no render node (the Halium phones): the GPU fence of SurfaceFlinger's composition (the client target's acquire fence, a real sync_file of
-//     the device GPU), which the composer has waited for before the hand-over.
+//  2. no render node (the Halium phones): a GPU fence through EGL (GpuFence.h; Mali there), made at the hand-over.
 //  3. neither: an eventfd (readable; not a sync_file, SurfaceFlinger logs it).
+// Most presents of the primary display have nothing to show (the apps' windows are virtual displays, vdisplay), so the fence cannot come from the
+// composition's own GPU fence.
 #pragma once
 
 #include <dirent.h>
 #include <fcntl.h>
-#include <linux/sync_file.h>
 #include <sys/eventfd.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -22,14 +22,11 @@
 #include <string>
 
 #include <drm.h>
+#include <log/log.h>
+
+#include "GpuFence.h"
 
 namespace apklayer::composer {
-
-// fd is a sync_file (what libsync's sync_file_info asks first)
-inline bool isSyncFile(int fd) {
-    sync_file_info info = {};
-    return fd >= 0 && ioctl(fd, SYNC_IOC_FILE_INFO, &info) == 0;
-}
 
 class PresentFences {
   public:
@@ -60,17 +57,6 @@ class PresentFences {
     }
     ~PresentFences() {
         if (mDrm >= 0) close(mDrm);
-        if (mGpu >= 0) close(mGpu);
-    }
-
-    // The client target's GPU fence of this frame, once waited for (ours: closed here or kept for the fallback).
-    void composed(int gpuFence) {
-        if (mDrm >= 0 || !isSyncFile(gpuFence)) {
-            if (gpuFence >= 0) close(gpuFence);
-            return;
-        }
-        if (mGpu >= 0) close(mGpu);
-        mGpu = gpuFence;
     }
 
     // A new fd, already signaled, at each present (the caller owns it).
@@ -83,9 +69,11 @@ class PresentFences {
             int fd = exportFd(mDrm, mHandle);
             if (fd >= 0) return fd;
         }
-        if (mGpu >= 0) {
-            int fd = fcntl(mGpu, F_DUPFD_CLOEXEC, 0);
-            if (fd >= 0) return fd;
+        int fd = mGpu.get();
+        if (fd >= 0) return fd;
+        if (!mToldEventfd) {
+            mToldEventfd = true;
+            ALOGW("present fences: neither a render node nor EGL native fences: eventfds (SurfaceFlinger logs each)");
         }
         return eventfd(1, EFD_CLOEXEC);
     }
@@ -99,7 +87,8 @@ class PresentFences {
     }
     int mDrm = -1;
     uint32_t mHandle = 0;
-    int mGpu = -1;  // the last composition's GPU fence (only without a render node)
+    GpuFence mGpu;  // used only without a render node
+    bool mToldEventfd = false;
 };
 
 }  // namespace apklayer::composer

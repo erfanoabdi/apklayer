@@ -260,7 +260,7 @@ class Client : public BnComposerClient {
         if (mClientFence >= 0) {  // wait for the GPU to finish the composition
             pollfd p = {mClientFence, POLLIN, 0};
             poll(&p, 1, 1000);
-            mFences.composed(mClientFence);
+            close(mClientFence);
             mClientFence = -1;
         }
         apklayer_gfx_buffer b = {};
