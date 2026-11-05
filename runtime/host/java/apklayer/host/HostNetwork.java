@@ -51,7 +51,8 @@ final class HostNetwork {
         for (int c : new int[] {NetworkCapabilities.NET_CAPABILITY_INTERNET, NetworkCapabilities.NET_CAPABILITY_VALIDATED, NetworkCapabilities.NET_CAPABILITY_NOT_METERED,
                 NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED, NetworkCapabilities.NET_CAPABILITY_NOT_VPN, NetworkCapabilities.NET_CAPABILITY_TRUSTED,
                 NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING, NetworkCapabilities.NET_CAPABILITY_NOT_SUSPENDED, NetworkCapabilities.NET_CAPABILITY_FOREGROUND,
-                NetworkCapabilities.NET_CAPABILITY_NOT_CONGESTED}) caps.addCapability(c);
+                NetworkCapabilities.NET_CAPABILITY_NOT_CONGESTED,
+                NetworkCapabilities.NET_CAPABILITY_NOT_VCN_MANAGED /* NetworkRequest.Builder asks for it by default (API 31): without it no request is satisfied (WorkManager's network constraint) */}) caps.addCapability(c);
         return caps;
     }
 
