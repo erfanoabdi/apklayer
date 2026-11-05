@@ -33,8 +33,8 @@ apps.txt (OTR2, Telegram, WhatsApp, CPU-Z, ...) were not part of this round.
 | Organic Maps 2026.09.29 | native maps | both | draws (map download) | |
 | OsmAnd 5.4.11 | maps | both | draws (welcome) | StrictMode reports MapActivity as a "non-UI Context" (open) |
 | FluffyChat 2.11.4 (was 2.11.3) | Flutter | both | draws (welcome) | |
-| Aurora Store 4.8.4 | Compose | both | draws (welcome) | |
-| F-Droid 2.0.2 | store client | both | draws (Discover, fetching repositories) | |
+| Aurora Store 4.8.4 | Compose | both | draws (welcome) | 2026-11-06 Parallels: onboarding (restart, install permission), anonymous login, app pages; downloads were cancelled by WorkManager's network constraint (fixed, not yet re-run) |
+| F-Droid 2.0.2 | store client | both | draws (Discover, fetching repositories) | 2026-11-06 Parallels: index loaded, Search > Calculator lists apps, Install works (checked by the owner) |
 | Fossify Gallery 1.14.1 | MediaStore | both | draws (no media) | |
 | Fossify Calendar 1.12.1 | CalendarContract | both | draws (month); the tap opens the day | |
 | Fossify Contacts 1.6.0 | ContactsContract | both | draws (no contacts) | |
