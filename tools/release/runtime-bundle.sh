@@ -15,7 +15,9 @@ mkdir -p "$out"
 stage="$(mktemp -d "$out/.stage.XXXXXX")"
 trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/aosp/android-all"
-put() { cp -al "$1" "$2" 2>/dev/null || cp -a "$1" "$2"; }  # hardlinks where the file system allows: tar reads each file once
+# hardlinks where the file system allows: tar reads each file once. A prebuilts checkout assembled from links (android-root -> another checkout)
+# is copied through them: the bundle holds the files, never a link out of itself (links inside android-root stay as they are)
+put() { s="$(realpath "$1")" && cp -al "$s" "$2" 2>/dev/null || cp -a "$s" "$2"; }
 put "$P/$cpu/android-libs/lib64" "$stage/android-libs"
 put "$P/$cpu/android-root" "$stage/android-root"
 [ ! -d "$P/$cpu/system-apps" ] || put "$P/$cpu/system-apps" "$stage/system-apps"
@@ -24,6 +26,8 @@ put "$P/common/Robolectric_all.jar" "$stage/aosp/Robolectric_all.jar"
 put "$P/common/android-all-16-robolectric-13921718.jar" "$stage/aosp/android-all/android-all-16-robolectric-13921718.jar"
 put "$P/common/android-all-16-robolectric-13921718.jar" "$stage/aosp/android-all/android-all-current-robolectric-r0.jar"  # the SDK provider asks for both names
 put "$P/common/android-stub.jar" "$stage/android-stub.jar"
+for d in android-root/system android-libs aosp/sim-classes; do [ -d "$stage/$d" ] && [ ! -L "$stage/$d" ] || { echo "runtime-bundle: $d is missing or a link" >&2; exit 1; }; done
+[ ! -d "$stage/system-apps" ] || [ -n "$(ls "$stage/system-apps")" ] || { echo "runtime-bundle: system-apps is empty" >&2; exit 1; }
 contents="$(cd "$stage" && ls | sed 's/.*/"&"/' | paste -sd, -)"
 printf '{"version": "%s", "cpu": "%s", "main_commit": "%s", "contents": [%s, "runtime.json"]}\n' "$version" "$cpu" "$main" "$contents" > "$stage/runtime.json"
 tar -C "$stage" --owner=0 --group=0 --numeric-owner --sort=name -cf - . | zstd -q -T0 -12 -o "$out/$name.tar.zst" -f

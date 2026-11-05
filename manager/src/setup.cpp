@@ -72,6 +72,7 @@ void Setup::firstRun(bool force) {
         steps_->push_back(SetupStep{id, title, slint::SharedString(detail), done ? "Done" : "", false});
     };
     add("binder", "Binder devices", binder ? "Ready for instance " + cli_.instance : "Missing for instance " + cli_.instance, binder);
+    add("java", "Java", "Java 21 runs the apps", false);
     add("runtime", "Android runtime", runtime.empty() ? "From the current release" : "Version " + runtime, !runtime.empty());
     add("instance", "Default instance", "Instance " + cli_.instance, false);
     add("system-apps", "System apps", "Providers, documents and the WebView", false);
@@ -172,8 +173,8 @@ void Setup::runSetup(Cli cli, bool microg, bool fdroid) {
     if (microg) flags.push_back("--microg");
     if (fdroid) flags.push_back("--fdroid");
     int status = runCliSetup(cli, flags, [&](const std::string& id, const std::string& state, const std::string& detail) {
-        if (id == "providers" || id == "webview") return;  // no row of their own
-        stepLater(id, state == "done" || state == "skipped" ? "Done" : state == "failed" ? "Failed" : "", state == "failed" ? sentence(detail) : detail, state == "running");
+        if (id == "webview") return;  // no row of its own
+        stepLater(id == "providers" ? "instance" : id, state == "done" || state == "skipped" ? "Done" : state == "failed" ? "Failed" : "", state == "failed" ? sentence(detail) : detail, state == "running");
     }, progress);
     post([this, ok = status == 0] { auto& b = ui_->global<Backend>(); b.set_setup_running(false); b.set_setup_done(ok); refresh_(); });
 }

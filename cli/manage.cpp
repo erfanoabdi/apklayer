@@ -144,7 +144,7 @@ int instanceCommand(const Layout& l, const std::string& action, const std::strin
         Instance inst = Instance::open(l, id);
         printf("created\t%s\n", inst.root.c_str());
         if (exists(binderDevice(id))) puts("binder\tok");
-        else printf("binder\tmissing\t%s\n", binderDeviceWhy(id).c_str());
+        else printf("binder\tmissing\t%s\n", haveBinderfs() ? binderSetupCommand(id).c_str() : binderDeviceWhy(id).c_str());
         return 0;
     }
     if (action != "remove") die("instance create|remove <id>");

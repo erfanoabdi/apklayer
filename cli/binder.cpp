@@ -21,10 +21,17 @@ std::string binderDevice(const std::string& id) {
 }
 
 std::string binderDeviceWhy(const std::string& id) {
-    if (haveBinderfs()) return "its binder devices are missing: sudo sh tools/host-setup/binder.sh " + id;
+    if (haveBinderfs()) return "its binder devices are missing: " + binderSetupCommand(id);
     if (id != "default") return "this kernel has no binderfs, only fixed binder nodes: one instance (the default) can run";
     if (isHalium()) return "this Halium kernel has no binderfs: /dev/binder is the device's own";
     return "no binder device: load binder_linux (docs/INSTALL.md)";
+}
+
+std::string binderSetupCommand(const std::string& id) {
+    if (isHalium() && exists("/etc/apklayer/instances"))
+        return "echo " + id + " | sudo tee -a /etc/apklayer/instances && sudo systemctl restart apklayer-binder";
+    const std::string installed = "/usr/share/apklayer/tools/host-setup/binder.sh";
+    return "sudo sh " + std::string(exists(installed) ? installed : "tools/host-setup/binder.sh") + " " + id;
 }
 
 std::string hostBinder(const std::string& family) {

@@ -79,8 +79,11 @@ int main(int argc, char** argv) {
     std::string id = getenvOr("APKLAYER_INSTANCE", defaultInstanceId());
     if (args.size() >= 2 && args[0] == "--instance") { id = args[1]; args.erase(args.begin(), args.begin() + 2); }
     if (args.empty()) return usage();
-    if (args[0] == "--version") { printf("version\t%s\nconverterAbi\t%d\ndataFormat\t%d\n", kVersion, kConverterAbi, kDataFormat); return 0; }
-    Layout layout = Layout::detect();
+    if (args[0] == "--version") {  // defaultInstance: the instance commands without --instance use (a Halium device's is "ut", cli/halium.cpp)
+        printf("version\t%s\nconverterAbi\t%d\ndataFormat\t%d\ndefaultInstance\t%s\n", kVersion, kConverterAbi, kDataFormat, id.c_str());
+        return 0;
+    }
+    Layout layout = Layout::detect(args[0] != "setup");  // setup sets the runtime up itself, after replacing a broken one
     // a command runs in apklayerd when it runs (its processes are then the daemon's); the internal ones and the daemon itself stay here
     bool autostart = args.size() >= 3 && args[0] == "instance" && args[1] == "autostart";  // systemctl --user is the user's, not apklayerd's
     static const std::set<std::string> kLocal = {"daemon", "stack-daemon", "stack", "exec", "sandbox-exec", "app-spare", "env", "setup"};

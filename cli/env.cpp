@@ -31,16 +31,6 @@ std::string frameworkDependencyDir(const Layout& l) {
     return dir;
 }
 
-std::string findJava(const Layout&) {
-    std::string wanted = getenvOr("APKLAYER_NATIVE_JAVA", "");
-    if (!wanted.empty() && isExecutable(wanted)) return wanted;
-    glob_t found{};
-    std::string result = "java";
-    // JDK 21 first (the tested one; the host patches java.base), any architecture's package name (arm64, amd64)
-    if (glob("/usr/lib/jvm/java-21-openjdk-*/bin/java", 0, nullptr, &found) == 0 && found.gl_pathc > 0) result = found.gl_pathv[0];
-    globfree(&found);
-    return result;
-}
 
 // Android apps ask for the GLES level a device gives (3.2; Off The Road 2 needs 3.1). A host driver that stops lower (virgl: ES 3.0) makes
 // eglCreateContext fail with EGL_BAD_MATCH; the driver's own version override then claims the Android level: what the driver truly lacks
@@ -65,6 +55,17 @@ std::string hostGles(const Layout& layout, const Env& env) {
 }
 
 }  // namespace
+
+std::string findJava(const Layout&) {
+    std::string wanted = getenvOr("APKLAYER_NATIVE_JAVA", "");
+    if (!wanted.empty() && isExecutable(wanted)) return wanted;
+    glob_t found{};
+    std::string result = "java";
+    // JDK 21 first (the tested one; the host patches java.base), any architecture's package name (arm64, amd64)
+    if (glob("/usr/lib/jvm/java-21-openjdk-*/bin/java", 0, nullptr, &found) == 0 && found.gl_pathc > 0) result = found.gl_pathv[0];
+    globfree(&found);
+    return result;
+}
 
 // A property of the machine's own Android (a Halium device): libhybris's getprop reads its live property area; "" when there is none
 std::string deviceProperty(const std::string& key) {

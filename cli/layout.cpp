@@ -26,7 +26,7 @@ void applyConfig() {
 }
 }  // namespace
 
-Layout Layout::detect() {
+Layout Layout::detect(bool setUp) {
     applyConfig();
     Layout l;
     std::string exe = realPath("/proc/self/exe");
@@ -55,7 +55,7 @@ Layout Layout::detect() {
     l.androidLibs = getenvOr("APKLAYER_ANDROID_LIBS", ours ? join(l.native, "android-libs") : join(homeDir(), "android-arm64/lib64"));
     l.bionic = getenvOr("APKLAYER_BT", ours ? join(lib, "bionic_translation/b") : join(homeDir(), "bt-arm/bionic_translation/b"));
     l.deps = getenvOr("APKLAYER_DEPS", ours ? l.native : join(homeDir(), ".cache/apklayer/deps"));
-    if (installed && l.native == bundle) l.setUpBundle();
+    if (setUp && installed && l.native == bundle) l.setUpBundle();
     l.appsDir = join(l.dataHome, "apklayer/apps");
     l.stateHome = getenvOr("XDG_STATE_HOME", join(homeDir(), ".local/state"));
     l.runtimeHome = getenvOr("XDG_RUNTIME_DIR", "/run/user/" + std::to_string(getuid()));
@@ -64,16 +64,18 @@ Layout Layout::detect() {
 
 // The package's half of the runtime (<build>/native) linked into the unpacked bundle, the JNI shim put into its framework jars and the instrumented
 // framework made (tools/setup-runtime.sh, under a lock): again whenever the package's native-runtime.jar changes.
-void Layout::setUpBundle() const {
-    if (!exists(join(native, "runtime.json"))) return;  // not downloaded yet: nativeEnv says so when something needs it
+bool Layout::setUpBundle(bool fatal) const {
+    if (!exists(join(native, "runtime.json"))) return true;  // not downloaded yet: nativeEnv says so when something needs it
     struct stat made{}, jar{};
-    if (stat(join(build, "native/native-runtime.jar").c_str(), &jar) == 0 && stat(join(native, ".setup").c_str(), &made) == 0 && made.st_mtime == jar.st_mtime) return;
+    if (stat(join(build, "native/native-runtime.jar").c_str(), &jar) == 0 && stat(join(native, ".setup").c_str(), &made) == 0 && made.st_mtime == jar.st_mtime) return true;
     Spawn setup;
     setup.argv = {"sh", join(root, "tools/setup-runtime.sh"), native, join(build, "native")};
     setup.env = currentEnv();
     setup.env["APKLAYER_BT"] = bionic;
     setup.env["APKLAYER_ANDROID_LIBS"] = androidLibs;
-    if (runAndWait(setup) != 0) die("could not set up the Android runtime in " + native);
+    if (runAndWait(setup) == 0) return true;
+    if (fatal) die("could not set up the Android runtime in " + native);
+    return false;
 }
 
 void Layout::requireRuntime() const {

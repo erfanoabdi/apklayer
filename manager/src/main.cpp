@@ -66,6 +66,13 @@ Snapshot load(const Cli& cli, const std::string& current) {
     return s;
 }
 
+// The CLI's own default instance ("ut" on a Halium phone, cli/halium.cpp), from its --version rows; "default" from a CLI that does not say
+std::string defaultInstance(const Cli& cli) {
+    for (const auto& row : manager::parseRows(manager::runProgram({cli.exe(), "--version"}).out))
+        if (row.size() >= 2 && row[0] == "defaultInstance" && !row[1].empty()) return row[1];
+    return "default";
+}
+
 class Manager {
 public:
     Manager(slint::ComponentHandle<AppWindow> ui, Cli cli) : ui_(ui), cli_(std::move(cli)) {
@@ -330,13 +337,19 @@ private:
             });
         });
         b.on_remove_instance([this](slint::SharedString id) {
-            if (std::string(id) == cli_.instance) { cli_.instance = "default"; ui_->global<Backend>().set_instance("default"); }
+            if (std::string(id) == cli_.instance) { cli_.instance = defaultInstance(cli_); ui_->global<Backend>().set_instance(slint::SharedString(cli_.instance)); }
             action("Removing instance", {"instance", "remove", std::string(id)});
         });
         b.on_setup_binder([this](slint::SharedString id) {
             if (root_.empty()) { message("The setup script is not found beside the CLI"); return; }
-            // binderfs devices need root: polkit asks the desktop user for the password (pkexec), the command is in the dialog otherwise
-            later([script = root_ + "/tools/host-setup/binder.sh", id = std::string(id)] { return manager::runProgram({"pkexec", "sh", script, id}); },
+            // binderfs devices need root: polkit asks the desktop user for the password (pkexec), the command is in the dialog otherwise. Ubuntu Touch
+            // has polkit and Lomiri's agent but no pkexec: the instance's line in /etc/apklayer/instances is the way there (cli/binder.cpp)
+            std::string script = root_ + "/tools/host-setup/binder.sh";
+            if (manager::runProgram({"sh", "-c", "command -v pkexec"}).status != 0) {
+                message("No password prompt (pkexec is not installed): in a terminal run sudo sh " + script + " " + std::string(id));
+                return;
+            }
+            later([script, id = std::string(id)] { return manager::runProgram({"pkexec", "sh", script, id}); },
                   [this](const Result& r) {
                       message(r.status == 0 ? "Binder devices ready" : r.status == 126 || r.status == 127 ? "Not authorized: run the command shown" : summary(r));
                       refresh();
@@ -382,9 +395,22 @@ bool writePng(const std::string& path, const slint::SharedPixelBuffer<slint::Rgb
 
 }  // namespace
 
+// Lomiri (Ubuntu Touch) gives its apps their scale in GRID_UNIT_PX (a grid unit is 8 dp: 14 px on a 280 dpi phone) and leaves the Wayland output at
+// scale 1, which Slint's winit backend takes: the window would be drawn at desktop size on a phone. SLINT_SCALE_FACTOR (set by the user) wins.
+static void lomiriScale() {
+    const char* grid = getenv("GRID_UNIT_PX");
+    double scale = grid ? atof(grid) / 8 : 0;
+    if (getenv("SLINT_SCALE_FACTOR") || scale <= 1) return;
+    char text[32];
+    snprintf(text, sizeof text, "%.3f", scale);
+    setenv("SLINT_SCALE_FACTOR", text, 1);
+}
+
 int main(int argc, char** argv) {
+    lomiriScale();
     Cli cli(Cli::locate());
     if (const char* id = getenv("APKLAYER_INSTANCE"); id && *id) cli.instance = id;
+    else cli.instance = defaultInstance(cli);
     std::string shot, app, dialog;
     std::vector<std::string> input, expect;
     int width = 0, height = 0, page = 0, dark = -1, waitRefreshes = 0, refreshes = 0;

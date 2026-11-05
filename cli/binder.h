@@ -13,6 +13,9 @@ bool haveBinderfs();
 // The binder node of the instance's stack, or "" when this machine cannot give that instance one (binderDeviceWhy says why).
 std::string binderDevice(const std::string& id);
 std::string binderDeviceWhy(const std::string& id);
+// The administrator's command that makes the instance's binderfs nodes: on a Halium device the id joins /etc/apklayer/instances, which
+// apklayer-binder.service reads at every boot; elsewhere the package's (or the tree's) tools/host-setup/binder.sh, once per boot.
+std::string binderSetupCommand(const std::string& id);
 // The machine's own binder ("binder", "hwbinder" or "vndbinder"): binderfs's, else /dev's; "" when there is none.
 std::string hostBinder(const std::string& family);
 

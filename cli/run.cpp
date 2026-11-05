@@ -22,16 +22,14 @@ namespace apklayer {
 
 namespace {
 const char* kHubReadyProperty = "apklayer.hub.ready";
-const char* kWebviewCommandLine = "/data/local/tmp/webview-command-line";
-
-// The host's switch file (tools/host-setup/webview.sh), copied into the instance's own /data, where Chromium reads it through the path layer
-// (APKLAYER_DATA). A launch from inside the instance (the hub's component host, with the path layer preloaded) reads that copy under the same name.
-bool webviewSandboxOff(const Instance& inst) {
-    auto text = readFile(kWebviewCommandLine);
-    if (!text || text->find("--no-sandbox") == std::string::npos) return false;
-    std::string own = join(inst.dataDir, std::string(kWebviewCommandLine).substr(strlen("/data/")));
-    if (readFile(own) != text) { makeDirs(dirName(own)); writeFile(own, *text); }
-    return true;
+// Chromium's switch file (/data/local/tmp/webview-command-line) in the instance's own /data, where Chromium reads it through the path layer
+// (APKLAYER_DATA); a launch from inside the instance (the hub's component host) reads the same file. Its seccomp sandbox cannot run in an app JVM
+// and is off for the provider route (user decision, 2026-10-27; tools/host-setup/webview.sh). Written here, as the user: no root, and never the
+// host's /data (on a Halium phone that is the device's own Android data).
+void webviewSandboxOff(const Instance& inst) {
+    const std::string text = "webview --no-sandbox --disable-seccomp-filter-sandbox\n";
+    std::string own = join(inst.dataDir, "local/tmp/webview-command-line");
+    if (readFile(own) != text) { makeDirs(dirName(own)); writeFile(own, text); }
 }
 
 // The title of a launch's window (its virtual display's): identifies instance and launch. Cut to the host display HAL's title limit.
@@ -98,12 +96,11 @@ std::vector<std::string> packageJvmArgs(const Layout& l, const Instance& inst, c
 }
 
 std::vector<std::string> windowJvmArgs(const Layout& l, const Instance& inst, NativeEnv& ne) {
-    // the Chromium WebView provider is the default WebView once installed and tools/host-setup/webview.sh ran; APKLAYER_WEBVIEW_PROVIDER=none disables it
+    // the Chromium WebView provider is the default WebView once installed; APKLAYER_WEBVIEW_PROVIDER=none disables it
     std::string provider = getenvOr("APKLAYER_WEBVIEW_PROVIDER", "\x01");
-    if (provider == "\x01") provider = exists(join(l.appsDir, "com.android.webview/classes.jar")) && webviewSandboxOff(inst) ? "com.android.webview" : "";
+    if (provider == "\x01") provider = exists(join(l.appsDir, "com.android.webview/classes.jar")) ? "com.android.webview" : "";
     if (provider == "none") provider.clear();
-    if (!provider.empty() && !webviewSandboxOff(inst))
-        die("the WebView provider route needs tools/host-setup/webview.sh once (Chromium's seccomp sandbox cannot run inside an app JVM and is switched off; needs sudo)");
+    if (!provider.empty()) webviewSandboxOff(inst);
     std::vector<std::string> jvm = hostJvmArgs(l, inst, ne);
     ne.env["LD_LIBRARY_PATH"] = l.native + ":" + join(l.native, "glibc") + ":" + ne.env["LD_LIBRARY_PATH"];  // bionic linker + its libs
     jvm.push_back("-Dapklayer.apps=" + l.appsDir);

@@ -20,8 +20,8 @@ struct Layout {
     std::string runtimeHome;  // $XDG_RUNTIME_DIR
     std::string runtimeVersion;  // installed: the Android runtime bundle this package needs (<root>/versions); empty in a source tree
 
-    static Layout detect();
-    void setUpBundle() const;
+    static Layout detect(bool setUp = true);  // setUp false: leave the bundle's setup to the caller (`apklayer setup` repairs a broken one)
+    bool setUpBundle(bool fatal = true) const;  // false (when not fatal): the setup script failed
     void requireRuntime() const;  // installed: dies with what to do while the runtime bundle is missing
     std::string btload() const { return join(native, "bin/btload"); }
     std::string hostClasses() const { return join(native, "aosp/host-classes.jar"); }

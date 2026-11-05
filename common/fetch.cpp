@@ -122,12 +122,23 @@ std::string fetch(const std::string& url, const std::string& sha256, const std::
     return e;
 }
 
+// an unpacked bundle with its parts as real directories (a bundle made from a prebuilts checkout of links held links out of itself:
+// tools/release/runtime-bundle.sh copies through them now); "" when complete, else what is wrong
+static std::string runtimeProblem(const std::string& dir) {
+    if (!exists(dir + "/runtime.json")) return "no runtime.json";
+    for (const char* part : {"android-root/system", "android-libs", "aosp/android-all"}) {
+        struct stat st{};
+        if (lstat((dir + "/" + part).c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) return std::string("no ") + part;
+    }
+    return "";
+}
+
 std::string installedRuntime(const std::string& root) {
     char target[PATH_MAX];
     ssize_t n = readlink((root + "/current").c_str(), target, sizeof target - 1);
     if (n <= 0) return "";
     std::string v(target, n);
-    return exists(root + "/" + v + "/runtime.json") ? v : "";
+    return runtimeProblem(root + "/" + v).empty() ? v : "";  // a broken one counts as none: setup unpacks it again
 }
 
 std::string unpackRuntime(const std::string& bundle, const std::string& root, const std::string& version) {
@@ -144,7 +155,7 @@ std::string unpackRuntime(const std::string& bundle, const std::string& root, co
         if (DIR* d = opendir(tmp.c_str())) { while (dirent* e = readdir(d)) if (e->d_name[0] != '.') names.push_back(e->d_name); closedir(d); }
         if (names.size() == 1) dir = tmp + "/" + names[0];
     }
-    if (!exists(dir + "/runtime.json")) { removeTree(tmp); return "not a runtime bundle (no runtime.json): " + bundle; }
+    if (std::string p = runtimeProblem(dir); !p.empty()) { removeTree(tmp); return "not a complete runtime bundle (" + p + "): " + bundle; }
     std::string target = root + "/" + version, previous = installedRuntime(root), old = tmp + ".old";
     if (exists(target) && rename(target.c_str(), old.c_str()) != 0) { removeTree(tmp); return "cannot replace " + target; }
     if (rename(dir.c_str(), target.c_str()) != 0) { rename(old.c_str(), target.c_str()); removeTree(tmp); return "cannot move the runtime to " + target; }

@@ -18,6 +18,9 @@ std::vector<std::string> hostJvmArgs(const Layout& layout, const Instance& insta
 
 NativeEnv nativeEnv(const Layout& layout, const Instance& instance);
 
+// The JVM apps run on: APKLAYER_NATIVE_JAVA, else the system's JDK 21, else `java` from PATH.
+std::string findJava(const Layout& layout);
+
 // A property of the machine's own Android (a Halium device's, through /usr/bin/getprop); "" when there is none.
 std::string deviceProperty(const std::string& key);
 

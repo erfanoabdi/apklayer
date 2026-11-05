@@ -1,6 +1,6 @@
 // `apklayer setup`: the first run and the runtime updates, in one command (the manager is a front-end that runs it and reads its lines).
 // Idempotent: it does what is missing or stale. Output, one per line, tab separated:
-//   step <id> <state> <detail>      id: binder runtime providers system-apps webview microg fdroid; state: todo running done failed skipped
+//   step <id> <state> <detail>      id: binder java runtime providers system-apps webview microg fdroid; state: todo running done failed skipped
 //   progress <0..1 or -1>           the running step's download
 //   latest <version> <runtime version> <date>   (--check, when releases.json was read)
 #include "setup.h"
@@ -11,6 +11,7 @@
 
 #include "apps.h"
 #include "binder.h"
+#include "env.h"
 #include "fetch.h"
 #include "halium.h"
 #include "providers.h"
@@ -35,6 +36,22 @@ void progress(double p) {
 }
 std::string readText(const std::string& path) { return readFile(path).value_or(""); }
 std::string envOr(const char* name, const char* fallback) { return getenvOr(name, fallback); }
+
+// "" when the JVM apps run on is Java 21 or newer, else what is wrong (the deb depends on openjdk-21-jre-headless; an install that skipped it,
+// as on a phone's small root file system, names another one as APKLAYER_NATIVE_JAVA in ~/.config/apklayer/env)
+std::string javaProblem(const Layout& layout) {
+    std::string java = findJava(layout);
+    Spawn s;
+    s.argv = {"sh", "-c", "exec \"$0\" -version 2>&1", java};
+    s.env = currentEnv();
+    int status = 0;
+    std::string out = runCapture(s, &status);
+    size_t at = out.find("version \"");
+    int major = status == 0 && at != std::string::npos ? atoi(out.c_str() + at + 9) : 0;
+    if (major >= 21) return "";
+    std::string hint = " (sudo apt install openjdk-21-jre-headless, or APKLAYER_NATIVE_JAVA=<java 21> in ~/.config/apklayer/env)";
+    return major > 0 ? "Java " + std::to_string(major) + " is too old: apklayer needs 21" + hint : "No Java 21 found" + hint;
+}
 
 struct Options {
     bool check = false, update = false, microg = false, fdroid = false;
@@ -80,6 +97,8 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
     // 1. binder: the instance's devices (root's: the package's service makes them at boot, the manager asks pkexec)
     bool binder = !binderDevice(instance.id).empty() && exists(binderDevice(instance.id));
     step("binder", binder ? "done" : "failed", binder ? "Ready for instance " + instance.id : binderDeviceWhy(instance.id));
+    std::string java = javaProblem(layout);
+    step("java", java.empty() ? "done" : "failed", java.empty() ? "Java 21" : java);
 
     // 2. the runtime: --bundle, else the current release's (releases.json), else what the package names
     manager::Release release;
@@ -123,10 +142,11 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
         if (!e.empty()) { step("runtime", "failed", e); return 1; }
         have = release.runtimeVersion;
     }
-    Layout fresh = Layout::detect();  // the unpacked bundle is the native dir now: link the package's half in, instrument the framework (a few minutes)
+    if (have.empty()) { step("runtime", "failed", "No complete Android runtime: run setup again (a download or --bundle <file>)"); return 1; }
+    Layout fresh = Layout::detect(false);  // the unpacked bundle is the native dir now: link the package's half in, instrument the framework (a few minutes)
     step("runtime", "running", "Setting up version " + have + " (a few minutes after an update)");
     fresh.requireRuntime();
-    fresh.setUpBundle();
+    if (!fresh.setUpBundle(false)) { step("runtime", "failed", "Setting up the runtime in " + fresh.native + " failed: apklayer setup in a terminal shows why"); return 1; }
     step("runtime", "done", "Version " + have);
 
     // 3. the instance's providers: a Halium device's graphics and camera are the device's
@@ -149,15 +169,7 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
             s.env = currentEnv();
             if (runAndWait(s) != 0) failed += (failed.empty() ? "" : "; ") + list[i];
         }
-        // the WebView provider's renderer runs without Chromium's sandbox, a switch only root can write (tools/host-setup/webview.sh)
-        if (std::find(list.begin(), list.end(), "webview.apk") != list.end() && !exists("/data/local/tmp/webview-command-line")) {
-            std::string script = join(layout.root, "tools/host-setup/webview.sh");
-            step("webview", "running", "The WebView's switch (asks for your password)");
-            Spawn s;
-            s.argv = {"pkexec", "sh", script};
-            s.env = currentEnv();
-            step("webview", runAndWait(s) == 0 ? "done" : "skipped", "sudo sh " + script + " enables the WebView");
-        }
+        // the WebView provider's switch (Chromium's sandbox off) is the instance's own file, written at launch (cli/run.cpp): nothing for root
         step("system-apps", failed.empty() ? "done" : "failed", failed.empty() ? std::to_string(list.size()) + " installed" : failed);
         if (failed.empty()) { makeDirs(dirName(marker)); writeFile(marker, "1\n"); }
     } else step("system-apps", "done", "Installed");
