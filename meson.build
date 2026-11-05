@@ -111,6 +111,10 @@ install_data(files(run_command('sh', '-c', 'cd "$MESON_SOURCE_ROOT" && find aosp
 install_symlink('portal', pointing_to: '../../../share/apklayer/bridge/portal', install_dir: pkg_lib / 'bridge')  # helpers above the CLI (HostFilePortal)
 install_symlink('apklayer', pointing_to: '../lib/apklayer/cli/apklayer', install_dir: get_option('bindir'))
 install_data('data/apklayer-manager.desktop', install_dir: get_option('datadir') / 'applications')
+# Ubuntu Touch: 'Open with' / share of a file to apklayer. Lomiri Content Hub reads its peers from /usr/share/lomiri-content-hub/peers, each named
+# by the receiving app's id: the hidden apklayer-share app, apklayer-manager --share. Unused elsewhere.
+install_data('data/apklayer-share.desktop', install_dir: get_option('datadir') / 'applications')
+install_data('data/content-hub-peer.json', rename: 'apklayer-share', install_dir: get_option('datadir') / 'lomiri-content-hub/peers')
 install_data('data/apklayer.svg', install_dir: get_option('datadir') / 'icons/hicolor/scalable/apps')
 install_data('data/apklayer-256.png', rename: 'apklayer.png', install_dir: get_option('datadir') / 'icons/hicolor/256x256/apps')
 install_data('data/modules-load.conf', rename: 'apklayer.conf', install_dir: 'lib/modules-load.d')  # binder_linux at boot

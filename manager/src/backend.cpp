@@ -1,11 +1,13 @@
 #include "backend.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <climits>
 #include <cctype>
 #include <csignal>
 #include <cstdlib>
 #include <fcntl.h>
+#include <filesystem>
 #include <future>
 #include <sys/wait.h>
 #include <thread>
@@ -84,6 +86,33 @@ std::string chosenFile(const Result& chooser) {
     for (const auto& row : parseRows(chooser.out))
         if (!row.empty() && row[0].rfind("uri ", 0) == 0) return fileUriPath(row[0].substr(4));
     return "";
+}
+
+std::vector<std::string> findApks(size_t limit) {
+    namespace fs = std::filesystem;
+    const char* home = getenv("HOME");
+    if (!home || !*home) return {};
+    std::vector<std::pair<fs::file_time_type, std::string>> found;
+    for (const char* sub : {"Downloads", "Documents", ""}) {
+        std::error_code ec;
+        for (fs::directory_iterator it(fs::path(home) / sub, ec), end; !ec && it != end; it.increment(ec)) {
+            std::string name = it->path().filename().string();
+            if (name.size() > 4 && name.compare(name.size() - 4, 4, ".apk") == 0 && it->is_regular_file(ec)) found.push_back({it->last_write_time(ec), it->path().string()});
+        }
+    }
+    std::sort(found.begin(), found.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+    std::vector<std::string> paths;
+    for (const auto& f : found) if (paths.size() < limit) paths.push_back(f.second);
+    return paths;
+}
+
+void dropImported(const std::string& path) {
+    namespace fs = std::filesystem;
+    const char* home = getenv("HOME");
+    fs::path dir = fs::path(path).parent_path();
+    if (!home || !*home || dir.parent_path().filename() != "HubIncoming" || path.rfind(std::string(home) + "/.cache/", 0) != 0) return;
+    std::error_code ec;
+    fs::remove_all(dir, ec);
 }
 
 std::vector<std::string> providerArgs(const std::string& domain, const std::string& backend, const std::vector<std::pair<std::string, std::string>>& options) {

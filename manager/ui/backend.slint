@@ -61,6 +61,7 @@ export global Backend {
     in property <string> binder-instance;
     in property <int> binder-serial;       // bumped to show the binder dialog
     in property <string> chosen-path;      // what the file chooser returned
+    in property <[InfoEntry]> found-apks;  // no file chooser at all: the .apk files found in the usual folders (key: the name, value: the path)
 
     callback refresh();
     callback install-chooser();            // the desktop's file chooser (portal), then install

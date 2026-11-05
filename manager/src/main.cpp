@@ -1,5 +1,5 @@
 // apklayer-manager: the Slint UI (ui/app.slint) over the apklayer CLI (src/backend.h). The CLI runs on worker threads; results come back to the
-// UI thread with slint::invoke_from_event_loop. Usage: apklayer-manager [--instance ID] [--first-run] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG]
+// UI thread with slint::invoke_from_event_loop. Usage: apklayer-manager [--instance ID] [--first-run] [--share] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG]
 // [--dialog install|instance|prop|uninstall] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--expect LABEL]...] (the screenshot mode: presses the labelled
 // elements, waits for N refreshes when asked (the actions' results), renders once, writes the PNG and exits: the tests' view and input).
 #include <map>
@@ -253,32 +253,45 @@ private:
         b.set_message_serial(b.get_message_serial() + 1);
     }
 
-    // a CLI action of the selected instance (or another): busy while it runs, then its result in the snackbar and a refresh
-    void action(const std::string& what, std::vector<std::string> args, const std::string& instance = "") {
+    // a CLI action of the selected instance (or another): busy while it runs, then its result in the snackbar and a refresh; after: on the worker, once it ran
+    void action(const std::string& what, std::vector<std::string> args, const std::string& instance = "", std::function<void()> after = {}) {
         auto& b = ui_->global<Backend>();
         b.set_busy(true);
         b.set_busy_text(slint::SharedString(what));
         Cli cli = cli_;
         if (!instance.empty()) cli.instance = instance;
-        later([cli, args = std::move(args)] { return cli.run(args); }, [this](const Result& r) {
+        later([cli, args = std::move(args), after = std::move(after)] { Result r = cli.run(args); if (after) after(); return r; }, [this](const Result& r) {
             ui_->global<Backend>().set_busy(false);
             message(summary(r));
             refresh();
         });
     }
 
+public:
+    // the install dialog's file: the chooser (file-chooser.py: the portal, else Content Hub) for "open"; "import" receives an .apk shared to
+    // apklayer from another app through Content Hub (--share: the apklayer-share peer)
+    void chooseApk(const std::string& mode) {
+        if (root_.empty()) { message("No file chooser: type the path of the .apk"); return; }
+        later([chooser = root_ + "/bridge/portal/file-chooser.py", mode] { return manager::runProgram({"python3", chooser, mode}); }, [this](const Result& r) {
+            if (std::string path = manager::chosenFile(r); !path.empty()) { ui_->global<Backend>().set_chosen_path(slint::SharedString(path)); return; }
+            if (r.out.find("unavailable") == std::string::npos) { message("No file chosen"); return; }
+            // no portal and no Content Hub: the .apk files in the usual folders, listed in the dialog
+            auto found = std::make_shared<slint::VectorModel<InfoEntry>>();
+            for (const std::string& p : manager::findApks(8)) found->push_back({slint::SharedString(p.substr(p.rfind('/') + 1)), slint::SharedString(p)});
+            ui_->global<Backend>().set_found_apks(found);
+            message(found->row_count() ? "No file chooser: pick one of the .apk files found, or type a path"
+                                       : "No file chooser and no .apk in Downloads, Documents or home: type the path");
+        });
+    }
+
+private:
     void wire() {
         auto& b = ui_->global<Backend>();
         b.set_instance(slint::SharedString(cli_.instance));
         b.on_refresh([this] { refresh(); });
-        b.on_install_path([this](slint::SharedString path) { action("Installing", {"install", std::string(path)}); });
-        b.on_install_chooser([this] {
-            if (root_.empty()) { message("No file chooser: type the path of the .apk"); return; }
-            later([chooser = root_ + "/bridge/portal/file-chooser.py"] { return manager::runProgram({"python3", chooser, "open"}); }, [this](const Result& r) {
-                if (std::string path = manager::chosenFile(r); !path.empty()) { ui_->global<Backend>().set_chosen_path(slint::SharedString(path)); return; }
-                message(r.out.find("unavailable") != std::string::npos ? "No file chooser portal: type the path of the .apk" : "No file chosen");
-            });
-        });
+        // a Content Hub import (Ubuntu Touch) is a copy for this install: dropped once installed
+        b.on_install_path([this](slint::SharedString path) { std::string p(path); action("Installing", {"install", p}, "", [p] { manager::dropImported(p); }); });
+        b.on_install_chooser([this] { chooseApk("open"); });
         b.on_open_app([this](slint::SharedString pkg) {
             std::string p(pkg);
             message("Starting " + p);
@@ -414,7 +427,7 @@ int main(int argc, char** argv) {
     std::string shot, app, dialog;
     std::vector<std::string> input, expect;
     int width = 0, height = 0, page = 0, dark = -1, waitRefreshes = 0, refreshes = 0;
-    bool firstRun = false;
+    bool firstRun = false, share = false;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         bool more = i + 1 < argc;
@@ -429,9 +442,13 @@ int main(int argc, char** argv) {
         else if (a == "--wait-refresh" && more) waitRefreshes = atoi(argv[++i]);
         else if (a == "--expect" && more) expect.push_back(argv[++i]);
         else if (a == "--first-run") firstRun = true;
-        else { fprintf(stderr, "usage: apklayer-manager [--instance ID] [--first-run] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG] [--dialog NAME] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--expect LABEL]...]\n"); return 2; }
+        else if (a == "--share") share = true;
+        else { fprintf(stderr, "usage: apklayer-manager [--instance ID] [--first-run] [--share] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG] [--dialog NAME] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--expect LABEL]...]\n"); return 2; }
     }
-    slint::set_xdg_app_id("apklayer-manager");  // the Wayland app id: GNOME matches the window to apklayer-manager.desktop (its icon, its dock entry)
+    // the Wayland app id: GNOME matches the window to apklayer-manager.desktop (its icon, its dock entry). Lomiri gives the window to the app its
+    // app id names: started as apklayer-share (--share) it must say so, or Lomiri counts that app windowless and suspends it
+    const char* lomiriApp = getenv("APP_ID");
+    slint::set_xdg_app_id(slint::SharedString(lomiriApp && *lomiriApp ? lomiriApp : "apklayer-manager"));
     auto ui = AppWindow::create();
     ui->set_frameless(getenv("GRID_UNIT_PX") != nullptr);  // Lomiri (lomiriScale)
     Manager m(ui, cli);
@@ -441,6 +458,7 @@ int main(int argc, char** argv) {
     if (shot.empty()) {
         m.refresh();
         m.setup().check(false);
+        if (share) { ui->invoke_show_dialog("install"); m.chooseApk("import"); }
         ui->run();
         return 0;
     }

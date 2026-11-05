@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Install with Apklayer
+Comment=Install an .apk shared from another app (Lomiri Content Hub)
+Exec=apklayer-manager --share
+Icon=apklayer
+Terminal=false
+NoDisplay=true
+X-Lomiri-Touch=true
+X-Lomiri-Single-Instance=true
