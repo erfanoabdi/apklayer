@@ -19,6 +19,8 @@ import org.robolectric.util.ReflectionHelpers;
 @Implements(className = "android.os.ServiceManager", isInAndroidSdk = false)
 public class ShadowHostServiceManager extends ShadowServiceManager {
     private static final Set<IBinder> wrapped = ConcurrentHashMap.newKeySet();
+    /** Services Robolectric has no fake for that apps take for granted (Aurora Store's onboarding reads its link handling: getSystemService returned null). */
+    static { addBinderService(binderServices, "domain_verification", android.content.pm.verify.domain.IDomainVerificationManager.class); }
 
     @Implementation protected static IBinder getService(String name) { IBinder hub = hub(name); return hub != null ? hub : orNative(name, report(name, ShadowServiceManager.getService(name))); }
     @Implementation protected static IBinder checkService(String name) { IBinder hub = hub(name); return hub != null ? hub : orNative(name, report(name, ShadowServiceManager.checkService(name))); }
@@ -66,6 +68,8 @@ public class ShadowHostServiceManager extends ShadowServiceManager {
             if (android.content.Context.WINDOW_SERVICE.equals(name) && method.getName().startsWith("attachWindowContextTo"))
                 return new android.window.WindowContextInfo(new android.content.res.Configuration(org.robolectric.RuntimeEnvironment.getApplication().getResources().getConfiguration()),
                         android.view.Display.DEFAULT_DISPLAY);
+            // an app's own link handling (Settings' "Open by default"): its web hosts, none verified
+            if ("domain_verification".equals(name) && method.getName().equals("getDomainVerificationUserState")) return HostDomainVerification.userState((String) args[0], (Integer) args[1]);
             try {
                 return method.invoke(fake, args);
             } catch (InvocationTargetException e) {

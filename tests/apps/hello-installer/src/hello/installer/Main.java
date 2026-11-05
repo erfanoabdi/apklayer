@@ -112,6 +112,23 @@ public class Main extends Activity {
             result = forResult(new Intent(Intent.ACTION_DELETE, android.net.Uri.fromParts("package", PAYLOAD, null)).putExtra(Intent.EXTRA_RETURN_RESULT, true));
             check("delete intent", broadcast(Intent.ACTION_PACKAGE_REMOVED) && result != null && result.getIntExtra("code", 0) == RESULT_OK && result.getIntExtra("install", 0) == 1 /* DELETE_SUCCEEDED */,
                     "result " + (result == null ? null : result.getExtras()));
+            // content:// URIs, as browsers and file managers hand them out: ACTION_INSTALL_PACKAGE with a read grant (its result), then ACTION_VIEW
+            // whose type only the provider tells; the payload goes again after each
+            java.io.File shared = new java.io.File(getCacheDir(), "shared");
+            shared.mkdirs();
+            try (InputStream in = getAssets().open("hello-payload2.apk")) { java.nio.file.Files.copy(in, new java.io.File(shared, "payload.apk").toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
+            android.net.Uri content = android.net.Uri.parse("content://" + ApkProvider.AUTHORITY + "/payload.apk");
+            result = forResult(new Intent(Intent.ACTION_INSTALL_PACKAGE, content).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION).putExtra(Intent.EXTRA_RETURN_RESULT, true));
+            check("content install", broadcast(Intent.ACTION_PACKAGE_ADDED) && result != null && result.getIntExtra("code", 0) == RESULT_OK && result.getIntExtra("install", 0) == 1 /* INSTALL_SUCCEEDED */,
+                    "result " + (result == null ? null : result.getExtras()));
+            installer.uninstall(PAYLOAD, senderOf(0x7ffd));
+            await();
+            broadcast(Intent.ACTION_PACKAGE_REMOVED);
+            runOnUiThread(() -> startActivity(new Intent(Intent.ACTION_VIEW, content).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK)));
+            check("content view", broadcast(Intent.ACTION_PACKAGE_ADDED), "no PACKAGE_ADDED");
+            installer.uninstall(PAYLOAD, senderOf(0x7ffc));
+            status = await();
+            check("content removed", status == 0 && broadcast(Intent.ACTION_PACKAGE_REMOVED), "status " + status);
             // a session left for the next start, preapproved: the hub keeps both across the installer's and its own restart
             int kept = installer.createSession(params());
             try (PackageInstaller.Session s = installer.openSession(kept)) {

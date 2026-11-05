@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 from instance import ENV, HOST_LIBS, INSTANCE, LOGDIR, inject, stop  # noqa: E402
 
 STEPS = ['abandon', 'cancel', 'install', 'session finished', 'split resource', 'update', 'data kept', 'mismatch', 'downgrade', 'uninstall', 'source allowed',
-         'view apk', 'install result', 'delete intent', 'preapproved', 'self update']
+         'view apk', 'install result', 'delete intent', 'content install', 'content view', 'content removed', 'preapproved', 'self update']
 data = Path(ENV.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'apklayer'
 log = Path(LOGDIR)
 work = Path(ENV.get('APKLY_OUT', log / 'installer-test'))

@@ -8,6 +8,7 @@ Steps:
   wait:<log>:<text>[:<s>] wait (at most s seconds, default 300) until <text> appears in the instance's log <log> (hub.log, app-<pkg>.log, ...);
                         a missing text ends the plan
   dump                  a thread dump of the app JVM (SIGQUIT) into its output
+  gdb                   gdb attached to the app JVM: a fatal signal's native backtrace into <prefix>-gdb.log
   in:<window>:<steps>   test input into another window of the instance (a package or apklayer.installer), steps separated by '+'
   <input steps>         test input into the app's window (instance.inject: "tap:162,400 text:abc key:28")
 Usage: drive.py <pkg> <out-prefix> <runms> <quiet> <step>...   Prints one line per step; exit 1 when a wait ran out."""
@@ -66,6 +67,17 @@ def wait_for(name, text, limit):
     return None
 
 
+def app_pids():
+    """The app's JVMs in this instance: their command line is the Android process name (pgrep -x sees only 15 characters of it)."""
+    found = []
+    for pid in filter(str.isdigit, os.listdir('/proc')):
+        try:
+            if open('/proc/%s/cmdline' % pid, 'rb').read().split(b'\0')[0] == pkg.encode() and instance.belongs(pid): found.append(int(pid))
+        except OSError: pass
+    return found
+
+
+gdb = None
 p = subprocess.Popen(['bin/apklayer', 'run', pkg], stdout=open(out_log, 'w'), stderr=subprocess.STDOUT, env=env)
 shots, questions, status = 0, text_of('hub.log').count('dialog shown:'), 0
 try:
@@ -96,9 +108,17 @@ try:
             print('wait', name, repr(text), 'after %s s' % took if took is not None else 'NOT SEEN', flush=True)
             if took is None: status = 1; break
         elif step == 'dump':  # a thread dump of the app JVM (SIGQUIT) into its output
-            for line in instance.mine(pkg, exact=True): os.kill(int(line.split()[0]), 3)
+            for pid in app_pids(): os.kill(pid, 3)
             settle(2, 4)
             print('dumped', flush=True)
+        elif step == 'gdb':  # gdb attached to the app JVM (sudo: ptrace_scope): a fatal signal's native backtrace into <prefix>-gdb.log
+            pid = str(app_pids()[0])
+            quiet_signals = [a for s in ('SIGSEGV', 'SIGILL', 'SIGBUS', 'SIGFPE', 'SIGUSR1', 'SIGUSR2', 'SIGQUIT', 'SIGPIPE', 'SIG33', 'SIG34', 'SIG35', 'SIG36')
+                             for a in ('-ex', 'handle %s nostop noprint pass' % s)]
+            gdb = subprocess.Popen(['sudo', '-n', 'gdb', '-batch', '-p', pid, *quiet_signals, '-ex', 'continue', '-ex', 'thread', '-ex', 'bt 40', '-ex', 'info sharedlibrary'],
+                                   stdout=open(prefix + '-gdb.log', 'w'), stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+            settle(3, 15)
+            print('gdb attached to', pid, flush=True)
         elif step.startswith('in:'):
             _, window, steps = step.split(':', 2)
             try: instance.inject(window, *steps.split('+'))
@@ -111,4 +131,7 @@ try:
 finally:
     subprocess.run(['bin/apklayer', 'stop'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     p.wait()
+    if gdb:
+        try: gdb.wait(10)
+        except subprocess.TimeoutExpired: subprocess.run(['sudo', '-n', 'kill', str(gdb.pid)]); gdb.wait()
 sys.exit(status)

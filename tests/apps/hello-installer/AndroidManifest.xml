@@ -6,6 +6,7 @@
     <activity android:name=".Main" android:exported="true">
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
     </activity>
+    <provider android:name=".ApkProvider" android:authorities="hello.installer.apks" android:exported="false" android:grantUriPermissions="true"/>
     <receiver android:name=".PackageReceiver" android:exported="true">
       <intent-filter><action android:name="android.intent.action.PACKAGE_ADDED"/><action android:name="android.intent.action.PACKAGE_REMOVED"/><data android:scheme="package"/></intent-filter>
     </receiver>
