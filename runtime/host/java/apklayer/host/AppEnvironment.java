@@ -68,6 +68,7 @@ final class AppEnvironment {
         sandbox.getTestEnvironment().setUpApplicationState("apklayer", configuration(describing), manifest);
         StartTrace.mark("robolectric application state set up");
         HostClock.alignToMonotonic();  // after the clock's reset by the state setup
+        if (!describing) HostSharedLibraries.install(apk);  // before any class of the app loads: <uses-library> jars (org.apache.http.legacy) on its class path
         HostProcessName.install(apk);  // before the Application is attached: Application.onCreate runs in every process, and apps check which one they are in
         NativeProcess.install();
         // before any class of the app is initialised (the lazy Application among them): static initialisers read Build (OpenVPN returns from

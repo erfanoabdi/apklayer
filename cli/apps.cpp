@@ -177,6 +177,10 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
         std::cerr << "apklayer: INSTALL_PARSE_FAILED_NO_CERTIFICATES: " << name << " is not signed" << std::endl;
         std::exit(kInstallUnsigned);
     }
+    if (!property(info, "missingLibraries").empty()) {  // PackageManagerService: a required <uses-library> the device does not have
+        std::cerr << "apklayer: INSTALL_FAILED_MISSING_SHARED_LIBRARY: " << pkg << " requires " << property(info, "missingLibraries") << std::endl;
+        std::exit(kInstallMissingLibrary);
+    }
     if (!property(info, "signerMismatch").empty()) {
         std::cerr << "apklayer: INSTALL_FAILED_UPDATE_INCOMPATIBLE: " << pkg << " is installed with another signature" << std::endl;
         std::exit(kInstallIncompatible);

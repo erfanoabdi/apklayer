@@ -25,7 +25,8 @@ if [ -f aidl.list ]; then
     "$BT/aidl" -p"$SDK/platforms/android-36.1/framework.aidl" -I"$PWD/../aidl" -o"$W/aidl" "$PWD/../aidl/$source"
   done < aidl.list
 fi
-javac -nowarn -d "$W/cls" -cp "$AJ" $(find -H src "$W/aidl" -name '*.java')
+OPT=$(ls "$SDK"/platforms/android-36.1/optional/*.jar | paste -sd: -)  # the optional shared libraries (<uses-library>): compile only, as the SDK's stubs
+javac -nowarn -d "$W/cls" -cp "$AJ:$OPT" $(find -H src "$W/aidl" -name '*.java')
 "$BT"/d8 --min-api 26 --lib "$AJ" --output "$W" $(find "$W/cls" -name '*.class')
 RES=()
 if [ -d res ]; then "$BT"/aapt2 compile --dir res -o "$W/res.zip"; RES=("$W/res.zip"); fi  # an app with resources (its own 0x7f package)

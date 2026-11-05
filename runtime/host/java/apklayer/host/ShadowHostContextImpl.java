@@ -143,7 +143,7 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
             info.nativeLibraryDir = libdir;
             info.primaryCpuAbi = HostBuild.appAbi();
         }
-        if (info != null && real.getPackageName().equals(info.packageName)) AppEnvironment.markSystem(info);
+        if (info != null && real.getPackageName().equals(info.packageName)) { AppEnvironment.markSystem(info); HostSharedLibraries.record(info); }
         return info;
     }
     @Implementation @Override protected void sendBroadcast(Intent intent) {
