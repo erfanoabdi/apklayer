@@ -111,6 +111,7 @@ int gnss_source_start(GDBusConnection *bus)
 }
 
 const int apklayer_plugin_abi = APKLAYER_PLUGIN_ABI;
+const char apklayer_gnss_needs[] = "the Lomiri location service on the system bus";  /* shown when probe() finds nothing (plugin.h) */
 int apklayer_gnss_probe(void) { return gnss_session_ping(G_BUS_TYPE_SYSTEM, SERVICE, "/com/lomiri/location/Service") ? 10 : -1; }
 
 int apklayer_gnss_init(int count, const char *const *options)

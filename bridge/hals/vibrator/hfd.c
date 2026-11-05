@@ -24,6 +24,7 @@ static int vibrate(int32_t ms)
 }
 
 const int apklayer_plugin_abi = APKLAYER_PLUGIN_ABI;
+const char apklayer_vibrator_needs[] = "hfd-service (the haptics of Ubuntu Touch) on the system bus";  /* shown when probe() finds nothing (plugin.h) */
 int apklayer_vibrator_probe(void)
 {
     GDBusConnection *c = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, NULL);

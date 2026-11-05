@@ -11,4 +11,4 @@ option('package_version', type: 'string', value: '',
 option('bionic_translation', type: 'string', value: '', deprecated: true,
   description: 'unused: bionic_translation is a subproject (subprojects/bionic_translation.wrap)')
 option('audio_backend', type: 'combo', choices: ['auto', 'pipewire', 'pulse'], value: 'auto',
-  description: 'the audio HAL\'s host library (bridge/hals/audio): PipeWire, or PulseAudio for hosts with no PipeWire daemon (Ubuntu Touch); auto: PipeWire when its library is found, else PulseAudio')
+  description: 'the audio backends to build (bridge/hals/audio: libapklayer-audio-<backend>.so, picked per instance by `apklayer providers`); auto: every one whose library is found')

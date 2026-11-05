@@ -1,4 +1,6 @@
-/* Native PipeWire playback for the Android audio HAL. Plain C across the ABI. */
+/* The Android audio HAL's host side (playback and capture), the audio domain's backend API: libapklayer-audio-<backend>.so (pipewire: audio.c,
+ * capture.c; pulse: pulse.c). Plain C across the ABI. Unlike the other domains' plugins it runs in every Android process that plays or records
+ * (APKLAYER_HOST_LIBS), not in a front: it takes no options and has no init(). */
 #ifndef APKLAYER_AUDIO_H
 #define APKLAYER_AUDIO_H
 #include <stddef.h>
@@ -7,6 +9,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+/* apklayer/plugin.h's probe (bridge/hals/audio/probe.c): <0 no server answers here, >0 quality (pipewire 20, pulse 10) */
+int apklayer_audio_probe(void);
 struct apklayer_audio;
 enum apklayer_audio_format { APKLAYER_AUDIO_S16, APKLAYER_AUDIO_F32 };
 struct apklayer_audio_config {

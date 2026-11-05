@@ -51,6 +51,7 @@ static int find(int *best_rank, char *name, size_t size)
 }
 
 const int apklayer_plugin_abi = APKLAYER_PLUGIN_ABI;
+const char apklayer_vibrator_needs[] = "a force-feedback input device that can rumble";  /* shown when probe() finds nothing (plugin.h) */
 int apklayer_vibrator_probe(void)
 {
     char path[300];

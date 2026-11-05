@@ -2,6 +2,7 @@
  * Video/Source node) with the raw sizes they offer. Streams: pipewire.c. Option: role=camera (default: only nodes whose media.role is
  * Camera, as libcamera's and V4L2's are; role=any takes every Video/Source). */
 #include "apklayer/camera.h"
+#include "apklayer/sound_server.h"
 #include "pipewire.h"
 
 #include <errno.h>
@@ -101,10 +102,12 @@ static const struct pw_core_events core_events = {PW_VERSION_CORE_EVENTS, .done 
 const int apklayer_plugin_abi = APKLAYER_PLUGIN_ABI;
 int apklayer_camera_probe(void)
 {
+    if (!apklayer_pipewire_answers()) return -1;  /* no daemon: no client context (its config warnings on a host without PipeWire) */
     struct apklayer_camera_info cams[1];
     return apklayer_camera_list(cams, 1) > 0 ? 10 : -1;  /* a real camera beats the fake; no camera: unusable here */
 }
 
+const char apklayer_camera_needs[] = "a PipeWire daemon with a camera";
 const char apklayer_camera_options[] = "role\tcamera\ttext\n";  /* camera or any (every video source) */
 
 int apklayer_camera_init(int count, const char *const *options)

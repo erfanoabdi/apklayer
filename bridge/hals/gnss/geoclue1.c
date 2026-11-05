@@ -58,6 +58,7 @@ int gnss_source_start(GDBusConnection *bus)
 
 /* below GeoClue 2 (10): a host with both picks the newer one */
 const int apklayer_plugin_abi = APKLAYER_PLUGIN_ABI;
+const char apklayer_gnss_needs[] = "GeoClue 1 (its Master on the session bus)";  /* shown when probe() finds nothing (plugin.h) */
 int apklayer_gnss_probe(void) { return gnss_session_ping(G_BUS_TYPE_SESSION, MASTER, "/org/freedesktop/Geoclue/Master") ? 5 : -1; }
 
 int apklayer_gnss_init(int count, const char *const *options)

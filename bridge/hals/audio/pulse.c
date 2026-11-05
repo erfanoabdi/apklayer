@@ -1,7 +1,7 @@
 /* apklayer/audio.h over PulseAudio (libpulse-simple), for hosts that run PulseAudio and no PipeWire daemon (Ubuntu Touch, Halium phones).
  * Same contract as audio.c/capture.c: playback blocks in write (the server's buffer paces the HAL worker, kept at ~100 ms), the output
  * clock is frames written minus the server's reported latency; capture is a thread filling a ring of the last half second.
- * Chosen at build time (meson: audio_backend), the exported functions are the same. */
+ * The audio domain's "pulse" backend (libapklayer-audio-pulse.so, probe.c): the exported functions are the same as the PipeWire one's. */
 #include <apklayer/audio.h>
 #include <errno.h>
 #include <pthread.h>
