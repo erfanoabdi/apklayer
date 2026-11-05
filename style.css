@@ -933,7 +933,7 @@ footer nav {
     font-size:11px;
   }
   .install-layout {
-    grid-template-columns:1fr;
+    grid-template-columns:minmax(0,1fr);
     gap:45px;
     padding-block:60px;
   }
@@ -1331,5 +1331,328 @@ td {
   }
   .screenshot-feature figcaption {
     padding: 22px;
+  }
+}
+
+/* The landing page shows the product first; technical references are opt-in. */
+.hero {
+  min-height: 590px;
+  padding-block: 55px 65px;
+  gap: 55px;
+}
+.hero-capture {
+  margin: 0;
+  padding: 14px;
+  border: 1px solid #496553;
+  border-radius: 17px;
+  background: linear-gradient(140deg, #304b3c, #17221e);
+  box-shadow: 0 25px 90px #0004;
+  transform: rotate(2deg);
+}
+.hero-capture a {
+  display: block;
+  border-radius: 9px;
+  overflow: hidden;
+}
+.hero-capture img {
+  display: block;
+  width: 100%;
+  height: 390px;
+  object-fit: cover;
+  object-position: top;
+}
+.hero-capture figcaption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 15px 4px 3px;
+  color: #d1e8d7;
+  font-size: 10px;
+}
+.capture-host {
+  margin-left: auto;
+  color: #b0c2b5;
+  font: 9px ui-monospace, monospace;
+}
+.nav-download {
+  display: inline-flex;
+  gap: 17px;
+  align-items: center;
+  padding: 9px 15px;
+  border-radius: 7px;
+  background: var(--mint);
+  color: #14231c;
+  font-weight: 650;
+}
+.nav-download:hover {
+  background: #d6ffdf;
+  color: #14231c;
+}
+.reference-panel {
+  min-width: 0;
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #131d1c;
+}
+.reference-panel > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 25px;
+  min-height: 88px;
+  padding: 20px 25px;
+  cursor: pointer;
+  list-style: none;
+}
+.reference-panel > summary::-webkit-details-marker {
+  display: none;
+}
+.reference-panel > summary:hover {
+  background: #1c2b23;
+}
+.reference-panel > summary:focus-visible, .requirements > summary:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: -4px;
+}
+.reference-panel summary strong, .reference-panel summary small {
+  display: block;
+}
+.reference-panel summary strong {
+  font-size: 15px;
+  font-weight: 550;
+  color: #e0eae2;
+}
+.reference-panel summary small {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.disclosure-icon {
+  color: var(--mint);
+  font-size: 25px;
+  font-weight: 300;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.reference-panel[open] > summary {
+  border-bottom: 1px solid var(--line);
+  background: #1c2b23;
+}
+.reference-panel[open] > summary .disclosure-icon {
+  transform: rotate(45deg);
+}
+.reference-body {
+  min-width: 0;
+  padding: 26px;
+}
+.reference-body .hardware-providers, .reference-body .host-matrix,
+.reference-body .microg-support, .reference-body .platform-integration,
+.reference-body .instance-capture {
+  margin-top: 0;
+}
+.reference-body > :first-child {
+  margin-top: 0;
+}
+.reference-body > :last-child {
+  margin-bottom: 0;
+}
+.capability-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 35px;
+}
+.capability-list li {
+  border: 1px solid #3c5143;
+  border-radius: 99px;
+  background: #1b2921;
+  padding: 7px 14px;
+  color: #c8dece;
+  font-size: 12px;
+}
+.compatibility-snapshot {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: center;
+  gap: 40px;
+  padding: 27px 30px;
+  border: 1px solid #405642;
+  border-radius: 12px;
+  background: #1b2b21;
+  margin-bottom: 30px;
+}
+.compatibility-number {
+  font-size: 65px;
+  line-height: 1;
+  letter-spacing: -4px;
+  font-weight: 550;
+  color: var(--mint);
+}
+.compatibility-number > span {
+  color: #8aa892;
+  font-size: 34px;
+  letter-spacing: -2px;
+}
+.compatibility-snapshot > div > p {
+  margin: 12px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.compatibility-snapshot > p {
+  margin: 0;
+  font-size: 13px;
+}
+.compatibility-snapshot .text-link {
+  white-space: nowrap;
+}
+.technical .instance-boundary {
+  margin: 0 0 30px;
+  color: #aabbaf;
+  font-size: 12px;
+}
+.approach-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+.approach-grid article {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 25px;
+}
+.approach-grid article:first-child {
+  border-color: #4a6750;
+  background: #1b2b21;
+}
+.approach-grid h3 {
+  font-size: 18px;
+}
+.approach-grid p {
+  font-size: 13px;
+  margin-bottom: 0;
+}
+.install-platforms {
+  color: #c8dece;
+  font-size: 12px;
+  margin-top: 25px;
+}
+.requirements {
+  margin-top: 16px;
+}
+.requirements > summary {
+  cursor: pointer;
+  color: #c8dece;
+  font-size: 12px;
+}
+.screenshot-section > .reference-panel {
+  margin-top: 24px;
+}
+@media (max-width: 1000px) {
+  .hero {
+    gap: 25px;
+  }
+  .hero-capture img {
+    height: 330px;
+  }
+  .capture-host {
+    display: none;
+  }
+  .compatibility-snapshot {
+    grid-template-columns: 1fr 1fr;
+    gap: 25px;
+  }
+  .compatibility-snapshot .text-link {
+    grid-column: 1 / -1;
+  }
+  .approach-grid {
+    gap: 12px;
+  }
+  .approach-grid article {
+    padding: 20px;
+  }
+  .site-header nav {
+    gap: 20px;
+  }
+}
+@media (max-width: 700px) {
+  .hero {
+    padding-block: 40px 45px;
+    gap: 38px;
+  }
+  .hero-capture {
+    transform: none;
+    width: min(100%, 440px);
+    margin-inline: auto;
+    padding: 10px;
+    border-radius: 12px;
+  }
+  .hero-capture img {
+    height: 310px;
+  }
+  .capture-host {
+    display: inline;
+  }
+  .site-header nav > a:first-child {
+    display: inline-flex;
+  }
+  .site-header nav .nav-technology, .site-header nav .nav-source {
+    display: none;
+  }
+  .site-header nav {
+    gap: 14px;
+  }
+  .nav-download {
+    padding: 8px 11px;
+    gap: 10px;
+  }
+  .reference-panel > summary {
+    padding: 18px;
+    min-height: 85px;
+    gap: 15px;
+  }
+  .reference-panel summary strong {
+    font-size: 14px;
+  }
+  .reference-panel summary small {
+    font-size: 11px;
+  }
+  .reference-body {
+    padding: 18px;
+  }
+  .compatibility-snapshot {
+    grid-template-columns: 1fr;
+    padding: 25px;
+    gap: 20px;
+  }
+  .capability-list {
+    margin-bottom: 25px;
+    gap: 7px;
+  }
+  .capability-list li {
+    font-size: 11px;
+    padding: 6px 11px;
+  }
+  .approach-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .approach-grid h3 {
+    margin-top: 15px;
+  }
+}
+
+.site-header .brand, .nav-download {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+@media (max-width: 400px) {
+  .site-header nav > a:first-child {
+    display: none;
   }
 }

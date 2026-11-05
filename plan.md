@@ -3,7 +3,7 @@
 ## Screenshots
 
 - [x] Capture real apps and manager views from the owner's Parallels VM using fresh app data.
-- [x] Add the screenshot section after application compatibility, with microG Settings and NewPipe actually playing a public demo video. Removed the earlier LocalSend, map-download, and vault-chooser captures.
+- [x] Add the screenshot section near the top, with microG Settings and NewPipe actually playing a public demo video. Removed the earlier LocalSend, map-download, and vault-chooser captures.
 - [x] Restore the original manager overview above microG and NewPipe.
 - [x] Add an instance-management capture beside the instance documentation.
 - [x] Record app versions, capture methods, host details, and verification scope in `assets/screenshots/README.md`; inspect captures for personal data.
@@ -11,7 +11,8 @@
 - [ ] Add a composed-on-the-desktop wide capture showing several fully visible app windows when interactive VM window positioning is available. Do not substitute a synthetic montage.
 - [x] Verify NewPipe playback: changing frames and an active PipeWire audio stream, using the existing upstream media check.
 - [ ] Add a later camera capture using non-personal sample content. OTR2 was dropped at the owner’s request; do not add a stalled game or its consent dialog as a demo.
-- [ ] Visually verify desktop and mobile website layouts when browser preview access is available. Source, assets, release behaviour, and HTTP serving are checked independently.
+- [x] Review the redesigned desktop layout in Firefox. Use an isolated browser for further website QA; do not control the owner’s Mac UI or Parallels.
+- [ ] Add a short real screen recording of app launch and playback when suitable footage is available; keep a static poster and respect reduced-motion preferences.
 
 ## Technical content
 
@@ -24,3 +25,9 @@ The site is plain HTML, CSS, and JavaScript. No build step or dependencies are n
 Local preview: `python3 -m http.server 8000` from this directory, then visit `http://localhost:8000`.
 
 Verification: `node --test tests/site.test.cjs` exercises the release feed and fallback links. Technical website content links to the upstream architecture, app corpus, hardware source and test groups, and device integration notes.
+
+## Presentation
+
+The main page leads with a real NewPipe playback image and the retained manager screenshot. Installation comes before the reference sections. Native `details`/`summary` disclosures keep all requested hardware, platform, microG, compatibility, instance, and comparison material available without a long default reading path. No new JavaScript or dependencies are required for the disclosures.
+
+Responsive QA: checked an isolated in-app browser at 320, 375, 390, 400, 401, 700, 701, 768, 1000, and 1280 pixels with all disclosures closed and open. Fixed the installation grid’s minimum track sizing at narrow widths. Verified keyboard disclosure toggling, contained keyboard-accessible table scrolling, local assets, section anchors, and release links. No Mac UI or Parallels control was used.
