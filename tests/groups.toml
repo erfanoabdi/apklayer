@@ -195,6 +195,11 @@ run = ["python3 -u tests/vm/gpu-select.py"]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/gpu-window-run.py"]
 
+[fences]
+# every fence a real sync_file: no "sync_file_info returned NULL" / "Invalid present fence" in an app's or SurfaceFlinger's log (glbench window)
+apps = ["hello-glbench"]
+run = ["python3 -u tests/vm/fences.py"]
+
 [texture-view]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/texture-view.py"]

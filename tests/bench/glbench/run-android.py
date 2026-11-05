@@ -3,7 +3,7 @@
 prints its result lines, and stops the instance once it prints "glbench: done" (or after a 120 s budget, or 20 s without output).
 Run in the repo copy on the VM with the instance's environment (APKLAYER_INSTANCE, XDG_RUNTIME_DIR, WAYLAND_DISPLAY...):
   python3 tests/bench/glbench/run-android.py [modes] [scenes] [seconds]     modes: window,window-novsync; scenes: clear,fill,draws
-Extra JVM options (-Dapklayer.perf=true...) come from APKLAYER_JOPTS; GLBENCH_DUMP=<prefix> writes SurfaceFlinger's dumpsys at each mode's\nstart and at the end to <prefix>.N."""
+Extra JVM options (-Dapklayer.perf=true...) come from APKLAYER_JOPTS; GLBENCH_DUMP=<prefix> writes SurfaceFlinger's dumpsys at each mode's\nstart and at the end to <prefix>.N (GLBENCH_DUMP_ARGS: its arguments, e.g. --frametimeline -all)."""
 import os
 import selectors
 import subprocess
@@ -39,7 +39,7 @@ try:
                     print(line, flush=True)
                 if os.environ.get('GLBENCH_DUMP') and ('GL_RENDERER' in line or 'glbench: done' in line):  # SurfaceFlinger's state at a mode's start and at the end
                     with open('%s.%d' % (os.environ['GLBENCH_DUMP'], dumps), 'wb') as out:
-                        subprocess.run([os.environ.get('APKLAYER_BIN', 'bin/apklayer'), 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger'], env=env, stdout=out, stderr=subprocess.STDOUT)
+                        subprocess.run([os.environ.get('APKLAYER_BIN', 'bin/apklayer'), 'exec', 'libapklayer_servicetool.so', 'dump', 'SurfaceFlinger'] + os.environ.get('GLBENCH_DUMP_ARGS', '').split(), env=env, stdout=out, stderr=subprocess.STDOUT)
                     dumps += 1
             if any('glbench: done' in l for l in text):
                 break
