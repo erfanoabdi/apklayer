@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=apklayer
+Name=Apklayer
 Comment=Android apps on Linux: install, open and manage them
 Exec=apklayer-manager
 Icon=apklayer
