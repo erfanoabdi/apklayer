@@ -27,3 +27,14 @@ Description: run Android apps on Linux in Wayland windows
  the command line tool, the window shell, the native runtime and
  apklayer-manager; the Android runtime bundle (Android's libraries and
  framework) is downloaded per user by apklayer-manager.
+
+Package: apklayer-dev
+Section: libdevel
+Architecture: any
+Depends: apklayer (= ${binary:Version}), ${misc:Depends}
+Description: apklayer hardware plugin API (headers and pkg-config file)
+ Headers and apklayer-plugin.pc for building apklayer hardware plugins out of
+ tree: sensors, GNSS, vibrator and camera backends, libraries
+ libapklayer-<domain>-<backend>.so installed into the pkg-config variable
+ plugindir (/usr/lib/<multiarch>/apklayer/plugins), where apklayer finds
+ them. Guide: docs/PLUGINS.md in the apklayer sources.

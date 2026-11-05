@@ -1,5 +1,5 @@
 #!/bin/sh
-# build-deb.sh <codename> <version> <prebuilts dir> <out dir>: the apklayer deb of this machine's CPU for one OS release (noble, trixie), the way
+# build-deb.sh <codename> <version> <prebuilts dir> <out dir>: the apklayer deb (and apklayer-dev) of this machine's CPU for one OS release (noble, trixie), the way
 # .github/workflows/release.yml builds it (docs/RELEASES.md). Run in the source tree on that OS, Build-Depends installed (apt-get build-dep ./).
 # Fetches Slint for the manager, writes debian/changelog (<version>-1~<codename>1) and debian/<codename>.substvars, then runs dpkg-buildpackage
 # (debian/rules: the Meson build, which fetches bionic_translation and the pinned jars itself; network); the deb lands in <out dir>.
@@ -30,6 +30,6 @@ apklayer ($deb) $codename; urgency=medium
 EOF
 
 APKLAYER_PREBUILTS="$P" APKLAYER_SLINT="$slint" dpkg-buildpackage -b -us -uc
-mv "../apklayer_${deb}_"*.deb "$out/"
+mv "../apklayer_${deb}_"*.deb "../apklayer-dev_${deb}_"*.deb "$out/"
 rm -f "../apklayer_${deb}_"*.buildinfo "../apklayer_${deb}_"*.changes
-ls -l "$out"/apklayer_"$deb"_*.deb
+ls -l "$out"/apklayer_"$deb"_*.deb "$out"/apklayer-dev_"$deb"_*.deb
