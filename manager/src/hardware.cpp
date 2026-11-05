@@ -167,7 +167,7 @@ Hardware::Hardware(slint::ComponentHandle<AppWindow> ui, const Cli& cli, std::st
             Result r = runProgram({"python3", chooser, "open"});
             slint::invoke_from_event_loop([this, r, domain, backend, key] {
                 std::string path = chosenFile(r);
-                if (path.empty()) { message_(r.out.find("unavailable") != std::string::npos ? "No file chooser portal: type the path" : "No file chosen"); return; }
+                if (path.empty()) { message_(r.out.find("unavailable") != std::string::npos ? "No file chooser (no portal, no Content Hub): type the path" : "No file chosen"); return; }
                 setOption(options(ui_->global<Backend>().get_hardware(), domain, backend), key, path);
             });
         }).detach();
