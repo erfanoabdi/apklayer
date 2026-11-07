@@ -15,6 +15,8 @@ bool inDrawer(const std::string& info);
 void writeDesktop(const Layout& layout, const std::string& package);
 // `launcher show|hide <package>`
 int launcherCommand(const Layout& layout, const std::string& action, const std::string& package);
+// the Apklayer submenu: its merge file and directory entry, written once (then every installed app's entry again)
+void writeMenu(const Layout& layout);
 // Installs of the packages tools/sysapps.list names that carry no system= yet are marked system apps, their entries rewritten
 void markSystemApps(const Layout& layout);
 
