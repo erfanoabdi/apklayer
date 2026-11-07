@@ -30,9 +30,9 @@ def maven(coord):
         for attempt in range(5):  # Maven Central answers 429 when parallel jobs fetch at once: back off and try again
             try:
                 with urllib.request.urlopen(base + '/' + rel) as r: return r.read()
-            except (OSError, http.client.IncompleteRead) as e:  # a connection cut mid-file (IncompleteRead) is tried again too
+            except (OSError, http.client.IncompleteRead) as e:  # a connection cut mid-file or before the answer is tried again too
                 print('fetch-dep: %s/%s: %s' % (base, rel, e), file=sys.stderr)
-                if not isinstance(e, http.client.IncompleteRead) and getattr(e, 'code', None) not in (429, 500, 502, 503, 504): break
+                if not isinstance(e, (http.client.IncompleteRead, ConnectionError)) and getattr(e, 'code', None) not in (429, 500, 502, 503, 504): break
                 time.sleep(2 ** attempt)
     raise SystemExit('fetch-dep: %s not found' % coord)
 
