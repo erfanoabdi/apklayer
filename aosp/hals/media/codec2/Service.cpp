@@ -19,6 +19,37 @@ static bool takes(const std::shared_ptr<C2ComponentInterface>& interface, const 
     if (v.type == C2FieldSupportedValues::VALUES) return std::any_of(v.values.begin(), v.values.end(), [&](const C2Value::Primitive& p) { return p.u32 == value; });
     return v.type != C2FieldSupportedValues::EMPTY;
 }
+// --probe of one audio codec: 48 kHz stereo configured and read back; a fixed-rate codec (AMR-NB 8 kHz mono, AMR-WB 16 kHz, GSM) cannot take it, as on a device: skipped
+template <typename Rate, typename Channels>
+static int probeAudio(const std::shared_ptr<C2ComponentInterface>& interface, const C2String& name) {
+    Rate rate(0u, 48000);
+    Channels channels(0u, 2);
+    if (!takes(interface, C2ParamField(&rate, &Rate::value), 48000) || !takes(interface, C2ParamField(&channels, &Channels::value), 2)) {
+        fprintf(stderr, "codec2: SKIP %s interface config/query: no 48000Hz 2ch\n", name.c_str());
+        return 0;
+    }
+    std::vector<std::unique_ptr<C2SettingResult>> failures;
+    std::vector<std::unique_ptr<C2Param>> heap;
+    bool ok = interface->config_vb({&rate, &channels}, C2_MAY_BLOCK, &failures) == C2_OK && failures.empty();
+    rate.value = channels.value = 0;
+    ok = ok && interface->query_vb({&rate, &channels}, {}, C2_MAY_BLOCK, &heap) == C2_OK && rate.value == 48000 && channels.value == 2;
+    fprintf(stderr, "codec2: %s %s interface config/query %uHz %uch\n", ok ? "PASS" : "FAIL", name.c_str(), rate.value, channels.value);
+    return ok ? 0 : 1;
+}
+
+// --probe of one video codec: a 64x48 picture configured and read back
+template <typename Size>
+static int probeVideo(const std::shared_ptr<C2ComponentInterface>& interface, const C2String& name) {
+    Size size(0u, 64, 48);
+    std::vector<std::unique_ptr<C2SettingResult>> failures;
+    std::vector<std::unique_ptr<C2Param>> heap;
+    bool ok = interface->config_vb({&size}, C2_MAY_BLOCK, &failures) == C2_OK && failures.empty();
+    size.width = size.height = 0;
+    ok = ok && interface->query_vb({&size}, {}, C2_MAY_BLOCK, &heap) == C2_OK && size.width == 64 && size.height == 48;
+    fprintf(stderr, "codec2: %s %s interface config/query %ux%u\n", ok ? "PASS" : "FAIL", name.c_str(), size.width, size.height);
+    return ok ? 0 : 1;
+}
+
 extern "C" int main(int argc, char** argv) {
     if (argc == 3 && !strcmp(argv[1], "--reorder-probe")) {
         ABinderProcess_setThreadPoolMaxThreadCount(2);
@@ -55,29 +86,13 @@ extern "C" int main(int argc, char** argv) {
         for (const auto& trait : traits) {
             std::shared_ptr<C2ComponentInterface> interface;
             if (store->createInterface(trait->name, &interface) != C2_OK) return 1;
-            if (trait->domain == C2Component::DOMAIN_AUDIO) {
-                C2StreamSampleRateInfo::output rate(0u, 48000);
-                C2StreamChannelCountInfo::output channels(0u, 2);
-                // a fixed-rate codec (AMR-NB 8 kHz mono, AMR-WB 16 kHz) refuses 48 kHz stereo, as on a device
-                if (!takes(interface, C2ParamField(&rate, &C2StreamSampleRateInfo::value), 48000) || !takes(interface, C2ParamField(&channels, &C2StreamChannelCountInfo::value), 2)) {
-                    fprintf(stderr, "codec2: SKIP %s interface config/query: no 48000Hz 2ch\n", trait->name.c_str());
-                    continue;
-                }
-                std::vector<std::unique_ptr<C2SettingResult>> failures;
-                if (interface->config_vb({&rate, &channels}, C2_MAY_BLOCK, &failures) != C2_OK || !failures.empty()) { fprintf(stderr, "codec2: FAIL %s config 48000Hz 2ch\n", trait->name.c_str()); return 1; }
-                rate.value = channels.value = 0;
-                std::vector<std::unique_ptr<C2Param>> heap;
-                if (interface->query_vb({&rate, &channels}, {}, C2_MAY_BLOCK, &heap) != C2_OK || rate.value != 48000 || channels.value != 2) return 1;
-                fprintf(stderr, "codec2: PASS %s interface config/query %uHz %uch\n", trait->name.c_str(), rate.value, channels.value);
-                continue;
-            }
-            C2StreamPictureSizeInfo::output size(0u, 64, 48);
-            std::vector<std::unique_ptr<C2SettingResult>> failures;
-            if (interface->config_vb({&size}, C2_MAY_BLOCK, &failures) != C2_OK || !failures.empty()) return 1;
-            size.width = size.height = 0;
-            std::vector<std::unique_ptr<C2Param>> heap;
-            if (interface->query_vb({&size}, {}, C2_MAY_BLOCK, &heap) != C2_OK || size.width != 64 || size.height != 48) return 1;
-            fprintf(stderr, "codec2: PASS %s interface config/query %ux%u\n", trait->name.c_str(), size.width, size.height);
+            // a decoder's stream format is its output's, an encoder's its input's (C2Config.h)
+            bool encoder = trait->kind == C2Component::KIND_ENCODER;
+            int status = trait->domain == C2Component::DOMAIN_AUDIO
+                    ? (encoder ? probeAudio<C2StreamSampleRateInfo::input, C2StreamChannelCountInfo::input>(interface, trait->name)
+                               : probeAudio<C2StreamSampleRateInfo::output, C2StreamChannelCountInfo::output>(interface, trait->name))
+                    : (encoder ? probeVideo<C2StreamPictureSizeInfo::input>(interface, trait->name) : probeVideo<C2StreamPictureSizeInfo::output>(interface, trait->name));
+            if (status != 0) return status;
         }
         return 0;
     }
