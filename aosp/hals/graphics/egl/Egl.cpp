@@ -302,8 +302,9 @@ EGLBoolean eglGetConfigAttrib(EGLDisplay dpy, EGLConfig cfg, EGLint attribute, E
             case DRM_FORMAT_ARGB8888: case DRM_FORMAT_ABGR8888: *value = 1; break;      // HAL_PIXEL_FORMAT_RGBA_8888 (every window buffer is allocated as it)
             case DRM_FORMAT_XRGB8888: case DRM_FORMAT_XBGR8888: *value = 2; break;      // RGBX_8888
             case DRM_FORMAT_RGB565: *value = 4; break;                                  // RGB_565
-            case DRM_FORMAT_ARGB2101010: case DRM_FORMAT_ABGR2101010: *value = 0x2b; break;  // RGBA_1010102
-            case DRM_FORMAT_ABGR16161616F: *value = 0x16; break;                        // RGBA_FP16
+            case DRM_FORMAT_ARGB2101010: case DRM_FORMAT_ABGR2101010:
+            case DRM_FORMAT_XRGB2101010: case DRM_FORMAT_XBGR2101010: *value = 0x2b; break;  // RGBA_1010102 (Android has no RGBX_1010102)
+            case DRM_FORMAT_ABGR16161616F: case DRM_FORMAT_XBGR16161616F: *value = 0x16; break;  // RGBA_FP16
             default: break;
         }
     }

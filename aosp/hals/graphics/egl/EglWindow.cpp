@@ -218,18 +218,24 @@ bool windowSize(ANativeWindow* nw, uint32_t* w, uint32_t* h) {
 }
 
 // A gbm_surface of that size and the host's window surface on it. Mesa takes RENDERING alone; NVIDIA's GBM backend refuses that surface
-// (EGL_BAD_ALLOC) unless SCANOUT is asked as well, so that is the second try.
+// (EGL_BAD_ALLOC) unless SCANOUT is asked as well, so that is the second try. A 10-bit config without alpha gets the alpha variant's buffer
+// first: the present cannot read an XR30/XB30 image back (virgl: an incomplete read framebuffer, RGB10 is not colour-renderable in GLES), and
+// Mesa takes an A format for an X config (its GBM config check compares the RGB channels only).
 EGLSurface hostSurfaceOnGbm(EGLDisplay dpy, EGLConfig cfg, EGLint visual, uint32_t w, uint32_t h, void** gbmOut) {
     auto create = gbmFn<void* (*)(void*, uint32_t, uint32_t, uint32_t, uint32_t)>("gbm_surface_create");
     auto destroy = gbmFn<void (*)(void*)>("gbm_surface_destroy");
     auto platformSurface = host<PFNEGLCREATEPLATFORMWINDOWSURFACEPROC>("eglCreatePlatformWindowSurface");
-    for (uint32_t usage : {1u << 2 /* GBM_BO_USE_RENDERING */, (1u << 2) | 1u /* | GBM_BO_USE_SCANOUT */}) {
-        void* gs = create(apklayer_gfx_gbm_device(gfx()), w, h, (uint32_t)visual, usage);
-        if (!gs) continue;
-        EGLSurface surface = platformSurface(dpy, cfg, gs, nullptr);
-        if (surface != EGL_NO_SURFACE) { *gbmOut = gs; return surface; }
-        destroy(gs);
-    }
+    std::vector<uint32_t> formats = {(uint32_t)visual};
+    if (visual == DRM_FORMAT_XRGB2101010) formats.insert(formats.begin(), DRM_FORMAT_ARGB2101010);
+    if (visual == DRM_FORMAT_XBGR2101010) formats.insert(formats.begin(), DRM_FORMAT_ABGR2101010);
+    for (uint32_t format : formats)
+        for (uint32_t usage : {1u << 2 /* GBM_BO_USE_RENDERING */, (1u << 2) | 1u /* | GBM_BO_USE_SCANOUT */}) {
+            void* gs = create(apklayer_gfx_gbm_device(gfx()), w, h, format, usage);
+            if (!gs) continue;
+            EGLSurface surface = platformSurface(dpy, cfg, gs, nullptr);
+            if (surface != EGL_NO_SURFACE) { *gbmOut = gs; return surface; }
+            destroy(gs);
+        }
     ALOGE("host window surface %ux%u format 0x%x failed: 0x%x", w, h, visual, host<EGLint (*)()>("eglGetError")());
     return EGL_NO_SURFACE;
 }

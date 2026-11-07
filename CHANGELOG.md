@@ -121,6 +121,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-07 - libapklayer_egl arm64 and x86_64 (deep window formats; vsync agent)
+- Why: a 10-bit config without alpha (XR30) gave an incomplete read framebuffer at the window present on UTM (virgl: `framebuffer incomplete (read 0x8cd6)`, the window stayed black); the gbm_surface now takes the alpha variant (AR30/AB30) first. EGL_NATIVE_VISUAL_ID of XR30/XB30/XB4H configs was the raw fourcc; now RGBA_1010102 / RGBA_FP16. Two sources, no graph change.
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "..." hals/graphics/egl` (the tree's copy equalled main's), then `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_egl`, then the same for gsi_x86_64.
 ### 2026-11-07 - libapklayer_egl x86_64 and arm64 (GBM window surface with SCANOUT on NVIDIA; lead)
 - Why: NVIDIA's proprietary EGL (615.71.09, RTX 5060 Ti, tester box) refuses eglCreatePlatformWindowSurface on a gbm_surface made with RENDERING only (EGL_BAD_ALLOC): no window surface, so HWUI drew nothing (no text, no icons). EglWindow.cpp now retries with RENDERING|SCANOUT; Mesa keeps the first try. One source, no graph change.
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "..." hals/graphics/egl`, then `cd ~/los24 && source build/envsetup.sh && breakfast gsi_x86_64 userdebug && m libapklayer_egl`, then the same for gsi_arm64.
