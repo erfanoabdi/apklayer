@@ -53,6 +53,7 @@ def instance_env(instance, out=None):
     env = {'APKLAYER_INSTANCE': instance, 'XDG_RUNTIME_DIR': run, 'WAYLAND_DISPLAY': '/run/user/$(id -u)/wayland-0',
            'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/$(id -u)/bus', 'PULSE_SERVER': 'unix:/run/user/$(id -u)/pulse/native',
            'PIPEWIRE_RUNTIME_DIR': '/run/user/$(id -u)', 'APKLAYER_TEST_INPUT': '1',
+           'APKLAYER_PERMISSIONS': 'grant',  # runtime permissions held without the prompt (HostRuntimePermissions); group permissions turns it on
            'APKLAYER_NATIVE': ROOT + '/inst/lib/apklayer/native'}  # tests/run's meson install (the CLI finds it itself; shell tests read $APKLAYER_NATIVE)
     if out: env['APKLY_OUT'] = out
     exports = ' '.join('%s="%s"' % kv for kv in env.items())

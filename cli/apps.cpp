@@ -282,11 +282,13 @@ void uninstallApp(const Layout& l, const std::string& package) {
         std::string data = join(l.dataHome, "apklayer/" + instance + "/app-data/" + package);
         if (isDir(data)) { reclaim(data); removeTree(data); }  // reclaim: files the sandbox's app uid owns
         setHomeAccess(join(l.dataHome, "apklayer/" + instance), package, false);
-        // and its revoked permissions (cli/manage.cpp): a reinstall starts with the grants of a new install, as on Android
-        std::string revoked = join(l.dataHome, "apklayer/" + instance + "/permissions-revoked"), kept;
-        if (!exists(revoked)) continue;
-        for (const std::string& line : split(readFile(revoked).value_or(""), '\n')) if (!line.empty() && line.rfind(package + "\t", 0) != 0) kept += line + "\n";
-        writeFile(revoked, kept);
+        // and its permission answers (cli/manage.cpp): a reinstall starts as a new install, asked again, as on Android
+        for (const char* name : {"/permissions-revoked", "/permissions-granted"}) {
+            std::string answers = join(l.dataHome, "apklayer/" + instance + name), kept;
+            if (!exists(answers)) continue;
+            for (const std::string& line : split(readFile(answers).value_or(""), '\n')) if (!line.empty() && line.rfind(package + "\t", 0) != 0) kept += line + "\n";
+            writeFile(answers, kept);
+        }
     }
     unlink(join(l.dataHome, "applications/apklayer-" + package + ".desktop").c_str());
     printf("apklayer: removed %s\n", package.c_str());

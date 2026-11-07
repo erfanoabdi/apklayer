@@ -44,6 +44,7 @@ final class HubDirectory extends Binder {
     private final HubBluetooth bluetooth = new HubBluetooth(this);
     private final HubGnss gnss = new HubGnss(this);
     final HubUsb usb;
+    private final HubPermissionPrompt permissionPrompt;
     private final Map<String, Process> appProcesses = new HashMap<>();
     private final Map<String, Process> hosts = new HashMap<>();
     private final Map<String, Integer> failures = new HashMap<>();
@@ -60,6 +61,7 @@ final class HubDirectory extends Binder {
         accounts = new HubAccounts(this, bindings, packages, new HubAuthenticators(apps, packages), Path.of(System.getProperty("apklayer.storage")).getParent().resolve("accounts.json"));
         installer = new HubInstaller(this, packages, pendingIntents, Path.of(System.getProperty("apklayer.storage")).getParent());
         usb = new HubUsb(this, packages, apps);
+        permissionPrompt = new HubPermissionPrompt(packages);
         attachInterface(null, HubProtocol.DESCRIPTOR);
         exitWhenIdle(60_000); // nobody ever connected
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -498,6 +500,14 @@ final class HubDirectory extends Binder {
             case HubProtocol.USB_PERMISSION -> {
                 Peer caller = caller(); String device = request.readString(); boolean ask = request.readBoolean(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeBoolean(usb.permission(caller.name(), device, ask)); return true;
+            }
+            case HubProtocol.PERMISSIONS_REQUEST -> {
+                Peer caller = caller(); String[] names = request.createStringArray(); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeIntArray(permissionPrompt.request(caller.name(), names)); return true;
+            }
+            case HubProtocol.ROLE_REQUEST -> {
+                Peer caller = caller(); String role = request.readString(); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeBoolean(permissionPrompt.role(caller.name(), role)); return true;
             }
             case HubProtocol.CHECK_PERMISSION -> {
                 caller(); int pid = request.readInt(), uid = request.readInt(); String permission = request.readString(); request.enforceNoDataAvail();

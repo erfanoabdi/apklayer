@@ -4,11 +4,16 @@ import android.content.Intent;
 import android.net.Uri;
 import android.app.Notification;
 import android.app.NotificationManager;
+import android.app.role.RoleManager;
+import android.content.pm.PackageManager;
 import java.io.IOException;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import org.robolectric.RuntimeEnvironment;
+import org.robolectric.Shadows;
+import org.robolectric.shadows.ShadowActivity;
+import org.robolectric.shadows.ShadowApplication;
 import org.robolectric.shadow.api.Shadow;
 import org.robolectric.shadows.ShadowNotificationManager;
 import java.util.Set;
@@ -37,24 +42,70 @@ final class HostPortals {
     }
 
     /**
-     * Runtime permission requests (Activity.requestPermissions): the desktop has no permission prompts yet (a portal
-     * dialog is the later form), so everything asked for is granted, except what the user revoked in the manager (denied as after "Don't allow"),
-     * and the result delivered like the system would.
+     * Runtime permission requests (Activity.requestPermissions, the ActivityResult API's RequestPermission contracts): the hub asks the person
+     * (HubPermissionPrompt) on a thread of their own, the app's looper keeps running; the answers come back as the PermissionController's result
+     * on the main thread (Activity.dispatchRequestPermissionsResult: onRequestPermissionsResult, the next request allowed). Without a hub: granted
+     * unless the person said no (HostRuntimePermissions).
      */
     static boolean requestPermissions(Intent intent, int requestCode, android.app.Activity requester) {
-        if (!"android.content.pm.action.REQUEST_PERMISSIONS".equals(intent.getAction())) return false;
-        String[] names = intent.getStringArrayExtra("android.content.pm.extra.REQUEST_PERMISSIONS_NAMES");
-        if (names == null) names = new String[0];
+        if (!PackageManager.ACTION_REQUEST_PERMISSIONS.equals(intent.getAction())) return false;
+        String[] asked = intent.getStringArrayExtra(PackageManager.EXTRA_REQUEST_PERMISSIONS_NAMES);
+        String[] names = asked == null ? new String[0] : asked;
         String pkg = RuntimeEnvironment.getApplication().getPackageName();
-        int[] granted = new int[names.length]; // PERMISSION_GRANTED == 0
-        java.util.List<String> allowed = new java.util.ArrayList<>(), denied = new java.util.ArrayList<>();
-        for (int i = 0; i < names.length; i++) {
-            if (HostRevokedPermissions.revoked(pkg, names[i])) { granted[i] = android.content.pm.PackageManager.PERMISSION_DENIED; denied.add(names[i]); }
-            else allowed.add(names[i]);
-        }
-        ((org.robolectric.shadows.ShadowApplication) Shadow.extract(RuntimeEnvironment.getApplication())).grantPermissions(allowed.toArray(new String[0]));
-        System.out.println("[apklayer] permissions granted: " + String.join(", ", allowed) + (denied.isEmpty() ? "" : "; revoked by the user: " + String.join(", ", denied)));
-        if (requestCode >= 0) requester.onRequestPermissionsResult(requestCode, names, granted);
+        Thread asking = new Thread(() -> {
+            int[] states = new int[names.length];
+            if (HubClient.connected()) {
+                try { states = HubClient.current().requestPermissions(names); }
+                catch (RuntimeException noHub) { java.util.Arrays.fill(states, HostRuntimePermissions.DENIED); System.out.println("[apklayer] permission request failed: " + noHub); }
+            }
+            else for (int i = 0; i < names.length; i++) states[i] = HostRuntimePermissions.revoked(pkg, names[i]) ? HostRuntimePermissions.DENIED : HostRuntimePermissions.GRANTED;
+            int[] answers = states;
+            requester.runOnUiThread(() -> {
+                ShadowApplication app = Shadow.extract(RuntimeEnvironment.getApplication());
+                int[] results = new int[names.length];
+                List<String> allowed = new java.util.ArrayList<>(), denied = new java.util.ArrayList<>();
+                for (int i = 0; i < names.length; i++) {
+                    boolean yes = answers[i] == HostRuntimePermissions.GRANTED;
+                    results[i] = yes ? PackageManager.PERMISSION_GRANTED : PackageManager.PERMISSION_DENIED;
+                    (yes ? allowed : denied).add(names[i]);
+                    if (yes) app.grantPermissions(names[i]); else app.denyPermissions(names[i]);
+                    Shadows.shadowOf(RuntimeEnvironment.getApplication().getPackageManager()).setShouldShowRequestPermissionRationale(names[i], answers[i] == HostRuntimePermissions.DENIED_ONCE);
+                }
+                System.out.println("[apklayer] permissions granted: " + String.join(", ", allowed) + (denied.isEmpty() ? "" : "; denied: " + String.join(", ", denied)));
+                if (requestCode >= 0 && !requester.isDestroyed())
+                    ((ShadowActivity) Shadow.extract(requester)).receiveResult(intent, android.app.Activity.RESULT_OK, new Intent(PackageManager.ACTION_REQUEST_PERMISSIONS)
+                            .putExtra(PackageManager.EXTRA_REQUEST_PERMISSIONS_NAMES, names).putExtra(PackageManager.EXTRA_REQUEST_PERMISSIONS_RESULTS, results));
+            });
+        }, "permission-request");
+        asking.setDaemon(true);
+        asking.start();
+        return true;
+    }
+
+    /** Roles a desktop without telephony cannot give (RoleController's availability): their request is refused at once, as RequestRoleActivity does. */
+    private static final Set<String> PHONE_ROLES = Set.of(RoleManager.ROLE_SMS, RoleManager.ROLE_DIALER, RoleManager.ROLE_CALL_SCREENING, RoleManager.ROLE_CALL_REDIRECTION, RoleManager.ROLE_EMERGENCY);
+
+    /** RoleManager.createRequestRoleIntent: the person decides in the hub's dialog (HubPermissionPrompt.role); RESULT_OK when the app holds the role then. */
+    static boolean requestRole(Intent intent, android.app.Activity requester, boolean wantsResult) {
+        if (!RoleManager.ACTION_REQUEST_ROLE.equals(intent.getAction())) return false;
+        String role = intent.getStringExtra(Intent.EXTRA_ROLE_NAME);
+        android.app.Application application = RuntimeEnvironment.getApplication();
+        boolean noPhone = !application.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEPHONY);
+        Thread asking = new Thread(() -> {
+            boolean held;
+            try { held = role != null && !(noPhone && PHONE_ROLES.contains(role)) && HubClient.connected() && HubClient.current().requestRole(role); }
+            catch (RuntimeException noHub) { held = false; }
+            System.out.println("[apklayer] role " + role + (held ? " held" : " not given"));
+            boolean given = held;
+            requester.runOnUiThread(() -> {
+                // shortcut: the role is held by this process only (ShadowRoleManager), asked again after a restart; keep it in the hub when an app needs it kept
+                if (given) Shadows.shadowOf(application.getSystemService(RoleManager.class)).addHeldRole(role);
+                if (wantsResult && !requester.isDestroyed())
+                    ((ShadowActivity) Shadow.extract(requester)).receiveResult(intent, given ? android.app.Activity.RESULT_OK : android.app.Activity.RESULT_CANCELED, null);
+            });
+        }, "role-request");
+        asking.setDaemon(true);
+        asking.start();
         return true;
     }
 
@@ -62,13 +113,13 @@ final class HostPortals {
             Intent.ACTION_CREATE_DOCUMENT, Intent.ACTION_OPEN_DOCUMENT_TREE);
 
     /**
-     * Intents the host answers itself when no installed app does (ActivityTask.launch's fallbacks: desktop links and file dialogs, permission requests, the
+     * Intents the host answers itself when no installed app does (ActivityTask.launch's fallbacks: desktop links and file dialogs, permission and role requests, the
      * installer's intents): startActivity does not throw ActivityNotFoundException for them.
      */
     static boolean hostAnswers(Intent intent) {
         String action = intent.getAction();
         return action == null || Intent.ACTION_VIEW.equals(action) || Intent.ACTION_CHOOSER.equals(action) || isPicker(intent)
-                || Set.of("android.content.pm.action.REQUEST_PERMISSIONS", Intent.ACTION_INSTALL_PACKAGE, Intent.ACTION_DELETE, Intent.ACTION_UNINSTALL_PACKAGE,
+                || Set.of(PackageManager.ACTION_REQUEST_PERMISSIONS, RoleManager.ACTION_REQUEST_ROLE, Intent.ACTION_INSTALL_PACKAGE, Intent.ACTION_DELETE, Intent.ACTION_UNINSTALL_PACKAGE,
                         android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).contains(action);
     }
 

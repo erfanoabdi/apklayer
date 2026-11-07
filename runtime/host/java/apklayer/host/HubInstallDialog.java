@@ -85,9 +85,10 @@ final class HubInstallDialog {
         canvas.drawColor(0xFFFAFAFA);
         Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
         text.setColor(0xFF1C1B1F); text.setTextSize(18); text.setTypeface(Typeface.DEFAULT_BOLD);
-        canvas.drawText(heading, 20, 36, text);
+        float y = 36;
+        for (String line : wrap(heading, text, W - 40)) { canvas.drawText(line, 20, y, text); y += 24; }  // a permission question takes two lines
         text.setColor(0xFF49454F); text.setTextSize(14); text.setTypeface(Typeface.DEFAULT);
-        float y = 64;
+        y += 4;
         for (String line : wrap(body, text, W - 40)) { canvas.drawText(line, 20, y, text); y += 20; }
         Paint button = new Paint(Paint.ANTI_ALIAS_FLAG);
         button.setColor(0xFF6750A4);

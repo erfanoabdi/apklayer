@@ -149,10 +149,13 @@ final class HostSystemConfig {
         Set<String> grant = new HashSet<>();
         for (String permission : asked) {
             String level = levels.getOrDefault(permission, "");
-            boolean ok = "normal".equals(level) || "dangerous".equals(level) || "appop".equals(level)  // normal, dangerous and "appop" (draw over other apps, write settings...) are granted at install: the desktop has no prompts
+            boolean ok = "normal".equals(level) || "appop".equals(level)  // normal and "appop" (draw over other apps, write settings...) are granted at install
+                    || ("dangerous".equals(level) && HostRuntimePermissions.granted(pkg, permission, app.getApplicationInfo().targetSdkVersion))  // runtime ones: as the person answered (HubPermissionPrompt)
                     || (system && ("signature".equals(level) || allowed.contains(permission)))  // platform-signed system apps hold signature permissions
                     || defaultGrants.getOrDefault(pkg, Set.of()).contains(permission);
-            if (ok && !blocked.contains(permission) && !("dangerous".equals(level) && HostRevokedPermissions.revoked(pkg, permission))) grant.add(permission);
+            if (ok && !blocked.contains(permission) && !("dangerous".equals(level) && HostRuntimePermissions.revoked(pkg, permission))) grant.add(permission);
+            if ("dangerous".equals(level) && HostRuntimePermissions.state(pkg, permission) == HostRuntimePermissions.DENIED_ONCE)  // asked again: the app may explain first
+                org.robolectric.Shadows.shadowOf(app.getPackageManager()).setShouldShowRequestPermissionRationale(permission, true);
         }
         if (system) System.out.println("[apklayer] privileged system app " + pkg);
         if (!grant.isEmpty()) ((org.robolectric.shadows.ShadowApplication) org.robolectric.shadow.api.Shadow.extract(app)).grantPermissions(grant.toArray(new String[0]));
