@@ -103,7 +103,7 @@ void ensureUid(const Layout& l, const std::string& dir) {
 
 std::string hostClasspath(const Layout& l) {  // no app classes: they get a loader of their own (apklayer.host.AppClassLoader)
     const std::string& n = l.native;
-    // the 32-bit runtime's JNI shim (native/linux/arm/libandroid_runtime.so, which Robolectric's loader looks up on the class path) first
+    // the 32-bit runtime's JNI shim (native/linux/arm/libandroid_runtime.so: Robolectric's loader looks it up here and in the sandbox) first
     std::string shim = exists(join(n, "shim.jar")) ? join(n, "shim.jar") + ":" : "";
     return shim + n + "/native-runtime.jar:" + l.hostClasses() + ":" + n + "/aosp/sim-classes:" + n + "/aosp/Robolectric_all.jar:" + l.deps +
            "/android-stub.jar:" + l.dex2jvmJar();

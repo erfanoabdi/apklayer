@@ -161,6 +161,10 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     if (arm32) ne32.env["APKLAYER_NATIVE"] = l.native;  // the CLI it runs (other launches, the hub) is the 64-bit one, with the 64-bit runtime
     NativeEnv& nj = arm32 ? ne32 : ne;
     std::vector<std::string> jvm = windowJvmArgs(lj, inst, nj), window;
+    if (arm32) {  // its armhf preloads reach the JVM through its loader (bin/java), not the 64-bit shell and tools on the way
+        ne32.env["APKLAYER_ARM32_PRELOAD"] = ne32.env["LD_PRELOAD"];
+        ne32.env.erase("LD_PRELOAD");
+    }
     if (mode == RunMode::Component) nj.env["APKLAYER_COMPONENT_HOST"] = "1";  // the launch's own environment (a spare gets it with its target)
     std::string spareKey = appSpareKey(l, inst, jvm, nj.env);
     int vdisplay = 0;

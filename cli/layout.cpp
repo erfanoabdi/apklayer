@@ -97,7 +97,7 @@ Layout Layout::arm32Layout() const {
     a.androidLibs = join(arm32, "android-libs");
     a.deps = a.native;
     a.java = join(arm32, "bin/java");
-    for (const char* shared : {"aosp", "android-root", "jdk-patch", "native-runtime.jar", "android-stub.jar", "libs"}) {
+    for (const char* shared : {"aosp", "android-root", "jdk-patch", "native-runtime.jar", "android-stub.jar", "libs", "runtime.json"}) {
         std::string from = join(std::string(shared) == "android-stub.jar" ? deps : native, shared), to = join(a.native, shared);
         if (exists(from) && !exists(to) && symlink(from.c_str(), to.c_str()) != 0) die("cannot link " + from + " into " + a.native);
     }

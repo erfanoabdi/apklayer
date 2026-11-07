@@ -96,7 +96,7 @@ index 4d3b92c1dd..9738e5617e 100644
  }
  
 +// apklayer patch: retire side-table entries on command-buffer/pool destruction.
-+void HostFreeCommandBuffers(VkDevice device, VkCommandPool pool, uint32_t count,
++VKAPI_ATTR void HostFreeCommandBuffers(VkDevice device, VkCommandPool pool, uint32_t count,
 +                           const VkCommandBuffer* buffers) {
 +    auto fn = reinterpret_cast<PFN_vkFreeCommandBuffers>(
 +        GetData(device).driver.GetDeviceProcAddr(device, "vkFreeCommandBuffers"));
@@ -104,7 +104,7 @@ index 4d3b92c1dd..9738e5617e 100644
 +    std::lock_guard<std::mutex> lock(host_dispatch_mutex);
 +    for (uint32_t i = 0; i < count; ++i) host_dispatch_data.erase(buffers[i]);
 +}
-+void HostDestroyCommandPool(VkDevice device, VkCommandPool pool,
++VKAPI_ATTR void HostDestroyCommandPool(VkDevice device, VkCommandPool pool,
 +                           const VkAllocationCallbacks* allocator) {
 +    const void* data = &GetData(device);
 +    auto fn = reinterpret_cast<PFN_vkDestroyCommandPool>(

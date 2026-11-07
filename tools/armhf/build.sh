@@ -23,7 +23,9 @@ meson install -C /b --skip-subprojects --quiet
 n="$a/lib/apklayer/native"
 python3 - "$n/shim.jar" /b/bridge/native/libandroid_runtime.so <<'EOF'
 import sys, zipfile
-with zipfile.ZipFile(sys.argv[1], 'w') as z: z.write(sys.argv[2], 'native/linux/arm/libandroid_runtime.so')
+with zipfile.ZipFile(sys.argv[1], 'w') as z:
+    for d in ('native/', 'native/linux/', 'native/linux/arm/'): z.writestr(d, '')
+    z.write(sys.argv[2], 'native/linux/arm/libandroid_runtime.so')
 EOF
 rm -rf "$a/jvm" && cp -rL /usr/lib/jvm/java-21-openjdk-armhf "$a/jvm"
 ln -sf ../jvm/lib/libjsig.so "$a/lib/libjsig.so"  # where hostJvmArgs looks for it (<java>/../lib)
@@ -48,9 +50,11 @@ mkdir -p "$a/bin"
 cat > "$a/bin/java" <<'EOF'
 #!/bin/sh
 # the armhf JVM on its own loader and glibc (tools/armhf/build.sh): the host has no /lib/ld-linux-armhf.so.3
-r="$(dirname "$(dirname "$(readlink -f "$0")")")"
-# LD_PRELOAD (armhf libraries) becomes the loader's --preload: the 64-bit programs the JVM runs would refuse it, noisily
-p="${LD_PRELOAD:-}"; unset LD_PRELOAD
+# (shell expansions only: a 64-bit tool run here would see LD_LIBRARY_PATH's armhf libraries)
+r="${0%/bin/java}"
+# the preloads (armhf libraries) come as APKLAYER_ARM32_PRELOAD (cli/run.cpp) and go to the loader's --preload: in LD_PRELOAD the 64-bit
+# programs on the way and those the JVM runs would refuse them, noisily
+p="${APKLAYER_ARM32_PRELOAD:-${LD_PRELOAD:-}}"; unset LD_PRELOAD APKLAYER_ARM32_PRELOAD
 exec "$r/sysroot/lib/ld-linux-armhf.so.3" --library-path "${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$r/sysroot/lib" ${p:+--preload "$p"} "$r/jvm/bin/java" "$@"
 EOF
 chmod +x "$a/bin/java"

@@ -281,7 +281,19 @@ diff --git a/nativeruntime/src/main/java/org/robolectric/nativeruntime/DefaultNa
    }
  
    /**
-@@ -412,7 +532,7 @@
+@@ -404,8 +524,10 @@
+   private void loadLibrary(TempDirectory tempDirectory) throws IOException {
+     Path libraryPath = tempDirectory.getBasePath().resolve(libraryName());
+-    URL libraryResource = Resources.getResource(nativeLibraryPath());
++    // apklayer patch: the 32-bit app process's shim (native/linux/arm) is a jar on the class path, which the sandbox's loader does not search
++    URL systemResource = ClassLoader.getSystemResource(nativeLibraryPath());
++    URL libraryResource = systemResource != null ? systemResource : Resources.getResource(nativeLibraryPath());
+     Logger.info("Loading android native library from: %s", libraryResource);
+     Resources.asByteSource(libraryResource).copyTo(Files.asByteSink(libraryPath.toFile()));
+     System.load(libraryPath.toAbsolutePath().toString());
+   }
+ 
+@@ -412,7 +534,7 @@
    private static boolean isSupported() {
      return (OsUtil.isMac()
              && (Objects.equals(arch(), "aarch64") || Objects.equals(arch(), "x86_64")))
@@ -290,7 +302,7 @@ diff --git a/nativeruntime/src/main/java/org/robolectric/nativeruntime/DefaultNa
          || (OsUtil.isWindows() && Objects.equals(arch(), "x86_64"));
    }
  
-@@ -469,6 +589,15 @@
+@@ -469,6 +591,15 @@
        ReflectionHelpers.callStaticMethod(
            Shadow.class.getClassLoader(), className, "__staticInitializer__");
      }
