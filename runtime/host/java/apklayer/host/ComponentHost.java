@@ -47,8 +47,14 @@ public final class ComponentHost implements Runnable {
     private static final long STOP_WORK_MS = 2000, STOP_DEADLINE_MS = 3500;  // SettingsState's longest write delay; under `stop`'s 5 s before SIGKILL
     private static volatile boolean stopping;
 
+    private static final long IDLE_POLL_MS = 250;  // an idle host's check of the hub and of `stop`
+
     private static void step(ShadowPausedLooper looper) {
-        looper.poll(8);
+        // until the next message is due (a post wakes the queue at once): an 8 ms tick kept each idle host at ~20% of a phone core;
+        // the main thread's native looper (no wake of its own here) keeps the short tick
+        long next = looper.getNextScheduledTaskTime().toMillis();
+        long wait = next == 0 ? IDLE_POLL_MS : Math.max(1, Math.min(IDLE_POLL_MS, next - android.os.SystemClock.uptimeMillis()));
+        looper.poll(NativeLooper.forThread() != 0 ? Math.min(wait, 8) : wait);
         if (NativeLooper.forThread() != 0) NativeLooper.pollOnce(0);
         ShadowSystemClock.advanceBy(Duration.ofNanos(Math.max(0, System.nanoTime() - org.robolectric.shadows.ShadowSystem.nanoTime())));
         looper.idle();
