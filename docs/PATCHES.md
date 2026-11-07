@@ -70,6 +70,7 @@ are headers meson.build adds for old toolchains, not patches.
 | 0015-display-change-without-idle | changeDisplay(qualifiers) leaves the display-change messages to the app's run loop |
 | 0019-navigation-bar-visibility-listener | ShadowWindowManagerGlobal.applyInsets tells `NavigationBarInset` when an app hides or shows the navigation bar (immersive mode) |
 | 0020-alarm-manager-pending-intent-hook | ShadowAlarmManager: PendingIntent alarms go to a hook (the hub holds them, HubScheduler) |
+| 0021-native-assets-content-key | the shared ICU/font copy keyed by the jar's entries' content (name, CRC, size), not its path and mtime (a copy per install) |
 
 ## LineageOS tree (`patches/aosp/<project>/`)
 | Patch | Purpose |
@@ -131,6 +132,7 @@ Behaviour that differs from Android or from stock Robolectric without editing up
 - system/libhidl 0003-host-listing-notifications: the no-hwservicemanager stand-in forwards listManifestByInterface (falling back to listByInterface), getTransport, registerForNotifications and the others to the host for listed HALs (cameraserver's provider listing, the Codec2 client's store names). Rebuild: `m libhidlbase`.
 - system/libhidl 0002-host-hals-passthrough: a listed HAL the host does not serve (the device's gralloc mapper) is loaded as passthrough from /vendor; the local hwservicemanager is never asked. Rebuild: `m libhidlbase`.
 - bionic_translation 0038-pthread-attr-bionic-fields: pthread attrs keep bionic's stack_size and guard_size filled (the native bridge's proxy pthread_create sizes the guest stack from them). binary_translation 0001 (amended): the guest linker's host pthread is the thread's own bionic record on a glibc host.
+- bionic_translation 0042-fault-signals-chained-with-libjsig: with HotSpot's libjsig preloaded, a bionic fault handler is chained behind the JVM's instead of dropped (0018). binary_translation 0003-glibc-host-guest-errno: on a glibc host, every trampoline into host code carries errno both ways.
 - bionic_translation 0039-linker-vendor-namespace: with BIONIC_VENDOR_LD_LIBRARY_PATH, a Halium device's vendor libraries (GPU driver, passthrough mapper) get their own copies of what they need from /vendor and the device's VNDK apex; the LLNDK and libc/libm/libdl stay shared. Unset: unchanged.
 - bionic_translation 0040-pthread-attr-copy-owner: the glibc attr's page records the bionic attr that made it; a byte copy (native_bridge_support's proxy pthread_create memcpy's the guest attr, edits its stack fields, destroys it) no longer unmaps the original's glibc attr on destroy, and pthread_create takes a copy's stack from bionic's fields. Fixed OTR2 through Berberis crashing in pthread_attr_destroy at about every second start. Test: tests/native/attr-copy.c (suite bionic).
 - bionic_translation 0041-linker-vendor-shared-libs: BIONIC_VENDOR_SHARED_LIBS (basenames, ':'-separated) names libraries the vendor namespace never loads its own copy of; the CLI sets libhidlbase.so for graphics = device (the vendor's Android 12 libhidlbase waited forever for hwservicemanager.ready inside the Mali driver's IMapper::getService). Unset: unchanged.
