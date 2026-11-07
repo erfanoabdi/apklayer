@@ -77,7 +77,9 @@ void cdsArgs(const Layout& l, const Instance& inst, std::vector<std::string>& a)
     char name[32];
     snprintf(name, sizeof name, "%016zx.jsa", std::hash<std::string>{}(key));
     std::string jsa = join(inst.stateDir, std::string("cds/") + name);
-    if (exists(jsa)) a.push_back("-XX:SharedArchiveFile=" + jsa);
+    // at the address it was written for, as JDKs before 20 did: relocated (21's default) its pages are each JVM's own, ~25 MB more per JVM than no
+    // archive (instance PSS on UTM: 2237 MB without, 2329 relocated, 2197 here); the JVM relocates it still when that address is taken
+    if (exists(jsa)) a.insert(a.end(), {"-XX:SharedArchiveFile=" + jsa, "-XX:+UnlockDiagnosticVMOptions", "-XX:ArchiveRelocationMode=0"});
     else a.insert(a.end(), {"-XX:+RecordDynamicDumpInfo", "-Dapklayer.cdsdump=" + jsa});
 }
 
