@@ -13,7 +13,7 @@ import org.robolectric.shadow.api.Shadow;
 /**
  * The framework's own Binder (transact, linkToDeath, calling identity) over the real binder JNI, not Robolectric's in-process stand-in. Every process has the desktop
  * user's Linux uid, so the calling uid is the app uid of the calling process: this one's for a local call, the hub's record for another app's pid, the uid in
- * the request header for a oneway call (no pid), the real uid (what native services run as) for a pid the hub does not know.
+ * the request header for a oneway call (no pid), the system uid (native services, libbinder patch 0007) for a pid the hub does not know.
  */
 @Implements(value = Binder.class, callNativeMethodsByDefault = true, isInAndroidSdk = false)
 public class ShadowHostRealBinder {
@@ -37,12 +37,12 @@ public class ShadowHostRealBinder {
         if (known != null) return known;
         int kernel = kernelUid(pid);
         if (kernel >= Process.FIRST_APPLICATION_UID && kernel <= Process.LAST_APPLICATION_UID) { APP_UIDS.put(pid, kernel); return kernel; }  // a sandboxed app: the kernel's word
-        if (Boolean.TRUE.equals(RESOLVING.get())) return ShadowHostProcess.realUidValue();  // the hub call below went through a proxy transaction listener (MediaProvider's) that asks the calling uid again
+        if (Boolean.TRUE.equals(RESOLVING.get())) return ShadowHostProcess.ownUid();  // the hub call below went through a proxy transaction listener (MediaProvider's) that asks the calling uid again
         RESOLVING.set(true);
         int uid;
         try { uid = HubClient.connected() ? HubClient.current().uidOf(pid) : -1; }
         finally { RESOLVING.remove(); }
-        if (uid < 0) return ShadowHostProcess.realUidValue();
+        if (uid < 0) return ShadowHostProcess.ownUid();
         APP_UIDS.put(pid, uid);
         return uid;
     }

@@ -7,6 +7,6 @@ final class NativeProcess {
     private NativeProcess() {}
     static void install() {
         ShadowProcess.setPid(Math.toIntExact(ProcessHandle.current().pid()));
-        ShadowProcess.setUid(Math.toIntExact(new com.sun.security.auth.module.UnixSystem().getUid()));
+        ShadowProcess.setUid(ShadowHostProcess.ownUid());
     }
 }
