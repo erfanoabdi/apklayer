@@ -67,6 +67,7 @@ int usage() {
           "                         APKLAYER_SANDBOX=1: apps run sandboxed, each as its own uid (docs/PLAN.md), and the daemon starts on demand\n"
           "  home-access <package> on|off  with the sandbox: the app sees the user's whole home (else only what the picker hands it)\n"
           "  portal pick open|save|directory [--multiple] [--name N] | open <uri>  the desktop's file dialog or link opener (a sandboxed app's)\n"
+          "  portal helper geoclue.py|bluez.py|settings.py [args]  a D-Bus helper run as the user (the sandbox's location, Bluetooth, settings)\n"
           "  --version              version, converterAbi, dataFormat (key<TAB>value)\n",
           stderr);
     return 2;
@@ -120,7 +121,9 @@ int main(int argc, char** argv) {
         return runApp(layout, inst, target, RunMode::App);
     }
     if (cmd == "component-host" && n == 2) return runApp(layout, inst, args[1], RunMode::Component);
-    if (cmd == "app-spare" && sandboxOn()) return 0;  // a spare JVM is nobody's yet: the sandbox starts each app process as its own uid
+    // under the sandbox a spare is one app's (cli/spare.cpp): only a launch names it, the hub's wake has none
+    if (cmd == "app-spare" && n == 5 && args[1] == "--after" && args[3] == "--package" && sandboxOn()) return runAppSpare(layout, inst, atoi(args[2].c_str()), args[4]);
+    if (cmd == "app-spare" && sandboxOn()) return 0;
     if (cmd == "app-spare" && n == 3 && args[1] == "--after") return runAppSpare(layout, inst, atoi(args[2].c_str()));  // started by a launch (cli/spare.cpp)
     if (cmd == "app-spare" && n == 1) { wakeAppSpare(layout, inst); return 0; }  // the hub's, at its start
     if (cmd == "sandbox-exec") return sandboxExec(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));

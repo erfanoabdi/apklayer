@@ -1,7 +1,9 @@
 #include "portal.h"
 #include "sandbox.h"
 
+#include <cerrno>
 #include <cstring>
+#include <unistd.h>
 
 namespace apklayer {
 
@@ -53,6 +55,16 @@ int portalCommand(const Layout& l, const Instance& inst, const std::vector<std::
             if (scheme == allowed) { Spawn s; s.argv = {"xdg-open", args[1]}; s.env = currentEnv(); return runAndWait(s); }
         fprintf(stderr, "apklayer: portal open takes http(s), mailto, tel and geo links\n");
         return 2;
+    }
+    if (args.size() >= 2 && args[0] == "helper") {  // a D-Bus helper of bridge/portal, as the user: sandboxed processes reach no bus themselves
+        if (args[1] != "geoclue.py" && args[1] != "bluez.py" && args[1] != "settings.py") { fprintf(stderr, "apklayer: no portal helper %s\n", args[1].c_str()); return 2; }
+        std::vector<std::string> argv = {"python3", join(l.root, "bridge/portal/" + args[1])};
+        argv.insert(argv.end(), args.begin() + 2, args.end());
+        std::vector<char*> pointers;
+        for (std::string& a : argv) pointers.push_back(a.data());
+        pointers.push_back(nullptr);
+        execvp(pointers[0], pointers.data());  // its stdin and stdout are the caller's (apklayerd passes them): a stream of lines, BlueZ's RFCOMM pipe
+        die("cannot run python3: " + std::string(strerror(errno)));
     }
     if (args.size() < 2 || args[0] != "pick" || (args[1] != "open" && args[1] != "save" && args[1] != "directory")) {
         fprintf(stderr, "usage: apklayer portal pick open|save|directory [--multiple] [--name NAME] | open <uri>\n");

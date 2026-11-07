@@ -147,6 +147,23 @@ sudo udevadm control --reload && sudo udevadm trigger    # or unplug and plug in
 An interface a Linux driver holds (ftdi_sio, cdc_acm, usb-storage...) cannot be claimed while it does, unless the app forces it (`claimInterface(..., true)`,
 which detaches the driver until the device is plugged in again); blacklisting the driver (`/etc/modprobe.d`) keeps it off for good.
 
+### The per-app sandbox (opt-in)
+
+With `APKLAYER_SANDBOX=1` every app process runs as its own uid (Android's app uid, taken from your `/etc/subuid` range) in a user namespace per
+instance, with Android's groups. It sees its own data and what Android's `/data` shows an app, never the other apps' data, the system's state
+(keystore2's database) or your home; a file reaches it through the file picker (only the one chosen), and `apklayer home-access <package> on`
+gives an app your home (as far as the files' permissions for others allow: the app's uid is not yours). Location (GeoClue) and Bluetooth (BlueZ)
+go through `apklayerd`, which runs as you.
+
+- The deb sets the host up at install: the AppArmor profile that lets apklayer make user namespaces (Ubuntu 23.10+ restricts them), GPU render
+  nodes usable by app uids (`/usr/lib/udev/rules.d/70-apklayer-render.rules`), `uidmap`. A source tree: `sudo sh tools/host-setup/sandbox.sh` once.
+- Your user needs 65536 subordinate ids: `grep $USER /etc/subuid /etc/subgid`; without a line,
+  `sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USER`.
+- On for your session and apklayerd: `mkdir -p ~/.config/environment.d && echo APKLAYER_SANDBOX=1 > ~/.config/environment.d/60-apklayer.conf`,
+  then `systemctl --user enable apklayerd` (a source tree: copy `tools/host-setup/apklayerd.service` to `~/.config/systemd/user/` first) and log
+  out and in (without the unit the daemon starts on demand). `apklayer stop` before switching.
+- An app's data becomes its uid's at its first sandboxed start and yours again when it runs without the sandbox.
+
 ## 9. Troubleshooting
 
 - Logs: `~/.local/state/apklayer/<instance>/` (`default` for the default instance): `stack.log` (the services' start), `shell.log` (windows, frames, input),

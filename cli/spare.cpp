@@ -1,6 +1,7 @@
 #include "spare.h"
 #include "env.h"
 #include "run.h"
+#include "sandbox.h"
 #include "stack.h"
 
 #include <cerrno>
@@ -114,7 +115,7 @@ void copyEarlyOutput(const Instance& inst, int out) {
 }
 }  // namespace
 
-std::string appSpareKey(const Layout& l, const Instance& inst, const std::vector<std::string>& argv, const Env& env) {
+std::string appSpareKey(const Layout& l, const Instance& inst, const std::vector<std::string>& argv, const Env& env, const std::string& sandboxPackage) {
     std::string key;
     for (const std::string& a : argv) key += a + '\0';
     for (const auto& [name, value] : env)
@@ -123,6 +124,7 @@ std::string appSpareKey(const Layout& l, const Instance& inst, const std::vector
     for (const std::string& path : {l.hostClasses(), join(l.native, "native-runtime.jar"), join(l.native, "aosp/Robolectric_all.jar"),
                                     join(l.native, "aosp/android-all-instrumented"), l.native, l.bionic, l.androidLibs, l.cliBinary()})
         key += stamp(path);
+    if (!sandboxPackage.empty()) key += "sandboxed as " + sandboxPackage + "\n";
     return key + readFile(inst.pidFile()).value_or("");
 }
 
@@ -165,10 +167,11 @@ int awaitAppSpare(int conn, int jvmPid) {
     return 1;
 }
 
-void startAppSpare(const Layout& l, const Instance& inst, int afterFd) {
+void startAppSpare(const Layout& l, const Instance& inst, int afterFd, const std::string& sandboxPackage) {
     fcntl(afterFd, F_SETFD, 0);  // the holder's: the caller closes its own copy
     Spawn holder;
     holder.argv = {l.cliBinary(), "--instance", inst.id, "app-spare", "--after", std::to_string(afterFd)};
+    if (!sandboxPackage.empty()) holder.argv.insert(holder.argv.end(), {"--package", sandboxPackage});
     holder.env = currentEnv();  // the launcher's own: the holder derives the spare's environment and key as the launcher does
     holder.logFile = join(inst.logs(), "app-spare.log");  // never the launcher's stdout (a caller reading it to its end would wait for the spare)
     holder.detach = true;
@@ -185,7 +188,7 @@ void wakeAppSpare(const Layout& l, const Instance& inst) {
     if (!held) startAppSpare(l, inst, -1);
 }
 
-int runAppSpare(const Layout& l, const Instance& inst, int afterFd) {
+int runAppSpare(const Layout& l, const Instance& inst, int afterFd, const std::string& sandboxPackage) {
     int lock = open(join(inst.stateDir, "app-spare.lock").c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0644);
     if (lock < 0 || flock(lock, LOCK_EX | LOCK_NB) != 0) return 0;  // one spare per instance
     if (ftruncate(1, 0) != 0) {}  // app-spare.log (startAppSpare) holds the current spare's output only
@@ -206,7 +209,7 @@ int runAppSpare(const Layout& l, const Instance& inst, int afterFd) {
     NativeEnv ne = nativeEnv(l, inst);
     for (const std::string& name : kLaunchEnv) ne.env.erase(name);  // the launch that started this holder: not the next one's
     std::vector<std::string> argv = windowJvmArgs(l, inst, ne);
-    std::string key = appSpareKey(l, inst, argv, ne.env);
+    std::string key = appSpareKey(l, inst, argv, ne.env, sandboxPackage);
     int pair[2];
     if (socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0, pair) != 0) return 1;
     fcntl(pair[1], F_SETFD, 0);
@@ -216,6 +219,9 @@ int runAppSpare(const Layout& l, const Instance& inst, int afterFd) {
     jvm.env = ne.env;
     jvm.env["APKLAYER_SPARE_FD"] = std::to_string(pair[1]);
     jvm.cwd = l.appsDir;
+    // under the sandbox: already that app's process (its uid and mount view; the binder driver keeps the uid it was opened with, and a JVM
+    // cannot change mount namespace), so a spare is one app's, the one launched last (a launch of another makes it stale)
+    if (!sandboxPackage.empty()) sandboxSpawn(l, inst, jvm, sandboxPackage);
     // no PR_SET_PDEATHSIG: the JVM's primordial thread keeps it (the Java main thread cannot clear it), so it would end the app born from the spare;
     // a spare whose holder ended exits instead once prepared (its socket's EOF: AppSpare), `apklayer stop` ends both (the record)
     int pid = spawn(jvm);

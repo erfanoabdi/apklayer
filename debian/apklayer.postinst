@@ -1,0 +1,17 @@
+#!/bin/sh
+# The per-app sandbox's host side (tools/host-setup/sandbox.sh for a source install): AppArmor's permission for apklayer's user namespaces where
+# AppArmor has userns rules (4.0: Ubuntu 23.10+, which restricts unprivileged user namespaces), the render nodes' new mode.
+set -e
+if [ "$1" = configure ]; then
+    if [ -e /etc/apparmor.d/abi/4.0 ]; then
+        cp /usr/share/apklayer/apparmor/apklayer /etc/apparmor.d/apklayer
+        if [ -d /sys/kernel/security/apparmor ] && command -v apparmor_parser >/dev/null; then
+            apparmor_parser -r -T -W /etc/apparmor.d/apklayer || echo "apklayer: the AppArmor profile did not load; the sandbox needs it (sudo apparmor_parser -r /etc/apparmor.d/apklayer)" >&2
+        fi
+    fi
+    if [ -d /run/udev ] && command -v udevadm >/dev/null; then
+        udevadm control --reload || true
+        udevadm trigger --subsystem-match=drm --action=change || true
+    fi
+fi
+#DEBHELPER#

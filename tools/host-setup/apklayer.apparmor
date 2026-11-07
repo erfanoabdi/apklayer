@@ -1,0 +1,11 @@
+abi <abi/4.0>,
+include <tunables/global>
+
+# apklayer makes a user namespace per instance and a mount namespace per app process (cli/sandbox.cpp). Ubuntu 23.10+
+# (kernel.apparmor_restrict_unprivileged_userns=1) leaves a namespace made by an unprofiled program without capabilities; crun's and
+# bwrap's profiles are the same. Installed by the deb's postinst (bin /usr/lib/apklayer/cli/apklayer) or tools/host-setup/sandbox.sh.
+profile apklayer@NAME@ @BIN@ flags=(unconfined) {
+  userns,
+
+  include if exists <local/apklayer>
+}

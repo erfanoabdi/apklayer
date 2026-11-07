@@ -43,7 +43,7 @@ final class HubHostSettings {
     void watch() {
         Process reader = null;
         try {
-            ProcessBuilder builder = new ProcessBuilder(HostProcess.dying("python3", HostLocation.script("settings.py"))).redirectError(ProcessBuilder.Redirect.DISCARD);
+            ProcessBuilder builder = new ProcessBuilder(HostLocation.helper("settings.py")).redirectError(ProcessBuilder.Redirect.DISCARD);
             if (System.getenv("DBUS_SESSION_BUS_ADDRESS") == null && System.getenv("XDG_RUNTIME_DIR") != null)
                 builder.environment().put("DBUS_SESSION_BUS_ADDRESS", "unix:path=" + System.getenv("XDG_RUNTIME_DIR") + "/bus");
             reader = builder.start();

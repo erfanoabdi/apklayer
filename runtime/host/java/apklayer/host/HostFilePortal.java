@@ -28,7 +28,6 @@ final class HostFilePortal {
         try (BufferedReader in = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
             for (String line; (line = in.readLine()) != null; ) {
                 if (line.startsWith("unavailable ")) throw new IOException(line.substring(12));
-                if (line.startsWith("request ")) System.out.println("[apklayer] portal " + line);
                 if (line.startsWith("uri ")) uris.add(Uri.decode(line.substring(4)));
             }
             process.waitFor();

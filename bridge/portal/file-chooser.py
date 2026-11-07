@@ -78,5 +78,6 @@ except GLib.Error as error:
     print('unavailable ' + error.message, flush=True)
     sys.exit(3)
 print('request ' + handle, flush=True)
+print('[apklayer] portal request ' + handle, file=sys.stderr, flush=True)  # to the app's output also when apklayerd runs this for a sandboxed app
 loop.run()
 sys.exit(status[0])

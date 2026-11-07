@@ -1,0 +1,10 @@
+#!/bin/sh
+# The AppArmor profile postinst put in place goes with the package (dpkg does not know the copy).
+set -e
+if [ "$1" = remove ] || [ "$1" = purge ]; then
+    if [ -e /etc/apparmor.d/apklayer ]; then
+        if [ -d /sys/kernel/security/apparmor ] && command -v apparmor_parser >/dev/null; then apparmor_parser -R /etc/apparmor.d/apklayer 2>/dev/null || true; fi
+        rm -f /etc/apparmor.d/apklayer
+    fi
+fi
+#DEBHELPER#
