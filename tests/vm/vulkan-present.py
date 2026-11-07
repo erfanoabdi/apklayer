@@ -14,8 +14,11 @@ import instance  # noqa: E402  (changes into the repo root)
 import pixels  # noqa: E402
 LOGDIR = instance.LOGDIR
 env = dict(instance.ENV, APKLAYER_VULKAN_PRESENT='1', APKLAYER_RUNTIME_DEBUG='1', APKLAYER_LOGCAT='1', APKLAYER_JOPTS='-Dapklayer.runms=25000')
-intent = Path('/tmp/apklayer-vulkan-present-intent.properties')
-intent.write_text('component=hello.vulkan.Present\n')
+# [package component]: hello.vulkan.arm64 hello.vulkan.arm64.Main is the same swapchain from an arm64 library (the native bridge on x86_64)
+PKG = sys.argv[1] if len(sys.argv) > 1 else 'hello.vulkan'
+COMPONENT = sys.argv[2] if len(sys.argv) > 2 else 'hello.vulkan.Present'
+intent = Path('/tmp/apklayer-vulkan-present-intent-%s.properties' % PKG)
+intent.write_text('component=%s\n' % COMPONENT)
 env['APKLAYER_INTENT_FILE'] = str(intent)
 
 
@@ -29,9 +32,9 @@ app = None
 seen = []
 captured = False
 try:
-    app = subprocess.Popen(['bin/apklayer', 'run', 'hello.vulkan'], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
+    app = subprocess.Popen(['bin/apklayer', 'run', PKG], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
     end = time.monotonic() + 60
-    with selectors.DefaultSelector() as events, open('/tmp/apklayer-vulkan-present.out', 'wb') as log:
+    with selectors.DefaultSelector() as events, open('/tmp/apklayer-vulkan-present-%s.out' % PKG, 'wb') as log:
         events.register(app.stdout, selectors.EVENT_READ)
         pending = b''
         while True:
@@ -48,7 +51,7 @@ try:
                     print(line, flush=True)
                 assert not any(tag in line for tag in ('FATAL EXCEPTION', 'fatal error has been detected')), line
                 if not captured and 'vkswap: presented 60 frames' in line:
-                    shot = instance.capture('Vulkan swapchain frames', 'hello.vulkan')
+                    shot = instance.capture('Vulkan swapchain frames', PKG)
                     magenta = pixels.count(shot, lambda r, g, b: r > 200 and g < 60 and 100 < b < 160) / (lambda im: im.width * im.height)(pixels.rgb(shot))
                     print('IMAGE %s: %.0f%% of the window magenta' % (shot, magenta * 100), flush=True)
                     assert magenta > 0.25, 'the presented frames are not on screen (%.0f%% magenta)' % (magenta * 100)
