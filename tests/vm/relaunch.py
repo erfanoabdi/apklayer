@@ -125,7 +125,9 @@ try:
     assert len(requests) == 3 and all('token' in l for l in requests), 'the shell did not raise the window each time: %s' % requests
     print('[relaunch] compositor: %s' % ('activated the window' if any(l.endswith(' activated') for l in shell) else 'no activated state for the window (focus-stealing prevention)'), flush=True)
 
-    for app in apps: os.killpg(app.proc.pid, 15)
+    for app in apps:
+        try: os.killpg(app.proc.pid, 15)
+        except OSError: pass  # it ended already
     stop()
     first = App(PKG, dict(view, data='https://example.org/first', **{'extra.text': 'first'}))
     apps.append(first)
