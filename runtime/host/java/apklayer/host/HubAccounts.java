@@ -280,14 +280,16 @@ final class HubAccounts extends IAccountManager.Stub {
      * AccountManagerService.getAuthToken's grant check: an authenticator with custom tokens decides itself; the account's authenticator and an app that sees
      * the account get a token (shortcut: Android asks an app that sees it too unless its user granted that token type before; ask when an app relies on
      * the question); any other app's user is asked, as GrantCredentialsPermissionActivity does, in a desktop dialog of the hub (HubInstallDialog).
-     * Allowed: the account becomes visible to the app (shortcut: Android keeps the grant per token type in its grants table, apart from visibility; keep it
-     * apart when an app tells the two apart). Denied: ERROR_CODE_CANCELED, as that activity answers.
+     * Allowed: a grant of that token type to the app (the grants table; the account stays invisible to it, as on Android), asked no more for that type.
+     * Denied: ERROR_CODE_CANCELED, as that activity answers.
      */
     @Override public void getAuthToken(IAccountManagerResponse response, Account account, String authTokenType, boolean notifyOnAuthFailure, boolean expectActivityLaunch, Bundle options) {
         HubDirectory.Peer caller = caller();
         HubAuthenticators.Authenticator authenticator = account == null ? null : authenticators.all().get(account.type);
         boolean custom = authenticator != null && authenticator.description().customTokens;
-        if (account != null && !custom && !java.util.Arrays.asList(visible(account.type, caller.name(), false)).contains(account)) {
+        String grant = caller.name() + " " + authTokenType;
+        if (account != null && !custom && !java.util.Arrays.asList(visible(account.type, caller.name(), false)).contains(account)
+                && !Boolean.TRUE.equals(store.read(account, e -> e.grants.contains(grant)))) {
             if (!store.has(account)) { error(response, AccountManager.ERROR_CODE_BAD_ARGUMENTS, "no account " + account.name + " of type " + account.type); return; }
             String label = HubInstaller.labelOf(caller.name(), caller.name());
             Thread ask = new Thread(() -> {  // the person's answer takes its time: never on a binder thread of the hub
@@ -295,7 +297,7 @@ final class HubAccounts extends IAccountManager.Stub {
                     error(response, AccountManager.ERROR_CODE_CANCELED, "canceled");
                     return;
                 }
-                if (store.update(account, e -> e.visibility.put(caller.name(), AccountManager.VISIBILITY_USER_MANAGED_VISIBLE))) changed(null);
+                store.update(account, e -> e.grants.add(grant));
                 token(caller, response, account, authTokenType, options, false);
             }, "hub-account-grant");
             ask.setDaemon(true);

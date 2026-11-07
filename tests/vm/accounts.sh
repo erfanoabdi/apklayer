@@ -1,7 +1,7 @@
 #!/bin/bash
 # accounts.sh: one account store per instance (the hub's account service). hello-system adds its account into a fresh store and makes it visible to
 # hello-accounts, which (another app, its own JVM) lists it and gets a token from hello-system's authenticator; hello-accountshidden (a third app, not
-# shown the account) lists none and asks a token: its user is asked (the hub's dialog), denies it and it gets none, then allows it and gets one and
+# shown the account) lists none and asks a token: its user is asked (the hub's dialog), denies it and it gets none, then allows it and gets one (a grant of that token type: the account stays unlisted) and
 # the account; hello-system's next run finds the account and its visibility persisted;
 # then removeAccount asks the authenticator (it refuses one account, allows another).
 # On the VM, in the group's instance (tests/run accounts): APKLAYER_INSTANCE, APKLY_STATE (its logs); the apps installed by the runner. Each run ends itself (runms).

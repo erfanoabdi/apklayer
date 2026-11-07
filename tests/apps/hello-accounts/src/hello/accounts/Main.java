@@ -26,8 +26,10 @@ public final class Main extends Activity {
                         String token = am.getAuthToken(hidden, "cross", null, false, null, null).getResult().getString(AccountManager.KEY_AUTHTOKEN);
                         // the token hello.accounts got before: AccountManagerService caches one per account and type, whoever asked
                         if (token == null || !token.startsWith("token-cross-")) throw new AssertionError("token after the grant " + token);
-                        if (am.getAccountsByType("hello.system.account").length != 1) throw new AssertionError("the granted account is not listed");
-                        System.out.println("[accounts] PASS granted: " + getPackageName() + " was allowed the account it did not see, token " + token);
+                        // a grant of that token type, not visibility (Android's grants table): still not listed, and not asked again for the type
+                        if (am.getAccountsByType("hello.system.account").length != 0) throw new AssertionError("a token grant made the account visible");
+                        if (!token.equals(am.getAuthToken(hidden, "cross", null, false, null, null).getResult().getString(AccountManager.KEY_AUTHTOKEN))) throw new AssertionError("no token on the second ask");
+                        System.out.println("[accounts] PASS granted: " + getPackageName() + " was granted the token type of an account it does not see, token " + token);
                         return;
                     }
                     try {

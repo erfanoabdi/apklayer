@@ -16,6 +16,9 @@ final class DisplayCheck implements Check {
         android.os.IBinder flinger = (android.os.IBinder) Class.forName("android.os.ServiceManager").getMethod("getService", String.class).invoke(null, "SurfaceFlinger");
         Check.require(flinger != null && flinger.pingBinder(), "no \"SurfaceFlinger\" service: " + flinger);
         Check.require("android.ui.ISurfaceComposer".equals(flinger.getInterfaceDescriptor()), "\"SurfaceFlinger\" is " + flinger.getInterfaceDescriptor());
+        // apklayer's own services and HAL instances stay out of apps' reach (Android's SELinux refuses apps HAL names)
+        for (String hidden : new String[] {"apklayer.instance", "apklayer.accounts", "android.hardware.graphics.allocator.IAllocator/default"})
+            Check.require(Class.forName("android.os.ServiceManager").getMethod("checkService", String.class).invoke(null, hidden) == null, "an app got \"" + hidden + "\"");
         Display display = ((android.hardware.display.DisplayManager) context.getSystemService(Context.DISPLAY_SERVICE)).getDisplay(Display.DEFAULT_DISPLAY);
         DisplayMetrics real = new DisplayMetrics();
         display.getRealMetrics(real);
