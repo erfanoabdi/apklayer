@@ -222,6 +222,15 @@ public final class HubClient {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.USB_PERMISSION, request -> { request.writeString(device); request.writeBoolean(ask); }, reply -> reply.readBoolean());
     }
 
+    /** Activity.requestPermissions: per name HostRuntimePermissions' GRANTED, DENIED_ONCE or DENIED; waits for the person's answers. */
+    int[] requestPermissions(String[] names) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.PERMISSIONS_REQUEST, request -> request.writeStringArray(names), reply -> reply.createIntArray());
+    }
+    /** RoleManager's request intent: whether the person makes this app the role's holder; waits for the answer. */
+    boolean requestRole(String role) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.ROLE_REQUEST, request -> request.writeString(role), reply -> reply.readBoolean());
+    }
+
     /** Alarms and jobs live in the hub (HubScheduler). */
     void setAlarm(android.app.PendingIntent operation, long delayMs, long intervalMs) {
         HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.ALARM_SET, request -> { request.writeStrongBinder(operation.getTarget().asBinder()); request.writeLong(delayMs); request.writeLong(intervalMs); }, reply -> null);

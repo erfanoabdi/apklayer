@@ -127,6 +127,7 @@ final class ActivityTask {
             if (HostInstallIntents.handle(intent, wantsResult ? stack.peek().get() : null)) return;  // the package installer's activities are the hub's
             if (HostPortals.open(intent)) return;
             if (HostPortals.requestPermissions(intent, request == null ? -1 : request.requestCode, stack.peek().get())) return;
+            if (HostPortals.requestRole(intent, stack.peek().get(), wantsResult)) return;
             // the Storage Access Framework pickers belong to the installed DocumentsUI (through the hub); the desktop's file dialog answers only when no installed app does
             if (HostPortals.isPicker(intent) && HubActivityClient.route(intent, wantsResult ? stack.peek().get() : null, intent)) return;
             Intent picked = HostPortals.pick(intent);

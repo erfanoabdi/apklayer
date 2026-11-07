@@ -76,6 +76,10 @@ run = ["tests/vm/gnss.sh"]
 apps = ["hello-usb"]
 run = ["tests/vm/usb.py"]
 
+[permissions]  # the runtime permission prompt and role requests (HubPermissionPrompt): answers by test input, kept for the manager
+apps = ["hello-permissions"]
+run = ["python3 -u tests/vm/permissions.py"]
+
 [host-binder]
 run = ["python3 tests/vm/host-binder.py"]  # libbinder's host context (frameworks/native 0006): a second instance plays the device
 
