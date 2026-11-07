@@ -57,7 +57,13 @@ final class HubLockScreen {
                 Files.write(handleFile, enrolled.getPayload());
                 verified = gatekeeper.verifyChallenge(USER, 0, enrolled.getPayload(), secret);
             }
-            System.out.println("[apklayer-hub] lock screen credential " + (verified.getResponseCode() == GateKeeperResponse.RESPONSE_OK ? "verified: unlocked" : "not verified: " + verified.getResponseCode()));
+            if (verified.getResponseCode() != GateKeeperResponse.RESPONSE_OK) { System.out.println("[apklayer-hub] lock screen credential not verified: " + verified.getResponseCode()); return; }
+            // LockSettingsService's unlock: keystore2's super keys for the user (auth-bound keys are super-encrypted), created once, then unlocked
+            android.os.IBinder maintenance = RealBinder.await("android.security.maintenance", 5000), authorization = RealBinder.await("android.security.authorization", 5000);
+            if (maintenance == null || authorization == null) { System.out.println("[apklayer-hub] keystore2 has no maintenance/authorization service: still locked"); return; }
+            android.security.maintenance.IKeystoreMaintenance.Stub.asInterface(maintenance).initUserSuperKeys(USER, secret, true);
+            android.security.authorization.IKeystoreAuthorization.Stub.asInterface(authorization).onDeviceUnlocked(USER, secret);
+            System.out.println("[apklayer-hub] lock screen credential verified: unlocked");
         } catch (android.os.RemoteException | IOException | RuntimeException failure) {
             System.out.println("[apklayer-hub] lock screen credential: " + failure);
         }

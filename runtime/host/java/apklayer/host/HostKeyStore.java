@@ -39,6 +39,7 @@ final class HostKeyStore {
         try { secure = gatekeeper.getSecureUserId(0) != 0; } catch (android.os.RemoteException gone) { return; }
         org.robolectric.util.ReflectionHelpers.setStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "isDeviceSecure", secure);
         org.robolectric.util.ReflectionHelpers.setStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "isKeyguardSecure", secure);
+        System.out.println("[apklayer] lock screen credential " + (secure ? "set" : "not set") + " (gatekeeperd)");
     }
 
     static void install() {
