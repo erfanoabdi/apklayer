@@ -17,4 +17,12 @@ test "$("$work/aprop" get test.mutable)" = second
 export APKLAYER_PROPERTIES="$work/other-instance"
 "$work/aprop" set ro.hyphen.data.dir /other-instance
 test "$("$work/aprop" get ro.hyphen.data.dir)" = /other-instance
+# `apklayer exec` without a stack: the tool sees a device-shaped store (apklayer.prop, the tree's build.prop, derived ones), as a stack's tools do
+unset APKLAYER_PROPERTIES
+bin/apklayer stop >/dev/null 2>&1
+bin/apklayer exec libapklayer-no-such-tool.so >/dev/null 2>&1 || true  # the tool need not run: its store is the check
+store="$XDG_RUNTIME_DIR/apklayer/${APKLAYER_INSTANCE:-default}/properties"
+model=$(APKLAYER_PROPERTIES="$store" "$work/aprop" get ro.product.model) fingerprint=$(APKLAYER_PROPERTIES="$store" "$work/aprop" get ro.build.fingerprint)
+echo "exec without a stack: model '$model', fingerprint '$fingerprint'"
+test "$model" = "Linux desktop" && [[ $fingerprint == lineage/lineage_desktop/desktop:* ]]
 echo 'PASS cross-process read-only, mutable and independent instance properties'

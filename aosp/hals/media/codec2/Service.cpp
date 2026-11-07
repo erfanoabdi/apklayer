@@ -7,8 +7,18 @@
 #include <android/binder_process.h>
 #include <codec2/aidl/ComponentStore.h>
 #include <cstdio>
+#include <algorithm>
 #include <cstring>
 #include <C2Config.h>
+// whether the interface's field may take the value (its possible values: a range or a list); true when it does not say
+static bool takes(const std::shared_ptr<C2ComponentInterface>& interface, const C2ParamField& field, uint32_t value) {
+    std::vector<C2FieldSupportedValuesQuery> query = {C2FieldSupportedValuesQuery::Possible(field)};
+    if (interface->querySupportedValues_vb(query, C2_MAY_BLOCK) != C2_OK || query[0].status != C2_OK) return true;
+    const C2FieldSupportedValues& v = query[0].values;
+    if (v.type == C2FieldSupportedValues::RANGE) return v.range.min.u32 <= value && value <= v.range.max.u32;
+    if (v.type == C2FieldSupportedValues::VALUES) return std::any_of(v.values.begin(), v.values.end(), [&](const C2Value::Primitive& p) { return p.u32 == value; });
+    return v.type != C2FieldSupportedValues::EMPTY;
+}
 extern "C" int main(int argc, char** argv) {
     if (argc == 3 && !strcmp(argv[1], "--reorder-probe")) {
         ABinderProcess_setThreadPoolMaxThreadCount(2);
@@ -48,8 +58,13 @@ extern "C" int main(int argc, char** argv) {
             if (trait->domain == C2Component::DOMAIN_AUDIO) {
                 C2StreamSampleRateInfo::output rate(0u, 48000);
                 C2StreamChannelCountInfo::output channels(0u, 2);
+                // a fixed-rate codec (AMR-NB 8 kHz mono, AMR-WB 16 kHz) refuses 48 kHz stereo, as on a device
+                if (!takes(interface, C2ParamField(&rate, &C2StreamSampleRateInfo::value), 48000) || !takes(interface, C2ParamField(&channels, &C2StreamChannelCountInfo::value), 2)) {
+                    fprintf(stderr, "codec2: SKIP %s interface config/query: no 48000Hz 2ch\n", trait->name.c_str());
+                    continue;
+                }
                 std::vector<std::unique_ptr<C2SettingResult>> failures;
-                if (interface->config_vb({&rate, &channels}, C2_MAY_BLOCK, &failures) != C2_OK || !failures.empty()) return 1;
+                if (interface->config_vb({&rate, &channels}, C2_MAY_BLOCK, &failures) != C2_OK || !failures.empty()) { fprintf(stderr, "codec2: FAIL %s config 48000Hz 2ch\n", trait->name.c_str()); return 1; }
                 rate.value = channels.value = 0;
                 std::vector<std::unique_ptr<C2Param>> heap;
                 if (interface->query_vb({&rate, &channels}, {}, C2_MAY_BLOCK, &heap) != C2_OK || rate.value != 48000 || channels.value != 2) return 1;

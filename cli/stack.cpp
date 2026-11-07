@@ -296,6 +296,36 @@ static std::string deviceGraphicsProperties(const Instance& inst) {
     return file;
 }
 
+// The instance's property store as a device's init fills it at boot: the prop files (overrides, the device's graphics values, the display's density,
+// apklayer.prop, the tree's build.prop) and what init derives from them (setDerivedProperties). The stack's start, and `exec` without a stack.
+static void loadProperties(const Layout& l, const Instance& inst, const NativeEnv& ne) {
+    const std::string& n = l.native;
+    std::vector<std::string> propFiles = {join(l.root, "bridge/native/apklayer.prop"), join(n, "android-root/props/system_build.prop")};
+    // the instance's own overrides (`apklayer prop set`): first, as ro.* is write-once (and the fingerprint is derived from them), and again last, as
+    // every other property keeps the last value loaded
+    if (exists(inst.propOverrides())) { propFiles.insert(propFiles.begin(), inst.propOverrides()); propFiles.push_back(inst.propOverrides()); }
+    if (deviceGraphics(l, inst)) propFiles.insert(propFiles.begin() + (propFiles.size() > 2), deviceGraphicsProperties(inst));  // after the overrides' first copy
+    if (int density = displayDensity(l); density > 0 && density != 160) {  // ro.sf.lcd_density: this display's, before apklayer.prop's 160 (write-once)
+        std::string file = join(inst.root, "display.prop");
+        writeFile(file, "ro.sf.lcd_density=" + std::to_string(density) + "\n");
+        propFiles.insert(propFiles.begin() + (exists(inst.propOverrides()) ? 1 : 0), file);
+    }
+    if (deviceDomain(l, inst, "media")) {
+        // the device's Codec2 is HIDL (a Halium 12 vendor): libcodec2's client takes the HAL media.c2.hal.selection names, which apklayer.prop
+        // sets to aidl: loaded last (a plain property keeps the last value)
+        std::string file = join(inst.runtimeDir, "media-device.prop");
+        writeFile(file, "media.c2.hal.selection=hidl\n");
+        propFiles.push_back(file);
+    }
+    setDerivedProperties(l, ne, propFiles);
+    Spawn prop;
+    prop.argv = {join(n, "bin/aprop"), "load"};
+    prop.argv.insert(prop.argv.end(), propFiles.begin(), propFiles.end());
+    prop.env = ne.env;
+    prop.logFile = join(inst.logs(), "aprop.log");
+    runAndWait(prop);
+}
+
 int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std::string>& tool) {
     if (sandboxOn()) enterInstanceUserNs();  // first: everything the stack starts is in the instance's user namespace (cli/sandbox.cpp)
     if (binderDevice(inst.id).empty()) die("instance " + inst.id + ": " + binderDeviceWhy(inst.id));  // cli/binder.cpp: no second instance without binderfs
@@ -321,30 +351,9 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     for (const ProviderService& p : providers) stageManifest(inst, l, true, "apklayer-" + p.name + ".xml", p.manifest);
     if (deviceGraphics(l, inst)) undeclareOwnGraphics(inst, l);
     if (deviceDomain(l, inst, "media")) stageDeviceCodecXml(inst);
-    std::vector<std::string> propFiles = {join(l.root, "bridge/native/apklayer.prop"), join(n, "android-root/props/system_build.prop")};
-    // the instance's own overrides (`apklayer prop set`): first, as ro.* is write-once (and the fingerprint is derived from them), and again last, as
-    // every other property keeps the last value loaded
-    if (exists(inst.propOverrides())) { propFiles.insert(propFiles.begin(), inst.propOverrides()); propFiles.push_back(inst.propOverrides()); }
-    if (deviceGraphics(l, inst)) propFiles.insert(propFiles.begin() + (propFiles.size() > 2), deviceGraphicsProperties(inst));  // after the overrides' first copy
-    if (int density = displayDensity(l); density > 0 && density != 160) {  // ro.sf.lcd_density: this display's, before apklayer.prop's 160 (write-once)
-        std::string file = join(inst.root, "display.prop");
-        writeFile(file, "ro.sf.lcd_density=" + std::to_string(density) + "\n");
-        propFiles.insert(propFiles.begin() + (exists(inst.propOverrides()) ? 1 : 0), file);
-    }
-    if (deviceDomain(l, inst, "media")) {
-        // the device's Codec2 is HIDL (a Halium 12 vendor): libcodec2's client takes the HAL media.c2.hal.selection names, which apklayer.prop
-        // sets to aidl: loaded last (a plain property keeps the last value)
-        std::string file = join(inst.runtimeDir, "media-device.prop");
-        writeFile(file, "media.c2.hal.selection=hidl\n");
-        propFiles.push_back(file);
-    }
-    setDerivedProperties(l, ne, propFiles);
+    loadProperties(l, inst, ne);
     Spawn prop;
-    prop.argv = {join(n, "bin/aprop"), "load"};
-    prop.argv.insert(prop.argv.end(), propFiles.begin(), propFiles.end());
     prop.env = ne.env;
-    prop.logFile = join(inst.logs(), "aprop.log");
-    runAndWait(prop);
     // Android init creates this directory (in the instance's /data) and announces it to RenderEngine.
     std::string cache = join(inst.dataDir, "misc/surfaceflinger");
     makeDirs(cache);
@@ -550,6 +559,11 @@ int execTool(const Layout& l, const Instance& inst, const std::vector<std::strin
     s.argv = {l.btload(), l.androidLibs, args[0], "--main"};
     s.argv.insert(s.argv.end(), args.begin() + 1, args.end());
     s.env = ne.env;
+    // without a stack the tool still sees a device's properties (the store stays for the next tool; a stack's start makes its own)
+    if (auto pid = readFile(inst.pidFile()); !(pid && alive(atoi(pid->c_str())))) {
+        makeDirs(inst.runtimeDir);
+        loadProperties(l, inst, ne);
+    }
     return runAndWait(s);
 }
 
