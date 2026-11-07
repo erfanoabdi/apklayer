@@ -2,6 +2,7 @@
 #include "sandbox.h"
 
 #include "desktop.h"
+#include "flatpak.h"
 #include "env.h"  // findJava: the converter and the install tools run on the apps' JVM (a phone names it in ~/.config/apklayer/env)
 #include "version.h"
 
@@ -290,7 +291,7 @@ void uninstallApp(const Layout& l, const std::string& package) {
             writeFile(answers, kept);
         }
     }
-    unlink(join(l.dataHome, "applications/apklayer-" + package + ".desktop").c_str());
+    unlink(join(hostXdg("XDG_DATA_HOME", ".local/share"), "applications/apklayer-" + package + ".desktop").c_str());
     printf("apklayer: removed %s\n", package.c_str());
 }
 

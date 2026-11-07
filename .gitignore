@@ -9,3 +9,4 @@ tests/corpus/results-subset.md
 /subprojects/*/
 /b/
 /inst/
+/flatpak/prebuilts

@@ -77,6 +77,30 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: {name: 'deb-${{ matrix.os.codename }}-${{ matrix.cpu.arch }}', path: out/*.deb, if-no-files-found: error}
 
+  flatpak:
+    # the Flatpak bundle of each CPU (flatpak/build.sh, docs/INSTALL.md "Flatpak"); new: a failed build does not hold the release back
+    name: flatpak ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: aarch64, runner: ubuntu-24.04-arm}
+          - {arch: x86_64, runner: ubuntu-24.04}
+    needs: guard
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with: {path: src}
+      - uses: actions/checkout@v4
+        with: {path: prebuilts, ref: '${{ needs.guard.outputs.prebuilts }}'}
+      - name: flatpak-builder
+        run: sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq flatpak flatpak-builder >/dev/null
+      - name: Build
+        run: sh src/flatpak/build.sh prebuilts out "${VERSION#v}"
+      - uses: actions/upload-artifact@v4
+        with: {name: 'flatpak-${{ matrix.arch }}', path: out/*.flatpak, if-no-files-found: error}
+
   bundle:
     needs: guard
     runs-on: ubuntu-24.04
@@ -91,7 +115,7 @@ jobs:
         with: {name: runtime, path: out/apklayer-runtime-*, if-no-files-found: error}
 
   release:
-    needs: [guard, deb, bundle]
+    needs: [guard, deb, bundle, flatpak]
     runs-on: ubuntu-24.04
     permissions:
       contents: write  # the GitHub Release and the pages branch commit
@@ -112,7 +136,7 @@ jobs:
         env: {GH_TOKEN: '${{ github.token }}'}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "apklayer ${VERSION#v}" --verify-tag \
-            --notes "Install: download the deb for your OS and CPU, \`sudo apt install ./apklayer_*.deb\`, then open apklayer-manager. apklayer-dev_*.deb: the headers for out-of-tree hardware plugins (docs/PLUGINS.md). SHA256SUMS lists every file."
+            --notes "Install: download the deb for your OS and CPU, \`sudo apt install ./apklayer_*.deb\`, then open apklayer-manager. Flatpak: \`flatpak install --user apklayer-*-<cpu>.flatpak\` (docs/INSTALL.md \"Flatpak\": binderfs is a host step). apklayer-dev_*.deb: the headers for out-of-tree hardware plugins (docs/PLUGINS.md). SHA256SUMS lists every file."
       - name: Publish releases.json
         if: github.event_name == 'push'
         working-directory: pages
