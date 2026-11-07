@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.ImageDecoder;
 import android.graphics.Paint;
+import android.graphics.Picture;
 import android.os.Bundle;
 import android.widget.ImageView;
 import java.io.ByteArrayOutputStream;
@@ -33,6 +34,12 @@ public class Main extends Activity {
             if (pixels.getPixel(0, 0) == 0xff0000ff) crops++;
         }
         System.out.println("hwbitmap: crops " + crops + "/50");
+        Picture picture = new Picture();  // Bitmap.createBitmap(Picture) renders through HardwareRenderer.createHardwareBitmap (Compose's layer snapshots)
+        picture.beginRecording(100, 100).drawColor(0xff00ff00);
+        picture.endRecording();
+        Bitmap drawn = Bitmap.createBitmap(picture);
+        Bitmap drawnBack = drawn == null ? null : drawn.copy(Bitmap.Config.ARGB_8888, false);
+        System.out.println("hwbitmap: picture " + (drawn == null ? null : drawn.getConfig() + " " + Integer.toHexString(drawnBack.getPixel(50, 50))));
         ByteArrayOutputStream png = new ByteArrayOutputStream();
         sw.compress(Bitmap.CompressFormat.PNG, 100, png);
         try {

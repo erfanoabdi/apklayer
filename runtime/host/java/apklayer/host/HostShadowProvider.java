@@ -110,6 +110,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.hardware.usb.UsbRequest", HostPlainShadows.UsbRequest.class.getName()),
                 Map.entry("android.os.SystemProperties", ShadowHostSystemProperties.class.getName()),
                 Map.entry("android.hardware.HardwareBuffer", ShadowHostNativeHardwareBuffer.class.getName()),
+                Map.entry("android.graphics.HardwareRenderer", ShadowHostHardwareRenderer.class.getName()),
                 Map.entry("android.app.DownloadManager", ShadowHostDownloadManager.class.getName()),  // the real one talks to DownloadProvider (DownloadStorageProvider reads it)
                 Map.entry("android.util.Xml", ShadowHostXml.class.getName()),
                 Map.entry("dalvik.system.VMRuntime", ShadowHostVMRuntime.class.getName()),
