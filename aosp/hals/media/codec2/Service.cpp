@@ -37,10 +37,14 @@ static int probeAudio(const std::shared_ptr<C2ComponentInterface>& interface, co
     return ok ? 0 : 1;
 }
 
-// --probe of one video codec: a 64x48 picture configured and read back
+// --probe of one video codec: a 64x48 picture configured and read back; a codec of fixed sizes (the H.263 encoder: CIF family only) skipped
 template <typename Size>
 static int probeVideo(const std::shared_ptr<C2ComponentInterface>& interface, const C2String& name) {
     Size size(0u, 64, 48);
+    if (!takes(interface, C2ParamField(&size, &Size::width), 64) || !takes(interface, C2ParamField(&size, &Size::height), 48)) {
+        fprintf(stderr, "codec2: SKIP %s interface config/query: no 64x48\n", name.c_str());
+        return 0;
+    }
     std::vector<std::unique_ptr<C2SettingResult>> failures;
     std::vector<std::unique_ptr<C2Param>> heap;
     bool ok = interface->config_vb({&size}, C2_MAY_BLOCK, &failures) == C2_OK && failures.empty();
