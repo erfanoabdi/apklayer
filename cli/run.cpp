@@ -298,6 +298,8 @@ int runHub(const Layout& l, const Instance& inst) {
 
 // `apklayer wait hub`: blocks until the hub is published (what a client does after launching `apklayer hub`).
 int waitHub(const Layout& l, const Instance& inst) {
+    // the stack first, a start shared with the hub's launcher: its new property store replaces the one a waiter would map and never hear from
+    if (!ensureStack(l, inst)) return 1;
     NativeEnv ne = nativeEnv(l, inst);
     return waitForProperty(l, ne, kHubReadyProperty, "1", -1) ? 0 : 1;
 }
