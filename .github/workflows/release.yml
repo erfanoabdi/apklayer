@@ -90,8 +90,26 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: {name: runtime, path: out/apklayer-runtime-*, if-no-files-found: error}
 
+  sailfish:
+    # the Sailfish OS RPMs (aarch64): apklayer and what Sailfish's repositories lack (temurin-21-jdk, libmd, libbsd, libunwind), built in the
+    # Platform SDK's SailfishOS-5.0.0.62 aarch64 target as a native container (rpm/Dockerfile, docs/HALIUM.md "Building for Sailfish OS")
+    needs: guard
+    runs-on: ubuntu-24.04-arm
+    continue-on-error: true  # new; a failure leaves the debs' release alone
+    steps:
+      - uses: actions/checkout@v4
+        with: {path: src}
+      - uses: actions/checkout@v4
+        with: {path: prebuilts, ref: '${{ needs.guard.outputs.prebuilts }}'}
+      - name: Tools
+        run: sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq p7zip-full >/dev/null
+      - name: Build
+        run: sh src/tools/release/sailfish-rpm.sh "${VERSION#v}" prebuilts out
+      - uses: actions/upload-artifact@v4
+        with: {name: rpm-sailfish-aarch64, path: out/*.rpm, if-no-files-found: error}
+
   release:
-    needs: [guard, deb, bundle]
+    needs: [guard, deb, bundle, sailfish]
     runs-on: ubuntu-24.04
     permissions:
       contents: write  # the GitHub Release and the pages branch commit
@@ -112,7 +130,7 @@ jobs:
         env: {GH_TOKEN: '${{ github.token }}'}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "apklayer ${VERSION#v}" --verify-tag \
-            --notes "Install: download the deb for your OS and CPU, \`sudo apt install ./apklayer_*.deb\`, then open apklayer-manager. apklayer-dev_*.deb: the headers for out-of-tree hardware plugins (docs/PLUGINS.md). SHA256SUMS lists every file."
+            --notes "Install: download the deb for your OS and CPU, \`sudo apt install ./apklayer_*.deb\`, then open apklayer-manager. apklayer-dev_*.deb: the headers for out-of-tree hardware plugins (docs/PLUGINS.md). Sailfish OS 5 (aarch64): the *.aarch64.rpm files, \`devel-su pkcon install-local\` them (docs/HALIUM.md). SHA256SUMS lists every file."
       - name: Publish releases.json
         if: github.event_name == 'push'
         working-directory: pages

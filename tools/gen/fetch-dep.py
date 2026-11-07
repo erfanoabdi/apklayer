@@ -3,6 +3,7 @@
 Looked for by file name in the local dirs (the prebuilts' common/, $APKLAYER_DEPS_LOCAL, the old deps cache), then ~/.m2 or the Android SDK,
 then downloaded: maven:<g>:<a>:<v>:<ext> from Maven Central ($APKLAYER_MAVEN) or Google's Maven, aar-classes:<g>:<a>:<v> the AAR's classes.jar."""
 import hashlib
+import http.client
 import io
 import os
 import shutil
@@ -29,9 +30,9 @@ def maven(coord):
         for attempt in range(5):  # Maven Central answers 429 when parallel jobs fetch at once: back off and try again
             try:
                 with urllib.request.urlopen(base + '/' + rel) as r: return r.read()
-            except OSError as e:
+            except (OSError, http.client.IncompleteRead) as e:  # a connection cut mid-file (IncompleteRead) is tried again too
                 print('fetch-dep: %s/%s: %s' % (base, rel, e), file=sys.stderr)
-                if getattr(e, 'code', None) not in (429, 500, 502, 503, 504): break
+                if not isinstance(e, http.client.IncompleteRead) and getattr(e, 'code', None) not in (429, 500, 502, 503, 504): break
                 time.sleep(2 ** attempt)
     raise SystemExit('fetch-dep: %s not found' % coord)
 
