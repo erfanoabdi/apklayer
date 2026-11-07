@@ -7,16 +7,17 @@
 set -eu
 if [ "${1:-}" = --in-root ]; then  # inside the build root: <version>; /work the tree, /cache the sources and prebuilts, /out the RPMs
     version="$2" top=/root/rpmbuild
+    zyp() { zypper "$@" || [ $? -eq 106 ]; }  # 106: a repository could not be refreshed (releases.jolla.com drops connections); the install went on
     mkdir -p "$top/SOURCES" && cp /cache/sources/* /cache/apklayer-"$version".tar.gz "$top/SOURCES/"
     # what Sailfish lacks, in dependency order; one already in <out dir> (same version) is reused
     for spec in temurin-21-jdk libmd libbsd libunwind; do
         v="$(rpmspec -q --qf '%{version}-%{release}\n' "/work/rpm/$spec.spec" | head -1)"
         [ -e "/out/$spec-$v.aarch64.rpm" ] || { rpmbuild -bb --define "_topdir $top" "/work/rpm/$spec.spec" && cp "$top"/RPMS/*/"$spec"*-"$v".aarch64.rpm /out/; }
         rm -f /out/*-debuginfo-* /out/*-debugsource-*
-        zypper -n --no-gpg-checks in --allow-unsigned-rpm /out/"$spec"*-"$v".aarch64.rpm
+        zyp -n --no-gpg-checks in --allow-unsigned-rpm /out/"$spec"*-"$v".aarch64.rpm
     done
     set -- --define "_topdir $top" --define "apklayer_version $version" --define "apklayer_prebuilts /cache/prebuilts" /work/rpm/apklayer.spec
-    zypper -n in $(rpmspec -q --buildrequires "$@" | sed 's/ .*//' | sort -u)
+    zyp -n in $(rpmspec -q --buildrequires "$@" | sed 's/ .*//' | sort -u)
     rpmbuild -bb "$@"
     cp "$top"/RPMS/*/apklayer-*"$version"-*.rpm /out/
     exit 0
