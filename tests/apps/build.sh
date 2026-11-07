@@ -28,6 +28,18 @@ fi
 OPT=$(ls "$SDK"/platforms/android-36.1/optional/*.jar | paste -sd: -)  # the optional shared libraries (<uses-library>): compile only, as the SDK's stubs
 javac -nowarn -d "$W/cls" -cp "$AJ:$OPT" $(find -H src "$W/aidl" -name '*.java')
 "$BT"/d8 --min-api 26 --lib "$AJ" --output "$W" $(find "$W/cls" -name '*.class')
+key() { local ks="$PWD/../../../build/keys/$1.jks"; mkdir -p "$(dirname "$ks")"
+  [ -f "$ks" ] || keytool -genkeypair -keystore "$ks" -alias key -storepass apklayer -keypass apklayer -dname "CN=$1" -keyalg RSA -validity 10000 -noprompt >/dev/null 2>&1
+  echo "$ks"; }
+MANIFEST=AndroidManifest.xml
+if grep -q '@cert-digest:' AndroidManifest.xml; then  # a library user names its provider's signer: @cert-digest:<key>@ -> that key's certificate SHA-256
+  cp AndroidManifest.xml "$W/manifest.xml"
+  for k in $(grep -o '@cert-digest:[^@]*@' AndroidManifest.xml | sed 's/@cert-digest:\(.*\)@/\1/' | sort -u); do
+    d=$(keytool -exportcert -keystore "$(key "$k")" -alias key -storepass apklayer 2>/dev/null | shasum -a 256 | cut -d' ' -f1)
+    sed -i.bak "s/@cert-digest:$k@/$d/g" "$W/manifest.xml"
+  done
+  MANIFEST="$W/manifest.xml"
+fi
 RES=()
 if [ -d res ]; then "$BT"/aapt2 compile --dir res -o "$W/res.zip"; RES=("$W/res.zip"); fi  # an app with resources (its own 0x7f package)
 ASSETS=()
@@ -41,16 +53,13 @@ ABIS=()
 if [ -f split.list ]; then while IFS=: read -r split config; do
   if [ "$config" = abi ]; then ABIS+=("$split"); elif [ -n "$split" ]; then SPLITS+=(--split "$W/split_$split.apk:$config"); fi
 done < split.list; fi
-"$BT"/aapt2 link ${ASSETS[@]+"${ASSETS[@]}"} -o "$W/base.apk" -I "$AJ" ${RES[@]+"${RES[@]}"} ${SPLITS[@]+"${SPLITS[@]}"} --manifest AndroidManifest.xml
+"$BT"/aapt2 link ${ASSETS[@]+"${ASSETS[@]}"} -o "$W/base.apk" -I "$AJ" ${RES[@]+"${RES[@]}"} ${SPLITS[@]+"${SPLITS[@]}"} --manifest "$MANIFEST"
 (cd "$W" && zip -q base.apk classes.dex $LIBS)
 for abi in ${ABIS[@]+"${ABIS[@]}"}; do  # what bundletool makes of lib/<abi>/: a split of the same package and versionCode named config.<abi>
   printf '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="%s" android:versionCode="%s" split="config.%s"><application android:hasCode="false"/></manifest>' \
     "$(sed -n 's/.*package="\([^"]*\)".*/\1/p' AndroidManifest.xml | head -1)" "$(sed -n 's/.*android:versionCode="\([^"]*\)".*/\1/p' AndroidManifest.xml | head -1)" "$abi" > "$W/abi.xml"
   "$BT"/aapt2 link -o "$W/split_$abi.apk" -I "$AJ" --manifest "$W/abi.xml"
 done
-key() { local ks="$PWD/../../../build/keys/$1.jks"; mkdir -p "$(dirname "$ks")"
-  [ -f "$ks" ] || keytool -genkeypair -keystore "$ks" -alias key -storepass apklayer -keypass apklayer -dname "CN=$1" -keyalg RSA -validity 10000 -noprompt >/dev/null 2>&1
-  echo "$ks"; }
 KEY=$NAME; PAST=
 [ -f sign ] && read -r KEY PAST < sign  # its own key by default: apps that share a signer name the same one
 SIGNERS=(--ks "$(key "$KEY")" --ks-pass pass:apklayer)
