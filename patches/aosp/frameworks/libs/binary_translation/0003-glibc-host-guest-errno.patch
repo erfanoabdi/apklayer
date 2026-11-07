@@ -1,0 +1,103 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: a host call keeps the guest's errno on a glibc host
+
+With glibc-host-thread-id-handoff each guest thread has bionic records of its own (0001), so the guest's errno (__errno: the record's
+errno_value) is not the errno host code sets (glibc's): a failing proxied call (clock_gettime, stat64, ftell, getaddrinfo ...) left the
+guest's errno as it was. MakeTrampolineCallable wraps every host function's trampoline: glibc's errno takes the guest's before the call,
+the guest's takes glibc's after it, as the shared thread record does on an Android host.
+
+diff --git a/guest_os_primitives/guest_thread.cc b/guest_os_primitives/guest_thread.cc
+--- a/guest_os_primitives/guest_thread.cc
++++ b/guest_os_primitives/guest_thread.cc
+@@ -18,6 +18,7 @@
+ 
+ #include <sys/mman.h>  // mprotect
+ #include <bit>
++#include <cerrno>  // apklayer patch: WrapHostCallForGuestErrno
+ 
+ #if defined(__BIONIC__)
+ #include "private/bionic_constants.h"
+@@ -32,6 +33,7 @@
+ #include "berberis/base/tracing.h"
+ #include "berberis/guest_state/guest_addr.h"  // ToGuestAddr
+ #include "berberis/guest_state/guest_state_opaque.h"
++#include "berberis/runtime_primitives/host_function_wrapper_impl.h"  // apklayer patch: WrapHostCallForGuestErrno
+ #include "berberis/runtime_primitives/host_stack.h"
+ #include "native_bridge_support/linker/static_tls_config.h"
+ 
+@@ -385,7 +387,7 @@
+   if (IsConfigFlagSet(kGlibcHostThreadIdHandoff)) {
+     // apklayer patch: under bionic_translation the host's thread slots are glibc's (%fs+0x08 the DTV, %fs+0x48 feature_1): there is no
+     // host pthread_internal_t or bionic_tls to share, and nothing seeds one for threads the JVM made. The thread gets zeroed records of its
+-    // own, with its tid as bionic's pthread_create sets it. Limit: errno set by a proxied host call is glibc's, not the guest's.
++    // own, with its tid as bionic's pthread_create sets it. A host call keeps errno in step (WrapHostCallForGuestErrno).
+     tls[g_static_tls_config.tls_slot_thread_id] = GlibcHostRecords();
+     tls[g_static_tls_config.tls_slot_bionic_tls] =
+         static_cast<char*>(glibc_host_records_) + kGlibcHostThreadRecordSize;
+@@ -414,6 +416,38 @@
+   }
+ #endif
+   return glibc_host_records_;
++}
++
++#if defined(__BIONIC__)
++namespace {
++
++// apklayer patch: a host function called from guest code, run with the guest thread's errno (its own records' errno_value, which the
++// guest's __errno returns) in glibc's errno, the one host code sets; what it leaves there is the guest's errno after the call.
++struct HostCallWithGuestErrno {
++  TrampolineFunc func;
++  HostCode arg;
++};
++
++void RunHostCallWithGuestErrno(HostCode arg, ThreadState* state) {
++  auto* call = static_cast<const HostCallWithGuestErrno*>(arg);
++  int& guest_errno = static_cast<pthread_internal_t*>(GetGuestThread(*state)->GlibcHostRecords())->errno_value;
++  errno = guest_errno;
++  call->func(call->arg, state);
++  guest_errno = errno;
++}
++
++}  // namespace
++#endif
++
++void WrapHostCallForGuestErrno(TrampolineFunc* func, HostCode* arg) {
++#if defined(__BIONIC__)
++  if (IsConfigFlagSet(kGlibcHostThreadIdHandoff)) {  // apklayer patch: else the guest shares the host thread's record, errno included
++    *arg = new HostCallWithGuestErrno{*func, *arg};  // one per wrapped function, kept as the wrapping is
++    *func = RunHostCallWithGuestErrno;
++  }
++#else
++  (void)func, (void)arg;
++#endif
+ }
+ 
+ void GuestThread::ConfigStaticTls(const NativeBridgeStaticTlsConfig* config) {
+diff --git a/runtime_primitives/host_function_wrapper_impl.cc b/runtime_primitives/host_function_wrapper_impl.cc
+--- a/runtime_primitives/host_function_wrapper_impl.cc
++++ b/runtime_primitives/host_function_wrapper_impl.cc
+@@ -46,6 +46,9 @@
+   TranslationCache* cache = TranslationCache::GetInstance();
+   GuestCodeEntry* entry = cache->AddAndLockForWrapping(pc);
+   if (entry) {
++    if (is_host_func && &WrapHostCallForGuestErrno != nullptr) {  // apklayer patch
++      WrapHostCallForGuestErrno(&func, &arg);
++    }
+     MachineCode mc;
+     GenTrampolineAdaptor(&mc, pc, AsHostCode(func), arg, name);
+     cache->SetWrappedAndUnlock(pc,
+diff --git a/runtime_primitives/include/berberis/runtime_primitives/host_function_wrapper_impl.h b/runtime_primitives/include/berberis/runtime_primitives/host_function_wrapper_impl.h
+--- a/runtime_primitives/include/berberis/runtime_primitives/host_function_wrapper_impl.h
++++ b/runtime_primitives/include/berberis/runtime_primitives/host_function_wrapper_impl.h
+@@ -41,6 +41,11 @@
+                             HostCode func,
+                             const char* name);
+ 
++// apklayer patch: on a glibc host (glibc-host-thread-id-handoff) a host function's trampoline is wrapped so that it runs with the guest
++// thread's errno and hands its errno back (guest_os_primitives/guest_thread.cc). Weak as Digitalis's override seam below: binaries
++// without guest_os_primitives skip it.
++__attribute__((weak)) void WrapHostCallForGuestErrno(TrampolineFunc* trampoline_func, HostCode* func);
++
+ // region digitalis
+ #if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
+ // Digitalis named-trampoline override seam: replaces an upstream trampoline
