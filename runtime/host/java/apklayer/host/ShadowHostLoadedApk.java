@@ -18,6 +18,11 @@ public class ShadowHostLoadedApk extends ShadowLoadedApk {
 
     @org.robolectric.annotation.RealObject private android.app.LoadedApk loaded;
 
+    /** No Android class loader (PathClassLoader over the dex files): the app's classes come from getClassLoader above. updateApplicationInfo
+     *  calls this when getPackageInfo finds the cached package's resources out of date (an activity context's ActivityThread.getPackageInfo
+     *  after an APK under the running app was rewritten); building one failed in BaseDexClassLoader.reportClassLoaderChain on the JVM. */
+    @Implementation protected void createOrUpdateClassLoaderLocked(java.util.List<String> addedPaths) {}
+
     /** The installed splits' resources join the base's (getResources), as PackageManagerService's split paths make them on Android; the app sees them in its ApplicationInfo. */
     @Implementation protected String[] getSplitPaths(String splitName) {
         android.content.pm.ApplicationInfo info = loaded.getApplicationInfo();

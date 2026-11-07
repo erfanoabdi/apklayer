@@ -86,8 +86,16 @@ try:
     shell_seen = shell_log.stat().st_size
 
     view = {'action': 'hello.act.PICK', 'data': 'https://example.org/one', 'component': PKG + '.PickActivity', 'extra.text': 'one', 'extra.keep': '1'}
-    relaunch(view)
-    line = target.expect('[act-t] create pid=%s ' % pid, 20)
+    # the running app's APK rewritten (a reinstall, a tree's install): the next activity's ActivityThread.getPackageInfo finds the package's
+    # resources out of date and updates the LoadedApk, which must not build an Android class loader
+    apk = Path(ENV.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'apklayer/apps' / PKG / 'base.apk'
+    times = apk.stat()
+    os.utime(apk)
+    try:
+        relaunch(view)
+        line = target.expect('[act-t] create pid=%s ' % pid, 20)
+    finally:
+        os.utime(apk, ns=(times.st_atime_ns, times.st_mtime_ns))
     assert 'text=one' in line and 'data=https://example.org/one' in line, line
     print('[relaunch] new activity: ' + line.strip(), flush=True)
     relaunch(dict(view, data='https://example.org/two', **{'extra.text': 'two'}))
