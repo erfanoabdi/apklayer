@@ -8,3 +8,4 @@ x86_64: from ~/los24 gsi_x86_64 userdebug (incremental builds of 2026-11-04 and 
 x86_64 tree: ro.build.fingerprint=Android/lineage_gsi_x86_64/generic_x86_64:17/CP2A.260605.016/eng.erfana:userdebug/test-keys; ro.build.date=Wed Oct 28 04:34:03 +0330 2026
 x86_64 webview: com.android.webview 156.0.8078.47, sha256 a98312a1427ca5c029e30009cc4a002e90affe9370e42b7f93a88ee6425c1278
 2026-11-05: libapklayer_composer (arm64 c8abba23..., x86_64 b3044e3f...) from the fences branch (worktree-agent-a1dbea5ecf5fe5ffd): sync_file present fences with real timestamps
+2026-11-07: libapklayer_egl (arm64 20ec4af3..., x86_64 00dc6bd2...) from main aaaa6547: a GBM window surface the host refuses is retried with SCANOUT (NVIDIA)
