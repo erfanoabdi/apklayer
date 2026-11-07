@@ -1,5 +1,6 @@
 #include "env.h"
 
+#include "apps.h"
 #include "gpus.h"
 #include "binder.h"
 #include "halium.h"
@@ -53,6 +54,31 @@ std::string hostGles(const Layout& layout, const Env& env) {
     if (version.rfind("2.", 0) == 0 || version == "3.0")
         fprintf(stderr, "apklayer: the host GLES is %s; apps get a 3.2 claim (APKLAYER_GLES_OVERRIDE=off to disable)\n", version.c_str());
     return version;
+}
+
+
+// Class data sharing (docs/PLAN.md "app start speed on phones"): the runtime's JDK image (tools/release/jdk-image.sh, java.base with the patch built in)
+// while it was made from this JDK's modules, else "" (the JDK with --patch-module, which turns CDS off)
+std::string jdkImage(const Layout& l, const std::string& java) {
+    std::string img = join(l.native, "jdk"), home = dirName(dirName(realPath(java)));
+    struct stat modules{};
+    if (home.empty() || stat(join(home, "lib/modules").c_str(), &modules) != 0 || !isExecutable(join(img, "bin/java"))) return "";
+    return trim(readFile(join(img, "apklayer-stamp")).value_or("")) == std::to_string(modules.st_mtime) ? join(img, "bin/java") : "";
+}
+
+// The instance's archive of the classes a start loads, made by the first launch that finds none (apklayer.host.CdsDump), named by the class path's
+// files: a new runtime gets its own. The JVM checks it itself and runs without it when it does not match (-Xshare:auto).
+void cdsArgs(const Layout& l, const Instance& inst, std::vector<std::string>& a) {
+    std::string key = readFile(join(l.native, "jdk/apklayer-stamp")).value_or("");
+    for (const std::string& entry : split(hostClasspath(l), ':')) {
+        struct stat st{};
+        if (stat(entry.c_str(), &st) == 0) key += entry + std::to_string(st.st_size) + "." + std::to_string(st.st_mtime) + ":";
+    }
+    char name[32];
+    snprintf(name, sizeof name, "%016zx.jsa", std::hash<std::string>{}(key));
+    std::string jsa = join(inst.stateDir, std::string("cds/") + name);
+    if (exists(jsa)) a.push_back("-XX:SharedArchiveFile=" + jsa);
+    else a.insert(a.end(), {"-XX:+RecordDynamicDumpInfo", "-Dapklayer.cdsdump=" + jsa});
 }
 
 }  // namespace
@@ -214,9 +240,12 @@ std::vector<std::string> hostJvmArgs(const Layout& l, const Instance& inst, Nati
                                   "-Dapklayer.storage=" + inst.storageDir};  // volumes: Internal storage (emulated/0 below), Home, Linux root
     // HotSpot's libjsig: a native library's fault handler (the native bridge's recovery, an app's own) is chained behind the JVM's, which
     // calls it for faults that are not its own (bionic_translation 0042); a spare-born process gets its route only later, so every JVM has it
+    std::string image = getenvOr("APKLAYER_CDS", "") == "off" ? "" : jdkImage(l, ne.java);
+    if (!image.empty()) { ne.java = a[0] = image; cdsArgs(l, inst, a); }
     std::string jsig = join(dirName(dirName(realPath(ne.java))), "lib/libjsig.so");
     if (exists(jsig)) ne.env["LD_PRELOAD"] += ":" + jsig;
-    if (isDir(join(n, "jdk-patch"))) { a.push_back("--patch-module"); a.push_back("java.base=" + join(n, "jdk-patch")); }  // libcore-only members Android's natives look up
+    // libcore-only members Android's natives look up: the image has them in its java.base
+    if (image.empty() && isDir(join(n, "jdk-patch"))) { a.push_back("--patch-module"); a.push_back("java.base=" + join(n, "jdk-patch")); }
     // the fonts of the device build, once a fonts.xml is staged beside them (Robolectric's font shadows read <fontdir>/fonts.xml); Robolectric's own otherwise
     if (exists(join(nr, "system/fonts/fonts.xml"))) a.push_back("-Drobolectric.nativeruntime.fontdir=" + join(nr, "system/fonts/"));
     std::string res = join(nr, "system/framework/org.lineageos.platform-res.apk");
