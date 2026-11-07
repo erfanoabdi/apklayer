@@ -40,7 +40,6 @@ Requires:       python3-base
 Requires:       zip
 Requires:       unzip
 Requires:       zstd
-Requires:       gnu-tar
 # the runtime bundle's download (common/fetch.cpp); Sailfish has wget in Chum only: `apklayer setup --bundle <file>` works without
 Recommends:     wget
 %{?systemd_requires}
