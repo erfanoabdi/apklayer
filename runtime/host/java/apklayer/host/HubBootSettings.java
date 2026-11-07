@@ -37,6 +37,7 @@ final class HubBootSettings {
         try {
             int boots = Settings.Global.getInt(resolver, Settings.Global.BOOT_COUNT, 0) + 1;  // Device Info HW reads it with getInt and no default
             Settings.Global.putInt(resolver, Settings.Global.BOOT_COUNT, boots);
+            if (boots == 1) directory.providers().createDocumentProviders();
             if (Settings.Global.getInt(resolver, Settings.Global.DEVICE_PROVISIONED, 0) == 0) Settings.Global.putInt(resolver, Settings.Global.DEVICE_PROVISIONED, 1);
             if (Settings.Secure.getInt(resolver, Settings.Secure.USER_SETUP_COMPLETE, 0) == 0) Settings.Secure.putInt(resolver, Settings.Secure.USER_SETUP_COMPLETE, 1);
             String enabled = inputMethods(directory.packages());
@@ -55,6 +56,7 @@ final class HubBootSettings {
             System.out.println("[apklayer-hub] boot count " + boots + ", location [" + String.join(",", allowed) + "], input methods [" + enabled + "]");
         } catch (RuntimeException failed) {
             System.out.println("[apklayer-hub] boot settings not written: " + failed);
+            failed.printStackTrace(System.out);
         } finally {
             if (location != null) location.destroy();
             BOOTED.countDown();

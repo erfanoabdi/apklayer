@@ -36,6 +36,24 @@ final class HubProviders {
     /** The provider's binder for the hub itself, the instance's system (uid 1000): what system_server writes at boot (HubBootSettings). */
     IBinder system(String authority) { return find(new HubDirectory.Peer(android.os.Process.myPid(), 1000, "android", null, null, true, 1000, null), authority); }
 
+    /**
+     * A data home's first boot: every documents provider is created at once, each in its process (its database too), as a device's first boot has
+     * them running before the Files app opens. DocumentsUI loads the providers' roots one after another under one lock and gives up after 5 s
+     * (ProvidersCache.FIRST_LOAD_TIMEOUT_MS), then closes when its default root is missing: cold hosts creating their databases took longer.
+     */
+    void createDocumentProviders() {
+        for (android.content.pm.PackageParser.Provider provider : components()) {
+            if (provider.intents.stream().noneMatch(filter -> filter.hasAction(android.provider.DocumentsContract.PROVIDER_INTERFACE))) continue;
+            String authority = provider.info.authority.split(";")[0];
+            Thread create = new Thread(() -> {
+                try { system(authority); }
+                catch (RuntimeException failed) { System.out.println("[apklayer-hub] first boot: " + authority + " not created: " + failed); }
+            }, "hub-first-boot-" + authority);
+            create.setDaemon(true);
+            create.start();
+        }
+    }
+
     /** A content change, told to every other app that is running: each has its own observers, registered in its ContentResolver. */
     void notifyChange(HubDirectory.Peer caller, android.net.Uri uri, int flags) {
         for (HubDirectory.Peer peer : directory.peersExcept(caller)) {
