@@ -55,8 +55,11 @@ def prepare(groups, slots):
             built = list(pool.map(lambda a: subprocess.run(['tests/apps/build.sh', a], cwd=vm.REPO, capture_output=True, text=True), apps))
         for app, b in zip(apps, built): assert b.returncode == 0, 'building %s failed:\n%s' % (app, b.stderr[-2000:])
         vm.copy([vm.REPO / 'build' / (a + '.apk') for a in apps], vm.WORK + '/apks')
+        # a test app left by another tree's keys (worktrees make their own build/keys): replaced, it is only a test app
         install = ('for a in %s; do out=$(bin/apklayer install %s/apks/$a.apk 2>&1); '
-                   '{ grep -aq "installed" <<<"$out" && ! grep -aq "INSTALL_FAILED" <<<"$out"; } || { tail -5 <<<"$out"; echo "install $a failed"; exit 1; }; done') % (' '.join(apps), vm.WORK)
+                   'p=$(sed -n "s/.*INSTALL_FAILED_UPDATE_INCOMPATIBLE: \\([^ ]*\\) is installed with another signature.*/\\1/p" <<<"$out"); '
+                   '[ -z "$p" ] || { bin/apklayer uninstall "$p" >/dev/null 2>&1; out=$(bin/apklayer install %s/apks/$a.apk 2>&1); }; '
+                   '{ grep -aq "installed" <<<"$out" && ! grep -aq "INSTALL_FAILED" <<<"$out"; } || { tail -5 <<<"$out"; echo "install $a failed"; exit 1; }; done') % (' '.join(apps), vm.WORK, vm.WORK)
         assert vm.ssh(vm.instance_env(slots[0]) + install).returncode == 0, 'installing the test apps failed'
     setup = [c for g in groups for c in GROUPS[g].get('setup', [])]
     for command in dict.fromkeys(setup):
