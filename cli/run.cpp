@@ -154,7 +154,11 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
 
     std::vector<std::string> jvm = windowJvmArgs(l, inst, ne), window;
     if (mode == RunMode::Component) ne.env["APKLAYER_COMPONENT_HOST"] = "1";  // the launch's own environment (a spare gets it with its target)
-    std::string spareKey = appSpareKey(l, inst, jvm, ne.env);
+    // under the sandbox a spare is one app's process from its start (cli/spare.cpp): an app window's launch takes the spare of its own package, or
+    // starts it for the next; component hosts and launches with an intent file (in a place the spare's view lacks) start cold
+    bool spare = !sandboxOn() || (mode == RunMode::App && getenvOr("APKLAYER_INTENT_FILE", "").empty());
+    std::string sandboxPackage = sandboxOn() ? package : "";
+    std::string spareKey = appSpareKey(l, inst, jvm, ne.env, sandboxPackage);
     int vdisplay = 0;
     int self = getpid();
     // one virtual display per app window (its own layer stack and sink per launch); pid-based ids cannot collide, and the title identifies instance and
@@ -183,7 +187,8 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     std::string record = join(inst.stateDir, "run." + std::to_string(self));
     // started: the launch's process is up (AppSpare.launchStarted), upon which the next spare prepares, as zygote forks the next app process
     int conn = -1, jvmPid = -1, started[2] = {-1, -1};
-    if (!sandboxOn() && pipe2(started, O_CLOEXEC) == 0) {  // the instance's spare takes the launch when it matches (cli/spare.cpp)
+    if (spare && pipe2(started, O_CLOEXEC) == 0) {  // the instance's spare takes the launch when it matches (cli/spare.cpp)
+        fchmod(started[1], 0622);  // the JVM reopens it through /proc/self/fd (AppSpare.launchStarted): a sandboxed one is another uid than the pipe's
         std::vector<std::string> target = late;
         target.insert(target.end(), files.begin(), files.end());
         jvmPid = takeAppSpare(inst, spareKey, target, ne.env, started[1], &conn);
@@ -198,7 +203,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     app.cwd = dir;
     if (sandboxOn()) sandboxSpawn(l, inst, app, package);  // the JVM as the app's own uid in its own view (cli/sandbox.cpp)
     if (jvmPid <= 0 && started[1] >= 0) { fcntl(started[1], F_SETFD, 0); app.env["APKLAYER_STARTED_FD"] = std::to_string(started[1]); }
-    if (started[0] >= 0) { startAppSpare(l, inst, started[0]); close(started[0]); }
+    if (started[0] >= 0) { startAppSpare(l, inst, started[0], sandboxPackage); close(started[0]); }
     if (mode == RunMode::Component && jvmPid <= 0) {
         // a cold service host has no window sink to clean up: become the JVM, so the launcher dies exactly when the host does (the hub restarts
         // a killed host as soon as its launcher is gone)

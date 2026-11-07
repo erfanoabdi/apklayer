@@ -18,13 +18,14 @@ int takeAppSpare(const Instance& inst, const std::string& key, const std::vector
 // outlives its holder: when the holder ends first, this waits for the JVM itself (its status is then unknown: 1).
 int awaitAppSpare(int conn, int jvmPid);
 // What a spare and a launch must share: the JVM's command line, its environment (but what is the launch's own), the runtime build.
-std::string appSpareKey(const Layout& layout, const Instance& instance, const std::vector<std::string>& argv, const Env& env);
+// sandboxPackage: under the sandbox, the one app whose process a spare is (its uid and view are fixed before the JVM starts); "" otherwise.
+std::string appSpareKey(const Layout& layout, const Instance& instance, const std::vector<std::string>& argv, const Env& env, const std::string& sandboxPackage);
 // Starts `apklayer app-spare` detached; it ends at once when the instance has a spare already, else prepares one once a byte or EOF comes on afterFd
 // (the launch's started pipe: AppSpare.launchStarted).
-void startAppSpare(const Layout& layout, const Instance& instance, int afterFd);
+void startAppSpare(const Layout& layout, const Instance& instance, int afterFd, const std::string& sandboxPackage = "");
 // `apklayer app-spare` (the hub at its start): a spare preparing now, also when the instance's holder still waits for its launch to be up.
 void wakeAppSpare(const Layout& layout, const Instance& instance);
 // The holder: starts the spare JVM, hands it the first launch that matches its key, then waits for it and tells that launch its exit status.
-int runAppSpare(const Layout& layout, const Instance& instance, int afterFd);
+int runAppSpare(const Layout& layout, const Instance& instance, int afterFd, const std::string& sandboxPackage = "");
 
 }  // namespace apklayer
