@@ -34,7 +34,7 @@ Consequences:
   `tools/host-setup/binder.sh <id>`, root once per boot), and the device is reached only through the host context.
 - The hosts are older than our libbinder (Android 16): Halium 12 and Android 13 write a binder's stability as a Category and number
   IServiceManager's methods differently (patch 0006 handles both, below).
-- Sailfish OS (glibc 2.30) runs apklayer from the sysroot bundle (below, "apklayer on Sailfish OS").
+- Sailfish OS (glibc 2.30) runs apklayer from RPMs built against Sailfish's own toolchain and libraries (below, "Building for Sailfish OS").
 - Graphics (step e): neither compositor offers linux-dmabuf; the HWC needs the `android_wlegl` path (`create_handle`/`create_buffer`
   with the gralloc handle's fds and ints) and the device's gralloc/EGL through the vendor namespace.
 
@@ -242,21 +242,36 @@ options, `apklayer portal` and the apps' document pickers through HostFilePortal
   and the home folder (one level), the Hardware page says to type the path. A desktop with a working portal is unchanged (the portal answers first).
 
 ## apklayer on Sailfish OS (Volla Phone Quintus, 2026-11-07)
-Route: no Sailfish SDK or Platform SDK is on this machine, and no toolchain with glibc <= 2.30 builds this tree (C++20, recent Meson). So the build host's userland
-ships with apklayer: `tools/release/sysroot-bundle.sh <build> <out>` on the Parallels VM (Ubuntu 24.04 arm64), after `meson setup b --prefix=/opt/apklayer
--Dandroid_runtime=false`, makes `apklayer-sysroot-aarch64-<runtime>.tar.gz` (161 MB; 344 MB unpacked): the meson install at `/opt/apklayer`, Ubuntu's JDK 21 in
-`/opt/apklayer/jvm`, glibc 2.39 with its loader and the 87 libraries the install and the JDK link in `/opt/apklayer/sysroot/lib`; every ELF of it gets that
-loader as interpreter and the sysroot as DT_RPATH (patchelf). A tarball, not an RPM: busybox tar unpacks it, nothing is built on the phone, and it never mixes
-with the system's libraries; `/opt` because the CLI finds its install relative to itself and Sailfish's rootfs (updated by zypper, not replaced) keeps it.
-The Android runtime bundle is glibc-independent: unpacked as usual in `~/.local/share/apklayer/runtime/<version>` (with `current`); busybox tar has no zstd,
-so it went over as a .tar.gz; its setup (setup-runtime.sh) runs on the phone after `zypper install zip unzip` (busybox has neither; its cp has no
---remove-destination, now a tar pipe).
+Route (2026-11-07, replaces the first sysroot tarball with its own glibc 2.39, which the owner rejected): real RPMs built against Sailfish OS's own
+toolchain and libraries, below. The Android runtime bundle stays per user (`apklayer setup`), as with the deb.
 
-Install (root once): `tar xzf apklayer-sysroot-aarch64-0.3.3.tar.gz -C /`, `zypper install zip unzip`, `sh /opt/apklayer/share/apklayer/tools/host-setup/binder.sh ut`
-(each boot). As defaultuser: the runtime in `~/.local/share/apklayer/runtime/0.3.3` and `current`, `APKLAYER_NATIVE_JAVA=/opt/apklayer/jvm/bin/java` in
-`~/.config/apklayer/env`, `PATH=/opt/apklayer/bin:$PATH`, `apklayer setup`, `apklayer providers set camera device` and `vibrator device` (setup reported them
-automatic, but the instance's host_hals.conf held only graphics until set: open). `cli/halium.cpp` detects the phone as on Ubuntu Touch (instance `ut`,
-PulseAudio from the session's runtime dir); the providers probe sensorfw, geoclue1, PulseAudio, the device's camera and vibrator.
+### Building for Sailfish OS
+How Sailfish software is built: the Sailfish SDK (`sfdk`, formerly `mb2`) and the Platform SDK both run `rpmbuild` on a spec in `rpm/` inside a
+*target*, the release's rootfs for one CPU, entered through scratchbox2 from an i486 SDK chroot (sb2 runs the target's binaries under qemu). CI does
+the same with community Docker images of the Platform SDK (coderus/sailfishos-platform-sdk with `mb2 -t <target> build`, the
+`coderus/github-sfos-build` action, R1tschY/docker-sailfishos-sdk). OBS (build.sailfishos.org, where Jolla and Chum build) is a hosting and
+distribution choice, not a requirement: **no OBS server is needed** to build RPMs; it would only matter to publish a repository (Chum) users add.
+
+What we use: the Platform SDK's own aarch64 target (`Sailfish_OS-5.0.0.62-Sailfish_SDK_Target-aarch64.tar.7z` from releases.sailfishos.org/sdk/targets,
+md5 checked, `rpm/sources`), imported as an aarch64 Docker image (`rpm/Dockerfile`, image `apklayer-sailfish-build:5.0.0.62`) and run natively: the
+Mac (OrbStack) and GitHub's `ubuntu-24.04-arm` runners are aarch64, so neither sb2 nor qemu is needed; the compiler, rpmbuild and every library
+come from Sailfish's own repositories (zypper in the container). Toolchain: gcc 10 (C++20 with `-std=c++20`), Meson 1.4, glibc 2.30, kernel headers
+3.18. `sh tools/release/sailfish-rpm.sh <version> <prebuilts checkout> <out dir>` builds everything; downloads land once in
+`~/.cache/apklayer/sailfish`, the Java libraries come from `~/.cache/apklayer/deps` when present. The container is `--rm` (nothing keeps running);
+`docker rmi apklayer-sailfish-build:5.0.0.62` frees the image. CI: job `sailfish` in `.github/workflows/release.yml` (the `*.aarch64.rpm` release assets).
+
+RPMs (`rpm/*.spec`): `apklayer` (meson `--prefix=/usr -Dandroid_runtime=false`, like debian/rules; no apklayer-manager: Slint's prebuilt needs a newer
+glibc) and `apklayer-devel`, plus what Sailfish 5.0's repositories and Chum lack: `temurin-21-jdk` (Adoptium's aarch64 JDK, built against glibc 2.17,
+repackaged unchanged at `/usr/lib/jvm/temurin-21-jdk`: building OpenJDK from source in the target is hours of work for the same bits),
+`libmd`, `libbsd`, `libunwind` (built from source). Sailfish-specific changes the tree needed: libdl linked explicitly (glibc < 2.34), linux_compat.h
+for the new mount API and pidfd_open, SYS_statx, bionic_translation compat patches (no `Elf64_Relr`, gcc 10's `-std=c++20`), and the runtime
+bundle unpacked as `zstd -dc | tar -x` (BusyBox tar has no `--zstd`; gnu-tar conflicts with busybox-symlinks-tar).
+
+Install (root): `pkcon install-local apklayer-*.aarch64.rpm temurin-21-jdk-*.rpm libbsd-*.rpm libmd-*.rpm libunwind-*.rpm` (unsigned local RPMs; zstd and
+elfutils-libelf come from Jolla's repositories); `apklayer-binder.service` starts. As defaultuser: `apklayer setup` (no wget on Sailfish: `--bundle
+<apklayer-runtime-arm64-*.tar.zst>`). Then `apklayer providers set camera device` and `vibrator device` (setup reported them automatic, but the instance's host_hals.conf
+held only graphics until set: open). `cli/halium.cpp` detects the phone as on Ubuntu Touch (instance `ut`, PulseAudio from the session's runtime dir);
+the providers probe sensorfw, geoclue1, PulseAudio, the device's camera and vibrator.
 
 What differs from Ubuntu Touch, and what changed:
 - Lipstick has no xdg-shell (wl_shell only), wl_compositor 3, wl_seat 3, no subcompositor: `bridge/shell/wlshell.c` makes a window a wl_shell toplevel laid out

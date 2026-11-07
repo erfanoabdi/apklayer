@@ -1,0 +1,72 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer compat: libc functions glibc before 2.38 lacks
+
+Android's libraries use strlcpy's and strlcat's FORTIFY forms (glibc 2.38), fstat64 (a symbol from 2.33), pidfd_open (2.36) and res_mkquery
+(in libc from 2.34); on Sailfish OS 5.0 (glibc 2.30) liblog.so failed to link without them. Applied by meson.build only when libc has no strlcpy.
+---
+diff --git a/libc/libc-glibc-compat.c b/libc/libc-glibc-compat.c
+new file mode 100644
+index 0000000..5015bf5
+--- /dev/null
++++ b/libc/libc-glibc-compat.c
+@@ -0,0 +1,42 @@
++/* apklayer compat: what Android's libraries take from libc and glibc before 2.38 lacks (Sailfish OS 5.0: 2.30); the linker finds bionic_<name> first */
++#define _GNU_SOURCE
++#include <bsd/string.h>
++#include <resolv.h>
++#include <stdlib.h>
++#include <sys/stat.h>
++#include <sys/syscall.h>
++#include <unistd.h>
++
++/* glibc 2.38: strlcpy, strlcat and their FORTIFY forms (libbsd has the functions) */
++size_t bionic___strlcpy_chk(char *dst, const char *src, size_t size, size_t dst_len)
++{
++	if (size > dst_len)
++		abort();
++	return strlcpy(dst, src, size);
++}
++
++size_t bionic___strlcat_chk(char *dst, const char *src, size_t size, size_t dst_len)
++{
++	if (size > dst_len)
++		abort();
++	return strlcat(dst, src, size);
++}
++
++/* glibc 2.33: fstat64 as a symbol (before, an inline over __fxstat64; one struct on 64-bit) */
++int bionic_fstat64(int fd, struct stat *buf)
++{
++	return fstat(fd, buf);
++}
++
++/* glibc 2.36: pidfd_open */
++int bionic_pidfd_open(pid_t pid, unsigned int flags)
++{
++	return syscall(434 /* __NR_pidfd_open, the same on every architecture */, pid, flags);
++}
++
++/* glibc 2.34: res_mkquery in libc (before, __res_mkquery in libresolv, which resolv.h names) */
++int bionic_res_mkquery(int op, const char *dname, int class, int type, const unsigned char *data, int datalen,
++		       const unsigned char *newrr, unsigned char *buf, int buflen)
++{
++	return res_mkquery(op, dname, class, type, data, datalen, newrr, buf, buflen);
++}
+diff --git a/meson.build b/meson.build
+index ea2e8ef..324f840 100644
+--- a/meson.build
++++ b/meson.build
+@@ -119,11 +119,13 @@ c_bio = shared_library('c_bio',
+ 		'libc/libc-stdio.c',
+ 		'libc/libc-sha1.c',
+ 		'libc/libc-open-overrides.c',
++		'libc/libc-glibc-compat.c',
+ 	],
+ 	soversion: 0, # we're shimming a stable ABI; this should never need to change
+ 	install: true,
+ 	dependencies: [
+ 		dependency('libbsd'),
++		meson.get_compiler('c').find_library('resolv'),
+ 		dependency('libunwind'), # see comments on https://reviews.llvm.org/D78787; for 32bit arm we may need more fun
+ 		libm_dep, # TODO: have separate libm_bio? (note: on musl this is a noop)
+ 	],

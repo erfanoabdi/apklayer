@@ -46,6 +46,7 @@ and list it here. The M1 seed's patch log is in `archive/seed-m1/docs/PATCHES.md
 | compat/gcc-before-13-cxx2b | `-std=c++2b` for gcc before 13 |
 | compat/gcc-before-11-cxx20 | `-std=c++20` for gcc before 11 (Sailfish OS 5.0: gcc 10), on top of the previous one |
 | compat/glibc-before-2.36-relr | RELR types in the linker for glibc before 2.36 (Ubuntu 22.04, Sailfish OS 5.0: 2.30) |
+| compat/glibc-before-2.38-libc | libc functions Android's libraries use that glibc before 2.38 lacks: `__strlcpy_chk`, `__strlcat_chk`, `fstat64`, `pidfd_open`, `res_mkquery` (Sailfish OS 5.0: 2.30) |
 | compat/libunwind-before-1.8-meson | accept libunwind before 1.8 |
 | compat/libunwind-before-1.8-weak-phdr | weak `unw_set_iterate_phdr_function` |
 

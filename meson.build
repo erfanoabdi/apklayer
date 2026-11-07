@@ -79,6 +79,9 @@ if host_machine.system() == 'linux'
   if not cc.has_header_symbol('elf.h', 'Elf64_Relr')  # glibc before 2.36
     run_command(apply, compat / 'glibc-before-2.36-relr.patch', bt_src, check: true)
   endif
+  if not cc.has_function('strlcpy')  # glibc before 2.38 (Sailfish OS 5.0: 2.30): libc functions Android's libraries use
+    run_command(apply, compat / 'glibc-before-2.38-libc.patch', bt_src, check: true)
+  endif
   unwind = dependency('libunwind', required: false)
   if not unwind.found() or unwind.version().version_compare('<1.8')  # one call each: a copy may have meson.build reset and keep linker.c
     run_command(apply, compat / 'libunwind-before-1.8-meson.patch', bt_src, check: true)
