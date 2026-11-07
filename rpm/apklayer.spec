@@ -97,6 +97,8 @@ systemctl daemon-reload >/dev/null 2>&1 || :
 %{_prefix}/lib/apklayer
 %{_datadir}/apklayer
 %{_datadir}/icons/hicolor/*/apps/apklayer.*
+%{_datadir}/desktop-directories/apklayer.directory
+%config(noreplace) %{_sysconfdir}/xdg/menus/applications-merged/apklayer.menu
 %{_prefix}/lib/modules-load.d/apklayer.conf
 %{_unitdir}/apklayer-binder.service
 %{_unitdir}/multi-user.target.wants/apklayer-binder.service
