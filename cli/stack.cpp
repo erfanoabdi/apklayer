@@ -250,6 +250,12 @@ static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std
     setProperty(l, ne, "ro.build.flavor", flavor.c_str());
     setProperty(l, ne, "ro.build.description", (flavor + " " + get("ro.build.version.release_or_codename") + " " + get("ro.build.id") + " " +
                                                 incremental + " " + get("ro.build.tags")).c_str());
+    // the GLES version apps read (ActivityManager.getDeviceConfigurationInfo, the unnamed FeatureInfo): major << 16 | minor, from the host's
+    // driver as apps' contexts get it (cli/env.cpp); a device prop file's value wins (ro.* is write-once)
+    if (auto it = ne.env.find("APKLAYER_GLES_VERSION"); it != ne.env.end()) {
+        unsigned major = 0, minor = 0;
+        if (sscanf(it->second.c_str(), "%u.%u", &major, &minor) == 2) setProperty(l, ne, "ro.opengles.version", std::to_string(major << 16 | minor).c_str());
+    }
     setProperty(l, ne, "ro.product.cpu.abi", kAbi);
     setProperty(l, ne, "ro.product.cpu.abilist", abis.c_str());
     setProperty(l, ne, "ro.product.cpu.abilist64", abis64.c_str());
@@ -276,7 +282,7 @@ static std::string deviceGraphicsProperties(const Instance& inst) {
         size_t k = line.find("]: [");
         if (line.size() < 6 || line[0] != '[' || k == std::string::npos || line.back() != ']') continue;
         std::string key = line.substr(1, k - 1), value = line.substr(k + 4, line.size() - k - 5);
-        bool wanted = key == "ro.hardware.egl" || key == "ro.hardware.vulkan" || key == "ro.board.platform";
+        bool wanted = key == "ro.hardware.egl" || key == "ro.hardware.vulkan" || key == "ro.board.platform" || key == "ro.opengles.version";
         for (const char* prefix : {"ro.vendor.", "vendor.", "debug.mediatek."}) wanted = wanted || key.rfind(prefix, 0) == 0;
         if (!wanted || value.empty()) continue;
         props += key + "=" + value + "\n";

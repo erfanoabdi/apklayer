@@ -171,11 +171,13 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
         for (const Gpu& g : gpus)
             if (g.compositor) env["APKLAYER_COMPOSITOR_NODE"] = g.node;
     }
+    std::string gles = hostGles(layout, env);
     if (!env.count("MESA_GLES_VERSION_OVERRIDE") && getenvOr("APKLAYER_GLES_OVERRIDE", "auto") != "off") {
-        std::string version = hostGles(layout, env);
         // eglinfo probes a device of its own choosing: with several GPUs the claim is made anyway (a no-op on a 3.2 driver)
-        if (version.rfind("2.", 0) == 0 || version == "3.0" || gpus.size() > 1) env["MESA_GLES_VERSION_OVERRIDE"] = "3.2";
+        if (gles.rfind("2.", 0) == 0 || gles == "3.0" || gpus.size() > 1) env["MESA_GLES_VERSION_OVERRIDE"] = "3.2";
     }
+    if (env.count("MESA_GLES_VERSION_OVERRIDE")) gles = env["MESA_GLES_VERSION_OVERRIDE"];
+    if (!gles.empty()) env["APKLAYER_GLES_VERSION"] = gles;  // the stack's ro.opengles.version (cli/stack.cpp)
     return result;
 }
 

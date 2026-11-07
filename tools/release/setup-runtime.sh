@@ -4,6 +4,8 @@
 # the package's half linked in, the package's JNI shim put into the framework jars, and the framework instrumented once.
 set -eu
 native="$(realpath "$1")" half="$(realpath "$2")" share="$(cd "$(dirname "$0")/.." && pwd)"
+# a wrong half (a CLI built for another layout resolved it to /) would link every entry of it into the runtime
+[ -f "$half/native-runtime.jar" ] || { echo "apklayer: $half is not apklayer's native dir (no native-runtime.jar); runtime not set up" >&2; exit 1; }
 exec 9>"$native/.setup.lock" && flock 9
 [ "$(stat -c %Y "$native/.setup" 2>/dev/null)" != "$(stat -c %Y "$half/native-runtime.jar")" ] || exit 0  # another CLI did it meanwhile
 echo "apklayer: setting up the Android runtime in $native (after each update, a few minutes)" >&2

@@ -21,6 +21,25 @@ public class ShadowHostActivityManager extends ShadowActivityManager {
         return HubActivityManager.service(ShadowActivityManager.getService());
     }
 
+    /** As ActivityManagerService answers it: the GLES version of ro.opengles.version (the host's, cli/stack.cpp) and the input of the configuration
+     *  (Robolectric's is empty: AIDA64 showed GLES 1.x, games that check for ES 2/3 refuse to start). */
+    @Implementation
+    protected android.content.pm.ConfigurationInfo getDeviceConfigurationInfo() {
+        android.content.pm.ConfigurationInfo info = new android.content.pm.ConfigurationInfo();
+        android.content.res.Configuration config = org.robolectric.RuntimeEnvironment.getApplication().getResources().getConfiguration();
+        info.reqTouchScreen = config.touchscreen;
+        info.reqKeyboardType = config.keyboard;
+        info.reqNavigation = config.navigation;
+        if (config.navigation == android.content.res.Configuration.NAVIGATION_DPAD || config.navigation == android.content.res.Configuration.NAVIGATION_TRACKBALL)
+            info.reqInputFeatures |= android.content.pm.ConfigurationInfo.INPUT_FEATURE_FIVE_WAY_NAV;
+        if (config.keyboard != android.content.res.Configuration.KEYBOARD_UNDEFINED && config.keyboard != android.content.res.Configuration.KEYBOARD_NOKEYS)
+            info.reqInputFeatures |= android.content.pm.ConfigurationInfo.INPUT_FEATURE_HARD_KEYBOARD;
+        info.reqGlEsVersion = glEsVersion();
+        return info;
+    }
+
+    static int glEsVersion() { return android.os.SystemProperties.getInt("ro.opengles.version", android.content.pm.ConfigurationInfo.GL_ES_VERSION_UNDEFINED); }
+
     /** This process under its own name (Robolectric names it after the package): apps tell their main process from a secondary one (android:process) by it. */
     @Implementation
     @Override
