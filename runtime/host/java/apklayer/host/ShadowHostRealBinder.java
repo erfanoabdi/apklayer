@@ -27,6 +27,7 @@ public class ShadowHostRealBinder {
     @Implementation protected static int getCallingUid() {
         int pid = Binder.getCallingPid();
         if (pid == Process.myPid()) return Process.myUid();
+        if (SANDBOXED) return kernelCallingUid();  // every process runs as its own uid (the hub and the services as 1000): the kernel's word, oneway calls too
         if (HubClient.connected() && pid == HubClient.current().hubPid()) return android.os.Process.SYSTEM_UID;  // the hub JVM stands for system_server
         if (pid == 0) {  // oneway: the kernel gives no calling pid; the sender's uid came in the request header (ShadowHostRealParcel)
             Integer sender = HEADER_UID.get();
@@ -45,6 +46,15 @@ public class ShadowHostRealBinder {
         if (uid < 0) return ShadowHostProcess.realUidValue();
         APP_UIDS.put(pid, uid);
         return uid;
+    }
+
+    private static final boolean SANDBOXED = "1".equals(System.getenv("APKLAYER_SANDBOX"));
+
+    /** The binder driver's sender euid of the current transaction (libbinder's calling identity, packed into the clearCallingIdentity token: uid in bits 32-62). */
+    static int kernelCallingUid() {
+        long token = Binder.clearCallingIdentity();
+        Binder.restoreCallingIdentity(token);
+        return (int) ((token >>> 32) & 0x7fffffffL);
     }
 
     /**

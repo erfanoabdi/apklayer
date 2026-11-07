@@ -33,7 +33,7 @@ final class HubBluetooth {
         if ((address == null) != (uuid == null) || address != null && (!ADDRESS.matcher(address).matches() || !UUID.matcher(uuid).matches()))
             throw new IllegalArgumentException("Bad RFCOMM target " + address + " " + uuid);
         watch();
-        List<String> command = HostProcess.dying("python3", HostLocation.script("bluez.py"));
+        List<String> command = HostLocation.helper("bluez.py");
         if (address != null) command.addAll(List.of("rfcomm", address, uuid));
         ParcelFileDescriptor[] in = ParcelFileDescriptor.createPipe(), out = ParcelFileDescriptor.createPipe();
         try {  // the pipes' far ends become the helper's stdin and stdout (a pipe reopens through /proc; ProcessBuilder passes no other descriptor)
@@ -46,7 +46,7 @@ final class HubBluetooth {
     /** The adapter's power as ACTION_STATE_CHANGED broadcasts; from the first session on (no Bluetooth user, no BlueZ client). */
     private synchronized void watch() throws IOException {
         if (watcher != null) return;
-        watcher = new ProcessBuilder(HostProcess.dying("python3", HostLocation.script("bluez.py"))).redirectError(ProcessBuilder.Redirect.INHERIT).start();
+        watcher = new ProcessBuilder(HostLocation.helper("bluez.py")).redirectError(ProcessBuilder.Redirect.INHERIT).start();
         BufferedReader events = new BufferedReader(new InputStreamReader(watcher.getInputStream()));
         Thread follower = new Thread(() -> {
             int state = -1;

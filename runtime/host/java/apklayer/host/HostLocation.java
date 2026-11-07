@@ -41,7 +41,7 @@ final class HostLocation {
         else shadow.setProviderEnabled(LocationManager.GPS_PROVIDER, gps);
         shadow.setProviderEnabled(LocationManager.NETWORK_PROVIDER, network);
         if (!manager.isLocationEnabled()) return;  // the host has no location service
-        if (network) follow(shadow, LocationManager.NETWORK_PROVIDER, HostProcess.dying("python3", script("geoclue.py")));
+        if (network) follow(shadow, LocationManager.NETWORK_PROVIDER, helper("geoclue.py"));
         // the GNSS HAL (providers.toml) through the hub's one client of it (HubGnss), whose pipe speaks the same lines, while this app has a gps
         // request (LocationRequests, robolectric 0018); Robolectric's LocationManager stays the framework side (no LocationManagerService or
         // GnssLocationProvider in the hub), fed with the HAL's fixes
@@ -120,6 +120,18 @@ final class HostLocation {
             }
         } catch (IOException ended) { /* the source went away */ }
         try { in.close(); } catch (IOException ignored) { }
+    }
+
+    /**
+     * The command that runs a D-Bus helper of bridge/portal (geoclue.py, bluez.py, settings.py) with these arguments, ending with this process. In the sandbox
+     * through apklayerd (`apklayer portal helper`), as the user outside the instance's user namespace: the system and session buses know no app uid, and
+     * not even the namespace's 1000 when the user's own uid is another.
+     */
+    static java.util.List<String> helper(String name, String... args) {
+        java.util.List<String> command = "1".equals(System.getenv("APKLAYER_SANDBOX"))
+                ? HostProcess.dying(System.getProperty("apklayer.cli"), "portal", "helper", name) : HostProcess.dying("python3", script(name));
+        command.addAll(java.util.List.of(args));
+        return command;
     }
 
     /** A helper of bridge/portal (geoclue.py, settings.py) above the CLI, as installed or in the tree. */

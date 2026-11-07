@@ -7,6 +7,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <ftw.h>
+#include <grp.h>
 #include <pwd.h>
 #include <sched.h>
 #include <sys/mount.h>
@@ -34,7 +35,12 @@ Range subordinate(const char* file) {
     return {};
 }
 
-// Namespace uid (and gid) 1000, Android's system uid (the hub, the services), is the user; 10000 and up the subordinate range
+// Android's groups an app process gets besides its own gid (ProcessList: shared and cache app gids, the user's everybody gid, permission gids)
+const gid_t kInetGid = 3003, kEverybodyGid = 9997;
+const long kExtraGids = 2;  // kInetGid and kEverybodyGid: mapped from the top of the subordinate range
+
+// Namespace uid (and gid) 1000, Android's system uid (the hub, the services), is the user; 10000 and up the subordinate range; gids 3003 and 9997
+// the last two subordinate gids
 bool writeMaps(int pid) {
     Range u = subordinate("/etc/subuid"), g = subordinate("/etc/subgid");
     if (u.count < kFirstAppUid || g.count < kFirstAppUid) {
@@ -45,8 +51,19 @@ bool writeMaps(int pid) {
     map.env = currentEnv();
     map.argv = {"newuidmap", std::to_string(pid), "1000", std::to_string(getuid()), "1", std::to_string(kFirstAppUid), std::to_string(u.start), std::to_string(std::min(u.count, 65536L))};
     if (runAndWait(map) != 0) return false;
-    map.argv = {"newgidmap", std::to_string(pid), "1000", std::to_string(getgid()), "1", std::to_string(kFirstAppUid), std::to_string(g.start), std::to_string(std::min(g.count, 65536L))};
+    long gids = std::min(g.count, 65536L) - kExtraGids;
+    map.argv = {"newgidmap", std::to_string(pid), "1000", std::to_string(getgid()), "1", std::to_string(kFirstAppUid), std::to_string(g.start), std::to_string(gids),
+                std::to_string(kInetGid), std::to_string(g.start + gids), "1", std::to_string(kEverybodyGid), std::to_string(g.start + gids + 1), "1"};
     return runAndWait(map) == 0;
+}
+
+// The groups Android's zygote gives an app process (ProcessList.startProcessLocked): its shared and cache app gids, the user's gid, inet with INTERNET
+std::vector<gid_t> appGroups(const Layout& l, const std::string& package, uid_t uid) {
+    long appId = (long)uid % 100000;
+    std::vector<gid_t> groups = {uid, (gid_t)(50000 + appId - kFirstAppUid), (gid_t)(20000 + appId - kFirstAppUid), kEverybodyGid};
+    for (const std::string& p : split(property(join(appDir(l, package), "info.properties"), "permissions"), ';'))
+        if (p == "android.permission.INTERNET") groups.push_back(kInetGid);
+    return groups;
 }
 
 // A namespace made by a process AppArmor did not allow it to (Ubuntu 23.10+: kernel.apparmor_restrict_unprivileged_userns) has no capabilities
@@ -127,8 +144,12 @@ void apply(const std::vector<Step>& steps) {
 
 std::string homeAccessFile(const std::string& root) { return join(root, "home-access"); }  // an instance's packages granted the user's home, one per line
 
-bool homeAccess(const Instance& inst, const std::string& package) {
+// The user's grant, or a system app that manages all storage (ExternalStorageProvider, whose Home root DocumentsUI shows: the picker hands one file on)
+bool homeAccess(const Layout& l, const Instance& inst, const std::string& package) {
     for (const std::string& p : split(readFile(homeAccessFile(inst.root)).value_or(""), '\n')) if (p == package) return true;
+    std::string info = join(appDir(l, package), "info.properties");
+    if (property(info, "system") != "true") return false;
+    for (const std::string& p : split(property(info, "permissions"), ';')) if (p == "android.permission.MANAGE_EXTERNAL_STORAGE") return true;
     return false;
 }
 
@@ -145,6 +166,12 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
     for (const char* var : {"LD_LIBRARY_PATH", "BIONIC_LD_LIBRARY_PATH", "LD_PRELOAD", "APKLAYER_HOST_LIBS"})
         for (const std::string& entry : split(getenvOr(var, ""), ':'))
             if (!entry.empty() && entry[0] == '/') shared.push_back(isDir(entry) ? entry : dirName(entry));
+    // what the runtime links to elsewhere (a Meson install links the prebuilts' jars and Android libraries into its native dir)
+    for (const std::string& dir : {l.native, join(l.native, "aosp")})
+        for (const std::string& name : listDir(dir)) {
+            std::string target = realPath(join(dir, name));
+            if (!target.empty() && !under(target, realPath(dir))) shared.push_back(isDir(target) ? target : dirName(target));
+        }
     std::vector<std::string> ro;
     for (const std::string& p : shared) {
         std::string r = realPath(p);
@@ -156,15 +183,26 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
         steps.push_back({Step::Bind, path, cloneTree(source, writable), file});
     };
     for (const std::string& h : hidden) steps.push_back({Step::Tmpfs, h});
-    if (homeAccess(inst, package)) {  // the user's opt-in (`apklayer home-access`), as Flatpak's --filesystem=home
-        bind(home, home, true);
+    if (homeAccess(l, inst, package)) {  // the user's opt-in (`apklayer home-access`), as Flatpak's --filesystem=home
         // a private directory on the way to the runtime (~/.cache, 0700) would stop the app's uid: an empty one there, the runtime's part bound into it
         auto closed = [](const std::string& dir) {
             struct stat st{};
-            return ::stat(dir.c_str(), &st) == 0 && !(st.st_mode & S_IXOTH) && !(st.st_gid == getgid() && (st.st_mode & S_IXGRP));
+            return ::stat(dir.c_str(), &st) == 0 && !(st.st_mode & S_IXOTH);
         };
-        std::vector<std::string> shut;
-        for (const std::string& r : ro)
+        // a home only its owner may pass (Ubuntu's 0750): its entries one by one in the open tmpfs. shortcut: the app's uid is not the user's, so it
+        // reads and writes what the files' "other" bits allow; full access needs idmapped mounts (root only for a disk's filesystem)
+        if (closed(home)) {
+            for (const std::string& name : listDir(home)) {
+                struct stat st{};
+                std::string p = join(home, name);
+                if (lstat(p.c_str(), &st) == 0 && (S_ISDIR(st.st_mode) || S_ISREG(st.st_mode))) bind(p, p, true, S_ISREG(st.st_mode));
+            }
+        } else {
+            bind(home, home, true);
+        }
+        std::vector<std::string> shut, inside = ro;  // and on the way to the instance's parts bound below (~/.local/state)
+        for (const std::string& own : {l.appsDir, inst.stateDir, inst.root, inst.runtimeDir}) inside.push_back(realPath(own));
+        for (const std::string& r : inside)
             for (size_t at = home.size() + 1; (at = r.find('/', at)) != std::string::npos; at++)
                 if (closed(r.substr(0, at))) {
                     if (std::find(shut.begin(), shut.end(), r.substr(0, at)) == shut.end()) shut.push_back(r.substr(0, at));
@@ -186,7 +224,14 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
     if (chown(tmp.c_str(), uid, uid) != 0) die("cannot give " + tmp + " to the app");
     steps.push_back({Step::Tmpfs, join(realPath(inst.root), "app-data")});  // the other apps' data is not in the view at all
     bind(data, data, true);
-    for (const std::string& rw : {realPath(inst.storageDir), realPath(inst.dataDir)}) bind(rw, rw, true);
+    bind(realPath(inst.storageDir), inst.storageDir, true);
+    // Android's /data as an app sees it: nothing but its own (above) and what the system exposes (WebView's command line, the HAL list); a system
+    // app (SettingsProvider: the system uid on Android) also /data/system
+    std::string androidData = realPath(inst.dataDir);
+    steps.push_back({Step::Tmpfs, androidData});
+    for (const char* shown : {"local/tmp", "apklayer"})
+        if (isDir(join(androidData, shown))) bind(join(androidData, shown), join(androidData, shown), false);
+    if (property(join(appDir(l, package), "info.properties"), "system") == "true") bind(join(androidData, "system"), join(androidData, "system"), true);
     bind(realPath(inst.tmpDir()), tmp, true);  // java.io.tmpdir: the app's own
     std::string assets = join(inst.tmpDir(), "robolectric-nativeruntime-assets");  // fonts and ICU data the instance's JVMs share (stack.cpp)
     if (isDir(assets)) bind(realPath(assets), assets, false);
@@ -259,9 +304,20 @@ int sandboxExec(const Layout& l, const Instance& inst, const std::vector<std::st
         chmod(data.c_str(), 0700);
         for (const std::string& f : listDir(appDir(l, package)))  // its APKs readable by its uid (installs before cli/apps.cpp made them 0644)
             if (f.size() > 4 && f.substr(f.size() - 4) == ".apk") chmod(join(appDir(l, package), f).c_str(), 0644);
+        // a launch's intent file (APKLAYER_INTENT_FILE, wherever its writer put it) goes with it into the app's own tmp, consumed as the app would
+        const char* intentFile = getenv("APKLAYER_INTENT_FILE");
+        std::optional<std::string> intent = intentFile ? readFile(intentFile) : std::nullopt;
+        if (intent) unlink(intentFile);
         apply(appView(l, inst, package, uid, argv[0]));
+        if (intent) {
+            std::string moved = join(inst.tmpDir(), "intent-" + std::to_string(getpid()) + ".properties");
+            writeFile(moved, *intent);
+            if (chown(moved.c_str(), uid, uid) != 0) die("cannot give the intent file to the app");
+            setenv("APKLAYER_INTENT_FILE", moved.c_str(), 1);
+        }
         if (chdir(dir.c_str()) != 0 && chdir("/") != 0) die("no working directory in the sandbox");  // by path again: the old one is a handle into the hidden tree
-        if (setresgid(uid, uid, uid) != 0 || setresuid(uid, uid, uid) != 0) die("cannot become uid " + std::to_string(uid));
+        std::vector<gid_t> groups = appGroups(l, package, uid);  // never the user's own groups (1000 and the unmapped ones)
+        if (setgroups(groups.size(), groups.data()) != 0 || setresgid(uid, uid, uid) != 0 || setresuid(uid, uid, uid) != 0) die("cannot become uid " + std::to_string(uid));
     }
     prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);  // and no capabilities after exec: the namespace's uids are not 0
     if (const char* preload = getenv("APKLAYER_SANDBOX_PRELOAD")) { setenv("LD_PRELOAD", preload, 1); unsetenv("APKLAYER_SANDBOX_PRELOAD"); }
