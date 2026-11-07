@@ -42,7 +42,7 @@ void window_layout(struct window *w)
     if (!w->mobile) decor_update(&w->decor, lw, window_scale(w), w->maximized, w->bar_hover, w->activated);
     else if (w->nav_hidden || w->nav_h <= 0) navbar_hide(&w->nav);
     else navbar_update(&w->nav, lh - w->nav_h, lw, w->nav_h, window_scale(w), w->dark, w->nav.pressed);
-    xdg_surface_set_window_geometry(w->xdg_surface, 0, -W_BAR(w), lw, lh + W_BAR(w));
+    if (w->xdg_surface) xdg_surface_set_window_geometry(w->xdg_surface, 0, -W_BAR(w), lw, lh + W_BAR(w));
 }
 
 /* What the last toplevel configure changed, applied at its xdg_surface configure (or right after an injected one). */
@@ -124,8 +124,10 @@ static const struct wp_fractional_scale_v1_listener fscale_listener = { preferre
 
 void window_geometry_init(struct window *w)
 {
-    xdg_surface_add_listener(w->xdg_surface, &xs_listener, w);
-    xdg_toplevel_add_listener(w->toplevel, &top_listener, w);
+    if (w->toplevel) {
+        xdg_surface_add_listener(w->xdg_surface, &xs_listener, w);
+        xdg_toplevel_add_listener(w->toplevel, &top_listener, w);
+    }
     if (viewporter) w->viewport = wp_viewporter_get_viewport(viewporter, w->surface);
     if (fscale_mgr) {
         w->fscale = wp_fractional_scale_manager_v1_get_fractional_scale(fscale_mgr, w->surface);

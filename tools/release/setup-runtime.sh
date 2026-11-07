@@ -11,7 +11,7 @@ for f in "$half"/* "$half"/aosp/*; do  # links to the package's files, so an upd
     t="$native/${f#"$half"/}"
     [ "$f" = "$half/aosp" ] || { [ -e "$t" ] && [ ! -L "$t" ]; } || ln -sfn "$f" "$t"
 done
-cp -r --remove-destination "$share/bridge/native/android-root/." "$native/android-root/"  # apklayer's own files of the Android root
+tar -C "$share/bridge/native/android-root" -cf - . | tar -C "$native/android-root" -xf -  # apklayer's own files of the Android root, replacing (busybox cp has no --remove-destination)
 tmp="$(mktemp -d)" && trap 'rm -rf "$tmp"' EXIT
 (cd "$tmp" && unzip -q "$half/native-runtime.jar" 'native/linux/*' && for j in "$native"/aosp/android-all/*.jar; do
     zip -q -O "$j.new" "$j" native/linux/x86_64/libandroid_runtime.so native/linux/aarch64/libandroid_runtime.so && mv -f "$j.new" "$j"

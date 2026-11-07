@@ -91,7 +91,7 @@ static void registry(void *d, struct wl_registry *r, uint32_t name, const char *
     (void)d;
     if (debug_input) fprintf(stderr, "[shell] global %s v%u\n", iface, ver);
     if (!strcmp(iface, wl_compositor_interface.name))
-        compositor = wl_registry_bind(r, name, &wl_compositor_interface, 4);
+        compositor = wl_registry_bind(r, name, &wl_compositor_interface, ver < 4 ? ver : 4);  /* Lipstick: 3 */
     else if (!strcmp(iface, wl_subcompositor_interface.name))
         subcompositor = wl_registry_bind(r, name, &wl_subcompositor_interface, 1);
     else if (!strcmp(iface, wp_cursor_shape_manager_v1_interface.name))
@@ -109,7 +109,9 @@ static void registry(void *d, struct wl_registry *r, uint32_t name, const char *
     else if (!strcmp(iface, xdg_wm_base_interface.name)) {
         wm_base = wl_registry_bind(r, name, &xdg_wm_base_interface, ver < 4 ? ver : 4);  /* v4: configure_bounds */
         xdg_wm_base_add_listener(wm_base, &wm_listener, NULL);
-    } else if (!strcmp(iface, wl_seat_interface.name) && !seat) {
+    } else if (!strcmp(iface, wl_shell_interface.name))
+        wl_shell_global = wl_registry_bind(r, name, &wl_shell_interface, 1);
+    else if (!strcmp(iface, wl_seat_interface.name) && !seat) {
         /* v5: pointer frame/axis events; every listener slot is filled. */
         seat = wl_registry_bind(r, name, &wl_seat_interface, ver < 5 ? ver : 5);
         wl_seat_add_listener(seat, &seat_listener, NULL);

@@ -4,22 +4,26 @@ Plan: `docs/PLAN.md` "Plan: hardware providers" (steps d and e). Owner's rule (2
 vibrator, camera and media (codecs) HALs; never the sensors or GNSS HAL (one client each, held by sensorfw and the OS's location
 service; on Halium those come through the OS services). Listing services (lshal, service list) is fine.
 
-## The owner's phones (surveyed 2026-11-04, read only)
-| | Ubuntu Touch 24.04 (`phablet@192.168.41.61`) | Sailfish OS 5.1.0.43 (`defaultuser@192.168.41.62`, retired 2026-11-07; the Sailfish test phone is now a Volla Phone Quintus, Sailfish OS 5.0.0.62, `defaultuser@192.168.41.153`, not yet surveyed) |
-|---|---|---|
-| Device | Volla Phone X23 (`vidofnir`, MediaTek) | Jolla C2 (Reeder S19 Max Pro S, Unisoc) |
-| Kernel | 5.10.209, aarch64 | 5.4.233, aarch64 |
-| glibc | 2.39 (as Ubuntu 24.04: apklayer's Parallels builds run) | 2.30 (too old for apklayer's builds) |
-| Android base | Halium 12: system API 32, vendor API 31 | Android 13: API 33 (system and vendor) |
-| Container | LXC `android` (`/var/lib/lxc/android`, lxc-android-config) | none: droid-hal-init runs the Android services natively |
-| Binder | binderfs: `binder`, `hwbinder`, `vndbinder` (0666), `anbox-binder/-hwbinder/-vndbinder` (0600, Waydroid's) | binderfs: `binder`, `hwbinder`, `vndbinder` (0666), `puddlejumper`, `hwpuddlejumper`, `vndpuddlejumper` (0600, Jolla AppSupport) |
-| Kernel binder | CONFIG_ANDROID_BINDERFS=y, devices from CONFIG_ANDROID_BINDER_DEVICES, no `features/` dir | the same |
-| Servicemanagers | servicemanager, hwservicemanager, vndservicemanager (uid system) | the same |
-| AIDL HALs (/dev/binder) | vibrator (`IVibrator/default`, `IVibratorManager/default`), lights, power, memtrack, keymint, gnss, NNAPI shims; 45 names | lights, power, health, usb, keymint, radio, drm, face, sprd vendor ones; 84 names; no vibrator HAL |
-| HIDL HALs (/dev/hwbinder) | camera.provider@2.4 (internal/0), media.c2@1.x, omx, sensors@2.0, gnss, allocator@4.0, composer@2.1-2.3, bluetooth, nfc, drm; 264 entries | camera.provider@2.4 (legacy/0), media.c2@1.x, omx, audio@7.x, gnss, allocator@4.0, composer@2.1-2.4 |
-| Compositor | Lomiri on Mir (lomiri-system-compositor), Wayland `wayland-0` | Lipstick (QtWayland) on `/run/display/wayland-0` |
-| Wayland buffers | `android_wlegl` v2, no `zwp_linux_dmabuf_v1` (globals: android_wlegl, qt_windowmanager, wl_compositor 4, wl_subcompositor, wl_seat 6, wl_output 3, wl_shell, zxdg_shell_v6, xdg_wm_base, wl_shm) | `android_wlegl` (libhybris `eglplatform_wayland`, server side in lipstick), no dmabuf |
-| Sensors, location | sensorfwd (hybris), lomiri-location-serviced | sensorfwd (hybris), geoclue providers |
+## The owner's phones (surveyed 2026-11-04 and 2026-11-07, read only)
+| | Ubuntu Touch 24.04 (`phablet@192.168.41.61`) | Sailfish OS 5.1.0.43 (`defaultuser@192.168.41.62`, retired 2026-11-07) | Sailfish OS 5.0.0.62 (`defaultuser@192.168.41.153`, surveyed 2026-11-07) |
+|---|---|---| --- |
+| Device | Volla Phone X23 (`vidofnir`, MediaTek) | Jolla C2 (Reeder S19 Max Pro S, Unisoc) | Volla Phone Quintus (`algiz`, MediaTek MT6877 Dimensity 1080, Mali-G68 MC4), 7.5 GB RAM, rootfs 6.8 GB (`/home` on it), `/userdata` 225 GB |
+| Kernel | 5.10.209, aarch64 | 5.4.233, aarch64 | 4.19.191-halium-algiz, aarch64 |
+| glibc | 2.39 (as Ubuntu 24.04: apklayer's Parallels builds run) | 2.30 (too old for apklayer's builds) | 2.30 (busybox userland: sh, cp, tar; zypper; Python 3.8; no Java; zip/unzip only after `zypper install zip unzip`) |
+| Android base | Halium 12: system API 32, vendor API 31 | Android 13: API 33 (system and vendor) | Halium 13: API 33 (system and vendor), `ro.vndk.version` 33 |
+| Container | LXC `android` (`/var/lib/lxc/android`, lxc-android-config) | none: droid-hal-init runs the Android services natively | LXC `android` (`/var/lib/lxc/android`; `/android/{system,vendor,data}`, `/system` and `/vendor` link there) |
+| Binder | binderfs: `binder`, `hwbinder`, `vndbinder` (0666), `anbox-binder/-hwbinder/-vndbinder` (0600, Waydroid's) | binderfs: `binder`, `hwbinder`, `vndbinder` (0666), `puddlejumper`, `hwpuddlejumper`, `vndpuddlejumper` (0600, Jolla AppSupport) | binderfs: `binder`, `hwbinder`, `vndbinder` (0666), `anbox-binder/-hwbinder/-vndbinder` (0600, Waydroid's; no AppSupport) |
+| Kernel binder | CONFIG_ANDROID_BINDERFS=y, devices from CONFIG_ANDROID_BINDER_DEVICES, no `features/` dir | the same | the same (CONFIG_ANDROID_BINDER_DEVICES lists the six) |
+| Servicemanagers | servicemanager, hwservicemanager, vndservicemanager (uid system) | the same | the same |
+| AIDL HALs (/dev/binder) | vibrator (`IVibrator/default`, `IVibratorManager/default`), lights, power, memtrack, keymint, gnss, NNAPI shims; 45 names | lights, power, health, usb, keymint, radio, drm, face, sprd vendor ones; 84 names; no vibrator HAL | vibrator (`IVibrator/default`), lights, power, gnss, lineage health; Sailfish's droidmedia `camera_service` registers `media.camera`, `media.audio_policy`, `android.media.ICameraRecordService` here; 34 names |
+| HIDL HALs (/dev/hwbinder) | camera.provider@2.4 (internal/0), media.c2@1.x, omx, sensors@2.0, gnss, allocator@4.0, composer@2.1-2.3, bluetooth, nfc, drm; 264 entries | camera.provider@2.4 (legacy/0), media.c2@1.x, omx, audio@7.x, gnss, allocator@4.0, composer@2.1-2.4 | camera.provider@2.4 (internal/0, MediaTek's 2.6 impl), media.c2@1.0-1.2 (default, software), omx, sensors@2.0, gnss 1.0-2.1, allocator@4.0, composer@2.1-2.3; 262 entries |
+| Compositor | Lomiri on Mir (lomiri-system-compositor), Wayland `wayland-0` | Lipstick (QtWayland) on `/run/display/wayland-0` | Lipstick 0.36 (QtWayland 5.6) on `/run/display/wayland-0` (the session's `WAYLAND_DISPLAY=../../display/wayland-0`) |
+| Wayland buffers | `android_wlegl` v2, no `zwp_linux_dmabuf_v1` (globals: android_wlegl, qt_windowmanager, wl_compositor 4, wl_subcompositor, wl_seat 6, wl_output 3, wl_shell, zxdg_shell_v6, xdg_wm_base, wl_shm) | `android_wlegl` (libhybris `eglplatform_wayland`, server side in lipstick), no dmabuf | `android_wlegl` v2, no dmabuf, **no xdg_wm_base** (globals: wl_compositor 3, wl_data_device_manager 1, wl_shm, qt_hardware_integration, android_wlegl 2, qt_surface_extension, qt_touch_extension, qt_windowmanager, wl_seat 3, wl_output 2, wl_shell, lipstick_recorder_manager, alien_manager; no wl_subcompositor, viewporter, fractional scale) |
+| GPU, EGL | Mali-G57 | | Mali-G68 MC4: `ro.hardware.egl` meow (`/vendor/lib64/egl/libGLES_meow.so`, MediaTek's layer over `libGLES_mali.so`), `ro.hardware.vulkan` mali, `ro.board.platform` mt6877, gralloc4 (allocator@4.0 service, mapper@4.0-impl-mediatek passthrough), ion (`/dev/ion`, no dma_heap), `/dev/mali0` 0666 |
+| Audio | PulseAudio, no PipeWire daemon | | PulseAudio 14.2 (droid modules, `/run/user/100000/pulse/native`), no PipeWire |
+| Vibrator, feedback | hfd-service | | ngfd (droid-vibrator plugin over the device's IVibrator); no hfd, no feedbackd |
+| Screenshots | `apklayer screenshot` | | Lipstick's `saveScreenshot(path)` (`org.nemomobile.lipstick` `/org/nemomobile/lipstick/screenshot`, session bus), only for the `privileged` group: `devel-su -p` |
+| Sensors, location | sensorfwd (hybris), lomiri-location-serviced | sensorfwd (hybris), geoclue providers | sensorfwd 0.15 (hybris binder plugin); GeoClue 1 (0.12.99) with the hybris-binder and MLS providers, no GeoClue 2 |
 
 How: `getprop`, `/proc/config.gz`, `ls /dev/binderfs`, services listed with libgbinder (`binder-list` on Sailfish, a ctypes call of
 `gbinder_servicemanager_list_sync` on Ubuntu Touch), Wayland globals with a ctypes registry listener. Both phones' `/dev/binder` and
@@ -30,7 +34,7 @@ Consequences:
   `tools/host-setup/binder.sh <id>`, root once per boot), and the device is reached only through the host context.
 - The hosts are older than our libbinder (Android 16): Halium 12 and Android 13 write a binder's stability as a Category and number
   IServiceManager's methods differently (patch 0006 handles both, below).
-- Sailfish needs apklayer built against glibc 2.30 (or a sysroot of its own) before anything runs there.
+- Sailfish OS (glibc 2.30) runs apklayer from the sysroot bundle (below, "apklayer on Sailfish OS").
 - Graphics (step e): neither compositor offers linux-dmabuf; the HWC needs the `android_wlegl` path (`create_handle`/`create_buffer`
   with the gralloc handle's fds and ints) and the device's gralloc/EGL through the vendor namespace.
 
@@ -236,3 +240,39 @@ options, `apklayer portal` and the apps' document pickers through HostFilePortal
   argument as the file (others only warn), so the helper's words (`import`, `multiple`) go before the .qml file.
 - Neither portal nor Content Hub (a desktop without a FileChooser backend): the install dialog lists the newest .apk files of ~/Downloads, ~/Documents
   and the home folder (one level), the Hardware page says to type the path. A desktop with a working portal is unchanged (the portal answers first).
+
+## apklayer on Sailfish OS (Volla Phone Quintus, 2026-11-07)
+Route: no Sailfish SDK or Platform SDK is on this machine, and no toolchain with glibc <= 2.30 builds this tree (C++20, recent Meson). So the build host's userland
+ships with apklayer: `tools/release/sysroot-bundle.sh <build> <out>` on the Parallels VM (Ubuntu 24.04 arm64), after `meson setup b --prefix=/opt/apklayer
+-Dandroid_runtime=false`, makes `apklayer-sysroot-aarch64-<runtime>.tar.gz` (161 MB; 344 MB unpacked): the meson install at `/opt/apklayer`, Ubuntu's JDK 21 in
+`/opt/apklayer/jvm`, glibc 2.39 with its loader and the 87 libraries the install and the JDK link in `/opt/apklayer/sysroot/lib`; every ELF of it gets that
+loader as interpreter and the sysroot as DT_RPATH (patchelf). A tarball, not an RPM: busybox tar unpacks it, nothing is built on the phone, and it never mixes
+with the system's libraries; `/opt` because the CLI finds its install relative to itself and Sailfish's rootfs (updated by zypper, not replaced) keeps it.
+The Android runtime bundle is glibc-independent: unpacked as usual in `~/.local/share/apklayer/runtime/<version>` (with `current`); busybox tar has no zstd,
+so it went over as a .tar.gz; its setup (setup-runtime.sh) runs on the phone after `zypper install zip unzip` (busybox has neither; its cp has no
+--remove-destination, now a tar pipe).
+
+Install (root once): `tar xzf apklayer-sysroot-aarch64-0.3.3.tar.gz -C /`, `zypper install zip unzip`, `sh /opt/apklayer/share/apklayer/tools/host-setup/binder.sh ut`
+(each boot). As defaultuser: the runtime in `~/.local/share/apklayer/runtime/0.3.3` and `current`, `APKLAYER_NATIVE_JAVA=/opt/apklayer/jvm/bin/java` in
+`~/.config/apklayer/env`, `PATH=/opt/apklayer/bin:$PATH`, `apklayer setup`, `apklayer providers set camera device` and `vibrator device` (setup reported them
+automatic, but the instance's host_hals.conf held only graphics until set: open). `cli/halium.cpp` detects the phone as on Ubuntu Touch (instance `ut`,
+PulseAudio from the session's runtime dir); the providers probe sensorfw, geoclue1, PulseAudio, the device's camera and vibrator.
+
+What differs from Ubuntu Touch, and what changed:
+- Lipstick has no xdg-shell (wl_shell only), wl_compositor 3, wl_seat 3, no subcompositor: `bridge/shell/wlshell.c` makes a window a wl_shell toplevel laid out
+  maximized at the output's size and active (Lipstick sends no configure); damage falls back to `wl_surface.damage` on v3; without subsurfaces there is no
+  navigation bar (no Back: open). Frames go as the device's gralloc buffers over `android_wlegl` (`[shell] gralloc buffer 1: 1080x2400 stride 1088`).
+- The system's programs (glibc 2.30) cannot load apklayer's LD_PRELOAD (needs GLIBC_2.34): the device's `/usr/bin/getprop` (cli `hostToolEnv()`) and the hub's
+  `setsid` (HubStartup) start without it now. Other host programs an app starts (`sh -c` overrides, Runtime.exec of a system binary) still inherit it: open.
+- `ro.hardware.egl` is `meow` (MediaTek's layer over Mali): libGLES_meow crashes in SurfaceFlinger during its dlopen (a jump to an unmapped address under
+  libdl_bio's constructor call); the instance runs with `apklayer prop set ro.hardware.egl mali`: SurfaceFlinger reports Mali-G68 MC4, OpenGL ES 3.2. Open.
+- The prebuilts (75a684a6) carry libraries older than the Halium work of 2026-11-05: libhidlbase without libhidl 0002/0003 ("gralloc-mapper is missing",
+  SurfaceFlinger aborted), libbinder without 0007 (AudioPolicyService refused the hub, uid 100000), libapklayer_vdisplay without the android_wlegl path
+  (frames went as shm), libapklayer_cameraserver. The phone runs the tree's current outputs of these four; the lock and the prebuilts branch need them
+  (libapklayer_codec2, libapklayer_egl, libgui, libvulkan, libstagefright, libmedia_omx differ from the tree too).
+- Lipstick's screenshot (`saveScreenshot`) needs the `privileged` group (`devel-su -p`); the phone has a lock code, so Lipstick's picture shows the lock
+  screen. App pictures are SurfaceFlinger's (`apklayer screenshot`); seeing the window on Lipstick unlocked needs a human check.
+
+Results (instance `ut`; `~/apklayer-sfos/sf-shots.sh <pkg> <secs>` on the phone: run, both screenshots, stop): UiBench draws (device gralloc buffers to
+Lipstick); NewPipe draws its UI (Trending stayed empty); Open Camera opens the device's camera 0 through cameraserver over the HIDL provider (`ID:0`, no
+CameraControllerException; the preview was dark, the phone lying on the desk: not judged). Not run on this phone: audio, sensors, GNSS, vibrator, media.
