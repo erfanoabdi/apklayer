@@ -232,6 +232,7 @@ static bool awaitHubOrLock(const Layout& l, const NativeEnv& ne, const std::stri
         Spawn wait;
         wait.argv = {join(l.native, "bin/aprop"), "wait", kHubReadyProperty, "1"};
         wait.env = ne.env;
+        wait.dieWithParent = true;
         int waiter = spawn(wait);
         pid_t locker = fork();
         if (locker == 0) { int fd = open(lockPath.c_str(), O_RDWR | O_CLOEXEC); flock(fd, LOCK_EX); _exit(0); }  // ends when the holder is gone

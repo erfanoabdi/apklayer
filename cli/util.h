@@ -42,6 +42,7 @@ struct Spawn {
     std::string logFile;           // stdout and stderr go here (appended); empty: inherit
     bool newSession = false;       // setsid(): the child leads its own process group
     bool detach = false;           // double fork: nobody waits for it
+    bool dieWithParent = false;    // PR_SET_PDEATHSIG SIGTERM: a helper the caller waits on ends when the caller is killed
     std::string unit;              // non-empty: in a transient systemd user scope of its own, "<unit>-<pid>.scope" (cli/unit.h)
 };
 

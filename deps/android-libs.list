@@ -140,6 +140,8 @@ libapklayer_audioserver.so
 libapklayer_codec2.so
 libapklayer_composer.so
 libapklayer_egl.so
+libapklayer_gatekeeper.so
+libapklayer_gatekeeperd.so
 libapklayer_gltest.so
 libapklayer_keymint.so
 libapklayer_keystore2.so
