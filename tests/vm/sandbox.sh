@@ -11,6 +11,8 @@ out=$APKLY_STATE/sandbox.out home=$HOME/.apklayer-sandbox-test-$inst
 other=$root/app-data/hello.other
 mkdir -p "$other" "$home" && echo secret > "$other/secret.txt" && echo home > "$home/home.txt" && echo picked > "$home/picked.txt" && echo beside > "$home/notpicked.txt"
 export APKLAYER_PICKER="echo $home/picked.txt"  # apklayerd's picker (it runs as the user); the app's own environment does not reach it
+# an on-demand apklayerd keeps its first client's environment: one an earlier group in this instance started has no picker of the test's
+bin/apklayer stop >/dev/null 2>&1; sh tests/vm/kill-instance.sh "$inst" "[a]pklayer daemon --on-demand"
 bin/apklayer install .tests/apks/hello-sandbox.apk 2>&1 | grep -aq installed || { echo "install hello-sandbox failed"; exit 1; }
 bin/apklayer stop >/dev/null 2>&1; bin/apklayer home-access hello.sandbox off >/dev/null
 jopts="-Dhello.other=$other -Dhello.home=$home/home.txt -Dhello.notpicked=$home/notpicked.txt"
