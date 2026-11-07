@@ -86,6 +86,10 @@ try:
                 elif 'script: hover:6,0' in line:
                     landscape = configures()[-1]
                     assert landscape[0] > landscape[1], 'the landscape request did not reshape the window: %s' % (landscape,)
+                    # turned, the window fills 85% of the work area as the first (portrait) one does: grown, not only shrunk (bridge/shell/geometry.c fit_size)
+                    bw, bh = (int(n) for n in re.search(r'first configure: display \d+x\d+, bounds (\d+)x(\d+)', (instance.STATE / 'shell.log').read_text(errors='replace')).groups())
+                    assert bw <= 0 or abs(landscape[0] - bw * 85 // 100) <= 1 or abs(landscape[1] - (bh * 85 // 100 - DECOR_H)) <= 1, \
+                        'the landscape window %s does not fill 85%% of the %dx%d work area' % (landscape[:2], bw, bh)
                     expect(*landscape[:3])
                     count = len(configures())
                     instance.inject(PKG, 'unmaximize:%d,%d' % (first[0], first[1] + DECOR_H))  # a floating configure the compositor sent before it saw the reshape

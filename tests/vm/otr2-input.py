@@ -132,7 +132,8 @@ def play(scale, mode, actions):
                 elif stage == 1:  # the title screen shows after the shaders are compiled (longer on a loaded VM)
                     if not (saw('@%d%%' % scale) and n >= mark + 1000): continue
                     shots['title'] = instance.capture('otr2-%s-title' % name, PKG)
-                    if green(shots['title'], 1) < 0.04:
+                    selected = 1 if green(shots['title'], 1) >= green(shots['title'], 2) else 2  # the profile keeps the last run's choice
+                    if green(shots['title'], selected) < 0.04:
                         assert tries < 40, 'OTR2 %s: the title screen never came up' % name
                         tries += 1; mark = n - 800  # not there yet: look again in 200 frames
                         if consent_dialog(shots['title']):  # a fresh instance first asks for consent (a Java dialog over the game): its Consent button

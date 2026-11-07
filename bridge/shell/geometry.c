@@ -6,16 +6,18 @@
 
 int window_scale(const struct window *w) { return w->pref_scale > 0 ? w->pref_scale : output_scale; }
 
-/* The logical content size for an app asking for lw x lh: that shape, the whole window at most 85% of the work area. */
-static void fit_size(const struct window *w, int lw, int lh, int *fw, int *fh)
+/* The logical content size for an app asking for lw x lh: that shape, the whole window at most 85% of the work area; grow: exactly that
+ * (an orientation turn fills the screen as the first portrait window does, which the display's default shape makes larger than the box). */
+static void fit_size(const struct window *w, int lw, int lh, int grow, int *fw, int *fh)
 {
     int aw = w->bounds_w, ah = w->bounds_h;
     if (aw <= 0 || ah <= 0) { aw = output_mode_w; ah = output_mode_h > 0 ? output_mode_h - 32 : 0; }  /* no bounds: the output less a top bar */
     if (w->mobile) { *fw = aw > 0 ? aw : lw; *fh = ah > 0 ? ah : lh; return; }  /* the compositor did not maximize it: the work area */
     int maxw = aw * 85 / 100, maxh = ah * 85 / 100 - DECOR_H;
     *fw = lw; *fh = lh;
-    if (maxh > 0 && *fh > maxh) { *fw = *fw * maxh / *fh; *fh = maxh; }
-    if (maxw > 0 && *fw > maxw) { *fh = *fh * maxw / *fw; *fw = maxw; }
+    if (maxw <= 0 || maxh <= 0 || lw <= 0 || lh <= 0 || (!grow && lw <= maxw && lh <= maxh)) return;
+    if ((long)lw * maxh > (long)lh * maxw) { *fw = maxw; *fh = (int)((long)lh * maxw / lw); }
+    else { *fh = maxh; *fw = (int)((long)lw * maxh / lh); }
 }
 
 /* Tells the app (and the display's owner, when an app took over the window) its logical content size and the scale to render at. */
@@ -50,7 +52,7 @@ static void apply_configure(struct window *w)
 {
     if (!w->configured) {
         w->configured = 1;
-        if (w->cfg_w <= 0 || w->cfg_h <= 0) fit_size(w, w->w, w->h, &w->cfg_w, &w->cfg_h);  /* the size is ours: the display's shape, fitted */
+        if (w->cfg_w <= 0 || w->cfg_h <= 0) fit_size(w, w->w, w->h, 0, &w->cfg_w, &w->cfg_h);  /* the size is ours: the display's shape, fitted */
         fprintf(stderr, "[shell] first configure: display %dx%d, bounds %dx%d, output %dx%d @%d%%, window scale %d%%\n", w->w, w->h,
                 w->bounds_w, w->bounds_h, output_mode_w, output_mode_h, output_scale, window_scale(w));
         window_layout(w);  /* before the first buffer: the compositor maps a window that already fits */
@@ -89,9 +91,18 @@ static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t c
         case XDG_TOPLEVEL_STATE_ACTIVATED: activated = 1; break;
     }
     int restored = w->constrained && !constrained, nw = 0, nh = 0;
+    if (debug_input) fprintf(stderr, "[shell] \"%s\" toplevel configure %dx%d%s%s%s\n", w->title, cw, ch, maximized ? " maximized" : constrained ? " tiled" : "",
+                             resizing ? " resizing" : "", restored ? " restored" : "");
     if (constrained && !w->constrained && w->cfg_w > 0) { w->float_w = w->cfg_w; w->float_h = w->cfg_h; }
     if (cw > 0 && ch > W_BAR(w) && (constrained || resizing || restored || !w->configured)) { nw = cw; nh = ch - W_BAR(w); }
     else if (restored && w->float_w > 0) { nw = w->float_w; nh = w->float_h; }
+    if (!constrained && w->lock && nw > 0 && nh > 0 && (nw > nh) != (w->lock == 1)) {
+        /* an activity fixed to one orientation keeps its shape in a floating window (as Android's desktop keeps a fixed app's aspect ratio on
+         * a drag, DragPositioningCallbackUtility): the largest size of its last shape inside the box (a client may take less than offered) */
+        int aw = w->cfg_w, ah = w->cfg_h;
+        if (aw <= 0 || ah <= 0 || (aw > ah) != (w->lock == 1)) { aw = nh; ah = nw; }
+        if ((long)aw * nh > (long)ah * nw) nh = (int)((long)nw * ah / aw); else nw = (int)((long)nh * aw / ah);
+    }
     if (nw > 0 && (nw != w->cfg_w || nh != w->cfg_h)) { w->cfg_w = nw; w->cfg_h = nh; w->resized = w->configured; }
     int active_changed = activated != w->activated;
     w->state_changed |= maximized != w->maximized || active_changed;
@@ -141,13 +152,15 @@ void window_geometry_destroy(struct window *w)
     w->viewport = NULL;
 }
 
-/* apklayer patch: the app asks for another shape (portrait <-> landscape): fitted to the work area, sent to the app and to the display's
- * owner. A maximized or tiled window keeps the compositor's size; the shape is used when it floats again. */
+/* apklayer patch: the app's top activity is fixed to a shape (portrait or landscape; 0 x 0: none): kept through drag resizes (top_configure);
+ * a window of the other shape turns, fitted to the work area, sent to the app and to the display's owner. A maximized or tiled window keeps
+ * the compositor's size; the shape is used when it floats again. */
 void window_request_size(struct window *w, int lw, int lh)
 {
     int fw, fh;
-    if (!w->configured) return;
-    fit_size(w, lw, lh, &fw, &fh);  /* the app turns its window (as a rotated phone), shrunk if it does not fit */
+    w->lock = lw <= 0 || lh <= 0 ? 0 : lw > lh ? 1 : lw < lh ? 2 : 0;
+    if (!w->configured || !w->lock || (w->cfg_w > w->cfg_h) == (w->lock == 1)) return;  /* already that shape */
+    fit_size(w, lw, lh, 1, &fw, &fh);  /* the app turns its window (as a rotated phone), fitted to the work area */
     if (w->constrained) { w->float_w = fw; w->float_h = fh; return; }
     if (fw == w->cfg_w && fh == w->cfg_h) return;
     w->cfg_w = fw;
