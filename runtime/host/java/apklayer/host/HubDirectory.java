@@ -446,6 +446,8 @@ final class HubDirectory extends Binder {
                 if (!sameUser(Binder.getCallingPid())) throw new SecurityException("Settings change from another user");
                 HubHostSettings settings = hostSettings;
                 if (settings != null) settings.changed();
+                try { HubBootSettings.writeInputMethods(RuntimeEnvironment.getApplication().getContentResolver(), packages); }  // `apklayer ime` too
+                catch (RuntimeException unwritten) { System.out.println("[apklayer-hub] input method settings not written: " + unwritten); }
                 reply.writeNoException(); return true;
             }
             case HubProtocol.TAKE_LAUNCH -> {

@@ -1,6 +1,7 @@
 #!/bin/bash
-# sysprov.sh [settings androidid contacts dictionary]: the tree's own providers (SettingsProvider, ContactsProvider, UserDictionaryProvider) installed as apps (tools/stage sysapps) and reached from another app through the hub.
+# sysprov.sh [settings androidid contacts dictionary geoclue]: the tree's own providers (SettingsProvider, ContactsProvider, UserDictionaryProvider) installed as apps (tools/stage sysapps) and reached from another app through the hub.
 # androidid: the app's ANDROID_ID read, the instance stopped and started again, read again: the same (SettingsProvider persists it a little after the read).
+# geoclue: the hub's GeoClue probe hangs (a stand-in that never answers): the boot settings are written within the probe's 2 s bound, not after the apps' 10 s wait.
 # On the VM, in the group's instance (tests/run sysprov): APKLAYER_INSTANCE, APKLY_STATE (its logs) and the test apps installed by the runner.
 : "${APKLY_STATE:=${XDG_STATE_HOME:-$HOME/.local/state}/apklayer/${APKLAYER_INSTANCE:-default}}"
 mkdir -p $APKLY_STATE
@@ -15,8 +16,17 @@ launch() {  # launch <scenario> <out>: hello.sysprov until it reports, then the 
     wait $! 2>/dev/null
     grep -a '\[sys\]' $2; grep -aq '^\[sys\] PASS' $2 || { grep -a 'Exception\|Error' $2 | head -4; status=1; }
 }
-for what in ${@:-settings androidid contacts dictionary}; do
+for what in ${@:-settings androidid contacts dictionary geoclue}; do
     out=$APKLY_STATE/sysprov-$what.out
+    if [ $what = geoclue ]; then
+        bin/apklayer stop >/dev/null 2>&1  # a fresh hub: its boot probes GeoClue
+        echo 'import time; time.sleep(60)' > $APKLY_STATE/geoclue-hang.py
+        APKLAYER_GEOCLUE_PROBE=$APKLY_STATE/geoclue-hang.py launch settings $out
+        boot=$(grep -a '^\[apklayer-hub\] boot count' $APKLY_STATE/hub.log | tail -1) ms=$(echo "$boot" | sed -n 's/.*(\([0-9]*\) ms)$/\1/p')
+        if grep -aq 'GeoClue did not answer within' $APKLY_STATE/hub.log && [ -n "$ms" ] && [ "$ms" -lt 8000 ]; then echo "[sys] PASS a hanging GeoClue: $boot"
+        else echo "[sys] FAIL a hanging GeoClue: ${boot:-no boot line}"; status=1; fi
+        continue
+    fi
     launch $what $out
     [ $what = androidid ] || continue
     launch $what $out.2

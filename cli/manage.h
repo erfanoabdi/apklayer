@@ -28,6 +28,8 @@ int propCommand(const Layout& layout, const Instance& instance, const std::vecto
 // `settings [list] | set KEY VALUE | unset KEY`: the instance's host-settings overrides (night, accent, contrast, animations, font-scale, locale,
 // timezone, time-format), laid over the desktop's by the hub; a running instance applies them at once
 int settingsCommand(const Layout& layout, const Instance& instance, const std::vector<std::string>& args);
+// tells a running instance's hub that its settings or input method files changed; false when the stack is not running (read at its next start)
+bool settingsChanged(const Layout& layout, const Instance& instance);
 // `permissions <package>`: permission, protection level, granted ("1"/"0", blank: another app defines it) of what the app requests;
 // `permissions grant|revoke <package> <permission>`: a runtime (dangerous) permission in this instance (a revoke stops the app, as on Android)
 int permissionsCommand(const Layout& layout, const Instance& instance, const std::vector<std::string>& args);

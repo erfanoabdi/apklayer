@@ -2,6 +2,7 @@
 #include "sandbox.h"
 
 #include "desktop.h"
+#include "manage.h"  // settingsChanged: `ime` applies to a running instance
 #include "env.h"  // findJava: the converter and the install tools run on the apps' JVM (a phone names it in ~/.config/apklayer/env)
 #include "version.h"
 
@@ -258,12 +259,12 @@ std::string appDataDir(const Layout& l, const Instance& inst, const std::string&
 int inputMethod(const Layout& l, const Instance& inst, const std::string& action, const std::string& name) {
     if (action != "enable" && action != "disable") die("ime enable|disable <package or ime id>");
     if (action == "enable" && !isDir(appDir(l, name.substr(0, name.find('/'))))) die("not installed: " + name);
-    std::string file = join(inst.root, "input-methods"), kept;  // read by the hub at its start (HubBootSettings)
+    std::string file = join(inst.root, "input-methods"), kept;  // read by the hub (HubBootSettings)
     for (const std::string& line : split(readFile(file).value_or(""), '\n'))
         if (!trim(line).empty() && trim(line) != name) kept += trim(line) + "\n";
     if (action == "enable") kept += name + "\n";
     if (!writeFile(file, kept)) die("cannot write " + file);
-    printf("apklayer: %s %sd for instance %s (from its next start)\n", name.c_str(), action.c_str(), inst.id.c_str());
+    printf("apklayer: %s %sd for instance %s (%s)\n", name.c_str(), action.c_str(), inst.id.c_str(), settingsChanged(l, inst) ? "applied now" : "from its next start");
     return 0;
 }
 
