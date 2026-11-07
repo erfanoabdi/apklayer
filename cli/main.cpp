@@ -104,6 +104,7 @@ int main(int argc, char** argv) {
     Instance inst = Instance::open(layout, id);
     const std::string& cmd = args[0];
     size_t n = args.size();
+    if (cmd == "run" || cmd == "list") refreshDesktops(layout);  // a launch from a working entry or the manager mends the others
     if (cmd == "install" && n >= 2) {
         bool downgrade = false, system = false;
         size_t first = 1;

@@ -31,6 +31,9 @@ run = ["tests/vm/properties.sh"]
 [install-verify]
 run = ["tests/vm/install-verify.sh"]
 
+[desktop-refresh]
+run = ["tests/vm/desktop-refresh.sh"]
+
 [reconvert]
 run = ["tests/vm/reconvert.sh"]
 

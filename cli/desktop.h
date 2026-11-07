@@ -13,6 +13,8 @@ bool isSystemApp(const std::string& info);
 bool inDrawer(const std::string& info);
 // (Re)writes the package's entry from its info.properties (a system app without a launcher activity has none) and the .apk handler
 void writeDesktop(const Layout& layout, const std::string& package);
+// Entries whose Exec names a CLI that no longer exists (an earlier install's) are written again with this one
+void refreshDesktops(const Layout& layout);
 // `launcher show|hide <package>`
 int launcherCommand(const Layout& layout, const std::string& action, const std::string& package);
 // the Apklayer submenu: its merge file and directory entry, written once (then every installed app's entry again)
