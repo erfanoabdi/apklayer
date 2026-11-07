@@ -1,0 +1,3 @@
+# apklayer's sandbox runs each app as its own uid (cli/sandbox.cpp), which the seat's ACL on the GPU render nodes does not name: render nodes
+# 0666, systemd's upstream default (Debian and Ubuntu make them 0660 group render). Render nodes give GPU compute and drawing, no display.
+SUBSYSTEM=="drm", KERNEL=="renderD*", MODE="0666"

@@ -23,6 +23,12 @@ override_dh_auto_install:
 	DESTDIR=$(CURDIR)/debian/apklayer meson install -C $(B) --skip-subprojects --no-rebuild --quiet
 	DESTDIR=$(CURDIR)/debian/apklayer meson install -C $(B)-manager --no-rebuild --quiet
 	install -D -m644 debian/instances debian/apklayer/etc/apklayer/instances
+	# the per-app sandbox (cli/sandbox.cpp): the AppArmor profile that allows its user namespaces (postinst puts it in place where AppArmor
+	# knows userns rules), render nodes for app uids, apklayerd's user unit (not enabled: `systemctl --user enable --now apklayerd`)
+	install -d debian/apklayer/usr/share/apklayer/apparmor
+	sed 's#@NAME@##; s#@BIN@#/usr/lib/apklayer/cli/apklayer#' tools/host-setup/apklayer.apparmor > debian/apklayer/usr/share/apklayer/apparmor/apklayer
+	install -D -m644 tools/host-setup/70-apklayer-render.rules debian/apklayer/usr/lib/udev/rules.d/70-apklayer-render.rules
+	install -D -m644 tools/host-setup/apklayerd.service debian/apklayer/usr/lib/systemd/user/apklayerd.service
 	# apklayer-dev: the hardware plugin API (headers, apklayer-plugin.pc: docs/PLUGINS.md)
 	mkdir -p debian/apklayer-dev/usr/lib/$(DEB_HOST_MULTIARCH)
 	mv debian/apklayer/usr/include debian/apklayer-dev/usr/
