@@ -56,6 +56,8 @@ for d in common arm64; do rsync -a --delete "$P/$d/" "$cache/prebuilts/$d/"; don
 find "$cache/prebuilts" -name '*.part000' | while read -r first; do b="${first%.part000}"; cat "$b".part??? > "$b" && rm -f "$b".part???; done
 
 git archive --prefix="apklayer-$version/" -o "$cache/apklayer-$version.tar.gz" HEAD
-docker run --rm --platform linux/arm64 -v "$src:/work:ro" -v "$cache:/cache" -v "$out:/out" "$image" sh /work/tools/release/sailfish-rpm.sh --in-root "$version"
+# the Java libraries this machine already fetched (fetch-dep.py looks in ~/.cache/apklayer/deps): no second download from Maven
+deps="$HOME/.cache/apklayer/deps"; mkdir -p "$deps"
+docker run --rm --platform linux/arm64 -v "$src:/work:ro" -v "$deps:/root/.cache/apklayer/deps:ro" -v "$cache:/cache" -v "$out:/out" "$image" sh /work/tools/release/sailfish-rpm.sh --in-root "$version"
 rm -f "$cache/apklayer-$version.tar.gz"
 ls -l "$out"/*.rpm

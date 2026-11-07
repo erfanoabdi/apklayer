@@ -4,5 +4,4 @@ executable('apklayer', ['main.cpp', 'util.cpp', 'layout.cpp', 'env.cpp', 'stack.
   # APKLAYER_LIB: where `meson install` puts the runtime (cli/layout.cpp: the source tree's CLI uses that install)
   # APKLAYER_PLUGINDIR: where third-party hardware plugins install (apklayer-plugin.pc's plugindir, docs/PLUGINS.md)
   cpp_args: ['-DAPKLAYER_VERSION="@0@"'.format(version), '-DAPKLAYER_LIB="@0@"'.format(pkg_lib), '-DAPKLAYER_PLUGINDIR="@0@"'.format(plugin_dir)],
-  include_directories: include_directories('../bridge/hals/include', '../common'), install: true, install_dir: pkg_lib / 'cli',
-  dependencies: dependency('dl'))  # libdl apart from libc before glibc 2.34 (Sailfish OS 5.0: 2.30)
+  include_directories: include_directories('../bridge/hals/include', '../common'), install: true, install_dir: pkg_lib / 'cli')
