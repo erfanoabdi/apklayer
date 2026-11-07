@@ -68,12 +68,19 @@ std::string findJava(const Layout&) {
     return result;
 }
 
+Env hostToolEnv() {
+    Env env = currentEnv();
+    env.erase("LD_PRELOAD");
+    env.erase("LD_LIBRARY_PATH");
+    return env;
+}
+
 // A property of the machine's own Android (a Halium device): libhybris's getprop reads its live property area; "" when there is none
 std::string deviceProperty(const std::string& key) {
     if (!exists("/usr/bin/getprop")) return "";
     Spawn get;
     get.argv = {"/usr/bin/getprop", key};
-    get.env = currentEnv();
+    get.env = hostToolEnv();
     int status = 0;
     std::string value = trim(runCapture(get, &status));
     return status == 0 ? value : "";

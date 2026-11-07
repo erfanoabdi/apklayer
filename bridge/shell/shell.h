@@ -152,6 +152,7 @@ struct window {
     struct wl_surface *surface;
     struct xdg_surface *xdg_surface;
     struct xdg_toplevel *toplevel;
+    struct wl_shell_surface *shell_surface;  /* instead of the two above where the compositor has no xdg-shell (wlshell.c) */
     void *map;
     size_t map_len;
     struct wl_buffer *buffers[NBUF];
@@ -182,6 +183,7 @@ extern struct wp_cursor_shape_manager_v1 *cursor_mgr;
 extern struct wl_shm *shm;
 extern struct zwp_linux_dmabuf_v1 *dmabuf_mgr;  /* dmabuf.c */
 extern struct xdg_wm_base *wm_base;
+extern struct wl_shell *wl_shell_global;  /* wlshell.c: Lipstick has only wl_shell */
 extern struct wl_seat *seat;
 extern struct wp_viewporter *viewporter;                     /* registry.c */
 extern struct wp_fractional_scale_manager_v1 *fscale_mgr;
@@ -245,6 +247,14 @@ void window_attach_input(struct client *c, int own_id, const char *title);  /* w
 void window_drop_proxy(struct client *c);  /* window.c */
 void window_dmabuf_show(struct window *w, int buf, const int32_t *damage);
 void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int nfds);  /* dmabuf.c */
+void wlshell_create(struct window *w, const char *label, const char *app_id);  /* wlshell.c */
+void wlshell_first_configure(struct window *w);
+/* damage in buffer coordinates; wl_compositor v3 (Lipstick) has only surface coordinates: the whole surface then */
+static inline void surface_damage(struct wl_surface *s, int32_t x, int32_t y, int32_t w, int32_t h)
+{
+    if (wl_surface_get_version(s) >= WL_SURFACE_DAMAGE_BUFFER_SINCE_VERSION) wl_surface_damage_buffer(s, x, y, w, h);
+    else wl_surface_damage(s, 0, 0, INT32_MAX, INT32_MAX);
+}
 void wlegl_bind(struct wl_registry *r, uint32_t name, uint32_t ver);  /* wlegl.c: libhybris's android_wlegl (Halium compositors) */
 void window_gralloc_frame(struct window *w, const int32_t *m, uint32_t len, const int *fds, int nfds);  /* wlegl.c */
 void window_dmabuf_destroy(struct window *w);  /* dmabuf.c */

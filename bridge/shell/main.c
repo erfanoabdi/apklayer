@@ -63,7 +63,7 @@ int main(int argc, char **argv)
     if (query_display) return print_display_info();
     decor_setup(compositor, subcompositor, shm, viewporter);
     navbar_setup(compositor, subcompositor, shm, viewporter);
-    if (!compositor || !shm || !wm_base) { fprintf(stderr, "[shell] missing Wayland globals\n"); return 1; }
+    if (!compositor || !shm || (!wm_base && !wl_shell_global)) { fprintf(stderr, "[shell] missing Wayland globals\n"); return 1; }
 
     clipboard_init();
     int lfd = listen_socket(path);

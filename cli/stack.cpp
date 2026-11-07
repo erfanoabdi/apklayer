@@ -265,7 +265,7 @@ static void setDerivedProperties(const Layout& l, const NativeEnv& ne, const std
 static std::string deviceGraphicsProperties(const Instance& inst) {
     Spawn get;
     get.argv = {"/usr/bin/getprop"};
-    get.env = currentEnv();
+    get.env = hostToolEnv();
     int status = 0;
     std::string out = exists("/usr/bin/getprop") ? runCapture(get, &status) : "", props;
     std::set<std::string> found;
