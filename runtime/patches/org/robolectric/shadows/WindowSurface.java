@@ -8,9 +8,14 @@ import java.util.Map;
 /** apklayer patch: WMS's container transform, separate from BLAST's buffer geometry. */
 final class WindowSurface {
   private SurfaceControl parent;
+  private SurfaceControl dim; // FLAG_DIM_BEHIND: Dimmer's color layer, relative below the window
 
-  void place(SurfaceControl child, ShadowWindowManagerGlobal.WindowInfo window, Map<IWindow, ShadowWindowManagerGlobal.WindowInfo> windows) {
-    if (child == null || !child.isValid()) return;
+  void place(SurfaceControl child, ShadowWindowManagerGlobal.WindowInfo window, Map<IWindow, ShadowWindowManagerGlobal.WindowInfo> windows,
+      boolean visible) {
+    if (child == null || !child.isValid()) {
+      showDim(false, window);
+      return;
+    }
     ShadowWindowManagerGlobal.WindowInfo host = null; // a sub-window's parent window (its token): WindowState stacks it there (WindowOrder)
     if (WindowOrder.isSubWindow(window.attrs.type) && window.attrs.token != null) {
       for (Map.Entry<IWindow, ShadowWindowManagerGlobal.WindowInfo> e : windows.entrySet()) {
@@ -46,6 +51,28 @@ final class WindowSurface {
           .show(child)
           .apply();
     }
+    showDim(visible && (window.attrs.flags & android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND) != 0, window);
+  }
+
+  /** Dimmer.updateDims: black over the display at dimAmount, just below this window's container, while the window is shown and asks for it. */
+  private void showDim(boolean shown, ShadowWindowManagerGlobal.WindowInfo window) {
+    if (dim == null && (!shown || parent == null)) return;
+    if (dim == null) {
+      dim = new SurfaceControl.Builder().setName("Dim Layer for - " + window.attrs.getTitle()).setColorLayer().build();
+    }
+    try (SurfaceControl.Transaction t = new SurfaceControl.Transaction()) {
+      if (shown) {
+        t.setLayerStack(dim, Integer.getInteger("apklayer.layerstack", 0))
+            .setRelativeLayer(dim, parent, -1)
+            .setColor(dim, new float[] {0, 0, 0})
+            .setAlpha(dim, window.attrs.dimAmount)
+            .setCrop(dim, window.displayFrame)
+            .show(dim);
+      } else {
+        t.hide(dim);
+      }
+      t.apply();
+    }
   }
 
   /** The zOrder of the window's activity (its token's base window, WindowOrder.activityOrder), its own without one. */
@@ -58,6 +85,13 @@ final class WindowSurface {
   }
 
   void close() {
+    if (dim != null) {
+      try (SurfaceControl.Transaction t = new SurfaceControl.Transaction()) {
+        t.remove(dim).apply();
+      }
+      dim.release();
+      dim = null;
+    }
     if (parent == null) return;
     try (SurfaceControl.Transaction t = new SurfaceControl.Transaction()) {
       t.remove(parent).apply();

@@ -45,7 +45,7 @@ public final class WindowOrder {
 
   /**
    * The stacking key of each window of WindowManagerGlobal's parallel lists (mViews, mParams: in the order the windows were added),
-   * higher is above.
+   * higher is above; -1 for a sub-window whose parent window is gone.
    */
   public static long[] keys(List<View> views, List<LayoutParams> params) {
     long[] keys = new long[views.size()];
@@ -54,6 +54,10 @@ public final class WindowOrder {
       int parent = -1;
       if (isSubWindow(p.type) && p.token != null) {
         for (int j = 0; j < keys.length && parent < 0; j++) if (j != i && views.get(j).getWindowToken() == p.token) parent = j;
+      }
+      if (isSubWindow(p.type) && p.token != null && parent < 0) {
+        keys[i] = -1; // its parent window was removed, and the window manager removed it with it: no window, no input
+        continue;
       }
       int top = parent < 0 ? i : parent;
       LayoutParams t = params.get(top);

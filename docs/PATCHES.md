@@ -70,6 +70,7 @@ are headers meson.build adds for old toolchains, not patches.
 | 0015-display-change-without-idle | changeDisplay(qualifiers) leaves the display-change messages to the app's run loop |
 | 0019-navigation-bar-visibility-listener | ShadowWindowManagerGlobal.applyInsets tells `NavigationBarInset` when an app hides or shows the navigation bar (immersive mode) |
 | 0020-alarm-manager-pending-intent-hook | ShadowAlarmManager: PendingIntent alarms go to a hook (the hub holds them, HubScheduler) |
+| 0021-window-children-dim | ShadowWindowManagerGlobal removes a window's sub-windows with it and tells WindowSurface the window's visibility (FLAG_DIM_BEHIND dim layer); ShadowUiAutomation skips orphaned sub-windows |
 
 ## LineageOS tree (`patches/aosp/<project>/`)
 | Patch | Purpose |
@@ -107,7 +108,7 @@ Behaviour that differs from Android or from stock Robolectric without editing up
 - MessageQueue: `ShadowHostMessageQueue` turns off DeliQueue (Robolectric's scheduler reads the legacy queue).
 - Navigation bar of the shell as the display's navigation bar inset (mobile window style): `runtime/patches/org/robolectric/shadows/NavigationBarInset.java` (sets SystemUi's NavigationBarBehavior; AppHost.hostResize); robolectric 0019 makes the app's hide/show of the navigation bar (WindowInsetsController, SYSTEM_UI_FLAG_HIDE_NAVIGATION) reach it, AppHost passes it to the shell (MSG_NAVBAR).
 - apklayer patch in `bridge/hals/graphics/display.c`: the window style (`APKLAYER_WINDOW_MODE`) is sent to the shell before the window is created.
-- Window container a window manager would make for each window: `runtime/patches/org/robolectric/shadows/WindowSurface.java`.
+- Window container a window manager would make for each window: `runtime/patches/org/robolectric/shadows/WindowSurface.java`; it also holds the FLAG_DIM_BEHIND dim layer (Dimmer's color layer, relative below the window).
 - Codec2: `aosp/hals/media/codec2/SoftCodecs.cpp` loads whichever tree `libcodec2_soft_*` are installed (the platform list aborts on a missing one); codec list `bridge/native/android-root/vendor/etc/media_codecs.xml`.
 - dex2jvm (`runtime/dex2jvm`, marked "apklayer patch"): `TypeInference.needsNarrowingCast` skips the checkcast when the required type is an interface (JVMS 4.10.1.2: any class is assignable to an interface type for the verifier).
 - dex2jvm `InitRepointPlan` (marked "apklayer patch"): the constructor scan keeps a tracked object across writes on other branches; constructors R8 deleted but still names get forwarders up to the class resolution reaches (ART resolves through the superclass).

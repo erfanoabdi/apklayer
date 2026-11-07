@@ -12,6 +12,13 @@ import android.widget.LinearLayout;
 
 /** Real widget text, IME and clipboard callbacks for the proxied GPU window. */
 public class Main extends Activity {
+    /** Sheet stage 7: a tap that reaches the activity's window (the orphaned popup above it has no window). */
+    @Override
+    public boolean dispatchTouchEvent(android.view.MotionEvent e) {
+        if (Sheet.orphaned && e.getActionMasked() == android.view.MotionEvent.ACTION_UP) Sheet.touched(this);
+        return super.dispatchTouchEvent(e);
+    }
+
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         ClipboardManager clipboard = getSystemService(ClipboardManager.class);

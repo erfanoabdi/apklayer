@@ -18,13 +18,27 @@ import android.widget.LinearLayout;
  * floating dialog with gravity BOTTOM and WRAP height (its button, an outside tap, Back). Stage 3 and 4: what Material's
  * BottomSheetDialog builds from plain views: a full-screen dimmed dialog whose outside area cancels on a click and whose sheet sits at the
  * bottom (stage 3: its button and an outside click, the sheet sliding out on animation frames; 4: a downward drag on its handle; 5: another
- * activity covers it, above the sheet and taking its taps (Meet's green room over the link sheet), then leaves; the sheet's button and Back). Each stage shows the next one when its dialog goes away.
+ * activity covers it, above the sheet and taking its taps (Meet's green room over the link sheet), then leaves; the sheet's button and Back;
+ * 6: a popup of the activity below the sheet; 7: a dialog's popup left behind when the dialog goes, which the window manager removes with it).
+ * Each stage shows the next one when its dialog goes away.
  */
 final class Sheet {
     private Sheet() {}
 
+    static volatile boolean orphaned;
+
+    static void touched(Activity a) {
+        orphaned = false;
+        System.out.println("[hello-input] activity touched");
+        a.getWindow().getDecorView().postDelayed(() -> show(a, 8), 500);
+    }
+
     static void show(Activity a, int stage) {
-        if (stage > 6) {
+        if (stage == 7) {
+            orphan(a);
+            return;
+        }
+        if (stage > 7) {
             System.out.println("[hello-input] sheet stages done");
             return;
         }
@@ -100,8 +114,35 @@ final class Sheet {
         p.showAtLocation(a.getWindow().getDecorView(), Gravity.BOTTOM, 0, 0);
         d.setOnDismissListener(x -> {
             p.dismiss();
-            System.out.println("[hello-input] sheet stages done");
+            a.getWindow().getDecorView().postDelayed(() -> show(a, 7), 500);
         });
+    }
+
+    /**
+     * Stage 7: a popup whose parent is a dialog's window, left showing when the dialog is dismissed. WindowManagerService removes a
+     * window's child windows with it: the popup is neither drawn nor gets input, a tap where it was reaches the activity.
+     */
+    private static void orphan(Activity a) {
+        Dialog d = new Dialog(a);
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        Button b = new Button(a);
+        b.setText("Dialog with a popup");
+        d.setContentView(b, new FrameLayout.LayoutParams(-1, 100));
+        d.show();
+        d.getWindow().setGravity(Gravity.BOTTOM);
+        b.postDelayed(() -> {
+            Button pb = new Button(a);
+            pb.setText("Popup of the dialog");
+            pb.setOnClickListener(v -> System.out.println("[hello-input] orphan popup tapped"));
+            android.widget.PopupWindow p = new android.widget.PopupWindow(pb, -1, 200, false);
+            p.showAtLocation(d.getWindow().getDecorView(), Gravity.TOP, 0, 0);
+            pb.postDelayed(() -> {
+                d.dismiss(); // the popup is not dismissed: only its parent window goes
+                orphaned = true;
+                a.getWindow().getDecorView().postDelayed(() -> System.out.println("[hello-input] sheet 7 orphaned popup attached="
+                        + pb.isAttachedToWindow()), 500);
+            }, 800);
+        }, 800);
     }
 
     /** The sheet slides out on animation frames (ViewDragHelper's settle: an OverScroller stepped by postOnAnimation), then the dialog cancels. */
