@@ -288,6 +288,14 @@ What differs from Ubuntu Touch, and what changed:
 - Lipstick's screenshot (`saveScreenshot`) needs the `privileged` group (`devel-su -p`); the phone has a lock code, so Lipstick's picture shows the lock
   screen. App pictures are SurfaceFlinger's (`apklayer screenshot`); seeing the window on Lipstick unlocked needs a human check.
 
-Results (instance `ut`; `~/apklayer-sfos/sf-shots.sh <pkg> <secs>` on the phone: run, both screenshots, stop): UiBench draws (device gralloc buffers to
+Results from the RPMs (2026-11-08, `pkcon install-local`, then `apklayer setup --bundle`: runtime unpacked, 10 system apps installed): UiBench
+installs and draws (SurfaceFlinger's screenshot 1080x2400 of its list; the shell sends device gralloc buffers to Lipstick: `[shell] gralloc buffer 0:
+1080x2400 stride 1088`); `sf-run.py` on the phone runs an app, takes the screenshot at its sixth frame log line and stops the instance. Fixes it took:
+bionic_translation 0042 (glibc 2.30's sigemptyset wrote 128 bytes over bionic's 8-byte sigset_t: libandroidfw's stack guard aborted describe) and
+compat/glibc-before-2.38-libc. Open: libdl_bio links the host libEGL.so.1, which on Sailfish is libhybris's, so every Android process maps
+libhybris (its linker and TLS handling; "library libEGL.so not found" per unresolved gl* symbol); Lipstick's own screenshot returned an error.
+The four libraries newer than the prebuilts (below) were again copied from the tree's los24 outputs into the runtime.
+
+Earlier results (sysroot tarball, instance `ut`; `~/apklayer-sfos/sf-shots.sh <pkg> <secs>` on the phone: run, both screenshots, stop): UiBench draws (device gralloc buffers to
 Lipstick); NewPipe draws its UI (Trending stayed empty); Open Camera opens the device's camera 0 through cameraserver over the HIDL provider (`ID:0`, no
 CameraControllerException; the preview was dark, the phone lying on the desk: not judged). Not run on this phone: audio, sensors, GNSS, vibrator, media.

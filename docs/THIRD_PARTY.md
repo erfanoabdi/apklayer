@@ -35,6 +35,14 @@ apklayer itself is AGPL-3.0-or-later (PLAN D5), compatible with all of the above
 
 The tree-host build reuses unchanged `FrameListener.class` and `ScreenUpdateHandler.class` from the pinned MIT simulator-4.17.jar; the tree simulator predates that split. It stages only these classes alongside the host, with the older tree simulator providing sandbox construction.
 
+## Repackaged for Sailfish OS (rpm/*.spec; built by tools/release/sailfish-rpm.sh, shipped as release assets, sources pinned in rpm/sources)
+
+| Package | Origin | License |
+|---|---|---|
+| temurin-21-jdk | Eclipse Adoptium's Temurin 21 aarch64 binary, unchanged | GPL-2.0 with Classpath Exception |
+| libmd, libbsd | libbsd.freedesktop.org releases, built from source | BSD-style / ISC (per file) |
+| libunwind | github.com/libunwind/libunwind release, built from source | MIT |
+
 ## License audit for a dual license (2026-10-28, not legal advice)
 
 Question: can apklayer be AGPL-3.0-or-later for everyone plus a commercial license (PLAN D5), distributable as deb/rpm/AUR/Flatpak/AppImage?
