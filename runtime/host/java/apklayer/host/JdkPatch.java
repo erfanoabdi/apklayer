@@ -47,7 +47,9 @@ public final class JdkPatch {
     /** JdkMembers nested class -> the java.base class that receives its members. */
     static final java.util.Map<String, String> TARGETS = java.util.Map.of(
             "Thread", "java/lang/Thread", "InetAddress", "java/net/InetAddress", "DateFormat", "java/text/DateFormat",
-            "ECParameterSpec", "java/security/spec/ECParameterSpec", "ByteBuffer", "java/nio/ByteBuffer");
+            "ECParameterSpec", "java/security/spec/ECParameterSpec", "ByteBuffer", "java/nio/ByteBuffer",
+            "DatagramSocket", "java/net/DatagramSocket", "Cipher", "javax/crypto/Cipher", "Mac", "javax/crypto/Mac",
+            "KeyAgreement", "javax/crypto/KeyAgreement", "Signature", "java/security/Signature");
 
     /** Copies the fields and methods (not the constructor) of JdkMembers$<name> into {@code target}, the nested class renamed to the target. */
     private static void withMembers(String name, String target, Path out) throws Exception {

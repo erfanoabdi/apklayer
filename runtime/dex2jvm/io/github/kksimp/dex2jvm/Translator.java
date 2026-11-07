@@ -423,13 +423,16 @@ public final class Translator {
      *  missing type. */
     public static void emitUnsupportedBody(ClassFileWriter.MethodWriter mw,
                                            DexMethod method, String msg) {
+        emitThrowingBody(mw, "java/lang/UnsupportedOperationException", msg);
+    }
+
+    /** A body that throws {@code new <exception>(msg)}; apklayer patch: split out of emitUnsupportedBody for DexConverter.failedClassStub. */
+    public static void emitThrowingBody(ClassFileWriter.MethodWriter mw, String exception, String msg) {
         CodeWriter c = mw.newCode();
-        c.typeOp(CodeWriter.NEW, "java/lang/UnsupportedOperationException");
+        c.typeOp(CodeWriter.NEW, exception);
         c.op(CodeWriter.DUP);
         c.ldcString(msg);
-        c.methodOp(CodeWriter.INVOKESPECIAL,
-                   "java/lang/UnsupportedOperationException",
-                   "<init>", "(Ljava/lang/String;)V", false);
+        c.methodOp(CodeWriter.INVOKESPECIAL, exception, "<init>", "(Ljava/lang/String;)V", false);
         c.op(CodeWriter.ATHROW);
     }
 

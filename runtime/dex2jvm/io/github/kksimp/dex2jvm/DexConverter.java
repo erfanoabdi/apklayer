@@ -260,7 +260,7 @@ public final class DexConverter {
                         try {
                             sink.accept(name, pending.get(i - start).get());
                         } catch (java.util.concurrent.ExecutionException ex) {
-                            errors.put(name, describe(ex.getCause()));
+                            failed(sink, name, all.get(i).getValue(), ex.getCause());
                         } catch (InterruptedException ex) {
                             Thread.currentThread().interrupt();
                             throw new IllegalStateException("conversion interrupted", ex);
@@ -278,6 +278,22 @@ public final class DexConverter {
             }
         }
 
+        /** apklayer patch: a class that failed is recorded and, unless the failure was memory, replaced by
+         *  {@link #failedClassStub} so the rest of the APK installs and only a use of this class fails, as ART's VerifyError does. */
+        private void failed(java.util.function.BiConsumer<String, byte[]> sink, String name, DexClass cls, Throwable t) {
+            errors.put(name, describe(t));
+            if (t instanceof OutOfMemoryError) return;     // may be transient: never persisted as a stub
+            byte[] stub;
+            try {
+                stub = failedClassStub(cls, superIfacePlan, nestIndex, describe(t));
+            } catch (RuntimeException e) {
+                return;                                     // the class shape itself is inexpressible: left out, as before
+            }
+            System.err.println("[" + Options.logTag + "] STUBBED class " + name + ": " + describe(t)
+                + " -- a use of it throws VerifyError");
+            sink.accept(name, stub);
+        }
+
         /** Worker count. Options.threads (DEX2JVM_THREADS) overrides it, mostly
          *  so the parallel and sequential paths can be A/B'd for byte identity. */
         private static int threadCount() {
@@ -291,7 +307,7 @@ public final class DexConverter {
             try {
                 sink.accept(name, convertOne(cls, hierarchy, plan, superIfacePlan, nestIndex));
             } catch (RuntimeException ex) {
-                errors.put(name, describe(ex));
+                failed(sink, name, cls, ex);
             } finally {
                 // Also on the failure path: a class we could not translate has
                 // no more claim on the heap than one we could.
@@ -314,6 +330,7 @@ public final class DexConverter {
         // The test knobs arm the two rescue transforms unconditionally so a
         // gate can exercise them on methods that are nowhere near the real
         // limit. See MethodOutliner.FORCE / MethodSplitter.FORCE.
+        if (cls.name().equals(Options.testFailClass)) throw new IllegalStateException("forced by dex2jvm.testFailClass");
         if (MethodOutliner.forced() || MethodSplitter.forced()) {
             return convertOne(cls, hierarchy, plan, superIfaces, nestIndex, true);
         }
@@ -511,6 +528,27 @@ public final class DexConverter {
             }
         }
 
+        return cw.toByteArray();
+    }
+
+    /**
+     * apklayer patch: the class's declared shape (superclass, interfaces, fields, methods, nest) with every body, and a
+     * {@code <clinit>}, throwing {@code java.lang.VerifyError} that names the class and the conversion failure: the first
+     * initialization fails as ART fails a class its verifier rejected, later uses get NoClassDefFoundError.
+     */
+    static byte[] failedClassStub(DexClass cls, SuperInterfacePlan superIfaces, NestIndex nestIndex, String reason) {
+        ClassFileWriter cw = new ClassFileWriter(classAccessFlags(cls), cls.name(), cls.superclassName(),
+            cls.interfaceNames().toArray(new String[0]));
+        applyClassAnnotations(cw, cls, nestIndex);
+        for (DexField f : cls.fields()) cw.addField(fieldAccessFlags(cls, f, superIfaces), f.name(), f.type());
+        String msg = Options.logTag + ": class " + cls.name().replace('/', '.') + " could not be converted (" + reason + ")";
+        boolean clinit = false;
+        for (DexMethod m : cls.methods()) {
+            ClassFileWriter.MethodWriter mw = cw.addMethod(m.accessFlags() & METHOD_FLAGS_MASK, m.name(), m.descriptor());
+            clinit |= m.name().equals("<clinit>");
+            if (!m.isAbstract() && !m.isNative()) Translator.emitThrowingBody(mw, "java/lang/VerifyError", msg);
+        }
+        if (!clinit) Translator.emitThrowingBody(cw.addMethod(0x0008, "<clinit>", "()V"), "java/lang/VerifyError", msg);
         return cw.toByteArray();
     }
 

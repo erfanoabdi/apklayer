@@ -145,7 +145,24 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
         conv.argv = {findJava(l), "-Duser.home=" + tmp, "-cp", l.dex2jvmJar() + ":" + l.frameworkDir() + "/*", "io.github.kksimp.dex2jvm.Main", join(tmp, "base.apk"), join(tmp, "raw.jar")};
         conv.env = env;
         conv.logFile = join(inst.logs(), "convert.log");
+        struct stat logStat{};
+        size_t logStart = stat(conv.logFile.c_str(), &logStat) == 0 ? logStat.st_size : 0;  // the log is appended to: only this conversion's lines
         if (runAndWait(conv) != 0) die("conversion failed (see " + conv.logFile + ")");
+        // a class dex2jvm could not convert is installed as a stub that throws VerifyError when used (as ART's verifier fails one): say which
+        std::vector<std::string> stubbed;
+        std::string log = readFile(conv.logFile).value_or("");
+        for (const std::string& line : split(log.substr(std::min(logStart, log.size())), '\n'))
+            if (size_t at = line.find("] STUBBED class "); at != std::string::npos) {
+                std::string cls = line.substr(at + 16, line.find(':', at + 16) - at - 16);
+                std::replace(cls.begin(), cls.end(), '/', '.');
+                stubbed.push_back(cls);
+            }
+        if (!stubbed.empty()) {
+            std::string names;
+            for (size_t i = 0; i < stubbed.size() && i < 5; i++) names += (i ? ", " : "") + stubbed[i];
+            printf("apklayer: warning: %zu class%s of %s could not be converted, a use of one throws VerifyError (%s%s; see %s)\n", stubbed.size(),
+                   stubbed.size() == 1 ? "" : "es", name.c_str(), names.c_str(), stubbed.size() > 5 ? ", ..." : "", conv.logFile.c_str());
+        }
         if (sh({findJava(l), "-cp", l.deps + "/libs/*:" + l.hostClasses(), "apklayer.tools.DenyInstrument", join(tmp, "raw.jar"), join(tmp, "classes.jar")}) != 0)
             die("preparing the converted classes failed (a half-written classes.jar is not installed)");
         // every DEX class in a well-formed class file and the APK's java resources reachable: nothing half-converted is installed or cached
