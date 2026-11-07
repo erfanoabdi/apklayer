@@ -1,8 +1,10 @@
 #pragma once
 #include <apklayer/audio.h>
 #include <core-impl/Stream.h>
+#include <atomic>
 
 namespace aidl::android::hardware::audio::core {
+extern std::atomic<bool> gMicMute;  // IModule.setMicMute (Service.cpp): capture streams deliver silence
 // The transfer thread runs unprivileged; PipeWire owns graph scheduling.
 class HostOutputWorker final : public StreamOutWorker {
   public:

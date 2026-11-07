@@ -25,7 +25,10 @@ final class RecordCheck {
 
     static void run() throws Exception { run(AudioAttributes.USAGE_MEDIA, MediaRecorder.AudioSource.MIC, "RECORD"); }
 
-    static void run(int usage, int source, String tag) throws Exception {
+    static void run(int usage, int source, String tag) throws Exception { run(usage, source, tag, false); }
+
+    /** {@code muted}: the microphone is muted (AudioManager.setMicrophoneMute): the capture must be silent although the tone plays. */
+    static void run(int usage, int source, String tag, boolean muted) throws Exception {
         final int rate = 48000, seconds = 4;
         AudioTrack track = new AudioTrack.Builder()
                 .setAudioAttributes(new AudioAttributes.Builder().setUsage(usage).build())
@@ -77,6 +80,14 @@ final class RecordCheck {
             System.out.println("[hello-native-audio] " + tag + " read " + total + " frames in " + String.format("%.2f", wall) + " s, left 440/880 = "
                     + (long) (l440 / Math.max(l880, 1)) + ", right 880/440 = " + (long) (r880 / Math.max(r440, 1)));
             require(wall > 2.0 && wall < 3.6, "recording 2.5 s took " + wall + " s");
+            if (muted) {
+                int peak = 0;
+                for (int n = 0; n < count; n++) peak = Math.max(peak, Math.max(Math.abs(l[n]), Math.abs(r[n])));
+                require(peak == 0, "muted microphone captured a peak of " + peak);
+                record.stop();
+                System.out.println("[hello-native-audio] " + tag + " PASS silent while muted");
+                return;
+            }
             require(l440 > l880 * 50, "left tone lost/swapped");
             require(r880 > r440 * 50, "right tone lost/swapped");
             record.stop();

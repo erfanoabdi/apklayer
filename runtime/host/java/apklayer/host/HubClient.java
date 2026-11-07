@@ -231,6 +231,16 @@ public final class HubClient {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.ROLE_REQUEST, request -> request.writeString(role), reply -> reply.readBoolean());
     }
 
+    /** AudioManager.setMode/getMode (MODE_CURRENT): the instance's mode after the request (HubCallAudio). */
+    int audioMode(int mode) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.AUDIO_MODE, request -> request.writeInt(mode), reply -> reply.readInt());
+    }
+    /** setCommunicationDevice ({@code set}; null clears this app's choice) or only the read: the communication device in force, null for none. */
+    android.media.AudioDeviceAttributes communicationDevice(boolean set, android.media.AudioDeviceAttributes device) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.AUDIO_COMMUNICATION_DEVICE, request -> { request.writeBoolean(set); request.writeTypedObject(device, 0); },
+                reply -> reply.readTypedObject(android.media.AudioDeviceAttributes.CREATOR));
+    }
+
     /** Alarms and jobs live in the hub (HubScheduler). */
     void setAlarm(android.app.PendingIntent operation, long delayMs, long intervalMs) {
         HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.ALARM_SET, request -> { request.writeStrongBinder(operation.getTarget().asBinder()); request.writeLong(delayMs); request.writeLong(intervalMs); }, reply -> null);

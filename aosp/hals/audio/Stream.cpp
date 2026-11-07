@@ -3,12 +3,14 @@
 #include <Utils.h>
 #include <cerrno>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 
 namespace aidl::android::hardware::audio::core {
 using ::aidl::android::media::audio::common::AudioFormatType;
 using ::aidl::android::media::audio::common::PcmType;
 using ::aidl::android::hardware::audio::common::getChannelCount;
+std::atomic<bool> gMicMute{false};
 ::android::status_t PipeWireStream::init(DriverCallbackInterface*) {
     const auto format = context_.getFormat();
     if (context_.getAsyncCallback() || context_.isMmap() || context_.isOffload() ||
@@ -86,6 +88,7 @@ void PipeWireStream::shutdown() { apklayer_audio_close(audio_); audio_ = nullptr
     if (read == -EAGAIN) return ::android::OK;
     if (read < 0) return read;
     *actual = read;
+    if (gMicMute) memset(buffer, 0, read * context_.getFrameSize());
     struct apklayer_audio_position position;
     if (!apklayer_capture_position(capture_, &position))
         *latency = std::min<uint64_t>(std::numeric_limits<int32_t>::max(), (position.pending_frames * 1000) / context_.getSampleRate());
