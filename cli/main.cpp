@@ -74,6 +74,9 @@ int usage() {
 }  // namespace
 
 int main(int argc, char** argv) {
+    // started by an Android process (the hub: the spare, component hosts), the path layer is preloaded here too and spells a realpath below
+    // $APKLAYER_STORAGE as /storage: this tool works with host paths (nativeEnv sets the variable again for what it starts)
+    unsetenv("APKLAYER_STORAGE");
     std::vector<std::string> args(argv + 1, argv + argc);
     bool inDaemon = !args.empty() && args[0] == "--no-daemon";  // apklayerd's own child: runs here
     if (inDaemon) args.erase(args.begin());

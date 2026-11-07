@@ -84,7 +84,11 @@ const std::set<std::string> kLaunchEnv = {"APKLAYER_INTENT_FILE", "APKLAYER_RESU
 const std::set<std::string> kIgnoredEnv = {"APKLAYER_JOPTS", "XDG_ACTIVATION_TOKEN", "DESKTOP_STARTUP_ID", "APKLAYER_HUB_READY_FD", "APKLAYER_STARTED_FD",
                                            "SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY", "XDG_SESSION_ID", "PWD", "OLDPWD", "SHLVL", "_",
                                            // the systemd unit's own (each launch and the spare run in units of their own: cli/unit.h)
-                                           "INVOCATION_ID", "JOURNAL_STREAM", "SYSTEMD_EXEC_PID", "MANAGERPID"};
+                                           "INVOCATION_ID", "JOURNAL_STREAM", "SYSTEMD_EXEC_PID", "MANAGERPID",
+                                           // who started the launch (lomiri-app-launch's identity of apklayer-manager or of a drawer entry, the
+                                           // manager's scale), not the app: the spare the hub started has none of them
+                                           "APP_ID", "APP_DESKTOP_FILE_PATH", "APP_EXEC", "APP_URIS", "DESKTOP_FILE_HINT", "XDG_SESSION_TYPE",
+                                           "SLINT_SCALE_FACTOR"};
 
 // The first entry (NUL-separated) in which a launch's key differs from the spare's: why a spare could not take it.
 std::string firstDifference(const std::string& spare, const std::string& launch) {

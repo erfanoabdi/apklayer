@@ -103,6 +103,19 @@ try:
     while time.monotonic() < end and Path('/proc/%d' % pid).exists(): time.sleep(0.2)
     assert not Path('/proc/%d' % pid).exists(), 'SIGTERM to the launcher left its app running'
     print('[units] SIGTERM to the launcher ended %s' % TARGET, flush=True)
+
+    # always-on mode: the hub alone (its unit's command) prepares the spare; the first launch takes it (the spare's helper runs under the hub's
+    # path layer, which once spelled the storage directory as /storage: a key no launch matched)
+    stop()
+    (Path(LOGDIR) / 'app-spare.log').unlink(missing_ok=True)  # the next spare's word only
+    hub = Launch(['bin/apklayer', 'hub'], env=env)
+    launches.append(hub)
+    instance.wait_file(Path(LOGDIR) / 'app-spare.log', 'app spare pid=', 90)
+    first = Launch(['bin/apklayer', 'run', TARGET], env=env)
+    launches.append(first)
+    first.expect('[act-t] main pid=')
+    assert any('app spare taken' in l for l in first.lines), 'the hub\'s spare did not serve the launch:\n' + '\n'.join(first.lines[-15:])
+    print('[units] the hub\'s spare served the first launch', flush=True)
     print('PASS units', flush=True)
 finally:
     systemctl('thaw', manager)
