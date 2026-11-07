@@ -49,7 +49,7 @@ apps.txt (OTR2, Telegram, WhatsApp, CPU-Z, ...) were not part of this round.
 | Etar 1.0.57 | CalendarContract | both | draws (week); the tap adds an event slot | fixed: canScheduleExactAlarms was Robolectric's false, so it opened REQUEST_SCHEDULE_EXACT_ALARM and died on ActivityNotFoundException |
 | DAVx5 4.5.21 | Compose, accounts | both | draws (intro) | |
 | Syncthing-Fork 2.1.7.0 | Go native | both | draws (welcome) | StrictMode "non-UI Context" reports as OsmAnd |
-| Briar 1.5.24 (was 1.5.23) | Tor, H2 | both | splash only | regression since 2026-11-04 (1.5.23 stays on the splash too): NavDrawerActivity's startActivity(StartupActivity) is never launched (open) |
+| Briar 1.5.24 (was 1.5.23) | Tor, H2 | both | draws (nickname setup) | fixed 2026-11-07: NavDrawerActivity's first BluetoothAdapter.getState waited 25 s on the BlueZ helper (D-Bus auto-start of a BlueZ that cannot start); the helper no longer auto-starts BlueZ |
 | QUIK 4.3.7 | SMS | both | dies at start | RoleManager's REQUEST_ROLE (SMS) intent has no handler: ActivityNotFoundException (open) |
 | SimpleX Chat 7.0.4 | Haskell core | both | draws (welcome "Be free") | was a white window on 2026-11-04 |
 | Wikipedia r/50614 | WebView, Room | both | draws (onboarding); Back reaches the Explore feed with articles | |
