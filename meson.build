@@ -30,6 +30,19 @@ if android_libs == '' and prebuilts != ''
   android_libs = prebuilts / cpu / 'android-libs/lib64'
 endif
 
+# bionic_translation's compat headers where the toolchain is older (patches/bionic_translation/compat), as global arguments: a subproject's
+# default_options c_args (and buildtype) take effect only from Meson 1.8 on (Sailfish OS 5.0 has 1.4); so before any target
+cc = meson.get_compiler('c')
+if host_machine.system() == 'linux'
+  compat_inc = meson.project_source_root() / 'patches/bionic_translation/compat/include'
+  if cc.version().version_compare('<12')
+    add_global_arguments('-I' + compat_inc, language: 'cpp')
+  endif
+  if not cc.has_header_symbol('elf.h', 'Elf64_Relr')  # glibc before 2.36
+    add_global_arguments('-include', compat_inc / 'relr-compat.h', language: ['c', 'cpp'])
+  endif
+endif
+
 subdir('deps')
 subdir('runtime/dex2jvm')
 subdir('bridge/shell')
@@ -62,18 +75,8 @@ if host_machine.system() == 'linux'
     fs.read(p)  # a changed or new patch reconfigures
   endforeach
   message(run_command(apply, 'bionic_translation', bt_src, check: true).stdout().strip())
-  cc = meson.get_compiler('c')
-  bt_cargs = []
-  bt_cppargs = []
   if cc.version().version_compare('<13')  # Ubuntu 22.04: gcc 11
     run_command(apply, compat / 'gcc-before-13-cxx2b.patch', bt_src, check: true)
-  endif
-  if cc.version().version_compare('<12')
-    bt_cppargs += '-I' + compat / 'include'
-  endif
-  if not cc.has_header_symbol('elf.h', 'Elf64_Relr')  # glibc before 2.36
-    bt_cargs += ['-include', compat / 'include/relr-compat.h']
-    bt_cppargs += ['-include', compat / 'include/relr-compat.h']
   endif
   unwind = dependency('libunwind', required: false)
   if not unwind.found() or unwind.version().version_compare('<1.8')  # one call each: a copy may have meson.build reset and keep linker.c
@@ -81,8 +84,7 @@ if host_machine.system() == 'linux'
     run_command(apply, compat / 'libunwind-before-1.8-weak-phdr.patch', bt_src, check: true)
   endif
   # built as upstream builds it on its own (debug, no optimization): the flags it was tested with
-  bt = subproject('bionic_translation', default_options: ['buildtype=debug', 'warning_level=1', 'c_args=' + ' '.join(bt_cargs),
-    'cpp_args=' + ' '.join(bt_cppargs)])
+  bt = subproject('bionic_translation', default_options: ['buildtype=debug', 'warning_level=1'])
   subdir('bridge/native')  # the native runtime: JNI shim, btload, the path layer, bionic_translation's library mapping
   subdir('bridge/ndk')
   subdir('bridge/hals/graphics/gles1')  # OpenGL ES 1 for hosts without it (-Dgfxstream)
