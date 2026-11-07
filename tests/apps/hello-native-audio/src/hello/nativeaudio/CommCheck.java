@@ -73,7 +73,9 @@ final class CommCheck {
     private static List<android.media.AudioDeviceAttributes> preferred() throws Exception {
         Class<?> system = Class.forName("android.media.AudioSystem");
         int strategy = -1;
-        for (Object candidate : (List<?>) Class.forName("android.media.audiopolicy.AudioProductStrategy").getMethod("getAudioProductStrategies").invoke(null))
+        java.util.ArrayList<Object> strategies = new java.util.ArrayList<>();
+        Class.forName("android.media.audiopolicy.AudioProductStrategy").getMethod("native_list_audio_product_strategies", java.util.ArrayList.class).invoke(null, strategies);
+        for (Object candidate : strategies)
             if (candidate.getClass().getMethod("getAudioAttributesForLegacyStreamType", int.class).invoke(candidate, AudioManager.STREAM_VOICE_CALL) != null) {
                 strategy = (int) candidate.getClass().getMethod("getId").invoke(candidate); break;
             }

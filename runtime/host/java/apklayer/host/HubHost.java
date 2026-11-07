@@ -31,11 +31,13 @@ public final class HubHost {
             throw new IllegalStateException("Cannot publish the account service");
         if (!HubPermissionChecker.publish(directory.packages()))
             throw new IllegalStateException("Cannot publish the permission checker");
+        if (!HubAttestationIds.publish(directory.packages())) System.out.println("[apklayer-hub] cannot publish " + HubAttestationIds.SERVICE);
         StartTrace.mark("hub: published");
         HostBattery.installHub(directory::sendSystem);
         HubVibrator.publishIfProvided(directory.packages()::uidHolds);  // before READY: an app's SystemVibratorManager looks it up once
         HubBatteryStats.publishIfSensors();  // SensorService's battery notes: without it every sensor enable and disable waits 5 s
         directory.usb.watch();
+        HubLockScreen.unlockIfProvided();  // before READY: an app's auth-bound keys need the auth token at once
         StartTrace.mark("hub: battery, vibrator, usb");
         System.out.println("[apklayer-hub] READY pid=" + android.os.Process.myPid());
         new Thread(() -> HubBootSettings.write(RuntimeEnvironment.getApplication(), directory), "hub-boot-settings").start();  // the hub is the instance's system (uid 1000)

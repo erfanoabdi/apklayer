@@ -66,8 +66,9 @@ final class HubCallAudio {
 
     /** AudioDeviceBroker.initRoutingStrategyIds: the strategy of STREAM_VOICE_CALL. */
     private int strategy() {
-        if (strategy < 0)
-            for (AudioProductStrategy candidate : AudioProductStrategy.getAudioProductStrategies())
+        java.util.ArrayList<AudioProductStrategy> strategies = new java.util.ArrayList<>();
+        if (strategy < 0 && AudioProductStrategy.native_list_audio_product_strategies(strategies) == AudioSystem.SUCCESS)  // AudioSystemAdapter's list
+            for (AudioProductStrategy candidate : strategies)
                 if (candidate.getAudioAttributesForLegacyStreamType(AudioSystem.STREAM_VOICE_CALL) != null) { strategy = candidate.getId(); break; }
         return strategy;
     }
