@@ -64,6 +64,9 @@ final class AppEnvironment {
         // Robolectric parses the manifest's providers only when it creates the application, after deciding on its fake: the install recorded them (AppMetadata).
         ownsMediaAuthority = apk != null && java.util.Arrays.asList(installProperty(apk, "authorities").split(";")).contains("media");
         System.setProperty("robolectric.installFakeMediaProvider", "false");  // not Robolectric's fake MediaStore: HostMediaStub until the hub hands out the real one
+        // each activity gets its own activity ContextImpl (ContextImpl.createActivityContext, a UI context: Context.isUiContext), not the
+        // application's: StrictMode reported every activity and DecorContext as an "incorrect context use"
+        System.setProperty("robolectric.createActivityContexts", "true");
         StartTrace.mark("manifest and config read");
         sandbox.getTestEnvironment().setUpApplicationState("apklayer", configuration(describing), manifest);
         StartTrace.mark("robolectric application state set up");
