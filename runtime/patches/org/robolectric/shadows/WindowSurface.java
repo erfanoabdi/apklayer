@@ -54,7 +54,10 @@ final class WindowSurface {
     showDim(visible && (window.attrs.flags & android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND) != 0, window);
   }
 
-  /** Dimmer.updateDims: black over the display at dimAmount, just below this window's container, while the window is shown and asks for it. */
+  /**
+   * Dimmer.updateDims: black over the display at dimAmount, just below the window, while the window is shown and asks for it. A child of
+   * the window's container under the window's own layer (Dimmer's relative layer -1 to the window, without a relative parent to follow).
+   */
   private void showDim(boolean shown, ShadowWindowManagerGlobal.WindowInfo window) {
     if (dim == null && (!shown || parent == null)) return;
     if (dim == null) {
@@ -62,8 +65,10 @@ final class WindowSurface {
     }
     try (SurfaceControl.Transaction t = new SurfaceControl.Transaction()) {
       if (shown) {
-        t.setLayerStack(dim, Integer.getInteger("apklayer.layerstack", 0))
-            .setRelativeLayer(dim, parent, -1)
+        Rect insets = window.attrs.surfaceInsets; // the container's origin on the screen: the dim covers the display from there
+        t.reparent(dim, parent)
+            .setLayer(dim, -1)
+            .setPosition(dim, insets.left - window.frame.left, insets.top - window.frame.top)
             .setColor(dim, new float[] {0, 0, 0})
             .setAlpha(dim, window.attrs.dimAmount)
             .setCrop(dim, window.displayFrame)
