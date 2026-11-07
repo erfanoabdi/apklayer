@@ -292,8 +292,9 @@ def rfcomm(address, uuid):
 
 if len(sys.argv) == 4 and sys.argv[1] == 'rfcomm':
     sys.exit(rfcomm(sys.argv[2], sys.argv[3]))
-try:
-    for path, ifaces in call('/', 'org.freedesktop.DBus.ObjectManager', 'GetManagedObjects')[0].items():
+try:  # no auto-start: an activatable BlueZ that cannot start (no adapter) answered only after D-Bus's 25 s timeout, the app's first Bluetooth call waiting on it
+    for path, ifaces in bus.call_sync(BLUEZ, '/', 'org.freedesktop.DBus.ObjectManager', 'GetManagedObjects', None, None,
+                                      Gio.DBusCallFlags.NO_AUTO_START, -1, None).unpack()[0].items():
         objects[path] = ifaces
 except GLib.Error as error:  # no BlueZ: the adapter is absent
     objects.clear()
