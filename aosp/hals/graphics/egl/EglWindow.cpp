@@ -217,19 +217,30 @@ bool windowSize(ANativeWindow* nw, uint32_t* w, uint32_t* h) {
     return true;
 }
 
+// A gbm_surface of that size and the host's window surface on it. Mesa takes RENDERING alone; NVIDIA's GBM backend refuses that surface
+// (EGL_BAD_ALLOC) unless SCANOUT is asked as well, so that is the second try.
+EGLSurface hostSurfaceOnGbm(EGLDisplay dpy, EGLConfig cfg, EGLint visual, uint32_t w, uint32_t h, void** gbmOut) {
+    auto create = gbmFn<void* (*)(void*, uint32_t, uint32_t, uint32_t, uint32_t)>("gbm_surface_create");
+    auto destroy = gbmFn<void (*)(void*)>("gbm_surface_destroy");
+    auto platformSurface = host<PFNEGLCREATEPLATFORMWINDOWSURFACEPROC>("eglCreatePlatformWindowSurface");
+    for (uint32_t usage : {1u << 2 /* GBM_BO_USE_RENDERING */, (1u << 2) | 1u /* | GBM_BO_USE_SCANOUT */}) {
+        void* gs = create(apklayer_gfx_gbm_device(gfx()), w, h, (uint32_t)visual, usage);
+        if (!gs) continue;
+        EGLSurface surface = platformSurface(dpy, cfg, gs, nullptr);
+        if (surface != EGL_NO_SURFACE) { *gbmOut = gs; return surface; }
+        destroy(gs);
+    }
+    ALOGE("host window surface %ux%u format 0x%x failed: 0x%x", w, h, visual, host<EGLint (*)()>("eglGetError")());
+    return EGL_NO_SURFACE;
+}
+
 // A gbm_surface and a host window surface of the Android window's size, stored in the Window (the old pair is the caller's).
 bool attachHostSurface(Window* win) {
     uint32_t w, h;
     if (!windowSize(win->native, &w, &h)) return false;
-    void* gs = gbmFn<void* (*)(void*, uint32_t, uint32_t, uint32_t, uint32_t)>("gbm_surface_create")(
-            apklayer_gfx_gbm_device(gfx()), w, h, (uint32_t)win->visual, 1u << 2 /* GBM_BO_USE_RENDERING */);
-    if (!gs) { ALOGE("gbm_surface_create %ux%u format 0x%x failed", w, h, win->visual); return false; }
-    EGLSurface surface = host<PFNEGLCREATEPLATFORMWINDOWSURFACEPROC>("eglCreatePlatformWindowSurface")(win->dpy, win->cfg, gs, nullptr);
-    if (surface == EGL_NO_SURFACE) {
-        ALOGE("host window surface failed: 0x%x", host<EGLint (*)()>("eglGetError")());
-        gbmFn<void (*)(void*)>("gbm_surface_destroy")(gs);
-        return false;
-    }
+    void* gs = nullptr;
+    EGLSurface surface = hostSurfaceOnGbm(win->dpy, win->cfg, win->visual, w, h, &gs);
+    if (surface == EGL_NO_SURFACE) return false;
     win->gbmSurface = gs;
     win->host = surface;
     win->width = w;
@@ -374,12 +385,9 @@ EGLSurface eglCreatePbufferSurface(EGLDisplay dpy, EGLConfig cfg, const EGLint* 
     }
     auto* win = new Window{dpy, cfg, nullptr, nullptr, EGL_NO_SURFACE, 0, 0, 0};
     host<EGLBoolean (*)(EGLDisplay, EGLConfig, EGLint, EGLint*)>("eglGetConfigAttrib")(dpy, cfg, EGL_NATIVE_VISUAL_ID, &win->visual);
-    void* gs = gbmFn<void* (*)(void*, uint32_t, uint32_t, uint32_t, uint32_t)>("gbm_surface_create")(
-            apklayer_gfx_gbm_device(gfx()), w, h, (uint32_t)win->visual, 1u << 2 /* GBM_BO_USE_RENDERING */);
-    EGLSurface surface = gs ? host<PFNEGLCREATEPLATFORMWINDOWSURFACEPROC>("eglCreatePlatformWindowSurface")(dpy, cfg, gs, nullptr) : EGL_NO_SURFACE;
+    void* gs = nullptr;
+    EGLSurface surface = hostSurfaceOnGbm(dpy, cfg, win->visual, w, h, &gs);
     if (surface == EGL_NO_SURFACE) {
-        ALOGE("pbuffer %ux%u format 0x%x: host surface failed", w, h, win->visual);
-        if (gs) gbmFn<void (*)(void*)>("gbm_surface_destroy")(gs);
         delete win;
         tError = EGL_BAD_ALLOC;
         return EGL_NO_SURFACE;
