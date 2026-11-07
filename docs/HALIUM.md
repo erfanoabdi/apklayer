@@ -34,7 +34,7 @@ Consequences:
   `tools/host-setup/binder.sh <id>`, root once per boot), and the device is reached only through the host context.
 - The hosts are older than our libbinder (Android 16): Halium 12 and Android 13 write a binder's stability as a Category and number
   IServiceManager's methods differently (patch 0006 handles both, below).
-- Sailfish needs apklayer built against glibc 2.30 (or a sysroot of its own) before anything runs there.
+- Sailfish OS (glibc 2.30) runs apklayer from the sysroot bundle (below, "apklayer on Sailfish OS").
 - Graphics (step e): neither compositor offers linux-dmabuf; the HWC needs the `android_wlegl` path (`create_handle`/`create_buffer`
   with the gralloc handle's fds and ints) and the device's gralloc/EGL through the vendor namespace.
 
@@ -240,3 +240,39 @@ options, `apklayer portal` and the apps' document pickers through HostFilePortal
   argument as the file (others only warn), so the helper's words (`import`, `multiple`) go before the .qml file.
 - Neither portal nor Content Hub (a desktop without a FileChooser backend): the install dialog lists the newest .apk files of ~/Downloads, ~/Documents
   and the home folder (one level), the Hardware page says to type the path. A desktop with a working portal is unchanged (the portal answers first).
+
+## apklayer on Sailfish OS (Volla Phone Quintus, 2026-11-07)
+Route: no Sailfish SDK or Platform SDK is on this machine, and no toolchain with glibc <= 2.30 builds this tree (C++20, recent Meson). So the build host's userland
+ships with apklayer: `tools/release/sysroot-bundle.sh <build> <out>` on the Parallels VM (Ubuntu 24.04 arm64), after `meson setup b --prefix=/opt/apklayer
+-Dandroid_runtime=false`, makes `apklayer-sysroot-aarch64-<runtime>.tar.gz` (161 MB; 344 MB unpacked): the meson install at `/opt/apklayer`, Ubuntu's JDK 21 in
+`/opt/apklayer/jvm`, glibc 2.39 with its loader and the 87 libraries the install and the JDK link in `/opt/apklayer/sysroot/lib`; every ELF of it gets that
+loader as interpreter and the sysroot as DT_RPATH (patchelf). A tarball, not an RPM: busybox tar unpacks it, nothing is built on the phone, and it never mixes
+with the system's libraries; `/opt` because the CLI finds its install relative to itself and Sailfish's rootfs (updated by zypper, not replaced) keeps it.
+The Android runtime bundle is glibc-independent: unpacked as usual in `~/.local/share/apklayer/runtime/<version>` (with `current`); busybox tar has no zstd,
+so it went over as a .tar.gz; its setup (setup-runtime.sh) runs on the phone after `zypper install zip unzip` (busybox has neither; its cp has no
+--remove-destination, now a tar pipe).
+
+Install (root once): `tar xzf apklayer-sysroot-aarch64-0.3.3.tar.gz -C /`, `zypper install zip unzip`, `sh /opt/apklayer/share/apklayer/tools/host-setup/binder.sh ut`
+(each boot). As defaultuser: the runtime in `~/.local/share/apklayer/runtime/0.3.3` and `current`, `APKLAYER_NATIVE_JAVA=/opt/apklayer/jvm/bin/java` in
+`~/.config/apklayer/env`, `PATH=/opt/apklayer/bin:$PATH`, `apklayer setup`, `apklayer providers set camera device` and `vibrator device` (setup reported them
+automatic, but the instance's host_hals.conf held only graphics until set: open). `cli/halium.cpp` detects the phone as on Ubuntu Touch (instance `ut`,
+PulseAudio from the session's runtime dir); the providers probe sensorfw, geoclue1, PulseAudio, the device's camera and vibrator.
+
+What differs from Ubuntu Touch, and what changed:
+- Lipstick has no xdg-shell (wl_shell only), wl_compositor 3, wl_seat 3, no subcompositor: `bridge/shell/wlshell.c` makes a window a wl_shell toplevel laid out
+  maximized at the output's size and active (Lipstick sends no configure); damage falls back to `wl_surface.damage` on v3; without subsurfaces there is no
+  navigation bar (no Back: open). Frames go as the device's gralloc buffers over `android_wlegl` (`[shell] gralloc buffer 1: 1080x2400 stride 1088`).
+- The system's programs (glibc 2.30) cannot load apklayer's LD_PRELOAD (needs GLIBC_2.34): the device's `/usr/bin/getprop` (cli `hostToolEnv()`) and the hub's
+  `setsid` (HubStartup) start without it now. Other host programs an app starts (`sh -c` overrides, Runtime.exec of a system binary) still inherit it: open.
+- `ro.hardware.egl` is `meow` (MediaTek's layer over Mali): libGLES_meow crashes in SurfaceFlinger during its dlopen (a jump to an unmapped address under
+  libdl_bio's constructor call); the instance runs with `apklayer prop set ro.hardware.egl mali`: SurfaceFlinger reports Mali-G68 MC4, OpenGL ES 3.2. Open.
+- The prebuilts (75a684a6) carry libraries older than the Halium work of 2026-11-05: libhidlbase without libhidl 0002/0003 ("gralloc-mapper is missing",
+  SurfaceFlinger aborted), libbinder without 0007 (AudioPolicyService refused the hub, uid 100000), libapklayer_vdisplay without the android_wlegl path
+  (frames went as shm), libapklayer_cameraserver. The phone runs the tree's current outputs of these four; the lock and the prebuilts branch need them
+  (libapklayer_codec2, libapklayer_egl, libgui, libvulkan, libstagefright, libmedia_omx differ from the tree too).
+- Lipstick's screenshot (`saveScreenshot`) needs the `privileged` group (`devel-su -p`); the phone has a lock code, so Lipstick's picture shows the lock
+  screen. App pictures are SurfaceFlinger's (`apklayer screenshot`); seeing the window on Lipstick unlocked needs a human check.
+
+Results (instance `ut`; `~/apklayer-sfos/sf-shots.sh <pkg> <secs>` on the phone: run, both screenshots, stop): UiBench draws (device gralloc buffers to
+Lipstick); NewPipe draws its UI (Trending stayed empty); Open Camera opens the device's camera 0 through cameraserver over the HIDL provider (`ID:0`, no
+CameraControllerException; the preview was dark, the phone lying on the desk: not judged). Not run on this phone: audio, sensors, GNSS, vibrator, media.

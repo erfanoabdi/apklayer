@@ -1,5 +1,5 @@
 #!/bin/sh
-# sysroot-bundle.sh <build dir> <out dir>: apklayer for a system whose glibc is older than the build host's (Sailfish OS 5: glibc 2.30; docs/SAILFISH.md),
+# sysroot-bundle.sh <build dir> <out dir>: apklayer for a system whose glibc is older than the build host's (Sailfish OS 5: glibc 2.30; docs/HALIUM.md "apklayer on Sailfish OS"),
 # as <out>/apklayer-sysroot-<cpu>-<version>.tar.gz to unpack at / (busybox tar). It holds the build's `meson install` at its prefix (meson setup
 # --prefix=/opt/apklayer -Dandroid_runtime=false) and, beside it, the build host's own userland that install needs: <prefix>/jvm (this host's Java 21,
 # links resolved) and <prefix>/sysroot/lib (glibc with its loader and every library the install and the JVM link). Every ELF of it is patched to start
