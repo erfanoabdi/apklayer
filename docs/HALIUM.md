@@ -5,7 +5,7 @@ vibrator, camera and media (codecs) HALs; never the sensors or GNSS HAL (one cli
 service; on Halium those come through the OS services). Listing services (lshal, service list) is fine.
 
 ## The owner's phones (surveyed 2026-11-04, read only)
-| | Ubuntu Touch 24.04 (`phablet@192.168.41.61`) | Sailfish OS 5.1.0.43 (`defaultuser@192.168.41.62`) |
+| | Ubuntu Touch 24.04 (`phablet@192.168.41.61`) | Sailfish OS 5.1.0.43 (`defaultuser@192.168.41.62`, retired 2026-11-07; the Sailfish test phone is now a Volla Phone Quintus, Sailfish OS 5.0.0.62, `defaultuser@192.168.41.153`, not yet surveyed) |
 |---|---|---|
 | Device | Volla Phone X23 (`vidofnir`, MediaTek) | Jolla C2 (Reeder S19 Max Pro S, Unisoc) |
 | Kernel | 5.10.209, aarch64 | 5.4.233, aarch64 |
