@@ -1,4 +1,5 @@
 // apklayer: run Android apps on Linux. install | run | list | uninstall | screenshot | stop | hub | component-host | env (see README.md).
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <set>
@@ -18,6 +19,7 @@
 #include "providers.h"
 #include "run.h"
 #include "spare.h"
+#include "unit.h"
 #include "version.h"
 
 using namespace apklayer;
@@ -89,6 +91,12 @@ int main(int argc, char** argv) {
     static const std::set<std::string> kLocal = {"daemon", "stack-daemon", "stack", "exec", "sandbox-exec", "app-spare", "env", "setup"};
     if (int status = 0; !inDaemon && !autostart && !kLocal.count(args[0]) && forwardToDaemon(layout, full, &status)) return status;
     if (args[0] == "daemon") return runDaemon(layout, args.size() == 2 && args[1] == "--on-demand");
+    // what lives on leaves the caller's systemd unit, which its session may freeze (Lomiri): each launch, the spare, the hub, the stack, setup (cli/unit.h)
+    const std::string& what = args[0];
+    if ((what == "run" || what == "component-host") && args.size() == 2) enterOwnUnit("apklayer-" + id + "-app-" + args[1]);
+    else if (what == "app-spare" && args.size() == 3) enterOwnUnit("apklayer-" + id + "-spare");
+    else if (what == "hub" || what == "stack-daemon") enterOwnUnit("apklayer-" + id + (what == "hub" ? "-hub" : "-stack"), true);
+    else if (what == "setup" && std::find(args.begin(), args.end(), "--check") == args.end()) enterOwnUnit("apklayer-setup");
     migrateData(layout);
     Instance inst = Instance::open(layout, id);
     const std::string& cmd = args[0];

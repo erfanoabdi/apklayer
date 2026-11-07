@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <optional>
 #include <signal.h>
+#include <sys/stat.h>
 #include <sys/utsname.h>
 #include <unistd.h>
 
@@ -48,6 +49,10 @@ void teeLaunchOutput(const Instance& inst, const std::string& package) {
     fflush(stdout);
     fflush(stderr);
     int terminal = fcntl(1, F_DUPFD_CLOEXEC, 3);
+    // a pipe's reader may stop reading (the manager, frozen by its session while the app has the focus): it never stalls the app, what the pipe cannot
+    // take at once is left out there (the file has everything). A terminal stays blocking (its description is the shell's too).
+    struct stat st {};
+    if (terminal >= 0 && fstat(terminal, &st) == 0 && S_ISFIFO(st.st_mode)) fcntl(terminal, F_SETFL, fcntl(terminal, F_GETFL) | O_NONBLOCK);
     pid_t tee = fork();
     if (tee == 0) {  // ends when every writer (this launcher, the JVM, its children) has closed the pipe
         signal(SIGPIPE, SIG_IGN);

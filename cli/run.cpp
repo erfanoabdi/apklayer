@@ -216,6 +216,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     // shortcut: SIGKILL to this waiter (the hub's stuck-host path) leaves a spare-born JVM to `apklayer stop` (its record); upgrade when the hub tracks JVM pids
     if (conn >= 0) status = awaitAppSpare(conn, jvmPid);
     else {
+        passSignalsTo(jvmPid);
         while (waitpid(jvmPid, &status, 0) < 0 && errno == EINTR) {}
         status = WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
     }

@@ -190,6 +190,7 @@ bool ensureShell(const Layout& l, const Instance& inst, const NativeEnv& env) {
         shell.env["APKLAYER_SHELL_READY_FD"] = std::to_string(ready[1]);
         shell.logFile = join(inst.logs(), "shell.log");
         shell.newSession = true;  // outlives any instance; instances never stop it
+        shell.unit = "apklayer-shell";  // every window's: never frozen with the app or manager that started it (cli/unit.h)
         shell.detach = true;
         int pid = spawn(shell);
         close(ready[1]);

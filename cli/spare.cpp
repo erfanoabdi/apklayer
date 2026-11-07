@@ -82,7 +82,9 @@ const std::set<std::string> kLaunchEnv = {"APKLAYER_INTENT_FILE", "APKLAYER_RESU
 // What differs from launch to launch and the runtime never reads: the JOPTS (in argv, but the launch's own late ones), a desktop launcher's
 // activation token, pipes of the process that started the launch (the hub's ready pipe, a launch's started pipe), the login session's and the shell's bookkeeping
 const std::set<std::string> kIgnoredEnv = {"APKLAYER_JOPTS", "XDG_ACTIVATION_TOKEN", "DESKTOP_STARTUP_ID", "APKLAYER_HUB_READY_FD", "APKLAYER_STARTED_FD",
-                                           "SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY", "XDG_SESSION_ID", "PWD", "OLDPWD", "SHLVL", "_"};
+                                           "SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY", "XDG_SESSION_ID", "PWD", "OLDPWD", "SHLVL", "_",
+                                           // the systemd unit's own (each launch and the spare run in units of their own: cli/unit.h)
+                                           "INVOCATION_ID", "JOURNAL_STREAM", "SYSTEMD_EXEC_PID", "MANAGERPID"};
 
 // The first entry (NUL-separated) in which a launch's key differs from the spare's: why a spare could not take it.
 std::string firstDifference(const std::string& spare, const std::string& launch) {
@@ -138,11 +140,15 @@ int takeAppSpare(const Instance& inst, const std::string& key, const std::vector
     return pid;
 }
 
-int awaitAppSpare(int conn, int jvmPid) {
-    forwardTo = jvmPid;
+void passSignalsTo(int pid) {
+    forwardTo = pid;
     struct sigaction sa{};
     sa.sa_handler = forward;
     for (int sig : {SIGINT, SIGTERM, SIGHUP}) sigaction(sig, &sa, nullptr);
+}
+
+int awaitAppSpare(int conn, int jvmPid) {
+    passSignalsTo(jvmPid);
     std::string reply = receive(conn);  // the holder's word once the JVM ended (its parent: the exit status); none when the holder ended first
     close(conn);
     if (reply.rfind("exit ", 0) == 0) return atoi(reply.c_str() + 5);
