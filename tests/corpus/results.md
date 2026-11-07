@@ -13,7 +13,7 @@ apps.txt (OTR2, Telegram, WhatsApp, CPU-Z, ...) were not part of this round.
 | GPSTest 3.10.6 | location | both | draws (Status, What's new); Back closes it, "GPS disabled" dialog follows | |
 | OpenVPN 0.7.69 | native | both | draws (profiles) | |
 | Shelter 1.9.1 | Kotlin | both | draws (welcome) | |
-| Unciv 4.22.16 (was 4.22.15) | libgdx | Parallels | draws (language picker); the tap selects a language | |
+| Unciv 4.22.16 (was 4.22.15) | libgdx | Parallels | draws (language picker); the tap selects a language | UTM (2026-11-07): black; the GL thread renders and its buffers reach SurfaceFlinger (also after a resize recreates the surfaces) but every frame is black, with virgl and with zink on UTM's Mesa 26.0.8; Parallels' Mesa 25.2.8 virgl draws (open, PLAN) |
 | | | UTM | black window | frames arrive, every pixel 0; GL context on virgl (ES 3.2 Mesa 26) and rulesets load, no error (open) |
 | Feeder 2.25.0 | Compose, RSS | both | draws (All feeds); the tap opens an article, Back returns | |
 | Tusky 33.1 | Kotlin views | both | draws (login) | |
@@ -27,11 +27,11 @@ apps.txt (OTR2, Telegram, WhatsApp, CPU-Z, ...) were not part of this round.
 | Thunderbird 24.0 | Compose | both | draws (welcome) | |
 | Element 1.6.62 | Rust | both | draws (welcome carousel; the tap moves it) | |
 | VLC 3.7.2 | native player | both | draws (welcome) | |
-| LibreTube 32.1 | media3 | both | draws (Trending); the tap opens a video page | the player stays black, `FileNotFoundException: ""` from media3's FileDataSource (open) |
+| LibreTube 32.1 | media3 | both | draws (Trending); a video plays (Big Buck Bunny, 2026-11-07) | live streams stay black, `FileNotFoundException: ""`: the app plays a live stream's `dash` URL whenever it is non-null and NewPipe's missing dashMpdUrl is "" (LibreTube master checks isNullOrBlank): the app's, not apklayer's |
 | Material Files 1.7.5 | file manager | both | draws (Internal storage); the tap opens a folder | getfilecon ENODATA logged (known: no SELinux labels) |
 | mpv 2026-09-17 | native, GL | both | draws; the tap opens "Open URL" | |
 | Organic Maps 2026.09.29 | native maps | both | draws (map download) | |
-| OsmAnd 5.4.11 | maps | both | draws (welcome) | StrictMode reports MapActivity as a "non-UI Context" (open) |
+| OsmAnd 5.4.11 | maps | both | draws (welcome) | fixed 2026-11-07: activities are UI contexts (their own activity ContextImpl), no StrictMode "non-UI Context" |
 | FluffyChat 2.11.4 (was 2.11.3) | Flutter | both | draws (welcome) | |
 | Aurora Store 4.8.4 | Compose | both | draws (welcome) | 2026-11-06 Parallels: onboarding (restart, install permission), anonymous login, app pages; downloads were cancelled by WorkManager's network constraint (fixed, not yet re-run) |
 | F-Droid 2.0.2 | store client | both | draws (Discover, fetching repositories) | 2026-11-06 Parallels: index loaded, Search > Calculator lists apps, Install works (checked by the owner) |
@@ -44,11 +44,11 @@ apps.txt (OTR2, Telegram, WhatsApp, CPU-Z, ...) were not part of this round.
 | AntennaPod 3.12.3 | media3 | both | draws (Home) | |
 | Jellyfin 2.7.3 | WebView | both | draws (Connect to Server); the tap opens Downloads | |
 | Termux 0.119.0-beta.3 | terminal | both | "Bootstrap Error" dialog | known (uid 1000, PLAN next phase 1) |
-| StreetComplete 64.1 (was 64.0) | Compose MP, MapLibre (JavaCPP) | both | draws (welcome); dies when the map renders | fixed: SIGSEGV in MaplibreNativeC event_mask(J) (NativeLoader bound the getter's `__` symbol to the setter); then `Bitmap.createBitmap(Picture)` → Robolectric's createHardwareBitmap gets no ImageReader image (NPE, open) |
+| StreetComplete 64.1 (was 64.0) | Compose MP, MapLibre (JavaCPP) | both | draws (welcome, then the world map) | fixed: SIGSEGV in MaplibreNativeC event_mask(J) (NativeLoader bound the getter's `__` symbol to the setter); fixed 2026-11-07: `Bitmap.createBitmap(Picture)` is HWUI's createHardwareBitmap (Robolectric's stand-in got no ImageReader image, NPE) |
 | Amaze 3.11.4 | file manager | both | draws (folders); the tap opens one | logback appenders missing (the app's own log config, harmless) |
 | Etar 1.0.57 | CalendarContract | both | draws (week); the tap adds an event slot | fixed: canScheduleExactAlarms was Robolectric's false, so it opened REQUEST_SCHEDULE_EXACT_ALARM and died on ActivityNotFoundException |
 | DAVx5 4.5.21 | Compose, accounts | both | draws (intro) | |
-| Syncthing-Fork 2.1.7.0 | Go native | both | draws (welcome) | StrictMode "non-UI Context" reports as OsmAnd |
+| Syncthing-Fork 2.1.7.0 | Go native | both | draws (welcome) | fixed 2026-11-07 as OsmAnd (no StrictMode "non-UI Context") |
 | Briar 1.5.24 (was 1.5.23) | Tor, H2 | both | draws (nickname setup) | fixed 2026-11-07: NavDrawerActivity's first BluetoothAdapter.getState waited 25 s on the BlueZ helper (D-Bus auto-start of a BlueZ that cannot start); the helper no longer auto-starts BlueZ |
 | QUIK 4.3.7 | SMS | both | starts (2026-11-07, UTM: MainActivity; drawing not rechecked) | REQUEST_ROLE (SMS) answered RESULT_CANCELED by the host (was ActivityNotFoundException) |
 | SimpleX Chat 7.0.4 | Haskell core | both | draws (welcome "Be free") | was a white window on 2026-11-04 |

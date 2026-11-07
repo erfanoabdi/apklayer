@@ -9,7 +9,7 @@ public class Main extends Activity {
         super.onCreate(state);
         TextView view = new TextView(this);
         view.setText("act target (launcher)");
-        System.out.println("[act-t] main pid=" + android.os.Process.myPid());  // relaunch: a launcher start of the running task creates no second one
+        System.out.println("[act-t] main pid=" + android.os.Process.myPid() + " ui=" + isUiContext());  // relaunch: a launcher start of the running task creates no second one
         setContentView(view);
     }
 }
