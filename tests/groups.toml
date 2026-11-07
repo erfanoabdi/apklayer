@@ -191,7 +191,9 @@ run = ["tests/vm/startup.sh com.android.test.uibench"]
 
 [gpu]
 needs = ["com.android.test.uibench"]
-run = ["python3 -u tests/vm/gpu-smoke.py"]
+# the second run under a decimal-comma locale: Android's native float parsing (VectorDrawable paths, PathInterpolator) must stay in C
+setup = ["locale -a | grep -qx nl_NL.utf8 || sudo -n locale-gen nl_NL.UTF-8 >/dev/null"]
+run = ["python3 -u tests/vm/gpu-smoke.py", "LANG=nl_NL.UTF-8 LC_ALL=nl_NL.UTF-8 python3 -u tests/vm/gpu-smoke.py"]
 
 [gpu-select]
 # apklayer gpus / gpu set|unset and the node the instance's processes get (no app: rendering on a choice is gpu/gpu-window with APKLAYER_GPU)

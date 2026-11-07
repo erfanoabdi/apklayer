@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """GPU smoke test: UiBench starts on the GPU route, buffers reach the shell, and SurfaceFlinger's picture of its window shows a drawn UI.
 Window, dialog and resize behaviour: the gpu-window group (tests/vm/gpu-window-run.py)."""
+import locale
 import subprocess
 import sys
 from pathlib import Path
@@ -10,6 +11,7 @@ import instance  # noqa: E402  (changes into the repo root)
 import pixels  # noqa: E402
 
 PKG = 'com.android.test.uibench'
+print('locale', locale.setlocale(locale.LC_ALL, ''))  # raises when LANG/LC_ALL names a locale the host lacks: the run would test nothing
 env = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1', APKLAYER_JOPTS='-Dapklayer.runms=12000 ' + instance.ENV.get('APKLAYER_EXTRA_JOPTS', ''))
 proc = None
 try:
@@ -22,7 +24,7 @@ try:
             imported += 1
             if imported == 3 and shot is None:  # the app is presenting GPU buffers: take the picture now
                 shot = instance.capture('gpu', PKG)
-        if 'Fatal signal' in line or 'SIGSEGV' in line or 'fatal error' in line:
+        if 'Fatal signal' in line or 'SIGSEGV' in line or 'fatal error' in line or 'NotFoundException' in line:
             print(line.rstrip())
     code = proc.wait()
 finally:

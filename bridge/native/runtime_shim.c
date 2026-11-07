@@ -10,6 +10,7 @@
 #include <jni.h>
 #include <jvmti.h>
 #include <link.h>
+#include <locale.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -406,6 +407,9 @@ static int create_attached(int (*entry)(void *), void *user, const char *name, i
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
 {
     (void)reserved;
+    /* HotSpot's setlocale(LC_ALL, "") left LC_NUMERIC at the host's (nl_NL: "0,2"); Android's native code parses floats
+       through libc strtod (path data, fonts.xml) as bionic does: in C. java.util.Locale was read at JVM start and stays. */
+    setlocale(LC_NUMERIC, "C");
     JNIEnv *env;
     if ((*vm)->GetEnv(vm, (void **)&env, JNI_VERSION_1_6) != JNI_OK) return -1;
 

@@ -14,7 +14,9 @@ Plan and open work: `docs/PLAN.md` "Next phase: binary releases".
 
 `tools/release/versions` names the runtime version `R` the package needs (`runtime=`); the deb installs it as `/usr/share/apklayer/versions`
 (the CLI's sign that it runs installed). Bump it whenever the prebuilts branch changes; a release that keeps it ships the same bundle again (the manager
-downloads it only when the version changes). `converter_abi` and `data_format` are `kConverterAbi` and `kDataFormat` of `cli/version.h`;
+downloads it only when the version changes). The workflow's first job (`tools/release/check-runtime.py`) enforces this: it fails before any build when the
+runtime version was already released from another prebuilts commit (`runtime.prebuilts` in releases.json; older entries take their
+`prebuilts-v<version>` tag), naming both commits. `converter_abi` and `data_format` are `kConverterAbi` and `kDataFormat` of `cli/version.h`;
 `apklayer --version` prints them with the package version.
 
 ## The deb
@@ -64,7 +66,7 @@ Environment variables (`APKLAYER_NATIVE`, `APKLAYER_ANDROID_LIBS`, ...) still ov
       "notes_url": "https://github.com/erfanoabdi/apklayer/releases/tag/v0.1.0",
       "converter_abi": 1,
       "data_format": 1,
-      "runtime": {"version": "0.1.0", "assets": {"arm64": {"url": "https://github.com/.../apklayer-runtime-arm64-0.1.0.tar.zst", "sha256": "..."}}},
+      "runtime": {"version": "0.1.0", "prebuilts": "<prebuilts commit>", "assets": {"arm64": {"url": "https://github.com/.../apklayer-runtime-arm64-0.1.0.tar.zst", "sha256": "..."}}},
       "debs": {
         "noble": {"arm64": {"url": ".../apklayer_0.1.0-1.noble1_arm64.deb", "sha256": "..."}, "amd64": {"url": "...", "sha256": "..."}},
         "trixie": {"arm64": {"url": "...", "sha256": "..."}}
@@ -78,6 +80,7 @@ Environment variables (`APKLAYER_NATIVE`, `APKLAYER_ANDROID_LIBS`, ...) still ov
 - Keys of `debs` are codenames (`VERSION_CODENAME` of `/etc/os-release`); CPU keys everywhere are Debian architectures (`dpkg --print-architecture`:
   `arm64`, `amd64`), also for the runtime assets (the bundle file of `amd64` is named `x86_64`).
 - `converter_abi` and `data_format` are `cli/version.h`'s numbers at the tag (`docs/PLAN.md` item 8).
+- `runtime.prebuilts` is the prebuilts commit the bundle was built from (what `PREBUILTS_REF` resolved to; the build jobs check out that commit).
 - The manager downloads `runtime.assets.<arch>` into `runtime/<runtime.version>/` when that version differs from what it has, checking `sha256`.
 
 ## Cutting a release
@@ -90,7 +93,7 @@ Environment variables (`APKLAYER_NATIVE`, `APKLAYER_ANDROID_LIBS`, ...) still ov
    git tag vX.Y.Z <main commit>
    git push origin prebuilts-vX.Y.Z vX.Y.Z
    ```
-3. The `release` workflow builds the four debs and the bundle, makes the GitHub Release `vX.Y.Z` and commits the entry to `releases.json` on `pages`.
+3. The `release` workflow first checks `runtime=` against releases.json (a runtime version released from other prebuilts fails: bump it), then builds the four debs and the bundle, makes the GitHub Release `vX.Y.Z` and commits the entry to `releases.json` on `pages`.
    A dry run without releasing: Actions -> release -> Run workflow (version, prebuilts ref); it prints the `releases.json` entry.
 4. Once: the `pages` branch exists on GitHub and Pages serves it (Settings -> Pages -> Deploy from branch `pages`, `/`).
 
