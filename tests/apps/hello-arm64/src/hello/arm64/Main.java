@@ -13,6 +13,8 @@ public class Main extends Activity {
     private static native int gl();
     private static native long field();
     private static native int field(long v);
+    private static native int fault();
+    private static native int errnos();
 
     static int twice(int v) { return 2 * v; }
 
@@ -48,7 +50,11 @@ public class Main extends Activity {
         log("translated code mappings " + memfdMappings());
         boolean overloads = field(5) == 1 && field() == 5;  // each overload bound to its own long-named function
         log("overloaded natives " + (overloads ? "ok" : "MIXED"));
-        boolean ok = "aarch64".equals(cpu) && first == warm && call == 42 && thread == 100 && overloads;
+        int errno = errnos();  // open ENOENT (2) * 100 + proxied clock_gettime EINVAL (22)
+        log("errno " + (errno == 222 ? "ok" : "WRONG " + errno));
+        int fault = fault();  // a guest null read its own SIGSEGV handler recovers from: the JVM lives on
+        log("guest fault " + (fault == 1 ? "recovered" : "FAIL " + fault));
+        boolean ok = "aarch64".equals(cpu) && first == warm && call == 42 && thread == 100 && overloads && errno == 222 && fault == 1;
         log(ok ? "PASS" : "FAIL first=" + first + " warm=" + warm);
         long t7 = System.nanoTime();
         int px = gl();  // EGL pbuffer cleared to (1, 0.5, 0, 1): 0xff0080ff, read back as RGBA bytes

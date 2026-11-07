@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Sat, 7 Nov 2026 00:00:00 +0000
+Subject: [PATCH] libc: fault handlers chained behind the JVM when libjsig is loaded
+
+With HotSpot's libjsig preloaded (every app JVM, cli/env.cpp), a bionic library's SIGSEGV/SIGBUS/SIGILL/SIGFPE handler goes to
+sigaction as usual instead of being dropped (0018): libjsig records it and the JVM's own handler calls it for the faults that are not
+the JVM's (the native bridge's recovery of a fault in translated code, an app's own handler, a crash reporter on a real crash).
+Without libjsig 0018 holds.
+
+apklayer patch, patch 0042 of patches/bionic_translation (see docs/PATCHES.md).
+---
+ libc/libc.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/libc/libc.c b/libc/libc.c
+index 626d4dd..77fcdb2 100644
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -305,6 +305,9 @@ int bionic_sigismember(const bionic_sigset_t *set, int sig)
+ 	return (int)((local_set[bit / LONG_BIT] >> (bit % LONG_BIT)) & 1);
+ }
+
++/* apklayer patch: HotSpot's libjsig (LD_PRELOADed) defines it; then a fault handler is chained behind the JVM's, which runs it for faults that are not its own */
++extern void *JVM_get_signal_action(int sig) __attribute__((weak));
++
+ int bionic_sigaction(int sig, const struct bionic_sigaction *restrict act, struct bionic_sigaction *restrict oact)
+ {
+ 	verbose("%d, %p, %p", sig, (void *)act, (void *)oact);
+@@ -314,7 +317,7 @@ int bionic_sigaction(int sig, const struct bionic_sigaction *restrict act, struc
+ 		sig = SIGRTMIN;
+
+ 	struct sigaction goact = {0}, gact = {0};
+-	if (act && (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL || sig == SIGFPE)) { /* apklayer patch: see scripts/patch-bionic-translation.sh step 13 */
++	if (act && (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL || sig == SIGFPE) && !JVM_get_signal_action) { /* apklayer patch: see scripts/patch-bionic-translation.sh step 13 */
+ 		if (oact) {
+ 			sigaction(sig, NULL, &goact);
+ 			*oact = (struct bionic_sigaction){0};
