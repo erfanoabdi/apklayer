@@ -66,10 +66,13 @@ final class HubCallAudio {
 
     /** AudioDeviceBroker.initRoutingStrategyIds: the strategy of STREAM_VOICE_CALL. */
     private int strategy() {
+        if (strategy >= 0) return strategy;
+        NativeMedia.ensureInitialized();
         java.util.ArrayList<AudioProductStrategy> strategies = new java.util.ArrayList<>();
-        if (strategy < 0 && AudioProductStrategy.native_list_audio_product_strategies(strategies) == AudioSystem.SUCCESS)  // AudioSystemAdapter's list
-            for (AudioProductStrategy candidate : strategies)
-                if (candidate.getAudioAttributesForLegacyStreamType(AudioSystem.STREAM_VOICE_CALL) != null) { strategy = candidate.getId(); break; }
+        int status = AudioProductStrategy.native_list_audio_product_strategies(strategies);  // AudioSystemAdapter's list
+        for (AudioProductStrategy candidate : strategies)
+            if (candidate.getAudioAttributesForLegacyStreamType(AudioSystem.STREAM_VOICE_CALL) != null) { strategy = candidate.getId(); break; }
+        if (strategy < 0) System.out.println("[apklayer-hub] no communication strategy (status " + status + ", " + strategies.size() + " strategies)");
         return strategy;
     }
 }

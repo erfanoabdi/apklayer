@@ -38,7 +38,7 @@ final class CommCheck {
         AudioDeviceInfo chosen = available.get(available.size() - 1);
         require(audio.setCommunicationDevice(chosen) && chosen.equals(audio.getCommunicationDevice()), "communication device not selected");
         require(audio.isSpeakerphoneOn() == (chosen.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER), "speakerphone follows the communication device");
-        require(preferred().size() == 1 && preferred().get(0).getType() == chosen.getType(), "the policy's preferred call device " + preferred());
+        require(preferred().size() == 1 && preferred().get(0) == chosen.getType(), "the policy's preferred call device " + preferred());
         deviceCallback(audio);
         audio.setMode(AudioManager.MODE_IN_COMMUNICATION);
         try {
@@ -69,8 +69,7 @@ final class CommCheck {
         Object policy = Class.forName("android.media.IAudioPolicyService$Stub").getMethod("asInterface", android.os.IBinder.class).invoke(null, binder);
         return ((Number) policy.getClass().getMethod("getPhoneState").invoke(policy)).intValue();
     }
-    @SuppressWarnings("unchecked")
-    private static List<android.media.AudioDeviceAttributes> preferred() throws Exception {
+    private static List<Integer> preferred() throws Exception {  // the device types (AudioDeviceAttributes is a system API)
         Class<?> system = Class.forName("android.media.AudioSystem");
         int strategy = -1;
         java.util.ArrayList<Object> strategies = new java.util.ArrayList<>();
@@ -79,9 +78,11 @@ final class CommCheck {
             if (candidate.getClass().getMethod("getAudioAttributesForLegacyStreamType", int.class).invoke(candidate, AudioManager.STREAM_VOICE_CALL) != null) {
                 strategy = (int) candidate.getClass().getMethod("getId").invoke(candidate); break;
             }
-        List<android.media.AudioDeviceAttributes> devices = new java.util.ArrayList<>();
+        List<Object> devices = new java.util.ArrayList<>();
         system.getMethod("getDevicesForRoleAndStrategy", int.class, int.class, List.class).invoke(null, strategy, 1 /* DEVICE_ROLE_PREFERRED */, devices);
-        return devices;
+        List<Integer> types = new java.util.ArrayList<>();
+        for (Object device : devices) types.add((Integer) device.getClass().getMethod("getType").invoke(device));
+        return types;
     }
     // AudioManager's device callback: the current devices come first, on the main looper when no handler is given (this is a worker thread)
     private static void deviceCallback(AudioManager audio) throws Exception {

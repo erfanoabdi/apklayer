@@ -11,4 +11,8 @@ public class ShadowHostNativeAudioSystem {
         // The JNI adapter completes the original initializer immediately after capability registration.
         NativeMedia.ensureInitialized();
     }
+
+    /** The policy's product strategies (AudioSystemAdapter's list: the call strategy for the communication device, HubCallAudio) from the real JNI. */
+    @Implements(className = "android.media.audiopolicy.AudioProductStrategy", callNativeMethodsByDefault = true, isInAndroidSdk = false)
+    public static class ProductStrategy {}
 }

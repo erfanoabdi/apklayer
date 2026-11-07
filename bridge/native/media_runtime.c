@@ -76,7 +76,8 @@ int apklayer_register_audio(JNIEnv *env, void *runtime)
 {
     static const char *const names[] = {"register_android_media_AudioDeviceAttributes",
         "register_android_media_AudioEffectDescriptor", "register_android_media_AudioSystem",
-        "register_android_media_AudioTrack", "register_android_media_AudioRecord", "register_android_media_AudioAttributes"};
+        "register_android_media_AudioTrack", "register_android_media_AudioRecord", "register_android_media_AudioAttributes",
+        "register_android_media_AudioProductStrategies"};  /* the policy's strategies (the call strategy: apklayer.host.HubCallAudio) */
     return register_runtime_jni(env, runtime, names, sizeof names / sizeof *names, "audio");
 }
 
