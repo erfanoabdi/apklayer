@@ -9,7 +9,7 @@
 #   tools/stage vulkan [stage dir]       the Orb Vulkan loader build onto the VM (the loader keeps its SONAME; the mapping selects the renamed copy)
 #   tools/stage x86_64                   everything an x86_64 machine needs, one tar file: build/x86_64/apklayer-x86_64-stage.tar (docs/X86_64.md)
 #   tools/stage arm32                    the arm32 Android libraries of the 32-bit app process into build/arm32/android-libs (gsi_arm64's system/lib,
-#                                        apklayer's modules' 32-bit outputs; then tools/armhf/build.sh: docs/ARM32.md)
+#                                        apklayer's modules' 32-bit outputs; then tools/armhf/build.sh)
 # The VM is the one in tests/vm/local.conf.
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"

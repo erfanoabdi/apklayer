@@ -158,6 +158,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     if (arm32 && !l.hasArm32()) die(package + " needs the 32-bit runtime (" + l.arm32 + ": tools/armhf/build.sh), which is not staged");
     Layout lj = arm32 ? l.arm32Layout() : l;
     NativeEnv ne32 = arm32 ? nativeEnv(lj, inst) : NativeEnv{};
+    if (arm32) ne32.env["APKLAYER_NATIVE"] = l.native;  // the CLI it runs (other launches, the hub) is the 64-bit one, with the 64-bit runtime
     NativeEnv& nj = arm32 ? ne32 : ne;
     std::vector<std::string> jvm = windowJvmArgs(lj, inst, nj), window;
     if (mode == RunMode::Component) nj.env["APKLAYER_COMPONENT_HOST"] = "1";  // the launch's own environment (a spare gets it with its target)

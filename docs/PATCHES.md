@@ -56,7 +56,7 @@ before 1.8 ignores a subproject's default_options cpp_args), not a patch.
 ## Robolectric (`patches/robolectric/`, external/robolectric)
 | Patch | Purpose |
 |---|---|
-| 0001-native-runtime-loader-arm64 | DefaultNativeRuntimeLoader: arm64 Linux, real window and media natives |
+| 0001-native-runtime-loader-arm64 | DefaultNativeRuntimeLoader: arm64 Linux (and arm: the 32-bit app process), real window and media natives |
 | 0002-surface-control-real-layers | ShadowSurfaceControl: real SurfaceFlinger layers |
 | 0003-blast-buffer-queue-real | ShadowBlastBufferQueue: the real libgui BLASTBufferQueue |
 | 0004-window-manager-global-layers | ShadowWindowManagerGlobal: relayout2, window layers placed and stacked, frames clamped |

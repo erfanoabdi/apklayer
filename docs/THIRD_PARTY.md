@@ -43,6 +43,13 @@ The tree-host build reuses unchanged `FrameListener.class` and `ScreenUpdateHand
 | libmd, libbsd | libbsd.freedesktop.org releases, built from source | BSD-style / ISC (per file) |
 | libunwind | github.com/libunwind/libunwind release, built from source | MIT |
 
+## Repackaged in the 32-bit app process's runtime (tools/armhf/build.sh; not shipped yet)
+
+| Package | Origin | License |
+|---|---|---|
+| openjdk-21-jre-headless (armhf) | Ubuntu 24.04's armhf binary package, unchanged (jvm/) | GPL-2.0 with Classpath Exception |
+| glibc and the libraries the armhf parts link (armhf) | Ubuntu 24.04's armhf binary packages (libc6, libgcc-s1, libstdc++6, mesa, wayland, gstreamer, pipewire...), unchanged (sysroot/lib) | per package (LGPL-2.1+, MIT, ...) |
+
 ## License audit for a dual license (2026-10-28, not legal advice)
 
 Question: can apklayer be AGPL-3.0-or-later for everyone plus a commercial license (PLAN D5), distributable as deb/rpm/AUR/Flatpak/AppImage?

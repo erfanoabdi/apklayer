@@ -1,5 +1,5 @@
 #!/bin/sh
-# tools/armhf/build.sh [out]: the 32-bit app process's runtime (docs/PLAN.md "apps built for another CPU" 2(a), docs/ARM32.md) in <out>/arm32
+# tools/armhf/build.sh [out]: the 32-bit app process's runtime (docs/PLAN.md "apps built for another CPU" 2(a)) in <out>/arm32
 # (default build/arm32): the armhf meson build of the native parts (bionic_translation, the JNI shim, btload, the path layer, the host HALs) under
 # lib/apklayer, the armhf JRE (jvm/) on its own glibc (sysroot/lib: the closure of what they link), bin/java (that JVM on that loader) and
 # lib/apklayer/native/shim.jar (the shim where Robolectric's loader looks for it). Put the arm32 Android libraries (tools/stage arm32) in
@@ -49,7 +49,9 @@ cat > "$a/bin/java" <<'EOF'
 #!/bin/sh
 # the armhf JVM on its own loader and glibc (tools/armhf/build.sh): the host has no /lib/ld-linux-armhf.so.3
 r="$(dirname "$(dirname "$(readlink -f "$0")")")"
-exec "$r/sysroot/lib/ld-linux-armhf.so.3" --library-path "${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$r/sysroot/lib" "$r/jvm/bin/java" "$@"
+# LD_PRELOAD (armhf libraries) becomes the loader's --preload: the 64-bit programs the JVM runs would refuse it, noisily
+p="${LD_PRELOAD:-}"; unset LD_PRELOAD
+exec "$r/sysroot/lib/ld-linux-armhf.so.3" --library-path "${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$r/sysroot/lib" ${p:+--preload "$p"} "$r/jvm/bin/java" "$@"
 EOF
 chmod +x "$a/bin/java"
 echo "arm32 runtime: $(du -sh "$a" | cut -f1) in $a ($(ls "$s" | wc -l) glibc-side libraries)"
