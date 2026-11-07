@@ -81,6 +81,10 @@ with selectors.DefaultSelector() as events:
             assert '[hello-hub-server] destroy hello.hubserver.EchoService' in target_log, target_log[-4000:]
             assert not any('displaywindow=' in line for line in target_log.splitlines()), 'service host created an app display'
             print('PASS Context.bindService: generated AIDL/Bundle/callback, permissions, null binding, process restart and unbind', flush=True)
+        elif os.environ.get('APKLAYER_SANDBOX') == '1':  # the app runs as its own uid: servicemanager refuses app uids a service name, as on Android
+            start('server', 'hello.binderserver')
+            wait_for('server', '[hello-binder-server] published=false')
+            print('PASS sandbox: an app uid may not add a service', flush=True)
         else:
             start('server', 'hello.binderserver')
             published = wait_for('server', '[hello-binder-server] published=true')
@@ -94,7 +98,7 @@ with selectors.DefaultSelector() as events:
                 wait_for('hub', '[apklayer-hub] died hello.binderserver')
                 wait_for('hub', '[apklayer-hub] died hello.binderclient')
                 print('PASS hub process registration, native caller identities and death cleanup', flush=True)
-        if not bound_mode:
+        if not bound_mode and os.environ.get('APKLAYER_SANDBOX') != '1':
             print('PASS two JVMs: real Binder call/callback, caller identities and death notification', flush=True)
     finally:
         for proc in children.values():

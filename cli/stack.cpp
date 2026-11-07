@@ -10,7 +10,10 @@
 #include <poll.h>
 #include <set>
 #include <signal.h>
+#include <linux/nsfs.h>
 #include <sys/file.h>
+#include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <sys/signalfd.h>
 #include <sys/wait.h>
 #include <sys/socket.h>
@@ -130,13 +133,25 @@ bool waitReady(const Layout& l, const NativeEnv& ne, int deathPidfd) { return wa
 
 bool alive(int pid) { return pid > 0 && kill(pid, 0) == 0; }
 
+// A process in a user namespace this user made (the sandbox's app processes: their environment is not readable, their command line an Android
+// process name). shortcut: any such namespace counts (a container's too) when a recorded pid is checked; upgrade by comparing with the stack's
+static bool inOwnUserNs(int pid) {
+    int fd = open(("/proc/" + std::to_string(pid) + "/ns/user").c_str(), O_RDONLY | O_CLOEXEC);
+    struct stat target{}, own{};
+    uid_t owner = (uid_t)-1;
+    bool ours = fd >= 0 && fstat(fd, &target) == 0 && ::stat("/proc/self/ns/user", &own) == 0 && target.st_ino != own.st_ino
+                && ioctl(fd, NS_GET_OWNER_UID, &owner) == 0 && owner == getuid();
+    if (fd >= 0) close(fd);
+    return ours;
+}
+
 // SIGTERM, then wait for the exit on a pidfd (SIGKILL after 5 s): `stop` returns with the processes gone.
 void terminate(int pid) {
     if (!alive(pid)) return;
     // a recycled pid is not ours: every process apklayer starts carries APKLAYER_INSTANCE (its command line may be an Android process name)
     if (auto env = readFile("/proc/" + std::to_string(pid) + "/environ"); !env || env->find("APKLAYER_INSTANCE=") == std::string::npos) {
         auto cmd = readFile("/proc/" + std::to_string(pid) + "/cmdline");
-        if (!cmd || cmd->find("apklayer") == std::string::npos) return;
+        if ((!cmd || cmd->find("apklayer") == std::string::npos) && !inOwnUserNs(pid)) return;
     }
     int fd = pidfdOpen(pid);
     kill(pid, SIGTERM);

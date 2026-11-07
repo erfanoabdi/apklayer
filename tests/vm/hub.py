@@ -60,7 +60,9 @@ def own_data_dir(pkg):
     info = dict(l.split('\t', 1) for l in subprocess.run(['bin/apklayer', 'info', pkg], env=ENV, capture_output=True, text=True, check=True).stdout.splitlines() if '\t' in l)
     want = '/apklayer/%s/app-data/%s' % ('0' if INSTANCE == 'default' else INSTANCE, pkg)
     assert info['dataDir'].endswith(want), 'app data of %s not per instance: %s' % (pkg, info['dataDir'])
-    assert Path(info['dataDir'], 'app/app_webview').is_dir(), 'no WebView profile in ' + info['dataDir']
+    profile = Path(info['dataDir'], 'app/app_webview')
+    # sandboxed (APKLAYER_SANDBOX=1) the data is the app uid's own, 0700: the user looks through sudo
+    assert profile.is_dir() or os.environ.get('APKLAYER_SANDBOX') == '1' and subprocess.run(['sudo', '-n', 'test', '-d', str(profile)]).returncode == 0, 'no WebView profile in ' + info['dataDir']
     # an apps/<pkg>/data of before 2026-11-04 may stay: it is the default instance's, moved there at that instance's next run (cli/apps.cpp appDataDir)
     print('[wv] app data per instance: ' + info['dataDir'], flush=True)
 
