@@ -64,6 +64,17 @@ final class HostCertificate {
         return out.toString();
     }
 
+    /**
+     * Whether an APK may replace the installed one, as PackageManagerService's reconcile checks it: the same signer, or a key rotation either way
+     * (the update's lineage has the installed signer with the right to keep its data, or the installed one's lets the update roll back to it).
+     */
+    static boolean canUpdate(java.io.File installed, java.io.File update) {
+        android.content.pm.SigningDetails old = details(installed), now = details(update);
+        if (old == null || now == null) return digest(installed).equals(digest(update));
+        return now.checkCapability(old, android.content.pm.SigningDetails.CertCapabilities.INSTALLED_DATA)
+                || old.checkCapability(now, android.content.pm.SigningDetails.CertCapabilities.ROLLBACK);
+    }
+
     /** A v1-only APK: the certificate in its META-INF signature block. shortcut: the block's first certificate (one signer without a chain, as APKs are signed); verify the chain if a multi-signer APK shows up. */
     private static Signature[] jarSigner(java.io.File apk) {
         try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(apk)) {

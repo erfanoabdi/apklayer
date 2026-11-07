@@ -90,7 +90,7 @@ final class AppMetadata {
 
     /**
      * The signer of the new package (its base and every split, as PackageManagerService requires) and, on an update, whether the installed one has another
-     * (signerMismatch: install refuses it). An unsigned APK has signer "": install refuses it, as Android does.
+     * that its signing lineage does not continue (signerMismatch: install refuses it). An unsigned APK has signer "": install refuses it, as Android does.
      */
     private static void signer(Properties info, Path dir, String pkg) throws IOException {
         String signer = HostCertificate.digest(dir.resolve("base.apk").toFile());
@@ -103,7 +103,7 @@ final class AppMetadata {
         info.setProperty("signer", signer);
         String apps = System.getProperty("apklayer.apps");
         java.io.File installed = apps == null ? null : Path.of(apps, pkg, "base.apk").toFile();
-        if (installed != null && installed.isFile() && !HostCertificate.digest(installed).equals(signer)) info.setProperty("signerMismatch", "true");
+        if (installed != null && installed.isFile() && !HostCertificate.canUpdate(installed, dir.resolve("base.apk").toFile())) info.setProperty("signerMismatch", "true");
     }
 
     private AppMetadata() {}

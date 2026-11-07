@@ -15,6 +15,12 @@ python3 -m http.server $port --bind 127.0.0.1 --directory $www > $www/server.log
 server=$!
 trap 'kill $server; rm -rf $www; bin/apklayer ime disable hello.system >/dev/null' EXIT  # an enabled IME would bind to the fields of later groups
 status=0
+# an update across a key rotation, as on Android: hello.rotated signed with its past key, then hello-rotated (its v3 lineage continues that key) over it
+unzip -p .tests/apks/hello-rotated.apk assets/hello-rotated-past.apk > $APKLY_STATE/rotated-past.apk
+bin/apklayer uninstall hello.rotated >/dev/null 2>&1
+past=$(bin/apklayer install $APKLY_STATE/rotated-past.apk 2>&1) update=$(bin/apklayer install .tests/apks/hello-rotated.apk 2>&1)
+if [[ $past == *installed* && $update == *installed* && $update != *INSTALL_FAILED* ]]; then echo "[sys] PASS rotated update over the past key's install"
+else echo "[sys] FAIL rotated update: $(tail -1 <<<"$past") / $(tail -1 <<<"$update")"; status=1; fi
 launch() {  # launch <scenario> <out>: hello.system until it reports DONE, then the instance stopped
     APKLAYER_JOPTS="-Dhello.sys=$1 -Dapklayer.runms=90000 -Dapklayer.logcat=true -Dhello.url=http://127.0.0.1:$port/check.bin" bin/apklayer run hello.system > $2 2>&1 &
     run=$!
