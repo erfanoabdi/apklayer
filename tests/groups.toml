@@ -110,6 +110,10 @@ apps = ["hello-system", "hello-accounts", "hello-accounts-hidden", "hello-rotate
 needs = ["com.android.providers.contacts", "com.android.documentsui"]
 run = ["tests/vm/system-apps.sh"]
 
+[first-start]
+# a fresh data home of its own: the providers and DocumentsUI installed from the prebuilts' system-apps, then the first start (boot settings, Files stays up)
+run = ["python3 -u tests/vm/first-start.py"]
+
 [accounts]
 apps = ["hello-system", "hello-accounts", "hello-accounts-hidden"]
 run = ["tests/vm/accounts.sh"]

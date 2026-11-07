@@ -87,7 +87,7 @@ enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
 #define MSG_ATTACH_INPUT 9   /* app -> shell: {own window id, title of the window whose input, state and size this app takes over} */
 #define DBUF_MAX 8
 #define CLIENT_MAX_FDS 16
-#define MSG_WINDOW_SIZE 10   /* app -> shell: {own window id, logical w, h}: the app wants its window this shape (orientation); the shell fits it to the screen and answers with CONFIGURE */
+#define MSG_WINDOW_SIZE 10   /* app -> shell: {own window id, logical w, h}: the app's activity is fixed to this shape (orientation); the shell fits it to the screen and answers with CONFIGURE (0 x 0: no fixed orientation) */
 #define MSG_VSYNC_REQUEST 7
 #define MSG_TEST_INPUT 11    /* test -> shell (testinput.c) */
 #define MSG_TEST_DONE 115    /* shell -> test: {i32 result} */
@@ -129,6 +129,7 @@ struct window {
     int told_scale;             /* scale last announced to the app */
     int cfg_w, cfg_h;           /* logical content size (window geometry less the title bar) the app was told, 0 = not yet */
     int float_w, float_h;       /* content size before a maximize/fullscreen/tile: restored when the compositor leaves the size to us */
+    int lock;                   /* the top activity's fixed orientation (MSG_WINDOW_SIZE): 1 landscape, 2 portrait, 0 none */
     int bounds_w, bounds_h;     /* xdg_toplevel.configure_bounds: the largest window geometry that fits the work area, 0 = unknown */
     int maximized, activated;   /* xdg toplevel states (maximized: also fullscreen) */
     int constrained;            /* maximized, fullscreen or tiled: the compositor decides the size */

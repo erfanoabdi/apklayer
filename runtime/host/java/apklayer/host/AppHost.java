@@ -340,11 +340,13 @@ public final class AppHost implements Runnable {
         if (req == lastOrientation) return;
         lastOrientation = req;
         boolean landscape = req == 0 || req == 6 || req == 11, portrait = req == 1 || req == 7 || req == 12;
-        if ((landscape && logicalW < logicalH) || (portrait && logicalW > logicalH)) {
-            System.out.println("[apklayer] orientation " + (landscape ? "landscape" : "portrait") + " requested");
-            if (shell != null) shell.sendWindowSize(logicalH, logicalW);  // the shell fits it to the screen and answers with a configure
-            else hostResize(logicalH, logicalW, logicalScale, logicalDpi, 0);
-        }
+        boolean turn = (landscape && logicalW < logicalH) || (portrait && logicalW > logicalH);
+        if (turn) System.out.println("[apklayer] orientation " + (landscape ? "landscape" : "portrait") + " requested");
+        // the shell keeps a fixed orientation's shape through drag resizes too (0 x 0: none), turns the window when it has the other shape and
+        // answers with a configure
+        int longer = Math.max(logicalW, logicalH), shorter = Math.min(logicalW, logicalH);
+        if (shell != null) shell.sendWindowSize(landscape ? longer : portrait ? shorter : 0, landscape ? shorter : portrait ? longer : 0);
+        else if (turn) hostResize(logicalH, logicalW, logicalScale, logicalDpi, 0);
     }
 
 

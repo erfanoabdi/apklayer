@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: apklayer <apklayer@localhost>
+Subject: [PATCH] ShadowWindowManagerGlobal/ShadowUiAutomation: child windows go with their parent, dim layers follow visibility
+
+apklayer patch: removing a window removes its sub-windows (WindowState.removeImmediately), so an orphaned popup gets no relayout, and
+UiAutomation skips a sub-window whose parent window is gone (WindowOrder.keys -1): no input. relayout tells WindowSurface whether the
+window is visible, which shows or hides its FLAG_DIM_BEHIND dim layer.
+
+Against external/robolectric 87aa52b08 (REVISION), after 0004, 0017 and 0019. Applied by runtime/meson.build onto the staged
+upstream sources; the result is compiled into native-runtime.jar ahead of Robolectric_all.jar.
+---
+diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java
+@@ -310,9 +310,23 @@
+       IWindow window = (IWindow) args[0];
+       WindowInfo removed = windows.remove(window);
+       if (removed != null) removed.surface.close();
++      removeChildren(window.asBinder());
+       // TODO: This transfers control to the last window, should there be another heuristic here?
+       // TODO: Streams.findLast is not available in Android Guava yet.
+       transferWindowInsetsControlTo(windows.values().stream().reduce((a, b) -> b).orElse(null));
++    }
++
++    // apklayer patch: WindowState.removeImmediately removes the child windows (sub-windows, their token is this window) with it:
++    // a popup of a dismissed dialog gets no more relayouts and no input (WindowOrder.keys)
++    private void removeChildren(IBinder token) {
++      List<IWindow> children = new ArrayList<>();
++      for (Entry<IWindow, WindowInfo> e : windows.entrySet()) {
++        if (e.getValue().attrs.token == token && WindowOrder.isSubWindow(e.getValue().attrs.type)) children.add(e.getKey());
++      }
++      for (IWindow child : children) {
++        windows.remove(child).surface.close();
++        removeChildren(child.asBinder());
++      }
+     }
+ 
+     protected int relayout(Object[] args) {
+@@ -379,7 +393,7 @@
+                     ? windowLayoutResult.insetsState
+                     : findFirst(InsetsState.class, args))
+                 : null);
+-        windowInfo.surface.place(layer, windowInfo, windows);
++        windowInfo.surface.place(layer, windowInfo, windows, (int) args[requestedSizeIdx + 2] == View.VISIBLE);
+         if (Boolean.getBoolean("apklayer.tracewindows")) {
+           System.err.println(
+               "[apklayer] window "
+diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUiAutomation.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUiAutomation.java
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUiAutomation.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUiAutomation.java
+@@ -289,6 +289,7 @@
+     // apklayer patch: the window manager's stacking (WindowOrder), the screen's too: a sub-window stacks with its parent window,
+     // so a popup of the activity stays below a dialog over the activity
+     long[] keys = WindowOrder.keys(viewRootImpls.stream().map(ViewRootImpl::getView).collect(toList()), params);
++    roots.removeIf(r -> keys[r.getIndex()] < 0); // apklayer patch: a sub-window whose parent window is gone has no window (WindowOrder.keys)
+     roots.sort(Comparator.comparingLong((Root r) -> keys[r.getIndex()]).reversed());
+     return ImmutableList.copyOf(roots);
+   }

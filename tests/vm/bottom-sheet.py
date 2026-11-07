@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Dialogs at the bottom of the screen take taps where they are (hello.input's Sheet, -Dhello.sheet): a floating dialog with gravity BOTTOM
 (its button, a tap outside cancels, Back cancels) and a Material-style bottom sheet (a full-screen dimmed dialog: its button, a tap on the
-area outside the sheet cancels, a downward drag on its handle dismisses). Google Meet's "Share this joining info" sheet ate every tap,
+area outside the sheet cancels, a downward drag on its handle dismisses; FLAG_DIM_BEHIND dims the activity below it), and a dialog's popup left
+behind when the dialog goes (the window manager removes it with its parent: a tap there reaches the activity). Google Meet's "Share this joining info" sheet ate every tap,
 and stayed above the green room that its Join started (a newer activity covers an older one's dialogs)."""
 import os
 from pathlib import Path
@@ -21,13 +22,20 @@ ENV = dict(instance.ENV, APKLAYER_RUNTIME_DEBUG='1', APKLAYER_DISPLAY_WIDTH='480
 SHOWN = re.compile(r'sheet (\d) shown sheet=(-?\d+),(-?\d+),(\d+),(\d+) window=(-?\d+),(-?\d+),(\d+),(\d+)')
 seen = []
 done = set()
-shown = gone = over = None
+shown = gone = over = dimmed = clear = None
 
 
 def level(shot):
     """Brightness where the sheet's handle is (its gray, or the activity once the sheet is gone)."""
     im = pixels.rgb(shot)
     return sum(im.getpixel((im.width // 2, im.height * 470 // 600))) // 3
+
+
+def upper(shot):
+    """Mean brightness of the activity's upper part (its field and buttons), outside every sheet."""
+    im = pixels.rgb(shot)
+    px = [sum(im.getpixel((x, y))) / 3 for x in range(0, im.width, 8) for y in range(im.height // 6, im.height // 2, 8)]
+    return sum(px) / len(px)
 
 
 def act(stage, x, y, w, h):
@@ -48,7 +56,7 @@ app = subprocess.Popen(['bin/apklayer', 'run', PKG], env=ENV, stdout=subprocess.
 try:
     selector = selectors.DefaultSelector()
     selector.register(app.stdout, selectors.EVENT_READ)
-    end = time.monotonic() + 45
+    end = time.monotonic() + 55
     pending, outside = b'', None
     with open(instance.OUT / 'bottom-sheet.log', 'wb') as log:
         while True:
@@ -67,7 +75,9 @@ try:
                 if m:
                     stage, x, y, w, h = (int(n) for n in m.groups()[:5])
                     assert y > 300, 'sheet %d is not at the bottom: %s' % (stage, line)
-                    if stage == 3: shown = level(instance.capture('sheet shown', PKG))
+                    if stage == 3:
+                        shot = instance.capture('sheet shown', PKG)
+                        shown, dimmed = level(shot), upper(shot)
                     if stage == 6: over = level(instance.capture('sheet over popup', PKG))
                     outside = act(stage, x, y, w, h)
                 elif 'covering activity shown' in line:  # stage 5: the newer activity is above the older one's sheet, for the screen and for taps
@@ -75,6 +85,10 @@ try:
                     r, g, b = im.getpixel((im.width // 2, im.height * 470 // 600))[:3]
                     assert r > 150 and g < 90 and b < 90, 'the sheet of the activity below is drawn over the covering activity: %s' % ((r, g, b),)
                     instance.inject(PKG, 'tap:240,560')
+                elif 'sheet 7 orphaned' in line:
+                    instance.inject(PKG, 'tap:240,100')  # where the dialog's popup was
+                elif 'activity touched' in line:
+                    done.add('orphan tap')
                 elif 'covering activity tapped' in line:
                     done.add('covering tapped')
                 elif outside and re.search(r'sheet [1356] button tapped', line):
@@ -84,16 +98,20 @@ try:
                 elif re.search(r'sheet \d (cancelled|dragged)', line):
                     done.add(' '.join(line.split()[2:4]))
                 elif 'sheet stages done' in line:
-                    gone = level(instance.capture('sheet gone', PKG))
+                    shot = instance.capture('sheet gone', PKG)
+                    gone, clear = level(shot), upper(shot)
                     instance.stop()
-    want = {'1 button', '1 cancelled', '2 cancelled', '3 button', '3 cancelled', '4 dragged', 'covering tapped', '5 button', '5 cancelled', '6 button', '6 cancelled'}
+    want = {'1 button', '1 cancelled', '2 cancelled', '3 button', '3 cancelled', '4 dragged', 'covering tapped', '5 button', '5 cancelled', '6 button', '6 cancelled', 'orphan tap'}
     assert done == want, 'missing: %s' % (want - done)
     assert not any('popup under the sheet tapped' in l for l in seen), 'a tap on the sheet reached a popup of the activity below it'
+    assert not any('orphan popup tapped' in l for l in seen), 'a popup whose parent dialog is gone got a tap'
+    print('activity brightness under the dimmed sheet: %.0f, without it: %.0f' % (dimmed, clear), flush=True)
+    assert clear > 30 and dimmed < clear * 0.75, 'FLAG_DIM_BEHIND (dimAmount 0.5) did not dim the activity'
     print('brightness at the handle of sheet 3: %d, after the sheets: %d' % (shown, gone), flush=True)
     assert abs(shown - gone) > 40, 'the sheet stays on the screen after the dialogs went away'  # the gray handle against the activity (its theme decides dark or light)
     print('brightness at the handle of sheet 6 over the popup: %d' % over, flush=True)
     assert abs(over - shown) < 10, 'the popup of the activity is drawn over the sheet'
-    print('PASS bottom dialogs: button taps, an outside tap and Back cancel, a downward drag dismisses the sheet; the sheet is gone from the screen; a popup of the activity below the sheet gets none of its taps; a newer activity covers the sheet', flush=True)
+    print('PASS bottom dialogs: button taps, an outside tap and Back cancel, a downward drag dismisses the sheet; the sheet is gone from the screen; a popup of the activity below the sheet gets none of its taps; a newer activity covers the sheet; the dim behind the sheet; an orphaned popup gets no taps', flush=True)
 finally:
     instance.stop()
     if app.poll() is None: os.killpg(app.pid, signal.SIGKILL)
