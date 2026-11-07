@@ -63,7 +63,9 @@ std::string findJava(const Layout&) {
     glob_t found{};
     std::string result = "java";
     // JDK 21 first (the tested one; the host patches java.base), any architecture's package name (arm64, amd64)
-    if (glob("/usr/lib/jvm/java-21-openjdk-*/bin/java", 0, nullptr, &found) == 0 && found.gl_pathc > 0) result = found.gl_pathv[0];
+    // (temurin-21-jdk: Adoptium's RPM path, also the Sailfish OS package's: rpm/temurin-21-jdk.spec)
+    if ((glob("/usr/lib/jvm/java-21-openjdk-*/bin/java", 0, nullptr, &found) == 0 ||
+         glob("/usr/lib/jvm/temurin-21-jdk*/bin/java", 0, nullptr, &found) == 0) && found.gl_pathc > 0) result = found.gl_pathv[0];
     globfree(&found);
     return result;
 }
