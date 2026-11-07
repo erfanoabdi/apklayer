@@ -43,7 +43,9 @@ try:
                     dumps += 1
                 if os.environ.get('GLBENCH_SHOT') and line.startswith('glbench: android') and 'fps=' in line:  # the window as SurfaceFlinger shows it after each scene
                     shot = '%s.%s.png' % (os.environ['GLBENCH_SHOT'], '.'.join(line.split()[2:4]))
-                    subprocess.run([os.environ.get('APKLAYER_BIN', 'bin/apklayer'), 'screenshot', 'hello.glbench', shot], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                    # twice, the second kept: the next scene has just begun and the first capture can still show the last frame of this one
+                    for _ in range(2):
+                        subprocess.run([os.environ.get('APKLAYER_BIN', 'bin/apklayer'), 'screenshot', 'hello.glbench', shot], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
             if any('glbench: done' in l for l in text):
                 break
 finally:
