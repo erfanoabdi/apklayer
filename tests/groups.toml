@@ -218,6 +218,11 @@ run = ["python3 -u tests/vm/gpu-window-run.py"]
 apps = ["hello-glbench"]
 run = ["python3 -u tests/vm/fences.py"]
 
+[window-formats]
+# 10-bit and half-float EGL window configs (AR30, XR30, AB4H, XB4H) reach the screen: screenshots during glbench's clear scene
+apps = ["hello-glbench"]
+run = ["python3 -u tests/vm/window-formats.py"]
+
 [texture-view]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/texture-view.py"]
