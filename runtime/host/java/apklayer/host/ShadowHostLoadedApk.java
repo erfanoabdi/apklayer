@@ -29,4 +29,8 @@ public class ShadowHostLoadedApk extends ShadowLoadedApk {
         ShadowHostPackageManager.installedPaths(info);
         return info.splitSourceDirs;
     }
+
+    /** The same split paths for an activity's context (ContextImpl.createActivityContext reads mSplitResDirs, set from the ApplicationInfo
+     *  before installedPaths filled its split paths: an activity saw only the base's resources). */
+    @Implementation protected String[] getSplitResDirs() { return getSplitPaths(null); }
 }
