@@ -5,6 +5,7 @@ import android.graphics.HardwareRenderer;
 import android.graphics.RenderNode;
 import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
+import org.robolectric.shadow.api.ShadowPicker;
 import org.robolectric.shadows.ShadowNativeHardwareRenderer;
 
 /** Robolectric's native HardwareRenderer shadow, except for createHardwareBitmap (Bitmap.createBitmap(Picture), Compose's
@@ -16,5 +17,10 @@ public class ShadowHostHardwareRenderer extends ShadowNativeHardwareRenderer {
     protected static Bitmap createHardwareBitmap(RenderNode node, int width, int height) {
         return NativeBinding.call(HardwareRenderer.class, "nCreateHardwareBitmap", new Class<?>[] {long.class, int.class, int.class},
                 node.mNativeRenderNode, width, height);
+    }
+
+    /** Robolectric picks HardwareRenderer's shadow (legacy or native graphics): HostShadowProvider.getShadowPickerMap names this one. */
+    public static final class Picker implements ShadowPicker<Object> {
+        @Override public Class<?> pickShadowClass() { return ShadowHostHardwareRenderer.class; }
     }
 }

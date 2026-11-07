@@ -16,7 +16,6 @@ public final class HostShadowProvider implements ShadowProvider {
     @Override public void reset() {}  // the tree's ShadowProvider (Robolectric_all.jar); Maven's Robolectric takes a ClassTracker
 
     @Override public String[] getProvidedPackageNames() { return new String[0]; }
-
     @Override public Collection<Map.Entry<String, String>> getShadows() {
         var entries = new ArrayList<>(List.of(
                 Map.entry("android.app.ApplicationPackageManager", ShadowHostPackageManager.class.getName()),
@@ -110,7 +109,6 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.hardware.usb.UsbRequest", HostPlainShadows.UsbRequest.class.getName()),
                 Map.entry("android.os.SystemProperties", ShadowHostSystemProperties.class.getName()),
                 Map.entry("android.hardware.HardwareBuffer", ShadowHostNativeHardwareBuffer.class.getName()),
-                Map.entry("android.graphics.HardwareRenderer", ShadowHostHardwareRenderer.class.getName()),
                 Map.entry("android.app.DownloadManager", ShadowHostDownloadManager.class.getName()),  // the real one talks to DownloadProvider (DownloadStorageProvider reads it)
                 Map.entry("android.util.Xml", ShadowHostXml.class.getName()),
                 Map.entry("dalvik.system.VMRuntime", ShadowHostVMRuntime.class.getName()),
@@ -149,6 +147,7 @@ public final class HostShadowProvider implements ShadowProvider {
     @Override public Map<String, String> getShadowPickerMap() {
         return Map.of("android.content.res.ApkAssets", ShadowHostApkAssets.Picker.class.getName(),
                 "android.os.MessageQueue", ShadowHostMessageQueue.Picker.class.getName(),
-                "android.database.CursorWindow", ShadowHostRealCursorWindow.Picker.class.getName());
+                "android.database.CursorWindow", ShadowHostRealCursorWindow.Picker.class.getName(),
+                "android.graphics.HardwareRenderer", ShadowHostHardwareRenderer.Picker.class.getName());
     }
 }

@@ -19,5 +19,5 @@ finally:
 print('\n'.join(lines))
 out = '\n'.join(lines)
 assert 'hwbitmap: readback ff0000ff ffff8000' in out, 'a HARDWARE copy does not read back'
-assert 'hwbitmap: picture HARDWARE ff00ff00' in out, 'Bitmap.createBitmap(Picture) gave no HARDWARE bitmap with the recorded colour'
+assert 'hwbitmap: pictures 20/20' in out, 'Bitmap.createBitmap(Picture) gave no HARDWARE bitmap with the recorded colour'
 print('PASS hwbitmap: HARDWARE copy and Bitmap.createBitmap(Picture) read back')
