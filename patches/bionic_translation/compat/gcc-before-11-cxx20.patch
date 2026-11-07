@@ -1,0 +1,17 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer compat: -std=c++20 for gcc before 11
+
+gcc 10 (Sailfish OS 5.0) knows no c++2b; libstdc++_standalone builds as C++20 there.
+Applied by meson.build after gcc-before-13-cxx2b.patch only when the compiler is gcc older than 11.
+---
+diff --git a/meson.build b/meson.build
+--- a/meson.build
++++ b/meson.build
+@@ -155,7 +155,7 @@ stdcpp_bio = shared_library('stdc++_bio',
+ 		'libstdc++_standalone/include/'
+ 	],
+ 	cpp_args: [
+-		'--std=c++2b'
++		'--std=c++20'
+ 	]
+ )

@@ -75,7 +75,9 @@ if host_machine.system() == 'linux'
     fs.read(p)  # a changed or new patch reconfigures
   endforeach
   message(run_command(apply, 'bionic_translation', bt_src, check: true).stdout().strip())
-  if cc.version().version_compare('<13')  # Ubuntu 22.04: gcc 11
+  if cc.version().version_compare('<11')  # Sailfish OS 5.0: gcc 10 (one series: the second patch is made on the first)
+    run_command(apply, compat / 'gcc-before-13-cxx2b.patch', compat / 'gcc-before-11-cxx20.patch', bt_src, check: true)
+  elif cc.version().version_compare('<13')  # Ubuntu 22.04: gcc 11
     run_command(apply, compat / 'gcc-before-13-cxx2b.patch', bt_src, check: true)
   endif
   unwind = dependency('libunwind', required: false)
