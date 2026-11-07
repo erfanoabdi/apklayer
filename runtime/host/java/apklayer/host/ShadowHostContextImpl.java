@@ -35,13 +35,21 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
         return AppClassLoader.app != null ? AppClassLoader.app : super.getClassLoader();
     }
     @Implementation protected Object getSystemService(String name) {
+        // A manager whose Robolectric shadow holds the system service's state (providers and fixes, battery, power, roles ...: the host fills the
+        // application's at start, HostLocation & co.) is one per process, as the one service behind it on Android: an activity's own ContextImpl
+        // (robolectric.createActivityContexts) got a fresh manager, and an activity's gps listener never got the fixes
+        android.app.Application app = android.app.ActivityThread.currentApplication();
+        Context base = app == null ? null : app.getBaseContext();
+        if (name != null && SHADOW_STATE_SERVICES.contains(name) && base != null && base != real) return base.getSystemService(name);
         Object service = (Object) Shadow.directlyOn(real, "android.app.ContextImpl", "getSystemService", ClassParameter.from(String.class, name));
         if (Boolean.getBoolean("apklayer.tracesvc")) System.out.println("[apklayer] getSystemService " + name + " -> " + service + " (" + real.getClass().getSimpleName() + ", " + Thread.currentThread().getName() + ")");
         if (service == null && Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] no system service " + name + " for " + real.getPackageName());
         if (name != null && fakeChecked.add(name)) reportFake(name, service);
         return service;
     }
-    private static final java.util.Set<String> fakeChecked = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final java.util.Set<String> SHADOW_STATE_SERVICES = java.util.Set.of(Context.LOCATION_SERVICE, Context.BATTERY_SERVICE, Context.POWER_SERVICE,
+            Context.ROLE_SERVICE, Context.STORAGE_SERVICE, Context.CONNECTIVITY_SERVICE, Context.WIFI_SERVICE, Context.UI_MODE_SERVICE, Context.CLIPBOARD_SERVICE);
+    private static final java.util.Set<String> fakeChecked =java.util.concurrent.ConcurrentHashMap.newKeySet();
     /** Once per service name: none at all, or a manager whose Robolectric shadow may answer without reaching any binder. */
     private static void reportFake(String name, Object service) {
         try {
