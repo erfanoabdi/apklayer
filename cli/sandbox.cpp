@@ -14,6 +14,7 @@
 #include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <sys/xattr.h>
 #include <unistd.h>
 
 namespace apklayer {
@@ -98,6 +99,19 @@ int chownOne(const char* path, const struct stat*, int, FTW*) { return lchown(pa
 void chownTree(const std::string& dir, uid_t id) {
     chownTo = id;
     if (nftw(dir.c_str(), chownOne, 16, FTW_PHYS) != 0) fprintf(stderr, "apklayer: cannot give %s to uid %u: %s\n", dir.c_str(), id, strerror(errno));
+}
+
+// The instance's shared storage (/storage/emulated/0) is every app's, as Android's sdcard emulation makes it: each directory open to all and
+// with a default ACL that makes what anyone creates there read-write for all (an app's umask does not apply), the user's own files included.
+// shortcut: no per-app media rules (scoped storage); MediaProvider and the pickers are the Android-side gates.
+int openStorageDir(const char* path, const struct stat* st, int type, FTW*) {
+    if (type != FTW_D) return 0;
+    struct __attribute__((packed)) { uint32_t version; struct __attribute__((packed)) { uint16_t tag, perm; uint32_t id; } entry[3]; } acl =
+        {2, {{0x01, 7, ~0u}, {0x04, 7, ~0u}, {0x20, 7, ~0u}}};  // POSIX ACL xattr: user::rwx group::rwx other::rwx
+    if ((st->st_mode & 07777) != 0777) chmod(path, 0777);
+    char current[64];
+    if (getxattr(path, "system.posix_acl_default", current, sizeof current) != (ssize_t)sizeof acl) setxattr(path, "system.posix_acl_default", &acl, sizeof acl, 0);
+    return 0;
 }
 
 bool under(const std::string& path, const std::string& dir) { return path == dir || path.rfind(dir + "/", 0) == 0; }
@@ -302,6 +316,7 @@ int sandboxExec(const Layout& l, const Instance& inst, const std::vector<std::st
         struct stat st{};
         if (::stat(data.c_str(), &st) == 0 && st.st_uid != uid) chownTree(data, uid);  // the app's files are its own uid's (data from before the sandbox too)
         chmod(data.c_str(), 0700);
+        nftw(realPath(inst.storageDir).c_str(), openStorageDir, 16, FTW_PHYS);
         for (const std::string& f : listDir(appDir(l, package)))  // its APKs readable by its uid (installs before cli/apps.cpp made them 0644)
             if (f.size() > 4 && f.substr(f.size() - 4) == ".apk") chmod(join(appDir(l, package), f).c_str(), 0644);
         // a launch's intent file (APKLAYER_INTENT_FILE, wherever its writer put it) goes with it into the app's own tmp, consumed as the app would
