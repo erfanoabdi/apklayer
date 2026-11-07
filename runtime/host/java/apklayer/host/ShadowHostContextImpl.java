@@ -50,6 +50,13 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
             else if (shadow != null && shadow.getClass().getName().startsWith("org.robolectric.shadows.")) FakeLog.hit(name, "getSystemService=" + shadow.getClass().getSimpleName());
         } catch (Throwable notShadowed) { /* not an instrumented manager */ }
     }
+    /**
+     * Activity.requestPermissions' short circuit asks this first (PermissionManagerService on a device; Robolectric's null binder answered GRANTED for
+     * everything): GRANTED for a held permission, else REQUESTABLE, so the request reaches the prompt (HostPortals.requestPermissions), which knows the rest.
+     */
+    @Implementation protected int getPermissionRequestState(String permission) {
+        return real.checkSelfPermission(permission) == android.content.pm.PackageManager.PERMISSION_GRANTED ? 0 : 1;  // Context.PERMISSION_REQUEST_STATE_GRANTED, _REQUESTABLE
+    }
     /** An Activity's context is associated with the display; the contexts Robolectric builds for activities are not marked as such (libgdx apps ask the activity for its display). */
     @Implementation protected android.view.Display getDisplay() {
         return ((android.hardware.display.DisplayManager) real.getSystemService(Context.DISPLAY_SERVICE)).getDisplay(android.view.Display.DEFAULT_DISPLAY);

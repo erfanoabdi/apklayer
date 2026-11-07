@@ -41,19 +41,19 @@ try:
                 parts = (pending + chunk).split(b'\n'); pending = parts.pop()
                 for raw in parts:
                     line = raw.decode(errors='replace'); lines.append(line)
-                    if '[perm]' in line or 'FATAL' in line or 'Exception' in line: print(line, flush=True)
+                    if '[perm]' in line or 'permission' in line or 'role' in line or 'FATAL' in line or 'Exception' in line: print(line, flush=True)
             hub = (log / 'hub.log').read_text(errors='replace').split('\n') if (log / 'hub.log').exists() else []
             shown = [l for l in hub if 'dialog shown:' in l]
             if len(shown) > len(questions):
                 question = shown[len(questions)].split('dialog shown: ')[1]
-                expected = ANSWERS[len(questions)] if len(questions) < len(ANSWERS) else ('', 'no=')
+                ours = [q for q in questions if 'perm-check' in q]  # another group's USB gadget may make this hub ask too: told no
+                field = ANSWERS[len(ours)][1] if 'perm-check' in question and len(ours) < len(ANSWERS) else 'no='
                 questions.append(question)
-                field = expected[1]
                 print('ANSWER %s %s' % (field[:-1], question), flush=True)
                 xy = question.split(field)[1].split()[0]
                 for attempt in range(20):  # the window takes input once the compositor configured it
                     try:
-                        if not shot and len(questions) == 1:  # the first question as the desktop shows it
+                        if not shot and 'perm-check' in question:  # the first question as the desktop shows it
                             shot = True; time.sleep(1)
                             try: capture('permission-dialog')
                             except Exception as no_capture: print('no desktop screenshot: %s' % no_capture, flush=True)
@@ -69,8 +69,8 @@ print(listing, end='')
 held = {l.split('\t')[0]: l.split('\t')[2] for l in listing.split('\n') if l.count('\t') == 2}
 passed = {l.split('[perm] PASS ')[1].split(' (')[0].strip() for l in lines if '[perm] PASS ' in l}
 failed = [l.split('[perm] FAIL ')[1].strip() for l in lines if '[perm] FAIL ' in l]
-asked = [q.split(' yes=')[0] for q in questions]
-order_ok = len(questions) == len(ANSWERS) and all(a[0] in q for a, q in zip(ANSWERS, asked))
+asked = [q.split(' yes=')[0] for q in questions if 'perm-check' in q]
+order_ok = len(asked) == len(ANSWERS) and all(a[0] in q for a, q in zip(ANSWERS, asked))
 manager_ok = held.get('android.permission.CAMERA') == '1' and held.get('android.permission.READ_CONTACTS') == '0' and held.get('android.permission.RECORD_AUDIO') == '1'
 revoked = (data / 'permissions-revoked').read_text() if (data / 'permissions-revoked').exists() else ''
 for step in STEPS: print('%s %s' % ('PASS' if step in passed else 'FAIL', step))
