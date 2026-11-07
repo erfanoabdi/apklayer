@@ -130,7 +130,7 @@ static void set_themed_cursor(const char *name)
     int scale = (output_scale + 50) / 100;
     wl_surface_set_buffer_scale(cursor_surface, scale);
     wl_surface_attach(cursor_surface, wl_cursor_image_get_buffer(img), 0, 0);
-    wl_surface_damage_buffer(cursor_surface, 0, 0, (int)img->width, (int)img->height);
+    surface_damage(cursor_surface, 0, 0, (int)img->width, (int)img->height);
     wl_surface_commit(cursor_surface);
     wl_pointer_set_cursor(the_pointer, ptr_enter_serial, cursor_surface,
                           (int32_t)img->hotspot_x / scale, (int32_t)img->hotspot_y / scale);
@@ -209,7 +209,7 @@ static void ptr_button(void *d, struct wl_pointer *p, uint32_t s, uint32_t t, ui
         if (held != NAV_NONE && held == hit) window_nav_action(w, held);
         return;
     }
-    if (pressed && pointer_focus && (b == 0x110 || b == 0x111)) {
+    if (pressed && pointer_focus && pointer_focus->toplevel && (b == 0x110 || b == 0x111)) {
         if (kb_android_meta() & 0x02) {
             /* Alt+left-drag moves, Alt+right-drag resizes (also without the title bar). */
             if (b == 0x110) xdg_toplevel_move(pointer_focus->toplevel, seat, s);

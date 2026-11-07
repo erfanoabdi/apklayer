@@ -61,7 +61,7 @@ static void show_initial(struct window *w)
     if (!w->initial_buffer) return;
     wl_buffer_add_listener(w->initial_buffer, &initial_listener, w);
     wl_surface_attach(w->surface, w->initial_buffer, 0, 0);
-    wl_surface_damage_buffer(w->surface, 0, 0, width, height);
+    surface_damage(w->surface, 0, 0, width, height);
     wl_surface_commit(w->surface);
 }
 
@@ -69,7 +69,7 @@ static void show(struct window *w, int buf, const int32_t *d)
 {
     w->framed = 1;
     wl_surface_attach(w->surface, w->buffers[buf], 0, 0);
-    wl_surface_damage_buffer(w->surface, d[0], d[1], d[2], d[3]);
+    surface_damage(w->surface, d[0], d[1], d[2], d[3]);
     wl_surface_commit(w->surface);
 }
 
@@ -149,7 +149,6 @@ void window_create(struct client *c, int id, int width, int height, const char *
         memset(w, 0, sizeof *w);
         return;
     }
-    w->xdg_surface = xdg_wm_base_get_xdg_surface(wm_base, w->surface);
     w->bar_hover = DECOR_NONE;
     w->nav.pressed = NAV_NONE;
     w->dark = decor_dark();
@@ -157,13 +156,17 @@ void window_create(struct client *c, int id, int width, int height, const char *
     char label[256];
     appinfo_label(package, label, sizeof label);   /* apklayer patch: the window carries the app's real name, and the app id is its package (the desktop entry's StartupWMClass) */
     snprintf(w->label, sizeof w->label, "%s", label);
-    w->toplevel = xdg_surface_get_toplevel(w->xdg_surface);
+    if (wm_base) {
+        w->xdg_surface = xdg_wm_base_get_xdg_surface(wm_base, w->surface);
+        w->toplevel = xdg_surface_get_toplevel(w->xdg_surface);
+        xdg_toplevel_set_title(w->toplevel, label);
+        xdg_toplevel_set_app_id(w->toplevel, package);
+    } else wlshell_create(w, label, package);
     window_geometry_init(w);
     snprintf(w->title, sizeof w->title, "%s", title);
-    xdg_toplevel_set_title(w->toplevel, label);
-    xdg_toplevel_set_app_id(w->toplevel, package);
     window_set_mode(w, c->window_mode ? c->window_mode - 1 : WM_AUTO);  /* mobile.c: title bar or navigation bar, min size, maximized */
-    wl_surface_commit(w->surface);  /* no buffer: asks for the first configure, whose size and bounds decide the window's (geometry.c) */
+    if (w->toplevel) wl_surface_commit(w->surface);  /* no buffer: asks for the first configure, whose size and bounds decide the window's (geometry.c) */
+    else wlshell_first_configure(w);
     fprintf(stderr, "[shell] %s: window %d %dx%d \"%s\", %s style\n", c->pkg, id, width, height, title, w->mobile ? "mobile" : "desktop");
     for (int i = 0; i < MAX_CLIENTS; i++)   /* an app that asked for a window of this title before it existed */
         if (clients[i].fd >= 0 && clients[i].attach_title[0] && !strcmp(clients[i].attach_title, w->title))
@@ -224,8 +227,9 @@ void window_destroy(struct window *w)
     decor_destroy(&w->decor);
     navbar_destroy(&w->nav);
     window_geometry_destroy(w);
-    xdg_toplevel_destroy(w->toplevel);
-    xdg_surface_destroy(w->xdg_surface);
+    if (w->toplevel) xdg_toplevel_destroy(w->toplevel);
+    if (w->xdg_surface) xdg_surface_destroy(w->xdg_surface);
+    if (w->shell_surface) wl_shell_surface_destroy(w->shell_surface);
     wl_surface_destroy(w->surface);
     memset(w, 0, sizeof *w);
     vsync_source_changed();
@@ -257,5 +261,5 @@ void window_minimize(struct window *w)
 {
     w->minimized = 1;
     send_state(w);
-    xdg_toplevel_set_minimized(w->toplevel);
+    if (w->toplevel) xdg_toplevel_set_minimized(w->toplevel);
 }

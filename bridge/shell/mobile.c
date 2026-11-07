@@ -86,7 +86,7 @@ static void metrics(struct window *w)
     int s = window_scale(w);
     w->dpi = display_density(s);
     int px = (48 * w->dpi + 80) / 160;
-    w->nav_h = w->mobile ? (px * 100 + s / 2) / s : 0;
+    w->nav_h = w->mobile && w->nav.surface ? (px * 100 + s / 2) / s : 0;
 }
 
 void window_set_mode(struct window *w, int mode)
@@ -108,9 +108,11 @@ void window_set_mode(struct window *w, int mode)
     }
     w->mobile = mobile;
     metrics(w);
-    xdg_toplevel_set_min_size(w->toplevel, 160, 160 + W_BAR(w));
-    if (mobile) xdg_toplevel_set_maximized(w->toplevel);  /* the work area; the compositor's configure brings its size */
-    else if (created && w->maximized) xdg_toplevel_unset_maximized(w->toplevel);
+    if (w->toplevel) {
+        xdg_toplevel_set_min_size(w->toplevel, 160, 160 + W_BAR(w));
+        if (mobile) xdg_toplevel_set_maximized(w->toplevel);  /* the work area; the compositor's configure brings its size */
+        else if (created && w->maximized) xdg_toplevel_unset_maximized(w->toplevel);
+    }
     if (!w->configured) return;  /* the first configure lays it out */
     window_layout(w);
     wl_surface_commit(w->surface);

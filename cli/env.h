@@ -24,4 +24,8 @@ std::string findJava(const Layout& layout);
 // A property of the machine's own Android (a Halium device's, through /usr/bin/getprop); "" when there is none.
 std::string deviceProperty(const std::string& key);
 
+// The environment for one of the machine's own programs (the device's getprop): this one without what loads apklayer's libraries (the stack's
+// LD_PRELOAD and LD_LIBRARY_PATH; on Sailfish OS they need a newer glibc than the system's programs have).
+Env hostToolEnv();
+
 }  // namespace apklayer

@@ -44,11 +44,14 @@ and list it here. The M1 seed's patch log is in `archive/seed-m1/docs/PATCHES.md
 | 0027-stdio-file-mapping-on-glibc | the FILE-taking stdio functions map bionic's standard streams on glibc too |
 | 0028-getenv-home-set-by-app | `getenv("HOME")` returns a HOME the app set itself |
 | compat/gcc-before-13-cxx2b | `-std=c++2b` for gcc before 13 |
+| compat/gcc-before-11-cxx20 | `-std=c++20` for gcc before 11 (Sailfish OS 5.0: gcc 10), on top of the previous one |
+| compat/glibc-before-2.36-relr | RELR types in the linker for glibc before 2.36 (Ubuntu 22.04, Sailfish OS 5.0: 2.30) |
+| compat/glibc-before-2.38-libc | libc functions Android's libraries use that glibc before 2.38 lacks: `__strlcpy_chk`, `__strlcat_chk`, `fstat64`, `pidfd_open`, `res_mkquery` (Sailfish OS 5.0: 2.30) |
 | compat/libunwind-before-1.8-meson | accept libunwind before 1.8 |
 | compat/libunwind-before-1.8-weak-phdr | weak `unw_set_iterate_phdr_function` |
 
-`compat/include/relr-compat.h` (RELR types for glibc before 2.36) and `compat/include/stdatomic.h` (C11 atomics from C++ for gcc before 12)
-are headers meson.build adds for old toolchains, not patches.
+`compat/include/stdatomic.h` (C11 atomics from C++ for gcc before 12) is a header meson.build adds (a global include directory: Meson
+before 1.8 ignores a subproject's default_options cpp_args), not a patch.
 
 ## Robolectric (`patches/robolectric/`, external/robolectric)
 | Patch | Purpose |
@@ -136,5 +139,6 @@ Behaviour that differs from Android or from stock Robolectric without editing up
 - bionic_translation 0039-linker-vendor-namespace: with BIONIC_VENDOR_LD_LIBRARY_PATH, a Halium device's vendor libraries (GPU driver, passthrough mapper) get their own copies of what they need from /vendor and the device's VNDK apex; the LLNDK and libc/libm/libdl stay shared. Unset: unchanged.
 - bionic_translation 0040-pthread-attr-copy-owner: the glibc attr's page records the bionic attr that made it; a byte copy (native_bridge_support's proxy pthread_create memcpy's the guest attr, edits its stack fields, destroys it) no longer unmaps the original's glibc attr on destroy, and pthread_create takes a copy's stack from bionic's fields. Fixed OTR2 through Berberis crashing in pthread_attr_destroy at about every second start. Test: tests/native/attr-copy.c (suite bionic).
 - bionic_translation 0041-linker-vendor-shared-libs: BIONIC_VENDOR_SHARED_LIBS (basenames, ':'-separated) names libraries the vendor namespace never loads its own copy of; the CLI sets libhidlbase.so for graphics = device (the vendor's Android 12 libhidlbase waited forever for hwservicemanager.ready inside the Mali driver's IMapper::getService). Unset: unchanged.
+- bionic_translation 0043-sigset-empty-fill: sigemptyset and sigfillset on bionic's one-long sigset_t; glibc's wrote its whole set (128 bytes in glibc 2.30, 16 in newer ones) past a set on the caller's stack (libandroidfw died in __stack_chk_fail on Sailfish OS 5.0).
 - hardware/interfaces 0004-gnss-no-mock-fix-from-a-subclass: `Gnss::reportsMockLocation()` (virtual, true); a subclass without a fix reports none.
 - robolectric 0018-location-manager-requests-listener: ProviderEntry tells `LocationRequests` (runtime/patches) when a provider's first request comes and its last goes.

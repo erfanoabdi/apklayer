@@ -147,7 +147,8 @@ std::string unpackRuntime(const std::string& bundle, const std::string& root, co
     std::string pattern = root + "/.unpack.XXXXXX";
     if (!mkdtemp(pattern.data())) return "cannot create a directory in " + root;
     const std::string tmp = pattern;
-    Result tar = runProgram({"tar", "--zstd", "--no-same-owner", "-xf", bundle, "-C", tmp});
+    // zstd apart from tar: BusyBox's tar (Sailfish OS) has no --zstd; -o: owner not restored (GNU and BusyBox); a broken stream fails tar too
+    Result tar = runProgram({"sh", "-c", "zstd -dcq -- \"$0\" | tar -xof - -C \"$1\"", bundle, tmp});
     if (tar.status != 0) { removeTree(tmp); return "cannot unpack " + bundle + ": " + tar.err.substr(0, 200); }
     std::string dir = tmp;
     if (!exists(dir + "/runtime.json")) {  // the bundle's one top directory

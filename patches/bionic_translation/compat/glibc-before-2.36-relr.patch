@@ -1,0 +1,24 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer compat: RELR types for glibc before 2.36
+
+glibc before 2.36 (Ubuntu 22.04: 2.35, Sailfish OS 5.0: 2.30) has no RELR types in elf.h; the linker uses them (Android's libraries are
+linked with --pack-dyn-relocs=android+relr). A patch, not a forced -include: a subproject's c_args from default_options apply only from
+Meson 1.8 on. Applied by meson.build only when elf.h lacks Elf64_Relr.
+---
+diff --git a/linker/linker.h b/linker/linker.h
+--- a/linker/linker.h
++++ b/linker/linker.h
+@@ -30,6 +30,13 @@
+ #define _LINKER_H_
+
+ #include <elf.h>
++#ifndef DT_RELR
++typedef Elf32_Word Elf32_Relr;
++typedef Elf64_Xword Elf64_Relr;
++#define DT_RELRSZ 35
++#define DT_RELR 36
++#define DT_RELRENT 37
++#endif
+ #include <link.h>
+ #include <stdbool.h>
+ #include <sys/types.h>

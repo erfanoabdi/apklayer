@@ -160,6 +160,13 @@ char *mkdtemp(char *path) {
  * translated library's Android paths (its linker's /system/etc/ld.config.arm64.txt) reach the path layer only here. The *at forms with an
  * absolute path; the argument stays the caller's for any other number. */
 #include <sys/syscall.h>
+#ifndef SYS_statx  /* kernel headers before 4.11 (Sailfish OS 5.0's are 3.18); the kernel may still have it */
+#if defined(__aarch64__)
+#define SYS_statx 291
+#elif defined(__x86_64__)
+#define SYS_statx 332
+#endif
+#endif
 long syscall(long nr, ...)
 {
     va_list ap;

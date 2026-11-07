@@ -1,5 +1,6 @@
 #include "util.h"
 #include "unit.h"
+#include "linux_compat.h"
 
 #include <dirent.h>
 #include <fcntl.h>
