@@ -55,12 +55,11 @@ final class HostAppLibraries {
 
     /** The jar of the installed app that provides the static or SDK library with that version and signer; null without one. */
     static Path providerJar(Use use) {
-        System.out.println("[apklayer] DEBUG apps " + apps());
         for (Path app : apps()) {
             Properties info = info(app);
             if (!List.of(info.getProperty("staticLibraries", "").split(";")).contains(use.kind() + ":" + use.name() + ":" + use.version())) continue;
             // the digest the user names is one of the provider's signers (HostCertificate.digest: comma-separated upper-case SHA-256 of each)
-            if (!use.certDigest().isEmpty() && !List.of(info.getProperty("signer", "").toLowerCase(Locale.ROOT).split(",")).contains(use.certDigest())) { System.out.println("[apklayer] DEBUG " + use + " " + use.certDigest() + " vs " + info.getProperty("signer")); continue; }
+            if (!use.certDigest().isEmpty() && !List.of(info.getProperty("signer", "").toLowerCase(Locale.ROOT).split(",")).contains(use.certDigest())) continue;
             return jar(app);
         }
         return null;

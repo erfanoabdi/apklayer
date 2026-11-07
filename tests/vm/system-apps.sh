@@ -40,12 +40,14 @@ if [ -z "${*:-}" ] || [[ " $* " == *" ime "* ]]; then
     bin/apklayer hub > $APKLY_STATE/sys-ime-live-hub.out 2>&1 &
     hub=$!
     bin/apklayer wait hub >/dev/null 2>&1
+    # its boot settings are written after it is ready (HubBootSettings, on their own thread): the choice comes after them
+    until grep -aq '^\[apklayer-hub\] boot count' $APKLY_STATE/sys-ime-live-hub.out; do kill -0 $hub 2>/dev/null || break; read -t 1 <> <(:) || true; done
     applied=$(bin/apklayer ime enable hello.system)
     out=$APKLY_STATE/sys-ime-live.out
     APKLAYER_JOPTS="-Dhello.sys=ime -Dapklayer.runms=60000" bin/apklayer run hello.system > $out 2>&1 &
     run=$!
     until grep -aq "^\[sys\] DONE" $out 2>/dev/null; do kill -0 $run 2>/dev/null || break; read -t 1 <> <(:) || true; done
-    grep -a '^\[apklayer-hub\] boot count' $APKLY_STATE/hub.log | tail -1 | grep -q 'input methods \[\]' && same=yes || same=no  # the hub that booted without the choice served the launch
+    grep -a '^\[apklayer-hub\] boot count' $APKLY_STATE/sys-ime-live-hub.out | tail -1 | grep -q 'input methods \[\]' && same=yes || same=no  # the hub that booted without the choice served the launch
     kill $run 2>/dev/null; bin/apklayer stop >/dev/null 2>&1; wait $run $hub 2>/dev/null
     if [[ $applied == *"applied now"* ]] && [ $same = yes ] && grep -aq "^\[sys\] PASS ime" $out; then echo "[sys] PASS ime live: $applied"
     else echo "[sys] FAIL ime live ($applied, same hub $same): $(grep -a '^\[sys\] FAIL' $out)"; status=1; fi
