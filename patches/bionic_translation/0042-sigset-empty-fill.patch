@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Sat, 7 Nov 2026 00:00:00 +0000
+Subject: [PATCH] sigemptyset and sigfillset on bionic's sigset_t
+
+bionic's sigset_t is one unsigned long; sigemptyset and sigfillset went to glibc's, which write glibc's whole sigset_t (128 bytes in
+glibc 2.30, 16 bytes in newer ones) and so past a set on the caller's stack: on Sailfish OS 5.0 (glibc 2.30) libandroidfw died in
+__stack_chk_fail after sigemptyset/sigaddset/pthread_sigmask. Wrapped like sigaddset and sigismember.
+
+apklayer patch: 0042 of patches/bionic_translation.
+---
+diff --git a/libc/libc.c b/libc/libc.c
+index 626d4dd..67dff94 100644
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -294,6 +294,28 @@ int bionic_sigaddset(const bionic_sigset_t *set, int sig)
+ 	return 0;
+ }
+ 
++/* apklayer patch: bionic's sigset_t is one long; glibc's sigemptyset and sigfillset write all of glibc's (128 bytes in glibc 2.30, 16 in
++   newer ones) and so past the caller's set on its stack (libandroidfw died in __stack_chk_fail on Sailfish OS 5.0) */
++int bionic_sigemptyset(bionic_sigset_t *set)
++{
++	if (!set) {
++		errno = EINVAL;
++		return -1;
++	}
++	*set = 0;
++	return 0;
++}
++
++int bionic_sigfillset(bionic_sigset_t *set)
++{
++	if (!set) {
++		errno = EINVAL;
++		return -1;
++	}
++	*set = ~0UL;
++	return 0;
++}
++
+ int bionic_sigismember(const bionic_sigset_t *set, int sig)
+ {
+ 	int bit = sig - 1; // Signal numbers start at 1, but bit positions start at 0.
