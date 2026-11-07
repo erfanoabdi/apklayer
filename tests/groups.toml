@@ -181,11 +181,12 @@ run = ["python3 -u tests/vm/mobile.py"]
 
 [startup]
 needs = ["com.android.test.uibench"]
-run = ["tests/vm/startup.sh com.android.test.uibench"]
+run = ["tests/vm/startup.sh com.android.test.uibench", "tests/vm/asset-cache.sh com.android.test.uibench"]
 
 [gpu]
+apps = ["hello-hwbitmap"]
 needs = ["com.android.test.uibench"]
-run = ["python3 -u tests/vm/gpu-smoke.py"]
+run = ["python3 -u tests/vm/gpu-smoke.py", "python3 -u tests/vm/hwbitmap.py"]
 
 [gpu-select]
 # apklayer gpus / gpu set|unset and the node the instance's processes get (no app: rendering on a choice is gpu/gpu-window with APKLAYER_GPU)

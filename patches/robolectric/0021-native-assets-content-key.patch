@@ -1,0 +1,56 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: apklayer <apklayer@localhost>
+Subject: [PATCH] DefaultNativeRuntimeLoader: shared asset copies keyed by content
+
+apklayer patch (docs/PATCHES.md): the shared ICU/font copy under java.io.tmpdir is keyed by the name, CRC and size of the
+archive's entries under the group's directory, not by the archive's path, size and modification time: every reinstall of the
+same framework jar (a test tree's meson install, another checkout) left one more ~30 MB ICU copy (106 in one instance's tmp).
+
+Against external/robolectric 87aa52b08 (REVISION), after 0001.
+---
+--- a/nativeruntime/src/main/java/org/robolectric/nativeruntime/DefaultNativeRuntimeLoader.java
++++ b/nativeruntime/src/main/java/org/robolectric/nativeruntime/DefaultNativeRuntimeLoader.java
+@@ -428,7 +428,7 @@
+   private static Path sharedAssetDirectory(String group, URL source, AssetCopier copier) {
+     Path directory;
+     try {
+-      String identity = archiveIdentity(source);
++      String identity = archiveIdentity(source, group + "/");
+       if (identity == null) {
+         Logger.info("Not sharing native runtime %s: %s is not supplied by an archive", group, source);
+         return null;
+@@ -465,15 +465,31 @@
+     }
+   }
+ 
+-  /** The archive that supplies the resource, by location, size and modification time (a rebuilt archive gets a new key); null for none. */
+-  private static String archiveIdentity(URL resource) {
++  /**
++   * The archive that supplies the resource, by the name, CRC and size of its entries under the group's directory (by location, size and
++   * modification time when it has none there); null for none.
++   * apklayer patch: by content, not by the archive's path and modification time: every reinstall of the same framework jar (a test
++   * tree's meson install, another checkout) made a new copy (106 ICU copies in one instance's tmp).
++   */
++  private static String archiveIdentity(URL resource, String prefix) {
+     if ("jar".equals(resource.getProtocol())) {
+       String jarPath = Iterables.get(Splitter.on('!').split(resource.toString()), 0);
+       String filePrefix = "jar:file:";
+       if (jarPath.startsWith(filePrefix)) {
+         File jarFile = new File(jarPath.substring(filePrefix.length()));
+         if (jarFile.isFile()) {
+-          return jarFile.getAbsolutePath() + ":" + jarFile.length() + ":" + jarFile.lastModified();
++          StringBuilder identity = new StringBuilder();
++          try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(jarFile)) {
++            zip.stream()
++                .filter(e -> e.getName().startsWith(prefix))
++                .forEach(e -> identity.append(e.getName()).append(':').append(e.getCrc()).append(':').append(e.getSize()).append(';'));
++          } catch (IOException e) {
++            throw new java.io.UncheckedIOException(e);
++          }
++          // no entry under the prefix (the resource is a file of its own): the archive itself, as before
++          return identity.length() > 0
++              ? identity.toString()
++              : jarFile.getAbsolutePath() + ":" + jarFile.length() + ":" + jarFile.lastModified();
+         }
+       }
+     }
