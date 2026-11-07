@@ -3,8 +3,9 @@ Subject: [PATCH] apklayer: a host call keeps the guest's errno on a glibc host
 
 With glibc-host-thread-id-handoff each guest thread has bionic records of its own (0001), so the guest's errno (__errno: the record's
 errno_value) is not the errno host code sets (glibc's): a failing proxied call (clock_gettime, stat64, ftell, getaddrinfo ...) left the
-guest's errno as it was. MakeTrampolineCallable wraps every host function's trampoline: glibc's errno takes the guest's before the call,
-the guest's takes glibc's after it, as the shared thread record does on an Android host.
+guest's errno as it was. MakeTrampolineCallable wraps every trampoline into host code (the proxy libraries' stubs as well as wrapped host
+functions): glibc's errno takes the guest's before the call, the guest's takes glibc's after it, as the shared thread record does on an
+Android host.
 
 diff --git a/guest_os_primitives/guest_thread.cc b/guest_os_primitives/guest_thread.cc
 --- a/guest_os_primitives/guest_thread.cc
@@ -80,7 +81,7 @@ diff --git a/runtime_primitives/host_function_wrapper_impl.cc b/runtime_primitiv
    TranslationCache* cache = TranslationCache::GetInstance();
    GuestCodeEntry* entry = cache->AddAndLockForWrapping(pc);
    if (entry) {
-+    if (is_host_func && &WrapHostCallForGuestErrno != nullptr) {  // apklayer patch
++    if (&WrapHostCallForGuestErrno != nullptr) {  // apklayer patch: also the proxy libraries' stubs (not is_host_func)
 +      WrapHostCallForGuestErrno(&func, &arg);
 +    }
      MachineCode mc;
@@ -93,7 +94,7 @@ diff --git a/runtime_primitives/include/berberis/runtime_primitives/host_functio
                              HostCode func,
                              const char* name);
  
-+// apklayer patch: on a glibc host (glibc-host-thread-id-handoff) a host function's trampoline is wrapped so that it runs with the guest
++// apklayer patch: on a glibc host (glibc-host-thread-id-handoff) a trampoline into host code is wrapped so that it runs with the guest
 +// thread's errno and hands its errno back (guest_os_primitives/guest_thread.cc). Weak as Digitalis's override seam below: binaries
 +// without guest_os_primitives skip it.
 +__attribute__((weak)) void WrapHostCallForGuestErrno(TrampolineFunc* trampoline_func, HostCode* func);
