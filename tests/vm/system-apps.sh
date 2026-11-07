@@ -45,7 +45,7 @@ if [ -z "${*:-}" ] || [[ " $* " == *" ime "* ]]; then
     APKLAYER_JOPTS="-Dhello.sys=ime -Dapklayer.runms=60000" bin/apklayer run hello.system > $out 2>&1 &
     run=$!
     until grep -aq "^\[sys\] DONE" $out 2>/dev/null; do kill -0 $run 2>/dev/null || break; read -t 1 <> <(:) || true; done
-    kill -0 $hub 2>/dev/null && same=yes || same=no  # the hub that booted without the choice served the launch
+    grep -a '^\[apklayer-hub\] boot count' $APKLY_STATE/hub.log | tail -1 | grep -q 'input methods \[\]' && same=yes || same=no  # the hub that booted without the choice served the launch
     kill $run 2>/dev/null; bin/apklayer stop >/dev/null 2>&1; wait $run $hub 2>/dev/null
     if [[ $applied == *"applied now"* ]] && [ $same = yes ] && grep -aq "^\[sys\] PASS ime" $out; then echo "[sys] PASS ime live: $applied"
     else echo "[sys] FAIL ime live ($applied, same hub $same): $(grep -a '^\[sys\] FAIL' $out)"; status=1; fi

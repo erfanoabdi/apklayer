@@ -11,8 +11,10 @@ from instance import LOGDIR, inject  # noqa: E402
 answer, seconds = sys.argv[1], float(sys.argv[2]) if len(sys.argv) > 2 else 60
 log = Path(LOGDIR) / 'hub.log'
 shown = lambda: [l for l in (log.read_text(errors='replace') if log.exists() else '').split('\n') if 'dialog shown:' in l]
-before, end = len(shown()), time.monotonic() + seconds
+inode = lambda: log.stat().st_ino if log.exists() else None
+before, start, end = len(shown()), inode(), time.monotonic() + seconds
 while time.monotonic() < end:
+    if inode() not in (start, None): before, start = 0, inode()  # a new stack's hub.log (the start removes the old one): every dialog in it is new
     lines = shown()
     if len(lines) > before:
         question = lines[before]
