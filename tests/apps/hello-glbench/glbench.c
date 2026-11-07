@@ -49,14 +49,20 @@ JNIEXPORT jint JNICALL Java_hello_glbench_Main_run(JNIEnv *env, jclass cls, jobj
     /* window-10bit[-opaque], window-fp16[-opaque]: the same with a deep config (the window present reads those buffers back) */
     int depth = strstr(mode, "10bit") ? 10 : strstr(mode, "fp16") ? 16 : 8;
     EGLConfig cfg = choose(t.dpy, EGL_WINDOW_BIT, depth, strstr(mode, "opaque") != NULL);
-    if (!cfg) { print("glbench: no config of that depth"); return 1; }
     EGLint red = 0, alpha = 0, visual = 0;
     eglGetConfigAttrib(t.dpy, cfg, EGL_RED_SIZE, &red);
     eglGetConfigAttrib(t.dpy, cfg, EGL_ALPHA_SIZE, &alpha);
     eglGetConfigAttrib(t.dpy, cfg, EGL_NATIVE_VISUAL_ID, &visual);
     char line[96];
-    snprintf(line, sizeof line, "glbench: %s config red=%d alpha=%d visual=0x%x", mode, red, alpha, visual);
+    if (cfg) snprintf(line, sizeof line, "glbench: %s config red=%d alpha=%d visual=0x%x", mode, red, alpha, visual);
+    else snprintf(line, sizeof line, "glbench: %s no config", mode);
     print(line);
+    if (!cfg) {
+        ANativeWindow_release(win);
+        (*env)->ReleaseStringUTFChars(env, jmode, mode);
+        if (scenes) (*env)->ReleaseStringUTFChars(env, jscenes, scenes);
+        return 1;
+    }
     EGLContext ctx = eglCreateContext(t.dpy, cfg, EGL_NO_CONTEXT, ctx_attr);
     t.surface = eglCreateWindowSurface(t.dpy, cfg, win, NULL);
     int r = 1;
