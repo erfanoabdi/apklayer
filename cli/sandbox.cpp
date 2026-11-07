@@ -1,6 +1,7 @@
 #include "sandbox.h"
 #include "apps.h"
 #include "daemon.h"
+#include "linux_compat.h"
 
 #include <algorithm>
 #include <cerrno>
