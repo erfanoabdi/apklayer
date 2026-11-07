@@ -19,6 +19,12 @@ run = ["meson test -C b --suite bionic --print-errorlogs"]
 apps = ["hello-arm64"]
 run = ["tests/vm/native-bridge.sh"]
 
+[native-bridge-vulkan]
+# hello-vulkan-arm64: vulkan-present's swapchain from an arm64-only library (the guest libvulkan proxy of the host's loader); needs a host
+# Vulkan device that presents (the owner's x86 PC; native on arm64)
+apps = ["hello-vulkan-arm64"]
+run = ["python3 -u tests/vm/vulkan-present.py hello.vulkan.arm64 hello.vulkan.arm64.Main"]
+
 [properties]
 run = ["tests/vm/properties.sh"]
 
@@ -75,6 +81,10 @@ run = ["tests/vm/gnss.sh"]
 [usb]  # Gadget Zero over usbip on the machine itself (tests/vm/usb-gadget.sh: modprobe, a udev rule, usbipd): the attach, permission dialog, transfers
 apps = ["hello-usb"]
 run = ["tests/vm/usb.py"]
+
+[permissions]  # the runtime permission prompt and role requests (HubPermissionPrompt): answers by test input, kept for the manager
+apps = ["hello-permissions"]
+run = ["python3 -u tests/vm/permissions.py"]
 
 [host-binder]
 run = ["python3 tests/vm/host-binder.py"]  # libbinder's host context (frameworks/native 0006): a second instance plays the device
@@ -186,11 +196,14 @@ run = ["python3 -u tests/vm/mobile.py"]
 
 [startup]
 needs = ["com.android.test.uibench"]
-run = ["tests/vm/startup.sh com.android.test.uibench"]
+run = ["tests/vm/startup.sh com.android.test.uibench", "tests/vm/asset-cache.sh com.android.test.uibench"]
 
 [gpu]
+apps = ["hello-hwbitmap"]
 needs = ["com.android.test.uibench"]
-run = ["python3 -u tests/vm/gpu-smoke.py"]
+# the second run under a decimal-comma locale: Android's native float parsing (VectorDrawable paths, PathInterpolator) must stay in C
+setup = ["locale -a | grep -qx nl_NL.utf8 || sudo -n locale-gen nl_NL.UTF-8 >/dev/null"]
+run = ["python3 -u tests/vm/gpu-smoke.py", "LANG=nl_NL.UTF-8 LC_ALL=nl_NL.UTF-8 python3 -u tests/vm/gpu-smoke.py", "python3 -u tests/vm/hwbitmap.py"]
 
 [gpu-select]
 # apklayer gpus / gpu set|unset and the node the instance's processes get (no app: rendering on a choice is gpu/gpu-window with APKLAYER_GPU)

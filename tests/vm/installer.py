@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
@@ -54,6 +55,7 @@ def bundles():
         props = dict(l.split('=', 1) for l in info.read_text().splitlines() if '=' in l) if info.exists() else {}
         ok = out.returncode == 0 and 'leaving out config.' + OTHER_ABI in out.stdout + out.stderr and props.get('splits') == 'config.%s,config.xxhdpi' % HOST_ABI
         report('bundle ' + kind, ok, 'exit %d splits %s: %s' % (out.returncode, props.get('splits'), (out.stdout + out.stderr)[-600:]))
+        if kind == 'xapk': menu()
         cli('uninstall', 'hello.payload')
     unsigned = work / 'unsigned.apk'
     with zipfile.ZipFile(unsigned, 'w') as out_zip, zipfile.ZipFile(io.BytesIO(base)) as signed:
@@ -62,6 +64,25 @@ def bundles():
     out = cli('install', str(unsigned))
     report('unsigned refused', out.returncode == 5 and 'INSTALL_PARSE_FAILED_NO_CERTIFICATES' in out.stderr and not (data / 'apps/hello.payload').exists(),
            'exit %d: %s' % (out.returncode, (out.stdout + out.stderr)[-400:]))
+
+
+def menu():
+    """The installed app's entry is in the Apklayer submenu only (X-Apklayer-App, as Waydroid's apps), the merge file and directory entry parse."""
+    entry = data.parent / 'applications/apklayer-hello.payload.desktop'
+    merge = Path(ENV.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'menus/applications-merged/apklayer.menu'
+    directory = data.parent / 'desktop-directories/apklayer.directory'
+    text = entry.read_text() if entry.exists() else ''
+    problems = [] if 'Categories=X-Apklayer-App;\n' in text else ['entry categories: ' + text]
+    try:
+        root = ET.parse(merge).getroot()
+        if root.find('Menu/Include/Category').text != 'X-Apklayer-App' or root.find('Menu/Directory').text != 'apklayer.directory': problems.append('menu content')
+    except (OSError, ET.ParseError, AttributeError) as e: problems.append('menu: %s' % e)
+    if shutil.which('desktop-file-validate'):
+        for f in (entry, directory):
+            v = subprocess.run(['desktop-file-validate', str(f)], capture_output=True, text=True)
+            if v.returncode: problems.append(v.stdout + v.stderr)
+    elif not directory.exists(): problems.append('no ' + str(directory))
+    report('menu', not problems, '; '.join(problems))
 
 
 def report(step, ok, detail):
@@ -76,7 +97,7 @@ first = work.with_name('hello-installer-v1.apk')
 first.parent.mkdir(parents=True, exist_ok=True)
 shutil.copy(data / 'apps/hello.installer/base.apk', first)
 bundles()
-STEPS += ['bundle xapk', 'bundle apkm', 'bundle apks', 'unsigned refused', 'legacy receiver']
+STEPS += ['menu', 'bundle xapk', 'bundle apkm', 'bundle apks', 'unsigned refused', 'legacy receiver']
 (data / INSTANCE / 'install-sources').unlink(missing_ok=True)
 shutil.rmtree(data / INSTANCE / 'install-sessions', ignore_errors=True)
 for name in ('hub.log', 'component-hello.installer.log', 'component-hello.legacyrx.log', 'app-hello.installer.log'): (log / name).unlink(missing_ok=True)

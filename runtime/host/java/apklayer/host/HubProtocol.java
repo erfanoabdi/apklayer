@@ -29,7 +29,9 @@ final class HubProtocol {
             ALARM_SET = 48,  // {operation (a hub PendingIntent), delay ms, interval ms}: HubScheduler fires it even when no app process runs
             ALARM_CANCEL = 49,  // {operation}
             JOB_SCHEDULE = 50,  // {JobInfo, delay ms}: HubScheduler has the app run the job (ENDPOINT_JOB) when due
-            JOB_CANCEL = 51;  // {job id}
+            JOB_CANCEL = 51,  // {job id}
+            PERMISSIONS_REQUEST = 52,  // {names} -> per name HostRuntimePermissions' GRANTED, DENIED_ONCE or DENIED: Activity.requestPermissions (HubPermissionPrompt asks)
+            ROLE_REQUEST = 53;  // {role} -> whether the person makes the caller the role's holder (HubPermissionPrompt)
             // RELAUNCH: `apklayer run` of a running app (the CLI, through servicetool call): {package, intent file or ""} -> 0 delivered, 1 not running
     static final int ENDPOINT_BIND = 1, ENDPOINT_UNBIND = 2, ENDPOINT_START = 3, ENDPOINT_STOP = 4, ENDPOINT_GET_PROVIDER = 5, ENDPOINT_NOTIFY = 6, ENDPOINT_START_ACTIVITY = 7, ENDPOINT_EXIT_IF_IDLE = 8, ENDPOINT_PACKAGE_CHANGED = 9, ENDPOINT_CONFIGURATION = 10, ENDPOINT_JOB = 11;
     private HubProtocol() {}

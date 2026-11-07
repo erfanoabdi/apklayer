@@ -1,9 +1,14 @@
 /* An arm64-only JNI library (hello-arm64): on an x86_64 host it runs only through the native bridge (PLAN "apps built for another CPU"). */
 #include <dlfcn.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <jni.h>
 #include <math.h>
 #include <pthread.h>
+#include <setjmp.h>
+#include <signal.h>
 #include <stdint.h>
+#include <time.h>
 #include <unistd.h>
 
 static JavaVM *vm;
@@ -54,6 +59,32 @@ static jint field_set(JNIEnv *env, jclass c, jlong v)
     (void)env; (void)c;
     field_value = v;
     return 1;
+}
+
+/* A guest fault the guest itself handles: a null read caught by its SIGSEGV handler, which jumps back (1); the JVM must survive it. */
+static sigjmp_buf fault_jump;
+static void on_fault(int sig) { siglongjmp(fault_jump, sig); }
+JNIEXPORT jint JNICALL Java_hello_arm64_Main_fault(JNIEnv *env, jclass c)
+{
+    (void)env; (void)c;
+    struct sigaction sa = {.sa_handler = on_fault}, old;
+    if (sigaction(SIGSEGV, &sa, &old) != 0) return -1;
+    int r = sigsetjmp(fault_jump, 1);
+    if (r == 0) r = *(volatile int *)(uintptr_t)16;  /* faults */
+    sigaction(SIGSEGV, &old, NULL);
+    return r == SIGSEGV;
+}
+
+/* errno of failing libc calls made from guest code: open of a missing file (a translated syscall) ENOENT, then clock_gettime of a bad clock
+ * (a host call through the bridge's proxy libc) EINVAL, as open*100 + clock (222). */
+JNIEXPORT jint JNICALL Java_hello_arm64_Main_errnos(JNIEnv *env, jclass c)
+{
+    (void)env; (void)c;
+    struct timespec ts;
+    errno = 0;
+    int r = open("/nonexistent/apklayer-errno", O_RDONLY) == -1 ? errno * 100 : 0;
+    errno = 0;
+    return r + (clock_gettime((clockid_t)1000, &ts) == -1 ? errno : 0);
 }
 
 static jclass main_class;

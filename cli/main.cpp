@@ -128,7 +128,7 @@ int main(int argc, char** argv) {
     if (cmd == "portal") return portalCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "hub") return runHub(layout, inst);
     if (cmd == "wait" && n == 2 && args[1] == "hub") return waitHub(layout, inst);
-    if (cmd == "list") markSystemApps(layout);  // installs staged before the system mark
+    if (cmd == "list") { writeMenu(layout); markSystemApps(layout); }  // installs staged before the menu or the system mark
     if (cmd == "list" && n == 2 && args[1] == "--tsv") { listAppsTsv(layout, inst); return 0; }
     if (cmd == "list") { listApps(layout); return 0; }
     if (cmd == "info" && n == 2) return appInfo(layout, inst, args[1]);

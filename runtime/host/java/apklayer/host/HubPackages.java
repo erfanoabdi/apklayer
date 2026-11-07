@@ -211,14 +211,15 @@ final class HubPackages {
         if (definition == null) { System.out.println("[apklayer-hub] permission " + permission + " has no definition"); return false; }
         switch (definition.protectionLevel & PermissionInfo.PROTECTION_MASK_BASE) {
             case PermissionInfo.PROTECTION_NORMAL: return true;
-            case PermissionInfo.PROTECTION_DANGEROUS: return !HostRevokedPermissions.revoked(name, permission);  // the desktop has no permission prompts: what the manifest asks for is granted unless the user revoked it (HostPortals.requestPermissions)
+            case PermissionInfo.PROTECTION_DANGEROUS:  // the person's answer (HubPermissionPrompt, the manager), or a system app's default grant
+                return HostRuntimePermissions.granted(name, permission, source.applicationInfo.targetSdkVersion) || (SYSTEM.defaultGrants.getOrDefault(name, java.util.Set.of()).contains(permission) && !HostRuntimePermissions.revoked(name, permission));
             case PermissionInfo.PROTECTION_SIGNATURE: return SYSTEM.privileged.containsKey(name);  // platform-signed system apps (the privileged allowlist)
             default: return false;
         }
     }
 
     /** The permission's definition: an installed package's, the framework's, or null. */
-    private PermissionInfo definition(String permission) {
+    PermissionInfo definition(String permission) {
         for (String other : installed()) {
             PackageParser.Package owner = get(other);
             if (owner == null) continue;

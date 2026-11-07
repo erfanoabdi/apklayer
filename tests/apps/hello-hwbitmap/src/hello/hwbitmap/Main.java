@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.ImageDecoder;
 import android.graphics.Paint;
+import android.graphics.Picture;
 import android.os.Bundle;
 import android.widget.ImageView;
 import java.io.ByteArrayOutputStream;
@@ -33,6 +34,23 @@ public class Main extends Activity {
             if (pixels.getPixel(0, 0) == 0xff0000ff) crops++;
         }
         System.out.println("hwbitmap: crops " + crops + "/50");
+        int pictures = 0;  // Bitmap.createBitmap(Picture) renders through HardwareRenderer.createHardwareBitmap (Compose's layer snapshots)
+        String last = null;
+        for (int i = 0; i < 20; i++) {
+            int w = 64 + 97 * i, h = 48 + 61 * i;
+            Picture picture = new Picture();
+            picture.beginRecording(w, h).drawColor(0xff00ff00);
+            picture.endRecording();
+            try {
+                Bitmap drawn = Bitmap.createBitmap(picture);
+                Bitmap pixels = drawn.copy(Bitmap.Config.ARGB_8888, false);
+                last = drawn.getConfig() + " " + drawn.getWidth() + "x" + drawn.getHeight() + " " + Integer.toHexString(pixels.getPixel(w / 2, h / 2));
+                if (drawn.getConfig() == Bitmap.Config.HARDWARE && pixels.getPixel(w / 2, h / 2) == 0xff00ff00) pictures++;
+            } catch (RuntimeException e) {
+                last = e.toString();
+            }
+        }
+        System.out.println("hwbitmap: pictures " + pictures + "/20 (last " + last + ")");
         ByteArrayOutputStream png = new ByteArrayOutputStream();
         sw.compress(Bitmap.CompressFormat.PNG, 100, png);
         try {

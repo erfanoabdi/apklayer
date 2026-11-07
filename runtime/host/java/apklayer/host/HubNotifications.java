@@ -45,7 +45,7 @@ final class HubNotifications {
     }
 
     /** The user turned the app's notifications off (NotificationManagerService.areNotificationsEnabledForPackage): its POST_NOTIFICATIONS revoked. */
-    static boolean muted(String pkg) { return HostRevokedPermissions.revoked(pkg, android.Manifest.permission.POST_NOTIFICATIONS); }
+    static boolean muted(String pkg) { return HostRuntimePermissions.revoked(pkg, android.Manifest.permission.POST_NOTIFICATIONS); }
 
     void cancel(HubDirectory.Peer caller, String tag, int id, boolean all) {
         List<Posted> gone = new ArrayList<>();

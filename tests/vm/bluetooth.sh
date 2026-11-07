@@ -29,4 +29,14 @@ APKLAYER_JOPTS="-Dapklayer.runms=8000" bin/apklayer run hello.bluetooth > $out.r
 bin/apklayer permissions grant hello.bluetooth android.permission.BLUETOOTH_SCAN
 grep -a "\[bt\]" $out.revoked
 grep -aq "\[bt\] discovery SecurityException" $out.revoked || { echo "FAIL: discovery without BLUETOOTH_SCAN did not throw"; exit 1; }
+# a host whose BlueZ is activatable but never comes up (bluetooth.service without an adapter): the helper answers "absent" at once instead of after
+# D-Bus's activation timeout (an app's first BluetoothAdapter call waits for that line on its main thread: Briar stayed on its splash)
+dir=$(mktemp -d); printf '[D-BUS Service]\nName=org.bluez\nExec=/bin/sleep 30\n' > $dir/org.bluez.service
+printf '<busconfig><include>/usr/share/dbus-1/session.conf</include><servicedir>%s</servicedir></busconfig>' $dir > $dir/bus.conf
+read -r address2 daemon2 < <(dbus-daemon --config-file=$dir/bus.conf --fork --print-address=1 --print-pid=1 | paste -sd' ')
+start=$(date +%s%N)
+first=$(DBUS_SYSTEM_BUS_ADDRESS=$address2 python3 bridge/portal/bluez.py < /dev/null 2>/dev/null | head -1)
+ms=$(( ($(date +%s%N) - start) / 1000000 )); kill $daemon2; rm -rf $dir
+echo "bluetooth: unstartable BlueZ: '$first' after $ms ms"
+[ "$first" = '{"ev": "adapter", "present": false}' ] && [ $ms -lt 5000 ] || { echo "FAIL: the helper's first line waited on BlueZ's activation"; exit 1; }
 echo "bluetooth: PASS"

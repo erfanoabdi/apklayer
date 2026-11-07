@@ -53,8 +53,12 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
     @Implementation
     protected android.content.pm.FeatureInfo[] getSystemAvailableFeatures() {
         android.content.pm.FeatureInfo[] known = super.getSystemAvailableFeatures();
-        if (known != null) return known;
-        return HostSystemConfig.loadedFeatures.stream().sorted().map(name -> { android.content.pm.FeatureInfo info = new android.content.pm.FeatureInfo(); info.name = name; return info; }).toArray(android.content.pm.FeatureInfo[]::new);
+        java.util.List<android.content.pm.FeatureInfo> list = new java.util.ArrayList<>(known != null ? java.util.Arrays.asList(known)
+                : HostSystemConfig.loadedFeatures.stream().sorted().map(name -> { android.content.pm.FeatureInfo info = new android.content.pm.FeatureInfo(); info.name = name; return info; }).toList());
+        android.content.pm.FeatureInfo gles = new android.content.pm.FeatureInfo();  // as PackageManagerService: the unnamed feature carries the GLES version
+        gles.reqGlEsVersion = ShadowHostActivityManager.glEsVersion();
+        list.add(gles);
+        return list.toArray(new android.content.pm.FeatureInfo[0]);
     }
 
     /** Apps read their own signing certificate in Application.onCreate (update checks, SoLoader...): every package has one from the first call. */

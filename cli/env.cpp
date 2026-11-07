@@ -148,7 +148,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     env["XDG_DATA_DIRS"] = prepend(join(n, "share"), getenvOr("XDG_DATA_DIRS", "/usr/local/share:/usr/share"));
     if (deviceGraphics(layout, instance)) deviceGraphicsEnv(instance, env);
     env["LD_PRELOAD"] = join(n, "libapklayer-preload.so") + ":libgcc_s.so.1";
-    if (const char* extra = getenv("APKLAYER_PRELOAD_EXTRA")) env["LD_PRELOAD"] += std::string(":") + extra;  // e.g. the JVM's libjsig.so for apps whose native code installs signal handlers
+    if (const char* extra = getenv("APKLAYER_PRELOAD_EXTRA")) env["LD_PRELOAD"] += std::string(":") + extra;  // more preloads (debugging)
     env["BIONIC_LD_LIBRARY_PATH"] = l;
     if (!env.count("APKLAYER_CRASH_TRACE")) env["APKLAYER_CRASH_TRACE"] = "1";
     // system_server's services stay in the JVM; native clients use their existing unavailable-service fallbacks
@@ -175,11 +175,13 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
         for (const Gpu& g : gpus)
             if (g.compositor) env["APKLAYER_COMPOSITOR_NODE"] = g.node;
     }
+    std::string gles = hostGles(layout, env);
     if (!env.count("MESA_GLES_VERSION_OVERRIDE") && getenvOr("APKLAYER_GLES_OVERRIDE", "auto") != "off") {
-        std::string version = hostGles(layout, env);
         // eglinfo probes a device of its own choosing: with several GPUs the claim is made anyway (a no-op on a 3.2 driver)
-        if (version.rfind("2.", 0) == 0 || version == "3.0" || gpus.size() > 1) env["MESA_GLES_VERSION_OVERRIDE"] = "3.2";
+        if (gles.rfind("2.", 0) == 0 || gles == "3.0" || gpus.size() > 1) env["MESA_GLES_VERSION_OVERRIDE"] = "3.2";
     }
+    if (env.count("MESA_GLES_VERSION_OVERRIDE")) gles = env["MESA_GLES_VERSION_OVERRIDE"];
+    if (!gles.empty()) env["APKLAYER_GLES_VERSION"] = gles;  // the stack's ro.opengles.version (cli/stack.cpp)
     return result;
 }
 
@@ -201,6 +203,10 @@ std::vector<std::string> hostJvmArgs(const Layout& l, const Instance& inst, Nati
                                   // Robolectric's native runtime: its library per JVM, its fonts and ICU data once (robolectric patch 0001), in the instance's state directory (disk)
                                   "-Djava.io.tmpdir=" + inst.tmpDir(),
                                   "-Dapklayer.storage=" + inst.storageDir};  // volumes: Internal storage (emulated/0 below), Home, Linux root
+    // HotSpot's libjsig: a native library's fault handler (the native bridge's recovery, an app's own) is chained behind the JVM's, which
+    // calls it for faults that are not its own (bionic_translation 0042); a spare-born process gets its route only later, so every JVM has it
+    std::string jsig = join(dirName(dirName(realPath(ne.java))), "lib/libjsig.so");
+    if (exists(jsig)) ne.env["LD_PRELOAD"] += ":" + jsig;
     if (isDir(join(n, "jdk-patch"))) { a.push_back("--patch-module"); a.push_back("java.base=" + join(n, "jdk-patch")); }  // libcore-only members Android's natives look up
     // the fonts of the device build, once a fonts.xml is staged beside them (Robolectric's font shadows read <fontdir>/fonts.xml); Robolectric's own otherwise
     if (exists(join(nr, "system/fonts/fonts.xml"))) a.push_back("-Drobolectric.nativeruntime.fontdir=" + join(nr, "system/fonts/"));

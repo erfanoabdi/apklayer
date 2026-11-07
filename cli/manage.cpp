@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <cstring>
 #include <ftw.h>
 #include <map>
@@ -230,9 +231,12 @@ int permissionsCommand(const Layout& l, const Instance& inst, const std::vector<
     std::map<std::string, std::string> levels;  // the framework's protection levels (tools/gen/permission-levels.py), as HostSystemConfig reads them
     for (const std::string& line : split(readFile(join(etc, "apklayer-permission-levels.tsv")).value_or(""), '\n'))
         if (size_t tab = line.find('\t'); tab != std::string::npos) levels[line.substr(0, tab)] = line.substr(tab + 1);
-    const std::string file = join(inst.root, "permissions-revoked");  // read by the runtime (apklayer.host.HostRevokedPermissions)
-    std::set<std::string> revoked;
+    // the person's answers, also the permission prompt's (apklayer.host.HostRuntimePermissions): "package\tpermission" granted, revoked ("\tonce": asked again)
+    const std::string grantedFile = join(inst.root, "permissions-granted"), file = join(inst.root, "permissions-revoked");
+    std::set<std::string> granted, revoked;
+    for (const std::string& line : split(readFile(grantedFile).value_or(""), '\n')) if (!line.empty()) granted.insert(line);
     for (const std::string& line : split(readFile(file).value_or(""), '\n')) if (!line.empty()) revoked.insert(line);
+    const bool legacy = std::atoi(property(info, "targetSdk").c_str()) < 23;  // granted at install unless revoked, as Android does
     std::vector<std::string> requested = split(property(info, "permissions"), ';');
     if (args.size() == 1) {
         // signature permissions: a privileged system app (in the build's allowlist) holds them, as HostSystemConfig grants them
@@ -243,9 +247,11 @@ int permissionsCommand(const Layout& l, const Instance& inst, const std::vector<
             if (p.empty()) continue;
             const std::string level = levels.count(p) ? levels[p] : "";
             // blank: a permission another app defines, which that app's protection level decides
-            const char* granted = level == "dangerous" ? (revoked.count(pkg + "\t" + p) ? "0" : "1") : level == "normal" || level == "appop" ? "1"
+            const std::string key = pkg + "\t" + p;
+            const bool held = granted.count(key) || (legacy && !revoked.count(key) && !revoked.count(key + "\tonce"));
+            const char* shown = level == "dangerous" ? (held ? "1" : "0") : level == "normal" || level == "appop" ? "1"
                                 : level == "signature" ? (privileged ? "1" : "0") : "";
-            printf("%s\t%s\t%s\n", clean(p).c_str(), level.c_str(), granted);
+            printf("%s\t%s\t%s\n", clean(p).c_str(), level.c_str(), shown);
         }
         return 0;
     }
@@ -253,10 +259,12 @@ int permissionsCommand(const Layout& l, const Instance& inst, const std::vector<
     // POST_NOTIFICATIONS is also the per-app notification switch for apps that do not request it (below 33: NotificationManagerService blocks the package)
     if (std::find(requested.begin(), requested.end(), perm) == requested.end() && perm != "android.permission.POST_NOTIFICATIONS") die(pkg + " does not request " + perm);
     if (levels[perm] != "dangerous") die(perm + " is not a runtime permission (only dangerous ones are granted or revoked)");
-    std::string text;
-    for (const std::string& line : revoked) if (line != pkg + "\t" + perm) text += line + "\n";
-    if (args[0] == "revoke") text += pkg + "\t" + perm + "\n";
-    if (!writeFile(file, text)) die("cannot write " + file);
+    const std::string key = pkg + "\t" + perm;
+    std::string text, grants;
+    for (const std::string& line : revoked) if (line != key && line != key + "\tonce") text += line + "\n";
+    for (const std::string& line : granted) if (line != key) grants += line + "\n";
+    if (args[0] == "revoke") text += key + "\n"; else grants += key + "\n";
+    if (!writeFile(file, text) || !writeFile(grantedFile, grants)) die("cannot write " + file);
     if (args[0] == "revoke") stopApp(l, inst, pkg);  // as Android does: a revoked permission ends the app's processes
     printf("apklayer: %s %s %s %s in instance %s\n", args[0] == "grant" ? "granted" : "revoked", perm.c_str(), args[0] == "grant" ? "to" : "from", pkg.c_str(),
            inst.id.c_str());

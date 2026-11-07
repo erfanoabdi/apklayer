@@ -74,7 +74,9 @@ apps = []
 try:
     target = App(PKG)
     apps.append(target)
-    pid = target.expect('[act-t] main pid=').split('pid=')[1].split()[0]
+    main = target.expect('[act-t] main pid=')
+    pid = main.split('pid=')[1].split()[0]
+    assert 'ui=true' in main, 'an activity is not a UI context (Context.isUiContext): ' + main
     jvm = jvms(PKG)
     assert jvm == [int(pid)], 'the app JVM: %s, pid %s' % (jvm, pid)
     print('[relaunch] %s runs, pid %s' % (PKG, pid), flush=True)

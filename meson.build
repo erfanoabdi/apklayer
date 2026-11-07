@@ -111,6 +111,9 @@ install_data(files(run_command('sh', '-c', 'cd "$MESON_SOURCE_ROOT" && find aosp
 install_symlink('portal', pointing_to: '../../../share/apklayer/bridge/portal', install_dir: pkg_lib / 'bridge')  # helpers above the CLI (HostFilePortal)
 install_symlink('apklayer', pointing_to: '../lib/apklayer/cli/apklayer', install_dir: get_option('bindir'))
 install_data('data/apklayer-manager.desktop', install_dir: get_option('datadir') / 'applications')
+# the Apklayer submenu of the desktop's app menu (as Waydroid's): apps carry Categories=X-Apklayer-App; the CLI writes a per-user copy too
+install_data('data/apklayer.menu', install_dir: get_option('sysconfdir') / 'xdg/menus/applications-merged')
+install_data('data/apklayer.directory', install_dir: get_option('datadir') / 'desktop-directories')
 # Ubuntu Touch: 'Open with' / share of a file to apklayer. Lomiri Content Hub reads its peers from /usr/share/lomiri-content-hub/peers, each named
 # by the receiving app's id: the hidden apklayer-share app, apklayer-manager --share. Unused elsewhere.
 install_data('data/apklayer-share.desktop', install_dir: get_option('datadir') / 'applications')

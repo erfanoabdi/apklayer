@@ -1,6 +1,7 @@
 /* apklayer graphics HAL, host side: GPU buffers from libgbm (see include/apklayer/graphics.h). */
 #define _GNU_SOURCE
 #include "apklayer/graphics.h"
+#include "readback.h"
 
 #include <dirent.h>
 #include <drm_fourcc.h>
@@ -179,6 +180,10 @@ int apklayer_gfx_alloc(struct apklayer_gfx *gfx, uint32_t width, uint32_t height
     int r = 0;
     if (gbm_device_is_format_supported(gfx->gbm, fourcc, gbm_flags(gfx, usage))) {
         struct gbm_bo *bo = gbm_bo_create(gfx->gbm, width, height, fourcc, gbm_flags(gfx, usage));
+        /* NVIDIA's GBM makes no LINEAR render target (EINVAL; its EGL renders to no pitch-linear image either): SurfaceFlinger's capture
+         * (GPU render + CPU read) is then tiled and the CPU reads it through the GPU (apklayer_gfx_map). Mesa never gets here. */
+        if (!bo && (gbm_flags(gfx, usage) & (GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING)) == (GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING))
+            bo = gbm_bo_create(gfx->gbm, width, height, fourcc, gbm_flags(gfx, usage) & ~GBM_BO_USE_LINEAR);
         if (!bo) { fprintf(stderr, "apklayer-gfx: gbm_bo_create %ux%u fourcc 0x%x flags 0x%x failed: %s\n", width, height, fourcc, gbm_flags(gfx, usage), strerror(errno)); return errno ? -errno : -ENOMEM; }
         out->modifier = gbm_bo_get_modifier(bo);
         out->num_planes = gbm_bo_get_plane_count(bo);
@@ -279,7 +284,13 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
             addr = gbm_bo_map(m->bo, 0, 0, fd_data.width, fd_data.height,
                               write ? GBM_BO_TRANSFER_READ_WRITE : GBM_BO_TRANSFER_READ, &map_stride, &m->map_data);
             if (!addr && getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[gfx] gbm_bo_map %ux%u: %s\n", fd_data.width, fd_data.height, strerror(errno));
-            if (!addr) gbm_bo_destroy(m->bo);
+            if (!addr) { gbm_bo_destroy(m->bo); m->bo = NULL; }
+        }
+        /* a tiled buffer the driver maps not at all (NVIDIA): read through the GPU into a copy at the buffer's stride */
+        if (!addr && !write && !buf->packed && buf->num_planes == 1 && (m->stage = malloc((size_t)buf->stride[0] * fd_data.height))) {
+            int r = apklayer_gfx_readback(gfx->gbm, fd_data.fd, fd_data.width, fd_data.height, fd_data.format, buf->stride[0], buf->offset[0],
+                                          buf->modifier, m->stage, buf->stride[0]);
+            if (r) { free(m->stage); m->stage = NULL; errno = -r; } else { addr = m->stage; offset = 0; }
         }
         /* Android reads a locked buffer at its own stride: a map with another one (a driver's detiled staging copy) is read and written
          * through a copy at that stride */
