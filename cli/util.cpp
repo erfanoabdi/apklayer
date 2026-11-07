@@ -1,4 +1,5 @@
 #include "util.h"
+#include "unit.h"
 
 #include <dirent.h>
 #include <fcntl.h>
@@ -253,7 +254,9 @@ char** toEnvp(const Env& env, std::vector<std::string>& storage, std::vector<cha
 }
 
 namespace {
-[[noreturn]] void execChild(const Spawn& spec) {
+[[noreturn]] void execChild(const Spawn& original) {
+    Spawn spec = original;
+    if (!spec.unit.empty()) scopeSpawn(spec, spec.unit);
     // a child gets the default signal mask: the stack daemon blocks SIGTERM/SIGHUP for its signalfd, and a service it restarts would inherit that
     // (then `stop` cannot end it: the daemon is SIGKILLed after 5 s and the service is left running)
     sigset_t none;

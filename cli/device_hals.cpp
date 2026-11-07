@@ -6,19 +6,22 @@
 namespace apklayer {
 
 namespace {
+// the host's own files: the CLI the hub's processes start runs under the path layer, which serves /vendor and /odm from the Android root
+const std::string kHost = "/proc/self/root";
+
 // The HALs the device's VINTF manifests declare (its servicemanager and hwservicemanager serve what these name): the "<name>" of every
 // <hal> in the vendor's and ODM's manifest and fragments. Read once per process. The live listing would need a binder client in the CLI
 // (glibc; libbinder is Android code): the manifests are what the device's own service managers check registrations against.
 const std::string& declared() {
     static const std::string names = [] {
         std::string all;
-        for (const std::string& dir : {std::string("/vendor/etc/vintf"), std::string("/odm/etc/vintf")}) {
+        for (const std::string& dir : {kHost + "/vendor/etc/vintf", kHost + "/odm/etc/vintf"}) {
             std::vector<std::string> files = {join(dir, "manifest.xml")};
             for (const std::string& f : listDir(join(dir, "manifest"))) files.push_back(join(dir, "manifest/" + f));
             for (const std::string& f : files)
                 if (auto text = readFile(f)) all += *text;
         }
-        if (auto legacy = readFile("/vendor/manifest.xml")) all += *legacy;
+        if (auto legacy = readFile(kHost + "/vendor/manifest.xml")) all += *legacy;
         return all;
     }();
     return names;
@@ -40,7 +43,7 @@ DeviceHal probeDeviceHal(const Layout& l, const std::string& domain) {
     }
     if (domain == "graphics") {
         if (!declares("android.hardware.graphics.allocator")) return {-1, "the device declares no gralloc allocator"};
-        if (!isDir("/vendor/lib64/egl")) return {-1, "the device has no GPU driver in /vendor/lib64/egl"};
+        if (!isDir(kHost + "/vendor/lib64/egl")) return {-1, "the device has no GPU driver in /vendor/lib64/egl"};
         return {30, "the device's gralloc and GPU driver"};
     }
     if (domain == "media") {

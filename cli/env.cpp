@@ -81,8 +81,12 @@ std::string deviceProperty(const std::string& key) {
 
 namespace {
 // dir first in a search path, once: a launch from inside the instance (the hub's) already has it there, and its spare key must equal a desktop launch's
+// dir first in the search path, once: the same result for an environment that went through here before (a launch's and the spare's, which the
+// hub started, must be equal: the spare key)
 std::string prepend(const std::string& dir, const std::string& path) {
-    return path == dir || path.rfind(dir + ":", 0) == 0 ? path : dir + ":" + path;
+    std::string result = dir;
+    for (const std::string& entry : split(path, ':')) if (entry != dir) result += ":" + entry;
+    return result;
 }
 }  // namespace
 
@@ -113,7 +117,7 @@ static void deviceGraphicsEnv(const Instance& instance, Env& env) {
     writeFile(join(share, "bionic_translation/cfg.d/device-graphics.cfg"),
               "# graphics = device: Android's own EGL loader and GLES (the device's driver), not apklayer's host EGL\n"
               "libEGL.so libEGL.so\nlibGLESv1_CM.so libGLESv1_CM.so\nlibGLESv2.so libGLESv2.so\nlibGLESv3.so libGLESv3.so\n");
-    env["XDG_DATA_DIRS"] = share + ":" + env["XDG_DATA_DIRS"];
+    env["XDG_DATA_DIRS"] = prepend(share, env["XDG_DATA_DIRS"]);
 }
 
 NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {

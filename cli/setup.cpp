@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include "apps.h"
+#include "autostart.h"
 #include "binder.h"
 #include "env.h"
 #include "fetch.h"
@@ -183,6 +184,9 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
         // the WebView provider's switch (Chromium's sandbox off) is the instance's own file, written at launch (cli/run.cpp): nothing for root
         step("system-apps", failed.empty() ? "done" : "failed", failed.empty() ? std::to_string(list.size()) + " installed" : failed);
         if (failed.empty()) { makeDirs(dirName(marker)); writeFile(marker, "1\n"); }
+        // a phone: the instance always on (its stack and hub up from login, the spare ready), so no launch waits for them (~10 s of a cold start
+        // on the Volla X23); once, at the first setup: the user's own choice stays (`apklayer instance autostart <id> off`)
+        if (failed.empty() && isHalium() && !autostartOn(instance)) autostartCommand(fresh, {instance.id, "on"});
     } else step("system-apps", "done", "Installed");
 
     // 5. the optional ones

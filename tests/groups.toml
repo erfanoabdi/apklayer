@@ -161,6 +161,11 @@ run = ["python3 -u tests/vm/broadcasts.py manifest", "python3 -u tests/vm/broadc
        "python3 -u tests/vm/broadcasts.py sticky", "python3 -u tests/vm/broadcasts.py async", "python3 -u tests/vm/broadcasts.py once",
        "python3 -u tests/vm/broadcasts.py death"]
 
+[units]
+# out of the starter's lifecycle (Lomiri freezes an app's unit when it loses the focus): a launch from a unit frozen meanwhile comes up, every process in apklayer's own units, the spare serves another app
+apps = ["hello-act-target", "hello-act-caller"]
+run = ["python3 -u tests/vm/units.py"]
+
 [push]
 # background push: a closed app wakes for a cloud message, an alarm and a job fire with no app process, boot broadcasts, always-on mode (HubScheduler, HubBootBroadcasts)
 apps = ["hello-push", "hello-pushgms"]

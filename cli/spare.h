@@ -17,6 +17,9 @@ int takeAppSpare(const Instance& inst, const std::string& key, const std::vector
 // The spare JVM's exit status (128+signal when killed); SIGINT, SIGTERM and SIGHUP to this launcher are passed on to it meanwhile. The JVM
 // outlives its holder: when the holder ends first, this waits for the JVM itself (its status is then unknown: 1).
 int awaitAppSpare(int conn, int jvmPid);
+// SIGINT, SIGTERM and SIGHUP to this launcher go to the app's JVM: a stop of the unit that started the launch (Lomiri closing the app) reaches only
+// the launcher, the JVM runs in a scope of its own (cli/unit.h).
+void passSignalsTo(int pid);
 // What a spare and a launch must share: the JVM's command line, its environment (but what is the launch's own), the runtime build.
 std::string appSpareKey(const Layout& layout, const Instance& instance, const std::vector<std::string>& argv, const Env& env);
 // Starts `apklayer app-spare` detached; it ends at once when the instance has a spare already, else prepares one once a byte or EOF comes on afterFd
