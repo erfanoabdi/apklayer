@@ -8,6 +8,8 @@
 #   tools/stage sysapps                  the tree's providers and system apps installed as apklayer apps on the VM
 #   tools/stage vulkan [stage dir]       the Orb Vulkan loader build onto the VM (the loader keeps its SONAME; the mapping selects the renamed copy)
 #   tools/stage x86_64                   everything an x86_64 machine needs, one tar file: build/x86_64/apklayer-x86_64-stage.tar (docs/X86_64.md)
+#   tools/stage arm32                    the arm32 Android libraries of the 32-bit app process into build/arm32/android-libs (gsi_arm64's system/lib,
+#                                        apklayer's modules' 32-bit outputs; then tools/armhf/build.sh: docs/ARM32.md)
 # The VM is the one in tests/vm/local.conf.
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -144,7 +146,30 @@ stage_x86_64() { # re-runs itself inside the OrbStack machine; every staged ELF 
     ls -la "$repo/build/x86_64/apklayer-x86_64-stage.tar"
 }
 
-[ $# -ge 1 ] || { sed -n '2,12p' "$0" >&2; exit 2; }
+stage_arm32() { # re-runs itself inside the OrbStack machine; every staged ELF is checked to be 32-bit ARM
+    if [ "${1:-}" != --inside ]; then exec orb -m ubuntu22-x86 sh "/mnt/mac$here/stage" arm32 --inside; fi
+    out="$tree/out/target/product/generic_arm64" dest="$repo/build/arm32/android-libs"
+    # apklayer's modules and the patched tree libraries from their 32-bit module outputs (`m <output file>`), then the product's system/lib
+    names="$(awk '($5 == "apklayer" || $5 == "patched") && $3 ~ /[.]so$/ { n = $3; sub(".*/", "", n); sub("[.]so$", "", n); printf "-name %s -o ", n }' "$repo/deps/android-tree-files.lock")"
+    srcs=""
+    for d in $(find "$tree/out/soong/.intermediates" -type d \( $names -false \) -prune 2>/dev/null); do
+        for v in android_arm_armv8-a_shared android_vendor_arm_armv8-a_shared; do [ -d "$d/$v" ] && srcs="$srcs$d/$v:"; done
+    done
+    srcs="$srcs$out/system/lib"
+    for d in "$out"/apex/*/lib "$out"/apex/*/lib/extractors "$out/system_ext/lib" "$out/system/system_ext/lib" "$out/vendor/lib"; do [ -d "$d" ] && srcs="$srcs:$d"; done
+    rm -rf "$dest"; mkdir -p "$dest"
+    # roots: what an app process loads (the list); the stack's own services stay 64-bit
+    ANDROID_LIBS_SRC="$srcs" stage_libs "$dest" $(grep -v ubsan_standalone "$repo/deps/android-libs.list" | sed 's/aarch64/arm/') > "$dest/../libs-copied.txt" 2> "$dest/../libs-missing.txt"
+    cp "$dest/libvulkan.so" "$dest/libapklayer_vulkan.so"  # the patched loader under its own name, as on arm64 (tools/stage vulkan)
+    echo "$(wc -l < "$dest/../libs-copied.txt") libraries copied; missing ($dest/../libs-missing.txt): $(sed 's/.*: //' "$dest/../libs-missing.txt" | sort -u | wc -l)"
+    bad=0
+    for f in "$dest"/*.so*; do
+        case "$(readelf -h "$f" 2>/dev/null | sed -n 's/.*Machine: *//p')" in ARM) ;; *) echo "not arm32: $f"; bad=$((bad + 1));; esac
+    done
+    echo "$bad foreign ELF files"
+}
+
+[ $# -ge 1 ] || { sed -n '2,14p' "$0" >&2; exit 2; }
 step="$1"; shift
 case "$step" in
     libs) stage_libs "$@";;
@@ -153,5 +178,6 @@ case "$step" in
     sysapps) stage_sysapps;;
     vulkan) stage_vulkan "$@";;
     x86_64) stage_x86_64 "$@";;
+    arm32) stage_arm32 "$@";;
     *) echo "tools/stage: unknown target $step" >&2; exit 2;;
 esac

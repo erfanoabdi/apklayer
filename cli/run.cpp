@@ -152,9 +152,16 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         spawn(hub);
     }
 
-    std::vector<std::string> jvm = windowJvmArgs(l, inst, ne), window;
-    if (mode == RunMode::Component) ne.env["APKLAYER_COMPONENT_HOST"] = "1";  // the launch's own environment (a spare gets it with its target)
-    std::string spareKey = appSpareKey(l, inst, jvm, ne.env);
+    // an arm32 app's JVM is the 32-bit runtime's (its JVM, native dir, libraries: Layout::arm32Layout); stack, shell and window sink stay 64-bit.
+    // Its spare key never matches the 64-bit spare's.
+    bool arm32 = property(join(dir, "info.properties"), "nativeRoute") == "arm32";
+    if (arm32 && !l.hasArm32()) die(package + " needs the 32-bit runtime (" + l.arm32 + ": tools/armhf/build.sh), which is not staged");
+    Layout lj = arm32 ? l.arm32Layout() : l;
+    NativeEnv ne32 = arm32 ? nativeEnv(lj, inst) : NativeEnv{};
+    NativeEnv& nj = arm32 ? ne32 : ne;
+    std::vector<std::string> jvm = windowJvmArgs(lj, inst, nj), window;
+    if (mode == RunMode::Component) nj.env["APKLAYER_COMPONENT_HOST"] = "1";  // the launch's own environment (a spare gets it with its target)
+    std::string spareKey = appSpareKey(l, inst, jvm, nj.env);
     int vdisplay = 0;
     int self = getpid();
     // one virtual display per app window (its own layer stack and sink per launch); pid-based ids cannot collide, and the title identifies instance and
@@ -170,7 +177,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
                 if (line.compare(0, eq, "window-mode") == 0) general = line.substr(eq + 1);
                 else if (line.compare(0, eq, "window-mode." + package) == 0) specific = line.substr(eq + 1);
             }
-            if (!specific.empty() || !general.empty()) ne.env["APKLAYER_WINDOW_MODE"] = specific.empty() ? general : specific;
+            if (!specific.empty() || !general.empty()) ne.env["APKLAYER_WINDOW_MODE"] = nj.env["APKLAYER_WINDOW_MODE"] = specific.empty() ? general : specific;
         }
         Spawn sink;
         sink.argv = {l.btload(), l.androidLibs, "libapklayer_vdisplay.so", "--main", title, std::to_string(self), getenvOr("APKLAYER_DISPLAY_WIDTH", "720"), getenvOr("APKLAYER_DISPLAY_HEIGHT", "1280")};
@@ -186,7 +193,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     if (!sandboxOn() && pipe2(started, O_CLOEXEC) == 0) {  // the instance's spare takes the launch when it matches (cli/spare.cpp)
         std::vector<std::string> target = late;
         target.insert(target.end(), files.begin(), files.end());
-        jvmPid = takeAppSpare(inst, spareKey, target, ne.env, started[1], &conn);
+        jvmPid = takeAppSpare(inst, spareKey, target, nj.env, started[1], &conn);
         if (jvmPid > 0) trace("app spare taken");
     }
     jvm.insert(jvm.end() - 3, late.begin(), late.end());
@@ -194,7 +201,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
 
     Spawn app;
     app.argv = jvm;
-    app.env = ne.env;
+    app.env = nj.env;
     app.cwd = dir;
     if (sandboxOn()) sandboxSpawn(l, inst, app, package);  // the JVM as the app's own uid in its own view (cli/sandbox.cpp)
     if (jvmPid <= 0 && started[1] >= 0) { fcntl(started[1], F_SETFD, 0); app.env["APKLAYER_STARTED_FD"] = std::to_string(started[1]); }

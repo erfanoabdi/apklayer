@@ -14,8 +14,12 @@ import org.robolectric.util.ReflectionHelpers.ClassParameter;
 final class HostBuild {
     private HostBuild() {}
 
-    /** arm64-v8a on an aarch64 machine, x86_64 on a PC (the libraries apps run are the ones of that ABI in their APK). */
-    static final String ABI = "aarch64".equals(System.getProperty("os.arch")) ? "arm64-v8a" : "x86_64";
+    /** arm64-v8a on an aarch64 machine, x86_64 on a PC, armeabi-v7a in the 32-bit app process (the libraries apps run are the ones of that ABI in their APK). */
+    static final String ABI = switch (System.getProperty("os.arch")) {
+        case "aarch64" -> "arm64-v8a";
+        case "arm" -> "armeabi-v7a";
+        default -> "x86_64";
+    };
 
     /** The ABI of the app's own libraries: arm64-v8a for an app that runs through the native bridge (as ART reports the app's ISA on a device with one), else ABI. */
     static String appAbi() { return "arm64".equals(System.getProperty("apklayer.nativebridge")) ? "arm64-v8a" : ABI; }  // a spare-born process gets the property with its launch

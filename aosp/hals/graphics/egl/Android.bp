@@ -13,7 +13,7 @@ cc_library_shared {
         "libsystem_headers",
     ],
     shared_libs: ["libcutils", "liblog", "libnativewindow"],
-    compile_multilib: "64",
+    compile_multilib: "both",  // the 32-bit app process loads it too (docs/PLAN.md "apps built for another CPU" 2(a))
     allow_undefined_symbols: true,
     cflags: ["-Wall", "-Werror", "-Wno-unused-parameter"],
 }

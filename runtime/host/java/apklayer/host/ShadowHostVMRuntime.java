@@ -7,5 +7,5 @@ import org.robolectric.shadows.ShadowVMRuntime;
 /** VMRuntime.vmInstructionSet() names the CPU of the runtime ("arm64", "x86_64"): SoLoader and others pick the native library directory by it. */
 @Implements(className = "dalvik.system.VMRuntime", isInAndroidSdk = false)
 public class ShadowHostVMRuntime extends ShadowVMRuntime {
-    @Implementation protected String vmInstructionSet() { return HostBuild.appAbi().equals("arm64-v8a") ? "arm64" : "x86_64"; }
+    @Implementation protected String vmInstructionSet() { return switch (HostBuild.appAbi()) { case "arm64-v8a" -> "arm64"; case "armeabi-v7a" -> "arm"; default -> "x86_64"; }; }
 }

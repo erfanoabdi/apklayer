@@ -19,8 +19,13 @@ struct Layout {
     std::string stateHome;    // ~/.local/state
     std::string runtimeHome;  // $XDG_RUNTIME_DIR
     std::string runtimeVersion;  // installed: the Android runtime bundle this package needs (<root>/versions); empty in a source tree
+    std::string arm32;        // the 32-bit app process's runtime (tools/armhf/build.sh): armhf JVM, native dir, arm32 Android libraries
+    std::string java;         // the JVM of this layout's app processes; empty: findJava's choice
 
     static Layout detect(bool setUp = true);  // setUp false: leave the bundle's setup to the caller (`apklayer setup` repairs a broken one)
+    bool hasArm32() const { return isExecutable(join(arm32, "bin/java")); }  // armeabi-v7a apps can run (nativeRoute arm32)
+    Layout arm32Layout() const;  // this layout with the 32-bit runtime's JVM, native dir and libraries (an arm32 app's JVM)
+
     bool setUpBundle(bool fatal = true) const;  // false (when not fatal): the setup script failed
     void requireRuntime() const;  // installed: dies with what to do while the runtime bundle is missing
     std::string btload() const { return join(native, "bin/btload"); }

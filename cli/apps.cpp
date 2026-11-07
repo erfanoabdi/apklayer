@@ -48,9 +48,11 @@ std::vector<std::string> apkFiles(const std::string& dir) {
     return found;
 }
 
-// Extracts the app's libraries of one ABI, from the base and its splits (an ABI split carries them): the CPU's own, else the native bridge's
-// when it is staged and the app has that ABI (as Android's installer picks from ro.product.cpu.abilist). Returns true for the bridge's.
-bool extractLibs(const Layout& l, const std::string& dir) {
+// Extracts the app's libraries of one ABI, from the base and its splits (an ABI split carries them), in the order Android's installer picks from
+// ro.product.cpu.abilist: the CPU's own, the native bridge's when it is staged, then 32-bit ARM when the 32-bit runtime is staged (its own JVM,
+// Layout::arm32Layout). Returns the route (info.properties nativeRoute): "native", "bridge-<isa>", "arm32", or "" when the APK has native
+// libraries but none of a runnable ABI (Android's INSTALL_FAILED_NO_MATCHING_ABIS).
+std::string extractLibs(const Layout& l, const std::string& dir) {
     removeTree(join(dir, "lib"));
     std::vector<std::string> names;
     for (const std::string& apk : apkFiles(dir)) {
@@ -60,24 +62,26 @@ bool extractLibs(const Layout& l, const std::string& dir) {
         int st = 0;
         names.push_back("\n" + runCapture(list, &st));
     }
-    auto has = [&](const std::string& prefix, size_t i) { return names[i].find("\n" + prefix) != std::string::npos; };
-    bool own = false, bridged = false;
-    for (size_t i = 0; i < names.size(); i++) own = own || has(std::string("lib/") + kAbi + "/", i);
-    if (!own && *kBridgeAbi && exists(join(l.androidLibs, kBridgeLib)))
-        for (size_t i = 0; i < names.size(); i++) bridged = bridged || has(std::string("lib/") + kBridgeAbi + "/", i);
-    const std::string prefix = std::string("lib/") + (bridged ? kBridgeAbi : kAbi) + "/";
+    auto any = [&](const std::string& prefix) {
+        for (const std::string& n : names) if (n.find("\n" + prefix) != std::string::npos) return true;
+        return false;
+    };
+    std::vector<std::pair<std::string, std::string>> routes = {{kAbi, "native"}};  // ABI, route
+    if (*kBridgeAbi && exists(join(l.androidLibs, kBridgeLib))) routes.push_back({kBridgeAbi, std::string("bridge-") + kBridgeIsa});
+    if (l.hasArm32()) routes.insert(routes.end(), {{"armeabi-v7a", "arm32"}, {"armeabi", "arm32"}});
+    std::string abi, route;
+    for (const auto& [a, r] : routes)
+        if (abi.empty() && any("lib/" + a + "/")) abi = a, route = r;
+    if (abi.empty()) return any("lib/") ? "" : "native";
+    const std::string prefix = "lib/" + abi + "/";
     std::vector<std::string> apks = apkFiles(dir);
     for (size_t i = 0; i < apks.size(); i++) {
-        if (!has(prefix, i)) continue;
+        if (names[i].find("\n" + prefix) == std::string::npos) continue;
         makeDirs(join(dir, "lib"));
         sh({"unzip", "-o", "-j", "-q", join(dir, apks[i]), prefix + "*.so", "-d", join(dir, "lib")});
     }
-    // Android refuses such an APK (INSTALL_FAILED_NO_MATCHING_ABIS); here its Java part may still run, so a warning
-    bool otherAbi = false;
-    for (size_t i = 0; i < names.size(); i++) otherAbi = otherAbi || has("lib/", i);
-    if (!isDir(join(dir, "lib")) && otherAbi) std::cerr << "apklayer: warning: the APK has native libraries but none for " << kAbi << ": its native code cannot load\n";
-    if (isDir(join(dir, "lib"))) sh({"chmod", "-R", "0755", join(dir, "lib")});  // as Android's installer leaves them: some apps run a bundled lib*.so as a program (Puzzles' libpuzzlesgen.so)
-    return bridged;
+    sh({"chmod", "-R", "0755", join(dir, "lib")});  // as Android's installer leaves them: some apps run a bundled lib*.so as a program (Puzzles' libpuzzlesgen.so)
+    return route;
 }
 }  // namespace
 
@@ -99,7 +103,9 @@ void ensureUid(const Layout& l, const std::string& dir) {
 
 std::string hostClasspath(const Layout& l) {  // no app classes: they get a loader of their own (apklayer.host.AppClassLoader)
     const std::string& n = l.native;
-    return n + "/native-runtime.jar:" + l.hostClasses() + ":" + n + "/aosp/sim-classes:" + n + "/aosp/Robolectric_all.jar:" + l.deps +
+    // the 32-bit runtime's JNI shim (native/linux/arm/libandroid_runtime.so, which Robolectric's loader looks up on the class path) first
+    std::string shim = exists(join(n, "shim.jar")) ? join(n, "shim.jar") + ":" : "";
+    return shim + n + "/native-runtime.jar:" + l.hostClasses() + ":" + n + "/aosp/sim-classes:" + n + "/aosp/Robolectric_all.jar:" + l.deps +
            "/android-stub.jar:" + l.dex2jvmJar();
 }
 
@@ -119,8 +125,11 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
 
     // base.apk and split_<name>.apk, as a device installs a package (apklayer.tools.ApkSet: one APK, a base and its splits, or an .apks/.xapk/.apkm)
     Spawn stage;
-    bool bridge = *kBridgeAbi && exists(join(l.androidLibs, kBridgeLib));  // a staged native bridge runs apps of its ABI too (extractLibs prefers the CPU's own)
-    stage.argv = {findJava(l), "-cp", l.hostClasses(), "apklayer.tools.ApkSet", tmp, bridge ? std::string(kAbi) + "," + kBridgeAbi : std::string(kAbi)};
+    // the ABIs this machine runs, in extractLibs' order: a staged native bridge's and the 32-bit runtime's too
+    std::string abis = kAbi;
+    if (*kBridgeAbi && exists(join(l.androidLibs, kBridgeLib))) abis += std::string(",") + kBridgeAbi;
+    if (l.hasArm32()) abis += ",armeabi-v7a,armeabi";
+    stage.argv = {findJava(l), "-cp", l.hostClasses(), "apklayer.tools.ApkSet", tmp, abis};
     stage.argv.insert(stage.argv.end(), apks.begin(), apks.end());
     stage.env = currentEnv();
     if (runAndWait(stage) != 0) die("not an installable package: " + apks[0]);
@@ -190,6 +199,14 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
                   << property(info, "versionCode") << " (install -d allows it)" << std::endl;
         std::exit(kInstallDowngrade);
     }
+    // the route of its native code (extracted into the staging directory, so a refused app leaves nothing behind)
+    std::string route = extractLibs(l, tmp);
+    if (route.empty()) {
+        std::cerr << "apklayer: INSTALL_FAILED_NO_MATCHING_ABIS: " << pkg << " has native libraries only for ABIs this machine cannot run (it runs "
+                  << kAbi << (*kBridgeAbi && exists(join(l.androidLibs, kBridgeLib)) ? std::string(", ") + kBridgeAbi : std::string())
+                  << (l.hasArm32() ? ", armeabi-v7a, armeabi" : "") << ")" << std::endl;
+        std::exit(kInstallNoMatchingAbis);
+    }
     makeDirs(dir);
     std::string oldUid = property(old, "uid");
     for (const std::string& f : apkFiles(dir)) if (f != "base.apk") unlink(join(dir, f).c_str());  // the update's own splits replace the old ones
@@ -198,11 +215,12 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
         chmod(join(dir, f).c_str(), 0644);  // readable by every app, as Android's /data/app (a sandboxed app's own uid too); a copy keeps its source's 0600
     }
     for (const char* f : {"classes.jar", "key", "icon.png"}) sh({"mv", "-f", join(tmp, f), join(dir, f)});
-    bool bridged = extractLibs(l, dir);
+    removeTree(join(dir, "lib"));
+    if (isDir(join(tmp, "lib"))) sh({"mv", join(tmp, "lib"), join(dir, "lib")});
     // info.properties, with its uid, is the commit: a hub or JVM that meets the package while it is installed sees all of it or none
     if (!oldUid.empty()) writeFile(info, readFile(info).value_or("") + "uid=" + oldUid + "\n");
-    // the route of its native code: the CPU's own, or translated through the native bridge (the manager shows it)
-    setProperty(info, "nativeRoute", bridged ? std::string("bridge-") + kBridgeIsa : "native");
+    // the route of its native code: the CPU's own, translated through the native bridge, or a 32-bit process (the manager shows it)
+    setProperty(info, "nativeRoute", route);
     // an update keeps the system mark and the app drawer choice; --system (the staging of the tree's system apps) marks it
     if (system || isSystemApp(old)) setProperty(info, "system", "true");
     if (std::string drawer = property(old, "drawer"); !drawer.empty()) setProperty(info, "drawer", drawer);

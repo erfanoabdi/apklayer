@@ -167,6 +167,9 @@ char *mkdtemp(char *path) {
 #define SYS_statx 332
 #endif
 #endif
+#if !defined(SYS_newfstatat) && defined(SYS_fstatat64)
+#define SYS_newfstatat SYS_fstatat64  /* its 32-bit name (the 32-bit app process) */
+#endif
 long syscall(long nr, ...)
 {
     va_list ap;

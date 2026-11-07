@@ -57,7 +57,8 @@ std::string hostGles(const Layout& layout, const Env& env) {
 
 }  // namespace
 
-std::string findJava(const Layout&) {
+std::string findJava(const Layout& l) {
+    if (!l.java.empty()) return l.java;  // the 32-bit runtime's (Layout::arm32Layout)
     std::string wanted = getenvOr("APKLAYER_NATIVE_JAVA", "");
     if (!wanted.empty() && isExecutable(wanted)) return wanted;
     glob_t found{};

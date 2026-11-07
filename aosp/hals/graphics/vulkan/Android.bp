@@ -4,6 +4,6 @@ cc_library_shared {
     srcs: ["Driver.cpp"],
     header_libs: ["hwvulkan_headers", "vulkan_headers", "libapklayer_gralloc_common_headers"],
     shared_libs: ["libcutils", "liblog", "libdl"],
-    compile_multilib: "64",
+    compile_multilib: "both",  // the 32-bit app process loads it too (docs/PLAN.md "apps built for another CPU" 2(a))
     cflags: ["-Wall", "-Werror", "-Wno-missing-field-initializers"],
 }

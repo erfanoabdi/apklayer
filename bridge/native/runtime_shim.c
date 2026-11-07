@@ -99,6 +99,31 @@ __asm__(
     "  ret\n"
     ".balign 8\n1: .quad 0\n"
     "apklayer_critical_tpl_end:\n");
+#elif defined(__arm__)
+/* AAPCS (hard float, the 32-bit app process): the JVM's call is (env, clazz, a1 ... an) in r0-r3 and then the stack; the library wants (a1 ... an).
+ * Shifting the core argument sequence (r0-r3, then the stack words) down two words keeps every 64-bit argument's even alignment, so the
+ * registers shift by two, the first two stack words go into r2 and r3, and the stack words after them move down two slots (ten are copied).
+ * Assembled as ARM code (the copy's address is called without the Thumb bit); its last word holds the target's address. */
+__asm__(
+    ".text\n.balign 4\n.arm\n.globl apklayer_critical_tpl_start\n.globl apklayer_critical_tpl_end\n"
+    "apklayer_critical_tpl_start:\n"
+    "  push {r4, r5, r11, lr}\n"
+    "  add r11, sp, #16\n"            /* the stack arguments at entry */
+    "  sub sp, sp, #40\n"
+    "  mov r0, r2\n  mov r1, r3\n"
+    "  ldr r2, [r11]\n  ldr r3, [r11, #4]\n"
+    "  add r4, r11, #8\n  mov r5, #0\n"
+    "0: ldr r12, [r4, r5]\n  str r12, [sp, r5]\n  add r5, r5, #4\n  cmp r5, #40\n  blt 0b\n"
+    "  ldr r12, 1f\n"
+    "  blx r12\n"
+    "  sub sp, r11, #16\n"
+    "  pop {r4, r5, r11, pc}\n"
+    ".balign 4\n1: .word 0\n"
+    "apklayer_critical_tpl_end:\n"
+#if defined(__thumb__)
+    ".thumb\n"
+#endif
+    );
 #else
 #error "no @CriticalNative thunk for this architecture"
 #endif
@@ -115,7 +140,7 @@ static void *critical_thunk(void *target)
     }
     char *t = thunk_page + thunk_used;
     memcpy(t, apklayer_critical_tpl_start, size);
-    memcpy(t + size - 8, &target, 8);
+    memcpy(t + size - sizeof target, &target, sizeof target);
     __builtin___clear_cache(t, t + size);
     thunk_used += (size + 15) & ~(size_t)15;
     return t;
