@@ -44,11 +44,13 @@ and list it here. The M1 seed's patch log is in `archive/seed-m1/docs/PATCHES.md
 | 0027-stdio-file-mapping-on-glibc | the FILE-taking stdio functions map bionic's standard streams on glibc too |
 | 0028-getenv-home-set-by-app | `getenv("HOME")` returns a HOME the app set itself |
 | compat/gcc-before-13-cxx2b | `-std=c++2b` for gcc before 13 |
+| compat/gcc-before-11-cxx20 | `-std=c++20` for gcc before 11 (Sailfish OS 5.0: gcc 10), on top of the previous one |
+| compat/glibc-before-2.36-relr | RELR types in the linker for glibc before 2.36 (Ubuntu 22.04, Sailfish OS 5.0: 2.30) |
 | compat/libunwind-before-1.8-meson | accept libunwind before 1.8 |
 | compat/libunwind-before-1.8-weak-phdr | weak `unw_set_iterate_phdr_function` |
 
-`compat/include/relr-compat.h` (RELR types for glibc before 2.36) and `compat/include/stdatomic.h` (C11 atomics from C++ for gcc before 12)
-are headers meson.build adds for old toolchains, not patches.
+`compat/include/stdatomic.h` (C11 atomics from C++ for gcc before 12) is a header meson.build adds (a global include directory: Meson
+before 1.8 ignores a subproject's default_options cpp_args), not a patch.
 
 ## Robolectric (`patches/robolectric/`, external/robolectric)
 | Patch | Purpose |

@@ -30,17 +30,11 @@ if android_libs == '' and prebuilts != ''
   android_libs = prebuilts / cpu / 'android-libs/lib64'
 endif
 
-# bionic_translation's compat headers where the toolchain is older (patches/bionic_translation/compat), as global arguments: a subproject's
-# default_options c_args (and buildtype) take effect only from Meson 1.8 on (Sailfish OS 5.0 has 1.4); so before any target
+# bionic_translation's C11 atomics for C++ with gcc before 12 (patches/bionic_translation/compat/include), a global argument: a subproject's
+# default_options cpp_args (and buildtype) take effect only from Meson 1.8 on (Sailfish OS 5.0 has 1.4); so before any target
 cc = meson.get_compiler('c')
-if host_machine.system() == 'linux'
-  compat_inc = meson.project_source_root() / 'patches/bionic_translation/compat/include'
-  if cc.version().version_compare('<12')
-    add_global_arguments('-I' + compat_inc, language: 'cpp')
-  endif
-  if not cc.has_header_symbol('elf.h', 'Elf64_Relr')  # glibc before 2.36
-    add_global_arguments('-include', compat_inc / 'relr-compat.h', language: ['c', 'cpp'])
-  endif
+if host_machine.system() == 'linux' and cc.version().version_compare('<12')
+  add_global_arguments('-I' + meson.project_source_root() / 'patches/bionic_translation/compat/include', language: 'cpp')
 endif
 
 subdir('deps')
@@ -79,6 +73,9 @@ if host_machine.system() == 'linux'
     run_command(apply, compat / 'gcc-before-13-cxx2b.patch', compat / 'gcc-before-11-cxx20.patch', bt_src, check: true)
   elif cc.version().version_compare('<13')  # Ubuntu 22.04: gcc 11
     run_command(apply, compat / 'gcc-before-13-cxx2b.patch', bt_src, check: true)
+  endif
+  if not cc.has_header_symbol('elf.h', 'Elf64_Relr')  # glibc before 2.36
+    run_command(apply, compat / 'glibc-before-2.36-relr.patch', bt_src, check: true)
   endif
   unwind = dependency('libunwind', required: false)
   if not unwind.found() or unwind.version().version_compare('<1.8')  # one call each: a copy may have meson.build reset and keep linker.c
