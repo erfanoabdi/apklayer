@@ -35,7 +35,7 @@ out=$APKLY_STATE/sharedlib-hello.applib.user.out
 [ $late = 0 ] && APKLAYER_JOPTS="-Dapklayer.runms=30000" bin/apklayer run hello.applib.user > "$out" 2>&1
 grep -a "\[sharedlib\]\|shared library" "$out" | cut -c1-300
 if [ $early = 6 ] && [ $late = 0 ] && grep -aq "\[sharedlib\] hello.applib.user PASS static=static-library v3 system=system library" "$out"; then echo "PASS libraries of installed apps"
-else echo "FAIL libraries of installed apps (before the providers: exit $early, after: $late)"; tail -2 "$work"/*.out; fail=1; fi
+else echo "FAIL libraries of installed apps (before the providers: exit $early, after: $late)"; tail -n 2 "$work"/*.out; fail=1; fi
 for p in hello.applib.user hello.applib hello.applib.system; do bin/apklayer uninstall $p >/dev/null 2>&1; done
 rm -rf "$work"
 bin/apklayer stop >/dev/null 2>&1

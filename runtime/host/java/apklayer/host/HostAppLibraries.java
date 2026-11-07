@@ -58,8 +58,8 @@ final class HostAppLibraries {
         for (Path app : apps()) {
             Properties info = info(app);
             if (!List.of(info.getProperty("staticLibraries", "").split(";")).contains(use.kind() + ":" + use.name() + ":" + use.version())) continue;
-            // the digest the user names is one of the provider's signers (HostCertificate.digest: comma-separated SHA-256 of each)
-            if (!use.certDigest().isEmpty() && !List.of(info.getProperty("signer", "").split(",")).contains(use.certDigest())) continue;
+            // the digest the user names is one of the provider's signers (HostCertificate.digest: comma-separated upper-case SHA-256 of each)
+            if (!use.certDigest().isEmpty() && !List.of(info.getProperty("signer", "").toLowerCase(Locale.ROOT).split(",")).contains(use.certDigest())) continue;
             return jar(app);
         }
         return null;

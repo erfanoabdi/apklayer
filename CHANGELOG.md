@@ -130,6 +130,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-08 - libapklayer_codec2: --probe skips fixed-rate audio codecs (open-items agent)
+- Why: the in-process interface probe configured every audio codec to 48 kHz stereo and exited 1 at AMR-NB (8 kHz mono only); codec2.sh hid it with `|| true`. Service.cpp now asks each codec's possible rate and channel values and skips one that cannot take 48 kHz stereo. One source, no graph change.
+- Command (OrbStack, `flock -n ~/los24-build.lock`): only `hals/media/codec2/Service.cpp` copied into `vendor/apklayer` (the tree's copy was main's), then `python3 tools/lib/orb-build-module.py libapklayer_codec2 hals/media/codec2 Service.cpp`.
 ### 2026-11-07 - gsi_x86_64 libberberis_arm64: errno of host calls reaches the guest (nbr agent)
 - Why: with glibc-host-thread-id-handoff the guest's errno is its own thread record's, so errno set by a proxied host call (clock_gettime, stat64, ftell ...) never reached guest code. binary_translation 0003 wraps every host function's trampoline (MakeTrampolineCallable) to carry errno both ways.
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `patches/apply aosp/frameworks/libs/binary_translation ~/los24/frameworks/libs/binary_translation`, then `cd ~/los24 && source build/envsetup.sh && export APKLAYER_NATIVE_BRIDGE=arm64 && breakfast gsi_x86_64 userdebug && m libberberis_arm64`.

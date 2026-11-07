@@ -10,7 +10,7 @@ set -uo pipefail
 id=${APKLAYER_INSTANCE:-default}; [ "$id" = default ] && id=0
 bin/apklayer stop >/dev/null 2>&1  # first: a running hub would write its store again
 rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/apklayer/$id/accounts.json"
-run() { APKLAYER_JOPTS="-Dapklayer.runms=15000 $2" bin/apklayer run $1 > $APKLY_STATE/accounts-$3.out 2>&1; bin/apklayer stop >/dev/null 2>&1; grep -a "^\[\(sys\|accounts\)\] \(PASS\|FAIL\)" $APKLY_STATE/accounts-$3.out; }
+run() { APKLAYER_JOPTS="-Dapklayer.runms=15000 $2" bin/apklayer run $1 > $APKLY_STATE/accounts-$3.out 2>&1; cp $APKLY_STATE/hub.log $APKLY_STATE/accounts-$3.hub.log; bin/apklayer stop >/dev/null 2>&1; grep -a "^\[\(sys\|accounts\)\] \(PASS\|FAIL\)" $APKLY_STATE/accounts-$3.out; }
 # the same with the hub's question answered (tests/vm/answer-dialog.py, started first: it waits for the next dialog)
 answered() {
     python3 -u tests/vm/answer-dialog.py $1 30 > $APKLY_STATE/accounts-answer-$4.out 2>&1 &
