@@ -1,4 +1,5 @@
 #include "purge.h"
+#include "desktop.h"
 #include "flatpak.h"
 #include "sandbox.h"
 #include "stack.h"
@@ -32,6 +33,7 @@ int removeAllCommand(const Layout& l, const std::vector<std::string>& args) {
         puts("then remove the package itself: sudo apt purge apklayer apklayer-dev");
         return args.empty() ? 0 : 2;
     }
+    if (inFlatpak()) for (const std::string& pkg : listDir(l.appsDir)) removeDesktop(l, pkg);  // the portal's launchers: no files of ours to list
     // every instance stopped, its always-on unit off, the folders the sandbox's app uids own taken back before the trees go
     for (const std::string& name : listDir(join(l.dataHome, "apklayer"))) {
         std::string root = join(l.dataHome, "apklayer/" + name);

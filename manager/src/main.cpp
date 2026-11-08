@@ -1,5 +1,5 @@
 // apklayer-manager: the Slint UI (ui/app.slint) over the apklayer CLI (src/backend.h). The CLI runs on worker threads; results come back to the
-// UI thread with slint::invoke_from_event_loop. Usage: apklayer-manager [--instance ID] [--first-run] [--share] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG]
+// UI thread with slint::invoke_from_event_loop. Usage: apklayer-manager [--instance ID] [--first-run] [--share] [FILE.apk] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG]
 // [--dialog install|instance|prop|uninstall] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--expect LABEL]...] (the screenshot mode: presses the labelled
 // elements, waits for N refreshes when asked (the actions' results), renders once, writes the PNG and exits: the tests' view and input).
 #include <map>
@@ -452,7 +452,12 @@ int main(int argc, char** argv) {
         else if (a == "--expect" && more) expect.push_back(argv[++i]);
         else if (a == "--first-run") firstRun = true;
         else if (a == "--share") share = true;
-        else { fprintf(stderr, "usage: apklayer-manager [--instance ID] [--first-run] [--share] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG] [--dialog NAME] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--expect LABEL]...]\n"); return 2; }
+        else if (a[0] != '-') {  // an .apk opened with the manager (the Flatpak's entry handles the type): what the deb's open-apk entry runs
+            execl(cli.exe().c_str(), cli.exe().c_str(), "--instance", cli.instance.c_str(), "run", argv[i], (char*)nullptr);
+            perror(cli.exe().c_str());
+            return 1;
+        }
+        else { fprintf(stderr, "usage: apklayer-manager [--instance ID] [--first-run] [--share] [FILE.apk] [--screenshot OUT.png [--size WxH] [--page N] [--app PKG] [--dialog NAME] [--dark|--light] [--click LABEL | --type LABEL=TEXT]... [--wait-refresh N] [--expect LABEL]...]\n"); return 2; }
     }
     // the Wayland app id: GNOME matches the window to apklayer-manager.desktop (its icon, its dock entry). Lomiri gives the window to the app its
     // app id names: started as apklayer-share (--share) it must say so, or Lomiri counts that app windowless and suspends it

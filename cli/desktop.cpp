@@ -19,11 +19,18 @@ std::string infoFile(const Layout& l, const std::string& package) { return join(
 
 // a system app without a launcher activity (a provider) gets no entry: there is nothing to open
 bool hasEntry(const std::string& info) { return !property(info, "launcher").empty() || !isSystemApp(info); }
+
+// the Flatpak's launchers: the dynamic launcher portal (bridge/portal/launcher.py) writes them, the host's menu files are not the app's
+int launcherPortal(const Layout& l, std::vector<std::string> args) {
+    args.insert(args.begin(), {"python3", join(l.root, "bridge/portal/launcher.py")});
+    return sh(std::move(args));
+}
 }  // namespace
 
 // the "Apklayer" submenu (freedesktop menu spec, as Waydroid's X-WayDroid-App): a merge file selects the X-Apklayer-App entries
 // (the deb also installs data/apklayer.menu in /etc/xdg: the same submenu, merged by name)
 void writeMenu(const Layout& l) {
+    if (inFlatpak()) return;  // the portal's launchers have no submenu
     std::string config = hostXdg("XDG_CONFIG_HOME", ".config"), menu = join(config, "menus/applications-merged/" + launcherPrefix() + "menu");
     static bool written;  // writeDesktop below calls this again: never loop when the file cannot be written
     std::string data = hostXdg("XDG_DATA_HOME", ".local/share");
@@ -62,8 +69,17 @@ bool inDrawer(const std::string& info) {
 }
 
 void writeDesktop(const Layout& l, const std::string& pkg) {
+    std::string info = infoFile(l, pkg);
+    if (inFlatpak()) {  // a hidden one is removed: the portal asks the person on each install, never on a rewrite of the same entry
+        if (!inDrawer(info)) { removeDesktop(l, pkg); return; }
+        // the portal sets Name and Icon from these and rewrites Exec to `flatpak run --command=apklayer <app id> run <package>`
+        launcherPortal(l, {"install", launcherPrefix() + pkg + ".desktop", property(info, "label"), appDir(l, pkg) + "/icon.png",
+                           "[Desktop Entry]\nType=Application\nComment=Android app (" + pkg + ") via apklayer\nExec=apklayer run " + pkg + "\nStartupWMClass=" + pkg +
+                               "\nCategories=X-Apklayer-App;\n"});
+        return;
+    }
     writeMenu(l);
-    std::string apps = join(hostXdg("XDG_DATA_HOME", ".local/share"), "applications"), info = infoFile(l, pkg), entry = join(apps, launcherPrefix() + pkg + ".desktop");
+    std::string apps = join(hostXdg("XDG_DATA_HOME", ".local/share"), "applications"), entry = join(apps, launcherPrefix() + pkg + ".desktop");
     makeDirs(apps);
     std::string cli = hostCli(l.cliBinary());
     if (hasEntry(info))
@@ -72,9 +88,13 @@ void writeDesktop(const Layout& l, const std::string& pkg) {
     else unlink(entry.c_str());
     writeFile(join(apps, launcherPrefix() + "open-apk.desktop"),
               "[Desktop Entry]\nType=Application\nName=Android app (apklayer)\nExec=" + cli + " run %f\nMimeType=application/vnd.android.package-archive;\nNoDisplay=true\n");
-    if (inFlatpak()) return;  // the Platform has neither tool: the host's menu reads the entries as they are
     sh({"update-desktop-database", apps});
     sh({"xdg-mime", "default", launcherPrefix() + "open-apk.desktop", "application/vnd.android.package-archive"});
+}
+
+void removeDesktop(const Layout& l, const std::string& pkg) {
+    if (inFlatpak()) launcherPortal(l, {"uninstall", launcherPrefix() + pkg + ".desktop"});
+    else unlink(join(hostXdg("XDG_DATA_HOME", ".local/share"), "applications/" + launcherPrefix() + pkg + ".desktop").c_str());
 }
 
 void refreshDesktops(const Layout& l) {
