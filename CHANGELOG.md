@@ -178,6 +178,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Why: an NVIDIA tester's Unity games (PGR, Azur Lane) end SurfaceFlinger with SIGABRT, which ends the whole stack (keystore2 included);
   renderengine's LOG_ALWAYS_FATAL on a texture it cannot import is the likely abort. Patch frameworks/native 0008 (applied in the tree by hand, same diff).
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `cd ~/los24 && source build/envsetup.sh && breakfast gsi_x86_64 userdebug && m libapklayer_surfaceflinger`, then the same for gsi_arm64.
+- Result: x86_64 built (30:36), libapklayer_surfaceflinger.so sha256 c2182dc9afcd081e1f58b89f7a418ad580ebce64381f3fce58143058f7aed5e4 (android_x86_64_shared);
+  arm64 built (19:16), sha256 53ef4a23818d9f5394b31445e7021ad93e271eede05cbd64052a0a727a9743e9 (android_arm64_armv8-a_shared). Neither is in the prebuilts yet:
+  the x86_64 one ran from a private library directory on the x86 PC (`~/apklayer-x86/ks/sflibs`, APKLAYER_ANDROID_LIBS): gpu, gpu-window pass.
 ### 2026-11-08 - gsi_arm64 libapklayer_servicetool: `bench serve|run` for arm64 (userspace binder agent)
 - Why: the same measurement as the x86_64 entry below, on arm64 (Parallels); servicetool.cpp only, already synced (vendor/apklayer 35df514).
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_servicetool`.
