@@ -17,10 +17,34 @@ public final class AppSpare {
         StartTrace.mark("spare prepared");
         System.out.flush();
         System.err.flush();
+        Thread preload = new Thread(AppSpare::preload, "spare-preload");
+        preload.setDaemon(true);
+        preload.setPriority(Thread.MIN_PRIORITY);
+        preload.start();
         String target = NativeLoader.receiveTarget(Integer.parseInt(System.getenv("APKLAYER_SPARE_FD")));  // the launch's stdout and stderr become this process's
+        taken = true;
         if (target == null) { System.out.println("[apklayer] spare: the holder is gone"); System.exit(0); }
         StartTrace.mark("spare target");
         return apply(target.lines().toList());
+    }
+
+    private static volatile boolean taken;
+
+    /** Zygote's preloaded classes: the framework and JDK classes apps load after this point (resources/preloaded-classes, tools/gen/preload-list.py),
+     *  loaded, not initialized, while the spare waits; stops when a launch takes it. */
+    private static void preload() {
+        long t0 = System.nanoTime();
+        int loaded = 0, missing = 0;
+        ClassLoader sandbox = AppSpare.class.getClassLoader();
+        try (java.io.BufferedReader in = new java.io.BufferedReader(new java.io.InputStreamReader(AppSpare.class.getResourceAsStream("/preloaded-classes"),
+                java.nio.charset.StandardCharsets.UTF_8))) {
+            for (String name; !taken && !"false".equals(System.getProperty("apklayer.sparepreload")) && (name = in.readLine()) != null; ) {
+                try { Class.forName(name, false, sandbox); loaded++; }
+                catch (Throwable notHere) { missing++; }
+            }
+        } catch (Exception unreadable) { System.out.println("[apklayer] spare: no preloaded classes: " + unreadable); }
+        System.out.println("[apklayer] spare: preloaded " + loaded + " classes (" + missing + " not found) in " + (System.nanoTime() - t0) / 1000000 + " ms"
+                + (taken ? ", stopped by the launch" : ""));
     }
 
     /** A target's lines: -D options (set as the JVM's properties), then the APK and the classes jar (returned). */

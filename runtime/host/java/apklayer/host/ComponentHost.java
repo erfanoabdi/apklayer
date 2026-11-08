@@ -31,6 +31,7 @@ public final class ComponentHost implements Runnable {
         StartTrace.mark("hub attached");
         System.out.println("[apklayer] component-host READY " + app.getPackageName() + " pid=" + android.os.Process.myPid());
         AppSpare.launchStarted();
+        HeapTrim.periodically("component host");  // a host mostly waits: its heap goes back while it does
         ShadowPausedLooper looper = Shadow.extract(Looper.getMainLooper());
         while (client.alive() && !stopping) step(looper);
         if (stopping) {

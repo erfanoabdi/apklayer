@@ -43,6 +43,7 @@ public final class HubHost {
         HubLockScreen.unlockIfProvided();  // before READY: an app's auth-bound keys need the auth token at once
         StartTrace.mark("hub: battery, vibrator, usb");
         System.out.println("[apklayer-hub] READY pid=" + android.os.Process.myPid());
+        HeapTrim.periodically("hub");
         new Thread(() -> HubBootSettings.write(RuntimeEnvironment.getApplication(), directory), "hub-boot-settings").start();  // the hub is the instance's system (uid 1000)
         Thread boot = new Thread(() -> HubBootBroadcasts.sendOnce(directory), "hub-boot-broadcasts");  // after the boot settings, once per stack start
         boot.setDaemon(true);
