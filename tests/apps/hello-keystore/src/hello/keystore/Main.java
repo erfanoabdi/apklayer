@@ -30,10 +30,12 @@ public final class Main extends Activity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         new Thread(() -> {
-            try { run(System.getProperty("hello.ks", "first")); }
+            try { if ("auth".equals(System.getProperty("hello.ks"))) Auth.run(this); else run(System.getProperty("hello.ks", "first")); }
             catch (Throwable failure) { failure.printStackTrace(System.out); System.out.println("[ks] FAIL " + failure); }
         }).start();
     }
+
+    @Override protected void onActivityResult(int request, int result, android.content.Intent data) { if (request == 7) Auth.RESULT.complete(result); }
 
     // Key attestation: the chain KeyMint signs (leaf, its batch key's certificates, a self-signed root), the challenge in the attestation extension
     private static void attestation() throws Exception {

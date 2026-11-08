@@ -352,7 +352,8 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     NativeEnv ne = nativeEnv(l, inst);
     const std::string& n = l.native;
     for (const std::string& f : listDir(inst.logs()))
-        if (f.size() > 4 && f.substr(f.size() - 4) == ".log" && f != "stack.log") unlink(join(inst.logs(), f).c_str());  // stack.log: this daemon's own stderr, already open
+        // the previous stack's logs become <name>.log.1: a service that crashed (and ended that stack) keeps its reason; stack.log is this daemon's own stderr, already open
+        if (f.size() > 4 && f.substr(f.size() - 4) == ".log" && f != "stack.log") rename(join(inst.logs(), f).c_str(), join(inst.logs(), f + ".1").c_str());
 
 
     // a fresh property store per stack (ro.* is write-once); ensureStack already made it when a client waits on the ready property
@@ -489,6 +490,12 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
                 waitpid(s.pid, &st, 0);
                 close(s.pidfd);
                 fprintf(stderr, "exited: %s (status %d)\n", s.name.c_str(), WIFEXITED(st) ? WEXITSTATUS(st) : 128 + WTERMSIG(st));
+                if (WIFSIGNALED(st)) {  // a crash: its log's last lines (an abort's message) into stack.log, which no restart renames
+                    std::string text = readFile(s.spec.logFile).value_or("");
+                    size_t from = text.size();
+                    for (int lines = 0; from > 0 && lines <= 24; ) if (text[--from] == '\n') lines++;
+                    fprintf(stderr, "--- the end of %s:\n%s\n---\n", s.spec.logFile.c_str(), text.substr(from).c_str());
+                }
                 if (!essential(s.name) && s.restarts < kMaxRestarts) {
                     s.restarts++;
                     s.pid = spawn(s.spec);

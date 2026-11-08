@@ -91,6 +91,7 @@ Build flags: upstream builds it with Meson's default buildtype (debug, -O0); mes
 | frameworks/native/0004-servicemanager-surfaceflinger-as-libraries | servicemanager and SurfaceFlinger as shared libraries |
 | frameworks/native/0005-libbinder-work-source-calling-uid | an app JVM's caller uid is the work source of its request header |
 | frameworks/native/0007-libbinder-own-uid-is-system | a caller with the stack's own uid counts as the system uid 1000 (Ubuntu Touch's phablet is uid 32011, an app uid to Android; Waydroid 0009 by the process uid) |
+| frameworks/native/0008-renderengine-unimportable-buffer-skips-layer | a client buffer the GPU cannot import is logged and its layer skipped, not LOG_ALWAYS_FATAL (an NVIDIA tester's Unity games aborted SurfaceFlinger) |
 | hardware/interfaces/0001-audio-effect-factory-filegroup | audio: the effect factory as a public filegroup |
 | libnativehelper/0001-file-descriptor-hotspot | file descriptor helpers on HotSpot |
 

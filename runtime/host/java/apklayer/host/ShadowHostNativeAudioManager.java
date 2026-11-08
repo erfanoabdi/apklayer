@@ -63,11 +63,37 @@ public class ShadowHostNativeAudioManager extends ShadowAudioManager {
     @Implementation @Override protected void setMode(int mode) {
         super.setMode(HubClient.connected() ? HubClient.current().audioMode(mode) : mode);  // Robolectric's copy dispatches this app's mode listeners
     }
+    // The managers this process registered listeners on (a manager per context, as AudioManager's listener lists are): another app's change
+    // (ENDPOINT_CALL_AUDIO) reaches each of them, on the main thread.
+    private static final java.util.Set<ShadowHostNativeAudioManager> LISTENING = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+    @Implementation @Override protected void addOnCommunicationDeviceChangedListener(java.util.concurrent.Executor executor, AudioManager.OnCommunicationDeviceChangedListener listener) {
+        if (LISTENING.add(this)) lastDevice = getCommunicationDevice();
+        super.addOnCommunicationDeviceChangedListener(executor, listener);
+    }
+    @Implementation protected void addOnModeChangedListener(java.util.concurrent.Executor executor, AudioManager.OnModeChangedListener listener) {
+        if (LISTENING.add(this)) lastDevice = getCommunicationDevice();
+        Reflector.reflector(AudioManagerDirect.class, real).addOnModeChangedListener(executor, listener);
+    }
+    private AudioDeviceInfo lastDevice;
+    /** The hub's news of another app's change: the mode (Robolectric's setMode dispatches the listeners when it differs) and the device in force. */
+    static void changedElsewhere(int mode, AudioDeviceAttributes device) {
+        int before = org.robolectric.util.ReflectionHelpers.getStaticField(ShadowAudioManager.class, "mode");
+        for (ShadowHostNativeAudioManager manager : java.util.List.copyOf(LISTENING)) {
+            org.robolectric.util.ReflectionHelpers.setStaticField(ShadowAudioManager.class, "mode", before);  // Robolectric's mode is one field for all managers
+            manager.superSetMode(mode);
+            AudioDeviceInfo now = manager.getCommunicationDevice();
+            if (!Objects.equals(now, manager.lastDevice)) { manager.lastDevice = now; manager.callOnCommunicationDeviceChangedListeners(now); }
+        }
+        org.robolectric.util.ReflectionHelpers.setStaticField(ShadowAudioManager.class, "mode", mode);
+    }
+    private void superSetMode(int mode) { super.setMode(mode); }  // Robolectric's: the shared mode field, and this manager's listeners when it differs
     @Implementation @Override protected int getMode() {
         return HubClient.connected() ? HubClient.current().audioMode(AudioManager.MODE_CURRENT) : super.getMode();
     }
-    // AudioService.setMicrophoneMute: a caller without MODIFY_AUDIO_SETTINGS changes nothing; the mute is AudioFlinger's (the HAL silences capture)
+    // AudioService.setMicrophoneMute: a caller without MODIFY_AUDIO_SETTINGS changes nothing; the mute is AudioFlinger's (the HAL silences capture).
+    // With a hub it sets the mute and broadcasts ACTION_MICROPHONE_MUTE_CHANGED (HubCallAudio).
     @Implementation @Override protected void setMicrophoneMute(boolean on) {
+        if (HubClient.connected()) { HubClient.current().microphoneMute(on); return; }
         android.content.Context context = RuntimeEnvironment.getApplication();
         if (context.checkSelfPermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return;
         NativeAudio.ensureInitialized();
@@ -89,6 +115,7 @@ public class ShadowHostNativeAudioManager extends ShadowAudioManager {
     interface AudioManagerDirect {
         @Direct void registerAudioDeviceCallback(AudioDeviceCallback callback, Handler handler);
         @Direct void unregisterAudioDeviceCallback(AudioDeviceCallback callback);
+        @Direct void addOnModeChangedListener(java.util.concurrent.Executor executor, AudioManager.OnModeChangedListener listener);
     }
 
     @Implementation @Override protected List<AudioDeviceInfo> getAvailableCommunicationDevices() {
@@ -134,6 +161,7 @@ public class ShadowHostNativeAudioManager extends ShadowAudioManager {
         AudioDeviceInfo before = getCommunicationDevice();
         if (HubClient.connected()) HubClient.current().communicationDevice(true, device); else requested = device;
         AudioDeviceInfo after = getCommunicationDevice();
+        lastDevice = after;
         if (!Objects.equals(before, after)) callOnCommunicationDeviceChangedListeners(after);
         return true;
     }

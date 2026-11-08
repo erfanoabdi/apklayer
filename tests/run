@@ -48,9 +48,9 @@ def prepare(groups, slots):
     t = time.monotonic()
     vm.push()
     # binder devices for the slots, unless the VM environment selects the userspace binder (docs/BINDER.md: no devices, no root)
-    # (a VM without passwordless sudo, Parallels: the slots' devices made once by hand, binder.sh with the password, are enough)
-    devices = '' if 'APKLAYER_BINDER=userspace' in vm.config.ENV else ' && { sudo -n sh tools/host-setup/binder.sh %s >/dev/null 2>&1 || %s; }' % (
-        ' '.join(slots), ' && '.join('[ -e /dev/binderfs/binder-%s ]' % s for s in slots))
+    # (no sudo when the slots' devices are there already: a VM whose sudo asks for a password, set up once by hand)
+    devices = '' if 'APKLAYER_BINDER=userspace' in vm.config.ENV else ' && { %s || sudo -n sh tools/host-setup/binder.sh %s >/dev/null; }' % (
+        ' && '.join('[ -e /dev/binderfs/%sbinder-%s ]' % (b, s) for s in slots for b in ('', 'hw', 'vnd')), ' '.join(slots))
     build = vm.ssh(vm.instance_env(slots[0]) + BUILD + devices,
                    capture_output=True, text=True)
     assert build.returncode == 0, 'VM build failed:\n' + build.stdout[-3000:] + build.stderr[-3000:]

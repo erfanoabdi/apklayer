@@ -22,12 +22,13 @@ import java.util.List;
  * (the system), never by the app that asks. It uses the shell's plain shared-memory window (bridge/shell/shell.h WINDOW_CREATE/FRAME, the
  * protocol apps used before SurfaceFlinger): the desktop shows it like an app window, tests reach it by its client name ("apklayer.installer")
  * through the shell's test input. In the shell's mobile style it is a full-screen page with big buttons (Android's permission screen on a
- * phone). Clicks and touches answer it. Without a shell there is nobody to ask: the answer is no.
+ * phone). Clicks and touches answer it. Without a shell there is nobody to ask: the answer is no. A password question (askSecret) adds a
+ * field: keys and the input method type into it (shown as dots), Enter or the yes button answers.
  */
 final class HubInstallDialog {
     static final String CLIENT = "apklayer.installer";
-    private static final int HELLO = 1, WINDOW_CREATE = 2, FRAME = 3, WINDOW_DESTROY = 4, INPUT = 101, CLOSE = 103, KEY = 105, CONFIGURE = 107, TOUCH = 111;
-    private static final int W = 440, H = 200, KEYCODE_BACK = 4, KEYCODE_ESCAPE = 111;
+    private static final int HELLO = 1, WINDOW_CREATE = 2, FRAME = 3, WINDOW_DESTROY = 4, TEXT_INPUT = 6, INPUT = 101, CLOSE = 103, KEY = 105, CONFIGURE = 107, IME = 110, TOUCH = 111;
+    private static final int W = 440, H = 200, FIELD = 56, KEYCODE_BACK = 4, KEYCODE_ESCAPE = 111, KEYCODE_ENTER = 66, KEYCODE_DEL = 67, KEYCODE_NUMPAD_ENTER = 160;
     private static final int HEADING = 0xFF1C1B1F, BODY = 0xFF49454F, ACCENT = 0xFF6750A4;
     private static int windows;
 
@@ -37,16 +38,27 @@ final class HubInstallDialog {
     private record Layout(int w, int h, int[] pixels, int[] yes, int[] no) {}
 
     /** Shows the question and waits for the person's answer: true for the yes button, false for no, the window's close button, Escape, Back or no shell. */
-    static boolean ask(String heading, String body, String yes, String no) {
+    static boolean ask(String heading, String body, String yes, String no) { return ask(heading, body, yes, no, null); }
+
+    /** The question with a password field: what the person typed when they answered yes, null otherwise. */
+    static String askSecret(String heading, String body, String yes, String no) {
+        StringBuilder typed = new StringBuilder();
+        return ask(heading, body, yes, no, typed) ? typed.toString() : null;
+    }
+
+    /** {@code secret} non-null: the field's text, edited by the person's keys and input method. */
+    private static boolean ask(String heading, String body, String yes, String no, StringBuilder secret) {
         String socket = System.getenv("XDG_RUNTIME_DIR") == null ? null : System.getenv("XDG_RUNTIME_DIR") + "/apklayer/shell.sock";
         if (socket == null || !Files.exists(Path.of(socket))) { System.out.println("[apklayer-hub] no shell to ask \"" + heading + "\": refused"); return false; }
         Path shm = Path.of(System.getenv("XDG_RUNTIME_DIR"), "apklayer", "installer-" + ProcessHandle.current().pid() + "-" + (++windows) + ".shm");
         try (SocketChannel channel = SocketChannel.open(UnixDomainSocketAddress.of(socket)); RandomAccessFile file = new RandomAccessFile(shm.toFile(), "rw")) {
             byte[] name = CLIENT.getBytes(StandardCharsets.UTF_8);
             send(channel, HELLO, buf(4 + name.length).putInt((int) ProcessHandle.current().pid()).put(name));
-            Layout shown = show(channel, file, shm, heading, desktop(heading, body, yes, no));
+            Layout shown = show(channel, file, shm, heading, desktop(heading, body, yes, no, secret), null);
+            if (secret != null) send(channel, TEXT_INPUT, buf(8).putInt(1).putInt(1));  // the input method (an on-screen keyboard on a phone) types into the field
             Boolean answer = null;
-            boolean told = false;
+            boolean told = false, mobile = false;
+            int dpi = 160, nav = 0;
             int touchX = -1, touchY = -1;
             ByteBuffer head = buf(8);
             while (answer == null) {
@@ -58,11 +70,12 @@ final class HubInstallDialog {
                 if (type == CONFIGURE && msg.capacity() >= 24) {
                     // {id, logical w, h, scale %, dpi, navigation bar px, mobile}: in the mobile style (bridge/shell/mobile.c) the question becomes
                     // a page filling the window the shell maximized (Lipstick's has no navigation bar); the desktop style keeps the small dialog
-                    int cw = msg.getInt(4), ch = msg.getInt(8), scale = Math.max(msg.getInt(12), 1), dpi = msg.getInt(16), nav = msg.getInt(20);
+                    int cw = msg.getInt(4), ch = msg.getInt(8), scale = Math.max(msg.getInt(12), 1);
+                    dpi = msg.getInt(16); nav = msg.getInt(20);
                     int pw = cw * scale / 100, ph = ch * scale / 100;
-                    boolean mobile = (msg.capacity() >= 28 ? msg.getInt(24) != 0 : nav > 0) && pw > 0 && ph > 0;
-                    if (mobile && (pw != shown.w || ph != shown.h)) shown = show(channel, file, shm, heading, page(heading, body, yes, no, pw, ph, dpi, nav));
-                    else if (!mobile && shown.w != W) shown = show(channel, file, shm, heading, desktop(heading, body, yes, no));
+                    mobile = (msg.capacity() >= 28 ? msg.getInt(24) != 0 : nav > 0) && pw > 0 && ph > 0;
+                    if (mobile && (pw != shown.w || ph != shown.h)) shown = show(channel, file, shm, heading, page(heading, body, yes, no, secret, pw, ph, dpi, nav), shown);
+                    else if (!mobile && shown.w != W) shown = show(channel, file, shm, heading, desktop(heading, body, yes, no, secret), shown);
                     if (!told) {  // the test reads where the buttons are (logical window content coordinates), once the window has its size
                         told = true;
                         System.out.println("[apklayer-hub] dialog shown: \"" + heading + "\" yes=" + centre(shown.yes, cw, shown.w) + " no=" + centre(shown.no, cw, shown.w)
@@ -71,6 +84,22 @@ final class HubInstallDialog {
                 }
                 else if (type == CLOSE) answer = false;
                 else if (type == KEY && msg.getInt(4) == 0 && (msg.getInt(8) == KEYCODE_ESCAPE || msg.getInt(8) == KEYCODE_BACK)) answer = false;
+                else if (secret != null && (type == KEY || type == IME)) {  // the field: a key's character, Backspace, Enter; the input method's commit
+                    int length = secret.length();
+                    if (type == KEY && msg.getInt(4) == 0 && (msg.getInt(8) == KEYCODE_ENTER || msg.getInt(8) == KEYCODE_NUMPAD_ENTER)) { answer = true; continue; }
+                    if (type == KEY && msg.getInt(4) == 0 && msg.getInt(8) == KEYCODE_DEL && length > 0) secret.setLength(length - 1);
+                    else if (type == KEY && msg.getInt(4) == 0 && msg.capacity() >= 16 && msg.getInt(12) >= ' ' && msg.getInt(12) != 0x7F) secret.appendCodePoint(msg.getInt(12));
+                    else if (type == IME && msg.capacity() > 12) {
+                        // shortcut: the input method's delete counts bytes, the field characters; the same for what one types into a password
+                        secret.setLength(Math.max(0, length - msg.getInt(4)));
+                        byte[] bytes = new byte[msg.capacity() - 12];
+                        msg.position(12); msg.get(bytes);
+                        String text = new String(bytes, StandardCharsets.UTF_8);
+                        secret.append(text, 0, text.indexOf('\0') < 0 ? text.length() : text.indexOf('\0'));  // the commit; the preedit after it is not typed yet
+                    }
+                    if (secret.length() != length)
+                        shown = show(channel, file, shm, heading, mobile ? page(heading, body, yes, no, secret, shown.w, shown.h, dpi, nav) : desktop(heading, body, yes, no, secret), shown);
+                }
                 else if (type == INPUT && msg.getInt(4) == 1) answer = hit(shown, msg.getInt(8), msg.getInt(12));  // MotionEvent UP at (x, y): a click ends there
                 else if (type == TOUCH && msg.capacity() >= 20) {  // {id, action, finger, x, y}: a tap ends where the finger last was (an up carries no position)
                     int action = msg.getInt(4);
@@ -79,6 +108,7 @@ final class HubInstallDialog {
                     else touchX = touchY = -1;
                 }
             }
+            if (secret != null && !Boolean.TRUE.equals(answer)) secret.setLength(0);
             send(channel, WINDOW_DESTROY, buf(4).putInt(1));
             System.out.println("[apklayer-hub] dialog answered: \"" + heading + "\" " + (Boolean.TRUE.equals(answer) ? yes : no));
             return Boolean.TRUE.equals(answer);
@@ -90,13 +120,14 @@ final class HubInstallDialog {
         }
     }
 
-    /** Puts the layout in the shared memory and shows it: the first call creates window 1, a later one rebuffers it at its new size (WINDOW_CREATE of the same id). */
-    private static Layout show(SocketChannel channel, RandomAccessFile file, Path shm, String heading, Layout l) throws IOException {
+    /** Puts the layout in the shared memory and shows it: the first call creates window 1, a later one rebuffers it at a new size (WINDOW_CREATE of the
+     *  same id); at the same size it is a new frame only. */
+    private static Layout show(SocketChannel channel, RandomAccessFile file, Path shm, String heading, Layout l, Layout before) throws IOException {
         long bytes = (long) l.w * l.h * 4;
         if (file.length() < bytes * 2) file.setLength(bytes * 2);  // the shell maps two buffers; the first is drawn
         file.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, bytes).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer().put(l.pixels);
         byte[] path = (shm + "\0" + heading).getBytes(StandardCharsets.UTF_8);
-        send(channel, WINDOW_CREATE, buf(12 + path.length).putInt(1).putInt(l.w).putInt(l.h).put(path));
+        if (before == null || before.w != l.w || before.h != l.h) send(channel, WINDOW_CREATE, buf(12 + path.length).putInt(1).putInt(l.w).putInt(l.h).put(path));
         send(channel, FRAME, buf(24).putInt(1).putInt(0).putInt(0).putInt(0).putInt(l.w).putInt(l.h));
         return l;
     }
@@ -109,25 +140,37 @@ final class HubInstallDialog {
 
     /** The desktop dialog: heading, wrapped body text, the two buttons side by side at the bottom right (yes filled). Android's own Canvas: the
      *  hub JVM's Java2D natives are not usable next to the device libraries. */
-    private static Layout desktop(String heading, String body, String yes, String no) {
-        int bw = 110, bh = 36;
-        int[] yesBox = {W - 16 - bw, H - 16 - bh, bw, bh}, noBox = {W - 2 * (16 + bw), H - 16 - bh, bw, bh};
-        Bitmap bitmap = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
+    private static Layout desktop(String heading, String body, String yes, String no, CharSequence field) {
+        int bw = 110, bh = 36, h = field == null ? H : H + FIELD;
+        int[] yesBox = {W - 16 - bw, h - 16 - bh, bw, bh}, noBox = {W - 2 * (16 + bw), h - 16 - bh, bw, bh};
+        Bitmap bitmap = Bitmap.createBitmap(W, h, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(0xFFFAFAFA);
         Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
         float y = lines(canvas, text, heading, 18, Typeface.DEFAULT_BOLD, HEADING, 20, 36, W - 40, 24, false);  // a permission question takes two lines
         lines(canvas, text, body, 14, Typeface.DEFAULT, BODY, 20, y + 4, W - 40, 20, false);
+        if (field != null) field(canvas, text, field, 20, yesBox[1] - 16 - 40, W - 40, 40, 1.5f);
         buttons(canvas, text, yes, no, yesBox, noBox, 14, 18, 1.5f);
-        return new Layout(W, H, pixels(bitmap), yesBox, noBox);
+        return new Layout(W, h, pixels(bitmap), yesBox, noBox);
+    }
+
+    /** The password field: an outlined box, one dot per typed character, the cursor after them. */
+    private static void field(Canvas canvas, Paint paint, CharSequence typed, float x, float y, float w, float h, float stroke) {
+        Paint box = new Paint(Paint.ANTI_ALIAS_FLAG);
+        box.setColor(ACCENT); box.setStyle(Paint.Style.STROKE); box.setStrokeWidth(stroke * 1.5f);
+        canvas.drawRoundRect(x, y, x + w, y + h, h / 8, h / 8, box);
+        paint.setColor(HEADING);
+        float r = h / 10, cx = x + h / 3;
+        for (int i = 0; i < typed.length() && cx < x + w - h / 3; i++, cx += r * 3) canvas.drawCircle(cx + r, y + h / 2, r, paint);
+        canvas.drawRect(cx, y + h / 4, cx + stroke, y + h * 3 / 4, paint);
     }
 
     /** The mobile page, as Android's permission screen on a phone: a question icon, the heading and body centred, full-width buttons stacked at the
      *  bottom above the navigation bar (nav pixels), in dp of the shell's density so a finger hits them (56 dp high). */
-    private static Layout page(String heading, String body, String yes, String no, int w, int h, int dpi, int nav) {
+    private static Layout page(String heading, String body, String yes, String no, CharSequence field, int w, int h, int dpi, int nav) {
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         float dp = Math.max(dpi, 160) / 160f;
-        while (dp > 1 && height(paint, heading, body, w, dp) > h - nav) dp *= 0.9f;  // a short window (landscape): smaller, never overlapping
+        while (dp > 1 && height(paint, heading, body, w, dp) + (field == null ? 0 : 68 * dp) > h - nav) dp *= 0.9f;  // a short window (landscape): smaller, never overlapping
         int margin = Math.round(24 * dp), bh = Math.round(56 * dp), gap = Math.round(12 * dp), bw = w - 2 * margin;
         int[] noBox = {margin, h - nav - margin - bh, bw, bh}, yesBox = {margin, noBox[1] - gap - bh, bw, bh};
         Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
@@ -140,7 +183,8 @@ final class HubInstallDialog {
         Paint.FontMetrics m = paint.getFontMetrics();
         canvas.drawText("?", w / 2f - paint.measureText("?") / 2, cy - (m.ascent + m.descent) / 2, paint);
         float y = lines(canvas, paint, heading, 24 * dp, Typeface.DEFAULT, HEADING, margin, cy + 72 * dp, bw, 32 * dp, true);
-        lines(canvas, paint, body, 16 * dp, Typeface.DEFAULT, BODY, margin, y + 8 * dp, bw, 24 * dp, true);
+        y = lines(canvas, paint, body, 16 * dp, Typeface.DEFAULT, BODY, margin, y + 8 * dp, bw, 24 * dp, true);
+        if (field != null) field(canvas, paint, field, margin, Math.min(y + 8 * dp, yesBox[1] - bh - gap), bw, bh, 2 * dp);
         buttons(canvas, paint, yes, no, yesBox, noBox, 18 * dp, bh / 2f, 2 * dp);
         return new Layout(w, h, pixels(bitmap), yesBox, noBox);
     }

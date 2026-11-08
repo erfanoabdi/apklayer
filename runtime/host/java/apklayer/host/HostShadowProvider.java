@@ -76,6 +76,8 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.media.AudioRecord", ShadowHostNativeAudioRecord.class.getName()),
                 Map.entry("android.media.MediaRecorder", ShadowHostNativeMediaRecorder.class.getName()),
                 Map.entry("android.media.AudioManager", ShadowHostNativeAudioManager.class.getName()),
+                Map.entry("android.hardware.biometrics.BiometricPrompt", ShadowHostBiometricPrompt.class.getName()),  // the device credential through the hub
+                Map.entry("android.hardware.biometrics.BiometricManager", ShadowHostBiometricPrompt.Manager.class.getName()),
                 Map.entry("android.content.AttributionSource.ScopedParcelState", ShadowHostNativeAttributionParcel.class.getName()),
                 // a SurfaceView owns a real BLAST-backed window: native code (NDK, Vulkan, EGL) needs an ANativeWindow
                 Map.entry("android.view.SurfaceView", ShadowHostNativeSurfaceView.class.getName()),
