@@ -173,7 +173,7 @@ The desktop's settings become Android's system settings, read live through the x
    - Halium (Volla X23): `media = device` (the device's Codec2: listing works, creating a component does not yet; OMX also found), a codecs provider domain; the camera preview is rotated in the phone's landscape window (mobile window mode); `getCallingUid` inside host callbacks; the hello.camera rear-camera still; present fences on the phone (check `present fences:` in surfaceflinger's or the composer's log); the composer's primary display only takes apklayer buffers; the window on Lomiri (the shell's android_wlegl path) needs a human check; NewPipe's Trending list once stayed empty for 25 s (network on the phone unchecked).
    - Sailfish (RPMs against glibc 2.30 since 2026-11-08, UiBench draws): the Volla X23's checks there; libhybris mapped into every Android process through libdl_bio's libEGL.so.1; the prebuilts lacking the four newer Halium libraries; an apklayer-manager for Sailfish; a Chum/OBS repository if users should get updates through zypper.
 7. **Order** (all done by 2026-11-05): (a) fake providers for sensors, GNSS, vibrator and camera behind the existing fronts, with the provider config and tests; (b) the manager Hardware page; (c) real backends (iio, sensorfw, GeoClue, feedbackd, PipeWire camera); (d) the host binder contexts (AIDL, HIDL) with the two-instance test; (e) the Halium graphics path (device gralloc, `android_wlegl`).
-8. **Parked**: a userspace binder transport (RPC binder over Unix sockets as a fallback for hosts without binder_linux and for Flatpak): revisit later.
+8. Userspace binder: see "Plan: binder in userspace, no kernel binder" below (replaces the parked RPC binder note).
 
 ## Plan: Bluetooth and USB (decided 2026-11-04 by the owner, done 2026-11-04)
 **No HALs** (no Bluetooth stack, no USB HAL): shadows of the framework classes apps call, backed by the host directly, as far as apps' Java usage needs.
@@ -245,6 +245,46 @@ Measured on the Ubuntu Touch phone (Volla X23), NewPipe 0.29.1 cold start, about
    Numbers, Volla X23, instance ut always-on, drawer launch (lomiri-app-launch) to `activity resumed`, 3 runs each, medians; cold = a JVM started for the launch (`apklayer run` with options no spare has), archive written by Calculator in both: NewPipe warm 17.3 -> **15.0 s**, cold 27.9 -> **23.4 s**; Calculator (opencalculator) warm 11.7 -> **8.1 s**, cold 21.7 -> **16.7 s** (its before-archive was 69 MB against 88 MB after: a provider host had likely written it first, which is main's behaviour).
 7. Open, measured: bytecode verification off for non-boot classes (-XX:-BytecodeVerificationRemote) saves 33 -> 27.3 s of a cold start without CDS, 23.4 -> 22.0 s with CDS and 0023 (the archive's classes are verified at its dump); not taken: the verifier is the only type check of dex2jvm's output. The way to keep the check is ART's: verify an app's classes once at install (a verifying JVM over classes.jar with the framework, VerifyInstall), mark the jar, then run its JVMs unverified. Also open: the app's own classes (~2200 for NewPipe, 640 WebView) are parsed and verified at every start, the instance archive (one per instance, written by one app) cannot hold every app's classes (a dynamic archive cannot be made on top of another); and zygote-style preloading in the spare (framework classes the first activities load, ~2800 for NewPipe after its state setup, from a list like Android's preloaded-classes or the archive's own).
 8. Later (owner, 2026-11-08): the always-on phone instance stays (push needs it), but it should use less memory: measure what the stack, hub, spare and idle component hosts hold on the Volla X23 (PSS per process) and cut it (fewer resident system hosts, smaller heaps for idle hosts, the spare's footprint, GC that returns memory to the OS such as SerialGC's shrinking or -XX:+UseZGC-style uncommit).
+
+## Plan: binder in userspace, no kernel binder (owner's direction 2026-11-08, for later)
+Goal: apklayer needs no kernel binder at all (no binder_linux module, no binderfs mount, no root setup step, no per-instance devices that stay
+until reboot, no Flatpak host step). Halium phones keep talking to the *device's own* HALs (camera, vibrator) over the phone's kernel binder;
+that is the device's binder, not apklayer's.
+
+Options looked at (2026-11-08):
+- **RPC binder** (libbinder `RpcServer`/`RpcSession`, Android 12+, over Unix sockets/vsock/TCP; used by AVF/microdroid; fd passing over Unix
+  sockets since 13). Not a whole-system replacement: a binder received over one session cannot be passed to a third process over another
+  (Android's framework passes binders between processes all the time: the hub hands an app another app's binder; SurfaceFlinger, audio and
+  BLASTBufferQueue pass tokens), servicemanager hands out RPC binders only through Android 16's accessors, and every service would need
+  patching to serve both ways. Useful only for fixed point-to-point links.
+- **Innkeeper** (github.com/sargunv/innkeeper, Rust, AGPL-3.0, started 2026-10-27, pre-alpha): runs unmodified AOSP in Flatpak; a "broker"
+  parent process puts Android's init under a seccomp user-notification filter that traps `openat(/dev/*binder)` and binder ioctls and serves
+  them: a 4 MiB memfd injected as the receive area (`SECCOMP_IOCTL_NOTIF_ADDFD`), caller memory through `/proc/<pid>/mem`, a driver model
+  (`supervisor/broker/src/binder/driver.rs`) that follows `drivers/android/binder.c` and is unit-tested; one broker thread, 70-90k
+  transactions/s, 15 us round trip against 3.8 us for kernel binder; no priority inheritance, fds can leak when a transaction fails after some
+  were installed; `sender_euid` is a virtual uid (all apps one kernel uid). Not adoptable as is here: the broker must be the ancestor of every
+  Android process (apklayer starts processes in their own systemd scopes since the Lomiri work) and `/proc/<pid>/mem` of a non-ancestor hits
+  Yama ptrace_scope=1; needs Linux 5.9+ (ADDFD); its code is AGPL by sargunv, which apklayer's commercial license (Navotpala) cannot relicense
+  without sargunv's agreement (ask before reusing driver.rs).
+- **Chosen direction: a userspace binder driver behind apklayer's own libc.** One daemon per instance holds the driver model (nodes, refs,
+  transactions and replies, oneway queues, death notifications, fd and fd-array objects, the context manager, freeze, the features libbinder
+  checks); written from `drivers/android/binder.c` (or innkeeper's driver.rs if sargunv agrees to dual licensing). Every binder user in
+  apklayer goes through bionic_translation, so a thin patch there routes `open`/`ioctl`/`mmap`/`poll`/`close` on `/dev/{binder,hwbinder,
+  vndbinder}` (and /dev/binderfs/*) to the daemon over a Unix socket: the receive area is a memfd the daemon maps too, fds travel with
+  SCM_RIGHTS, a closed socket is the process's death. No seccomp, no /proc/<pid>/mem, no ancestry requirement, works from separate scopes.
+  Caller identity: the daemon reads each connection's SO_PEERCRED, so the per-app sandbox keeps kernel-attested uids (innkeeper gives that
+  up). Libbinder, servicemanager, Java and native code stay unmodified, and binder objects move freely between processes.
+Steps:
+1. Design note (docs/BINDER.md): the daemon's protocol, the driver model's scope, what libbinder's `/dev/binderfs/features` and
+   BINDER_VERSION must say, threading (looper spawn, BR_SPAWN_LOOPER), oneway ordering, the freezer (ActivityManager), buffer allocation in
+   the memfd, fd lifetime on failed transactions.
+2. Prototype: the daemon plus the bionic_translation patch; the existing `binder` and `host-binder` test groups and UiBench run on it;
+   round-trip and throughput against kernel binder (a microbenchmark like innkeeper's), on the x86 PC and arm64.
+3. Then everything: servicemanager, hwservicemanager, SurfaceFlinger, audio, the hub and apps on the daemon; the full suite on it;
+   binderfs becomes optional (kept as an option only if it stays clearly faster for graphics/audio), then removed from setup, the deb's
+   unit and the manager's first-run check; Flatpak without its host step.
+4. Measure the hot paths (SurfaceFlinger transactions per frame, audio) before dropping kernel binder; a second daemon thread or sharded
+   locks if one thread saturates.
 
 ## Parked (owner's decision)
 - Not now: NFC, biometrics, game controllers, ModemManager ("no SIM" is the honest answer), screen capture portal. Backlight and thermal are the host's.
