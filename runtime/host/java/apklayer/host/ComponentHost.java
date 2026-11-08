@@ -31,7 +31,6 @@ public final class ComponentHost implements Runnable {
         StartTrace.mark("hub attached");
         System.out.println("[apklayer] component-host READY " + app.getPackageName() + " pid=" + android.os.Process.myPid());
         AppSpare.launchStarted();
-        ShadowPausedLooper looper = Shadow.extract(Looper.getMainLooper());
         // no cached processes (the owner's rule; Android keeps them until memory runs short): a host that runs no service, has no work queued and
         // was not called for IDLE_EXIT_MS ends, as its last service's end does (Services.exitIfIdle); a provider's next client starts it again
         // (RemoteProvider retries a dead provider through the hub). What runs in system_server on a device (android:process="system":
@@ -41,23 +40,44 @@ public final class ComponentHost implements Runnable {
         boolean resident = "system".equals(info.processName) || android.os.Process.myUid() == android.os.Process.SYSTEM_UID
                 || (info.flags & android.content.pm.ApplicationInfo.FLAG_PERSISTENT) != 0;
         System.out.println("[apklayer] component-host process " + info.processName + (resident ? ": resident" : ": ends when idle"));
-        while (client.alive() && !stopping) {
-            step(looper);
-            if (!resident && idleExitNs > 0 && Services.none() && ShadowHostRealBinder.IN_FLIGHT.get() == 0 && looper.getNextScheduledTaskTime().toMillis() == 0
-                    && System.nanoTime() - ShadowHostRealBinder.LAST_TRANSACTION > idleExitNs) {
-                System.out.println("[apklayer] component-host idle for " + idleExitNs / 1_000_000 + " ms (no service, no call): exiting");
-                stopping = true;
+        ShadowPausedLooper looper = Shadow.extract(Looper.getMainLooper());
+        boolean[] told = {false};
+        loop(() -> {
+            if (!client.alive()) return true;
+            if (resident || idleExitNs <= 0 || System.nanoTime() - ShadowHostRealBinder.LAST_TRANSACTION <= idleExitNs) { told[0] = false; return false; }
+            // a message due later than the idle window does not keep it (Android ends such a cached process too): MediaProvider's WorkManager posts
+            // its delayed work 14 h ahead (GreedyScheduler), the same work is a job the hub runs then (JobScheduler)
+            long next = looper.getNextScheduledTaskTime().toMillis();
+            boolean idle = Services.none() && ShadowHostRealBinder.IN_FLIGHT.get() == 0 && (next == 0 || next - android.os.SystemClock.uptimeMillis() > idleExitNs / 1_000_000);
+            if (idle) { System.out.println("[apklayer] component-host idle for " + idleExitNs / 1_000_000 + " ms (no service, no call): exiting"); stop(); }
+            else if (!told[0]) {  // uncalled, yet kept: say once by what
+                told[0] = true;
+                System.out.println("[apklayer] component-host stays: " + (Services.none() ? "" : "a service runs, ") + ShadowHostRealBinder.IN_FLIGHT.get() + " calls in flight, next message "
+                        + (looper.getNextScheduledTaskTime().toMillis() == 0 ? "none" : "in " + (looper.getNextScheduledTaskTime().toMillis() - android.os.SystemClock.uptimeMillis()) + " ms: "
+                        + org.robolectric.util.ReflectionHelpers.getField(Looper.getMainLooper().getQueue(), "mMessages")));
             }
-        }
-        if (stopping) {
-            // `apklayer stop` (SIGTERM): the work due within STOP_WORK_MS runs first (pending writes; SharedPreferences.apply), then the host ends
-            long due = android.os.SystemClock.uptimeMillis() + STOP_WORK_MS, deadline = System.nanoTime() + STOP_DEADLINE_MS * 1_000_000L;
-            android.app.QueuedWork.waitToFinish();
-            while (PendingWork.dueBefore(due) && System.nanoTime() < deadline) step(looper);
-            PendingWork.awaitOtherLoopers(deadline);  // the settings provider saves on its own handler thread
-            System.out.println("[apklayer] component-host stopped " + app.getPackageName() + " after " + ((System.nanoTime() - deadline) / 1_000_000 + STOP_DEADLINE_MS) + " ms of due work");
-        }
+            return idle;
+        });
+        saveDueWork(app);
         NativeLoader.endWithoutNativeDestructors();
+    }
+
+    /** Runs the main looper until {@link #stop} (SIGTERM, an idle host) or {@code end} says so. */
+    static void loop(java.util.function.BooleanSupplier end) {
+        ShadowPausedLooper looper = Shadow.extract(Looper.getMainLooper());
+        do step(looper); while (!stopping && !end.getAsBoolean());
+    }
+    static void stop() { stopping = true; }
+
+    /** After a stop: the work due within STOP_WORK_MS runs first (pending writes; SharedPreferences.apply, SettingsState's), then the process may end. */
+    static void saveDueWork(Application app) {
+        if (!stopping) return;  // the hub went away: nothing asked for an orderly stop
+        ShadowPausedLooper looper = Shadow.extract(Looper.getMainLooper());
+        long due = android.os.SystemClock.uptimeMillis() + STOP_WORK_MS, deadline = System.nanoTime() + STOP_DEADLINE_MS * 1_000_000L;
+        android.app.QueuedWork.waitToFinish();
+        while (PendingWork.dueBefore(due) && System.nanoTime() < deadline) step(looper);
+        PendingWork.awaitOtherLoopers(deadline);  // the settings provider saves on its own handler thread
+        System.out.println("[apklayer] component-host stopped " + app.getPackageName() + " after " + ((System.nanoTime() - deadline) / 1_000_000 + STOP_DEADLINE_MS) + " ms of due work");
     }
 
     private static final long STOP_WORK_MS = 2000, STOP_DEADLINE_MS = 3500;  // SettingsState's longest write delay; under `stop`'s 5 s before SIGKILL

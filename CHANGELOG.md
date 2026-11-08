@@ -61,6 +61,21 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - From the shell on, touch works: a finger down/up through the shell's wl_touch handlers (test input, 540,228) opened UiBench's "General" (screenshot). So the fault is between Lipstick and the shell.
 - Lipstick 0.36.41 (LipstickCompositorWindow::handleTouchEvent, QtWayland 5.6 Touch) sends wl_pointer.enter, wl_keyboard.enter and wl_touch.down to a mapped application window's client; it does not use qt_touch_extension for that. No fault found in that code for a wl_shell client.
 - A tap written to the touchscreen's evdev node (goodix_ts, event4) produced no Wayland input event at all. The phone was blanked and locked (mce: display off, tklock locked, device lock with a code), so this run says nothing yet. Lipstick's own delivery needs a run with the phone unlocked and the app in front. Unlocking it from a script was not done (needs the owner's permission).
+## 2026-11-09: the always-on phone instance with less memory, second round (docs/PLAN.md "app start speed on phones" 8)
+- Measured where a host JVM's ~320 MB goes on the Volla X23 (NMT summary, smaps): heap 90 MB committed for 30-43 MB live, the CDS archive's
+  read-write half ~33 MB private per JVM, ~110 MB of Android native allocations NMT does not see, metaspace/code/symbols ~40 MB.
+- SettingsProvider runs in the hub's JVM, as in system_server (HubHost, cli runHub; not under the sandbox, or with APKLAYER_SETTINGS_IN_HUB=0).
+  Local hub calls clear the calling identity; the hub's own pid holds every permission; a peer is known by its app uid too; settings changes from
+  the CLI are written as the system; the hub's own data mapping is not inherited by what it starts (the spare's key matched no launch).
+- Idle component hosts: a message due after the idle window does not keep one (the media provider's WorkManager posts 14 h ahead); a kept,
+  uncalled host says once by what.
+- Host JVMs: -XX:InitialHeapSize=32m, -XX:TrimNativeHeapInterval=60000 (needs JDK 21.0.1 or later).
+- Phone (deb 0.4.7~git20261109.mem2 built on Parallels, dpkg -i --force-depends; apps stay at converter ABI 4, which ABI 3 does not reconvert):
+  settled instance 1939 -> 1308-1321 MB (two JVMs left: hub, spare); after NewPipe and Calculator 1388 MB. Launches within noise (PLAN 8's table;
+  NewPipe cold with the settings provider in its own host again, and without the heap flags, interleaved: no faster).
+- Tests (Parallels, own tree ~/agent-mem): providers, services, hub-services, activities, sysprov, host-uid, files, startup, system-apps,
+  broadcasts, first-start, units, settings, accounts, pendingintents, notifications, permissions, push, keystore, gpu, dex2jvm, reconvert pass;
+  installer passes but for its menu scenario, which fails in that fresh data home (no menu merge file from a setup; nothing of this round).
 
 ## 2026-11-09: verify-at-install reverted (owner)
 - Reverted 046485af and b3f66b04 (VerifyInstall/VerifyBytecode, refused-class stubs, -XX:-BytecodeVerificationRemote, converter ABI 4): the gain (NewPipe ~0.5 s cold, ~1.2 s warm; Calculator none) did not pay for 10-14 s longer phone installs, a reconvert of every app and unverified runtime-defined classes. Converter ABI back to 3. The spare's class preload and idle component hosts ending stay.

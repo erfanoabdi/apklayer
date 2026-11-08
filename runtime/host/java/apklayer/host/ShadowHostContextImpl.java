@@ -130,6 +130,7 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
 
     // A provider (or any service) in this process asking about its caller: with the hub the caller's package decides, not this app's own grants.
     @Implementation @Override protected int checkPermission(String permission, int pid, int uid) {
+        if (HubHost.hub && pid == android.os.Process.myPid()) return android.content.pm.PackageManager.PERMISSION_GRANTED;  // system_server holds every permission
         if (hub() && HubClient.connected() && pid != android.os.Process.myPid()) return HubClient.current().checkPermission(pid, uid, permission);
         int result = super.checkPermission(permission, pid, uid);
         if (result != android.content.pm.PackageManager.PERMISSION_GRANTED && permission != null && pid == android.os.Process.myPid()) {

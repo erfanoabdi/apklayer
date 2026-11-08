@@ -18,6 +18,8 @@ public class ShadowHostInstrumentation extends ShadowInstrumentation {
     @Implementation
     protected void callApplicationOnCreate(Application app) {
         // as Android's bindApplication: the system's and other apps' providers (Settings among them) answer from Application.onCreate on
+        // the hub's own package (HubHost) attaches and creates its providers once the hub is published
+        if (HubHost.booting) { Shadow.directlyOn(real, "android.app.Instrumentation", "callApplicationOnCreate", org.robolectric.util.ReflectionHelpers.ClassParameter.from(Application.class, app)); return; }
         if (System.getProperty("apklayer.package") != null && !AppEnvironment.installing) HubClient.attach(app);
         // before the app's own code in every process, component hosts included (Build: AppEnvironment.setUpApplication): the storage volumes (MediaProvider's
         // onCreate attaches the primary volume it finds)

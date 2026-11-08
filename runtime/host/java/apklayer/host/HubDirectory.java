@@ -123,7 +123,9 @@ final class HubDirectory extends Binder {
     private Peer caller() {
         synchronized (peers) {
             Peer peer = peers.get(Binder.getCallingPid());
-            if (peer == null || peer.uid != Binder.getCallingUid()) throw new SecurityException("Unregistered calling process");
+            // the caller's uid as registered, or its app uid: the hub resolves that once it hosts a package of its own (HubHost: ShadowHostRealBinder)
+            int uid = Binder.getCallingUid();
+            if (peer == null || (peer.uid != uid && peer.appUid != uid)) throw new SecurityException("Unregistered calling process");
             return peer;
         }
     }
@@ -144,7 +146,8 @@ final class HubDirectory extends Binder {
     /** Ends every process of the package (before the installer replaces or removes it, as Android kills the app), and waits for them to go. */
     void stopPackage(String name) {
         java.util.List<ProcessHandle> ending = new java.util.ArrayList<>();
-        synchronized (peers) { for (Peer peer : peers.values()) if (peer.name.equals(name)) ProcessHandle.of(peer.pid).ifPresent(ending::add); }
+        // the hub's own package (HubHost) is not ended: as a system_server package's, its update takes effect with the next hub
+        synchronized (peers) { for (Peer peer : peers.values()) if (peer.name.equals(name) && peer.pid != android.os.Process.myPid()) ProcessHandle.of(peer.pid).ifPresent(ending::add); }
         synchronized (hosts) { hosts.forEach((key, process) -> { if (key.equals(name) || key.startsWith(name + "#")) ending.add(process.toHandle()); }); }
         synchronized (appProcesses) { Process app = appProcesses.get(name); if (app != null) ending.add(app.toHandle()); }
         end(ending, 10_000);
@@ -187,6 +190,7 @@ final class HubDirectory extends Binder {
         if (stopping || peer(name) != null) return;
         int hash = name.indexOf('#');
         String pkg = hash < 0 ? name : name.substring(0, hash), instance = hash < 0 ? null : name.substring(hash + 1);
+        if (pkg.equals(System.getProperty("apklayer.package"))) return;  // runs in this JVM (HubHost), never in a host of its own
         synchronized (hosts) {
             Process old = hosts.get(name);
             if (old != null && old.isAlive()) return;
@@ -228,8 +232,9 @@ final class HubDirectory extends Binder {
                 if (packages.get(name) == null || endpoint == null || appThread == null || !HubProtocol.ENDPOINT.equals(endpoint.getInterfaceDescriptor()))
                     throw new SecurityException("Unknown app endpoint");
                 int installedUid = packages.uid(name);  // what others know this process by (UID_OF_PID, oneway callers): the installed uid, not one it claims
-                if (installedUid >= 0 && appUid != installedUid) throw new SecurityException(name + " is uid " + installedUid + ", not " + appUid);
                 int pid = Binder.getCallingPid(), uid = Binder.getCallingUid();
+                // the hub's own package (HubHost: system_server's SettingsProvider) runs as the system uid, as on a device
+                if (installedUid >= 0 && appUid != installedUid && pid != android.os.Process.myPid()) throw new SecurityException(name + " is uid " + installedUid + ", not " + appUid);
                 int kernel = ShadowHostRealBinder.kernelUid(pid);  // sandboxed (cli/sandbox.cpp): the process runs as its app uid, which it cannot choose
                 if (kernel >= android.os.Process.FIRST_APPLICATION_UID && kernel <= android.os.Process.LAST_APPLICATION_UID && kernel != installedUid)
                     throw new SecurityException(name + " is uid " + installedUid + ", its process runs as " + kernel);
@@ -454,9 +459,12 @@ final class HubDirectory extends Binder {
                 request.enforceNoDataAvail();
                 if (!sameUser(Binder.getCallingPid())) throw new SecurityException("Settings change from another user");
                 HubHostSettings settings = hostSettings;
-                if (settings != null) settings.changed();
-                try { HubBootSettings.writeInputMethods(org.robolectric.RuntimeEnvironment.getApplication().getContentResolver(), packages); }  // `apklayer ime` too
-                catch (RuntimeException unwritten) { System.out.println("[apklayer-hub] input method settings not written: " + unwritten); }
+                long identity = Binder.clearCallingIdentity();  // written as the system, not as the CLI (the settings provider may run in this JVM: HubHost)
+                try {
+                    if (settings != null) settings.changed();
+                    try { HubBootSettings.writeInputMethods(org.robolectric.RuntimeEnvironment.getApplication().getContentResolver(), packages); }  // `apklayer ime` too
+                    catch (RuntimeException unwritten) { System.out.println("[apklayer-hub] input method settings not written: " + unwritten); }
+                } finally { Binder.restoreCallingIdentity(identity); }
                 reply.writeNoException(); return true;
             }
             case HubProtocol.TAKE_LAUNCH -> {

@@ -84,7 +84,9 @@ side; buffers cross as dmabuf fds and fences as sync_file fds; one directory per
   timing anchor with the real refresh rate and vsync from the shell. Text input and clipboard belong to the focused proxied window; the shell reads and writes selections asynchronously.
 - Media: Codec2 and the extractor run as separate AOSP services with host GStreamer decoders behind them; YUV reaches SurfaceFlinger as dmabufs. Audio goes through the audio HAL to PipeWire.
 - Instance hub: a headless JVM (`apklayer hub`) owns the package/process directory; app JVMs carry real Binder/Parcel between each other. It reuses the framework's APK parser, launches
-  service-only apps through `component-host`, and implements bound and started services, broadcasts, providers, activities, notifications and pending intents. Tests: `tests/run` (groups in `tests/groups.toml`).
+  service-only apps through `component-host`, and implements bound and started services, broadcasts, providers, activities, notifications and pending intents. Like
+  system_server it is also the process of SettingsProvider (android:process="system"): `HubHost` sets its application up from that APK and registers it with
+  itself, so no JVM of its own runs for it (not under the sandbox). Tests: `tests/run` (groups in `tests/groups.toml`).
 - The spare, zygote's role: every process kind shares one sandbox (no package on its classpath), so a JVM can build it, load the native runtime and dry-run the
   state setup before it knows its package. One per instance, owned by the CLI (`apklayer app-spare`, `cli/spare.cpp`, `AppSpare`): the next app launch or component
   host start (`apklayer run`, the hub's `apklayer component-host`) of the same runtime build and environment takes it with its options, per-launch environment

@@ -45,11 +45,15 @@ public final class Main {
     public static void main(String[] args) {
         StartTrace.mark("jvm main");
         openJavaBase();
-        if (args.length == 1 && args[0].equals("--hub")) {
+        if (args.length >= 1 && args[0].equals("--hub")) {  // --hub [<apk> <classes>]: the system process's package it hosts (cli runHub)
             AndroidSandbox sandbox = sandbox();
+            Path apk = args.length == 3 ? Path.of(args[1]) : null, classes = args.length == 3 ? Path.of(args[2]) : null;
             try {
                 sandbox.runOnMainThread(() -> {
-                    try { sandbox.bootstrappedClass(HubHost.class).getMethod("run", AndroidSandbox.class).invoke(null, sandbox); }
+                    try {
+                        if (apk != null) Thread.currentThread().setContextClassLoader(appLoader(sandbox, apk, classes));
+                        sandbox.bootstrappedClass(HubHost.class).getMethod("run", AndroidSandbox.class, Path.class).invoke(null, sandbox, apk);
+                    }
                     catch (ReflectiveOperationException failure) { throw new RuntimeException(failure); }
                 });
             } catch (Throwable failure) { failure.printStackTrace(); System.exit(1); }
