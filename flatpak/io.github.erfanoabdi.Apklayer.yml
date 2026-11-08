@@ -61,6 +61,33 @@ modules:
         sha256: b88cc9163d0c652aaf39a99991d974ddba1c3a9711db8f1b5838af2a14731014
     cleanup: [/include, /lib/pkgconfig, '*.a', '*.la', /share/man]
 
+  # libinput.so.10 for the manager's prebuilt Slint (manager/fetch-slint.sh; its linuxkms backend links it), with its mtdev and libevdev
+  - name: mtdev
+    config-opts: [--disable-static]
+    sources:
+      - type: archive
+        url: https://bitmath.org/code/mtdev/mtdev-1.1.7.tar.bz2
+        sha256: a107adad2101fecac54ac7f9f0e0a0dd155d954193da55c2340c97f2ff1d814e
+    cleanup: [/bin, /include, /lib/pkgconfig, '*.la']
+
+  - name: libevdev
+    buildsystem: meson
+    config-opts: [-Dtests=disabled, -Ddocumentation=disabled, -Dtools=disabled]
+    sources:
+      - type: archive
+        url: https://www.freedesktop.org/software/libevdev/libevdev-1.13.4.tar.xz
+        sha256: f00ab8d42ad8b905296fab67e13b871f1a424839331516642100f82ad88127cd
+    cleanup: [/bin, /include, /lib/pkgconfig]
+
+  - name: libinput
+    buildsystem: meson
+    config-opts: [-Dlibwacom=false, -Ddebug-gui=false, -Dtests=false, -Ddocumentation=false, -Dinstall-tests=false]
+    sources:
+      - type: archive
+        url: https://gitlab.freedesktop.org/libinput/libinput/-/archive/1.28.1/libinput-1.28.1.tar.gz
+        sha256: a13f8c9a7d93df3c85c66afd135f0296701d8d32f911991b7aa4273fdd6a42a3
+    cleanup: [/bin, /include, /lib/pkgconfig, /libexec, /share/man, /share/zsh, /etc]
+
   - name: apklayer
     buildsystem: meson
     builddir: true
