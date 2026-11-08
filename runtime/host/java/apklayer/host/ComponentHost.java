@@ -33,7 +33,19 @@ public final class ComponentHost implements Runnable {
         AppSpare.launchStarted();
         HeapTrim.periodically("component host");  // a host mostly waits: its heap goes back while it does
         ShadowPausedLooper looper = Shadow.extract(Looper.getMainLooper());
-        while (client.alive() && !stopping) step(looper);
+        // no cached processes (the owner's rule; Android keeps them until memory runs short): a host that runs no service, has no work queued and
+        // was not called for IDLE_EXIT_MS ends, as its last service's end does (Services.exitIfIdle); a provider's next client starts it again
+        // (RemoteProvider retries a dead provider through the hub). The system's own (uid 1000: SettingsProvider) and persistent apps stay.
+        long idleExitNs = Long.getLong("apklayer.hostidlems", 60_000) * 1_000_000L;
+        boolean resident = android.os.Process.myUid() == android.os.Process.SYSTEM_UID || (app.getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_PERSISTENT) != 0;
+        while (client.alive() && !stopping) {
+            step(looper);
+            if (!resident && idleExitNs > 0 && Services.none() && ShadowHostRealBinder.IN_FLIGHT.get() == 0 && looper.getNextScheduledTaskTime().toMillis() == 0
+                    && System.nanoTime() - ShadowHostRealBinder.LAST_TRANSACTION > idleExitNs) {
+                System.out.println("[apklayer] component-host idle for " + idleExitNs / 1_000_000 + " ms (no service, no call): exiting");
+                stopping = true;
+            }
+        }
         if (stopping) {
             // `apklayer stop` (SIGTERM): the work due within STOP_WORK_MS runs first (pending writes; SharedPreferences.apply), then the host ends
             long due = android.os.SystemClock.uptimeMillis() + STOP_WORK_MS, deadline = System.nanoTime() + STOP_DEADLINE_MS * 1_000_000L;

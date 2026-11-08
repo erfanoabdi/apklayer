@@ -106,6 +106,9 @@ public final class Services {
     /** Hub requests (start, stop) being served: a host never exits inside one, or the hub would get no reply. */
     static final java.util.concurrent.atomic.AtomicInteger HUB_CALLS = new java.util.concurrent.atomic.AtomicInteger();
 
+    /** No service runs in this process and none is being created. */
+    static boolean none() { return RUNNING.isEmpty() && !creating; }
+
     /** A component host with no service left ends (main thread). */
     static void exitIfIdle() {
         if (Boolean.getBoolean("apklayer.componenthost") && RUNNING.isEmpty() && !creating) { System.out.println("[apklayer] last service of this process destroyed: exiting"); System.out.flush(); NativeLoader.endWithoutNativeDestructors(); Runtime.getRuntime().halt(0); }
