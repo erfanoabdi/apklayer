@@ -24,17 +24,17 @@ bool hasEntry(const std::string& info) { return !property(info, "launcher").empt
 // the "Apklayer" submenu (freedesktop menu spec, as Waydroid's X-WayDroid-App): a merge file selects the X-Apklayer-App entries
 // (the deb also installs data/apklayer.menu in /etc/xdg: the same submenu, merged by name)
 void writeMenu(const Layout& l) {
-    std::string config = hostXdg("XDG_CONFIG_HOME", ".config"), menu = join(config, "menus/applications-merged/apklayer.menu");
+    std::string config = hostXdg("XDG_CONFIG_HOME", ".config"), menu = join(config, "menus/applications-merged/" + launcherPrefix() + "menu");
     static bool written;  // writeDesktop below calls this again: never loop when the file cannot be written
     std::string data = hostXdg("XDG_DATA_HOME", ".local/share");
-    if (written || (exists(menu) && exists(join(data, "desktop-directories/apklayer.directory")))) return;  // another data home beside the same config: its own entry
+    if (written || (exists(menu) && exists(join(data, "desktop-directories/" + launcherPrefix() + "directory")))) return;  // another data home beside the same config: its own entry
     written = true;
     makeDirs(join(data, "desktop-directories"));
-    writeFile(join(data, "desktop-directories/apklayer.directory"),
+    writeFile(join(data, "desktop-directories/" + launcherPrefix() + "directory"),
               "[Desktop Entry]\nType=Directory\nName=Apklayer\nIcon=" + getenvOr("FLATPAK_ID", "apklayer") + "\n");  // the Flatpak's icon is named by its id
     makeDirs(join(config, "menus/applications-merged"));
     writeFile(menu, "<!DOCTYPE Menu PUBLIC \"-//freedesktop//DTD Menu 1.0//EN\"\n \"http://www.freedesktop.org/standards/menu-spec/menu-1.0.dtd\">\n"
-                    "<Menu>\n <Name>Applications</Name>\n <Menu>\n  <Name>Apklayer</Name>\n  <Directory>apklayer.directory</Directory>\n"
+                    "<Menu>\n <Name>Applications</Name>\n <Menu>\n  <Name>Apklayer</Name>\n  <Directory>" + launcherPrefix() + "directory</Directory>\n"
                     "  <Include><Category>X-Apklayer-App</Category></Include>\n </Menu>\n</Menu>\n");
     // the first menu: the entries written before it get their category
     for (const std::string& pkg : listDir(l.appsDir))
@@ -63,23 +63,23 @@ bool inDrawer(const std::string& info) {
 
 void writeDesktop(const Layout& l, const std::string& pkg) {
     writeMenu(l);
-    std::string apps = join(hostXdg("XDG_DATA_HOME", ".local/share"), "applications"), info = infoFile(l, pkg), entry = join(apps, "apklayer-" + pkg + ".desktop");
+    std::string apps = join(hostXdg("XDG_DATA_HOME", ".local/share"), "applications"), info = infoFile(l, pkg), entry = join(apps, launcherPrefix() + pkg + ".desktop");
     makeDirs(apps);
     std::string cli = hostCli(l.cliBinary());
     if (hasEntry(info))
         writeFile(entry, "[Desktop Entry]\nType=Application\nName=" + property(info, "label") + "\nComment=Android app (" + pkg + ") via apklayer\nExec=" + cli + " run " + pkg +
                              "\nIcon=" + appDir(l, pkg) + "/icon.png\nStartupWMClass=" + pkg + "\nCategories=X-Apklayer-App;\nX-Lomiri-Touch=true\n" + (inDrawer(info) ? "" : "NoDisplay=true\n"));
     else unlink(entry.c_str());
-    writeFile(join(apps, "apklayer-open-apk.desktop"),
+    writeFile(join(apps, launcherPrefix() + "open-apk.desktop"),
               "[Desktop Entry]\nType=Application\nName=Android app (apklayer)\nExec=" + cli + " run %f\nMimeType=application/vnd.android.package-archive;\nNoDisplay=true\n");
     sh({"update-desktop-database", apps});
-    sh({"xdg-mime", "default", "apklayer-open-apk.desktop", "application/vnd.android.package-archive"});
+    sh({"xdg-mime", "default", launcherPrefix() + "open-apk.desktop", "application/vnd.android.package-archive"});
 }
 
 void refreshDesktops(const Layout& l) {
     // an entry of an earlier install whose CLI is gone (a tarball in /opt replaced by the RPM: the launcher's icon opened nothing) is written again
     for (const std::string& pkg : listDir(l.appsDir)) {
-        std::string exec = property(join(l.dataHome, "applications/apklayer-" + pkg + ".desktop"), "Exec");
+        std::string exec = property(join(l.dataHome, "applications/" + launcherPrefix() + pkg + ".desktop"), "Exec");
         if (!exec.empty() && !exists(exec.substr(0, exec.find(' '))) && exists(infoFile(l, pkg))) writeDesktop(l, pkg);
     }
 }

@@ -21,4 +21,6 @@ std::string hostCli(const std::string& cli) {
     return inFlatpak() ? "flatpak run --command=apklayer " + getenvOr("FLATPAK_ID", "io.github.erfanoabdi.Apklayer") : cli;
 }
 
+std::string launcherPrefix() { return inFlatpak() ? getenvOr("FLATPAK_ID", "io.github.erfanoabdi.Apklayer") + "." : "apklayer-"; }
+
 }  // namespace apklayer

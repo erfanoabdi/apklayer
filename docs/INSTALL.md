@@ -242,7 +242,7 @@ Permissions (`finish-args` in `flatpak/io.github.erfanoabdi.Apklayer.yml`) and w
 | `--socket=pulseaudio`, `--filesystem=xdg-run/pipewire-0` | the audio backends (`apklayer providers`) and PipeWire cameras |
 | `--share=network` | apps' internet, `apklayer setup`'s downloads |
 | `--allow=bluetooth`, `--system-talk-name=org.bluez`, `--system-talk-name=org.freedesktop.GeoClue2`, `--talk-name=org.freedesktop.Notifications` | Bluetooth, location, notifications |
-| `--filesystem=xdg-data/applications:create`, `xdg-data/desktop-directories:create`, `xdg-config/menus:create` | launchers of installed apps and the Apklayer submenu, written at the host's paths (as Bottles does; the dynamic launcher portal asks the user once per app and is a later option) |
+| `--filesystem=xdg-data/applications:create`, `xdg-data/desktop-directories:create`, `xdg-config/menus:create` | launchers of installed apps and the Apklayer submenu, written at the host's paths as `io.github.erfanoabdi.Apklayer.<package>.desktop`, `....menu`, `....directory` (the deb's are `apklayer-*`: the two installs never touch each other's; as Bottles does; the dynamic launcher portal asks the user once per app and is a later option) |
 
 Different from the deb: data, logs and the runtime live under `~/.var/app/io.github.erfanoabdi.Apklayer/`; the per-app sandbox (`APKLAYER_SANDBOX=1`)
 cannot run (Flatpak's seccomp filter refuses nested user namespaces and `newuidmap` is not setuid inside); an app's full home access needs
