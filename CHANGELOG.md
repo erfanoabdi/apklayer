@@ -276,7 +276,10 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 ### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_gnss: a client that dies without close() is closed for it
 - Why: docs/PLAN.md item 6, the GNSS example crashed once after its client died (the hub ends its client with a signal): a death recipient on the callback closes the session; setCallback, close and the death are serialized (the example joins its thread in both).
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "gnss: close a dead client's session" hals/gnss`, then `m libapklayer_gnss` for gsi_arm64, then gsi_x86_64.
-- Result: (below)
+- Result: arm64 built (10:16, sha256 17897c6e...); the x86_64 run was stopped in kati to add a stderr line for the death, synced again (`hals/gnss`), arm64 then
+  replayed with `tools/lib/orb-build-module.py libapklayer_gnss hals/gnss Service.cpp`: sha256 71f4077c1d98edfa2212688e14cd7e2be501f45e2a1ac0eee6918e992d1d1399.
+  On Parallels (private prebuilts copy): gnss and hardware pass, gnss.log shows `the client died without close(): session closed` for the hub's two ended clients.
+  x86_64 `m libapklayer_gnss`: (below)
 ### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_camera: MJPEG frames decoded (libyuv MJPGToI420)
 - Why: USB webcams offer their larger sizes only as MJPEG; the PipeWire backend now lists and streams them, the provider decodes them (`-DHAVE_JPEG` for libyuv's header).
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "camera: MJPEG frames" hals/camera`, then `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_camera`, then the same for gsi_x86_64.
