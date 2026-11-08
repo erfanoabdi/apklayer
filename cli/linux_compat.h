@@ -5,12 +5,16 @@
 #include <cstddef>
 #include <cstdint>
 #include <fcntl.h>
+#include <sys/ioctl.h>
 #include <sys/mount.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
 #ifndef SYS_pidfd_open
 #define SYS_pidfd_open 434
+#endif
+#ifndef NS_GET_OWNER_UID  // linux/nsfs.h (Linux 4.11)
+#define NS_GET_OWNER_UID _IO(0xb7, 0x4)
 #endif
 #ifndef AT_RECURSIVE
 #define AT_RECURSIVE 0x8000

@@ -10,7 +10,7 @@
 #include <poll.h>
 #include <set>
 #include <signal.h>
-#include <linux/nsfs.h>
+#include "linux_compat.h"
 #include <sys/file.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
