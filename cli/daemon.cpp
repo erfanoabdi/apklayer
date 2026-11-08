@@ -123,9 +123,9 @@ int startRequest(const Layout& l, int conn, const std::string& exe, const sigset
     for (size_t at = 0; at < message.size();) { size_t end = message.find('\0', at); if (end == std::string::npos) break; f.push_back(message.substr(at, end - at)); at = end + 1; }
     ucred peer{};
     socklen_t len = sizeof peer;
-    if (!f.empty() && f[0] == "open") {  // the file broker (cli/broker.cpp): answered here, the connection closed
+    if (brokerRequest(f)) {  // the file broker (cli/broker.cpp): answered here, the connection closed
         for (int fd : fds) close(fd);
-        if (getsockopt(conn, SOL_SOCKET, SO_PEERCRED, &peer, &len) == 0) brokerOpen(l, conn, f, peer, instanceOf(l, peer.pid));
+        if (getsockopt(conn, SOL_SOCKET, SO_PEERCRED, &peer, &len) == 0) brokerAnswer(l, conn, f, peer, instanceOf(l, peer.pid));
         close(conn);
         return -1;
     }

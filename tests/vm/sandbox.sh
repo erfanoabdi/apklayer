@@ -31,8 +31,14 @@ consumed=1; [ -e "$home/intent.properties" ] && consumed=0
 # the opt-in: the whole home, still not the other apps' data
 bin/apklayer home-access hello.sandbox on
 APKLAYER_JOPTS="-Dapklayer.runms=15000 $jopts" bin/apklayer run hello.sandbox > "$out.home" 2>&1
-grep -a "\[sandbox\] \(home\|other\|private\|privdir\|write\)" "$out.home"
+grep -a "\[sandbox\] \(home\|other\|private\|privdir\|write\|change\)" "$out.home"
 written=$(stat -c %U "$home/written.txt" 2>/dev/null)
+# a launch with an intent file takes the app's spare (prepared after the launch above): the file's text goes with it (cli/run.cpp)
+printf 'action=hello.SANDBOX\nextra.hello.extra=fromspare\ncomponent=hello.sandbox.Main\n' > "$home/intent2.properties"
+APKLAYER_INTENT_FILE=$home/intent2.properties APKLAYER_JOPTS="-Dapklayer.runms=10000 $jopts" bin/apklayer run hello.sandbox > "$out.spare" 2>&1
+grep -a "\[sandbox\] intent" "$out.spare"
+# the spare's own early output (its pid) heads a launch that took it (cli/spare.cpp copyEarlyOutput)
+spared=$(grep -ac "^\[apklayer\] app spare pid=[0-9]*$" "$out.spare"); echo "spare launches: $spared"; consumed2=1; [ -e "$home/intent2.properties" ] && consumed2=0
 bin/apklayer stop >/dev/null 2>&1
 bin/apklayer uninstall hello.sandbox >/dev/null 2>&1; left=$(ls -d "$root/app-data/hello.sandbox" 2>/dev/null)
 rm -rf "$home" "$other"
@@ -51,6 +57,10 @@ grep -aq "\[sandbox\] home read home" "$out.home" && grep -aq "\[sandbox\] other
 echo "$reg" | grep -q " uid=$uid kernel-uid=$uid " || { echo "FAIL: the hub's caller uid is not $uid"; ok=0; }
 grep -aq "\[sandbox\] private read private" "$out.home" && grep -aq "\[sandbox\] privdir listed 1" "$out.home" && grep -aq "\[sandbox\] write ok" "$out.home" &&
     [ "$written" = "$(id -un)" ] || { echo "FAIL: home-access on: the broker did not read the private file, list its folder or write as the user ($written)"; ok=0; }
+grep -aq "\[sandbox\] change mkdir=true write=true rename=true delete=true rmdir=true access=true" "$out.home" ||
+    { echo "FAIL: home-access on: the broker did not mkdir, write, rename, delete or answer access in a 0700 folder"; ok=0; }
+grep -aq "\[sandbox\] intent hello.SANDBOX extra=fromspare" "$out.spare" && [ "$spared" -ge 1 ] && [ $consumed2 = 1 ] ||
+    { echo "FAIL: the intent-file launch did not take the app spare with its intent ($spared)"; ok=0; }
 grep -aq "\[sandbox\] private denied" "$out" || { echo "FAIL: home-access off: the private file was readable"; ok=0; }
 [ -z "$gpu" ] || grep -aq "\[sandbox\] gpu opened" "$out" || { echo "FAIL: the GPU node $gpu did not open through the broker"; ok=0; }
 [ -z "$left" ] || { echo "FAIL: uninstall left $left"; ok=0; }

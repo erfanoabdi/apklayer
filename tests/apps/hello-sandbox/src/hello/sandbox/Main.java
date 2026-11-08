@@ -22,6 +22,14 @@ public final class Main extends Activity {
         log("gpu " + openable(System.getProperty("hello.gpu")));  // a GPU node the app's uid may not open: through apklayerd's broker
         log("private " + probe(System.getProperty("hello.private")));  // with home-access: a 0600 file in a 0700 folder of the home, through the broker
         log("privdir " + probe(System.getProperty("hello.privdir")));
+        String privdir = System.getProperty("hello.privdir");  // the broker's other operations in that 0700 folder (with home-access)
+        if (privdir != null) {
+            File made = new File(privdir, "made"), w = new File(privdir, "w.txt"), r = new File(privdir, "r.txt");
+            boolean wrote;
+            try (java.io.FileOutputStream out = new java.io.FileOutputStream(w)) { out.write(1); wrote = true; } catch (Exception e) { wrote = false; }
+            log("change mkdir=" + made.mkdir() + " write=" + wrote + " rename=" + w.renameTo(r) + " delete=" + r.delete() + " rmdir=" + made.delete()
+                + " access=" + new File(privdir, "p.txt").canRead());
+        }
         try {
             Files.writeString(new File(System.getProperty("hello.write", "/nonexistent/x")).toPath(), "written");
             log("write ok");

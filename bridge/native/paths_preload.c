@@ -25,36 +25,56 @@ int apklayer_binder_route_open(const char *path, int flags);
 int apklayer_binder_route_exists(const char *path);
 /* the sandbox's file broker (broker.c): an fd for a refused open the user may make, else the caller's result */
 int apklayer_broker_open(const char *path, int flags, int mode, int failed);
+int apklayer_broker_openat(int dirfd, const char *path, int flags, int mode, int failed);
+/* mkdir, unlink, rmdir, rename, access in the granted home: 0 in place of the caller's failed result when apklayerd did it */
+int apklayer_broker_change(const char *op, int dirfd, const char *path, int dirfd2, const char *to, int x, int failed);
+#define CHANGE(r, op, dirfd, p, x) r = apklayer_broker_change(op, dirfd, p, AT_FDCWD, NULL, x, r)
 #ifndef AT_STATX_SYNC_TYPE
 #define AT_STATX_SYNC_TYPE 0x6000
 #endif
 #define BROKER(r, p, flags, mode) r = apklayer_broker_open(p, flags, mode, r)
 /* a stat the broker answers, from an O_PATH fd it opened (a file inside a directory the app's uid may not search) */
-#define BROKER_STAT(r, p, nofollow, call) do { if (r != 0 && errno == EACCES) { int fd_ = apklayer_broker_open(p, O_PATH | O_CLOEXEC | ((nofollow) ? O_NOFOLLOW : 0), 0, -1); \
+#define BROKER_STAT(r, p, nofollow, call) BROKER_STATAT(r, AT_FDCWD, p, nofollow, call)
+#define BROKER_STATAT(r, dirfd, p, nofollow, call) do { if (r != 0 && errno == EACCES) { int fd_ = apklayer_broker_openat(dirfd, p, O_PATH | O_CLOEXEC | ((nofollow) ? O_NOFOLLOW : 0), 0, -1); \
     if (fd_ >= 0) { r = call; int e_ = errno; close(fd_); errno = e_; } } } while (0)
 #define ROUTE(p, flags) do { int h_ = apklayer_binder_route_open(p, flags); if (h_ != -2) { DONE(m); return h_; } } while (0)  /* m: MAP's */
 
 #define REAL(name) ({ static void *f_; if (!f_) f_ = dlsym(RTLD_NEXT, #name); f_; })
 #define MAP(var, p) char *var = (char *)(p); bool var##_alloc = (p) && apklayer_apply_path_overrides(&var)
 #define DONE(var) do { if (var##_alloc) free(var); } while (0)
+#define AT(var, p) MAP(var, (p) && (p)[0] == '/' ? (p) : NULL); const char *var##_use = var ? var : (p)
 #define MODE(flags, mode) do { mode = 0; if ((flags) & (O_CREAT | O_TMPFILE)) { va_list ap; va_start(ap, flags); mode = va_arg(ap, int); va_end(ap); } } while (0)
 
 int open(const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open))(m, flags, mode); BROKER(r, m, flags, mode); DONE(m); return r; }
 int open64(const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open64))(m, flags, mode); BROKER(r, m, flags, mode); DONE(m); return r; }
 int __open_2(const char *path, int flags) { MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open))(m, flags, 0); BROKER(r, m, flags, 0); DONE(m); return r; }
 int __open64_2(const char *path, int flags) { MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open64))(m, flags, 0); BROKER(r, m, flags, 0); DONE(m); return r; }
-int openat(int dirfd, const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; ROUTE(use, flags); int r = ((int (*)(int, const char *, int, ...))REAL(openat))(dirfd, use, flags, mode); BROKER(r, use, flags, mode); DONE(m); return r; }
-int openat64(int dirfd, const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; ROUTE(use, flags); int r = ((int (*)(int, const char *, int, ...))REAL(openat64))(dirfd, use, flags, mode); BROKER(r, use, flags, mode); DONE(m); return r; }
+int openat(int dirfd, const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; ROUTE(use, flags); int r = ((int (*)(int, const char *, int, ...))REAL(openat))(dirfd, use, flags, mode); r = apklayer_broker_openat(dirfd, use, flags, mode, r); DONE(m); return r; }
+int openat64(int dirfd, const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; ROUTE(use, flags); int r = ((int (*)(int, const char *, int, ...))REAL(openat64))(dirfd, use, flags, mode); r = apklayer_broker_openat(dirfd, use, flags, mode, r); DONE(m); return r; }
 int __openat_2(int dirfd, const char *path, int flags) { return openat(dirfd, path, flags, 0); }
 int __openat64_2(int dirfd, const char *path, int flags) { return openat64(dirfd, path, flags, 0); }
-FILE *fopen(const char *path, const char *mode) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *))REAL(fopen))(m, mode); DONE(m); return r; }
-FILE *fopen64(const char *path, const char *mode) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *))REAL(fopen64))(m, mode); DONE(m); return r; }
-int access(const char *path, int mode) { MAP(m, path); if (apklayer_binder_route_exists(m)) { DONE(m); return 0; } int r = ((int (*)(const char *, int))REAL(access))(m, mode); DONE(m); return r; }
+/* fopen's open is glibc's own (not the wrapper above): a refused one goes to the broker here, with the flags its mode means */
+static FILE *broker_fopen(const char *path, const char *mode, FILE *r)
+{
+    if (r || errno != EACCES) return r;
+    int plus = strchr(mode, '+') != NULL, flags = mode[0] == 'r' ? (plus ? O_RDWR : O_RDONLY)
+        : (plus ? O_RDWR : O_WRONLY) | O_CREAT | (mode[0] == 'w' ? O_TRUNC : mode[0] == 'a' ? O_APPEND : 0);
+    if (strchr(mode, 'e')) flags |= O_CLOEXEC;
+    if (strchr(mode, 'x')) flags |= O_EXCL;
+    int fd = apklayer_broker_open(path, flags, 0666, -1);
+    if (fd < 0) return NULL;
+    FILE *f = fdopen(fd, mode);
+    if (!f) close(fd);
+    return f;
+}
+FILE *fopen(const char *path, const char *mode) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *))REAL(fopen))(m, mode); r = broker_fopen(m, mode, r); DONE(m); return r; }
+FILE *fopen64(const char *path, const char *mode) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *))REAL(fopen64))(m, mode); r = broker_fopen(m, mode, r); DONE(m); return r; }
+int access(const char *path, int mode) { MAP(m, path); if (apklayer_binder_route_exists(m)) { DONE(m); return 0; } int r = ((int (*)(const char *, int))REAL(access))(m, mode); CHANGE(r, "access", AT_FDCWD, m, mode); DONE(m); return r; }
 int stat(const char *path, struct stat *st) { MAP(m, path); int r = ((int (*)(const char *, struct stat *))REAL(stat))(m, st); BROKER_STAT(r, m, 0, fstat(fd_, st)); DONE(m); return r; }
 int stat64(const char *path, struct stat64 *st) { MAP(m, path); int r = ((int (*)(const char *, struct stat64 *))REAL(stat64))(m, st); BROKER_STAT(r, m, 0, fstat64(fd_, st)); DONE(m); return r; }
 int lstat(const char *path, struct stat *st) { MAP(m, path); int r = ((int (*)(const char *, struct stat *))REAL(lstat))(m, st); BROKER_STAT(r, m, 1, fstat(fd_, st)); DONE(m); return r; }
 int lstat64(const char *path, struct stat64 *st) { MAP(m, path); int r = ((int (*)(const char *, struct stat64 *))REAL(lstat64))(m, st); BROKER_STAT(r, m, 1, fstat64(fd_, st)); DONE(m); return r; }
-int fstatat(int dirfd, const char *path, struct stat *st, int flags) { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; int r = ((int (*)(int, const char *, struct stat *, int))REAL(fstatat))(dirfd, use, st, flags); BROKER_STAT(r, use, flags & AT_SYMLINK_NOFOLLOW, fstat(fd_, st)); DONE(m); return r; }
+int fstatat(int dirfd, const char *path, struct stat *st, int flags) { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; int r = ((int (*)(int, const char *, struct stat *, int))REAL(fstatat))(dirfd, use, st, flags); BROKER_STATAT(r, dirfd, use, flags & AT_SYMLINK_NOFOLLOW, fstat(fd_, st)); DONE(m); return r; }
 DIR *opendir(const char *path) { MAP(m, path); DIR *r = ((DIR * (*)(const char *))REAL(opendir))(m);
     if (!r) { int fd = apklayer_broker_open(m, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0, -1); if (fd >= 0 && !(r = fdopendir(fd))) close(fd); } DONE(m); return r; }
 long apklayer_android_spelling(char *buf, long n);
@@ -67,10 +87,13 @@ ssize_t readlink(const char *path, char *buf, size_t n) { MAP(m, path); ssize_t 
 #define WRAP(ret, name, params, types, ...) ret name params { MAP(m, path); ret r = ((ret (*) types)REAL(name))(__VA_ARGS__); DONE(m); return r; }
 #define WRAPAT(ret, name, params, types, ...) ret name params { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; \
     ret r = ((ret (*) types)REAL(name))(__VA_ARGS__); DONE(m); return r; }
-WRAP(int, mkdir, (const char *path, mode_t mode), (const char *, mode_t), m, mode)
-WRAP(int, rmdir, (const char *path), (const char *), m)
-WRAP(int, unlink, (const char *path), (const char *), m)
-WRAP(int, remove, (const char *path), (const char *), m)
+int mkdir(const char *path, mode_t mode) { MAP(m, path); int r = ((int (*)(const char *, mode_t))REAL(mkdir))(m, mode); CHANGE(r, "mkdir", AT_FDCWD, m, (int)mode); DONE(m); return r; }
+int rmdir(const char *path) { MAP(m, path); int r = ((int (*)(const char *))REAL(rmdir))(m); CHANGE(r, "rmdir", AT_FDCWD, m, 0); DONE(m); return r; }
+int unlink(const char *path) { MAP(m, path); int r = ((int (*)(const char *))REAL(unlink))(m); CHANGE(r, "unlink", AT_FDCWD, m, 0); DONE(m); return r; }
+/* glibc's remove tries unlink then rmdir through its own calls: the broker likewise */
+int remove(const char *path) { MAP(m, path); int r = ((int (*)(const char *))REAL(remove))(m);
+    if (r != 0 && (errno == EACCES || errno == EPERM)) { int e = errno; CHANGE(r, "unlink", AT_FDCWD, m, 0); if (r != 0 && errno == EISDIR) { errno = e; CHANGE(r, "rmdir", AT_FDCWD, m, 0); } }
+    DONE(m); return r; }
 WRAP(int, chdir, (const char *path), (const char *), m)
 WRAP(int, chmod, (const char *path, mode_t mode), (const char *, mode_t), m, mode)
 WRAP(int, chown, (const char *path, uid_t u, gid_t g), (const char *, uid_t, gid_t), m, u, g)
@@ -84,16 +107,20 @@ WRAP(int, statfs, (const char *path, struct statfs *s), (const char *, struct st
 WRAP(int, statfs64, (const char *path, struct statfs64 *s), (const char *, struct statfs64 *), m, s)
 WRAP(int, symlink, (const char *target, const char *path), (const char *, const char *), target, m)
 int fstatat64(int dirfd, const char *path, struct stat64 *st, int flags) { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
-    int r = ((int (*)(int, const char *, struct stat64 *, int))REAL(fstatat64))(dirfd, use, st, flags); BROKER_STAT(r, use, flags & AT_SYMLINK_NOFOLLOW, fstat64(fd_, st)); DONE(m); return r; }
+    int r = ((int (*)(int, const char *, struct stat64 *, int))REAL(fstatat64))(dirfd, use, st, flags); BROKER_STATAT(r, dirfd, use, flags & AT_SYMLINK_NOFOLLOW, fstat64(fd_, st)); DONE(m); return r; }
 int statx(int dirfd, const char *path, int flags, unsigned int mask, struct statx *st) { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
     int r = ((int (*)(int, const char *, int, unsigned int, struct statx *))REAL(statx))(dirfd, use, flags, mask, st);
-    BROKER_STAT(r, use, flags & AT_SYMLINK_NOFOLLOW, ((int (*)(int, const char *, int, unsigned int, struct statx *))REAL(statx))(fd_, "", AT_EMPTY_PATH | (flags & AT_STATX_SYNC_TYPE), mask, st)); DONE(m); return r; }
-WRAPAT(int, faccessat, (int dirfd, const char *path, int mode, int flags), (int, const char *, int, int), dirfd, use, mode, flags)
-WRAPAT(int, mkdirat, (int dirfd, const char *path, mode_t mode), (int, const char *, mode_t), dirfd, use, mode)
-WRAPAT(int, unlinkat, (int dirfd, const char *path, int flags), (int, const char *, int), dirfd, use, flags)
+    BROKER_STATAT(r, dirfd, use, flags & AT_SYMLINK_NOFOLLOW, ((int (*)(int, const char *, int, unsigned int, struct statx *))REAL(statx))(fd_, "", AT_EMPTY_PATH | (flags & AT_STATX_SYNC_TYPE), mask, st)); DONE(m); return r; }
+int faccessat(int dirfd, const char *path, int mode, int flags) { AT(m, path); int r = ((int (*)(int, const char *, int, int))REAL(faccessat))(dirfd, m_use, mode, flags);
+    CHANGE(r, "access", dirfd, m_use, mode); DONE(m); return r; }
+int mkdirat(int dirfd, const char *path, mode_t mode) { AT(m, path); int r = ((int (*)(int, const char *, mode_t))REAL(mkdirat))(dirfd, m_use, mode);
+    CHANGE(r, "mkdir", dirfd, m_use, (int)mode); DONE(m); return r; }
+int unlinkat(int dirfd, const char *path, int flags) { AT(m, path); int r = ((int (*)(int, const char *, int))REAL(unlinkat))(dirfd, m_use, flags);
+    CHANGE(r, (flags & AT_REMOVEDIR) ? "rmdir" : "unlink", dirfd, m_use, 0); DONE(m); return r; }
 WRAPAT(int, fchmodat, (int dirfd, const char *path, mode_t mode, int flags), (int, const char *, mode_t, int), dirfd, use, mode, flags)
 WRAPAT(int, utimensat, (int dirfd, const char *path, const struct timespec t[2], int flags), (int, const char *, const struct timespec *, int), dirfd, use, t, flags)
-int rename(const char *from, const char *to) { MAP(a, from); MAP(b, to); int r = ((int (*)(const char *, const char *))REAL(rename))(a, b); DONE(a); DONE(b); return r; }
+int rename(const char *from, const char *to) { MAP(a, from); MAP(b, to); int r = ((int (*)(const char *, const char *))REAL(rename))(a, b);
+    r = apklayer_broker_change("rename", AT_FDCWD, a, AT_FDCWD, b, 0, r); DONE(a); DONE(b); return r; }
 int link(const char *from, const char *to) { MAP(a, from); MAP(b, to); int r = ((int (*)(const char *, const char *))REAL(link))(a, b); DONE(a); DONE(b); return r; }
 /* A resolved path below the storage directory is spelled as Android's again (/storage/...): callers compare it with the volume paths. */
 char *realpath(const char *path, char *resolved)
@@ -110,7 +137,8 @@ char *__realpath_chk(const char *path, char *resolved, size_t n) { (void)n; retu
 WRAP(int, lutimes, (const char *path, const struct timeval t[2]), (const char *, const struct timeval *), m, t)
 int renameat(int fd1, const char *from, int fd2, const char *to) {
     MAP(a, from && from[0] == '/' ? from : NULL); MAP(b, to && to[0] == '/' ? to : NULL);
-    int r = ((int (*)(int, const char *, int, const char *))REAL(renameat))(fd1, a ? a : from, fd2, b ? b : to); DONE(a); DONE(b); return r;
+    int r = ((int (*)(int, const char *, int, const char *))REAL(renameat))(fd1, a ? a : from, fd2, b ? b : to);
+    r = apklayer_broker_change("rename", fd1, a ? a : from, fd2, b ? b : to, 0, r); DONE(a); DONE(b); return r;
 }
 
 /* The rest that bionic code and the JDK reach by name and glibc does not route through the functions above (bionic_translation hands an unwrapped
@@ -118,7 +146,6 @@ int renameat(int fd1, const char *from, int fd2, const char *to) {
  * through internal calls (mkstemp family, scandir, freopen). */
 #include <sys/inotify.h>
 #include <sys/xattr.h>
-#define AT(var, p) MAP(var, (p) && (p)[0] == '/' ? (p) : NULL); const char *var##_use = var ? var : (p)
 WRAP(int, creat, (const char *path, mode_t mode), (const char *, mode_t), m, mode)
 WRAP(int, creat64, (const char *path, mode_t mode), (const char *, mode_t), m, mode)
 WRAP(int, mkfifo, (const char *path, mode_t mode), (const char *, mode_t), m, mode)
@@ -145,7 +172,9 @@ int linkat(int fd1, const char *from, int fd2, const char *to, int flags) {
     AT(a, from); AT(b, to); int r = ((int (*)(int, const char *, int, const char *, int))REAL(linkat))(fd1, a_use, fd2, b_use, flags); DONE(a); DONE(b); return r;
 }
 int renameat2(int fd1, const char *from, int fd2, const char *to, unsigned int flags) {
-    AT(a, from); AT(b, to); int r = ((int (*)(int, const char *, int, const char *, unsigned int))REAL(renameat2))(fd1, a_use, fd2, b_use, flags); DONE(a); DONE(b); return r;
+    AT(a, from); AT(b, to); int r = ((int (*)(int, const char *, int, const char *, unsigned int))REAL(renameat2))(fd1, a_use, fd2, b_use, flags);
+    if (!flags) r = apklayer_broker_change("rename", fd1, a_use, fd2, b_use, 0, r);  /* RENAME_NOREPLACE/EXCHANGE: not brokered */
+    DONE(a); DONE(b); return r;
 }
 FILE *freopen(const char *path, const char *mode, FILE *f) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *, FILE *))REAL(freopen))(m, mode, f); DONE(m); return r; }
 FILE *freopen64(const char *path, const char *mode, FILE *f) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *, FILE *))REAL(freopen64))(m, mode, f); DONE(m); return r; }
