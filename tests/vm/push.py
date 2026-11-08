@@ -27,7 +27,7 @@ MARKER = LOGS / 'autostart'
 # the VM has other apps with boot receivers: only the boot phase wakes them (APKLAYER_BOOT_BROADCASTS=0 for the others)
 MICROG = 'com.google.android.gms'
 env = dict(ENV, APKLAYER_BOOT_BROADCASTS={'boot': '1', 'mcs': MICROG}.get(PHASE, '0'), APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400', APKLAYER_HOST_LIBS=instance.HOST_LIBS)
-children = []
+children, cleanups = [], []
 HUB_OUT = instance.OUT / 'hub-stdout.log'  # a hub started by `apklayer hub` prints to its launcher's stdout (the stack's start empties the state dir's logs)
 
 
@@ -208,10 +208,16 @@ try:
         # systemctl --user reaches the user's manager through the real session directory, not the instance's own XDG_RUNTIME_DIR
         env = dict(env, XDG_RUNTIME_DIR=instance.SESSION, DBUS_SESSION_BUS_ADDRESS='unix:path=%s/bus' % instance.SESSION)
         assert cli('instance', 'autostart', iid).stdout.strip() == 'off'
+        # the unit goes where the user's systemd manager reads it (its own XDG_CONFIG_HOME), not under the test's private XDG_CONFIG_HOME
+        shown = subprocess.run(['systemctl', '--user', 'show-environment'], capture_output=True, text=True, env=env).stdout.splitlines()
+        config = next((l.split('=', 1)[1] for l in shown if l.startswith('XDG_CONFIG_HOME=')), str(Path.home() / '.config'))
+        unit = Path(config) / 'systemd/user/apklayer-instance@.service'
+        unit_was = unit.exists()
         on = cli('instance', 'autostart', iid, 'on', '--no-start')
+        if not unit_was: cleanups.append(lambda: (unit.unlink(missing_ok=True), subprocess.run(['systemctl', '--user', 'daemon-reload'], env=env)))
+        cleanups.append(lambda: cli('instance', 'autostart', iid, 'off'))  # never leave the unit enabled (the owner's desktop)
         assert on.returncode == 0, on.stderr
         assert MARKER.exists() and cli('instance', 'autostart', iid).stdout.strip() == 'on'
-        unit = Path.home() / '.config/systemd/user/apklayer-instance@.service'
         assert 'ExecStart=' in unit.read_text() and ' --instance %i hub' in unit.read_text(), unit.read_text()
         listed = [l.split('\t') for l in cli('instances').stdout.splitlines() if l.split('\t')[0] == iid]
         assert listed and listed[0][4] == '1', listed
@@ -225,6 +231,7 @@ try:
     else:
         raise SystemExit('unknown phase ' + PHASE)
 finally:
+    for cleanup in reversed(cleanups): cleanup()
     for child in children:
         try: os.killpg(child.pid, signal.SIGTERM)
         except OSError: pass

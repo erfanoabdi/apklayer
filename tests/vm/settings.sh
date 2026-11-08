@@ -33,7 +33,9 @@ await 2; sleep 2
 bin/apklayer screenshot hello.settings "$work/dark.png" > /dev/null 2>&1
 check "night pinned on: recreated with night=true, UiModeManager MODE_NIGHT_YES" "$(last | grep 'night=true nightMode=2')"
 l=$(luma "$work/light.png" 2>/dev/null); d=$(luma "$work/dark.png" 2>/dev/null)
-check "the shell redrew the title bar light, then dark" "$(grep -a 'hello.settings: title bar light' "$APKLY_STATE/shell.log" && grep -a 'hello.settings: title bar dark' "$APKLY_STATE/shell.log")"
+# the bar starts in the desktop's scheme (decor_dark): on a light desktop it is light already and only the dark redraw is logged
+desktop_dark=$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null | grep -c dark)
+check "the shell redrew the title bar light, then dark" "$({ [ "$desktop_dark" = 0 ] || grep -a 'hello.settings: title bar light' "$APKLY_STATE/shell.log"; } && grep -a 'hello.settings: title bar dark' "$APKLY_STATE/shell.log")"
 check "the window redrew: light screenshot luma ${l:-none} > 150, dark ${d:-none} < 100" "$([ "${l:-0}" -gt 150 ] && [ "${d:-255}" -lt 100 ] && echo 1)"
 
 n=$(creates)

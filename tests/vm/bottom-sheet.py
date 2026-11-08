@@ -23,12 +23,14 @@ SHOWN = re.compile(r'sheet (\d) shown sheet=(-?\d+),(-?\d+),(\d+),(\d+) window=(
 seen = []
 done = set()
 shown = gone = over = dimmed = clear = None
+scale = 1  # the window's scale (the shell's configure line)
 
 
 def level(shot):
-    """Brightness where the sheet's handle is (its gray, or the activity once the sheet is gone)."""
+    """Brightness where the sheet's handle is (its gray, or the activity once the sheet is gone): the app's pixels, as the sheet line gives them
+    (its sizes are pixels, so at 200% the handle is lower in the window than at 100%)."""
     im = pixels.rgb(shot)
-    return sum(im.getpixel((im.width // 2, im.height * 470 // 600))) // 3
+    return sum(im.getpixel((im.width // 2, handle_y))) // 3
 
 
 def upper(shot):
@@ -39,14 +41,15 @@ def upper(shot):
 
 
 def act(stage, x, y, w, h):
-    button = (x + w // 2, y + h - 50)  # the button: the dialog's last 100 pixels
+    """x, y, w, h: the sheet in the app's pixels; inject takes the window's logical pixels (scale: the window's, 200% on a HiDPI desktop)."""
+    button = (round((x + w // 2) / scale), round((y + h - 50) / scale))  # the button: the dialog's last 100 pixels
     if stage in (1, 3, 5, 6):
         instance.inject(PKG, '%s:%d,%d' % ('click' if stage == 3 else 'tap', *button))  # the mouse (the pointer path) in stage 3
         return 'key:1' if stage >= 5 else '%s:240,40' % ('click' if stage == 3 else 'tap')  # then outside the sheet, or Back
     if stage == 2:
         instance.inject(PKG, 'key:1')  # Esc is Back
     else:  # the handle (the sheet's first 60 pixels), dragged down
-        hx, hy = x + w // 2, y + 30
+        hx, hy = round((x + w // 2) / scale), round((y + 30) / scale)
         instance.inject(PKG, 'press:%d,%d' % (hx, hy), *('move:%d,%d' % (hx, hy + d) for d in (20, 50, 90, 130)), 'release:%d,%d' % (hx, hy + 130))
     return None
 
@@ -68,6 +71,8 @@ try:
             *lines, pending = pending.split(b'\n')
             for raw in lines:
                 line = raw.decode(errors='replace')
+                m = re.search(r'\[apklayer\] configure \d+x\d+ @(\d+)%', line)
+                if m: scale = int(m.group(1)) / 100
                 if '[hello-input]' not in line and 'Exception' not in line: continue
                 seen.append(line)
                 print(line, flush=True)
@@ -76,6 +81,7 @@ try:
                     stage, x, y, w, h = (int(n) for n in m.groups()[:5])
                     assert y > 300, 'sheet %d is not at the bottom: %s' % (stage, line)
                     if stage == 3:
+                        handle_y = y + 30  # the handle: the sheet's first 60 pixels
                         shot = instance.capture('sheet shown', PKG)
                         shown, dimmed = level(shot), upper(shot)
                     if stage == 6: over = level(instance.capture('sheet over popup', PKG))
