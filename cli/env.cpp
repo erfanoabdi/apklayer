@@ -237,6 +237,10 @@ std::vector<std::string> hostJvmArgs(const Layout& l, const Instance& inst, Nati
                                   // C1 only gets a 48 MB code cache; Meet filled it in a call ("Out of space in CodeCache for method handle intrinsic", the
                                   // JVM exits). 240 MB is the tiered default; it is reserved address space, committed as code is compiled
                                   "-XX:ReservedCodeCacheSize=240m",
+                                  // memory of the always-on JVMs (PLAN "app start speed on phones" 8): SerialGC never shrinks below the initial heap
+                                  // (1/64 of RAM: 90 MB on a 6 GB phone, ~45 MB live in the hub), and the Android natives' freed malloc stays in glibc's
+                                  // arenas (a trim gave back 3-25 MB a JVM). Measured on the phone: no slower start
+                                  "-XX:InitialHeapSize=32m", "-XX:TrimNativeHeapInterval=60000",
                                   // a JVM defines ~5400 framework classes at start: with the default 32K buckets the symbol lookups of their constant pools
                                   // take about half of the class definition time (perf: SymbolTable::do_lookup), the table grows only later
                                   "-XX:+UnlockExperimentalVMOptions", "-XX:SymbolTableSize=262144",
