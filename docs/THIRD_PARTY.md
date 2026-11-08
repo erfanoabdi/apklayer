@@ -64,6 +64,7 @@ A commercial license can only cover code the licensor owns or that is permissive
 | android_translation_layer (ATL) | GPL-3.0 | Reference only; grep finds no copied code (one comment mentions a TLS constant "as on ATL"). Keep it that way: copying any ATL code would force GPL on that file |
 | Robolectric 4.17, shadows in `runtime/patches/org/robolectric/*` | MIT | OK. These files are modified copies of MIT code: keep the MIT notice for them (headers not checked, unverified) |
 | AOSP / LineageOS tree libraries and HAL code (Apache-2.0; bionic BSD; libc++ Apache with LLVM exception), `aosp/hals/**` derived from AOSP | Apache-2.0 / BSD | OK; ship the NOTICE files of the shipped libraries (not yet collected) |
+| `bridge/compat/include/linux/android/binder.h` | bionic's generated copy (libc/kernel/uapi) of the Linux uapi header: GPL-2.0 WITH Linux-syscall-note | OK: a uapi header, used only where the system headers lack it (Sailfish OS 5.0's 3.18 kernel headers) |
 | libvpx parts (`VpxHeaders.h`, `LICENSE.libvpx`) | BSD-3-Clause | OK |
 | Mesa, PipeWire | MIT | OK |
 | GStreamer (media bridge) | LGPL-2.1+ | OK if dynamically linked/used as a separate process; do not statically link |

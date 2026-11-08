@@ -36,6 +36,10 @@ cc = meson.get_compiler('c')
 if host_machine.system() == 'linux' and cc.version().version_compare('<12')
   add_global_arguments('-I' + meson.project_source_root() / 'patches/bionic_translation/compat/include', language: 'cpp')
 endif
+# the binder uapi header (bridge/compat/include) where the kernel headers predate it (Sailfish OS 5.0: 3.18)
+if host_machine.system() == 'linux' and not cc.has_header('linux/android/binder.h')
+  add_project_arguments('-I' + meson.project_source_root() / 'bridge/compat/include', language: ['c', 'cpp'])
+endif
 # dlopen and friends live in libdl apart from libc before glibc 2.34 (Sailfish OS 5.0: 2.30); built into libc after, then this adds nothing
 add_project_dependencies(dependency('dl'), language: ['c', 'cpp'])
 
