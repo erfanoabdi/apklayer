@@ -65,7 +65,7 @@ final class HubInstallDialog {
                     else if (!mobile && shown.w != W) shown = show(channel, file, shm, heading, desktop(heading, body, yes, no));
                     if (!told) {  // the test reads where the buttons are (logical window content coordinates), once the window has its size
                         told = true;
-                        System.out.println("[apklayer-hub] dialog shown: \"" + heading + "\" yes=" + centre(shown.yes, scale) + " no=" + centre(shown.no, scale)
+                        System.out.println("[apklayer-hub] dialog shown: \"" + heading + "\" yes=" + centre(shown.yes, cw, shown.w) + " no=" + centre(shown.no, cw, shown.w)
                                 + " size=" + cw + "x" + ch + (mobile ? " mobile" : " desktop"));
                     }
                 }
@@ -104,7 +104,8 @@ final class HubInstallDialog {
     /** The answer of a click or tap at (x, y) in buffer pixels; null off both buttons (the question stays). */
     private static Boolean hit(Layout l, int x, int y) { return inside(x, y, l.yes) ? Boolean.TRUE : inside(x, y, l.no) ? Boolean.FALSE : null; }
     private static boolean inside(int x, int y, int[] b) { return x >= b[0] && x < b[0] + b[2] && y >= b[1] && y < b[1] + b[3]; }
-    private static String centre(int[] b, int scale) { return (b[0] + b[2] / 2) * 100 / scale + "," + (b[1] + b[3] / 2) * 100 / scale; }
+    /** A button's centre in logical content coordinates: the buffer (bw pixels wide) is shown cw logical wide (the desktop dialog 1:1 at any scale). */
+    private static String centre(int[] b, int cw, int bw) { return (b[0] + b[2] / 2) * cw / bw + "," + (b[1] + b[3] / 2) * cw / bw; }
 
     /** The desktop dialog: heading, wrapped body text, the two buttons side by side at the bottom right (yes filled). Android's own Canvas: the
      *  hub JVM's Java2D natives are not usable next to the device libraries. */
