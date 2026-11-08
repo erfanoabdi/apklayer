@@ -13,6 +13,7 @@
 #include "setup.h"
 #include "logs.h"
 #include "portal.h"
+#include "purge.h"
 #include "sandbox.h"
 #include "manage.h"
 #include "migrate.h"
@@ -65,6 +66,8 @@ int usage() {
           "  env                    print the environment of Android's processes\n"
           "  daemon                 apklayerd: every command (and every app process) then runs under it (tools/host-setup/apklayerd.service);\n"
           "                         the per-app sandbox (each app its own uid) is opt-in: APKLAYER_SANDBOX=1 (docs/INSTALL.md)\n"
+          "  remove-all [--yes]    everything apklayer keeps for this user: every instance's apps and data, runtimes, logs, caches, desktop entries,\n"
+          "                         the Apklayer submenu, user units (without --yes: lists it); the package: sudo apt purge apklayer\n"
           "  home-access <package> on|off  with the sandbox: the app sees the user's whole home (else only what the picker hands it)\n"
           "  portal pick open|save|directory [--multiple] [--name N] | open <uri>  the desktop's file dialog or link opener (a sandboxed app's)\n"
           "  portal helper geoclue.py|bluez.py|settings.py [args]  a D-Bus helper run as the user (the sandbox's location, Bluetooth, settings)\n"
@@ -143,6 +146,7 @@ int main(int argc, char** argv) {
     if (cmd == "report") return reportCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "clear-data" && n == 2) return clearData(layout, inst, args[1]);
     if (cmd == "stop" && n == 2) return stopApp(layout, inst, args[1]);
+    if (cmd == "remove-all") return removeAllCommand(layout, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "instances") { listInstances(layout); return 0; }
     if (cmd == "instance" && n >= 3 && args[1] == "autostart") return autostartCommand(layout, std::vector<std::string>(args.begin() + 2, args.end()));
     if (cmd == "instance" && n == 3) return instanceCommand(layout, args[1], args[2]);

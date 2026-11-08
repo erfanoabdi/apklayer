@@ -185,13 +185,19 @@ go through `apklayerd`, which runs as you.
 
 ## 10. Uninstall
 
+Installed from the deb (apt): first, as each user who ran apklayer, remove what it keeps in that user's home (every Android app and its
+data, the runtime bundles, logs, caches, desktop entries, the Apklayer submenu, systemd user units; apt never touches home folders), then
+the package once:
+
 ```sh
-bin/apklayer stop                         # and `--instance <id> stop` for every other instance
-rm -rf "$AL" ~/.config/apklayer ~/.local/share/apklayer ~/.local/state/apklayer ~/.cache/apklayer
-sudo rm -f /data/local/tmp/webview-command-line   # only if an older version's step 6 wrote it (no longer read)
+apklayer remove-all          # lists what it would delete
+apklayer remove-all --yes    # deletes it (the apps' data cannot be brought back)
+sudo apt purge apklayer apklayer-dev
 ```
 
-The binder devices go away at the next reboot. The apt packages from step 1 stay; remove them with `apt` if nothing else needs them.
+From a source tree: `bin/apklayer remove-all --yes`, then delete the tree (`rm -rf "$AL"`) and, if an older version's step 6 wrote it,
+`sudo rm -f /data/local/tmp/webview-command-line`. The binder devices go away at the next reboot. The apt packages from step 1 stay; remove
+them with `apt` if nothing else needs them.
 
 ## What still needs the LineageOS tree
 
