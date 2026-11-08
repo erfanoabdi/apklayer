@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 /* bionic_translation (libdl_bio) */
 extern void dl_parse_library_path(const char *path, char *delim);
@@ -25,12 +26,40 @@ __attribute__((constructor)) static void init_r_debug(void)
     _r_debug_ptr = &_r_debug;
 }
 
+/* The app namespace's directories: NativeLoader's, then those of android_update_LD_LIBRARY_PATH (below) */
+static char app_paths[4096], app_extra[4096];
+static void apply_app_paths(void)
+{
+    char all[sizeof app_paths + sizeof app_extra + 1];
+    snprintf(all, sizeof all, "%s%s%s", app_paths, *app_extra ? ":" : "", app_extra);
+    dl_parse_app_library_path(all, ":");
+}
+
+/* The linker's private API Pojav/FCL call through libdl.so (their game's JRE directories): on Android the default namespace's search path; here the
+ * app namespace's, after the app's own directories. Only existing directories outside /system and /vendor (the device's, which the system namespace has).
+ * shortcut: the shim linker keeps 8 directories (LDPATH_MAX) of 512 bytes in all, the rest is dropped; raise those in bionic_translation when an app needs more. */
+void bionic_android_update_LD_LIBRARY_PATH(const char *path)
+{
+    char copy[sizeof app_extra], *save = NULL;
+    snprintf(copy, sizeof copy, "%s", path ? path : "");
+    app_extra[0] = 0;
+    for (char *d = strtok_r(copy, ":", &save); d; d = strtok_r(NULL, ":", &save)) {
+        struct stat st;
+        if (!strncmp(d, "/system/", 8) || !strncmp(d, "/vendor/", 8) || stat(d, &st) != 0 || !S_ISDIR(st.st_mode)) continue;
+        size_t n = strlen(app_extra);
+        snprintf(app_extra + n, sizeof app_extra - n, "%s%s", n ? ":" : "", d);
+    }
+    apply_app_paths();
+}
+void bionic___loader_android_update_LD_LIBRARY_PATH(const char *path) { bionic_android_update_LD_LIBRARY_PATH(path); }
+
 JNIEXPORT void JNICALL Java_apklayer_host_NativeLoader_setLibraryPath(JNIEnv *env, jclass c, jstring system, jstring app)
 {
     (void)c;
     const char *s = (*env)->GetStringUTFChars(env, system, NULL), *a = (*env)->GetStringUTFChars(env, app, NULL);
     dl_parse_library_path(s, ":");
-    dl_parse_app_library_path(a, ":");
+    snprintf(app_paths, sizeof app_paths, "%s", a);
+    apply_app_paths();
     (*env)->ReleaseStringUTFChars(env, system, s);
     (*env)->ReleaseStringUTFChars(env, app, a);
 }
