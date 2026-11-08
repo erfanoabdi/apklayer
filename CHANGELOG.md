@@ -3,6 +3,28 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: hardware round (docs/PLAN.md "After release 0.4.5", item 6)
+- Camera: sizes a camera offers only as MJPEG (most USB webcams' larger ones; Parallels' OBS virtual camera has only 1920x1080 MJPEG) are listed and
+  streamed by the PipeWire backend as APKLAYER_CAM_MJPEG when the provider asks for it; the provider decodes with libyuv's MJPGToI420 (already linked;
+  `-DHAVE_JPEG` for its header). camera-pipewire: a second gst fixture (MJPEG 1280x720 only), the test binary waits for the fixtures by name and
+  streams only them, and hello.camera opens each fixture by id (`-Dhello.id`; a host's real cameras are listed first). Parallels: camera-pipewire passes
+  (the MJPEG fixture's bars decoded in the app); the backend also streams the MacBook and iPhone cameras (NV12) and the OBS camera (MJPEG) there.
+- Bluetooth: a legacy device's PIN or a passkey (BlueZ's RequestPinCode/RequestPasskey) is asked in the hub's dialog (HubProtocol.BLUETOOTH_PIN,
+  HubBluetooth.pin, HubInstallDialog.askSecret) through the app's session (HostBluetooth). RFCOMM client sockets were untested: the bluetooth group's
+  mock now answers ConnectProfile through the registered profile with an echo socket (tests/vm/bluez-mock-calls.py) and has a device that pairs only
+  with PIN 1234; hello.bluetooth connects, writes, reads the echo, checks its pipes are closed, and bonds that device (answer-dialog.py types text
+  answers). The mock sets ManufacturerData through Properties.Set (Ubuntu 24.04's dbusmock 0.31 cannot re-wrap a dictionary in UpdateProperties).
+  Parallels: bluetooth passes.
+- USB serial: group `usb-serial` (Linux's g_serial over usbip, which the host's cdc_acm driver binds as a real adapter): hello.usb claims both CDC
+  interfaces with force, sets the line coding and DTR/RTS, writes a line and reads the gadget end's answer (/dev/ttyGS0). No runtime change was
+  needed: the framework's UsbDeviceConnection JNI detaches the kernel driver. usb-gadget.sh takes USB_GADGET=serial and SUDO (sudo -A on a VM whose
+  sudo asks a password); usb and usb-serial run alone (one usbip-vudc). Parallels: usb-serial and usb pass.
+- GNSS: the HAL closes the session of a client that dies without close() (a death recipient; setCallback, close and the death serialized: the AOSP
+  example joins its thread in both). geoclue1 on the Sailfish phone (192.168.41.153, ctypes run of the installed backend): the session reaches
+  geoclue-master and starts its hybris provider; no fix while the phone's location is off (needs a person).
+- Not done: the camera portal (not needed while the Flatpak has the PipeWire socket; GNOME's portal refuses an unsandboxed client without a person),
+  rotate-and-crop (design in docs/PLAN.md "Camera").
+
 ## 2026-11-09: release 0.4.8 (runtime 0.3.5)
 - Sandbox broker and fixes (opt-in), Flatpak with the userspace binder, keystore device-credential prompts and lock state, call-audio broadcasts, idle component hosts end, spare preloads framework classes, MojoLauncher and FCL crash fixes, SurfaceFlinger skips a layer whose buffer it cannot import (frameworks/native 0008), service logs kept across restarts.
 
@@ -251,10 +273,15 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_gnss: a client that dies without close() is closed for it
+- Why: docs/PLAN.md item 6, the GNSS example crashed once after its client died (the hub ends its client with a signal): a death recipient on the callback closes the session; setCallback, close and the death are serialized (the example joins its thread in both).
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "gnss: close a dead client's session" hals/gnss`, then `m libapklayer_gnss` for gsi_arm64, then gsi_x86_64.
+- Result: (below)
 ### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_camera: MJPEG frames decoded (libyuv MJPGToI420)
 - Why: USB webcams offer their larger sizes only as MJPEG; the PipeWire backend now lists and streams them, the provider decodes them (`-DHAVE_JPEG` for libyuv's header).
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "camera: MJPEG frames" hals/camera`, then `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_camera`, then the same for gsi_x86_64.
-- Result: (below)
+- Result: arm64 built (14:06), sha256 7c9571368175674e13fbd3682be20a7cb22349d66264c0a40a9903f7f5489598; x86_64 built, sha256 fd04d404d4c2d3fabb850e56d0a0b1a987bd7497c3918faa8ae4609a32cc3752.
+  Not in the prebuilts yet: the arm64 one ran from a private prebuilts copy on Parallels (`~/apklayer-hw/prebuilts`): camera-pipewire passes.
 ### 2026-11-08 - gsi_x86_64 and gsi_arm64 libapklayer_surfaceflinger: a client buffer the GPU cannot import skips its layer
 - Why: an NVIDIA tester's Unity games (PGR, Azur Lane) end SurfaceFlinger with SIGABRT, which ends the whole stack (keystore2 included);
   renderengine's LOG_ALWAYS_FATAL on a texture it cannot import is the likely abort. Patch frameworks/native 0008 (applied in the tree by hand, same diff).
