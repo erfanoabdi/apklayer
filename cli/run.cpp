@@ -23,6 +23,7 @@ namespace apklayer {
 
 namespace {
 const char* kHubReadyProperty = "apklayer.hub.ready";
+const char* kSystemProcessPackage = "com.android.providers.settings";  // runs in the hub (runHub, HubHost)
 // Chromium's switch file (/data/local/tmp/webview-command-line) in the instance's own /data, where Chromium reads it through the path layer
 // (APKLAYER_DATA); a launch from inside the instance (the hub's component host) reads the same file. Its seccomp sandbox cannot run in an app JVM
 // and is off for the provider route (user decision, 2026-10-27; tools/host-setup/webview.sh). Written here, as the user: no root, and never the
@@ -293,7 +294,17 @@ int runHub(const Layout& l, const Instance& inst) {
     if (!ensureStack(l, inst)) return 1;
     std::vector<std::string> jvm = hostJvmArgs(l, inst, ne);
     // uid 1000: the hub is the instance's system_server, also as the uid its oneway calls carry (HubProviders.check)
-    jvm.insert(jvm.end(), {"-Dapklayer.uid=1000", "-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary(), "-cp", hostClasspath(l), "apklayer.host.Main", "--hub"});
+    jvm.insert(jvm.end(), {"-Dapklayer.uid=1000", "-Dapklayer.apps=" + l.appsDir, "-Dapklayer.cli=" + l.cliBinary()});
+    // SettingsProvider is system_server's own (android:process="system"): it runs in the hub's JVM, as on a device, not in a JVM of its own (PLAN
+    // "app start speed on phones" 8). Its data and package as for its own process, the hub's uid. Under the sandbox it keeps its own host (its app uid's files).
+    std::vector<std::string> system;
+    if (!sandboxOn() && getenvOr("APKLAYER_SETTINGS_IN_HUB", "1") != "0" && exists(join(appDir(l, kSystemProcessPackage), "classes.jar"))) {
+        system = packageJvmArgs(l, inst, kSystemProcessPackage);
+        system.erase(std::remove_if(system.begin(), system.end(), [](const std::string& a) { return a.rfind("-Dapklayer.uid=", 0) == 0; }), system.end());
+        jvm.insert(jvm.end(), system.begin(), system.end() - 2);
+    }
+    jvm.insert(jvm.end(), {"-cp", hostClasspath(l), "apklayer.host.Main", "--hub"});
+    if (!system.empty()) jvm.insert(jvm.end(), system.end() - 2, system.end());  // its APK and classes jar
     setProperty(l, ne, kHubReadyProperty, "0");
     // Like init after a service registers: once this JVM has published the hub to the service manager it says so on this pipe (HubHost), and
     // apklayer.hub.ready=1 (clients block on it). Its own word, not a service-manager lookup, which can still find the previous hub's binder.

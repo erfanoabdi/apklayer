@@ -30,8 +30,9 @@ final class HubBootSettings {
         // read on its own thread: a hanging GeoClue call must not hold apps' first provider request (awaitBoot) for long
         java.util.concurrent.CompletableFuture<Boolean> located = java.util.concurrent.CompletableFuture.supplyAsync(() -> locationReady(location));
         if (location != null) java.util.concurrent.CompletableFuture.delayedExecutor(LOCATION_GIVE_UP_S, java.util.concurrent.TimeUnit.SECONDS).execute(location::destroy);
-        // the hub's own resolver reaches the settings provider in its process like an app's does (RemoteProvider), as the system
-        org.robolectric.shadows.ShadowContentResolver.registerProviderInternal(Settings.AUTHORITY,
+        // the hub's own resolver reaches the settings provider in its process like an app's does (RemoteProvider), as the system; when the provider
+        // runs in the hub itself (HubHost) the resolver has it already
+        if (System.getProperty("apklayer.package") == null) org.robolectric.shadows.ShadowContentResolver.registerProviderInternal(Settings.AUTHORITY,
                 new RemoteProvider(new android.content.ContextWrapper(context) {
                     @Override public android.content.AttributionSource getAttributionSource() {
                         return new android.content.AttributionSource.Builder(android.os.Process.SYSTEM_UID).setPackageName("android").build();

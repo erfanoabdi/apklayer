@@ -48,7 +48,7 @@ public final class HubClient {
 
     private static int registerNow(Context context, IBinder hub, HubEndpoint endpoint) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.REGISTER, request -> {
-            request.writeString(context.getPackageName()); request.writeStrongBinder(endpoint); request.writeBoolean(Boolean.getBoolean("apklayer.componenthost"));
+            request.writeString(context.getPackageName()); request.writeStrongBinder(endpoint); request.writeBoolean(Boolean.getBoolean("apklayer.componenthost") || HubHost.hub);
             request.writeStrongBinder(((android.app.IApplicationThread) android.app.ActivityThread.currentActivityThread().getApplicationThread()).asBinder());
             request.writeInt(android.os.Process.myUid()); request.writeString(System.getProperty("apklayer.isolated"));
         }, reply -> reply.readInt());
@@ -272,7 +272,7 @@ public final class HubClient {
      * first use. False outside an app process, while installing, or while the attachment is under way.
      */
     static synchronized boolean attachEarly() {
-        if (current == null && !attaching && System.getProperty("apklayer.apps") != null && System.getProperty("apklayer.package") != null && !AppEnvironment.installing) {
+        if (current == null && !attaching && !HubHost.booting && System.getProperty("apklayer.apps") != null && System.getProperty("apklayer.package") != null && !AppEnvironment.installing) {
             android.app.Application app = android.app.ActivityThread.currentApplication();
             if (app != null) {
                 attaching = true;

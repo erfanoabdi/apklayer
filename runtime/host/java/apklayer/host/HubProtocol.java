@@ -42,12 +42,16 @@ final class HubProtocol {
     private HubProtocol() {}
     static <T> T call(IBinder target, String descriptor, int code, Consumer<Parcel> write, Function<Parcel, T> read) {
         Parcel request = Parcel.obtain(), reply = Parcel.obtain();
+        // a call to a binder of this process (the hub's own package, HubHost) is this process's, not the binder caller's it may run for: a local
+        // transact keeps the calling identity, as on Android, where system_server clears it
+        boolean local = target instanceof android.os.Binder;
+        long identity = local ? android.os.Binder.clearCallingIdentity() : 0;
         try {
             request.writeInterfaceToken(descriptor); write.accept(request);
             if (!target.transact(code, request, reply, 0)) throw new IllegalStateException("Unknown hub transaction " + code);
             reply.readException(); return read.apply(reply);
         } catch (RemoteException failure) {
             throw new IllegalStateException("Instance hub disconnected", failure);
-        } finally { request.recycle(); reply.recycle(); }
+        } finally { if (local) android.os.Binder.restoreCallingIdentity(identity); request.recycle(); reply.recycle(); }
     }
 }
