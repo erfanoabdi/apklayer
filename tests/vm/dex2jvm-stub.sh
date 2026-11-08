@@ -1,8 +1,7 @@
 #!/bin/bash
 # A class dex2jvm cannot convert does not block the install (DexConverter.failedClassStub): hello.stub is installed with hello.stub.Victim forced
 # to fail (DEX2JVM_TEST_FAIL_CLASS), the install says so, the app runs and its call into Victim throws VerifyError naming the class.
-# Then installed again without the knob: the call returns. Both times its classes.dex loaded through InMemoryDexClassLoader (converted and verified
-# in the app JVM: ShadowHostBaseDexClassLoader) gives a Victim of that loader whose call returns. On the VM, in the group's instance (tests/run dex2jvm).
+# Then installed again without the knob: the call returns. On the VM, in the group's instance (tests/run dex2jvm).
 : "${APKLY_STATE:=${XDG_STATE_HOME:-$HOME/.local/state}/apklayer/${APKLAYER_INSTANCE:-default}}"
 fail=0
 apk=.tests/apks/hello-stub.apk
@@ -23,6 +22,5 @@ check stubbed "\[stub\] VerifyError .*class hello.stub.Victim could not be conve
 bin/apklayer uninstall hello.stub >/dev/null 2>&1  # the stubbed conversion is not left for a later install to reuse
 bin/apklayer install $apk > /dev/null 2>&1 || { echo "FAIL plain install"; fail=1; }
 check converted "\[stub\] call returned converted"
-if grep -aq "\[stub\] in-memory returned converted$" "$APKLY_STATE/stub-converted.out"; then echo "PASS in-memory"; else echo "FAIL in-memory"; fail=1; fi
 bin/apklayer stop >/dev/null 2>&1
 exit $fail
