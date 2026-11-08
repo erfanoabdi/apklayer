@@ -299,6 +299,35 @@ Steps:
 4. Measure the hot paths (SurfaceFlinger transactions per frame, audio) before dropping kernel binder; a second daemon thread or sharded
    locks if one thread saturates.
 
+State (2026-11-08, branch `userspace-binder`): steps 1 and 2 done. Design note `docs/BINDER.md` (protocol, driver-model scope, threading and
+BR_SPAWN_LOOPER, oneway ordering, buffer allocation, fd lifetime, freezer, what is left out). Prototype: `bridge/binderd` (apklayer-binderd, the model
+written from binder.c v6.6, no innkeeper code), the route in libapklayer-preload.so (`bridge/native/binder_route.c`; the path layer's glibc-level
+opens call it too, since bionic's fortified `__open_2` reaches them on glibc), bionic_translation 0046 (fd hooks), `cli/binder.cpp` (selection:
+`APKLAYER_BINDER=userspace` or `<instance root>/binder`; the CLI binds the socket and hands it to the daemon). Kernel binder stays the default.
+- Tests on the x86 PC with the userspace binder: binder, host-binder (AIDL and HIDL over hwbinder, two instances' daemons), hub-services, services,
+  activities, providers, broadcasts, pendingintents, notifications pass; gpu's two UiBench smokes pass. gpu's hwbitmap and keystore (attestation
+  chain length 1) fail, as they do with kernel binder on that PC in other trees the same day (both pass on UTM): x86 PC issues, not the binder.
+- Not done: arm64. The Parallels disk was full (59 of 62 GB used by other trees; my copy took the rest and was removed again); needs room for a
+  tree (~2.2 GB) and a current prebuilts copy (~0.9 GB: Parallels' `~/prebuilts` predates libbinder's host context and robolectric patch 0023).
+- Numbers (x86 PC, 4 cores, libbinder both ends: `servicetool bench serve|run`, a servicemanager, one client process; kernel on an idle binderfs node):
+
+  | | kernel binder | userspace binder |
+  |---|---|---|
+  | round trip, empty / 128 B | 10.4 / 10.4 us (86k calls/s) | 28.7 / 29.1 us (26k calls/s) |
+  | echo 4 KiB / 64 KiB | 11.5 / 22.6 us | 36.3 / 86.5 us |
+  | 4 client threads, 128 B | 142k calls/s (p50 23 us) | 44k calls/s (p50 57 us) |
+  | oneway 128 B | 122k/s | 75k/s |
+
+  About 2.8x the kernel's round trip: a round trip is four socket messages through the daemon (two requests, two replies) plus a copy into the
+  receive area; one daemon thread serves every process. Innkeeper reports 15 us against 3.8 us for its seccomp broker on other hardware.
+- Next for step 3 (everything on it): the remaining groups on it (media, audio, webview, system, the corpus) on x86 and arm64; then the hot paths
+  of step 4. Cheaper round trips first: a reply that carries the read in the same message is already the case; next, transaction data written
+  straight into the target's receive area (the route could map every peer's area, or a per-thread shared ring replaces the socket copy), fewer
+  allocations in the route (one reused buffer per thread), and `SOCK_SEQPACKET` with one `sendmsg` per message. Then a second daemon thread per
+  context or one daemon thread per context (binder, hwbinder, vndbinder are independent already). Before binderfs goes: the per-app sandbox's
+  user namespace (the daemon runs in the instance's namespace when the stack starts it, in the caller's when `apklayer exec` does), the Flatpak
+  (the socket directory under `$XDG_RUNTIME_DIR` is shared with the sandbox), and the deb's unit and the manager's first-run check.
+
 ## Parked (owner's decision)
 - Not now: NFC, biometrics, game controllers, ModemManager ("no SIM" is the honest answer), screen capture portal. Backlight and thermal are the host's.
 - Several phone instances as a product (P9) and SystemUI: yardsticks, not goals. CTS strictly last.
