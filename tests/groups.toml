@@ -227,8 +227,6 @@ needs = ["com.android.test.uibench"]
 optional = true
 run = ["python3 -u tests/vm/decoration.py"]
 
-[mobile]
-
 [mobile]  # also the hub's questions as full-screen pages in the mobile style (permission-mobile.py)
 needs = ["com.android.test.uibench"]
 apps = ["hello-permissions"]
