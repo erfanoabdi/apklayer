@@ -124,13 +124,14 @@ final class HubInstallDialog {
     /** The mobile page, as Android's permission screen on a phone: a question icon, the heading and body centred, full-width buttons stacked at the
      *  bottom above the navigation bar (nav pixels), in dp of the shell's density so a finger hits them (56 dp high). */
     private static Layout page(String heading, String body, String yes, String no, int w, int h, int dpi, int nav) {
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         float dp = Math.max(dpi, 160) / 160f;
+        while (dp > 1 && height(paint, heading, body, w, dp) > h - nav) dp *= 0.9f;  // a short window (landscape): smaller, never overlapping
         int margin = Math.round(24 * dp), bh = Math.round(56 * dp), gap = Math.round(12 * dp), bw = w - 2 * margin;
         int[] noBox = {margin, h - nav - margin - bh, bw, bh}, yesBox = {margin, noBox[1] - gap - bh, bw, bh};
         Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(0xFFFAFAFA);
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         paint.setColor(ACCENT);
         float cy = 96 * dp;
         canvas.drawCircle(w / 2f, cy, 28 * dp, paint);
@@ -141,6 +142,16 @@ final class HubInstallDialog {
         lines(canvas, paint, body, 16 * dp, Typeface.DEFAULT, BODY, margin, y + 8 * dp, bw, 24 * dp, true);
         buttons(canvas, paint, yes, no, yesBox, noBox, 18 * dp, bh / 2f, 2 * dp);
         return new Layout(w, h, pixels(bitmap), yesBox, noBox);
+    }
+
+    /** The page's height at dp: the icon, the wrapped heading and body (as page() draws them), the two buttons with their margins. */
+    private static float height(Paint paint, String heading, String body, int w, float dp) {
+        int width = w - 2 * Math.round(24 * dp);
+        paint.setTypeface(Typeface.DEFAULT);
+        paint.setTextSize(24 * dp);
+        float y = 168 * dp + (heading.isEmpty() ? 0 : wrap(heading, paint, width).size() * 32 * dp);
+        paint.setTextSize(16 * dp);
+        return y + 8 * dp + (body.isEmpty() ? 0 : wrap(body, paint, width).size() * 24 * dp) + (24 + 56 + 12 + 56 + 24) * dp;
     }
 
     /** Draws text wrapped to width from (x, baseline y), one line per step; returns the next baseline. */
