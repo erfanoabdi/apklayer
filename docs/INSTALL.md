@@ -218,7 +218,7 @@ Ubuntu Touch (Halium phones): docs/HALIUM.md "The apt install on the phone"; "Ch
 
 ## Flatpak
 
-**New (2026-11-08): run end to end on aarch64; see docs/PLAN.md "Flatpak".** The release's `apklayer-<version>-<cpu>.flatpak` (aarch64, x86_64; app id `io.github.erfanoabdi.Apklayer`, runtime `org.freedesktop.Platform` 26.08 from Flathub):
+**New (2026-11-08): run end to end on aarch64 and x86_64; see docs/PLAN.md "Flatpak".** The release's `apklayer-<version>-<cpu>.flatpak` (aarch64, x86_64; app id `io.github.erfanoabdi.Apklayer`, runtime `org.freedesktop.Platform` 26.08 from Flathub):
 
 ```sh
 flatpak install --user apklayer-*-aarch64.flatpak

@@ -155,7 +155,9 @@ Open, in order:
    renderD128, PipeWire audio AIDL up (no playback checked), launchers `io.github.erfanoabdi.Apklayer.<pkg>.desktop` with `flatpak run` beside the
    deb's untouched ones. Every `flatpak run` is a pid namespace of its own: in the Flatpak every command goes through the on-demand apklayerd
    (cli/daemon.cpp), whose namespace holds the stacks; without it a second `flatpak run` started a second stack (servicemanager aborted).
-   Open: x86_64 on the owner's PC (its Flathub pulls of GL.default fail); `.apk` file association (no xdg-mime in the Platform).
+   x86_64 the same on the owner's PC (Intel, CI bundle, GL.default from a CI-made runtime bundle: its own Flathub pulls of that extension fail):
+   setup, UiBench run and screenshot, the deb's launchers untouched; with binderfs visible (default `--device=all`) the kernel binder is used.
+   Open: `.apk` file association (no xdg-mime in the Platform).
 3. Flathub: offline sources (wrap, deps.lock, Slint as pinned sources), the dynamic launcher portal instead of `xdg-data/applications`.
 
 ## Plan: one build instead of tools/* (decided 2026-11-04 by the owner, after the current round)
