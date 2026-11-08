@@ -150,7 +150,7 @@ try:
         assert text.index('LOCKED_BOOT_COMPLETED') < text.index('android.intent.action.BOOT_COMPLETED'), 'wrong order:\n' + text
         assert 'user=0' in text and 'sending android.intent.action.BOOT_COMPLETED' in instance.wait_file(HUB_OUT, 'sending android.intent.action.BOOT_COMPLETED', 5)
         # ordered, as UserController sends it: one receiver (one app's process start) after the other
-        assert 'broadcast android.intent.action.BOOT_COMPLETED from android ordered' in instance.wait_file(HUB_OUT, 'broadcast android.intent.action.BOOT_COMPLETED from', 5), 'not ordered
+        assert 'broadcast android.intent.action.BOOT_COMPLETED from android ordered' in instance.wait_file(HUB_OUT, 'broadcast android.intent.action.BOOT_COMPLETED from', 5), 'not ordered'
         # the same stack, a new hub (the first ended): not a boot again
         jvm = int((LOGS / 'hub.pid').read_text().split()[0])
         os.kill(jvm, signal.SIGTERM)

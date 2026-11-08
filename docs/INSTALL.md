@@ -73,8 +73,8 @@ meson install -C b --skip-subprojects     # --skip-subprojects: bionic_translati
 `bin/apklayer` (the tree's CLI, `b/cli/apklayer`) and `$AL/install/bin/apklayer` both use that install; no environment variables are needed.
 After a pull or an edit: `ninja -C b && meson install -C b --skip-subprojects --only-changed` (ninja rebuilds exactly what changed:
 a host Java file rebuilds the host classes and what depends on them, an edit of the JNI shim the jars that carry it). A new prebuilts commit:
-pull it, `sh "$AL/prebuilts/join-parts.sh"`, then the same two commands. An edited bionic_translation patch:
-`meson subprojects update --reset bionic_translation` first. OpenGL ES 1 for hosts whose Mesa lacks it: add `-Dgfxstream=<gfxstream source>`
+pull it, `sh "$AL/prebuilts/join-parts.sh"`, then the same two commands. An edited bionic_translation patch: the
+reconfigure resets the subproject to its revision and applies the series again (`meson subprojects update --reset bionic_translation` by hand does the same). OpenGL ES 1 for hosts whose Mesa lacks it: add `-Dgfxstream=<gfxstream source>`
 (the tree's `hardware/google/gfxstream`).
 
 ## 5. Install and run an app
