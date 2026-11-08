@@ -46,7 +46,7 @@ bin/apklayer settings set time-format 12 >/dev/null
 bin/apklayer settings set animations off >/dev/null
 bin/apklayer settings set contrast high >/dev/null
 bin/apklayer settings set accent '#e01b24' >/dev/null
-seen 'contrast=1.0 accent1_600'; sleep 1; n=$(creates)  # contrast and accent recreate (a new palette), the others need none
+seen 'create .*palette=.*FFE01B24.*contrast=1.0'; n=$(creates)  # contrast and accent recreate (a new palette), the others need none
 aprop=${APKLAYER_NATIVE:-$HOME/arm64-native}/bin/aprop
 check "persist.sys.timezone $($aprop get persist.sys.timezone), persist.sys.locale $($aprop get persist.sys.locale) in the instance's store" \
   "$([ "$($aprop get persist.sys.timezone)" = Europe/Berlin ] && [ "$($aprop get persist.sys.locale)" = de-DE ] && echo 1)"
