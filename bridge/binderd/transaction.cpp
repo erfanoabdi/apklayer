@@ -206,99 +206,104 @@ void Driver::transaction(Thread* thread, const binder_transaction_data& tr, bool
     buf->target_node = target_node;
     node_ref = false;
 
+    // straight from the sender's shared buffer into the target's receive area. Every value the daemon acts on is read once into private memory
+    // (the offsets, each object, each scatter-gather buffer's place): neither process can change it under the daemon, both can write their memory
     uint8_t* base = target_proc->area + buf->off;
     const uint64_t user = target_proc->user_base + buf->off;
     memcpy(base, data, tr.data_size);
     size_t off_start = align8(tr.data_size);
-    memcpy(base + off_start, offsets, tr.offsets_size);
+    std::vector<binder_size_t> offs(tr.offsets_size / sizeof(binder_size_t));
+    memcpy(offs.data(), offsets, offs.size() * sizeof(binder_size_t));
+    memcpy(base + off_start, offs.data(), offs.size() * sizeof(binder_size_t));
     size_t sg_off = off_start + align8(tr.offsets_size), sg_end = sg_off + extra_size, sg_in = 0, fd_next = 0, off_min = 0;
     bool accept_fds = reply ? (in_reply_to->flags & TF_ACCEPT_FDS) : target_node->accept_fds;
-    std::vector<size_t> obj_at;  // offset of the object at each index (parents of PTR and FDA objects)
-    auto parentPtr = [&](uint64_t index, size_t below) -> binder_buffer_object* {
-        if (index >= below) return nullptr;
-        auto* p = reinterpret_cast<binder_buffer_object*>(base + obj_at[index]);
-        return p->hdr.type == BINDER_TYPE_PTR ? p : nullptr;
-    };
+    struct Sg { size_t off = 0, length = 0; bool ptr = false; };  // per object index: a PTR object's copy in the buffer
+    std::vector<Sg> sgs(offs.size());
+    auto parentOf = [&](uint64_t index, size_t below) -> const Sg* { return index < below && sgs[index].ptr ? &sgs[index] : nullptr; };
+    union {
+        binder_object_header hdr;
+        flat_binder_object fp;
+        binder_fd_object fd;
+        binder_fd_array_object fda;
+        binder_buffer_object bp;
+    } o;
     int32_t bad = 0;
-    for (size_t i = 0; !bad && i < tr.offsets_size / sizeof(binder_size_t); i++) {
-        binder_size_t at;
-        memcpy(&at, base + off_start + i * sizeof at, sizeof at);
-        obj_at.push_back(at);
+    for (size_t i = 0; !bad && i < offs.size(); i++) {
+        binder_size_t at = offs[i];
         if (at % sizeof(uint32_t) || at < off_min || at + sizeof(binder_object_header) > tr.data_size) { bad = -EINVAL; break; }
-        auto* hdr = reinterpret_cast<binder_object_header*>(base + at);
-        size_t size = objectSize(hdr->type);
+        memcpy(&o.hdr, data + at, sizeof o.hdr);
+        size_t size = objectSize(o.hdr.type);
         if (!size || at + size > tr.data_size) { bad = -EINVAL; break; }
+        memcpy(&o, data + at, size);
         off_min = at + size;
-        switch (hdr->type) {
+        switch (o.hdr.type) {
             case BINDER_TYPE_BINDER: case BINDER_TYPE_WEAK_BINDER: {
-                auto* fp = reinterpret_cast<flat_binder_object*>(hdr);
-                bool strong = hdr->type == BINDER_TYPE_BINDER;
-                Node* node = newNode(proc, fp->binder, fp->cookie, fp->flags);
+                bool strong = o.hdr.type == BINDER_TYPE_BINDER;
+                Node* node = newNode(proc, o.fp.binder, o.fp.cookie, o.fp.flags);
                 uint32_t desc;
-                if (fp->cookie != node->cookie) { bad = -EINVAL; break; }
+                if (o.fp.cookie != node->cookie) { bad = -EINVAL; break; }
                 if (int r = incRefForNode(target_proc, node, strong, thread, &desc)) { bad = r; break; }
-                fp->hdr.type = strong ? BINDER_TYPE_HANDLE : BINDER_TYPE_WEAK_HANDLE;
-                fp->binder = 0;
-                fp->handle = desc;
-                fp->cookie = 0;
-                buf->objects.push_back({fp->hdr.type, nullptr, desc});
+                o.fp.hdr.type = strong ? BINDER_TYPE_HANDLE : BINDER_TYPE_WEAK_HANDLE;
+                o.fp.binder = 0;
+                o.fp.handle = desc;
+                o.fp.cookie = 0;
+                buf->objects.push_back({o.fp.hdr.type, nullptr, desc});
             } break;
             case BINDER_TYPE_HANDLE: case BINDER_TYPE_WEAK_HANDLE: {
-                auto* fp = reinterpret_cast<flat_binder_object*>(hdr);
-                bool strong = hdr->type == BINDER_TYPE_HANDLE;
-                Ref* ref = getRef(proc, fp->handle, strong);
+                bool strong = o.hdr.type == BINDER_TYPE_HANDLE;
+                Ref* ref = getRef(proc, o.fp.handle, strong);
                 if (!ref) { bad = -EINVAL; break; }
                 Node* node = ref->node;
                 if (node->proc == target_proc) {
-                    fp->hdr.type = strong ? BINDER_TYPE_BINDER : BINDER_TYPE_WEAK_BINDER;
-                    fp->binder = node->ptr;
-                    fp->cookie = node->cookie;
+                    o.fp.hdr.type = strong ? BINDER_TYPE_BINDER : BINDER_TYPE_WEAK_BINDER;
+                    o.fp.binder = node->ptr;
+                    o.fp.cookie = node->cookie;
                     incNode(node, strong, false, nullptr);
-                    buf->objects.push_back({fp->hdr.type, node, 0});
+                    buf->objects.push_back({o.fp.hdr.type, node, 0});
                 } else {
                     uint32_t desc;
                     if (int r = incRefForNode(target_proc, node, strong, nullptr, &desc)) { bad = r; break; }
-                    fp->binder = 0;
-                    fp->handle = desc;
-                    fp->cookie = 0;
-                    buf->objects.push_back({fp->hdr.type, nullptr, desc});
+                    o.fp.binder = 0;
+                    o.fp.handle = desc;
+                    o.fp.cookie = 0;
+                    buf->objects.push_back({o.fp.hdr.type, nullptr, desc});
                 }
             } break;
-            case BINDER_TYPE_FD: {
-                auto* fp = reinterpret_cast<binder_fd_object*>(hdr);
+            case BINDER_TYPE_FD:
                 if (!accept_fds) { bad = -EPERM; break; }
                 if (fd_next >= fds.size()) { bad = -EINVAL; break; }
                 t->fds.push_back({fds[fd_next], buf->off + at + offsetof(binder_fd_object, fd), false});
                 fds[fd_next++] = -1;
-                fp->pad_binder = 0;
-            } break;
+                o.fd.pad_binder = 0;
+                break;
             case BINDER_TYPE_FDA: {
-                auto* fda = reinterpret_cast<binder_fd_array_object*>(hdr);
-                binder_buffer_object* parent = parentPtr(fda->parent, i);
+                const Sg* parent = parentOf(o.fda.parent, i);
                 if (!accept_fds) { bad = -EPERM; break; }
-                if (!parent || fda->parent_offset + fda->num_fds * sizeof(uint32_t) > parent->length || fda->parent_offset % sizeof(uint32_t) ||
-                    fd_next + fda->num_fds > fds.size()) { bad = -EINVAL; break; }
-                size_t first = parent->buffer - target_proc->user_base + fda->parent_offset;
-                for (binder_size_t k = 0; k < fda->num_fds; k++) {
+                if (!parent || o.fda.num_fds > parent->length / sizeof(uint32_t) || o.fda.parent_offset > parent->length - o.fda.num_fds * sizeof(uint32_t) ||
+                    o.fda.parent_offset % sizeof(uint32_t) || o.fda.num_fds > fds.size() - fd_next) { bad = -EINVAL; break; }
+                size_t first = buf->off + parent->off + o.fda.parent_offset;
+                for (binder_size_t k = 0; k < o.fda.num_fds; k++) {
                     t->fds.push_back({fds[fd_next], first + k * sizeof(uint32_t), true});
                     fds[fd_next++] = -1;
                 }
             } break;
             case BINDER_TYPE_PTR: {
-                auto* bp = reinterpret_cast<binder_buffer_object*>(hdr);
-                if (bp->length > sg_end - sg_off || sg_in + align8(bp->length) > sg_size) { bad = -EINVAL; break; }
-                memcpy(base + sg_off, sg + sg_in, bp->length);
-                sg_in += align8(bp->length);
-                bp->buffer = user + sg_off;
-                sg_off += align8(bp->length);
-                if (bp->flags & BINDER_BUFFER_FLAG_HAS_PARENT) {  // binder_fixup_parent: the parent's copy points at this one's
-                    binder_buffer_object* parent = parentPtr(bp->parent, i);
-                    if (!parent || bp->parent_offset + sizeof(binder_uintptr_t) > parent->length) { bad = -EINVAL; break; }
-                    binder_uintptr_t value = bp->buffer;
-                    memcpy(base + (parent->buffer - user) + bp->parent_offset, &value, sizeof value);
+                size_t len = o.bp.length;
+                if (o.bp.length > sg_end - sg_off || align8(len) > sg_size - sg_in) { bad = -EINVAL; break; }
+                memcpy(base + sg_off, sg + sg_in, len);
+                sg_in += align8(len);
+                o.bp.buffer = user + sg_off;
+                sgs[i] = {sg_off, len, true};
+                sg_off += align8(len);
+                if (o.bp.flags & BINDER_BUFFER_FLAG_HAS_PARENT) {  // binder_fixup_parent: the parent's copy points at this one's
+                    const Sg* parent = parentOf(o.bp.parent, i);
+                    if (!parent || parent->length < sizeof(binder_uintptr_t) || o.bp.parent_offset > parent->length - sizeof(binder_uintptr_t)) { bad = -EINVAL; break; }
+                    binder_uintptr_t value = o.bp.buffer;
+                    memcpy(base + parent->off + o.bp.parent_offset, &value, sizeof value);
                 }
             } break;
         }
+        if (!bad) memcpy(base + at, &o, size);  // the translated object
     }
     Work* tcomplete = nullptr;
     auto failBuffer = [&](uint32_t error, int32_t param) {

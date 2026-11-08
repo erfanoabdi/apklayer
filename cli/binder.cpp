@@ -62,7 +62,7 @@ int unixSocket(const std::string& path, bool listening) {
     a.sun_family = AF_UNIX;
     if (path.size() >= sizeof a.sun_path) die("binder socket path too long (" + std::to_string(path.size()) + " bytes): " + path);
     memcpy(a.sun_path, path.c_str(), path.size());
-    int s = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    int s = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);  // bridge/binderd/protocol.h
     if (s < 0) return -1;
     bool ok = listening ? (unlink(path.c_str()), bind(s, (sockaddr*)&a, sizeof a) == 0 && listen(s, 64) == 0) : connect(s, (sockaddr*)&a, sizeof a) == 0;
     if (!ok) { close(s); return -1; }

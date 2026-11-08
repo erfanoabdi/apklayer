@@ -1,9 +1,9 @@
-/* The write stream of a BINDER_WRITE_READ, marshalled for the userspace binder's daemon (protocol.h "struct bd_txn"): what the kernel would
- * copy out of the caller's memory goes inline, the fds of BINDER_TYPE_FD and BINDER_TYPE_FDA objects go as SCM_RIGHTS. Included once, by
- * binder_route.c. */
+/* The write stream of a BINDER_WRITE_READ, marshalled for the userspace binder's daemon (protocol.h "struct bd_txn") into the thread's shared
+ * buffer: what the kernel would copy out of the caller's memory goes inline, the fds of BINDER_TYPE_FD and BINDER_TYPE_FDA objects go as
+ * SCM_RIGHTS with the request. The lists are the thread's, reused. Included once, by binder_route.c. */
 
 struct wbuf {
-    uint8_t *data;
+    uint8_t *data; /* the shared buffer */
     size_t len, cap;
     int *fds;
     uint32_t nfds, fcap;
@@ -12,9 +12,18 @@ struct wbuf {
     int err;
 };
 
+static void wbuf_reset(struct wbuf *w, uint8_t *data, size_t cap)
+{
+    w->data = data;
+    w->cap = cap;
+    w->len = 0;
+    w->nfds = 0;
+    w->ncmd = 0;
+    w->err = 0;
+}
+
 static void wbuf_free(struct wbuf *w)
 {
-    free(w->data);
     free(w->fds);
     free(w->mend);
     free(w->oend);
@@ -23,14 +32,7 @@ static void wbuf_free(struct wbuf *w)
 static void put(struct wbuf *w, const void *p, size_t n)
 {
     if (w->err) return;
-    if (w->len + n > w->cap) {
-        size_t cap = w->cap ? w->cap : 256;
-        while (cap < w->len + n) cap *= 2;
-        uint8_t *d = realloc(w->data, cap);
-        if (!d) { w->err = -ENOMEM; return; }
-        w->data = d;
-        w->cap = cap;
-    }
+    if (n > w->cap - w->len) { w->err = -E2BIG; return; }  /* larger than any receive area: the kernel would refuse it too */
     if (p) memcpy(w->data + w->len, p, n);
     else memset(w->data + w->len, 0, n);
     w->len += n;

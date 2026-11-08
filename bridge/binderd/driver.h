@@ -1,12 +1,14 @@
 // The binder driver model of apklayer's userspace binder (docs/BINDER.md): procs, threads, nodes, refs, transactions, buffers and work
-// queues, after Linux's drivers/android/binder.c (written from it, structure and names kept so the two can be compared). One thread runs
-// it (bridge/binderd/main.cpp): no locks; a thread that would sleep in the kernel is a request the daemon answers later.
+// queues, after Linux's drivers/android/binder.c (written from it, structure and names kept so the two can be compared). One Driver per context
+// (binder, hwbinder, vndbinder), each run by a thread of its own (bridge/binderd/main.cpp): no locks inside; a thread that would sleep in the
+// kernel is a request the daemon answers later.
 #pragma once
 
 #include <linux/android/binder.h>
 #include <sys/types.h>
 
 #include <cstdint>
+#include <functional>
 #include <list>
 #include <map>
 #include <set>
@@ -122,6 +124,7 @@ struct Thread {
     Proc* proc;
     int sock;
     int tid;
+    const uint8_t* tx = nullptr;  // the thread's shared buffer, read-only here (protocol.h BD_TX_SIZE): its write streams
     uint32_t looper = 0;
     bool looper_need_return = true;
     Transaction* transaction_stack = nullptr;
@@ -184,20 +187,21 @@ struct Reply {
 class Driver {
 public:
     // connections (main.cpp): a proc's hello, a thread's hello, a request, a closed socket
-    Proc* newProc(int sock, const std::string& context, pid_t pid, uid_t euid);
+    Proc* newProc(int sock, pid_t pid, uid_t euid);
     Thread* newThread(Proc* proc, int sock, int tid);
     Proc* procByCookie(uint64_t cookie);
     void releaseProc(Proc* proc);      // binder_deferred_release
     void releaseThread(Thread* t);     // binder_thread_release, then the thread is gone
     // returns false when the reply waits (a blocking read with no work yet); the reply is then sent by flush()
-    bool ioctl(Thread* t, uint32_t cmd, const std::vector<uint8_t>& arg, uint64_t a1, uint64_t a2, std::vector<int>& fds, Reply& out);
+    bool ioctl(Thread* t, uint32_t cmd, const std::vector<uint8_t>& arg, uint64_t a1, uint64_t a2, uint64_t a3, std::vector<int>& fds, Reply& out);
     int mmap(Thread* t, size_t size, int* memfd);
     int mapped(Thread* t, uint64_t base);
     // after each request: answer the threads whose reads now have work, wake polling processes
     void flush();
     // main.cpp sends replies and closes sockets
-    void (*sendReply)(Thread* t, Reply& r) = nullptr;
-    void (*closeSocket)(int sock) = nullptr;
+    std::function<void(Thread*, Reply&)> sendReply;
+    std::function<void(int)> closeSocket;
+    uint8_t index = 0;  // this context's number, the top byte of its procs' cookies (a thread's hello finds its context by it)
 
     // the model (binder.c names)
     int writeCommands(Thread* t, const uint8_t* buf, size_t size, uint64_t* consumed, std::vector<int>& fds, size_t* fd_next);
@@ -239,11 +243,12 @@ public:
     void freeAlloc(Proc* p, Buffer* b);
     Buffer* bufferForUser(Proc* p, binder_uintptr_t ptr);
 
-    std::map<std::string, Context*> contexts;
+    Context context;
     std::map<uint64_t, Proc*> procs;
     std::set<Thread*> ready;  // threads whose pending read may now be answered
     std::set<Proc*> dirty;    // procs whose poll wakeup is to be checked
     int next_debug_id = 1;
+    bool debug = false;
 };
 
 inline size_t align8(size_t n) { return (n + 7) & ~size_t(7); }

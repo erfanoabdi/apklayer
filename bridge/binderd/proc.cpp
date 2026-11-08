@@ -1,11 +1,13 @@
 // Procs and threads, their ioctls and their release (binder.c: binder_ioctl and its helpers, binder_mmap, binder_thread_release,
 // binder_deferred_release, binder_release_work).
+#include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/random.h>
 #include <unistd.h>
 
 #include <algorithm>
 #include <cerrno>
+#include <cstdio>
 #include <cstring>
 
 #include "driver.h"
@@ -22,20 +24,16 @@ template <typename T> bool argIn(const std::vector<uint8_t>& arg, T* out) {
 template <typename T> void argOut(Reply& out, const T& v) { out.data.assign((const uint8_t*)&v, (const uint8_t*)&v + sizeof v); }
 }  // namespace
 
-Proc* Driver::newProc(int sock, const std::string& name, pid_t pid, uid_t euid) {
-    Context*& c = contexts[name];
-    if (!c) {
-        c = new Context;
-        c->name = name;
-    }
+Proc* Driver::newProc(int sock, pid_t pid, uid_t euid) {
     Proc* p = new Proc;
-    p->context = c;
+    p->context = &context;
     p->sock = sock;
     p->pid = pid;
     p->euid = euid;
     do {
         if (getrandom(&p->cookie, sizeof p->cookie, 0) != sizeof p->cookie) p->cookie = (uint64_t(pid) << 32) ^ uint64_t(sock) ^ uint64_t(next_debug_id++);
-    } while (!p->cookie || procs.count(p->cookie));
+        p->cookie = (p->cookie & ~(uint64_t(0xff) << 56)) | (uint64_t(index) << 56);
+    } while (procs.count(p->cookie));
     procs[p->cookie] = p;
     return p;
 }
@@ -59,9 +57,11 @@ int Driver::mmap(Thread* t, size_t size, int* memfd) {
     if (p->area) return -EBUSY;
     size = std::min<size_t>(size, 4 * 1024 * 1024);  // the kernel's limit
     if (size < sizeof(void*)) return -EINVAL;
-    int fd = memfd_create("binder", MFD_CLOEXEC);
+    int fd = memfd_create("binder", MFD_CLOEXEC | MFD_ALLOW_SEALING);
     if (fd < 0) return -errno;
-    void* area = ftruncate(fd, size) == 0 ? ::mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0) : MAP_FAILED;
+    // sealed at its size: the process gets this fd, and a shrunk area would fault the daemon's writes (SIGBUS)
+    bool sized = ftruncate(fd, size) == 0 && fcntl(fd, F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_SEAL) == 0;
+    void* area = sized ? ::mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0) : MAP_FAILED;
     if (area == MAP_FAILED) {
         int e = errno;
         close(fd);
@@ -83,7 +83,7 @@ int Driver::mapped(Thread* t, uint64_t base) {
     return 0;
 }
 
-bool Driver::ioctl(Thread* t, uint32_t cmd, const std::vector<uint8_t>& arg, uint64_t a1, uint64_t a2, std::vector<int>& fds, Reply& out) {
+bool Driver::ioctl(Thread* t, uint32_t cmd, const std::vector<uint8_t>& arg, uint64_t a1, uint64_t a2, uint64_t a3, std::vector<int>& fds, Reply& out) {
     Proc* p = t->proc;
     auto pendingTxns = [](Proc* q) {
         if (q->outstanding_txns > 0) return true;
@@ -93,10 +93,10 @@ bool Driver::ioctl(Thread* t, uint32_t cmd, const std::vector<uint8_t>& arg, uin
     };
     switch (cmd) {
         case BINDER_WRITE_READ: {
-            t->pending = {a1, 0, uint32_t(a2)};
+            t->pending = {std::min<uint64_t>(a1, BD_MAX_READ), 0, uint32_t(a2)};  // a reply is one message
             uint64_t consumed = 0;
             size_t fd_next = 0;
-            int r = arg.empty() ? 0 : writeCommands(t, arg.data(), arg.size(), &consumed, fds, &fd_next);
+            int r = a3 == 0 ? 0 : !t->tx || a3 > BD_TX_SIZE ? -EINVAL : writeCommands(t, t->tx, a3, &consumed, fds, &fd_next);
             for (int fd : fds) if (fd >= 0) close(fd);  // fds of commands the stream did not reach
             fds.clear();
             out.write_consumed = consumed;
@@ -159,7 +159,8 @@ bool Driver::ioctl(Thread* t, uint32_t cmd, const std::vector<uint8_t>& arg, uin
             argOut(out, info);
         } break;
         case BINDER_FREEZE: {
-            // no timeout wait: a process with transactions in flight is refused at once (-EAGAIN), as the kernel's after its timeout
+            // no timeout wait: a process with transactions in flight is refused at once (-EAGAIN), as the kernel's after its timeout. Only this
+            // context's procs of that pid: each context has a thread of its own (the kernel freezes them in all binder devices)
             binder_freeze_info info{};
             if (!argIn(arg, &info)) { out.ret = -EINVAL; break; }
             bool found = false;
@@ -246,10 +247,12 @@ void Driver::releaseThread(Thread* thread) {
     proc->waiting_threads.remove(thread);
     ready.erase(thread);
     closeSocket(thread->sock);
+    if (thread->tx) munmap(const_cast<uint8_t*>(thread->tx), BD_TX_SIZE);
     delete thread;
 }
 
 void Driver::releaseProc(Proc* p) {
+    if (debug) fprintf(stderr, "binderd: %s: proc %d ends (%zu nodes, %zu refs)\n", context.name.c_str(), p->pid, p->nodes.size(), p->refs_by_desc.size());
     p->is_dead = true;
     if (p->context->mgr && p->context->mgr->proc == p) p->context->mgr = nullptr;
     while (!p->threads.empty()) releaseThread(p->threads.front());

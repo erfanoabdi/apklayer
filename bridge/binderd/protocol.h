@@ -1,16 +1,22 @@
 /* apklayer's userspace binder (docs/BINDER.md): the messages between a process's binder route (bridge/native/binder_route.c, in every
- * Android process through LD_PRELOAD) and the instance's binder daemon (bridge/binderd). One stream socket per opened binder fd (the
- * process: its close is the process's death) and one per thread that uses it (a thread's ioctls block on its own socket). */
+ * Android process through LD_PRELOAD) and the instance's binder daemon (bridge/binderd). One SOCK_SEQPACKET socket per opened binder fd (the
+ * process: its close is the process's death) and one per thread that uses it (a thread's ioctls block on its own socket). Messages are small
+ * (at most BD_MAX_MSG): a BINDER_WRITE_READ's write stream goes through the thread's shared buffer (BD_HELLO_THREAD), which the daemon maps
+ * read-only and copies transaction data from straight into the target's receive area. */
 #pragma once
 #include <stdint.h>
 
-#define BD_VERSION 1
+#define BD_VERSION 2
 #define BD_MAX_FDS 250 /* fds per sendmsg (SCM_MAX_FD is 253); more go in follow-up one-byte messages */
+#define BD_MAX_MSG (64u << 10) /* a message's size, header included (a read is capped to fit) */
+#define BD_MAX_READ (32u << 10)
+#define BD_TX_SIZE (8u << 20)  /* a thread's shared buffer: sparse, pages exist where a stream was written */
 
 enum bd_op {
     BD_HELLO_PROC = 1, /* payload: the context name ("binder", "hwbinder", "vndbinder"); a0: BD_VERSION. Reply: write_consumed = the proc cookie */
-    BD_HELLO_THREAD,   /* a0: proc cookie, a1: tid. The daemon checks SO_PEERCRED's pid against the proc's */
-    BD_IOCTL,          /* a0: ioctl command; payload: the argument (BINDER_WRITE_READ: the marshalled write stream, a1 read size, a2 BD_RD_* flags) */
+    BD_HELLO_THREAD,   /* a0: proc cookie, a1: tid; one fd: the thread's shared buffer (BD_TX_SIZE). The daemon checks SO_PEERCRED's pid */
+    BD_IOCTL,          /* a0: ioctl command; payload: the argument. BINDER_WRITE_READ: a1 read size, a2 BD_RD_* flags, a3 the length of the
+                          marshalled write stream at the start of the shared buffer */
     BD_MMAP,           /* a0: size. Reply: one fd, the receive area (a memfd the daemon maps too) */
     BD_MAPPED,         /* a0: the address the process mapped the receive area at (the daemon writes pointers into it) */
 };
@@ -23,7 +29,7 @@ struct bd_req {
     uint32_t op;
     uint32_t nfds; /* fds sent with it, in order */
     uint32_t pad;
-    uint64_t a0, a1, a2;
+    uint64_t a0, a1, a2, a3;
 };
 
 struct bd_rep {
@@ -57,11 +63,11 @@ struct bd_txn {
 #ifdef __cplusplus
 extern "C" {
 #endif
-/* wire.c: one message out (header and payload in one sendmsg, the fds after it) and in. 0 or -errno; EINTR is retried. */
+/* wire.c: one message out (header and payload in one sendmsg, more than BD_MAX_FDS fds in follow-up messages) and in. 0 or -errno; EINTR
+ * is retried. */
 int bd_send(int sock, const void *hdr, uint32_t hlen, const void *payload, uint32_t plen, const int *fds, uint32_t nfds);
-/* reads exactly hlen header bytes, taking the fds that came with the first part (at most BD_MAX_FDS) into fds; *got: how many */
-int bd_recv_hdr(int sock, void *hdr, uint32_t hlen, int *fds, uint32_t *got);
-int bd_recv_all(int sock, void *buf, uint64_t len);
+/* one message into buf (cap bytes): its length or -errno (-EMSGSIZE: larger than cap); the fds that came with it (at most BD_MAX_FDS) into fds */
+int bd_recv(int sock, void *buf, uint32_t cap, int *fds, uint32_t *got);
 /* the rest of a message's fds (beyond the first BD_MAX_FDS) */
 int bd_recv_more_fds(int sock, int *fds, uint32_t have, uint32_t total);
 #ifdef __cplusplus

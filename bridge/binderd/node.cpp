@@ -2,6 +2,7 @@
 // binder_inc/dec_ref_olocked, binder_cleanup_ref_olocked, binder_node_release, BC_(CLEAR|REQUEST)_DEATH_NOTIFICATION, BC_DEAD_BINDER_DONE).
 // No tmp_refs: one thread runs the model, nothing is freed under a caller's feet.
 #include <cerrno>
+#include <cstdio>
 
 #include "driver.h"
 
@@ -178,6 +179,7 @@ void Driver::nodeRelease(Node* node) {
     node->proc = nullptr;
     node->local_strong_refs = node->local_weak_refs = 0;
     for (Ref* ref : node->refs) {
+        if (debug) fprintf(stderr, "binderd: %s: node of %d dead, ref %u in %d %s\n", context.name.c_str(), proc->pid, ref->desc, ref->proc->pid, ref->death ? "notified" : "without death request");
         if (!ref->death) continue;
         ref->death->type = Work::DEAD_BINDER;
         ref->proc->todo.push(ref->death);
