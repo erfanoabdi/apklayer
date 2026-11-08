@@ -31,6 +31,10 @@ __attribute__((constructor)) static void read_env(void)
     const char *e = getenv("APKLAYER_ANDROID_ROOT"), *n = getenv("APKLAYER_NATIVE");
     if (e) snprintf(root_buf, sizeof root_buf, "%s", e);
     else if (n) snprintf(root_buf, sizeof root_buf, "%s/android-root", n);
+    /* the kernel's spelling (readlink of /proc/self/fd/N): a root under a symlink (the deb's runtime/current) must match it, or
+     * apklayer_android_spelling misses and the guest linker finds no ld.config section for /system/bin/arm64/app_process64 */
+    char real[PATH_MAX];
+    if (root_buf[0] && realpath(root_buf, real)) snprintf(root_buf, sizeof root_buf, "%s", real);
     inst_env = copy_env("APKLAYER_INSTANCE", NULL);
     host_binder_env = copy_env("APKLAYER_HOST_BINDER", NULL);
     host_hwbinder_env = copy_env("APKLAYER_HOST_HWBINDER", NULL);
