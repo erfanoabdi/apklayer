@@ -21,9 +21,13 @@ final class CdsDump {
 
     private static final long DELAY_MS = 3000;  // the first frames' classes too, and the dump's pause away from the start
 
-    static void afterStart() {
+    private static boolean asked;
+
+    /** The first activity is up (ActivityTask): a component host or the hub never writes the archive, it would lack every window class. */
+    static synchronized void afterStart() {
         String file = System.getProperty("apklayer.cdsdump");
-        if (file == null) return;
+        if (file == null || asked) return;
+        asked = true;
         Thread t = new Thread(() -> dump(Path.of(file)), "cds-dump");
         t.setDaemon(true);
         t.start();

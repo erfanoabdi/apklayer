@@ -1,0 +1,33 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: apklayer <apklayer@localhost>
+Subject: [PATCH] InvokeDynamicSupport: a call site of a method without a shadow is linked to its original
+
+apklayer patch: apklayer builds one sandbox per JVM (apklayer.host.Main, the simulator SandboxBuilder) whose shadow map is set before
+the first instrumented call and never replaced, so no switch point is ever invalidated. A method without a shadow (most of the framework)
+gets its original method handle as the call site's target: no SwitchPoint guard, no fallback fold, no catchException that cleans stack
+traces ($$robo$$ frames now show in an exception's trace). Upstream compiled ~4 LambdaForm classes per new signature for those wrappers
+(~5600 of the 7300 in a NewPipe start) and ran three method handle levels around every framework call, which C1 does not inline.
+Methods with a shadow are bound as before.
+
+Against external/robolectric 87aa52b08 (REVISION). The prebuilts' robolectric-src needs the upstream
+sandbox/src/main/java/org/robolectric/internal/bytecode/InvokeDynamicSupport.java; the result is compiled into native-runtime.jar ahead
+of Robolectric_all.jar.
+---
+diff --git a/sandbox/src/main/java/org/robolectric/internal/bytecode/InvokeDynamicSupport.java b/sandbox/src/main/java/org/robolectric/internal/bytecode/InvokeDynamicSupport.java
+--- a/sandbox/src/main/java/org/robolectric/internal/bytecode/InvokeDynamicSupport.java
++++ b/sandbox/src/main/java/org/robolectric/internal/bytecode/InvokeDynamicSupport.java
+@@ -185,8 +185,12 @@
+             site.getTheClass(), site.getName(), site.type(), site.isStatic(), site.isNative());
+ 
+     if (mh == null) {
+-      // call original code
+-      mh = site.getOriginal();
++      // apklayer patch: one sandbox per JVM, its shadow map set before the first call site and never replaced (no switch point is invalidated),
++      // so a method without a shadow is linked to its original for good: no guard, no fallback, no stack trace cleaning. Those took ~4 compiled
++      // LambdaForm classes per new signature (~5600 in a NewPipe start) and three method handle levels per framework call under C1.
++      MethodHandle original = site.getOriginal().asType(site.type());
++      site.setTarget(original);
++      return original;
+     } else if (mh == ShadowWrangler.DO_NOTHING) {
+       // no-op
+       mh = dropArguments(mh, 0, site.type().parameterList());

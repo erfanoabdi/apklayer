@@ -76,6 +76,7 @@ Build flags: upstream builds it with Meson's default buildtype (debug, -O0); mes
 | 0020-alarm-manager-pending-intent-hook | ShadowAlarmManager: PendingIntent alarms go to a hook (the hub holds them, HubScheduler) |
 | 0021-native-assets-content-key | the shared ICU/font copy keyed by the jar's entries' content (name, CRC, size), not its path and mtime (a copy per install) |
 | 0022-window-children-dim | ShadowWindowManagerGlobal removes a window's sub-windows with it and tells WindowSurface the window's visibility (FLAG_DIM_BEHIND dim layer); ShadowUiAutomation skips orphaned sub-windows |
+| 0023-direct-original-call-sites | InvokeDynamicSupport: a call site of a method without a shadow gets its original handle as target (no SwitchPoint guard, fallback or stack-trace catch: apklayer never replaces the shadow map); ~5600 fewer LambdaForm classes in a NewPipe start. Needs the upstream InvokeDynamicSupport.java in the prebuilts' robolectric-src |
 
 ## LineageOS tree (`patches/aosp/<project>/`)
 | Patch | Purpose |

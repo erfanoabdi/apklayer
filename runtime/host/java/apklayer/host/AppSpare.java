@@ -44,7 +44,6 @@ public final class AppSpare {
     static void launchStarted() {
         if (started) return;
         started = true;
-        CdsDump.afterStart();
         Integer fd = Integer.getInteger("apklayer.startedfd");  // a spare's (spare_target.c); a plain launch's in the environment
         if (fd == null && System.getenv("APKLAYER_STARTED_FD") != null) fd = Integer.valueOf(System.getenv("APKLAYER_STARTED_FD"));
         if (fd == null) return;
