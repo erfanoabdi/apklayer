@@ -15,7 +15,17 @@ mkdir -p "$DEST"
 cd "$DEST"
 get() {  # url file sha256
     # python, not curl (not on every host); material.slint.dev refuses Python's default user agent
-    [ -f "$2" ] || { python3 -c 'import shutil, sys, urllib.request as u; shutil.copyfileobj(u.urlopen(u.Request(sys.argv[1], headers={"User-Agent": "curl/8"})), open(sys.argv[2], "wb"))' "$1" "$2.part" && mv "$2.part" "$2"; }
+    # retried with backoff: GitHub's release downloads answer 504 now and then (two release runs failed on it)
+    [ -f "$2" ] || { python3 -c '
+import shutil, sys, time, urllib.error, urllib.request as u
+for attempt in range(6):
+    try:
+        with u.urlopen(u.Request(sys.argv[1], headers={"User-Agent": "curl/8"}), timeout=120) as r, open(sys.argv[2], "wb") as out: shutil.copyfileobj(r, out)
+        break
+    except (urllib.error.URLError, OSError) as e:
+        if getattr(e, "code", 500) < 500 and getattr(e, "code", None) != 429 or attempt == 5: raise
+        print("fetch-slint: %s: %s, again" % (sys.argv[1], e), file=sys.stderr); time.sleep(5 * 2 ** attempt)
+' "$1" "$2.part" && mv "$2.part" "$2"; }
     echo "$3  $2" | sha256sum -c --quiet || { rm -f "$2"; echo "fetch-slint: $2 does not match its pinned hash" >&2; exit 1; }
 }
 get "https://github.com/slint-ui/slint/releases/download/v$V/$cpp.tar.gz" "$cpp.tar.gz" "$cpp_sha"
