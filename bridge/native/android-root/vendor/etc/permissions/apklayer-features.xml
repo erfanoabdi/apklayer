@@ -6,4 +6,8 @@
     <feature name="android.hardware.screen.landscape" />
     <feature name="android.hardware.screen.portrait" />
     <feature name="android.hardware.audio.output" />
+    <!-- the audio HAL's capture (every backend records the host's default source) and WifiManager over the host's network (HostNetwork), as Android-x86 declares on Ethernet;
+         Play filters by them: CAMERA/RECORD_AUDIO/CHANGE_WIFI_STATE imply camera/microphone/wifi as required (Punishing: Gray Raven was "App not supported" without them) -->
+    <feature name="android.hardware.microphone" />
+    <feature name="android.hardware.wifi" />
 </permissions>

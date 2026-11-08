@@ -73,6 +73,10 @@ final class HostSystemConfig {
         String[] adapters = new File("/sys/class/bluetooth").list();  // the host has a Bluetooth adapter: BlueZ through the hub (HubBluetooth)
         if (adapters != null && adapters.length > 0)
             config.features.addAll(java.util.List.of("android.hardware.bluetooth", "android.hardware.bluetooth_le"));
+        if (HostCameraShadows.declared())  // the stack runs cameraserver over a camera HAL (providers.toml)
+            config.features.addAll(java.util.List.of("android.hardware.camera", "android.hardware.camera.any"));
+        if (HostLocation.gnssDeclared())  // the GNSS HAL (gps) and GeoClue's network provider (HostLocation)
+            config.features.addAll(java.util.List.of("android.hardware.location", "android.hardware.location.gps", "android.hardware.location.network"));
         try {
             for (String line : java.nio.file.Files.readAllLines(new File(root, "etc/apklayer-permission-levels.tsv").toPath())) {
                 String[] parts = line.split("\t");
