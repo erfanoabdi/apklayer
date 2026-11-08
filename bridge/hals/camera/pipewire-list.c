@@ -23,7 +23,8 @@ struct entry {
 };
 
 /* the last listing's MJPEG-only sizes per camera, for the streams */
-static struct apklayer_camera_info mjpeg_only[16];
+#define MAX_NODES 64  /* camera nodes looked at: an Intel IPU6 laptop has ~30 raw-Bayer ones the provider cannot take */
+static struct apklayer_camera_info mjpeg_only[MAX_NODES];
 static int mjpeg_only_count;
 
 int pw_camera_mjpeg_only(const char *id, uint32_t width, uint32_t height)
@@ -41,9 +42,9 @@ struct listing {
     struct pw_registry *registry;
     struct spa_hook core_listener, registry_listener;
     int pending;
-    struct entry cams[16];
-    struct pw_proxy *nodes[16];
-    struct spa_hook node_listeners[16];
+    struct entry cams[MAX_NODES];
+    struct pw_proxy *nodes[MAX_NODES];
+    struct spa_hook node_listeners[MAX_NODES];
     int count;
 };
 
@@ -102,7 +103,7 @@ static void on_global(void *data, uint32_t id, uint32_t permissions, const char 
 {
     (void)permissions, (void)version;
     struct listing *l = data;
-    if (strcmp(type, PW_TYPE_INTERFACE_Node) || !props || l->count >= 16) return;
+    if (strcmp(type, PW_TYPE_INTERFACE_Node) || !props || l->count >= MAX_NODES) return;
     const char *klass = spa_dict_lookup(props, PW_KEY_MEDIA_CLASS), *role = spa_dict_lookup(props, PW_KEY_MEDIA_ROLE);
     if (!klass || strcmp(klass, "Video/Source") || (!any_role && (!role || strcmp(role, "Camera")))) return;
     const char *name = spa_dict_lookup(props, PW_KEY_NODE_NAME), *description = spa_dict_lookup(props, PW_KEY_NODE_DESCRIPTION);
