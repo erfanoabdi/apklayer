@@ -132,6 +132,7 @@ struct window {
     int lock;                   /* the top activity's fixed orientation (MSG_WINDOW_SIZE): 1 landscape, 2 portrait, 0 none */
     int bounds_w, bounds_h;     /* xdg_toplevel.configure_bounds: the largest window geometry that fits the work area, 0 = unknown */
     int maximized, activated;   /* xdg toplevel states (maximized: also fullscreen) */
+    int test_focus;             /* test input set its activation (testinput.c): the desktop's activation changes are ignored from then on */
     int constrained;            /* maximized, fullscreen or tiled: the compositor decides the size */
     int resized, state_changed; /* what the toplevel configure changed, applied at the xdg_surface configure (geometry.c) */
     int framed;                 /* the app has presented a frame (the splash is gone) */

@@ -1,4 +1,4 @@
-// Reuse the original AOSP FMQ worker, module and policy parser; no stub driver.
+// Reuse the original AOSP FMQ worker, module and policy parser; its stub driver (DriverStubImpl) only when no sound server answers.
 cc_library_shared {
     name: "libapklayer_audio",
     defaults: [

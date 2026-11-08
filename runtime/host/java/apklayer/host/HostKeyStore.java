@@ -9,10 +9,11 @@ import java.security.Security;
 final class HostKeyStore {
     private HostKeyStore() {}
 
-    /** keystore2 of the device's own service manager, waited for only when the stack declares it (it stages the declaration together with the service). */
+    /** keystore2 of the device's own service manager, waited for only when the stack declares it (it stages the declaration together with the service,
+     *  in the instance's own root: cli/stack.cpp stageManifest, never in the shared native tree). */
     private static android.os.IBinder nativeService(String name) {
-        String native_ = System.getProperty("apklayer.native");
-        if (native_ == null || !new java.io.File(native_, "android-root/system/etc/vintf/manifest/apklayer-keystore2.xml").exists()) return null;
+        String root = System.getenv("APKLAYER_INSTANCE_ROOT");
+        if (root == null || !new java.io.File(root, "system/etc/vintf/manifest/apklayer-keystore2.xml").exists()) return null;
         return RealBinder.await(name, 5000);  // it registers once it has met KeyMint and negotiated the shared secret
     }
 
@@ -36,10 +37,29 @@ final class HostKeyStore {
         var gatekeeper = android.service.gatekeeper.IGateKeeperService.Stub.asInterface(binder);
         org.robolectric.shadows.ShadowServiceManager.addBinderService(HubLockScreen.SERVICE, android.service.gatekeeper.IGateKeeperService.class, gatekeeper);
         boolean secure;
-        try { secure = gatekeeper.getSecureUserId(0) != 0; } catch (android.os.RemoteException gone) { return; }
+        try {
+            secure = gatekeeper.getSecureUserId(0) != 0;
+            // a new instance: the hub enrolls the credential before it is ready (HubLockScreen.unlockIfProvided), and this app may have started
+            // with the hub (its first app start); once enrolled the id is there at once and nothing waits. The hub itself does not wait for itself.
+            if (!secure && !AppEnvironment.installing && System.getenv("APKLAYER_HUB_READY_FD") == null && awaitHub()) secure = gatekeeper.getSecureUserId(0) != 0;
+        } catch (android.os.RemoteException gone) { return; }
         org.robolectric.util.ReflectionHelpers.setStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "isDeviceSecure", secure);
         org.robolectric.util.ReflectionHelpers.setStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "isKeyguardSecure", secure);
         System.out.println("[apklayer] lock screen credential " + (secure ? "set" : "not set") + " (gatekeeperd)");
+    }
+
+    /** `apklayer wait hub`: until the instance's hub is ready (at once when it is), at most 10 s (a process whose launcher started no hub). */
+    private static boolean awaitHub() {
+        String cli = System.getProperty("apklayer.cli");
+        if (cli == null) return false;
+        try {
+            Process wait = new ProcessBuilder(cli, "wait", "hub").inheritIO().start();
+            if (wait.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)) return wait.exitValue() == 0;
+            wait.destroy();
+            return false;
+        }
+        catch (java.io.IOException failed) { return false; }
+        catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); return false; }
     }
 
     static void install() {

@@ -140,6 +140,8 @@ jobs:
 
   release:
     needs: [guard, deb, bundle, sailfish, flatpak]
+    # the debs and the bundle are the release; Sailfish RPMs and Flatpak bundles join it when their jobs succeeded
+    if: ${{ !cancelled() && needs.guard.result == 'success' && needs.deb.result == 'success' && needs.bundle.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write  # the GitHub Release and the pages branch commit

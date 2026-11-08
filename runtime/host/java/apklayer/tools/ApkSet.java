@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -62,6 +63,13 @@ public final class ApkSet {
             else if (splits.put(m[2], apk) != null) fail("split " + m[2] + " given twice");
         }
         if (base == null) fail("no base APK among " + apks);
+        // as PackageManager picks one primary ABI: the first of the machine's ABIs that has a split, the other ABIs' splits are left out
+        String best = Arrays.stream(abi.split(",")).filter(a -> splits.keySet().stream().anyMatch(s -> a.equals(abiOf(s)))).findFirst().orElse(null);
+        splits.keySet().removeIf(s -> {
+            boolean other = abiOf(s) != null && !abiOf(s).equals(best);
+            if (other) System.err.println("apklayer: leaving out " + s + " (" + best + " is preferred)");
+            return other;
+        });
         for (var split : splits.entrySet()) Files.copy(split.getValue(), out.resolve("split_" + split.getKey() + ".apk"), StandardCopyOption.REPLACE_EXISTING);
         try (var stream = Files.walk(unpacked)) { for (Path p : stream.sorted(Collections.reverseOrder()).toList()) Files.delete(p); }
         if (!splits.isEmpty()) System.out.println("apklayer: " + pkg + " with splits " + String.join(", ", splits.keySet()));
@@ -69,8 +77,14 @@ public final class ApkSet {
 
     /** "config.x86" for a machine that is arm64_v8a (abi: the machine's ABIs, comma-separated: its own, then a native bridge's); the base and feature splits are for every ABI. */
     static boolean otherAbi(String split, String abi) {
+        String config = abiOf(split);
+        return config != null && !("," + abi + ",").contains("," + config + ",");
+    }
+
+    /** The ABI of an ABI config split ("config.x86_64", "feature.config.arm64_v8a"), else null. */
+    static String abiOf(String split) {
         String config = split.startsWith("config.") ? split.substring(7) : split.contains(".config.") ? split.substring(split.indexOf(".config.") + 8) : null;
-        return config != null && ABIS.contains(config) && !("," + abi + ",").contains("," + config + ",");
+        return config != null && ABIS.contains(config) ? config : null;
     }
 
     /** The APKs of an archive a device would install: a bundletool set's splits (not its standalone alternatives), else every APK at the root. */

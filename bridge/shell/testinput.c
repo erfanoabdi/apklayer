@@ -20,9 +20,9 @@ static int32_t inject(struct window *w, const int32_t *v, const char *text)
 {
     switch (v[0]) {
     case TEST_FOCUS:   /* what the compositor does on a click: activate it, deactivate the others, keyboard enter; a = 1: focus leaves it */
-        if (v[1]) { window_inject_configure(w, 0, 0, 0); keyboard_inject_leave(w); return 0; }
+        if (v[1]) { w->test_focus = 1; window_inject_configure(w, 0, 0, 0); keyboard_inject_leave(w); return 0; }
         for (int i = 0; i < MAX_WINDOWS; i++)
-            if (windows[i].client && windows[i].configured) window_inject_configure(&windows[i], 0, 0, &windows[i] == w);
+            if (windows[i].client && windows[i].configured) { windows[i].test_focus = 1; window_inject_configure(&windows[i], 0, 0, &windows[i] == w); }
         keyboard_inject_focus(w);
         return 0;
     case TEST_KEY: keyboard_inject_key(w, (uint32_t)v[1], v[2]); return 0;
