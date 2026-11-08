@@ -85,7 +85,16 @@ public final class Main extends Activity {
     }
 
     /** A blocking socket, as serial-port apps use it: connect, write, read the echo; then the PIN pairing. */
+    private static int pipes() {  // this process's open pipes: a closed socket's pipes must go
+        int n = 0;
+        for (java.io.File f : new java.io.File("/proc/self/fd").listFiles()) {
+            try { if (java.nio.file.Files.readSymbolicLink(f.toPath()).toString().startsWith("pipe:")) n++; } catch (IOException gone) { }
+        }
+        return n;
+    }
+
     private void rfcomm() {
+        int before = pipes();
         try (BluetoothSocket socket = adapter.getRemoteDevice("11:22:33:44:55:66").createRfcommSocketToServiceRecord(SPP)) {
             socket.connect();
             log("rfcomm connected=" + socket.isConnected());
@@ -94,6 +103,7 @@ public final class Main extends Activity {
             int n = socket.getInputStream().read(got);
             log("rfcomm read " + (n > 0 ? new String(got, 0, n, StandardCharsets.UTF_8).trim() : "nothing"));
         } catch (IOException failed) { log("rfcomm failed " + failed); }
+        log("rfcomm pipes left=" + (pipes() - before));
         log("pin bond started=" + adapter.getRemoteDevice(PIN_DEVICE).createBond());
     }
 

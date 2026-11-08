@@ -22,7 +22,7 @@ for want in "adapter state=12 enabled=true name=apklayer-mock address=02:00:00:0
         "scan C0:FF:EE:00:00:01 name=mock-ble rssi=-50 type=2 mfr=010203" "gatt state=2 status=0" "services 1 battery=true" \
         "read 00002a19-0000-1000-8000-00805f9b34fb value=42 status=0" "ccc written status=0" "notify 00002a19-0000-1000-8000-00805f9b34fb value=43" \
         "bond C0:FF:EE:00:00:01 10->11" "bond C0:FF:EE:00:00:01 11->12" "state 12->10 enabled=false" "state 10->12 enabled=true" \
-        "rfcomm connected=true" "rfcomm read echo:ping" "bond AA:BB:CC:00:00:01 10->11" "bond AA:BB:CC:00:00:01 11->12" "PASS"; do
+        "rfcomm connected=true" "rfcomm read echo:ping" "rfcomm pipes left=0" "bond AA:BB:CC:00:00:01 10->11" "bond AA:BB:CC:00:00:01 11->12" "PASS"; do
     grep -aqF "[bt] $want" $out || { echo "FAIL: no '[bt] $want'"; exit 1; }
 done
 grep -aq "\[bt\] scan C0:FF:EE:00:00:02" $out && { echo "FAIL: the scan filter let the device without the Battery service through"; exit 1; }
