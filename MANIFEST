@@ -15,3 +15,4 @@ x86_64 webview: com.android.webview 156.0.8078.47, sha256 a98312a1427ca5c029e300
 2026-11-08: arm64 call audio and keystore round: libapklayer_audio (mic mute), libapklayer_codec2 (probe skips fixed-rate codecs), libapklayer_gatekeeper, libapklayer_gatekeeperd and the tree's gatekeeper/authorization/libgsi libraries they link
 2026-11-08: x86_64 call audio and keystore round (libapklayer_audio, libapklayer_codec2, libapklayer_gatekeeper, libapklayer_gatekeeperd and the tree's gatekeeper/authorization/libgsi), level with arm64 1c79d580; not run on an x86_64 host yet
 2026-11-08: libapklayer_egl and libapklayer_vdisplay (arm64 f5b52e6f/9c5116f2, x86_64 88ac65ee/599e2c4f) from main 141f3799: real frame timestamps and compositor timing, the fence wait off SurfaceFlinger's thread
+2026-11-08: libapklayer_audio (arm64 494a68a9, x86_64 e47b976f) from main a2075bda: a silent output at real time without a sound server
