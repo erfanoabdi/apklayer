@@ -163,6 +163,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-08 - gsi_arm64 libapklayer_servicetool: `bench serve|run` for arm64 (userspace binder agent)
+- Why: the same measurement as the x86_64 entry below, on arm64 (Parallels); servicetool.cpp only, already synced (vendor/apklayer 35df514).
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_servicetool`.
 ### 2026-11-08 - gsi_x86_64 libapklayer_servicetool: `bench serve|run` (userspace binder agent)
 - Why: docs/PLAN.md "Plan: binder in userspace" step 2 wants round-trip and throughput numbers of the userspace binder against kernel binder; a libbinder
   client/service pair is the honest measure (what apps pay). Only servicetool.cpp changes (no new module, no graph change). The output is used from a private

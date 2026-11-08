@@ -99,6 +99,14 @@ struct Loop {
     std::vector<Message> inbox;  // hellos handed over by the main thread
     std::vector<uint8_t> buf = std::vector<uint8_t>(BD_MAX_MSG);
 
+    // a reply to one of this context's procs: when it tells the route to read wake bytes away, whether a polling thread still has work is
+    // looked at again (Driver::flush -> wakePoll), or the poller would sleep with work queued
+    void answer(int fd, Proc* p, Reply& r) {
+        bool drains = p && p->wakes;
+        send(fd, p, r);
+        if (drains) driver.dirty.insert(p);
+    }
+
     void closeSock(int fd) {
         epoll_ctl(epfd, EPOLL_CTL_DEL, fd, nullptr);
         close(fd);
@@ -122,7 +130,7 @@ struct Loop {
             r.write_consumed = p->cookie;
             if (debug) fprintf(stderr, "binderd: proc %d (%s) uid %u\n", pid, driver.context.name.c_str(), uid);
             closeAll(m.fds);
-            return send(fd, nullptr, r);
+            return answer(fd, nullptr, r);
         }
         // a thread: of that very process (SO_PEERCRED), with its shared buffer, sealed against shrinking (the daemon reads it)
         Proc* p = driver.procByCookie(m.h.a0);
@@ -136,7 +144,7 @@ struct Loop {
         Thread* t = driver.newThread(p, fd, int(m.h.a1));
         t->tx = static_cast<const uint8_t*>(tx);
         conns[fd].thread = t;
-        send(fd, p, r);
+        answer(fd, p, r);
     }
 
     // a request on a thread socket; false: drop it
@@ -148,21 +156,21 @@ struct Loop {
         switch (m.h.op) {
             case BD_IOCTL:
                 if (m.h.a0 == BINDER_THREAD_EXIT) {
-                    send(fd, t->proc, r);
+                    answer(fd, t->proc, r);
                     driver.releaseThread(t);  // closes fd
                     return closeAll(m.fds), true;
                 }
-                if (driver.ioctl(t, uint32_t(m.h.a0), m.payload, m.h.a1, m.h.a2, m.h.a3, m.fds, r)) send(fd, t->proc, r);
+                if (driver.ioctl(t, uint32_t(m.h.a0), m.payload, m.h.a1, m.h.a2, m.h.a3, m.fds, r)) answer(fd, t->proc, r);
                 break;
             case BD_MMAP: {
                 int memfd = -1;
                 r.ret = driver.mmap(t, m.h.a0, &memfd);
                 if (memfd >= 0) r.fds.push_back(memfd);
-                send(fd, t->proc, r);
+                answer(fd, t->proc, r);
             } break;
             case BD_MAPPED:
                 r.ret = driver.mapped(t, m.h.a0);
-                send(fd, t->proc, r);
+                answer(fd, t->proc, r);
                 break;
             default:
                 closeAll(m.fds);
@@ -211,7 +219,7 @@ struct Loop {
         driver.index = uint8_t(index);
         driver.debug = debug;
         driver.context.name = kContexts[index];
-        driver.sendReply = [](Thread* t, Reply& r) { send(t->sock, t->proc, r); };
+        driver.sendReply = [](Thread* t, Reply& r) { send(t->sock, t->proc, r); };  // from flush, which marks the proc itself
         driver.closeSocket = [this](int fd) { closeSock(fd); };
         epfd = epoll_create1(EPOLL_CLOEXEC);
         wake = eventfd(0, EFD_CLOEXEC);
