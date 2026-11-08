@@ -88,7 +88,7 @@ WebView switch per instance, no pkexec); the manager follows Lomiri's scale and 
    Open (2026-11-06, store clients): an Aurora download end to end after the network-constraint fix, split install from Aurora, F-Droid update and uninstall, both scripted (needs network: corpus, not tests/run) (Aurora's delayed DownloadWorker jobs ran before their time: the backoff count died with the process, fixed 2026-11-08 in the hub; check it with Aurora there).
 5. **Cleanup** (done 2026-11-04: shortcut markers 24 -> 6, the 6 owned by the installer and accounts work; Egl.cpp split; dead test flags and EGL debug switches removed; 2026-11-08: getAccountsByFeatures asks hasFeatures, patch `+` lines name docs/PATCHES.md, meson resets bionic_translation when an edited patch no longer matches). Open: hello-binder-client still reads the gone `apklayer.instancehub` flag (that branch never runs).
 
-## After release 0.4.4: next work, in the owner's order (2026-11-08)
+## After release 0.4.5: next work, in the owner's order (2026-11-08)
 1. Apps start faster ("Plan: app start speed on phones" items 7-8: verify once at install like ART, framework classes preloaded in the spare,
    the always-on phone instance with less memory).
 2. Sandbox leftovers ("Plan: per-app sandbox": a spare shared between apps, cold component hosts and intent-file launches, home-access beyond
