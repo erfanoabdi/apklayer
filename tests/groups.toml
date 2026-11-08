@@ -339,6 +339,11 @@ run = ["tests/vm/audio-host.sh system"]
 alone = true
 run = ["tests/vm/audio-system.sh"]
 
+[audio-silent]
+# no sound server for the instance: the HAL's silent output takes the original AudioTrack's PCM at real time (docs/PLAN.md, audio)
+alone = true
+run = ["python3 -u tests/vm/audio-silent.py", "python3 tests/lib/instance.py clean"]
+
 [otr2]
 # alone: its GPU load stalls gpu-window beside it (virgl)
 needs = ["com.dogbytegames.otrnext"]

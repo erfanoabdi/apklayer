@@ -1,10 +1,15 @@
 #pragma once
 #include <apklayer/audio.h>
+#include <core-impl/DriverStubImpl.h>
 #include <core-impl/Stream.h>
 #include <atomic>
+#include <optional>
 
 namespace aidl::android::hardware::audio::core {
 extern std::atomic<bool> gMicMute;  // IModule.setMicMute (Service.cpp): capture streams deliver silence
+// No sound server answers (the open fails): the stream runs on AOSP's DriverStubImpl (the emulator's stub), discarding output and
+// delivering silent input at real time, so apps still see a working device (owner's decision 2026-11-08; logged once per process).
+bool silentFallback(int status, bool input);
 // The transfer thread runs unprivileged; PipeWire owns graph scheduling.
 class HostOutputWorker final : public StreamOutWorker {
   public:
@@ -35,6 +40,7 @@ class PipeWireStream : public StreamCommonImpl {
     const StreamContext& context_;
     apklayer_audio* audio_ = nullptr;
     int64_t epoch_ = 0;
+    std::optional<DriverStubImpl> stub_;
 };
 class PipeWireOutput final : public StreamOut, public PipeWireStream {
   public:
@@ -62,7 +68,7 @@ class PipeWireInStream : public StreamCommonImpl {
         }), context_(*context) {}
     ~PipeWireInStream() override { cleanupWorker(); }
     ::android::status_t init(DriverCallbackInterface*) override;
-    ::android::status_t drain(StreamDescriptor::DrainMode) override { return ::android::INVALID_OPERATION; }
+    ::android::status_t drain(StreamDescriptor::DrainMode mode) override { return stub_ ? stub_->drain(mode) : ::android::INVALID_OPERATION; }
     ::android::status_t flush() override;
     ::android::status_t pause() override;
     ::android::status_t standby() override;
@@ -74,6 +80,7 @@ class PipeWireInStream : public StreamCommonImpl {
     const StreamContext& context_;
     apklayer_capture* capture_ = nullptr;
     int64_t epoch_ = 0;
+    std::optional<DriverStubImpl> stub_;
 };
 class PipeWireInput final : public StreamIn, public PipeWireInStream {
   public:
