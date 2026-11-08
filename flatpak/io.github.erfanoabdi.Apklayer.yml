@@ -81,6 +81,16 @@ modules:
         sha256: a13f8c9a7d93df3c85c66afd135f0296701d8d32f911991b7aa4273fdd6a42a3
     cleanup: [/bin, /include, /lib/pkgconfig, /libexec, /share/man, /share/zsh, /etc]
 
+  # PyGObject for bridge/portal's D-Bus helpers (the file chooser, the launcher portal's launcher.py): the Platform has Python, not gi
+  - name: pygobject
+    buildsystem: meson
+    config-opts: [-Dpycairo=disabled, -Dtests=false]
+    sources:
+      - type: archive
+        url: https://download.gnome.org/sources/pygobject/3.58/pygobject-3.58.1.tar.gz
+        sha256: 4c80598ade17fbaa7798e01a25d0bf29ce109740786026a074c5c62bb3e79d23
+    cleanup: [/include, /lib/pkgconfig]
+
   - name: apklayer
     buildsystem: meson
     builddir: true
