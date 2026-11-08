@@ -114,7 +114,7 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
     std::string java = javaProblem(layout);
     step("java", java.empty() ? "done" : "failed", java.empty() ? "Java 21" : java);
     std::string noSandbox = sandboxUnavailable();
-    step("sandbox", noSandbox.empty() ? "done" : "skipped", noSandbox.empty() ? "Each app runs as its own user" : "Apps run without the per-app sandbox: " + noSandbox);
+    step("sandbox", sandboxOn() ? "done" : "skipped", sandboxOn() ? "Each app runs as its own user" : noSandbox.empty() ? "Off (APKLAYER_SANDBOX=1 turns it on)" : "Off: " + noSandbox);
 
     // 2. the runtime: --bundle, else the current release's (releases.json), else what the package names
     manager::Release release;

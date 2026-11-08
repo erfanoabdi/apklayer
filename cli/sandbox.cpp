@@ -297,13 +297,8 @@ std::string sandboxUnavailable() {
     return "";
 }
 
-// APKLAYER_SANDBOX=1|0 decides; unset, the sandbox is on wherever the host is set up for it (main.cpp pins the answer for every child)
-bool sandboxOn() {
-    std::string set = getenvOr("APKLAYER_SANDBOX", "");
-    if (!set.empty()) return set == "1";
-    static const bool ready = sandboxUnavailable().empty();
-    return ready;
-}
+// Opt-in: APKLAYER_SANDBOX=1 (on by default in 0.4.5 broke NVIDIA's device nodes and deb installs; back to opt-in in 0.4.6 until it's proven there)
+bool sandboxOn() { return getenvOr("APKLAYER_SANDBOX", "") == "1"; }
 
 
 void setHomeAccess(const std::string& root, const std::string& package, bool on) {

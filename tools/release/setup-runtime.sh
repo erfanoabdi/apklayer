@@ -9,6 +9,7 @@ native="$(realpath "$1")" half="$(realpath "$2")" share="$(cd "$(dirname "$0")/.
 exec 9>"$native/.setup.lock" && flock 9
 [ "$(stat -c %Y "$native/.setup" 2>/dev/null)" != "$(stat -c %Y "$half/native-runtime.jar")" ] || exit 0  # another CLI did it meanwhile
 echo "apklayer: setting up the Android runtime in $native (after each update, a few minutes)" >&2
+chmod 755 "$native"  # unpacked as 0700 before 0.4.6: sandboxed apps (other uids) could not read the runtime
 for f in "$half"/* "$half"/aosp/*; do  # links to the package's files, so an update reaches them; the bundle's own files stay
     t="$native/${f#"$half"/}"
     [ "$f" = "$half/aosp" ] || { [ -e "$t" ] && [ ! -L "$t" ]; } || ln -sfn "$f" "$t"

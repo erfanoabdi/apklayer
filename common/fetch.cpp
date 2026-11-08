@@ -157,6 +157,8 @@ std::string unpackRuntime(const std::string& bundle, const std::string& root, co
         if (names.size() == 1) dir = tmp + "/" + names[0];
     }
     if (std::string p = runtimeProblem(dir); !p.empty()) { removeTree(tmp); return "not a complete runtime bundle (" + p + "): " + bundle; }
+    // mkdtemp made it 0700: the runtime is read by every app process, sandboxed ones run as other uids (a 0700 runtime: no preload, no host classes)
+    chmod(dir.c_str(), 0755);
     std::string target = root + "/" + version, previous = installedRuntime(root), old = tmp + ".old";
     if (exists(target) && rename(target.c_str(), old.c_str()) != 0) { removeTree(tmp); return "cannot replace " + target; }
     if (rename(dir.c_str(), target.c_str()) != 0) { rename(old.c_str(), target.c_str()); removeTree(tmp); return "cannot move the runtime to " + target; }
