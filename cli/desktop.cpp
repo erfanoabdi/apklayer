@@ -72,6 +72,7 @@ void writeDesktop(const Layout& l, const std::string& pkg) {
     else unlink(entry.c_str());
     writeFile(join(apps, launcherPrefix() + "open-apk.desktop"),
               "[Desktop Entry]\nType=Application\nName=Android app (apklayer)\nExec=" + cli + " run %f\nMimeType=application/vnd.android.package-archive;\nNoDisplay=true\n");
+    if (inFlatpak()) return;  // the Platform has neither tool: the host's menu reads the entries as they are
     sh({"update-desktop-database", apps});
     sh({"xdg-mime", "default", launcherPrefix() + "open-apk.desktop", "application/vnd.android.package-archive"});
 }

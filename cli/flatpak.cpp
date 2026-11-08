@@ -2,6 +2,8 @@
 
 #include "util.h"
 
+#include <unistd.h>
+
 namespace apklayer {
 
 bool inFlatpak() { return exists("/.flatpak-info"); }
@@ -22,5 +24,14 @@ std::string hostCli(const std::string& cli) {
 }
 
 std::string launcherPrefix() { return inFlatpak() ? getenvOr("FLATPAK_ID", "io.github.erfanoabdi.Apklayer") + "." : "apklayer-"; }
+
+void shareRuntimeDir(const std::string& runtimeHome) {
+    if (!inFlatpak()) return;
+    const std::string shared = join(runtimeHome, "app/" + getenvOr("FLATPAK_ID", "io.github.erfanoabdi.Apklayer"));
+    if (!isDir(shared)) return;
+    for (const char* dir : {"apklayer", "apklayer-binder"}) makeDirs(join(shared, dir));
+    for (const char* name : {"apklayer", "apklayer-binder", "apklayer-compositor-gpu", "apklayer-host-gles"})
+        (void)!symlink(join(shared, name).c_str(), join(runtimeHome, name).c_str());  // already there: this sandbox linked it before
+}
 
 }  // namespace apklayer

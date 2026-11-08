@@ -1,4 +1,5 @@
 #include "daemon.h"
+#include "flatpak.h"
 #include "apps.h"
 #include "sandbox.h"
 
@@ -227,7 +228,9 @@ int runDaemon(const Layout& l, bool onDemand) {
 bool forwardToDaemon(const Layout& l, const std::vector<std::string>& args, int* status) {
     std::string path = daemonSocket(l);
     int fd = connectTo(path);
-    if (fd < 0 && sandboxOn()) {  // the sandbox's apps start through it: started on demand, one at a time
+    // the sandbox's apps start through it, and in the Flatpak everything (each `flatpak run` has its own pid namespace; the daemon's holds the
+    // stacks): started on demand, one at a time
+    if (fd < 0 && (sandboxOn() || inFlatpak())) {
         makeDirs(dirName(path));
         int lock = open((path + ".start").c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
         flock(lock, LOCK_EX);

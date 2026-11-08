@@ -20,4 +20,8 @@ std::string hostCli(const std::string& cli);
 // Flatpak's "<app id>." (a deb beside it keeps its own; neither one's remove-all or uninstall touches the other's)
 std::string launcherPrefix();
 
+// Every `flatpak run` is a sandbox of its own with a private $XDG_RUNTIME_DIR: apklayer's entries there (the instances' sockets, the binder
+// daemons', the probe caches) become links into the app's shared $XDG_RUNTIME_DIR/app/<id>, so each sandbox reaches the same stack and apklayerd
+void shareRuntimeDir(const std::string& runtimeHome);
+
 }  // namespace apklayer
