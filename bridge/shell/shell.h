@@ -139,7 +139,10 @@ struct window {
     struct wp_fractional_scale_v1 *fscale;
     int text_input_enabled;
     int minimized;              /* set by our Minimize button, cleared when the window is activated again */
-    struct decor decor;         /* title bar subsurface (desktop style only) */
+    struct decor decor;         /* title bar subsurface (desktop style without server-side decorations only) */
+    struct zxdg_toplevel_decoration_v1 *deco;  /* decoration.c */
+    int ssd;                    /* the compositor draws the title bar (decoration.c): no bar of ours */
+    int styled;                 /* window_set_mode has applied a style (mobile.c) */
     int mode;                   /* WM_* asked for (WM_AUTO: by the session and the output, mobile.c) */
     int mobile;                 /* mobile style: maximized, no title bar, a navigation bar over the content's bottom (navbar.c) */
     struct navbar nav;
@@ -170,8 +173,8 @@ struct window {
 /* who an input, state or size message about a window goes to, and under which window id */
 #define W_TARGET(w) ((w)->proxy ? (w)->proxy : (w)->client)
 #define W_ID(w) ((w)->proxy ? (w)->proxy_id : (w)->id)
-/* logical height of the title bar above the content: none in mobile style */
-#define W_BAR(w) ((w)->mobile ? 0 : DECOR_H)
+/* logical height of our title bar above the content: none in mobile style or under the compositor's (server-side) bar */
+#define W_BAR(w) ((w)->mobile || (w)->ssd ? 0 : DECOR_H)
 
 /* ---- state shared between the modules (defined in main.c) ---- */
 extern struct wl_display *display;
@@ -263,6 +266,9 @@ void window_dmabuf_destroy(struct window *w);  /* dmabuf.c */
 void test_input(struct client *c, const uint8_t *p, uint32_t len);
 void activate_message(const uint8_t *p, uint32_t len);  /* activation.c */
 extern struct xdg_activation_v1 *activation;  /* activation.c */
+extern struct zxdg_decoration_manager_v1 *deco_mgr;  /* decoration.c */
+void decoration_create(struct window *w);
+void decoration_destroy(struct window *w);
 void keyboard_inject_focus(struct window *w);  /* keyboard.c */
 void keyboard_inject_key(struct window *w, uint32_t evdev, int down);  /* keyboard.c */
 void pointer_inject(struct window *w, int x, int y, int button);  /* pointer.c */

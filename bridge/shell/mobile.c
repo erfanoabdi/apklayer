@@ -92,26 +92,30 @@ static void metrics(struct window *w)
 void window_set_mode(struct window *w, int mode)
 {
     w->mode = mode;
-    int mobile = mode == WM_MOBILE || (mode == WM_AUTO && display_mobile());
-    int created = w->decor.surface || w->nav.surface;
-    if (created && mobile == w->mobile) { window_display_changed(w); return; }
+    int mobile = mode == WM_MOBILE || (mode == WM_AUTO && display_mobile()), bar = !mobile && !w->ssd, was_mobile = w->mobile;
+    int created = w->styled;
+    if (created && mobile == w->mobile && bar == !!w->decor.surface) { window_display_changed(w); return; }
     pointer_forget_window(w);
-    if (created) fprintf(stderr, "[shell] %s: %s style\n", w->title, mobile ? "mobile" : "desktop");
+    if (created) fprintf(stderr, "[shell] %s: %s style%s\n", w->title, mobile ? "mobile" : "desktop", bar || mobile ? "" : ", the compositor's title bar");
     if (mobile) {
         decor_destroy(&w->decor);
         navbar_create(&w->nav, w->surface);
     } else {
         navbar_destroy(&w->nav);
-        decor_create(&w->decor, w->surface);
-        w->decor.dark = w->dark;
-        decor_set_title(&w->decor, w->label);
+        if (!bar) decor_destroy(&w->decor);
+        else if (!w->decor.surface) {
+            decor_create(&w->decor, w->surface);
+            w->decor.dark = w->dark;
+            decor_set_title(&w->decor, w->label);
+        }
     }
     w->mobile = mobile;
+    w->styled = 1;
     metrics(w);
     if (w->toplevel) {
         xdg_toplevel_set_min_size(w->toplevel, 160, 160 + W_BAR(w));
         if (mobile) xdg_toplevel_set_maximized(w->toplevel);  /* the work area; the compositor's configure brings its size */
-        else if (created && w->maximized) xdg_toplevel_unset_maximized(w->toplevel);
+        else if (created && was_mobile && w->maximized) xdg_toplevel_unset_maximized(w->toplevel);
     }
     if (!w->configured) return;  /* the first configure lays it out */
     window_layout(w);
@@ -121,7 +125,7 @@ void window_set_mode(struct window *w, int mode)
 
 void window_display_changed(struct window *w)
 {
-    if (w->mode == WM_AUTO && (w->decor.surface || w->nav.surface) && w->mobile != display_mobile()) { window_set_mode(w, WM_AUTO); return; }
+    if (w->mode == WM_AUTO && w->styled && w->mobile != display_mobile()) { window_set_mode(w, WM_AUTO); return; }
     metrics(w);
     if (!w->configured || (w->told_dpi == w->dpi && w->told_nav == w->nav_h && w->told_scale == window_scale(w))) return;
     window_layout(w);
