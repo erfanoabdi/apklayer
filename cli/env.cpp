@@ -247,13 +247,6 @@ std::vector<std::string> hostJvmArgs(const Layout& l, const Instance& inst, Nati
                                   // Robolectric's native runtime: its library per JVM, its fonts and ICU data once (robolectric patch 0001), in the instance's state directory (disk)
                                   "-Djava.io.tmpdir=" + inst.tmpDir(),
                                   "-Dapklayer.storage=" + inst.storageDir};  // volumes: Internal storage (emulated/0 below), Home, Linux root
-    // ART's way: every app's classes went through HotSpot's verifier at install (converter ABI 4: VerifyInstall), the framework's and the host's
-    // are the build's own; host JVMs skip it (~1.4 s of a phone's cold start; the CDS archive records the setting, so all of them alike). It stays
-    // on while any installed app (the WebView provider, a library's app) predates that; a staging directory (.install.*) is not one yet
-    bool verified = true;
-    for (const std::string& app : listDir(l.appsDir))
-        if (std::string info = join(join(l.appsDir, app), "info.properties"); app[0] != '.' && exists(info) && isStale(info)) verified = false;
-    if (verified) a.insert(a.end(), {"-XX:+UnlockDiagnosticVMOptions", "-XX:-BytecodeVerificationRemote", "-Dapklayer.unverified=true"});
     // HotSpot's libjsig: a native library's fault handler (the native bridge's recovery, an app's own) is chained behind the JVM's, which
     // calls it for faults that are not its own (bionic_translation 0042); a spare-born process gets its route only later, so every JVM has it
     std::string image = getenvOr("APKLAYER_CDS", "") == "off" ? "" : jdkImage(l, ne.java);

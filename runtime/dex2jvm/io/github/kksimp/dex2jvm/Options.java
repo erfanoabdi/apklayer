@@ -74,30 +74,6 @@ public final class Options {
     public static volatile String testFailClass = setting("dex2jvm.testFailClass",
             "DEX2JVM_TEST_FAIL_CLASS", "TEST_FAIL_CLASS", null);
 
-    /** apklayer patch: a file of classes the install's verifier refused (apklayer.tools.VerifyInstall's {@code .refused}: internal name, exception
-     *  class, message per line, tab-separated); each is converted into a stub whose use throws that exception (DexConverter.failedClassStub). */
-    public static volatile String refusedClasses = setting("dex2jvm.refusedClasses",
-            "DEX2JVM_REFUSED_CLASSES", "REFUSED_CLASSES", null);
-
-    private static volatile java.util.Map<String, String[]> refused;
-
-    /** The refusal of a class (exception class, message) from {@link #refusedClasses}, or null. */
-    public static String[] refusal(String internalName) {
-        if (refusedClasses == null) return null;
-        java.util.Map<String, String[]> r = refused;
-        if (r == null) {
-            r = new java.util.HashMap<>();
-            try {
-                for (String line : java.nio.file.Files.readAllLines(java.nio.file.Path.of(refusedClasses))) {
-                    String[] f = line.split("\t", 3);
-                    if (f.length == 3) r.put(f[0], new String[] {f[1], f[2]});
-                }
-            } catch (java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
-            refused = r;
-        }
-        return r.get(internalName);
-    }
-
     /** The tag on every stderr line the converter prints, as "[tag] ...". */
     public static volatile String logTag = setting("dex2jvm.logTag",
             "DEX2JVM_LOG_TAG", "LOG_TAG", "dex2jvm");

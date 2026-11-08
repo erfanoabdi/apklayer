@@ -284,16 +284,13 @@ public final class DexConverter {
             errors.put(name, describe(t));
             if (t instanceof OutOfMemoryError) return;     // may be transient: never persisted as a stub
             byte[] stub;
-            String[] refusal = Options.refusal(cls.name());  // the install's verifier refused it: the error a verifying JVM would have thrown
-            String exception = refusal != null ? refusal[0] : "java/lang/VerifyError";
-            String reason = refusal != null ? "refused by the verifier: " + refusal[0].replace('/', '.') + " " + refusal[1] : describe(t);
             try {
-                stub = failedClassStub(cls, superIfacePlan, nestIndex, reason, exception);
+                stub = failedClassStub(cls, superIfacePlan, nestIndex, describe(t));
             } catch (RuntimeException e) {
                 return;                                     // the class shape itself is inexpressible: left out, as before
             }
-            System.err.println("[" + Options.logTag + "] STUBBED class " + name + ": " + reason
-                + " -- a use of it throws " + exception.replace('/', '.'));
+            System.err.println("[" + Options.logTag + "] STUBBED class " + name + ": " + describe(t)
+                + " -- a use of it throws VerifyError");
             sink.accept(name, stub);
         }
 
@@ -334,7 +331,6 @@ public final class DexConverter {
         // gate can exercise them on methods that are nowhere near the real
         // limit. See MethodOutliner.FORCE / MethodSplitter.FORCE.
         if (cls.name().equals(Options.testFailClass)) throw new IllegalStateException("forced by dex2jvm.testFailClass");
-        if (Options.refusal(cls.name()) != null) throw new IllegalStateException("refused by the install's verifier");
         if (MethodOutliner.forced() || MethodSplitter.forced()) {
             return convertOne(cls, hierarchy, plan, superIfaces, nestIndex, true);
         }
@@ -537,10 +533,10 @@ public final class DexConverter {
 
     /**
      * apklayer patch: the class's declared shape (superclass, interfaces, fields, methods, nest) with every body, and a
-     * {@code <clinit>}, throwing {@code java.lang.VerifyError} (or the error the install's verifier met: {@code exception}) that names the class and the failure: the first
+     * {@code <clinit>}, throwing {@code java.lang.VerifyError} that names the class and the conversion failure: the first
      * initialization fails as ART fails a class its verifier rejected, later uses get NoClassDefFoundError.
      */
-    static byte[] failedClassStub(DexClass cls, SuperInterfacePlan superIfaces, NestIndex nestIndex, String reason, String exception) {
+    static byte[] failedClassStub(DexClass cls, SuperInterfacePlan superIfaces, NestIndex nestIndex, String reason) {
         ClassFileWriter cw = new ClassFileWriter(classAccessFlags(cls), cls.name(), cls.superclassName(),
             cls.interfaceNames().toArray(new String[0]));
         applyClassAnnotations(cw, cls, nestIndex);
@@ -550,9 +546,9 @@ public final class DexConverter {
         for (DexMethod m : cls.methods()) {
             ClassFileWriter.MethodWriter mw = cw.addMethod(m.accessFlags() & METHOD_FLAGS_MASK, m.name(), m.descriptor());
             clinit |= m.name().equals("<clinit>");
-            if (!m.isAbstract() && !m.isNative()) Translator.emitThrowingBody(mw, exception, msg);
+            if (!m.isAbstract() && !m.isNative()) Translator.emitThrowingBody(mw, "java/lang/VerifyError", msg);
         }
-        if (!clinit) Translator.emitThrowingBody(cw.addMethod(0x0008, "<clinit>", "()V"), exception, msg);
+        if (!clinit) Translator.emitThrowingBody(cw.addMethod(0x0008, "<clinit>", "()V"), "java/lang/VerifyError", msg);
         return cw.toByteArray();
     }
 
