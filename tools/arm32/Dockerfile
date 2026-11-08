@@ -12,4 +12,6 @@ RUN dpkg --add-architecture armel && apt-get update && DEBIAN_FRONTEND=nonintera
       libegl-mesa0:armel libgl1-mesa-dri:armel zstd && \
     apt-get download openjdk-21-jre-headless:armel && dpkg -x openjdk-21-jre-headless_*_armel.deb / && rm -f *.deb && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
+# the host Vulkan loader the library mapping names for libvulkan.so (libhwui and libandroid_runtime link it; vulkan.apklayer is 64-bit only so far)
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libvulkan1:armel && apt-get clean && rm -rf /var/lib/apt/lists/*
 CMD ["/bin/bash"]

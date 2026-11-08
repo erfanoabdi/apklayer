@@ -32,7 +32,7 @@ ln -sf ../jvm/lib/libjsig.so "$a/lib/libjsig.so"  # where hostJvmArgs looks for 
 # the glibc side: the loader and every library the armel ELF files need, recursively, from the multiarch directories
 s="$a/sysroot/lib"
 rm -rf "$a/sysroot" && mkdir -p "$s"
-cp -L /lib/ld-linux.so.3 /usr/lib/arm-linux-gnueabi/libgcc_s.so.1 "$s/"
+cp -L /lib/ld-linux.so.3 /usr/lib/arm-linux-gnueabi/libgcc_s.so.1 /usr/lib/arm-linux-gnueabi/libvulkan.so.1 "$s/"  # (and what is loaded by name, not linked)
 queue="$(find "$a/lib" "$a/jvm" -type f \( -name '*.so*' -o -perm -u+x \) | sort)"
 while [ -n "$queue" ]; do
     next=""

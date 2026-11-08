@@ -103,22 +103,23 @@ std::string prepend(const std::string& dir, const std::string& path) {
 // A Halium device's graphics (providers.toml: graphics = device, docs/HALIUM.md): its vendor libraries load in bionic_translation's
 // vendor namespace (0039) with the VNDK of the vendor's Android version, and Android's own libEGL/libGLES (the device's driver from
 // /vendor/lib64/egl) replace apklayer's host-EGL ones: a cfg.d in the instance's directory, first in XDG_DATA_DIRS.
-static void deviceGraphicsEnv(const Instance& instance, Env& env) {
+static void deviceGraphicsEnv(const Instance& instance, Env& env, const std::string& lib) {
+    // lib: lib64, or lib for the 32-bit app process (its vendor libraries are the device's 32-bit ones)
     // the vendor's VNDK (ro.vndk.version: the Volla X23's system is API 32, its vendor 31, and both apexes exist); else the newest apex
     std::string vndk, version = deviceProperty("ro.vndk.version");
-    if (!version.empty() && isDir("/apex/com.android.vndk.v" + version + "/lib64")) vndk = "/apex/com.android.vndk.v" + version + "/lib64";
+    if (!version.empty() && isDir("/apex/com.android.vndk.v" + version + "/" + lib)) vndk = "/apex/com.android.vndk.v" + version + "/" + lib;
     else
         for (const std::string& f : listDir("/apex"))
-            if (f.rfind("com.android.vndk.v", 0) == 0 && isDir(join("/apex", f + "/lib64"))) vndk = join("/apex", f + "/lib64");
+            if (f.rfind("com.android.vndk.v", 0) == 0 && isDir(join("/apex", f + "/" + lib))) vndk = join("/apex", f + "/" + lib);
     // shortcut: the vendor libraries' few system dependencies outside the VNDK (libprocessgroup, libcgrouprc) come from the
     // device's /system; a generated list of them per vendor version when another device needs more
-    std::string extra = join(instance.root, "device-graphics/vendor-system");  // the instance root: the runtime directory is made anew per stack
+    std::string extra = join(instance.root, lib == "lib64" ? "device-graphics/vendor-system" : "device-graphics/vendor-system32");  // the instance root: the runtime directory is made anew per stack
     makeDirs(extra);
-    for (const char* lib : {"libprocessgroup.so", "libcgrouprc.so"})
-        if (exists(join("/system/lib64", lib)) && !exists(join(extra, lib)) && symlink(join("/system/lib64", lib).c_str(), join(extra, lib).c_str()) != 0)
-            fprintf(stderr, "apklayer: cannot link %s into %s\n", lib, extra.c_str());
-    if (!env.count("BIONIC_VENDOR_LD_LIBRARY_PATH"))
-        env["BIONIC_VENDOR_LD_LIBRARY_PATH"] = "/vendor/lib64:/vendor/lib64/egl:/vendor/lib64/hw" + (vndk.empty() ? "" : ":" + vndk) + ":" + extra;
+    for (const char* so : {"libprocessgroup.so", "libcgrouprc.so"})
+        if (exists(join("/system/" + lib, so)) && !exists(join(extra, so)) && symlink(join("/system/" + lib, so).c_str(), join(extra, so).c_str()) != 0)
+            fprintf(stderr, "apklayer: cannot link %s into %s\n", so, extra.c_str());
+    if (!env.count("BIONIC_VENDOR_LD_LIBRARY_PATH") || lib != "lib64")
+        env["BIONIC_VENDOR_LD_LIBRARY_PATH"] = "/vendor/" + lib + ":/vendor/" + lib + "/egl:/vendor/" + lib + "/hw" + (vndk.empty() ? "" : ":" + vndk) + ":" + extra;
     // the vendor's libraries use apklayer's libhidlbase (bionic_translation 0041): one hwbinder state and service lookup per process, through
     // host_hals.conf; the vendor's Android 12 copy waits for a hwservicemanager.ready that never comes (it knows no .disabled)
     if (!env.count("BIONIC_VENDOR_SHARED_LIBS")) env["BIONIC_VENDOR_SHARED_LIBS"] = "libhidlbase.so";
@@ -156,7 +157,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     env["LD_LIBRARY_PATH"] = layout.bionic + ":" + n;
     env["PATH"] = prepend(join(n, "bin"), getenvOr("PATH", "/usr/local/bin:/usr/bin:/bin"));  // getprop for the apps that run it
     env["XDG_DATA_DIRS"] = prepend(join(n, "share"), getenvOr("XDG_DATA_DIRS", "/usr/local/share:/usr/share"));
-    if (deviceGraphics(layout, instance)) deviceGraphicsEnv(instance, env);
+    if (deviceGraphics(layout, instance)) deviceGraphicsEnv(instance, env, layout.java.empty() ? "lib64" : "lib");  // a layout with its own JVM: the 32-bit one
     env["LD_PRELOAD"] = join(n, "libapklayer-preload.so") + ":libgcc_s.so.1";
     if (const char* extra = getenv("APKLAYER_PRELOAD_EXTRA")) env["LD_PRELOAD"] += std::string(":") + extra;  // more preloads (debugging)
     env["BIONIC_LD_LIBRARY_PATH"] = l;
