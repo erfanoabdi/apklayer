@@ -55,6 +55,21 @@ def belongs(pid):
     return next((e[18:].decode() for e in env if e.startswith(b'APKLAYER_INSTANCE=')), 'default') == INSTANCE
 
 
+_cpu = [0]
+
+
+def busy(seconds=0.3):
+    """Whether this instance's processes used at least that much CPU time since the last call: a start that is silent on a loaded host (JVM
+    start, hub boot) is busy, a hung one is idle (an idle stack's own ticks stay far below it)."""
+    total = 0
+    for p in Path('/proc').iterdir():
+        if p.name.isdigit() and int(p.name) != os.getpid() and belongs(p.name):
+            try: f = (p / 'stat').read_text().rsplit(')', 1)[1].split(); total += int(f[11]) + int(f[12])  # utime, stime
+            except (OSError, IndexError, ValueError): pass
+    was, _cpu[0] = _cpu[0], total
+    return total - was >= seconds * os.sysconf('SC_CLK_TCK')
+
+
 def mine(pattern, exact=False):
     """`pgrep -af pattern` restricted to this instance: the lines of its matching processes. exact: match the process name (`pgrep -x`), for the
     JVMs, whose command line is their Android process name once the runtime has named them."""

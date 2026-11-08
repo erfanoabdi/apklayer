@@ -59,6 +59,8 @@ resized = False
 try:
     proc = subprocess.Popen(['bin/apklayer', 'run', PKG], env=ENV, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, start_new_session=True)
+    instance.busy()  # the CPU baseline of the silence check, renewed every second while output flows
+    cpu_mark = time.monotonic()
     selector = selectors.DefaultSelector()
     selector.register(proc.stdout, selectors.EVENT_READ)
     # Startup logs belong to the service processes, not the launcher's pipe.
@@ -79,8 +81,14 @@ try:
             events = selector.select(3)
             if time.monotonic() > deadline:
                 raise RuntimeError('GPU regression exceeded its 45-second budget')
+            if events and time.monotonic() - cpu_mark > 1:
+                instance.busy()
+                cpu_mark = time.monotonic()
+            if not events and not instance.busy():  # silent and idle: hung (a loaded host's slow hub boot is silent but busy)
+                raise RuntimeError('app produced no output and no CPU work for 3 seconds; see /tmp/gpu-test.out')
             if not events:
-                raise RuntimeError('app produced no output for 3 seconds; see /tmp/gpu-test.out')
+                print('STACK silent for 3 s but busy', flush=True)
+                continue
             if any(key.fd == notify for key, _ in events):
                 activity = os.read(notify, 65536)
                 if time.monotonic() - last_report > 1:
