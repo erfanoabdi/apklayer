@@ -41,11 +41,18 @@ public final class ComponentHost implements Runnable {
                 || (info.flags & android.content.pm.ApplicationInfo.FLAG_PERSISTENT) != 0;
         System.out.println("[apklayer] component-host process " + info.processName + (resident ? ": resident" : ": ends when idle"));
         ShadowPausedLooper looper = Shadow.extract(Looper.getMainLooper());
+        boolean[] told = {false};
         loop(() -> {
             if (!client.alive()) return true;
-            boolean idle = !resident && idleExitNs > 0 && Services.none() && ShadowHostRealBinder.IN_FLIGHT.get() == 0 && looper.getNextScheduledTaskTime().toMillis() == 0
-                    && System.nanoTime() - ShadowHostRealBinder.LAST_TRANSACTION > idleExitNs;
+            if (resident || idleExitNs <= 0 || System.nanoTime() - ShadowHostRealBinder.LAST_TRANSACTION <= idleExitNs) { told[0] = false; return false; }
+            boolean idle = Services.none() && ShadowHostRealBinder.IN_FLIGHT.get() == 0 && looper.getNextScheduledTaskTime().toMillis() == 0;
             if (idle) { System.out.println("[apklayer] component-host idle for " + idleExitNs / 1_000_000 + " ms (no service, no call): exiting"); stop(); }
+            else if (!told[0]) {  // uncalled, yet kept: say once by what
+                told[0] = true;
+                System.out.println("[apklayer] component-host stays: " + (Services.none() ? "" : "a service runs, ") + ShadowHostRealBinder.IN_FLIGHT.get() + " calls in flight, next message "
+                        + (looper.getNextScheduledTaskTime().toMillis() == 0 ? "none" : "in " + (looper.getNextScheduledTaskTime().toMillis() - android.os.SystemClock.uptimeMillis()) + " ms: "
+                        + org.robolectric.util.ReflectionHelpers.getField(Looper.getMainLooper().getQueue(), "mMessages")));
+            }
             return idle;
         });
         saveDueWork(app);
