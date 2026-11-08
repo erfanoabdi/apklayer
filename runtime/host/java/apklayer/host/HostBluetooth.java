@@ -53,7 +53,7 @@ final class HostBluetooth {
                     JSONObject event = new JSONObject(line);
                     if ("adapter".equals(event.optString("ev"))) adapter = event;
                     if ("error".equals(event.optString("ev"))) System.out.println("[apklayer] bluetooth: " + event.optString("message"));
-                    if ("pin".equals(event.optString("ev"))) askPin(event.optString("address"), event.optString("name"), event.optBoolean("passkey"));
+                    if ("pin".equals(event.optString("ev"))) askPin(event.optString("address"), event.isNull("name") ? null : event.optString("name"), event.optBoolean("passkey"));
                     for (Consumer<JSONObject> listener : listeners) listener.accept(event);
                 }
             } catch (IOException | JSONException ended) { System.out.println("[apklayer] bluetooth session ended: " + ended); }
