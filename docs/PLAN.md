@@ -88,6 +88,18 @@ WebView switch per instance, no pkexec); the manager follows Lomiri's scale and 
    Open (2026-11-06, store clients): an Aurora download end to end after the network-constraint fix, split install from Aurora, F-Droid update and uninstall, both scripted (needs network: corpus, not tests/run) (Aurora's delayed DownloadWorker jobs ran before their time: the backoff count died with the process, fixed 2026-11-08 in the hub; check it with Aurora there).
 5. **Cleanup** (done 2026-11-04: shortcut markers 24 -> 6, the 6 owned by the installer and accounts work; Egl.cpp split; dead test flags and EGL debug switches removed; 2026-11-08: getAccountsByFeatures asks hasFeatures, patch `+` lines name docs/PATCHES.md, meson resets bionic_translation when an edited patch no longer matches). Open: hello-binder-client still reads the gone `apklayer.instancehub` flag (that branch never runs).
 
+## After release 0.4.4: next work, in the owner's order (2026-11-08)
+1. Apps start faster ("Plan: app start speed on phones" items 7-8: verify once at install like ART, framework classes preloaded in the spare,
+   the always-on phone instance with less memory).
+2. Sandbox leftovers ("Plan: per-app sandbox": a spare shared between apps, cold component hosts and intent-file launches, home-access beyond
+   "other" bits, the hub's D-Bus clients for uids other than 1000, isolated processes, DocumentsUI's Home root).
+3. Keystore (per-operation authentication, a locked state, UNLOCKED_DEVICE_REQUIRED keys).
+4. Call audio (other apps' listeners told of a change, ACTION_MICROPHONE_MUTE_CHANGED, the mode owner).
+5. Graphics (render into the dequeued buffer, present fences at the real present, Vulkan presentation/Godot, the ES1 checks).
+6. Hardware (camera portal, MJPEG/V4L2, rotation; GNSS example-HAL crash, geoclue1 on Sailfish; Bluetooth RFCOMM and PIN dialog; USB serial).
+7. Storage (which volumes ordinary apps reach, SELinux labels).
+Later, not in this list: binder in userspace, Flatpak's first build. Closed: arm32.
+
 ## Open by area (not in the next phase yet)
 - **Startup**: the hub boots in 1.4 s on an idle UTM and 4-8 s when several groups and agents load it (CPU contention, not a regression; marks under -Dapklayer.perf in HubHost); an app's first hub call (REGISTER) waits for that boot and prints `waiting for the instance hub (N s)` every 2 s. Faster: fewer classes before READY (AppCDS done 2026-11-08).
 - **Graphics**: the host-ES1 path is untested. OpenTTD's SDL logs `Invalid texture` after a focus loss when desktop audio is unreachable (cause found 2026-11-08, UTM, `blur` test input): with no sound server the audio HAL opens no output (AudioTrack init fails, -19), and SDL 1.2's pause then keeps its game thread drawing with the textures of the GL context it destroyed until the focus returns (with audio the game thread stops at the pause: no spam). A device always has an output; the fix would be one that discards at real time when no server answers (AOSP's DriverStubImpl behind Stream.cpp): a stand-in, so the owner's call.
