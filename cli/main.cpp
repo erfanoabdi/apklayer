@@ -64,7 +64,7 @@ int usage() {
           "  gpu set <id|node> | unset  the instance's GPU (default: the compositor's; from its next start)\n"
           "  env                    print the environment of Android's processes\n"
           "  daemon                 apklayerd: every command (and every app process) then runs under it (tools/host-setup/apklayerd.service);\n"
-          "                         APKLAYER_SANDBOX=1: apps run sandboxed, each as its own uid (docs/PLAN.md), and the daemon starts on demand\n"
+          "                         the per-app sandbox (each app its own uid) is on where the host is set up (docs/INSTALL.md); APKLAYER_SANDBOX=0|1 forces it\n"
           "  home-access <package> on|off  with the sandbox: the app sees the user's whole home (else only what the picker hands it)\n"
           "  portal pick open|save|directory [--multiple] [--name N] | open <uri>  the desktop's file dialog or link opener (a sandboxed app's)\n"
           "  portal helper geoclue.py|bluez.py|settings.py [args]  a D-Bus helper run as the user (the sandbox's location, Bluetooth, settings)\n"
@@ -105,6 +105,11 @@ int main(int argc, char** argv) {
     Instance inst = Instance::open(layout, id);
     const std::string& cmd = args[0];
     size_t n = args.size();
+    // the sandbox's answer for this command and every process it starts (the Java side reads the variable)
+    bool sandbox = sandboxOn();
+    setenv("APKLAYER_SANDBOX", sandbox ? "1" : "0", 1);
+    if (!sandbox && cmd == "run" && getenvOr("APKLAYER_SANDBOX_QUIET", "").empty())
+        if (std::string why = sandboxUnavailable(); !why.empty()) fprintf(stderr, "apklayer: apps run without the per-app sandbox: %s\n", why.c_str());
     if (cmd == "run" || cmd == "list") refreshDesktops(layout);  // a launch from a working entry or the manager mends the others
     if (cmd == "install" && n >= 2) {
         bool downgrade = false, system = false;

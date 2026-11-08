@@ -4,6 +4,7 @@
 //   progress <0..1 or -1>           the running step's download
 //   latest <version> <runtime version> <date>   (--check, when releases.json was read)
 #include "setup.h"
+#include "sandbox.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -112,6 +113,8 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
     step("binder", binder ? "done" : "failed", binder ? "Ready for instance " + instance.id : binderDeviceWhy(instance.id));
     std::string java = javaProblem(layout);
     step("java", java.empty() ? "done" : "failed", java.empty() ? "Java 21" : java);
+    std::string noSandbox = sandboxUnavailable();
+    step("sandbox", noSandbox.empty() ? "done" : "skipped", noSandbox.empty() ? "Each app runs as its own user" : "Apps run without the per-app sandbox: " + noSandbox);
 
     // 2. the runtime: --bundle, else the current release's (releases.json), else what the package names
     manager::Release release;

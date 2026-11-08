@@ -8,6 +8,8 @@
 namespace apklayer {
 
 bool sandboxOn();
+// Why this host cannot run the sandbox, "" when it can (the default then turns it on)
+std::string sandboxUnavailable();
 // The stack daemon, before it starts anything: unshares the instance's user namespace (newuidmap/newgidmap write its maps). Dies with the reason.
 void enterInstanceUserNs();
 // A process of the instance in the sandbox: `apklayer sandbox-exec <package|-> -- argv...` in front of spec's command ("-": only the user namespace, the hub).

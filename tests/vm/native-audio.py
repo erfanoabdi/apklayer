@@ -101,10 +101,13 @@ try:
                 instance.inject('hello.nativeaudio', 'key:1')  # Back into this instance's window: other instances share the desktop's focus
                 captured = True
     text = '\n'.join(seen)
-    assert '[runtime] native attribution Parcel adapter registered' in text
+    # a launch the instance's spare took registered its natives when the spare started: that line is in the spare's log, not the app's
+    spare_log = Path(instance.LOGDIR) / 'app-spare.log'
+    runtime = text + (spare_log.read_text(errors='replace') if spare_log.exists() else '')
+    assert '[runtime] native attribution Parcel adapter registered' in runtime
     assert '[hello-native-audio] attribution PASS fields/Unicode/chain/tokens/scoped release' in text
     if audio_mode:
-        assert '[runtime] original Android audio JNI registered' in text
+        assert '[runtime] original Android audio JNI registered' in runtime
         assert '[hello-native-audio] native Parcel PASS' in text
         assert '[hello-native-audio] startup AudioTrack PASS' in text
         assert '[hello-native-audio] AudioTrack PASS PCM/marker/timestamp=' in text

@@ -147,9 +147,9 @@ sudo udevadm control --reload && sudo udevadm trigger    # or unplug and plug in
 An interface a Linux driver holds (ftdi_sio, cdc_acm, usb-storage...) cannot be claimed while it does, unless the app forces it (`claimInterface(..., true)`,
 which detaches the driver until the device is plugged in again); blacklisting the driver (`/etc/modprobe.d`) keeps it off for good.
 
-### The per-app sandbox (opt-in)
+### The per-app sandbox (on where the host is set up)
 
-With `APKLAYER_SANDBOX=1` every app process runs as its own uid (Android's app uid, taken from your `/etc/subuid` range) in a user namespace per
+With the sandbox every app process runs as its own uid (Android's app uid, taken from your `/etc/subuid` range) in a user namespace per
 instance, with Android's groups. It sees its own data and what Android's `/data` shows an app, never the other apps' data, the system's state
 (keystore2's database) or your home; a file reaches it through the file picker (only the one chosen), and `apklayer home-access <package> on`
 gives an app your home (as far as the files' permissions for others allow: the app's uid is not yours). Location (GeoClue) and Bluetooth (BlueZ)
@@ -159,9 +159,11 @@ go through `apklayerd`, which runs as you.
   nodes usable by app uids (`/usr/lib/udev/rules.d/70-apklayer-render.rules`), `uidmap`. A source tree: `sudo sh tools/host-setup/sandbox.sh` once.
 - Your user needs 65536 subordinate ids: `grep $USER /etc/subuid /etc/subgid`; without a line,
   `sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USER`.
-- On for your session and apklayerd: `mkdir -p ~/.config/environment.d && echo APKLAYER_SANDBOX=1 > ~/.config/environment.d/60-apklayer.conf`,
-  then `systemctl --user enable apklayerd` (a source tree: copy `tools/host-setup/apklayerd.service` to `~/.config/systemd/user/` first) and log
-  out and in (without the unit the daemon starts on demand). `apklayer stop` before switching.
+- It is on by default wherever the host is set up for it (the three points above); otherwise apps run without it and `apklayer run` says why
+  (`apklayer setup` shows it as its `sandbox` step). Inside Flatpak and on Halium phones it stays off for now. `APKLAYER_SANDBOX=0` turns it off,
+  `APKLAYER_SANDBOX=1` insists on it (a host that is not set up then fails with the reason): for your session in
+  `~/.config/environment.d/60-apklayer.conf`. `systemctl --user enable apklayerd` starts the daemon at login (else it starts on demand; a source
+  tree: copy `tools/host-setup/apklayerd.service` to `~/.config/systemd/user/` first). `apklayer stop` before switching.
 - An app's data becomes its uid's at its first sandboxed start and yours again when it runs without the sandbox.
 
 ## 9. Troubleshooting

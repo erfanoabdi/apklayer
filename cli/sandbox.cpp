@@ -2,6 +2,8 @@
 #include "apps.h"
 #include "daemon.h"
 #include "linux_compat.h"
+#include "flatpak.h"
+#include "halium.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -20,7 +22,6 @@
 
 namespace apklayer {
 
-bool sandboxOn() { return getenvOr("APKLAYER_SANDBOX", "") == "1"; }
 
 namespace {
 const long kFirstAppUid = 10000;  // Android's FIRST_APPLICATION_UID: namespace uids from here are the user's subordinate ids
@@ -257,6 +258,34 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
     return steps;
 }
 }  // namespace
+
+// Why this host cannot run the sandbox ("" when it can): subordinate ids, newuidmap/newgidmap, and where Ubuntu restricts unprivileged user
+// namespaces the AppArmor profile for this binary (tools/host-setup/sandbox.sh, the deb's postinst)
+std::string sandboxUnavailable() {
+    if (inFlatpak()) return "inside Flatpak (its seccomp filter refuses nested user namespaces)";
+    if (isHalium()) return "not set up on Halium devices yet";
+    Range u = subordinate("/etc/subuid"), g = subordinate("/etc/subgid");
+    if (u.count < kFirstAppUid || g.count < kFirstAppUid) return "no subordinate ids for this user (sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USER)";
+    for (const char* tool : {"/usr/bin/newuidmap", "/usr/bin/newgidmap"})
+        if (!isExecutable(tool)) return std::string(tool) + " is missing (the uidmap package)";
+    if (trim(readFile("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").value_or("0")) == "1") {
+        std::string exe = realPath("/proc/self/exe");
+        bool profile = false;
+        for (const std::string& name : listDir("/etc/apparmor.d"))
+            if (name.rfind("apklayer", 0) == 0 && readFile(join("/etc/apparmor.d", name)).value_or("").find(exe) != std::string::npos) profile = true;
+        if (!profile) return "no AppArmor profile allows " + exe + " user namespaces (sudo tools/host-setup/sandbox.sh, or reinstall the deb)";
+    }
+    return "";
+}
+
+// APKLAYER_SANDBOX=1|0 decides; unset, the sandbox is on wherever the host is set up for it (main.cpp pins the answer for every child)
+bool sandboxOn() {
+    std::string set = getenvOr("APKLAYER_SANDBOX", "");
+    if (!set.empty()) return set == "1";
+    static const bool ready = sandboxUnavailable().empty();
+    return ready;
+}
+
 
 void setHomeAccess(const std::string& root, const std::string& package, bool on) {
     if (!exists(homeAccessFile(root)) && !on) return;
