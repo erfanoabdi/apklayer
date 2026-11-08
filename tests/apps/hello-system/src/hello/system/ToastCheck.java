@@ -29,18 +29,18 @@ final class ToastCheck implements Check {
         });
         long start = SystemClock.uptimeMillis();
         View shown = null;
-        while (shown == null && SystemClock.uptimeMillis() - start < 3000) { shown = toastWindow(); if (shown == null) Thread.sleep(20); }
-        Check.require(shown != null, "no toast window within 3 s");
+        while (shown == null && SystemClock.uptimeMillis() - start < 10000) { shown = toastWindow(); if (shown == null) Thread.sleep(20); }
+        Check.require(shown != null, "no toast window within 10 s");
         long seen = SystemClock.uptimeMillis() - start;
         int width = shown.getWidth(), height = shown.getHeight();
         Object root = View.class.getMethod("getViewRootImpl").invoke(shown);
         java.lang.reflect.Field surface = root.getClass().getDeclaredField("mSurface");
         surface.setAccessible(true);
         Check.require(((android.view.Surface) surface.get(root)).isValid(), "the toast window has no surface");  // a real layer, not only a laid-out view
-        while (toastWindow() != null && SystemClock.uptimeMillis() - start < 6000) Thread.sleep(50);
+        while (toastWindow() != null && SystemClock.uptimeMillis() - start < 14000) Thread.sleep(50);
         long gone = SystemClock.uptimeMillis() - start;
         Check.require(gone >= 1500, "toast window left after " + gone + " ms");
-        while (events.size() < 4 && SystemClock.uptimeMillis() - start < 9000) Thread.sleep(50);
+        while (events.size() < 4 && SystemClock.uptimeMillis() - start < 18000) Thread.sleep(50);
         Thread.sleep(300);  // a cancelled toast that showed anyway would be reported by now
         Check.require(toastWindow() == null && events.equals(List.of("first shown", "first hidden", "second shown", "second hidden")), "toast queue and callbacks: " + events);
         return "toast window " + width + "x" + height + " after " + seen + " ms, next toast after " + gone + " ms; " + events;

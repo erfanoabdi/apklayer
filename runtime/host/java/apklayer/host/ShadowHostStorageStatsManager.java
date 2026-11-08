@@ -1,6 +1,5 @@
 package apklayer.host;
 
-import android.app.AppOpsManager;
 import android.app.usage.StorageStats;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
@@ -60,14 +59,14 @@ public class ShadowHostStorageStatsManager {
         return stats(packages().getInstalledApplications(0));
     }
 
-    /** StorageStatsService.checkStatsPermission: the GET_USAGE_STATS app op, at its default the PACKAGE_USAGE_STATS permission. */
+    /**
+     * StorageStatsService.checkStatsPermission with the GET_USAGE_STATS app op at its default (MODE_DEFAULT): the PACKAGE_USAGE_STATS permission decides.
+     * shortcut: no app op store here (Robolectric's AppOpsManager answers MODE_ALLOWED for every op), so a user cannot grant usage access; a hub app op store would.
+     */
     private static void enforceStatsPermission() {
         Context context = RuntimeEnvironment.getApplication();
-        int mode = context.getSystemService(AppOpsManager.class).unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.getOpPackageName());
-        if (mode == AppOpsManager.MODE_ALLOWED) return;
-        if (mode == AppOpsManager.MODE_DEFAULT && context.checkCallingOrSelfPermission(android.Manifest.permission.PACKAGE_USAGE_STATS) == PackageManager.PERMISSION_GRANTED) return;
-        throw new SecurityException(mode == AppOpsManager.MODE_DEFAULT ? "Caller does not have " + android.Manifest.permission.PACKAGE_USAGE_STATS + "; callingPackage="
-                + context.getOpPackageName() + ", callingUid=" + Process.myUid() : "Package " + context.getOpPackageName() + " from UID " + Process.myUid() + " blocked by mode " + mode);
+        if (context.checkCallingOrSelfPermission(android.Manifest.permission.PACKAGE_USAGE_STATS) == PackageManager.PERMISSION_GRANTED) return;
+        throw new SecurityException("Caller does not have " + android.Manifest.permission.PACKAGE_USAGE_STATS + "; callingPackage=" + context.getOpPackageName() + ", callingUid=" + Process.myUid());
     }
 
     private static PackageManager packages() { return RuntimeEnvironment.getApplication().getPackageManager(); }

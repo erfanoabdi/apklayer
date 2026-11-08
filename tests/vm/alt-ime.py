@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""FLAG_ALT_FOCUSABLE_IM (input group): hello.input shows a dialog with that flag and a focused field. Keys reach the field; the input method's
-text does not (WindowManager.LayoutParams.mayUseInputMethod: the window is no IME target), nor the activity's field below it."""
+"""FLAG_ALT_FOCUSABLE_IM (input group): hello.input shows a dialog with that flag and a focused field. Keys reach the field; the input method
+leaves it (WindowManager.LayoutParams.mayUseInputMethod: the window is no IME target): the shell's text input goes off and refuses IME text."""
 import os
 from pathlib import Path
 import selectors
@@ -43,10 +43,16 @@ try:
                 print(line, flush=True)
                 if 'script: hover:1,0' in line:
                     assert saw('[hello-input] alt dialog shown'), 'no dialog'
-                    instance.inject(PKG, 'text:ime', 'key:30')  # an IME commit, then the key a
+                    instance.inject(PKG, 'key:30')  # a
+                    try: instance.inject(PKG, 'text:ime')
+                    except AssertionError as refused: assert 'no text field enabled' in str(refused), refused
+                    else: raise AssertionError('the shell took IME text for a FLAG_ALT_FOCUSABLE_IM window')
     assert app.wait() == 0, 'input app failed'
     assert saw('[hello-input] alt text=a'), 'a key did not reach the FLAG_ALT_FOCUSABLE_IM window\'s field'
     assert not saw('text=ime'), 'IME text reached a field of a FLAG_ALT_FOCUSABLE_IM window or the window below'
+    shown = next(i for i, l in enumerate(seen) if 'alt dialog shown' in l)
+    after = [l for l in seen[shown:] if '[apklayer] text input ' in l]
+    assert after and after[-1].endswith('text input off'), 'text input stayed on for the FLAG_ALT_FOCUSABLE_IM window: %s' % after
     print('PASS keys reach a FLAG_ALT_FOCUSABLE_IM window\'s field, the input method does not', flush=True)
 finally:
     instance.stop()

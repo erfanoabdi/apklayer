@@ -24,16 +24,26 @@ public class Covered extends Activity {
         button.postDelayed(() -> below.startActivity(new Intent(below, Covered.class)), 1500);
         // a dialog shown once the activity is stopped (a late network answer): hidden with it, no taps
         android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
-        main.postDelayed(() -> {
-            Dialog late = new Dialog(below);
-            Button lateButton = new Button(below);
-            lateButton.setText("Late dialog of the stopped activity");
-            lateButton.setOnClickListener(v -> System.out.println("[hello-input] covered dialog tapped (late)"));
-            late.setContentView(lateButton);
-            late.show();
-            late.getWindow().setLayout(-1, -1);
-            main.postDelayed(() -> System.out.println("[hello-input] late dialog shown=" + late.getWindow().getDecorView().isShown()), 500);
-        }, 3000);
+        below.registerActivityLifecycleCallbacks(new android.app.Application.ActivityLifecycleCallbacks() {
+            @Override public void onActivityStopped(Activity a) { below.unregisterActivityLifecycleCallbacks(this); main.postDelayed(() -> showLate(below, main), 500); }
+            @Override public void onActivityCreated(Activity a, Bundle b) {}
+            @Override public void onActivityStarted(Activity a) {}
+            @Override public void onActivityResumed(Activity a) {}
+            @Override public void onActivityPaused(Activity a) {}
+            @Override public void onActivitySaveInstanceState(Activity a, Bundle b) {}
+            @Override public void onActivityDestroyed(Activity a) {}
+        });
+    }
+
+    private static void showLate(Activity below, android.os.Handler main) {
+        Dialog late = new Dialog(below);
+        Button lateButton = new Button(below);
+        lateButton.setText("Late dialog of the stopped activity");
+        lateButton.setOnClickListener(v -> System.out.println("[hello-input] covered dialog tapped (late)"));
+        late.setContentView(lateButton);
+        late.show();
+        late.getWindow().setLayout(-1, -1);
+        main.postDelayed(() -> System.out.println("[hello-input] late dialog shown=" + late.getWindow().getDecorView().isShown()), 500);
     }
 
     @Override protected void onCreate(Bundle state) {

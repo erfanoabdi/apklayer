@@ -23,7 +23,7 @@ final class StorageStatsCheck implements Check {
             try { stats.getTotalBytes(java.util.UUID.randomUUID()); throw new AssertionError("an unknown volume has a size"); }
             catch (java.io.IOException expected) { /* as on Android */ }
             // another app's sizes and the user's need PACKAGE_USAGE_STATS (StorageStatsService.enforceStatsPermission)
-            try { stats.queryStatsForPackage(StorageManager.UUID_DEFAULT, "hello.accounts", Process.myUserHandle()); throw new AssertionError("another app's stats without PACKAGE_USAGE_STATS"); }
+            try { stats.queryStatsForPackage(StorageManager.UUID_DEFAULT, "hello.accounts", Process.myUserHandle()); throw new AssertionError("another app's stats without PACKAGE_USAGE_STATS (its uid " + context.getPackageManager().getApplicationInfo("hello.accounts", 0).uid + ", own " + Process.myUid() + ", permission " + context.checkSelfPermission(android.Manifest.permission.PACKAGE_USAGE_STATS) + ")"); }
             catch (SecurityException expected) { /* as on Android */ }
             try { stats.queryStatsForUser(StorageManager.UUID_DEFAULT, Process.myUserHandle()); throw new AssertionError("the user's stats without PACKAGE_USAGE_STATS"); }
             catch (SecurityException expected) { /* as on Android */ }

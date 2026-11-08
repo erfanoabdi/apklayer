@@ -19,7 +19,8 @@ final class AcceptCheck implements Check {
             client.connect(new LocalSocketAddress(name));
             Class<?> unix = Class.forName("android.system.UnixSocketAddress");
             SocketAddress peer = (SocketAddress) unix.getMethod("createUnnamed").invoke(null);
-            FileDescriptor accepted = Os.accept(server.getFileDescriptor(), peer);
+            // Os.accept(FileDescriptor, SocketAddress) is the hidden overload LocalSocketImpl uses (the SDK shows the InetSocketAddress one)
+            FileDescriptor accepted = (FileDescriptor) Os.class.getMethod("accept", FileDescriptor.class, SocketAddress.class).invoke(null, server.getFileDescriptor(), peer);
             java.lang.reflect.Field path = unix.getDeclaredField("sun_path");
             path.setAccessible(true);
             byte[] got = (byte[]) path.get(peer), want = ("\0" + own).getBytes(StandardCharsets.US_ASCII);

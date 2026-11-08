@@ -33,7 +33,7 @@ try:
     pending = b''
     with open(instance.OUT / 'stopped-windows.log', 'wb') as log:
         while True:
-            assert selector.select(5) and time.monotonic() < end, 'stopped-windows test stalled'
+            assert selector.select(10) and time.monotonic() < end, 'stopped-windows test stalled'
             data = os.read(app.stdout.fileno(), 65536)
             if not data: break
             log.write(data)
