@@ -1,5 +1,6 @@
 #include "broker.h"
 #include "apps.h"
+#include "logs.h"
 #include "sandbox.h"
 
 #include <cerrno>
@@ -47,7 +48,14 @@ int openFor(const Layout& l, const std::string& path, int flags, int mode, uid_t
     } else {
         uid_t uid = appUidOf(hostUid);
         std::string package = uid == (uid_t)-1 ? "" : packageOf(l, uid);
-        if (package.empty() || !homeAccess(l, Instance::open(l, instance), package)) return -EACCES;
+        if (package.empty()) return -EACCES;
+        Instance inst = Instance::open(l, instance);
+        if (path == appLogPath(inst, package)) {  // its own app log (android.util.Log lines, AppEnvironment): appended, the user's file as before
+            if ((flags & O_ACCMODE) != O_WRONLY || !(flags & O_APPEND)) return -EACCES;
+            fd = open(path.c_str(), (base | O_NOFOLLOW) & ~(O_TRUNC | O_EXCL), 0600);
+            return fd < 0 ? -errno : (fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK), fd);
+        }
+        if (!homeAccess(l, inst, package)) return -EACCES;
         std::string home = realPath(homeDir());
         std::vector<std::string> closed = {realPath(join(l.dataHome, "apklayer")), realPath(join(l.stateHome, "apklayer")), realPath(l.runtimeHome)};
         auto inHome = [&](const std::string& p) {  // what the app's view shows of the home: the apklayer trees there are emptied (appView)

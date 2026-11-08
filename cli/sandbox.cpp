@@ -3,6 +3,7 @@
 #include "daemon.h"
 #include "linux_compat.h"
 #include "flatpak.h"
+#include "logs.h"
 #include "halium.h"
 
 #include <algorithm>
@@ -430,6 +431,9 @@ int sandboxExec(const Layout& l, const Instance& inst, const std::vector<std::st
         // what the app's uid may not open but the user may hand it (GPU nodes, the granted home): apklayerd's broker (cli/broker.cpp, bridge/native/broker.c)
         if (exists(daemonSocket(l))) setenv("APKLAYER_BROKER", daemonSocket(l).c_str(), 1);
         if (homeAccess(l, inst, package)) setenv("APKLAYER_BROKER_HOME", realPath(homeDir()).c_str(), 1);
+        setenv("APKLAYER_BROKER_LOG", appLogPath(inst, package).c_str(), 1);
+        // the host's shader caches (Mesa's, NVIDIA's under XDG_CACHE_HOME) in the app's own cache: the user's cache is not in the view
+        setenv("XDG_CACHE_HOME", join(data, "cache/host").c_str(), 1);
         if (chdir(dir.c_str()) != 0 && chdir("/") != 0) die("no working directory in the sandbox");  // by path again: the old one is a handle into the hidden tree
         std::vector<gid_t> groups = appGroups(l, package, uid);  // never the user's own groups (1000 and the unmapped ones)
         if (setgroups(groups.size(), groups.data()) != 0 || setresgid(uid, uid, uid) != 0 || setresuid(uid, uid, uid) != 0) die("cannot become uid " + std::to_string(uid));

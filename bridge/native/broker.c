@@ -13,9 +13,9 @@
 
 static int eligible(const char *path)
 {
-    const char *home = getenv("APKLAYER_BROKER_HOME");
+    const char *home = getenv("APKLAYER_BROKER_HOME"), *log = getenv("APKLAYER_BROKER_LOG");  /* the app's own app log, appended */
     size_t n = home ? strlen(home) : 0;
-    return path && path[0] == '/' && (!strncmp(path, "/dev/", 5) || (n > 1 && !strncmp(path, home, n) && path[n] == '/'));
+    return path && path[0] == '/' && (!strncmp(path, "/dev/", 5) || (n > 1 && !strncmp(path, home, n) && path[n] == '/') || (log && !strcmp(path, log)));
 }
 
 /* failed: the caller's own result; a broker fd in its place, else failed with its errno */
