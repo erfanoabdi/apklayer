@@ -49,6 +49,12 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
     @Implementation(minSdk = android.os.Build.VERSION_CODES.O)
     protected boolean canRequestPackageInstalls() { return HubClient.connected() && HubClient.current().installSource(false); }
 
+    /** As PackageManagerService: a declared feature at that version or a later one (Robolectric answers false for every version). */
+    @Implementation
+    protected boolean hasSystemFeature(String name, int version) {
+        return HostSystemConfig.loadedFeatures.contains(name) && HostSystemConfig.loadedVersions.getOrDefault(name, 0) >= version;
+    }
+
     /** The features the build declares, as a list (Robolectric answers null while its own list is empty; apps read .length). */
     @Implementation
     protected android.content.pm.FeatureInfo[] getSystemAvailableFeatures() {

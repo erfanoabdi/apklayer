@@ -56,6 +56,38 @@ std::string hostGles(const Layout& layout, const Env& env) {
     return version;
 }
 
+// Vulkan presentation (VK_ANDROID_native_buffer in aosp/hals/graphics/vulkan/Driver.cpp) where the host has a GPU device that imports dma-bufs:
+// its API version as "major.minor", "" without one. Venus (virtio-gpu Vulkan on the VMs) aborts on imported dma-bufs and CPU devices are no game
+// target. shortcut: any such device counts, not only the instance's GPU (APKLAYER_GPU); the driver still checks the extensions on its own device.
+std::string hostVulkan(const Layout& layout, const Env& env) {
+    std::string cache = join(layout.runtimeHome, "apklayer-host-vulkan");
+    if (auto cached = readFile(cache); cached && !trim(*cached).empty()) return trim(*cached) == "-" ? "" : trim(*cached);
+    if (!exists("/usr/bin/vulkaninfo")) return "";  // vulkan-tools is only recommended
+    Spawn probe;
+    probe.argv = {"vulkaninfo", "--summary"};
+    probe.env = env;
+    int status = 0;
+    std::string out = runCapture(probe, &status), version;
+    unsigned best = 0;
+    for (size_t at = out.find("\nGPU"); at != std::string::npos;) {  // the "GPU0:", "GPU1:" ... blocks
+        size_t next = out.find("\nGPU", at + 4);
+        std::string gpu = out.substr(at, next == std::string::npos ? std::string::npos : next - at);
+        at = next;
+        auto field = [&](const std::string& key) {
+            size_t at = gpu.find(key + " ");
+            if (at == std::string::npos) return std::string();
+            size_t eq = gpu.find("= ", at), end = gpu.find('\n', eq);
+            return eq == std::string::npos ? std::string() : trim(gpu.substr(eq + 2, end - eq - 2));
+        };
+        std::string api = field("apiVersion"), type = field("deviceType"), driver = field("driverID");
+        unsigned major = 0, minor = 0;
+        if (sscanf(api.c_str(), "%u.%u", &major, &minor) != 2 || type.empty() || type == "PHYSICAL_DEVICE_TYPE_CPU" || driver == "DRIVER_ID_MESA_VENUS") continue;
+        if ((major << 16 | minor) > best) best = major << 16 | minor, version = std::to_string(major) + "." + std::to_string(minor);
+    }
+    writeFile(cache, (version.empty() ? "-" : version) + "\n");
+    return version;
+}
+
 
 // Class data sharing (docs/PLAN.md "app start speed on phones"): the runtime's JDK image (tools/release/jdk-image.sh, java.base with the patch built in)
 // while it was made from this JDK's modules, else "" (the JDK with --patch-module, which turns CDS off)
@@ -199,6 +231,13 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     if (!env.count("APKLAYER_NO_SYSTEM_SERVER")) env["APKLAYER_NO_SYSTEM_SERVER"] = "1";
     // Android and host Vulkan loaders retain separate dispatch tables once the frontend is installed
     if (exists(join(l, "libapklayer_vulkan.so")) && exists(join(l, "vulkan.apklayer.so"))) env["APKLAYER_VULKAN_HOST"] = "1";
+    // Vulkan presentation on where the host can do it (the driver's switch; HostSystemConfig declares android.hardware.vulkan.* from the
+    // version); APKLAYER_VULKAN_PRESENT=0 turns it off, =1 keeps it on where the probe finds no device
+    if (env.count("APKLAYER_VULKAN_PRESENT") && env["APKLAYER_VULKAN_PRESENT"] == "0") env.erase("APKLAYER_VULKAN_PRESENT");
+    else if (env.count("APKLAYER_VULKAN_HOST")) {
+        std::string vulkan = hostVulkan(layout, env);
+        if (!vulkan.empty()) env["APKLAYER_VULKAN_PRESENT"] = "1", env["APKLAYER_VULKAN_VERSION"] = vulkan;
+    }
     // the host side of the graphics, media and audio HALs: every staged library is loaded (services and apps use all of them)
     std::string libs;
     for (const char* hal : {"graphics", "media", "audio"}) {

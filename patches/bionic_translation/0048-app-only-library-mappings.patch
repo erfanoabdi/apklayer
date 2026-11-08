@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Mon, 9 Nov 2026 00:00:00 +0000
+Subject: [PATCH] linker: cfg.d lines that map only the app namespace's lookups
+
+apklayer patch (docs/PATCHES.md). volk (Godot 4, and other engines) opens "libvulkan.so.1" before "libvulkan.so"; on a device
+the first fails, here it found the host's glibc loader, which has no VK_KHR_android_surface, so Godot's Vulkan context failed.
+apklayer's own Vulkan driver (vulkan.apklayer.so, a system library) opens the host loader by that same name. A cfg.d line
+"app:<name> <target>" now maps <name> only when the app namespace asks for it (an app's library or its dlopen), so apps get
+Android's loader under both names and the driver keeps the host's.
+
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -1646,7 +1646,11 @@
+ 		name += prefix64_len;
+
+ 	for(int i = 0; i < lib_override_map.len; i++) {
+-		if(!strcmp(lib_override_map.overrides[i].from, name)) {
++		/* apklayer patch: an "app:<name>" line maps only what the app namespace asks for (the app's own libraries and their dlopens) */
++		const char *from = lib_override_map.overrides[i].from;
++		if (!strncmp(from, "app:", 4) && !(from += 4, app))
++			continue;
++		if(!strcmp(from, name)) {
+ 			name = lib_override_map.overrides[i].to;
+ 			break;
+ 		}

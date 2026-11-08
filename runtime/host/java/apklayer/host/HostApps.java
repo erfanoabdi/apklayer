@@ -133,6 +133,8 @@ final class HostApps {
         Map<String, String> extras = new TreeMap<>();
         for (String k : p.stringPropertyNames()) if (k.startsWith("extra.")) extras.put(k.substring(6), p.getProperty(k));
         extras.forEach(intent::putExtra);
+        // a String[] extra (Godot's command_line_params): "extra[].<name>=a|b|c"
+        for (String k : p.stringPropertyNames()) if (k.startsWith("extra[].")) intent.putExtra(k.substring(8), p.getProperty(k).split("\\|"));
         return intent;
     }
 
