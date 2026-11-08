@@ -41,6 +41,14 @@ final class HostConfiguration {
         }
     }
 
+    /** The desktop session's lock (the hub's "locked", logind's LockedHint): KeyguardManager.isKeyguardLocked and isDeviceLocked, as TrustManager has them. */
+    private static void locked(boolean locked) {
+        org.robolectric.util.ReflectionHelpers.setStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "isKeyguardLocked", locked);
+        org.robolectric.util.ReflectionHelpers.setStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "isDeviceLocked", locked);
+        java.util.Set<Integer> users = org.robolectric.util.ReflectionHelpers.getStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "deviceLockedForUsers");
+        if (locked) users.add(android.os.UserHandle.myUserId()); else users.remove(android.os.UserHandle.myUserId());
+    }
+
     private static int apply(Bundle next) {
         Configuration before = new Configuration(RuntimeEnvironment.getApplication().getResources().getConfiguration());
         settings = next == null ? new Bundle() : next;
@@ -51,6 +59,7 @@ final class HostConfiguration {
             android.icu.util.TimeZone.setDefault(android.icu.util.TimeZone.getTimeZone(tz));
         }
         android.animation.ValueAnimator.setDurationScale(settings.getFloat("animatorScale", 1f));  // WindowManagerGlobal sets it from the system's on a device
+        locked(settings.getBoolean("locked"));
         Boolean night = night();
         android.app.UiModeManager modes = RuntimeEnvironment.getApplication().getSystemService(android.app.UiModeManager.class);
         if (night != null && modes != null) {  // the shadow's own setNightMode writes Settings.Secure, which only the system (the hub) may

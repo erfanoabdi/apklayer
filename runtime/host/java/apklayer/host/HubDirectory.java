@@ -63,7 +63,7 @@ final class HubDirectory extends Binder {
         installer = new HubInstaller(this, packages, pendingIntents, Path.of(System.getProperty("apklayer.storage")).getParent());
         usb = new HubUsb(this, packages, apps);
         permissionPrompt = new HubPermissionPrompt(packages);
-        callAudio = new HubCallAudio(packages);
+        callAudio = new HubCallAudio(packages, this);
         attachInterface(null, HubProtocol.DESCRIPTOR);
         exitWhenIdle(60_000); // nobody ever connected
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -532,6 +532,14 @@ final class HubDirectory extends Binder {
                 android.media.AudioDeviceAttributes device = request.readTypedObject(android.media.AudioDeviceAttributes.CREATOR); request.enforceNoDataAvail();
                 if (set) callAudio.setCommunicationDevice(caller, device);
                 reply.writeNoException(); reply.writeTypedObject(callAudio.communicationDevice(), 0); return true;
+            }
+            case HubProtocol.MICROPHONE_MUTE -> {
+                Peer caller = caller(); boolean on = request.readBoolean(); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeBoolean(callAudio.setMicrophoneMute(caller, on)); return true;
+            }
+            case HubProtocol.CONFIRM_CREDENTIAL -> {
+                Peer caller = caller(); String title = request.readString(), description = request.readString(); long challenge = request.readLong(); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeBoolean(HubLockScreen.confirm(caller.name(), title, description, challenge)); return true;
             }
             case HubProtocol.CHECK_PERMISSION -> {
                 caller(); int pid = request.readInt(), uid = request.readInt(); String permission = request.readString(); request.enforceNoDataAvail();

@@ -128,6 +128,7 @@ final class ActivityTask {
             if (HostPortals.open(intent)) return;
             if (HostPortals.requestPermissions(intent, request == null ? -1 : request.requestCode, stack.peek().get())) return;
             if (HostPortals.requestRole(intent, stack.peek().get(), wantsResult)) return;
+            if (HostPortals.confirmCredential(intent, stack.peek().get(), wantsResult)) return;
             // the Storage Access Framework pickers belong to the installed DocumentsUI (through the hub); the desktop's file dialog answers only when no installed app does
             // (a picker command of the user's, APKLAYER_PICKER, is the desktop's dialog by choice: it answers first)
             if (HostPortals.isPicker(intent) && System.getenv("APKLAYER_PICKER") == null && HubActivityClient.route(intent, wantsResult ? stack.peek().get() : null, intent)) return;

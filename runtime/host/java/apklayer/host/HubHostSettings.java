@@ -101,6 +101,7 @@ final class HubHostSettings {
         if (zone != null && !zone.isEmpty()) b.putString("timezone", zone);
         String format = o.getOrDefault("time-format", host.get("clock-format") == null ? null : host.get("clock-format").startsWith("12") ? "12" : "24");
         if (format != null) b.putBoolean("time24", !format.startsWith("12"));
+        if (host.containsKey("locked-hint")) b.putBoolean("locked", "true".equals(host.get("locked-hint")));  // the desktop session is locked (HubLockScreen, KeyguardManager)
         for (Map.Entry<String, String> e : o.entrySet())  // the window style: the instance's, and an app's own (window-mode.<package>); the shell applies it
             if (e.getKey().equals("window-mode") || e.getKey().startsWith("window-mode.")) b.putString("windowMode" + e.getKey().substring(11), e.getValue());
         return b;
@@ -117,6 +118,7 @@ final class HubHostSettings {
         first.countDown();  // before the settings provider is written to: its own process registers with HOST_SETTINGS
         if (same(before, next)) return;
         System.out.println("[apklayer-hub] host settings " + describe(next));
+        HubLockScreen.setLocked(next.getBoolean("locked"));  // keystore2 first: an app told of the lock finds its keys locked
         HubBootSettings.awaitBoot();  // the hub's resolver reaches the settings provider from then on
         writeSystemSettings(before, next);
         for (HubDirectory.Peer peer : directory.peersExcept(null)) {

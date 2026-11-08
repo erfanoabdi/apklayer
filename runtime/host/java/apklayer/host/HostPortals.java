@@ -82,6 +82,28 @@ final class HostPortals {
         return true;
     }
 
+    /** KeyguardManager.createConfirmDeviceCredentialIntent (Settings' ConfirmDeviceCredentialActivity): the desktop's login password in the hub's
+     *  dialog (HubLockScreen.confirm); RESULT_OK once it verified the credential, so keys with an authentication timeout work. */
+    static boolean confirmCredential(Intent intent, android.app.Activity requester, boolean wantsResult) {
+        if (!android.app.KeyguardManager.ACTION_CONFIRM_DEVICE_CREDENTIAL.equals(intent.getAction())
+                && !android.app.KeyguardManager.ACTION_CONFIRM_DEVICE_CREDENTIAL_WITH_USER.equals(intent.getAction())) return false;
+        CharSequence title = intent.getCharSequenceExtra(android.app.KeyguardManager.EXTRA_TITLE), description = intent.getCharSequenceExtra(android.app.KeyguardManager.EXTRA_DESCRIPTION);
+        Thread asking = new Thread(() -> {
+            boolean confirmed;
+            try { confirmed = HubClient.connected() && HubClient.current().confirmCredential(title == null ? null : title.toString(), description == null ? null : description.toString(), 0); }
+            catch (RuntimeException noHub) { confirmed = false; }
+            System.out.println("[apklayer] device credential " + (confirmed ? "confirmed" : "not confirmed"));
+            boolean ok = confirmed;
+            requester.runOnUiThread(() -> {
+                if (wantsResult && !requester.isDestroyed())
+                    ((ShadowActivity) Shadow.extract(requester)).receiveResult(intent, ok ? android.app.Activity.RESULT_OK : android.app.Activity.RESULT_CANCELED, null);
+            });
+        }, "confirm-credential");
+        asking.setDaemon(true);
+        asking.start();
+        return true;
+    }
+
     /** Roles a desktop without telephony cannot give (RoleController's availability): their request is refused at once, as RequestRoleActivity does. */
     private static final Set<String> PHONE_ROLES = Set.of(RoleManager.ROLE_SMS, RoleManager.ROLE_DIALER, RoleManager.ROLE_CALL_SCREENING, RoleManager.ROLE_CALL_REDIRECTION, RoleManager.ROLE_EMERGENCY);
 
@@ -120,7 +142,8 @@ final class HostPortals {
         String action = intent.getAction();
         return action == null || Intent.ACTION_VIEW.equals(action) || Intent.ACTION_CHOOSER.equals(action) || isPicker(intent)
                 || Set.of(PackageManager.ACTION_REQUEST_PERMISSIONS, RoleManager.ACTION_REQUEST_ROLE, Intent.ACTION_INSTALL_PACKAGE, Intent.ACTION_DELETE, Intent.ACTION_UNINSTALL_PACKAGE,
-                        android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).contains(action);
+                        android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.app.KeyguardManager.ACTION_CONFIRM_DEVICE_CREDENTIAL,
+                        android.app.KeyguardManager.ACTION_CONFIRM_DEVICE_CREDENTIAL_WITH_USER).contains(action);
     }
 
     static boolean isPicker(Intent intent) { return intent.getAction() != null && PICKERS.contains(intent.getAction()); }

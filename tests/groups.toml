@@ -51,7 +51,7 @@ run = ["tests/vm/reconvert.sh"]
 
 [keystore]
 apps = ["hello-keystore", "hello-keystore-other"]
-run = ["tests/vm/keystore.sh"]
+run = ["tests/vm/keystore.sh", "python3 -u tests/vm/keystore-auth.py"]
 
 [settings]
 alone = true  # flips the desktop's colour scheme for a few seconds: every instance's apps follow it (their screenshots too)

@@ -17,11 +17,16 @@ public final class HubClient {
         IBinder found;
         HubEndpoint own;
         int pid;
-        for (;;) {  // a hub that is ending refuses the registration: wait for it to go and attach to the next one
+        for (;;) {  // a hub that is ending refuses the registration, or is gone after the lookup found it alive: wait for it to go and attach to the next one
             found = HubStartup.connect();
-            own = new HubEndpoint(context, HubProtocol.call(found, HubProtocol.DESCRIPTOR, HubProtocol.STATUS, request -> {}, reply -> reply.readInt()));
-            try { pid = register(context, found, own); break; }
-            catch (IllegalStateException refused) { if (!HubProtocol.EXITING.equals(refused.getMessage())) throw refused; HubStartup.awaitDeath(found); }
+            try {
+                own = new HubEndpoint(context, HubProtocol.call(found, HubProtocol.DESCRIPTOR, HubProtocol.STATUS, request -> {}, reply -> reply.readInt()));
+                pid = register(context, found, own);
+                break;
+            } catch (IllegalStateException refused) {
+                if (!HubProtocol.EXITING.equals(refused.getMessage()) && !(refused.getCause() instanceof android.os.DeadObjectException)) throw refused;
+                HubStartup.awaitDeath(found);
+            }
         }
         hub = found; endpoint = own; hubPid = own.hubPid();
         try { hub.linkToDeath(() -> alive = false, 0); }
@@ -235,6 +240,15 @@ public final class HubClient {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.ROLE_REQUEST, request -> request.writeString(role), reply -> reply.readBoolean());
     }
 
+    /** KeyguardManager's confirm intent ({@code challenge} 0) and BiometricPrompt's credential page (its operation id): whether the person confirmed. */
+    boolean confirmCredential(String title, String description, long challenge) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CONFIRM_CREDENTIAL, request -> { request.writeString(title); request.writeString(description); request.writeLong(challenge); },
+                reply -> reply.readBoolean());
+    }
+    /** AudioManager.setMicrophoneMute: the mute in force after the request (HubCallAudio). */
+    boolean microphoneMute(boolean on) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.MICROPHONE_MUTE, request -> request.writeBoolean(on), reply -> reply.readBoolean());
+    }
     /** AudioManager.setMode/getMode (MODE_CURRENT): the instance's mode after the request (HubCallAudio). */
     int audioMode(int mode) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.AUDIO_MODE, request -> request.writeInt(mode), reply -> reply.readInt());

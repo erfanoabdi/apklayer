@@ -14,17 +14,23 @@ import java.nio.file.attribute.PosixFilePermissions;
  * hands keystore2 an auth token and keys with an authentication timeout (setUserAuthenticationParameters(seconds, AUTH_DEVICE_CREDENTIAL)) work for
  * that long after the last verification. The credential is a random secret
  * in the instance's /data/system (only the hub reads it; apps share the Linux uid, so this is no barrier against an app's native code).
- * shortcut: no per-operation authentication (timeout 0, BiometricPrompt) and no lock while the desktop session runs; upgrade with a host prompt.
+ * Per-operation authentication (BiometricPrompt with DEVICE_CREDENTIAL, KeyguardManager.createConfirmDeviceCredentialIntent: confirm) asks for the
+ * desktop's login password in the hub's dialog, checked by PAM's helper (HubDesktopPassword), then verifies the credential with the operation's
+ * challenge as LockSettingsService.verifyCredential does: gatekeeperd hands keystore2 the auth token. The instance is locked while the desktop
+ * session is (logind's LockedHint, through HubHostSettings: setLocked), as TrustManagerService tells keystore2.
  */
 final class HubLockScreen {
     static final String SERVICE = "android.service.gatekeeper.IGateKeeperService";
     private static final int USER = 0;
     private static volatile long unlocked = Long.MIN_VALUE / 2;  // nanoTime of the last verification
+    private static volatile boolean locked;  // the desktop session is locked
+    private static final Object ASKING = new Object();  // one password question at a time
+    private static final int TRIES = 5;
     private HubLockScreen() {}
 
     /** An app registers: the person at the desktop is there; refreshes the auth token when the last one is a minute old. */
     static void appStarted() {
-        if (System.nanoTime() - unlocked < 60_000_000_000L) return;
+        if (locked || System.nanoTime() - unlocked < 60_000_000_000L) return;
         unlocked = System.nanoTime();
         Thread refresh = new Thread(HubLockScreen::unlockIfProvided, "hub-unlock");
         refresh.setDaemon(true);
@@ -62,10 +68,67 @@ final class HubLockScreen {
             android.os.IBinder maintenance = RealBinder.await("android.security.maintenance", 5000), authorization = RealBinder.await("android.security.authorization", 5000);
             if (maintenance == null || authorization == null) { System.out.println("[apklayer-hub] keystore2 has no maintenance/authorization service: still locked"); return; }
             android.security.maintenance.IKeystoreMaintenance.Stub.asInterface(maintenance).initUserSuperKeys(USER, secret, true);
-            android.security.authorization.IKeystoreAuthorization.Stub.asInterface(authorization).onDeviceUnlocked(USER, secret);
-            System.out.println("[apklayer-hub] lock screen credential verified: unlocked");
+            var keystore = android.security.authorization.IKeystoreAuthorization.Stub.asInterface(authorization);
+            keystore.onDeviceUnlocked(USER, secret);
+            if (locked) keystore.onDeviceLocked(USER, new long[0], false);  // the hub started under a locked desktop: the keys wait for its unlock
+            System.out.println("[apklayer-hub] lock screen credential verified: " + (locked ? "the desktop is locked" : "unlocked"));
         } catch (android.os.RemoteException | IOException | RuntimeException failure) {
             System.out.println("[apklayer-hub] lock screen credential: " + failure);
+        }
+    }
+
+    /** The desktop session locked or unlocked (TrustManagerService's onDeviceLocked/Unlocked): keystore2 refuses UNLOCKED_DEVICE_REQUIRED keys while it is
+     *  locked; the unlock verifies the credential again (a fresh auth token). */
+    static void setLocked(boolean now) {
+        if (now == locked) return;
+        locked = now;
+        System.out.println("[apklayer-hub] desktop " + (now ? "locked" : "unlocked"));
+        if (!now) { unlockIfProvided(); return; }
+        synchronized (HubLockScreen.class) {
+            android.os.IBinder authorization = RealBinder.lookup("android.security.authorization");
+            if (authorization == null) return;
+            try { android.security.authorization.IKeystoreAuthorization.Stub.asInterface(authorization).onDeviceLocked(USER, new long[0], false); }
+            catch (android.os.RemoteException | RuntimeException failure) { System.out.println("[apklayer-hub] keystore2 not told of the lock: " + failure); }
+        }
+    }
+    static boolean locked() { return locked; }
+
+    /**
+     * ConfirmDeviceCredentialActivity and BiometricPrompt's credential page for {@code pkg}: the person types the desktop's login password into the
+     * hub's dialog (up to TRIES times); a right one verifies the instance credential with {@code challenge} (BiometricPrompt's operation id, 0 for
+     * the confirm intent), so keystore2 gets the auth token. False when cancelled, wrong too often, or without a credential.
+     */
+    static boolean confirm(String pkg, String title, String description, long challenge) {
+        if (locked) { System.out.println("[apklayer-hub] credential confirmation of " + pkg + " refused: the desktop is locked"); return false; }
+        String heading = title == null || title.isEmpty() ? "Confirm it's you" : title;
+        String ask = (description == null || description.isEmpty() ? HubInstaller.labelOf(pkg, pkg) + " asks for your password." : description)
+                + " Enter the password you log in to this computer with.";
+        synchronized (ASKING) {
+            for (int attempt = 0; attempt < TRIES; attempt++) {
+                String typed = HubInstallDialog.askSecret(heading, attempt == 0 ? ask : "Wrong password. Try again.", "Confirm", "Cancel");
+                if (typed == null) { System.out.println("[apklayer-hub] credential confirmation of " + pkg + ": cancelled"); return false; }
+                if (!HubDesktopPassword.check(typed)) { System.out.println("[apklayer-hub] credential confirmation of " + pkg + ": wrong password"); continue; }
+                boolean verified = verify(challenge);
+                System.out.println("[apklayer-hub] credential confirmation of " + pkg + (verified ? ": confirmed" : ": the instance credential was not verified") + (challenge != 0 ? " (an operation's challenge)" : ""));
+                return verified;
+            }
+        }
+        return false;
+    }
+
+    /** gatekeeperd's verifyChallenge of the enrolled credential: it adds the auth token (with this challenge) to keystore2 itself. */
+    private static synchronized boolean verify(long challenge) {
+        String data = System.getenv("APKLAYER_DATA");
+        android.os.IBinder binder = RealBinder.lookup(SERVICE);
+        if (data == null || binder == null) return false;
+        Path dir = Path.of(data, "system", "apklayer-lock");
+        try {
+            GateKeeperResponse verified = IGateKeeperService.Stub.asInterface(binder).verifyChallenge(USER, challenge, Files.readAllBytes(dir.resolve("handle")), Files.readAllBytes(dir.resolve("credential")));
+            if (verified.getResponseCode() == GateKeeperResponse.RESPONSE_OK) unlocked = System.nanoTime();
+            return verified.getResponseCode() == GateKeeperResponse.RESPONSE_OK;
+        } catch (android.os.RemoteException | IOException | RuntimeException failure) {
+            System.out.println("[apklayer-hub] lock screen credential: " + failure);
+            return false;
         }
     }
 }

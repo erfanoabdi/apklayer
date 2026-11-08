@@ -3,7 +3,8 @@
 org.gnome.desktop.interface through it), the system time zone (timedate1) and the session locale. Prints `<key> <value>` lines: every
 known setting, then `ready`, then one line per change (the portal's SettingChanged, timedate1's PropertiesChanged).
 Keys: color-scheme (0 none, 1 dark, 2 light), accent-color (r,g,b in 0..1), contrast (0, 1 high), reduced-motion (0, 1 reduced),
-enable-animations (true|false), text-scaling-factor, clock-format (12h|24h), timezone, locale (the session's LANG)."""
+enable-animations (true|false), text-scaling-factor, clock-format (12h|24h), timezone, locale (the session's LANG), locked-hint (true|false:
+logind's LockedHint of the user's graphical session, which the desktop's screen lock sets)."""
 import os
 from gi.repository import Gio, GLib
 
@@ -52,6 +53,25 @@ try:
     show('timezone', zone.unpack()[0])
 except GLib.Error as error:
     print('unavailable timedate1 ' + error.message, flush=True)
+
+
+def on_session(connection, sender, path, interface, signal, parameters, data):
+    changed = parameters.unpack()[1]
+    if 'LockedHint' in changed:
+        show('locked-hint', changed['LockedHint'])
+
+
+try:
+    LOGIN = 'org.freedesktop.login1'
+    system = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+    _, session_path = system.call_sync(LOGIN, '/org/freedesktop/login1/user/self', 'org.freedesktop.DBus.Properties', 'Get',
+                                       GLib.Variant('(ss)', (LOGIN + '.User', 'Display')), None, Gio.DBusCallFlags.NONE, 5000, None).unpack()[0]
+    if session_path != '/':  # no graphical session: nothing locks
+        system.signal_subscribe(LOGIN, 'org.freedesktop.DBus.Properties', 'PropertiesChanged', session_path, None, Gio.DBusSignalFlags.NONE, on_session, None)
+        show('locked-hint', system.call_sync(LOGIN, session_path, 'org.freedesktop.DBus.Properties', 'Get', GLib.Variant('(ss)', (LOGIN + '.Session', 'LockedHint')),
+                                             None, Gio.DBusCallFlags.NONE, 5000, None).unpack()[0])
+except GLib.Error as error:
+    print('unavailable login1 ' + error.message, flush=True)
 locale = os.environ.get('LC_ALL') or os.environ.get('LC_MESSAGES') or os.environ.get('LANG')
 if locale:
     show('locale', locale)

@@ -35,10 +35,13 @@ final class HubProtocol {
             AUDIO_MODE = 54,  // {mode, MODE_CURRENT to read} -> the instance's audio mode (HubCallAudio)
             AUDIO_COMMUNICATION_DEVICE = 55,  // {set, AudioDeviceAttributes or null} -> the communication device in force (HubCallAudio)
             NOTIFY_CHANNELS = 56,  // {op, arguments}: the caller's package's notification channels (HubNotificationChannels)
-            JOB_RETRY = 57;  // {job id, system stop}: the run ended asking to be rescheduled; HubScheduler plans it after its backoff
+            JOB_RETRY = 57,  // {job id, system stop}: the run ended asking to be rescheduled; HubScheduler plans it after its backoff
+            CONFIRM_CREDENTIAL = 58,  // {title, description, challenge} -> whether the person confirmed with the login password (HubLockScreen.confirm)
+            MICROPHONE_MUTE = 59;  // {on} -> the microphone mute after the request (HubCallAudio: AudioService.setMicrophoneMute and its broadcast)
             // RELAUNCH: `apklayer run` of a running app (the CLI, through servicetool call): {package, intent file or ""} -> 0 delivered, 1 not running
     static final int ENDPOINT_BIND = 1, ENDPOINT_UNBIND = 2, ENDPOINT_START = 3, ENDPOINT_STOP = 4, ENDPOINT_GET_PROVIDER = 5, ENDPOINT_NOTIFY = 6, ENDPOINT_START_ACTIVITY = 7, ENDPOINT_EXIT_IF_IDLE = 8, ENDPOINT_PACKAGE_CHANGED = 9, ENDPOINT_CONFIGURATION = 10, ENDPOINT_JOB = 11,
-            ENDPOINT_JOB_STOP = 12;  // {job id, JobParameters stop reason}: a constraint stopped holding (HostJobs.stop)
+            ENDPOINT_JOB_STOP = 12,  // {job id, JobParameters stop reason}: a constraint stopped holding (HostJobs.stop)
+            ENDPOINT_CALL_AUDIO = 13;  // {mode, AudioDeviceAttributes or null}: another app changed the instance's audio mode or communication device (HubCallAudio)
     private HubProtocol() {}
     static <T> T call(IBinder target, String descriptor, int code, Consumer<Parcel> write, Function<Parcel, T> read) {
         Parcel request = Parcel.obtain(), reply = Parcel.obtain();

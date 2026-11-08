@@ -32,7 +32,11 @@ final class HostKeyStore {
     /** gatekeeperd (HubLockScreen enrolled the instance's credential): GateKeeper.getSecureUserId for keys that need user authentication, and
      *  KeyguardManager's secure lock screen when a credential is set. */
     private static void lockScreen() {
-        android.os.IBinder binder = RealBinder.lookup(HubLockScreen.SERVICE);
+        // a stack that runs gatekeeperd (cli/stack.cpp stages the Gatekeeper HAL's declaration with it): an app starting with the stack waits for
+        // its registration, as for keystore2's (without the wait the first app of a new stack saw no secure lock screen)
+        String root = System.getenv("APKLAYER_INSTANCE_ROOT");
+        if (root == null || !new java.io.File(root, "vendor/etc/vintf/manifest/apklayer-gatekeeper.xml").exists()) return;
+        android.os.IBinder binder = RealBinder.await(HubLockScreen.SERVICE, 5000);
         if (binder == null) return;
         var gatekeeper = android.service.gatekeeper.IGateKeeperService.Stub.asInterface(binder);
         org.robolectric.shadows.ShadowServiceManager.addBinderService(HubLockScreen.SERVICE, android.service.gatekeeper.IGateKeeperService.class, gatekeeper);
