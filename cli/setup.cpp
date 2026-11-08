@@ -109,7 +109,7 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
     std::string have = manager::installedRuntime(root);
 
     // 1. binder: the instance's devices (root's: the package's service makes them at boot, the manager asks pkexec)
-    bool binder = !binderDevice(instance.id).empty() && exists(binderDevice(instance.id));
+    bool binder = userspaceBinder(instance.root) || (!binderDevice(instance.id).empty() && exists(binderDevice(instance.id)));
     step("binder", binder ? "done" : "failed", binder ? "Ready for instance " + instance.id : binderDeviceWhy(instance.id));
     std::string java = javaProblem(layout);
     step("java", java.empty() ? "done" : "failed", java.empty() ? "Java 21" : java);

@@ -100,6 +100,7 @@ if host_machine.system() == 'linux'
   # optimized with its debug info kept (upstream builds it with Meson's default, -O0): every proxied libc call, mutex and condition variable of
   # translated code goes through it
   bt = subproject('bionic_translation', default_options: ['buildtype=debugoptimized', 'warning_level=1'])
+  subdir('bridge/binderd')  # the userspace binder's daemon (docs/BINDER.md)
   subdir('bridge/native')  # the native runtime: JNI shim, btload, the path layer, bionic_translation's library mapping
   subdir('bridge/ndk')
   subdir('bridge/hals/graphics/gles1')  # OpenGL ES 1 for hosts without it (-Dgfxstream)

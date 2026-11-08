@@ -348,7 +348,7 @@ static void loadProperties(const Layout& l, const Instance& inst, const NativeEn
 
 int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std::string>& tool) {
     if (sandboxOn()) enterInstanceUserNs();  // first: everything the stack starts is in the instance's user namespace (cli/sandbox.cpp)
-    if (binderDevice(inst.id).empty()) die("instance " + inst.id + ": " + binderDeviceWhy(inst.id));  // cli/binder.cpp: no second instance without binderfs
+    if (!userspaceBinder(inst.root) && binderDevice(inst.id).empty()) die("instance " + inst.id + ": " + binderDeviceWhy(inst.id));  // cli/binder.cpp: no second instance without binderfs
     NativeEnv ne = nativeEnv(l, inst);
     const std::string& n = l.native;
     for (const std::string& f : listDir(inst.logs()))
@@ -400,6 +400,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         running.push_back({name, pid, pidfdOpen(pid), s});
     };
     const std::string hals = join(l.root, "aosp/hals/audio");
+    if (userspaceBinder(inst.root)) ensureBinderDaemon(l.runtimeHome, n, inst.id, join(inst.logs(), "binderd.log"));  // docs/BINDER.md
     start("servicemanager", "libapklayer_servicemanager.so", {"/dev/binder"});
     start("permission", "libapklayer_permission.so", {});  // libbinder's checkPermission() asks this (no system_server PermissionController)
     if (!deviceGraphics(l, inst)) start("allocator", "libapklayer_allocator.so", {});  // a Halium device's own: the host context
@@ -590,6 +591,7 @@ int execTool(const Layout& l, const Instance& inst, const std::vector<std::strin
         makeDirs(inst.runtimeDir);
         loadProperties(l, inst, ne);
     }
+    if (userspaceBinder(inst.root)) ensureBinderDaemon(l.runtimeHome, l.native, inst.id, join(inst.logs(), "binderd.log"));
     return runAndWait(s);
 }
 
@@ -606,6 +608,8 @@ void stopStack(const Layout& l, const Instance& inst) {
         for (const std::string& pid : split(*hub, '\n')) terminate(atoi(pid.c_str()));
     auto pid = readFile(inst.pidFile());
     if (pid) terminate(atoi(pid->c_str()));
+    // the userspace binder (docs/BINDER.md): it would end by itself once its clients are gone; stop means now
+    if (auto binderd = readFile(join(binderSocketDir(l.runtimeHome), inst.id + ".pid"))) terminate(atoi(binderd->c_str()));
 }
 
 }  // namespace apklayer

@@ -16,7 +16,8 @@ import instance  # noqa: E402  (changes into the repo root)
 
 DEV = instance.INSTANCE + '-dev'
 NAME = 'apklayer.test.IHostEcho/default'
-subprocess.run(['sudo', '-n', 'sh', 'tools/host-setup/binder.sh', DEV], check=True, stdout=subprocess.DEVNULL)
+if os.environ.get('APKLAYER_BINDER') != 'userspace':  # the userspace binder (docs/BINDER.md) needs no devices: DEV's daemon serves its contexts
+    subprocess.run(['sudo', '-n', 'sh', 'tools/host-setup/binder.sh', DEV], check=True, stdout=subprocess.DEVNULL)
 # the instance's /data (cli/layout.cpp): the stack writes this list from the provider choice; the test writes it itself
 conf = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'apklayer' / instance.INSTANCE / 'data/apklayer/host_hals.conf'
 conf.parent.mkdir(parents=True, exist_ok=True)

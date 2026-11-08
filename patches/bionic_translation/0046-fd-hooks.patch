@@ -1,0 +1,180 @@
+From: apklayer
+Subject: [PATCH] fd hooks: open, ioctl, mmap and close of fds a library serves itself
+
+A library in the process can serve open/ioctl/mmap/close for fds of its own by exporting `bionic_fd_hooks` (looked up once):
+apklayer's userspace binder (docs/BINDER.md) routes /dev/binder, /dev/hwbinder, /dev/vndbinder and /dev/binderfs/* to its daemon
+that way, with libbinder unchanged. open (and __open_2, openat with an absolute path) asks the hook after the path layer; ioctl, close
+and LP64 mmap/mmap64 get wrappers that fall through to glibc (ioctl to the global `ioctl`, which a launcher may define).
+
+apklayer patch: 0046 of patches/bionic_translation.
+---
+diff --git a/libc/libc-chk.c b/libc/libc-chk.c
+index f880f96..5f0824c 100644
+--- a/libc/libc-chk.c
++++ b/libc/libc-chk.c
+@@ -1,6 +1,7 @@
+ #include <stdbool.h>
+ #include <stdlib.h>
+ bool libc_bio_apply_path_overrides(char **path); /* apklayer patch: path layer */
++int libc_bio_fd_hook_open(const char *path, int flags); /* apklayer patch: fd hooks */
+ // SPDX-License-Identifier: MIT AND Apache-2.0
+ 
+ // portions of this file Copyright (C) The Android Open Source Project
+@@ -86,7 +87,8 @@ int bionic___open_2(const char *pathname, int flags)
+ {
+ 	flags |= O_LARGEFILE;
+ 	char *mapped = (char *)pathname; bool free_it = libc_bio_apply_path_overrides(&mapped);
+-	int ret = open(mapped, flags, 0);
++	int ret = libc_bio_fd_hook_open(mapped, flags); /* apklayer patch: fd hooks */
++	if (ret == -2) ret = open(mapped, flags, 0);
+ 	if (free_it) free(mapped);
+ 	return ret;
+ }
+diff --git a/libc/libc-fd-hooks.c b/libc/libc-fd-hooks.c
+new file mode 100644
+index 0000000..da8d105
+--- /dev/null
++++ b/libc/libc-fd-hooks.c
+@@ -0,0 +1,75 @@
++// SPDX-License-Identifier: MIT
++/* apklayer patch: fd hooks. A library in the process (apklayer's userspace binder, its bridge/native/binder_route.c) can serve open, ioctl,
++ * mmap and close for fds of its own: it exports `bionic_fd_hooks`, looked up once on first use. Without it everything goes to glibc as
++ * before. ioctl goes on to the global `ioctl` (a launcher may define its own). */
++#define _GNU_SOURCE
++#include <dlfcn.h>
++#include <pthread.h>
++#include <stdarg.h>
++#include <sys/ioctl.h>
++#include <sys/mman.h>
++#include <sys/types.h>
++#include <unistd.h>
++
++struct bionic_fd_hooks {
++	int (*open)(const char *path, int flags);                     /* an fd, -1 with errno, or -2: not the hook's path */
++	int (*ioctl)(int fd, unsigned int request, void *arg, int *result); /* nonzero: handled, *result is the return value */
++	int (*mmap)(void *addr, size_t len, int prot, int flags, int fd, off_t off, void **result);
++	int (*close)(int fd, int *result);
++};
++
++static const struct bionic_fd_hooks *hooks;
++static pthread_once_t hooks_once = PTHREAD_ONCE_INIT;
++
++static void hooks_lookup(void)
++{
++	hooks = dlsym(RTLD_DEFAULT, "bionic_fd_hooks");
++}
++
++static const struct bionic_fd_hooks *fd_hooks(void)
++{
++	pthread_once(&hooks_once, hooks_lookup);
++	return hooks;
++}
++
++int libc_bio_fd_hook_open(const char *path, int flags)
++{
++	const struct bionic_fd_hooks *h = fd_hooks();
++	return h && h->open ? h->open(path, flags) : -2;
++}
++
++int libc_bio_fd_hook_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off, void **result)
++{
++	const struct bionic_fd_hooks *h = fd_hooks();
++	return fd >= 0 && h && h->mmap && h->mmap(addr, len, prot, flags, fd, off, result);
++}
++
++int bionic_ioctl(int fd, int request, ...)
++{
++	va_list ap;
++	va_start(ap, request);
++	void *arg = va_arg(ap, void *);
++	va_end(ap);
++	const struct bionic_fd_hooks *h = fd_hooks();
++	int result;
++	if (h && h->ioctl && h->ioctl(fd, (unsigned int)request, arg, &result))
++		return result;
++	return ioctl(fd, (unsigned long)(unsigned int)request, arg);
++}
++
++int bionic_close(int fd)
++{
++	const struct bionic_fd_hooks *h = fd_hooks();
++	int result;
++	if (h && h->close && h->close(fd, &result))
++		return result;
++	return close(fd);
++}
++
++#ifdef __LP64__
++void *bionic_mmap64(void *address, size_t length, int protect, int flags, int filedes, off_t offset);
++void *bionic_mmap(void *address, size_t length, int protect, int flags, int filedes, off_t offset)
++{
++	return bionic_mmap64(address, length, protect, flags, filedes, offset);
++}
++#endif
+diff --git a/libc/libc-musl.c b/libc/libc-musl.c
+index 8b78d52..4f04de3 100644
+--- a/libc/libc-musl.c
++++ b/libc/libc-musl.c
+@@ -135,8 +135,12 @@ int bionic_statvfs64(const char *file, struct statfs *buf)
+ 	return statfs(file, buf);
+ }
+ 
++int libc_bio_fd_hook_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off, void **result); /* apklayer patch: fd hooks */
+ void * bionic_mmap64(void *address, size_t length, int protect, int flags, int filedes, off_t offset)
+ {
++	void *hooked;
++	if (libc_bio_fd_hook_mmap(address, length, protect, flags, filedes, offset, &hooked))
++		return hooked;
+ 	return mmap(address, length, protect, flags, filedes, offset);
+ }
+ 
+diff --git a/libc/libc-open-overrides.c b/libc/libc-open-overrides.c
+index cf401b9..4920aef 100644
+--- a/libc/libc-open-overrides.c
++++ b/libc/libc-open-overrides.c
+@@ -7,6 +7,8 @@
+ #include <string.h>
+ #include <unistd.h>
+ 
++int libc_bio_fd_hook_open(const char *path, int flags); /* apklayer patch: fd hooks */
++
+ #define OPEN_NEEDS_MODE(flags) ((flags & O_CREAT) || (flags & O_TMPFILE))
+ 
+ /* nop */
+@@ -37,6 +39,14 @@ int bionic_open(char *path, int oflag, ...)
+ 
+ 	bool free_path = (*apply_path_overrides_func)(&path);
+ 
++	/* apklayer patch: fd hooks (libc-fd-hooks.c) */
++	fd = libc_bio_fd_hook_open(path, oflag);
++	if (fd != -2) {
++		if (free_path)
++			free(path);
++		return fd;
++	}
++
+ 	// Hide TracerPid from /proc/self/status for hideous apps that check for debugger.
+ 	// Note, since /proc/self/status doesn't get updated anymore, this may break some stuff.
+ 	// XXX: Turn this ON/OFF with env var maybe?
+@@ -103,7 +113,8 @@ int bionic_openat(int dirfd, const char *path, int oflag, ...)
+ 	if (OPEN_NEEDS_MODE(oflag)) { va_list arg; va_start(arg, oflag); mode = va_arg(arg, int); va_end(arg); }
+ 	char *mapped = (char *)path;
+ 	bool free_it = path && path[0] == '/' && (*apply_path_overrides_func)(&mapped);
+-	int fd = openat(dirfd, mapped, oflag, mode);
++	int fd = mapped && mapped[0] == '/' ? libc_bio_fd_hook_open(mapped, oflag) : -2; /* apklayer patch: fd hooks */
++	if (fd == -2) fd = openat(dirfd, mapped, oflag, mode);
+ 	if (free_it) free(mapped);
+ 	return fd;
+ }
+diff --git a/meson.build b/meson.build
+index d741726..94e288e 100644
+--- a/meson.build
++++ b/meson.build
+@@ -119,6 +119,7 @@ c_bio = shared_library('c_bio',
+ 		'libc/libc-stdio.c',
+ 		'libc/libc-sha1.c',
+ 		'libc/libc-open-overrides.c',
++		'libc/libc-fd-hooks.c', # apklayer patch: fd hooks
+ 	],
+ 	soversion: 0, # we're shimming a stable ABI; this should never need to change
+ 	install: true,
