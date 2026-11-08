@@ -263,6 +263,7 @@ namespace {
     // (then `stop` cannot end it: the daemon is SIGKILLed after 5 s and the service is left running)
     sigset_t none;
     sigemptyset(&none);
+    if (spec.blockSigpipe) sigaddset(&none, SIGPIPE);
     sigprocmask(SIG_SETMASK, &none, nullptr);
     if (spec.newSession) setsid();
     if (spec.dieWithParent) prctl(PR_SET_PDEATHSIG, SIGTERM);

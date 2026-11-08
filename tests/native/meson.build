@@ -8,6 +8,9 @@ if is_variable('c_bio')
     test(name, executable(name + '-test', name + '.c', dependencies: [native_dl, native_threads], c_args: ['-Wno-unused-parameter']),
       args: [c_bio], env: ['LD_LIBRARY_PATH=' + bt_dir], suite: 'bionic', timeout: 30)
   endforeach
+  # a chaining bionic crash handler ends the process (0046); JVM_get_signal_action exported as libjsig's
+  test('fault-chain', executable('fault-chain-test', 'fault-chain.c', dependencies: [native_dl], export_dynamic: true),
+    args: [c_bio], env: ['LD_LIBRARY_PATH=' + bt_dir], suite: 'bionic', timeout: 30)
   # bionic code's path functions through the path layer (paths.c, as the shim installs it)
   test('bionic-paths', executable('bionic-paths-test', ['bionic-paths.c', '../../bridge/native/paths.c'], dependencies: [native_dl], c_args: ['-U_FILE_OFFSET_BITS']),
     args: [c_bio], env: ['LD_LIBRARY_PATH=' + bt_dir], suite: 'bionic', timeout: 30)

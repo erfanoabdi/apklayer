@@ -39,6 +39,8 @@ int printFile(const std::string& path) {
 
 std::string appLogPath(const Instance& inst, const std::string& package) { return join(inst.logs(), "app-" + package + ".log"); }
 
+constexpr off_t kAppLogCap = 256 << 20;
+
 void teeLaunchOutput(const Instance& inst, const std::string& package) {
     std::string path = appLogPath(inst, package);
     makeDirs(inst.logs());
@@ -64,6 +66,15 @@ void teeLaunchOutput(const Instance& inst, const std::string& package) {
             if (n < 0 && errno == EINTR) continue;
             if (n <= 0) break;
             if (terminal >= 0) writeAll(terminal, buf, n);
+            if (file < 0) continue;
+            struct stat fs {};  // a runaway app (a crash handler looping on its fault) never fills the disk: the file stops at the cap
+            if (fstat(file, &fs) == 0 && fs.st_size + n > kAppLogCap) {
+                static const char note[] = "\n[apklayer] this log reached its size limit (256 MB): the rest of the launch's output is left out\n";
+                writeAll(file, note, sizeof note - 1);
+                close(file);
+                file = -1;
+                continue;
+            }
             writeAll(file, buf, n);
         }
         _exit(0);

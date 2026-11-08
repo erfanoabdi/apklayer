@@ -44,6 +44,8 @@ struct Spawn {
     bool detach = false;           // double fork: nobody waits for it
     bool dieWithParent = false;    // PR_SET_PDEATHSIG SIGTERM: a helper the caller waits on ends when the caller is killed
     std::string unit;              // non-empty: in a transient systemd user scope of its own, "<unit>-<pid>.scope" (cli/unit.h)
+    bool blockSigpipe = false;     // an app JVM: SIGPIPE blocked in all its threads, as ART blocks it (Runtime::BlockSignals): a write to a closed pipe
+                                   // fails with EPIPE and never runs an app's handler (HotSpot chains SIGPIPE to it: Unity's then faulted)
 };
 
 // Starts a process; returns its pid. The caller owns waiting for it (not for a detached one: init reaps it).
