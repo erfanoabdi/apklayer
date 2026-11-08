@@ -119,13 +119,14 @@ int openStorageDir(const char* path, const struct stat* st, int type, FTW*) {
 bool under(const std::string& path, const std::string& dir) { return path == dir || path.rfind(dir + "/", 0) == 0; }
 
 // One step of an app's mount view, in order: a tmpfs, a clone of the host's tree (taken before anything is covered) moved to the same path, or a
-// directory of the app's own made inside a tmpfs
+// directory of the app's own made inside a tmpfs, or a symbolic link of the host's again in a tmpfs
 struct Step {
-    enum Kind { Tmpfs, Bind, OwnDir } kind;
+    enum Kind { Tmpfs, Bind, OwnDir, Link } kind;
     std::string path;
     int tree = -1;
     bool file = false;
     uid_t owner = (uid_t)-1;
+    std::string target;
 };
 
 int cloneTree(const std::string& path, bool writable) {
@@ -151,6 +152,10 @@ void apply(const std::vector<Step>& steps) {
             makeMountPoint(s.path, s.file);
             if (move_mount(s.tree, "", AT_FDCWD, s.path.c_str(), MOVE_MOUNT_F_EMPTY_PATH) != 0) die("cannot mount " + s.path + " in the sandbox: " + strerror(errno));
             close(s.tree);
+        } else if (s.kind == Step::Link) {
+            struct stat st{};
+            makeDirs(dirName(s.path));
+            if (lstat(s.path.c_str(), &st) != 0 && symlink(s.target.c_str(), s.path.c_str()) != 0) die("cannot link " + s.path + " in the sandbox: " + strerror(errno));
         } else {
             makeDirs(s.path);
             if (chown(s.path.c_str(), s.owner, s.owner) != 0) die("cannot give " + s.path + " to the app");
@@ -230,6 +235,20 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
     std::string last;
     for (const std::string& r : ro)
         if (r != home && (last.empty() || !under(r, last))) { bind(r, r, false); last = r; }
+    // the runtime is bound at its real paths: a link on the way to one in a hidden directory (~/apklayer -> ~/apklayer-m1, through which the JDK
+    // image's java and the class path are named) again, as on the host; before a mount point made through one would make it a directory
+    std::vector<std::string> named = shared;
+    for (const std::string& own : {l.appsDir, inst.stateDir, inst.root, inst.runtimeDir, inst.storageDir, inst.tmpDir()}) named.push_back(own);
+    for (const std::string& p : named)
+        for (size_t at = 1; at <= p.size() && p[0] == '/'; at++) {
+            if (at < p.size() && p[at] != '/') continue;
+            std::string prefix = p.substr(0, at);
+            struct stat st{};
+            char target[4096];
+            ssize_t n;
+            if (isHidden(prefix) && lstat(prefix.c_str(), &st) == 0 && S_ISLNK(st.st_mode) && (n = readlink(prefix.c_str(), target, sizeof target - 1)) > 0)
+                steps.push_back({Step::Link, prefix, -1, false, (uid_t)-1, std::string(target, n)});
+        }
     // what holds every instance's and app's data, where such a tree has it inside (a source tree with its tests' data): empty again,
     // then only this instance's parts
     for (const std::string& all : {join(realPath(l.dataHome), "apklayer"), join(realPath(l.stateHome), "apklayer"), runtime})
@@ -324,7 +343,9 @@ void enterInstanceUserNs() {
 
 void sandboxSpawn(const Layout& l, const Instance& inst, Spawn& spec, const std::string& package) {
     std::vector<std::string> argv = {l.cliBinary(), "--instance", inst.id, "sandbox-exec", package, "--"};
-    argv.insert(argv.end(), spec.argv.begin(), spec.argv.end());
+    // an app reads the instance's class data sharing archive but never writes it (code the other apps' JVMs map): the hub dumps it (HubHost)
+    for (const std::string& a : spec.argv)
+        if (package == "-" || (a != "-XX:+RecordDynamicDumpInfo" && a.rfind("-Dapklayer.cdsdump=", 0) != 0)) argv.push_back(a);
     spec.argv = argv;
     // not in sandbox-exec itself: the path layer would answer its own path lookups with Android's (/storage...); sandbox-exec hands it on
     if (spec.env.count("LD_PRELOAD")) { spec.env["APKLAYER_SANDBOX_PRELOAD"] = spec.env["LD_PRELOAD"]; spec.env.erase("LD_PRELOAD"); }

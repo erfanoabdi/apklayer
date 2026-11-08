@@ -51,6 +51,7 @@ public final class HubHost {
         Thread audio = new Thread(() -> HubAudioPermissions.watch(directory.packages()), "hub-audio-permissions");
         audio.setDaemon(true);
         audio.start();
+        if ("1".equals(System.getenv("APKLAYER_SANDBOX"))) CdsDump.afterStart();  // sandboxed apps cannot write the archive (cli/sandbox.cpp sandboxSpawn)
         String ready = System.getenv("APKLAYER_HUB_READY_FD");  // the launcher's pipe (cli runHub): it sets apklayer.hub.ready on this byte
         if (ready != null) {
             try (java.io.OutputStream out = new java.io.FileOutputStream("/proc/self/fd/" + ready)) { out.write('1'); }
