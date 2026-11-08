@@ -216,10 +216,16 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
             std::string target = realPath(join(dir, name));
             if (!target.empty() && !under(target, realPath(dir))) shared.push_back(isDir(target) ? target : dirName(target));
         }
+    // what holds every instance's and app's data: emptied below, then only this instance's parts; the runtime of a deb install lies inside
+    // (<data home>/apklayer/runtime) and is bound again after that
+    std::vector<std::string> all;
+    for (const std::string& a : {join(realPath(l.dataHome), "apklayer"), join(realPath(l.stateHome), "apklayer"), runtime})
+        if (isDir(a)) all.push_back(a);
+    auto inAll = [&](const std::string& p) { return std::any_of(all.begin(), all.end(), [&](const std::string& a) { return under(p, a); }); };
     std::vector<std::string> ro;
     for (const std::string& p : shared) {
         std::string r = realPath(p);
-        if (!r.empty() && exists(r) && isHidden(r) && !under(home, r)) ro.push_back(r);
+        if (!r.empty() && exists(r) && (isHidden(r) || inAll(r)) && !under(home, r)) ro.push_back(r);
     }
     std::sort(ro.begin(), ro.end());
     std::vector<Step> steps;
@@ -255,9 +261,13 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
         for (const std::string& s : shut) steps.push_back({Step::Tmpfs, s});
         ro.push_back(home);
     }
-    std::string last;
-    for (const std::string& r : ro)
-        if (r != home && (last.empty() || !under(r, last))) { bind(r, r, false); last = r; }
+    auto bindShared = [&](bool late) {
+        std::string last;
+        for (const std::string& r : ro)
+            if (r != home && inAll(r) == late && (last.empty() || !under(r, last))) { bind(r, r, false); last = r; }
+    };
+    bindShared(false);
+    std::vector<Step> lateLinks;
     // the runtime is bound at its real paths: a link on the way to one in a hidden directory (~/apklayer -> ~/apklayer-m1, through which the JDK
     // image's java and the class path are named) again, as on the host; before a mount point made through one would make it a directory
     std::vector<std::string> named = shared;
@@ -269,13 +279,14 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
             struct stat st{};
             char target[4096];
             ssize_t n;
-            if (isHidden(prefix) && lstat(prefix.c_str(), &st) == 0 && S_ISLNK(st.st_mode) && (n = readlink(prefix.c_str(), target, sizeof target - 1)) > 0)
-                steps.push_back({Step::Link, prefix, -1, false, (uid_t)-1, std::string(target, n)});
+            if ((isHidden(prefix) || inAll(prefix)) && lstat(prefix.c_str(), &st) == 0 && S_ISLNK(st.st_mode) && (n = readlink(prefix.c_str(), target, sizeof target - 1)) > 0)
+                (inAll(prefix) ? lateLinks : steps).push_back({Step::Link, prefix, -1, false, (uid_t)-1, std::string(target, n)});
         }
-    // what holds every instance's and app's data, where such a tree has it inside (a source tree with its tests' data): empty again,
-    // then only this instance's parts
-    for (const std::string& all : {join(realPath(l.dataHome), "apklayer"), join(realPath(l.stateHome), "apklayer"), runtime})
-        if (isDir(all)) steps.push_back({Step::Tmpfs, all});  // also where no hidden directory holds them (a data home on another disk)
+    // empty again where a bound tree has them inside (a source tree with its tests' data), also where no hidden directory holds them (a data
+    // home on another disk)
+    for (const std::string& a : all) steps.push_back({Step::Tmpfs, a});
+    bindShared(true);
+    steps.insert(steps.end(), lateLinks.begin(), lateLinks.end());
     for (const std::string& own : {l.appsDir, inst.stateDir, inst.root}) bind(realPath(own), own, false);
     std::string data = realPath(appDataDir(l, inst, package)), tmp = join(inst.tmpDir(), "sandbox-" + std::to_string(uid));
     makeDirs(tmp);
