@@ -148,7 +148,8 @@ run = ["python3 -u tests/vm/hub-smoke.py", "python3 -u tests/vm/binder.py bound"
 
 [providers]
 apps = ["hello-cp-provider", "hello-cp-client", "hello-cp-denied"]
-run = ["python3 -u tests/vm/hub.py providers basic", "python3 -u tests/vm/hub.py providers denied", "python3 -u tests/vm/hub.py providers death"]
+run = ["python3 -u tests/vm/hub.py providers basic", "python3 -u tests/vm/hub.py providers denied", "python3 -u tests/vm/hub.py providers death",
+       "python3 -u tests/vm/hub.py providers idle"]
 
 [services]
 apps = ["hello-svc-target", "hello-svc-caller", "hello-svc-late"]  # hello-svc-late: installed again by the late phase while a host runs

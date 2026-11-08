@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Cross-app tests through the instance hub, one phase per run: `hub.py <test> <phase>`. The test app prints `[<tag>] PASS|FAIL|KILL <pid>`;
-every JVM is owned and reaped. Tests: providers (basic denied death observe files grant), services (start selfstop sticky private filters own late oneway respawn rebind framework),
+every JVM is owned and reaped. Tests: providers (basic denied death observe files grant idle: basic, then the provider's host ends once idle), services (start selfstop sticky private filters own late oneway respawn rebind framework),
 activities (result explicit again private up), pendingintents (broadcast targets cancel forresult), notifications (click cancel muted channels), webview (probe). HUB_VERBOSE=1: all lines."""
 import os
 import selectors
@@ -29,7 +29,8 @@ if isinstance(package, dict): package = package.get(PHASE, 'hello.cpclient')
 shown = ('[%s]' % tag, '[apklayer-hub]') + shown
 jopts = '-Dapklayer.runms=%d' % (90000 if TEST == 'webview' else 60000)
 env = dict(ENV, APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400', APKLAYER_HOST_LIBS=HOST_LIBS,
-           APKLAYER_JOPTS=jopts + (' -D%s=%s' % (prop, PHASE) if prop else ' ' + os.environ.get('WV_JOPTS', '')))
+           APKLAYER_JOPTS=jopts + (' -D%s=%s' % (prop, 'basic' if PHASE == 'idle' else PHASE) if prop else ' ' + os.environ.get('WV_JOPTS', '')))
+if PHASE == 'idle': env['APKLAYER_JOPTS'] += ' -Dapklayer.hostidlems=4000'  # the hub's hosts get the launch's options (the hub inherits its environment)
 if TEST == 'webview':
     env.update(APKLAYER_WEBVIEW_PROVIDER='com.android.webview', APKLAYER_LOGCAT='1')
     if os.environ.get('WV_RTDEBUG'): env['APKLAYER_RUNTIME_DEBUG'] = '1'
@@ -121,6 +122,10 @@ try:
                     if TEST == 'webview':
                         capture('webview', package)  # what the WebView drew, for a look afterwards
                         own_data_dir(package)
+                    if PHASE == 'idle':  # no service, no call for 4 s: the provider's host ends on its own (ComponentHost), the client keeps running
+                        instance.wait_file(log / 'component-hello.cpprovider.log', 'component-host idle for 4000 ms', 30)
+                        hub_wait('host hello.cpprovider exited', 10)
+                        print('[cpc] provider host ended once idle', flush=True)
                     print('PASS %s %s' % (TEST, PHASE), flush=True)
                     raise SystemExit(0)
     import hangdump

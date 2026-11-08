@@ -26,12 +26,22 @@ import org.objectweb.asm.util.CheckClassAdapter;
  * finds them (classes.jar, then base.apk: cli/run.cpp). The only intended drop is a class a later DEX file defines again: the first
  * definition wins, as on ART and in dex2jvm. A class dex2jvm could not translate is missing too and fails the install: the jar is cached.
  *
+ * <p>With -Dapklayer.verify.classpath (the app JVM's framework, Robolectric and host jars) and -Dapklayer.verify.log (this JVM's
+ * -Xlog:class+init=info file) every class also goes through HotSpot's verifier ({@link VerifyBytecode}); the classes it refuses are written to
+ * {@code <classes.jar>.refused} (internal name, exception class, message; tab-separated) for dex2jvm to install as stubs that throw that error
+ * (dex2jvm.refusedClasses), exit 3.
+ *
  * <p>Usage: java -Xbootclasspath/a:Robolectric_all.jar -cp host-classes:dex2jvm.jar apklayer.tools.VerifyInstall <base.apk> <classes.jar>. Exit 1 on a failure.
+ * {@code --classes <jar>}: the verifier only.
  */
 public final class VerifyInstall {
     private static final int SHOWN = 10;
 
     public static void main(String[] args) throws Exception {
+        if (args.length == 2 && args[0].equals("--classes")) {  // classes no install saw (ShadowHostBaseDexClassLoader): the verifier only
+            bytecode(Path.of(args[1]), List.of(Path.of(args[1])));
+            return;
+        }
         long t0 = System.currentTimeMillis();
         Path apk = Path.of(args[0]), jar = Path.of(args[1]);
         List<String> problems = new ArrayList<>();
@@ -90,10 +100,30 @@ public final class VerifyInstall {
 
         System.out.println("[apklayer] verified " + checked + " classes (" + dexClasses.size() + " in the DEX files, " + duplicates + " defined twice), " + resources
                 + " java resources, " + providers + " service providers in " + (System.currentTimeMillis() - t0) + " ms");
-        if (problems.isEmpty()) return;
+        if (problems.isEmpty()) {
+            bytecode(jar, List.of(jar, apk));
+            return;
+        }
         for (String p : problems.subList(0, Math.min(SHOWN, problems.size()))) System.out.println("[apklayer] verify: " + p);
         if (problems.size() > SHOWN) System.out.println("[apklayer] verify: ... and " + (problems.size() - SHOWN) + " more");
         System.exit(1);
+    }
+
+    /** The HotSpot verification (with its two properties), exit 3 with {@code <jar>.refused} when it refuses classes. */
+    private static void bytecode(Path jar, List<Path> appJars) throws java.io.IOException {
+        String framework = System.getProperty("apklayer.verify.classpath"), log = System.getProperty("apklayer.verify.log");
+        if (framework == null || log == null) return;
+        long t1 = System.currentTimeMillis();
+        java.util.Map<String, String[]> refused = VerifyBytecode.refused(jar, appJars, framework, Path.of(log));
+        System.out.println("[apklayer] bytecode verified in " + (System.currentTimeMillis() - t1) + " ms, " + refused.size() + " classes refused");
+        if (refused.isEmpty()) return;
+        StringBuilder out = new StringBuilder();
+        for (var e : refused.entrySet()) {
+            out.append(e.getKey()).append('\t').append(e.getValue()[0]).append('\t').append(e.getValue()[1]).append('\n');
+            if (out.length() < 2000) System.out.println("[apklayer] verify: refused " + e.getKey() + ": " + e.getValue()[0] + " " + e.getValue()[1]);
+        }
+        java.nio.file.Files.writeString(Path.of(jar + ".refused"), out);
+        System.exit(3);
     }
 
     /** What a class loader serves from the APK: not the DEX, the Android resources and manifest, native libraries, assets or the signature. */

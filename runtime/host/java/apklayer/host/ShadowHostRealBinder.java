@@ -74,13 +74,18 @@ public class ShadowHostRealBinder {
      * runs; ActivityThread's ApplicationThread and Binder's own accounting ask getCallingUid before the stub's enforceInterface reads the work source.
      */
     @Implementation protected boolean execTransact(int code, long dataObj, long replyObj, int flags) {
+        IN_FLIGHT.incrementAndGet();
         Integer previous = HEADER_UID.get();
         HEADER_UID.set(Binder.getCallingPid() == 0 ? headerUid(dataObj) : null);
         try { return (Boolean) EXEC_TRANSACT.invoke(real, code, dataObj, replyObj, flags); }
         catch (java.lang.reflect.InvocationTargetException failed) { throw sneaky(failed.getCause()); }
         catch (IllegalAccessException impossible) { throw new IllegalStateException(impossible); }
-        finally { HEADER_UID.set(previous); }
+        finally { HEADER_UID.set(previous); LAST_TRANSACTION = System.nanoTime(); IN_FLIGHT.decrementAndGet(); }
     }
+
+    /** Incoming transactions being served, and when the last one ended: a component host with neither for a while is idle (ComponentHost). */
+    static final java.util.concurrent.atomic.AtomicInteger IN_FLIGHT = new java.util.concurrent.atomic.AtomicInteger();
+    static volatile long LAST_TRANSACTION = System.nanoTime();
 
     // looked up once: this runs for every transaction a process gets (Shadow.directlyOn looks the method up on each call)
     private static final java.lang.reflect.Method EXEC_TRANSACT = accessible(Binder.class, Shadow.directMethodName("android.os.Binder", "execTransact"), int.class, long.class, long.class, int.class);
