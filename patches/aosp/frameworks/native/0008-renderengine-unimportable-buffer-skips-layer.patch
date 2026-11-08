@@ -1,0 +1,59 @@
+From: apklayer
+Subject: [PATCH] renderengine: a client buffer the GPU cannot import skips its layer
+
+apklayer patch (docs/PATCHES.md). A client layer's buffer that the host driver cannot import as a texture (a format, modifier or
+usage it refuses; an NVIDIA tester's Unity games aborted SurfaceFlinger, which ended the whole stack) is logged and its layer not
+drawn, instead of LOG_ALWAYS_FATAL. Output buffers and the other fatal paths stay as they are.
+Rebuild: `m libapklayer_surfaceflinger`. Against frameworks/native (REVISION), after 0001-0007. Apply: patches/apply aosp <LineageOS tree>.
+---
+--- a/libs/renderengine/skia/AutoBackendTexture.cpp
++++ b/libs/renderengine/skia/AutoBackendTexture.cpp
+@@ -66,6 +66,7 @@
+ 
+     sk_sp<SkImage> image =
+             mBackendTexture->makeImage(alphaType, dataspace, releaseImageProc, this, options);
++    if (!image) return nullptr;  // apklayer patch: a buffer that was not imported (no releaseProc will run)
+     // The following ref will be counteracted by releaseProc, when SkImage is discarded.
+     ref();
+ 
+--- a/libs/renderengine/skia/SkiaRenderEngine.cpp
++++ b/libs/renderengine/skia/SkiaRenderEngine.cpp
+@@ -1411,6 +1411,10 @@
+                                                               : kUnpremul_SkAlphaType;
+             sk_sp<SkImage> image =
+                     imageTextureRef->makeImage(layerDataspace, alphaType, colorSpaceOptions);
++            if (!image) {  // apklayer patch: a buffer the GPU could not import: this layer is not drawn
++                ALOGE("drawLayers: skipping a layer whose buffer could not be imported");
++                continue;
++            }
+             // If the image could not be created in such a way to respect item.isOpaque, then we
+             // need to use a workaround where we treat the image as premultiplied and apply
+             // SkBlendMode::kPlus with opaque black.
+--- a/libs/renderengine/skia/compat/GaneshBackendTexture.cpp
++++ b/libs/renderengine/skia/compat/GaneshBackendTexture.cpp
+@@ -75,10 +75,12 @@
+     }
+ 
+     if (!mBackendTexture.isValid() || !desc.width || !desc.height) {
+-        LOG_ALWAYS_FATAL("Failed to create a valid texture. [%p]:[%d,%d] isProtected:%d "
+-                         "isWriteable:%d format:%d",
+-                         this, desc.width, desc.height, createProtectedImage, isOutputBuffer,
+-                         desc.format);
++        // apklayer patch: a buffer the host GPU driver cannot import (format, modifier, usage) fails
++        // its layer (makeImage returns null and drawLayers skips it) instead of aborting SurfaceFlinger
++        ALOGE("Failed to create a valid texture. [%p]:[%d,%d] isProtected:%d "
++              "isWriteable:%d format:%d usage:0x%llx",
++              this, desc.width, desc.height, createProtectedImage, isOutputBuffer,
++              desc.format, static_cast<unsigned long long>(desc.usage));
+     }
+ }
+ 
+@@ -95,6 +97,8 @@
+                                                ftl::Flags<ColorSpaceOptions> options) {
+     if (mBackendTexture.isValid()) {
+         mUpdateProc(mImageCtx, mGrContext.get());
++    } else {
++        return nullptr;  // apklayer patch: not imported (see the constructor)
+     }
+ 
+     SkColorType colorType = internalColorType();
