@@ -73,6 +73,14 @@ void writeDesktop(const Layout& l, const std::string& pkg) {
     sh({"xdg-mime", "default", "apklayer-open-apk.desktop", "application/vnd.android.package-archive"});
 }
 
+void refreshDesktops(const Layout& l) {
+    // an entry of an earlier install whose CLI is gone (a tarball in /opt replaced by the RPM: the launcher's icon opened nothing) is written again
+    for (const std::string& pkg : listDir(l.appsDir)) {
+        std::string exec = property(join(l.dataHome, "applications/apklayer-" + pkg + ".desktop"), "Exec");
+        if (!exec.empty() && !exists(exec.substr(0, exec.find(' '))) && exists(infoFile(l, pkg))) writeDesktop(l, pkg);
+    }
+}
+
 int launcherCommand(const Layout& l, const std::string& action, const std::string& pkg) {
     if (action != "show" && action != "hide") die("launcher show|hide <package>");
     std::string info = infoFile(l, pkg);
