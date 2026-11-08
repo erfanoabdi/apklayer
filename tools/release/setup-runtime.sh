@@ -27,4 +27,5 @@ for j in "$native"/aosp/android-all/*.jar; do  # the SDK provider names the jar 
     "${APKLAYER_JAVA:-java}" -cp "$native/native-runtime.jar:$native/aosp/host-classes.jar:$native/aosp/sim-classes:$native/aosp/Robolectric_all.jar" apklayer.tools.PreInstrument "$j" "$out/$(basename "$j")"
     done_jar="$j"
 done
+sh "$share/tools/jdk-image.sh" "${APKLAYER_JAVA:-java}" "$native" || echo "apklayer: no JDK image (class data sharing) for the runtime" >&2
 touch -r "$half/native-runtime.jar" "$native/.setup"

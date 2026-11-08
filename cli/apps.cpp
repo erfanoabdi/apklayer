@@ -100,7 +100,9 @@ void ensureUid(const Layout& l, const std::string& dir) {
 
 std::string hostClasspath(const Layout& l) {  // no app classes: they get a loader of their own (apklayer.host.AppClassLoader)
     const std::string& n = l.native;
-    return n + "/native-runtime.jar:" + l.hostClasses() + ":" + n + "/aosp/sim-classes:" + n + "/aosp/Robolectric_all.jar:" + l.deps +
+    // the classes' jar when there is one (tools/release/jdk-image.sh): a class data sharing dump exits the JVM on a non-empty directory here
+    std::string sim = n + (exists(n + "/aosp/sim-classes.jar") ? "/aosp/sim-classes.jar" : "/aosp/sim-classes");
+    return n + "/native-runtime.jar:" + l.hostClasses() + ":" + sim + ":" + n + "/aosp/Robolectric_all.jar:" + l.deps +
            "/android-stub.jar:" + l.dex2jvmJar();
 }
 
