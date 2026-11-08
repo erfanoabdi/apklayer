@@ -4,6 +4,6 @@ cc_library_shared {
     srcs: ["Driver.cpp"],
     header_libs: ["hwvulkan_headers", "vulkan_headers", "libapklayer_gralloc_common_headers"],
     shared_libs: ["libcutils", "liblog", "libdl"],
-    compile_multilib: "both",  // the 32-bit app process loads it too (docs/PLAN.md "apps built for another CPU" 2(a))
+    compile_multilib: "64",  // not yet 32-bit: arm32 Vulkan entry points are aapcs-vfp (VKAPI_ATTR) while the 32-bit process's host side is soft-float
     cflags: ["-Wall", "-Werror", "-Wno-missing-field-initializers"],
 }

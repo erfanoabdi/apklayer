@@ -100,7 +100,7 @@ __asm__(
     ".balign 8\n1: .quad 0\n"
     "apklayer_critical_tpl_end:\n");
 #elif defined(__arm__)
-/* AAPCS (hard float, the 32-bit app process): the JVM's call is (env, clazz, a1 ... an) in r0-r3 and then the stack; the library wants (a1 ... an).
+/* AAPCS (the 32-bit app process: base standard, floats in core registers as Android's armeabi-v7a): the JVM's call is (env, clazz, a1 ... an) in r0-r3 and then the stack; the library wants (a1 ... an).
  * Shifting the core argument sequence (r0-r3, then the stack words) down two words keeps every 64-bit argument's even alignment, so the
  * registers shift by two, the first two stack words go into r2 and r3, and the stack words after them move down two slots (ten are copied).
  * Assembled as ARM code (the copy's address is called without the Thumb bit); its last word holds the target's address. */

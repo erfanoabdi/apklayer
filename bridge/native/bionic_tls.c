@@ -7,21 +7,22 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#if defined(__aarch64__)
+#if defined(__aarch64__) || defined(__arm__)  /* 32-bit ARM (the 32-bit app process): the same variant I layout, slots of 4 bytes from tp+8 */
+#define POISON ((uintptr_t)0x5555555555555555ull)
 _Thread_local uintptr_t apklayer_bionic_tls[] = {
     0,                  /* tp+2  TLS_SLOT_APP: free for apps; Go's runtime keeps its g here and takes any other value for a goroutine (a Go signal handler on a JVM thread then crashed on 0x5555...) */
-    0x5555555555555555, /* tp+3  TLS_SLOT_OPENGL */
+    POISON,             /* tp+3  TLS_SLOT_OPENGL */
     0,                  /* tp+4  TLS_SLOT_OPENGL_API: Android's GLES 1 trampolines return on null (no context yet); our libEGL stores the hook table here */
-    0x5555555555555555, /* tp+5  TLS_SLOT_STACK_GUARD (constant, as on ATL) */
-    0x5555555555555555, /* tp+6  TLS_SLOT_SANITIZER */
-    0x5555555555555555, /* tp+7  TLS_SLOT_ART_THREAD_SELF */
+    POISON,             /* tp+5  TLS_SLOT_STACK_GUARD (constant, as on ATL) */
+    POISON,             /* tp+6  TLS_SLOT_SANITIZER */
+    POISON,             /* tp+7  TLS_SLOT_ART_THREAD_SELF */
 };
 
 __attribute__((constructor)) static void check_bionic_tls(void)
 {
     uintptr_t tp = (uintptr_t)__builtin_thread_pointer(), at = (uintptr_t)apklayer_bionic_tls;
-    if (at != tp + 16)
-        fprintf(stderr, "[bionic-tls] slots are at tp%+ld, bionic expects tp+16: another TLS module is loaded before this library "
+    if (at != tp + 2 * sizeof(uintptr_t))
+        fprintf(stderr, "[bionic-tls] slots are at tp%+ld, bionic expects slot 2: another TLS module is loaded before this library "
                         "(put libapklayer-preload.so first in LD_PRELOAD)\n", (long)(at - tp));
 }
 #else
