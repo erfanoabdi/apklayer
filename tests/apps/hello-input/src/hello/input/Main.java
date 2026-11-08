@@ -19,6 +19,22 @@ public class Main extends Activity {
         return super.dispatchTouchEvent(e);
     }
 
+    /** tests/vm/alt-ime.py: a dialog with FLAG_ALT_FOCUSABLE_IM takes keys into its field, but the input method stays off it (WindowManagerService's IME target). */
+    private void altFocusableIm() {
+        android.app.Dialog dialog = new android.app.Dialog(this);
+        EditText alt = new EditText(this);
+        alt.addTextChangedListener(new TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void onTextChanged(CharSequence s, int start, int before, int count) { System.out.println("[hello-input] alt text=" + s); }
+            public void afterTextChanged(Editable s) {}
+        });
+        dialog.setContentView(alt);
+        dialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
+        dialog.show();
+        alt.requestFocus();
+        System.out.println("[hello-input] alt dialog shown");
+    }
+
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         ClipboardManager clipboard = getSystemService(ClipboardManager.class);
@@ -44,6 +60,7 @@ public class Main extends Activity {
             public void onDestroyActionMode(android.view.ActionMode mode) { System.out.println("[hello-input] action mode finished"); }
         };
         field.setCustomSelectionActionModeCallback(toolbar);
+        field.setOnLongClickListener(v -> { System.out.println("[hello-input] long press"); return false; });  // false: the editor's word selection goes on
         field.setCustomInsertionActionModeCallback(toolbar);
         float dp = getResources().getDisplayMetrics().density;  // heights in dp: the tests tap logical (dp) coordinates at any host scale
         layout.addView(field, new LinearLayout.LayoutParams(-1, (int) (80 * dp)));
@@ -76,6 +93,7 @@ public class Main extends Activity {
         setContentView(layout);
         field.requestFocus();
         if (System.getProperty("hello.covered") != null) Covered.coverWithDialog(this);
+        if (System.getProperty("hello.altim") != null) field.postDelayed(this::altFocusableIm, 1000);
         if (System.getProperty("hello.sheet") != null) field.postDelayed(() -> Sheet.show(this, 1), 1500);
         if (System.getProperty("hello.magnifier") != null) {
             field.setText("magnify me");

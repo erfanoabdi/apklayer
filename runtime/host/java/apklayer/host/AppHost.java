@@ -75,6 +75,12 @@ public final class AppHost implements Runnable {
         // native activity initialization; the paused Java queue alone does not.
         if (describe == null && NativeLooper.prepareForThread() == 0)
             throw new IllegalStateException("Cannot prepare the main native looper");
+        // ActivityThread's launch transaction is queued right behind bindApplication, before Application.onCreate posts anything: its message first,
+        // filled in once the window is set up (beforeFirstLaunch runs ahead of it, as bindApplication's configuration does)
+        if (describe == null) {
+            synchronized (AppHost.class) { firstLaunchQueued = true; }
+            new Handler(Looper.getMainLooper()).post(AppHost::firstLaunchMessage);
+        }
         Application app = RuntimeEnvironment.getApplication(); // created here (lazy), on persistent dirs
         if (describe != null) {
             AppMetadata.describe(app, describe);
@@ -188,13 +194,17 @@ public final class AppHost implements Runnable {
         // a message, as Android's launch transaction is: an app whose Application.onCreate posted its own Looper.loop() (a crash guard: SimpleX) runs it from there
         final Intent first = incoming;
         final int moveX = width, moveY = height;
-        new android.os.Handler(Looper.getMainLooper()).post(() -> {
+        Runnable launch = () -> {
             task.launchFirst(first != null ? first : AppMetadata.launcherIntent(app), first != null);
             HubActivityClient.setStarter(task::startForHub);
             // Like Simulator.postMotionEvent: an off-screen move so the first frame is drawn.
             input.inject(MotionEvent.obtain(0, SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE, moveX, moveY, 0));
             launched = true;
-        });
+        };
+        synchronized (AppHost.class) {
+            if (firstLaunchRan) new Handler(Looper.getMainLooper()).post(launch);  // something ran the looper before the window was ready
+            else firstLaunch = launch;
+        }
         loop(shell);
     }
 
@@ -230,6 +240,24 @@ public final class AppHost implements Runnable {
         looper.idle();  // the first launch
         while (step(false)) {}
         end();
+    }
+
+    private static Runnable firstLaunch;
+    private static boolean firstLaunchQueued, firstLaunchRan;
+    private static final List<Runnable> beforeFirstLaunch = new ArrayList<>();
+
+    /** Main-thread work that must come before the first launch (the hub's configuration: bindApplication's); otherwise (after it, a component host) a message. */
+    static void beforeFirstLaunch(Runnable work) {
+        synchronized (AppHost.class) { if (firstLaunchQueued && !firstLaunchRan) { beforeFirstLaunch.add(work); return; } }
+        new Handler(Looper.getMainLooper()).post(work);
+    }
+
+    private static void firstLaunchMessage() {
+        List<Runnable> before;
+        Runnable launch;
+        synchronized (AppHost.class) { firstLaunchRan = true; before = new ArrayList<>(beforeFirstLaunch); beforeFirstLaunch.clear(); launch = firstLaunch; firstLaunch = null; }
+        for (Runnable work : before) work.run();
+        if (launch != null) launch.run();
     }
 
     private ShadowPausedLooper looper;
@@ -297,6 +325,7 @@ public final class AppHost implements Runnable {
         }
         if (TRACE_ROOTS && now - lastRootTrace > 1_000_000_000L) { lastRootTrace = now; HostWindows.traceRoots(); }
         task.followNavigation();
+        if (!task.stopped.isEmpty()) HostWindows.hideAddedToStopped(task.stopped);
         if (stack.isEmpty()) return true;  // the grace period after a launcher activity finished itself
         followOrientation();
         text.followTextInput();

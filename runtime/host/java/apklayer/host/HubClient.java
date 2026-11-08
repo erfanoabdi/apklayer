@@ -31,8 +31,8 @@ public final class HubClient {
         registerPackages(context);
         HubProviders_registerRemote(context);
         android.os.Bundle settings = HubProtocol.call(found, HubProtocol.DESCRIPTOR, HubProtocol.HOST_SETTINGS, request -> {}, reply -> reply.readBundle(HubClient.class.getClassLoader()));
-        // a message (an early attachment runs inside the application's creation), queued before the first launch's (AppHost.run)
-        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> AppHost.configurationChanged(HostConfiguration.update(settings)));
+        // on the main thread later (an early attachment runs inside the application's creation), ahead of the first launch (AppHost.run)
+        AppHost.beforeFirstLaunch(() -> AppHost.configurationChanged(HostConfiguration.update(settings)));
         HostInputMethods.install(context,HubProtocol.call(found, HubProtocol.DESCRIPTOR, HubProtocol.INPUT_METHODS, request -> {}, reply -> reply.readString()));
         System.out.println("[apklayer] hub registered " + context.getPackageName() + " pid=" + pid);
     }
@@ -166,6 +166,10 @@ public final class HubClient {
         HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.START_INPUT, request -> { request.writeStrongBinder(remoteInputConnection); request.writeTypedObject(editor, 0); }, reply -> null);
     }
     void finishInput() { HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.FINISH_INPUT, request -> {}, reply -> null); }
+    /** This package's notification channels in the hub (HubNotificationChannels): {op, arguments} -> what read takes from the reply. */
+    <T> T notificationChannels(int op, java.util.function.Consumer<android.os.Parcel> write, java.util.function.Function<android.os.Parcel, T> read) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.NOTIFY_CHANNELS, request -> { request.writeInt(op); write.accept(request); }, read);
+    }
     void cancelNotification(String tag, int id, boolean all) {
         HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.NOTIFY_CANCEL, request -> { request.writeString(tag); request.writeInt(id); request.writeBoolean(all); }, reply -> null);
     }

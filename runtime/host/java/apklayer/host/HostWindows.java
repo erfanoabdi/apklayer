@@ -279,7 +279,9 @@ final class HostWindows {
         Object wmg = android.view.WindowManagerGlobal.getInstance();
         List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
         View root = topWindow(views, -1, -1);
-        View f = root == null ? null : root.findFocus();
+        // the IME target, as WindowManagerService's: a focusable window with FLAG_ALT_FOCUSABLE_IM takes keys but not the input method
+        if (root == null || root.getLayoutParams() instanceof android.view.WindowManager.LayoutParams lp && !android.view.WindowManager.LayoutParams.mayUseInputMethod(lp.flags)) return null;
+        View f = root.findFocus();
         return f != null && f.onCheckIsTextEditor() ? f : null;
     }
 
@@ -333,8 +335,8 @@ final class HostWindows {
      * 0017) and stay out of the screen; the stopped activity's fragments are stopped too and must not see taps. Shown again: only those hidden here.
      */
     static void setAttachedVisible(Activity activity, boolean visible) {
-        List<View> hidden = hiddenWith.remove(activity);
         if (visible) {
+            List<View> hidden = hiddenWith.remove(activity);
             if (hidden != null) for (View v : hidden) if (v.getVisibility() == View.INVISIBLE) v.setVisibility(View.VISIBLE);
             return;
         }
@@ -353,7 +355,21 @@ final class HostWindows {
             if (v.getWindowToken() != null) tokens.add(v.getWindowToken());
             if (v.getVisibility() == View.VISIBLE) { v.setVisibility(View.INVISIBLE); now.add(v); }
         }
-        if (!now.isEmpty()) hiddenWith.put(activity, now);
+        if (!now.isEmpty()) hiddenWith.computeIfAbsent(activity, a -> new ArrayList<>()).addAll(now);
+    }
+
+    private static View lastAdded;
+    private static int windowCount;
+
+    /** A window added for a stopped activity (a dialog shown after onStop) is hidden with it: WindowManagerService adds it without ADD_FLAG_APP_VISIBLE. */
+    static void hideAddedToStopped(java.util.Collection<Activity> stopped) {
+        List<View> views = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mViews");
+        View last = views.isEmpty() ? null : views.get(views.size() - 1);
+        if (views.size() == windowCount && last == lastAdded) return;
+        boolean added = views.size() > windowCount || last != lastAdded;
+        windowCount = views.size();
+        lastAdded = last;
+        if (added) for (Activity activity : stopped) setAttachedVisible(activity, false);
     }
 
     /** ViewRootImpl#windowFocusChanged and the top-resumed state, as the window manager reports them for the top window. */

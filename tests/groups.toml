@@ -177,7 +177,7 @@ run = ["python3 -u tests/vm/hub.py pendingintents broadcast", "python3 -u tests/
 
 [notifications]
 apps = ["hello-nt-poster"]
-run = ["python3 -u tests/vm/hub.py notifications click", "python3 -u tests/vm/hub.py notifications cancel", "python3 -u tests/vm/hub.py notifications muted"]
+run = ["python3 -u tests/vm/hub.py notifications click", "python3 -u tests/vm/hub.py notifications cancel", "python3 -u tests/vm/hub.py notifications muted", "python3 -u tests/vm/hub.py notifications channels"]
 
 [broadcasts]
 apps = ["hello-bc-receiver", "hello-bc-sender", "hello-bc-denied"]
@@ -263,7 +263,7 @@ run = ["python3 -u tests/vm/vulkan-present.py"]
 
 [input]
 apps = ["hello-input", "hello-system"]  # hello.system's Ime: the Android input method bound to hello.input's field (ime-bind)
-run = ["python3 -u tests/vm/input-inject.py", "python3 -u tests/vm/stopped-windows.py", "python3 -u tests/vm/ime-bind.py", "python3 -u tests/vm/bottom-sheet.py", "python3 -u tests/vm/logs.py"]
+run = ["python3 -u tests/vm/input-inject.py", "python3 -u tests/vm/stopped-windows.py", "python3 -u tests/vm/alt-ime.py", "python3 -u tests/vm/ime-bind.py", "python3 -u tests/vm/bottom-sheet.py", "python3 -u tests/vm/logs.py"]
 
 [magnifier]
 apps = ["hello-input"]

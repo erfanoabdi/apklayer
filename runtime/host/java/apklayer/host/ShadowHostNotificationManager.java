@@ -9,7 +9,11 @@ import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
 import org.robolectric.shadows.ShadowNotificationManager;
 
-/** With the hub, the app's notifications also go to the hub, which owns them for every app and shows them on the desktop. The in-process state stays for the app's own queries. */
+/**
+ * With the hub, the app's notifications also go to the hub, which owns them for every app and shows them on the desktop. The in-process state stays for the app's own queries.
+ * Notification channels are the hub's, per package (HubNotificationChannels): every process of the app sees the same ones, and they outlive the process.
+ * shortcut: channel groups stay per process (Robolectric's); move them to the hub when an app needs them across processes.
+ */
 @Implements(value = NotificationManager.class, isInAndroidSdk = false)
 public class ShadowHostNotificationManager extends ShadowNotificationManager {
     private static boolean hub() { return HubClient.connected(); }
@@ -30,6 +34,29 @@ public class ShadowHostNotificationManager extends ShadowNotificationManager {
         Context context = RuntimeEnvironment.getApplication();
         NotificationChannel channel = notification.getChannelId() == null ? null : getNotificationChannel(notification.getChannelId());
         HubClient.current().postNotification(context.getPackageName(), tag, id, notification, channel == null ? NotificationManager.IMPORTANCE_DEFAULT : channel.getImportance());
+    }
+
+    @Implementation @Override protected void createNotificationChannel(NotificationChannel channel) { createNotificationChannels(java.util.List.of(channel)); }
+
+    @Implementation @Override protected void createNotificationChannels(java.util.List<NotificationChannel> channels) {
+        if (!hub()) { super.createNotificationChannels(channels); return; }
+        for (NotificationChannel channel : channels) if (channel.getId() == null) throw new IllegalArgumentException("Channel id is null");  // NotificationManager's own check
+        HubClient.current().notificationChannels(HubNotificationChannels.CREATE, request -> request.writeTypedList(channels), reply -> null);
+    }
+
+    @Implementation @Override protected NotificationChannel getNotificationChannel(String id) {
+        if (!hub()) return super.getNotificationChannel(id);
+        return HubClient.current().notificationChannels(HubNotificationChannels.GET, request -> request.writeString(id), reply -> reply.readTypedObject(NotificationChannel.CREATOR));
+    }
+
+    @Implementation @Override public java.util.List<NotificationChannel> getNotificationChannels() {
+        if (!hub()) return super.getNotificationChannels();
+        return HubClient.current().notificationChannels(HubNotificationChannels.LIST, request -> {}, reply -> reply.createTypedArrayList(NotificationChannel.CREATOR));
+    }
+
+    @Implementation @Override protected void deleteNotificationChannel(String id) {
+        if (!hub()) { super.deleteNotificationChannel(id); return; }
+        HubClient.current().notificationChannels(HubNotificationChannels.DELETE, request -> request.writeString(id), reply -> null);
     }
 
     @Implementation @Override protected void cancel(int id) { cancel(null, id); }

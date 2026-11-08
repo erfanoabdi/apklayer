@@ -321,6 +321,7 @@ void uninstallApp(const Layout& l, const std::string& package) {
         std::string data = join(l.dataHome, "apklayer/" + instance + "/app-data/" + package);
         if (isDir(data)) { reclaim(data); removeTree(data); }  // reclaim: files the sandbox's app uid owns
         setHomeAccess(join(l.dataHome, "apklayer/" + instance), package, false);
+        unlink(join(l.dataHome, "apklayer/" + instance + "/notification-channels/" + package).c_str());  // the hub's channels of the app (HubNotificationChannels)
         // and its permission answers (cli/manage.cpp): a reinstall starts as a new install, asked again, as on Android
         for (const char* name : {"/permissions-revoked", "/permissions-granted"}) {
             std::string answers = join(l.dataHome, "apklayer/" + instance + name), kept;

@@ -20,7 +20,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Posts a notification whose content, action and delete intents are broadcasts to this app; the test driver clicks on the desktop popup (phase click),
- * or the app cancels it (cancel), or the user turned the app's notifications off (muted). Phase from -Dhello.nt.
+ * or the app cancels it (cancel), or the user turned the app's notifications off (muted); channels: the app's channels as its other process sees them.
+ * Phase from -Dhello.nt.
  */
 public class Main extends Activity {
     private final Set<String> seen = ConcurrentHashMap.newKeySet();
@@ -29,12 +30,37 @@ public class Main extends Activity {
         return PendingIntent.getBroadcast(this, code, new Intent(action).setPackage(getPackageName()), PendingIntent.FLAG_IMMUTABLE);
     }
 
+    /** Channels are per package (NotificationManagerService): a create again renames and only lowers the importance, a deleted one is gone, in every process. */
+    private void channels() {
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        manager.createNotificationChannel(new NotificationChannel("kept", "Kept", NotificationManager.IMPORTANCE_HIGH));
+        manager.createNotificationChannel(new NotificationChannel("kept", "Kept 2", NotificationManager.IMPORTANCE_LOW));
+        manager.createNotificationChannel(new NotificationChannel("kept", "Kept 2", NotificationManager.IMPORTANCE_HIGH));  // raising it is the user's, not the app's
+        manager.createNotificationChannel(new NotificationChannel("gone", "Gone", NotificationManager.IMPORTANCE_DEFAULT));
+        manager.deleteNotificationChannel("gone");
+        bindService(new Intent(this, Probe.class), new android.content.ServiceConnection() {
+            @Override public void onServiceConnected(android.content.ComponentName name, android.os.IBinder binder) {
+                new Thread(() -> {
+                    android.os.Parcel data = android.os.Parcel.obtain(), reply = android.os.Parcel.obtain();
+                    try {
+                        binder.transact(1, data, reply, 0);
+                        String seen = reply.readString(), want = "kept Kept 2 " + NotificationManager.IMPORTANCE_LOW + ", gone false, listed true";
+                        System.out.println(seen.equals(want) ? "[nt] PASS channels: the other process sees " + seen : "[nt] FAIL channels: the other process sees " + seen + ", not " + want);
+                    } catch (android.os.RemoteException e) { System.out.println("[nt] FAIL channels: " + e); }
+                    finally { data.recycle(); reply.recycle(); }
+                }).start();
+            }
+            @Override public void onServiceDisconnected(android.content.ComponentName name) {}
+        }, BIND_AUTO_CREATE);
+    }
+
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         TextView view = new TextView(this);
         view.setText("nt poster");
         setContentView(view);
         String phase = System.getProperty("hello.nt", "click");
+        if (phase.equals("channels")) { channels(); return; }
         BroadcastReceiver receiver = new BroadcastReceiver() {
             @Override public void onReceive(Context context, Intent intent) {
                 seen.add(intent.getAction());
