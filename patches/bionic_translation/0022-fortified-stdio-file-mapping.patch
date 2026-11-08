@@ -28,7 +28,7 @@ index 8660476..eecf214 100644
  		abort();
  	}
 -	return fgets(dest, supplied_size, stream);
-+	return fgets(dest, supplied_size, bionic_file_to_glibc_file(stream)); /* apklayer patch: see scripts/patch-bionic-translation.sh step 17 */
++	return fgets(dest, supplied_size, bionic_file_to_glibc_file(stream)); /* apklayer patch: see docs/PATCHES.md */
  }
  
  /* these don't exist in glibc either, which also means that by definition their ABI is not copied from glibc */
@@ -49,7 +49,7 @@ index 8660476..eecf214 100644
 +	return fread(buf, size, count, bionic_file_to_glibc_file(stream));
 +}
 +
-+/* apklayer patch: see scripts/patch-bionic-translation.sh step 17 */
++/* apklayer patch: see docs/PATCHES.md */
 +int bionic___vfprintf_chk(FILE *stream, int flag, const char *format, va_list ap)
 +{
 +	return __vfprintf_chk(bionic_file_to_glibc_file(stream), flag, format, ap);

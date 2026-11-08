@@ -356,15 +356,32 @@ final class HubAccounts extends IAccountManager.Stub {
     @Override public void isCredentialsUpdateSuggested(IAccountManagerResponse response, Account account, String statusToken) {
         session(account.type, response, (a, r) -> a.isCredentialsUpdateSuggested(r, account, statusToken), null);
     }
-    /** Limit: the required features are not checked with the authenticator (its hasFeatures per account): every visible account of the type is returned. */
+    /** The visible accounts of the type that have the features: the authenticator's hasFeatures for each (AccountManagerService.GetAccountsByTypeAndFeatureSession). */
     @Override public void getAccountsByFeatures(IAccountManagerResponse response, String accountType, String[] features, String opPackageName) {
-        Bundle result = new Bundle();
-        result.putParcelableArray(AccountManager.KEY_ACCOUNTS, visible(accountType, caller().name(), false));
-        reply(response, result);
+        HubDirectory.Peer caller = caller();
+        withFeatures(caller, accountType, visible(accountType, caller.name(), false), features, 0, new java.util.ArrayList<>(), response, found -> {
+            Bundle result = new Bundle();
+            result.putParcelableArray(AccountManager.KEY_ACCOUNTS, found);
+            reply(response, result);
+        });
     }
-    /** The one account of the type, or none (Android shows a chooser for several: the first is taken here). */
+    /** The one account of the type with the features, or none (Android shows a chooser for several: the first is taken here). */
     @Override public void getAccountByTypeAndFeatures(IAccountManagerResponse response, String accountType, String[] features, String opPackageName) {
-        Account[] accounts = visible(accountType, caller().name(), false);
-        reply(response, accounts.length == 0 ? new Bundle() : accountResult(accounts[0]));
+        HubDirectory.Peer caller = caller();
+        withFeatures(caller, accountType, visible(accountType, caller.name(), false), features, 0, new java.util.ArrayList<>(), response,
+                found -> reply(response, found.length == 0 ? new Bundle() : accountResult(found[0])));
+    }
+    /** From account {@code i} on, those whose authenticator answers hasFeatures true join {@code found}; then {@code done}. No features: every account. */
+    private void withFeatures(HubDirectory.Peer caller, String type, Account[] accounts, String[] features, int i, java.util.List<Account> found,
+            IAccountManagerResponse response, java.util.function.Consumer<Account[]> done) {
+        if (features == null || features.length == 0) { done.accept(accounts); return; }
+        if (i == accounts.length) { done.accept(found.toArray(new Account[0])); return; }
+        session(caller, type, new IAccountManagerResponse.Stub() {
+            @Override public void onResult(Bundle result) {
+                if (result != null && result.getBoolean(AccountManager.KEY_BOOLEAN_RESULT)) found.add(accounts[i]);
+                withFeatures(caller, type, accounts, features, i + 1, found, response, done);
+            }
+            @Override public void onError(int code, String message) { error(response, code, message); }
+        }, (a, r) -> a.hasFeatures(r, accounts[i], features), null);
     }
 }

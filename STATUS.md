@@ -43,6 +43,6 @@ Mac.apk, Robolectric, android_translation_layer (all in `~/GitHub`), Husk (GPL, 
 - `ro.*` properties are write-once: every stack start gets a fresh store.
 - Process lookup: Android processes carry their process name in `/proc/<pid>/cmdline`; find an instance's processes by `APKLAYER_INSTANCE` in `/proc/<pid>/environ`
   or the recorded `run.*` pids, never by name. Never `pkill -f` a pattern in your own command line. Do not attach `jcmd` to app JVMs (it ended Fennec).
-- After an edited bionic_translation patch: `meson subprojects update --reset bionic_translation`, then ninja and install (a new patch is picked up by ninja itself).
+- After an edited bionic_translation patch: ninja and install (the reconfigure resets the subproject when the edited series no longer matches; a new patch is picked up by ninja itself).
 - Files deleted in git stay on the VMs after a push: remove them there by name. macOS tar: `COPYFILE_DISABLE=1`, `tar -c -f - --no-xattrs`.
 - dex2jvm needs `android-all` on its own classpath; its output needs `@DoNotInstrument` (`DenyInstrument`). gcc 15 makes implicit declarations errors.

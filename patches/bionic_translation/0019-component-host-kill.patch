@@ -18,7 +18,7 @@ index 86f2006..cd32ce1 100644
  	return syscall(SYS_gettid);
  }
  
-+int bionic_kill(pid_t pid, int sig) /* apklayer patch: see scripts/patch-bionic-translation.sh step 14 */
++int bionic_kill(pid_t pid, int sig) /* apklayer patch: see docs/PATCHES.md */
 +{
 +	if (pid != getpid() && getenv("APKLAYER_COMPONENT_HOST")) {
 +		errno = EPERM;

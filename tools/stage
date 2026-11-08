@@ -55,6 +55,11 @@ stage_root() {
     # the javac output of each library module (architecture independent; the device's jar there is DEX)
     jars="$tree/out/soong/.intermediates/external/apache-http/org.apache.http.legacy.impl/android_common/repackaged-jarjar/javac/org.apache.http.legacy.jar"
     for m in base mock runner; do jars="$jars $tree/out/soong/.intermediates/frameworks/base/test-$m/android.test.$m.impl/android_common/repackaged-jarjar/javac/android.test.$m.jar"; done
+    # the platform's other optional libraries (etc/permissions names them): the same javac output (javax.obex holds only ObexPacket in this tree, as on the device)
+    for m in location/lib/com.android.location.provider obex/javax.obex libs/usb/com.android.future.usb.accessory media/lib/remotedisplay/com.android.media.remotedisplay \
+            media/lib/signer/com.android.mediadrm.signer nfc-extras/com.android.nfc_extras; do
+        jars="$jars $tree/out/soong/.intermediates/frameworks/base/$m.impl/android_common/repackaged-jarjar/javac/${m##*/}.jar"
+    done
     $ORB tar cf - --transform='s,^.*/,system/framework/,' -P $jars | sink .
     # the build properties the stack's property store loads (stack.cpp: android-root/props/system_build.prop)
     $ORB tar cf - -C "$OUT/system" --transform='s,^build.prop$,system_build.prop,' build.prop | sink props

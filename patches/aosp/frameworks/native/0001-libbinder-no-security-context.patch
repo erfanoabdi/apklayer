@@ -5,7 +5,7 @@ keystore2 (and any service created with set_requesting_sid) asks the kernel for 
 context (FLAT_BINDER_FLAG_TXN_SECURITY_CTX); this desktop kernel has no SELinux, so every transaction to
 such a node failed ("failed to get security context", EINVAL). The flag is not set, and getCallingSid()
 answers the one fixed context of bridge/ndk/libselinux.c (whose access checks allow everything).
-Formerly scripts/patch-libbinder.sh (the marker comments still name it). Rebuild: `m libbinder`.
+Formerly scripts/patch-libbinder.sh. Rebuild: `m libbinder`.
 Against frameworks/native 46018f54b424 (REVISION). Apply: patches/apply aosp <LineageOS tree>.
 ---
 diff --git a/libs/binder/IPCThreadState.cpp b/libs/binder/IPCThreadState.cpp
@@ -17,7 +17,7 @@ index 6c4dd469b8..c5fb4fa24b 100644
  {
      checkContextIsBinderForUse(__func__);
 -    return mCallingSid;
-+    return mCallingSid ? mCallingSid : "u:r:apklayer:s0";  // apklayer patch: the kernel supplies no context here (scripts/patch-libbinder.sh)
++    return mCallingSid ? mCallingSid : "u:r:apklayer:s0";  // apklayer patch: the kernel supplies no context here (docs/PATCHES.md)
  }
  
  uid_t IPCThreadState::getCallingUid() const
@@ -32,7 +32,7 @@ index 1ae7af3223..58af6c1c26 100644
 -            if (local->isRequestingSid()) {
 -                obj.flags |= FLAT_BINDER_FLAG_TXN_SECURITY_CTX;
 -            }
-+            // apklayer patch: no kernel security context on this host (scripts/patch-libbinder.sh)
++            // apklayer patch: no kernel security context on this host (docs/PATCHES.md)
 +            (void)local->isRequestingSid();
              if (local->isInheritRt()) {
                  obj.flags |= FLAT_BINDER_FLAG_INHERIT_RT;

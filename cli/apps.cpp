@@ -316,6 +316,18 @@ void listApps(const Layout& l) {
 
 void uninstallApp(const Layout& l, const std::string& package) {
     if (!isDir(appDir(l, package))) die("not installed: " + package);
+    // DeletePackageHelper: a static or SDK library an installed app uses keeps its provider (AppMetadata: "staticLibraries", "usesStaticLibraries")
+    for (const std::string& lib : split(property(join(appDir(l, package), "info.properties"), "staticLibraries"), ';')) {
+        if (lib.empty()) continue;
+        for (const std::string& app : listDir(l.appsDir)) {
+            if (app == package) continue;
+            for (const std::string& used : split(property(join(join(l.appsDir, app), "info.properties"), "usesStaticLibraries"), ';')) {
+                if (used != lib) continue;
+                std::cerr << "apklayer: DELETE_FAILED_USED_SHARED_LIBRARY: " << package << " provides " << lib << " to " << app << std::endl;
+                std::exit(kUninstallUsedLibrary);
+            }
+        }
+    }
     removeTree(appDir(l, package));
     for (const std::string& instance : listDir(join(l.dataHome, "apklayer"))) {  // the app's data in every instance of this data home
         std::string data = join(l.dataHome, "apklayer/" + instance + "/app-data/" + package);

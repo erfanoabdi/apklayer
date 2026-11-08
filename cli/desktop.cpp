@@ -26,9 +26,9 @@ bool hasEntry(const std::string& info) { return !property(info, "launcher").empt
 void writeMenu(const Layout& l) {
     std::string config = hostXdg("XDG_CONFIG_HOME", ".config"), menu = join(config, "menus/applications-merged/apklayer.menu");
     static bool written;  // writeDesktop below calls this again: never loop when the file cannot be written
-    if (written || exists(menu)) return;
-    written = true;
     std::string data = hostXdg("XDG_DATA_HOME", ".local/share");
+    if (written || (exists(menu) && exists(join(data, "desktop-directories/apklayer.directory")))) return;  // another data home beside the same config: its own entry
+    written = true;
     makeDirs(join(data, "desktop-directories"));
     writeFile(join(data, "desktop-directories/apklayer.directory"),
               "[Desktop Entry]\nType=Directory\nName=Apklayer\nIcon=" + getenvOr("FLATPAK_ID", "apklayer") + "\n");  // the Flatpak's icon is named by its id

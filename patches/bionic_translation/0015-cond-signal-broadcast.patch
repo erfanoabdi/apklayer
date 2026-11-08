@@ -19,7 +19,7 @@ index b522a9d..a520418 100644
  	assert(cond);
  	INIT_IF_NOT_MAPPED(cond, default_pthread_cond_init);
 -	return pthread_cond_signal(cond->glibc);
-+	return pthread_cond_broadcast(cond->glibc); /* apklayer patch: see scripts/patch-bionic-translation.sh step 10 */
++	return pthread_cond_broadcast(cond->glibc); /* apklayer patch: see docs/PATCHES.md */
  }
  
  int

@@ -2,3 +2,4 @@ hello-sharedlib-missing
 hello-applib
 hello-applib-system
 hello-applib-user
+hello-sharedlib-native

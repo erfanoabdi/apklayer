@@ -255,6 +255,7 @@ public final class HubClient {
     void scheduleJob(android.app.job.JobInfo job, long delayMs) {
         HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.JOB_SCHEDULE, request -> { request.writeTypedObject(job, 0); request.writeLong(delayMs); }, reply -> null);
     }
+    void retryJob(int jobId, boolean systemStop) { HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.JOB_RETRY, request -> { request.writeInt(jobId); request.writeBoolean(systemStop); }, reply -> null); }
     void cancelJob(int jobId) { HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.JOB_CANCEL, request -> request.writeInt(jobId), reply -> null); }
 
     static synchronized HubClient attach(Context context) {

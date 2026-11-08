@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- requires a native shared library no build lists as public (<uses-native-library>, target 31+): install refuses it (INSTALL_FAILED_MISSING_SHARED_LIBRARY); carried in hello-sharedlib's assets -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="hello.sharedlib.native">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34"/>
+  <application android:label="sharedlib-native">
+    <uses-native-library android:name="libnot_on_this_device.so" android:required="true"/>
+    <activity android:name="hello.sharedlibnative.Main" android:exported="true"/>
+  </application>
+</manifest>

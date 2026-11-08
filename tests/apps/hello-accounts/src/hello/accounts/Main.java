@@ -42,7 +42,12 @@ public final class Main extends Activity {
                 if (accounts.length == 0) throw new AssertionError("hello-system's account is not listed");
                 String token = am.getAuthToken(accounts[0], "cross", null, false, null, null).getResult().getString(AccountManager.KEY_AUTHTOKEN);
                 if (!("token-cross-" + android.os.Process.myUid()).equals(token)) throw new AssertionError("token " + token);
-                System.out.println("[accounts] PASS " + accounts.length + " account(s) of hello.system.account, token " + token);
+                // getAccountsByTypeAndFeatures asks the authenticator's hasFeatures for each account: "check" has hello.feature, none has another
+                Account[] featured = am.getAccountsByTypeAndFeatures("hello.system.account", new String[] {"hello.feature"}, null, null).getResult();
+                Account[] none = am.getAccountsByTypeAndFeatures("hello.system.account", new String[] {"hello.other"}, null, null).getResult();
+                if (featured.length != 1 || !featured[0].name.equals("check") || none.length != 0)
+                    throw new AssertionError("by features: " + java.util.Arrays.toString(featured) + " and " + java.util.Arrays.toString(none));
+                System.out.println("[accounts] PASS " + accounts.length + " account(s) of hello.system.account, token " + token + ", by features " + featured[0].name);
             } catch (Throwable failure) {
                 failure.printStackTrace(System.out);
                 System.out.println("[accounts] FAIL " + failure);

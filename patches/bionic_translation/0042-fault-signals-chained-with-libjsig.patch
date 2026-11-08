@@ -31,8 +31,8 @@ index 626d4dd..77fcdb2 100644
  		sig = SIGRTMIN;
 
  	struct sigaction goact = {0}, gact = {0};
--	if (act && (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL || sig == SIGFPE)) { /* apklayer patch: see scripts/patch-bionic-translation.sh step 13 */
-+	if (act && (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL || sig == SIGFPE) && !JVM_get_signal_action) { /* apklayer patch: see scripts/patch-bionic-translation.sh step 13 */
+-	if (act && (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL || sig == SIGFPE)) { /* apklayer patch: see docs/PATCHES.md */
++	if (act && (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL || sig == SIGFPE) && !JVM_get_signal_action) { /* apklayer patch: see docs/PATCHES.md */
  		if (oact) {
  			sigaction(sig, NULL, &goact);
  			*oact = (struct bionic_sigaction){0};

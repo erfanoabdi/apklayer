@@ -8,6 +8,8 @@ namespace apklayer {
 // Converts (cached), describes and installs one package (an APK, a base APK and its splits, or an .apks/.xapk/.apkm); returns the package name.
 // An update keeps the app's data and its system mark (system: mark it a system app, FLAG_SYSTEM); another signer exits kInstallIncompatible, a lower versionCode kInstallDowngrade unless allowDowngrade, an unsigned APK kInstallUnsigned, a required <uses-library> the build does not know kInstallMissingLibrary, native libraries of no runnable ABI kInstallNoMatchingAbis.
 inline constexpr int kInstallIncompatible = 3, kInstallDowngrade = 4, kInstallUnsigned = 5, kInstallMissingLibrary = 6, kInstallNoMatchingAbis = 7;
+// uninstall: a provider of a static or SDK library an installed app uses exits kUninstallUsedLibrary (DELETE_FAILED_USED_SHARED_LIBRARY)
+inline constexpr int kUninstallUsedLibrary = 8;
 std::string installApp(const Layout& layout, const Instance& instance, const std::vector<std::string>& apks, bool allowDowngrade = false, bool system = false);
 // `reconvert <package> | --all-stale`: install again from the kept base.apk and splits (data, uid, system mark kept); a failing app keeps its old
 // install and the others still convert (exit status 1 names the failed ones)

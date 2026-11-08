@@ -77,6 +77,7 @@ public class ShadowHostPackageInstaller extends ShadowPackageInstaller {
         if (!reply.readBoolean()) return null;
         PackageInstaller.SessionInfo info = new PackageInstaller.SessionInfo();
         info.sessionId = reply.readInt(); info.installerPackageName = reply.readString(); info.appPackageName = reply.readString(); info.appLabel = reply.readString();
+        info.isCommitted = info.sealed = reply.readBoolean();
         info.active = true; info.mode = PackageInstaller.SessionParams.MODE_FULL_INSTALL;
         return info;
     }

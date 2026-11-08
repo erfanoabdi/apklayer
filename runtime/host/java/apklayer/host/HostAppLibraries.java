@@ -17,8 +17,8 @@ import java.util.Set;
  * {@code <uses-static-library name version certDigest>} and {@code <uses-sdk-library name versionMajor certDigest>}: the name, the version and the
  * provider's signing certificate digest must match, else install refuses the user with INSTALL_FAILED_MISSING_SHARED_LIBRARY). The provider's code
  * (its converted classes.jar) joins the user's class path. Recorded at the provider's install in its info.properties ("libraries", "staticLibraries").
- * shortcut: classes only, the provider's resources are not added to the user's (Android adds its APK to sharedLibraryFiles); uninstalling a provider
- * an installed app uses is not refused. Upgrade when an app ships a static library with resources.
+ * Uninstalling a provider while an installed app uses its library is refused (cli/apps.cpp: DELETE_FAILED_USED_SHARED_LIBRARY, "usesStaticLibraries").
+ * shortcut: classes only, the provider's resources are not added to the user's (Android adds its APK to sharedLibraryFiles). Upgrade when an app ships a static library with resources.
  */
 final class HostAppLibraries {
     private HostAppLibraries() {}

@@ -19,7 +19,7 @@ index 88832fc..e5a1ece 100644
  {
  	assert(dirp);
 -	static struct bionic_dirent bde;
-+	static __thread struct bionic_dirent bde; /* apklayer patch: see scripts/patch-bionic-translation.sh step 16 */
++	static __thread struct bionic_dirent bde; /* apklayer patch: see docs/PATCHES.md */
  	struct dirent *de;
 -	if (!(de = readdir(dirp)))
 -		return NULL;

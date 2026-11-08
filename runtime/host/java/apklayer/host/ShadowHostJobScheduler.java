@@ -29,7 +29,8 @@ public class ShadowHostJobScheduler extends ShadowJobScheduler.ShadowJobSchedule
         return result;
     }
 
-    @Override @Implementation public int enqueue(JobInfo job, JobWorkItem work) { return schedule(job); }  // Robolectric's enqueue calls schedule too
+    /** The work joins the job's queue (HostJobs); only a job not yet there is scheduled, as JobSchedulerService keeps a pending or running one. */
+    @Override @Implementation public int enqueue(JobInfo job, JobWorkItem work) { return HostJobs.enqueue(job, work) ? schedule(job) : JobScheduler.RESULT_SUCCESS; }
 
     @Override @Implementation public void cancel(int jobId) {
         HostJobs.cancel(jobId);

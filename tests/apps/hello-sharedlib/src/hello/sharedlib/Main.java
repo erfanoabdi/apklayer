@@ -22,7 +22,12 @@ public final class Main extends Activity {
             legacy.close();
             boolean testBase;
             try { Class.forName("android.test.AndroidTestCase"); testBase = true; } catch (ClassNotFoundException absent) { testBase = false; }
-            System.out.println(tag + " query=" + query + " client=" + client.getClass().getName() + " testBase=" + testBase
+            int optional = 0;  // the platform's other optional libraries (hello.sharedlib declares them): one class of each, not initialized
+            for (String name : new String[] {"com.android.location.provider.LocationProviderBase", "javax.obex.ObexPacket", "com.android.future.usb.UsbManager",
+                    "com.android.media.remotedisplay.RemoteDisplayProvider", "com.android.mediadrm.signer.MediaDrmSigner", "com.android.nfc_extras.NfcAdapterExtras"}) {
+                try { Class.forName(name, false, getClassLoader()); optional++; } catch (ClassNotFoundException absent) { System.out.println(tag + " no " + name); }
+            }
+            System.out.println(tag + " optional=" + optional + " query=" + query + " client=" + client.getClass().getName() + " testBase=" + testBase
                     + " libs=" + Arrays.toString(getApplicationInfo().sharedLibraryFiles));
             System.out.println(tag + " PASS");
         } catch (Throwable failure) {

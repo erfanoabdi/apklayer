@@ -29,7 +29,7 @@ diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowBroad
  import org.robolectric.util.reflector.ForType;
  
 +/**
-+ * Robolectric's BroadcastReceiver stand-in (abortBroadcast only sets a flag it reads itself). apklayer patch: with the instance hub (-Dapklayer.instancehub=true)
++ * Robolectric's BroadcastReceiver stand-in (abortBroadcast only sets a flag it reads itself). apklayer patch: with the instance hub (every app has one)
 + * abortBroadcast is Android's own, so the abort reaches the PendingResult and with it the hub's ordered queue.
 + */
  @Implements(BroadcastReceiver.class)

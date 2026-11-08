@@ -195,7 +195,10 @@ final class HubBroadcasts {
             if (target.manifest != null) delivery.setComponent(new ComponentName(target.manifest.packageName, target.manifest.name));
             if (!ordered) { deliver(target, delivery, resultCode, resultData, resultExtras, false, isSticky, userId, false); continue; }
             Result result = deliver(target, delivery, resultCode, resultData, resultExtras, true, isSticky, userId, true);
-            if (result != null) { resultCode = result.code; resultData = result.data; resultExtras = result.extras; if (result.abort) break; }
+            if (result != null) {
+                resultCode = result.code; resultData = result.data; resultExtras = result.extras;
+                if (result.abort && (intent.getFlags() & Intent.FLAG_RECEIVER_NO_ABORT) == 0) break;  // BroadcastRecord: NO_ABORT ignores abortBroadcast
+            }
         }
         if (resultTo != null) {
             try { IIntentReceiver.Stub.asInterface(resultTo).performReceive(new Intent(intent), resultCode, resultData, resultExtras, false, false, userId); }

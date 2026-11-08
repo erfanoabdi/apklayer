@@ -18,7 +18,7 @@ index bdbdef0..01beeb1 100644
  		if (si && si->next) {
  			sym = apkenv_lookup(symbol, &found, si->next);
  		}
-+		if (!sym) { /* apklayer patch: see scripts/patch-bionic-translation.sh step 12 */
++		if (!sym) { /* apklayer patch: see docs/PATCHES.md */
 +			void *host = dlsym(RTLD_DEFAULT, symbol);
 +			if (host) {
 +				pthread_mutex_unlock(&apkenv_dl_lock);
