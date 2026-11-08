@@ -207,6 +207,7 @@ final class ActivityTask {
         c.get().getWindow().getDecorView().invalidate();
         System.out.println("[apklayer] started " + c.get().getClass().getName() + " depth=" + stack.size());
         StartTrace.mark("activity resumed " + c.get().getClass().getName());
+        CdsDump.afterStart();  // an app window's classes (views, widgets, drawing), not only a component host's
         AppSpare.launchStarted();
     }
 
