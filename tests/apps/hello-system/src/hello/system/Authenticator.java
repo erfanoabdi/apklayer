@@ -26,7 +26,11 @@ public final class Authenticator extends Service {
         @Override public Bundle confirmCredentials(AccountAuthenticatorResponse response, Account account, Bundle options) { return null; }
         @Override public String getAuthTokenLabel(String authTokenType) { return authTokenType; }
         @Override public Bundle updateCredentials(AccountAuthenticatorResponse response, Account account, String authTokenType, Bundle options) { return null; }
-        @Override public Bundle hasFeatures(AccountAuthenticatorResponse response, Account account, String[] features) { return null; }
+        @Override public Bundle hasFeatures(AccountAuthenticatorResponse response, Account account, String[] features) {  // "check" has hello.feature
+            Bundle result = new Bundle();
+            result.putBoolean(AccountManager.KEY_BOOLEAN_RESULT, account.name.equals("check") && java.util.Arrays.asList("hello.feature").containsAll(java.util.Arrays.asList(features)));
+            return result;
+        }
         @Override public Bundle getAccountRemovalAllowed(AccountAuthenticatorResponse response, Account account) {  // AccountRemovalCheck: "kept" stays
             Bundle result = new Bundle();
             result.putBoolean(AccountManager.KEY_BOOLEAN_RESULT, !account.name.equals("kept"));
