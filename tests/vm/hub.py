@@ -61,8 +61,10 @@ def own_data_dir(pkg):
     want = '/apklayer/%s/app-data/%s' % ('0' if INSTANCE == 'default' else INSTANCE, pkg)
     assert info['dataDir'].endswith(want), 'app data of %s not per instance: %s' % (pkg, info['dataDir'])
     profile = Path(info['dataDir'], 'app/app_webview')
-    # sandboxed (APKLAYER_SANDBOX=1) the data is the app uid's own, 0700: the user looks through sudo
-    assert profile.is_dir() or os.environ.get('APKLAYER_SANDBOX') == '1' and subprocess.run(['sudo', '-n', 'test', '-d', str(profile)]).returncode == 0, 'no WebView profile in ' + info['dataDir']
+    # sandboxed (APKLAYER_SANDBOX=1) the data is the app uid's own, 0700: looked at as that uid, in its view (no sudo: Parallels has none without a password)
+    sandboxed = ENV.get('APKLAYER_SANDBOX', os.environ.get('APKLAYER_SANDBOX')) == '1'
+    assert (subprocess.run(['bin/apklayer', 'sandbox-exec', pkg, '--', 'test', '-d', str(profile)], env=ENV).returncode == 0 if sandboxed
+            else profile.is_dir()), 'no WebView profile in ' + info['dataDir']
     # an apps/<pkg>/data of before 2026-11-04 may stay: it is the default instance's, moved there at that instance's next run (cli/apps.cpp appDataDir)
     print('[wv] app data per instance: ' + info['dataDir'], flush=True)
 
