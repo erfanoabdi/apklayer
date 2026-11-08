@@ -21,6 +21,7 @@ import org.w3c.dom.NodeList;
  */
 final class HostSystemConfig {
     final Set<String> features = new HashSet<>();
+    final Map<String, Integer> versions = new HashMap<>();  // <feature name version>: android.hardware.vulkan.version and the like
     final Set<String> unavailable = new HashSet<>();
     final Map<String, Set<String>> privileged = new HashMap<>();
     final Map<String, Set<String>> denied = new HashMap<>();
@@ -35,6 +36,7 @@ final class HostSystemConfig {
 
     /** The features of the last configuration applied (ShadowHostPackageManager lists them). */
     static volatile java.util.Set<String> loadedFeatures = java.util.Set.of();
+    static volatile java.util.Map<String, Integer> loadedVersions = java.util.Map.of();
 
     /** A device path under /system ("/system/framework/x.jar") in this build's root (ANDROID_ROOT: <native>/android-root/system), or null. */
     static java.nio.file.Path systemPath(String devicePath) {
@@ -77,6 +79,15 @@ final class HostSystemConfig {
             config.features.addAll(java.util.List.of("android.hardware.camera", "android.hardware.camera.any"));
         if (HostLocation.gnssDeclared())  // the GNSS HAL (gps) and GeoClue's network provider (HostLocation)
             config.features.addAll(java.util.List.of("android.hardware.location", "android.hardware.location.gps", "android.hardware.location.network"));
+        String vulkan = System.getenv("APKLAYER_VULKAN_PRESENT") != null ? System.getenv().getOrDefault("APKLAYER_VULKAN_VERSION", "1.1") : null;
+        if (vulkan != null) {  // the swapchain is there (cli/env.cpp): what a device's android.hardware.vulkan.*.xml declares, at the host's API version up to 1.3
+            String[] v = vulkan.split("\\.");
+            int minor = Integer.parseInt(v[0]) > 1 ? 3 : Math.min(3, Integer.parseInt(v[1]));
+            config.versions.put("android.hardware.vulkan.version", 1 << 22 | minor << 12);  // VK_MAKE_API_VERSION(0, 1, minor, 0)
+            config.versions.put("android.hardware.vulkan.level", 0);
+            config.versions.put("android.hardware.vulkan.compute", 0);
+            config.features.addAll(config.versions.keySet());
+        }
         try {
             for (String line : java.nio.file.Files.readAllLines(new File(root, "etc/apklayer-permission-levels.tsv").toPath())) {
                 String[] parts = line.split("\t");
@@ -98,7 +109,10 @@ final class HostSystemConfig {
     }
 
     private void readConfig(Element root) {
-        for (Element feature : children(root, "feature")) features.add(feature.getAttribute("name"));
+        for (Element feature : children(root, "feature")) {
+            features.add(feature.getAttribute("name"));
+            if (!feature.getAttribute("version").isEmpty()) versions.put(feature.getAttribute("name"), Integer.decode(feature.getAttribute("version")));
+        }
         for (Element feature : children(root, "unavailable-feature")) unavailable.add(feature.getAttribute("name"));
         for (Element broadcast : children(root, "allow-implicit-broadcast")) implicitBroadcasts.add(broadcast.getAttribute("action"));
         for (Element library : children(root, "library")) {
@@ -128,11 +142,13 @@ final class HostSystemConfig {
     /** Declares the features and grants this package what the build gives it. */
     void apply(Context app) {
         loadedFeatures = java.util.Set.copyOf(features);
+        loadedVersions = java.util.Map.copyOf(versions);
         org.robolectric.shadows.ShadowPackageManager shadow = Shadows.shadowOf(app.getPackageManager());
         for (String feature : features) {
             shadow.setSystemFeature(feature, true);
             android.content.pm.FeatureInfo info = new android.content.pm.FeatureInfo();  // getSystemAvailableFeatures lists them too (Device Info HW counts them; null there is a crash)
             info.name = feature;
+            info.version = versions.getOrDefault(feature, 0);
             shadow.addSystemAvailableFeature(info);
         }
         for (String feature : unavailable) shadow.setSystemFeature(feature, false);

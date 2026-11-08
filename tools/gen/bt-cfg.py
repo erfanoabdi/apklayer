@@ -16,6 +16,8 @@ if egl.exists(): lines.append('libEGL.so libapklayer_egl.so')  # our EGL (aosp/h
 lines.append('libGLESv1_CM.so ' + ('libGLESv1_CM.so' if egl.is_file() and b'apklayer_gles1_create' in egl.read_bytes() else 'libGLESv1_CM.so.1'))
 if (libs / 'libapklayer_vulkan.so').is_file() and (libs / 'vulkan.apklayer.so').is_file():
     lines.append('libvulkan.so libapklayer_vulkan.so')  # Android's Vulkan loader (renamed copy)
+    # volk opens libvulkan.so.1 first: apps get Android's loader by that name too; our driver opens the host's by it (bionic_translation 0048)
+    lines.append('app:libvulkan.so.1 libapklayer_vulkan.so')
 if (libs / 'libOpenSLES.so').is_file(): lines.append('libOpenSLES.so libOpenSLES.so')  # Android's OpenSL ES engine on the original audio services
 lines += ["# bionic_translation's own cfg.d", Path(upstream).read_text().rstrip('\n')]
 Path(out).write_text('\n'.join(lines) + '\n')
