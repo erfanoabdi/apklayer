@@ -155,34 +155,47 @@ std::string installApp(const Layout& l, const Instance& inst, const std::vector<
         Env env = currentEnv();
         env["ANDROID_HOME"] = tmp;
         env["ANDROID_SDK_ROOT"] = tmp;
-        Spawn conv;
-        conv.argv = {findJava(l), "-Duser.home=" + tmp, "-cp", l.dex2jvmJar() + ":" + l.frameworkDir() + "/*", "io.github.kksimp.dex2jvm.Main", join(tmp, "base.apk"), join(tmp, "raw.jar")};
-        conv.env = env;
-        conv.logFile = join(inst.logs(), "convert.log");
-        struct stat logStat{};
-        size_t logStart = stat(conv.logFile.c_str(), &logStat) == 0 ? logStat.st_size : 0;  // the log is appended to: only this conversion's lines
-        if (runAndWait(conv) != 0) die("conversion failed (see " + conv.logFile + ")");
-        // a class dex2jvm could not convert is installed as a stub that throws VerifyError when used (as ART's verifier fails one): say which
-        std::vector<std::string> stubbed;
-        std::string log = readFile(conv.logFile).value_or("");
-        for (const std::string& line : split(log.substr(std::min(logStart, log.size())), '\n'))
-            if (size_t at = line.find("] STUBBED class "); at != std::string::npos) {
-                std::string cls = line.substr(at + 16, line.find(':', at + 16) - at - 16);
-                std::replace(cls.begin(), cls.end(), '/', '.');
-                stubbed.push_back(cls);
+        // the app JVM's view for HotSpot's verifier (VerifyBytecode): the framework, then the host class path its sandbox serves
+        std::string verifyPath;
+        for (const std::string& jar : listDir(l.frameworkDir())) if (jar.size() > 4 && jar.substr(jar.size() - 4) == ".jar") verifyPath += join(l.frameworkDir(), jar) + ":";
+        verifyPath += hostClasspath(l);
+        const std::string refused = join(tmp, "classes.jar.refused"), verifyLog = join(tmp, "verify.log");
+        // round 2 converts again with the classes the verifier refused as stubs that throw its error: app JVMs run unverified (cli/run.cpp)
+        for (int round = 1;; round++) {
+            Spawn conv;
+            conv.argv = {findJava(l), "-Duser.home=" + tmp, "-cp", l.dex2jvmJar() + ":" + l.frameworkDir() + "/*", "io.github.kksimp.dex2jvm.Main", join(tmp, "base.apk"), join(tmp, "raw.jar")};
+            if (round > 1) conv.argv.insert(conv.argv.begin() + 1, "-Ddex2jvm.refusedClasses=" + refused);
+            conv.env = env;
+            conv.logFile = join(inst.logs(), "convert.log");
+            struct stat logStat{};
+            size_t logStart = stat(conv.logFile.c_str(), &logStat) == 0 ? logStat.st_size : 0;  // the log is appended to: only this conversion's lines
+            if (runAndWait(conv) != 0) die("conversion failed (see " + conv.logFile + ")");
+            // a class dex2jvm could not convert (or the verifier refused) is installed as a stub that throws when used (as ART's verifier fails one): say which
+            std::vector<std::string> stubbed;
+            std::string log = readFile(conv.logFile).value_or("");
+            for (const std::string& line : split(log.substr(std::min(logStart, log.size())), '\n'))
+                if (size_t at = line.find("] STUBBED class "); at != std::string::npos) {
+                    std::string cls = line.substr(at + 16, line.find(':', at + 16) - at - 16);
+                    std::replace(cls.begin(), cls.end(), '/', '.');
+                    stubbed.push_back(cls);
+                }
+            if (!stubbed.empty()) {
+                std::string names;
+                for (size_t i = 0; i < stubbed.size() && i < 5; i++) names += (i ? ", " : "") + stubbed[i];
+                printf("apklayer: warning: %zu class%s of %s could not be converted or failed verification, a use of one throws its error (%s%s; see %s)\n", stubbed.size(),
+                       stubbed.size() == 1 ? "" : "es", name.c_str(), names.c_str(), stubbed.size() > 5 ? ", ..." : "", conv.logFile.c_str());
             }
-        if (!stubbed.empty()) {
-            std::string names;
-            for (size_t i = 0; i < stubbed.size() && i < 5; i++) names += (i ? ", " : "") + stubbed[i];
-            printf("apklayer: warning: %zu class%s of %s could not be converted, a use of one throws VerifyError (%s%s; see %s)\n", stubbed.size(),
-                   stubbed.size() == 1 ? "" : "es", name.c_str(), names.c_str(), stubbed.size() > 5 ? ", ..." : "", conv.logFile.c_str());
+            if (sh({findJava(l), "-cp", l.deps + "/libs/*:" + l.hostClasses(), "apklayer.tools.DenyInstrument", join(tmp, "raw.jar"), join(tmp, "classes.jar")}) != 0)
+                die("preparing the converted classes failed (a half-written classes.jar is not installed)");
+            // every DEX class in a well-formed class file and the APK's java resources reachable: nothing half-converted is installed or cached
+            // ASM's CheckClassAdapter comes from Robolectric_all.jar, which lacks asm-analysis: on the boot class path it is not verified, so the data-flow classes it names are never loaded
+            int verified = sh({findJava(l), "-Xlog:class+init=info:file=" + verifyLog, "-Dapklayer.verify.classpath=" + verifyPath, "-Dapklayer.verify.log=" + verifyLog,
+                               "-Xbootclasspath/a:" + l.native + "/aosp/Robolectric_all.jar", "-cp", l.hostClasses() + ":" + l.dex2jvmJar(), "apklayer.tools.VerifyInstall", join(tmp, "base.apk"), join(tmp, "classes.jar")});
+            unlink(verifyLog.c_str());
+            if (verified == 0) break;
+            if (verified != 3 || round > 1) die("the converted classes are incomplete or malformed (see above); " + name + " is not installed");
         }
-        if (sh({findJava(l), "-cp", l.deps + "/libs/*:" + l.hostClasses(), "apklayer.tools.DenyInstrument", join(tmp, "raw.jar"), join(tmp, "classes.jar")}) != 0)
-            die("preparing the converted classes failed (a half-written classes.jar is not installed)");
-        // every DEX class in a well-formed class file and the APK's java resources reachable: nothing half-converted is installed or cached
-        // ASM's CheckClassAdapter comes from Robolectric_all.jar, which lacks asm-analysis: on the boot class path it is not verified, so the data-flow classes it names are never loaded
-        if (sh({findJava(l), "-Xbootclasspath/a:" + l.native + "/aosp/Robolectric_all.jar", "-cp", l.hostClasses() + ":" + l.dex2jvmJar(), "apklayer.tools.VerifyInstall", join(tmp, "base.apk"), join(tmp, "classes.jar")}) != 0)
-            die("the converted classes are incomplete or malformed (see above); " + name + " is not installed");
+        unlink(refused.c_str());
         unlink(join(tmp, "raw.jar").c_str());
     }
     writeFile(join(tmp, "key"), key + "\n");
