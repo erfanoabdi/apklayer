@@ -13,7 +13,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
   uncalled host says once by what.
 - Host JVMs: -XX:InitialHeapSize=32m, -XX:TrimNativeHeapInterval=60000 (needs JDK 21.0.1 or later).
 - Phone (deb 0.4.7~git20261109.mem2 built on Parallels, dpkg -i --force-depends; apps stay at converter ABI 4, which ABI 3 does not reconvert):
-  settled instance 1939 -> 1321 MB (two JVMs left: hub, spare); after NewPipe and Calculator 1388 MB. Launches within noise (PLAN 8's table).
+  settled instance 1939 -> 1308-1321 MB (two JVMs left: hub, spare); after NewPipe and Calculator 1388 MB. Launches within noise (PLAN 8's table;
+  NewPipe cold with the settings provider in its own host again, and without the heap flags, interleaved: no faster).
+- Tests: installer's menu scenario fails in that fresh data home (no menu merge file from a setup), unrelated.
 - Tests (Parallels, own tree ~/agent-mem): providers, services, hub-services, activities, sysprov, host-uid, files, startup, system-apps,
   broadcasts, first-start, units, settings, accounts, pendingintents, notifications, permissions pass.
 
