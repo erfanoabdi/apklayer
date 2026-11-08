@@ -12,6 +12,26 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Intent files take String[] extras (`extra[].<name>=a|b`), for Godot's command_line_params. Test group `godot` (tests/vm/godot-vulkan.py; the Godot 4.3 android_editor.apk from godot-builds installed by hand): a one-scene Mobile-renderer project runs, Godot reports "Vulkan 1.4.318 - Forward Mobile - Using Device #0: Intel - Intel(R) Graphics (ADL-N)" and the screenshot is 100% the scene's magenta.
 - x86 PC (own tree, prebuilts 234b56ec): godot, vulkan, vulkan-present, native-bridge-vulkan, gpu (hwbitmap included: fixed by 2026-11-08's pthread_gettid_np) and otr2 pass; vulkan with APKLAYER_VULKAN_PRESENT=0 reports no swapchain and passes. Not run: Parallels/UTM (Venus or llvmpipe only: the probe declares nothing there).
 - Measured, not changed: the GL swap's blit costs 0.62-1.31 ms GPU per frame on the N100 (834x1484 to 1080x2400); OTR2 at 2448x1374 runs ~30 fps with and without Swappy. The host-ES1 path cannot run on the PC or Parallels (no host ES 1 context). Present fences at the real present still need a kernel fence the composer can signal. Details: docs/PLAN.md "Graphics performance", "Graphics".
+## 2026-11-09: storage an ordinary app sees, as on Android 16 (PLAN next work 7)
+- Measured first (hello-files' new `VOLUMES=1` scenario, group files): getExternalFilesDir was `Android/data/<pkg>` itself and getExternalCacheDir
+  `<sdcard>/<pkg>-cache` (Robolectric's, a folder per app in the sdcard's root), Environment.isExternalStorageManager() was true for every app (Robolectric
+  allows every app op), getStorageVolumes listed only a hand-built primary volume, and the desktop's removable drives were nowhere.
+- Now, as Android 16 (StorageManagerService.getVolumeList, VolumeInfo.buildStorageVolume, ContextImpl): external files `Android/data/<pkg>/files`, cache
+  `Android/data/<pkg>/cache` (ShadowHostContextImpl); what an app kept in `Android/data/<pkg>` moves into `files/` once and the old `<pkg>-cache` goes
+  (HostStorage); "all files access" only for apps that declare MANAGE_EXTERNAL_STORAGE (the op's default mode defers to the permission, which
+  app-op permissions get at install); getStorageVolumes builds the emulated and public volumes with Android's own code from the storage service's list
+  (HostVolumes gained the private internal volume, so the primary is "Internal shared storage" with UUID_DEFAULT).
+- Removable drives: a drive the desktop mounts for the user (`/media/<user>/<label>`, `/run/media/<user>/<label>`) is a public volume
+  `/storage/<fs uuid>` (a link in the instance's storage dir; `/mnt/media_rw/<uuid>`, ExternalStorageProvider's path, maps there in paths.c): apps see it
+  in getStorageVolumes (removable, its label), MediaStore lists its volume (`4c3a-9050`), DocumentsUI gets its root. Checked with a vfat loop image
+  mounted at /media/parallels/APKTEST on Parallels. Read once per process (no hot plug yet); a sandboxed app does not see it (its uid cannot read /media/<user>).
+- Home and Linux root stay DocumentsUI's roots only (not in apps' getStorageVolumes): the desktop's files reach an app through the picker, or the sandbox's home access.
+- SELinux labels: not implemented. No app needs them: of the ~40 local APKs (corpus and ~/Downloads) only Termux names getFileContext (its file-info diagnostics) and OsmAnd's
+  "security.selinux" is libarchive's xattr name; no system app (MediaProvider, DownloadProvider, DocumentsUI, ExternalStorageProvider) asks.
+- Amaze's "8 folders for 4" (here 26 for 13) is Amaze's own race, not storage: jdb on the app shows loadlist run from onViewCreated and again from a
+  posted initViews; both LoadFilesListTasks reset and add to the same view model's counters (the first is cancelled, its loop keeps counting). The listing is right.
+- Tests (Parallels, own instances): files (with VOLUMES=1), view, sysprov, providers, sandbox pass; Amaze, Fossify Gallery, F-Droid and NewPipe draw.
+  NewPipe's download folders are `file:/storage/emulated/0/{Movies,Music}/NewPipe` (no SAF), served by the path layer; a download itself was not driven.
 
 ## 2026-11-09: release 0.4.8 (runtime 0.3.5)
 - Sandbox broker and fixes (opt-in), Flatpak with the userspace binder, keystore device-credential prompts and lock state, call-audio broadcasts, idle component hosts end, spare preloads framework classes, MojoLauncher and FCL crash fixes, SurfaceFlinger skips a layer whose buffer it cannot import (frameworks/native 0008), service logs kept across restarts.

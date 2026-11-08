@@ -69,10 +69,11 @@ static bool binder_device(char **path)
 }
 
 /* Android's storage paths are the instance's storage directory ($APKLAYER_STORAGE, cli/layout): /storage/emulated/0 as on a device (MediaProvider
- * reads volume and relative path from that spelling), and its other names /sdcard and /data/media/0. Mapped whether or not the file exists yet. */
+ * reads volume and relative path from that spelling), and its other names /sdcard and /data/media/0; a removable drive's /mnt/media_rw/<uuid> is its
+ * /storage/<uuid> (a link to the desktop's mount, HostVolumes.Removable). Mapped whether or not the file exists yet. */
 static bool storage_path(char **path)
 {
-    static const char *const names[][2] = { { "/storage", "" }, { "/sdcard", "/emulated/0" }, { "/data/media/0", "/emulated/0" } };
+    static const char *const names[][2] = { { "/storage", "" }, { "/sdcard", "/emulated/0" }, { "/data/media/0", "/emulated/0" }, { "/mnt/media_rw", "" } };
     const char *storage = storage_env;
     if (!storage[0]) return false;
     for (size_t i = 0; i < sizeof names / sizeof names[0]; i++) {
