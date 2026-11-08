@@ -8,7 +8,7 @@ import android.os.storage.StorageManager;
 import java.io.File;
 import java.nio.file.Files;
 
-/** A file manager's storage page: the volume's size and free space, and this app's own code, data and cache sizes. */
+/** A file manager's storage page: the volume's size and free space, and this app's own code, data and cache sizes; another app's are refused without PACKAGE_USAGE_STATS. */
 final class StorageStatsCheck implements Check {
     @Override public String run(Context context) throws Exception {
         StorageStatsManager stats = context.getSystemService(StorageStatsManager.class);
@@ -22,6 +22,11 @@ final class StorageStatsCheck implements Check {
                     "package " + own.getAppBytes() + "/" + own.getDataBytes() + "/" + own.getCacheBytes());
             try { stats.getTotalBytes(java.util.UUID.randomUUID()); throw new AssertionError("an unknown volume has a size"); }
             catch (java.io.IOException expected) { /* as on Android */ }
+            // another app's sizes and the user's need PACKAGE_USAGE_STATS (StorageStatsService.enforceStatsPermission)
+            try { stats.queryStatsForPackage(StorageManager.UUID_DEFAULT, "hello.accounts", Process.myUserHandle()); throw new AssertionError("another app's stats without PACKAGE_USAGE_STATS"); }
+            catch (SecurityException expected) { /* as on Android */ }
+            try { stats.queryStatsForUser(StorageManager.UUID_DEFAULT, Process.myUserHandle()); throw new AssertionError("the user's stats without PACKAGE_USAGE_STATS"); }
+            catch (SecurityException expected) { /* as on Android */ }
             return "volume " + total / (1 << 30) + " GB, " + free / (1 << 20) + " MiB free; app " + own.getAppBytes() / 1024 + " KiB code, "
                     + own.getDataBytes() / 1024 + " KiB data, " + own.getCacheBytes() / 1024 + " KiB cache";
         } finally { cached.delete(); }

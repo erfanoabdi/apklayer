@@ -1,9 +1,12 @@
 package apklayer.host;
 
+import android.app.AppOpsManager;
 import android.app.usage.StorageStats;
+import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.os.FileUtils;
+import android.os.Process;
 import android.os.UserHandle;
 import android.os.storage.StorageManager;
 import java.io.File;
@@ -33,14 +36,16 @@ public class ShadowHostStorageStatsManager {
     // shortcut: usable bytes without the clearable cache StorageStatsService adds (no cache quotas here)
     @Implementation protected long getFreeBytes(UUID uuid) throws IOException { return volume(uuid).getUsableSpace(); }
 
-    // shortcut: other packages' stats without the PACKAGE_USAGE_STATS check StorageStatsService makes; enforce it with the hub's app ops
     @Implementation protected StorageStats queryStatsForPackage(UUID uuid, String packageName, UserHandle user) throws PackageManager.NameNotFoundException, IOException {
         volume(uuid);
-        return stats(List.of(packages().getApplicationInfo(packageName, 0)));
+        ApplicationInfo app = packages().getApplicationInfo(packageName, 0);
+        if (app.uid != Process.myUid()) enforceStatsPermission();  // no permission needed about itself
+        return stats(List.of(app));
     }
 
     @Implementation protected StorageStats queryStatsForUid(UUID uuid, int uid) throws IOException {
         volume(uuid);
+        if (uid != Process.myUid()) enforceStatsPermission();
         String[] names = packages().getPackagesForUid(uid);
         List<ApplicationInfo> apps = new java.util.ArrayList<>();
         for (String name : names == null ? new String[0] : names) {
@@ -51,7 +56,18 @@ public class ShadowHostStorageStatsManager {
 
     @Implementation protected StorageStats queryStatsForUser(UUID uuid, UserHandle user) throws IOException {
         volume(uuid);
+        enforceStatsPermission();
         return stats(packages().getInstalledApplications(0));
+    }
+
+    /** StorageStatsService.checkStatsPermission: the GET_USAGE_STATS app op, at its default the PACKAGE_USAGE_STATS permission. */
+    private static void enforceStatsPermission() {
+        Context context = RuntimeEnvironment.getApplication();
+        int mode = context.getSystemService(AppOpsManager.class).unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.getOpPackageName());
+        if (mode == AppOpsManager.MODE_ALLOWED) return;
+        if (mode == AppOpsManager.MODE_DEFAULT && context.checkCallingOrSelfPermission(android.Manifest.permission.PACKAGE_USAGE_STATS) == PackageManager.PERMISSION_GRANTED) return;
+        throw new SecurityException(mode == AppOpsManager.MODE_DEFAULT ? "Caller does not have " + android.Manifest.permission.PACKAGE_USAGE_STATS + "; callingPackage="
+                + context.getOpPackageName() + ", callingUid=" + Process.myUid() : "Package " + context.getOpPackageName() + " from UID " + Process.myUid() + " blocked by mode " + mode);
     }
 
     private static PackageManager packages() { return RuntimeEnvironment.getApplication().getPackageManager(); }
