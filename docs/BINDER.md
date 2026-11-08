@@ -37,25 +37,35 @@ wrappers (`paths_preload.c`). `access()` of a routed node succeeds. `ioctl`, `cl
 
 ## Protocol (`protocol.h`)
 
-Stream sockets with length-prefixed messages (`bd_req`, `bd_rep`); fds as `SCM_RIGHTS` (250 per `sendmsg`, more in follow-up one-byte messages).
+`SOCK_SEQPACKET` sockets: one `sendmsg` and one `recvmsg` per message (`bd_req`, `bd_rep`, at most 64 KiB), fds as `SCM_RIGHTS` (250 per
+message, more in follow-up one-byte messages). Bulk data never goes through a socket: it goes through the thread's shared buffer (below).
 
 - **Proc socket**: the fd `open()` returns *is* a Unix socket connected to the daemon. Its hello names the context and gets a cookie. After that the
   process never writes to it; the daemon writes one wake byte when a thread that polls (below) has work. Closing it, or the process dying, is the
   proc's death (`binder_deferred_release`). `SO_PEERCRED` gives pid and euid: `sender_pid` and `sender_euid` are kernel-attested, so the
   per-app sandbox keeps real uids (innkeeper's broker gives that up).
 - **Thread sockets**: each thread connects its own socket on first use (hello: cookie and tid; the daemon checks that `SO_PEERCRED`'s pid is the
-  proc's, so a leaked cookie is useless to another process). A thread's ioctls go over it and block on it: a thread sleeping in
+  proc's, so a leaked cookie is useless to another process). The hello carries the thread's **shared buffer**: an 8 MiB memfd (sparse: only
+  written pages exist), sealed against shrinking (`F_SEAL_SHRINK`, checked by the daemon: a shrunk file would fault the daemon's reads), mapped
+  read-write by the route and read-only by the daemon. A thread's ioctls go over it and block on it: a thread sleeping in
   `binder_thread_read` is a request the daemon answers later. A thread's exit closes it (a pthread key destructor) and BINDER_THREAD_EXIT does the
   same explicitly; either releases the thread (`binder_thread_release`).
 - **ioctl**: a generic request carries `_IOC_SIZE` bytes in (for `_IOC_WRITE`) and returns them out (for `_IOC_READ`). BINDER_WRITE_READ is
-  marshalled: the write stream goes as is, except BC_TRANSACTION(_SG)/BC_REPLY(_SG), which are followed by a `bd_txn` header, the data, the
-  offsets and the scatter-gather buffers (BINDER_TYPE_PTR objects, in offset order) copied out of the process, and their fds (BINDER_TYPE_FD,
-  then each BINDER_TYPE_FDA's) attached. The daemon never reads process memory (no `/proc/<pid>/mem`, no ptrace, no ancestry). It answers with
+  marshalled into the shared buffer (the request only says how long it is): the write stream as is, except BC_TRANSACTION(_SG)/BC_REPLY(_SG),
+  which are followed by a `bd_txn` header, the data, the offsets and the scatter-gather buffers (BINDER_TYPE_PTR objects, in offset order) copied
+  out of the process, and their fds (BINDER_TYPE_FD, then each BINDER_TYPE_FDA's) attached to the request. The daemon copies the data from the
+  shared buffer straight into the target's receive area: two copies in all (the kernel makes one), none through a socket. A read is capped at
+  32 KiB per call so that its reply is one message (libbinder reads 256 bytes). The daemon never reads process memory (no `/proc/<pid>/mem`, no ptrace, no ancestry). It answers with
   `write_consumed` in marshalled bytes (the route maps it back command by command), the read bytes, the fds of the delivered transaction and
   their fixups.
 - **mmap**: the daemon creates the receive area (a memfd, at most 4 MiB as the kernel's) and maps it read-write; the route maps it read-only
   where libbinder asked (so libbinder sees what it sees on the kernel) and once more read-write for itself, and tells the daemon the read-only
-  address: BR_TRANSACTION pointers are real addresses in the process, computed by the daemon as the kernel does.
+  address: BR_TRANSACTION pointers are real addresses in the process, computed by the daemon as the kernel does. The area is sealed at its size
+  (`F_SEAL_SHRINK|F_SEAL_GROW|F_SEAL_SEAL`) before the process gets it.
+- **Memory a process can write is read once**: the sender's shared buffer and the target's (writable for the route) receive area can change
+  under the daemon. Every value the daemon acts on (offsets, each object, each scatter-gather buffer's place, the parents of fd arrays and
+  pointers) is copied into daemon memory once, checked and translated there, and the translated object written into the area; nothing is read
+  back from the area.
 
 ## Driver model scope (`driver.h`)
 
@@ -74,7 +84,10 @@ BINDER_GET_NODE_INFO_FOR_REF, BINDER_ENABLE_ONEWAY_SPAM_DETECTION, BINDER_GET_EX
 
 ## Threading and BR_SPAWN_LOOPER
 
-One daemon thread runs the whole model: no locks, nothing freed under a caller (so no `tmp_refs`). Waiting is not a sleeping thread but a
+One thread per context runs that context's model (binder, hwbinder and vndbinder share no state: a Driver each); the main thread accepts
+connections and hands each to its context by its hello (a thread's cookie carries the context in its top byte). Inside a context: no locks,
+nothing freed under a caller (so no `tmp_refs`). After a request the daemon answers the threads it woke (a reply's waiting caller) before the
+requester's own answer: the caller is the one on the critical path. Waiting is not a sleeping thread but a
 pending reply: a thread whose read finds no work is marked waiting (and joins `waiting_threads` when it may take proc work, the kernel's
 `binder_available_for_proc_work_ilocked`); queuing work for it puts it on a ready list, and after each request the daemon answers every ready
 thread (`Driver::flush`). Proc work picks the first waiting thread (`binder_select_thread_ilocked`). A new thread's first read returns at once
@@ -85,9 +98,11 @@ BC_REGISTER_LOOPER counts it started).
 Polling (`IPCThreadState::setupPolling`, servicemanager's Looper): the kernel's `binder_poll` marks the polling thread. Here the thread that
 sends BC_ENTER_LOOPER in a write without a read is taken as the poller (that is what setupPolling does), and the proc socket is made readable
 (one wake byte at a time) when that thread would find work: its own todo, or proc work that no waiting thread takes. Every reply to the proc
-tells the route how many wake bytes to read away (`ndrain`), and the condition is checked again after each request.
+tells the route how many wake bytes to read away (`ndrain`); any reply that drains bytes (a new thread's hello, an mmap, a plain ioctl too)
+marks the proc, and the condition is checked again after the request, so a poller never sleeps with work queued (a lost wake byte was the
+cause of occasional missing death notifications under load).
 
-The daemon's single thread is the open question for step 4 (PLAN): all instances' traffic of one context goes through it.
+Still one thread for all traffic of one context (step 4, PLAN). BINDER_FREEZE now reaches only the procs of the caller's context.
 
 ## Oneway ordering
 
