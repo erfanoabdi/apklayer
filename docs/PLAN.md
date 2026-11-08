@@ -85,7 +85,7 @@ WebView switch per instance, no pkexec); the manager follows Lomiri's scale and 
 2. **Startup** (done 2026-11-04: app spare `apklayer app-spare` in zygote's role, one sandbox for every process kind, hub spare before hub setup: warm UiBench 2.5 -> 1.3 s, Telegram 2.9 -> 1.9 s; cold 4.1 -> 3.4 s, 4.6 -> 4.0 s). Open: per-launch environment (APKLAYER_INTENT_FILE) sends a launch past the spare; cold JNI_OnLoad ~150 ms; killing a spare's holder kills the app born from it.
 3. **Correctness gaps** (done 2026-11-04: native path mapping covered by a test, rebind across a dying host, hub refuses registrations while it shuts down, getAuthToken asks the user, no `eng.<user>` incremental, same-process start/stopService, real ServiceManager names for Java).
 4. **Installer** (done 2026-11-04: hub-owned sessions across restarts with preapproval, SessionCallback.onFinished, legacy intent results, manifest receivers below 26, self-update, unsigned APKs refused, signed test apps, ABI splits; the F-Droid client installs an app end to end; 2026-11-08: a committed session stays in getSessionInfo, isCommitted, until its final status, and across hub restarts: committed again it asks again, as markAsSealed allows).
-   Open (2026-11-06, store clients): an Aurora download end to end after the network-constraint fix, split install from Aurora, F-Droid update and uninstall, both scripted (needs network: corpus, not tests/run) (Aurora's delayed DownloadWorker jobs ran before their time: the backoff count died with the process, fixed 2026-11-08 in the hub; check it with Aurora there).
+   Open (2026-11-06, store clients): an Aurora download end to end after the network-constraint fix, split install from Aurora, F-Droid update and uninstall, both scripted (needs network: corpus, not tests/run) (Aurora's delayed DownloadWorker jobs ran before their time: the backoff count died with the process, fixed 2026-11-08 in the hub; check it with Aurora there). Play filters by the system feature list Aurora sends (2026-11-08: microphone, wifi, camera, location added, CHANGELOG); still missing where the host has them: touchscreen.multitouch(.distinct) with a touch device, sensor.* for the sensors the sensors HAL serves, opengles.aep at GLES 3.2, vulkan.level/version/compute with a Vulkan device; apps that need them stay "not supported". Punishing: Gray Raven installs from Aurora but Unity reports "Failed to load Il2CPP." after libunity loads (libil2cpp.so, 178 MB, maps under bionic_translation; the game also loads Tencent ACE's libanogs/libanort, which may guard it; Unity's own log lines do not reach the app log: open).
 5. **Cleanup** (done 2026-11-04: shortcut markers 24 -> 6, the 6 owned by the installer and accounts work; Egl.cpp split; dead test flags and EGL debug switches removed; 2026-11-08: getAccountsByFeatures asks hasFeatures, patch `+` lines name docs/PATCHES.md, meson resets bionic_translation when an edited patch no longer matches). Open: hello-binder-client still reads the gone `apklayer.instancehub` flag (that branch never runs).
 
 ## Sandbox before it can be the default again (2026-11-08, after 0.4.5)
@@ -212,7 +212,7 @@ On machines with several GPUs (e.g. Intel + AMD, or a laptop's iGPU + dGPU) each
 5. **Tests**: on a machine with two render nodes (the owner's x86 PC has one: test with a second virtual node such as vgem/vkms or on hardware with two GPUs), an instance on each GPU, the gpu and gpu-window groups pass on both, screenshots, and `GL_RENDERER`/Vulkan deviceName in the app match the chosen GPU.
 
 ## Plan: apps built for another CPU (decided 2026-11-04 by the owner; part 1 works on the x86 PC, part 2(a) on the Volla X23)
-Part 1 state (2026-11-07): works on the x86 PC (hello-arm64, Nextcloud's start screen, OTR2 translated on GLES 3.2; groups native-bridge, native-bridge-vulkan); guest faults are recovered (HotSpot libjsig preloaded in every app JVM, bionic_translation 0042: a native library's own crash handler, breakpad or Gecko, now runs on a real crash instead of hs_err), errno of proxied calls (binary_translation 0003). Open: no translation cache across starts; Telegram.
+Part 1 state (2026-11-07): works on the x86 PC (hello-arm64, Nextcloud's start screen, OTR2 translated on GLES 3.2; groups native-bridge, native-bridge-vulkan); guest faults are recovered (HotSpot libjsig preloaded in every app JVM, bionic_translation 0042: a native library's own crash handler, breakpad or Gecko, now runs on a real crash instead of hs_err), errno of proxied calls (binary_translation 0003). Open: no translation cache across starts; Telegram. Fixed 2026-11-08: arm64-only apps on deb installs (the Android root under runtime/current: guest linker config section, CHANGELOG); APKPure itself is unchecked (no APK here).
 Apps whose native libraries exist only for another CPU: arm64-only apps on x86_64 hosts, and arm32-only (armeabi-v7a) apps on arm64 or x86_64 hosts.
 1. **arm64 apps on x86_64 hosts: Digitalis** (https://digitalisx64.github.io): an ARM64 guest backend for AOSP's Berberis translator, exposed through Android's NativeBridge interface (`NativeBridgeCallbacks`: `loadLibrary`, `getTrampoline`, namespaces), JIT with a translation cache.
    - Wiring: apklayer's NativeLoader (runtime/host/.../NativeLoader*, bridge/native/native_loader.c) checks an app's ABIs at install (`lib/<abi>/`): no host ABI but arm64 present -> the app runs with the native bridge; `System.loadLibrary` and JNI calls go through the bridge's trampolines, as libnativebridge does on Android (`ro.dalvik.vm.native.bridge`, `ro.enable.native.bridge.exec`).
@@ -307,6 +307,60 @@ Steps:
    unit and the manager's first-run check; Flatpak without its host step.
 4. Measure the hot paths (SurfaceFlinger transactions per frame, audio) before dropping kernel binder; a second daemon thread or sharded
    locks if one thread saturates.
+
+State (2026-11-08, branch `userspace-binder`): steps 1 and 2 done. Design note `docs/BINDER.md` (protocol, driver-model scope, threading and
+BR_SPAWN_LOOPER, oneway ordering, buffer allocation, fd lifetime, freezer, what is left out). Prototype: `bridge/binderd` (apklayer-binderd, the model
+written from binder.c v6.6, no innkeeper code), the route in libapklayer-preload.so (`bridge/native/binder_route.c`; the path layer's glibc-level
+opens call it too, since bionic's fortified `__open_2` reaches them on glibc), bionic_translation 0047 (fd hooks), `cli/binder.cpp` (selection:
+`APKLAYER_BINDER=userspace` or `<instance root>/binder`; the CLI binds the socket and hands it to the daemon). Kernel binder stays the default.
+- Tests on the x86 PC with the userspace binder: binder, host-binder (AIDL and HIDL over hwbinder, two instances' daemons), hub-services, services,
+  activities, providers, broadcasts, pendingintents, notifications pass; gpu's two UiBench smokes pass. gpu's hwbitmap and keystore (attestation
+  chain length 1) fail, as they do with kernel binder on that PC in other trees the same day (both pass on UTM): x86 PC issues, not the binder.
+- Not done: arm64. The Parallels disk was full (59 of 62 GB used by other trees; my copy took the rest and was removed again); needs room for a
+  tree (~2.2 GB) and a current prebuilts copy (~0.9 GB: Parallels' `~/prebuilts` predates libbinder's host context and robolectric patch 0023).
+- Numbers (x86 PC, 4 cores, libbinder both ends: `servicetool bench serve|run`, a servicemanager, one client process; kernel on an idle binderfs node):
+
+  | | kernel binder | userspace binder |
+  |---|---|---|
+  | round trip, empty / 128 B | 10.4 / 10.4 us (86k calls/s) | 28.7 / 29.1 us (26k calls/s) |
+  | echo 4 KiB / 64 KiB | 11.5 / 22.6 us | 36.3 / 86.5 us |
+  | 4 client threads, 128 B | 142k calls/s (p50 23 us) | 44k calls/s (p50 57 us) |
+  | oneway 128 B | 122k/s | 75k/s |
+
+  About 2.8x the kernel's round trip: a round trip is four socket messages through the daemon (two requests, two replies) plus a copy into the
+  receive area; one daemon thread serves every process. Innkeeper reports 15 us against 3.8 us for its seccomp broker on other hardware.
+- Round 2 (2026-11-08): the cheaper round trips and the remaining groups on both architectures.
+  - Transaction data now goes through a per-thread shared buffer (sealed memfd, read-only in the daemon) straight into the target's receive area;
+    `SOCK_SEQPACKET` with one message per send/receive; buffers reused per thread; one daemon thread per context; the woken caller answered before
+    the replier. Also fixed: a lost poll wakeup (a reply that drained the wake byte did not re-check: occasional missing death notifications under
+    load) and two holes (values re-read from process-writable memory; memfds a process could shrink under the daemon).
+  - Numbers, medians of three alternating rounds (libbinder both ends, `servicetool bench`; the x86 PC was busy with another agent's tests, load ~2):
+
+    | | x86 kernel | x86 userspace (round 1 / 2) | arm64 kernel | arm64 userspace |
+    |---|---|---|---|---|
+    | round trip, 128 B | 11.4 us | 29.1 / 28.2 us | 40.6 us | 91.0 us |
+    | echo 4 KiB | 12.1 us | 36.3 / 28.7 us | 40.9 us | 91.3 us |
+    | echo 64 KiB | 23.2 us | 86.5 / 41.6 us | 44.5 us | 97.1 us |
+    | 4 threads, 128 B | 123k/s | 44k / 51k/s | 61k/s | 30k/s |
+    | oneway 128 B | 40-122k/s | 75k / 84k/s | 78k/s | 22k/s |
+
+    (arm64 = the Parallels VM, where every context switch is dear: kernel binder itself takes 41 us there.) Data size no longer matters much; what
+    is left is the hop count: a call is four socket messages through the daemon against two wakeups with kernel binder. Getting under ~2x needs
+    fewer hops, not fewer copies (next).
+  - Groups with the userspace binder, x86 PC and arm64 (Parallels): binder, host-binder, hub-services, services, activities, providers,
+    broadcasts, pendingintents, notifications, files, view, sysprov, devices, portal, properties, codec2, native-surface, native-media,
+    native-player, native-audio, audio-late-install, audio-aidl, audio-track, audio-system pass on both; webview passes on both (once on x86 the
+    page's cookie had not reached CookieManager when onPageFinished ran: 1 of 5 runs, a Chromium timing window the slower binder widens; 0 of 4
+    with kernel binder); webview-input passes on x86, failed once on arm64 and passed on rerun (it also failed once with kernel binder there);
+    system-apps and keystore pass on arm64. Not binder, same with kernel binder on the same host: gpu's hwbitmap (both hosts: HWUI's
+    RenderThread::isCurrent race, fixed on branch `x86-hwbitmap-keystore`), keystore on x86 (fixed on that branch), system-apps downloads/media
+    on x86 ("Cannot start com.android.providers.media.module", also in agent a319's kernel run on that PC).
+- Next for step 3 (everything on it): fewer hops per call. Ideas, cheapest first: futex doorbells in the shared buffers instead of socket
+  messages for the request/reply path (the socket stays for fds and death), so a call is still two daemon wakeups but cheaper ones; or let the
+  daemon hand a two-way call's reply buffer to the caller's thread without a second wakeup of the replier (the replier's TRANSACTION_COMPLETE
+  can ride on its next read); a busy-poll window of a few microseconds in the daemon before it sleeps. Then the sandbox's user namespace
+  (the daemon runs in the instance's namespace when the stack starts it, the caller's when `apklayer exec` does), the Flatpak (socket directory
+  under `$XDG_RUNTIME_DIR`), the deb's unit and the manager's first-run check; and the hot paths of step 4 (SurfaceFlinger per frame, audio).
 
 ## Parked (owner's decision)
 - Not now: NFC, biometrics, game controllers, ModemManager ("no SIM" is the honest answer), screen capture portal. Backlight and thermal are the host's.

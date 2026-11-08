@@ -136,7 +136,7 @@ void listInstances(const Layout& l) {
         if (!isDir(join(root, "storage")) && !isDir(join(root, "data"))) continue;  // apps/ and anything else that is not an instance
         std::string id = name == "0" ? "default" : name;
         auto pid = readFile(join(l.stateHome, "apklayer/" + id + "/stack.pid"));
-        printf("%s\t%d\t%d\t%s\t%d\n", id.c_str(), pid && alive(atoi(pid->c_str())) ? 1 : 0, exists(binderDevice(id)) ? 1 : 0, root.c_str(), exists(join(l.stateHome, "apklayer/" + id + "/autostart")) ? 1 : 0);
+        printf("%s\t%d\t%d\t%s\t%d\n", id.c_str(), pid && alive(atoi(pid->c_str())) ? 1 : 0, binderReady(root, id) ? 1 : 0, root.c_str(), exists(join(l.stateHome, "apklayer/" + id + "/autostart")) ? 1 : 0);
     }
 }
 
@@ -145,7 +145,7 @@ int instanceCommand(const Layout& l, const std::string& action, const std::strin
     if (action == "create") {
         Instance inst = Instance::open(l, id);
         printf("created\t%s\n", inst.root.c_str());
-        if (exists(binderDevice(id))) puts("binder\tok");
+        if (binderReady(inst.root, id)) puts("binder\tok");
         else printf("binder\tmissing\t%s\n", haveBinderfs() ? binderSetupCommand(id).c_str() : binderDeviceWhy(id).c_str());
         return 0;
     }
@@ -279,7 +279,7 @@ int status(const Layout& l, const Instance& inst) {
     std::string pkgs;
     for (const auto& [pkg, records] : launches(l, inst)) pkgs += (pkgs.empty() ? "" : ",") + pkg;
     printf("instance\t%s\nstack\t%s\nbinder\t%s\napps\t%s\nabi\t%s\n", inst.id.c_str(), stackRunning(inst) ? "running" : "stopped",
-           exists(binderDevice(inst.id)) ? "ok" : "missing", pkgs.c_str(), kAbi);
+           binderReady(inst.root, inst.id) ? "ok" : "missing", pkgs.c_str(), kAbi);
     printf("gpu node\t%s\n", ne.env.count("APKLAYER_RENDER_NODE") ? ne.env["APKLAYER_RENDER_NODE"].c_str() : "none");
     Spawn egl;
     egl.argv = {"eglinfo", "-B", "-p", "gbm"};
