@@ -25,6 +25,7 @@ final class CommCheck {
 
     static void run(Context context) throws Exception {
         AudioManager audio = context.getSystemService(AudioManager.class);
+        Listener.start(context);  // another process: told of each change below
         AudioDeviceInfo[] outputs = audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS), inputs = audio.getDevices(AudioManager.GET_DEVICES_INPUTS);
         List<AudioDeviceInfo> available = audio.getAvailableCommunicationDevices();
         System.out.println("[hello-native-audio] COMM outputs" + list(outputs) + ", inputs" + list(inputs) + ", communication"
@@ -35,8 +36,9 @@ final class CommCheck {
         for (AudioDeviceInfo device : available) require(device.isSink(), "communication device not a sink");
         require(available.contains(audio.getCommunicationDevice()), "current communication device " + audio.getCommunicationDevice());
         require(Integer.parseInt(audio.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)) > 0, "output sample rate");
-        AudioDeviceInfo chosen = available.get(available.size() - 1);
+        AudioDeviceInfo chosen = available.get(available.size() - 1), before = audio.getCommunicationDevice();
         require(audio.setCommunicationDevice(chosen) && chosen.equals(audio.getCommunicationDevice()), "communication device not selected");
+        if (!chosen.equals(before)) Listener.await(context, "device " + chosen.getType());  // a listener hears a change only (one device: none)
         require(audio.isSpeakerphoneOn() == (chosen.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER), "speakerphone follows the communication device");
         require(preferred().size() == 1 && preferred().get(0) == chosen.getType(), "the policy's preferred call device " + preferred());
         deviceCallback(audio);
@@ -44,12 +46,14 @@ final class CommCheck {
         try {
             require(audio.getMode() == AudioManager.MODE_IN_COMMUNICATION, "mode " + audio.getMode());
             require(phoneState() == AudioManager.MODE_IN_COMMUNICATION, "the policy's phone state " + phoneState());
+            Listener.await(context, "mode " + AudioManager.MODE_IN_COMMUNICATION);
             audio.setMode(AudioManager.MODE_IN_CALL);  // needs MODIFY_PHONE_STATE, which an app does not get: refused
             require(audio.getMode() == AudioManager.MODE_IN_COMMUNICATION, "MODE_IN_CALL without MODIFY_PHONE_STATE: mode " + audio.getMode());
             RecordCheck.run(AudioAttributes.USAGE_VOICE_COMMUNICATION, MediaRecorder.AudioSource.VOICE_COMMUNICATION, "COMM");
             audio.setMicrophoneMute(true);
             try {
                 require(audio.isMicrophoneMute(), "microphone mute not set");
+                Listener.await(context, "mute true");
                 RecordCheck.run(AudioAttributes.USAGE_VOICE_COMMUNICATION, MediaRecorder.AudioSource.VOICE_COMMUNICATION, "MUTE", true);
             } finally { audio.setMicrophoneMute(false); }
             require(!audio.isMicrophoneMute(), "microphone mute not cleared");
@@ -60,6 +64,9 @@ final class CommCheck {
         }
         require(!audio.isSpeakerphoneOn(), "speakerphone after clearCommunicationDevice");
         require(phoneState() == AudioManager.MODE_NORMAL && preferred().isEmpty(), "the policy after the call: state " + phoneState() + ", preferred " + preferred());
+        Listener.await(context, "mute false");
+        Listener.await(context, "mode " + AudioManager.MODE_NORMAL);
+        System.out.println("[hello-native-audio] CROSS PASS another process heard the mode, the communication device and the mute broadcast");
         System.out.println("[hello-native-audio] CALL PASS mode, communication device and microphone mute reach the policy");
     }
 

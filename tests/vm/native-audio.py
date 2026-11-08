@@ -116,7 +116,8 @@ try:
         assert '[hello-native-audio] RECORDER PASS' in text
         assert '[hello-native-audio] COMM PASS' in text  # devices, communication device, a call's playback and capture
         assert '[hello-native-audio] MUTE PASS silent while muted' in text  # setMicrophoneMute: AudioFlinger's mute, the HAL's silent capture
-        assert '[hello-native-audio] CALL PASS' in text  # setMode and setCommunicationDevice reach the policy through the hub (HubCallAudio)
+        assert '[hello-native-audio] CALL PASS' in text
+        assert '[hello-native-audio] CROSS PASS' in text  # another process's mode/device listeners and ACTION_MICROPHONE_MUTE_CHANGED (HubCallAudio)  # setMode and setCommunicationDevice reach the policy through the hub (HubCallAudio)
         assert '[hello-native-audio] VOIP PASS' in text  # WebRTC's call audio: direct buffers with an array, mono capture, effects, ByteBuffer I/O
         capture.verify()
     if late:
