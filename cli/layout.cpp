@@ -1,7 +1,6 @@
 #include "layout.h"
 
 #include "env.h"
-#include "flatpak.h"
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -63,7 +62,6 @@ Layout Layout::detect(bool setUp) {
     l.appsDir = join(l.dataHome, "apklayer/apps");
     l.stateHome = getenvOr("XDG_STATE_HOME", join(homeDir(), ".local/state"));
     l.runtimeHome = getenvOr("XDG_RUNTIME_DIR", "/run/user/" + std::to_string(getuid()));
-    shareRuntimeDir(l.runtimeHome);
     return l;
 }
 
