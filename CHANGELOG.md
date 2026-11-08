@@ -144,6 +144,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-08 - gsi_x86_64 libapklayer_egl, libapklayer_vdisplay (frame timestamps, present thread; graphics/windows agent)
+- Why: the x86_64 counterpart of the entry below; its first try failed: since the arm32 round libapklayer_egl is `compile_multilib: "both"`, and gsi_x86_64's 32-bit variant (i686) has no DEFINE_STUB in Egl.cpp; Android.bp now disables the x86 arch (no 32-bit x86 app process). The tree's copy of hals/graphics was this branch's.
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "..." hals/graphics/egl`, then `cd ~/los24 && source build/envsetup.sh && breakfast gsi_x86_64 userdebug && m libapklayer_egl libapklayer_vdisplay`.
 ### 2026-11-08 - arm64 libapklayer_egl, libapklayer_vdisplay: frame timestamps, the window sink's fence wait off the binder thread (graphics-perf agent)
 - Why: PLAN "Graphics performance" (d) EGL_ANDROID_get_frame_timestamps was stubbed (EglWindow.cpp now does what Android's libEGL does); (b) the window sink waited for SurfaceFlinger's composition fence inside SurfaceFlinger's queueBuffer call (VirtualDisplay.cpp: a present thread). The tree's copies of hals/graphics/egl and vdisplay were main's.
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "..." hals/graphics/egl hals/graphics/vdisplay`, then `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_egl libapklayer_vdisplay`.
