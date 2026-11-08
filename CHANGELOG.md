@@ -3,6 +3,26 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-08: tester reports (0.4.7 deb, NVIDIA x86_64): MojoLauncher's StackOverflowError, FCL's androidnsbypass
+- MojoLauncher (git.artdeell.mjlaunch): its Application wraps its base context (a ContextWrapper of the same ContextImpl), so ShadowHostContextImpl's
+  redirect of the state services (location, battery, ...) to the application's base came back to itself forever. The base is unwrapped to its ContextImpl
+  first. Test: hello-system's `wrappedbase` scenario (its own launch of tests/vm/system-apps.sh; the Application wraps its base only then, since
+  ActivityThread casts the base to ContextImpl for a manifest receiver, as on Android).
+- FCL (com.tungsten.fcl) / Pojav: androidnsbypass resolves the linker's private API from libdl.so and ld-android.so; nothing answered, it fell back to a
+  memory scan for linker64 and called null. Now `bionic___loader_dlopen/_android_dlopen_ext/_dlclose/_dlsym` and the namespace calls
+  (`__loader_android_create_namespace` returns a dummy namespace, link calls succeed) in bridge/native/android_platform.c, found through bionic_dlsym's
+  global `bionic_<name>` lookup; `ld-android.so` and `libdl_android.so` map to the shim's libdl (bridge/native/bionic_translation.cfg);
+  `android_update_LD_LIBRARY_PATH` (FCL's setLdLibraryPath through libdl.so, a null call before) adds existing directories to the app namespace
+  (bridge/native/native_loader.c; the shim linker's 8-directory limit stays).
+- x86 PC (~/apklayer-x86/fcl, FCL 1.3.4.5 x86_64 from its GitHub release): btload loading FCL's libandroidnsbypass.so runs its constructor through
+  "Obtaining private API dlFuncs using libdl.so" and "linker namespace funcs from ld-android.so" (before: the same failure as the tester's log). FCL itself:
+  agreement, storage alert, runtime install (JRE 8/17/21/25, LWJGL; JRE 8's pack200 files fail: FCL runs libunpack200.so as a program, exit 127) by scripted
+  taps; a game launch (it needs a Minecraft version downloaded) was not driven. system-apps: wrappedbase passes in both launches; media fails there
+  (MediaProvider does not start in that tree's setup, unrelated).
+- Java on a deb: `APKLAYER_LOGCAT=1 apklayer run` takes the same JVM (checked: <native>/jdk/bin/java on the PC). The runtime ships no JDK of its own; the
+  deb's JVM is the system's (or the CDS image jdk-image.sh builds from it when the JDK has jmods), so Ubuntu's 21.0.12 in the tester's crash report is
+  expected. The spare message only means that launch started its own JVM (the spare was made without the logcat property).
+
 ## 2026-11-08: Sailfish RPM build fixed after the userspace binder merge (v0.4.7's sailfish job failed)
 - compat/glibc-before-2.38-libc.patch rebased onto 0047 (both add a c_bio source after libc-open-overrides.c: it no longer applied); bionic's uapi
   linux/android/binder.h in bridge/compat/include, used when the kernel headers lack it (Sailfish OS 5.0: 3.18; apklayer-binderd, binder_route.c);
