@@ -44,7 +44,7 @@
  *                114 DMABUF_RELEASE {i32 id, buf}: the compositor is done with that dmabuf buffer (it may be drawn into again)
  *                112 DISPLAY        {i32 refresh in mHz}: the output's refresh rate (sent at HELLO and when it changes)
  *                113 VSYNC          {i32 id, i32 ms}: answer to VSYNC_REQUEST, the compositor's frame callback time (ms)
- *                107 CONFIGURE      {i32 id, i32 logical w, i32 logical h, i32 scale*100, i32 density dpi, i32 navigation bar px}
+ *                107 CONFIGURE      {i32 id, i32 logical w, i32 logical h, i32 scale*100, i32 density dpi, i32 navigation bar px, i32 mobile style}
  *                                    the app renders w*scale x h*scale pixels and re-sends
  *                                    WINDOW_CREATE with the same id to rebuffer in place; density: the dpi the app's resources take
  *                                    (160 * scale on a desktop, the handheld's physical density bucket: mobile.c); navigation bar: the

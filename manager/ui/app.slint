@@ -1,7 +1,7 @@
 // apklayer-manager: Material 3, one window for phones and desktops. Compact (< 600 dp): navigation bar and an extended FAB; medium and
 // expanded: navigation rail with its FAB; expanded (>= 840 dp) also shows the apps' list and detail side by side.
 import { MaterialWindow, MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, NavigationBar, NavigationRail, NavigationItem,
-         SmallAppBar, FloatingActionButton, FABStyle, Dialog, TextField, LinearProgressIndicator, TextButton } from "@material";
+         SmallAppBar, FloatingActionButton, FABStyle, TextField, LinearProgressIndicator, TextButton } from "@material";
 import { Palette } from "std-widgets.slint";
 import { Backend, AppIcons, PropEntry } from "backend.slint";
 import { AppsPage } from "apps.slint";
@@ -10,6 +10,7 @@ import { PropsPage } from "props.slint";
 import { DevicePage } from "device.slint";
 import { HardwarePage } from "hardware.slint";
 import { FirstRunPage, UpdateBanner } from "setup.slint";
+import { PageDialog } from "dialog.slint";
 
 export { Backend }
 
@@ -167,8 +168,8 @@ export component AppWindow inherits MaterialWindow {
         }
     }
 
-    confirm-dialog := Dialog {
-        x: 0; y: 0; width: root.width; height: root.height;
+    confirm-dialog := PageDialog {
+        x: 0; y: 0; width: root.width; height: root.height; full: !root.wide;
         title: root.ask-kind == "uninstall" ? "Uninstall " + root.ask-target + "?" : root.ask-kind == "clear-data" ? "Clear the data of " + root.ask-target + "?"
              : root.ask-kind == "remove-addon" ? "Remove " + root.ask-target + "?" : "Remove instance " + root.ask-target + "?";
         default-action-text: root.ask-kind == "uninstall" ? "Uninstall" : root.ask-kind == "clear-data" ? "Clear data" : "Remove";
@@ -193,8 +194,8 @@ export component AppWindow inherits MaterialWindow {
         action-clicked => { self.close(); }
     }
 
-    install-dialog := Dialog {
-        x: 0; y: 0; width: root.width; height: root.height;
+    install-dialog := PageDialog {
+        x: 0; y: 0; width: root.width; height: root.height; full: !root.wide;
         title: "Install an app";
         default-action-text: "Install";
         actions: ["Cancel"];
@@ -213,8 +214,8 @@ export component AppWindow inherits MaterialWindow {
         action-clicked => { self.close(); }
     }
 
-    instance-dialog := Dialog {
-        x: 0; y: 0; width: root.width; height: root.height;
+    instance-dialog := PageDialog {
+        x: 0; y: 0; width: root.width; height: root.height; full: !root.wide;
         title: "New instance";
         default-action-text: "Create";
         actions: ["Cancel"];
@@ -228,8 +229,8 @@ export component AppWindow inherits MaterialWindow {
         action-clicked => { self.close(); }
     }
 
-    binder-dialog := Dialog {
-        x: 0; y: 0; width: root.width; height: root.height;
+    binder-dialog := PageDialog {
+        x: 0; y: 0; width: root.width; height: root.height; full: !root.wide;
         icon: AppIcons.admin;
         title: "Binder devices needed";
         default-action-text: "Set up";
@@ -244,8 +245,8 @@ export component AppWindow inherits MaterialWindow {
         action-clicked => { self.close(); }
     }
 
-    prop-dialog := Dialog {
-        x: 0; y: 0; width: root.width; height: root.height;
+    prop-dialog := PageDialog {
+        x: 0; y: 0; width: root.width; height: root.height; full: !root.wide;
         title: root.editing-new ? "Add property" : "Edit property";
         default-action-text: "Save";
         actions: root.editing.source == "instance" ? ["Cancel", "Remove override"] : ["Cancel"];
