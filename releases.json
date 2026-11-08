@@ -1,6 +1,49 @@
 {
-  "latest": "0.4.3",
+  "latest": "0.4.5",
   "releases": [
+    {
+      "version": "0.4.5",
+      "date": "2026-11-08",
+      "notes_url": "https://github.com/erfanoabdi/apklayer/releases/tag/v0.4.5",
+      "converter_abi": 3,
+      "data_format": 1,
+      "runtime": {
+        "version": "0.3.4",
+        "prebuilts": "bc10db71448c702e18121873b54bc22ee3d67959",
+        "assets": {
+          "arm64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.5/apklayer-runtime-arm64-0.3.4.tar.zst",
+            "sha256": "2c6aa73b49379b83c9c97b7b3e5210f03985249b9b9cc42eceaa829611a20785"
+          },
+          "amd64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.5/apklayer-runtime-x86_64-0.3.4.tar.zst",
+            "sha256": "1d98d30a685acc3c5e7691e7095a8568d6e172128285aaaaeb4cfc5681edd33e"
+          }
+        }
+      },
+      "debs": {
+        "noble": {
+          "amd64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.5/apklayer_0.4.5-1.noble1_amd64.deb",
+            "sha256": "9dd562336ba1ba5f052be7019bab14b6621bbffd48a4cc58fd4ca3cac3abded3"
+          },
+          "arm64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.5/apklayer_0.4.5-1.noble1_arm64.deb",
+            "sha256": "8925d78ae415aa6c778edb86e711a1c5fdc052bb8d156453d2745d616806ea18"
+          }
+        },
+        "trixie": {
+          "amd64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.5/apklayer_0.4.5-1.trixie1_amd64.deb",
+            "sha256": "9010965d208ef51ca0365995386765a031426b2f1744926662c9f25806651176"
+          },
+          "arm64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.5/apklayer_0.4.5-1.trixie1_arm64.deb",
+            "sha256": "44fc06af9e095b28fb0a384dac90dbc46a89aa84e03a83d761eefe7b945b3d6f"
+          }
+        }
+      }
+    },
     {
       "version": "0.4.3",
       "date": "2026-11-05",
