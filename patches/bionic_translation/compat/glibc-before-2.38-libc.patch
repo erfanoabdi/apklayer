@@ -53,13 +53,13 @@ index 0000000..5015bf5
 +	return res_mkquery(op, dname, class, type, data, datalen, newrr, buf, buflen);
 +}
 diff --git a/meson.build b/meson.build
-index ea2e8ef..324f840 100644
+index 94e288e..03be7cf 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -119,11 +119,13 @@ c_bio = shared_library('c_bio',
- 		'libc/libc-stdio.c',
+@@ -120,11 +120,13 @@ c_bio = shared_library('c_bio',
  		'libc/libc-sha1.c',
  		'libc/libc-open-overrides.c',
+ 		'libc/libc-fd-hooks.c', # apklayer patch: fd hooks
 +		'libc/libc-glibc-compat.c',
  	],
  	soversion: 0, # we're shimming a stable ABI; this should never need to change
