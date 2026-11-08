@@ -8,7 +8,7 @@ import java.util.Map;
 
 /**
  * The system apps and services an app depends on, each used from an app's point of view (-Dhello.sys=name, or "all"): contacts, calendar, downloads, settings,
- * media, documents, userdict, telephony, notifications, alarms, jobs, asyncjobs, build, signing, display, storage, storagestats, vibrator, toast, sysprops, accounts, location, ime. Each prints "[sys] PASS|FAIL name detail"; tests/vm/system-apps.sh runs them one by one.
+ * media, documents, userdict, telephony, notifications, alarms, jobs, asyncjobs, build, signing, display, storage, storagestats, vibrator, toast, sysprops, accounts, location, ime, accept, launchorder. Each prints "[sys] PASS|FAIL name detail"; tests/vm/system-apps.sh runs them one by one.
  */
 public final class Main extends Activity {
     private static final Map<String, Check> CHECKS = new LinkedHashMap<>();
@@ -37,9 +37,14 @@ public final class Main extends Activity {
         CHECKS.put("accountremoval", new AccountRemovalCheck());
         CHECKS.put("location", new LocationCheck());
         CHECKS.put("ime", new ImeCheck());
+        CHECKS.put("accept", new AcceptCheck());
+        CHECKS.put("launchorder", new LaunchOrderCheck());
     }
 
+    static volatile boolean created;  // LaunchOrderCheck
+
     @Override protected void onCreate(Bundle state) {
+        created = true;
         super.onCreate(state);
         Context context = getApplicationContext();
         new Thread(() -> {

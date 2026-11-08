@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """A stopped activity's windows (input group): hello.input shows a full-window dialog and is then covered by its Covered activity. Taps
 must reach the covering activity, never the dialog of the stopped one (Android's window manager hides it; Google Meet crashed when a tap
-reached a stopped activity's fragments). A start of an intent nobody handles leaves the covering activity resumed."""
+reached a stopped activity's fragments); a dialog the stopped activity shows later is hidden too. A start of an intent nobody handles leaves the
+covering activity resumed."""
 import os
 from pathlib import Path
 import selectors
@@ -48,6 +49,7 @@ try:
                     instance.inject(PKG, 'tap:%d,%d' % CENTER)
     assert app.wait() == 0, 'input app failed'
     assert not count('covered dialog tapped'), 'a tap reached the stopped activity\'s dialog'
+    assert count('late dialog shown=false') == 1, 'a dialog shown after its activity stopped was not hidden'
     assert count('covering activity tapped, stateSaved=false') == 2, 'the taps did not reach the covering activity'
     assert not count('covering activity paused') and not count('covering activity stopped'), 'the unhandled start changed the lifecycle'
     print('PASS taps go to the covering activity, not to the stopped one\'s dialog; an unhandled start leaves the lifecycle as it is', flush=True)

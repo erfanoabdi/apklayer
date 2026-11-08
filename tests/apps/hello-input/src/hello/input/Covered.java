@@ -22,6 +22,18 @@ public class Covered extends Activity {
         dialog.show();
         dialog.getWindow().setLayout(-1, -1);
         button.postDelayed(() -> below.startActivity(new Intent(below, Covered.class)), 1500);
+        // a dialog shown once the activity is stopped (a late network answer): hidden with it, no taps
+        android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
+        main.postDelayed(() -> {
+            Dialog late = new Dialog(below);
+            Button lateButton = new Button(below);
+            lateButton.setText("Late dialog of the stopped activity");
+            lateButton.setOnClickListener(v -> System.out.println("[hello-input] covered dialog tapped (late)"));
+            late.setContentView(lateButton);
+            late.show();
+            late.getWindow().setLayout(-1, -1);
+            main.postDelayed(() -> System.out.println("[hello-input] late dialog shown=" + late.getWindow().getDecorView().isShown()), 500);
+        }, 3000);
     }
 
     @Override protected void onCreate(Bundle state) {

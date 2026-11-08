@@ -89,8 +89,12 @@ int apklayer_register_nativelooper(JNIEnv *env, jclass looper)
  * Descriptors are OpenJDK FileDescriptor objects (field "fd"); errors are android.system.ErrnoException(function, errno). */
 #include <errno.h>
 #include <fcntl.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <stddef.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 static jfieldID fd_field(JNIEnv *env)
@@ -169,12 +173,58 @@ static jobject linux_socket(JNIEnv *env, jobject self, jint domain, jint type, j
 }
 static void linux_listen(JNIEnv *env, jobject self, jobject fd, jint backlog) { (void)self; if (listen(fd_of(env, fd), backlog) < 0) throw_errno(env, "listen", errno); }
 static void linux_shutdown(JNIEnv *env, jobject self, jobject fd, jint how) { (void)self; if (shutdown(fd_of(env, fd), how) < 0) throw_errno(env, "shutdown", errno); }
-/* shortcut: the peer address is not filled in (LocalSocketImpl passes null); an InetSocketAddress caller gets it unchanged, fill it when one needs it */
+/* libcore's fillSocketAddress: the peer of an accepted connection into the caller's InetSocketAddress (its holder's addr and port; an IPv4-mapped
+ * address as the IPv4 one, as sockaddrToInetAddress) or android.system.UnixSocketAddress (sun_path); false with an exception pending otherwise */
+static int fill_peer(JNIEnv *env, jobject peer, const struct sockaddr_storage *ss, socklen_t length)
+{
+    jclass inet = (*env)->FindClass(env, "java/net/InetSocketAddress"), unix_class = (*env)->FindClass(env, "android/system/UnixSocketAddress");
+    if (!unix_class) (*env)->ExceptionClear(env);
+    if ((*env)->IsInstanceOf(env, peer, inet) && (ss->ss_family == AF_INET || ss->ss_family == AF_INET6)) {
+        const struct sockaddr_in *in = (const struct sockaddr_in *)ss;
+        const struct sockaddr_in6 *in6 = (const struct sockaddr_in6 *)ss;
+        int mapped = ss->ss_family == AF_INET6 && IN6_IS_ADDR_V4MAPPED(&in6->sin6_addr);
+        const void *bytes = ss->ss_family == AF_INET ? (const void *)&in->sin_addr : mapped ? (const void *)&in6->sin6_addr.s6_addr[12] : (const void *)&in6->sin6_addr;
+        jsize size = ss->ss_family == AF_INET || mapped ? 4 : 16;
+        jbyteArray array = (*env)->NewByteArray(env, size);
+        (*env)->SetByteArrayRegion(env, array, 0, size, bytes);
+        jobject address;
+        if (size == 4) {
+            jclass cls = (*env)->FindClass(env, "java/net/InetAddress");
+            address = (*env)->CallStaticObjectMethod(env, cls, (*env)->GetStaticMethodID(env, cls, "getByAddress", "([B)Ljava/net/InetAddress;"), array);
+        } else {
+            jclass cls = (*env)->FindClass(env, "java/net/Inet6Address");
+            address = (*env)->CallStaticObjectMethod(env, cls, (*env)->GetStaticMethodID(env, cls, "getByAddress", "(Ljava/lang/String;[BI)Ljava/net/Inet6Address;"),
+                                                     NULL, array, (jint)in6->sin6_scope_id);
+        }
+        if ((*env)->ExceptionCheck(env)) return 0;
+        jobject holder = (*env)->GetObjectField(env, peer, (*env)->GetFieldID(env, inet, "holder", "Ljava/net/InetSocketAddress$InetSocketAddressHolder;"));
+        jclass holder_class = (*env)->GetObjectClass(env, holder);
+        (*env)->SetObjectField(env, holder, (*env)->GetFieldID(env, holder_class, "addr", "Ljava/net/InetAddress;"), address);
+        (*env)->SetIntField(env, holder, (*env)->GetFieldID(env, holder_class, "port", "I"), ntohs(ss->ss_family == AF_INET ? in->sin_port : in6->sin6_port));
+        return 1;
+    }
+    if (unix_class && (*env)->IsInstanceOf(env, peer, unix_class) && ss->ss_family == AF_UNIX) {
+        jsize size = length > offsetof(struct sockaddr_un, sun_path) ? (jsize)(length - offsetof(struct sockaddr_un, sun_path)) : 0;
+        jbyteArray path = (*env)->NewByteArray(env, size);
+        (*env)->SetByteArrayRegion(env, path, 0, size, (const jbyte *)((const struct sockaddr_un *)ss)->sun_path);
+        (*env)->SetObjectField(env, peer, (*env)->GetFieldID(env, unix_class, "sun_path", "[B"), path);
+        return 1;
+    }
+    jclass unsupported = (*env)->FindClass(env, "java/lang/UnsupportedOperationException");
+    (*env)->ThrowNew(env, unsupported, "unsupported SocketAddress subclass");
+    return 0;
+}
+
 static jobject linux_accept(JNIEnv *env, jobject self, jobject fd, jobject peer)
 {
-    (void)self; (void)peer;
-    int n = accept(fd_of(env, fd), NULL, NULL);
+    (void)self;
+    struct sockaddr_storage ss;
+    socklen_t length = sizeof ss;
+    memset(&ss, 0, sizeof ss);
+    int n;
+    do n = accept(fd_of(env, fd), peer ? (struct sockaddr *)&ss : NULL, peer ? &length : NULL); while (n < 0 && errno == EINTR);
     if (n < 0) { throw_errno(env, "accept", errno); return NULL; }
+    if (peer && !fill_peer(env, peer, &ss, length)) { close(n); return NULL; }
     return fd_make(env, n);
 }
 
