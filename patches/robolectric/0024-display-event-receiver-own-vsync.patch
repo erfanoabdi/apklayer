@@ -1,0 +1,54 @@
+From: apklayer
+Subject: [PATCH] ShadowDisplayEventReceiver: every receiver gets its own scheduled vsync
+
+The next vsync time is one static of ShadowChoreographer; the first receiver whose clock listener saw it due cleared it and took the
+vsync. A Choreographer on another looper (Unity 2022's UnityChoreographer thread) then never got one while the main thread's kept
+scheduling frames, and Unity's render loop waited for that frame counter forever (a black window). Each receiver now keeps its own due
+time; the shared one still tells the loop when the next frame is due.
+
+Against external/robolectric 87aa52b08 (REVISION), after 0005. apklayer patch: 0024 of patches/robolectric (see docs/PATCHES.md).
+---
+diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowDisplayEventReceiver.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowDisplayEventReceiver.java
+index 9908be9..334f4fd 100644
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowDisplayEventReceiver.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowDisplayEventReceiver.java
+@@ -179,6 +179,9 @@ public class ShadowDisplayEventReceiver {
+     private final ShadowPausedSystemClock.Listener clockListener = this::onClockAdvanced;
+     private int frame = 0;
+     private Object /* VsyncEventData */ latestVsyncEventData = null;
++    // apklayer patch: this receiver's own pending vsync. The shared next-vsync time alone went to whichever receiver's listener ran first,
++    // so a Choreographer on another looper (Unity's UnityChoreographer thread) never got one while the main thread's kept scheduling.
++    private long vsyncAt = 0;
+ 
+     public NativeDisplayEventReceiver(WeakReference<DisplayEventReceiver> receiverRef) {
+       this.receiverRef = receiverRef;
+@@ -188,11 +191,14 @@ public class ShadowDisplayEventReceiver {
+ 
+     private void onClockAdvanced(Duration advancedBy) {
+       synchronized (this) {
+-        long nextVsyncTime = ShadowChoreographer.getNextVsyncTimeNanos();
+-        if (nextVsyncTime == 0 || ShadowPausedSystemClock.uptimeNanos() < nextVsyncTime) {
++        long now = ShadowPausedSystemClock.uptimeNanos();
++        if (vsyncAt == 0 || now < vsyncAt) {
+           return;
+         }
+-        ShadowChoreographer.setNextVsyncTimeNanos(0);
++        vsyncAt = 0;
++        if (ShadowChoreographer.getNextVsyncTimeNanos() <= now) {
++          ShadowChoreographer.setNextVsyncTimeNanos(0);
++        }
+       }
+ 
+       doVsync();
+@@ -205,6 +211,11 @@ public class ShadowDisplayEventReceiver {
+     public void scheduleVsync() {
+       Duration frameDelay = ShadowChoreographer.getFrameDelay();
+       if (ShadowChoreographer.isPaused()) {
++        synchronized (this) {
++          if (vsyncAt == 0) {
++            vsyncAt = ShadowPausedSystemClock.uptimeNanos() + frameDelay.toNanos();
++          }
++        }
+         if (ShadowChoreographer.getNextVsyncTimeNanos() < ShadowPausedSystemClock.uptimeNanos()) {
+           ShadowChoreographer.setNextVsyncTimeNanos(
+               ShadowPausedSystemClock.uptimeNanos() + frameDelay.toNanos());

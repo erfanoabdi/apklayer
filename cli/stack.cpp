@@ -431,6 +431,11 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         // cameraserver over the camera provider HAL: what the apps' CameraManager and android.hardware.Camera talk to (HostCameraShadows)
         if (p.name == "camera" && staged(l, "libapklayer_cameraserver.so")) start("cameraserver", "libapklayer_cameraserver.so", {});
     }
+    // no sensors provider: SensorService still runs, with no sensors (no HAL declared), as a device always has it; else libsensor (NDK
+    // ASensorManager: Unity) waits 300 s for "sensorservice" on every call
+    bool sensors = false;
+    for (const ProviderService& p : providers) sensors |= p.name == "sensors";
+    if (!sensors && staged(l, "libapklayer_sensorservice.so")) start("sensorservice", "libapklayer_sensorservice.so", {});
     // camera = device: the device's HIDL provider through the host hwbinder context, cameraserver over it (libhidl 0003 lists it)
     if (deviceDomain(l, inst, "camera") && staged(l, "libapklayer_cameraserver.so")) start("cameraserver", "libapklayer_cameraserver.so", {});
     start("surfaceflinger", "libapklayer_surfaceflinger.so", {});
