@@ -27,9 +27,10 @@ scale = 1  # the window's scale (the shell's configure line)
 
 
 def level(shot):
-    """Brightness where the sheet's handle is (its gray, or the activity once the sheet is gone)."""
+    """Brightness where the sheet's handle is (its gray, or the activity once the sheet is gone): the app's pixels, as the sheet line gives them
+    (its sizes are pixels, so at 200% the handle is lower in the window than at 100%)."""
     im = pixels.rgb(shot)
-    return sum(im.getpixel((im.width // 2, im.height * 470 // 600))) // 3
+    return sum(im.getpixel((im.width // 2, handle_y))) // 3
 
 
 def upper(shot):
@@ -80,6 +81,7 @@ try:
                     stage, x, y, w, h = (int(n) for n in m.groups()[:5])
                     assert y > 300, 'sheet %d is not at the bottom: %s' % (stage, line)
                     if stage == 3:
+                        handle_y = y + 30  # the handle: the sheet's first 60 pixels
                         shot = instance.capture('sheet shown', PKG)
                         shown, dimmed = level(shot), upper(shot)
                     if stage == 6: over = level(instance.capture('sheet over popup', PKG))
