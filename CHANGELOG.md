@@ -144,6 +144,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-08 - arm64 libapklayer_egl, libapklayer_vdisplay: frame timestamps, the window sink's fence wait off the binder thread (graphics-perf agent)
+- Why: PLAN "Graphics performance" (d) EGL_ANDROID_get_frame_timestamps was stubbed (EglWindow.cpp now does what Android's libEGL does); (b) the window sink waited for SurfaceFlinger's composition fence inside SurfaceFlinger's queueBuffer call (VirtualDisplay.cpp: a present thread). The tree's copies of hals/graphics/egl and vdisplay were main's.
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "..." hals/graphics/egl hals/graphics/vdisplay`, then `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_egl libapklayer_vdisplay`.
 ### 2026-11-08 - x86_64 libapklayer_audio, libapklayer_codec2, libapklayer_gatekeeper, libapklayer_gatekeeperd (lead)
 - Why: the x86_64 prebuilts lack the call-audio/keystore round (mic mute, software Gatekeeper and gatekeeperd) and the codec2 probe change that arm64 got (prebuilts 1c79d580). Sources already in vendor/apklayer (synced from main).
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "..." hals/media/codec2`, then `cd ~/los24 && source build/envsetup.sh && breakfast gsi_x86_64 userdebug && m libapklayer_audio libapklayer_codec2 libapklayer_gatekeeper libapklayer_gatekeeperd`.

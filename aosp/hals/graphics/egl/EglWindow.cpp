@@ -7,6 +7,7 @@
 
 #include <drm_fourcc.h>
 #include <log/log.h>
+#include <errno.h>
 #include <poll.h>
 #include <system/window.h>
 #include <sys/stat.h>
@@ -56,6 +57,11 @@ std::set<Window*> windows;
 Window* windowOf(EGLSurface s) {  // windowsLock held
     auto* w = static_cast<Window*>(s);
     return windows.count(w) ? w : nullptr;
+}
+ANativeWindow* nativeOf(EGLSurface s) {  // the Android window of one of our window surfaces, else null
+    std::lock_guard<std::recursive_mutex> lock(windowsLock);
+    Window* w = windowOf(s);
+    return w ? w->native : nullptr;
 }
 EGLSurface appSurface(EGLSurface host) {  // reverse, for eglGetCurrentSurface
     std::lock_guard<std::recursive_mutex> lock(windowsLock);
@@ -380,7 +386,91 @@ EGLBoolean eglQuerySurface(EGLDisplay dpy, EGLSurface surface, EGLint attribute,
 }
 
 EGLBoolean eglSurfaceAttrib(EGLDisplay dpy, EGLSurface surface, EGLint attribute, EGLint value) {
+    if (attribute == EGL_TIMESTAMPS_ANDROID) {  // SurfaceFlinger's frame events for this window (no effect on a pbuffer, as the spec says)
+        ANativeWindow* nw = nativeOf(surface);
+        return !nw || native_window_enable_frame_timestamps(nw, value != 0) == 0 ? EGL_TRUE : fail(EGL_BAD_SURFACE);
+    }
     return host<EGLBoolean (*)(EGLDisplay, EGLSurface, EGLint, EGLint)>("eglSurfaceAttrib")(dpy, hostSurface(surface), attribute, value);
+}
+
+// EGL_ANDROID_get_frame_timestamps as Android's libEGL does it (egl_platform_entries.cpp): libgui's Surface keeps SurfaceFlinger's frame events.
+// The display present time is offered only when SurfaceFlinger trusts the present fences (ours are PRESENT_FENCE_IS_NOT_RELIABLE: it says no).
+EGLBoolean eglGetNextFrameIdANDROID(EGLDisplay, EGLSurface surface, EGLuint64KHR* frameId) {
+    ANativeWindow* nw = nativeOf(surface);
+    if (!nw) return fail(EGL_BAD_SURFACE);
+    uint64_t id = 0;
+    if (native_window_get_next_frame_id(nw, &id) != 0) return fail(EGL_NOT_INITIALIZED);
+    *frameId = id;
+    return EGL_TRUE;
+}
+
+EGLBoolean eglGetCompositorTimingANDROID(EGLDisplay, EGLSurface surface, EGLint n, const EGLint* names, EGLnsecsANDROID* values) {
+    ANativeWindow* nw = nativeOf(surface);
+    if (!nw) return fail(EGL_BAD_SURFACE);
+    int64_t *deadline = nullptr, *interval = nullptr, *latency = nullptr;
+    for (EGLint i = 0; i < n; i++) {
+        switch (names[i]) {
+            case EGL_COMPOSITE_DEADLINE_ANDROID: deadline = &values[i]; break;
+            case EGL_COMPOSITE_INTERVAL_ANDROID: interval = &values[i]; break;
+            case EGL_COMPOSITE_TO_PRESENT_LATENCY_ANDROID: latency = &values[i]; break;
+            default: return fail(EGL_BAD_PARAMETER);
+        }
+    }
+    int ret = native_window_get_compositor_timing(nw, deadline, interval, latency);
+    return ret == 0 ? EGL_TRUE : fail(ret == -ENOSYS ? EGL_BAD_SURFACE : EGL_NOT_INITIALIZED);
+}
+
+EGLBoolean eglGetCompositorTimingSupportedANDROID(EGLDisplay, EGLSurface surface, EGLint name) {
+    if (!nativeOf(surface)) return fail(EGL_BAD_SURFACE);
+    return name == EGL_COMPOSITE_DEADLINE_ANDROID || name == EGL_COMPOSITE_INTERVAL_ANDROID || name == EGL_COMPOSITE_TO_PRESENT_LATENCY_ANDROID;
+}
+
+EGLBoolean eglGetFrameTimestampsANDROID(EGLDisplay, EGLSurface surface, EGLuint64KHR frameId, EGLint n, const EGLint* names, EGLnsecsANDROID* values) {
+    ANativeWindow* nw = nativeOf(surface);
+    if (!nw) return fail(EGL_BAD_SURFACE);
+    int64_t *requested = nullptr, *acquire = nullptr, *latch = nullptr, *firstRefresh = nullptr, *lastRefresh = nullptr, *gpuDone = nullptr,
+            *present = nullptr, *dequeueReady = nullptr, *release = nullptr;
+    for (EGLint i = 0; i < n; i++) {
+        switch (names[i]) {
+            case EGL_REQUESTED_PRESENT_TIME_ANDROID: requested = &values[i]; break;
+            case EGL_RENDERING_COMPLETE_TIME_ANDROID: acquire = &values[i]; break;
+            case EGL_COMPOSITION_LATCH_TIME_ANDROID: latch = &values[i]; break;
+            case EGL_FIRST_COMPOSITION_START_TIME_ANDROID: firstRefresh = &values[i]; break;
+            case EGL_LAST_COMPOSITION_START_TIME_ANDROID: lastRefresh = &values[i]; break;
+            case EGL_FIRST_COMPOSITION_GPU_FINISHED_TIME_ANDROID: gpuDone = &values[i]; break;
+            case EGL_DISPLAY_PRESENT_TIME_ANDROID: present = &values[i]; break;
+            case EGL_DEQUEUE_READY_TIME_ANDROID: dequeueReady = &values[i]; break;
+            case EGL_READS_DONE_TIME_ANDROID: release = &values[i]; break;
+            default: return fail(EGL_BAD_PARAMETER);
+        }
+    }
+    int ret = native_window_get_frame_timestamps(nw, frameId, requested, acquire, latch, firstRefresh, lastRefresh, gpuDone, present,
+                                                 dequeueReady, release);
+    switch (ret) {
+        case 0: return EGL_TRUE;
+        case -ENOENT: return fail(EGL_BAD_ACCESS);  // not (or no longer) in the history
+        case -ENOSYS: return fail(EGL_BAD_SURFACE);
+        case -EINVAL: return fail(EGL_BAD_PARAMETER);
+        default: return fail(EGL_NOT_INITIALIZED);
+    }
+}
+
+EGLBoolean eglGetFrameTimestampSupportedANDROID(EGLDisplay, EGLSurface surface, EGLint name) {
+    ANativeWindow* nw = nativeOf(surface);
+    if (!nw) return fail(EGL_BAD_SURFACE);
+    switch (name) {
+        case EGL_COMPOSITE_DEADLINE_ANDROID: case EGL_COMPOSITE_INTERVAL_ANDROID: case EGL_COMPOSITE_TO_PRESENT_LATENCY_ANDROID:
+        case EGL_REQUESTED_PRESENT_TIME_ANDROID: case EGL_RENDERING_COMPLETE_TIME_ANDROID: case EGL_COMPOSITION_LATCH_TIME_ANDROID:
+        case EGL_FIRST_COMPOSITION_START_TIME_ANDROID: case EGL_LAST_COMPOSITION_START_TIME_ANDROID:
+        case EGL_FIRST_COMPOSITION_GPU_FINISHED_TIME_ANDROID: case EGL_DEQUEUE_READY_TIME_ANDROID: case EGL_READS_DONE_TIME_ANDROID:
+            return EGL_TRUE;
+        case EGL_DISPLAY_PRESENT_TIME_ANDROID: {
+            int value = 0;
+            nw->query(nw, NATIVE_WINDOW_FRAME_TIMESTAMPS_SUPPORTS_PRESENT, &value);
+            return value != 0;
+        }
+        default: return EGL_FALSE;
+    }
 }
 
 EGLSurface eglCreatePbufferSurface(EGLDisplay dpy, EGLConfig cfg, const EGLint* attribs) {

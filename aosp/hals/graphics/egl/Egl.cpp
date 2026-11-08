@@ -90,7 +90,8 @@ std::vector<EGLint> filtered(const EGLint* attribs, std::initializer_list<EGLint
 
 const char* kAndroidExtensions =
         " EGL_ANDROID_image_native_buffer EGL_ANDROID_get_native_client_buffer EGL_ANDROID_blob_cache EGL_IMG_context_priority"
-        " EGL_ANDROID_recordable EGL_KHR_swap_buffers_with_damage";  // the last: implemented here (HWUI refuses to start without it)
+        " EGL_ANDROID_recordable EGL_KHR_swap_buffers_with_damage"  // implemented here (HWUI refuses to start without it)
+        " EGL_ANDROID_get_frame_timestamps";  // EglWindow.cpp: SurfaceFlinger's frame events through the Android window, as Android's libEGL
 
 static unsigned displayRefs;  // initialize/terminate count, below
 
@@ -313,11 +314,6 @@ EGLBoolean eglGetConfigAttrib(EGLDisplay dpy, EGLConfig cfg, EGLint attribute, E
 
 // Android's EGL extensions the framework asks for that need no real work here.
 void eglSetBlobCacheFuncsANDROID(EGLDisplay, EGLSetBlobFuncANDROID, EGLGetBlobFuncANDROID) {}
-EGLBoolean eglGetFrameTimestampSupportedANDROID(EGLDisplay, EGLSurface, EGLint) { return EGL_FALSE; }
-EGLBoolean eglGetCompositorTimingSupportedANDROID(EGLDisplay, EGLSurface, EGLint) { return EGL_FALSE; }
-EGLBoolean eglGetCompositorTimingANDROID(EGLDisplay, EGLSurface, EGLint, const EGLint*, EGLnsecsANDROID*) { return fail(EGL_BAD_ACCESS); }
-EGLBoolean eglGetNextFrameIdANDROID(EGLDisplay, EGLSurface, EGLuint64KHR*) { return fail(EGL_BAD_ACCESS); }
-EGLBoolean eglGetFrameTimestampsANDROID(EGLDisplay, EGLSurface, EGLuint64KHR, EGLint, const EGLint*, EGLnsecsANDROID*) { return fail(EGL_BAD_ACCESS); }
 
 // ---- forwarded to the host, untouched ----
 // A tail call through a pointer resolved at load: no signature needed.
