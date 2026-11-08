@@ -218,7 +218,7 @@ Ubuntu Touch (Halium phones): docs/HALIUM.md "The apt install on the phone"; "Ch
 
 ## Flatpak
 
-**Not yet built or run end to end (2026-11-08): see docs/PLAN.md "Flatpak".** The release's `apklayer-<version>-<cpu>.flatpak` (aarch64, x86_64; app id `io.github.erfanoabdi.Apklayer`, runtime `org.freedesktop.Platform` 26.08 from Flathub):
+**New (2026-11-08): run end to end on aarch64; see docs/PLAN.md "Flatpak".** The release's `apklayer-<version>-<cpu>.flatpak` (aarch64, x86_64; app id `io.github.erfanoabdi.Apklayer`, runtime `org.freedesktop.Platform` 26.08 from Flathub):
 
 ```sh
 flatpak install --user apklayer-*-aarch64.flatpak
@@ -246,8 +246,9 @@ Permissions (`finish-args` in `flatpak/io.github.erfanoabdi.Apklayer.yml`) and w
 
 Different from the deb: data, logs and the runtime live under `~/.var/app/io.github.erfanoabdi.Apklayer/`; the per-app sandbox (`APKLAYER_SANDBOX=1`)
 cannot run (Flatpak's seccomp filter refuses nested user namespaces and `newuidmap` is not setuid inside); an app's full home access needs
-`flatpak override --user --filesystem=home io.github.erfanoabdi.Apklayer`; `apklayer instance autostart` (systemd user units) and the `.apk` file
-association are not available; the GLES version probe (`eglinfo`, mesa-utils) is not in the Platform, so a host driver under GLES 3.2 gets no 3.2
+`flatpak override --user --filesystem=home io.github.erfanoabdi.Apklayer`; `apklayer instance autostart` (systemd user units) is not available and the `.apk` file
+association is not set (the Platform has no `xdg-mime`); every command runs in apklayerd (started on demand, as with the per-app sandbox),
+because each `flatpak run` is a pid namespace of its own; the GLES version probe (`eglinfo`, mesa-utils) is not in the Platform, so a host driver under GLES 3.2 gets no 3.2
 claim. NVIDIA: Flatpak needs the `org.freedesktop.Platform.GL.nvidia-<version>` extension matching the host driver (`flatpak update` installs it
 when Flathub has that version); other GPUs use Mesa from `org.freedesktop.Platform.GL.default`.
 

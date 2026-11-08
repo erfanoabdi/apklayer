@@ -6,7 +6,8 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 ## 2026-11-08: Flatpak builds in CI (branch flatpak-ci)
 - Manifest modules libmd, libbsd (bionic_translation), mtdev, libevdev, libinput (the manager's prebuilt Slint); post-install from the build directory;
   `.github/workflows/flatpak.yml` builds the bundles alone. Inside the Flatpak with no binderfs the userspace binder is used (no host step).
-  Run on Parallels started (stack up on apklayer-binderd), paused before UiBench (docs/PLAN.md "Flatpak").
+  Every command inside goes through the on-demand apklayerd (each `flatpak run` has its own pid namespace); the launchers, merge file and
+  directory entry are named by the app id, apart from the deb's `apklayer-*`. UiBench ran and was screenshotted on Parallels (docs/PLAN.md "Flatpak").
 
 ## 2026-11-08: userspace binder prototype (docs/BINDER.md, branch userspace-binder)
 - docs/PLAN.md "Plan: binder in userspace" steps 1-2. `apklayer-binderd` (bridge/binderd): the binder driver model written from Linux's binder.c (v6.6),
