@@ -131,7 +131,14 @@ WebView switch per instance, no pkexec); the manager follows Lomiri's scale and 
 - **A person**: the window raise of a relaunched app (the shell asks with the launcher's XDG_ACTIVATION_TOKEN; mutter refuses the shell's own token, no test has a launcher token); what the text magnifier draws; the portal file chooser and pkexec prompt in the manager; the Google sign-in in Meet/microG; playback quality by ear and eye.
 
 ## Before a public release
-Flatpak; the per-app sandbox below; COMMERCIAL.md terms and contact, a CLA and ownership of agent-written commits, NOTICE files for everything shipped.
+Flatpak (in progress, below); the per-app sandbox below; COMMERCIAL.md terms and contact, a CLA and ownership of agent-written commits, NOTICE files for everything shipped.
+
+## Flatpak (started 2026-11-08)
+Done: manifest `flatpak/io.github.erfanoabdi.Apklayer.yml` (the deb's Meson build at /app, runtime freedesktop 26.08, openjdk21 extension's JRE, the manager as the command), `flatpak/build.sh`, release job `flatpak` (aarch64, x86_64; continue-on-error), CLI: launchers and submenu at the host's XDG paths with `flatpak run --command=apklayer` (cli/flatpak.cpp), binder setup command with the host path of binder.sh (CLI and manager). Permissions and host step: docs/INSTALL.md "Flatpak".
+Open, in order:
+1. **First local build**: never completed: Flathub pulls from this network drop mid-file (curl 56, 2026-11-08, OrbStack ubuntu26 and Parallels; 40 retries did not finish the SDK). Retry `sh flatpak/build.sh ~/fp/prebuilts ~/fp/out` in OrbStack `ubuntu26` (prebuilts joined there in `~/fp/prebuilts`, source in `~/fp/src`), or take the CI job's bundle. Expect fixes: libinput/libunwind/libbsd may be missing from the 26.08 SDK (then modules), `eglinfo` (gpus.cpp, GLES version) and `unzip` may be missing from the Platform, post-install's cwd.
+2. **Run UiBench through it** on Parallels (flatpak 1.14.6 installed there from its debs; its Platform pull failed the same way: copy the runtime from OrbStack with `flatpak build-bundle --runtime`): `apklayer setup`, install tests/uibench, `apklayer screenshot`; check that `/dev/binderfs` is visible with `--device=all` and that Flatpak's seccomp lets the JVMs and bionic_translation run.
+3. Flathub: offline sources (wrap, deps.lock, Slint as pinned sources), the dynamic launcher portal instead of `xdg-data/applications`.
 
 ## Plan: one build instead of tools/* (decided 2026-11-04 by the owner, after the current round)
 Done 2026-11-04: AppHost split (the task stack in ActivityTask.java; AppHost 407 lines). Done 2026-11-05: items 1-3, 5 and 6 (tools/build, fetch-deps.sh, javac-jar.sh, package.sh removed; tests/run installs into <repo>/inst; debian/rules calls Meson); item 4 done for development and tests (instrumented once by ninja); the deb's per-user bundle setup remains as `tools/release/setup-runtime.sh` until the bundle format is decided (ship the instrumented framework jar in the bundle?).

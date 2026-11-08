@@ -4,7 +4,7 @@
 # Build: sh flatpak/build.sh <joined prebuilts checkout> <out dir> (it links flatpak/prebuilts to the checkout).
 app-id: io.github.erfanoabdi.Apklayer
 runtime: org.freedesktop.Platform
-runtime-version: '25.08'
+runtime-version: '26.08'
 sdk: org.freedesktop.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.openjdk21
