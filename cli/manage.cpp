@@ -124,6 +124,7 @@ int clearData(const Layout& l, const Instance& inst, const std::string& package)
     stopApp(l, inst, package);
     reclaim(inst.appData(package));  // files the sandbox's app uid owns
     removeTree(inst.appData(package));
+    unlink(join(inst.root, "notification-channels/" + package).c_str());  // as NotificationManagerService.clearData: the app's channels go with its data
     if (inst.id == "default") removeTree(join(appDir(l, package), "data"));  // the shared place before data was per instance (appDataDir would move it back in)
     printf("apklayer: cleared the data of %s in instance %s\n", package.c_str(), inst.id.c_str());
     return 0;

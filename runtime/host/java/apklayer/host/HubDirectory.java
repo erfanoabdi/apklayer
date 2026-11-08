@@ -502,6 +502,9 @@ final class HubDirectory extends Binder {
                 try { if (follow) fixes = gnss.follow(caller); else gnss.died(caller); } catch (IOException failure) { throw new IllegalStateException("GNSS: " + failure, failure); }
                 reply.writeNoException(); reply.writeTypedObject(fixes, android.os.Parcelable.PARCELABLE_WRITE_RETURN_VALUE); return true;
             }
+            case HubProtocol.NOTIFY_CHANNELS -> {
+                Peer caller = caller(); HubNotificationChannels.call(caller.name(), request.readInt(), request, reply); return true;
+            }
             case HubProtocol.USB_PERMISSION -> {
                 Peer caller = caller(); String device = request.readString(); boolean ask = request.readBoolean(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeBoolean(usb.permission(caller.name(), device, ask)); return true;
