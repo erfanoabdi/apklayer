@@ -10,7 +10,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.widget.TextView;
 
-/** One phase from -Dhello.push: register (the default), alarm (an RTC_WAKEUP alarm in 8 s), job (a job in 6 s), jobs (JobsCheck), retry (RetryJob), service (a started service). */
+/** One phase from -Dhello.push: register (the default), alarm (an RTC_WAKEUP alarm in 8 s), job (a job in 6 s), jobs (JobsCheck), retry (RetryJob), service (a started service), c2dm (a registration with microG). */
 public class Main extends Activity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -38,6 +38,20 @@ public class Main extends Activity {
             case "service" -> {
                 startService(new Intent(this, KeepService.class));
                 System.out.println("[push] SERVICE-ASKED");
+            }
+            case "c2dm" -> {
+                // as Firebase's Rpc (the registration every FCM app makes, FirebaseMessaging.getToken): REGISTER to Play services / microG, the answer
+                // through a Messenger
+                android.os.Messenger reply = new android.os.Messenger(new android.os.Handler(android.os.Looper.getMainLooper(), message -> {
+                    Bundle extras = message.obj instanceof Intent answer ? answer.getExtras() : null;
+                    String token = extras == null ? null : extras.getString("registration_id");
+                    System.out.println("[push] C2DM " + (token != null ? "token of " + token.length() + " chars" : "error=" + (extras == null ? message : extras.getString("error"))));
+                    return true;
+                }));
+                Intent register = new Intent("com.google.android.c2dm.intent.REGISTER").setPackage("com.google.android.gms")
+                        .putExtra("app", PendingIntent.getBroadcast(this, 0, new Intent().setPackage("com.google.example.invalidpackage"), PendingIntent.FLAG_IMMUTABLE))
+                        .putExtra("sender", System.getProperty("hello.sender", "760348033671")).putExtra("scope", "*").putExtra("google.messenger", reply);
+                System.out.println("[push] C2DM-ASKED " + startService(register));
             }
             default -> System.out.println("[push] REGISTERED");
         }

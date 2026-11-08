@@ -62,7 +62,11 @@ final class HostNetwork {
 
     static void install(Application app) {
         apply(app, read());
-        watch(() -> { State next = read(); new Handler(Looper.getMainLooper()).post(() -> apply(app, next)); });
+        watch(() -> {
+            State next = read();
+            if (hubSend != null) apply(app, next);  // the hub's main thread does not loop
+            else new Handler(Looper.getMainLooper()).post(() -> apply(app, next));
+        });
     }
 
     /** Runs {@code changed} on every route or address event of the host (the hub's job constraints, an app's networks). */
@@ -83,6 +87,9 @@ final class HostNetwork {
     private static synchronized void apply(Application app, State next) {
         State previous = current;
         if (initialized && java.util.Objects.equals(previous, next)) return;
+        if (initialized && hubSend != null)  // as ConnectivityService: registered receivers only (microG's McsService reconnects on it); non-sticky
+            hubSend.accept(new android.content.Intent(ConnectivityManager.CONNECTIVITY_ACTION).putExtra(ConnectivityManager.EXTRA_NO_CONNECTIVITY, next == null)
+                    .addFlags(android.content.Intent.FLAG_RECEIVER_REGISTERED_ONLY), false);
         initialized = true;
         current = next;
         ConnectivityManager manager = app.getSystemService(ConnectivityManager.class);
@@ -114,4 +121,8 @@ final class HostNetwork {
     }
 
     private static boolean initialized;
+    private static java.util.function.BiConsumer<android.content.Intent, Boolean> hubSend;
+
+    /** In the hub: each change of the host's connection is announced as CONNECTIVITY_ACTION. */
+    static synchronized void installHub(java.util.function.BiConsumer<android.content.Intent, Boolean> send) { hubSend = send; }
 }

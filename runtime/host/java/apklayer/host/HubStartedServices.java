@@ -31,7 +31,11 @@ final class HubStartedServices {
         if (!caller.name().equals(info.packageName) && !info.exported) throw new SecurityException("Service is not exported");
         packages.enforceServicePermission(caller.name(), info);
         Intent explicit = new Intent(intent).setComponent(new ComponentName(info.packageName, info.name));
-        HubDirectory.Peer target = broadcasts.process(info.packageName);
+        // a service declared in a process of its own (android:process, isolatedProcess: microG's McsService in ":persistent") runs in that process's
+        // host, keyed as a bind keys it (HubServices.ownProcess); the package's process would refuse it
+        String process = info.processName != null ? info.processName : info.packageName;
+        boolean own = (info.flags & ServiceInfo.FLAG_ISOLATED_PROCESS) != 0 || !process.equals(info.packageName);
+        HubDirectory.Peer target = broadcasts.process(HubDirectory.key(info.packageName, own ? info.name : null));
         if (target == null) throw new IllegalStateException("Cannot start " + info.packageName);
         return deliver(target, explicit, explicit);
     }
@@ -77,7 +81,7 @@ final class HubStartedServices {
         for (Started record : restart) {
             if (record.result() != START_STICKY && record.result() != START_REDELIVER_INTENT) continue;
             Thread thread = new Thread(() -> {
-                HubDirectory.Peer target = broadcasts.process(peer.name());
+                HubDirectory.Peer target = broadcasts.process(HubDirectory.key(peer));
                 if (target == null) return;
                 try { deliver(target, record.intent(), record.result() == START_REDELIVER_INTENT ? record.intent() : null); }
                 catch (RuntimeException failure) { System.out.println("[apklayer-hub] cannot restart " + record.intent().getComponent() + ": " + failure); }

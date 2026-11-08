@@ -25,7 +25,8 @@ LOGS = Path(LOGDIR)
 APP, GMS = 'hello.push', 'hello.pushgms'
 MARKER = LOGS / 'autostart'
 # the VM has other apps with boot receivers: only the boot phase wakes them (APKLAYER_BOOT_BROADCASTS=0 for the others)
-env = dict(ENV, APKLAYER_BOOT_BROADCASTS='1' if PHASE == 'boot' else '0', APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400', APKLAYER_HOST_LIBS=instance.HOST_LIBS)
+MICROG = 'com.google.android.gms'
+env = dict(ENV, APKLAYER_BOOT_BROADCASTS={'boot': '1', 'mcs': MICROG}.get(PHASE, '0'), APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='400', APKLAYER_HOST_LIBS=instance.HOST_LIBS)
 children = []
 HUB_OUT = instance.OUT / 'hub-stdout.log'  # a hub started by `apklayer hub` prints to its launcher's stdout (the stack's start empties the state dir's logs)
 
@@ -162,6 +163,46 @@ try:
         log = (LOGS / ('component-%s.log' % APP)).read_text(errors='replace')
         assert log.count('[push] BOOT android.intent.action.BOOT_COMPLETED') == 1 and log.count('[push] BOOT android.intent.action.LOCKED_BOOT_COMPLETED') == 1, 'the boot broadcasts came again:\n' + log
         print('PASS boot: LOCKED_BOOT_COMPLETED then BOOT_COMPLETED woke a closed app once per stack start', flush=True)
+    elif PHASE == 'mcs':
+        # microG's own push connection with no app open: the always-on instance boots, microG (its /system/etc/microg.xml defaults: device registration
+        # and cloud messaging on) checks in with Google and McsService logs in to mtalk.google.com; a dropped connection comes back by itself
+        MARKER.write_text('1\n')
+        mlog = LOGS / ('component-%s-org.microg.gms.gcm.McsService.log' % MICROG)  # McsService runs in its own process (":persistent")
+        mlog.unlink(missing_ok=True)
+        # heartbeats each minute (microG's shortest setting) instead of 5: its heartbeat alarm (a service PendingIntent) fires within the test
+        prefs = Path(ENV.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'apklayer' / instance.INSTANCE / 'app-data' / MICROG / 'app/shared_prefs' / ('%s_preferences.xml' % MICROG)
+        text = prefs.read_text() if prefs.exists() else "<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n</map>\n"
+        for key in ('gcm_network_wifi', 'gcm_network_other'):
+            if 'name="%s"' % key not in text: text = text.replace('</map>', '    <string name="%s">1</string>\n</map>' % key)
+        prefs.parent.mkdir(parents=True, exist_ok=True)
+        prefs.write_text(text)
+        hub = subprocess.Popen(['bin/apklayer', 'hub'], env=dict(env, APKLAYER_LOGCAT='1'), stdout=open(HUB_OUT, 'a'), stderr=subprocess.STDOUT, start_new_session=True)
+        children.append(hub)
+        assert hub_alive(), 'no hub'
+        text = instance.wait_file(mlog, 'GmsGcmMcsSvc: Logged in', 150)
+        assert 'Logged in' in text, 'McsService never logged in:\n' + text[-3000:]
+        print('mcs: logged in to mtalk.google.com with no app open', flush=True)
+        # an app registers for cloud messages as Firebase does: microG asks Google (c2dm register3) and answers through the app's Messenger
+        run_app(APP, 'c2dm')
+        answer = instance.wait_file(LOGS / ('app-%s.log' % APP), '[push] C2DM ', 90)
+        print('mcs: registration answered: ' + answer.split('[push] C2DM ')[1].splitlines()[0], flush=True)
+        close_app(APP)
+        text = instance.wait_file(mlog, 'Outgoing message: HeartbeatPing', 100)
+        print('mcs: heartbeat sent from its alarm', flush=True)
+        # a network change (an address on the default interface): the hub announces CONNECTIVITY_ACTION, microG's TriggerReceiver gets it
+        dev = subprocess.run(['ip', '-o', 'route', 'show', 'default'], capture_output=True, text=True).stdout.split(' dev ')[1].split()[0]
+        subprocess.run(['sudo', '-n', 'ip', 'addr', 'add', '10.254.254.1/32', 'dev', dev], check=True)
+        try: instance.wait_file(mlog, 'act=android.net.conn.CONNECTIVITY_CHANGE', 30)
+        finally: subprocess.run(['sudo', '-n', 'ip', 'addr', 'del', '10.254.254.1/32', 'dev', dev], check=False)
+        print('mcs: CONNECTIVITY_CHANGE reached microG', flush=True)
+        # the connection drops (as a network change or a resume ends it): microG reconnects on its own (its reconnect alarm, held by HubScheduler)
+        killed = subprocess.run(['sudo', '-n', 'ss', '-K', 'dport', '=', '5228'], capture_output=True, text=True)
+        assert killed.returncode == 0, killed.stderr
+        deadline = time.monotonic() + 150
+        while mlog.read_text(errors='replace').count('GmsGcmMcsSvc: Logged in') < 2 and time.monotonic() < deadline: time.sleep(1)
+        text = mlog.read_text(errors='replace')
+        assert text.count('GmsGcmMcsSvc: Logged in') >= 2, 'no new login after the connection dropped:\n' + text[-3000:]
+        print('PASS mcs: McsService logged in with no app open, sent its heartbeat, got CONNECTIVITY_CHANGE and logged in again after its connection dropped', flush=True)
     elif PHASE == 'autostart':
         iid = instance.INSTANCE
         # systemctl --user reaches the user's manager through the real session directory, not the instance's own XDG_RUNTIME_DIR
