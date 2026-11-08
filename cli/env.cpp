@@ -240,8 +240,6 @@ std::vector<std::string> hostJvmArgs(const Layout& l, const Instance& inst, Nati
                                   // a JVM defines ~5400 framework classes at start: with the default 32K buckets the symbol lookups of their constant pools
                                   // take about half of the class definition time (perf: SymbolTable::do_lookup), the table grows only later
                                   "-XX:+UnlockExperimentalVMOptions", "-XX:SymbolTableSize=262144",
-                                  // an idle JVM (hub, component host, waiting spare) gives its heap back (HeapTrim): below the initial size, at once
-                                  "-XX:MinHeapSize=8m", "-XX:-ShrinkHeapInSteps",
                                   "@" + join(l.root, "runtime/host/jvm.args"), "-Drobolectric.offline=true",
                                   "-Drobolectric.dependency.dir=" + frameworkDependencyDir(l), "-Dapklayer.native=" + n, "-Dapklayer.androidlibs=" + l.androidLibs,
                                   "-Drobolectric.windowManager.useRequestedSize=true",

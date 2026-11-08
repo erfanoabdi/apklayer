@@ -31,7 +31,6 @@ public final class ComponentHost implements Runnable {
         StartTrace.mark("hub attached");
         System.out.println("[apklayer] component-host READY " + app.getPackageName() + " pid=" + android.os.Process.myPid());
         AppSpare.launchStarted();
-        HeapTrim.periodically("component host");  // a host mostly waits: its heap goes back while it does
         ShadowPausedLooper looper = Shadow.extract(Looper.getMainLooper());
         // no cached processes (the owner's rule; Android keeps them until memory runs short): a host that runs no service, has no work queued and
         // was not called for IDLE_EXIT_MS ends, as its last service's end does (Services.exitIfIdle); a provider's next client starts it again
