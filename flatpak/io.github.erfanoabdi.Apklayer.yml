@@ -15,8 +15,8 @@ finish-args:
   - --share=ipc
   # apps' internet, and `apklayer setup`'s downloads
   - --share=network
-  # binder (the host's /dev/binderfs mount, binderfs cannot be mounted from inside: docs/INSTALL.md "Flatpak"), GPU render nodes, cameras,
-  # input devices and USB devices (apklayer usb). --device=dri covers only the GPU; Flatpak has no narrower grant for binder nodes
+  # GPU render nodes, cameras, input devices and USB devices (apklayer usb), the host's /dev/binderfs when it has one (else the userspace
+  # binder: docs/INSTALL.md "Flatpak"). --device=dri covers only the GPU
   - --device=all
   # audio: the PulseAudio backend through the pulse socket, the PipeWire backend through PipeWire's own
   - --socket=pulseaudio
@@ -74,14 +74,15 @@ modules:
       - type: dir
         path: prebuilts
         dest: flatpak/prebuilts
+    # post-install runs in the build directory (builddir: true), the sources one level up
     post-install:
-      - install -Dm644 data/apklayer.svg /app/share/icons/hicolor/scalable/apps/io.github.erfanoabdi.Apklayer.svg
-      - install -Dm644 data/apklayer-256.png /app/share/icons/hicolor/256x256/apps/io.github.erfanoabdi.Apklayer.png
-      - install -Dm644 flatpak/io.github.erfanoabdi.Apklayer.metainfo.xml -t /app/share/metainfo
+      - install -Dm644 ../data/apklayer.svg /app/share/icons/hicolor/scalable/apps/io.github.erfanoabdi.Apklayer.svg
+      - install -Dm644 ../data/apklayer-256.png /app/share/icons/hicolor/256x256/apps/io.github.erfanoabdi.Apklayer.png
+      - install -Dm644 ../flatpak/io.github.erfanoabdi.Apklayer.metainfo.xml -t /app/share/metainfo
       # the manager's entry under the app id (Flatpak exports only files named after it); the deb's other entries are not exported
-      - sed -e 's/^Icon=.*/Icon=io.github.erfanoabdi.Apklayer/' data/apklayer-manager.desktop > /app/share/applications/io.github.erfanoabdi.Apklayer.desktop
+      - sed -e 's/^Icon=.*/Icon=io.github.erfanoabdi.Apklayer/' ../data/apklayer-manager.desktop > /app/share/applications/io.github.erfanoabdi.Apklayer.desktop
       - rm /app/share/applications/apklayer-manager.desktop /app/share/applications/apklayer-share.desktop
       # the manager (debian/rules' second build)
-      - sh manager/fetch-slint.sh $PWD/slint
-      - meson setup manager/b manager --prefix=/app -Dlibdir=lib/apklayer -Dslint=$PWD/slint
-      - ninja -C manager/b apklayer-manager && meson install -C manager/b --no-rebuild
+      - cd .. && sh manager/fetch-slint.sh $PWD/slint
+      - cd .. && meson setup manager/b manager --prefix=/app -Dlibdir=lib/apklayer -Dslint=$PWD/slint
+      - cd .. && ninja -C manager/b apklayer-manager && meson install -C manager/b --no-rebuild
