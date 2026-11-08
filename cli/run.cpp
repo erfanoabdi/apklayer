@@ -215,6 +215,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     app.argv = jvm;
     app.env = nj.env;
     app.cwd = dir;
+    app.blockSigpipe = true;
     if (sandboxOn()) sandboxSpawn(l, inst, app, package);  // the JVM as the app's own uid in its own view (cli/sandbox.cpp)
     if (jvmPid <= 0 && started[1] >= 0) { fcntl(started[1], F_SETFD, 0); app.env["APKLAYER_STARTED_FD"] = std::to_string(started[1]); }
     if (started[0] >= 0) { startAppSpare(l, inst, started[0], sandboxPackage); close(started[0]); }

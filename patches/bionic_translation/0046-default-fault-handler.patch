@@ -1,0 +1,69 @@
+From: apklayer
+Subject: [PATCH] A debuggerd-like default handler for fault signals
+
+On Android every process has debuggerd's handler installed (the linker does it), so an app crash handler that chains to the previous
+handler always ends in one that ends the process. Here the previous handler of a fault signal was SIG_DFL (libjsig's empty chain slot):
+Unity's handler printed "No handler for signal 11", returned, and the fault repeated forever. sigaction now reports a default handler
+in place of SIG_DFL for SIGSEGV/SIGBUS/SIGILL/SIGFPE/SIGABRT/SIGTRAP/SIGSYS; it writes a note, resets the signal to SIG_DFL in the
+kernel and re-raises it.
+
+apklayer patch: 0046 of patches/bionic_translation (see docs/PATCHES.md).
+---
+diff --git a/libc/libc.c b/libc/libc.c
+index 9bd632d..8db560f 100644
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -330,6 +330,37 @@ int bionic_sigismember(const bionic_sigset_t *set, int sig)
+ /* apklayer patch: HotSpot's libjsig (LD_PRELOADed) defines it; then a fault handler is chained behind the JVM's, which runs it for faults that are not its own */
+ extern void *JVM_get_signal_action(int sig) __attribute__((weak));
+ 
++/* apklayer patch: Android's debuggerd handler (the linker installs it in every process) ends a fault that no handler took: an app
++ * handler that chains to the "previous" handler finds this one in place of SIG_DFL, instead of returning into the same fault forever */
++static void apklayer_default_fault_handler(int sig, siginfo_t *info, void *ucontext)
++{
++	unsigned long pc = 0, lr = 0;
++	if (ucontext) {
++#if defined(__aarch64__)
++		pc = ((ucontext_t *)ucontext)->uc_mcontext.pc;
++		lr = ((ucontext_t *)ucontext)->uc_mcontext.regs[30];
++#elif defined(__x86_64__)
++		pc = ((ucontext_t *)ucontext)->uc_mcontext.gregs[REG_RIP];
++#endif
++	}
++	char note[224]; /* shortcut: snprintf of integers and pointers only, as debuggerd's async_safe_format does */
++	const int n = snprintf(note, sizeof note, "apklayer: Fatal signal %d, code %d, fault addr %p, pc %#lx, lr %#lx in tid %ld: no handler took it, the process ends\n",
++	                       sig, info ? info->si_code : 0, info ? info->si_addr : NULL, pc, lr, (long)syscall(SYS_gettid));
++	if (n > 0)
++		write(STDERR_FILENO, note, n < (int)sizeof note ? n : (int)sizeof note - 1);
++	unsigned long dfl[4] = {0}; /* the kernel's struct sigaction with SIG_DFL; the raw call passes libjsig's chain */
++	syscall(SYS_rt_sigaction, sig, dfl, NULL, 8);
++	syscall(SYS_tgkill, getpid(), syscall(SYS_gettid), sig); /* delivered with SIG_DFL once the handlers return (core, exit status) */
++}
++
++static void apklayer_default_fault_oact(int sig, struct bionic_sigaction *oact)
++{
++	if (oact && oact->bsa_handler == SIG_DFL && (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL || sig == SIGFPE || sig == SIGABRT || sig == SIGTRAP || sig == SIGSYS)) {
++		oact->bsa_sigaction = (void (*)(int, void *, void *))apklayer_default_fault_handler;
++		oact->sa_flags = SA_SIGINFO | SA_ONSTACK;
++	}
++}
++
+ int bionic_sigaction(int sig, const struct bionic_sigaction *restrict act, struct bionic_sigaction *restrict oact)
+ {
+ 	verbose("%d, %p, %p", sig, (void *)act, (void *)oact);
+@@ -345,6 +376,7 @@ int bionic_sigaction(int sig, const struct bionic_sigaction *restrict act, struc
+ 			*oact = (struct bionic_sigaction){0};
+ 			oact->bsa_handler = goact.sa_handler;
+ 			oact->sa_flags = goact.sa_flags;
++			apklayer_default_fault_oact(sig, oact);
+ 		}
+ 		return 0;
+ 	}
+@@ -377,6 +409,7 @@ int bionic_sigaction(int sig, const struct bionic_sigaction *restrict act, struc
+ 			if (sigismember(&goact.sa_mask, signo))
+ 				bionic_sigaddset(&oact->sa_mask, signo);
+ 		}
++		apklayer_default_fault_oact(sig, oact);
+ 	}
+ 
+ 	return ret;

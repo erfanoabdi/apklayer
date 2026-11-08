@@ -219,6 +219,7 @@ int runAppSpare(const Layout& l, const Instance& inst, int afterFd, const std::s
     jvm.env = ne.env;
     jvm.env["APKLAYER_SPARE_FD"] = std::to_string(pair[1]);
     jvm.cwd = l.appsDir;
+    jvm.blockSigpipe = true;
     // under the sandbox: already that app's process (its uid and mount view; the binder driver keeps the uid it was opened with, and a JVM
     // cannot change mount namespace), so a spare is one app's, the one launched last (a launch of another makes it stale)
     if (!sandboxPackage.empty()) sandboxSpawn(l, inst, jvm, sandboxPackage);

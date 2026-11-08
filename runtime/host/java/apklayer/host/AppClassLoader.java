@@ -92,6 +92,12 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
         }
     }
 
+    /** The app's native libraries, as a PathClassLoader finds them: native code asks this loader through JNI (Unity's il2cpp lookup), past the converter. */
+    @Override
+    protected String findLibrary(String name) {
+        return NativeLoader.findLibrary(name);
+    }
+
     /** The app's own resources first (META-INF/services, kotlin builtins), as for classes. */
     @Override
     public URL getResource(String name) {
