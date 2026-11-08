@@ -214,6 +214,12 @@ run = ["python3 -u tests/vm/splash.py"]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/window-geometry.py"]
 
+[decoration]
+# server-side title bars under sway (headless, its own socket): needs sway on the VM
+needs = ["com.android.test.uibench"]
+optional = true
+run = ["python3 -u tests/vm/decoration.py"]
+
 [mobile]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/mobile.py"]
