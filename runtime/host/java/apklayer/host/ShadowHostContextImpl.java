@@ -40,6 +40,8 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
         // (robolectric.createActivityContexts) got a fresh manager, and an activity's gps listener never got the fixes
         android.app.Application app = android.app.ActivityThread.currentApplication();
         Context base = app == null ? null : app.getBaseContext();
+        // an app that wraps its base context (attachBaseContext with a locale wrapper: MojoLauncher) would send the call back here forever
+        while (base instanceof android.content.ContextWrapper) base = ((android.content.ContextWrapper) base).getBaseContext();
         if (name != null && SHADOW_STATE_SERVICES.contains(name) && base != null && base != real) return base.getSystemService(name);
         Object service = (Object) Shadow.directlyOn(real, "android.app.ContextImpl", "getSystemService", ClassParameter.from(String.class, name));
         if (Boolean.getBoolean("apklayer.tracesvc")) System.out.println("[apklayer] getSystemService " + name + " -> " + service + " (" + real.getClass().getSimpleName() + ", " + Thread.currentThread().getName() + ")");

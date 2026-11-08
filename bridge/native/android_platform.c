@@ -61,6 +61,23 @@ void *android_get_exported_namespace(const char *name) { (void)name; return NULL
 bool android_link_namespaces(void *a, void *b, const char *c) { (void)a; (void)b; (void)c; return true; }
 bool android_init_anonymous_namespace(const char *a, const char *b) { (void)a; (void)b; return true; }
 bool android_dlwarning(void *obj, void (*cb)(void *, const char *)) { (void)obj; (void)cb; return false; }
+/* The linker's private API (ld-android.so, reached through libdl.so/libdl_android.so on a device): Pojav/FCL's androidnsbypass dlsyms
+ * __loader_* from libdl.so and ld-android.so (bionic_translation.cfg maps both names to its libdl). bionic_dlsym answers any handle with a
+ * global "bionic_<name>" first, so these are found there. The caller address only picks a namespace, which the shim linker has not; a
+ * namespace is a dummy that must not be NULL (androidnsbypass exits without one), dlopen in it is a plain dlopen. */
+extern void *bionic_dlopen(const char *filename, int flag);
+extern void *bionic_dlsym(void *handle, const char *symbol);
+extern int bionic_dlclose(void *handle);
+static char apklayer_namespace;
+void *bionic___loader_dlopen(const char *f, int flags, const void *caller) { (void)caller; return bionic_dlopen(f, flags); }
+void *bionic___loader_android_dlopen_ext(const char *f, int flags, const void *info, const void *caller) { (void)info; (void)caller; return bionic_dlopen(f, flags); }
+int bionic___loader_dlclose(void *h) { return bionic_dlclose(h); }
+void *bionic___loader_dlsym(void *h, const char *s, const void *caller) { (void)caller; return bionic_dlsym(h, s); }
+void *bionic___loader_android_create_namespace(const char *a, const char *b, const char *c, uint64_t d, const char *e, void *f, const void *caller)
+{ (void)a; (void)b; (void)c; (void)d; (void)e; (void)f; (void)caller; return &apklayer_namespace; }
+void *bionic___loader_android_get_exported_namespace(const char *name) { (void)name; return &apklayer_namespace; }
+bool bionic___loader_android_link_namespaces(void *a, void *b, const char *c) { (void)a; (void)b; (void)c; return true; }
+bool bionic___loader_android_link_namespaces_all_libs(void *a, void *b) { (void)a; (void)b; return true; }
 /* fdsan: bionic's file-descriptor ownership checks. The functions are weak imports that libcutils (native_handle_close) calls
  * unconditionally, so unresolved they were a null call. There is no tracking here: owner tags are computed as bionic does and
  * ignored, closing is a plain close. */

@@ -8,8 +8,14 @@ public class App extends Application {
     static final String STATIC_FINGERPRINT = Build.FINGERPRINT, STATIC_TAGS = Build.TAGS, STATIC_TYPE = Build.TYPE, STATIC_MODEL = Build.MODEL;
     static volatile Boolean postSawActivity;  // LaunchOrderCheck: whether Main.onCreate had run when this process's onCreate post ran
 
+    /** A wrapped base, as an app's locale wrapper (MojoLauncher): its base is this process's ContextImpl, the one that redirects SHADOW_STATE_SERVICES to the base (it looped). */
+    @Override protected void attachBaseContext(android.content.Context base) {
+        super.attachBaseContext(new android.content.ContextWrapper(base));
+    }
+
     @Override public void onCreate() {
         super.onCreate();
+        getSystemService(LOCATION_SERVICE); getSystemService(BATTERY_SERVICE);  // a StackOverflowError here fails every scenario
         new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> postSawActivity = Main.created);
     }
 }
