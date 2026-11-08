@@ -11,7 +11,7 @@ import org.robolectric.android.controller.ActivityController;
 /**
  * The instance's host settings (HubHostSettings: the desktop's, or the instance's overrides) as an app process's configuration: night mode
  * and locale as resource qualifiers on top of the window's size ones, the font scale, the default locale and time zone, the animator duration
- * scale, UiModeManager's night mode (contrast is the hub's CONTRAST_LEVEL only). AppHost hands a change to its activities as ActivityThread's handleConfigurationChanged does.
+ * scale, UiModeManager's night mode and contrast, the dynamic colour palette (HostPalette). AppHost hands a change to its activities as ActivityThread's handleConfigurationChanged does.
  */
 final class HostConfiguration {
     private HostConfiguration() {}
@@ -63,7 +63,22 @@ final class HostConfiguration {
                 System.out.println("[apklayer] UiModeManager night mode not set: " + e);
             }
         }
+        if (modes != null && settings.containsKey("contrast")) {  // UiModeManager's ContrastChangeListeners (getContrast: the Globals shadow below)
+            // the user's callback as UiModeManagerService calls it (the shadow's setContrast picks its path by API level, 36, not this framework's Globals)
+            try {
+                java.lang.reflect.Field globals = android.app.UiModeManager.class.getDeclaredField("sGlobals");
+                globals.setAccessible(true);
+                java.lang.reflect.Method user = globals.getType().getDeclaredMethod("getUserCallbackOrCreate", int.class);
+                user.setAccessible(true);
+                Object callback = user.invoke(globals.get(null), android.os.UserHandle.myUserId());
+                java.lang.reflect.Method notify = callback.getClass().getDeclaredMethod("notifyContrastChanged", float.class);
+                notify.setAccessible(true);
+                notify.invoke(callback, settings.getFloat("contrast"));
+            } catch (ReflectiveOperationException | RuntimeException e) { System.out.println("[apklayer] UiModeManager contrast not set: " + e); }
+        }
         int changes = before.diff(RuntimeEnvironment.getApplication().getResources().getConfiguration()) & SETTINGS_CHANGES;
+        if (HostPalette.update(settings.containsKey("accent") ? settings.getInt("accent") : null, Boolean.TRUE.equals(night), settings.getFloat("contrast", 0f)))
+            changes |= android.content.pm.ActivityInfo.CONFIG_ASSETS_PATHS;  // a new overlay on a device: no activity handles it itself
         System.out.println("[apklayer] host settings " + settings.keySet().stream().sorted().map(k -> k + "=" + settings.get(k)).toList() + (changes != 0 ? " changes=0x" + Integer.toHexString(changes) : ""));
         return changes;
     }
@@ -97,9 +112,9 @@ final class HostConfiguration {
         for (ActivityController<? extends Activity> c : controllers) {
             Activity old = c.get();
             try {
-                // shortcut: a stopped activity only gets the new resources (its views stay as drawn); relaunch it at its restart as ActivityThread does when an app shows stale colours
-                if (asleep.test(old)) {
+                if (asleep.test(old)) {  // the new resources now, the relaunch at its restart (ActivityThread defers it until the activity is visible)
                     old.getResources().updateConfiguration(config, app.getResources().getDisplayMetrics());
+                    pending.merge(old, changes, (a, b) -> a | b);
                     continue;
                 }
                 c.configurationChange(new Configuration(config), app.getResources().getDisplayMetrics(), changes);
@@ -112,6 +127,35 @@ final class HostConfiguration {
                 e.printStackTrace(System.out);
             }
         }
+    }
+
+    /** UiModeManager.getContrast(): the instance's contrast, where Robolectric's IUiModeManager stand-in answers 0 once no listener keeps the user's callback. */
+    @org.robolectric.annotation.Implements(className = "android.app.UiModeManager$Globals", isInAndroidSdk = false)
+    public static final class ShadowGlobals {
+        @org.robolectric.annotation.Implementation protected float getContrast(int userId) { return settings.getFloat("contrast", 0f); }
+    }
+
+    /** Changes that arrived while an activity was stopped, applied by {@link #relaunch} at its restart. */
+    private static final java.util.Map<Activity, Integer> pending = new java.util.WeakHashMap<>();
+
+    /**
+     * A stopped activity coming back (ActivityTask.restart): the changes it missed while stopped, as ActivityThread relaunches it then
+     * (recreated unless it handles them itself; Robolectric's recreation leaves it stopped). Returns the activity it replaced, or null.
+     */
+    static Activity relaunch(ActivityController<? extends Activity> c) {
+        Activity old = c.get();
+        Integer changes = pending.remove(old);
+        if (changes == null) return null;
+        android.content.res.Resources res = RuntimeEnvironment.getApplication().getResources();
+        try {
+            c.configurationChange(new Configuration(res.getConfiguration()), res.getDisplayMetrics(), changes);
+        } catch (Throwable e) {
+            System.out.println("[apklayer] configuration change failed: " + e);
+            e.printStackTrace(System.out);
+        }
+        if (c.get() == old) return null;
+        System.out.println("[apklayer] configuration change: relaunched " + old.getClass().getName() + " at its restart");
+        return old;
     }
 
     /** A new size from the shell (AppHost.hostResize): applied in place, like an activity that handles the change itself. */

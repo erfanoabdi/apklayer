@@ -158,7 +158,7 @@ final class ActivityTask {
             if (plan.reuse()) {
                 ActivityController<? extends Activity> target = stack.peek();
                 target.newIntent(intent);
-                if (stopped.remove(target.get())) setVisible(target.restart().resume().visible(), true);
+                if (stopped.remove(target.get())) restart(target);
                 else target.resume();
                 System.out.println("[apklayer] reused " + cls.getName() + " depth=" + stack.size());
                 return;
@@ -272,7 +272,7 @@ final class ActivityTask {
             System.out.println("[apklayer] finished " + top.getClass().getName() + " depth=" + stack.size());
             if (!stack.isEmpty()) {
                 ActivityController<? extends Activity> c = stack.peek();
-                if (stopped.remove(c.get())) setVisible(c.restart().resume().visible(), true);
+                if (stopped.remove(c.get())) restart(c);
                 else c.resume();
             }
         }
@@ -289,6 +289,13 @@ final class ActivityTask {
     }
 
     /** What was kept for an activity that configurationChange replaced follows the new instance. */
+    /** A stopped activity to the front: relaunched first when a configuration change came while it was stopped (HostConfiguration.relaunch). */
+    void restart(ActivityController<? extends Activity> c) {
+        Activity old = HostConfiguration.relaunch(c);
+        if (old != null) recreated(old, c.get());
+        setVisible(c.restart().resume().visible(), true);
+    }
+
     void recreated(Activity old, Activity now) {
         for (java.util.Map<Activity, ?> kept : List.<java.util.Map<Activity, ?>>of(resultFor, hubResults)) if (kept.containsKey(old)) move(kept, old, now);
         if (incomingActivity == old) incomingActivity = now;

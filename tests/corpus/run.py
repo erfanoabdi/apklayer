@@ -189,6 +189,8 @@ def main():
         rows = [json.loads((HERE / 'logs' / (e[0] + '.json')).read_text()) for e in entries if (HERE / 'logs' / (e[0] + '.json')).exists()]
     else:
         ssh('mkdir -p %s/tests/corpus' % REPO)
+        if INSTANCE:  # apps start in the desktop's scheme: a corpus instance pinned light keeps the screenshots comparable (never the owner's default)
+            ssh(ENV + 'bin/apklayer settings set night no >/dev/null')
         subprocess.run(config.auth('scp') + ['-q', str(HERE / 'first-frame.py'), config.VM + ':' + REPO.replace('~/', '') + '/tests/corpus/first-frame.py'], check=True)
         rows = [run_one(*e) for e in entries]
         rows = [run_one(*e) if r['note'].startswith('lock busy') else r for e, r in zip(entries, rows)]  # one more try for the apps that found the lock busy

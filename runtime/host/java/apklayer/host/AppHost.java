@@ -382,7 +382,7 @@ public final class AppHost implements Runnable {
             stoppedByMinimize = true;
             System.out.println("[apklayer] lifecycle: stopped (minimized)");
         } else if (!minimized && stoppedByMinimize) {
-            setVisible(top.restart().resume().visible(), true);
+            task.restart(top);
             stoppedByMinimize = false;
             System.out.println("[apklayer] lifecycle: resumed");
         }
