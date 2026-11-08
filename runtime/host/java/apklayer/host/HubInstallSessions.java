@@ -55,7 +55,7 @@ final class HubInstallSessions {
             case OPEN_WRITE -> {
                 int id = request.readInt(); String name = request.readString(); long offset = request.readLong(); request.enforceNoDataAvail();
                 if (!name.matches("[A-Za-z0-9_.-]+") || name.matches("\\.\\.?|session\\.properties.*")) throw new IllegalArgumentException("Invalid name: " + name);
-                Path dir = owned(caller, id);
+                Path dir = open(caller, id);
                 try (RandomAccessFile file = new RandomAccessFile(dir.resolve(name).toFile(), "rw")) {
                     file.seek(Math.max(0, offset));  // the descriptor shares this position: writing goes on from the offset, as the session's file on Android
                     reply.writeNoException(); reply.writeFileDescriptor(file.getFD());
@@ -67,7 +67,7 @@ final class HubInstallSessions {
             }
             case REMOVE -> {
                 int id = request.readInt(); String name = request.readString(); request.enforceNoDataAvail();
-                if (name.matches("[A-Za-z0-9_.-]+") && !name.matches("\\.\\.?|session\\.properties.*")) Files.deleteIfExists(owned(caller, id).resolve(name));
+                if (name.matches("[A-Za-z0-9_.-]+") && !name.matches("\\.\\.?|session\\.properties.*")) Files.deleteIfExists(open(caller, id).resolve(name));
                 reply.writeNoException();
             }
             case ABANDON -> {
@@ -78,6 +78,9 @@ final class HubInstallSessions {
                 int id = request.readInt(); IBinder status = request.readStrongBinder(); request.enforceNoDataAvail();
                 Path dir = owned(caller, id);
                 Properties session = read(id);
+                // committed, it stays a session (getSessionInfo, isCommitted) until its final status, across hub restarts; a commit again (a new status
+                // receiver, as PackageInstallerSession.markAsSealed allows) asks the person again
+                if (session.setProperty("committed", "true") == null) store(id, session);
                 installer.commitSession(caller, id, session.getProperty("package"), session.getProperty("label"), session.getProperty("preapproved"), dir, apks(dir), status);
                 reply.writeNoException();
             }
@@ -111,6 +114,13 @@ final class HubInstallSessions {
         }
     }
 
+    /** A session the caller owns that takes writes (a committed one is sealed). */
+    private Path open(HubDirectory.Peer caller, int id) {
+        Path dir = owned(caller, id);
+        if (read(id).getProperty("committed") != null) throw new SecurityException("Session " + id + " is already committed");
+        return dir;
+    }
+
     private Properties read(int id) {
         Properties session = new Properties();
         try (var in = Files.newBufferedReader(root.resolve(id + "/session.properties"))) { session.load(in); return session; }
@@ -129,14 +139,15 @@ final class HubInstallSessions {
         return root.resolve(Integer.toString(id));
     }
 
-    private static List<Path> apks(Path dir) throws IOException {
+    static List<Path> apks(Path dir) throws IOException {
         try (var files = Files.list(dir)) { return files.filter(f -> !f.getFileName().toString().startsWith("session.properties")).sorted().toList(); }
     }
 
-    /** A SessionInfo's fields (ShadowHostPackageInstaller makes one of them): present, then id, installer, package, label. */
+    /** A SessionInfo's fields (ShadowHostPackageInstaller makes one of them): present, then id, installer, package, label, committed. */
     private static void write(Parcel reply, int id, Properties session) {
         reply.writeBoolean(session != null);
         if (session == null) return;
         reply.writeInt(id); reply.writeString(session.getProperty("installer")); reply.writeString(session.getProperty("package")); reply.writeString(session.getProperty("label"));
+        reply.writeBoolean(session.getProperty("committed") != null);
     }
 }

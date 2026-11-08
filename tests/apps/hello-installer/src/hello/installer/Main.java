@@ -54,8 +54,10 @@ public class Main extends Activity {
         try {
             System.out.println("[inst] canRequestPackageInstalls=" + getPackageManager().canRequestPackageInstalls());
             PackageInstaller installer = getPackageManager().getPackageInstaller();
-            for (PackageInstaller.SessionInfo kept : installer.getMySessions()) {
-                if (!PAYLOAD.equals(kept.getAppPackageName())) continue;
+            java.util.List<PackageInstaller.SessionInfo> mine = new java.util.ArrayList<>(installer.getMySessions());
+            mine.sort(java.util.Comparator.comparing(PackageInstaller.SessionInfo::isCommitted));  // the preapproved one first
+            for (PackageInstaller.SessionInfo kept : mine) {
+                if (!PAYLOAD.equals(kept.getAppPackageName()) || kept.isCommitted()) continue;
                 // the second start (tests/vm/installer.py stopped the instance in between): the session prepared and preapproved before it is still there
                 try (PackageInstaller.Session s = installer.openSession(kept.getSessionId())) {
                     check("session kept", java.util.Arrays.asList(s.getNames()).contains("hello-payload.apk"), "names " + java.util.Arrays.toString(s.getNames()));
@@ -65,6 +67,16 @@ public class Main extends Activity {
                 check("preapproval kept", status == PackageInstaller.STATUS_SUCCESS && getPackageManager().getPackageInfo(PAYLOAD, 0) != null, "status " + status);
                 installer.uninstall(PAYLOAD, senderOf(0x7ffe));
                 await();
+                // the session committed before the restart, still waiting for the person: committed again (a new status receiver), it asks again
+                PackageInstaller.SessionInfo waiting = mine.stream().filter(PackageInstaller.SessionInfo::isCommitted).findFirst().orElse(null);
+                check("confirmation kept", waiting != null, "sessions " + mine.size());
+                if (waiting != null) {
+                    try (PackageInstaller.Session s = installer.openSession(waiting.getSessionId())) { s.commit(sender(waiting.getSessionId()).getIntentSender()); }
+                    status = await();
+                    check("confirmed after restart", status == PackageInstaller.STATUS_SUCCESS && installer.getSessionInfo(waiting.getSessionId()) == null, "status " + status);
+                    installer.uninstall(PAYLOAD, senderOf(0x7ffe));
+                    await();
+                }
                 System.out.println("[inst] DONE");
                 return;
             }
@@ -137,6 +149,13 @@ public class Main extends Activity {
             }
             status = await();
             check("preapproved", status == PackageInstaller.STATUS_SUCCESS && installer.getSessionInfo(kept) != null, "status " + status);
+            check("committed visible", committedSeen, "a session waiting for the person was not in getSessionInfo as committed");
+            // another, committed and left waiting for the person (its confirmation not started): the next start finds it committed
+            int waiting = installer.createSession(params());
+            try (PackageInstaller.Session s = installer.openSession(waiting)) { write(s, "hello-payload.apk"); s.commit(sender(waiting).getIntentSender()); }
+            Intent pendingStatus = statuses.poll(150, TimeUnit.SECONDS);
+            check("left waiting", pendingStatus != null && pendingStatus.getIntExtra(PackageInstaller.EXTRA_STATUS, 0) == PackageInstaller.STATUS_PENDING_USER_ACTION
+                    && installer.getSessionInfo(waiting).isCommitted(), "status " + (pendingStatus == null ? null : pendingStatus.getExtras()));
             // last: an installer updating itself is stopped like any updated app; the new version's MY_PACKAGE_REPLACED receiver reports (SelfUpdated)
             System.out.println("[inst] updating itself");
             status = commitFor(getPackageName(), "hello-installer2.apk");
@@ -188,6 +207,8 @@ public class Main extends Activity {
 
     private android.content.IntentSender senderOf(int code) { return sender(code).getIntentSender(); }
 
+    private boolean committedSeen;
+
     private int await() throws InterruptedException {
         for (;;) {
             Intent result = statuses.poll(150, TimeUnit.SECONDS);
@@ -195,6 +216,8 @@ public class Main extends Activity {
             int status = result.getIntExtra(PackageInstaller.EXTRA_STATUS, Integer.MIN_VALUE);
             System.out.println("[inst] status " + status + " " + result.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE));
             if (status != PackageInstaller.STATUS_PENDING_USER_ACTION) return status;
+            PackageInstaller.SessionInfo waiting = getPackageManager().getPackageInstaller().getSessionInfo(result.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1));
+            if (waiting != null && waiting.isCommitted()) committedSeen = true;  // Android keeps a committed session until its end
             Intent confirm = result.getParcelableExtra(Intent.EXTRA_INTENT, Intent.class);
             runOnUiThread(() -> startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)));
         }

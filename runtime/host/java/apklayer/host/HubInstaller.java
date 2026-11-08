@@ -71,23 +71,19 @@ final class HubInstaller {
         staged(caller, 0, null, null, null, dir, files.size(), status, true);
     }
 
-    /** A committed session: its APKs move from the session to the staging directory (the session is done with). */
+    /** A committed session: installed from the session's directory, which goes with its final status (PackageInstallerSession: the session ends then). */
     void commitSession(HubDirectory.Peer caller, int sessionId, String expected, String label, String approved, Path session, List<Path> apks, IBinder status) throws IOException {
-        Path dir = Files.createDirectories(staging.resolve(caller.name() + "-" + sessionId + "-" + tokens.incrementAndGet()));
-        int n = 0;
-        for (Path apk : apks) Files.move(apk, dir.resolve(n++ + "-" + apk.getFileName()));
-        delete(session);
-        staged(caller, sessionId, expected, label, approved, dir, apks.size(), status, false);
+        staged(caller, sessionId, expected, label, approved, session, apks.size(), status, false);
     }
 
     private void staged(HubDirectory.Peer caller, int sessionId, String expected, String label, String approved, Path dir, int count, IBinder status, boolean now) throws IOException {
         String pkg = null;
-        try (var listing = Files.list(dir)) {
-            for (Path apk : listing.toList()) {
+        try {
+            for (Path apk : HubInstallSessions.apks(dir)) {
                 PackageParser.ApkLite lite = PackageParser.parseApkLite(apk.toFile(), 0);
                 if (lite.splitName == null) pkg = lite.packageName;
             }
-        } catch (PackageParser.PackageParserException | RuntimeException unreadable) { finish(dir, status, sessionId, null, PackageInstaller.STATUS_FAILURE_INVALID, "INSTALL_PARSE_FAILED: " + unreadable.getMessage()); return; }
+        } catch (PackageParser.PackageParserException | IOException | RuntimeException unreadable) { finish(dir, status, sessionId, null, PackageInstaller.STATUS_FAILURE_INVALID, "INSTALL_PARSE_FAILED: " + unreadable.getMessage()); return; }
         if (pkg == null) { finish(dir, status, sessionId, null, PackageInstaller.STATUS_FAILURE_INVALID, "INSTALL_FAILED_INVALID_APK: no base APK"); return; }
         if (expected != null && !expected.equals(pkg)) { finish(dir, status, sessionId, pkg, PackageInstaller.STATUS_FAILURE_INVALID, "INSTALL_FAILED_PACKAGE_CHANGED: the session is for " + expected); return; }
         String denied = mayRequest(caller.name(), REQUEST_INSTALL, 26);
@@ -141,7 +137,10 @@ final class HubInstaller {
 
     private void askLater(Request request) {
         String token = request.installer + "-" + tokens.incrementAndGet();
-        synchronized (pending) { pending.put(token, request); }
+        synchronized (pending) {  // a session committed again: its earlier confirmation is replaced
+            if (request.sessionId != 0) pending.values().removeIf(old -> old.sessionId == request.sessionId && old.kind == request.kind);
+            pending.put(token, request);
+        }
         Intent confirmation = new Intent(request.kind == Kind.PREAPPROVE ? PackageInstaller.ACTION_CONFIRM_PRE_APPROVAL : request.kind == Kind.INSTALL ? PackageInstaller.ACTION_CONFIRM_INSTALL
                 : Intent.ACTION_UNINSTALL_PACKAGE).putExtra(PackageInstaller.EXTRA_SESSION_ID, request.sessionId).putExtra(CONFIRM, token);
         System.out.println("[apklayer-hub] " + request.kind + " of " + request.pkg + " by " + request.installer + " waits for the person");
@@ -197,7 +196,7 @@ final class HubInstaller {
     private void install(Request request) {
         boolean update = packages.get(request.pkg) != null;
         List<String> command = new ArrayList<>(List.of(System.getProperty("apklayer.cli"), "install"));
-        try (var listing = Files.list(request.staged)) { listing.sorted().forEach(apk -> command.add(apk.toString())); }
+        try { HubInstallSessions.apks(request.staged).forEach(apk -> command.add(apk.toString())); }
         catch (IOException failure) { send(request.status, request.sessionId, request.pkg, PackageInstaller.STATUS_FAILURE, failure.toString(), null); return; }
         int[] exit = {0};
         String output = run(command, exit);
@@ -227,7 +226,8 @@ final class HubInstaller {
         directory.stopPackage(request.pkg);
         int[] exit = {0};
         String output = run(List.of(System.getProperty("apklayer.cli"), "uninstall", request.pkg), exit);
-        if (exit[0] != 0) { send(request.status, 0, request.pkg, PackageInstaller.STATUS_FAILURE, output, null); return; }
+        // a library provider still used: STATUS_FAILURE_CONFLICT, as PackageManager.deleteStatusToPublicStatus maps DELETE_FAILED_USED_SHARED_LIBRARY
+        if (exit[0] != 0) { send(request.status, 0, request.pkg, exit[0] == 8 ? PackageInstaller.STATUS_FAILURE_CONFLICT : PackageInstaller.STATUS_FAILURE, output, null); return; }
         directory.packageChanged(request.pkg, true);
         broadcast(Intent.ACTION_PACKAGE_REMOVED, request.pkg, uid, false);
         directory.sendSystem(new Intent(Intent.ACTION_PACKAGE_FULLY_REMOVED, Uri.fromParts("package", request.pkg, null)).putExtra(Intent.EXTRA_UID, uid)

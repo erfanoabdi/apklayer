@@ -151,14 +151,16 @@ try:
     # until the updated installer reports (its first version is stopped by its own update, its output then ends)
     lines, _ = run_installer(lambda out: any('self update' in l for l in out), True)
     later = own_logs()  # before the restore below: its stack start begins the instance's logs anew
+    for name in ('hub.log', 'app-hello.installer.log'):  # the first run's, for a failure's reader
+        if (log / name).exists(): shutil.copy(log / name, log / ('installer-first-' + name.replace('.log', '.txt')))
     legacy = (log / 'component-hello.legacyrx.log').read_text(errors='replace') if (log / 'component-hello.legacyrx.log').exists() else ''
 finally:
     restored = cli('install', '-d', str(first))
     print('restored the installer\'s first version: exit %d' % restored.returncode, flush=True)
 # a new start of the instance (hub and all): the session the first run prepared and had preapproved is committed without a question
-STEPS += ['session kept', 'preapproval kept', 'no question']
+STEPS += ['session kept', 'preapproval kept', 'no question', 'committed visible', 'left waiting', 'confirmation kept', 'confirmed after restart']
 again, questions = run_installer(lambda out: any('[inst] DONE' in l for l in out), False)
-report('no question', not any(q.startswith(('"Install', '"Update')) for q in questions), 'asked %s' % questions)
+report('no question', len([q for q in questions if q.startswith(('"Install', '"Update'))]) == 1, 'asked %s (only the session left waiting asks)' % questions)
 lines += again
 for line in lines + later:
     if '[inst] PASS ' in line: passed.add(line.split('[inst] PASS ')[1].strip())
