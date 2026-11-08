@@ -52,6 +52,7 @@ and list it here. The M1 seed's patch log is in `archive/seed-m1/docs/PATCHES.md
 
 `compat/include/stdatomic.h` (C11 atomics from C++ for gcc before 12) is a header meson.build adds (a global include directory: Meson
 before 1.8 ignores a subproject's default_options cpp_args), not a patch.
+Build flags: upstream builds it with Meson's default buildtype (debug, -O0); meson.build builds it `debugoptimized` (-O2 -g), not a patch.
 
 ## Robolectric (`patches/robolectric/`, external/robolectric)
 | Patch | Purpose |
