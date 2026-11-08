@@ -77,6 +77,7 @@ static const struct xdg_surface_listener xs_listener = { xs_configure };
 /* cw x ch: window geometry (title bar included), 0 = the client's choice. A floating window takes the compositor's size on its first
  * configure, during an interactive resize and when it leaves maximized/fullscreen/tiled; any other floating configure only repeats the size
  * the compositor last saw, which may predate our own reshape (an orientation request), so it is not a resize. */
+static int injecting;  /* top_configure called by inject() (test input), not by the compositor */
 static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t ch, struct wl_array *st)
 {
     (void)t;
@@ -90,6 +91,9 @@ static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t c
         case XDG_TOPLEVEL_STATE_RESIZING: resizing = 1; break;
         case XDG_TOPLEVEL_STATE_ACTIVATED: activated = 1; break;
     }
+    /* a test drives this window's focus: another window opening on the shared desktop (a parallel group) must not deactivate it, which ends
+     * a long press as on Android (View.onWindowFocusChanged) */
+    if (w->test_focus && !injecting) activated = w->activated;
     int restored = w->constrained && !constrained, nw = 0, nh = 0;
     if (debug_input) fprintf(stderr, "[shell] \"%s\" toplevel configure %dx%d%s%s%s\n", w->title, cw, ch, maximized ? " maximized" : constrained ? " tiled" : "",
                              resizing ? " resizing" : "", restored ? " restored" : "");
@@ -181,7 +185,9 @@ static void inject(struct window *w, int cw, int ch, int maximized, int resizing
     if (maximized) *(uint32_t *)wl_array_add(&states, 4) = XDG_TOPLEVEL_STATE_MAXIMIZED;
     if (resizing) *(uint32_t *)wl_array_add(&states, 4) = XDG_TOPLEVEL_STATE_RESIZING;
     if (activated) *(uint32_t *)wl_array_add(&states, 4) = XDG_TOPLEVEL_STATE_ACTIVATED;
+    injecting = 1;
     top_configure(w, w->toplevel, cw, ch, &states);
+    injecting = 0;
     wl_array_release(&states);
     apply_configure(w);
 }
