@@ -3,6 +3,12 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: Sailfish touch (owner: "apps draw, taps do nothing"), investigation, not fixed yet
+- Volla Quintus, RPM 0.4.7, UiBench, shell with WAYLAND_DEBUG=client and APKLAYER_DEBUG_INPUT=1. Lipstick advertises wl_seat v3 (capabilities 7: pointer, keyboard, touch), qt_touch_extension, wl_shell (no xdg_wm_base); the shell binds wl_pointer, wl_touch and wl_keyboard and makes one wl_shell toplevel (one surface, no input region).
+- From the shell on, touch works: a finger down/up through the shell's wl_touch handlers (test input, 540,228) opened UiBench's "General" (screenshot). So the fault is between Lipstick and the shell.
+- Lipstick 0.36.41 (LipstickCompositorWindow::handleTouchEvent, QtWayland 5.6 Touch) sends wl_pointer.enter, wl_keyboard.enter and wl_touch.down to a mapped application window's client; it does not use qt_touch_extension for that. No fault found in that code for a wl_shell client.
+- A tap written to the touchscreen's evdev node (goodix_ts, event4) produced no Wayland input event at all. The phone was blanked and locked (mce: display off, tklock locked, device lock with a code), so this run says nothing yet. Lipstick's own delivery needs a run with the phone unlocked and the app in front. Unlocking it from a script was not done (needs the owner's permission).
+
 ## 2026-11-09: verify-at-install reverted (owner)
 - Reverted 046485af and b3f66b04 (VerifyInstall/VerifyBytecode, refused-class stubs, -XX:-BytecodeVerificationRemote, converter ABI 4): the gain (NewPipe ~0.5 s cold, ~1.2 s warm; Calculator none) did not pay for 10-14 s longer phone installs, a reconvert of every app and unverified runtime-defined classes. Converter ABI back to 3. The spare's class preload and idle component hosts ending stay.
 
