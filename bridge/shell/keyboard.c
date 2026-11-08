@@ -146,6 +146,7 @@ const struct wl_keyboard_listener kb_listener = {
 /* Test input: a keyboard enter on w, and a key with the modifier state xkb derives from the injected keys themselves (the compositor's
  * modifiers event is what a real seat sends after a modifier key). */
 void keyboard_inject_focus(struct window *w) { kb_enter(NULL, NULL, 0, w->surface, NULL); }
+void keyboard_inject_leave(struct window *w) { kb_leave(NULL, NULL, 0, w->surface); }
 void keyboard_inject_key(struct window *w, uint32_t evdev, int down)
 {
     keyboard_focus = w;

@@ -270,6 +270,7 @@ extern struct zxdg_decoration_manager_v1 *deco_mgr;  /* decoration.c */
 void decoration_create(struct window *w);
 void decoration_destroy(struct window *w);
 void keyboard_inject_focus(struct window *w);  /* keyboard.c */
+void keyboard_inject_leave(struct window *w);  /* keyboard.c */
 void keyboard_inject_key(struct window *w, uint32_t evdev, int down);  /* keyboard.c */
 void pointer_inject(struct window *w, int x, int y, int button);  /* pointer.c */
 void touch_inject(struct window *w, int action, int x, int y);  /* touch.c */
