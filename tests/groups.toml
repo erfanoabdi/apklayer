@@ -344,6 +344,12 @@ run = ["tests/vm/audio-system.sh"]
 alone = true
 run = ["python3 -u tests/vm/audio-silent.py", "python3 tests/lib/instance.py clean"]
 
+[openttd-silent]
+# OpenTTD (SDL 1.2) without a sound server, then a focus loss (docs/PLAN.md, graphics): OPENTTD_APK (APKLY_VM_ENV) names its APK on the host
+optional = true
+alone = true
+run = ["python3 -u tests/vm/openttd-silent.py", "python3 tests/lib/instance.py clean"]
+
 [otr2]
 # alone: its GPU load stalls gpu-window beside it (virgl)
 needs = ["com.dogbytegames.otrnext"]
