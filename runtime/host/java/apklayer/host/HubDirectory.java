@@ -459,9 +459,12 @@ final class HubDirectory extends Binder {
                 request.enforceNoDataAvail();
                 if (!sameUser(Binder.getCallingPid())) throw new SecurityException("Settings change from another user");
                 HubHostSettings settings = hostSettings;
-                if (settings != null) settings.changed();
-                try { HubBootSettings.writeInputMethods(org.robolectric.RuntimeEnvironment.getApplication().getContentResolver(), packages); }  // `apklayer ime` too
-                catch (RuntimeException unwritten) { System.out.println("[apklayer-hub] input method settings not written: " + unwritten); }
+                long identity = Binder.clearCallingIdentity();  // written as the system, not as the CLI (the settings provider may run in this JVM: HubHost)
+                try {
+                    if (settings != null) settings.changed();
+                    try { HubBootSettings.writeInputMethods(org.robolectric.RuntimeEnvironment.getApplication().getContentResolver(), packages); }  // `apklayer ime` too
+                    catch (RuntimeException unwritten) { System.out.println("[apklayer-hub] input method settings not written: " + unwritten); }
+                } finally { Binder.restoreCallingIdentity(identity); }
                 reply.writeNoException(); return true;
             }
             case HubProtocol.TAKE_LAUNCH -> {
