@@ -181,8 +181,10 @@ public final class AppHost implements Runnable {
         }
         if (System.getProperty("apklayer.webviewprovider") != null) org.robolectric.Shadows.shadowOf(app.getPackageManager()).setSystemFeature(android.content.pm.PackageManager.FEATURE_WEBVIEW, true);
         StartTrace.mark("system package installed");
-        Intent incoming = HubActivityClient.incoming(); // another app started this one with an intent, through the hub
-        if (incoming == null) incoming = HostApps.incoming(); // ... or through the older intent file (PLAN P6)
+        // this launch's own intent file (`apklayer run --intent`, PLAN P6) or what another app started it with through the hub; with both, the file's
+        // came first (the hub queued its one while this process started: `apklayer run` again, HubActivities.relaunch) and the hub's follows it
+        Intent own = HostApps.incoming(), hub = HubActivityClient.incoming(), incoming = own != null ? own : hub;
+        if (own != null && hub != null) HubActivityClient.deliver(hub, HubActivityClient.takeReceiver());  // kept until the first activity is up (setStarter)
         // a message, as Android's launch transaction is: an app whose Application.onCreate posted its own Looper.loop() (a crash guard: SimpleX) runs it from there
         final Intent first = incoming;
         final int moveX = width, moveY = height;

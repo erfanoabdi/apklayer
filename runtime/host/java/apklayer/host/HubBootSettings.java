@@ -25,7 +25,11 @@ final class HubBootSettings {
     static final String INPUT_METHOD_ACTION = "android.view.InputMethod";
 
     static void write(Context context, HubDirectory directory) {
+        long start = System.nanoTime();
         Process location = startLocationProbe();  // GeoClue's answer comes while the settings provider's host starts
+        // read on its own thread: a hanging GeoClue call must not hold apps' first provider request (awaitBoot) for long
+        java.util.concurrent.CompletableFuture<Boolean> located = java.util.concurrent.CompletableFuture.supplyAsync(() -> locationReady(location));
+        if (location != null) java.util.concurrent.CompletableFuture.delayedExecutor(LOCATION_GIVE_UP_S, java.util.concurrent.TimeUnit.SECONDS).execute(location::destroy);
         // the hub's own resolver reaches the settings provider in its process like an app's does (RemoteProvider), as the system
         org.robolectric.shadows.ShadowContentResolver.registerProviderInternal(Settings.AUTHORITY,
                 new RemoteProvider(new android.content.ContextWrapper(context) {
@@ -40,27 +44,42 @@ final class HubBootSettings {
             if (boots == 1) directory.providers().createDocumentProviders();
             if (Settings.Global.getInt(resolver, Settings.Global.DEVICE_PROVISIONED, 0) == 0) Settings.Global.putInt(resolver, Settings.Global.DEVICE_PROVISIONED, 1);
             if (Settings.Secure.getInt(resolver, Settings.Secure.USER_SETUP_COMPLETE, 0) == 0) Settings.Secure.putInt(resolver, Settings.Secure.USER_SETUP_COMPLETE, 1);
-            String enabled = inputMethods(directory.packages());
-            put(resolver, Settings.Secure.ENABLED_INPUT_METHODS, enabled);
-            String current = Settings.Secure.getString(resolver, Settings.Secure.DEFAULT_INPUT_METHOD);
-            List<String> ids = enabled.isEmpty() ? List.of() : List.of(enabled.split(":"));
-            if (current == null || !ids.contains(current)) put(resolver, Settings.Secure.DEFAULT_INPUT_METHOD, ids.isEmpty() ? "" : ids.get(0));
-            boolean located = locationReady(location), gnss = HostLocation.gnssDeclared();
-            // LOCATION_PROVIDERS_ALLOWED: gone from Android's own settings (version 193), but Robolectric's LocationManager keeps provider state in it
-            // (HostLocation): the network provider is GeoClue's, the gps provider the GNSS HAL's (providers.toml)
-            List<String> allowed = new ArrayList<>();
-            if (gnss) allowed.add(android.location.LocationManager.GPS_PROVIDER);
-            if (located) allowed.add(android.location.LocationManager.NETWORK_PROVIDER);
-            put(resolver, Settings.Secure.LOCATION_MODE, Integer.toString(allowed.isEmpty() ? Settings.Secure.LOCATION_MODE_OFF : Settings.Secure.LOCATION_MODE_HIGH_ACCURACY));
-            put(resolver, Settings.Secure.LOCATION_PROVIDERS_ALLOWED, String.join(",", allowed));
-            System.out.println("[apklayer-hub] boot count " + boots + ", location [" + String.join(",", allowed) + "], input methods [" + enabled + "]");
+            String enabled = writeInputMethods(resolver, directory.packages());
+            boolean network;
+            try { network = located.get(LOCATION_WAIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS); }
+            catch (java.util.concurrent.TimeoutException slow) {  // the last boot's answer for now; GeoClue's own once it comes
+                String last = Settings.Secure.getString(resolver, Settings.Secure.LOCATION_PROVIDERS_ALLOWED);
+                network = last != null && last.contains(android.location.LocationManager.NETWORK_PROVIDER);
+                System.out.println("[apklayer-hub] GeoClue did not answer within " + LOCATION_WAIT_MS + " ms: the network provider stays " + (network ? "on" : "off") + " until it does");
+                boolean assumed = network;
+                located.thenAccept(answer -> {
+                    if (answer != assumed) writeLocation(resolver, answer);
+                    location.destroy();
+                });
+            } catch (InterruptedException | java.util.concurrent.ExecutionException failed) { network = false; }
+            String allowed = writeLocation(resolver, network);
+            System.out.println("[apklayer-hub] boot count " + boots + ", location [" + allowed + "], input methods [" + enabled + "] (" + (System.nanoTime() - start) / 1_000_000 + " ms)");
         } catch (RuntimeException failed) {
             System.out.println("[apklayer-hub] boot settings not written: " + failed);
             failed.printStackTrace(System.out);
         } finally {
-            if (location != null) location.destroy();
+            if (location != null && located.isDone()) location.destroy();
             BOOTED.countDown();
         }
+    }
+    private static final long LOCATION_WAIT_MS = 2000, LOCATION_GIVE_UP_S = 60;
+
+    /**
+     * LOCATION_PROVIDERS_ALLOWED: gone from Android's own settings (version 193), but Robolectric's LocationManager keeps provider state in it
+     * (HostLocation): the network provider is GeoClue's, the gps provider the GNSS HAL's (providers.toml). Returns the allowed list.
+     */
+    private static String writeLocation(ContentResolver resolver, boolean network) {
+        List<String> allowed = new ArrayList<>();
+        if (HostLocation.gnssDeclared()) allowed.add(android.location.LocationManager.GPS_PROVIDER);
+        if (network) allowed.add(android.location.LocationManager.NETWORK_PROVIDER);
+        put(resolver, Settings.Secure.LOCATION_MODE, Integer.toString(allowed.isEmpty() ? Settings.Secure.LOCATION_MODE_OFF : Settings.Secure.LOCATION_MODE_HIGH_ACCURACY));
+        put(resolver, Settings.Secure.LOCATION_PROVIDERS_ALLOWED, String.join(",", allowed));
+        return String.join(",", allowed);
     }
 
     private static final java.util.concurrent.CountDownLatch BOOTED = new java.util.concurrent.CountDownLatch(1);
@@ -72,13 +91,24 @@ final class HubBootSettings {
     }
     private static final long BOOT_WAIT_S = 10;
 
+    /** ENABLED_INPUT_METHODS and DEFAULT_INPUT_METHOD from the user's choice: at boot and when `apklayer ime` changes it (HubProtocol.SETTINGS_CHANGED). */
+    static String writeInputMethods(ContentResolver resolver, HubPackages packages) {
+        String enabled = inputMethods(packages);
+        put(resolver, Settings.Secure.ENABLED_INPUT_METHODS, enabled);
+        String current = Settings.Secure.getString(resolver, Settings.Secure.DEFAULT_INPUT_METHOD);
+        List<String> ids = enabled.isEmpty() ? List.of() : List.of(enabled.split(":"));
+        if (current == null || !ids.contains(current)) put(resolver, Settings.Secure.DEFAULT_INPUT_METHOD, ids.isEmpty() ? "" : ids.get(0));
+        return enabled;
+    }
+
     private static void put(ContentResolver resolver, String key, String value) {
         if (!value.equals(Settings.Secure.getString(resolver, key))) Settings.Secure.putString(resolver, key, value);
     }
 
     /** The host's location service (GeoClue, bridge/portal/geoclue.py) as HostLocation asks it: null without python. */
     private static Process startLocationProbe() {
-        try { return new ProcessBuilder(HostLocation.helper("geoclue.py")).redirectError(ProcessBuilder.Redirect.DISCARD).start(); }
+        String standIn = System.getenv("APKLAYER_GEOCLUE_PROBE");  // a test's stand-in (tests/vm/sysprov.sh geoclue)
+        try { return new ProcessBuilder(standIn != null ? HostProcess.dying("python3", standIn) : HostLocation.helper("geoclue.py")).redirectError(ProcessBuilder.Redirect.DISCARD).start(); }
         catch (IOException noPython) { return null; }
     }
 

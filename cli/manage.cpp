@@ -209,16 +209,18 @@ int settingsCommand(const Layout& l, const Instance& inst, const std::vector<std
     for (const auto& [k, v] : own) if (k != args[1]) text += k + "=" + v + "\n";
     if (action == "set") text += args[1] + "=" + args[2] + "\n";
     if (!writeFile(file, text)) die("cannot write " + file);
-    bool live = false;
-    if (stackRunning(inst)) {  // HubProtocol.SETTINGS_CHANGED (43): the hub rereads the file and the running apps get the new configuration
-        Spawn call;
-        call.argv = {l.btload(), l.androidLibs, "libapklayer_servicetool.so", "--main", "call", "apklayer.instance", "43", "apklayer.IInstanceHub"};
-        call.env = nativeEnv(l, inst).env;
-        call.logFile = join(inst.logs(), "settings.log");
-        live = runAndWait(call) == 0;
-    }
-    printf("apklayer: %s %s for instance %s (%s)\n", args[1].c_str(), action == "set" ? "set" : "unset", inst.id.c_str(), live ? "applied now" : "from its next start");
+    printf("apklayer: %s %s for instance %s (%s)\n", args[1].c_str(), action == "set" ? "set" : "unset", inst.id.c_str(), settingsChanged(l, inst) ? "applied now" : "from its next start");
     return 0;
+}
+
+bool settingsChanged(const Layout& l, const Instance& inst) {
+    if (!stackRunning(inst)) return false;
+    // HubProtocol.SETTINGS_CHANGED (43): the hub rereads the settings and input method files; the running apps get the new configuration
+    Spawn call;
+    call.argv = {l.btload(), l.androidLibs, "libapklayer_servicetool.so", "--main", "call", "apklayer.instance", "43", "apklayer.IInstanceHub"};
+    call.env = nativeEnv(l, inst).env;
+    call.logFile = join(inst.logs(), "settings.log");
+    return runAndWait(call) == 0;
 }
 
 int permissionsCommand(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {

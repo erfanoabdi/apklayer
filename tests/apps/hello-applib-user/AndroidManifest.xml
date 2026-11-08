@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Uses libraries installed apps provide (HostAppLibraries): hello-applib's static library (version 3, its signer) and hello-applib-system's <library>; carried in hello-sharedlib's assets -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="hello.applib.user">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34"/>
+  <application android:label="applib-user">
+    <uses-static-library android:name="hello.applib" android:version="3" android:certDigest="@cert-digest:applib@"/>
+    <uses-library android:name="hello.applib.shared" android:required="true"/>
+    <activity android:name="hello.applib.user.Main" android:exported="true">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+    </activity>
+  </application>
+</manifest>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- hello-rotated before its key rotation (sign: rotated-past only), embedded in hello-rotated: tests/vm/system-apps.sh installs it, then hello-rotated over it. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="hello.rotated">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34"/>
+  <application android:label="rotated">
+    <activity android:name="hello.accounts.Main" android:exported="true">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+    </activity>
+  </application>
+</manifest>

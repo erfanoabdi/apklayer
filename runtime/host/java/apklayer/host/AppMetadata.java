@@ -63,7 +63,9 @@ final class AppMetadata {
             String[] requested = pm.getPackageInfo(app.getPackageName(), PackageManager.GET_PERMISSIONS).requestedPermissions;
             info.setProperty("permissions", requested == null ? "" : String.join(";", requested));  // the manager's permission list (apklayer permissions)
             // <uses-library>: install refuses a required one the build does not know (INSTALL_FAILED_MISSING_SHARED_LIBRARY); the CLI reads "missingLibraries"
-            HostSharedLibraries.Resolved libs = HostSharedLibraries.resolve(HostSharedLibraries.used(dir.resolve("base.apk").toFile(), app.getApplicationInfo().targetSdkVersion));
+            HostSharedLibraries.Resolved libs = HostSharedLibraries.resolve(HostSharedLibraries.used(dir.resolve("base.apk").toFile(), app.getApplicationInfo().targetSdkVersion),
+                    HostAppLibraries.uses(dir.resolve("base.apk").toFile()));
+            HostAppLibraries.recordProvided(info, dir.resolve("base.apk").toFile());  // what it provides to apps installed after it
             info.setProperty("missingLibraries", String.join(";", libs.unknown()));
             for (String absent : libs.absent()) System.out.println("[apklayer] warning: " + app.getPackageName() + " requires the shared library " + absent + ", which this runtime has no classes for");
             signer(info, dir, app.getPackageName());
@@ -90,7 +92,7 @@ final class AppMetadata {
 
     /**
      * The signer of the new package (its base and every split, as PackageManagerService requires) and, on an update, whether the installed one has another
-     * (signerMismatch: install refuses it). An unsigned APK has signer "": install refuses it, as Android does.
+     * that its signing lineage does not continue (signerMismatch: install refuses it). An unsigned APK has signer "": install refuses it, as Android does.
      */
     private static void signer(Properties info, Path dir, String pkg) throws IOException {
         String signer = HostCertificate.digest(dir.resolve("base.apk").toFile());
@@ -103,7 +105,7 @@ final class AppMetadata {
         info.setProperty("signer", signer);
         String apps = System.getProperty("apklayer.apps");
         java.io.File installed = apps == null ? null : Path.of(apps, pkg, "base.apk").toFile();
-        if (installed != null && installed.isFile() && !HostCertificate.digest(installed).equals(signer)) info.setProperty("signerMismatch", "true");
+        if (installed != null && installed.isFile() && !HostCertificate.canUpdate(installed, dir.resolve("base.apk").toFile())) info.setProperty("signerMismatch", "true");
     }
 
     private AppMetadata() {}

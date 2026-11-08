@@ -2,7 +2,9 @@
 """`apklayer run` of an app that already runs (activities group): the launch goes to the running process, never a second one (Android: a launcher
 or `am start` reaches the running app). hello.acttarget runs; an intent file starts its singleTask PickActivity in that process, a second one
 reaches it through onNewIntent, a launcher start brings the task forward without a new activity. One JVM of the package throughout, each such
-`run` returns at once, and the shell asks the compositor to raise the window (xdg-activation)."""
+`run` returns at once, and the shell asks the compositor to raise the window (xdg-activation). Then a start with its own intent file and a second
+`run` while that process starts (run record, not registered: the hub queues the launch): the first file's intent is the first activity, the queued
+one follows it (onNewIntent), as two `am start` in a row."""
 import os
 import selectors
 import subprocess
@@ -20,8 +22,13 @@ shell_log = Path(LOGDIR) / 'shell.log'
 
 
 class App:
-    def __init__(self, package):
-        self.proc = subprocess.Popen(['bin/apklayer', 'run', package], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
+    def __init__(self, package, intent=None):
+        run_env = dict(env)
+        if intent:
+            path = OUT / 'first-intent.properties'
+            path.write_text(''.join('%s=%s\n' % kv for kv in intent.items()))
+            run_env['APKLAYER_INTENT_FILE'] = str(path)
+        self.proc = subprocess.Popen(['bin/apklayer', 'run', package], env=run_env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
         self.lines, self.pending, self.events = [], b'', selectors.DefaultSelector()
         self.events.register(self.proc.stdout, selectors.EVENT_READ)
 
@@ -117,6 +124,24 @@ try:
     requests = [l for l in shell if '[shell] activate ' in l]
     assert len(requests) == 3 and all('token' in l for l in requests), 'the shell did not raise the window each time: %s' % requests
     print('[relaunch] compositor: %s' % ('activated the window' if any(l.endswith(' activated') for l in shell) else 'no activated state for the window (focus-stealing prevention)'), flush=True)
+
+    for app in apps:
+        try: os.killpg(app.proc.pid, 15)
+        except OSError: pass  # it ended already
+    stop()
+    first = App(PKG, dict(view, data='https://example.org/first', **{'extra.text': 'first'}))
+    apps.append(first)
+    end = time.monotonic() + 30
+    while time.monotonic() < end and not any(r.name.startswith('run.') and len(r.read_text().split()) >= 2 and int(r.read_text().split()[1]) > 0
+                                             for r in Path(LOGDIR).iterdir() if r.name.startswith('run.')):
+        time.sleep(0.05)  # the launch's run record with its window sink: from then on `run` hands over
+    relaunch(dict(view, data='https://example.org/queued', **{'extra.text': 'queued'}))
+    line = first.expect('[act-t] create pid=', 60)
+    assert 'text=first' in line, 'the first activity is not the launch\'s own intent: ' + line
+    line = first.expect('[act-t] newintent pid=', 20)
+    assert 'text=queued' in line, line
+    queued = 'relaunch %s (still starting: queued)' % PKG in (Path(LOGDIR) / 'hub.log').read_text(errors='replace')
+    print('[relaunch] a second run while it started (%s): its own intent first, then the other: %s' % ('queued by the hub' if queued else 'it had registered already', line.strip()), flush=True)
     print('PASS activities relaunch', flush=True)
 finally:
     for app in apps:

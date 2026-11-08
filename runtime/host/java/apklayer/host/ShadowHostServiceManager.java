@@ -26,9 +26,12 @@ public class ShadowHostServiceManager extends ShadowServiceManager {
     @Implementation protected static IBinder checkService(String name) { IBinder hub = hub(name); return hub != null ? hub : orNative(name, report(name, ShadowServiceManager.checkService(name))); }
     @Implementation protected static IBinder waitForService(String name) throws InterruptedException { IBinder hub = hub(name); return hub != null ? hub : orNative(name, report(name, ShadowServiceManager.waitForService(name))); }
 
-    /** A name Robolectric has no service for: the one the instance's own service manager has under it (the native stack's "SurfaceFlinger", "media.audio_policy"...), as on a device. */
+    /**
+     * A name Robolectric has no service for: the one the instance's own service manager has under it (the native stack's "SurfaceFlinger", "media.audio_policy"...), as on a device.
+     * Not HAL instances ("android.hardware.vibrator.IVibrator/default": SELinux keeps them from apps on a device) nor apklayer's own ("apklayer.instance": the hub's, looked up through RealBinder).
+     */
     private static IBinder orNative(String name, IBinder fake) {
-        if (fake != null || name == null) return fake;
+        if (fake != null || name == null || name.indexOf('/') >= 0 || name.startsWith("apklayer.")) return fake;
         try { return RealBinder.lookup(name); }
         catch (Throwable noBinder) { return null; }  // a JVM without the native runtime (no kernel binder) has only Robolectric's services
     }

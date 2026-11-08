@@ -24,6 +24,9 @@ ro.build.type=user
 ro.build.tags=release-keys
 ro.system.build.type=user
 ro.system.build.tags=release-keys
+# a release build's builder (Build.USER/HOST), not the machine that built the tree
+ro.build.user=android-build
+ro.build.host=localhost
 # a phone-class device (the GSI's system build.prop has none; Robolectric's says "robolectric", an emulator image "emulator")
 ro.build.characteristics=default
 # SurfaceFlinger pre-compiles shaders at startup by rendering into dummy buffers of many formats; one of them cannot be wrapped as a

@@ -16,30 +16,42 @@ import org.xmlpull.v1.XmlPullParser;
  * build knows are its system configuration's {@code <library name file>} (etc/permissions, HostSystemConfig); the runtime carries their classes as JVM
  * jars at the path that names ({@code android-root/system/framework/<name>.jar}, tools/stage root). Their classes win over the "Stub!" copies the
  * sandbox's jars have ({@link AppClassLoader#addLibraries}). Install refuses an app that requires a library the build does not know, as Android does.
+ * Installed apps provide libraries too (HostAppLibraries): a system app's {@code <library>} for {@code <uses-library>}, any app's {@code <static-library>}
+ * and {@code <sdk-library>} for {@code <uses-static-library>}/{@code <uses-sdk-library>} (name, version and certificate digest must match).
  */
 final class HostSharedLibraries {
     private HostSharedLibraries() {}
 
-    private static final int ATTR_NAME = 0x01010003, ATTR_REQUIRED = 0x0101028e;  // android.R.attr.name, android.R.attr.required
+    // android.R.attr.name, required, version, certDigest, versionMajor
+    static final int ATTR_NAME = 0x01010003, ATTR_REQUIRED = 0x0101028e, ATTR_VERSION = 16844057, ATTR_CERT_DIGEST = 16844104, ATTR_VERSION_MAJOR = 16844151;
 
-    /** The libraries an app uses after the platform's rules: name -> required, in class path order. */
-    static Map<String, Boolean> used(File apk, int targetSdk) {
-        Map<String, Boolean> libs = new LinkedHashMap<>();
+    /** An element of the manifest's {@code <application>}: its tag and attributes by resource id (shrunk manifests drop the attribute names). */
+    record Element(String tag, Map<Integer, String> attributes) {}
+
+    /** The {@code <application>} children of an APK's manifest with one of the tags; empty when it is unreadable. */
+    static List<Element> applicationElements(File apk, java.util.Set<String> tags) {
+        List<Element> found = new ArrayList<>();
         try {
             ApkAssets assets = ApkAssets.loadFromPath(apk.getPath());
             try (XmlResourceParser xml = assets.openXml("AndroidManifest.xml")) {
                 for (int type; (type = xml.next()) != XmlPullParser.END_DOCUMENT; ) {
-                    if (type != XmlPullParser.START_TAG || xml.getDepth() != 3 || !"uses-library".equals(xml.getName())) continue;
-                    String name = null;
-                    boolean required = true;
-                    for (int i = 0; i < xml.getAttributeCount(); i++) {  // by resource id: shrunk manifests drop the attribute names
-                        if (xml.getAttributeNameResource(i) == ATTR_NAME) name = xml.getAttributeValue(i);
-                        else if (xml.getAttributeNameResource(i) == ATTR_REQUIRED) required = xml.getAttributeBooleanValue(i, true);
-                    }
-                    if (name != null && !libs.containsKey(name)) libs.put(name, required);
+                    if (type != XmlPullParser.START_TAG || xml.getDepth() != 3 || !tags.contains(xml.getName())) continue;
+                    Map<Integer, String> attributes = new java.util.HashMap<>();
+                    for (int i = 0; i < xml.getAttributeCount(); i++) attributes.put(xml.getAttributeNameResource(i), xml.getAttributeValue(i));
+                    found.add(new Element(xml.getName(), attributes));
                 }
             } finally { assets.close(); }
-        } catch (Exception unreadable) { System.out.println("[apklayer] uses-library of " + apk + ": " + unreadable); }
+        } catch (Exception unreadable) { System.out.println("[apklayer] libraries of " + apk + ": " + unreadable); }
+        return found;
+    }
+
+    /** The libraries an app uses after the platform's rules: name -> required, in class path order. */
+    static Map<String, Boolean> used(File apk, int targetSdk) {
+        Map<String, Boolean> libs = new LinkedHashMap<>();
+        for (Element e : applicationElements(apk, java.util.Set.of("uses-library"))) {
+            String name = e.attributes().get(ATTR_NAME);
+            if (name != null && !libs.containsKey(name)) libs.put(name, !"false".equals(e.attributes().get(ATTR_REQUIRED)));
+        }
         // PackageBackwardCompatibility's updaters, in their order (frameworks/base/services/core/java/com/android/server/pm/parsing/library)
         for (String onBootClassPath : new String[] {"wear-sdk", "android.net.ipsec.ike", "com.google.android.maps", "android.hidl.base", "android.hidl.manager"})
             libs.remove(onBootClassPath);  // on the boot class path, or dropped for apps (maps; HIDL for non-system apps)
@@ -73,11 +85,19 @@ final class HostSharedLibraries {
     /** What the libraries resolve to: the jars this runtime has (dependencies first), the required libraries the build does not know, those it lacks. */
     record Resolved(List<Path> jars, List<String> unknown, List<String> absent) {}
 
-    static Resolved resolve(Map<String, Boolean> libs) {
+    static Resolved resolve(Map<String, Boolean> libs) { return resolve(libs, List.of()); }
+
+    /** With the app's {@code <uses-static-library>}/{@code <uses-sdk-library>} (HostAppLibraries.uses): the installed apps that provide them. */
+    static Resolved resolve(Map<String, Boolean> libs, List<HostAppLibraries.Use> statics) {
         List<Path> jars = new ArrayList<>();
-        if (libs.isEmpty()) return new Resolved(jars, List.of(), List.of());
+        if (libs.isEmpty() && statics.isEmpty()) return new Resolved(jars, List.of(), List.of());
         Map<String, HostSystemConfig.Library> known = HostSystemConfig.cached().libraries;
         List<String> unknown = new ArrayList<>(), absent = new ArrayList<>();
+        for (HostAppLibraries.Use use : statics) {
+            Path jar = HostAppLibraries.providerJar(use);
+            if (jar == null) unknown.add(use.toString());
+            else if (!jars.contains(jar)) jars.add(jar);
+        }
         for (Map.Entry<String, Boolean> lib : libs.entrySet()) add(lib.getKey(), lib.getValue(), known, jars, unknown, absent, 0);
         return new Resolved(jars, unknown, absent);
     }
@@ -85,6 +105,10 @@ final class HostSharedLibraries {
     private static void add(String name, boolean required, Map<String, HostSystemConfig.Library> known, List<Path> jars, List<String> unknown,
             List<String> absent, int depth) {
         HostSystemConfig.Library lib = known.get(name);
+        if (lib == null) {  // a system app's <library> (PackageManagerService takes them from system apps only)
+            Path provided = HostAppLibraries.systemAppJar(name);
+            if (provided != null) { if (!jars.contains(provided)) jars.add(provided); return; }
+        }
         // an optional library the device lacks is skipped, as Android does; without a system configuration (no ANDROID_ROOT) nothing is known
         if (lib == null) { if (required && !known.isEmpty()) unknown.add(name); return; }
         if (depth < 8) for (String dependency : lib.dependencies()) add(dependency, required, known, jars, unknown, absent, depth + 1);
@@ -111,7 +135,7 @@ final class HostSharedLibraries {
      */
     static void install(Path apk) {
         if (apk == null) return;
-        Resolved resolved = resolve(used(apk.toFile(), ApkSdk.target(apk.toFile())));
+        Resolved resolved = resolve(used(apk.toFile(), ApkSdk.target(apk.toFile())), HostAppLibraries.uses(apk.toFile()));
         for (String name : resolved.unknown()) System.out.println("[apklayer] shared library " + name + ": unknown to this build");
         for (String name : resolved.absent()) System.out.println("[apklayer] shared library " + name + ": this runtime has no classes for it");
         if (resolved.jars().isEmpty()) return;

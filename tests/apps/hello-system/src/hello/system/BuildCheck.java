@@ -13,7 +13,8 @@ final class BuildCheck implements Check {
             {"ID", Build.ID, "ro.build.id"}, {"DISPLAY", Build.DISPLAY, "ro.build.display.id"}, {"TAGS", Build.TAGS, "ro.build.tags"}, {"TYPE", Build.TYPE, "ro.build.type"},
             {"VERSION.RELEASE", Build.VERSION.RELEASE, "ro.build.version.release"}, {"VERSION.INCREMENTAL", Build.VERSION.INCREMENTAL, "ro.build.version.incremental"},
             {"VERSION.SECURITY_PATCH", Build.VERSION.SECURITY_PATCH, "ro.build.version.security_patch"}, {"VERSION.CODENAME", Build.VERSION.CODENAME, "ro.build.version.codename"},
-            {"VERSION.SDK_INT", String.valueOf(Build.VERSION.SDK_INT), "ro.build.version.sdk"}, {"SUPPORTED_ABIS", String.join(",", Build.SUPPORTED_ABIS), "ro.product.cpu.abilist"}};
+            {"VERSION.SDK_INT", String.valueOf(Build.VERSION.SDK_INT), "ro.build.version.sdk"}, {"SUPPORTED_ABIS", String.join(",", Build.SUPPORTED_ABIS), "ro.product.cpu.abilist"},
+            {"USER", Build.USER, "ro.build.user"}, {"HOST", Build.HOST, "ro.build.host"}};
         StringBuilder wrong = new StringBuilder();
         for (Object[] p : pairs) {
             String field = (String) p[1], prop = (String) get.invoke(null, p[2]);
@@ -40,6 +41,8 @@ final class BuildCheck implements Check {
         // a build number, not the builder's name a build without BUILD_NUMBER writes (eng.<user>)
         if (Build.VERSION.INCREMENTAL.startsWith("eng.") || Build.FINGERPRINT.contains("/eng.") || ((String) get.invoke(null, "ro.build.description")).contains(" eng."))
             wrong.append("a builder's name in the build number: ").append(Build.VERSION.INCREMENTAL).append("; ");
+        // a release build's builder, not the machine that built the tree (apklayer.prop)
+        if (!"android-build".equals(Build.USER) || !"localhost".equals(Build.HOST)) wrong.append("builder ").append(Build.USER).append('@').append(Build.HOST).append("; ");
         Check.require(wrong.length() == 0, wrong.toString());
         return Build.FINGERPRINT;
     }

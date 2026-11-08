@@ -39,6 +39,8 @@ BUILD = ('{ [ -f b/build.ninja ] || meson setup b --prefix "$PWD/inst" >/dev/nul
          '{ grep -q "\\"$PWD/inst\\"" b/meson-info/intro-buildoptions.json || meson configure b --prefix "$PWD/inst" >/dev/null; } && '
          # meson lists the patch files when it configures: a new one is applied only after a reconfigure
          '{ [ -z "$(find patches -newer b/build.ninja -name \'*.patch\' | head -1)" ] || ninja -C b reconfigure >/dev/null; } && '
+         # and the runtime's Java sources: a new file is compiled only after a reconfigure (ninja does not know it and keeps the old jar)
+         '{ find runtime -name \'*.java\' | sort > b/java-files.new; cmp -s b/java-files.new b/java-files || ninja -C b reconfigure >/dev/null; } && mv b/java-files.new b/java-files && '
          'ninja -C b && meson install -C b --skip-subprojects --only-changed --quiet >/dev/null')
 
 

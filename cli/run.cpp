@@ -53,6 +53,8 @@ std::string windowLaunch(const Layout& l, const Instance& inst, const std::strin
 bool relaunch(const Layout& l, const Instance& inst, const NativeEnv& ne, const std::string& package) {
     std::string launcher = windowLaunch(l, inst, package);
     if (launcher.empty()) return false;
+    // a launch that is still starting may have started the hub only now: the hub takes the intent once it is up (queued for the app: HubActivities.relaunch)
+    if (!waitForProperty(l, ne, kHubReadyProperty, "1", -1)) return false;
     std::string window = windowTitle(inst, launcher, package);
     std::string intent = getenvOr("APKLAYER_INTENT_FILE", "");
     if (!intent.empty()) intent = realPath(intent);
