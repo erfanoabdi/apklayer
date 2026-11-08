@@ -320,13 +320,38 @@ opens call it too, since bionic's fortified `__open_2` reaches them on glibc), b
 
   About 2.8x the kernel's round trip: a round trip is four socket messages through the daemon (two requests, two replies) plus a copy into the
   receive area; one daemon thread serves every process. Innkeeper reports 15 us against 3.8 us for its seccomp broker on other hardware.
-- Next for step 3 (everything on it): the remaining groups on it (media, audio, webview, system, the corpus) on x86 and arm64; then the hot paths
-  of step 4. Cheaper round trips first: a reply that carries the read in the same message is already the case; next, transaction data written
-  straight into the target's receive area (the route could map every peer's area, or a per-thread shared ring replaces the socket copy), fewer
-  allocations in the route (one reused buffer per thread), and `SOCK_SEQPACKET` with one `sendmsg` per message. Then a second daemon thread per
-  context or one daemon thread per context (binder, hwbinder, vndbinder are independent already). Before binderfs goes: the per-app sandbox's
-  user namespace (the daemon runs in the instance's namespace when the stack starts it, in the caller's when `apklayer exec` does), the Flatpak
-  (the socket directory under `$XDG_RUNTIME_DIR` is shared with the sandbox), and the deb's unit and the manager's first-run check.
+- Round 2 (2026-11-08): the cheaper round trips and the remaining groups on both architectures.
+  - Transaction data now goes through a per-thread shared buffer (sealed memfd, read-only in the daemon) straight into the target's receive area;
+    `SOCK_SEQPACKET` with one message per send/receive; buffers reused per thread; one daemon thread per context; the woken caller answered before
+    the replier. Also fixed: a lost poll wakeup (a reply that drained the wake byte did not re-check: occasional missing death notifications under
+    load) and two holes (values re-read from process-writable memory; memfds a process could shrink under the daemon).
+  - Numbers, medians of three alternating rounds (libbinder both ends, `servicetool bench`; the x86 PC was busy with another agent's tests, load ~2):
+
+    | | x86 kernel | x86 userspace (round 1 / 2) | arm64 kernel | arm64 userspace |
+    |---|---|---|---|---|
+    | round trip, 128 B | 11.4 us | 29.1 / 28.2 us | 40.6 us | 91.0 us |
+    | echo 4 KiB | 12.1 us | 36.3 / 28.7 us | 40.9 us | 91.3 us |
+    | echo 64 KiB | 23.2 us | 86.5 / 41.6 us | 44.5 us | 97.1 us |
+    | 4 threads, 128 B | 123k/s | 44k / 51k/s | 61k/s | 30k/s |
+    | oneway 128 B | 40-122k/s | 75k / 84k/s | 78k/s | 22k/s |
+
+    (arm64 = the Parallels VM, where every context switch is dear: kernel binder itself takes 41 us there.) Data size no longer matters much; what
+    is left is the hop count: a call is four socket messages through the daemon against two wakeups with kernel binder. Getting under ~2x needs
+    fewer hops, not fewer copies (next).
+  - Groups with the userspace binder, x86 PC and arm64 (Parallels): binder, host-binder, hub-services, services, activities, providers,
+    broadcasts, pendingintents, notifications, files, view, sysprov, devices, portal, properties, codec2, native-surface, native-media,
+    native-player, native-audio, audio-late-install, audio-aidl, audio-track, audio-system pass on both; webview passes on both (once on x86 the
+    page's cookie had not reached CookieManager when onPageFinished ran: 1 of 5 runs, a Chromium timing window the slower binder widens; 0 of 4
+    with kernel binder); webview-input passes on x86, failed once on arm64 and passed on rerun (it also failed once with kernel binder there);
+    system-apps and keystore pass on arm64. Not binder, same with kernel binder on the same host: gpu's hwbitmap (both hosts: HWUI's
+    RenderThread::isCurrent race, fixed on branch `x86-hwbitmap-keystore`), keystore on x86 (fixed on that branch), system-apps downloads/media
+    on x86 ("Cannot start com.android.providers.media.module", also in agent a319's kernel run on that PC).
+- Next for step 3 (everything on it): fewer hops per call. Ideas, cheapest first: futex doorbells in the shared buffers instead of socket
+  messages for the request/reply path (the socket stays for fds and death), so a call is still two daemon wakeups but cheaper ones; or let the
+  daemon hand a two-way call's reply buffer to the caller's thread without a second wakeup of the replier (the replier's TRANSACTION_COMPLETE
+  can ride on its next read); a busy-poll window of a few microseconds in the daemon before it sleeps. Then the sandbox's user namespace
+  (the daemon runs in the instance's namespace when the stack starts it, the caller's when `apklayer exec` does), the Flatpak (socket directory
+  under `$XDG_RUNTIME_DIR`), the deb's unit and the manager's first-run check; and the hot paths of step 4 (SurfaceFlinger per frame, audio).
 
 ## Parked (owner's decision)
 - Not now: NFC, biometrics, game controllers, ModemManager ("no SIM" is the honest answer), screen capture portal. Backlight and thermal are the host's.
