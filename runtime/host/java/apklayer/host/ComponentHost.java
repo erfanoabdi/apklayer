@@ -45,7 +45,10 @@ public final class ComponentHost implements Runnable {
         loop(() -> {
             if (!client.alive()) return true;
             if (resident || idleExitNs <= 0 || System.nanoTime() - ShadowHostRealBinder.LAST_TRANSACTION <= idleExitNs) { told[0] = false; return false; }
-            boolean idle = Services.none() && ShadowHostRealBinder.IN_FLIGHT.get() == 0 && looper.getNextScheduledTaskTime().toMillis() == 0;
+            // a message due later than the idle window does not keep it (Android ends such a cached process too): MediaProvider's WorkManager posts
+            // its delayed work 14 h ahead (GreedyScheduler), the same work is a job the hub runs then (JobScheduler)
+            long next = looper.getNextScheduledTaskTime().toMillis();
+            boolean idle = Services.none() && ShadowHostRealBinder.IN_FLIGHT.get() == 0 && (next == 0 || next - android.os.SystemClock.uptimeMillis() > idleExitNs / 1_000_000);
             if (idle) { System.out.println("[apklayer] component-host idle for " + idleExitNs / 1_000_000 + " ms (no service, no call): exiting"); stop(); }
             else if (!told[0]) {  // uncalled, yet kept: say once by what
                 told[0] = true;
