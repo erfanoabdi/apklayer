@@ -4,7 +4,7 @@ Subject: [PATCH] fd hooks: open, ioctl, mmap and close of fds a library serves i
 A library in the process can serve open/ioctl/mmap/close for fds of its own by exporting `bionic_fd_hooks` (looked up once):
 apklayer's userspace binder (docs/BINDER.md) routes /dev/binder, /dev/hwbinder, /dev/vndbinder and /dev/binderfs/* to its daemon
 that way, with libbinder unchanged. open (and __open_2, openat with an absolute path) asks the hook after the path layer; ioctl, close
-and LP64 mmap/mmap64 get wrappers that fall through to glibc (ioctl to the global `ioctl`, which a launcher may define).
+and LP64 glibc mmap/mmap64 get wrappers that fall through to glibc (ioctl to the global `ioctl`, which a launcher may define).
 
 apklayer patch: 0046 of patches/bionic_translation.
 ---
@@ -32,10 +32,10 @@ index f880f96..5f0824c 100644
  }
 diff --git a/libc/libc-fd-hooks.c b/libc/libc-fd-hooks.c
 new file mode 100644
-index 0000000..da8d105
+index 0000000..ccbbf25
 --- /dev/null
 +++ b/libc/libc-fd-hooks.c
-@@ -0,0 +1,75 @@
+@@ -0,0 +1,82 @@
 +// SPDX-License-Identifier: MIT
 +/* apklayer patch: fd hooks. A library in the process (apklayer's userspace binder, its bridge/native/binder_route.c) can serve open, ioctl,
 + * mmap and close for fds of its own: it exports `bionic_fd_hooks`, looked up once on first use. Without it everything goes to glibc as
@@ -104,11 +104,18 @@ index 0000000..da8d105
 +	return close(fd);
 +}
 +
-+#ifdef __LP64__
-+void *bionic_mmap64(void *address, size_t length, int protect, int flags, int filedes, off_t offset);
++#if defined(__LP64__) && defined(__GLIBC__) /* musl's builds have their own mmap64 wrapper (libc-musl.c) */
 +void *bionic_mmap(void *address, size_t length, int protect, int flags, int filedes, off_t offset)
 +{
-+	return bionic_mmap64(address, length, protect, flags, filedes, offset);
++	void *hooked;
++	if (libc_bio_fd_hook_mmap(address, length, protect, flags, filedes, offset, &hooked))
++		return hooked;
++	return mmap(address, length, protect, flags, filedes, offset);
++}
++
++void *bionic_mmap64(void *address, size_t length, int protect, int flags, int filedes, off_t offset)
++{
++	return bionic_mmap(address, length, protect, flags, filedes, offset);
 +}
 +#endif
 diff --git a/libc/libc-musl.c b/libc/libc-musl.c

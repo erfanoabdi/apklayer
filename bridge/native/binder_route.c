@@ -46,7 +46,7 @@ static __thread int tsock[MAX_CONNS]; /* fd + 1 (0: none) */
 static __thread unsigned tgen[MAX_CONNS];
 static pthread_key_t thread_key;
 static pthread_once_t key_once = PTHREAD_ONCE_INIT;
-static int enabled = -1;
+static int enabled = -1, debug;
 static const char *sock_dir, *instance;
 
 static void thread_gone(void *unused)
@@ -66,6 +66,7 @@ static bool on(void)
         instance = getenv("APKLAYER_INSTANCE");
         if (!instance || !instance[0]) instance = "default";
         enabled = b && !strcmp(b, "userspace") && sock_dir && sock_dir[0];
+        debug = getenv("APKLAYER_BINDER_DEBUG") != NULL;
     }
     return enabled;
 }
@@ -147,9 +148,10 @@ static int feature(const char *name)
 static int route_open(const char *path, int flags)
 {
     char sock[sizeof conns[0].path], ctx[16];
-    if (!path || !on()) return -2;
+    if (!path || strncmp(path, "/dev/", 5) || !on()) return -2;
     if (!strncmp(path, "/dev/binderfs/features/", 23)) return feature(path + 23);
     if (!route_of(path, sock, sizeof sock, ctx, sizeof ctx)) return -2;
+    if (debug) fprintf(stderr, "[binder-route] %s: %s (%s)\n", path, sock, ctx);
     int s = connect_to(sock, flags);
     if (s < 0) { errno = -s == ENOENT || -s == ECONNREFUSED ? ENOENT : -s; return -1; }  /* no daemon: as a missing device */
     struct bd_rep h;
@@ -368,6 +370,16 @@ static int route_close(int fd, int *result)
     pthread_mutex_unlock(&conns_lock);
     *result = close(fd);  /* the daemon sees the proc's end: its threads' sockets go with it */
     return 1;
+}
+
+/* the path layer's glibc-level open wrappers (paths_preload.c: bionic code's fortified __open_2 reaches them on glibc) ask here too; and access()
+ * of a routed node succeeds, as for a device */
+int apklayer_binder_route_open(const char *path, int flags) { return route_open(path, flags); }
+int apklayer_binder_route_exists(const char *path)
+{
+    char sock[sizeof conns[0].path], ctx[16];
+    if (!path || strncmp(path, "/dev/", 5) || !on()) return 0;
+    return !strncmp(path, "/dev/binderfs/features/", 23) || (route_of(path, sock, sizeof sock, ctx, sizeof ctx) && access(sock, F_OK) == 0);
 }
 
 /* what bionic_translation's libc looks up (patches/bionic_translation/0046) */

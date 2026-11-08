@@ -19,23 +19,27 @@
 #include <unistd.h>
 
 bool apklayer_apply_path_overrides(char **path);
+/* the userspace binder's nodes (binder_route.c): opened through its daemon, -2 when the path is not one */
+int apklayer_binder_route_open(const char *path, int flags);
+int apklayer_binder_route_exists(const char *path);
+#define ROUTE(p, flags) do { int h_ = apklayer_binder_route_open(p, flags); if (h_ != -2) { DONE(m); return h_; } } while (0)  /* m: MAP's */
 
 #define REAL(name) ({ static void *f_; if (!f_) f_ = dlsym(RTLD_NEXT, #name); f_; })
 #define MAP(var, p) char *var = (char *)(p); bool var##_alloc = (p) && apklayer_apply_path_overrides(&var)
 #define DONE(var) do { if (var##_alloc) free(var); } while (0)
 #define MODE(flags, mode) do { mode = 0; if ((flags) & (O_CREAT | O_TMPFILE)) { va_list ap; va_start(ap, flags); mode = va_arg(ap, int); va_end(ap); } } while (0)
 
-int open(const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path); int r = ((int (*)(const char *, int, ...))REAL(open))(m, flags, mode); DONE(m); return r; }
-int open64(const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path); int r = ((int (*)(const char *, int, ...))REAL(open64))(m, flags, mode); DONE(m); return r; }
-int __open_2(const char *path, int flags) { MAP(m, path); int r = ((int (*)(const char *, int, ...))REAL(open))(m, flags, 0); DONE(m); return r; }
-int __open64_2(const char *path, int flags) { MAP(m, path); int r = ((int (*)(const char *, int, ...))REAL(open64))(m, flags, 0); DONE(m); return r; }
-int openat(int dirfd, const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; int r = ((int (*)(int, const char *, int, ...))REAL(openat))(dirfd, use, flags, mode); DONE(m); return r; }
-int openat64(int dirfd, const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; int r = ((int (*)(int, const char *, int, ...))REAL(openat64))(dirfd, use, flags, mode); DONE(m); return r; }
+int open(const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open))(m, flags, mode); DONE(m); return r; }
+int open64(const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open64))(m, flags, mode); DONE(m); return r; }
+int __open_2(const char *path, int flags) { MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open))(m, flags, 0); DONE(m); return r; }
+int __open64_2(const char *path, int flags) { MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open64))(m, flags, 0); DONE(m); return r; }
+int openat(int dirfd, const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; ROUTE(use, flags); int r = ((int (*)(int, const char *, int, ...))REAL(openat))(dirfd, use, flags, mode); DONE(m); return r; }
+int openat64(int dirfd, const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; ROUTE(use, flags); int r = ((int (*)(int, const char *, int, ...))REAL(openat64))(dirfd, use, flags, mode); DONE(m); return r; }
 int __openat_2(int dirfd, const char *path, int flags) { return openat(dirfd, path, flags, 0); }
 int __openat64_2(int dirfd, const char *path, int flags) { return openat64(dirfd, path, flags, 0); }
 FILE *fopen(const char *path, const char *mode) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *))REAL(fopen))(m, mode); DONE(m); return r; }
 FILE *fopen64(const char *path, const char *mode) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *))REAL(fopen64))(m, mode); DONE(m); return r; }
-int access(const char *path, int mode) { MAP(m, path); int r = ((int (*)(const char *, int))REAL(access))(m, mode); DONE(m); return r; }
+int access(const char *path, int mode) { MAP(m, path); if (apklayer_binder_route_exists(m)) { DONE(m); return 0; } int r = ((int (*)(const char *, int))REAL(access))(m, mode); DONE(m); return r; }
 int stat(const char *path, struct stat *st) { MAP(m, path); int r = ((int (*)(const char *, struct stat *))REAL(stat))(m, st); DONE(m); return r; }
 int stat64(const char *path, struct stat64 *st) { MAP(m, path); int r = ((int (*)(const char *, struct stat64 *))REAL(stat64))(m, st); DONE(m); return r; }
 int lstat(const char *path, struct stat *st) { MAP(m, path); int r = ((int (*)(const char *, struct stat *))REAL(lstat))(m, st); DONE(m); return r; }
