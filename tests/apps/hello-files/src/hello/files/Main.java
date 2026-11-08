@@ -26,6 +26,7 @@ public final class Main extends Activity {
                     System.out.println("[files] owndata java=" + viaJava + " os=" + os + " nio=" + java.nio.file.Files.isDirectory(java.nio.file.Path.of("/data/user/0/" + pkg + "/files")) + " other=" + other + " filesDir=" + getFilesDir());
                     System.out.println("[files] DONE"); finish(); return;
                 }
+                if (System.getProperty("hello.volumes") != null) { Volumes.print(this); finish(); return; }
                 if (System.getProperty("hello.uri") != null) {
                     try (Cursor any = cr.query(Uri.parse(System.getProperty("hello.uri")), null, null, null, null)) { System.out.println("[files] " + System.getProperty("hello.uri") + " -> " + (any == null ? "null" : any.getCount() + " rows, " + any.getClass().getName())); }
                     System.out.println("[files] DONE"); finish(); return;

@@ -169,6 +169,16 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
         String stable = dir == null ? null : AppEnvironment.stableDataPath(dir.getPath());
         return dir == null || stable.equals(dir.getPath()) ? dir : new java.io.File(stable);
     }
+    /** Android's app-specific external directories (Environment.buildExternalStorageAppFilesDirs, ...CacheDirs): <external>/Android/data/<pkg>/files[/type] and .../cache. */
+    @Implementation @Override protected java.io.File getExternalFilesDir(String type) { return externalAppDir("files", type); }
+    @Implementation @Override protected java.io.File[] getExternalFilesDirs(String type) { return new java.io.File[] {getExternalFilesDir(type)}; }
+    @Implementation protected java.io.File[] getExternalCacheDirs() { return new java.io.File[] {externalAppDir("cache", null)}; }
+    private java.io.File externalAppDir(String kind, String type) {
+        java.io.File dir = new java.io.File(android.os.Environment.getExternalStorageDirectory(), "Android/data/" + real.getPackageName() + "/" + kind);
+        if (type != null) dir = new java.io.File(dir, type);
+        dir.mkdirs();
+        return dir;
+    }
     @Implementation @Override protected void sendBroadcast(Intent intent) {
         if (hub()) real("sendBroadcast", ClassParameter.from(Intent.class, intent)); else super.sendBroadcast(intent);
     }

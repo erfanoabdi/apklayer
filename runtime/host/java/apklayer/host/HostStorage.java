@@ -2,12 +2,9 @@ package apklayer.host;
 
 import android.app.Application;
 import android.os.Environment;
-import android.os.Process;
 import android.os.storage.StorageManager;
-import android.os.storage.StorageVolume;
+import android.os.storage.VolumeInfo;
 import java.io.File;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Parameter;
 import org.robolectric.shadow.api.Shadow;
 import org.robolectric.shadows.ShadowStorageManager;
 
@@ -25,36 +22,47 @@ final class HostStorage {
             org.robolectric.shadows.ShadowEnvironment.setExternalStorageState(internal, Environment.MEDIA_MOUNTED);
             org.robolectric.shadows.ShadowEnvironment.setExternalStorageEmulated(internal, true);
             org.robolectric.shadows.ShadowEnvironment.setIsExternalStorageEmulated(true);
+            moveOldAppDirs(internal, app.getPackageName());
         }
+        // Robolectric allows every app op; Android's default for "all files access" defers to the permission (Environment.isExternalStorageManager), which an
+        // app holds when it declares it (HostSystemConfig grants app-op permissions at install): an app without it is not a storage manager
+        android.app.AppOpsManager ops = app.getSystemService(android.app.AppOpsManager.class);
+        if (ops != null) ((org.robolectric.shadows.ShadowAppOpsManager) Shadow.extract(ops)).setMode(android.app.AppOpsManager.OP_MANAGE_EXTERNAL_STORAGE,
+                app.getApplicationInfo().uid, app.getPackageName(), android.app.AppOpsManager.MODE_DEFAULT);
         StorageManager manager = app.getSystemService(StorageManager.class);
         if (manager != null && manager.getStorageVolumes().isEmpty()) {
-            StorageVolume primary = primaryVolume();
-            if (primary != null) ((ShadowStorageManager) Shadow.extract(manager)).addStorageVolume(primary);
+            ShadowStorageManager shadow = Shadow.extract(manager);
+            int user = android.os.Process.myUserHandle().getIdentifier();
+            // StorageManagerService.getVolumeList: the user's emulated volume first, then the visible public ones, each built as the service builds it.
+            // Not the stub volumes (Home, Linux root): they are the desktop's folders, DocumentsUI's roots, and reach apps through the picker.
+            for (VolumeInfo volume : manager.getVolumes()) {
+                if (volume.getType() != VolumeInfo.TYPE_EMULATED && volume.getType() != VolumeInfo.TYPE_PUBLIC || !volume.isVisibleForUser(user)) continue;
+                shadow.addStorageVolume(volume.buildStorageVolume(app, user, false));
+            }
         }
     }
 
-    /** StorageVolume's constructor is hidden and varies by release: parameters are filled by type and order (id, description, state; primary, removable, emulated). */
-    private static StorageVolume primaryVolume() {
-        Constructor<?> best = null;
-        for (Constructor<?> c : StorageVolume.class.getDeclaredConstructors()) if (best == null || c.getParameterCount() > best.getParameterCount()) best = c;
-        if (best == null) return null;
-        File root = Environment.getExternalStorageDirectory();
-        String[] strings = {"emulated", "Internal storage", null, Environment.MEDIA_MOUNTED};
-        boolean[] flags = {true, false, true};  // primary, removable, emulated
-        Object[] args = new Object[best.getParameterCount()];
-        int i = 0, s = 0, b = 0;
-        for (Parameter p : best.getParameters()) {
-            Class<?> t = p.getType();
-            if (t == String.class) args[i] = s < strings.length ? strings[s++] : null;
-            else if (t == File.class) args[i] = root;
-            else if (t == boolean.class) args[i] = b < flags.length && flags[b++];
-            else if (t == long.class) args[i] = 0L;
-            else if (t == int.class) args[i] = 0;
-            else if (t == android.os.UserHandle.class) args[i] = Process.myUserHandle();
-            else args[i] = null;
-            i++;
+    /**
+     * The app's external files directory is Android/data/<pkg>/files and its external cache Android/data/<pkg>/cache (ShadowHostContextImpl); until
+     * 2026-11-09 they were Android/data/<pkg> itself and <external>/<pkg>-cache (Robolectric's): what an app kept there moves into files/ once
+     * (offline maps, downloads), the old cache goes.
+     */
+    private static void moveOldAppDirs(File external, String pkg) {
+        File own = new File(external, "Android/data/" + pkg), files = new File(own, "files");
+        String[] old = own.list();
+        if (old != null && old.length > 0 && !files.exists() && files.mkdir()) {
+            for (String name : old) {
+                if (!new File(own, name).renameTo(new File(files, name))) System.out.println("[apklayer] storage: could not move " + own + "/" + name + " into files/");
+            }
+            System.out.println("[apklayer] storage: moved " + old.length + " entries of " + own + " into files/ (Android's external files directory)");
         }
-        try { best.setAccessible(true); return (StorageVolume) best.newInstance(args); }
-        catch (ReflectiveOperationException failure) { System.out.println("[apklayer] storage: cannot build the primary volume: " + (failure.getCause() != null ? failure.getCause() : failure)); return null; }
+        File cache = new File(external, pkg + "-cache");
+        if (cache.isDirectory()) deleteTree(cache);
+    }
+
+    private static void deleteTree(File dir) {
+        File[] children = dir.listFiles();
+        if (children != null) for (File child : children) { if (child.isDirectory() && !java.nio.file.Files.isSymbolicLink(child.toPath())) deleteTree(child); else child.delete(); }
+        dir.delete();
     }
 }
