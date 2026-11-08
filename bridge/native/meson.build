@@ -17,7 +17,7 @@ executable('btload', ['btload.c', 'android_platform.c', 'properties.c', 'paths.c
   export_dynamic: true, link_with: dl_bio, c_args: native_cargs, override_options: native_opts, install: true, install_dir: native_dir / 'bin')
 # the LD_PRELOAD library (first in symbol lookup for every library of the process, first static TLS module): the path layer and bionic's TLS slots
 # and the userspace binder's route (binder_route.c: bionic_translation's fd hooks find it here, one copy per process)
-apklayer_preload = shared_module('apklayer-preload', ['paths.c', 'paths_preload.c', 'exec_preload.c', 'bionic_tls.c', 'binder_route.c', '../binderd/wire.c'],
+apklayer_preload = shared_module('apklayer-preload', ['paths.c', 'paths_preload.c', 'exec_preload.c', 'bionic_tls.c', 'binder_route.c', 'broker.c', '../binderd/wire.c'],
   link_args: ['-ldl', '-lpthread'], c_args: native_cargs, override_options: native_opts, install: true, install_dir: native_dir)
 executable('aprop', ['aprop.c', 'properties.c'], c_args: native_cargs, override_options: native_opts, install: true, install_dir: native_dir / 'bin')
 install_data('getprop', install_dir: native_dir / 'bin', install_mode: 'rwxr-xr-x')  # Android's getprop for the apps that run it

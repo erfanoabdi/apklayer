@@ -71,6 +71,7 @@ int usage() {
           "  home-access <package> on|off  with the sandbox: the app sees the user's whole home (else only what the picker hands it)\n"
           "  portal pick open|save|directory [--multiple] [--name N] | open <uri>  the desktop's file dialog or link opener (a sandboxed app's)\n"
           "  portal helper geoclue.py|bluez.py|settings.py [args]  a D-Bus helper run as the user (the sandbox's location, Bluetooth, settings)\n"
+          "  portal bus gdbus|dbus-monitor ...  the hub's desktop notification calls run as the user (the sandbox)\n"
           "  --version              version, converterAbi, dataFormat (key<TAB>value)\n",
           stderr);
     return 2;

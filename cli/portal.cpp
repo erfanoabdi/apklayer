@@ -66,6 +66,20 @@ int portalCommand(const Layout& l, const Instance& inst, const std::vector<std::
         execvp(pointers[0], pointers.data());  // its stdin and stdout are the caller's (apklayerd passes them): a stream of lines, BlueZ's RFCOMM pipe
         die("cannot run python3: " + std::string(strerror(errno)));
     }
+    if (args.size() >= 2 && args[0] == "bus") {  // the hub's desktop notifications (DesktopNotifications.java) as the user: the bus refuses the namespace's
+        // uid 1000 when the user's own uid is another. Only the hub's (an app's request carries APKLAYER_PEER_PID), only that service
+        const std::string service = "org.freedesktop.Notifications";
+        std::vector<std::string> a(args.begin() + 1, args.end());
+        bool call = a.size() >= 9 && a[0] == "gdbus" && a[1] == "call" && a[2] == "--session" && a[3] == "--dest" && a[4] == service && a[5] == "--object-path" &&
+                    a[6] == "/org/freedesktop/Notifications" && a[7] == "--method" && (a[8] == service + ".Notify" || a[8] == service + ".CloseNotification");
+        bool monitor = a.size() == 3 && a[0] == "dbus-monitor" && a[1] == "--session" && a[2] == "type='signal',interface='" + service + "'";
+        if (peer > 0 || !(call || monitor)) { fprintf(stderr, "apklayer: portal bus takes the hub's notification calls only\n"); return 2; }
+        std::vector<char*> pointers;
+        for (std::string& s : a) pointers.push_back(s.data());
+        pointers.push_back(nullptr);
+        execvp(pointers[0], pointers.data());
+        die("cannot run " + a[0] + ": " + strerror(errno));
+    }
     if (args.size() < 2 || args[0] != "pick" || (args[1] != "open" && args[1] != "save" && args[1] != "directory")) {
         fprintf(stderr, "usage: apklayer portal pick open|save|directory [--multiple] [--name NAME] | open <uri>\n");
         return 2;

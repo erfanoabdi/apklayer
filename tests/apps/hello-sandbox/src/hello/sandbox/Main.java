@@ -19,6 +19,13 @@ public final class Main extends Activity {
         log("groups " + status("Groups:"));
         log("other " + probe(System.getProperty("hello.other")));
         log("home " + probe(System.getProperty("hello.home")));
+        log("gpu " + openable(System.getProperty("hello.gpu")));  // a GPU node the app's uid may not open: through apklayerd's broker
+        log("private " + probe(System.getProperty("hello.private")));  // with home-access: a 0600 file in a 0700 folder of the home, through the broker
+        log("privdir " + probe(System.getProperty("hello.privdir")));
+        try {
+            Files.writeString(new File(System.getProperty("hello.write", "/nonexistent/x")).toPath(), "written");
+            log("write ok");
+        } catch (Exception e) { log("write denied " + e.getClass().getSimpleName()); }
         log("keystore " + probe("/data/misc/keystore/persistent.sqlite"));  // keystore2's database: the system's, not in an app's /data
         log("webview " + probe("/data/local/tmp/webview-command-line"));  // what Android's /data does show an app
         try {
@@ -39,6 +46,12 @@ public final class Main extends Activity {
         File f = new File(path);
         if (f.isDirectory()) { String[] names = f.list(); return names == null ? "denied" : "listed " + names.length; }
         try { return "read " + Files.readString(f.toPath()).trim(); }
+        catch (Exception e) { return "denied " + e.getClass().getSimpleName(); }
+    }
+
+    private static String openable(String path) {
+        if (path == null || path.isEmpty()) return "none";
+        try (java.io.RandomAccessFile f = new java.io.RandomAccessFile(path, "rw")) { return "opened"; }
         catch (Exception e) { return "denied " + e.getClass().getSimpleName(); }
     }
 
