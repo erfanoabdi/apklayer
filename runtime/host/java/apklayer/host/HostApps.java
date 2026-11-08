@@ -166,8 +166,14 @@ final class HostApps {
 
     /** The intent another app handed to this process at start (null for a normal launch). */
     static Intent incoming() {
+        String pkg = RuntimeEnvironment.getApplication().getPackageName(), text = AppSpare.launchEnv("APKLAYER_INTENT_TEXT");
+        if (text != null) {  // the sandbox's: the file's text, newlines as \u001f (cli/run.cpp)
+            Properties p = new Properties();
+            try { p.load(new java.io.StringReader(text.replace('\u001f', '\n'))); } catch (IOException e) { return null; }
+            return intentFor(p, pkg);
+        }
         String path = AppSpare.launchEnv(INTENT_ENV);
-        return path == null ? null : read(Path.of(path), RuntimeEnvironment.getApplication().getPackageName());
+        return path == null ? null : read(Path.of(path), pkg);
     }
 
     /** An intent file (consumed) for the package: its component, or without one the package's activity that resolves it; null if unreadable. */
@@ -179,6 +185,10 @@ final class HostApps {
         } catch (IOException e) {
             return null;
         }
+        return intentFor(p, pkg);
+    }
+
+    private static Intent intentFor(Properties p, String pkg) {
         Intent intent = fromProperties(p);
         if (p.getProperty("component") != null) intent.setComponent(new ComponentName(pkg, p.getProperty("component")));
         else intent.setPackage(pkg);

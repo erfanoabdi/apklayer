@@ -4,6 +4,7 @@
 #include "sandbox.h"
 #include "spare.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdint>
 #include <cstring>
@@ -168,9 +169,19 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         ne32.env.erase("LD_PRELOAD");
     }
     if (mode == RunMode::Component) nj.env["APKLAYER_COMPONENT_HOST"] = "1";  // the launch's own environment (a spare gets it with its target)
+    // under the sandbox a launch's intent file goes with it as text (its place is not in the app's view, and the app could not delete it there):
+    // one line, newlines as \x1f (spare.cpp hands launch variables over as lines; Properties.store never writes control characters raw)
+    std::string intentFile = getenvOr("APKLAYER_INTENT_FILE", "");
+    if (sandboxOn() && mode == RunMode::App && !intentFile.empty())
+        if (auto text = readFile(intentFile); text && text->size() < 65536) {  // an environment string's limit is 128 KiB
+            std::replace(text->begin(), text->end(), '\n', '\x1f');
+            nj.env["APKLAYER_INTENT_TEXT"] = *text;
+            nj.env.erase("APKLAYER_INTENT_FILE");
+            unlink(intentFile.c_str());
+        }
     // under the sandbox a spare is one app's process from its start (cli/spare.cpp): an app window's launch takes the spare of its own package, or
-    // starts it for the next; component hosts and launches with an intent file (in a place the spare's view lacks) start cold
-    bool spare = !sandboxOn() || (mode == RunMode::App && getenvOr("APKLAYER_INTENT_FILE", "").empty());
+    // starts it for the next; component hosts and launches with a large intent file start cold
+    bool spare = !sandboxOn() || (mode == RunMode::App && !nj.env.count("APKLAYER_INTENT_FILE"));
     std::string sandboxPackage = sandboxOn() ? package : "";
     std::string spareKey = appSpareKey(l, inst, jvm, nj.env, sandboxPackage);
     int vdisplay = 0;
