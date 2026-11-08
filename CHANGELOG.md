@@ -3,6 +3,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: release 0.4.8 (runtime 0.3.5)
+- Sandbox broker and fixes (opt-in), Flatpak with the userspace binder, keystore device-credential prompts and lock state, call-audio broadcasts, idle component hosts end, spare preloads framework classes, MojoLauncher and FCL crash fixes, SurfaceFlinger skips a layer whose buffer it cannot import (frameworks/native 0008), service logs kept across restarts.
+
 ## 2026-11-09: verify-at-install reverted (owner)
 - Reverted 046485af and b3f66b04 (VerifyInstall/VerifyBytecode, refused-class stubs, -XX:-BytecodeVerificationRemote, converter ABI 4): the gain (NewPipe ~0.5 s cold, ~1.2 s warm; Calculator none) did not pay for 10-14 s longer phone installs, a reconvert of every app and unverified runtime-defined classes. Converter ABI back to 3. The spare's class preload and idle component hosts ending stay.
 
