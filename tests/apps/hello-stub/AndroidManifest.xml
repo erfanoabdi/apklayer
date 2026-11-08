@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- tests/vm/dex2jvm-stub.sh installs it with hello.stub.Victim forced to fail conversion (DEX2JVM_TEST_FAIL_CLASS): the install goes on, a use of Victim throws VerifyError. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="hello.stub">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35"/>
+  <application android:label="stub-check">
+    <activity android:name="hello.stub.Main" android:exported="true">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+    </activity>
+  </application>
+</manifest>

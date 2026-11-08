@@ -70,6 +70,10 @@ public final class Options {
     public static volatile int threads = parseInt(setting("dex2jvm.threads",
             "DEX2JVM_THREADS", "THREADS", null));
 
+    /** apklayer patch, a test knob: the internal name of a class whose conversion is made to fail (tests/vm/dex2jvm-stub.sh). */
+    public static volatile String testFailClass = setting("dex2jvm.testFailClass",
+            "DEX2JVM_TEST_FAIL_CLASS", "TEST_FAIL_CLASS", null);
+
     /** The tag on every stderr line the converter prints, as "[tag] ...". */
     public static volatile String logTag = setting("dex2jvm.logTag",
             "DEX2JVM_LOG_TAG", "LOG_TAG", "dex2jvm");

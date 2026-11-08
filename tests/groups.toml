@@ -34,6 +34,11 @@ run = ["tests/vm/install-verify.sh"]
 [desktop-refresh]
 run = ["tests/vm/desktop-refresh.sh"]
 
+[dex2jvm]
+# a class the converter fails on is installed as a stub that throws VerifyError (DexConverter.failedClassStub); the rest of the app runs
+apps = ["hello-stub"]
+run = ["tests/vm/dex2jvm-stub.sh"]
+
 [reconvert]
 run = ["tests/vm/reconvert.sh"]
 
