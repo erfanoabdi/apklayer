@@ -279,12 +279,12 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Result: arm64 built (10:16, sha256 17897c6e...); the x86_64 run was stopped in kati to add a stderr line for the death, synced again (`hals/gnss`), arm64 then
   replayed with `tools/lib/orb-build-module.py libapklayer_gnss hals/gnss Service.cpp`: sha256 71f4077c1d98edfa2212688e14cd7e2be501f45e2a1ac0eee6918e992d1d1399.
   On Parallels (private prebuilts copy): gnss and hardware pass, gnss.log shows `the client died without close(): session closed` for the hub's two ended clients.
-  x86_64 `m libapklayer_gnss`: (below)
+  x86_64 `m libapklayer_gnss` built (09:52), sha256 b67ac78740954bf203a3878687ed8909bcfb9ab68dbe3e8a3b947bf083c971e7 (not run: the x86 PC was not used). Neither is in the prebuilts yet.
 ### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_camera: MJPEG frames decoded (libyuv MJPGToI420)
 - Why: USB webcams offer their larger sizes only as MJPEG; the PipeWire backend now lists and streams them, the provider decodes them (`-DHAVE_JPEG` for libyuv's header).
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "camera: MJPEG frames" hals/camera`, then `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_camera`, then the same for gsi_x86_64.
 - Result: arm64 built (14:06), sha256 7c9571368175674e13fbd3682be20a7cb22349d66264c0a40a9903f7f5489598; x86_64 built, sha256 fd04d404d4c2d3fabb850e56d0a0b1a987bd7497c3918faa8ae4609a32cc3752.
-  Not in the prebuilts yet: the arm64 one ran from a private prebuilts copy on Parallels (`~/apklayer-hw/prebuilts`): camera-pipewire passes.
+  Not in the prebuilts yet: the arm64 one ran from a private prebuilts copy on Parallels (since removed): camera, camera-pipewire pass.
 ### 2026-11-08 - gsi_x86_64 and gsi_arm64 libapklayer_surfaceflinger: a client buffer the GPU cannot import skips its layer
 - Why: an NVIDIA tester's Unity games (PGR, Azur Lane) end SurfaceFlinger with SIGABRT, which ends the whole stack (keystore2 included);
   renderengine's LOG_ALWAYS_FATAL on a texture it cannot import is the likely abort. Patch frameworks/native 0008 (applied in the tree by hand, same diff).
