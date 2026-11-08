@@ -39,7 +39,5 @@ jobs:
         run: |
           flatpak install --user -y --noninteractive out/*.flatpak
           flatpak run --command=apklayer io.github.erfanoabdi.Apklayer setup --check || true
-      - name: GL runtime bundle (temporary, for a test machine whose Flathub pulls fail)
-        run: flatpak build-bundle --runtime ~/.local/share/flatpak/repo out/gl-default.flatpak org.freedesktop.Platform.GL.default 26.08 && ls -la out
       - uses: actions/upload-artifact@v4
         with: {name: 'flatpak-${{ matrix.arch }}', path: out/*.flatpak, if-no-files-found: error}
