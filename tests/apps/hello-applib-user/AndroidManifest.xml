@@ -5,6 +5,8 @@
   <application android:label="applib-user">
     <uses-static-library android:name="hello.applib" android:version="3" android:certDigest="@cert-digest:applib@"/>
     <uses-library android:name="hello.applib.shared" android:required="true"/>
+    <!-- optional and on no build: install goes on, it is not among the app's sharedLibraryInfos -->
+    <uses-native-library android:name="libnot_on_this_device.so" android:required="false"/>
     <activity android:name="hello.applib.user.Main" android:exported="true">
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
     </activity>

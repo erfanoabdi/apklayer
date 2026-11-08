@@ -63,9 +63,14 @@ final class AppMetadata {
             String[] requested = pm.getPackageInfo(app.getPackageName(), PackageManager.GET_PERMISSIONS).requestedPermissions;
             info.setProperty("permissions", requested == null ? "" : String.join(";", requested));  // the manager's permission list (apklayer permissions)
             // <uses-library>: install refuses a required one the build does not know (INSTALL_FAILED_MISSING_SHARED_LIBRARY); the CLI reads "missingLibraries"
-            HostSharedLibraries.Resolved libs = HostSharedLibraries.resolve(HostSharedLibraries.used(dir.resolve("base.apk").toFile(), app.getApplicationInfo().targetSdkVersion),
-                    HostAppLibraries.uses(dir.resolve("base.apk").toFile()));
-            HostAppLibraries.recordProvided(info, dir.resolve("base.apk").toFile());  // what it provides to apps installed after it
+            // and <uses-native-library> from target 31 on (a required one the build's public native libraries lack)
+            java.io.File base = dir.resolve("base.apk").toFile();
+            List<HostAppLibraries.Use> statics = HostAppLibraries.uses(base);
+            HostSharedLibraries.Resolved libs = HostSharedLibraries.resolve(HostSharedLibraries.used(base, app.getApplicationInfo().targetSdkVersion), statics,
+                    HostSharedLibraries.usedNative(base, app.getApplicationInfo().targetSdkVersion));
+            HostAppLibraries.recordProvided(info, base);  // what it provides to apps installed after it
+            // what it uses of other apps (kind:name:version, as providers record theirs): uninstall refuses a provider while a user is installed
+            info.setProperty("usesStaticLibraries", String.join(";", statics.stream().map(use -> use.kind() + ":" + use.name() + ":" + use.version()).toList()));
             info.setProperty("missingLibraries", String.join(";", libs.unknown()));
             for (String absent : libs.absent()) System.out.println("[apklayer] warning: " + app.getPackageName() + " requires the shared library " + absent + ", which this runtime has no classes for");
             signer(info, dir, app.getPackageName());

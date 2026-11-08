@@ -28,6 +28,7 @@ final class HostSystemConfig {
     final Map<String, String> levels = new HashMap<>();  // permission -> normal | dangerous | appop | signature
     final Set<String> implicitBroadcasts = new HashSet<>();  // <allow-implicit-broadcast>: actions that still reach manifest receivers of apps targeting 26+
     final Map<String, Library> libraries = new HashMap<>();  // <library>: the shared libraries apps may use (HostSharedLibraries)
+    final Set<String> nativeLibraries = new HashSet<>();  // the native shared libraries <uses-native-library> names (SystemConfig.readPublicNativeLibrariesList)
 
     /** A {@code <library name file dependency>}: its jar's path on a device, the libraries it needs. */
     record Library(String file, List<String> dependencies) {}
@@ -58,6 +59,17 @@ final class HostSystemConfig {
         for (String dir : new String[] {"etc/permissions", "etc/sysconfig"}) config.readDir(new File(root, dir), false);
         config.readDir(new File(new File(root).getParentFile(), "vendor/etc/permissions"), false);  // the vendor half: what this device's host layers provide
         config.readDir(new File(root, "etc/default-permissions"), true);
+        // the vendor's public libraries and the partitions' public.libraries-<company>.txt (the plain public.libraries.txt is every app's anyway)
+        java.util.List<File> lists = new java.util.ArrayList<>(java.util.List.of(new File(new File(root).getParentFile(), "vendor/etc/public.libraries.txt")));
+        for (String dir : new String[] {"etc", "system_ext/etc", "product/etc"}) {
+            File[] found = new File(root, dir).listFiles((d, name) -> name.startsWith("public.libraries-") && name.endsWith(".txt"));
+            if (found != null) lists.addAll(java.util.List.of(found));
+        }
+        for (File list : lists) {
+            try {
+                for (String line : java.nio.file.Files.readAllLines(list.toPath())) if (!line.isBlank() && !line.startsWith("#")) config.nativeLibraries.add(line.trim().split(" ")[0]);
+            } catch (java.io.IOException missing) { /* no such list on this build */ }
+        }
         String[] adapters = new File("/sys/class/bluetooth").list();  // the host has a Bluetooth adapter: BlueZ through the hub (HubBluetooth)
         if (adapters != null && adapters.length > 0)
             config.features.addAll(java.util.List.of("android.hardware.bluetooth", "android.hardware.bluetooth_le"));

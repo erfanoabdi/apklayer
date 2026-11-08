@@ -1,5 +1,7 @@
 package apklayer.host;
 
+import android.content.pm.SharedLibraryInfo;
+import android.content.pm.VersionedPackage;
 import android.content.res.ApkAssets;
 import android.content.res.XmlResourceParser;
 import java.io.File;
@@ -82,47 +84,84 @@ final class HostSharedLibraries {
         }
     }
 
-    /** What the libraries resolve to: the jars this runtime has (dependencies first), the required libraries the build does not know, those it lacks. */
-    record Resolved(List<Path> jars, List<String> unknown, List<String> absent) {}
+    /**
+     * The app's {@code <uses-native-library>}: name -> required. PackageManagerService checks them from target SDK 31 on (ENFORCE_NATIVE_SHARED_LIBRARY_DEPENDENCIES);
+     * below that an app sees every public native library and they are not its shared libraries.
+     */
+    static Map<String, Boolean> usedNative(File apk, int targetSdk) {
+        Map<String, Boolean> libs = new LinkedHashMap<>();
+        if (targetSdk < 31) return libs;
+        for (Element e : applicationElements(apk, java.util.Set.of("uses-native-library"))) {
+            String name = e.attributes().get(ATTR_NAME);
+            if (name != null && !libs.containsKey(name)) libs.put(name, !"false".equals(e.attributes().get(ATTR_REQUIRED)));
+        }
+        return libs;
+    }
 
-    static Resolved resolve(Map<String, Boolean> libs) { return resolve(libs, List.of()); }
+    /**
+     * What the libraries resolve to: the jars this runtime has (dependencies first), the required libraries the build does not know, those it lacks, and
+     * the app's SharedLibraryInfos (ApplicationInfo.sharedLibraryInfos: the libraries it was given, as SharedLibrariesImpl collects them).
+     */
+    record Resolved(List<Path> jars, List<String> unknown, List<String> absent, List<SharedLibraryInfo> infos) {}
+
+    static Resolved resolve(Map<String, Boolean> libs) { return resolve(libs, List.of(), Map.of()); }
 
     /** With the app's {@code <uses-static-library>}/{@code <uses-sdk-library>} (HostAppLibraries.uses): the installed apps that provide them. */
-    static Resolved resolve(Map<String, Boolean> libs, List<HostAppLibraries.Use> statics) {
+    /** With the app's {@code <uses-native-library>} (usedNative): a required one the build's public native libraries lack is unknown too. */
+    static Resolved resolve(Map<String, Boolean> libs, List<HostAppLibraries.Use> statics, Map<String, Boolean> natives) {
         List<Path> jars = new ArrayList<>();
-        if (libs.isEmpty() && statics.isEmpty()) return new Resolved(jars, List.of(), List.of());
-        Map<String, HostSystemConfig.Library> known = HostSystemConfig.cached().libraries;
+        List<SharedLibraryInfo> infos = new ArrayList<>();
+        if (libs.isEmpty() && statics.isEmpty() && natives.isEmpty()) return new Resolved(jars, List.of(), List.of(), infos);
+        HostSystemConfig config = HostSystemConfig.cached();
         List<String> unknown = new ArrayList<>(), absent = new ArrayList<>();
         for (HostAppLibraries.Use use : statics) {
             Path jar = HostAppLibraries.providerJar(use);
-            if (jar == null) unknown.add(use.toString());
-            else if (!jars.contains(jar)) jars.add(jar);
+            if (jar == null) { unknown.add(use.toString()); continue; }
+            if (!jars.contains(jar)) jars.add(jar);
+            String provider = jar.getParent().getFileName().toString();
+            infos.add(new SharedLibraryInfo(null, provider, List.of(jar.toString()), use.name(), use.version(), use.kind().equals("sdk") ? SharedLibraryInfo.TYPE_SDK_PACKAGE : SharedLibraryInfo.TYPE_STATIC,
+                    new VersionedPackage(provider, use.version()), null, null, false));
         }
-        for (Map.Entry<String, Boolean> lib : libs.entrySet()) add(lib.getKey(), lib.getValue(), known, jars, unknown, absent, 0);
-        return new Resolved(jars, unknown, absent);
+        for (Map.Entry<String, Boolean> lib : libs.entrySet()) add(lib.getKey(), lib.getValue(), config.libraries, jars, unknown, absent, infos, 0);
+        for (Map.Entry<String, Boolean> lib : natives.entrySet()) {  // a public native library of the vendor or a partition's list
+            if (config.nativeLibraries.contains(lib.getKey()))
+                infos.add(new SharedLibraryInfo(lib.getKey(), null, null, lib.getKey(), SharedLibraryInfo.VERSION_UNDEFINED, SharedLibraryInfo.TYPE_BUILTIN, new VersionedPackage("android", 0L), null, null, true));
+            else if (lib.getValue() && !config.libraries.isEmpty()) unknown.add(lib.getKey());
+        }
+        return new Resolved(jars, unknown, absent, infos);
     }
 
     private static void add(String name, boolean required, Map<String, HostSystemConfig.Library> known, List<Path> jars, List<String> unknown,
-            List<String> absent, int depth) {
+            List<String> absent, List<SharedLibraryInfo> infos, int depth) {
         HostSystemConfig.Library lib = known.get(name);
         if (lib == null) {  // a system app's <library> (PackageManagerService takes them from system apps only)
             Path provided = HostAppLibraries.systemAppJar(name);
-            if (provided != null) { if (!jars.contains(provided)) jars.add(provided); return; }
+            if (provided != null) {
+                if (!jars.contains(provided)) jars.add(provided);
+                String provider = provided.getParent().getFileName().toString();
+                infos.add(new SharedLibraryInfo(null, provider, List.of(provided.toString()), name, SharedLibraryInfo.VERSION_UNDEFINED, SharedLibraryInfo.TYPE_DYNAMIC,
+                        new VersionedPackage(provider, 0L), null, null, false));
+                return;
+            }
         }
         // an optional library the device lacks is skipped, as Android does; without a system configuration (no ANDROID_ROOT) nothing is known
         if (lib == null) { if (required && !known.isEmpty()) unknown.add(name); return; }
-        if (depth < 8) for (String dependency : lib.dependencies()) add(dependency, required, known, jars, unknown, absent, depth + 1);
+        if (depth < 8) for (String dependency : lib.dependencies()) add(dependency, required, known, jars, unknown, absent, infos, depth + 1);
         Path jar = HostSystemConfig.systemPath(lib.file());
         if (jar == null || !jar.toFile().isFile()) { if (required) absent.add(name); return; }
         if (!jars.contains(jar)) jars.add(jar);
+        if (infos.stream().noneMatch(info -> info.getName().equals(name)))
+            infos.add(new SharedLibraryInfo(lib.file(), null, null, name, SharedLibraryInfo.VERSION_UNDEFINED, SharedLibraryInfo.TYPE_BUILTIN, new VersionedPackage("android", 0L), null, null, false));
     }
 
     /** This process's app's library jars (install), or none. */
     private static volatile String[] files = new String[0];
+    private static volatile List<SharedLibraryInfo> infos = List.of();
 
-    /** The app's own ApplicationInfo lists its library jars first in sharedLibraryFiles, as PackageManagerService records them. */
+    /** The app's own ApplicationInfo lists its library jars first in sharedLibraryFiles, and its libraries in sharedLibraryInfos, as PackageManagerService records them. */
     static void record(android.content.pm.ApplicationInfo info) {
         String[] own = files;
+        if (info != null && !infos.isEmpty()) info.sharedLibraryInfos = new ArrayList<>(infos);
         if (info == null || own.length == 0) return;
         List<String> all = new ArrayList<>(List.of(own));
         if (info.sharedLibraryFiles != null) for (String f : info.sharedLibraryFiles) if (!all.contains(f)) all.add(f);
@@ -135,10 +174,18 @@ final class HostSharedLibraries {
      */
     static void install(Path apk) {
         if (apk == null) return;
-        Resolved resolved = resolve(used(apk.toFile(), ApkSdk.target(apk.toFile())), HostAppLibraries.uses(apk.toFile()));
+        int target = ApkSdk.target(apk.toFile());
+        Resolved resolved = resolve(used(apk.toFile(), target), HostAppLibraries.uses(apk.toFile()), usedNative(apk.toFile(), target));
         for (String name : resolved.unknown()) System.out.println("[apklayer] shared library " + name + ": unknown to this build");
         for (String name : resolved.absent()) System.out.println("[apklayer] shared library " + name + ": this runtime has no classes for it");
-        if (resolved.jars().isEmpty()) return;
+        infos = List.copyOf(resolved.infos());
+        if (resolved.jars().isEmpty()) {
+            try {
+                Object bound = org.robolectric.util.ReflectionHelpers.getField(org.robolectric.RuntimeEnvironment.getActivityThread(), "mBoundApplication");
+                record(org.robolectric.util.ReflectionHelpers.getField(bound, "appInfo"));
+            } catch (RuntimeException notBoundYet) { /* the context path covers it */ }
+            return;
+        }
         ClassLoader app = AppClassLoader.app;  // the loader Main built, a class of the outer loader: reached by reflection
         try {
             if (app != null) app.getClass().getMethod("addLibraries", Path[].class).invoke(app, (Object) resolved.jars().toArray(new Path[0]));

@@ -5,6 +5,13 @@
   <application android:label="sharedlib-check">
     <uses-library android:name="org.apache.http.legacy" android:required="true"/>
     <uses-library android:name="com.example.not.on.this.device" android:required="false"/>
+    <!-- the platform's other optional libraries: each gives its classes -->
+    <uses-library android:name="com.android.location.provider" android:required="false"/>
+    <uses-library android:name="javax.obex" android:required="false"/>
+    <uses-library android:name="com.android.future.usb.accessory" android:required="false"/>
+    <uses-library android:name="com.android.media.remotedisplay" android:required="false"/>
+    <uses-library android:name="com.android.mediadrm.signer" android:required="false"/>
+    <uses-library android:name="com.android.nfc_extras" android:required="false"/>
     <activity android:name="hello.sharedlib.Main" android:exported="true">
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
     </activity>
