@@ -34,9 +34,13 @@ public final class ComponentHost implements Runnable {
         ShadowPausedLooper looper = Shadow.extract(Looper.getMainLooper());
         // no cached processes (the owner's rule; Android keeps them until memory runs short): a host that runs no service, has no work queued and
         // was not called for IDLE_EXIT_MS ends, as its last service's end does (Services.exitIfIdle); a provider's next client starts it again
-        // (RemoteProvider retries a dead provider through the hub). The system's own (uid 1000: SettingsProvider) and persistent apps stay.
+        // (RemoteProvider retries a dead provider through the hub). What runs in system_server on a device (android:process="system":
+        // SettingsProvider, which every start reads), uid 1000 and persistent apps stay.
         long idleExitNs = Long.getLong("apklayer.hostidlems", 60_000) * 1_000_000L;
-        boolean resident = android.os.Process.myUid() == android.os.Process.SYSTEM_UID || (app.getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_PERSISTENT) != 0;
+        android.content.pm.ApplicationInfo info = app.getApplicationInfo();
+        boolean resident = "system".equals(info.processName) || android.os.Process.myUid() == android.os.Process.SYSTEM_UID
+                || (info.flags & android.content.pm.ApplicationInfo.FLAG_PERSISTENT) != 0;
+        System.out.println("[apklayer] component-host process " + info.processName + (resident ? ": resident" : ": ends when idle"));
         while (client.alive() && !stopping) {
             step(looper);
             if (!resident && idleExitNs > 0 && Services.none() && ShadowHostRealBinder.IN_FLIGHT.get() == 0 && looper.getNextScheduledTaskTime().toMillis() == 0
