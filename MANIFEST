@@ -12,3 +12,4 @@ x86_64 webview: com.android.webview 156.0.8078.47, sha256 a98312a1427ca5c029e300
 2026-11-07: libberberis_arm64 (x86_64 691a6802...) from main f3405436: binary_translation 0003, errno carried both ways through host trampolines
 2026-11-07: libapklayer_egl (arm64 115919a4..., x86_64 b1fc712b...) from main 730ae2c3: XR30/XB30 windows on an AR30/AB30 surface, HAL formats as native visual ids (keeps the NVIDIA SCANOUT retry)
 2026-11-08: arm64 libhidlbase, libbinder, libapklayer_vdisplay, libapklayer_cameraserver from the 2026-11-05 gsi_arm64 builds (libbinder 0006/0007, libhidl 0001-0003: host binder contexts for Halium device HALs; the x86_64 set had them since f25b22ce)
+2026-11-08: arm64 call audio and keystore round: libapklayer_audio (mic mute), libapklayer_codec2 (probe skips fixed-rate codecs), libapklayer_gatekeeper, libapklayer_gatekeeperd and the tree's gatekeeper/authorization/libgsi libraries they link
