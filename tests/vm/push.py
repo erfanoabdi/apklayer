@@ -4,6 +4,8 @@
             the hub starts the app's process, its receiver posts a notification that reaches the desktop
   alarm     an alarm set by an app that is then closed fires its PendingIntent (the hub holds it: HubScheduler)
   job       a JobScheduler job of a closed app runs
+  jobs      JobWorkItems dequeued in order, onStopJob when the app cancels a running job, a job held back by its network constraint, one run at its deadline
+  retry     WorkManager's retry pattern: the backoff (hub-held attempt count) grows across process ends, no run before its time
   boot      an always-on instance's fresh stack: the hub sends LOCKED_BOOT_COMPLETED then BOOT_COMPLETED to the app that was never started; a restarted hub sends them no more
   autostart `apklayer instance autostart`: the marker, the unit, the instances row, off again
 Every JVM is owned and reaped (this instance's stop)."""
@@ -109,6 +111,36 @@ try:
         close_app(APP)
         component('[push] JOB 7', 60)
         print('PASS job: scheduled by an app that was then closed, run by the hub in a new process', flush=True)
+    elif PHASE == 'jobs':
+        # JobWorkItems, onStopJob, constraints and deadlines (hello.push JobsCheck), in the app's own process
+        run_app(APP, 'jobs')
+        app = LOGS / ('app-%s.log' % APP)
+        instance.wait_file(app, '[push] JOBS-SET', 90)
+        text = instance.wait_file(app, '[push] WORK-DONE', 40)
+        works = [l.split('[push] WORK ')[1].split()[0] for l in text.splitlines() if '[push] WORK ' in l]
+        assert works == ['a', 'b', 'c', 'd'], 'work items: %s\n%s' % (works, text)
+        text = instance.wait_file(app, '[push] STOPPED 11', 20)
+        assert '[push] STARTED 11' in text and '[push] STOPPED 11 reason=1' in text, text  # JobParameters.STOP_REASON_CANCELLED_BY_APP
+        text = instance.wait_file(app, '[push] JOB 13', 20)  # its deadline passed: it runs without the cellular network
+        wait_hub('job 12 of hello.push waits for its constraints (7)', 5)  # STOP_REASON_CONSTRAINT_CONNECTIVITY
+        settle(3)
+        text = app.read_text(errors='replace')
+        assert '[push] JOB 12' not in text and text.count('[push] STARTED 11') == 1, 'job 12 ran without its network, or the cancelled 11 again:\n' + text
+        print('PASS jobs: work items dequeued in order (one enqueued while running), onStopJob on cancel, a constraint holds a job back until its deadline', flush=True)
+    elif PHASE == 'retry':
+        # WorkManager's retry: the hub's backoff count outlives the app's process (closed after each run), so no run comes before its time
+        MARKER.write_text('1\n')
+        run_app(APP, 'retry')
+        instance.wait_file(LOGS / ('app-%s.log' % APP), '[push] RETRY-SET', 90)
+        wait_hub('job 8 of hello.push again in 10000 ms (attempt 1)', 20)
+        close_app(APP)
+        component('[push] RUN 8 attempt 2', 40)
+        wait_hub('job 8 of hello.push again in 20000 ms (attempt 2)', 10)
+        close_app(APP)
+        text = component('[push] DONE 8', 50)
+        logs = (LOGS / ('app-%s.log' % APP)).read_text(errors='replace') + text
+        assert '[push] EARLY' not in logs, 'a run before its backoff:\n' + logs
+        print('PASS retry: the backoff grows with the hub-held attempt count across process ends (10 s, 20 s), no run before its time', flush=True)
     elif PHASE == 'boot':
         MARKER.write_text('1\n')  # an always-on instance is the one that boots
         hub = subprocess.Popen(['bin/apklayer', 'hub'], env=env, stdout=open(HUB_OUT, 'a'), stderr=subprocess.STDOUT, start_new_session=True)
@@ -117,6 +149,8 @@ try:
         text = component('[push] BOOT android.intent.action.BOOT_COMPLETED', 60)
         assert text.index('LOCKED_BOOT_COMPLETED') < text.index('android.intent.action.BOOT_COMPLETED'), 'wrong order:\n' + text
         assert 'user=0' in text and 'sending android.intent.action.BOOT_COMPLETED' in instance.wait_file(HUB_OUT, 'sending android.intent.action.BOOT_COMPLETED', 5)
+        # ordered, as UserController sends it: one receiver (one app's process start) after the other
+        assert 'broadcast android.intent.action.BOOT_COMPLETED from android ordered' in instance.wait_file(HUB_OUT, 'broadcast android.intent.action.BOOT_COMPLETED from', 5), 'not ordered
         # the same stack, a new hub (the first ended): not a boot again
         jvm = int((LOGS / 'hub.pid').read_text().split()[0])
         os.kill(jvm, signal.SIGTERM)

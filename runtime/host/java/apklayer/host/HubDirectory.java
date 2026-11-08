@@ -19,9 +19,9 @@ final class HubDirectory extends Binder {
     void sendSystem(Intent intent, boolean sticky) {
         broadcasts.send(SYSTEM, intent, null, 0, null, null, null, false, sticky, 0);
     }
-    /** A broadcast from the system to receivers holding a permission (the boot broadcasts). */
-    void sendSystem(Intent intent, String requiredPermission) {
-        broadcasts.send(SYSTEM, intent, null, 0, null, null, new String[] {requiredPermission}, false, false, 0);
+    /** An ordered broadcast from the system to receivers holding a permission (the boot broadcasts: one receiver, and so one process start, at a time). */
+    void sendSystemOrdered(Intent intent, String requiredPermission) {
+        broadcasts.send(SYSTEM, intent, null, 0, null, null, new String[] {requiredPermission}, true, false, 0);
     }
     /** An activity the system starts (HubUsb's attach intent). */
     void startSystem(Intent intent) { activities.start(SYSTEM, intent, null); }
@@ -56,7 +56,7 @@ final class HubDirectory extends Binder {
     HubDirectory(Path apps) {
         packages = new HubPackages(apps); bindings = new HubServiceBindings(this, packages); broadcasts = new HubBroadcasts(this, packages); providers = new HubProviders(this, packages, broadcasts); activities = new HubActivities(this, packages, providers); startedServices = new HubStartedServices(this, packages, broadcasts); pendingIntents = new HubPendingIntents(this, broadcasts, activities, startedServices);
         notifications = new HubNotifications(packages, pendingIntents);
-        scheduler = new HubScheduler(pendingIntents, broadcasts);
+        scheduler = new HubScheduler(this, pendingIntents, broadcasts);
         inputMethods = new HubInputMethods(bindings, packages);
         // the instance's own data directory (the volumes' parent): accounts belong to the instance, as /data/system_ce does to a device
         accounts = new HubAccounts(this, bindings, packages, new HubAuthenticators(apps, packages), Path.of(System.getProperty("apklayer.storage")).getParent().resolve("accounts.json"));
@@ -104,6 +104,8 @@ final class HubDirectory extends Binder {
     }
     java.util.List<Peer> peersExcept(Peer one) { synchronized (peers) { return peers.values().stream().filter(peer -> peer != one).toList(); } }
     HubAccounts accounts() { return accounts; }
+    /** The host's network or power supply changed (job constraints). */
+    void hostChanged() { scheduler.constraintsChanged(); }
     HubProviders providers() { return providers; }
     HubPackages packages() { return packages; }
     HubInstaller installer() { return installer; }
@@ -409,6 +411,10 @@ final class HubDirectory extends Binder {
             case HubProtocol.JOB_SCHEDULE -> {
                 Peer caller = caller(); android.app.job.JobInfo job = request.readTypedObject(android.app.job.JobInfo.CREATOR); long delay = request.readLong(); request.enforceNoDataAvail();
                 scheduler.scheduleJob(caller, job, delay); reply.writeNoException(); return true;
+            }
+            case HubProtocol.JOB_RETRY -> {
+                Peer caller = caller(); int id = request.readInt(); boolean systemStop = request.readBoolean(); request.enforceNoDataAvail();
+                scheduler.retryJob(caller, id, systemStop); reply.writeNoException(); return true;
             }
             case HubProtocol.JOB_CANCEL -> {
                 Peer caller = caller(); int id = request.readInt(); request.enforceNoDataAvail();

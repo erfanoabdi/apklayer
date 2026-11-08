@@ -99,6 +99,11 @@ final class HubEndpoint extends Binder {
             main.post(() -> HostJobs.run(job));
             reply.writeNoException(); return true;
         }
+        if (code == HubProtocol.ENDPOINT_JOB_STOP) {
+            int id = request.readInt(), reason = request.readInt(); request.enforceNoDataAvail();
+            main.post(() -> HostJobs.stop(id, reason));
+            reply.writeNoException(); return true;
+        }
         if (code == HubProtocol.ENDPOINT_EXIT_IF_IDLE) {
             request.enforceNoDataAvail();
             main.post(Services::exitIfIdle);

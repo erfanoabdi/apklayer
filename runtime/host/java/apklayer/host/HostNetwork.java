@@ -62,14 +62,16 @@ final class HostNetwork {
 
     static void install(Application app) {
         apply(app, read());
+        watch(() -> { State next = read(); new Handler(Looper.getMainLooper()).post(() -> apply(app, next)); });
+    }
+
+    /** Runs {@code changed} on every route or address event of the host (the hub's job constraints, an app's networks). */
+    static void watch(Runnable changed) {
         try {
             Process monitor = new ProcessBuilder(HostProcess.dying("ip", "monitor", "route", "address")).redirectErrorStream(true).start();
             Thread thread = new Thread(() -> {
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(monitor.getInputStream()))) {
-                    while (in.readLine() != null) {
-                        State next = read();
-                        new Handler(Looper.getMainLooper()).post(() -> apply(app, next));
-                    }
+                    while (in.readLine() != null) changed.run();
                 } catch (IOException ended) { /* the monitor stopped with the JVM */ }
             }, "apklayer-network");
             thread.setDaemon(true);
