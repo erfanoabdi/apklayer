@@ -3,6 +3,22 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-08: app start on phones, items 7-8 (verify at install, spare preload, idle hosts end)
+- docs/PLAN.md "Plan: app start speed on phones" 7-8. Install verifies every converted class with HotSpot's verifier (VerifyInstall/VerifyBytecode,
+  the app JVM's loader view; refusals from the class+init log); refused classes become stubs that throw the verifier's error (dex2jvm.refusedClasses);
+  converter ABI 4; host JVMs run with -XX:-BytecodeVerificationRemote while every installed app is ABI 4; in-memory DEX in such a JVM is verified
+  in a JVM of its own first. The spare preloads 4357 framework/JDK classes (resources/preloaded-classes, tools/gen/preload-list.py). Component hosts
+  end after 60 s without a service, queued work or an incoming call (uid 1000 and persistent apps stay). Tried and dropped: idle heap trims (SerialGC
+  keeps the initial heap).
+- Volla X23 (deb 0.4.7~git20261108.speed78/78b built on Parallels, installed with dpkg -i --force-depends: the phone lacks openjdk-21-jre-headless
+  and uidmap, it runs ~/apklayer-dev/jdk; runtime 0.3.4 from the bundle, `apklayer setup --update --bundle`; 13 apps reconverted, 474 s, 0 refused):
+  NewPipe cold 19.0-20.7 s, warm 11.5-11.9 s (earlier deb 23.1-24.9 / 15.1 s); Calculator cold 17.6 s, warm 9.7-10.1 s (earlier deb 16.6-16.8 /
+  8.4-8.7 s); the settled instance's PSS 2157 -> 1970 MB with idle hosts ending (WebView's hosts end after NewPipe); A/B and memory in PLAN 7-8.
+  The phone keeps deb 0.4.7~git20261108.speed78c (runtime 0.3.4, apps at converter ABI 4). Rollback deb on the phone: ~/apklayer-life/speed1.deb.
+- Tests: Parallels (own tree ~/agent-speed78): install-verify (HotSpot cases), dex2jvm (in-memory DEX), startup, gpu, activities, services,
+  providers (idle) pass. x86 PC (own tree ~/apklayer-x86/speed78, -j 2): dex2jvm, providers, startup, gpu, activities, services,
+  installer, install-verify pass.
+
 ## 2026-11-08: userspace binder prototype (docs/BINDER.md, branch userspace-binder)
 - docs/PLAN.md "Plan: binder in userspace" steps 1-2. `apklayer-binderd` (bridge/binderd): the binder driver model written from Linux's binder.c (v6.6),
   one per instance, one thread, socket-activated by the CLI; the route in libapklayer-preload.so (bridge/native/binder_route.c) and bionic_translation
