@@ -490,6 +490,12 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
                 waitpid(s.pid, &st, 0);
                 close(s.pidfd);
                 fprintf(stderr, "exited: %s (status %d)\n", s.name.c_str(), WIFEXITED(st) ? WEXITSTATUS(st) : 128 + WTERMSIG(st));
+                if (WIFSIGNALED(st)) {  // a crash: its log's last lines (an abort's message) into stack.log, which no restart renames
+                    std::string text = readFile(s.spec.logFile).value_or("");
+                    size_t from = text.size();
+                    for (int lines = 0; from > 0 && lines <= 24; ) if (text[--from] == '\n') lines++;
+                    fprintf(stderr, "--- the end of %s:\n%s\n---\n", s.spec.logFile.c_str(), text.substr(from).c_str());
+                }
                 if (!essential(s.name) && s.restarts < kMaxRestarts) {
                     s.restarts++;
                     s.pid = spawn(s.spec);
