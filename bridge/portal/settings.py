@@ -76,4 +76,7 @@ locale = os.environ.get('LC_ALL') or os.environ.get('LC_MESSAGES') or os.environ
 if locale:
     show('locale', locale)
 print('ready', flush=True)
-GLib.MainLoop().run()
+loop = GLib.MainLoop()
+# the hub's end closes our stdin (its pipe): where setpriv's death signal is missing (the Flatpak's Platform) nothing else ends this
+GLib.unix_fd_add_full(GLib.PRIORITY_DEFAULT, 0, GLib.IOCondition.IN | GLib.IOCondition.HUP, lambda *a: loop.quit())
+loop.run()

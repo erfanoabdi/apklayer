@@ -3,7 +3,7 @@
 in the host's ~/.local/share/applications. Usage:
   launcher.py install <id.desktop> <name> <icon.png> <desktop entry>  the desktop asks the person once (PrepareInstall); an installed one is kept
   launcher.py uninstall <id.desktop>                                   (gone already: nothing to do)
-Prints `installed`, `kept`, `cancelled`, `uninstalled` or `unavailable <why>` (status 3)."""
+Prints `installed`, `kept`, `cancelled`, `uninstalled`, `unavailable <why>` (status 3) or `failed <why>` (status 4)."""
 import sys
 from gi.repository import Gio, GLib
 
@@ -56,11 +56,16 @@ def main():
     if installed(desktop_id):  # shortcut: an app update's new label or icon does not reach a launcher already there (each Install asks the person)
         print('kept', flush=True)
         return 0
-    token = prepare(name, icon)
-    if not token:
-        print('cancelled', flush=True)
-        return 1
-    call('Install', GLib.Variant('(sssa{sv})', (token, desktop_id, entry, {})))
+    try:
+        token = prepare(name, icon)
+        if not token:
+            print('cancelled', flush=True)
+            return 1
+        call('Install', GLib.Variant('(sssa{sv})', (token, desktop_id, entry, {})))
+    except GLib.Error as e:
+        # Ubuntu 24.04: the portal's icon check runs in bwrap, which its AppArmor userns restriction breaks (LP#2069526): "icon failed validation"
+        print('failed ' + e.message, flush=True)
+        return 4
     print('installed', flush=True)
     return 0
 
