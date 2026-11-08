@@ -92,8 +92,9 @@ if host_machine.system() == 'linux'
     run_command(apply, compat / 'libunwind-before-1.8-meson.patch', bt_src, check: true)
     run_command(apply, compat / 'libunwind-before-1.8-weak-phdr.patch', bt_src, check: true)
   endif
-  # built as upstream builds it on its own (debug, no optimization): the flags it was tested with
-  bt = subproject('bionic_translation', default_options: ['buildtype=debug', 'warning_level=1'])
+  # optimized with its debug info kept (upstream builds it with Meson's default, -O0): every proxied libc call, mutex and condition variable of
+  # translated code goes through it
+  bt = subproject('bionic_translation', default_options: ['buildtype=debugoptimized', 'warning_level=1'])
   subdir('bridge/native')  # the native runtime: JNI shim, btload, the path layer, bionic_translation's library mapping
   subdir('bridge/ndk')
   subdir('bridge/hals/graphics/gles1')  # OpenGL ES 1 for hosts without it (-Dgfxstream)
