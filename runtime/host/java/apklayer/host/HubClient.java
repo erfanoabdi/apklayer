@@ -188,6 +188,11 @@ public final class HubClient {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.BLUETOOTH, request -> { request.writeString(address); request.writeString(uuid); },
                 reply -> new android.os.ParcelFileDescriptor[] {reply.readTypedObject(android.os.ParcelFileDescriptor.CREATOR), reply.readTypedObject(android.os.ParcelFileDescriptor.CREATOR)});
     }
+    /** The PIN or passkey for a pairing BlueZ asks about, as the person typed it in the hub's dialog; null when they refused. */
+    String bluetoothPin(String address, String name, boolean passkey) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.BLUETOOTH_PIN, request -> { request.writeString(address); request.writeString(name); request.writeBoolean(passkey); },
+                reply -> reply.readString());
+    }
     /** The gps fixes from the hub's GNSS HAL client (HubGnss): {@code follow}, a pipe of `ready` and `location LAT LON ACCURACY` lines; else null,
      *  and this process's pipes end (their reader sees the end of the stream). */
     android.os.ParcelFileDescriptor gnss(boolean follow) {

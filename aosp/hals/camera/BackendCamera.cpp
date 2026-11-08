@@ -51,6 +51,7 @@ void BackendCamera::onFrame(void* user, const apklayer_camera_frame* f) {
             break;
         case APKLAYER_CAM_YUYV: r = libyuv::YUY2ToI420(p0, f->stride[0], y, w, u, w / 2, v, w / 2, w, h); break;
         case APKLAYER_CAM_XRGB: r = libyuv::ARGBToI420(p0, f->stride[0], y, w, u, w / 2, v, w / 2, w, h); break;
+        case APKLAYER_CAM_MJPEG: r = libyuv::MJPGToI420(p0, f->size[0], y, w, u, w / 2, v, w / 2, f->width, f->height, w, h); break;
     }
     if (r != 0) { out.width = out.height = 0; ALOGE("%s: frame format 0x%x not converted", __func__, f->fourcc); }
     self->mFrameCond.notify_all();
@@ -92,7 +93,7 @@ bool BackendCamera::configure(const CameraMetadata& sessionParams, const size_t 
         mLatest.width = mLatest.height = 0;
         mFailed = false;
     }
-    static const uint32_t fourccs[] = {APKLAYER_CAM_I420, APKLAYER_CAM_NV12, APKLAYER_CAM_YUYV, APKLAYER_CAM_XRGB, 0};
+    static const uint32_t fourccs[] = {APKLAYER_CAM_I420, APKLAYER_CAM_NV12, APKLAYER_CAM_YUYV, APKLAYER_CAM_XRGB, APKLAYER_CAM_MJPEG, 0};
     mStreaming = need.area() > 0 && apklayer_camera_start(mCamera, source.width, source.height, 30, fourccs) == 0;
     if (!mStreaming) return FAILURE(false);
     applyMetadata(sessionParams);

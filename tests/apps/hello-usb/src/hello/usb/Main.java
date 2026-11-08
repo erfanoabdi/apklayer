@@ -22,7 +22,8 @@ import java.util.Arrays;
 /**
  * USB as apps use it, against Linux's Gadget Zero (0525:a4a0): the device list, ACTION_USB_DEVICE_ATTACHED/DETACHED, hasPermission/requestPermission with
  * the answer through a PendingIntent, openDevice, the connection's descriptor, GET_DESCRIPTOR on endpoint 0, the loopback configuration, claimInterface,
- * a bulk round trip and a UsbRequest. Prints `[usb] PASS|FAIL <step>`.
+ * a bulk round trip and a UsbRequest. A CDC ACM serial device already plugged in (g_serial) is asked for at the start and driven as a serial port
+ * (Serial). Prints `[usb] PASS|FAIL <step>`.
  */
 public class Main extends Activity {
     static final String PERMISSION = "hello.usb.PERMISSION";
@@ -57,12 +58,13 @@ public class Main extends Activity {
                     case PERMISSION -> {
                         boolean granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false);
                         report("permission result", granted && usb.hasPermission(d), "granted=" + granted);
-                        if (granted) new Thread(() -> exercise(d), "usb-test").start();
+                        if (granted) new Thread(() -> { if (Serial.acm(d)) Serial.exercise(usb, d); else exercise(d); }, "usb-test").start();
                     }
                     default -> { }
                 }
             }
         }, filter(), Context.RECEIVER_EXPORTED);
+        for (UsbDevice d : usb.getDeviceList().values()) if (Serial.acm(d) && !asked) { asked = true; ask(d); }
         System.out.println("[usb] ready");
     }
 

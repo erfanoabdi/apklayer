@@ -9,6 +9,7 @@ import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
+import android.bluetooth.BluetoothSocket;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanResult;
@@ -19,16 +20,20 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
 import android.os.ParcelUuid;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
 /**
  * Bluetooth as an app uses it, against the bluetooth group's mock BlueZ (tests/vm/bluez-mock.py): adapter state and bonded devices, classic discovery,
  * an LE scan filtered by the Battery service, a GATT connection that reads Battery Level and gets its notification, bonding, then the adapter switched
- * off and on (ACTION_STATE_CHANGED from the system). Each step prints a "[bt]" line; "[bt] PASS" at the end.
+ * off and on (ACTION_STATE_CHANGED from the system), an RFCOMM socket to the paired device's Serial Port service (the mock echoes), and bonding a
+ * legacy device whose PIN the person types into the hub's dialog (the test types 1234). Each step prints a "[bt]" line; "[bt] PASS" at the end.
  */
 public final class Main extends Activity {
-    private static final UUID BATTERY = uuid("180f"), LEVEL = uuid("2a19"), CCC = uuid("2902");
+    private static final UUID BATTERY = uuid("180f"), LEVEL = uuid("2a19"), CCC = uuid("2902"), SPP = uuid("1101");
+    private static final String PIN_DEVICE = "AA:BB:CC:00:00:01";
     private BluetoothAdapter adapter;
     private boolean found, sawOff;
 
@@ -66,16 +71,40 @@ public final class Main extends Activity {
             case BluetoothDevice.ACTION_BOND_STATE_CHANGED -> {
                 int bond = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, -1);
                 log("bond " + device.getAddress() + " " + intent.getIntExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, -1) + "->" + bond);
-                if (bond == BluetoothDevice.BOND_BONDED) log("power off=" + adapter.disable());
+                if (bond == BluetoothDevice.BOND_BONDED && PIN_DEVICE.equals(device.getAddress())) log("PASS");
+                else if (bond == BluetoothDevice.BOND_BONDED) log("power off=" + adapter.disable());
             }
             case BluetoothAdapter.ACTION_STATE_CHANGED -> {
                 int now = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1);
                 log("state " + intent.getIntExtra(BluetoothAdapter.EXTRA_PREVIOUS_STATE, -1) + "->" + now + " enabled=" + adapter.isEnabled());
                 if (now == BluetoothAdapter.STATE_OFF) { sawOff = true; log("power on=" + adapter.enable()); }
-                if (now == BluetoothAdapter.STATE_ON && sawOff) log("PASS");
+                if (now == BluetoothAdapter.STATE_ON && sawOff) new Thread(this::rfcomm).start();
             }
             default -> { }
         }
+    }
+
+    /** A blocking socket, as serial-port apps use it: connect, write, read the echo; then the PIN pairing. */
+    private static int pipes() {  // this process's open pipes: a closed socket's pipes must go
+        int n = 0;
+        for (java.io.File f : new java.io.File("/proc/self/fd").listFiles()) {
+            try { if (java.nio.file.Files.readSymbolicLink(f.toPath()).toString().startsWith("pipe:")) n++; } catch (IOException gone) { }
+        }
+        return n;
+    }
+
+    private void rfcomm() {
+        int before = pipes();
+        try (BluetoothSocket socket = adapter.getRemoteDevice("11:22:33:44:55:66").createRfcommSocketToServiceRecord(SPP)) {
+            socket.connect();
+            log("rfcomm connected=" + socket.isConnected());
+            socket.getOutputStream().write("ping\n".getBytes(StandardCharsets.UTF_8));
+            byte[] got = new byte[64];
+            int n = socket.getInputStream().read(got);
+            log("rfcomm read " + (n > 0 ? new String(got, 0, n, StandardCharsets.UTF_8).trim() : "nothing"));
+        } catch (IOException failed) { log("rfcomm failed " + failed); }
+        log("rfcomm pipes left=" + (pipes() - before));
+        log("pin bond started=" + adapter.getRemoteDevice(PIN_DEVICE).createBond());
     }
 
     private void scan() {

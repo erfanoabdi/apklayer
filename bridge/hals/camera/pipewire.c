@@ -1,5 +1,6 @@
 /* The PipeWire camera backend's streams: a capture stream to one camera node (pipewire-list.c lists them), raw frames in the first of the
- * provider's formats the camera offers, near the asked size and rate; mapped buffers handed over on PipeWire's thread. */
+ * provider's formats the camera offers, near the asked size and rate, or MJPEG frames when the size is offered only so and the provider
+ * takes MJPEG; mapped buffers handed over on PipeWire's thread. */
 #include "apklayer/camera.h"
 #include "pipewire.h"
 
@@ -59,12 +60,18 @@ static void on_param_changed(void *data, uint32_t id, const struct spa_pod *para
 {
     struct apklayer_camera *c = data;
     if (id != SPA_PARAM_Format || !param) return;
+    uint32_t media_type, media_subtype;
     struct spa_video_info_raw info;
-    if (spa_format_video_raw_parse(param, &info) < 0 || !pw_camera_fourcc(info.format)) {
+    struct spa_video_info_mjpg mjpg;
+    if (spa_format_parse(param, &media_type, &media_subtype) >= 0 && media_subtype == SPA_MEDIA_SUBTYPE_mjpg && spa_format_video_mjpg_parse(param, &mjpg) >= 0) {
+        c->fourcc = APKLAYER_CAM_MJPEG, info.size = mjpg.size, info.framerate = mjpg.framerate;
+    } else if (spa_format_video_raw_parse(param, &info) >= 0 && pw_camera_fourcc(info.format)) {
+        c->fourcc = pw_camera_fourcc(info.format);
+    } else {
         pw_stream_set_error(c->stream, -ENOTSUP, "unsupported video format");
         return;
     }
-    c->fourcc = pw_camera_fourcc(info.format), c->width = info.size.width, c->height = info.size.height;
+    c->width = info.size.width, c->height = info.size.height;
     c->fps = info.framerate.denom ? info.framerate.num / info.framerate.denom : 0;
     /* buffers the provider can read: plain or memfd memory (a dmabuf may be tiled) */
     uint8_t buffer[256];
@@ -82,7 +89,7 @@ static void on_process(void *data)
     struct pw_buffer *b = pw_stream_dequeue_buffer(c->stream);
     if (!b) return;
     struct spa_buffer *buf = b->buffer;
-    uint32_t planes = c->fourcc == APKLAYER_CAM_I420 ? 3 : c->fourcc == APKLAYER_CAM_NV12 ? 2 : 1;
+    uint32_t planes = c->fourcc == APKLAYER_CAM_I420 ? 3 : c->fourcc == APKLAYER_CAM_NV12 ? 2 : 1, mjpeg = c->fourcc == APKLAYER_CAM_MJPEG;
     struct apklayer_camera_frame f = {.fourcc = c->fourcc, .width = c->width, .height = c->height, .num_planes = planes,
                                       .dmabuf_fd = {-1, -1, -1, -1}, .sequence = c->sequence++};
     struct timespec now;
@@ -102,7 +109,8 @@ static void on_process(void *data)
             f.size[p] = f.stride[p] * (c->height / 2);
         }
     }
-    if (ok && f.stride[0] && c->cb.frame) c->cb.frame(c->cb.user, &f);
+    if (mjpeg) f.stride[0] = 0;  /* a JPEG: its bytes, no rows */
+    if (ok && (f.stride[0] || mjpeg) && c->cb.frame) c->cb.frame(c->cb.user, &f);
     pw_stream_queue_buffer(c->stream, b);
 }
 
@@ -154,8 +162,15 @@ int apklayer_camera_start(struct apklayer_camera *c, uint32_t width, uint32_t he
     uint8_t buffer[2048];
     struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof buffer);
     const struct spa_pod *params[4];
-    uint32_t n = 0;
-    for (const uint32_t *f = fourccs; *f && n < 4; f++) {  /* one EnumFormat per format, in the provider's order of preference */
+    uint32_t n = 0, mjpeg = 0;
+    for (const uint32_t *f = fourccs; *f; f++) mjpeg |= *f == APKLAYER_CAM_MJPEG;
+    mjpeg = mjpeg && pw_camera_mjpeg_only(c->id, width, height);  /* the camera's raw formats do not have this size */
+    if (mjpeg)
+        params[n++] = spa_pod_builder_add_object(&b, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
+            SPA_FORMAT_mediaType, SPA_POD_Id(SPA_MEDIA_TYPE_video), SPA_FORMAT_mediaSubtype, SPA_POD_Id(SPA_MEDIA_SUBTYPE_mjpg),
+            SPA_FORMAT_VIDEO_size, SPA_POD_Rectangle(&SPA_RECTANGLE(width, height)),
+            SPA_FORMAT_VIDEO_framerate, SPA_POD_CHOICE_RANGE_Fraction(&SPA_FRACTION(fps, 1), &SPA_FRACTION(0, 1), &SPA_FRACTION(240, 1)));
+    for (const uint32_t *f = fourccs; !mjpeg && *f && n < 4; f++) {  /* one EnumFormat per format, in the provider's order of preference */
         uint32_t format = spa_format_of(*f);
         if (format == SPA_VIDEO_FORMAT_UNKNOWN) continue;
         params[n++] = spa_pod_builder_add_object(&b, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,

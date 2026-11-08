@@ -6,5 +6,7 @@
 
 /* the APKLAYER_CAM_* fourcc of a SPA raw video format the provider takes, 0 for another */
 uint32_t pw_camera_fourcc(uint32_t spa_video_format);
+/* whether camera `id`'s listing offered width x height only as MJPEG (pipewire-list.c records it, pipewire.c streams it that way) */
+int pw_camera_mjpeg_only(const char *id, uint32_t width, uint32_t height);
 
 #endif

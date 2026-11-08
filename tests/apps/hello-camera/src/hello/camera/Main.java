@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class Main extends Activity {
     private static final int W = 640, H = 480;
     private static final String REAL = System.getProperty("hello.real");  // the camera id of a real camera (a phone's): no colour bars to compare
+    private static final String ID = System.getProperty("hello.id");  // the camera to open (default: the first)
     // the fake backend's bars (bridge/hals/camera/fake.c): BT.601 Y, U, V of white, yellow, cyan, green, magenta, red, blue, black
     private static final int[][] BARS = {{235, 128, 128}, {210, 16, 146}, {170, 166, 16}, {145, 54, 34}, {106, 202, 222}, {81, 90, 240}, {41, 240, 110}, {16, 128, 128}};
 
@@ -72,7 +73,7 @@ public final class Main extends Activity {
         Handler handler = new Handler(thread.getLooper());
         CameraDevice[] device = new CameraDevice[1];
         CountDownLatch opened = new CountDownLatch(1);
-        manager.openCamera(REAL != null ? REAL : ids[0], new CameraDevice.StateCallback() {
+        manager.openCamera(REAL != null ? REAL : ID != null ? ID : ids[0], new CameraDevice.StateCallback() {
             @Override public void onOpened(CameraDevice d) { device[0] = d; opened.countDown(); }
             @Override public void onDisconnected(CameraDevice d) { System.out.println("[cam] disconnected"); opened.countDown(); }
             @Override public void onError(CameraDevice d, int error) { System.out.println("[cam] open error " + error); opened.countDown(); }

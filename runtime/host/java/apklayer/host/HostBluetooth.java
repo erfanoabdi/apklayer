@@ -53,12 +53,25 @@ final class HostBluetooth {
                     JSONObject event = new JSONObject(line);
                     if ("adapter".equals(event.optString("ev"))) adapter = event;
                     if ("error".equals(event.optString("ev"))) System.out.println("[apklayer] bluetooth: " + event.optString("message"));
+                    if ("pin".equals(event.optString("ev"))) askPin(event.optString("address"), event.isNull("name") ? null : event.optString("name"), event.optBoolean("passkey"));
                     for (Consumer<JSONObject> listener : listeners) listener.accept(event);
                 }
             } catch (IOException | JSONException ended) { System.out.println("[apklayer] bluetooth session ended: " + ended); }
         }, "apklayer-bluetooth");
         reader.setDaemon(true);
         reader.start();
+    }
+
+    /** BlueZ waits for a pairing's PIN: the hub asks the person (not on this reader: the session's other events go on meanwhile). */
+    private void askPin(String address, String name, boolean passkey) {
+        Thread asking = new Thread(() -> {
+            String pin = null;
+            try { pin = HubClient.current().bluetoothPin(address, name, passkey); }
+            catch (RuntimeException failure) { System.out.println("[apklayer] bluetooth PIN not asked: " + failure); }
+            send("op", "pin", "address", address, "pin", pin == null ? JSONObject.NULL : pin);
+        }, "apklayer-bluetooth-pin");
+        asking.setDaemon(true);
+        asking.start();
     }
 
     /** The session, opened on first use; null without a hub or when the hub refused (no Bluetooth permission). */

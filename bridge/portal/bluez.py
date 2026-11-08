@@ -144,12 +144,16 @@ AGENT_XML = '''<node><interface name="org.bluez.Agent1"><method name="Release"/>
 <method name="RequestAuthorization"><arg type="o" direction="in"/></method>
 <method name="AuthorizeService"><arg type="o" direction="in"/><arg type="s" direction="in"/></method></interface></node>'''
 agent = None
+pin_requests = {}  # address -> (method, invocation): BlueZ waits for the PIN or passkey the app's side asks the person for (op "pin")
 
 
 def on_agent(connection, sender, path, interface, method, parameters, invocation):
-    # shortcut: the app asked to bond, so confirmations are accepted (Android would show its pairing dialog); PIN and passkey entry are refused: needs a dialog
+    # shortcut: the app asked to bond, so confirmations are accepted (Android would show its pairing dialog); a PIN or passkey is asked through the app's side
     if method in ('RequestPinCode', 'RequestPasskey'):
-        invocation.return_dbus_error('org.bluez.Error.Rejected', 'no PIN entry in apklayer yet')
+        target = parameters.unpack()[0]
+        address = objects.get(target, {}).get(DEVICE, {}).get('Address') or target.rsplit('dev_', 1)[-1].replace('_', ':')
+        pin_requests[address.upper()] = (method, invocation)
+        emit(ev='pin', address=address, name=objects.get(target, {}).get(DEVICE, {}).get('Alias'), passkey=method == 'RequestPasskey')
     else:
         invocation.return_value(None)
 
@@ -159,7 +163,7 @@ def ensure_agent():
     if agent is None:
         agent = '/apklayer/agent%d' % os.getpid()
         bus.register_object(agent, Gio.DBusNodeInfo.new_for_xml(AGENT_XML).interfaces[0], on_agent, None, None)
-        call('/org/bluez', BLUEZ + '.AgentManager1', 'RegisterAgent', (agent, 'NoInputNoOutput'), '(os)')
+        call('/org/bluez', BLUEZ + '.AgentManager1', 'RegisterAgent', (agent, 'NoInputNoOutput'), '(os)')  # Just Works for SSP; a legacy device still asks its PIN (RequestPinCode)
 
 
 def command(line):
@@ -225,6 +229,15 @@ def command(line):
         ensure_agent()
         emit(ev='bond', address=address, state=11)
         call(target, DEVICE, 'Pair', done=lambda r, e: e and emit(ev='bond', address=address, state=10, message=e))
+    elif op == 'pin':  # the person's PIN or passkey for a waiting request; none: the pairing is refused
+        method, invocation = pin_requests.pop(address.upper(), (None, None))
+        if invocation is None:
+            return
+        pin = c.get('pin')
+        if not pin or method == 'RequestPasskey' and not (pin.isdigit() and int(pin) <= 999999):
+            invocation.return_dbus_error('org.bluez.Error.Rejected', 'no PIN given')
+        else:
+            invocation.return_value(GLib.Variant('(s)', (pin,)) if method == 'RequestPinCode' else GLib.Variant('(u)', (int(pin),)))
     elif op == 'unbond':
         target = device_path(address)
         if target:

@@ -28,6 +28,7 @@ enum {
     APKLAYER_CAM_NV12 = 0x3231564e,  /* 'NV12': Y plane, interleaved UV */
     APKLAYER_CAM_YUYV = 0x56595559,  /* 'YUYV' */
     APKLAYER_CAM_XRGB = 0x34325258,  /* 'XR24' (B,G,R,X in memory) */
+    APKLAYER_CAM_MJPEG = 0x47504a4d, /* 'MJPG': one JPEG per frame, data[0] and size[0] (stride 0); given only when the provider asks for it */
 };
 
 /* Android's LENS_FACING values */
