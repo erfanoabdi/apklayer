@@ -21,6 +21,27 @@ public class ShadowHostActivityManager extends ShadowActivityManager {
         return HubActivityManager.service(ShadowActivityManager.getService());
     }
 
+    /** The host's memory from /proc/meminfo, as ActivityManagerService reports the device's (Robolectric's is all zeros: PGR's script then
+     *  warned "Your device RAM is less than 2048MB"). */
+    @Implementation
+    @Override
+    protected void getMemoryInfo(ActivityManager.MemoryInfo outInfo) {
+        try {
+            for (String line : java.nio.file.Files.readAllLines(java.nio.file.Path.of("/proc/meminfo"))) {
+                String[] f = line.split("\\s+");
+                if (f.length < 2) continue;
+                if (f[0].equals("MemTotal:")) outInfo.totalMem = Long.parseLong(f[1]) * 1024;
+                else if (f[0].equals("MemAvailable:")) outInfo.availMem = Long.parseLong(f[1]) * 1024;
+            }
+        } catch (java.io.IOException | NumberFormatException e) {
+            super.getMemoryInfo(outInfo);
+            return;
+        }
+        outInfo.threshold = outInfo.totalMem / 16;  // shortcut: a fixed share where Android has the low-memory killer's level
+        outInfo.advertisedMem = outInfo.totalMem;
+        outInfo.lowMemory = outInfo.availMem < outInfo.threshold;
+    }
+
     /** As ActivityManagerService answers it: the GLES version of ro.opengles.version (the host's, cli/stack.cpp) and the input of the configuration
      *  (Robolectric's is empty: AIDA64 showed GLES 1.x, games that check for ES 2/3 refuse to start). */
     @Implementation

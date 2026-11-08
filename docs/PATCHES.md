@@ -77,6 +77,7 @@ Build flags: upstream builds it with Meson's default buildtype (debug, -O0); mes
 | 0021-native-assets-content-key | the shared ICU/font copy keyed by the jar's entries' content (name, CRC, size), not its path and mtime (a copy per install) |
 | 0022-window-children-dim | ShadowWindowManagerGlobal removes a window's sub-windows with it and tells WindowSurface the window's visibility (FLAG_DIM_BEHIND dim layer); ShadowUiAutomation skips orphaned sub-windows |
 | 0023-direct-original-call-sites | InvokeDynamicSupport: a call site of a method without a shadow gets its original handle as target (no SwitchPoint guard, fallback or stack-trace catch: apklayer never replaces the shadow map); ~5600 fewer LambdaForm classes in a NewPipe start. Needs the upstream InvokeDynamicSupport.java in the prebuilts' robolectric-src |
+| 0024-display-event-receiver-own-vsync | ShadowDisplayEventReceiver: each receiver keeps its own due vsync (a Choreographer on another looper, Unity's UnityChoreographer, got none) |
 
 ## LineageOS tree (`patches/aosp/<project>/`)
 | Patch | Purpose |
@@ -147,6 +148,7 @@ Behaviour that differs from Android or from stock Robolectric without editing up
 - bionic_translation 0041-linker-vendor-shared-libs: BIONIC_VENDOR_SHARED_LIBS (basenames, ':'-separated) names libraries the vendor namespace never loads its own copy of; the CLI sets libhidlbase.so for graphics = device (the vendor's Android 12 libhidlbase waited forever for hwservicemanager.ready inside the Mali driver's IMapper::getService). Unset: unchanged.
 - bionic_translation 0043-sigset-empty-fill: sigemptyset and sigfillset on bionic's one-long sigset_t; glibc's wrote its whole set (128 bytes in glibc 2.30, 16 in newer ones) past a set on the caller's stack (libandroidfw died in __stack_chk_fail on Sailfish OS 5.0).
 - bionic_translation 0044-mmap2-32-bit: `__mmap2` for 32-bit bionic (its mmap and mmap64 call it with the offset in pages; glibc exports none): libprotobuf-cpp-lite and everything above it (libhwui, libandroid_runtime) failed to link in the 32-bit app process.
+- bionic_translation 0046-default-fault-handler: as debuggerd's handler on Android, sigaction reports a default handler in place of SIG_DFL for SIGSEGV/SIGBUS/SIGILL/SIGFPE/SIGABRT/SIGTRAP/SIGSYS; it writes a note (signal, code, fault address, pc, lr, tid), resets the signal to SIG_DFL in the kernel (past libjsig) and re-raises it. A chaining app handler (Unity's) printed "No handler for signal 11" and returned into the same fault forever.
 - bionic_translation 0045-rel-relative-addend: R_ARM_RELATIVE adds the load base to the word's implicit addend (REL, 32-bit ARM); it wrote the bare base, so an NDK library's pointer tables (JNINativeMethod for RegisterNatives) pointed at its ELF header.
 - frameworks/native 0003-vulkan-host-dispatch (2026-11-08): the host-dispatch hooks are `VKAPI_ATTR` (their casts broke the arm32 build: `-Wcast-calling-convention`).
 - hardware/interfaces 0004-gnss-no-mock-fix-from-a-subclass: `Gnss::reportsMockLocation()` (virtual, true); a subclass without a fix reports none.
