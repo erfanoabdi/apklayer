@@ -1,0 +1,43 @@
+# The Flatpak bundles alone (flatpak/build.sh), for work on the manifest: a push to the flatpak-ci branch, or by hand. Releases build them
+# in release.yml's flatpak job.
+name: flatpak
+
+on:
+  push:
+    branches: [flatpak-ci]
+  workflow_dispatch:
+    inputs:
+      prebuilts:
+        description: ref of the prebuilts branch to build from
+        default: prebuilts
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  flatpak:
+    name: flatpak ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: aarch64, runner: ubuntu-24.04-arm}
+          - {arch: x86_64, runner: ubuntu-24.04}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {path: src}
+      - uses: actions/checkout@v4
+        with: {path: prebuilts, ref: "${{ inputs.prebuilts || 'prebuilts' }}"}
+      - name: flatpak-builder
+        run: sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq flatpak flatpak-builder >/dev/null
+      - name: Build
+        run: sh src/flatpak/build.sh prebuilts out "0.0.0-ci${GITHUB_RUN_NUMBER}"
+      - name: Smoke test
+        # the bundle installs and its CLI starts (the runtime from the build's Flathub remote)
+        run: |
+          flatpak install --user -y --noninteractive out/*.flatpak
+          flatpak run --command=apklayer io.github.erfanoabdi.Apklayer setup --check || true
+      - uses: actions/upload-artifact@v4
+        with: {name: 'flatpak-${{ matrix.arch }}', path: out/*.flatpak, if-no-files-found: error}

@@ -156,8 +156,15 @@ Flatpak (in progress, below); the per-app sandbox below; COMMERCIAL.md terms and
 ## Flatpak (started 2026-11-08)
 Done: manifest `flatpak/io.github.erfanoabdi.Apklayer.yml` (the deb's Meson build at /app, runtime freedesktop 26.08, openjdk21 extension's JRE, the manager as the command), `flatpak/build.sh`, release job `flatpak` (aarch64, x86_64; continue-on-error), CLI: launchers and submenu at the host's XDG paths with `flatpak run --command=apklayer` (cli/flatpak.cpp), binder setup command with the host path of binder.sh (CLI and manager). Permissions and host step: docs/INSTALL.md "Flatpak".
 Open, in order:
-1. **First local build**: never completed: Flathub pulls from this network drop mid-file (curl 56, 2026-11-08, OrbStack ubuntu26 and Parallels; 40 retries did not finish the SDK). Retry `sh flatpak/build.sh ~/fp/prebuilts ~/fp/out` in OrbStack `ubuntu26` (prebuilts joined there in `~/fp/prebuilts`, source in `~/fp/src`), or take the CI job's bundle. Expect fixes: libinput/libunwind/libbsd may be missing from the 26.08 SDK (then modules), `eglinfo` (gpus.cpp, GLES version) and `unzip` may be missing from the Platform, post-install's cwd.
-2. **Run UiBench through it** on Parallels (flatpak 1.14.6 installed there from its debs; its Platform pull failed the same way: copy the runtime from OrbStack with `flatpak build-bundle --runtime`): `apklayer setup`, install tests/uibench, `apklayer screenshot`; check that `/dev/binderfs` is visible with `--device=all` and that Flatpak's seccomp lets the JVMs and bionic_translation run.
+1. **Build**: done 2026-11-08 in CI (`.github/workflows/flatpak.yml` on branch flatpak-ci, run 42494279707: aarch64 and x86_64 green; modules libmd, libbsd, mtdev, libevdev, libinput). Inside the Flatpak without binderfs the userspace binder is the default (cli/binder.cpp): CI's `setup --check` reports binder done.
+2. **Run**: done 2026-11-08 on Parallels (aarch64, CI run 42507109448's bundle, `--nodevice=all --device=dri` so binderfs is hidden): `setup` all
+   done (binder by apklayer-binderd), UiBench installed, run and screenshotted from another `flatpak run`; Mesa 26.2.5 from GL.default on
+   renderD128, PipeWire audio AIDL up (no playback checked), launchers `io.github.erfanoabdi.Apklayer.<pkg>.desktop` with `flatpak run` beside the
+   deb's untouched ones. Every `flatpak run` is a pid namespace of its own: in the Flatpak every command goes through the on-demand apklayerd
+   (cli/daemon.cpp), whose namespace holds the stacks; without it a second `flatpak run` started a second stack (servicemanager aborted).
+   x86_64 the same on the owner's PC (Intel, CI bundle, GL.default from a CI-made runtime bundle: its own Flathub pulls of that extension fail):
+   setup, UiBench run and screenshot, the deb's launchers untouched; with binderfs visible (default `--device=all`) the kernel binder is used.
+   Open: `.apk` file association (no xdg-mime in the Platform).
 3. Flathub: offline sources (wrap, deps.lock, Slint as pinned sources), the dynamic launcher portal instead of `xdg-data/applications`.
 
 ## Plan: one build instead of tools/* (decided 2026-11-04 by the owner, after the current round)

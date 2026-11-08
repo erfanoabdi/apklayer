@@ -162,7 +162,7 @@ jobs:
         env: {GH_TOKEN: '${{ github.token }}'}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "apklayer ${VERSION#v}" --verify-tag \
-            --notes "Install: download the deb for your OS and CPU, \`sudo apt install ./apklayer_*.deb\`, then open apklayer-manager. Flatpak: \`flatpak install --user apklayer-*-<cpu>.flatpak\` (docs/INSTALL.md \"Flatpak\": binderfs is a host step). apklayer-dev_*.deb: the headers for out-of-tree hardware plugins (docs/PLUGINS.md). Sailfish OS 5 (aarch64): the *.aarch64.rpm files, \`devel-su pkcon install-local\` them (docs/HALIUM.md). SHA256SUMS lists every file."
+            --notes "Install: download the deb for your OS and CPU, \`sudo apt install ./apklayer_*.deb\`, then open apklayer-manager. Flatpak: \`flatpak install --user apklayer-*-<cpu>.flatpak\` (docs/INSTALL.md \"Flatpak\"). apklayer-dev_*.deb: the headers for out-of-tree hardware plugins (docs/PLUGINS.md). Sailfish OS 5 (aarch64): the *.aarch64.rpm files, \`devel-su pkcon install-local\` them (docs/HALIUM.md). SHA256SUMS lists every file."
       - name: Publish releases.json
         if: github.event_name == 'push'
         working-directory: pages

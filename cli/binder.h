@@ -17,7 +17,8 @@ std::string binderDeviceWhy(const std::string& id);
 // apklayer-binder.service reads at every boot; elsewhere the package's (or the tree's) tools/host-setup/binder.sh, once per boot.
 std::string binderSetupCommand(const std::string& id);
 // The userspace binder (docs/BINDER.md, bridge/binderd) instead of the kernel's for the instance whose data root this is: APKLAYER_BINDER=userspace
-// (=kernel: never), else the instance setting, a file <root>/binder that says userspace. No binder devices are needed then.
+// (=kernel: never), else the instance setting, a file <root>/binder that says userspace (or anything else: kernel), else inside the Flatpak when
+// no binderfs is visible. No binder devices are needed then.
 bool userspaceBinder(const std::string& instanceRoot);
 // The instance can run a stack: its userspace binder, or its kernel binder device exists.
 bool binderReady(const std::string& instanceRoot, const std::string& id);

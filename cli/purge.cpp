@@ -21,10 +21,10 @@ int removeAllCommand(const Layout& l, const std::vector<std::string>& args) {
     std::string data = hostXdg("XDG_DATA_HOME", ".local/share"), config = hostXdg("XDG_CONFIG_HOME", ".config");
     std::string cache = getenvOr("XDG_CACHE_HOME", join(homeDir(), ".cache")), units = join(config, "systemd/user");
     std::vector<std::string> trees = {join(l.dataHome, "apklayer"), join(l.stateHome, "apklayer"), join(cache, "apklayer"), join(config, "apklayer")};
-    std::vector<std::string> files = {join(config, "menus/applications-merged/apklayer.menu"), join(data, "desktop-directories/apklayer.directory"),
+    std::vector<std::string> files = {join(config, "menus/applications-merged/" + launcherPrefix() + "menu"), join(data, "desktop-directories/" + launcherPrefix() + "directory"),
                                       join(units, "apklayer-instance@.service"), join(units, "apklayerd.service")};
     for (const std::string& name : listDir(join(data, "applications")))
-        if (name.rfind("apklayer-", 0) == 0 && name.size() > 8 && name.compare(name.size() - 8, 8, ".desktop") == 0) files.push_back(join(data, "applications/" + name));
+        if (name.rfind(launcherPrefix(), 0) == 0 && name.size() > 8 && name.compare(name.size() - 8, 8, ".desktop") == 0) files.push_back(join(data, "applications/" + name));
     if (args.size() != 1 || args[0] != "--yes") {
         puts("apklayer remove-all --yes deletes, for this user (every Android app and its data, which cannot be undone):");
         for (const std::string& t : trees) if (exists(t)) printf("  %s\n", t.c_str());

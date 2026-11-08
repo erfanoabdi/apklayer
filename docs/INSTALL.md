@@ -233,7 +233,7 @@ Ubuntu Touch (Halium phones): docs/HALIUM.md "The apt install on the phone"; "Ch
 
 ## Flatpak
 
-**Not yet built or run end to end (2026-11-08): see docs/PLAN.md "Flatpak".** The release's `apklayer-<version>-<cpu>.flatpak` (aarch64, x86_64; app id `io.github.erfanoabdi.Apklayer`, runtime `org.freedesktop.Platform` 26.08 from Flathub):
+**New (2026-11-08): run end to end on aarch64 and x86_64; see docs/PLAN.md "Flatpak".** The release's `apklayer-<version>-<cpu>.flatpak` (aarch64, x86_64; app id `io.github.erfanoabdi.Apklayer`, runtime `org.freedesktop.Platform` 26.08 from Flathub):
 
 ```sh
 flatpak install --user apklayer-*-aarch64.flatpak
@@ -241,15 +241,10 @@ flatpak run io.github.erfanoabdi.Apklayer                               # the ma
 alias apklayer='flatpak run --command=apklayer io.github.erfanoabdi.Apklayer'   # the CLI
 ```
 
-**Binder is a host step.** A Flatpak cannot load kernel modules or mount file systems, so binderfs must exist on the host before the app starts.
-Run the app's own script on the host as root, once per boot (it loads binder_linux, mounts `/dev/binderfs`, makes the default instance's devices and those named):
-
-```sh
-sudo sh "$(flatpak info --show-location io.github.erfanoabdi.Apklayer)/files/share/apklayer/tools/host-setup/binder.sh" [instance...]
-```
-
-`apklayer setup` (the manager's first-run screen) and the manager's binder button print this command with the path filled in when `/dev/binderfs` is
-missing. For every boot, install the deb's unit (`debian/apklayer.apklayer-binder.service`) with `ExecStart` pointing at a copy of that script.
+**No host step.** A Flatpak cannot load kernel modules or mount binderfs, so inside it apklayer uses the userspace binder (docs/BINDER.md) whenever
+`/dev/binderfs` is not visible: `apklayer setup`'s binder step passes and nothing runs as root. When the host has binderfs mounted (the deb's
+`apklayer-binder.service`, or `sudo sh "$(flatpak info --show-location io.github.erfanoabdi.Apklayer)/files/share/apklayer/tools/host-setup/binder.sh"`)
+the kernel's binder is used as with the deb; `APKLAYER_BINDER=userspace|kernel` (`flatpak run --env=...`) forces either.
 The Android runtime bundle is downloaded per user by `apklayer setup`, as with the deb (not a Flatpak extension: the bundle has its own version and
 release cycle, `tools/release/versions`, and updates without a new Flatpak).
 
@@ -257,17 +252,20 @@ Permissions (`finish-args` in `flatpak/io.github.erfanoabdi.Apklayer.yml`) and w
 
 | Permission | Why |
 |---|---|
-| `--device=all` | the host's `/dev/binderfs` (Flatpak has no grant for single binder nodes), GPU render nodes, cameras, input and USB devices; `--device=dri` would cover only the GPU |
+| `--device=all` | GPU render nodes (`--device=dri` alone would do for the GPU), the host's `/dev/binderfs` when it has one, cameras, input and USB devices; `--device=dri` would cover only the GPU |
 | `--socket=wayland`, `--share=ipc` | apps' windows and the manager (Wayland only, no X11) |
 | `--socket=pulseaudio`, `--filesystem=xdg-run/pipewire-0` | the audio backends (`apklayer providers`) and PipeWire cameras |
 | `--share=network` | apps' internet, `apklayer setup`'s downloads |
 | `--allow=bluetooth`, `--system-talk-name=org.bluez`, `--system-talk-name=org.freedesktop.GeoClue2`, `--talk-name=org.freedesktop.Notifications` | Bluetooth, location, notifications |
-| `--filesystem=xdg-data/applications:create`, `xdg-data/desktop-directories:create`, `xdg-config/menus:create` | launchers of installed apps and the Apklayer submenu, written at the host's paths (as Bottles does; the dynamic launcher portal asks the user once per app and is a later option) |
+| `--filesystem=xdg-data/applications:create`, `xdg-data/desktop-directories:create`, `xdg-config/menus:create` | launchers of installed apps and the Apklayer submenu, written at the host's paths as `io.github.erfanoabdi.Apklayer.<package>.desktop`, `....menu`, `....directory` (the deb's are `apklayer-*`: the two installs never touch each other's; as Bottles does; the dynamic launcher portal asks the user once per app and is a later option) |
 
 Different from the deb: data, logs and the runtime live under `~/.var/app/io.github.erfanoabdi.Apklayer/`; the per-app sandbox (`APKLAYER_SANDBOX=1`)
 cannot run (Flatpak's seccomp filter refuses nested user namespaces and `newuidmap` is not setuid inside); an app's full home access needs
-`flatpak override --user --filesystem=home io.github.erfanoabdi.Apklayer`; `apklayer instance autostart` (systemd user units) and the `.apk` file
-association are not available.
+`flatpak override --user --filesystem=home io.github.erfanoabdi.Apklayer`; `apklayer instance autostart` (systemd user units) is not available and the `.apk` file
+association is not set (the Platform has no `xdg-mime`); every command runs in apklayerd (started on demand, as with the per-app sandbox),
+because each `flatpak run` is a pid namespace of its own; the GLES version probe (`eglinfo`, mesa-utils) is not in the Platform, so a host driver under GLES 3.2 gets no 3.2
+claim. NVIDIA: Flatpak needs the `org.freedesktop.Platform.GL.nvidia-<version>` extension matching the host driver (`flatpak update` installs it
+when Flathub has that version); other GPUs use Mesa from `org.freedesktop.Platform.GL.default`.
 
 Build it: `sh flatpak/build.sh <prebuilts checkout> <out dir> [version]` (needs flatpak and flatpak-builder; it joins split prebuilts and installs the
 SDK and openjdk21 extension from Flathub). The build fetches what the deb's build fetches (the bionic_translation wrap, `deps.lock`, Slint) with

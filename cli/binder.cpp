@@ -31,7 +31,6 @@ std::string binderDevice(const std::string& id) {
 
 std::string binderDeviceWhy(const std::string& id) {
     if (haveBinderfs()) return "its binder devices are missing: " + binderSetupCommand(id);
-    if (inFlatpak()) return "no binderfs at /dev/binderfs: on the host run " + binderSetupCommand(id) + " (docs/INSTALL.md \"Flatpak\")";
     if (id != "default") return "this kernel has no binderfs, only fixed binder nodes: one instance (the default) can run";
     if (isHalium()) return "this Halium kernel has no binderfs: /dev/binder is the device's own";
     return "no binder device: load binder_linux (docs/INSTALL.md)";
@@ -49,7 +48,8 @@ bool userspaceBinder(const std::string& instanceRoot) {
     std::string mode = getenvOr("APKLAYER_BINDER", "");
     if (mode == "userspace" || mode == "kernel") return mode == "userspace";
     auto setting = readFile(join(instanceRoot, "binder"));
-    return setting && setting->rfind("userspace", 0) == 0;
+    if (setting) return setting->rfind("userspace", 0) == 0;
+    return inFlatpak() && !haveBinderfs();  // the Flatpak cannot mount binderfs: no host step then (docs/INSTALL.md "Flatpak")
 }
 
 bool binderReady(const std::string& instanceRoot, const std::string& id) { return userspaceBinder(instanceRoot) || exists(binderDevice(id)); }
