@@ -88,7 +88,17 @@ int malloc_iterate(uintptr_t base, size_t size, void (*cb)(uintptr_t, size_t, vo
 { (void)base; (void)size; (void)cb; (void)arg; return 0; }
 size_t malloc_backtrace(void *pointer, uintptr_t *frames, size_t max) { (void)pointer; (void)frames; (void)max; return 0; }
 void *memset_explicit(void *p, int c, size_t n) { volatile unsigned char *v = p; while (n--) *v++ = (unsigned char)c; return p; }
-pid_t pthread_gettid_np(pthread_t t) { (void)t; return (pid_t)syscall(SYS_gettid); } /* only the calling thread is known */
+/* bionic's tid of another thread. glibc has no call for it, but pthread_getcpuclockid encodes it: the kernel's
+ * MAKE_THREAD_CPUCLOCK(tid, CPUCLOCK_SCHED) = (~tid << 3) | 6. The caller's own tid for every thread made
+ * RenderThread::isCurrent() true on any thread (libutils Thread::getTid): HWUI ran render-thread work (a HARDWARE bitmap's
+ * readback) on the caller, before the render thread had its EglManager. */
+pid_t pthread_gettid_np(pthread_t t)
+{
+    if (pthread_equal(t, pthread_self())) return (pid_t)syscall(SYS_gettid);
+    clockid_t clock;
+    if (pthread_getcpuclockid(t, &clock) != 0 || (clock & 7) != 6) return -1;
+    return (pid_t)~(clock >> 3);
+}
 
 /* network-scoped DNS (netd): the desktop has one network, so the network id and mark are ignored */
 int android_getaddrinfofornet(const char *hostname, const char *servname, const struct addrinfo *hints, unsigned netid, unsigned mark,
