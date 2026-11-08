@@ -287,23 +287,25 @@ public final class NativeLoader {
         return "L" + c.getName().replace('.', '/') + ";";
     }
 
-    /** Names of the defined dynamic symbols that start with "Java_" (ELF64, little endian). */
+    /** Names of the defined dynamic symbols that start with "Java_" (ELF64 or, in the 32-bit app process, ELF32; little endian). */
     private static java.util.List<String> exportedJavaFunctions(String path) {
         java.util.List<String> names = new java.util.ArrayList<>();
         try {
             ByteBuffer b = ByteBuffer.wrap(Files.readAllBytes(new File(path).toPath())).order(ByteOrder.LITTLE_ENDIAN);
-            if (b.getInt(0) != 0x464c457f || b.get(4) != 2) return names; // not ELF64
-            long shoff = b.getLong(0x28);
-            int shentsize = b.getShort(0x3A) & 0xffff, shnum = b.getShort(0x3C) & 0xffff;
+            if (b.getInt(0) != 0x464c457f || (b.get(4) != 1 && b.get(4) != 2)) return names; // not ELF
+            boolean e64 = b.get(4) == 2;
+            long shoff = e64 ? b.getLong(0x28) : b.getInt(0x20) & 0xffffffffL;
+            int shentsize = b.getShort(e64 ? 0x3A : 0x2E) & 0xffff, shnum = b.getShort(e64 ? 0x3C : 0x30) & 0xffff;
+            int symEnt = e64 ? 24 : 16, shndx = e64 ? 6 : 14;  // Elf64_Sym / Elf32_Sym: size, st_shndx
             for (int i = 0; i < shnum; i++) {
                 int sh = (int) shoff + i * shentsize;
                 if (b.getInt(sh + 4) != 11) continue; // SHT_DYNSYM
-                long symOff = b.getLong(sh + 0x18), symSize = b.getLong(sh + 0x20);
-                int strSh = (int) shoff + b.getInt(sh + 0x28) * shentsize;
-                long strOff = b.getLong(strSh + 0x18);
-                for (long s = symOff; s + 24 <= symOff + symSize; s += 24) {
+                long symOff = e64 ? b.getLong(sh + 0x18) : b.getInt(sh + 0x10), symSize = e64 ? b.getLong(sh + 0x20) : b.getInt(sh + 0x14);
+                int strSh = (int) shoff + b.getInt(sh + (e64 ? 0x28 : 0x18)) * shentsize;
+                long strOff = e64 ? b.getLong(strSh + 0x18) : b.getInt(strSh + 0x10);
+                for (long s = symOff; s + symEnt <= symOff + symSize; s += symEnt) {
                     int nameIdx = b.getInt((int) s);
-                    if ((b.getShort((int) s + 6) & 0xffff) == 0) continue; // undefined
+                    if ((b.getShort((int) s + shndx) & 0xffff) == 0) continue; // undefined
                     int p = (int) strOff + nameIdx, end = p;
                     while (b.get(end) != 0) end++;
                     String name = new String(b.array(), p, end - p, StandardCharsets.US_ASCII);

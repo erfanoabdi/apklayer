@@ -53,9 +53,10 @@ cat > "$a/bin/java" <<'EOF'
 # (shell expansions only: a 64-bit tool run here would see LD_LIBRARY_PATH's armel libraries)
 r="${0%/bin/java}"
 # the preloads (armel libraries) come as APKLAYER_ARM32_PRELOAD (cli/run.cpp) and go to the loader's --preload: in LD_PRELOAD the 64-bit
-# programs on the way and those the JVM runs would refuse them, noisily
+# programs on the way and those the JVM runs would refuse them, noisily. Processes start by vfork: the JDK's jspawnhelper is armel too
+# and names a loader the host lacks
 p="${APKLAYER_ARM32_PRELOAD:-${LD_PRELOAD:-}}"; unset LD_PRELOAD APKLAYER_ARM32_PRELOAD
-exec "$r/sysroot/lib/ld-linux.so.3" --library-path "${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$r/sysroot/lib" ${p:+--preload "$p"} "$r/jvm/bin/java" "$@"
+exec "$r/sysroot/lib/ld-linux.so.3" --library-path "${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$r/sysroot/lib" ${p:+--preload "$p"} "$r/jvm/bin/java" -Djdk.lang.Process.launchMechanism=VFORK "$@"
 EOF
 chmod +x "$a/bin/java"
 echo "arm32 runtime: $(du -sh "$a" | cut -f1) in $a ($(ls "$s" | wc -l) glibc-side libraries)"
