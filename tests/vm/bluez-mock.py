@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Fills python-dbusmock's bluez5 template (running on $DBUS_SYSTEM_BUS_ADDRESS) for the bluetooth group: adapter hci0, a paired classic device,
-a BLE device advertising the Battery service whose GATT database has Battery Level (read 42; notify sends 43) with its CCC descriptor."""
+a BLE device advertising the Battery service whose GATT database has Battery Level (read 42; notify sends 43) with its CCC descriptor, RFCOMM on the
+paired device (an echo service behind the Serial Port Profile UUID) and a legacy device that pairs only with PIN 1234 (tests/vm/bluez-mock-calls.py)."""
+import os
+
 import dbus
 
 bus = dbus.SystemBus()
@@ -11,13 +14,23 @@ mock.AddDevice('hci0', '11:22:33:44:55:66', 'mock-paired')
 mock.PairDevice('hci0', '11:22:33:44:55:66')
 mock.AddDevice('hci0', 'C0:FF:EE:00:00:01', 'mock-ble')
 mock.AddDevice('hci0', 'C0:FF:EE:00:00:02', 'mock-other')  # filtered out by the app's service UUID filter
+mock.AddDevice('hci0', 'AA:BB:CC:00:00:01', 'mock-pin')
+
+CALLS = "exec(open(%r).read(), globals()); " % os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bluez-mock-calls.py')
+bus.get_object('org.bluez', '/org/bluez').AddMethod('org.bluez.ProfileManager1', 'RegisterProfile', 'osa{sv}', '',
+                                                    "self.profiles = {**getattr(self, 'profiles', {}), args[1].lower(): args[0]}", dbus_interface=MOCK)
+bus.get_object('org.bluez', '/org/bluez/hci0/dev_11_22_33_44_55_66').AddMethod('org.bluez.Device1', 'ConnectProfile', 's', '',
+                                                                                 CALLS + 'connect_profile(self, args[0])', dbus_interface=MOCK)
+bus.get_object('org.bluez', '/org/bluez/hci0/dev_AA_BB_CC_00_00_01').AddMethod('org.bluez.Device1', 'Pair', '', '', CALLS + 'pair(self)', dbus_interface=MOCK)
 
 BATTERY, LEVEL, CCC = ('0000%s-0000-1000-8000-00805f9b34fb' % n for n in ('180f', '2a19', '2902'))
 dev = '/org/bluez/hci0/dev_C0_FF_EE_00_00_01'
 device = bus.get_object('org.bluez', dev)
-device.UpdateProperties('org.bluez.Device1', {'AddressType': 'random', 'UUIDs': dbus.Array([BATTERY], signature='s'), 'RSSI': dbus.Int16(-50),
-                                              'ManufacturerData': dbus.Dictionary({dbus.UInt16(0xffff): dbus.Array([1, 2, 3], signature='y', variant_level=1)}, signature='qv')},
+device.UpdateProperties('org.bluez.Device1', {'AddressType': 'random', 'UUIDs': dbus.Array([BATTERY], signature='s'), 'RSSI': dbus.Int16(-50)},
                         dbus_interface=MOCK)
+# Properties.Set, not UpdateProperties: dbusmock 0.31 cannot re-wrap a dictionary there (Ubuntu 24.04's python3-dbusmock)
+device.Set('org.bluez.Device1', 'ManufacturerData', dbus.Dictionary({dbus.UInt16(0xffff): dbus.Array([1, 2, 3], signature='y', variant_level=1)}, signature='qv'),
+           dbus_interface='org.freedesktop.DBus.Properties')
 bus.get_object('org.bluez', '/org/bluez/hci0/dev_C0_FF_EE_00_00_02').UpdateProperties('org.bluez.Device1', {'AddressType': 'random', 'RSSI': dbus.Int16(-70)},
                                                                                        dbus_interface=MOCK)
 # connecting resolves the GATT database at once, as BlueZ does after its discovery

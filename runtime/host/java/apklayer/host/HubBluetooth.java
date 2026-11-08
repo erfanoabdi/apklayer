@@ -22,6 +22,7 @@ final class HubBluetooth {
             UUID = Pattern.compile("[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}");
     private final HubDirectory directory;
     private Process watcher;
+    private final Object pairing = new Object();
 
     HubBluetooth(HubDirectory directory) { this.directory = directory; }
 
@@ -41,6 +42,18 @@ final class HubBluetooth {
                     .redirectError(ProcessBuilder.Redirect.INHERIT).start();
         } finally { in[0].close(); out[1].close(); }
         return new ParcelFileDescriptor[] {in[1], out[0]};
+    }
+
+    /** A pairing's PIN (or 6-digit passkey) from the person, as Android's pairing dialog asks for it (Settings' BluetoothPairingDialog); null when refused. */
+    String pin(HubDirectory.Peer caller, String address, String name, boolean passkey) {
+        if (!directory.packages().holds(caller.name(), "android.permission.BLUETOOTH_CONNECT") && !directory.packages().holds(caller.name(), "android.permission.BLUETOOTH"))
+            throw new SecurityException(caller.name() + " holds no Bluetooth permission");
+        if (address == null || !ADDRESS.matcher(address).matches()) throw new IllegalArgumentException("Bad Bluetooth address " + address);
+        String device = name == null || name.isBlank() ? address : name.strip();
+        synchronized (pairing) {  // one pairing question at a time
+            return HubInstallDialog.askSecret("Pair with " + device + "?", passkey ? "Type the 6-digit passkey shown on " + device + "." : "Type the PIN of " + device + " (often 0000 or 1234).",
+                    "Pair", "Cancel");
+        }
     }
 
     /** The adapter's power as ACTION_STATE_CHANGED broadcasts; from the first session on (no Bluetooth user, no BlueZ client). */

@@ -251,6 +251,10 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_camera: MJPEG frames decoded (libyuv MJPGToI420)
+- Why: USB webcams offer their larger sizes only as MJPEG; the PipeWire backend now lists and streams them, the provider decodes them (`-DHAVE_JPEG` for libyuv's header).
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "camera: MJPEG frames" hals/camera`, then `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_camera`, then the same for gsi_x86_64.
+- Result: (below)
 ### 2026-11-08 - gsi_x86_64 and gsi_arm64 libapklayer_surfaceflinger: a client buffer the GPU cannot import skips its layer
 - Why: an NVIDIA tester's Unity games (PGR, Azur Lane) end SurfaceFlinger with SIGABRT, which ends the whole stack (keystore2 included);
   renderengine's LOG_ALWAYS_FATAL on a texture it cannot import is the likely abort. Patch frameworks/native 0008 (applied in the tree by hand, same diff).
