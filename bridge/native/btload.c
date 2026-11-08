@@ -46,6 +46,8 @@ __attribute__((noreturn)) static void enter(uintptr_t entry, int argc, char **ar
     __asm__ volatile("mov sp, %1\n br %0" ::"r"(entry), "r"(raw) : "memory");
 #elif defined(__x86_64__)
     __asm__ volatile("mov %1, %%rsp\n jmp *%0" ::"r"(entry), "r"(raw) : "memory");
+#elif defined(__arm__)
+    __asm__ volatile("mov sp, %1\n bx %0" ::"r"(entry), "r"(raw) : "memory");
 #else
 #error "btload --exec: no entry sequence for this architecture"
 #endif

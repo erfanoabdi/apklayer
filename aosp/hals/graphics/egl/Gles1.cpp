@@ -86,7 +86,7 @@ bool hostFilled, translatorFilled, gles2Filled;
 thread_local bool tTranslated;
 
 void setThreadHooks(const Hooks* h) {
-#if defined(__aarch64__)
+#if defined(__aarch64__) || defined(__arm__)
     reinterpret_cast<const void**>(__builtin_thread_pointer())[4] = h;  // TLS_SLOT_OPENGL_API: bridge/native/bionic_tls.c reserves it per thread
 #elif defined(__x86_64__)
     const void** tls;  // bionic's __get_tls(): %fs:0 is the thread's own address; slot 4 is glibc's unused sysinfo word there (bridge/native/bionic_tls.c)

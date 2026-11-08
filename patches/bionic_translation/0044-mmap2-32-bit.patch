@@ -1,0 +1,27 @@
+From: apklayer
+Subject: [PATCH] __mmap2 for 32-bit bionic
+
+32-bit bionic's mmap and mmap64 call __mmap2 (the offset in pages); glibc exports no such symbol, so libprotobuf-cpp-lite (its
+arena) and every library above it (libhwui, libandroid_runtime) failed to link in the 32-bit app process.
+
+apklayer patch: 0044 of patches/bionic_translation.
+---
+diff --git a/libc/libc.c b/libc/libc.c
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -396,7 +396,15 @@
+ {
+ 	fprintf(stderr, "%s:%d: %s: assertion \"%s\" failed\n", file, line, function, failed_expression);
+ 	abort();
++}
++
++#ifndef __LP64__
++/* apklayer patch: 32-bit bionic's mmap and mmap64 call __mmap2 (its offset counted in 4096-byte pages), which glibc does not export */
++void *bionic___mmap2(void *addr, size_t size, int prot, int flags, int fd, size_t pgoff)
++{
++	return (void *)syscall(SYS_mmap2, addr, size, prot, flags, fd, pgoff);  /* -1 and errno on failure: MAP_FAILED */
+ }
++#endif
+ 
+ /* in most if not all cases this is not what the app will use, see main-executable/bionic_compat.c */
+ uintptr_t bionic___stack_chk_guard = 4;

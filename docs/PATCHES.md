@@ -56,7 +56,7 @@ before 1.8 ignores a subproject's default_options cpp_args), not a patch.
 ## Robolectric (`patches/robolectric/`, external/robolectric)
 | Patch | Purpose |
 |---|---|
-| 0001-native-runtime-loader-arm64 | DefaultNativeRuntimeLoader: arm64 Linux, real window and media natives |
+| 0001-native-runtime-loader-arm64 | DefaultNativeRuntimeLoader: arm64 Linux (and arm: the 32-bit app process), real window and media natives |
 | 0002-surface-control-real-layers | ShadowSurfaceControl: real SurfaceFlinger layers |
 | 0003-blast-buffer-queue-real | ShadowBlastBufferQueue: the real libgui BLASTBufferQueue |
 | 0004-window-manager-global-layers | ShadowWindowManagerGlobal: relayout2, window layers placed and stacked, frames clamped |
@@ -143,5 +143,8 @@ Behaviour that differs from Android or from stock Robolectric without editing up
 - bionic_translation 0040-pthread-attr-copy-owner: the glibc attr's page records the bionic attr that made it; a byte copy (native_bridge_support's proxy pthread_create memcpy's the guest attr, edits its stack fields, destroys it) no longer unmaps the original's glibc attr on destroy, and pthread_create takes a copy's stack from bionic's fields. Fixed OTR2 through Berberis crashing in pthread_attr_destroy at about every second start. Test: tests/native/attr-copy.c (suite bionic).
 - bionic_translation 0041-linker-vendor-shared-libs: BIONIC_VENDOR_SHARED_LIBS (basenames, ':'-separated) names libraries the vendor namespace never loads its own copy of; the CLI sets libhidlbase.so for graphics = device (the vendor's Android 12 libhidlbase waited forever for hwservicemanager.ready inside the Mali driver's IMapper::getService). Unset: unchanged.
 - bionic_translation 0043-sigset-empty-fill: sigemptyset and sigfillset on bionic's one-long sigset_t; glibc's wrote its whole set (128 bytes in glibc 2.30, 16 in newer ones) past a set on the caller's stack (libandroidfw died in __stack_chk_fail on Sailfish OS 5.0).
+- bionic_translation 0044-mmap2-32-bit: `__mmap2` for 32-bit bionic (its mmap and mmap64 call it with the offset in pages; glibc exports none): libprotobuf-cpp-lite and everything above it (libhwui, libandroid_runtime) failed to link in the 32-bit app process.
+- bionic_translation 0045-rel-relative-addend: R_ARM_RELATIVE adds the load base to the word's implicit addend (REL, 32-bit ARM); it wrote the bare base, so an NDK library's pointer tables (JNINativeMethod for RegisterNatives) pointed at its ELF header.
+- frameworks/native 0003-vulkan-host-dispatch (2026-11-08): the host-dispatch hooks are `VKAPI_ATTR` (their casts broke the arm32 build: `-Wcast-calling-convention`).
 - hardware/interfaces 0004-gnss-no-mock-fix-from-a-subclass: `Gnss::reportsMockLocation()` (virtual, true); a subclass without a fix reports none.
 - robolectric 0018-location-manager-requests-listener: ProviderEntry tells `LocationRequests` (runtime/patches) when a provider's first request comes and its last goes.

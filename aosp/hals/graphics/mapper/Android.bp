@@ -14,7 +14,7 @@ cc_library_shared {
         "libutils",
         "liblog",
     ],
-    compile_multilib: "64",
+    compile_multilib: "both",  // the 32-bit app process loads it too (docs/PLAN.md "apps built for another CPU" 2(a))
     allow_undefined_symbols: true,
     cpp_std: "c++20",
     cflags: ["-Wall", "-Werror"],

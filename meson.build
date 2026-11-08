@@ -39,10 +39,15 @@ endif
 # dlopen and friends live in libdl apart from libc before glibc 2.34 (Sailfish OS 5.0: 2.30); built into libc after, then this adds nothing
 add_project_dependencies(dependency('dl'), language: ['c', 'cpp'])
 
-subdir('deps')
-subdir('runtime/dex2jvm')
-subdir('bridge/shell')
-subdir('cli')
+# a cross build is the 32-bit app process's (tools/armhf/build.sh): only the native parts an app JVM loads; CLI, shell and Java come from the 64-bit build
+version = get_option('package_version') != '' ? get_option('package_version') : meson.project_version()  # the deb passes its own (debian/rules)
+arm32_only = meson.is_cross_build()
+if not arm32_only
+  subdir('deps')
+  subdir('runtime/dex2jvm')
+  subdir('bridge/shell')
+  subdir('cli')
+endif
 subdir('bridge/hals/graphics')
 subdir('bridge/hals/media')
 subdir('bridge/hals/audio')
@@ -115,7 +120,9 @@ install_subdir('bridge/portal', install_dir: share_dir / 'bridge', exclude_direc
 install_data(files(run_command('sh', '-c', 'cd "$MESON_SOURCE_ROOT" && find aosp/hals -name "*.xml" | sort', check: true).stdout().strip().split('\n')),
   preserve_path: true, install_dir: share_dir)
 install_symlink('portal', pointing_to: '../../../share/apklayer/bridge/portal', install_dir: pkg_lib / 'bridge')  # helpers above the CLI (HostFilePortal)
-install_symlink('apklayer', pointing_to: '../lib/apklayer/cli/apklayer', install_dir: get_option('bindir'))
+if not arm32_only
+  install_symlink('apklayer', pointing_to: '../lib/apklayer/cli/apklayer', install_dir: get_option('bindir'))
+endif
 install_data('data/apklayer-manager.desktop', install_dir: get_option('datadir') / 'applications')
 # the Apklayer submenu of the desktop's app menu (as Waydroid's): apps carry Categories=X-Apklayer-App; the CLI writes a per-user copy too
 install_data('data/apklayer.menu', install_dir: get_option('sysconfdir') / 'xdg/menus/applications-merged')

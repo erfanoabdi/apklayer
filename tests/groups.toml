@@ -19,6 +19,13 @@ run = ["meson test -C b --suite bionic --print-errorlogs"]
 apps = ["hello-arm64"]
 run = ["tests/vm/native-bridge.sh"]
 
+[arm32]
+# an armeabi-v7a-only JNI app in the 32-bit app process (docs/PLAN.md "apps built for another CPU" 2(a)): needs a CPU that runs AArch32 code
+# (the Volla X23; not the VMs on Apple Silicon) and the 32-bit runtime (tools/stage arm32, tools/armhf/build.sh, APKLAYER_ARM32)
+apps = ["hello-arm32"]
+run = ["tests/vm/arm32.sh"]
+optional = true
+
 [native-bridge-vulkan]
 # hello-vulkan-arm64: vulkan-present's swapchain from an arm64-only library (the guest libvulkan proxy of the host's loader); needs a host
 # Vulkan device that presents (the owner's x86 PC; native on arm64)

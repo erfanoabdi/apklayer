@@ -2,7 +2,7 @@ From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: apklayer <apklayer@localhost>
 Subject: [PATCH] DefaultNativeRuntimeLoader: arm64 Linux, real window and media natives
 
-apklayer patch (docs/PATCHES.md): isSupported() also accepts Linux aarch64, because the
+apklayer patch (docs/PATCHES.md): isSupported() also accepts Linux aarch64 and arm (the 32-bit app process), because the
 shim and the device libraries are arm64. The natives of SurfaceControl, SurfaceSession, BLASTBufferQueue and HardwareBuffer are
 registered (windows are real SurfaceFlinger layers fed by a real BLASTBufferQueue), and Parcel and the resource classes
 (ApkAssets, AssetManager, StringBlock, XmlBlock: the NDK asset and configuration APIs need real resource pointers) are always
@@ -281,16 +281,28 @@ diff --git a/nativeruntime/src/main/java/org/robolectric/nativeruntime/DefaultNa
    }
  
    /**
-@@ -412,7 +532,7 @@
+@@ -404,8 +524,10 @@
+   private void loadLibrary(TempDirectory tempDirectory) throws IOException {
+     Path libraryPath = tempDirectory.getBasePath().resolve(libraryName());
+-    URL libraryResource = Resources.getResource(nativeLibraryPath());
++    // apklayer patch: the 32-bit app process's shim (native/linux/arm) is a jar on the class path, which the sandbox's loader does not search
++    URL systemResource = ClassLoader.getSystemResource(nativeLibraryPath());
++    URL libraryResource = systemResource != null ? systemResource : Resources.getResource(nativeLibraryPath());
+     Logger.info("Loading android native library from: %s", libraryResource);
+     Resources.asByteSource(libraryResource).copyTo(Files.asByteSink(libraryPath.toFile()));
+     System.load(libraryPath.toAbsolutePath().toString());
+   }
+ 
+@@ -412,7 +534,7 @@
    private static boolean isSupported() {
      return (OsUtil.isMac()
              && (Objects.equals(arch(), "aarch64") || Objects.equals(arch(), "x86_64")))
 -        || (OsUtil.isLinux() && Objects.equals(arch(), "x86_64"))
-+        || (OsUtil.isLinux() && (Objects.equals(arch(), "x86_64") || Objects.equals(arch(), "aarch64"))) // apklayer patch: arm64 Linux (the shim and the device libraries are arm64)
++        || (OsUtil.isLinux() && (Objects.equals(arch(), "x86_64") || Objects.equals(arch(), "aarch64") || Objects.equals(arch(), "arm"))) // apklayer patch: arm64 Linux (the shim and the device libraries are arm64), arm in the 32-bit app process
          || (OsUtil.isWindows() && Objects.equals(arch(), "x86_64"));
    }
  
-@@ -469,6 +589,15 @@
+@@ -469,6 +591,15 @@
        ReflectionHelpers.callStaticMethod(
            Shadow.class.getClassLoader(), className, "__staticInitializer__");
      }

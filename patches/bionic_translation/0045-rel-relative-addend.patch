@@ -1,0 +1,23 @@
+From: apklayer
+Subject: [PATCH] R_ARM_RELATIVE adds the base to the implicit addend
+
+With REL relocations (32-bit ARM) the addend is the relocated word itself; RELATIVE wrote the bare load base over it, so every
+pointer in an app library's data (an NDK library's JNINativeMethod table for RegisterNatives) pointed at its ELF header.
+
+apklayer patch: 0045 of patches/bionic_translation.
+---
+diff --git a/linker/linker.c b/linker/linker.c
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -2084,7 +2084,11 @@
+ 			}
+ 			TRACE_TYPE(RELO, "RELO RELATIVE %p <- +%p\n", (void *)reloc,
+ 				   (void *)si->base);
++#if defined(USE_RELA)
+ 			*((ElfW(Addr) *)reloc) = si->base + get_addend(rel);
++#else
++			*((ElfW(Addr) *)reloc) += si->base;  /* apklayer patch: REL (32-bit ARM) keeps the addend in the word itself */
++#endif
+ 			break;
+ 		case R_GENERIC_TLS_DTPMOD:
+ 			*((ElfW(Addr) *)reloc) = si->tls_slot_id;

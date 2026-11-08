@@ -343,6 +343,15 @@ FORWARDED(DECLARE_SLOT)
 #elif defined(__x86_64__)
 #define DEFINE_STUB(name) \
     __asm__(".text\n.globl " #name "\n.type " #name ",@function\n" #name ":\n\tmovq host_slot_" #name "(%rip), %r11\n\tjmp *%r11\n");
+#elif defined(__arm__)  // the 32-bit app process: ARM code, the slot's address pc-relative (no text relocation)
+#define DEFINE_STUB(name) \
+    __asm__(".text\n.arm\n.globl " #name "\n.type " #name ",%function\n" #name ":\n\tldr ip, 1f\n0:\tadd ip, pc, ip\n\tldr ip, [ip]\n\tbx ip\n" \
+            "1:\t.word host_slot_" #name " - (0b + 8)\n" STUB_MODE);
+#if defined(__thumb__)
+#define STUB_MODE ".thumb\n"
+#else
+#define STUB_MODE ""
+#endif
 #endif
 FORWARDED(DEFINE_STUB)
 

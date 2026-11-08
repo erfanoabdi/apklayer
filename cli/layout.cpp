@@ -57,6 +57,7 @@ Layout Layout::detect(bool setUp) {
     l.androidLibs = getenvOr("APKLAYER_ANDROID_LIBS", ours ? join(l.native, "android-libs") : join(homeDir(), "android-arm64/lib64"));
     l.bionic = getenvOr("APKLAYER_BT", ours ? join(lib, "bionic_translation/b") : join(homeDir(), "bt-arm/bionic_translation/b"));
     l.deps = getenvOr("APKLAYER_DEPS", ours ? l.native : join(homeDir(), ".cache/apklayer/deps"));
+    l.arm32 = getenvOr("APKLAYER_ARM32", join(l.native, "arm32"));
     if (setUp && installed && l.native == bundle) l.setUpBundle();
     l.appsDir = join(l.dataHome, "apklayer/apps");
     l.stateHome = getenvOr("XDG_STATE_HOME", join(homeDir(), ".local/state"));
@@ -85,6 +86,22 @@ void Layout::requireRuntime() const {
     if (!runtimeVersion.empty() && !exists(join(native, "runtime.json")))
         die("no Android runtime " + runtimeVersion + " in " + native + ": open apklayer-manager, or unpack apklayer-runtime-<cpu>-" + runtimeVersion +
             ".tar.zst there (docs/RELEASES.md)");
+}
+
+// The 32-bit runtime is a meson install for armhf (<arm32>/lib/apklayer) with its JVM and Android libraries beside it; the architecture-independent
+// half (framework jars, host classes, android-root) is this layout's, linked into its native dir on first use.
+Layout Layout::arm32Layout() const {
+    Layout a = *this;
+    a.native = join(arm32, "lib/apklayer/native");
+    a.bionic = join(arm32, "lib/apklayer/bionic_translation/b");
+    a.androidLibs = join(arm32, "android-libs");
+    a.deps = a.native;
+    a.java = join(arm32, "bin/java");
+    for (const char* shared : {"aosp", "android-root", "jdk-patch", "native-runtime.jar", "android-stub.jar", "libs", "runtime.json"}) {
+        std::string from = join(std::string(shared) == "android-stub.jar" ? deps : native, shared), to = join(a.native, shared);
+        if (exists(from) && !exists(to) && symlink(from.c_str(), to.c_str()) != 0) die("cannot link " + from + " into " + a.native);
+    }
+    return a;
 }
 
 std::string Layout::cliBinary() const { return realPath("/proc/self/exe"); }

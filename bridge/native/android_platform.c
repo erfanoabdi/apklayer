@@ -204,6 +204,12 @@ static void where(uint64_t addr)
 #define CTX_ARG0(uc) ((uint64_t)(uc)->uc_mcontext.gregs[REG_RDI])
 #define CTX_LR(uc) (*(uint64_t *)(uintptr_t)(uc)->uc_mcontext.gregs[REG_RSP])  /* a call pushed the return address (valid in a leaf function, a hint elsewhere) */
 #define CTX_SP(uc) ((uint64_t)(uc)->uc_mcontext.gregs[REG_RSP])
+#elif defined(__arm__)  /* the 32-bit app process: no frame chain is walked (CTX_FP 0) */
+#define CTX_PC(uc) ((uint64_t)(uc)->uc_mcontext.arm_pc)
+#define CTX_FP(uc) ((uint64_t)0)
+#define CTX_ARG0(uc) ((uint64_t)(uc)->uc_mcontext.arm_r0)
+#define CTX_LR(uc) ((uint64_t)(uc)->uc_mcontext.arm_lr)
+#define CTX_SP(uc) ((uint64_t)(uc)->uc_mcontext.arm_sp)
 #endif
 
 static void crash_trace_handler(int sig, siginfo_t *info, void *ctx)
