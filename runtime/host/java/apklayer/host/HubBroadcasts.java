@@ -93,7 +93,7 @@ final class HubBroadcasts {
 
     void registered(HubDirectory.Peer peer) {
         CompletableFuture<HubDirectory.Peer> waiting;
-        synchronized (this) { waiting = starting.remove(peer.name()); }
+        synchronized (this) { waiting = starting.remove(HubDirectory.key(peer)); }  // a service's own process waits under its key (pkg#service)
         if (waiting != null) waiting.complete(peer);
     }
 

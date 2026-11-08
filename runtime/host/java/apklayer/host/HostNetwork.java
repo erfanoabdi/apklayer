@@ -68,7 +68,8 @@ final class HostNetwork {
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(monitor.getInputStream()))) {
                     while (in.readLine() != null) {
                         State next = read();
-                        new Handler(Looper.getMainLooper()).post(() -> apply(app, next));
+                        if (hubSend != null) apply(app, next);  // the hub's main thread does not loop
+                        else new Handler(Looper.getMainLooper()).post(() -> apply(app, next));
                     }
                 } catch (IOException ended) { /* the monitor stopped with the JVM */ }
             }, "apklayer-network");
@@ -81,6 +82,9 @@ final class HostNetwork {
     private static synchronized void apply(Application app, State next) {
         State previous = current;
         if (initialized && java.util.Objects.equals(previous, next)) return;
+        if (initialized && hubSend != null)  // as ConnectivityService: registered receivers only (microG's McsService reconnects on it); non-sticky
+            hubSend.accept(new android.content.Intent(ConnectivityManager.CONNECTIVITY_ACTION).putExtra(ConnectivityManager.EXTRA_NO_CONNECTIVITY, next == null)
+                    .addFlags(android.content.Intent.FLAG_RECEIVER_REGISTERED_ONLY), false);
         initialized = true;
         current = next;
         ConnectivityManager manager = app.getSystemService(ConnectivityManager.class);
@@ -112,4 +116,8 @@ final class HostNetwork {
     }
 
     private static boolean initialized;
+    private static java.util.function.BiConsumer<android.content.Intent, Boolean> hubSend;
+
+    /** In the hub: each change of the host's connection is announced as CONNECTIVITY_ACTION. */
+    static synchronized void installHub(java.util.function.BiConsumer<android.content.Intent, Boolean> send) { hubSend = send; }
 }

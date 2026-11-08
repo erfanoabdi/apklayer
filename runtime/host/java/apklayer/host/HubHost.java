@@ -34,6 +34,8 @@ public final class HubHost {
         if (!HubAttestationIds.publish(directory.packages())) System.out.println("[apklayer-hub] cannot publish " + HubAttestationIds.SERVICE);
         StartTrace.mark("hub: published");
         HostBattery.installHub(directory::sendSystem);
+        HostNetwork.installHub(directory::sendSystem);
+        HostNetwork.install(RuntimeEnvironment.getApplication());  // the hub follows the host's connection too, to announce its changes
         HubVibrator.publishIfProvided(directory.packages()::uidHolds);  // before READY: an app's SystemVibratorManager looks it up once
         HubBatteryStats.publishIfSensors();  // SensorService's battery notes: without it every sensor enable and disable waits 5 s
         directory.usb.watch();

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<!-- microG's system defaults (read by GmsCore as /system/etc/microg.xml, as a microG ROM ships them): device registration and cloud messaging on,
+     so push messages reach apps without a trip to microG's settings. The user's own choice in microG's settings wins. -->
+<map>
+    <boolean name="checkin_enable_service" value="true" />
+    <boolean name="gcm_enable_mcs_service" value="true" />
+</map>

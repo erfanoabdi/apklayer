@@ -133,6 +133,15 @@ bin/apklayer --instance work stop
 bin/apklayer instance remove work         # deletes its data
 ```
 
+### Notifications while apps are closed
+
+Messengers (Telegram, WhatsApp, Signal with Play services...) get their messages through Google's cloud messaging, which on apklayer is microG
+(`apklayer setup --microg`: Services and Companion). microG keeps one connection to Google for every app, so the instance has to run while the apps
+are closed: installing microG Services turns the instance's always-on mode on (`apklayer instance autostart <id> on|off`, the switch on the manager's
+Instances page): a systemd user unit starts its services at login and keeps them up, and a message wakes the closed app, whose notification appears on
+the desktop. In microG's settings (the microG Settings app in the instance) "Google device registration" and "Cloud Messaging" are on by default
+(apklayer's `/system/etc/microg.xml`); a Google account is not needed for push, an app that signs in with Google needs one.
+
 ### USB devices
 
 Apps reach a USB device the way they do on Android (UsbManager: the device list, the attach intent, a permission question, `openDevice`); apklayer

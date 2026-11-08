@@ -26,9 +26,12 @@ final class HubBootBroadcasts {
         catch (FileAlreadyExistsException already) { return; }
         catch (IOException failure) { System.out.println("[apklayer-hub] boot broadcasts not sent: " + failure); return; }
         int flags = Intent.FLAG_RECEIVER_NO_ABORT | Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND | Intent.FLAG_RECEIVER_OFFLOAD;
+        String only = System.getenv("APKLAYER_BOOT_BROADCASTS");  // a package name: to that app only (tests: the VM has many apps with boot receivers)
         for (String action : new String[] {Intent.ACTION_LOCKED_BOOT_COMPLETED, Intent.ACTION_BOOT_COMPLETED}) {
             System.out.println("[apklayer-hub] sending " + action);
-            directory.sendSystem(new Intent(action).putExtra(Intent.EXTRA_USER_HANDLE, 0).addFlags(flags), "android.permission.RECEIVE_BOOT_COMPLETED");
+            Intent boot = new Intent(action).putExtra(Intent.EXTRA_USER_HANDLE, 0).addFlags(flags);
+            if (only != null && only.contains(".")) boot.setPackage(only);
+            directory.sendSystem(boot, "android.permission.RECEIVE_BOOT_COMPLETED");
         }
     }
 }
