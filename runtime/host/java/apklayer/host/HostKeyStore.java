@@ -9,10 +9,11 @@ import java.security.Security;
 final class HostKeyStore {
     private HostKeyStore() {}
 
-    /** keystore2 of the device's own service manager, waited for only when the stack declares it (it stages the declaration together with the service). */
+    /** keystore2 of the device's own service manager, waited for only when the stack declares it (it stages the declaration together with the service,
+     *  in the instance's own root: cli/stack.cpp stageManifest, never in the shared native tree). */
     private static android.os.IBinder nativeService(String name) {
-        String native_ = System.getProperty("apklayer.native");
-        if (native_ == null || !new java.io.File(native_, "android-root/system/etc/vintf/manifest/apklayer-keystore2.xml").exists()) return null;
+        String root = System.getenv("APKLAYER_INSTANCE_ROOT");
+        if (root == null || !new java.io.File(root, "system/etc/vintf/manifest/apklayer-keystore2.xml").exists()) return null;
         return RealBinder.await(name, 5000);  // it registers once it has met KeyMint and negotiated the shared secret
     }
 
