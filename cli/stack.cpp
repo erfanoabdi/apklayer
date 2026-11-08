@@ -174,6 +174,7 @@ bool waitForProperty(const Layout& l, const NativeEnv& ne, const char* name, con
     Spawn wait;
     wait.argv = {join(l.native, "bin/aprop"), "wait", name, value};
     wait.env = ne.env;
+    wait.dieWithParent = true;  // a caller's timeout that kills this process (`timeout apklayer wait hub`) ends the wait too
     int pid = spawn(wait);
     int fd = pidfdOpen(pid);
     pollfd fds[2] = {{fd, POLLIN, 0}, {deathPidfd, POLLIN, 0}};
@@ -226,6 +227,10 @@ bool ensureShell(const Layout& l, const Instance& inst, const NativeEnv& env) {
 }
 
 // keystore2 keeps its database in /data/misc/keystore, which the path layer serves from the instance's /data
+// The software Gatekeeper and gatekeeperd (auth-bound keys) come with the keystore when both are staged
+static bool gatekeeper(const Layout& l) {
+    return staged(l, "libapklayer_keystore2.so") && staged(l, "libapklayer_gatekeeper.so") && staged(l, "libapklayer_gatekeeperd.so");
+}
 static std::string keystoreDir(const Instance& inst) {
     std::string dir = join(inst.dataDir, "misc/keystore");
     makeDirs(dir);
@@ -360,6 +365,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     stageManifest(inst, l, staged(l, "libapklayer_audioserver.so"), "apklayer-audio-effects.xml", "aosp/hals/audio/effects-manifest.xml");
     stageManifest(inst, l, staged(l, "libapklayer_keymint.so"), "apklayer-keymint.xml", "aosp/hals/security/manifest.xml");
     stageManifest(inst, l, staged(l, "libapklayer_keystore2.so"), "apklayer-keystore2.xml", "aosp/hals/security/keystore2-manifest.xml", "system");  // a framework HAL: keystore2 may register its service
+    stageManifest(inst, l, gatekeeper(l), "apklayer-gatekeeper.xml", "aosp/hals/security/gatekeeper-manifest.xml");
     // the hardware providers of providers.toml: their HALs are declared for this stack's lifetime (servicemanager reads the manifests once)
     std::vector<ProviderService> providers = providerServices(l, inst);
     writeHostHals(l, inst);  // domains set to the device: their HALs come from the host binder contexts, no front starts
@@ -410,8 +416,13 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     }
     if (staged(l, "libapklayer_keymint.so") && staged(l, "libapklayer_keystore2.so")) {  // the real Android keystore: software KeyMint, then keystore2 over it
         start("keymint", "libapklayer_keymint.so", {});
+        if (gatekeeper(l)) start("gatekeeper", "libapklayer_gatekeeper.so", {});  // before keystore2: its shared secret takes part in keystore2's negotiation
         keystoreDir(inst);
         start("keystore2", "libapklayer_keystore2.so", {"/data/misc/keystore"});  // as keystore2.rc: the database directory, through the path layer
+        if (gatekeeper(l)) {  // as gatekeeperd.rc; the hub enrolls and verifies the instance's credential (HubLockScreen)
+            makeDirs(join(inst.dataDir, "misc/gatekeeper"));
+            start("gatekeeperd", "libapklayer_gatekeeperd.so", {"/data/misc/gatekeeper"});
+        }
     }
     for (const ProviderService& p : providers) {
         start(p.name, p.front, p.options, p.backend);

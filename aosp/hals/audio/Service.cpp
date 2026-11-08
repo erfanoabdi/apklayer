@@ -32,6 +32,11 @@ class PipeWireModule final : public Module {
             return ndk::ScopedAStatus::fromExceptionCode(EX_UNSUPPORTED_OPERATION);
         return createStreamInstance<PipeWireOutput>(result, std::move(context), metadata, offload);
     }
+    // The microphone mute (AudioFlinger::setMicMute, from AudioManager.setMicrophoneMute): Module keeps the flag, the capture streams silence.
+    ndk::ScopedAStatus setMicMute(bool mute) override {
+        gMicMute = mute;
+        return Module::setMicMute(mute);
+    }
     // Let AudioFlinger apply software master controls instead of acknowledging no-ops.
     ndk::ScopedAStatus onMasterVolumeChanged(float) override {
         return ndk::ScopedAStatus::fromExceptionCode(EX_UNSUPPORTED_OPERATION);

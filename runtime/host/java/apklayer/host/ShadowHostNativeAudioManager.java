@@ -1,17 +1,23 @@
 package apklayer.host;
 
 import android.media.AudioAttributes;
+import android.media.AudioDeviceCallback;
 import android.media.AudioDeviceAttributes;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.media.AudioSystem;
+import android.os.Handler;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
 import org.robolectric.annotation.RealObject;
+import org.robolectric.RuntimeEnvironment;
 import org.robolectric.shadows.ShadowAudioManager;
+import org.robolectric.util.reflector.Direct;
+import org.robolectric.util.reflector.ForType;
+import org.robolectric.util.reflector.Reflector;
 
 /** Java service bookkeeping with real policy volume, devices and global session allocation. */
 @Implements(AudioManager.class)
@@ -49,9 +55,41 @@ public class ShadowHostNativeAudioManager extends ShadowAudioManager {
             AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_HEARING_AID, AudioDeviceInfo.TYPE_BLE_HEADSET,
             AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_BLE_SPEAKER, AudioDeviceInfo.TYPE_LINE_ANALOG, AudioDeviceInfo.TYPE_HDMI,
             AudioDeviceInfo.TYPE_AUX_LINE, AudioDeviceInfo.TYPE_BUS, AudioDeviceInfo.TYPE_BLE_HEARING_AID};
-    // shortcut: the request stays in this process and is not set as the policy's preferred device of the communication strategy (that needs
-    // MODIFY_AUDIO_ROUTING, system_server's); the policy has one sink today, so the routing is the same. Upgrade when PipeWire offers several sinks.
+    // The instance's mode and communication device live in the hub (HubCallAudio: AudioService's part, which sets them on the policy); without a
+    // hub (a host-only run) they stay in this process.
     private static AudioDeviceAttributes requested;
+    private static AudioDeviceAttributes requested() { return HubClient.connected() ? HubClient.current().communicationDevice(false, null) : requested; }
+
+    @Implementation @Override protected void setMode(int mode) {
+        super.setMode(HubClient.connected() ? HubClient.current().audioMode(mode) : mode);  // Robolectric's copy dispatches this app's mode listeners
+    }
+    @Implementation @Override protected int getMode() {
+        return HubClient.connected() ? HubClient.current().audioMode(AudioManager.MODE_CURRENT) : super.getMode();
+    }
+    // AudioService.setMicrophoneMute: a caller without MODIFY_AUDIO_SETTINGS changes nothing; the mute is AudioFlinger's (the HAL silences capture)
+    @Implementation @Override protected void setMicrophoneMute(boolean on) {
+        android.content.Context context = RuntimeEnvironment.getApplication();
+        if (context.checkSelfPermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+        NativeAudio.ensureInitialized();
+        AudioSystem.muteMicrophone(on);
+    }
+    @Implementation @Override protected boolean isMicrophoneMute() {
+        NativeAudio.ensureInitialized();
+        return AudioSystem.isMicrophoneMuted();
+    }
+    // AudioManager's own registration (the policy's port updates; the first callback on the handler's looper, the main one without a handler)
+    @Implementation @Override protected void registerAudioDeviceCallback(AudioDeviceCallback callback, Handler handler) {
+        NativeAudio.ensureInitialized();
+        Reflector.reflector(AudioManagerDirect.class, real).registerAudioDeviceCallback(callback, handler);
+    }
+    @Implementation @Override protected void unregisterAudioDeviceCallback(AudioDeviceCallback callback) {
+        Reflector.reflector(AudioManagerDirect.class, real).unregisterAudioDeviceCallback(callback);
+    }
+    @ForType(AudioManager.class)
+    interface AudioManagerDirect {
+        @Direct void registerAudioDeviceCallback(AudioDeviceCallback callback, Handler handler);
+        @Direct void unregisterAudioDeviceCallback(AudioDeviceCallback callback);
+    }
 
     @Implementation @Override protected List<AudioDeviceInfo> getAvailableCommunicationDevices() {
         List<AudioDeviceInfo> devices = new ArrayList<>();
@@ -69,7 +107,8 @@ public class ShadowHostNativeAudioManager extends ShadowAudioManager {
     @Implementation @Override protected void clearCommunicationDevice() { change(null); }
     // AudioDeviceBroker.isSpeakerphoneOn: the speaker is the requested communication device; setSpeakerphoneOn requests or drops it.
     @Implementation @Override protected boolean isSpeakerphoneOn() {
-        return requested != null && requested.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER;
+        AudioDeviceAttributes device = requested();
+        return device != null && device.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER;
     }
     @Implementation @Override protected void setSpeakerphoneOn(boolean on) {
         if (!on) { if (isSpeakerphoneOn()) change(null); return; }
@@ -78,7 +117,7 @@ public class ShadowHostNativeAudioManager extends ShadowAudioManager {
     }
     @Implementation @Override protected AudioDeviceInfo getCommunicationDevice() {
         List<AudioDeviceInfo> devices = getAvailableCommunicationDevices();
-        AudioDeviceAttributes wanted = requested;
+        AudioDeviceAttributes wanted = requested();
         if (wanted == null) {
             List<AudioDeviceAttributes> routed = AudioSystem.getDevicesForAttributes(
                     new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION).build(), false);
@@ -93,7 +132,7 @@ public class ShadowHostNativeAudioManager extends ShadowAudioManager {
     }
     private boolean change(AudioDeviceAttributes device) {
         AudioDeviceInfo before = getCommunicationDevice();
-        requested = device;
+        if (HubClient.connected()) HubClient.current().communicationDevice(true, device); else requested = device;
         AudioDeviceInfo after = getCommunicationDevice();
         if (!Objects.equals(before, after)) callOnCommunicationDeviceChangedListeners(after);
         return true;

@@ -71,6 +71,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.media.MediaPlayer", ShadowHostNativeMediaPlayer.class.getName()),
                 Map.entry("android.media.AudioTrack", ShadowHostNativeAudioTrack.class.getName()),
                 Map.entry("android.media.AudioSystem", ShadowHostNativeAudioSystem.class.getName()),
+                Map.entry("android.media.audiopolicy.AudioProductStrategy", ShadowHostNativeAudioSystem.ProductStrategy.class.getName()),
                 Map.entry("android.media.AudioRecord", ShadowHostNativeAudioRecord.class.getName()),
                 Map.entry("android.media.MediaRecorder", ShadowHostNativeMediaRecorder.class.getName()),
                 Map.entry("android.media.AudioManager", ShadowHostNativeAudioManager.class.getName()),

@@ -43,6 +43,7 @@ final class HubDirectory extends Binder {
     private final HubInputMethods inputMethods;
     private final HubBluetooth bluetooth = new HubBluetooth(this);
     private final HubGnss gnss = new HubGnss(this);
+    private final HubCallAudio callAudio;
     final HubUsb usb;
     private final HubPermissionPrompt permissionPrompt;
     private final Map<String, Process> appProcesses = new HashMap<>();
@@ -62,6 +63,7 @@ final class HubDirectory extends Binder {
         installer = new HubInstaller(this, packages, pendingIntents, Path.of(System.getProperty("apklayer.storage")).getParent());
         usb = new HubUsb(this, packages, apps);
         permissionPrompt = new HubPermissionPrompt(packages);
+        callAudio = new HubCallAudio(packages);
         attachInterface(null, HubProtocol.DESCRIPTOR);
         exitWhenIdle(60_000); // nobody ever connected
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -243,6 +245,7 @@ final class HubDirectory extends Binder {
                 System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " registered " + name + " pid=" + pid + " uid=" + uid + " kernel-uid=" + kernel + " t=" + System.nanoTime() / 1_000_000);
                 synchronized (failures) { failures.remove(key(peer)); }  // launches are counted per host (package#process): a host that registered did not fail
                 HubAudioPermissions.registered(packages, name);  // before the reply: the app's first track finds its package
+                HubLockScreen.appStarted();
                 bindings.registered(peer);
                 broadcasts.registered(peer);
                 reply.writeNoException(); reply.writeInt(pid); return true;
@@ -511,6 +514,16 @@ final class HubDirectory extends Binder {
                 Peer caller = caller(); String role = request.readString(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeBoolean(permissionPrompt.role(caller.name(), role)); return true;
             }
+            case HubProtocol.AUDIO_MODE -> {
+                Peer caller = caller(); int mode = request.readInt(); request.enforceNoDataAvail();
+                reply.writeNoException(); reply.writeInt(callAudio.setMode(caller, mode)); return true;
+            }
+            case HubProtocol.AUDIO_COMMUNICATION_DEVICE -> {
+                Peer caller = caller(); boolean set = request.readBoolean();
+                android.media.AudioDeviceAttributes device = request.readTypedObject(android.media.AudioDeviceAttributes.CREATOR); request.enforceNoDataAvail();
+                if (set) callAudio.setCommunicationDevice(caller, device);
+                reply.writeNoException(); reply.writeTypedObject(callAudio.communicationDevice(), 0); return true;
+            }
             case HubProtocol.CHECK_PERMISSION -> {
                 caller(); int pid = request.readInt(), uid = request.readInt(); String permission = request.readString(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeInt(providers.check(pid, uid, permission)); return true;
@@ -526,6 +539,7 @@ final class HubDirectory extends Binder {
         broadcasts.died(peer);
         startedServices.died(peer);
         gnss.died(peer);
+        callAudio.died(peer);
         exitWhenIdle(IDLE_EXIT_MS);
     }
 }

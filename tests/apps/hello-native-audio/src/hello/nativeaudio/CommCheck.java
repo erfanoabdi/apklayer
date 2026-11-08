@@ -38,16 +38,64 @@ final class CommCheck {
         AudioDeviceInfo chosen = available.get(available.size() - 1);
         require(audio.setCommunicationDevice(chosen) && chosen.equals(audio.getCommunicationDevice()), "communication device not selected");
         require(audio.isSpeakerphoneOn() == (chosen.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER), "speakerphone follows the communication device");
+        require(preferred().size() == 1 && preferred().get(0) == chosen.getType(), "the policy's preferred call device " + preferred());
+        deviceCallback(audio);
         audio.setMode(AudioManager.MODE_IN_COMMUNICATION);
         try {
             require(audio.getMode() == AudioManager.MODE_IN_COMMUNICATION, "mode " + audio.getMode());
+            require(phoneState() == AudioManager.MODE_IN_COMMUNICATION, "the policy's phone state " + phoneState());
+            audio.setMode(AudioManager.MODE_IN_CALL);  // needs MODIFY_PHONE_STATE, which an app does not get: refused
+            require(audio.getMode() == AudioManager.MODE_IN_COMMUNICATION, "MODE_IN_CALL without MODIFY_PHONE_STATE: mode " + audio.getMode());
             RecordCheck.run(AudioAttributes.USAGE_VOICE_COMMUNICATION, MediaRecorder.AudioSource.VOICE_COMMUNICATION, "COMM");
+            audio.setMicrophoneMute(true);
+            try {
+                require(audio.isMicrophoneMute(), "microphone mute not set");
+                RecordCheck.run(AudioAttributes.USAGE_VOICE_COMMUNICATION, MediaRecorder.AudioSource.VOICE_COMMUNICATION, "MUTE", true);
+            } finally { audio.setMicrophoneMute(false); }
+            require(!audio.isMicrophoneMute(), "microphone mute not cleared");
             VoipCheck.run(audio);
         } finally {
             audio.clearCommunicationDevice();
             audio.setMode(AudioManager.MODE_NORMAL);
         }
         require(!audio.isSpeakerphoneOn(), "speakerphone after clearCommunicationDevice");
+        require(phoneState() == AudioManager.MODE_NORMAL && preferred().isEmpty(), "the policy after the call: state " + phoneState() + ", preferred " + preferred());
+        System.out.println("[hello-native-audio] CALL PASS mode, communication device and microphone mute reach the policy");
+    }
+
+    // The policy's own view (hidden APIs, as a system app would read them): IAudioPolicyService.getPhoneState and the call strategy's preferred devices
+    private static int phoneState() throws Exception {
+        Object binder = Class.forName("android.os.ServiceManager").getMethod("getService", String.class).invoke(null, "media.audio_policy");
+        Object policy = Class.forName("android.media.IAudioPolicyService$Stub").getMethod("asInterface", android.os.IBinder.class).invoke(null, binder);
+        return ((Number) policy.getClass().getMethod("getPhoneState").invoke(policy)).intValue();
+    }
+    private static List<Integer> preferred() throws Exception {  // the device types (AudioDeviceAttributes is a system API)
+        Class<?> system = Class.forName("android.media.AudioSystem");
+        int strategy = -1;
+        java.util.ArrayList<Object> strategies = new java.util.ArrayList<>();
+        Class.forName("android.media.audiopolicy.AudioProductStrategy").getMethod("native_list_audio_product_strategies", java.util.ArrayList.class).invoke(null, strategies);
+        for (Object candidate : strategies)
+            if (candidate.getClass().getMethod("getAudioAttributesForLegacyStreamType", int.class).invoke(candidate, AudioManager.STREAM_VOICE_CALL) != null) {
+                strategy = (int) candidate.getClass().getMethod("getId").invoke(candidate); break;
+            }
+        List<Object> devices = new java.util.ArrayList<>();
+        system.getMethod("getDevicesForRoleAndStrategy", int.class, int.class, List.class).invoke(null, strategy, 1 /* DEVICE_ROLE_PREFERRED */, devices);
+        List<Integer> types = new java.util.ArrayList<>();
+        for (Object device : devices) types.add((Integer) device.getClass().getMethod("getType").invoke(device));
+        return types;
+    }
+    // AudioManager's device callback: the current devices come first, on the main looper when no handler is given (this is a worker thread)
+    private static void deviceCallback(AudioManager audio) throws Exception {
+        java.util.concurrent.CountDownLatch added = new java.util.concurrent.CountDownLatch(1);
+        Thread[] on = new Thread[1];
+        android.media.AudioDeviceCallback callback = new android.media.AudioDeviceCallback() {
+            @Override public void onAudioDevicesAdded(AudioDeviceInfo[] devices) { if (devices.length > 0) { on[0] = Thread.currentThread(); added.countDown(); } }
+        };
+        audio.registerAudioDeviceCallback(callback, null);
+        try {
+            require(added.await(5, java.util.concurrent.TimeUnit.SECONDS), "no onAudioDevicesAdded");
+            require(on[0] == android.os.Looper.getMainLooper().getThread(), "onAudioDevicesAdded on " + on[0] + ", not the main thread");
+        } finally { audio.unregisterAudioDeviceCallback(callback); }
     }
 
     private CommCheck() {}

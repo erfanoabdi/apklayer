@@ -39,3 +39,58 @@ cc_library_shared {
     compile_multilib: "64",
     allow_undefined_symbols: true,
 }
+
+// The software Gatekeeper and gatekeeperd (the lock screen credential's checker, for auth-bound keys): the tree's own sources, each as a library whose
+// main btload calls. The HAL compiles the tree's GateKeeper.cpp, SharedSecret.cpp and service.cpp through gatekeeper_service.cpp; gatekeeperd takes
+// main.cpp as a copy (gatekeeperd_main.cpp), which includes the tree's gatekeeperd.cpp.
+cc_library_shared {
+    name: "libapklayer_gatekeeper",
+    vendor: true,
+    cflags: ["-Wall", "-Werror"],
+    include_dirs: ["hardware/interfaces/gatekeeper/aidl/software"],
+    shared_libs: [
+        "android.hardware.gatekeeper-V1-ndk",
+        "android.hardware.security.sharedsecret-V1-ndk",
+        "libbase",
+        "libbinder_ndk",
+        "libcrypto",
+        "libcutils",
+        "libgatekeeper",
+        "libhardware",
+        "libkeymaster_portable",
+        "liblog",
+        "libutils",
+    ],
+    static_libs: ["libscrypt_static"],
+    srcs: ["gatekeeper_service.cpp"],
+    compile_multilib: "64",
+    allow_undefined_symbols: true,
+}
+
+cc_library_shared {
+    name: "libapklayer_gatekeeperd",
+    // gatekeeperd_defaults' own srcs would resolve here: its libraries as they are
+    defaults: ["keymint_use_latest_hal_aidl_ndk_shared"],
+    cflags: ["-Wall", "-Wextra", "-Werror", "-Wunused"],
+    shared_libs: [
+        "libbinder",
+        "libbinder_ndk",
+        "libgatekeeper",
+        "libgsi",
+        "liblog",
+        "libhardware",
+        "libbase",
+        "libutils",
+        "libcrypto",
+        "libhidlbase",
+        "android.hardware.gatekeeper-V1-ndk",
+        "android.hardware.gatekeeper@1.0",
+        "libgatekeeper_aidl",
+        "android.security.authorization-ndk",
+    ],
+    static_libs: ["libscrypt_static"],
+    include_dirs: ["system/core/gatekeeperd", "external/scrypt/lib/crypto"],
+    srcs: ["gatekeeperd_main.cpp"],
+    compile_multilib: "64",
+    allow_undefined_symbols: true,
+}

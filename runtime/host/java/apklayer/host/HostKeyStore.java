@@ -28,6 +28,20 @@ final class HostKeyStore {
         }
     }
 
+    /** gatekeeperd (HubLockScreen enrolled the instance's credential): GateKeeper.getSecureUserId for keys that need user authentication, and
+     *  KeyguardManager's secure lock screen when a credential is set. */
+    private static void lockScreen() {
+        android.os.IBinder binder = RealBinder.lookup(HubLockScreen.SERVICE);
+        if (binder == null) return;
+        var gatekeeper = android.service.gatekeeper.IGateKeeperService.Stub.asInterface(binder);
+        org.robolectric.shadows.ShadowServiceManager.addBinderService(HubLockScreen.SERVICE, android.service.gatekeeper.IGateKeeperService.class, gatekeeper);
+        boolean secure;
+        try { secure = gatekeeper.getSecureUserId(0) != 0; } catch (android.os.RemoteException gone) { return; }
+        org.robolectric.util.ReflectionHelpers.setStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "isDeviceSecure", secure);
+        org.robolectric.util.ReflectionHelpers.setStaticField(org.robolectric.shadows.ShadowKeyguardManager.class, "isKeyguardSecure", secure);
+        System.out.println("[apklayer] lock screen credential " + (secure ? "set" : "not set") + " (gatekeeperd)");
+    }
+
     static void install() {
         if (Security.getProvider("AndroidKeyStore") != null) return;
         if (!Boolean.getBoolean("apklayer.softkeystore")) {
@@ -38,6 +52,7 @@ final class HostKeyStore {
                     org.robolectric.shadows.ShadowServiceManager.addBinderService("android.system.keystore2.IKeystoreService/default", android.system.keystore2.IKeystoreService.class,
                             android.system.keystore2.IKeystoreService.Stub.asInterface(real));
                     org.robolectric.shadows.ShadowServiceManager.setServiceDeclaredOrNot("android.system.keystore2.IKeystoreService/default", true);
+                    lockScreen();
                     android.security.keystore2.AndroidKeyStoreProvider.install();
                     Security.getProvider("AndroidKeyStore").put("KeyStore.AndroidKeyStore", Spi.class.getName());
                     StartTrace.mark("keystore provider installed");

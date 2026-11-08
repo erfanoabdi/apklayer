@@ -35,6 +35,60 @@ public final class Main extends Activity {
         }).start();
     }
 
+    // Key attestation: the chain KeyMint signs (leaf, its batch key's certificates, a self-signed root), the challenge in the attestation extension
+    private static void attestation() throws Exception {
+        byte[] challenge = "apklayer-challenge".getBytes();
+        KeyPairGenerator ec = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
+        ec.initialize(new KeyGenParameterSpec.Builder("attested", KeyProperties.PURPOSE_SIGN).setDigests(KeyProperties.DIGEST_SHA256)
+                .setAttestationChallenge(challenge).build());
+        ec.generateKeyPair();
+        KeyStore store = KeyStore.getInstance("AndroidKeyStore");
+        store.load(null);
+        Certificate[] chain = store.getCertificateChain("attested");
+        require(chain != null && chain.length >= 2, "attestation chain length " + (chain == null ? 0 : chain.length));
+        for (int i = 0; i < chain.length; i++) chain[i].verify(chain[Math.min(i + 1, chain.length - 1)].getPublicKey());  // each by the next, the root by itself
+        byte[] extension = ((java.security.cert.X509Certificate) chain[0]).getExtensionValue("1.3.6.1.4.1.11129.2.1.17");
+        require(extension != null, "no key attestation extension");
+        require(java.util.Collections.indexOfSubList(bytes(extension), bytes(challenge)) >= 0, "challenge not in the attestation");
+        store.deleteEntry("attested");
+        System.out.println("[ks] attestation chain of " + chain.length + " verified, challenge attested");
+    }
+    private static java.util.List<Byte> bytes(byte[] array) {
+        java.util.List<Byte> list = new java.util.ArrayList<>();
+        for (byte b : array) list.add(b);
+        return list;
+    }
+
+    // KeyInfo of a secret and a private key (SecretKeyFactory / KeyFactory of AndroidKeyStore)
+    private static void keyInfo(KeyStore store, SecretKey aes, PrivateKey ec) throws Exception {
+        android.security.keystore.KeyInfo secret = (android.security.keystore.KeyInfo) javax.crypto.SecretKeyFactory.getInstance(aes.getAlgorithm(), "AndroidKeyStore")
+                .getKeySpec(aes, android.security.keystore.KeyInfo.class);
+        require(secret.getKeystoreAlias().equals("aes") && secret.getKeySize() == 256 && !secret.isUserAuthenticationRequired()
+                && (secret.getPurposes() & KeyProperties.PURPOSE_DECRYPT) != 0, "aes KeyInfo");
+        android.security.keystore.KeyInfo pair = java.security.KeyFactory.getInstance(ec.getAlgorithm(), "AndroidKeyStore")
+                .getKeySpec(ec, android.security.keystore.KeyInfo.class);
+        require(pair.getKeySize() == 256 && pair.getSecurityLevel() == KeyProperties.SECURITY_LEVEL_SOFTWARE && !pair.isInsideSecureHardware(), "ec KeyInfo "
+                + pair.getKeySize() + " level " + pair.getSecurityLevel());
+        System.out.println("[ks] KeyInfo: aes 256, ec 256, software level");
+    }
+
+    // A key that needs the lock screen credential within 300 s: the instance has one (the hub enrolled it) and verified it at its start
+    private void authBound() throws Exception {
+        require(getSystemService(android.app.KeyguardManager.class).isDeviceSecure(), "no secure lock screen");
+        KeyGenerator aes = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
+        aes.init(new KeyGenParameterSpec.Builder("auth", KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setUserAuthenticationRequired(true).setUserAuthenticationParameters(300, KeyProperties.AUTH_DEVICE_CREDENTIAL).build());
+        SecretKey key = aes.generateKey();
+        android.security.keystore.KeyInfo info = (android.security.keystore.KeyInfo) javax.crypto.SecretKeyFactory.getInstance("AES", "AndroidKeyStore")
+                .getKeySpec(key, android.security.keystore.KeyInfo.class);
+        require(info.isUserAuthenticationRequired() && info.getUserAuthenticationValidityDurationSeconds() == 300, "auth-bound KeyInfo");
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.ENCRYPT_MODE, key);
+        cipher.doFinal("unlocked".getBytes());
+        System.out.println("[ks] auth-bound key used within its timeout after the instance's unlock");
+    }
+
     private void run(String scenario) throws Exception {
         KeyStore store = KeyStore.getInstance("AndroidKeyStore");
         store.load(null);
@@ -106,6 +160,9 @@ public final class Main extends Activity {
             java.lang.reflect.Field raw = javax.crypto.spec.SecretKeySpec.class.getDeclaredField("key");
             raw.setAccessible(true);
             require(((byte[]) raw.get(new javax.crypto.spec.SecretKeySpec(plain, "AES"))).length == plain.length, "SecretKeySpec.key by reflection");
+            attestation();
+            keyInfo(store, key, ecPair.getPrivate());
+            authBound();
             System.out.println("[ks] PASS first: keys generated, used, listed, one deleted");
         } else {
             SecretKey key = (SecretKey) store.getKey("aes", null);
@@ -121,6 +178,9 @@ public final class Main extends Activity {
             verify.update(plain);
             require(verify.verify(Base64.decode(prefs.getString("sig", ""), 0)), "signature of the first run verifies");
             require(!store.containsAlias("hmac"), "deleted alias stayed deleted");
+            Cipher auth = Cipher.getInstance("AES/GCM/NoPadding");
+            auth.init(Cipher.ENCRYPT_MODE, (SecretKey) store.getKey("auth", null));  // the new hub start verified the credential again: the same secure user id
+            auth.doFinal(plain);
             System.out.println("[ks] PASS second: decrypted and verified what the first launch made");
         }
     }
