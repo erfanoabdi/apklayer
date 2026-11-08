@@ -3,6 +3,12 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-08: Sailfish RPM build fixed after the userspace binder merge (v0.4.7's sailfish job failed)
+- compat/glibc-before-2.38-libc.patch rebased onto 0047 (both add a c_bio source after libc-open-overrides.c: it no longer applied); bionic's uapi
+  linux/android/binder.h in bridge/compat/include, used when the kernel headers lack it (Sailfish OS 5.0: 3.18; apklayer-binderd, binder_route.c);
+  btload links threads (pthread_getcpuclockid is in libpthread before glibc 2.34). tools/release/sailfish-rpm.sh builds; the RPM on the phone:
+  `apklayer --version` 0.4.7, UiBench draws (sf-run.py, SurfaceFlinger screenshot of its list).
+
 ## 2026-11-08: userspace binder prototype (docs/BINDER.md, branch userspace-binder)
 - docs/PLAN.md "Plan: binder in userspace" steps 1-2. `apklayer-binderd` (bridge/binderd): the binder driver model written from Linux's binder.c (v6.6),
   one per instance, one thread, socket-activated by the CLI; the route in libapklayer-preload.so (bridge/native/binder_route.c) and bionic_translation
