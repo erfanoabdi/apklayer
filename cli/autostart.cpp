@@ -6,7 +6,23 @@
 namespace apklayer {
 
 namespace {
-std::string unitDir() { return join(getenvOr("XDG_CONFIG_HOME", join(homeDir(), ".config")), "systemd/user"); }
+// The user's systemd manager reads units from its own XDG_CONFIG_HOME, not this shell's (a private one, as the tests set, would hide the unit);
+// systemctl --user enable resolves the same paths on the client side, so it runs with the manager's value too.
+Env managerEnv() {
+    Env env = currentEnv();
+    env.erase("XDG_CONFIG_HOME");
+    Spawn s;
+    s.argv = {"systemctl", "--user", "show-environment"};
+    s.env = env;
+    int status = 0;
+    for (const std::string& line : split(runCapture(s, &status), '\n'))
+        if (line.rfind("XDG_CONFIG_HOME=", 0) == 0) env["XDG_CONFIG_HOME"] = line.substr(16);
+    return env;
+}
+std::string unitDir() {
+    Env env = managerEnv();
+    return join(env.count("XDG_CONFIG_HOME") ? env["XDG_CONFIG_HOME"] : join(homeDir(), ".config"), "systemd/user");
+}
 std::string unitName(const std::string& id) { return "apklayer-instance@" + id + ".service"; }
 
 // A user unit per instance (a template: %i is the instance id): `apklayer hub` runs the instance's stack and hub in the foreground for as long as the
@@ -34,7 +50,7 @@ int systemctl(std::vector<std::string> args) {
     Spawn s;
     s.argv = {"systemctl", "--user"};
     s.argv.insert(s.argv.end(), args.begin(), args.end());
-    s.env = currentEnv();
+    s.env = managerEnv();
     return runAndWait(s);
 }
 }  // namespace
