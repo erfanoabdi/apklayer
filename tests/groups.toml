@@ -99,7 +99,7 @@ run = ["tests/vm/usb.py"]
 
 [permissions]  # the runtime permission prompt and role requests (HubPermissionPrompt): answers by test input, kept for the manager
 apps = ["hello-permissions"]
-run = ["python3 -u tests/vm/permissions.py"]
+run = ["python3 -u tests/vm/permissions.py", "python3 -u tests/vm/permission-mobile.py"]
 
 [host-binder]
 run = ["python3 tests/vm/host-binder.py"]  # libbinder's host context (frameworks/native 0006): a second instance plays the device
@@ -214,9 +214,10 @@ run = ["python3 -u tests/vm/splash.py"]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/window-geometry.py"]
 
-[mobile]
+[mobile]  # also the hub's questions as full-screen pages in the mobile style (permission-mobile.py)
 needs = ["com.android.test.uibench"]
-run = ["python3 -u tests/vm/mobile.py"]
+apps = ["hello-permissions"]
+run = ["python3 -u tests/vm/mobile.py", "python3 -u tests/vm/permission-mobile.py"]
 
 [startup]
 needs = ["com.android.test.uibench"]

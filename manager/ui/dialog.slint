@@ -1,0 +1,68 @@
+// The manager's dialogs. Wide windows: Material's basic dialog (a card over a scrim, the buttons in a row at its bottom right). Compact windows
+// (a phone, full: true): a full-screen page as Android's own dialogs on a phone, the title large, the content, and the buttons full width and
+// 56 dp high stacked at the bottom, so a finger hits them. Same properties and callbacks as Material's Dialog.
+import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, Icon, TextButton, FilledButton, OutlineButton } from "@material";
+
+export component PageDialog inherits PopupWindow {
+    in property <string> title;
+    in property <image> icon;
+    in property <string> default-action-text;
+    in property <[string]> actions;
+    in property <bool> full;
+    callback default-action-clicked();
+    callback action-clicked(index: int);
+    property <bool> has-icon: root.icon.width > 0 && root.icon.height > 0;
+
+    close-policy: no-auto-close;
+    forward-focus: keys;
+    keys := FocusScope {
+        x: 0;
+        width: 0;
+        key-pressed(event) => {
+            if event.text == Key.Return && root.default-action-text != "" { root.default-action-clicked(); return accept; }
+            if event.text == Key.Escape { root.close(); return accept; }
+            reject
+        }
+    }
+
+    // the scrim: a tap beside a wide dialog closes it
+    Rectangle {
+        background: root.full ? MaterialPalette.surface : #00000052;
+        TouchArea { clicked => { if !root.full { root.close(); } } }
+    }
+    Rectangle {
+        x: root.full ? 0 : (parent.width - self.width) / 2;
+        y: root.full ? 0 : (parent.height - self.height) / 2;
+        width: root.full ? parent.width : layout.min-width;
+        height: root.full ? parent.height : layout.min-height;
+        border-radius: root.full ? 0 : MaterialStyleMetrics.border_radius_28;
+        background: root.full ? MaterialPalette.surface : MaterialPalette.surface_container_high;
+        TouchArea {}  // a tap on the dialog itself does not reach the scrim
+        layout := VerticalLayout {
+            padding: MaterialStyleMetrics.padding_24;
+            padding-top: root.full ? 48px : MaterialStyleMetrics.padding_24;
+            spacing: MaterialStyleMetrics.spacing_16;
+            if root.has-icon : Icon { x: (parent.width - self.width) / 2; colorize: MaterialPalette.on_surface; source: root.icon; }
+            if root.title != "" : MaterialText {
+                horizontal-alignment: root.has-icon || root.full ? center : left;
+                wrap: word-wrap;
+                text: root.title;
+                style: root.full ? MaterialTypography.headline_medium : MaterialTypography.headline_small;
+                color: MaterialPalette.on_surface;
+            }
+            @children
+            if root.full : Rectangle { vertical-stretch: 1; }
+            if root.full : VerticalLayout {
+                spacing: MaterialStyleMetrics.spacing_12;
+                if root.default-action-text != "" : FilledButton { height: 56px; text: root.default-action-text; clicked => { root.default-action-clicked(); } }
+                for action[index] in root.actions : OutlineButton { height: 56px; text: action; clicked => { root.action-clicked(index); } }
+            }
+            if !root.full : HorizontalLayout {
+                spacing: MaterialStyleMetrics.spacing_8;
+                Rectangle {}
+                for action[index] in root.actions : TextButton { text: action; clicked => { root.action-clicked(index); } }
+                if root.default-action-text != "" : FilledButton { text: root.default-action-text; clicked => { root.default-action-clicked(); } }
+            }
+        }
+    }
+}
