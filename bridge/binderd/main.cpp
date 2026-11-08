@@ -160,7 +160,10 @@ struct Loop {
                     driver.releaseThread(t);  // closes fd
                     return closeAll(m.fds), true;
                 }
-                if (driver.ioctl(t, uint32_t(m.h.a0), m.payload, m.h.a1, m.h.a2, m.h.a3, m.fds, r)) answer(fd, t->proc, r);
+                if (driver.ioctl(t, uint32_t(m.h.a0), m.payload, m.h.a1, m.h.a2, m.h.a3, m.fds, r)) {
+                    driver.flush();  // the threads this request woke first (a reply's waiting caller), then the requester's own answer
+                    answer(fd, t->proc, r);
+                }
                 break;
             case BD_MMAP: {
                 int memfd = -1;
