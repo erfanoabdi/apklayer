@@ -15,9 +15,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Phone (deb 0.4.7~git20261109.mem2 built on Parallels, dpkg -i --force-depends; apps stay at converter ABI 4, which ABI 3 does not reconvert):
   settled instance 1939 -> 1308-1321 MB (two JVMs left: hub, spare); after NewPipe and Calculator 1388 MB. Launches within noise (PLAN 8's table;
   NewPipe cold with the settings provider in its own host again, and without the heap flags, interleaved: no faster).
-- Tests: installer's menu scenario fails in that fresh data home (no menu merge file from a setup), unrelated.
 - Tests (Parallels, own tree ~/agent-mem): providers, services, hub-services, activities, sysprov, host-uid, files, startup, system-apps,
-  broadcasts, first-start, units, settings, accounts, pendingintents, notifications, permissions pass.
+  broadcasts, first-start, units, settings, accounts, pendingintents, notifications, permissions, push, keystore, gpu, dex2jvm, reconvert pass;
+  installer passes but for its menu scenario, which fails in that fresh data home (no menu merge file from a setup; nothing of this round).
 
 ## 2026-11-09: verify-at-install reverted (owner)
 - Reverted 046485af and b3f66b04 (VerifyInstall/VerifyBytecode, refused-class stubs, -XX:-BytecodeVerificationRemote, converter ABI 4): the gain (NewPipe ~0.5 s cold, ~1.2 s warm; Calculator none) did not pay for 10-14 s longer phone installs, a reconvert of every app and unverified runtime-defined classes. Converter ABI back to 3. The spare's class preload and idle component hosts ending stay.
