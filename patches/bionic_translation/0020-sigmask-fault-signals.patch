@@ -19,7 +19,7 @@ index cd32ce1..88832fc 100644
  }
  
 +#define APK_SYNC_SIGNALS ((1UL << (SIGSEGV - 1)) | (1UL << (SIGBUS - 1)) | (1UL << (SIGILL - 1)) | (1UL << (SIGFPE - 1)))
-+static int apk_sigmask(int thread, int how, const unsigned long *set, unsigned long *oset) /* apklayer patch: see scripts/patch-bionic-translation.sh step 15 */
++static int apk_sigmask(int thread, int how, const unsigned long *set, unsigned long *oset) /* apklayer patch: see docs/PATCHES.md */
 +{
 +	sigset_t in, out;
 +	unsigned long bits;
@@ -35,6 +35,6 @@ index cd32ce1..88832fc 100644
 +int bionic_pthread_sigmask(int how, const unsigned long *set, unsigned long *oset) { return apk_sigmask(1, how, set, oset); }
 +int bionic_sigprocmask(int how, const unsigned long *set, unsigned long *oset) { return apk_sigmask(0, how, set, oset); }
 +
- int bionic_kill(pid_t pid, int sig) /* apklayer patch: see scripts/patch-bionic-translation.sh step 14 */
+ int bionic_kill(pid_t pid, int sig) /* apklayer patch: see docs/PATCHES.md */
  {
  	if (pid != getpid() && getenv("APKLAYER_COMPONENT_HOST")) {

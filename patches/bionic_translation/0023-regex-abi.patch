@@ -19,7 +19,7 @@ index e5a1ece..aafc903 100644
  #include "libc-verbose.h"
  #endif
 +
-+/* apklayer patch: see scripts/patch-bionic-translation.sh step 18 */
++/* apklayer patch: see docs/PATCHES.md */
 +#include <regex.h>
 +#include <stdint.h>
 +struct bionic_regex { int re_magic; size_t re_nsub; const char *re_endp; void *re_g; };

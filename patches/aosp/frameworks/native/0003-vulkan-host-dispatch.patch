@@ -4,7 +4,7 @@ Subject: [PATCH] apklayer: libvulkan keeps the host loader dispatch pointers
 Original Android libvulkan runs over a vulkan.apklayer frontend to the host libvulkan.so.1, reusing
 AOSP's API/WSI implementation. Host dispatchable handles keep their original vtables; Android's private
 data lives in a guarded side table, retired on buffer/pool/device/instance destruction
-(aosp/hals/graphics/vulkan). Formerly scripts/patch-vulkan.sh; build with scripts/orb-build-vulkan.py.
+(aosp/hals/graphics/vulkan). Formerly scripts/patch-vulkan.sh; build with tools/lib/orb-build-vulkan.py.
 Against frameworks/native 46018f54b424 (REVISION). Apply: patches/apply aosp <LineageOS tree>.
 ---
 diff --git a/vulkan/libvulkan/driver.cpp b/vulkan/libvulkan/driver.cpp

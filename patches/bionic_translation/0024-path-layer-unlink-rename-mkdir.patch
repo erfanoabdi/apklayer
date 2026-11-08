@@ -19,7 +19,7 @@ index aafc903..626d4dd 100644
  	return regerror(errcode, preg ? preg->re_g : NULL, errbuf, errbuf_size);
  }
 +
-+/* apklayer patch: see scripts/patch-bionic-translation.sh step 19 */
++/* apklayer patch: see docs/PATCHES.md */
 +#include <unistd.h>
 +#include <sys/stat.h>
 +#include <stdio.h>

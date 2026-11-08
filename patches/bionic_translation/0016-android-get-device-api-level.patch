@@ -19,7 +19,7 @@ index ba67c36..43895cc 100644
  #endif
  }
 +
-+/* apklayer patch: see scripts/patch-bionic-translation.sh step 11 */
++/* apklayer patch: see docs/PATCHES.md */
 +int bionic_android_get_device_api_level(void)
 +{
 +	return 36;

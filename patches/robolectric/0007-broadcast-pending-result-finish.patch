@@ -19,7 +19,7 @@ diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowBroad
 +import org.robolectric.shadow.api.Shadow;
  
 +/**
-+ * Robolectric's stand-in for BroadcastReceiver.PendingResult: finish() only completes a future. apklayer patch: with the instance hub (-Dapklayer.instancehub=true)
++ * Robolectric's stand-in for BroadcastReceiver.PendingResult: finish() only completes a future. apklayer patch: with the instance hub (every app has one)
 + * the real finish() runs too, so Android's own code tells the (hub-backed) activity manager that the receiver is done and passes the ordered result on.
 + */
  @Implements(BroadcastReceiver.PendingResult.class)

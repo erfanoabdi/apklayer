@@ -20,8 +20,8 @@ index 8592c2f..fdb550f 100644
  			break;
 -		case R_GENERIC_TLS_DTPREL:
 -			*((ElfW(Addr) *)reloc) = sym_addr + get_addend(rel);
-+		case R_GENERIC_TLS_DTPREL: /* apklayer patch: see scripts/patch-bionic-translation.sh step 20 */
++		case R_GENERIC_TLS_DTPREL: /* apklayer patch: see docs/PATCHES.md */
 +			*((ElfW(Addr) *)reloc) = (s ? s->st_value : sym ? si->symtab[sym].st_value : 0) + get_addend(rel);
  			break;
  #if defined(__aarch64__)
- 		case R_AARCH64_IRELATIVE: { /* apklayer patch: IRELATIVE (ifunc), see scripts/patch-bionic-translation.sh step 9 */
+ 		case R_AARCH64_IRELATIVE: { /* apklayer patch: IRELATIVE (ifunc), see docs/PATCHES.md */

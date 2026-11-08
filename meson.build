@@ -65,7 +65,7 @@ import('pkgconfig').generate(name: 'apklayer-plugin', filebase: 'apklayer-plugin
 
 if host_machine.system() == 'linux'
   # bionic_translation at its pinned revision (subprojects/bionic_translation.wrap) with our series applied (patches/apply, idempotent; an edited
-  # patch: `meson subprojects update --reset bionic_translation`), plus patches/bionic_translation/compat where the toolchain is older
+  # patch resets it to that revision first, below), plus patches/bionic_translation/compat where the toolchain is older
   bt_src = meson.project_source_root() / 'subprojects/bionic_translation'
   if not fs.is_dir(bt_src)
     run_command(find_program('meson'), 'subprojects', 'download', '--sourcedir', meson.project_source_root(), 'bionic_translation', check: true)
@@ -75,7 +75,12 @@ if host_machine.system() == 'linux'
   foreach p : run_command('sh', '-c', 'cd "$MESON_SOURCE_ROOT" && ls patches/bionic_translation/*.patch patches/bionic_translation/compat/*.patch', check: true).stdout().split()
     fs.read(p)  # a changed or new patch reconfigures
   endforeach
-  message(run_command(apply, 'bionic_translation', bt_src, check: true).stdout().strip())
+  applied = run_command(apply, 'bionic_translation', bt_src, check: false)
+  if applied.returncode() != 0  # a patch edited since this tree was patched: the pinned revision again, then the whole series
+    run_command(find_program('meson'), 'subprojects', 'update', '--reset', '--sourcedir', meson.project_source_root(), 'bionic_translation', check: true)
+    applied = run_command(apply, 'bionic_translation', bt_src, check: true)
+  endif
+  message(applied.stdout().strip())
   if cc.version().version_compare('<11')  # Sailfish OS 5.0: gcc 10 (one series: the second patch is made on the first)
     run_command(apply, compat / 'gcc-before-13-cxx2b.patch', compat / 'gcc-before-11-cxx20.patch', bt_src, check: true)
   elif cc.version().version_compare('<13')  # Ubuntu 22.04: gcc 11
