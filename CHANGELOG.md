@@ -3,6 +3,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: Vulkan presentation not on by default with NVIDIA's driver
+- cli/env.cpp hostVulkan skips DRIVER_ID_NVIDIA_PROPRIETARY: presentation is untested there and Unity games (PGR, Azur Lane already failing on the NVIDIA tester) pick Vulkan when offered; `APKLAYER_VULKAN_PRESENT=1` still turns it on. x86 PC (Intel): vulkan, gpu pass.
+
 ## 2026-11-09: graphics round (Vulkan presentation by default, Godot 4; x86 PC)
 - Vulkan presentation is on by default where the host can do it: cli/env.cpp asks `vulkaninfo --summary` once per session and, for a GPU device that is not Venus (the VMs: it aborts on imported dma-bufs) or a CPU device, sets APKLAYER_VULKAN_PRESENT (the driver's existing switch) and APKLAYER_VULKAN_VERSION; APKLAYER_VULKAN_PRESENT=0 turns it off. HostSystemConfig then declares android.hardware.vulkan.version (the host's API up to 1.3), .level 0 and .compute 0 with their versions, and ShadowHostPackageManager answers hasSystemFeature(name, version) as PackageManagerService (Robolectric answered false for every version). Godot checks them before it creates its Vulkan view ("this device does not meet the requirements for Vulkan support" before).
 - Godot's Vulkan context then failed with "Required extension VK_KHR_android_surface not found": volk opens libvulkan.so.1 before libvulkan.so, and bionic_translation found the host's glibc loader under that name. bionic_translation 0048: a cfg.d line `app:<name> <target>` maps only lookups from the app namespace; bt-cfg.py maps app:libvulkan.so.1 to Android's loader, while our driver (a system library) keeps opening the host loader by that name.
