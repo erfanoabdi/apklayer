@@ -352,7 +352,8 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     NativeEnv ne = nativeEnv(l, inst);
     const std::string& n = l.native;
     for (const std::string& f : listDir(inst.logs()))
-        if (f.size() > 4 && f.substr(f.size() - 4) == ".log" && f != "stack.log") unlink(join(inst.logs(), f).c_str());  // stack.log: this daemon's own stderr, already open
+        // the previous stack's logs become <name>.log.1: a service that crashed (and ended that stack) keeps its reason; stack.log is this daemon's own stderr, already open
+        if (f.size() > 4 && f.substr(f.size() - 4) == ".log" && f != "stack.log") rename(join(inst.logs(), f).c_str(), join(inst.logs(), f + ".1").c_str());
 
 
     // a fresh property store per stack (ro.* is write-once); ensureStack already made it when a client waits on the ready property

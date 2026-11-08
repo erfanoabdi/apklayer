@@ -129,11 +129,13 @@ int reportCommand(const Layout& l, const Instance& inst, const std::vector<std::
                         "\n## apklayer gpus\n" + capture({cli, "--instance", id, "gpus"}) +
                         "\n## apklayer permissions " + package + "\n" + capture({cli, "--instance", id, "permissions", package});
     writeFile(join(base, "about.txt"), about);
-    // the app's own logs and the instance's service logs (the ones a crash or a black window is found in)
-    std::vector<std::string> names = {"app-" + package + ".log", "app-" + package + ".log.1", "hub.log", "shell.log", "stack.log", "surfaceflinger.log",
-                                      "composer.log", "allocator.log", "convert.log", "audio.log", "media.log", "codec2.log", "app-spare.log"};
-    for (const std::string& name : listDir(inst.logs()))
-        if (name.rfind("component-" + package, 0) == 0) names.push_back(name);
+    // the app's own logs and every service log of the instance (the ones a crash or a black window is found in), the previous stack's too
+    // (<name>.log.1, cli/stack.cpp: a service crash that ended it is there); other apps' logs stay out
+    std::vector<std::string> names = {"app-" + package + ".log", "app-" + package + ".log.1", "app-spare.log", "app-spare.log.1"};
+    for (const std::string& name : listDir(inst.logs())) {
+        bool log = name.size() > 4 && (name.compare(name.size() - 4, 4, ".log") == 0 || (name.size() > 6 && name.compare(name.size() - 6, 6, ".log.1") == 0));
+        if (name.rfind("component-" + package, 0) == 0 || (log && name.rfind("app-", 0) != 0 && name.rfind("component-", 0) != 0)) names.push_back(name);
+    }
     int copied = 0;
     for (const std::string& name : names) {
         std::optional<std::string> text = readFile(join(inst.logs(), name));
