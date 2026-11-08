@@ -61,6 +61,16 @@ GLESiface* iface;
 GlobalNameSpace* names;
 ObjectNameManager* groups;
 
+// glGetString as a device's ES 1 driver answers: the host GPU's own vendor and renderer (the translator's are "Google (<host>)" and "Android
+// Emulator OpenGL ES Translator (<host>)", which apps show and match on), the translator's ES-CM version and extensions
+const GLubyte* GL_APIENTRY getString(GLenum name) {
+    if (name == GL_VENDOR || name == GL_RENDERER) {
+        static auto host = reinterpret_cast<const GLubyte* (GL_APIENTRY*)(GLenum)>(hostGl()->findSymbol("glGetString"));
+        return host(name);  // the host context behind the current ES 1 one is current
+    }
+    return ::translator::gles1::glGetString(name);
+}
+
 GLESiface* cmIface() {  // lock held
     if (!iface) {
         iface = static_translator_glescm_getIfaces(&kEglIface);
@@ -111,6 +121,7 @@ __attribute__((visibility("default"))) void apklayer_gles1_destroy(void* ctx) {
 
 // An ES 1.1 entry point (core or extension), null for names ES 1 does not have. Extensions need a current ES 1 context.
 __attribute__((visibility("default"))) void* apklayer_gles1_proc(const char* name) {
+    if (!strcmp(name, "glGetString")) return reinterpret_cast<void*>(getString);
 #define APKLAYER_GLES1_ENTRY(ret, fn, sig, args) if (!strcmp(name, #fn)) return reinterpret_cast<void*>(::translator::gles1::fn);
     LIST_GLES1_FUNCTIONS(APKLAYER_GLES1_ENTRY, APKLAYER_GLES1_ENTRY)
 #undef APKLAYER_GLES1_ENTRY

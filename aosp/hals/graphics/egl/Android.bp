@@ -14,6 +14,7 @@ cc_library_shared {
     ],
     shared_libs: ["libcutils", "liblog", "libnativewindow"],
     compile_multilib: "both",  // the 32-bit app process loads it too (docs/PLAN.md "apps built for another CPU" 2(a))
+    arch: { x86: { enabled: false } },  // a 32-bit app process is ARM only (gsi_x86_64 builds no 32-bit x86 one: Egl.cpp has no i386 stub)
     allow_undefined_symbols: true,
     cflags: ["-Wall", "-Werror", "-Wno-unused-parameter"],
 }

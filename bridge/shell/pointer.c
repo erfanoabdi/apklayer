@@ -88,13 +88,13 @@ static void ptr_motion(void *d, struct wl_pointer *p, uint32_t t, wl_fixed_t x, 
 static uint32_t resize_edge(const struct window *w, int x, int y)
 {
     const int E = 8;
-    int lw = w->cfg_w, lh = w->cfg_h + DECOR_H;
+    int lw = w->cfg_w, lh = w->cfg_h + W_BAR(w);
     uint32_t e = 0;
     if (x < E) e |= XDG_TOPLEVEL_RESIZE_EDGE_LEFT;
     if (x >= lw - E) e |= XDG_TOPLEVEL_RESIZE_EDGE_RIGHT;
     if (y < E) e |= XDG_TOPLEVEL_RESIZE_EDGE_TOP;
     if (y >= lh - E) e |= XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM;
-    return w->maximized || w->mobile ? 0 : e;
+    return w->maximized || w->mobile || w->ssd ? 0 : e;  /* server-side: the compositor's frame resizes */
 }
 
 /* Cursor names (xcursor) for a resize edge; NULL = the default arrow. */

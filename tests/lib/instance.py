@@ -55,6 +55,21 @@ def belongs(pid):
     return next((e[18:].decode() for e in env if e.startswith(b'APKLAYER_INSTANCE=')), 'default') == INSTANCE
 
 
+_cpu = [0]
+
+
+def busy(seconds=0.3):
+    """Whether this instance's processes used at least that much CPU time since the last call: a start that is silent on a loaded host (JVM
+    start, hub boot) is busy, a hung one is idle (an idle stack's own ticks stay far below it)."""
+    total = 0
+    for p in Path('/proc').iterdir():
+        if p.name.isdigit() and int(p.name) != os.getpid() and belongs(p.name):
+            try: f = (p / 'stat').read_text().rsplit(')', 1)[1].split(); total += int(f[11]) + int(f[12])  # utime, stime
+            except (OSError, IndexError, ValueError): pass
+    was, _cpu[0] = _cpu[0], total
+    return total - was >= seconds * os.sysconf('SC_CLK_TCK')
+
+
 def mine(pattern, exact=False):
     """`pgrep -af pattern` restricted to this instance: the lines of its matching processes. exact: match the process name (`pgrep -x`), for the
     JVMs, whose command line is their Android process name once the runtime has named them."""
@@ -122,7 +137,7 @@ def inject(window, *steps):
     """Test input into one window of this instance's shell (bridge/shell/testinput.c): no desktop, no focus, so groups that use it run in
     parallel. The events take the shell's own path from the seat on (focus, xkb, pointer, touch, text-input, configure). window: the app's
     package. Steps (x, y: logical pixels in the window's content, y < 0: its title bar):
-      focus | key:<evdev> | combo:<mod>+<evdev> | click:<x>,<y> | rclick:<x>,<y> | tap:<x>,<y> | press:<x>,<y> | move:<x>,<y> | release:<x>,<y> (a finger down, moved and up: a long press or a drag) | text:<utf8> | preedit:<utf8> | resize:<w>,<h>
+      focus | blur (the focus leaves it) | key:<evdev> | combo:<mod>+<evdev> | click:<x>,<y> | rclick:<x>,<y> | tap:<x>,<y> | press:<x>,<y> | move:<x>,<y> | release:<x>,<y> (a finger down, moved and up: a long press or a drag) | text:<utf8> | preedit:<utf8> | resize:<w>,<h>
       | scale:<percent> (the compositor's preferred scale) | maximize:<w>,<h> (window geometry) | unmaximize[:<w>,<h>]"""
     print('INJECT %s %s' % (window, ' '.join(steps)), flush=True)
     messages = []
@@ -130,6 +145,7 @@ def inject(window, *steps):
         kind, _, arg = step.partition(':')
         xy = [int(n) for n in arg.split(',')] if kind in ('click', 'rclick', 'tap', 'press', 'move', 'release', 'resize', 'maximize') or (kind == 'unmaximize' and arg) else [0, 0]
         if kind == 'focus': messages.append((FOCUS, 0, 0, 0, ''))
+        elif kind == 'blur': messages.append((FOCUS, 1, 0, 0, ''))
         elif kind == 'key': messages += [(KEY, int(arg), 1, 0, ''), (KEY, int(arg), 0, 0, '')]
         elif kind == 'combo':
             mod, code = arg.split('+')

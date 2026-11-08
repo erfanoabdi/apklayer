@@ -88,6 +88,42 @@ static void draw(const struct gl_state *g, const char *scene, int frame)
     }
 }
 
+/* EGL_ANDROID_get_frame_timestamps (what Swappy and FrameMetrics read): two more frames swapped after enabling them, then the first one's
+ * SurfaceFlinger times relative to its own swap, and the compositor's interval. "unsupported" where the extension is missing (Linux). */
+static void frame_timestamps(const struct bench_target *t, const char *scene)
+{
+    const char *ext = eglQueryString(t->dpy, EGL_EXTENSIONS);
+    char line[512];
+    if (!ext || !strstr(ext, "EGL_ANDROID_get_frame_timestamps")) {
+        snprintf(line, sizeof line, "glbench: %s %s %s timestamps unsupported", t->side, t->mode, scene);
+        t->print(line);
+        return;
+    }
+    PFNEGLGETNEXTFRAMEIDANDROIDPROC next_id = (PFNEGLGETNEXTFRAMEIDANDROIDPROC)eglGetProcAddress("eglGetNextFrameIdANDROID");
+    PFNEGLGETFRAMETIMESTAMPSANDROIDPROC get = (PFNEGLGETFRAMETIMESTAMPSANDROIDPROC)eglGetProcAddress("eglGetFrameTimestampsANDROID");
+    PFNEGLGETCOMPOSITORTIMINGANDROIDPROC timing = (PFNEGLGETCOMPOSITORTIMINGANDROIDPROC)eglGetProcAddress("eglGetCompositorTimingANDROID");
+    EGLuint64KHR id = 0;
+    eglSurfaceAttrib(t->dpy, t->surface, EGL_TIMESTAMPS_ANDROID, EGL_TRUE);
+    int ok_id = next_id(t->dpy, t->surface, &id);
+    double swapped = now_ms();
+    for (int i = 0; i < 6; i++) { glClear(GL_COLOR_BUFFER_BIT); eglSwapBuffers(t->dpy, t->surface); }  /* the frame and five after it */
+    static const EGLint names[] = { EGL_REQUESTED_PRESENT_TIME_ANDROID, EGL_RENDERING_COMPLETE_TIME_ANDROID, EGL_COMPOSITION_LATCH_TIME_ANDROID,
+                                    EGL_FIRST_COMPOSITION_START_TIME_ANDROID, EGL_DEQUEUE_READY_TIME_ANDROID };
+    EGLnsecsANDROID v[5] = { 0 }, ct[1] = { 0 };
+    static const EGLint ctn[] = { EGL_COMPOSITE_INTERVAL_ANDROID };
+    int ok = ok_id && get(t->dpy, t->surface, id, 5, names, v);
+    int ok_t = timing(t->dpy, t->surface, 1, ctn, ct);
+    eglSurfaceAttrib(t->dpy, t->surface, EGL_TIMESTAMPS_ANDROID, EGL_FALSE);
+    double base = v[0] > 0 ? v[0] / 1e6 : swapped;  /* the requested present time is the frame's queue time */
+#define REL(x) ((x) > 0 ? (x) / 1e6 - base : -1.0)
+    snprintf(line, sizeof line,
+             "glbench: %s %s %s timestamps %s frame=%llu queued_to_rendered_ms=%.2f queued_to_latch_ms=%.2f queued_to_composition_ms=%.2f "
+             "queued_to_released_ms=%.2f composite_interval_ms=%.2f",
+             t->side, t->mode, scene, ok ? "ok" : "failed", (unsigned long long)id, REL(v[1]), REL(v[2]), REL(v[3]), REL(v[4]), ok_t ? ct[0] / 1e6 : -1.0);
+#undef REL
+    t->print(line);
+}
+
 static void run_scene(const struct bench_target *t, const struct gl_state *g, const char *scene, double seconds)
 {
     PFNEGLCREATESYNCKHRPROC create_sync = (PFNEGLCREATESYNCKHRPROC)eglGetProcAddress("eglCreateSyncKHR");
@@ -133,6 +169,7 @@ static void run_scene(const struct bench_target *t, const struct gl_state *g, co
              frame_ms[n - 1], draw_sum / n, t->offscreen ? "wait" : "swap", swap_sum / n, t->offscreen ? "wait" : "swap", swap_max);
     t->print(line);
     free(frame_ms);
+    if (!t->offscreen) frame_timestamps(t, scene);
 }
 
 int bench_run(const struct bench_target *t, const char *scenes, double seconds)

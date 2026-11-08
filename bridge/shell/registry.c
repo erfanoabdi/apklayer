@@ -2,6 +2,7 @@
 #include "shell.h"
 #include "text-input-v3-client-protocol.h"
 #include "xdg-activation-v1-client-protocol.h"
+#include "xdg-decoration-unstable-v1-client-protocol.h"
 
 static void seat_caps(void *d, struct wl_seat *st, uint32_t caps)
 {
@@ -128,6 +129,8 @@ static void registry(void *d, struct wl_registry *r, uint32_t name, const char *
         fscale_mgr = wl_registry_bind(r, name, &wp_fractional_scale_manager_v1_interface, 1);
     else if (!strcmp(iface, xdg_activation_v1_interface.name))
         activation = wl_registry_bind(r, name, &xdg_activation_v1_interface, 1);
+    else if (!strcmp(iface, zxdg_decoration_manager_v1_interface.name))
+        deco_mgr = wl_registry_bind(r, name, &zxdg_decoration_manager_v1_interface, 1);
 }
 static void registry_rm(void *d, struct wl_registry *r, uint32_t n)
 {

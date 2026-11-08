@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fences are real sync_files: glbench's window (clear, draws) through apklayer, then the instance's logs must hold no
 "sync_file_info returned NULL" (libui's Fence::getSignalTime on an fd that is no sync_file) and no "Invalid present fence" (SurfaceFlinger).
-Prints the counts per log, their rate per 10 s of the run, and glbench's result lines (frame times)."""
+Prints the counts per log, their rate per 10 s of the run, and glbench's result lines (frame times); each scene must get its frame timestamps."""
 import subprocess
 import sys
 import time
@@ -44,4 +44,7 @@ print('frame timeline: %d display frames, %d with an unusable present time ("Unk
 assert 'glbench: done' in run.stdout, 'glbench did not finish'
 assert frames and unknown * 4 < len(frames), 'present fences carry no usable time'
 assert not counts, 'fences that are no sync_file (%.0f s run)' % elapsed
+# EGL_ANDROID_get_frame_timestamps (Swappy, FrameMetrics): SurfaceFlinger's latch and composition times reach the app through the EGL
+stamps = [l for l in run.stdout.splitlines() if ' timestamps ' in l]
+assert stamps and all(' timestamps ok ' in l and 'queued_to_latch_ms=-1.00' not in l for l in stamps), 'no frame timestamps: %s' % stamps
 print('fences: no fence log lines in %.0f s' % elapsed)

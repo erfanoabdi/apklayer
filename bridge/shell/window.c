@@ -163,6 +163,7 @@ void window_create(struct client *c, int id, int width, int height, const char *
         xdg_toplevel_set_app_id(w->toplevel, package);
     } else wlshell_create(w, label, package);
     window_geometry_init(w);
+    decoration_create(w);  /* asked before the first commit: its configure comes with the first one */
     snprintf(w->title, sizeof w->title, "%s", title);
     window_set_mode(w, c->window_mode ? c->window_mode - 1 : WM_AUTO);  /* mobile.c: title bar or navigation bar, min size, maximized */
     if (w->toplevel) wl_surface_commit(w->surface);  /* no buffer: asks for the first configure, whose size and bounds decide the window's (geometry.c) */
@@ -227,6 +228,7 @@ void window_destroy(struct window *w)
     decor_destroy(&w->decor);
     navbar_destroy(&w->nav);
     window_geometry_destroy(w);
+    decoration_destroy(w);
     if (w->toplevel) xdg_toplevel_destroy(w->toplevel);
     if (w->xdg_surface) xdg_surface_destroy(w->xdg_surface);
     if (w->shell_surface) wl_shell_surface_destroy(w->shell_surface);

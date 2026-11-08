@@ -21,7 +21,9 @@
 #include <cstdlib>
 #include <map>
 #include <string>
+#include <condition_variable>
 #include <mutex>
+#include <thread>
 
 #include "apklayer/display.h"
 #include "gralloc_handle.h"
@@ -64,6 +66,7 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         // apklayer patch: only now, with the display existing; the shell's first (fitted) configure, if it came
         // meanwhile, is replayed here instead of being dropped (the display then kept the 720x1280 it opened at)
         apklayer_display_set_configure_callback(mDisplay, &Sink::onConfigure, this);
+        std::thread([this] { presentLoop(); }).detach();  // lives as long as the process (main joins the binder pool)
         return true;
     }
 
@@ -77,12 +80,33 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         t.apply(/*synchronous=*/true);
     }
 
-    // a finished frame of the virtual display
+    // a finished frame of the virtual display: SurfaceFlinger's queueBuffer (a binder call into this process) only wakes the present thread,
+    // which waits for the composition's fence and hands the frame over; the fence wait no longer holds SurfaceFlinger's composition up
     void onFrameAvailable(const BufferItem&) override {
-        std::lock_guard<std::mutex> lock(mLock);
-        BufferItem item;
-        if (mConsumer->acquireBuffer(&item, 0) != OK) return;
-        if (item.mFence != nullptr) item.mFence->waitForever("apklayer-vdisplay");  // the GPU finished composing it
+        std::lock_guard<std::mutex> lock(mQueueLock);
+        mQueued++;
+        mQueueCv.notify_one();
+    }
+
+    void presentLoop() {
+        for (;;) {
+            {
+                std::unique_lock<std::mutex> lock(mQueueLock);
+                mQueueCv.wait(lock, [this] { return mQueued > 0; });
+                mQueued--;
+            }
+            BufferItem item;
+            {
+                std::lock_guard<std::mutex> lock(mLock);
+                if (mConsumer->acquireBuffer(&item, 0) != OK) continue;
+            }
+            if (item.mFence != nullptr) item.mFence->waitForever("apklayer-vdisplay");  // the GPU finished composing it
+            std::lock_guard<std::mutex> lock(mLock);
+            present(item);
+        }
+    }
+
+    void present(BufferItem& item) {  // mLock held
         HandleData d;
         if (item.mGraphicBuffer == nullptr) { mConsumer->releaseBuffer(item); return; }
         if (!decode(item.mGraphicBuffer->handle, &d)) return presentDevice(item);
@@ -181,6 +205,9 @@ class Sink : public ConsumerBase::FrameAvailableListener {
     sp<IBinder> mToken;
     apklayer_display* mDisplay = nullptr;
     std::mutex mLock;
+    std::mutex mQueueLock;  // frames SurfaceFlinger queued that the present thread has not acquired yet
+    std::condition_variable mQueueCv;
+    int mQueued = 0;
     uint32_t mStack = 0, mWidth = 0, mHeight = 0;
     BufferItem mHeld[kSlots];
     bool mUsed[kSlots] = {}, mBusy[kSlots] = {};

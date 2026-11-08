@@ -52,6 +52,7 @@ and list it here. The M1 seed's patch log is in `archive/seed-m1/docs/PATCHES.md
 
 `compat/include/stdatomic.h` (C11 atomics from C++ for gcc before 12) is a header meson.build adds (a global include directory: Meson
 before 1.8 ignores a subproject's default_options cpp_args), not a patch.
+Build flags: upstream builds it with Meson's default buildtype (debug, -O0); meson.build builds it `debugoptimized` (-O2 -g), not a patch.
 
 ## Robolectric (`patches/robolectric/`, external/robolectric)
 | Patch | Purpose |
@@ -103,6 +104,7 @@ Behaviour that differs from Android or from stock Robolectric without editing up
 - JNI shim `bridge/native/runtime_shim.c`: binder/callback threads attach to the JVM, `@CriticalNative` argument thunk, `GetFieldID(FileDescriptor, "descriptor")` answers OpenJDK's `fd`.
 - Robolectric setup as its simulator's `AppLoader`: the APK as the manifest, `FixedConfiguration` (NATIVE graphics/SQLite, PAUSED looper), `LazyApplication` with persistent data dirs (`runtime/host/java/apklayer/host/AppEnvironment.java`); JDK opens in `runtime/host/jvm.args`.
 - Activity stack and task rules emulating ActivityThread/ActivityTaskManager: `AppHost.java`, `LaunchRules.java`.
+- Dynamic colour without an overlay manager: `HostPalette` puts monet's scheme (SystemUI ThemeOverlayController's) into the public `system_*` colours through a ResourcesLoader (RemoteViews.ColorResources' table, night qualifier at night) instead of FabricatedOverlays; `UiModeManager.getContrast()` from the instance's settings (`HostConfiguration.ShadowGlobals`); a change while an activity is stopped relaunches it at its restart (`HostConfiguration.relaunch`, ActivityThread's deferred relaunch).
 - Manifest ContentProviders created before `Application.onCreate`, the `android` package registered: `AppEnvironment.installProviders`, `installSystemPackage`.
 - Permissions: normal and listed default permissions granted at start (`HostSystemConfig.java`), runtime requests granted at once (`HostPortals.requestPermissions`).
 - Android app uids (10000+): `-Dapklayer.uid`, `ShadowHostProcess.java`; native services get it as the binder work source (aosp patch 0005 above).

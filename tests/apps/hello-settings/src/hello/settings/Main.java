@@ -41,6 +41,12 @@ public final class Main extends Activity {
         }
     }
 
+    /** A tap starts Top over this activity, which stops it (tests/vm/settings.sh: a change while stopped relaunches it at its restart). */
+    @Override public boolean onTouchEvent(android.view.MotionEvent e) {
+        if (e.getAction() == android.view.MotionEvent.ACTION_UP) startActivity(new Intent(this, Top.class));
+        return true;
+    }
+
     @Override public void onConfigurationChanged(Configuration config) {
         super.onConfigurationChanged(config);
         System.out.println("[set] changed " + describe(config));
@@ -52,7 +58,8 @@ public final class Main extends Activity {
         return "night=" + night + " nightMode=" + modes.getNightMode() + " fontScale=" + c.fontScale + " locale=" + c.getLocales().get(0).toLanguageTag()
                 + " default=" + Locale.getDefault().toLanguageTag() + " cancel=" + getString(android.R.string.cancel) + " tz=" + TimeZone.getDefault().getID()
                 + " 24h=" + DateFormat.is24HourFormat(this) + " animator=" + ValueAnimator.getDurationScale()
-                + " palette=" + secure("theme_customization_overlay_packages");
+                + " palette=" + secure("theme_customization_overlay_packages") + " contrast=" + modes.getContrast()
+                + " accent1_600=" + Integer.toHexString(getColor(android.R.color.system_accent1_600));
     }
 
     /** A Settings.Secure value; hidden keys not annotated @Readable are refused to apps (S+). */

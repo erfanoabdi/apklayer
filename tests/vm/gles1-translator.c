@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <gbm.h>
 #include <stdio.h>
+#include <string.h>
 
 static void* (*proc)(const char*);
 #define GL(name, ...) ((void (*)())proc(#name))(__VA_ARGS__)  // an unprototyped call: -std=gnu17 (C23 reads () as no parameters)
@@ -35,7 +36,9 @@ int main(int argc, char** argv) {
     if (!eglMakeCurrent(d, s, s, x)) { printf("FAIL no host GLES 3 context\n"); return 1; }
     void* es1 = create(NULL);
     makeCurrent(es1);
-    printf("%s | %s\n", ((const char* (*)(GLenum))proc("glGetString"))(GL_VERSION), ((const char* (*)(GLenum))proc("glGetString"))(GL_RENDERER));
+    const char* renderer = ((const char* (*)(GLenum))proc("glGetString"))(GL_RENDERER);
+    printf("%s | %s\n", ((const char* (*)(GLenum))proc("glGetString"))(GL_VERSION), renderer);
+    if (strstr(renderer, "Translator")) { printf("FAIL renderer is the translator's, not the host GPU's\n"); return 1; }
 
     GL(glViewport, 0, 0, 64, 64);
     ((void (*)(GLfloat, GLfloat, GLfloat, GLfloat))proc("glClearColor"))(0, 0, 1, 1);

@@ -18,8 +18,12 @@ uretprobe:@LIBS@/libapklayer_surfaceflinger.so:_ZN7android17compositionengine4im
     @sf_gpu_compose_us[pid] = avg((nsecs - @g[tid]) / 1000); @sf_gpu_composes[pid] = count(); }
 uprobe:@LIBS@/libui.so:_ZN7android5Fence11waitForeverEPKc { @w[tid] = nsecs; }
 uretprobe:@LIBS@/libui.so:_ZN7android5Fence11waitForeverEPKc /@w[tid]/ { @fence_waitForever_us[pid] = avg((nsecs - @w[tid]) / 1000); @fence_waitForever_max_us[pid] = max((nsecs - @w[tid]) / 1000); }
+// a producer's queueBuffer served in the consumer's process (the window sink: SurfaceFlinger's composition of the window waits for it)
+uprobe:@LIBS@/libgui.so:_ZN7android19BufferQueueProducer11queueBufferEiRKNS_22IGraphicBufferProducer16QueueBufferInputEPNS1_17QueueBufferOutputE { @q[tid] = nsecs; }
+uretprobe:@LIBS@/libgui.so:_ZN7android19BufferQueueProducer11queueBufferEiRKNS_22IGraphicBufferProducer16QueueBufferInputEPNS1_17QueueBufferOutputE /@q[tid]/ {
+    @queueBuffer_us[pid] = avg((nsecs - @q[tid]) / 1000); @queueBuffer_max_us[pid] = max((nsecs - @q[tid]) / 1000); }
 uprobe:@NATIVE@/libapklayer-hal-graphics.so:apklayer_display_present {
     if (@lastp[pid]) { @present_interval_ms[(uint64)pid] = lhist((nsecs - @lastp[pid]) / 1000000, 0, 40, 2); }
     @lastp[pid] = nsecs; @presents[pid] = count(); }
 uprobe:@NATIVE@/libapklayer-hal-graphics.so:apklayer_display_request_vsync { @vsync_requests[pid] = count(); }
-END { clear(@lastvs); clear(@c); clear(@g); clear(@w); clear(@lastp); }
+END { clear(@lastvs); clear(@c); clear(@g); clear(@w); clear(@q); clear(@lastp); }
