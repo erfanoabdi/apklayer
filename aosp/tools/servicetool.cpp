@@ -109,8 +109,7 @@ extern "C" int main(int argc, char** argv) {
         int32_t value = reply.dataAvail() >= sizeof(int32_t) ? reply.readInt32() : 0;
         printf("reply: %d\n", value);
         return value;  // the exit status: the reply's first int after its exception header
-    } else if (!strcmp(cmd, "bench") && argc > 3 && !strcmp(argv[2], "serve")) {  // bench serve NAME [THREADS]
-        ProcessState::self()->setThreadPoolMaxThreadCount(argc > 4 ? atoi(argv[4]) : 4);
+    } else if (!strcmp(cmd, "bench") && argc > 3 && !strcmp(argv[2], "serve")) {  // bench serve NAME: libbinder's default thread pool
         status_t st = sm->addService(String16(argv[3]), sp<BenchService>::make());
         printf("bench serve %s: %d\n", argv[3], st);
         fflush(stdout);
@@ -121,7 +120,7 @@ extern "C" int main(int argc, char** argv) {
         if (b == nullptr) { printf("%s: not found\n", argv[3]); return 1; }
         return benchRun(b, atoi(argv[4]), atoi(argv[5]), argc > 6 ? atoi(argv[6]) : 1, argc > 7 ? argv[7] : "call");
     } else {
-        fprintf(stderr, "usage: servicetool list | check NAME | wait NAME | dump NAME [args] | add NAME [--stay] | call NAME CODE DESCRIPTOR [s16 STR | i32 N | binder null]... | bench serve NAME [THREADS] | bench run NAME COUNT SIZE [THREADS] [call|echo|oneway]\n");
+        fprintf(stderr, "usage: servicetool list | check NAME | wait NAME | dump NAME [args] | add NAME [--stay] | call NAME CODE DESCRIPTOR [s16 STR | i32 N | binder null]... | bench serve NAME | bench run NAME COUNT SIZE [THREADS] [call|echo|oneway]\n");
         return 2;
     }
     return 0;
