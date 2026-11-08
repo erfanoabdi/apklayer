@@ -19,8 +19,12 @@ out=$APKLY_STATE/camera-pipewire.out
 bin/apklayer stop >/dev/null 2>&1
 trap 'kill $fixture 2>/dev/null; bin/apklayer stop >/dev/null 2>&1; bin/apklayer providers unset camera >/dev/null' EXIT
 bin/apklayer providers set camera pipewire >/dev/null
-APKLAYER_JOPTS="-Dapklayer.runms=25000" bin/apklayer run hello.camera > $out 2>&1 || true
-grep -a "\[cam\]" $out
-bin/apklayer stop >/dev/null 2>&1
-# the frames are the fixture's SMPTE bars, not the fake's: a YUV frame of the asked size is enough
-grep -aq "\[cam\] opened" $out && grep -aq "\[cam\] yuv .* 640x480" $out
+# the provider numbers the cameras in the backend's listing order (a host with real cameras lists them too)
+id_of() { echo "$list" | grep '^camera ' | grep -n " \"$1\" " | cut -d: -f1 | awk '{print $1 - 1}'; }
+for cam in apklayer-test-camera apklayer-test-mjpeg; do
+    APKLAYER_JOPTS="-Dapklayer.runms=25000 -Dhello.id=$(id_of $cam)" bin/apklayer run hello.camera > $out.$cam 2>&1 || true
+    grep -a "\[cam\]" $out.$cam
+    bin/apklayer stop >/dev/null 2>&1
+    # the frames are the fixture's SMPTE bars, not the fake's: a YUV frame of the asked size, not black (the MJPEG one: decoded by the provider)
+    grep -aq "\[cam\] opened $(id_of $cam)" $out.$cam && grep -a "\[cam\] yuv .* 640x480" $out.$cam | grep -qv "640x480\( 16/128/128\)*$" || { echo "FAIL $cam in the app"; exit 1; }
+done
