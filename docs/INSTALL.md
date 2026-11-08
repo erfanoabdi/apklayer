@@ -161,17 +161,22 @@ which detaches the driver until the device is plugged in again); blacklisting th
 With the sandbox every app process runs as its own uid (Android's app uid, taken from your `/etc/subuid` range) in a user namespace per
 instance, with Android's groups. It sees its own data and what Android's `/data` shows an app, never the other apps' data, the system's state
 (keystore2's database) or your home; a file reaches it through the file picker (only the one chosen), and `apklayer home-access <package> on`
-gives an app your home (as far as the files' permissions for others allow: the app's uid is not yours). Location (GeoClue) and Bluetooth (BlueZ)
-go through `apklayerd`, which runs as you.
+gives an app your home. Location (GeoClue), Bluetooth (BlueZ) and the hub's desktop notifications go through `apklayerd`, which runs as you. So
+does what the app's uid may not open but you may (its file broker): GPU device nodes that only your seat's ACL or a group opens (`/dev/dri/*`,
+NVIDIA's `/dev/nvidia*`, `/dev/kfd`), the app's own log, and with home access the files, folders, renames and deletions in your home that their
+permissions close to others.
 
 - The deb sets the host up at install: the AppArmor profile that lets apklayer make user namespaces (Ubuntu 23.10+ restricts them), GPU render
   nodes usable by app uids (`/usr/lib/udev/rules.d/70-apklayer-render.rules`), `uidmap`. A source tree: `sudo sh tools/host-setup/sandbox.sh` once.
 - Your user needs 65536 subordinate ids: `grep $USER /etc/subuid /etc/subgid`; without a line,
   `sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USER`.
 - Opt-in: `APKLAYER_SANDBOX=1` for your session in `~/.config/environment.d/60-apklayer.conf` (0.4.5 turned it on by default where the host was
-  set up; 0.4.6 made it opt-in again: on NVIDIA's driver and on deb installs it broke apps). `systemctl --user enable apklayerd` starts the
+  set up; 0.4.6 made it opt-in again: on NVIDIA's driver and on deb installs it broke apps; both are addressed since 2026-11-08, NVIDIA not yet
+  confirmed on real hardware: Troubleshooting below). `systemctl --user enable apklayerd` starts the
   daemon at login (else it starts on demand). `apklayer stop` before switching.
 - An app's data becomes its uid's at its first sandboxed start and yours again when it runs without the sandbox.
+- A source tree on a machine where you cannot use sudo yourself: the owner runs
+  `sudo sh tools/host-setup/sandbox.sh <tree>/b/cli/apklayer` once (the profile names that exact binary).
 
 ## 9. Troubleshooting
 
@@ -181,6 +186,16 @@ go through `apklayerd`, which runs as you.
 - "the shell did not listen": no Wayland session (`echo $WAYLAND_DISPLAY`); apklayer does not run on X11 or a text console.
 - An app that closes at once: its log names the cause; `bin/apklayer info <package>` shows what was installed. Converted classes are cached: after an
   apklayer update that changed dex2jvm, install the app again.
+- Apps draw with software (llvmpipe) only with the sandbox on (`APKLAYER_SANDBOX=1`), on NVIDIA or any GPU: send these to the developers.
+  1. `ls -l /dev/dri /dev/nvidia*` and `getfacl /dev/nvidia* /dev/dri/renderD*`; `grep -r NVreg_DeviceFile /etc/modprobe.d /lib/modprobe.d`
+     (Debian makes NVIDIA's nodes 0660 group video; app uids reach them only through apklayerd's broker).
+  2. `grep broker $XDG_RUNTIME_DIR/apklayer/apklayerd.log`: every GPU node an app asked for, opened or refused (and why).
+  3. The app's renderer: `APKLAYER_LOGCAT=1 apklayer run <package> 2>&1 | grep -m1 "GL version"`, once with `APKLAYER_SANDBOX=1` and once with 0.
+     `llvmpipe` only sandboxed means NVIDIA's EGL did not start in the app's view and glvnd fell back to Mesa.
+  4. `ls /dev/nvidia-modeset /dev/nvidia-uvm`: a node that does not exist yet is made by the setuid `nvidia-modprobe`, which the sandbox cannot run
+     (no new privileges); opening any GL app outside the sandbox once makes it.
+  5. `env | grep -E "__EGL|VK_|LIBGL|GBM"` and `ls ~/.local/share/glvnd ~/.local/share/vulkan 2>/dev/null`: driver files in your home are bound into
+     the app's view from these; a path elsewhere that is hidden (/tmp) is not.
 - Wrong paths: the CLI reads `~/.config/apklayer/env` for every variable not set in the environment; `bin/apklayer env` prints what it uses.
 
 ## 10. Uninstall

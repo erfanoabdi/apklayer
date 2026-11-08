@@ -8,6 +8,31 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
   linux/android/binder.h in bridge/compat/include, used when the kernel headers lack it (Sailfish OS 5.0: 3.18; apklayer-binderd, binder_route.c);
   btload links threads (pthread_getcpuclockid is in libpthread before glibc 2.34). tools/release/sailfish-rpm.sh builds; the RPM on the phone:
   `apklayer --version` 0.4.7, UiBench draws (sf-run.py, SurfaceFlinger screenshot of its list).
+## 2026-11-08: the per-app sandbox toward the default again (branch of the sandbox agent; the default stays opt-in)
+- Deb installs: every sandboxed app failed with `cannot run .../runtime/current/jdk/bin/java`: the view emptied `<data home>/apklayer` after binding
+  the runtime that a deb keeps inside it (source trees keep it outside, so the VM groups never saw it). Now bound after. Sandboxed apps' own
+  `android.util.Log` lines were lost (their app log is the user's 0600 file in a read-only state dir); host shader caches (Mesa's, NVIDIA's) go
+  to the app's own `cache/host`.
+- apklayerd's file broker (cli/broker.cpp, bridge/native/broker.c): what the app's uid is refused (EACCES) but the user may do, apklayerd does as
+  the user and hands over the fd: GPU nodes (`/dev/dri/*`, `/dev/nvidia*`, `/dev/kfd`, `/dev/dxg`; each logged in apklayerd.log) for any
+  sandboxed app, its own app log, and for apps with home access open/opendir/stat/fopen/mkdir/unlink/rmdir/rename/access in the home (never
+  apklayer's own trees there, never through a link as the last name). Relative paths of the *at forms are made absolute from the fd first.
+  Rootless (the idmapped mounts it replaces need root); also gives DocumentsUI's Home root the files closed to "other".
+- The app view binds what the host's GL/Vulkan/VA/OpenCL loaders name in hidden places (their variables, the user's and XDG_DATA_DIRS' ICD and
+  vendor directories, each manifest's `library_path`): driver-agnostic, for NVIDIA's files in a home too.
+- The hub's desktop notifications run through apklayerd (`apklayer portal bus`, Notify/CloseNotification and their signals only): the session bus
+  refused the namespace's uid 1000 when the user's uid is another.
+- A launch with an intent file takes the app's spare (the file's text goes as `APKLAYER_INTENT_TEXT`); the spare's key names `home-access`.
+- Checks (Parallels, arm64): with `/dev/dri/renderD128` closed to app uids (0660 + the seat's ACL, as Debian's NVIDIA nodes) group gpu passes
+  sandboxed through the broker. A deb built from the branch (0.4.7+sbx3), installed, `apklayer setup --bundle` in a fresh data home: UiBench
+  and F-Droid run sandboxed (own uids, drawn, F-Droid updating its repositories); the owner's 0.4.7~git20261108 deb was put back after. Groups
+  activities services broadcasts providers pendingintents notifications binder files keystore gpu gpu-window webview push sandbox permissions:
+  all pass unsandboxed and sandboxed (webview failed once sandboxed beside another group, cookie null; passed on 3 reruns). Not run: the x86 PC
+  (AppArmor restricts user namespaces there and no profile exists: the owner runs `sudo sh tools/host-setup/sandbox.sh
+  ~/apklayer-x86/<dir>/repo/b/cli/apklayer` once), an NVIDIA host (tester offline: docs/INSTALL.md Troubleshooting lists what to check).
+- Tests: group sandbox checks the broker (a seat-ACL GPU node, a private file, folder listing, write, mkdir, rename, delete, access), an
+  intent-file launch from the spare; webview's profile check uses sandbox-exec (no sudo); tests/run takes binder devices made once by hand on a
+  VM without passwordless sudo.
 
 ## 2026-11-08: userspace binder prototype (docs/BINDER.md, branch userspace-binder)
 - docs/PLAN.md "Plan: binder in userspace" steps 1-2. `apklayer-binderd` (bridge/binderd): the binder driver model written from Linux's binder.c (v6.6),

@@ -20,8 +20,11 @@ final class DesktopNotifications {
 
     private static String quote(String text) { return "'" + text.replace("\\", "\\\\").replace("'", "\\'") + "'"; }
 
+    /** In the sandbox through apklayerd as the user (`apklayer portal bus`): the bus knows the namespace's uid 1000 only when it is the user's own. */
     private static ProcessBuilder tool(String... command) {
-        ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true);
+        List<String> line = new ArrayList<>(List.of(command));
+        if ("1".equals(System.getenv("APKLAYER_SANDBOX"))) line.addAll(0, List.of(System.getProperty("apklayer.cli"), "portal", "bus"));
+        ProcessBuilder builder = new ProcessBuilder(line).redirectErrorStream(true);
         if (System.getenv("DBUS_SESSION_BUS_ADDRESS") == null && System.getenv("XDG_RUNTIME_DIR") != null)
             builder.environment().put("DBUS_SESSION_BUS_ADDRESS", "unix:path=" + System.getenv("XDG_RUNTIME_DIR") + "/bus");
         return builder;

@@ -79,7 +79,7 @@ void forward(int sig) { if (forwardTo > 0) kill(forwardTo, sig); }
 
 // A launch's own environment, which the runtime reads after its target: a spare gets it with the target (spare_target.c sets it, Java reads
 // -Dapklayer.env.<name>), a cold JVM in its environment. Neither in the key nor in the spare's own environment.
-const std::set<std::string> kLaunchEnv = {"APKLAYER_INTENT_FILE", "APKLAYER_RESULT_FILE", "APKLAYER_COMPONENT_HOST", "APKLAYER_ISOLATED"};
+const std::set<std::string> kLaunchEnv = {"APKLAYER_INTENT_FILE", "APKLAYER_INTENT_TEXT", "APKLAYER_RESULT_FILE", "APKLAYER_COMPONENT_HOST", "APKLAYER_ISOLATED"};
 // What differs from launch to launch and the runtime never reads: the JOPTS (in argv, but the launch's own late ones), a desktop launcher's
 // activation token, pipes of the process that started the launch (the hub's ready pipe, a launch's started pipe), the login session's and the shell's bookkeeping
 const std::set<std::string> kIgnoredEnv = {"APKLAYER_JOPTS", "XDG_ACTIVATION_TOKEN", "DESKTOP_STARTUP_ID", "APKLAYER_HUB_READY_FD", "APKLAYER_STARTED_FD",
@@ -124,7 +124,8 @@ std::string appSpareKey(const Layout& l, const Instance& inst, const std::vector
     for (const std::string& path : {l.hostClasses(), join(l.native, "native-runtime.jar"), join(l.native, "aosp/Robolectric_all.jar"),
                                     join(l.native, "aosp/android-all-instrumented"), l.native, l.bionic, l.androidLibs, l.cliBinary()})
         key += stamp(path);
-    if (!sandboxPackage.empty()) key += "sandboxed as " + sandboxPackage + "\n";
+    // and its view: one made before `home-access` changed is not this launch's
+    if (!sandboxPackage.empty()) key += "sandboxed as " + sandboxPackage + (homeAccess(l, inst, sandboxPackage) ? " with the home" : "") + "\n";
     return key + readFile(inst.pidFile()).value_or("");
 }
 

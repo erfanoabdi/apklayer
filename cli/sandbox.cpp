@@ -3,6 +3,7 @@
 #include "daemon.h"
 #include "linux_compat.h"
 #include "flatpak.h"
+#include "logs.h"
 #include "halium.h"
 
 #include <algorithm>
@@ -118,6 +119,39 @@ int openStorageDir(const char* path, const struct stat* st, int type, FTW*) {
 
 bool under(const std::string& path, const std::string& dir) { return path == dir || path.rfind(dir + "/", 0) == 0; }
 
+// What the host's GL, Vulkan, VA and OpenCL loaders read besides /usr and /etc, driver-agnostic: the files and directories their variables name,
+// the user's and XDG_DATA_DIRS' ICD and vendor directories, and each manifest's library_path (a driver installed into the home, NVIDIA's
+// egl-wayland or a Vulkan layer in ~/.local). The caller keeps what lies in a hidden directory.
+std::vector<std::string> graphicsFiles(const Layout& l) {
+    std::vector<std::string> out, dirs;
+    for (const char* var : {"__EGL_VENDOR_LIBRARY_FILENAMES", "__EGL_VENDOR_LIBRARY_DIRS", "__EGL_EXTERNAL_PLATFORM_CONFIG_FILENAMES", "__EGL_EXTERNAL_PLATFORM_CONFIG_DIRS",
+                            "VK_ICD_FILENAMES", "VK_DRIVER_FILES", "VK_ADD_DRIVER_FILES", "VK_LAYER_PATH", "VK_ADD_LAYER_PATH", "LIBGL_DRIVERS_PATH",
+                            "GBM_BACKENDS_PATH", "LIBVA_DRIVERS_PATH", "OCL_ICD_VENDORS", "OCL_ICD_FILENAMES"})
+        for (const std::string& entry : split(getenvOr(var, ""), ':'))
+            if (!entry.empty() && entry[0] == '/') (isDir(entry) ? dirs : out).push_back(entry);
+    std::vector<std::string> roots = {l.dataHome, getenvOr("XDG_CONFIG_HOME", join(homeDir(), ".config"))};
+    for (const std::string& d : split(getenvOr("XDG_DATA_DIRS", "/usr/local/share:/usr/share"), ':')) if (!d.empty()) roots.push_back(d);
+    for (const std::string& r : roots)
+        for (const char* sub : {"vulkan/icd.d", "vulkan/implicit_layer.d", "vulkan/explicit_layer.d", "glvnd/egl_vendor.d", "egl/egl_external_platform.d"})
+            if (isDir(join(r, sub))) dirs.push_back(join(r, sub));
+    std::vector<std::string> manifests;
+    for (const std::string& d : dirs) {
+        out.push_back(d);
+        for (const std::string& name : listDir(d)) manifests.push_back(join(d, name));
+    }
+    for (const std::string& f : out) if (f.size() > 5 && f.substr(f.size() - 5) == ".json") manifests.push_back(f);
+    for (const std::string& m : manifests) {
+        std::string text = readFile(m).value_or("");
+        size_t key = text.find("\"library_path\""), colon = key == std::string::npos ? key : text.find(':', key);
+        size_t open = colon == std::string::npos ? colon : text.find('"', colon), close = open == std::string::npos ? open : text.find('"', open + 1);
+        if (close == std::string::npos) continue;
+        std::string lib = text.substr(open + 1, close - open - 1);
+        if (lib.find('/') == std::string::npos) continue;  // a bare name: found through the library path, which is bound already
+        out.push_back(lib[0] == '/' ? lib : join(dirName(realPath(m)), lib));
+    }
+    return out;
+}
+
 // One step of an app's mount view, in order: a tmpfs, a clone of the host's tree (taken before anything is covered) moved to the same path, or a
 // directory of the app's own made inside a tmpfs, or a symbolic link of the host's again in a tmpfs
 struct Step {
@@ -163,17 +197,6 @@ void apply(const std::vector<Step>& steps) {
     }
 }
 
-std::string homeAccessFile(const std::string& root) { return join(root, "home-access"); }  // an instance's packages granted the user's home, one per line
-
-// The user's grant, or a system app that manages all storage (ExternalStorageProvider, whose Home root DocumentsUI shows: the picker hands one file on)
-bool homeAccess(const Layout& l, const Instance& inst, const std::string& package) {
-    for (const std::string& p : split(readFile(homeAccessFile(inst.root)).value_or(""), '\n')) if (p == package) return true;
-    std::string info = join(appDir(l, package), "info.properties");
-    if (property(info, "system") != "true") return false;
-    for (const std::string& p : split(property(info, "permissions"), ';')) if (p == "android.permission.MANAGE_EXTERNAL_STORAGE") return true;
-    return false;
-}
-
 // What an app process sees: its own data, the instance's shared storage and /data, the runtime read-only; the user's home, /tmp and runtime directory
 // are empty tmpfs, the other apps' data is not there. Everything at the host's paths, so no path changes.
 
@@ -187,16 +210,23 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
     for (const char* var : {"LD_LIBRARY_PATH", "BIONIC_LD_LIBRARY_PATH", "LD_PRELOAD", "APKLAYER_HOST_LIBS"})
         for (const std::string& entry : split(getenvOr(var, ""), ':'))
             if (!entry.empty() && entry[0] == '/') shared.push_back(isDir(entry) ? entry : dirName(entry));
+    for (const std::string& entry : graphicsFiles(l)) shared.push_back(isDir(entry) ? entry : dirName(entry));
     // what the runtime links to elsewhere (a Meson install links the prebuilts' jars and Android libraries into its native dir)
     for (const std::string& dir : {l.native, join(l.native, "aosp")})
         for (const std::string& name : listDir(dir)) {
             std::string target = realPath(join(dir, name));
             if (!target.empty() && !under(target, realPath(dir))) shared.push_back(isDir(target) ? target : dirName(target));
         }
+    // what holds every instance's and app's data: emptied below, then only this instance's parts; the runtime of a deb install lies inside
+    // (<data home>/apklayer/runtime) and is bound again after that
+    std::vector<std::string> all;
+    for (const std::string& a : {join(realPath(l.dataHome), "apklayer"), join(realPath(l.stateHome), "apklayer"), runtime})
+        if (isDir(a)) all.push_back(a);
+    auto inAll = [&](const std::string& p) { return std::any_of(all.begin(), all.end(), [&](const std::string& a) { return under(p, a); }); };
     std::vector<std::string> ro;
     for (const std::string& p : shared) {
         std::string r = realPath(p);
-        if (!r.empty() && exists(r) && isHidden(r) && !under(home, r)) ro.push_back(r);
+        if (!r.empty() && exists(r) && (isHidden(r) || inAll(r)) && !under(home, r)) ro.push_back(r);
     }
     std::sort(ro.begin(), ro.end());
     std::vector<Step> steps;
@@ -232,9 +262,13 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
         for (const std::string& s : shut) steps.push_back({Step::Tmpfs, s});
         ro.push_back(home);
     }
-    std::string last;
-    for (const std::string& r : ro)
-        if (r != home && (last.empty() || !under(r, last))) { bind(r, r, false); last = r; }
+    auto bindShared = [&](bool late) {
+        std::string last;
+        for (const std::string& r : ro)
+            if (r != home && inAll(r) == late && (last.empty() || !under(r, last))) { bind(r, r, false); last = r; }
+    };
+    bindShared(false);
+    std::vector<Step> lateLinks;
     // the runtime is bound at its real paths: a link on the way to one in a hidden directory (~/apklayer -> ~/apklayer-m1, through which the JDK
     // image's java and the class path are named) again, as on the host; before a mount point made through one would make it a directory
     std::vector<std::string> named = shared;
@@ -246,13 +280,14 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
             struct stat st{};
             char target[4096];
             ssize_t n;
-            if (isHidden(prefix) && lstat(prefix.c_str(), &st) == 0 && S_ISLNK(st.st_mode) && (n = readlink(prefix.c_str(), target, sizeof target - 1)) > 0)
-                steps.push_back({Step::Link, prefix, -1, false, (uid_t)-1, std::string(target, n)});
+            if ((isHidden(prefix) || inAll(prefix)) && lstat(prefix.c_str(), &st) == 0 && S_ISLNK(st.st_mode) && (n = readlink(prefix.c_str(), target, sizeof target - 1)) > 0)
+                (inAll(prefix) ? lateLinks : steps).push_back({Step::Link, prefix, -1, false, (uid_t)-1, std::string(target, n)});
         }
-    // what holds every instance's and app's data, where such a tree has it inside (a source tree with its tests' data): empty again,
-    // then only this instance's parts
-    for (const std::string& all : {join(realPath(l.dataHome), "apklayer"), join(realPath(l.stateHome), "apklayer"), runtime})
-        if (isDir(all)) steps.push_back({Step::Tmpfs, all});  // also where no hidden directory holds them (a data home on another disk)
+    // empty again where a bound tree has them inside (a source tree with its tests' data), also where no hidden directory holds them (a data
+    // home on another disk)
+    for (const std::string& a : all) steps.push_back({Step::Tmpfs, a});
+    bindShared(true);
+    steps.insert(steps.end(), lateLinks.begin(), lateLinks.end());
     for (const std::string& own : {l.appsDir, inst.stateDir, inst.root}) bind(realPath(own), own, false);
     std::string data = realPath(appDataDir(l, inst, package)), tmp = join(inst.tmpDir(), "sandbox-" + std::to_string(uid));
     makeDirs(tmp);
@@ -277,6 +312,23 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
     return steps;
 }
 }  // namespace
+
+static std::string homeAccessFile(const std::string& root) { return join(root, "home-access"); }  // an instance's packages granted the user's home, one per line
+
+// The user's grant, or a system app that manages all storage (ExternalStorageProvider, whose Home root DocumentsUI shows: the picker hands one file on)
+bool homeAccess(const Layout& l, const Instance& inst, const std::string& package) {
+    for (const std::string& p : split(readFile(homeAccessFile(inst.root)).value_or(""), '\n')) if (p == package) return true;
+    std::string info = join(appDir(l, package), "info.properties");
+    if (property(info, "system") != "true") return false;
+    for (const std::string& p : split(property(info, "permissions"), ';')) if (p == "android.permission.MANAGE_EXTERNAL_STORAGE") return true;
+    return false;
+}
+
+uid_t appUidOf(uid_t hostUid) {
+    Range u = subordinate("/etc/subuid");
+    long n = std::min(u.count, 65536L);
+    return u.count && (long)hostUid >= u.start && (long)hostUid < u.start + n ? (uid_t)(kFirstAppUid + hostUid - u.start) : (uid_t)-1;
+}
 
 // Why this host cannot run the sandbox ("" when it can): subordinate ids, newuidmap/newgidmap, and where Ubuntu restricts unprivileged user
 // namespaces the AppArmor profile for this binary (tools/host-setup/sandbox.sh, the deb's postinst)
@@ -376,6 +428,12 @@ int sandboxExec(const Layout& l, const Instance& inst, const std::vector<std::st
             if (chown(moved.c_str(), uid, uid) != 0) die("cannot give the intent file to the app");
             setenv("APKLAYER_INTENT_FILE", moved.c_str(), 1);
         }
+        // what the app's uid may not open but the user may hand it (GPU nodes, the granted home): apklayerd's broker (cli/broker.cpp, bridge/native/broker.c)
+        if (exists(daemonSocket(l))) setenv("APKLAYER_BROKER", daemonSocket(l).c_str(), 1);
+        if (homeAccess(l, inst, package)) setenv("APKLAYER_BROKER_HOME", realPath(homeDir()).c_str(), 1);
+        setenv("APKLAYER_BROKER_LOG", appLogPath(inst, package).c_str(), 1);
+        // the host's shader caches (Mesa's, NVIDIA's under XDG_CACHE_HOME) in the app's own cache: the user's cache is not in the view
+        setenv("XDG_CACHE_HOME", join(data, "cache/host").c_str(), 1);
         if (chdir(dir.c_str()) != 0 && chdir("/") != 0) die("no working directory in the sandbox");  // by path again: the old one is a handle into the hidden tree
         std::vector<gid_t> groups = appGroups(l, package, uid);  // never the user's own groups (1000 and the unmapped ones)
         if (setgroups(groups.size(), groups.data()) != 0 || setresgid(uid, uid, uid) != 0 || setresuid(uid, uid, uid) != 0) die("cannot become uid " + std::to_string(uid));

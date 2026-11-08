@@ -1,4 +1,5 @@
 #include "daemon.h"
+#include "broker.h"
 #include "apps.h"
 #include "sandbox.h"
 
@@ -114,7 +115,7 @@ std::string selfExe() {
 }
 
 // Starts the request's command as a child (the client's fds, environment and directory; a sandboxed app's command with the daemon's own
-// environment): its pid, or 0 when the request is refused.
+// environment): its pid, 0 when the request is refused, -1 for a broker request (answered and closed).
 int startRequest(const Layout& l, int conn, const std::string& exe, const sigset_t& oldMask) {
     std::vector<int> fds;
     std::string message = receive(conn, &fds);
@@ -122,6 +123,12 @@ int startRequest(const Layout& l, int conn, const std::string& exe, const sigset
     for (size_t at = 0; at < message.size();) { size_t end = message.find('\0', at); if (end == std::string::npos) break; f.push_back(message.substr(at, end - at)); at = end + 1; }
     ucred peer{};
     socklen_t len = sizeof peer;
+    if (brokerRequest(f)) {  // the file broker (cli/broker.cpp): answered here, the connection closed
+        for (int fd : fds) close(fd);
+        if (getsockopt(conn, SOL_SOCKET, SO_PEERCRED, &peer, &len) == 0) brokerAnswer(l, conn, f, peer, instanceOf(l, peer.pid));
+        close(conn);
+        return -1;
+    }
     size_t argc = f.empty() ? 0 : strtoul(f[0].c_str(), nullptr, 10);
     if (fds.size() != 3 || getsockopt(conn, SOL_SOCKET, SO_PEERCRED, &peer, &len) != 0 || f.size() < argc + 2) { for (int fd : fds) close(fd); return 0; }
     std::vector<std::string> args(f.begin() + 1, f.begin() + 1 + argc);
@@ -195,7 +202,7 @@ int runDaemon(const Layout& l, bool onDemand) {
             int conn = accept4(listener, nullptr, nullptr, SOCK_CLOEXEC);
             int child = conn >= 0 ? startRequest(l, conn, exe, oldMask) : 0;
             if (child > 0) connOf[child] = conn;
-            else if (conn >= 0) { sendMessage(conn, "exit 126"); close(conn); }
+            else if (conn >= 0 && child == 0) { sendMessage(conn, "exit 126"); close(conn); }
         }
         for (size_t i = 2; i < fds.size(); i++) {
             if (!(fds[i].revents & (POLLIN | POLLHUP))) continue;
