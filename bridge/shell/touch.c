@@ -22,6 +22,7 @@ static void t_down(void *d, struct wl_touch *t, uint32_t serial, uint32_t time,
     (void)d; (void)t; (void)time;
     last_input_serial = serial;
     struct window *w = window_for_surface(sf);
+    if (debug_input) fprintf(stderr, "[shell] touch down %d at %d,%d on %s\n", id, wl_fixed_to_int(x), wl_fixed_to_int(y), w ? w->title : "no window");
     if (!w || sf == w->decor.surface) return; /* title bar touches are not forwarded */
     if (sf == w->nav.surface) {  /* the navigation bar: its button acts when the finger lifts */
         if (nav_window) return;
