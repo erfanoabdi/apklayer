@@ -1,6 +1,6 @@
 # Installing apklayer
 
-Released versions come as a deb (Ubuntu 24.04, Debian 13; arm64): `sudo apt install ./apklayer_*.deb` from the latest GitHub Release, then open apklayer-manager (`docs/RELEASES.md`). This page builds from source.
+Released versions come as a deb (Ubuntu 24.04, Debian 13; arm64): `sudo apt install ./apklayer_*.deb` from the latest GitHub Release, then open apklayer-manager (`docs/RELEASES.md`), or as a Flatpak for any distribution (section "Flatpak" at the end). This page builds from source.
 
 Step by step, from a fresh Linux machine to an Android app in a window. Tested on Ubuntu 24.04 arm64 (a Parallels VM, GNOME Wayland, Mesa virgl), 2026-11-04, from a fresh clone.
 x86_64 has its own prebuilts but was never run on a real PC (`docs/X86_64.md`); the steps below are written for arm64.
@@ -200,3 +200,45 @@ installed and offers Install, Update (nothing is downloaded beyond the repositor
 Setup needs no root: what does (binderfs and the instances' binder devices) the package does at install and at every boot (`apklayer-binder.service`).
 Ubuntu Touch (Halium phones): docs/HALIUM.md "The apt install on the phone"; "Choose file…" and Share to apklayer go through Lomiri Content Hub
 (docs/HALIUM.md "Choosing and sharing files on Ubuntu Touch").
+
+## Flatpak
+
+**Not yet built or run end to end (2026-11-08): see docs/PLAN.md "Flatpak".** The release's `apklayer-<version>-<cpu>.flatpak` (aarch64, x86_64; app id `io.github.erfanoabdi.Apklayer`, runtime `org.freedesktop.Platform` 26.08 from Flathub):
+
+```sh
+flatpak install --user apklayer-*-aarch64.flatpak
+flatpak run io.github.erfanoabdi.Apklayer                               # the manager (also "Apklayer" in the app menu)
+alias apklayer='flatpak run --command=apklayer io.github.erfanoabdi.Apklayer'   # the CLI
+```
+
+**Binder is a host step.** A Flatpak cannot load kernel modules or mount file systems, so binderfs must exist on the host before the app starts.
+Run the app's own script on the host as root, once per boot (it loads binder_linux, mounts `/dev/binderfs`, makes the default instance's devices and those named):
+
+```sh
+sudo sh "$(flatpak info --show-location io.github.erfanoabdi.Apklayer)/files/share/apklayer/tools/host-setup/binder.sh" [instance...]
+```
+
+`apklayer setup` (the manager's first-run screen) and the manager's binder button print this command with the path filled in when `/dev/binderfs` is
+missing. For every boot, install the deb's unit (`debian/apklayer.apklayer-binder.service`) with `ExecStart` pointing at a copy of that script.
+The Android runtime bundle is downloaded per user by `apklayer setup`, as with the deb (not a Flatpak extension: the bundle has its own version and
+release cycle, `tools/release/versions`, and updates without a new Flatpak).
+
+Permissions (`finish-args` in `flatpak/io.github.erfanoabdi.Apklayer.yml`) and why:
+
+| Permission | Why |
+|---|---|
+| `--device=all` | the host's `/dev/binderfs` (Flatpak has no grant for single binder nodes), GPU render nodes, cameras, input and USB devices; `--device=dri` would cover only the GPU |
+| `--socket=wayland`, `--share=ipc` | apps' windows and the manager (Wayland only, no X11) |
+| `--socket=pulseaudio`, `--filesystem=xdg-run/pipewire-0` | the audio backends (`apklayer providers`) and PipeWire cameras |
+| `--share=network` | apps' internet, `apklayer setup`'s downloads |
+| `--allow=bluetooth`, `--system-talk-name=org.bluez`, `--system-talk-name=org.freedesktop.GeoClue2`, `--talk-name=org.freedesktop.Notifications` | Bluetooth, location, notifications |
+| `--filesystem=xdg-data/applications:create`, `xdg-data/desktop-directories:create`, `xdg-config/menus:create` | launchers of installed apps and the Apklayer submenu, written at the host's paths (as Bottles does; the dynamic launcher portal asks the user once per app and is a later option) |
+
+Different from the deb: data, logs and the runtime live under `~/.var/app/io.github.erfanoabdi.Apklayer/`; the per-app sandbox (`APKLAYER_SANDBOX=1`)
+cannot run (Flatpak's seccomp filter refuses nested user namespaces and `newuidmap` is not setuid inside); an app's full home access needs
+`flatpak override --user --filesystem=home io.github.erfanoabdi.Apklayer`; `apklayer instance autostart` (systemd user units) and the `.apk` file
+association are not available.
+
+Build it: `sh flatpak/build.sh <prebuilts checkout> <out dir> [version]` (needs flatpak and flatpak-builder; it joins split prebuilts and installs the
+SDK and openjdk21 extension from Flathub). The build fetches what the deb's build fetches (the bionic_translation wrap, `deps.lock`, Slint) with
+network on; Flathub itself would need those as pinned sources.

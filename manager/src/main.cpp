@@ -361,6 +361,11 @@ private:
             // binderfs devices need root: polkit asks the desktop user for the password (pkexec), the command is in the dialog otherwise. Ubuntu Touch
             // has polkit and Lomiri's agent but no pkexec: the instance's line in /etc/apklayer/instances is the way there (cli/binder.cpp)
             std::string script = root_ + "/tools/host-setup/binder.sh";
+            if (access("/.flatpak-info", F_OK) == 0) {  // the Flatpak: no root inside it, the script runs on the host from the app's deployed files
+                std::string app = manager::runProgram({"sed", "-n", "s/^app-path=//p", "/.flatpak-info"}).out;
+                message("On the host, in a terminal run sudo sh " + app.substr(0, app.find('\n')) + script.substr(4) + " " + std::string(id));
+                return;
+            }
             if (manager::runProgram({"sh", "-c", "command -v pkexec"}).status != 0) {
                 message("No password prompt (pkexec is not installed): in a terminal run sudo sh " + script + " " + std::string(id));
                 return;

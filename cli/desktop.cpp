@@ -3,6 +3,7 @@
 #include <unistd.h>
 
 #include "apps.h"
+#include "flatpak.h"
 
 namespace apklayer {
 
@@ -23,12 +24,14 @@ bool hasEntry(const std::string& info) { return !property(info, "launcher").empt
 // the "Apklayer" submenu (freedesktop menu spec, as Waydroid's X-WayDroid-App): a merge file selects the X-Apklayer-App entries
 // (the deb also installs data/apklayer.menu in /etc/xdg: the same submenu, merged by name)
 void writeMenu(const Layout& l) {
-    std::string config = getenvOr("XDG_CONFIG_HOME", join(homeDir(), ".config")), menu = join(config, "menus/applications-merged/apklayer.menu");
+    std::string config = hostXdg("XDG_CONFIG_HOME", ".config"), menu = join(config, "menus/applications-merged/apklayer.menu");
     static bool written;  // writeDesktop below calls this again: never loop when the file cannot be written
     if (written || exists(menu)) return;
     written = true;
-    makeDirs(join(l.dataHome, "desktop-directories"));
-    writeFile(join(l.dataHome, "desktop-directories/apklayer.directory"), "[Desktop Entry]\nType=Directory\nName=Apklayer\nIcon=apklayer\n");
+    std::string data = hostXdg("XDG_DATA_HOME", ".local/share");
+    makeDirs(join(data, "desktop-directories"));
+    writeFile(join(data, "desktop-directories/apklayer.directory"),
+              "[Desktop Entry]\nType=Directory\nName=Apklayer\nIcon=" + getenvOr("FLATPAK_ID", "apklayer") + "\n");  // the Flatpak's icon is named by its id
     makeDirs(join(config, "menus/applications-merged"));
     writeFile(menu, "<!DOCTYPE Menu PUBLIC \"-//freedesktop//DTD Menu 1.0//EN\"\n \"http://www.freedesktop.org/standards/menu-spec/menu-1.0.dtd\">\n"
                     "<Menu>\n <Name>Applications</Name>\n <Menu>\n  <Name>Apklayer</Name>\n  <Directory>apklayer.directory</Directory>\n"
@@ -60,9 +63,9 @@ bool inDrawer(const std::string& info) {
 
 void writeDesktop(const Layout& l, const std::string& pkg) {
     writeMenu(l);
-    std::string apps = join(l.dataHome, "applications"), info = infoFile(l, pkg), entry = join(apps, "apklayer-" + pkg + ".desktop");
+    std::string apps = join(hostXdg("XDG_DATA_HOME", ".local/share"), "applications"), info = infoFile(l, pkg), entry = join(apps, "apklayer-" + pkg + ".desktop");
     makeDirs(apps);
-    std::string cli = l.cliBinary();
+    std::string cli = hostCli(l.cliBinary());
     if (hasEntry(info))
         writeFile(entry, "[Desktop Entry]\nType=Application\nName=" + property(info, "label") + "\nComment=Android app (" + pkg + ") via apklayer\nExec=" + cli + " run " + pkg +
                              "\nIcon=" + appDir(l, pkg) + "/icon.png\nStartupWMClass=" + pkg + "\nCategories=X-Apklayer-App;\nX-Lomiri-Touch=true\n" + (inDrawer(info) ? "" : "NoDisplay=true\n"));

@@ -1,0 +1,72 @@
+# The apklayer Flatpak (docs/INSTALL.md "Flatpak"): the deb's Meson build (debian/rules) with prefix /app, the manager as the app's command,
+# the CLI as `flatpak run --command=apklayer io.github.erfanoabdi.Apklayer`. Like the deb it has no Android half: `apklayer setup` (the manager's
+# first run) downloads the per-user runtime bundle into ~/.var/app/io.github.erfanoabdi.Apklayer/data/apklayer/runtime.
+# Build: sh flatpak/build.sh <joined prebuilts checkout> <out dir> (it links flatpak/prebuilts to the checkout).
+app-id: io.github.erfanoabdi.Apklayer
+runtime: org.freedesktop.Platform
+runtime-version: '26.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.openjdk21
+command: apklayer-manager
+finish-args:
+  # windows: apklayer's shell and the manager are Wayland clients only
+  - --socket=wayland
+  - --share=ipc
+  # apps' internet, and `apklayer setup`'s downloads
+  - --share=network
+  # binder (the host's /dev/binderfs mount, binderfs cannot be mounted from inside: docs/INSTALL.md "Flatpak"), GPU render nodes, cameras,
+  # input devices and USB devices (apklayer usb). --device=dri covers only the GPU; Flatpak has no narrower grant for binder nodes
+  - --device=all
+  # audio: the PulseAudio backend through the pulse socket, the PipeWire backend through PipeWire's own
+  - --socket=pulseaudio
+  - --filesystem=xdg-run/pipewire-0
+  # Bluetooth (BlueZ, AF_BLUETOOTH sockets), location (GeoClue), notifications
+  - --allow=bluetooth
+  - --system-talk-name=org.bluez
+  - --system-talk-name=org.freedesktop.GeoClue2
+  - --talk-name=org.freedesktop.Notifications
+  # installed apps' launchers and the Apklayer submenu in the host's app menu (cli/desktop.cpp writes them at the host's XDG paths)
+  - --filesystem=xdg-data/applications:create
+  - --filesystem=xdg-data/desktop-directories:create
+  - --filesystem=xdg-config/menus:create
+  # the JDK apps run on (the openjdk21 extension's JRE, installed into /app/jre)
+  - --env=APKLAYER_NATIVE_JAVA=/app/jre/bin/java
+build-options:
+  append-path: /usr/lib/sdk/openjdk21/bin
+  env:
+    JAVA_HOME: /usr/lib/sdk/openjdk21/jvm/openjdk-21
+  # shortcut: the build fetches what debian/rules fetches (the bionic_translation wrap, deps.lock jars, manager/fetch-slint.sh); Flathub
+  # needs them as pinned sources instead
+  build-args:
+    - --share=network
+modules:
+  - name: openjdk
+    buildsystem: simple
+    build-commands:
+      - /usr/lib/sdk/openjdk21/install.sh
+
+  - name: apklayer
+    buildsystem: meson
+    builddir: true
+    config-opts:
+      - -Dprebuilts=/run/build/apklayer/flatpak/prebuilts
+      - -Dandroid_runtime=false
+    sources:
+      - type: dir
+        path: ..
+        skip: [b, inst, .flatpak-builder, flatpak/prebuilts, flatpak/build, subprojects/bionic_translation]
+      - type: dir
+        path: prebuilts
+        dest: flatpak/prebuilts
+    post-install:
+      - install -Dm644 data/apklayer.svg /app/share/icons/hicolor/scalable/apps/io.github.erfanoabdi.Apklayer.svg
+      - install -Dm644 data/apklayer-256.png /app/share/icons/hicolor/256x256/apps/io.github.erfanoabdi.Apklayer.png
+      - install -Dm644 flatpak/io.github.erfanoabdi.Apklayer.metainfo.xml -t /app/share/metainfo
+      # the manager's entry under the app id (Flatpak exports only files named after it); the deb's other entries are not exported
+      - sed -e 's/^Icon=.*/Icon=io.github.erfanoabdi.Apklayer/' data/apklayer-manager.desktop > /app/share/applications/io.github.erfanoabdi.Apklayer.desktop
+      - rm /app/share/applications/apklayer-manager.desktop /app/share/applications/apklayer-share.desktop
+      # the manager (debian/rules' second build)
+      - sh manager/fetch-slint.sh $PWD/slint
+      - meson setup manager/b manager --prefix=/app -Dlibdir=lib/apklayer -Dslint=$PWD/slint
+      - ninja -C manager/b apklayer-manager && meson install -C manager/b --no-rebuild

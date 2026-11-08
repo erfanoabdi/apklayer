@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.erfanoabdi.Apklayer</id>
+  <name>Apklayer</name>
+  <summary>Run Android apps on Linux in Wayland windows</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+  <developer id="io.github.erfanoabdi">
+    <name>Erfan Abdi</name>
+  </developer>
+  <description>
+    <p>apklayer runs Android apps (APKs) as Linux processes, each in its own Wayland window. The manager installs, opens and manages them;
+      its first run downloads the Android runtime bundle.</p>
+    <p>The host needs the binder kernel driver with binderfs mounted at /dev/binderfs (a one-time root step the manager names).</p>
+  </description>
+  <launchable type="desktop-id">io.github.erfanoabdi.Apklayer.desktop</launchable>
+  <url type="homepage">https://github.com/erfanoabdi/apklayer</url>
+  <content_rating type="oars-1.1"/>
+</component>
