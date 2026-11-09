@@ -86,6 +86,32 @@ public class Main extends Activity {
         int serverPid = r.readInt(), seenByServer = r.readInt();
         d.recycle(); r.recycle();
 
+        // SharedMemory across processes: the server's memfd arrives in the reply, mapped here; the region was sealed read-only by the server
+        d = Parcel.obtain(); r = Parcel.obtain();
+        d.writeInterfaceToken(DESCRIPTOR);
+        d.writeString("shared-memory-from-server");
+        require(echo.transact(4, d, r, 0), "transact shm");
+        r.readException();
+        android.os.SharedMemory shm = android.os.SharedMemory.CREATOR.createFromParcel(r);
+        d.recycle(); r.recycle();
+        java.nio.ByteBuffer map = shm.mapReadOnly();
+        byte[] got = new byte[shm.getSize()];
+        map.get(got);
+        String shmText = new String(got, java.nio.charset.StandardCharsets.UTF_8);
+        require("shared-memory-from-server".equals(shmText), "shared memory content " + shmText);
+        boolean sealed = false;
+        try { shm.mapReadWrite(); } catch (android.system.ErrnoException expected) { sealed = true; }
+        require(sealed, "a region sealed read-only refuses a writable mapping");
+        android.os.SharedMemory.unmap(map);
+        shm.close();
+        // and in this process: two mappings of one region see each other's writes
+        android.os.SharedMemory own = android.os.SharedMemory.create("hello-own", 4096);
+        java.nio.ByteBuffer one = own.mapReadWrite(), two = own.map(android.system.OsConstants.PROT_READ, 4000, 96);
+        one.putInt(4000, 0x5eed);
+        require(two.getInt(0) == 0x5eed, "two mappings share memory");
+        own.close();
+        System.out.println("[hello-binder-client] shm=" + shmText + " size=" + got.length);
+
         System.out.println("[hello-binder-client] reply=" + reply + " called=\"" + called + "\" serverPid=" + serverPid + " myPid=" + Process.myPid()
                 + " serverSawCaller=" + seenByServer + " callbackCaller=" + callerPid[0]);
         require(serverPid != Process.myPid(), "the server is another process");

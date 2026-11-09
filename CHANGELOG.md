@@ -25,6 +25,16 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
   (x86 PC, own tree); native (bionic suite) passes on Parallels arm64 (own lean tree, removed). Not checked: FCL on arm64 (Parallels has
   no Vulkan for the game); Flatpak's debuginfo step may strip libdl_bio's .symtab (bytehook would return 3 there).
 
+## 2026-11-09: android.os.SharedMemory is real: a memfd, mappable in the process it is sent to (docs/PLAN.md "libcore on HotSpot")
+- Robolectric's ShadowSharedMemory kept a temp file per create and mapped only its own files, so a SharedMemory from another process failed
+  ("Cannot find the backing file", and its size lookup threw). ShadowHostSharedMemory: nCreate is a memfd (Os.memfd_create, now real through the
+  runtime shim's libcore.io.Linux natives instead of Robolectric's temp file), nGetSize the descriptor's size, nSetProt without PROT_WRITE seals
+  future writes (F_SEAL_FUTURE_WRITE, libcutils' ashmem on memfd). map() cannot build libcore's DirectByteBuffer(int,long,FileDescriptor,Runnable,
+  boolean) on HotSpot: it maps the descriptor reopened through /proc/self/fd with FileChannel.map (the JDK's mapped buffer, MAP_SHARED, freed by
+  its cleaner); unmap() runs that cleaner. No new native mapping code: Os.mmap is not among the runtime's real Linux natives.
+- Test: binder (hello-binder-server/client) passes a SharedMemory written and sealed by the server; the client maps it read-only, checks the text,
+  is refused a writable mapping, and checks two mappings of its own region share memory.
+
 ## 2026-11-09: Sailfish OS (Volla Quintus): Lipstick's switcher, its close, media = device, the Back-only bar
 - Switcher: every apklayer window is the session shell's (one Wayland client, one pid), and Lipstick ties a window to its launcher entry by the
   client's pid and the entry's Exec (JollaSystemInfo.isWindowForLauncherItem, matchingPidForCommand), except for entries with
@@ -1184,7 +1194,6 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Result: built (10:20, 11 ninja steps), system/lib64/libapklayer_egl.so sha256 981c26d3ff318553449df4e5582237e02d480947c29d0de67d2e2f36afd7cd42; installed only in `~/wt/nativepath/lib64` on UTM. The two sources in `vendor/apklayer` are changed but not committed there (the next `tools/sync-aosp.sh` from main after the merge commits them).
 ### 2026-11-04 — m libapklayer_codec2 (full build of the module)
 - Why: the codec2 library rebuilt with tools/lib/orb-build-module.py for the EOS fix linked old objects without SoftCodecs.cpp, so the tree's software decoders (MP3, Opus, ...) were missing (native-media: audio/mpeg NAME_NOT_FOUND). Command: `flock -n ~/los24-build.lock -c 'cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_codec2'`. Result: built (sha256 af4b582b...), installed on both VMs; native-media, codec2, native-player, native-surface pass on UTM, fennec-media and newpipe-media on Parallels.
-
 
 ### 2026-11-04 — libapklayer_audio: the --probe configures only the output ports (audio agent)
 - Why: since the input mix and microphone ports were added (ec9f119) the HAL has four ports; the probe asserted two and aborted before writing PCM (audio-aidl reported it as "left channel tone lost/swapped").

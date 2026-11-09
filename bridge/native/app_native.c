@@ -92,6 +92,7 @@ int apklayer_register_nativelooper(JNIEnv *env, jclass looper)
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <stddef.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -139,6 +140,18 @@ static jobject linux_open(JNIEnv *env, jobject self, jstring path, jint flags, j
     int error = errno;
     (*env)->ReleaseStringUTFChars(env, path, p);
     if (n < 0) { throw_errno(env, "open", error); return NULL; }
+    return fd_make(env, n);
+}
+
+/* SharedMemory's backing (ShadowHostSharedMemory); Robolectric's memfd_create is a temp file another process cannot map */
+static jobject linux_memfd_create(JNIEnv *env, jobject self, jstring name, jint flags)
+{
+    (void)self;
+    const char *p = (*env)->GetStringUTFChars(env, name, NULL);
+    int n = memfd_create(p, flags);
+    int error = errno;
+    (*env)->ReleaseStringUTFChars(env, name, p);
+    if (n < 0) { throw_errno(env, "memfd_create", error); return NULL; }
     return fd_make(env, n);
 }
 
@@ -325,6 +338,7 @@ int apklayer_register_linux(JNIEnv *env, jclass libcore_linux)
         {"strerror", "(I)Ljava/lang/String;", (void *)linux_strerror},
         {"open", "(Ljava/lang/String;II)Ljava/io/FileDescriptor;", (void *)linux_open},
         {"pipe2", "(I)[Ljava/io/FileDescriptor;", (void *)linux_pipe2},
+        {"memfd_create", "(Ljava/lang/String;I)Ljava/io/FileDescriptor;", (void *)linux_memfd_create},
         {"socketpair", "(IIILjava/io/FileDescriptor;Ljava/io/FileDescriptor;)V", (void *)linux_socketpair},
         {"socket", "(III)Ljava/io/FileDescriptor;", (void *)linux_socket},
         {"listen", "(Ljava/io/FileDescriptor;I)V", (void *)linux_listen},

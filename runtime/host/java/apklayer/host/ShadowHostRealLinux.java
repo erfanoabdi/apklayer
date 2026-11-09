@@ -71,6 +71,10 @@ public class ShadowHostRealLinux extends ShadowLinux {
     @Implementation protected void symlink(String oldPath, String newPath) { natively("symlink", path(oldPath), path(newPath)); }
     @Implementation protected void link(String oldPath, String newPath) { natively("link", path(oldPath), path(newPath)); }
     @Implementation protected void rename(String oldPath, String newPath) { natively("rename", path(oldPath), path(newPath)); }
+    /** A real memfd (SharedMemory's backing): Robolectric's is a temp file. */
+    @Implementation @Override protected FileDescriptor memfd_create(String name, int flags) {
+        return natively("memfd_create", ClassParameter.from(String.class, name), ClassParameter.from(int.class, flags));
+    }
     @Implementation protected FileDescriptor[] pipe2(int flags) { return natively("pipe2", ClassParameter.from(int.class, flags)); }
     @Implementation protected void socketpair(int domain, int type, int protocol, FileDescriptor one, FileDescriptor two) {
         natively("socketpair", ClassParameter.from(int.class, domain), ClassParameter.from(int.class, type), ClassParameter.from(int.class, protocol),

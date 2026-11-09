@@ -8,7 +8,7 @@ import android.os.Parcel;
 import android.os.Process;
 import android.widget.TextView;
 
-/** A hand-written "AIDL" service published under a name: echo(String), call(IBinder callback, String) that calls the client back, pid(). */
+/** A hand-written "AIDL" service published under a name: echo(String), call(IBinder callback, String) that calls the client back, pid(), shm(String). */
 public class Main extends Activity {
     static final String DESCRIPTOR = "hello.IEcho", CALLBACK = "hello.ICallback";
 
@@ -43,10 +43,21 @@ public class Main extends Activity {
                         reply.writeInt(Process.myPid());
                         reply.writeInt(Binder.getCallingPid());
                         return true;
+                    case 4: { // shm(String): SharedMemory holding the string, made read-only before it is sent
+                        byte[] text = data.readString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                        android.os.SharedMemory shm = android.os.SharedMemory.create("hello-shm", text.length);
+                        java.nio.ByteBuffer map = shm.mapReadWrite();
+                        map.put(text);
+                        android.os.SharedMemory.unmap(map);
+                        if (!shm.setProtect(android.system.OsConstants.PROT_READ)) throw new IllegalStateException("setProtect");
+                        reply.writeNoException();
+                        shm.writeToParcel(reply, 0);
+                        return true;
+                    }
                     default:
                         return super.onTransact(code, data, reply, flags);
                 }
-            } catch (android.os.RemoteException e) {
+            } catch (android.os.RemoteException | android.system.ErrnoException e) {
                 throw new RuntimeException(e);
             }
         }
