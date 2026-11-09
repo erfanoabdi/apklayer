@@ -1,6 +1,53 @@
 {
-  "latest": "0.4.9",
+  "latest": "0.4.10",
   "releases": [
+    {
+      "version": "0.4.10",
+      "date": "2026-11-09",
+      "notes_url": "https://github.com/erfanoabdi/apklayer/releases/tag/v0.4.10",
+      "converter_abi": 3,
+      "data_format": 1,
+      "runtime": {
+        "version": "0.4.10",
+        "prebuilts": "72603418ffbc939367c2331e3667f314c726f864",
+        "assets": {
+          "arm64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.10/apklayer-runtime-arm64-0.4.10.tar.zst",
+            "sha256": "333045ce7d92729364724d33351adc7bccb793cabb3bed087bc91d6dc76594fb",
+            "size": 514479644,
+            "unpacked_size": 897710080
+          },
+          "amd64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.10/apklayer-runtime-x86_64-0.4.10.tar.zst",
+            "sha256": "e0ebfda61bc89ab98a240e38b27081f1f7f6efdf5a6fc45f66cc41e57a83aa37",
+            "size": 549604489,
+            "unpacked_size": 1036789760
+          }
+        }
+      },
+      "debs": {
+        "noble": {
+          "amd64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.10/apklayer_0.4.10-1.noble1_amd64.deb",
+            "sha256": "4f3056d4fc8e67b34656a003d2000471f715582151f31302e53a23ff3a4e2f64"
+          },
+          "arm64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.10/apklayer_0.4.10-1.noble1_arm64.deb",
+            "sha256": "c5dec3ad18baf752edb536b36b419207e8487b8a54351f51ba882b9995c654d5"
+          }
+        },
+        "trixie": {
+          "amd64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.10/apklayer_0.4.10-1.trixie1_amd64.deb",
+            "sha256": "fb7dd81e49a1891c647da1385edd37ac8df25ee1e2325ac8590809a3673a5341"
+          },
+          "arm64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.10/apklayer_0.4.10-1.trixie1_arm64.deb",
+            "sha256": "0a70903dea35b31172350e4ede0d002f36de952741510cc2c8236a56a7194128"
+          }
+        }
+      }
+    },
     {
       "version": "0.4.9",
       "date": "2026-11-09",
