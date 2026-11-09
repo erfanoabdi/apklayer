@@ -20,21 +20,23 @@ public class ShadowHostBluetoothSocket extends ShadowBluetoothSocket {
     private String address;
     private BluetoothDevice device;
     private String target;  // the service's UUID or the channel
+    private boolean secure;
     private InputStream in;
     private OutputStream out;
 
-    static BluetoothSocket create(BluetoothDevice device, String target) {
+    static BluetoothSocket create(BluetoothDevice device, String target, boolean secure) {
         BluetoothSocket socket = Shadow.newInstanceOf(BluetoothSocket.class);
         ShadowHostBluetoothSocket shadow = Shadow.extract(socket);
         shadow.device = device;  // getRemoteDevice: Android 16's BluetoothSocket keeps it in an Optional the constructor fills
         shadow.address = device.getAddress();
         shadow.target = target;
+        shadow.secure = secure;
         return socket;
     }
 
     /** A connection a server socket accepted: the listener helper's pipes (ShadowHostBluetoothServerSocket). */
     static BluetoothSocket accepted(BluetoothDevice device, String service, InputStream in, OutputStream out) {
-        BluetoothSocket socket = create(device, service);
+        BluetoothSocket socket = create(device, service, true);
         ShadowHostBluetoothSocket shadow = Shadow.extract(socket);
         shadow.in = in;
         shadow.out = out;
@@ -52,7 +54,7 @@ public class ShadowHostBluetoothSocket extends ShadowBluetoothSocket {
         if (address == null) { super.connect(); return; }  // a socket Robolectric made (a server socket's)
         if (in != null) return;
         ParcelFileDescriptor[] pipes;
-        try { pipes = HubClient.current().bluetooth(address, target, null); }
+        try { pipes = HubClient.current().bluetooth(address, target, null, secure); }
         catch (RuntimeException failure) { throw new IOException("read failed, socket might closed or timeout", failure); }
         out = new ParcelFileDescriptor.AutoCloseOutputStream(pipes[0]);
         in = new ParcelFileDescriptor.AutoCloseInputStream(pipes[1]);

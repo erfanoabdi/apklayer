@@ -29,7 +29,7 @@ final class HubBluetooth {
 
     /** A session (all null), an RFCOMM connection to the device's service or channel, or a listener for one connection to the app's service (no address):
      *  {the helper's stdin, its stdout} for the caller. */
-    ParcelFileDescriptor[] open(HubDirectory.Peer caller, String address, String uuid, String name) throws IOException {
+    ParcelFileDescriptor[] open(HubDirectory.Peer caller, String address, String uuid, String name, boolean secure) throws IOException {
         HubPackages packages = directory.packages();
         if (!List.of("android.permission.BLUETOOTH_CONNECT", "android.permission.BLUETOOTH_SCAN", "android.permission.BLUETOOTH").stream().anyMatch(p -> packages.holds(caller.name(), p)))
             throw new SecurityException(caller.name() + " holds no Bluetooth permission");
@@ -42,33 +42,55 @@ final class HubBluetooth {
         if (address != null) command.addAll(List.of("rfcomm", address, uuid));
         String service = name == null ? "" : name.replaceAll("\\p{Cntrl}", "");
         if (server) command.addAll(List.of("listen", uuid, service.substring(0, Math.min(service.length(), 100))));
+        if (address != null || server) command.add(secure ? "secure" : "insecure");
+        if (server) command.add(Integer.toString(caller.pid()));  // the app's dispatcher of the service (one registration for all its accepts)
         ParcelFileDescriptor[] in = ParcelFileDescriptor.createPipe(), out = ParcelFileDescriptor.createPipe();
         try {  // the pipes' far ends become the helper's stdin and stdout (a pipe reopens through /proc; ProcessBuilder passes no other descriptor)
             new ProcessBuilder(command).redirectInput(new File("/proc/self/fd/" + in[0].getFd())).redirectOutput(new File("/proc/self/fd/" + out[1].getFd()))
                     .redirectError(ProcessBuilder.Redirect.INHERIT).start();
-        } finally { in[0].close(); out[1].close(); }
+        } finally { close(in[0]); close(out[1]); }
         return new ParcelFileDescriptor[] {in[1], out[0]};
     }
 
+    /** The hub's copy of a pipe end, closed for real: ParcelFileDescriptor.close (also PARCELABLE_WRITE_RETURN_VALUE's) forgets the descriptor but leaves it open on the host
+     *  JVM, so the helper never saw its stdin end with the app and outlived it (its discovery, agent and subscriptions too); a stream's close does close it. */
+    static void close(ParcelFileDescriptor pipe) {
+        try { new ParcelFileDescriptor.AutoCloseInputStream(pipe).close(); } catch (IOException ignored) { /* closed already */ }
+    }
+
     /** A pairing's PIN, 6-digit passkey or comparison from the person, as Android's pairing dialog asks (Settings' BluetoothPairingDialog; variants are
-     *  BluetoothDevice.PAIRING_VARIANT_*); null when refused and for a key only shown (DISPLAY_PASSKEY/PIN: BlueZ waits for the device, not for us). */
+     *  BluetoothDevice.PAIRING_VARIANT_*); null when refused and for a key only shown (DISPLAY_PASSKEY/PIN: BlueZ waits for the device, not for us).
+     *  Variant -1: the pairing ended, the device's question closes (also when the asking app dies). */
     String pin(HubDirectory.Peer caller, String address, String name, int variant, String key) {
         if (!directory.packages().holds(caller.name(), "android.permission.BLUETOOTH_CONNECT") && !directory.packages().holds(caller.name(), "android.permission.BLUETOOTH"))
             throw new SecurityException(caller.name() + " holds no Bluetooth permission");
         if (address == null || !ADDRESS.matcher(address).matches()) throw new IllegalArgumentException("Bad Bluetooth address " + address);
         if (variant >= 2 && (key == null || !KEY.matcher(key).matches())) throw new IllegalArgumentException("Bad pairing key " + key);
+        if (variant < 0) {  // the pairing ended (bonded, failed, BlueZ's Cancel: the app's session tells): its question goes, only the asking app's
+            Asking question = asking.get(address.toUpperCase());
+            if (question != null && question.pid() == caller.pid()) HubInstallDialog.dismiss(question.thread());
+            return null;
+        }
         String device = name == null || name.isBlank() ? address : name.strip();
         synchronized (pairing) {  // one pairing question at a time
-            // shortcut: a shown key's dialog stays until the person closes it (BlueZ's Cancel does not close it); close it on the pairing's end when that matters
-            return switch (variant) {
+            Thread asker = Thread.currentThread();
+            Asking question = new Asking(caller.pid(), asker);
+            asking.put(address.toUpperCase(), question);
+            java.util.concurrent.CompletableFuture<?> died = ProcessHandle.of(caller.pid()).map(p -> p.onExit().thenRun(() -> HubInstallDialog.dismiss(asker))).orElse(null);
+            try { return switch (variant) {
                 case 0, 1 -> HubInstallDialog.askSecret("Pair with " + device + "?", variant == 1 ? "Type the 6-digit passkey shown on " + device + "."
                         : "Type the PIN of " + device + " (often 0000 or 1234).", "Pair", "Cancel");
                 case 2 -> HubInstallDialog.ask("Pair with " + device + "?", "Pair only if " + device + " shows the passkey " + key + ".", "Pair", "Cancel") ? "yes" : null;
                 case 4, 5 -> { HubInstallDialog.ask("Pair with " + device, "Type " + key + " on " + device + ", then press Enter there.", "OK", "Cancel"); yield null; }
                 default -> throw new IllegalArgumentException("Bad pairing variant " + variant);
-            };
+            }; } finally {
+                asking.remove(address.toUpperCase(), question);
+                if (died != null) died.cancel(false);
+            }
         }
     }
+    private record Asking(int pid, Thread thread) {}
+    private final java.util.Map<String, Asking> asking = new java.util.concurrent.ConcurrentHashMap<>();  // address -> the app asking and the thread showing its question
 
     /** The adapter's power as ACTION_STATE_CHANGED broadcasts; from the first session on (no Bluetooth user, no BlueZ client). */
     private synchronized void watch() throws IOException {

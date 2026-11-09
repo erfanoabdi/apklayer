@@ -64,7 +64,7 @@ public class ShadowHostBluetoothGatt extends ShadowBluetoothGatt {
         } catch (ReflectiveOperationException failure) { throw new IllegalStateException("Cannot make a BluetoothGatt", failure); }
     }
 
-    void open(String address, BluetoothGattCallback callback) {
+    void open(String address, BluetoothGattCallback callback, boolean auto) {
         this.address = address;
         this.callback = callback;
         setGattCallback(callback);
@@ -75,7 +75,7 @@ public class ShadowHostBluetoothGatt extends ShadowBluetoothGatt {
         }
         events = this::event;
         session.listen(events);
-        session.send("op", "connect", "address", address);
+        session.send("op", "connect", "address", address, "auto", auto);
     }
 
     private void event(JSONObject event) {
@@ -101,6 +101,7 @@ public class ShadowHostBluetoothGatt extends ShadowBluetoothGatt {
                 if (target instanceof BluetoothGattCharacteristic c) callback.onCharacteristicWrite(real, c, status);
                 else if (target instanceof BluetoothGattDescriptor d) callback.onDescriptorWrite(real, d, status);
             }
+            case "mtu" -> callback.onMtuChanged(real, Math.min(requestedMtu, event.optInt("mtu", 23)), BluetoothGatt.GATT_SUCCESS);
             case "changed" -> { if (target instanceof BluetoothGattCharacteristic c) { c.setValue(value); callback.onCharacteristicChanged(real, c, value); } }
             default -> { }
         }
@@ -154,7 +155,7 @@ public class ShadowHostBluetoothGatt extends ShadowBluetoothGatt {
     @Implementation @Override protected boolean connect() {
         HostBluetooth session = HostBluetooth.get();
         if (session == null || callback == null) return false;
-        session.send("op", "connect", "address", address);
+        session.send("op", "connect", "address", address, "auto", true);  // Android's reconnect is an autoConnect one
         return true;
     }
 
@@ -216,10 +217,13 @@ public class ShadowHostBluetoothGatt extends ShadowBluetoothGatt {
         return send(d, "op", "write", "value", HostBluetooth.hex(value)) ? BluetoothStatusCodes.SUCCESS : BluetoothStatusCodes.ERROR_GATT_WRITE_NOT_ALLOWED;
     }
 
-    // shortcut: BlueZ negotiates the ATT MTU itself; the default 23 is reported (safe for every write); upgrade by reading BlueZ's MTU property of the characteristics
+    /** BlueZ exchanges the ATT MTU itself when it connects (517 asked): the app learns that one (the characteristics' MTU), capped at what it asked for. */
     @Implementation @Override protected boolean requestMtu(int mtu) {
         if (!connected) return false;
-        HostBluetooth.onMain(() -> callback.onMtuChanged(real, 23, BluetoothGatt.GATT_SUCCESS));
-        return true;
+        requestedMtu = Math.max(23, Math.min(mtu, 517));
+        HostBluetooth session = HostBluetooth.get();
+        if (session != null) session.send("op", "mtu", "address", address);
+        return session != null;
     }
+    private int requestedMtu = 23;
 }

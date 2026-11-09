@@ -46,6 +46,7 @@ public final class Main extends Activity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        if (System.getProperty("bt.real") != null) { Real.start(this, System.getProperty("bt.real")); return; }  // against real devices (Real.java)
         adapter = getSystemService(BluetoothManager.class).getAdapter();
         log("feature le=" + getPackageManager().hasSystemFeature("android.hardware.bluetooth_le") + " scan-granted="
                 + (checkSelfPermission("android.permission.BLUETOOTH_SCAN") == android.content.pm.PackageManager.PERMISSION_GRANTED));

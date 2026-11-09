@@ -57,6 +57,8 @@ final class HostBluetooth {
                     if ("adapter".equals(event.optString("ev"))) adapter = event;
                     if ("error".equals(event.optString("ev"))) System.out.println("[apklayer] bluetooth: " + event.optString("message"));
                     if ("pin".equals(event.optString("ev"))) pairingRequest(event);
+                    if ("bond".equals(event.optString("ev")) && event.optInt("state") != BluetoothDevice.BOND_BONDING || "cancel".equals(event.optString("ev")))
+                        pairingEnded(event.optString("address", null));
                     for (Consumer<JSONObject> listener : listeners) listener.accept(event);
                 }
             } catch (IOException | JSONException ended) { System.out.println("[apklayer] bluetooth session ended: " + ended); }
@@ -97,6 +99,21 @@ final class HostBluetooth {
     private final java.util.Set<String> waiting = java.util.concurrent.ConcurrentHashMap.newKeySet();  // addresses BlueZ waits on for an answer
     private boolean dialog;
 
+    private final java.util.Set<String> asked = java.util.concurrent.ConcurrentHashMap.newKeySet();  // addresses whose question the hub shows
+
+    /** A pairing ended (bonded, failed, BlueZ's Cancel: null, every one): the hub's question about it closes, as Android's dialog does. */
+    private void pairingEnded(String address) {
+        waiting.removeIf(a -> address == null || a.equalsIgnoreCase(address));
+        for (String a : asked) {
+            if (address != null && !a.equalsIgnoreCase(address)) continue;
+            Thread closing = new Thread(() -> {
+                try { HubClient.current().bluetoothPin(a, null, -1, null); } catch (RuntimeException failure) { System.out.println("[apklayer] bluetooth pairing question not closed: " + failure); }
+            }, "apklayer-bluetooth-pin-end");
+            closing.setDaemon(true);
+            closing.start();
+        }
+    }
+
     /** No app answered: the hub asks the person (not on the main thread: its dialog waits for them). */
     private void askHub(Intent request) {
         String address = ((BluetoothDevice) request.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)).getAddress();
@@ -104,8 +121,10 @@ final class HostBluetooth {
         if (variant <= BluetoothDevice.PAIRING_VARIANT_PASSKEY_CONFIRMATION && !waiting.contains(address)) return;  // the app answered (setPin)
         Thread asking = new Thread(() -> {
             String pin = null;
+            asked.add(address);
             try { pin = HubClient.current().bluetoothPin(address, request.getStringExtra(NAME), variant, request.getStringExtra(KEY)); }
             catch (RuntimeException failure) { System.out.println("[apklayer] bluetooth pairing not asked: " + failure); }
+            finally { asked.remove(address); }
             if (variant <= BluetoothDevice.PAIRING_VARIANT_PASSKEY_CONFIRMATION) answer(address, pin);
         }, "apklayer-bluetooth-pin");
         asking.setDaemon(true);
@@ -124,7 +143,7 @@ final class HostBluetooth {
         if (session != null || failed) return session;
         try {
             HubClient hub = HubClient.current();
-            session = new HostBluetooth(hub.bluetooth(null, null, null));
+            session = new HostBluetooth(hub.bluetooth(null, null, null, true));
         } catch (IOException | JSONException | RuntimeException none) {
             failed = true;
             System.out.println("[apklayer] bluetooth unavailable: " + none);
@@ -202,13 +221,20 @@ final class HostBluetooth {
     /** The BluetoothDevice of a helper's device record, with what BlueZ knows of it (name, type, class, bond state). */
     static BluetoothDevice device(JSONObject record) {
         BluetoothDevice device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(record.optString("address").toUpperCase());
-        ShadowBluetoothDevice shadow = Shadow.extract(device);
+        KNOWN.put(device.getAddress(), record);
+        fill(Shadow.extract(device), record);
+        return device;
+    }
+
+    /** The last record of each device, for a BluetoothDevice that came through a parcel (an intent's EXTRA_DEVICE is a new object: ShadowHostBluetoothDevice). */
+    static final Map<String, JSONObject> KNOWN = new java.util.concurrent.ConcurrentHashMap<>();
+
+    static void fill(ShadowBluetoothDevice shadow, JSONObject record) {
         if (!record.isNull("name")) shadow.setName(record.optString("name"));
         shadow.setType(switch (record.optString("type")) { case "le" -> BluetoothDevice.DEVICE_TYPE_LE; case "dual" -> BluetoothDevice.DEVICE_TYPE_DUAL; default -> BluetoothDevice.DEVICE_TYPE_CLASSIC; });
         if (!record.isNull("class")) shadow.setBluetoothClass(org.robolectric.util.ReflectionHelpers.callConstructor(android.bluetooth.BluetoothClass.class,
                 org.robolectric.util.ReflectionHelpers.ClassParameter.from(int.class, record.optInt("class"))));
         if (record.has("paired")) shadow.setBondState(record.optBoolean("paired") ? BluetoothDevice.BOND_BONDED : BluetoothDevice.BOND_NONE);
-        return device;
     }
 
     /** A scan result as the controller reports it: the advertisement rebuilt from BlueZ's fields (flags, service UUIDs, name, TX power, manufacturer and service data). */

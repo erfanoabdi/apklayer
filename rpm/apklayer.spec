@@ -39,6 +39,8 @@ BuildRequires:  pkgconfig(libbsd)
 BuildRequires:  pkgconfig(libunwind)
 Requires:       temurin-21-jdk
 Requires:       python3-base
+# bridge/portal's D-Bus helpers (Bluetooth, location, settings) are PyGObject; Sailfish does not install it by default
+Requires:       python3-gobject
 Requires:       zip
 Requires:       unzip
 Requires:       zstd

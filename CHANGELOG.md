@@ -3,6 +3,30 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: Bluetooth against real devices (Volla X23 Ubuntu Touch, Volla Quintus Sailfish OS, the x86 PC), fixes
+Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real.java: `-Dbt.real=scan|pair|server|client|gatt`) and tests/vm/bt-peer.py
+(the far side on a plain BlueZ: an auto-yes default agent, an RFCOMM echo channel, an LE GATT peripheral). Fixes went to the phones as a private overlay
+(the CLI copied, new bluez.py and host-classes.jar through APKLAYER_ROOT/BUILD/NATIVE, a drop-in for UT's always-on unit), removed afterwards.
+- Works now: discovery and LE scan on both phones (each sees the other and the PC); pairing UT -> Quintus by numeric comparison in the hub's dialog (the
+  key equal on both sides), UT -> PC answered by the app itself (ACTION_PAIRING_REQUEST, setPin, abortBroadcast: no dialog); RFCOMM by UUID both ways
+  between the phones (secure and insecure, two accepts in a row on one server socket), by channel (createRfcommSocket) UT -> PC and Quintus -> PC
+  (insecure from an unpaired device: no bond made); GATT from both phones to the PC's peripheral (services, reads, a write, a notification) with the
+  real MTU (517) and autoConnect to a device that starts advertising later; the hub's pairing dialog closes when the pairing ends unanswered or the app dies.
+- bluez.py: server sockets had no RFCOMM channel in their SDP record (RegisterProfile without Channel: nothing could connect; Channel 0 now); BlueZ's
+  handed-over sockets are non-blocking (the relay ended at the first read with no data); one dispatcher per app and service (`serve`) holds the
+  registration and queues connections for the accepts (a registration per accept left the gap in which a connection was refused, and BlueZ registers a
+  UUID once); BT_SECURITY on channel sockets and RequireAuthentication on profiles for secure/insecure (RequireAuthorization off: no per-service
+  question); channel sockets connect through ctypes (Sailfish's Python has no AF_BLUETOOTH addresses); a GATT connection or a bond to a device BlueZ
+  has not seen recently discovers it first (BlueZ acts only on known devices; Android's stack pages any address), autoConnect retries when it is seen
+  again; the MTU op (the characteristics' MTU); BlueZ's Cancel ends a pairing question; on Sailfish (agents only for its privileged group) Pair goes on
+  with the system's agent instead of never starting.
+- Host: a session helper outlived its app (the hub's pipe ends: ParcelFileDescriptor.close forgets the descriptor without closing it on the host JVM,
+  also PARCELABLE_WRITE_RETURN_VALUE's; closed through a stream now), so each app run left a BlueZ client with its discovery and agent; devices from
+  intents (ACTION_FOUND's EXTRA_DEVICE is unparcelled anew) had type 0 and no name (HostBluetooth.KNOWN); requestMtu reports BlueZ's MTU;
+  connectGatt passes autoConnect; the pairing question is closed by the asking app's session (bond ended, Cancel) or its death (HubInstallDialog.dismiss).
+- Packages: the deb depends on python3-gi, the RPM requires python3-gobject (Sailfish had no PyGObject: Bluetooth, location and settings helpers failed).
+- tests/vm/answer-dialog.py reads an always-on hub's dialogs from the journal. Group `bluetooth` (dbusmock) passes on Parallels.
+
 ## 2026-11-09: the navigation bar has Back only (owner: no Home button)
 - bridge/shell/navbar.c/.h, mobile.c: Home (the ring) and its action (minimize) are gone; Back stays at a quarter of the width, the rest of the bar is plain (taps there do nothing); Home is the compositor's own gesture/button. tests/vm/mobile.py's bar check looks for Back's strokes only.
 

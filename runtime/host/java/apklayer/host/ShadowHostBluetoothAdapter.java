@@ -114,12 +114,11 @@ public class ShadowHostBluetoothAdapter extends ShadowBluetoothAdapter {
     @Implementation @Override protected boolean isDiscovering() { return discovery != null; }
 
     @Implementation @Override protected BluetoothServerSocket listenUsingRfcommWithServiceRecord(String name, UUID uuid) throws IOException {
-        return ShadowHostBluetoothServerSocket.listen(real, name, uuid);
+        return ShadowHostBluetoothServerSocket.listen(real, name, uuid, true);
     }
 
-    // shortcut: the insecure service asks the same security of BlueZ (its default); pass RequireAuthentication=false to RegisterProfile when a device needs it
     @Implementation @Override protected BluetoothServerSocket listenUsingInsecureRfcommWithServiceRecord(String name, UUID uuid) {
-        try { return ShadowHostBluetoothServerSocket.listen(real, name, uuid); }
+        try { return ShadowHostBluetoothServerSocket.listen(real, name, uuid, false); }
         catch (IOException failed) { throw ShadowHostBluetoothAdapter.<RuntimeException>sneaky(failed); }  // Android's throws IOException; Robolectric's declares none
     }
 

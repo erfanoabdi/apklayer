@@ -520,10 +520,12 @@ final class HubDirectory extends Binder {
                 reply.writeNoException(); reply.writeBoolean(installer.source(caller, ask)); return true;
             }
             case HubProtocol.BLUETOOTH -> {
-                Peer caller = caller(); String address = request.readString(), uuid = request.readString(), name = request.readString(); request.enforceNoDataAvail();
+                Peer caller = caller(); String address = request.readString(), uuid = request.readString(), name = request.readString(); boolean secure = request.readBoolean();
+                request.enforceNoDataAvail();
                 android.os.ParcelFileDescriptor[] pipes;
-                try { pipes = bluetooth.open(caller, address, uuid, name); } catch (IOException failure) { throw new IllegalStateException("Bluetooth: " + failure, failure); }
-                reply.writeNoException(); for (var pipe : pipes) reply.writeTypedObject(pipe, android.os.Parcelable.PARCELABLE_WRITE_RETURN_VALUE); return true;
+                try { pipes = bluetooth.open(caller, address, uuid, name, secure); } catch (IOException failure) { throw new IllegalStateException("Bluetooth: " + failure, failure); }
+                reply.writeNoException(); for (var pipe : pipes) { reply.writeTypedObject(pipe, 0); HubBluetooth.close(pipe); }  // the parcel holds its own copy
+                return true;
             }
             case HubProtocol.BLUETOOTH_PIN -> {
                 Peer caller = caller(); String address = request.readString(), name = request.readString(); int variant = request.readInt(); String key = request.readString(); request.enforceNoDataAvail();
