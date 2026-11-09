@@ -78,6 +78,13 @@ class Allocator : public BnAllocator {
         if (d.format == PixelFormat::BLOB) return apklayer_gfx_alloc_blob(mGfx, static_cast<uint32_t>(d.width), buf);
         uint32_t fourcc = toFourcc(d.format, usage);
         if (fourcc == 0) return -ENOTSUP;
+        // only the CPU uses it (a software encoder's input, a software decoder's byte-buffer output): YUV in shared memory, one view
+        // in every process (a writer may hand the buffer on before its unlock); other formats go to the GPU as before (-ENOTSUP)
+        constexpr uint64_t kCpu = bit(BufferUsage::CPU_READ_MASK) | bit(BufferUsage::CPU_WRITE_MASK);
+        if ((usage & kCpu) && !(usage & ~(kCpu | bit(BufferUsage::VIDEO_ENCODER)))) {
+            int r = apklayer_gfx_alloc_memory(mGfx, d.width, d.height, fourcc, buf);
+            if (r != -ENOTSUP) return r;
+        }
         return apklayer_gfx_alloc(mGfx, d.width, d.height, fourcc, toGfxUsage(usage), buf);
     }
 

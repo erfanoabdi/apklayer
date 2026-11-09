@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <string.h>
 #include <unistd.h>
 #include <xf86drm.h>
@@ -215,6 +216,33 @@ int apklayer_gfx_alloc_blob(struct apklayer_gfx *gfx, uint64_t size, struct apkl
     return 0;
 }
 
+/* A YUV buffer only the CPU touches (a software encoder's input, a software decoder's byte-buffer output): its planes one after another in
+ * shared memory, so every process's lock maps the same pages, as a device's gralloc does. The GPU-plane fallback (packed 2) locks
+ * through a private copy per lock, so a reader in another process saw the bytes from before a writer's unlock: MediaCodec queues an
+ * input image while its own view is still mapped (CCodec's GraphicBlockBuffer), and the encoder read black frames. */
+int apklayer_gfx_alloc_memory(struct apklayer_gfx *gfx, uint32_t width, uint32_t height, uint32_t fourcc, struct apklayer_gfx_buffer *out)
+{
+    (void)gfx;
+    const struct pack_spec *sp = find_pack(fourcc);
+    if (!sp) return -ENOTSUP;
+    buffer_init(out, width, height, fourcc);
+    uint32_t luma = (width * (sp->base == DRM_FORMAT_R16 ? 2 : 1) + 63) & ~63u;
+    size_t size = 0;
+    for (int p = 0; p < sp->planes; p++) {
+        out->stride[p] = luma / sp->plane[p].stride_div;
+        out->offset[p] = (uint32_t)size;
+        size += (size_t)out->stride[p] * ((height * sp->plane[p].num + sp->plane[p].den - 1) / sp->plane[p].den);
+    }
+    int fd = memfd_create("apklayer-yuv", MFD_CLOEXEC);
+    if (fd < 0) return -errno;
+    if (ftruncate(fd, (off_t)size) < 0) { int e = errno; close(fd); return -e; }
+    out->packed = 3;
+    out->num_planes = sp->planes;
+    out->modifier = DRM_FORMAT_MOD_LINEAR;
+    for (int p = 0; p < sp->planes; p++) out->fd[p] = fd;  /* one fd repeated: apklayer_gfx_buffer_close closes it once */
+    return 0;
+}
+
 void apklayer_gfx_buffer_close(struct apklayer_gfx_buffer *buf)
 {
     for (int i = 0; i < APKLAYER_GFX_MAX_PLANES; i++) {
@@ -249,8 +277,9 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
     if (!m) { errno = ENOMEM; return NULL; }
     uint8_t *addr = NULL;
     size_t offset = buf->fourcc == 0 ? 0 : buf->offset[plane];
-    if (buf->fourcc == 0) { /* plain memory */
-        m->blob_len = buf->width;
+    if (buf->fourcc == 0 || buf->packed == 3) { /* plain memory: a BLOB, or CPU-only YUV planes (apklayer_gfx_alloc_memory) */
+        struct stat st;
+        m->blob_len = buf->fourcc == 0 ? buf->width : fstat(buf->fd[0], &st) == 0 ? (size_t)st.st_size : 0;
         void *p = mmap(NULL, m->blob_len, PROT_READ | (write ? PROT_WRITE : 0), MAP_SHARED, buf->fd[0], 0);
         if (p != MAP_FAILED) { addr = p; m->blob = p; }
     } else {

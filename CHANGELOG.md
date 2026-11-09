@@ -3,6 +3,29 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: native-media's AVC round trip flake (encoder fed black frames) and audio-silent on the x86 PC
+- native-media, about one run in two on Parallels: `AVC round trip luma 47` (and passing runs averaged ~60, not 81). Per picture, a quarter of
+  the round trip's pictures were black (Y 0, U 0), and the encoder's packets showed it was fed black input. Cause: MediaCodec's byte-buffer
+  encoder input is a gralloc YUV block that CCodec (GraphicBlockBuffer) keeps mapped after queueing it; on GBM drivers without NV12 (virtio-gpu
+  on both VMs) the graphics HAL's separate-plane fallback locks through a private copy written back at unlock, so the encoder in the codec2
+  service mapped the buffer before the app's unlock and read the zeros from before the app's writes. Fix: YUV buffers only the CPU uses
+  (CPU read/write, video encoder: software encoders' input, software decoders' byte-buffer output) are plain shared memory, planes
+  contiguous (bridge/hals/graphics `apklayer_gfx_alloc_memory`, packed 3; the allocator picks it, Build log): every lock in every process maps
+  the same pages, as a device's gralloc. GPU-used buffers are unchanged. The test now checks every picture's luma, not only the mean (which
+  hid four black pictures in twelve); graphics-test checks a second mapping sees writes before the unlock.
+- Not the same cause: MediaMetadataRetriever's H.264 frame (PLAN, "C2_CORRUPTED on a single-sample EOS input") still fails; the decoder
+  there gets no picture (`avdec_h264: No valid frames decoded before end of stream`), a decode-side issue, left open.
+- audio-silent on the x86 PC: the stack aborted (`getOutputSamplingRate` check: the HAL's `Failed to initialize the driver: -112`). Cause: the
+  PC's `~/apklayer-x86/lead/prebuilts` is behind the x86_64 lock: its libapklayer_audio.so (5b86b604..., 2026-11-08 09:35) predates the
+  silent fallback; nine more libapklayer_* differ too (audio, camera, cameraserver, codec2, egl, gnss, mediaserver, sensors, servicemanager,
+  surfaceflinger). No code change: with the locked libraries (from the prebuilts checkout) the group passes. (Parallels' ~/apklayer-st/prebuilts
+  is behind the arm64 lock in eight of them as well: camera, cameraserver, codec2, egl, gnss, mediaserver, sensors, servicemanager.)
+- Runs (own trees, prebuilts = symlinks to the host's set plus the locked libapklayer_* and the new allocator): before the allocator, the
+  per-picture check failed every run on Parallels (also with the locked libraries); after it native-media passed 6 of 6 there (round trip luma
+  82 each time) and 5 of 5 on the x86 PC; audio-silent passed 5 of 5 on the PC. codec2, native, native-bridge, native-surface, native-player,
+  native-audio and audio-aidl/-track/-system/-silent pass on both, native-bridge-vulkan on the PC; audio-late-install and once native-media
+  (3 s of silence at app start) failed only inside a batch on a loaded host (`playing 8 s of PCM took 10 s`) and pass on their own.
+
 ## 2026-11-09: `apklayer stop` leaves nothing of the instance running; an app ends with its hub
 - Cause (the two follow-ups of "the always-on unit's hub no longer loses to a stray `apklayer hub`"): stop ended the run.* records before the hub, so
   the still-running hub restarted a component host stop had just ended; that launch took the spare (a JVM the holder started, no child of the hub)
@@ -425,6 +448,16 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_allocator: CPU-only YUV buffers in shared memory (media flake agent)
+- Why: native-media's AVC round trip failed about one run in two on Parallels: MediaCodec queues an encoder input image while its own CPU view
+  is still mapped, and the GPU-plane YUV fallback (packed 2) locks through a private copy, so the encoder read black frames. The allocator now
+  gives YUV buffers only the CPU uses (CPU read/write, video encoder) plain shared memory (apklayer_gfx_alloc_memory). Sources only.
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "allocator: CPU-only YUV in shared memory" hals/graphics/allocator`, then
+  `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_allocator`, then the same for gsi_x86_64.
+- Result: both built (arm64 12:00, x86_64 14:08, kati for each product). libapklayer_allocator.so sha256 arm64
+  860377629a3e52380266f4f17bd097f3015871763c925f8313a0103747122fbb (52384 bytes, android_arm64_armv8-a_shared), x86_64
+  e62ecffc6ded33f5aad7e90f01bcf420ccef416bacecf15875cec73d3351b989 (52296 bytes, android_x86_64_shared); both locks set by hand. Not in the
+  prebuilts yet (copies for the lead: the agent's Mac scratchpad `stage/{arm64,x86_64}/libapklayer_allocator.so`).
 ### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_camera: rotate-and-crop (camera rotate-and-crop agent)
 - Why: docs/PLAN.md item 6, rotate-and-crop for portrait-locked apps: the provider lists ANDROID_SCALER_AVAILABLE_ROTATE_AND_CROP_MODES and
   turns and crops each output (BackendCamera.cpp, two lines in the vendored goldfish/CameraDevice.cpp). Sources only, no graph change.

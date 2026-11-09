@@ -30,7 +30,8 @@ struct apklayer_gfx_buffer {
     int num_planes;
     int fd[APKLAYER_GFX_MAX_PLANES];              /* dmabuf per plane (the same fd may repeat); owned by the caller, close() them */
     /* 0: native driver layout; 1: legacy single packed resource; 2: separate
-     * R/RG plane resources, with a staged contiguous CPU view for mapper lock. */
+     * R/RG plane resources, with a staged contiguous CPU view for mapper lock;
+     * 3: YUV planes in plain shared memory (apklayer_gfx_alloc_memory). */
     int packed;
     uint32_t alloc_fourcc, alloc_width, alloc_height; /* the underlying allocation (for a packed buffer: R8/R16 and the total rows) */
     uint32_t stride[APKLAYER_GFX_MAX_PLANES];     /* bytes */
@@ -55,6 +56,10 @@ int apklayer_gfx_alloc(struct apklayer_gfx *gfx, uint32_t width, uint32_t height
 
 /* Plain CPU memory shared by fd (Android's BLOB buffers: JPEG, raw sensor data); not GPU-importable. fourcc is 0. */
 int apklayer_gfx_alloc_blob(struct apklayer_gfx *gfx, uint64_t size, struct apklayer_gfx_buffer *out);
+
+/* A YUV format (NV12, NV21, NV16, YUV420, YVU420, P010) in plain shared memory, planes contiguous, for buffers only the CPU uses: every
+ * mapping, in any process, is the same memory. Not GPU-importable. -ENOTSUP for other formats. */
+int apklayer_gfx_alloc_memory(struct apklayer_gfx *gfx, uint32_t width, uint32_t height, uint32_t fourcc, struct apklayer_gfx_buffer *out);
 
 void apklayer_gfx_buffer_close(struct apklayer_gfx_buffer *buf); /* closes its fds */
 
