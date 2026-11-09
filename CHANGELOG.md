@@ -3,6 +3,14 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: group files on the x86 PC: the data home had no storage provider
+- `[files] FAIL ... Cursor.getCount() ... null` on the PC (main tree) was the roots query of `com.android.externalstorage.documents` with no
+  provider for it: the lead data home (`~/apklayer-x86/main/data`) has no system apps installed (only the WebView; "remote providers
+  registered: 10", no provider process started). Parallels' `apklayer-ks` data home without them fails the same; not an x86_64 bug.
+- groups.toml: `files` now `needs` ExternalStorageProvider and MediaProvider (VOLUMES=1 reads MediaStore), so a data home without them SKIPs
+  with the reason, as `volumes` and `system-apps` do. Checked in own trees with the prebuilts' system APKs installed: PC (x86_64 APKs) files
+  PASS, system-apps all checks but the known `display` one; Parallels (arm64) files PASS; both SKIP files before the install.
+
 ## 2026-11-10: Termux's shell without the sandbox: Android groups, program names, `ls -a`, its login's ~/.termux (bionic_translation 0061, 0062)
 - `id` listed the desktop user's groups: bionic's getgroups now answers the groups zygote gives an app (0061; inet 3003 with INTERNET,
   everybody 9997, cache 20000+appId, shared 50000+appId: NativeLoader.appGroups, as the sandbox sets them), carried to the app's programs in
