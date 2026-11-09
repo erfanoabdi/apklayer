@@ -3,6 +3,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: release 0.4.10 (runtime 0.4.10)
+- bionic_translation 0050-0057: HotSpot sees real thread stacks (no StackOverflowError at VM init in game JVMs), absolute dlopen of an app's own data, bytehook's PLT hooks (FCL's crash screen), no copy of every loaded library kept in memory (phone instance 1387 -> 785 MB with an app open), the app's own uid for native code (Termux reaches its shell), bionic-shaped stdin/stdout/stderr; activities of another android:process in their own process and Process.killProcess; the manifest's AppComponentFactory; real SharedMemory (memfd) across processes; x86_64 system apps (MediaProvider without the native bridge); window stacking by task order and app visibility for stopped activities' dialogs; an empty IME update no longer wipes a selection; Sailfish OS splash and switcher fixes.
+
 ## 2026-11-09: the bionic linker no longer keeps a copy of every library (bionic_translation 0055): phone instance 1387 -> 785 MB
 - Looked for SurfaceFlinger's and the composer's GL memory on the Volla X23 (PLAN "After release 0.4.5" 1). Their Mali GPU memory is small
   (debugfs mali0/ctx/<pid>_*/mem_profile: ~1.7 MB each; the 39 MB of textures is lomiri-system-compositor's). Their PSS was one anonymous
