@@ -25,6 +25,24 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Runs, own trees (PC ~/apklayer-x86/a2c, Parallels ~/apklayer-a2c): PC input 3/3, activities 1/1; Parallels input+activities in
   parallel 4 times: activities 4/4, input 3/4 (the miss: input-inject's third long press ran no long click; back in PLAN "Open by area").
 
+## 2026-11-09: the phones' on-screen keyboards type into Android fields (Maliit: Sailfish OS and Ubuntu Touch)
+- Neither phone's compositor offers a Wayland text-input protocol (globals listed over the wire: Lomiri on the Volla X23 has android_wlegl,
+  qt_windowmanager, wl_compositor 4, wl_subcompositor, wl_seat 6, wl_output 3, wl_data_device_manager 3, wl_shell, zxdg_shell_v6, xdg_wm_base,
+  wl_shm; Lipstick on the Volla Quintus has wl_compositor 3, wl_data_device_manager 1, wl_shm, qt_hardware_integration, android_wlegl,
+  qt_surface_extension, qt_touch_extension, qt_windowmanager, wl_seat 3, wl_output 2, wl_shell, lipstick_recorder_manager, alien_manager).
+  Both keyboards are maliit-server 2.3.0 plugins that Qt apps reach over Maliit's own D-Bus protocol: the session bus names a peer-to-peer
+  address (`org.maliit.server`), the app is an input context (`com.meego.inputmethod.inputcontext1`) and calls the server's `uiserver1`.
+- `bridge/shell/maliit.c` (new, GDBus on a GMainContext polled by the shell's loop): without zwp_text_input_v3 a field's focus activates the
+  context, sends the field's state and shows the keyboard; its preedit and commits go to the window as IME messages (text_input_send, shared
+  with textinput.c), Backspace and Delete as IME deletions (in order with the preedit Lomiri sends right after them: as key events they
+  reached the field after it and the word doubled), Enter, Tab, arrows and Escape as key events; the area it covers becomes the window's
+  bottom inset (the CONFIGURE navigation bar value, the larger of the two), back to the bar when it hides. The shell links gio-2.0.
+- Volla X23 (Lomiri) and Volla Quintus (Lipstick), own instance `ime` (installed CLI and runtime 0.4.9, this tree's shell; Sailfish's built in
+  its build root), hello.input, taps and keys through uinput, the compositors' screenshots: the keyboard comes up when the field has focus
+  (Lomiri reports 720x597 at the bottom, Lipstick 1080x868; the app gets navigation bar 597 / 868 px), typing reaches the field (UT:
+  preedit `h`, `hi`, commit `hi `, Backspace x3 then Lomiri's preedit `hi`, `h`: `hi ` -> `hi` -> `h` -> `` -> `hi` -> `h`; a tap on the
+  field then `o k space`: `ok `; Sailfish: `h i space h i` and three Backspaces: `hi hi` -> `hi`). Group input passes on Parallels.
+
 ## 2026-11-09: release 0.4.10 (runtime 0.4.10)
 - bionic_translation 0050-0057: HotSpot sees real thread stacks (no StackOverflowError at VM init in game JVMs), absolute dlopen of an app's own data, bytehook's PLT hooks (FCL's crash screen), no copy of every loaded library kept in memory (phone instance 1387 -> 785 MB with an app open), the app's own uid for native code (Termux reaches its shell), bionic-shaped stdin/stdout/stderr; activities of another android:process in their own process and Process.killProcess; the manifest's AppComponentFactory; real SharedMemory (memfd) across processes; x86_64 system apps (MediaProvider without the native bridge); window stacking by task order and app visibility for stopped activities' dialogs; an empty IME update no longer wipes a selection; Sailfish OS splash and switcher fixes.
 

@@ -292,6 +292,21 @@ options, `apklayer portal` and the apps' document pickers through HostFilePortal
 - Neither portal nor Content Hub (a desktop without a FileChooser backend): the install dialog lists the newest .apk files of ~/Downloads, ~/Documents
   and the home folder (one level), the Hardware page says to type the path. A desktop with a working portal is unchanged (the portal answers first).
 
+## The on-screen keyboard on both phones (2026-11-09)
+Lomiri and Lipstick offer no Wayland text-input protocol (their globals: CHANGELOG 2026-11-09); both keyboards are maliit-server 2.3.0 plugins
+reached over Maliit's D-Bus protocol, which the shell speaks without zwp_text_input_v3 (`bridge/shell/maliit.c`). Facts from the check:
+- The server's peer-to-peer address comes from the session bus (`org.maliit.server`, `/org/maliit/server/address`, property `address`):
+  `unix:path=/run/user/32011/maliit-server` on Ubuntu Touch, `/run/user/100000/maliit-server/dbus-socket` on Sailfish. gdbus's `--address`
+  cannot talk to it (it says Hello to a bus); GDBus's peer connection (`G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT`) can.
+- Lomiri's keyboard sends a word as preedit and commits it with the space; Backspace after a committed word is three Backspace key events and
+  the word again as preedit. Sailfish's commits each letter and sends Backspace as key events. Enter is Qt's Key_Return on both.
+- The area (`updateInputMethodArea`): Lomiri animates it (about ten updates, 720x129 to 720x597, its y relative to the window's 1508 px
+  height); Lipstick sends 1080x868 once.
+- Checking it: the screen on and unlocked first (the locked screen's keypad takes the taps, and Lipstick's screenshot of a locked phone is
+  white). Ubuntu Touch: the power key through uinput (`phablet` is in plugdev), the PIN on Lomiri's keypad, a screenshot with Volume Up + Down
+  (`~/Pictures/Screenshots`, then the tool's trash icon at 40,94). Sailfish: `mce req_tklock_mode_change unlocked` brings the keypad, the code
+  and its accept key through uinput as root (`devel-su`), Lipstick's `saveScreenshot` writes only below `~/Pictures`.
+
 ## apklayer on Sailfish OS (Volla Phone Quintus, 2026-11-07)
 Route (2026-11-07, replaces the first sysroot tarball with its own glibc 2.39, which the owner rejected): real RPMs built against Sailfish OS's own
 toolchain and libraries, below. The Android runtime bundle stays per user (`apklayer setup`), as with the deb.
