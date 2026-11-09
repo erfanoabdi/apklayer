@@ -58,7 +58,8 @@ try:
                     assert count('translucent activity resumed'), 'the translucent activity is not up'
                     if 'hover:2' in line: assert count('configuration change: recreated hello.input.Main') == 1, 'the activity below was not relaunched'
                     im = pixels.rgb(instance.capture('translucent over the paused dialogs' + (' relaunched' if 'hover:2' in line else ''), PKG))
-                    r, g, b = im.getpixel((im.width // 2, im.height // 2))[:3]
+                    # a quarter down, off the button's centered label (at font scale 1.3 a glyph edge lies on the center: (106, 0, 0) on the x86 PC)
+                    r, g, b = im.getpixel((im.width // 2, im.height // 4))[:3]
                     assert r > 150 and g < 90 and b < 90, 'the paused activity or its dialog is drawn over the translucent one: %s' % ((r, g, b),)
                     instance.inject(PKG, 'tap:%d,%d' % CENTER)
                     # a configuration change relaunches both (no configChanges): the one below must keep its place under the translucent one

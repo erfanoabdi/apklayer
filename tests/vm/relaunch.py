@@ -90,7 +90,7 @@ try:
     other = App('hello.actcaller')  # takes the desktop focus, so that raising the target is visible in its activated state
     apps.append(other)
     other.expect('[act] unknown scenario')
-    shell_seen = shell_log.stat().st_size
+    shell_seen = shell_log.stat().st_size if shell_log.exists() else 0  # the shell may not have written its log yet (beside another group)
 
     view = {'action': 'hello.act.PICK', 'data': 'https://example.org/one', 'component': PKG + '.PickActivity', 'extra.text': 'one', 'extra.keep': '1'}
     # the running app's APK rewritten (a reinstall, a tree's install): the next activity's ActivityThread.getPackageInfo finds the package's

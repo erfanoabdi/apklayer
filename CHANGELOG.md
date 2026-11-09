@@ -3,6 +3,15 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: `stopped-windows.py translucent` on the x86 PC: the sample hit the label, not a dim layer
+- The check failed only on the owner's x86 PC with (106, 0, 0) in the relaunched screenshot. The screenshot itself is the translucent
+  activity's plain red: at font scale 1.3 the centered "Translucent activity" label puts a glyph's antialiased edge on the center pixel
+  (the PC's font metrics differ from Parallels'). The stacking was right; the check now samples a quarter down, off the label (the
+  dialogs and the paused activity's window fill the window, so a wrong stacking still shows there).
+- relaunch.py (group activities) read shell.log's size before the shell had written it when run beside another group: 0 when absent.
+- Runs, own trees (PC ~/apklayer-x86/a2c, Parallels ~/apklayer-a2c): PC input 3/3, activities 1/1; Parallels input+activities in
+  parallel 4 times: activities 4/4, input 3/4 (the miss: input-inject's third long press ran no long click; back in PLAN "Open by area").
+
 ## 2026-11-09: release 0.4.10 (runtime 0.4.10)
 - bionic_translation 0050-0057: HotSpot sees real thread stacks (no StackOverflowError at VM init in game JVMs), absolute dlopen of an app's own data, bytehook's PLT hooks (FCL's crash screen), no copy of every loaded library kept in memory (phone instance 1387 -> 785 MB with an app open), the app's own uid for native code (Termux reaches its shell), bionic-shaped stdin/stdout/stderr; activities of another android:process in their own process and Process.killProcess; the manifest's AppComponentFactory; real SharedMemory (memfd) across processes; x86_64 system apps (MediaProvider without the native bridge); window stacking by task order and app visibility for stopped activities' dialogs; an empty IME update no longer wipes a selection; Sailfish OS splash and switcher fixes.
 
