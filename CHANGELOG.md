@@ -3,6 +3,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: release 0.4.11 (runtime 0.4.11)
+- Native bridge (x86_64 hosts, arm64 apps): a guest thread's pthread record maps to its host thread (binary_translation 0004, native_bridge_support 0001, bionic_translation 0058): Unity/il2cpp's GC no longer scans the wrong stack (PGR's "irrecoverable stack overflow" and black screen); Sailfish OS and Ubuntu Touch: the phone's own on-screen keyboard (Maliit) types into Android fields, with its height as the window's inset; the screen (max window metrics, real display size, the drawing cache limit) is the monitor, not the first window (FCL's guide overlay); headless runs without a shell no longer throw.
+
 ## 2026-11-09: the screen is the output, not the window (FCL's "too large to fit into a software layer")
 - A tester's FCL log repeated `GuideOverlayView not displayed ... needs 19043840 bytes, only 2636288 available` (4 x 608 x 1084: the first,
   portrait window; the window had turned 1932x1084). Two causes: Robolectric's ShadowViewConfiguration answers the drawing cache limit as
