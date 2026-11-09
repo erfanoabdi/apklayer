@@ -486,6 +486,35 @@ is the fixed /dev/binder (isHalium() needs binderfs today, so none is treated as
   (the daemon runs in the instance's namespace when the stack starts it, the caller's when `apklayer exec` does), the Flatpak (socket directory
   under `$XDG_RUNTIME_DIR`), the deb's unit and the manager's first-run check; and the hot paths of step 4 (SurfaceFlinger per frame, audio).
 
+## Exploration: the tree's Settings and SystemUI (2026-11-09, P8 notes; owner: stop at the effort estimate)
+How: the los24 `gsi_arm64` Settings.apk and SystemUI.apk (platform-signed, `system_ext/priv-app`) installed with `apklayer install --system` in an agent tree on Parallels,
+their `system_ext/etc/permissions/*.xml` (privapp allowlists) copied into the runtime's `android-root/system/etc/permissions` by hand (HostSystemConfig reads only
+`etc/permissions` and `etc/sysconfig`: staging `system_ext/etc/permissions` is needed before either app is a real system app). Screenshots: CHANGELOG 2026-11-09.
+- **Settings** (sharedUserId android.uid.system): the home page and Display, Apps (All apps with other apps' labels and icons, sizes), Storage, About phone and
+  Network & internet draw. Display needs LineageParts and LineageSettingsProvider installed too (its LineagePartsPreference reads LineageParts' parts catalog;
+  LineageSettings' provider). Fixed on the way (generic): network_management, lock_settings, device_state services; StorageManager.getDisks,
+  StorageStatsManager.queryExternalStatsForUser; PackageManager.getInstalledApplicationsAsUser and getResourcesForApplication of other packages (labels, icons,
+  resources of another APK); a system app sharing android.uid.system holds every permission; the build's grants hold before Application.onCreate.
+  Open: a page takes 10-20 s to its first frame (Display ~20 s on a loaded VM); battery usage (BatteryStatsManager.getBatteryUsageStats null), IMEI, the
+  permission controller (Robolectric's) answer nothing; the instance's platform certificate is not the tree's test key, so signature checks against "android"
+  differ from a device (sharedUserId is honoured only for permissions, not as uid 1000). Size: small; installing Settings (+ LineageParts, LineageSettingsProvider)
+  as system apps is mostly staging (tools/sysapps.list, the system_ext permission files).
+- **SystemUI** (sharedUserId android.uid.systemui, persistent, started by system_server's startSystemUi): with the AppComponentFactory honoured (Robolectric
+  patch 0025, AppFactory) its Application builds the Dagger graph, its providers start and SystemUIService is created (started by hand:
+  `-Dapklayer.startservice=com.android.systemui.SystemUIService` on `apklayer component-host com.android.systemui`). It then stops in WM Shell's init:
+  `IWindowManager.registerDisplayWindowListener` answers null (DisplayController), the first of the window manager's organizer APIs. Nothing draws: a component
+  host has no display, so its windows (layers in the app's layer stack) are never presented.
+  What P8 needs for SystemUI, in order: (1) a persistent-app start (the hub starts persistent system apps at boot and SystemUIService as startSystemUi does);
+  (2) a window manager that answers the shell's APIs: registerDisplayWindowListener, attachWindowContextToDisplayArea, setDisplayChangeWindowController,
+  ITaskOrganizer, IDisplayAreaOrganizer, ITransitionPlayer/shell transitions, IWindowSession for non-activity windows, getWindowInsets, keyguard lock state;
+  (3) presentation of the system window types as host surfaces: TYPE_STATUS_BAR, TYPE_NOTIFICATION_SHADE, TYPE_NAVIGATION_BAR (+ _PANEL),
+  TYPE_STATUS_BAR_ADDITIONAL/_SUB_PANEL, TYPE_VOLUME_OVERLAY, TYPE_SYSTEM_DIALOG, TYPE_KEYGUARD_DIALOG, TYPE_SECURE_SYSTEM_OVERLAY (on Wayland: layer-shell
+  panels or one fullscreen overlay); (4) system services in the hub instead of Robolectric fakes: IStatusBarService (Robolectric registers "statusbar" with the
+  IStatusBar callback interface, so registerStatusBar has no server), notification listener registration for a system listener (NotificationListener),
+  IDreamManager, ITrustManager, IActivityTaskManager task stack/listeners, input (registerKeyGestureHandler, input monitors for gestures), power, device state,
+  biometrics; (5) keyguard bound by the window manager (KeyguardService). Size: a large project (system_server's window manager and status bar service
+  halves), not a round of fixes; a standalone shade or quick settings panel needs (2) and (3) first.
+
 ## Parked (owner's decision)
 - Not now: NFC, biometrics, game controllers, ModemManager ("no SIM" is the honest answer), screen capture portal. Backlight and thermal are the host's.
 - Several phone instances as a product (P9) and SystemUI: yardsticks, not goals. CTS strictly last.

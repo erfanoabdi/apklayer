@@ -205,6 +205,7 @@ final class HubPackages {
         if (permission == null || permission.isEmpty() || "android".equals(name)) return true;  // the system holds every permission
         PackageParser.Package source = get(name);
         if (source == null) return false;
+        if ("android.uid.system".equals(source.mSharedUserId) && system(name)) return true;  // a system app sharing the system uid (1000 on a device) holds every permission
         if (source.permissions.stream().anyMatch(declared -> permission.equals(declared.info.name))) return true;
         if (!source.requestedPermissions.contains(permission)) return false;
         PermissionInfo definition = definition(permission);

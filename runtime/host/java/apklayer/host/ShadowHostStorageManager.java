@@ -20,6 +20,10 @@ public class ShadowHostStorageManager extends ShadowStorageManager {
     @Implementation
     protected List<android.os.storage.VolumeRecord> getVolumeRecords() { return List.of(); }
 
+    /** No volume is on a disk vold manages (the host's drives are public volumes without one): Settings' storage page lists them (the fake service said null). */
+    @Implementation
+    protected List<android.os.storage.DiskInfo> getDisks() { return new java.util.ArrayList<>(); }
+
     @Implementation
     protected List<VolumeInfo> getVolumes() {
         synchronized (ShadowHostStorageManager.class) {

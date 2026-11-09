@@ -159,6 +159,16 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
         catch (PackageManager.NameNotFoundException unknown) { if (!registerInstalled(packageName)) throw unknown; return signed(super.getPackageInfo(packageName, flags), flags.getValue()); }
     }
 
+    /** One user: the user's list is the installed one (Robolectric shadows only the plain call; the fake IPackageManager answered none to Settings' app list). */
+    @Implementation(minSdk = android.os.Build.VERSION_CODES.TIRAMISU)
+    protected java.util.List<android.content.pm.ApplicationInfo> getInstalledApplicationsAsUser(
+            @org.robolectric.annotation.ClassName("android.content.pm.PackageManager$ApplicationInfoFlags") Object flags, int userId) {
+        return getInstalledApplications(flags);
+    }
+
+    @Implementation
+    protected java.util.List<android.content.pm.ApplicationInfo> getInstalledApplicationsAsUser(int flags, int userId) { return getInstalledApplications(flags); }
+
     /** The installed packages with their signatures as getPackageInfo has them (Robolectric's list skips it; F-Droid's update check refused a package without signers). */
     @Implementation
     @Override public java.util.List<android.content.pm.PackageInfo> getInstalledPackages(int flags) {
@@ -190,5 +200,39 @@ public class ShadowHostPackageManager extends ShadowApplicationPackageManager {
             } catch (RuntimeException unreadable) { System.out.println("[apklayer] icon of " + packageName + " not loaded: " + unreadable); }
             return getDefaultActivityIcon();
         }
+    }
+
+    /**
+     * Another installed package's resources from its APK, as ApplicationPackageManager loads them (Robolectric hands out an empty table: labels
+     * in Settings' app list and LineageParts' catalog that Settings reads failed with "No package ID 7f").
+     */
+    @Implementation
+    @Override protected android.content.res.Resources getResourcesForApplication(android.content.pm.ApplicationInfo app) throws PackageManager.NameNotFoundException {
+        if (!app.packageName.equals(org.robolectric.RuntimeEnvironment.getApplication().getPackageName())) {
+            try {
+                android.content.pm.ApplicationInfo source = app.sourceDir != null ? app : getPackageInfo(app.packageName, 0).applicationInfo;  // a listed one may carry no paths
+                if (source == null || source.sourceDir == null || !new java.io.File(source.sourceDir).isFile()) return super.getResourcesForApplication(app);
+                if (source.publicSourceDir == null) {  // the framework loads another uid's package from its public paths
+                    source = new android.content.pm.ApplicationInfo(source);
+                    source.publicSourceDir = source.sourceDir;
+                    source.splitPublicSourceDirs = source.splitSourceDirs;
+                }
+                android.content.res.Resources own = org.robolectric.util.reflector.Reflector.reflector(PackageManagerDirect.class, real).getResourcesForApplication(source);
+                if (own != null) return own;
+            } catch (RuntimeException unreadable) { System.out.println("[apklayer] resources of " + app.packageName + " not loaded: " + unreadable); }
+        }
+        return super.getResourcesForApplication(app);
+    }
+
+    @Implementation
+    @Override protected android.content.res.Resources getResourcesForApplication(String packageName) throws PackageManager.NameNotFoundException {
+        if (packageName.equals(org.robolectric.RuntimeEnvironment.getApplication().getPackageName())) return super.getResourcesForApplication(packageName);
+        android.content.pm.ApplicationInfo app = getPackageInfo(packageName, 0).applicationInfo;  // NameNotFound for a package that is not installed
+        return app == null ? super.getResourcesForApplication(packageName) : getResourcesForApplication(app);
+    }
+
+    @org.robolectric.util.reflector.ForType(android.app.ApplicationPackageManager.class)
+    interface PackageManagerDirect {
+        @org.robolectric.util.reflector.Direct android.content.res.Resources getResourcesForApplication(android.content.pm.ApplicationInfo app) throws PackageManager.NameNotFoundException;
     }
 }

@@ -60,6 +60,18 @@ public class ShadowHostStorageStatsManager {
     }
 
     /**
+     * The user's shared storage in use (Settings' storage page; the fake service said null). shortcut: the total only; StorageStatsService splits
+     * audio, video, images and apps by quota accounting that does not exist here (walk by MediaStore type if a page needs the split).
+     */
+    @Implementation protected android.app.usage.ExternalStorageStats queryExternalStatsForUser(UUID uuid, UserHandle user) throws IOException {
+        volume(uuid);
+        enforceStatsPermission();
+        android.app.usage.ExternalStorageStats stats = new android.app.usage.ExternalStorageStats();
+        stats.totalBytes = size(android.os.Environment.getExternalStorageDirectory().getPath());
+        return stats;
+    }
+
+    /**
      * StorageStatsService.checkStatsPermission with the GET_USAGE_STATS app op at its default (MODE_DEFAULT): the PACKAGE_USAGE_STATS permission decides.
      * shortcut: no app op store here (Robolectric's AppOpsManager answers MODE_ALLOWED for every op), so a user cannot grant usage access; a hub app op store would.
      */

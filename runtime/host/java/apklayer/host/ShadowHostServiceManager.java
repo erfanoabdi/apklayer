@@ -20,7 +20,13 @@ import org.robolectric.util.ReflectionHelpers;
 public class ShadowHostServiceManager extends ShadowServiceManager {
     private static final Set<IBinder> wrapped = ConcurrentHashMap.newKeySet();
     /** Services Robolectric has no fake for that apps take for granted (Aurora Store's onboarding reads its link handling: getSystemService returned null). */
-    static { addBinderService(binderServices, "domain_verification", android.content.pm.verify.domain.IDomainVerificationManager.class); }
+    static {
+        addBinderService(binderServices, "domain_verification", android.content.pm.verify.domain.IDomainVerificationManager.class);
+        // the tree's Settings: Utils.isBandwidthControlEnabled, LockPatternUtils.isSecure (no credential: CREDENTIAL_TYPE_NONE)
+        addBinderService(binderServices, "network_management", android.os.INetworkManagementService.class);
+        addBinderService(binderServices, "lock_settings", com.android.internal.widget.ILockSettings.class);
+        addBinderService(binderServices, "device_state", android.hardware.devicestate.IDeviceStateManager.class);  // the tree's SystemUI: DeviceStateManager
+    }
 
     @Implementation protected static IBinder getService(String name) {
         IBinder hub = hub(name);
