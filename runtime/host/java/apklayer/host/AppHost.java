@@ -443,8 +443,9 @@ public final class AppHost implements Runnable {
                 + "x" + hdp + "dp @" + dpi + "dpi, navigation bar " + navPx + " px");
         org.robolectric.shadows.NavigationBarInset.set(navPx);
         NativeWindowResize.resizing(new ArrayList<>(stack));
-        HostConfiguration.resize("w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi", new ArrayList<>(stack));
+        // before the app sees the new shape: a Camera1 app opens or sets its display orientation from onConfigurationChanged or the view's size
         HostCameraShadows.windowShape(h > w);
+        HostConfiguration.resize("w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi", new ArrayList<>(stack));
         Object wmg = android.view.WindowManagerGlobal.getInstance();
         List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
         for (View v : views) { // force a fresh frame at the new size

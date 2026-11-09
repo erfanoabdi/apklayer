@@ -5,7 +5,8 @@ picture) must show the scene upright and cropped to its centre 3:4 slice: along 
 red, blue (cut) left to right for the back camera, mirrored for the front one; no white or black bar. With the back camera open the app turns
 its window to landscape (all eight bars across, no rotate-and-crop) and back ("back-live"): the open camera follows.
 CAMERA_REAL=<description> (e.g. "MacBook Pro Camera"): that real PipeWire camera instead, whose picture is unknown: the portrait screenshots
-must match the landscape one's centre slice as it is, better than turned or mirrored."""
+must match the landscape one's centre slice as it is, better than turned or mirrored.
+CAMERA1=1: the same through android.hardware.Camera (-Dhello.camera1: Camera2Client in cameraserver, the app's setDisplayOrientation)."""
 import os
 from pathlib import Path
 import selectors
@@ -20,6 +21,8 @@ from PIL import Image  # noqa: E402
 
 PKG = 'hello.camera'
 REAL = os.environ.get('CAMERA_REAL')
+CAMERA1 = os.environ.get('CAMERA1') == '1'
+TAG = 'camera1' if CAMERA1 else 'camera'
 COLOURS = {(0, 1, 1): 'cyan', (0, 1, 0): 'green', (1, 0, 1): 'magenta', (1, 0, 0): 'red', (1, 1, 0): 'yellow', (0, 0, 1): 'blue',
            (1, 1, 1): 'white', (0, 0, 0): 'black'}
 # the scene's x (of 640) at fractions of the window's width: the slice is scene columns 140..500
@@ -96,7 +99,7 @@ def real_camera_id():
     return found[0]
 
 
-jopts = '-Dapklayer.runms=60000 -Dhello.portrait=true'
+jopts = '-Dapklayer.runms=60000 -Dhello.portrait=true' + (' -Dhello.camera1=true' if CAMERA1 else '')
 instance.stop()
 if REAL:
     jopts += ' -Dhello.real=%d' % real_camera_id()
@@ -112,7 +115,7 @@ try:
     selector = selectors.DefaultSelector()
     selector.register(app.stdout, selectors.EVENT_READ)
     end, pending = time.monotonic() + 90, b''
-    with open(instance.OUT / 'camera-portrait.log', 'wb') as log:
+    with open(instance.OUT / ('%s-portrait.log' % TAG), 'wb') as log:
         while result is None:
             assert selector.select(15) and time.monotonic() < end, 'camera-portrait stalled'
             data = os.read(app.stdout.fileno(), 65536)
@@ -126,7 +129,7 @@ try:
                 print(line, flush=True)
                 if line.endswith(' shown'):
                     shape, camera = line.split()[-3:-1]
-                    shot = instance.capture('camera-%s-%s' % (shape, camera), PKG)
+                    shot = instance.capture('%s-%s-%s' % (TAG, shape, camera), PKG)
                     check_landscape(shot) if shape == 'landscape' else check(shot, camera == 'front')
                     shots[shape + ' ' + camera] = shot
                 elif '[cam] PASS' in line or '[cam] FAIL' in line: result = line
@@ -137,8 +140,8 @@ try:
     if REAL:
         # the shot right after the landscape one (the first portrait one is a few seconds earlier, while the camera's exposure still settles)
         compare(shots['landscape ' + first], shots['portrait %s-live' % first])
-    print('PASS camera-portrait: rotate-and-crop for the %s, upright on screen, following the window while open'
-          % ('real camera "%s"' % REAL if REAL else 'back and front cameras'), flush=True)
+    print('PASS %s-portrait: rotate-and-crop for the %s, upright on screen, following the window while open'
+          % (TAG, 'real camera "%s"' % REAL if REAL else 'back and front cameras'), flush=True)
 finally:
     instance.stop()
     if app.poll() is None: os.killpg(app.pid, signal.SIGKILL)

@@ -3,6 +3,22 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: Camera1 (android.hardware.Camera) apps get rotate-and-crop, also when the window turns while the camera is open (docs/PLAN.md "Camera")
+- Cause: Camera.open and Camera.getCameraInfo read the app's CameraCompatibilityInfo in JNI (android_content_res_CameraCompatibilityInfo_toNative)
+  through field ids that register_android_content_res_CameraCompatibilityInfo sets; apklayer's runtime never called it, so Camera1 passed
+  garbage and cameraserver's Camera2Client never turned the frames (portrait windows showed the scene sideways). bridge/native/runtime_shim.c
+  registers it with the other camera natives. camera2 passes the compat info as a parcel and was not affected.
+- A Camera1 app that sets its display orientation in onConfigurationChanged did it before cameraserver changed the open camera's mode, so
+  Camera2Client kept the rotate-and-crop preview transform in landscape (bars turned on screen). AppHost.hostResize now tells cameraserver the
+  window shape before the configuration change, and HostCameraShadows sends WINDOW_SHAPE as a two-way call (returns after
+  notifyDisplayConfigurationChange). Without the reorder the landscape screenshot fails ("black black yellow ..."); Service.cpp's comment only.
+- Tests: hello.camera's Portrait takes -Dhello.camera1 (Camera.open, the preview on the TextureView, NV21 preview-callback frames, the
+  documented setDisplayOrientation value from onConfigurationChanged); camera-portrait.py with CAMERA1=1 (group camera, a third step):
+  NV21 frames turned/upright/turned, SurfaceFlinger screenshots of the back camera in portrait, landscape and portrait again, and the front
+  one. Parallels (own tree): camera passed 6 of 7 runs (one failed "the preview is not upright and cropped", the step not recorded),
+  camera-pipewire passes (one earlier failure: the app stalled reading a jar under load 11). x86 PC (x86pc, -j 2): camera passes (the first
+  run after the full rebuild started no app, the rerun passed).
+
 ## 2026-11-09: setup checks the free space; apklayer's data on /userdata on a phone with a small home (Sailfish, the Quintus at 0.4.9)
 - The 0.4.9 update on the Volla Quintus had 211 MB free on its 6.8 GB system partition (the home); the lead moved `~/.local/share/apklayer` to
   `/userdata/apklayer/share` by hand. Now: common/fetch.cpp `runtimeRoom` compares statvfs's free space of the runtime's directory with what the

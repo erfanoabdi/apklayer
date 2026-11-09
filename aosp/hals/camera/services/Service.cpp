@@ -22,7 +22,7 @@ namespace {
 // notifications (session statistics, watchdog) have no listener here. Rotate-and-crop follows each app's window shape (WINDOW_SHAPE).
 class CameraServiceProxy : public hardware::BnCameraServiceProxy, public IBinder::DeathRecipient {
   public:
-    // apklayer's own call (not in ICameraServiceProxy.aidl), oneway, from an app process whose window turned between portrait and landscape
+    // apklayer's own call (not in ICameraServiceProxy.aidl), from an app process whose window turned between portrait and landscape
     // (HostCameraShadows.windowShape): package, rotate-and-crop rotation in degrees (0 or 90), the process's token. On a device WindowManager
     // tells system_server's CameraServiceProxy, which has cameraserver ask getRotateAndCropOverride again for each open camera
     // (notifyDisplayConfigurationChange): the open cameras' requests follow without a reopen.
