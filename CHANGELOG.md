@@ -3,6 +3,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: release 0.4.12 (runtime 0.4.11)
+- Halium phones (Sailfish OS, Ubuntu Touch): every native service crashed on 0.4.11 (libhybris's EGL bound to libdl_bio's `__loader_dlopen`, exported for bytehook in 0054, and the linker's gdb notification ran before btload's main): the `__loader_*` symbols are in a hidden version only bytehook's GOT lookup reaches (bionic_translation 0059) and no notification before main (0060); checked on the Volla Quintus and the Volla X23. Also runtime-bundle.sh no longer nests a tree when a link copy fails part way.
+
 ## 2026-11-10: Halium phones after 0.4.11: libdl's __loader_* no longer taken by libhybris (bionic_translation 0059, 0060)
 - Regression in 0.4.11 on Sailfish (Volla Quintus) and Ubuntu Touch (Volla X23): every Android service of the stack exited with status 139.
   btload's constructor (resolve_gl_stubs) calls the device's libEGL.so.1 (libhybris), whose Android linker (q.so: android_dlopen calls
