@@ -52,6 +52,10 @@
  *   app -> shell  15 WINDOW_MODE    {i32 id, i32 mode}: 0 auto, 1 desktop (floating, title bar), 2 mobile (maximized, navigation bar);
  *                                   sent before WINDOW_CREATE it sets the new window's style, later it switches it (mobile.c)
  *                 16 NAVBAR         {i32 id, i32 visible}: the app shows or hides the navigation bar (immersive mode)
+ *                 17 NAVBAR_LAYER   {i32 id}: the window's owner (the virtual display, aosp/hals/graphics/vdisplay) composes the navigation bar
+ *                                   into its frames; used where the compositor has no wl_subcompositor (Lipstick), answered with
+ *   shell -> app 116 NAVBAR_PIXELS  {i32 id, i32 w, i32 h} + a memfd (w x h px XRGB8888, SCM_RIGHTS): the bar to show over the bottom of
+ *                                   the frame, sent on every change (size, theme, a held button); 0 x 0 and no fd: hidden
  */
 
 #define _GNU_SOURCE
@@ -94,6 +98,8 @@ enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
 #define MSG_DECOR_DARK 13    /* app -> shell: {own window id, 1 light | 2 dark}: the instance's colour scheme (its host settings), for the title bar */
 #define MSG_WINDOW_MODE 15   /* app -> shell: {own window id, WM_*} (mobile.c) */
 #define MSG_NAVBAR 16        /* app -> shell: {own window id, visible}: the app's navigation bar visibility (immersive mode) */
+#define MSG_NAVBAR_LAYER 17  /* app -> shell: {own window id}: the window's owner composes the navigation bar (mobile.c) */
+#define MSG_NAVBAR_PIXELS 116 /* shell -> app: {id, w, h} + memfd: that bar's pixels */
 enum { WM_AUTO = 0, WM_DESKTOP = 1, WM_MOBILE = 2 };
 #define MSG_ACTIVATE 12      /* `apklayer run` of a running app -> shell: {utf8 window title "\0" utf8 xdg-activation token or ""} (activation.c) */
 /* TEST_INPUT kinds: focus; key {evdev, down}; pointer {x, y, button (0 move, +code press, -code release)}; touch {action, x, y};
@@ -149,6 +155,7 @@ struct window {
     struct navbar nav;
     int nav_hidden;             /* the app hid the navigation bar (immersive) */
     int nav_h;                  /* logical height of the navigation bar, 0 without one */
+    int nav_layer;              /* the window's owner composes the bar (MSG_NAVBAR_LAYER): used without subsurfaces */
     int dpi, told_dpi, told_nav;/* density the app is told (mobile.c), and what it was last told */
     char label[64];             /* the app's name: the title bar's text */
     int dark;                   /* the bars' colour scheme: the desktop's, then the instance's (window_set_dark) */
@@ -158,6 +165,7 @@ struct window {
     struct xdg_surface *xdg_surface;
     struct xdg_toplevel *toplevel;
     struct wl_shell_surface *shell_surface;  /* instead of the two above where the compositor has no xdg-shell (wlshell.c) */
+    struct qt_extended_surface *qt_ext;      /* with it, Lipstick's qt_surface_extension (raise, lower) */
     void *map;
     size_t map_len;
     struct wl_buffer *buffers[NBUF];
@@ -189,6 +197,7 @@ extern struct wl_shm *shm;
 extern struct zwp_linux_dmabuf_v1 *dmabuf_mgr;  /* dmabuf.c */
 extern struct xdg_wm_base *wm_base;
 extern struct wl_shell *wl_shell_global;  /* wlshell.c: Lipstick has only wl_shell */
+extern struct qt_surface_extension *qt_surface_ext;  /* wlshell.c */
 extern struct wl_seat *seat;
 extern struct wp_viewporter *viewporter;                     /* registry.c */
 extern struct wp_fractional_scale_manager_v1 *fscale_mgr;
@@ -218,6 +227,7 @@ void clipboard_client_drop(struct client *c);
 void clipboard_pollfds(struct pollfd *p);
 void clipboard_dispatch(struct pollfd *p);  /* clipboard.c */
 void send_msg(struct client *c, uint32_t type, const int32_t *v, int n);  /* client.c */
+void send_msg_fd(struct client *c, uint32_t type, const int32_t *v, int n, int fd);  /* with fd (SCM_RIGHTS) unless it is < 0 */
 void send_input(struct window *w, int32_t type, int32_t a, int32_t b);  /* client.c */
 void client_read(struct client *c);  /* client.c */
 uint32_t kb_android_meta(void);  /* keyboard.c */
@@ -254,6 +264,9 @@ void window_dmabuf_show(struct window *w, int buf, const int32_t *damage);
 void window_dmabuf_frame(struct window *w, const int32_t *m, const int *fds, int nfds);  /* dmabuf.c */
 void wlshell_create(struct window *w, const char *label, const char *app_id);  /* wlshell.c */
 void wlshell_first_configure(struct window *w);
+void wlshell_lower(struct window *w);
+void wlshell_raise(struct window *w);
+void wlshell_destroy(struct window *w);
 /* damage in buffer coordinates; wl_compositor v3 (Lipstick) has only surface coordinates: the whole surface then */
 static inline void surface_damage(struct wl_surface *s, int32_t x, int32_t y, int32_t w, int32_t h)
 {
@@ -284,6 +297,7 @@ int display_mobile(void);                        /* WM_AUTO's answer: a mobile s
 void window_set_mode(struct window *w, int mode); /* WM_*: (re)applies the style, before the first configure or live */
 void window_display_changed(struct window *w);   /* the outputs changed: style (auto), density and navigation bar follow */
 void window_nav_visible(struct window *w, int visible);  /* MSG_NAVBAR */
+void window_nav_layer(struct window *w);  /* MSG_NAVBAR_LAYER */
 void window_nav_action(struct window *w, int button);    /* a navigation bar button (NAV_*) was pressed */
 void window_send_back(struct window *w);         /* pointer.c: KEYCODE_BACK down and up */
 void window_minimize(struct window *w);          /* pointer.c: the app stops, then the compositor minimizes */

@@ -19,6 +19,11 @@ struct navbar {
     int lw, lh, scale, dark, pressed;  /* what the current buffer shows */
     int y;                             /* position under the window's content surface */
     int shown;                         /* a buffer is attached */
+    /* no subsurface (Lipstick has no wl_subcompositor): the window's display owner composes the bar into its frames (a layer of the app's
+     * virtual display, aosp/hals/graphics/vdisplay); each drawing goes to it as a memfd (fd, w x h px XRGB8888; fd -1, 0 x 0: hidden) */
+    int remote, fd;
+    void (*send)(void *ctx, int fd, int pw, int ph);
+    void *ctx;
 };
 
 struct wp_viewporter;
@@ -28,6 +33,8 @@ void navbar_create(struct navbar *n, struct wl_surface *parent);
  * applies with the parent's next commit. */
 void navbar_update(struct navbar *n, int y, int lw, int lh, int scale, int dark, int pressed);
 void navbar_hide(struct navbar *n);
+/* The bar as pixels for the display owner instead of a subsurface (navbar_create made none): later updates go to send(ctx, ...). */
+void navbar_set_remote(struct navbar *n, void (*send)(void *ctx, int fd, int pw, int ph), void *ctx);
 /* Which button is at x (logical, on the bar). */
 int navbar_hit(const struct navbar *n, int x);
 void navbar_destroy(struct navbar *n);

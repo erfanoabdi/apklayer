@@ -275,8 +275,15 @@ the providers probe sensorfw, geoclue1, PulseAudio, the device's camera and vibr
 
 What differs from Ubuntu Touch, and what changed:
 - Lipstick has no xdg-shell (wl_shell only), wl_compositor 3, wl_seat 3, no subcompositor: `bridge/shell/wlshell.c` makes a window a wl_shell toplevel laid out
-  maximized at the output's size and active (Lipstick sends no configure); damage falls back to `wl_surface.damage` on v3; without subsurfaces there is no
-  navigation bar (no Back: open). Frames go as the device's gralloc buffers over `android_wlegl` (`[shell] gralloc buffer 1: 1080x2400 stride 1088`).
+  maximized at the output's size and active (Lipstick sends no configure); damage falls back to `wl_surface.damage` on v3. Without subsurfaces the
+  navigation bar is a layer of the app's virtual display (2026-11-09): the shell draws it as before (navbar.c) and sends its pixels as a memfd
+  (`NAVBAR_PIXELS`) to the display's owner, which offered it (`NAVBAR_LAYER`, `apklayer_display_set_navbar_callback`); libapklayer_vdisplay puts
+  them in a layer on top of the app's layer stack at the bottom edge, so SurfaceFlinger composes it into every frame (and `apklayer screenshot`
+  shows it). Touches on the window's bottom `nav_h` pixels are the bar's; the app gets the bar's inset as on other compositors. The pointer on that
+  strip still goes to the app (Lipstick is touch only). Lipstick's own extensions give no second surface inside a window (qt_surface_extension and
+  alien_manager, Jolla's AppSupport windows, are window management), but qt_surface_extension's `lower` is Home: jolla-home's
+  `onWindowLowered` hides an application window to the home screen, and the app stops (minimized); `raise` (`apklayer run` of the running app)
+  and its `onscreen_visibility` (shown again) resume it. Frames go as the device's gralloc buffers over `android_wlegl` (`[shell] gralloc buffer 1: 1080x2400 stride 1088`).
 - The system's programs (glibc 2.30) cannot load apklayer's LD_PRELOAD (needs GLIBC_2.34): the device's `/usr/bin/getprop` (cli `hostToolEnv()`) and the hub's
   `setsid` (HubStartup) start without it now. Other host programs an app starts (`sh -c` overrides, Runtime.exec of a system binary) still inherit it: open.
 - `ro.hardware.egl` is `meow` (MediaTek's layer over Mali): libGLES_meow crashes in SurfaceFlinger during its dlopen (a jump to an unmapped address under

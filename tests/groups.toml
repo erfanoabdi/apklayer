@@ -242,7 +242,7 @@ run = ["python3 -u tests/vm/decoration.py"]
 [mobile]  # also the hub's questions as full-screen pages in the mobile style (permission-mobile.py)
 needs = ["com.android.test.uibench"]
 apps = ["hello-permissions"]
-run = ["python3 -u tests/vm/mobile.py", "python3 -u tests/vm/permission-mobile.py"]
+run = ["python3 -u tests/vm/mobile.py", "python3 -u tests/vm/mobile.py --no-subsurfaces", "python3 -u tests/vm/permission-mobile.py"]
 
 [startup]
 needs = ["com.android.test.uibench"]
