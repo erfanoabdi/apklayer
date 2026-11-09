@@ -3,6 +3,18 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: input-inject's long presses wait for the app (the third long press that "ran no long click")
+- Cause: the test, not the app. It held the finger until the long click ran but failed when the script's next steps (hover:8/11/14) came
+  first. The steps run on the app's clock, which follows real time through a stall: under parallel load the app stalled around a press,
+  its DOWN came after the next step (a Parallels log of 2026-11-09: hover:9 press, hover:10, then the DOWN, then hover:11) or with both
+  remaining steps at once, and the long click due 400 ms after the DOWN came after the step the test took for its deadline. Reproduced by
+  stopping the app's JVM for 2.8 s over the third press: DOWN, hover:13, hover:14 within 0.2 s, the long click 0.4 s later (the PLAN's
+  signature: no long click, then the release as a tap). Unstalled, about 40 parallel runs (up to 5 input-inject beside activities) all ran it 0.40-0.42 s after the DOWN.
+- Fix (tests/vm/input-inject.py): the steps that come during a press wait for its long click and action mode, then run in order, as a
+  person goes on once the toolbar shows; the app's end is the deadline (an unreleased press or a missing action mode fails there). The
+  hover:13 empty done now also runs when the third press was still held (it was skipped). With the JVM stopped 2.8 s over the first or third
+  press, 1.8 s over the second, the test passes; Parallels, own tree ~/apklayer-lp: `tests/run input activities` 5 of 5.
+
 ## 2026-11-10: release 0.4.11 (runtime 0.4.11)
 - Native bridge (x86_64 hosts, arm64 apps): a guest thread's pthread record maps to its host thread (binary_translation 0004, native_bridge_support 0001, bionic_translation 0058): Unity/il2cpp's GC no longer scans the wrong stack (PGR's "irrecoverable stack overflow" and black screen); Sailfish OS and Ubuntu Touch: the phone's own on-screen keyboard (Maliit) types into Android fields, with its height as the window's inset; the screen (max window metrics, real display size, the drawing cache limit) is the monitor, not the first window (FCL's guide overlay); headless runs without a shell no longer throw.
 
