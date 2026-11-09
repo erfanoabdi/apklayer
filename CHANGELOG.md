@@ -16,6 +16,23 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Check: hello.acttarget logs max/real/window/cache, relaunch.py (group activities) asserts max = real = output px (Parallels: 1024x768,
   window 480x400, cache 3145728). Parallels, own tree ~/apklayer-a25: activities, gpu, window-geometry, mobile pass.
 
+## 2026-11-09: Unity games through the native bridge: il2cpp's GC gets its own stack (PGR black screen on x86_64)
+- Tester report (x86_64, NVIDIA, 0.4.7/0.4.9/0.4.10): Punishing: Gray Raven (arm64-only, Unity 2022.3 il2cpp) stayed black after MainActivity
+  ("An irrecoverable stack overflow has occurred", later "double free or corruption (out)"). Reproduced on the x86 PC (Intel) with main:
+  UnityMain died in il2cpp_init (SEGV_ACCERR, Unity's tombstone), the same with -Xss2m, so not a stack size. Not bionic_translation 0050-0057.
+- Cause: il2cpp's Boehm GC asks pthread_getattr_np(pthread_self()) for its stack. Under the bridge a guest thread's pthread_self() is its
+  own bionic record (binary_translation 0001), which the proxy handed to the host: glibc took it for the initial thread and the tid lookup
+  failed, so the guest got the host main stack; and the guest's pthread_attr_getstack read glibc's attr, never the guest stack the proxy
+  writes into bionic's fields. The GC scanned from its guest stack upwards into the first unmapped/guard page (HotSpot printed the
+  "irrecoverable stack overflow" when that page was the JVM thread's red zone). With that fixed the GC's first stop-the-world aborted:
+  `pthread_kill failed at suspend` (pthread_kill got the record too).
+- Fix (generic): binary_translation 0004 (GuestPthreadToHost: a record to its host pthread_t), native_bridge_support 0001 (every proxied
+  function taking a pthread_t maps it), bionic_translation 0058 (attr stack getters read bionic's fields). Test: hello-arm64 "own stack".
+- Result on the x86 PC: PGR draws its Unity screens up to the game's data-download check ("Disk space is insufficient ... 43141 MB/13717 MB",
+  the PC's free space; stopped there, nothing downloaded). Groups native-bridge, native-bridge-vulkan, startup, native, gpu pass (x86 PC).
+  The tester's "double free or corruption (out)" did not occur on the PC (neither before the fix, where the GC fault came first, nor after).
+- Libraries: Build log; libberberis_arm64 and libberberis_proxy_libc (x86_64) are in the lock, not yet in the prebuilts branch.
+
 ## 2026-11-09: `stopped-windows.py translucent` on the x86 PC: the sample hit the label, not a dim layer
 - The check failed only on the owner's x86 PC with (106, 0, 0) in the relaunched screenshot. The screenshot itself is the translucent
   activity's plain red: at font scale 1.3 the centered "Translucent activity" label puts a glyph's antialiased edge on the center pixel
@@ -1010,6 +1027,17 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-09 - gsi_x86_64 libberberis_proxy_libc: a guest's pthread_getattr_np(pthread_self()) (PGR agent)
+- Why: Unity's il2cpp GC got the host main stack for its guest thread and faulted above the guest stack (PGR black screen through the
+  bridge; patches/aosp/frameworks/libs/native_bridge_support 0001, entry above).
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `patches/apply aosp/frameworks/libs/native_bridge_support ~/los24/frameworks/libs/native_bridge_support`,
+  then `cd ~/los24 && source build/envsetup.sh && export APKLAYER_NATIVE_BRIDGE=arm64 && breakfast gsi_x86_64 userdebug && m libberberis_proxy_libc`.
+- Result: built (13:50, graph regenerated); the first version only mapped pthread_getattr_np's own-thread case.
+- Second run (same day): the patch reworked (every proxied pthread_t function, binary_translation 0004 GuestPthreadToHost), applied
+  with `patches/apply` to both projects (the first version reversed with `patch -R`), then `m libberberis_arm64 libberberis_proxy_libc`.
+- Result: built (09:50). sha256 libberberis_arm64.so c2ea0078483bcff739c554daf33dfb5ede70b02c1414a112edb4e05de1d11c7b (3030560 bytes),
+  libberberis_proxy_libc.so 6724ec9f66b1b19e03982e24b05541b695ce5d6eeb1d3b42d935d17d354aa6c8 (85296 bytes); x86_64 lock set; staged only in
+  the PC's ~/apklayer-x86/pgr prebuilts copy, not in the prebuilts branch yet (copies on the Mac: /tmp/pgrwork/).
 ### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_vdisplay: the navigation bar layer waits for the app's first frame (lead)
 - Why: on Sailfish OS the bar layer was shown at once, so SurfaceFlinger presented a bar-only frame before the app drew and the shell dropped its splash (owner: "we lost the splashscreen").
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "vdisplay: bar after the first frame" hals/graphics/vdisplay`, then `APKLAYER_PRODUCT=<product> python3 tools/lib/orb-build-module.py libapklayer_vdisplay hals/graphics/vdisplay VirtualDisplay.cpp` for gsi_arm64 and gsi_x86_64.

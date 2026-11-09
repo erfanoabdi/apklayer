@@ -1,0 +1,103 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: the host pthread_t of a guest thread's own record
+
+With glibc-host-thread-id-handoff (0001) a guest thread's pthread_self() is its own bionic record, so a pthread_t the guest got that
+way meant nothing to the host's pthread functions: native_bridge_support's proxies passed it on (pthread_getattr_np gave the host
+main thread's stack, pthread_kill failed with ESRCH; il2cpp's Boehm GC in Unity games faulted above its stack, then aborted with
+"pthread_kill failed at suspend"). Each GuestThread keeps the host pthread_t its records stand for (they are made on the thread
+itself), and GuestPthreadToHost maps a record to it: the record's tid finds the GuestThread, whose record pointer must match.
+Used by native_bridge_support 0001.
+
+--- a/guest_os_primitives/guest_thread.cc
++++ b/guest_os_primitives/guest_thread.cc
+@@ -409,6 +409,7 @@
+ #if defined(__BIONIC__)
+   if (glibc_host_records_ == nullptr) {  // apklayer patch: zeroed, with the tid and bionic_tls pointer bionic's pthread_create sets
+     glibc_host_records_ = Mmap(kGlibcHostRecordsSize);
++    host_pthread_ = pthread_self();  // made on the thread itself (InitStaticTls, the linker's host pthread)
+     CHECK_NE(glibc_host_records_, MAP_FAILED);
+     auto* thread = static_cast<pthread_internal_t*>(glibc_host_records_);
+     thread->tid = GettidSyscall();
+--- a/guest_os_primitives/guest_thread_manager.cc
++++ b/guest_os_primitives/guest_thread_manager.cc
+@@ -19,6 +19,7 @@
+ #include <cstddef>      // size_t
+ 
+ #include "berberis/base/checks.h"
++#include "berberis/base/config_globals.h"  // apklayer patch
+ #include "berberis/base/tracing.h"
+ #include "berberis/guest_os_primitives/guest_thread.h"
+ #include "berberis/guest_os_primitives/guest_thread_manager.h"
+@@ -26,6 +27,9 @@
+ #include "berberis/runtime_primitives/code_pool.h"  // ResetAllExecRegions
+ #include "guest_thread_manager_impl.h"
+ #include "guest_thread_map.h"
++#if defined(__BIONIC__)
++#include "bionic/pthread_internal.h"  // apklayer patch: pthread_internal_t (GuestPthreadToHost)
++#endif
+ #include "scoped_signal_blocker.h"
+ 
+ namespace berberis {
+@@ -96,6 +100,18 @@
+   }
+   *error = ESRCH;
+   return false;
++}
++
++pthread_t GuestPthreadToHost(pthread_t thread) {
++#if defined(__BIONIC__)
++  // apklayer patch: a record's tid finds its GuestThread (reading that word of a glibc struct pthread is harmless; the record
++  // pointer itself must then match).
++  if (thread != 0 && IsConfigFlagSet(kGlibcHostThreadIdHandoff)) {
++    GuestThread* guest = GuestThreadMap::GetInstance()->FindThread(reinterpret_cast<const pthread_internal_t*>(thread)->tid);
++    if (guest != nullptr) guest->HostPthreadOf(reinterpret_cast<const void*>(thread), &thread);
++  }
++#endif
++  return thread;
+ }
+ 
+ void ExitCurrentThread(int status) {
+--- a/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h
++++ b/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h
+@@ -19,6 +19,7 @@
+ 
+ #include <csetjmp>  // jmp_buf
+ #include <csignal>  // stack_t
++#include <pthread.h>  // apklayer patch: pthread_t
+ #include <memory>
+ 
+ #include "berberis/guest_state/guest_addr.h"
+@@ -70,6 +71,12 @@
+   // apklayer patch: on a glibc host (glibc-host-thread-id-handoff) this thread's own bionic records, a pthread_internal_t followed by
+   // its bionic_tls, made on first use: what the guest takes for the host's thread (InitStaticTls, the linker's host pthread).
+   void* GlibcHostRecords();
++  // apklayer patch: the host's pthread_t of this thread when `record` is its own record (the guest's pthread_self()).
++  bool HostPthreadOf(const void* record, pthread_t* host) const {
++    if (record == nullptr || record != glibc_host_records_) return false;
++    *host = host_pthread_;
++    return true;
++  }
+ 
+   // Configure static tls for *current* *main* guest thread.
+   void ConfigStaticTls(const NativeBridgeStaticTlsConfig* config);
+@@ -136,6 +143,7 @@
+   void* static_tls_ = nullptr;
+   // apklayer patch: on a glibc host, this thread's own bionic records (pthread_internal_t, bionic_tls); see InitStaticTls.
+   void* glibc_host_records_ = nullptr;
++  pthread_t host_pthread_ = 0;  // apklayer patch: the host thread the records stand for (HostPthreadOf)
+ 
+   // Shadow call stack.
+   void* scs_region_ = nullptr;
+--- a/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread_manager.h
++++ b/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread_manager.h
+@@ -35,6 +35,10 @@
+ 
+ void ExitCurrentThread(int status);
+ 
++// apklayer patch: on a glibc host (glibc-host-thread-id-handoff) a guest thread's pthread_self() is its own bionic record, not a
++// host pthread_t: the proxies that take a pthread_t pass it through this. Anything else is returned as it is.
++pthread_t GuestPthreadToHost(pthread_t thread);
++
+ // Ensure guest threads don't run obsolete code.
+ void FlushGuestCodeCache();
+ 
