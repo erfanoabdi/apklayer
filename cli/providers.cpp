@@ -261,6 +261,7 @@ bool deviceDomain(const Layout& l, const Instance& inst, const std::string& doma
     std::vector<ProviderConfig> configs = readProviders(providersFile(inst));
     if (const ProviderConfig* c = named(configs, domain)) return c->provider == "device";
     const Domain* d = findDomain(domain);
+    if (domain == "media" && d && deviceWorks(l, *d) && !deviceDomain(l, inst, "graphics")) return false;  // the device's Codec2 needs its gralloc
     return d && deviceWorks(l, *d);  // not named: automatic, the device's HAL when it works
 }
 

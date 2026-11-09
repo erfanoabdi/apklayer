@@ -3,6 +3,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: Halium, media = device is the default (owner)
+- cli/device_hals.cpp: the device's Codec2 store probes 30 (was 0, opt-in), so an instance whose providers.toml names no media provider uses the device's HIDL/AIDL Codec2 (the stack's own Codec2 over GStreamer is not started); cli/providers.cpp deviceDomain: automatic only with graphics = device too (the device's HAL takes its output buffers from its own gralloc). `apklayer providers set media apklayer` keeps the GStreamer path.
+
 ## 2026-11-09: media = device works on the Volla X23 (the device's hardware Codec2)
 - "Failed to create video/avc decoder" was no failed creation: the 64x48 fixture is below `c2.mtk.avc.decoder`'s `size min="64x64"` and the device's
   software AVC decoder is not in its codec xml, so MediaCodecList matched nothing. With a 320x240 fixture (`red-h264-320x240.mp4`, hello-native-player
