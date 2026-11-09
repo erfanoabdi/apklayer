@@ -267,7 +267,7 @@ asks once per app ("Create App"), `launcher hide` and uninstall remove it, an ap
 submenu (the deb's `apklayer-*` entries are untouched). On Ubuntu 24.04 the portal refuses every launcher ("Dynamic launcher icon failed
 validation": its icon check runs in bwrap, which the AppArmor user-namespace restriction breaks, LP#2069526); there
 `flatpak override --user --filesystem=xdg-data/applications:create io.github.erfanoabdi.Apklayer` makes apklayer write the launchers itself at the
-host's paths, as the deb does (`io.github.erfanoabdi.Apklayer.<package>.desktop`). `.apk` files open with the manager's own entry (`MimeType` there, `apklayer run <file>`);
+host's paths, as the deb does (`io.github.erfanoabdi.Apklayer.<package>.desktop`; then `apklayer stop`: a running apklayerd keeps the permissions it started with). `.apk` files open with the manager's own entry (`MimeType` there, `apklayer run <file>`);
 every command runs in apklayerd (started on demand, as with the per-app sandbox),
 because each `flatpak run` is a pid namespace of its own; the GLES version probe (`eglinfo`, mesa-utils) is not in the Platform, so a host driver under GLES 3.2 gets no 3.2
 claim. NVIDIA: Flatpak needs the `org.freedesktop.Platform.GL.nvidia-<version>` extension matching the host driver (`flatpak update` installs it

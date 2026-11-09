@@ -3,6 +3,10 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: Flatpak toward Flathub (docs/PLAN.md "Flatpak" 3-4)
+- Offline build (pinned bionic_translation, deps.lock artifacts via `tools/gen/flatpak-sources.py` -> `flatpak/deps-sources.json`, Slint), PyGObject module, `--device=dri` instead of `all`, launchers through the dynamic launcher portal (`bridge/portal/launcher.py`; files at the host's paths only when the person grants that folder), `.apk` association on the manager's entry (`apklayer-manager FILE.apk` execs `apklayer run`), metainfo with screenshot, releases, branding. settings.py ends when the hub's pipe closes (no setpriv in the Platform).
+- CI flatpak-ci green both arches, flatpak-builder-lint clean apart from screenshot mirroring (Flathub's build does it) and the Wayland-only warning. Parallels: UiBench installed, run, screenshot, .apk opened via file forwarding; the portal refuses launchers on Ubuntu 24.04 (validate-icon's bwrap vs AppArmor, LP#2069526).
+
 ## 2026-11-09: Vulkan presentation not on by default with NVIDIA's driver
 - cli/env.cpp hostVulkan skips DRIVER_ID_NVIDIA_PROPRIETARY: presentation is untested there and Unity games (PGR, Azur Lane already failing on the NVIDIA tester) pick Vulkan when offered; `APKLAYER_VULKAN_PRESENT=1` still turns it on. x86 PC (Intel): vulkan, gpu pass.
 
