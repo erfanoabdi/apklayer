@@ -29,8 +29,26 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
   Parallels (~/apklayer-st, st1/st2): the same groups pass; host-binder-kernel cannot run there (sudo now asks for a password, no `-dev`
   devices); at -j 2 the slot st1 left an apklayer-shell after the stop now and then (binder-kernel, gpu-window, hub-services; all pass at -j 1:
   the known Parallels -j 2 flake). sandbox passes on Parallels.
+  Parallels' -j 2 st1 failures (a shell left after the stop, a missing shell.log) happen with `APKLAYER_BINDER=kernel` for every group too.
 - UiBench on the x86 PC (tests/vm/startup.sh, 3 alternating rounds, first frame): cold 6.38-6.43 s kernel / 6.43-6.60 s userspace, warm
   1.66-1.70 s / 1.67-1.70 s.
+- Volla X23 (Ubuntu Touch), deb 0.4.8~git20261109.ubinder2 (this tree, built on Parallels with build-deb.sh, `dpkg -i --force-depends`: no
+  uidmap there), runtime 0.3.4 with lazy4's five libraries. The always-on instance ut came up on the userspace binder: apklayer-binderd runs,
+  no process holds `binder-ut`/`hwbinder-ut`; the device HALs' host contexts (`/dev/binderfs/binder`, `hwbinder`) stay open as before. Open
+  Camera (Camera1 through the device's HIDL provider): cameraserver connects and starts streaming, the window composed ~130 frames in its
+  15 s. Launches (`apklayer run` in the user manager's environment through systemd-run, to `activity resumed`; warm from the spare, cold a
+  JVM for the launch; same deb, `apklayer binder kernel` for the kernel rows, each series ~8 min after a restart):
+
+  | | NewPipe cold | NewPipe warm | Calculator cold | Calculator warm |
+  |---|---|---|---|---|
+  | userspace | 19.9-21.5 s (5) | 12.8-13.1 s (4; first after restart 13.5) | 18.0-18.9 s (5) | 9.8-10.1 s (5) |
+  | kernel | 19.4, 21.0 s | 12.6, 12.6 s | 17.6, 19.1 s | 9.8, 9.9 s |
+  | PLAN 8 (lazy4, kernel) | 21.0-21.4 s | 12.2-12.5 s | 17.5-18.3 s | 10.0-10.5 s |
+
+  Memory (PSS + SwapPss of the instance's processes; component hosts still running left out: F-Droid's boot job ~320 MB, the WebView host
+  NewPipe leaves ~280 MB), 6-8 min after a restart, no app yet: userspace 945 MB (hub 320, spare 284, native 310, apklayer-binderd ~1),
+  kernel 940 MB (318, 284, 309); lazy4 before the update (kernel, up 2 h) 941 MB; PLAN 8's 974. After the same launch series: userspace
+  1001 MB, kernel 994 MB. The phone is left on this deb, instance ut on the userspace binder (no choice file), active.
 
 ## 2026-11-09: Halium, media = device is the default (owner)
 - cli/device_hals.cpp: the device's Codec2 store probes 30 (was 0, opt-in), so an instance whose providers.toml names no media provider uses the device's HIDL/AIDL Codec2 (the stack's own Codec2 over GStreamer is not started); cli/providers.cpp deviceDomain: automatic only with graphics = device too (the device's HAL takes its output buffers from its own gralloc). `apklayer providers set media apklayer` keeps the GStreamer path.
