@@ -109,10 +109,26 @@ public final class Services {
     /** No service runs in this process and none is being created. */
     static boolean none() { return RUNNING.isEmpty() && !creating; }
 
-    /** A component host with no service left ends (main thread). */
+    /**
+     * A component host with no service left ends (main thread); not while a job it planned to run at once has yet to start (WorkManager schedules a
+     * chain's next work before the last one's job finishes, and runs it in this process meanwhile): that job's end asks again, or the idle rule ends it.
+     * In a process that schedules jobs the check is made EXIT_GRACE_MS later: work a service's last call enqueued (MediaProvider's volume scan)
+     * schedules its job from another thread.
+     */
     static void exitIfIdle() {
-        if (Boolean.getBoolean("apklayer.componenthost") && RUNNING.isEmpty() && !creating) { System.out.println("[apklayer] last service of this process destroyed: exiting"); System.out.flush(); NativeLoader.endWithoutNativeDestructors(); Runtime.getRuntime().halt(0); }
+        if (!Boolean.getBoolean("apklayer.componenthost") || !RUNNING.isEmpty() || creating) return;
+        if (!HostJobs.scheduled) { exit(); return; }
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            // a service came meanwhile, or a client's call runs (a provider's): the next service end or the idle rule decides
+            if (!RUNNING.isEmpty() || creating || ShadowHostRealBinder.IN_FLIGHT.get() > 0) return;
+            if (HostJobs.due()) { System.out.println("[apklayer] last service of this process destroyed: a job is due, staying"); return; }
+            exit();
+        }, EXIT_GRACE_MS);
     }
+    private static void exit() {
+        System.out.println("[apklayer] last service of this process destroyed: exiting"); System.out.flush(); NativeLoader.endWithoutNativeDestructors(); Runtime.getRuntime().halt(0);
+    }
+    private static final long EXIT_GRACE_MS = 500;
 
     /** Runs a task on the main thread and waits for it (services are created and called there). */
     private static <T> T onMain(java.util.function.Supplier<T> task) {

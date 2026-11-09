@@ -115,6 +115,11 @@ apps = ["hello-files"]
 setup = ["""f=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/system/etc/permissions/apklayer-test-hello-files.xml; [ -e $f ] || printf '<permissions><privapp-permissions package="hello.files"><permission name="android.permission.MANAGE_DOCUMENTS"/></privapp-permissions></permissions>\\n' > $f"""]
 run = ["tests/vm/files.sh", "OWNDATA=1 tests/vm/files.sh", "VOLUMES=1 tests/vm/files.sh"]
 
+[volumes]  # a vfat loop image mounted at /media/<user>/<label> and removed while hello-files runs (root: sudo -n, or sudo -A with SUDO_ASKPASS)
+apps = ["hello-files"]
+needs = ["com.android.providers.media.module", "com.android.externalstorage"]
+run = ["tests/vm/volumes.py"]
+
 [view]
 apps = ["hello-files", "hello-reader"]
 needs = ["com.android.externalstorage"]  # the linux-home documents provider

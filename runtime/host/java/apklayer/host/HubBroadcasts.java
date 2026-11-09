@@ -237,6 +237,9 @@ final class HubBroadcasts {
     }
 
     /** The running process of a package, started when needed. */
+    /** Someone waits in process() for this process to register. */
+    synchronized boolean awaitingStart(String name) { return starting.containsKey(name); }
+
     HubDirectory.Peer process(String name) {
         HubDirectory.Peer peer = directory.peer(name);
         if (peer != null) return peer;

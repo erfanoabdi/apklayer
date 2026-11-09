@@ -47,3 +47,8 @@ ro.vendor.api_level=202604
 # no local hwservicemanager (HIDL HALs come from the host, libhidl 0001/0002). libhwbinder takes one as installed when /system/bin/hwservicemanager
 # exists, which on a Halium device is the device's own, and then waits for this property (always_sets_disabled is the tree's): say it is off.
 hwservicemanager.disabled=true
+# MediaProvider's database backup (DatabaseBackupAndRecovery: leveldb through its FUSE daemon) needs that daemon, and there is no FUSE here: each
+# volume attach otherwise waits 20 s for one (getFuseDaemonForFileWithWait)
+persist.sys.fuse.backup.internal_db_backup=false
+persist.sys.fuse.backup.external_volume_backup=false
+persist.sys.fuse.backup.public_db_backup=false

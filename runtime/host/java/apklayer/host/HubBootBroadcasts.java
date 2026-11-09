@@ -11,7 +11,8 @@ import java.nio.file.Path;
  * ACTION_LOCKED_BOOT_COMPLETED, then ACTION_BOOT_COMPLETED, sent as UserController does (FLAG_RECEIVER_NO_ABORT | FLAG_RECEIVER_INCLUDE_BACKGROUND, EXTRA_USER_HANDLE,
  * permission RECEIVE_BOOT_COMPLETED required of the receiver), after the boot settings are written. Ordered, as UserController sends them (a result receiver):
  * the receivers get it one after the other, so the closed apps with a receiver are started one at a time, each after the previous one finished. The hub
- * of a stack that was already announced (it ended when idle and came back) sends nothing: the marker lives in the stack's runtime directory.
+ * of a stack that was already announced (it ended when idle and came back) sends nothing: the marker lives in the stack's runtime directory. Then
+ * ACTION_MEDIA_MOUNTED for each mounted volume and its scan, as StorageManagerService once vold has mounted them.
  */
 final class HubBootBroadcasts {
     private HubBootBroadcasts() {}
@@ -34,5 +35,7 @@ final class HubBootBroadcasts {
             if (only != null && only.contains(".")) boot.setPackage(only);
             directory.sendSystemOrdered(boot, "android.permission.RECEIVE_BOOT_COMPLETED");
         }
+        // the volumes vold mounted at boot, internal storage and the drives: ACTION_MEDIA_MOUNTED, and MediaProvider scans each (HubStorageService)
+        for (android.os.storage.VolumeInfo volume : directory.volumes.mountedVolumes()) HubVolumes.announce(directory, volume);
     }
 }
