@@ -1,0 +1,130 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: proxied pthread functions take a guest thread's own record
+
+With glibc-host-thread-id-handoff (binary_translation 0001) a guest thread's pthread_self() is its own bionic record, not a host
+pthread_t, and the proxies handed it to the host. pthread_getattr_np: glibc took the zeroed record for the initial thread (the main
+stack) and pthread_gettid_np found no tid, so il2cpp's Boehm GC (Unity; Punishing: Gray Raven) scanned from its guest stack up
+past the stack's mapping (SEGV_ACCERR in il2cpp_init; HotSpot's "irrecoverable stack overflow" when the page was the JVM thread's
+red zone). pthread_kill: ESRCH, so the GC's stop-the-world aborted ("pthread_kill failed at suspend"). pthread_getattr_np,
+pthread_join and, through custom trampolines in the arm64 table, pthread_detach, gettid_np, getcpuclockid, kill, setname_np,
+setschedprio, getname_np, getschedparam and setschedparam map it with binary_translation's GuestPthreadToHost first.
+Not mapped: pthread_sigqueue (a union by value). Test: tests/apps/hello-arm64 "own stack" (group native-bridge).
+
+--- a/android_api/libc/proxy/pthread_translation.cc
++++ b/android_api/libc/proxy/pthread_translation.cc
+@@ -79,6 +79,25 @@
+   pthread_attr_destroy(&attr);
+ }
+ 
++// apklayer patch: on a glibc host a guest thread's pthread_self() is its own bionic record, not a host pthread_t
++// (binary_translation 0001): the host got the record (pthread_kill failed with ESRCH, il2cpp's GC aborted at its first
++// collection: "pthread_kill failed at suspend"). These map it to the host thread first.
++#define APKLAYER_HOST_PTHREAD_TRAMPOLINE(name, call, ...)                    \
++  void DoCustomTrampoline_##name(HostCode /* callee */, ProcessState* state) { \
++    auto [__VA_ARGS__] = GuestParamsValues<decltype(name)>(state);             \
++    auto&& [ret] = GuestReturnReference<decltype(name)>(state);              \
++    ret = call;                                                                \
++  }
++APKLAYER_HOST_PTHREAD_TRAMPOLINE(pthread_detach, pthread_detach(GuestPthreadToHost(t)), t)
++APKLAYER_HOST_PTHREAD_TRAMPOLINE(pthread_gettid_np, pthread_gettid_np(GuestPthreadToHost(t)), t)
++APKLAYER_HOST_PTHREAD_TRAMPOLINE(pthread_getcpuclockid, pthread_getcpuclockid(GuestPthreadToHost(t), a), t, a)
++APKLAYER_HOST_PTHREAD_TRAMPOLINE(pthread_kill, pthread_kill(GuestPthreadToHost(t), a), t, a)
++APKLAYER_HOST_PTHREAD_TRAMPOLINE(pthread_setname_np, pthread_setname_np(GuestPthreadToHost(t), a), t, a)
++APKLAYER_HOST_PTHREAD_TRAMPOLINE(pthread_setschedprio, pthread_setschedprio(GuestPthreadToHost(t), a), t, a)
++APKLAYER_HOST_PTHREAD_TRAMPOLINE(pthread_getname_np, pthread_getname_np(GuestPthreadToHost(t), a, b), t, a, b)
++APKLAYER_HOST_PTHREAD_TRAMPOLINE(pthread_getschedparam, pthread_getschedparam(GuestPthreadToHost(t), a, b), t, a, b)
++APKLAYER_HOST_PTHREAD_TRAMPOLINE(pthread_setschedparam, pthread_setschedparam(GuestPthreadToHost(t), a, b), t, a, b)
++
+ // int pthread_join(pthread_t thread, void **retval);
+ void DoCustomTrampoline_pthread_join(HostCode /* callee */,
+                                      ProcessState* state) {
+@@ -87,7 +106,7 @@
+ 
+   ScopedPendingSignalsDisabler scoped_pending_signals_disabler(state->thread);
+   auto&& [ret] = GuestReturnReference<decltype(pthread_join)>(state);
+-  ret = pthread_join(guest_thread, retval);
++  ret = pthread_join(GuestPthreadToHost(guest_thread), retval);  // apklayer patch
+ }
+ 
+ // int pthread_getattr_np(pthread_t thread, pthread_attr_t *attr);
+@@ -98,7 +117,8 @@
+ 
+   // Query host attr.
+   auto&& [ret] = GuestReturnReference<decltype(pthread_getattr_np)>(state);
+-  ret = pthread_getattr_np(guest_thread, guest_attr);
++  pthread_t host_thread = GuestPthreadToHost(guest_thread);  // apklayer patch: the host thread, also for the tid below
++  ret = pthread_getattr_np(host_thread, guest_attr);
+   if (ret != 0) {
+     return;
+   }
+@@ -111,7 +131,7 @@
+   size_t stack_size;
+   size_t guard_size;
+   int error;
+-  pid_t tid = pthread_gettid_np(guest_thread);
++  pid_t tid = pthread_gettid_np(host_thread);
+   if (GetGuestThreadAttr(tid, &stack_base, &stack_size, &guard_size, &error)) {
+     guest_attr->stack_base = ToHostAddr<void>(stack_base);
+     // TODO(b/78156520): main thread's stack has no guard and its size is
+--- a/android_api/libc/proxy/pthread_translation.h
++++ b/android_api/libc/proxy/pthread_translation.h
+@@ -122,6 +122,17 @@
+ void DoCustomTrampoline_pthread_getattr_np(HostCode callee,
+                                            ProcessState* state);
+ 
++// apklayer patch: functions that take a pthread_t the guest may have from pthread_self() (GuestPthreadToHost).
++void DoCustomTrampoline_pthread_detach(HostCode callee, ProcessState* state);
++void DoCustomTrampoline_pthread_gettid_np(HostCode callee, ProcessState* state);
++void DoCustomTrampoline_pthread_getcpuclockid(HostCode callee, ProcessState* state);
++void DoCustomTrampoline_pthread_kill(HostCode callee, ProcessState* state);
++void DoCustomTrampoline_pthread_setname_np(HostCode callee, ProcessState* state);
++void DoCustomTrampoline_pthread_setschedprio(HostCode callee, ProcessState* state);
++void DoCustomTrampoline_pthread_getname_np(HostCode callee, ProcessState* state);
++void DoCustomTrampoline_pthread_getschedparam(HostCode callee, ProcessState* state);
++void DoCustomTrampoline_pthread_setschedparam(HostCode callee, ProcessState* state);
++
+ // int pthread_key_create(pthread_key_t* key, void (*destructor)(void*));
+ void DoCustomTrampoline_pthread_key_create(HostCode callee,
+                                            ProcessState* state);
+--- a/android_api/libc/proxy/trampolines_arm64_to_x86_64-inl.h
++++ b/android_api/libc/proxy/trampolines_arm64_to_x86_64-inl.h
+@@ -81,21 +81,30 @@
+ {"pthread_attr_setstack", GetTrampolineFunc<auto(void*, void*, uint64_t) -> int32_t>(), reinterpret_cast<void*>(NULL)},
+ {"pthread_attr_setstacksize", GetTrampolineFunc<auto(void*, uint64_t) -> int32_t>(), reinterpret_cast<void*>(NULL)},
+ {"pthread_create", DoCustomTrampoline_pthread_create, reinterpret_cast<void*>(DoBadThunk)},
+-{"pthread_detach", GetTrampolineFunc<auto(int64_t) -> int32_t>(), reinterpret_cast<void*>(NULL)},
++{"pthread_detach", DoCustomTrampoline_pthread_detach, reinterpret_cast<void*>(DoBadThunk)},  // apklayer patch
++// was: {"pthread_detach", GetTrampolineFunc<auto(int64_t) -> int32_t>(), reinterpret_cast<void*>(NULL)},
+ {"pthread_exit", GetTrampolineFunc<auto(void*) -> void>(), reinterpret_cast<void*>(NULL)},
+ {"pthread_getattr_np", DoCustomTrampoline_pthread_getattr_np, reinterpret_cast<void*>(DoBadThunk)},
+-{"pthread_getcpuclockid", GetTrampolineFunc<auto(int64_t, void*) -> int32_t>(), reinterpret_cast<void*>(NULL)},
+-{"pthread_getname_np", GetTrampolineFunc<auto(int64_t, void*, uint64_t) -> int32_t>(), reinterpret_cast<void*>(NULL)},
+-{"pthread_getschedparam", GetTrampolineFunc<auto(int64_t, void*, void*) -> int32_t>(), reinterpret_cast<void*>(NULL)},
++{"pthread_getcpuclockid", DoCustomTrampoline_pthread_getcpuclockid, reinterpret_cast<void*>(DoBadThunk)},  // apklayer patch
++// was: {"pthread_getcpuclockid", GetTrampolineFunc<auto(int64_t, void*) -> int32_t>(), reinterpret_cast<void*>(NULL)},
++{"pthread_getname_np", DoCustomTrampoline_pthread_getname_np, reinterpret_cast<void*>(DoBadThunk)},  // apklayer patch
++// was: {"pthread_getname_np", GetTrampolineFunc<auto(int64_t, void*, uint64_t) -> int32_t>(), reinterpret_cast<void*>(NULL)},
++{"pthread_getschedparam", DoCustomTrampoline_pthread_getschedparam, reinterpret_cast<void*>(DoBadThunk)},  // apklayer patch
++// was: {"pthread_getschedparam", GetTrampolineFunc<auto(int64_t, void*, void*) -> int32_t>(), reinterpret_cast<void*>(NULL)},
+ {"pthread_getspecific", GetTrampolineFunc<auto(int32_t) -> void*>(), reinterpret_cast<void*>(NULL)},
+-{"pthread_gettid_np", GetTrampolineFunc<auto(int64_t) -> int32_t>(), reinterpret_cast<void*>(NULL)},
++{"pthread_gettid_np", DoCustomTrampoline_pthread_gettid_np, reinterpret_cast<void*>(DoBadThunk)},  // apklayer patch
++// was: {"pthread_gettid_np", GetTrampolineFunc<auto(int64_t) -> int32_t>(), reinterpret_cast<void*>(NULL)},
+ {"pthread_join", DoCustomTrampoline_pthread_join, reinterpret_cast<void*>(DoBadThunk)},
+ {"pthread_key_create", DoCustomTrampoline_pthread_key_create, reinterpret_cast<void*>(DoBadThunk)},
+ {"pthread_key_delete", GetTrampolineFunc<auto(int32_t) -> int32_t>(), reinterpret_cast<void*>(NULL)},
+-{"pthread_kill", GetTrampolineFunc<auto(int64_t, int32_t) -> int32_t>(), reinterpret_cast<void*>(NULL)},
+-{"pthread_setname_np", GetTrampolineFunc<auto(int64_t, void*) -> int32_t>(), reinterpret_cast<void*>(NULL)},
+-{"pthread_setschedparam", GetTrampolineFunc<auto(int64_t, int32_t, void*) -> int32_t>(), reinterpret_cast<void*>(NULL)},
+-{"pthread_setschedprio", GetTrampolineFunc<auto(int64_t, int32_t) -> int32_t>(), reinterpret_cast<void*>(NULL)},
++{"pthread_kill", DoCustomTrampoline_pthread_kill, reinterpret_cast<void*>(DoBadThunk)},  // apklayer patch
++// was: {"pthread_kill", GetTrampolineFunc<auto(int64_t, int32_t) -> int32_t>(), reinterpret_cast<void*>(NULL)},
++{"pthread_setname_np", DoCustomTrampoline_pthread_setname_np, reinterpret_cast<void*>(DoBadThunk)},  // apklayer patch
++// was: {"pthread_setname_np", GetTrampolineFunc<auto(int64_t, void*) -> int32_t>(), reinterpret_cast<void*>(NULL)},
++{"pthread_setschedparam", DoCustomTrampoline_pthread_setschedparam, reinterpret_cast<void*>(DoBadThunk)},  // apklayer patch
++// was: {"pthread_setschedparam", GetTrampolineFunc<auto(int64_t, int32_t, void*) -> int32_t>(), reinterpret_cast<void*>(NULL)},
++{"pthread_setschedprio", DoCustomTrampoline_pthread_setschedprio, reinterpret_cast<void*>(DoBadThunk)},  // apklayer patch
++// was: {"pthread_setschedprio", GetTrampolineFunc<auto(int64_t, int32_t) -> int32_t>(), reinterpret_cast<void*>(NULL)},
+ {"pthread_setspecific", GetTrampolineFunc<auto(int32_t, void*) -> int32_t>(), reinterpret_cast<void*>(NULL)},
+ {"pthread_sigqueue", GetTrampolineFunc<auto(int64_t, int32_t, void*) -> int32_t>(), reinterpret_cast<void*>(NULL)},
+ {"setjmp", GetTrampolineFunc<auto(void*) -> int32_t>(), reinterpret_cast<void*>(DoThunk_setjmp)},

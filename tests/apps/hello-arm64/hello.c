@@ -87,6 +87,25 @@ JNIEXPORT jint JNICALL Java_hello_arm64_Main_errnos(JNIEnv *env, jclass c)
     return r + (clock_gettime((clockid_t)1000, &ts) == -1 ? errno : 0);
 }
 
+/* pthread_getattr_np(pthread_self()) of a guest thread covers its own stack (GCs such as il2cpp's Boehm scan up to that top): 1 if so.
+ * The calling thread is a JVM one, as Unity's UnityMain. */
+static int own_stack(void)
+{
+    pthread_attr_t a;
+    void *base;
+    size_t size;
+    char here;
+    if (pthread_getattr_np(pthread_self(), &a) != 0 || pthread_attr_getstack(&a, &base, &size) != 0) return 0;
+    pthread_attr_destroy(&a);
+    return (char *)base <= &here && &here < (char *)base + size;
+}
+
+JNIEXPORT jint JNICALL Java_hello_arm64_Main_ownStack(JNIEnv *env, jclass c)
+{
+    (void)env; (void)c;
+    return own_stack();
+}
+
 static jclass main_class;
 
 static void *thread_main(void *arg)

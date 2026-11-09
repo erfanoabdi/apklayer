@@ -1,0 +1,63 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: pthread attr stack getters read bionic's fields
+
+The native bridge's proxy pthread_getattr_np (Berberis/native_bridge_support) calls the host's, then writes the guest thread's own
+stack base, size and guard into the bionic struct. The guest's pthread_attr_getstack/getstacksize/getguardsize then reached
+these wrappers, which read glibc's attr: the host thread's stack. il2cpp's Boehm GC (Unity, Punishing: Gray Raven, UnityMain is a
+JVM thread) took that as its guest stack and scanned from its guest stack pointer upwards, past the guest stack's mapping
+(SEGV_ACCERR in il2cpp_init; HotSpot's "irrecoverable stack overflow" when the page hit was the JVM thread's red zone).
+Every setter keeps bionic's fields in step with glibc's (sync_bionic_attr), and pthread_getattr_np now records the stack base as
+well, so the getters read bionic's fields. Test: tests/apps/hello-arm64 "own stack" (group native-bridge).
+
+--- a/pthread_wrapper/libpthread.c
++++ b/pthread_wrapper/libpthread.c
+@@ -419,7 +419,11 @@
+ 	assert(thread && attr);
+ 	*attr = (bionic_attr_t){0};
+ 	attr->glibc = apklayer_attr_map(attr);
+-	return sync_bionic_attr(attr, pthread_getattr_np((pthread_t)thread, attr->glibc));
++	const int ret = sync_bionic_attr(attr, pthread_getattr_np((pthread_t)thread, attr->glibc));
++	size_t size;  /* apklayer patch: the stack's base in bionic's field too (the getters below read bionic's fields) */
++	if (ret == 0)
++		pthread_attr_getstack(attr->glibc, &attr->bionic.stack_base, &size);
++	return ret;
+ }
+ 
+ /* apklayer patch: was bionic_pthread_attr_settstack, so the guest's pthread_attr_setstack, like the guard size and the other attr
+@@ -444,7 +448,8 @@
+ int bionic_pthread_attr_getguardsize(const bionic_attr_t *attr, size_t *guardsize)
+ {
+ 	assert(attr && IS_MAPPED(attr));
+-	return pthread_attr_getguardsize(attr->glibc, guardsize);
++	*guardsize = attr->bionic.guard_size;  /* apklayer patch: bionic's field, see getstack */
++	return 0;
+ }
+ 
+ int bionic_pthread_attr_setscope(bionic_attr_t *attr, int scope)
+@@ -471,10 +476,15 @@
+ 	return pthread_attr_getinheritsched(attr->glibc, inherit);
+ }
+ 
++/* apklayer patch: the stack getters read bionic's fields, which every setter keeps in step with glibc's attr: the native bridge's
++ * proxy pthread_getattr_np writes a guest thread's own stack there after the host call, and the guest read the host thread's
++ * from glibc's attr (il2cpp's GC scanned from its guest stack up to the JVM thread's stack top: a fault above the guest stack). */
+ int bionic_pthread_attr_getstack(const bionic_attr_t *attr, void *stackaddr, size_t *stacksize)
+ {
+ 	assert(attr && IS_MAPPED(attr));
+-	return pthread_attr_getstack(attr->glibc, stackaddr, stacksize);
++	*(void **)stackaddr = attr->bionic.stack_base;
++	*stacksize = attr->bionic.stack_size;
++	return 0;
+ }
+ 
+ #if defined(__LP64__)
+@@ -499,7 +509,8 @@
+ int bionic_pthread_attr_getstacksize(const bionic_attr_t *attr, size_t *stacksize)
+ {
+ 	assert(attr && IS_MAPPED(attr));
+-	return pthread_attr_getstacksize(attr->glibc, stacksize);
++	*stacksize = attr->bionic.stack_size;  /* apklayer patch: bionic's field, see getstack */
++	return 0;
+ }
+ 
+ int bionic_pthread_attr_setschedpolicy(bionic_attr_t *attr, int policy)
