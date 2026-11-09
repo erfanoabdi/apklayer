@@ -196,9 +196,9 @@ public final class HubClient {
     }
     /** Whether another app's caller holds the permission: the kernel's pid of a synchronous call names it, the uid its header carried a oneway one (pid 0 or -1). */
     /** A BlueZ helper of this process's own (HubBluetooth): {its stdin, its stdout}; an RFCOMM connection when address and uuid (or a channel) are given,
-     *  a server socket's listener for the service when only uuid and name are. */
-    android.os.ParcelFileDescriptor[] bluetooth(String address, String uuid, String name) {
-        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.BLUETOOTH, request -> { request.writeString(address); request.writeString(uuid); request.writeString(name); },
+     *  a server socket's listener for the service when only uuid and name are; secure: authenticated and encrypted (an insecure one asks neither). */
+    android.os.ParcelFileDescriptor[] bluetooth(String address, String uuid, String name, boolean secure) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.BLUETOOTH, request -> { request.writeString(address); request.writeString(uuid); request.writeString(name); request.writeBoolean(secure); },
                 reply -> new android.os.ParcelFileDescriptor[] {reply.readTypedObject(android.os.ParcelFileDescriptor.CREATOR), reply.readTypedObject(android.os.ParcelFileDescriptor.CREATOR)});
     }
     /** The answer to a pairing BlueZ asks about (BluetoothDevice.PAIRING_VARIANT_*), from the person in the hub's dialog: the PIN or passkey, "yes" to a

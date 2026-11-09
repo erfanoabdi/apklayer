@@ -23,19 +23,29 @@ public class ShadowHostBluetoothDevice extends ShadowBluetoothDevice {
     @RealObject private BluetoothDevice real;
     private Consumer<JSONObject> bonding;
 
-    @Implementation @Override protected BluetoothGatt connectGatt(Context context, boolean autoConnect, BluetoothGattCallback callback) { return gatt(callback); }
-    @Implementation @Override protected BluetoothGatt connectGatt(Context context, boolean autoConnect, BluetoothGattCallback callback, int transport) { return gatt(callback); }
+    @Implementation @Override protected BluetoothGatt connectGatt(Context context, boolean autoConnect, BluetoothGattCallback callback) { return gatt(callback, autoConnect); }
+    @Implementation @Override protected BluetoothGatt connectGatt(Context context, boolean autoConnect, BluetoothGattCallback callback, int transport) { return gatt(callback, autoConnect); }
     @Implementation @Override protected BluetoothGatt connectGatt(Context context, boolean autoConnect, BluetoothGattCallback callback, int transport, int phy, Handler handler) {
-        return gatt(callback);
+        return gatt(callback, autoConnect);
     }
 
-    // shortcut: autoConnect is a direct connection (BlueZ's Connect); upgrade to BlueZ's background connection (Device1.Connect on advertisement) when an app needs it
-    private BluetoothGatt gatt(BluetoothGattCallback callback) {
+    /** autoConnect: the helper connects whenever the device is seen advertising (an LE discovery runs meanwhile), with no timeout; a direct connection gives up after 30 s. */
+    private BluetoothGatt gatt(BluetoothGattCallback callback, boolean auto) {
         HostBluetooth.require(ShadowHostBluetoothAdapter.CONNECT);
         BluetoothGatt gatt = ShadowHostBluetoothGatt.create(real, callback);
-        ((ShadowHostBluetoothGatt) Shadow.extract(gatt)).open(real.getAddress(), callback);
+        ((ShadowHostBluetoothGatt) Shadow.extract(gatt)).open(real.getAddress(), callback, auto);
         return gatt;
     }
+
+    /** A device unparcelled from an intent (ACTION_FOUND's EXTRA_DEVICE) is a new object: it takes what BlueZ last told of its address (HostBluetooth.KNOWN). */
+    private void fill() {
+        JSONObject record = super.getType() == BluetoothDevice.DEVICE_TYPE_UNKNOWN ? HostBluetooth.KNOWN.get(real.getAddress()) : null;
+        if (record != null) HostBluetooth.fill(this, record);
+    }
+    @Implementation @Override protected String getName() { fill(); return super.getName(); }
+    @Implementation @Override protected int getType() { fill(); return super.getType(); }
+    @Implementation @Override protected int getBondState() { fill(); return super.getBondState(); }
+    @Implementation @Override public android.bluetooth.BluetoothClass getBluetoothClass() { fill(); return super.getBluetoothClass(); }
 
     @Implementation @Override protected boolean createBond() {
         HostBluetooth.require(ShadowHostBluetoothAdapter.CONNECT);
@@ -68,20 +78,20 @@ public class ShadowHostBluetoothDevice extends ShadowBluetoothDevice {
         return true;
     }
 
-    @Implementation @Override protected BluetoothSocket createRfcommSocketToServiceRecord(UUID uuid) {
-        HostBluetooth.require(ShadowHostBluetoothAdapter.CONNECT);
-        return ShadowHostBluetoothSocket.create(real, uuid.toString());
-    }
+    @Implementation @Override protected BluetoothSocket createRfcommSocketToServiceRecord(UUID uuid) { return socket(uuid.toString(), true); }
 
-    @Implementation protected BluetoothSocket createInsecureRfcommSocketToServiceRecord(UUID uuid) { return createRfcommSocketToServiceRecord(uuid); }
+    @Implementation protected BluetoothSocket createInsecureRfcommSocketToServiceRecord(UUID uuid) { return socket(uuid.toString(), false); }
+
+    /** Secure: BlueZ authenticates (pairs first) and encrypts the link (BT_SECURITY medium); insecure: neither is asked (low), as Android's. */
+    private BluetoothSocket socket(String target, boolean secure) {
+        HostBluetooth.require(ShadowHostBluetoothAdapter.CONNECT);
+        return ShadowHostBluetoothSocket.create(real, target, secure);
+    }
 
     /** The hidden calls serial apps fall back to (by reflection) when a device's SDP record is missing: straight to the RFCOMM channel. */
-    @Implementation protected BluetoothSocket createRfcommSocket(int channel) {
-        HostBluetooth.require(ShadowHostBluetoothAdapter.CONNECT);
-        return ShadowHostBluetoothSocket.create(real, Integer.toString(channel));
-    }
+    @Implementation protected BluetoothSocket createRfcommSocket(int channel) { return socket(Integer.toString(channel), true); }
 
-    @Implementation protected BluetoothSocket createInsecureRfcommSocket(int channel) { return createRfcommSocket(channel); }
+    @Implementation protected BluetoothSocket createInsecureRfcommSocket(int channel) { return socket(Integer.toString(channel), false); }
 
     /** An app's own answer to ACTION_PAIRING_REQUEST (HostBluetooth.pairingRequest): the PIN or passkey BlueZ waits for. */
     @Implementation @Override protected boolean setPin(byte[] pin) {

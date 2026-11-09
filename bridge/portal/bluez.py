@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """BlueZ (org.bluez on the system bus) for one app's Bluetooth session, started by the hub (HubBluetooth) with stdin/stdout handed to the app (HostBluetooth).
 Speaks JSON lines: commands {"op": ...} on stdin, events {"ev": ...} on stdout. Ends when stdin closes (BlueZ then stops this client's discovery and notifications).
-`bluez.py rfcomm <address> <uuid>|<channel>`: an RFCOMM connection to the device's service through BlueZ's Profile API (or straight to the channel, an
-AF_BLUETOOTH socket); `bluez.py listen <uuid> <name>`: the service registered (BlueZ's Profile API, server role), `LISTEN` once it is, then the first
-incoming connection. Both print `OK [address]` or `ERR <why>` on its own line, then relay the connection's bytes between stdin/stdout and the socket."""
+`bluez.py rfcomm <address> <uuid>|<channel> [secure|insecure]`: an RFCOMM connection to the device's service through BlueZ's Profile API (or straight to the channel, an
+AF_BLUETOOTH socket); `bluez.py listen <uuid> <name> [secure|insecure] [<app>]`: the service registered (BlueZ's Profile API, server role, through the app's dispatcher:
+`serve`), `LISTEN` once it is, then the next incoming connection. Both print `OK [address]` or `ERR <why>` on its own line, then relay the connection's bytes between stdin/stdout and the socket."""
+import array
+import ctypes
 import json
 import os
+import select
 import socket
+import struct
+import subprocess
 import sys
 import threading
 import warnings
@@ -19,6 +24,7 @@ warnings.simplefilter('ignore', DeprecationWarning)  # Gio's register_object (th
 bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
 objects = {}  # path -> {interface: {property: python value}}, as GetManagedObjects and the signals tell
 loop = GLib.MainLoop()
+libc = ctypes.CDLL(None, use_errno=True)
 
 
 def emit(**event):
@@ -90,9 +96,16 @@ def services(address):
     emit(ev='services', address=address, services=tree)
 
 
+def mtu(address):
+    """The ATT MTU BlueZ exchanged with the device (its characteristics' MTU property, BlueZ 5.62+; else the default 23)."""
+    root = device_path(address) or '-'
+    emit(ev='mtu', address=address, mtu=max([i[CHAR].get('MTU', 23) for p, i in objects.items() if p.startswith(root + '/') and CHAR in i] or [23]))
+
+
 scanning = False
 notifying = set()
 waiting_services = set()
+waiting_mtu = set()
 
 
 def on_properties(path, interface, changed):
@@ -104,6 +117,8 @@ def on_properties(path, interface, changed):
         address = known.get('Address')
         if scanning and ({'RSSI', 'ManufacturerData', 'ServiceData'} & changed.keys()):
             emit(ev='found', device=device(path))
+        if 'RSSI' in changed:
+            seen(path)
         if 'Connected' in changed:
             emit(ev='conn', address=address, connected=changed['Connected'], status=0)
         if 'Paired' in changed:
@@ -112,6 +127,9 @@ def on_properties(path, interface, changed):
         if changed.get('ServicesResolved') and address in waiting_services:
             waiting_services.discard(address)
             services(address)
+        if changed.get('ServicesResolved') and address in waiting_mtu:
+            waiting_mtu.discard(address)
+            mtu(address)
     elif interface == CHAR and 'Value' in changed and path in notifying:
         emit(ev='changed', path=path, value=hexbytes(changed['Value']))
 
@@ -124,6 +142,8 @@ def on_signal(connection, sender, path, interface, signal, parameters, data):
         objects.setdefault(args[0], {}).update(args[1])
         if DEVICE in args[1] and scanning:
             emit(ev='found', device=device(args[0]))
+        if DEVICE in args[1]:
+            seen(args[0])
         if ADAPTER in args[1]:
             emit_adapter()
     elif signal == 'InterfacesRemoved':
@@ -162,6 +182,9 @@ def on_agent(connection, sender, path, interface, method, parameters, invocation
         if not method.startswith('Request'):
             invocation.return_value(None)
     else:
+        if method == 'Cancel':  # the pairing ended without the answer (timeout, the device gave up): a question about it closes
+            pin_requests.clear()
+            emit(ev='cancel')
         invocation.return_value(None)
 
 
@@ -171,6 +194,62 @@ def ensure_agent():
         agent = '/apklayer/agent%d' % os.getpid()
         bus.register_object(agent, Gio.DBusNodeInfo.new_for_xml(AGENT_XML).interfaces[0], on_agent, None, None)
         call('/org/bluez', BLUEZ + '.AgentManager1', 'RegisterAgent', (agent, 'DisplayYesNo'), '(os)')  # Android's: numeric comparison where both sides show it
+
+
+pending = {}  # address -> what to do once BlueZ sees the device: it connects and pairs only devices it knows (Android's stack pages any address); a discovery runs meanwhile
+seeking = False
+
+
+def connect(address, auto):
+    target = device_path(address)
+    if target is None:  # a direct connection gives up after about 30 s, as Android's (GATT_ERROR 133); autoConnect waits
+        seek(address, lambda: connect(address, auto), None if auto else lambda: emit(ev='conn', address=address, connected=False, status=133))
+    elif objects[target][DEVICE].get('Connected'):  # BlueZ says AlreadyConnected: the app's connection is there
+        emit(ev='conn', address=address, connected=True, status=0)
+    else:  # autoConnect: a device out of reach is connected when it shows up again
+        call(target, DEVICE, 'Connect', done=lambda r, e: e and (seek(address, lambda: connect(address, True)) if auto else
+                                                              emit(ev='conn', address=address, connected=False, status=133, message=e)))
+
+
+def bond(address):
+    target = device_path(address)
+    if target is None:
+        seek(address, lambda: bond(address), lambda: emit(ev='bond', address=address, state=10, message='not found'))
+        return
+    call(target, DEVICE, 'Pair', done=lambda r, e: e and emit(ev='bond', address=address, state=10, message=e))
+
+
+def seek(address, then, give_up=None):
+    global seeking
+    key = address.upper()
+    pending[key] = then
+
+    def expire():
+        if pending.get(key) is then:
+            pending.pop(key)
+            stop_seeking()
+            give_up()
+        return False
+    if give_up:
+        GLib.timeout_add_seconds(30, expire)
+    if not seeking and not scanning:
+        seeking = True
+        call(adapter(), ADAPTER, 'SetDiscoveryFilter', ({'Transport': GLib.Variant('s', 'auto'), 'DuplicateData': GLib.Variant('b', True)},), '(a{sv})', lambda r, e: None)
+        call(adapter(), ADAPTER, 'StartDiscovery', done=lambda r, e: None)
+
+
+def stop_seeking():
+    global seeking
+    if seeking and not pending and not scanning:
+        seeking = False
+        call(adapter(), ADAPTER, 'StopDiscovery', done=lambda r, e: None)
+
+
+def seen(path):
+    then = pending.pop(objects[path][DEVICE].get('Address', '').upper(), None)
+    if then:
+        stop_seeking()
+        then()
 
 
 def command(line):
@@ -200,15 +279,10 @@ def command(line):
         scanning = False
         call(adapter(), ADAPTER, 'StopDiscovery', done=lambda r, e: None)
     elif op == 'connect':
-        target = device_path(address)
-        if target is None:
-            emit(ev='conn', address=address, connected=False, status=133)
-            return
-        if objects[target][DEVICE].get('Connected'):  # BlueZ says AlreadyConnected: the app's connection is there
-            emit(ev='conn', address=address, connected=True, status=0)
-            return
-        call(target, DEVICE, 'Connect', done=lambda r, e: e and emit(ev='conn', address=address, connected=False, status=133, message=e))
+        connect(address, c.get('auto', False))
     elif op == 'disconnect':
+        if pending.pop(address.upper(), None) is not None:
+            stop_seeking()
         target = device_path(address)
         if target:
             call(target, DEVICE, 'Disconnect', done=lambda r, e: e and emit(ev='conn', address=address, connected=False, status=0))
@@ -218,6 +292,12 @@ def command(line):
             services(address)
         else:
             waiting_services.add(address)
+    elif op == 'mtu':
+        target = device_path(address)
+        if target and objects[target][DEVICE].get('ServicesResolved'):
+            mtu(address)
+        else:
+            waiting_mtu.add(address)
     elif op == 'read':
         call(path, DESC if DESC in objects.get(path, {}) else CHAR, 'ReadValue', ({},), '(a{sv})',
              lambda r, e: emit(ev='read', path=path, status=status(e), value=hexbytes(r[0]) if r else ''))
@@ -229,13 +309,12 @@ def command(line):
         (notifying.add if c['on'] else notifying.discard)(path)
         call(path, CHAR, 'StartNotify' if c['on'] else 'StopNotify', done=lambda r, e: emit(ev='notify', path=path, status=status(e)))
     elif op == 'bond':
-        target = device_path(address)
-        if target is None:
-            emit(ev='bond', address=address, state=10)
-            return
-        ensure_agent()
+        try:
+            ensure_agent()
+        except GLib.Error as error:  # Sailfish lets only its privileged group register agents: BlueZ asks its own agent then (the system's pairing UI)
+            emit(ev='error', message='pairing without our agent: ' + error.message)
         emit(ev='bond', address=address, state=11)
-        call(target, DEVICE, 'Pair', done=lambda r, e: e and emit(ev='bond', address=address, state=10, message=e))
+        bond(address)
     elif op == 'pin':  # the answer to a waiting request (a PIN, a passkey, "yes" to a comparison); none: the pairing is refused
         method, invocation = pin_requests.pop(address.upper(), (None, None))
         if invocation is None:
@@ -267,15 +346,18 @@ PROFILE_XML = '''<node><interface name="org.bluez.Profile1"><method name="Releas
 <method name="NewConnection"><arg type="o" direction="in"/><arg type="h" direction="in"/><arg type="a{sv}" direction="in"/></method></interface></node>'''
 
 
-def profile(uuid, options, waiting):
-    """Registers an RFCOMM profile whose NewConnection (BlueZ hands the connected socket over) ends the main loop with waiting['fd'] and ['device']."""
+def security(secure):
+    """RegisterProfile's options for an Android secure (authenticated, encrypted) or insecure (neither) service; no per-service question to the person."""
+    return {'RequireAuthentication': GLib.Variant('b', secure), 'RequireAuthorization': GLib.Variant('b', False)}
+
+
+def profile(uuid, options, on_connection):
+    """Registers an RFCOMM profile: on_connection(device path, fd) for each connected socket BlueZ hands over (NewConnection)."""
     path = '/apklayer/rfcomm%d' % os.getpid()
 
     def on_profile(connection, sender, path, interface, method, parameters, invocation):
         if method == 'NewConnection':
-            waiting['device'] = parameters.unpack()[0]
-            waiting['fd'] = invocation.get_message().get_unix_fd_list().get(parameters.unpack()[1])
-            loop.quit()
+            on_connection(parameters.unpack()[0], invocation.get_message().get_unix_fd_list().get(parameters.unpack()[1]))
         invocation.return_value(None)
     bus.register_object(path, Gio.DBusNodeInfo.new_for_xml(PROFILE_XML).interfaces[0], on_profile, None, None)
     call('/org/bluez', BLUEZ + '.ProfileManager1', 'RegisterProfile', (path, uuid, options), '(osa{sv})')
@@ -283,6 +365,7 @@ def profile(uuid, options, waiting):
 
 
 def relay(sock, status):
+    os.set_blocking(sock, True)  # BlueZ hands its sockets over non-blocking: the first read with nothing yet (EAGAIN) ended the connection
     print(status, flush=True)
 
     def pump(source, sink):
@@ -308,14 +391,17 @@ def relay(sock, status):
     return 0
 
 
-def rfcomm(address, target):
+def rfcomm(address, target, secure):
     """One RFCOMM connection: to a channel, a socket of our own; to a service, BlueZ connects the profile (SDP lookup of its channel) and hands the socket over."""
     if target.isdigit():  # BluetoothDevice.createRfcommSocket(channel), the hidden call serial apps fall back to
-        # shortcut: the kernel's default security for both the secure and the insecure call; set BT_SECURITY (medium for the secure one) when a device needs it
         try:
-            sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
-            sock.connect((address, int(target)))
-        except (OSError, AttributeError) as error:
+            sock = socket.socket(31, socket.SOCK_STREAM, 3)  # AF_BLUETOOTH, BTPROTO_RFCOMM
+            sock.setsockopt(274, 4, bytes([2 if secure else 1, 0]))  # SOL_BLUETOOTH, BT_SECURITY {level: medium (authenticated, encrypted) or low, key size}
+            # connect(2) with a sockaddr_rc of our own: Sailfish's Python has no AF_BLUETOOTH addresses (built without the Bluetooth headers)
+            rc = struct.pack('<H6sBx', 31, bytes.fromhex(address.replace(':', ''))[::-1], int(target))
+            if libc.connect(sock.fileno(), rc, len(rc)) != 0:
+                raise OSError(ctypes.get_errno(), os.strerror(ctypes.get_errno()))
+        except (OSError, AttributeError, ValueError) as error:
             print('ERR ' + (getattr(error, 'strerror', None) or str(error)), flush=True)
             return 1
         return relay(sock.detach(), 'OK')
@@ -326,7 +412,7 @@ def rfcomm(address, target):
     try:
         if device is None:
             raise RuntimeError('unknown device ' + address)
-        profile(target, {'Role': GLib.Variant('s', 'client')}, connected)
+        profile(target, {'Role': GLib.Variant('s', 'client'), **security(secure)}, lambda device, fd: (connected.update(fd=fd), loop.quit()))
         call(device, DEVICE, 'ConnectProfile', (target,), '(s)', lambda r, e: e and (connected.update(error=e), loop.quit()))
     except (GLib.Error, RuntimeError) as error:
         print('ERR ' + str(error), flush=True)
@@ -338,30 +424,93 @@ def rfcomm(address, target):
     return relay(connected['fd'], 'OK')
 
 
-def listen(uuid, name):
-    """One incoming connection to the service (BluetoothServerSocket.accept), registered until it comes; the app's side starts the next listener after each
-    one. Ends without a connection when stdin closes (the server socket closed)."""
-    waiting = {}
+def address_of(device):
     try:
-        path = profile(uuid, {'Role': GLib.Variant('s', 'server'), 'Name': GLib.Variant('s', name)}, waiting)
+        return call(device, PROPS, 'Get', (DEVICE, 'Address'), '(ss)')[0]
+    except GLib.Error:
+        return device.rsplit('dev_', 1)[-1].replace('_', ':')
+
+
+def listen(uuid, name, secure, app):
+    """One incoming connection to the service (BluetoothServerSocket.accept): taken from the server socket's dispatcher (`serve`, started by the first
+    listener), the one registration of the service, which queues what BlueZ hands over until an accept takes it (a registration per accept left a gap
+    after each connection in which the next one was refused; BlueZ registers a UUID once). Ends without a connection when stdin closes (the server
+    socket closed)."""
+    key = 'apklayer-bt-%s-%s' % (app, uuid)  # one dispatcher per app process and service (an abstract socket's name)
+    taker = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+    try:
+        taker.connect('\0' + key)
+    except OSError:
+        dispatcher = subprocess.Popen([sys.executable, os.path.abspath(__file__), 'serve', uuid, name, 'secure' if secure else 'insecure', key],
+                                      stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, text=True)
+        status = dispatcher.stdout.readline().strip()
+        dispatcher.stdout.close()
+        try:
+            taker.connect('\0' + key)
+        except OSError:
+            print('ERR ' + (status[4:] if status.startswith('ERR ') else 'the service could not be registered'), flush=True)
+            return 1
+    print('LISTEN', flush=True)
+    if taker not in select.select([taker, 0], [], [])[0]:
+        return 1  # stdin closed first: the server socket closed (the dispatcher sees this taker go)
+    fds = array.array('i')
+    message, ancillary, flags, _ = taker.recvmsg(256, socket.CMSG_LEN(fds.itemsize))
+    for level, kind, data in ancillary:
+        if level == socket.SOL_SOCKET and kind == socket.SCM_RIGHTS:
+            fds.frombytes(data[:fds.itemsize])
+    if not fds:
+        return 1
+    return relay(fds[0], 'OK ' + message.decode())
+
+
+def serve(uuid, name, secure, key):
+    """The dispatcher of a server socket: the service registered (Channel 0: BlueZ picks a free RFCOMM channel; without it a custom UUID's record names
+    none), each connection handed to the waiting listener (in order; queued while none waits). Ends when a waiting listener goes untaken: the app closed
+    the server socket (its shadow starts the next listener as an accept returns, so one waits while it is open)."""
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+    try:
+        server.bind('\0' + key)
+    except OSError:  # another listener's dispatcher came first
+        print('BUSY', flush=True)
+        return 0
+    server.listen(8)
+    queue, takers = [], []  # (fd, device path) no accept took yet; (listener, its watch) waiting
+
+    def hand():
+        while queue and takers:
+            (taker, watch), (fd, device) = takers.pop(0), queue.pop(0)
+            GLib.source_remove(watch)
+            taker.sendmsg([address_of(device).encode()], [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array('i', [fd]))])
+            os.close(fd)
+            taker.close()
+
+    def on_taker(source, condition):
+        taker = server.accept()[0]
+        if struct.unpack('3i', taker.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))[1] != os.getuid():
+            taker.close()
+            return True
+        takers.append((taker, GLib.io_add_watch(taker.fileno(), GLib.PRIORITY_DEFAULT, GLib.IOCondition.IN | GLib.IOCondition.HUP, lambda *a: loop.quit())))
+        hand()
+        return True
+    try:
+        profile(uuid, {'Role': GLib.Variant('s', 'server'), 'Name': GLib.Variant('s', name), 'Channel': GLib.Variant('q', 0), **security(secure)},
+                lambda device, fd: (queue.append((fd, device)), GLib.idle_add(hand)))  # after the reply: BlueZ waits for it
     except GLib.Error as error:
         print('ERR ' + error.message, flush=True)
         return 1
-    print('LISTEN', flush=True)
-    GLib.io_add_watch(GLib.IOChannel.unix_new(0), GLib.PRIORITY_DEFAULT, GLib.IOCondition.IN | GLib.IOCondition.HUP, lambda *a: loop.quit())
+    print('READY', flush=True)
+    sys.stdout.close()
+    GLib.io_add_watch(server.fileno(), GLib.PRIORITY_DEFAULT, GLib.IOCondition.IN, on_taker)
     loop.run()
-    if 'fd' not in waiting:
-        return 1
-    try:  # the next listener registers the service anew
-        call('/org/bluez', BLUEZ + '.ProfileManager1', 'UnregisterProfile', (path,), '(o)')
-        address = call(waiting['device'], PROPS, 'Get', (DEVICE, 'Address'), '(ss)')[0]
-    except GLib.Error:
-        address = waiting['device'].rsplit('dev_', 1)[-1].replace('_', ':')
-    return relay(waiting['fd'], 'OK ' + address)
+    return 0
 
 
-if len(sys.argv) == 4 and sys.argv[1] in ('rfcomm', 'listen'):
-    sys.exit((rfcomm if sys.argv[1] == 'rfcomm' else listen)(sys.argv[2], sys.argv[3]))
+if len(sys.argv) == 6 and sys.argv[1] == 'serve':
+    sys.exit(serve(sys.argv[2], sys.argv[3], sys.argv[4] != 'insecure', sys.argv[5]))
+if len(sys.argv) >= 4 and sys.argv[1] == 'rfcomm':  # [secure|insecure]: secure when not said
+    sys.exit(rfcomm(sys.argv[2], sys.argv[3], sys.argv[4:5] != ['insecure']))
+if len(sys.argv) >= 4 and sys.argv[1] == 'listen':  # [secure|insecure] [the app's process: one dispatcher per app and service]
+    sys.exit(listen(sys.argv[2], sys.argv[3], sys.argv[4:5] != ['insecure'], sys.argv[5] if len(sys.argv) > 5 else str(os.getppid())))
 try:  # no auto-start: an activatable BlueZ that cannot start (no adapter) answered only after D-Bus's 25 s timeout, the app's first Bluetooth call waiting on it
     for path, ifaces in bus.call_sync(BLUEZ, '/', 'org.freedesktop.DBus.ObjectManager', 'GetManagedObjects', None, None,
                                       Gio.DBusCallFlags.NO_AUTO_START, -1, None).unpack()[0].items():

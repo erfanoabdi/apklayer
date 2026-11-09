@@ -46,12 +46,21 @@ final class HubInstallDialog {
         return ask(heading, body, yes, no, typed) ? typed.toString() : null;
     }
 
+    private static final java.util.Map<Thread, SocketChannel> OPEN = new java.util.concurrent.ConcurrentHashMap<>();  // the asking thread -> its dialog
+
+    /** Closes the question the thread is asking (answered no), as when the person closes it: the matter ended without them (a pairing's end). */
+    static void dismiss(Thread asker) {
+        SocketChannel channel = asker == null ? null : OPEN.get(asker);
+        try { if (channel != null) channel.close(); } catch (IOException ignored) { /* closed already */ }
+    }
+
     /** {@code secret} non-null: the field's text, edited by the person's keys and input method. */
     private static boolean ask(String heading, String body, String yes, String no, StringBuilder secret) {
         String socket = System.getenv("XDG_RUNTIME_DIR") == null ? null : System.getenv("XDG_RUNTIME_DIR") + "/apklayer/shell.sock";
         if (socket == null || !Files.exists(Path.of(socket))) { System.out.println("[apklayer-hub] no shell to ask \"" + heading + "\": refused"); return false; }
         Path shm = Path.of(System.getenv("XDG_RUNTIME_DIR"), "apklayer", "installer-" + ProcessHandle.current().pid() + "-" + (++windows) + ".shm");
         try (SocketChannel channel = SocketChannel.open(UnixDomainSocketAddress.of(socket)); RandomAccessFile file = new RandomAccessFile(shm.toFile(), "rw")) {
+            OPEN.put(Thread.currentThread(), channel);
             byte[] name = CLIENT.getBytes(StandardCharsets.UTF_8);
             send(channel, HELLO, buf(4 + name.length).putInt((int) ProcessHandle.current().pid()).put(name));
             Layout shown = show(channel, file, shm, heading, desktop(heading, body, yes, no, secret), null);
@@ -113,9 +122,10 @@ final class HubInstallDialog {
             System.out.println("[apklayer-hub] dialog answered: \"" + heading + "\" " + (Boolean.TRUE.equals(answer) ? yes : no));
             return Boolean.TRUE.equals(answer);
         } catch (IOException failure) {
-            System.out.println("[apklayer-hub] dialog failed: " + failure);
+            System.out.println("[apklayer-hub] dialog " + (failure instanceof java.nio.channels.AsynchronousCloseException ? "closed: \"" + heading + "\"" : "failed: " + failure));
             return false;
         } finally {
+            OPEN.remove(Thread.currentThread());
             try { Files.deleteIfExists(shm); } catch (IOException ignored) { /* the runtime directory goes with the session */ }
         }
     }

@@ -26,12 +26,13 @@ import org.robolectric.shadows.ShadowBluetoothServerSocket;
 public class ShadowHostBluetoothServerSocket extends ShadowBluetoothServerSocket {
     private BluetoothAdapter adapter;
     private String uuid, name;
+    private boolean secure;
     private Listener armed;  // the helper waiting for the next connection; null once closed
 
     /** One listener helper: its stdin, its stdout, the service registered (or why not), then the address of the device that connected. */
     private record Listener(OutputStream in, InputStream out, CompletableFuture<Void> registered, CompletableFuture<String> connected) {}
 
-    static BluetoothServerSocket listen(BluetoothAdapter adapter, String name, UUID uuid) throws IOException {
+    static BluetoothServerSocket listen(BluetoothAdapter adapter, String name, UUID uuid, boolean secure) throws IOException {
         HostBluetooth.require(ShadowHostBluetoothAdapter.CONNECT);
         if (!adapter.isEnabled()) throw new IOException("Bluetooth is off");
         BluetoothServerSocket server = Shadow.newInstanceOf(BluetoothServerSocket.class);  // Robolectric's newInstance names a constructor this android-all lacks
@@ -39,6 +40,7 @@ public class ShadowHostBluetoothServerSocket extends ShadowBluetoothServerSocket
         shadow.adapter = adapter;
         shadow.uuid = uuid.toString();
         shadow.name = name;
+        shadow.secure = secure;
         Listener first = shadow.arm();
         try { first.registered.get(); }
         catch (ExecutionException | InterruptedException failed) { shadow.close(); throw new IOException("Error: " + failed.getCause().getMessage(), failed); }
@@ -47,7 +49,7 @@ public class ShadowHostBluetoothServerSocket extends ShadowBluetoothServerSocket
 
     private synchronized Listener arm() throws IOException {
         ParcelFileDescriptor[] pipes;
-        try { pipes = HubClient.current().bluetooth(null, uuid, name); }
+        try { pipes = HubClient.current().bluetooth(null, uuid, name, secure); }
         catch (RuntimeException failure) { throw new IOException("listen failed", failure); }
         Listener listener = new Listener(new ParcelFileDescriptor.AutoCloseOutputStream(pipes[0]), new ParcelFileDescriptor.AutoCloseInputStream(pipes[1]),
                 new CompletableFuture<>(), new CompletableFuture<>());

@@ -22,7 +22,7 @@ final class HubProtocol {
             START_INPUT = 40, FINISH_INPUT = 41,
             HOST_SETTINGS = 42,  // {} -> the instance's host settings Bundle (HubHostSettings), pushed again on a change (ENDPOINT_CONFIGURATION)
             SETTINGS_CHANGED = 43,  // `apklayer settings set|unset` (the CLI, through servicetool call): {} -> the hub rereads the instance's overrides  // the input method binding (HubInputMethods): {IRemoteInputConnection, EditorInfo} / {}  // {intent} -> 1 when an installed app (or the installer's confirmation) handles it: startActivity's ActivityNotFoundException
-            BLUETOOTH = 44,  // {address, uuid or RFCOMM channel, service name} (all null: a session; no address: a server socket's listener) -> two descriptors to a BlueZ helper (HubBluetooth)
+            BLUETOOTH = 44,  // {address, uuid or RFCOMM channel, service name, secure} (all null: a session; no address: a server socket's listener) -> two descriptors to a BlueZ helper (HubBluetooth)
             USB_PERMISSION = 45,  // {device name, ask} -> whether the caller may open the USB device (HubUsb); ask: the person decides now
             GNSS = 46,  // {follow} -> true: a pipe of the gps fixes from the hub's one GNSS HAL client (HubGnss); false: the caller's pipes end (null)
             PI_SEND_FOR_RESULT = 47,  // {sender, fill-in, ResultReceiver} -> status: Activity.startIntentSenderForResult (an activity PendingIntent answers the receiver)

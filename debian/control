@@ -17,7 +17,7 @@ Rules-Requires-Root: no
 Package: apklayer
 Architecture: arm64 amd64
 Depends: ${shlibs:Depends}, ${misc:Depends}, ${apklayer:Depends},
- openjdk-21-jre-headless, python3, zip, unzip, wget, zstd, uidmap
+ openjdk-21-jre-headless, python3, python3-gi, zip, unzip, wget, zstd, uidmap
 Recommends: mesa-utils, pkexec, xdg-utils, desktop-file-utils,
  gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, gstreamer1.0-libav
 Suggests: ${apklayer:Suggests}
