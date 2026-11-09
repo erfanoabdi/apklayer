@@ -3,6 +3,23 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: the bionic linker no longer keeps a copy of every library (bionic_translation 0055): phone instance 1387 -> 785 MB
+- Looked for SurfaceFlinger's and the composer's GL memory on the Volla X23 (PLAN "After release 0.4.5" 1). Their Mali GPU memory is small
+  (debugfs mali0/ctx/<pid>_*/mem_profile: ~1.7 MB each; the 39 MB of textures is lomiri-system-compositor's). Their PSS was one anonymous
+  region (composer 47 MB, SurfaceFlinger 40 MB) holding libGLES_mali.so's bytes: `apkenv_load_library` read each whole library file into a
+  calloc for its ELF and program headers and never freed it, in every btload daemon and every app JVM.
+- Now the file is mapped read-only for the headers and unmapped after loading (patches/bionic_translation/0055). Only libdl_bio changes.
+- Volla X23, own instance (`--instance mg`, fake sensors/GNSS/vibrator/camera, the click's CLI with APKLAYER_NATIVE/APKLAYER_BT pointing at
+  a copy of runtime 0.4.9 and the two libdl_bio builds), PSS + SwapPss over the instance's processes, Calculator at its first frame / after
+  it ended (hub, spare, stack), base twice, new twice:
+  | | total, Calculator open | total, idle | Calculator | hub | spare | SurfaceFlinger | composer | audioserver | vdisplay |
+  |---|---|---|---|---|---|---|---|---|---|
+  | before | 1385-1387 MB | 991 MB | 395-398 | 310 | 278 | 105 | 75 | 48 | 17 |
+  | after | 784-785 MB | 544-546 MB | 256 | 217 | 184 | 32 | 22 | 12 | 3 |
+  Calculator reached its first frame in both; group gpu passes on Parallels (own tree ~/apklayer-memgl).
+- Left: the composer loads libGLES_mali for its fences (~6 MB with its Mali context); SurfaceFlinger's 32 MB is ~18 MB heap, its own
+  relocated text and the Mali driver's mappings.
+
 ## 2026-11-09: bytehook works under bionic_translation; FCL's crash screen after a game crash (bionic_translation 0054)
 - bytehook (ByteDance's PLT hook library; FCL 1.3.4.5 ships 1.0.10) returned 3 (INITERR_SYM): it reads the linker's ELF at
   getauxval(AT_BASE) and its .symtab from /system/bin/linker64 (the host's ld.so: stripped, and not the linker of Android code).
