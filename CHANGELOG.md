@@ -3,6 +3,14 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: the display mode is the screen too (system-apps `display` regression from 2026-11-09)
+- Since the screen became the output (67a829ee), Display.getRealMetrics/getRealSize and the maximum window metrics followed the max bounds
+  but Display.getMode() kept Robolectric's mode, the window's pixels (ShadowDisplayManager.createDisplayInfo): DisplayCheck failed with
+  "mode differs from the size" (Parallels: real 768x1024, mode 325x579). HostConfiguration.apply now gives the default display one mode of
+  the screen's size (turned like the window, so at rotation 0 it is the real size) before it applies the max bounds; without a shell all
+  of them stay the window. DisplayCheck also compares getRealSize and getMaximumWindowMetrics.
+- Checks: Parallels (own tree) system-apps, activities, window-geometry, mobile, gpu pass; x86 PC (own tree) system-apps, activities pass.
+
 ## 2026-11-10: release 0.4.12 (runtime 0.4.11)
 - Halium phones (Sailfish OS, Ubuntu Touch): every native service crashed on 0.4.11 (libhybris's EGL bound to libdl_bio's `__loader_dlopen`, exported for bytehook in 0054, and the linker's gdb notification ran before btload's main): the `__loader_*` symbols are in a hidden version only bytehook's GOT lookup reaches (bionic_translation 0059) and no notification before main (0060); checked on the Volla Quintus and the Volla X23. Also runtime-bundle.sh no longer nests a tree when a link copy fails part way.
 

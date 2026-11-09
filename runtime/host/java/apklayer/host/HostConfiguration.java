@@ -111,6 +111,16 @@ final class HostConfiguration {
         if (night != null) extra.append(extra.length() > 0 ? "-" : "").append(night ? "night" : "notnight");
         RuntimeEnvironment.setQualifiers(extra.length() > 0 ? size + " +" + extra : size);
         if (screen != null) {  // Robolectric's qualifiers make the max bounds the window (DeviceConfig.setBounds); on Android they are the display
+            // and so is the display mode (Display.getMode: the panel, at rotation 0 the real size); Robolectric's is the window. Before the max
+            // bounds: changeDisplay resets the default display's to its logical size
+            android.view.DisplayInfo info = android.hardware.display.DisplayManagerGlobal.getInstance().getDisplayInfo(android.view.Display.DEFAULT_DISPLAY);
+            android.view.Display.Mode mode = info.getMode();
+            info.supportedModes = new android.view.Display.Mode[] {new android.view.Display.Mode(mode.getModeId(), screen.width(), screen.height(), mode.getRefreshRate())};
+            if (org.robolectric.util.ReflectionHelpers.hasField(android.view.DisplayInfo.class, "appsSupportedModes"))
+                org.robolectric.util.ReflectionHelpers.setField(info, "appsSupportedModes", info.supportedModes);
+            org.robolectric.util.ReflectionHelpers.callInstanceMethod(org.robolectric.shadow.api.Shadow.extract(android.hardware.display.DisplayManagerGlobal.getInstance()), "changeDisplay",
+                    org.robolectric.util.ReflectionHelpers.ClassParameter.from(int.class, android.view.Display.DEFAULT_DISPLAY),
+                    org.robolectric.util.ReflectionHelpers.ClassParameter.from(android.view.DisplayInfo.class, info));
             Configuration c = new Configuration(RuntimeEnvironment.getApplication().getResources().getConfiguration());
             c.windowConfiguration.setMaxBounds(screen);
             c.seq = 0;  // unsequenced: always applied

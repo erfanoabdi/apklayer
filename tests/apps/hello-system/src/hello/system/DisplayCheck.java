@@ -24,11 +24,16 @@ final class DisplayCheck implements Check {
         display.getRealMetrics(real);
         int orientation = context.getResources().getConfiguration().orientation;
         Display.Mode mode = display.getMode();
-        String seen = real.widthPixels + "x" + real.heightPixels + " rotation=" + display.getRotation() + " orientation=" + orientation + " mode=" + mode.getPhysicalWidth() + "x" + mode.getPhysicalHeight();
+        android.graphics.Point size = new android.graphics.Point();
+        display.getRealSize(size);
+        android.graphics.Rect max = context.getSystemService(android.view.WindowManager.class).getMaximumWindowMetrics().getBounds();
+        String seen = real.widthPixels + "x" + real.heightPixels + " realSize=" + size.x + "x" + size.y + " maxWindow=" + max.width() + "x" + max.height() + " rotation=" + display.getRotation() + " orientation=" + orientation + " mode=" + mode.getPhysicalWidth() + "x" + mode.getPhysicalHeight();
         Check.require(display.getRotation() == Surface.ROTATION_0, "rotated display: " + seen);
         Check.require(orientation == (real.heightPixels >= real.widthPixels ? Configuration.ORIENTATION_PORTRAIT : Configuration.ORIENTATION_LANDSCAPE), "orientation differs from the size: " + seen);
         // a mode's physical size is the panel's, in the natural orientation (rotation 0: the real size)
         Check.require(mode.getPhysicalWidth() == real.widthPixels && mode.getPhysicalHeight() == real.heightPixels, "mode differs from the size: " + seen);
+        // the screen, however it is asked for (Display.getRealSize and the maximum window metrics: WindowConfiguration's max bounds)
+        Check.require(size.x == real.widthPixels && size.y == real.heightPixels && max.width() == real.widthPixels && max.height() == real.heightPixels, "screen sizes differ: " + seen);
         return seen;
     }
 }
