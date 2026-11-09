@@ -5,6 +5,7 @@
 #include "providers.h"
 #include "gpus.h"
 
+#include <algorithm>
 #include <fcntl.h>
 #include <cerrno>
 #include <poll.h>
@@ -29,6 +30,7 @@ struct Service {
     int pidfd;
     Spawn spec;        // how it was started: an optional service that exits is started again the same way
     int restarts = 0;
+    std::vector<std::string> names;  // started on use: when a client asks the service manager for one of these while it is not running
 };
 
 // What the stack cannot run without: these ending ends the stack (and the test tool's end is the end of a test run). SurfaceFlinger holds its
@@ -400,16 +402,46 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         int pid = spawn(s);
         running.push_back({name, pid, pidfdOpen(pid), s});
     };
+    // Services apps rarely use start on first use and end when their last client lets go, as AOSP's lazy services (an idle phone instance keeps
+    // ~220 MB less): servicemanager writes each lookup of their names to this FIFO (aosp/hals/servicemanager/Access.cpp), clients wait for the
+    // service as on a device (waitForService, getService's polling: both look again). APKLAYER_LAZY_SERVICES=0 starts them all here and keeps them.
+    const std::map<std::string, std::vector<std::string>> lazyNames = {
+        {"codec2", {"android.hardware.media.c2.IComponentStore/apklayer"}},
+        {"media", {"media.player", "media.resource_manager", "media.resource_observer"}},
+        {"extractor", {"media.extractor"}},
+        {"cameraserver", {"media.camera", "processinfo"}},  // processinfo: ResourceManagerService asks it when codecs compete
+    };
+    std::string fifo = join(inst.runtimeDir, "lazy-services");
+    int lazyFd = -1;
+    // only with a servicemanager that reports lookups (an older runtime's never would start them)
+    bool reports = readFile(join(l.androidLibs, "libapklayer_servicemanager.so")).value_or("").find("APKLAYER_LAZY_FIFO") != std::string::npos;
+    if (getenvOr("APKLAYER_LAZY_SERVICES", "1") == "1" && reports && !sandboxOn() && (mkfifo(fifo.c_str(), 0600) == 0 || errno == EEXIST))
+        lazyFd = open(fifo.c_str(), O_RDWR | O_NONBLOCK | O_CLOEXEC);  // read-write: never an end of file while no writer has it open
+    auto lazy = [&](const std::string& name, const std::string& lib, const std::vector<std::string>& args) {
+        if (lazyFd < 0) return start(name, lib, args);
+        Spawn s = spec(name, lib, args);
+        s.env["APKLAYER_LAZY_SERVICE"] = "1";  // the service exits once no client holds it (an AOSP lazy service)
+        running.push_back({name, 0, -1, s, 0, lazyNames.at(name)});
+    };
     const std::string hals = join(l.root, "aosp/hals/audio");
     if (userspaceBinder(inst.root)) ensureBinderDaemon(l.runtimeHome, n, inst.id, join(inst.logs(), "binderd.log"));  // docs/BINDER.md
-    start("servicemanager", "libapklayer_servicemanager.so", {"/dev/binder"});
+    {
+        Spawn s = spec("servicemanager", "libapklayer_servicemanager.so", {"/dev/binder"});
+        if (lazyFd >= 0) {
+            s.env["APKLAYER_LAZY_FIFO"] = fifo;
+            for (const auto& [service, names] : lazyNames)
+                for (const std::string& name : names) s.env["APKLAYER_LAZY_NAMES"] += name + " ";
+        }
+        int pid = spawn(s);
+        running.push_back({"servicemanager", pid, pidfdOpen(pid), s});
+    }
     start("permission", "libapklayer_permission.so", {});  // libbinder's checkPermission() asks this (no system_server PermissionController)
     if (!deviceGraphics(l, inst)) start("allocator", "libapklayer_allocator.so", {});  // a Halium device's own: the host context
     start("composer", "libapklayer_composer.so", {});
-    if (staged(l, "libapklayer_codec2.so") && !deviceDomain(l, inst, "media")) start("codec2", "libapklayer_codec2.so", {});  // media = device: the host's Codec2 store
+    if (staged(l, "libapklayer_codec2.so") && !deviceDomain(l, inst, "media")) lazy("codec2", "libapklayer_codec2.so", {});  // media = device: the host's Codec2 store
     if (staged(l, "libapklayer_mediaserver.so")) {
-        start("media", "libapklayer_mediaserver.so", {});
-        start("extractor", "libapklayer_mediaserver.so", {"--extractor"});
+        lazy("media", "libapklayer_mediaserver.so", {});
+        lazy("extractor", "libapklayer_mediaserver.so", {"--extractor"});
     }
     if (staged(l, "libapklayer_audio.so")) start("audio", "libapklayer_audio.so", {join(hals, "audio_policy_configuration.xml")});
     if (staged(l, "libapklayer_audioserver.so")) {
@@ -431,7 +463,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         // system_server's SensorService, over the sensors HAL: what SensorManager in apps talks to (HostSensorShadows)
         if (p.name == "sensors" && staged(l, "libapklayer_sensorservice.so")) start("sensorservice", "libapklayer_sensorservice.so", {});
         // cameraserver over the camera provider HAL: what the apps' CameraManager and android.hardware.Camera talk to (HostCameraShadows)
-        if (p.name == "camera" && staged(l, "libapklayer_cameraserver.so")) start("cameraserver", "libapklayer_cameraserver.so", {});
+        if (p.name == "camera" && staged(l, "libapklayer_cameraserver.so")) lazy("cameraserver", "libapklayer_cameraserver.so", {});
     }
     // no sensors provider: SensorService still runs, with no sensors (no HAL declared), as a device always has it; else libsensor (NDK
     // ASensorManager: Unity) waits 300 s for "sensorservice" on every call
@@ -439,7 +471,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     for (const ProviderService& p : providers) sensors |= p.name == "sensors";
     if (!sensors && staged(l, "libapklayer_sensorservice.so")) start("sensorservice", "libapklayer_sensorservice.so", {});
     // camera = device: the device's HIDL provider through the host hwbinder context, cameraserver over it (libhidl 0003 lists it)
-    if (deviceDomain(l, inst, "camera") && staged(l, "libapklayer_cameraserver.so")) start("cameraserver", "libapklayer_cameraserver.so", {});
+    if (deviceDomain(l, inst, "camera") && staged(l, "libapklayer_cameraserver.so")) lazy("cameraserver", "libapklayer_cameraserver.so", {});
     start("surfaceflinger", "libapklayer_surfaceflinger.so", {});
     if (!tool.empty()) {
         // smoke tools draw on stack 0: give them the same virtual-display sink an app uses
@@ -453,9 +485,8 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     // "server died"). One waiter per service blocks in waitForService; the daemon sets the ready property after all of them returned.
     std::vector<std::string> waitFor = {"SurfaceFlingerAIDL"};
     if (staged(l, "libapklayer_audioserver.so")) waitFor.push_back("media.audio_policy");
-    for (const ProviderService& p : providers)  // an app's first camera list (the provider joins cameraserver whenever it registers)
-        if (p.name == "camera" && staged(l, "libapklayer_cameraserver.so")) waitFor.push_back("media.camera");
-    if (deviceDomain(l, inst, "camera") && staged(l, "libapklayer_cameraserver.so")) waitFor.push_back("media.camera");
+    for (const Service& s : running)  // an app's first camera list (the provider joins cameraserver whenever it registers); started on first use: no wait
+        if (s.name == "cameraserver" && s.pid > 0) waitFor.push_back("media.camera");
     std::vector<int> waiters;
     for (const std::string& svc : waitFor) {
         Spawn w;
@@ -477,6 +508,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
     sigprocmask(SIG_BLOCK, &sigs, nullptr);
     int sfd = signalfd(-1, &sigs, SFD_CLOEXEC);
     fds.push_back({sfd, POLLIN, 0});
+    fds.push_back({lazyFd, POLLIN, 0});
 
     size_t pending = waiters.size();
     int status = 0;
@@ -496,6 +528,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
                     for (int lines = 0; from > 0 && lines <= 24; ) if (text[--from] == '\n') lines++;
                     fprintf(stderr, "--- the end of %s:\n%s\n---\n", s.spec.logFile.c_str(), text.substr(from).c_str());
                 }
+                if (!s.names.empty() && WIFEXITED(st) && WEXITSTATUS(st) == 0) { fds[i].fd = -1; s.pid = 0; continue; }  // a lazy one without clients: the next lookup starts it
                 if (!essential(s.name) && s.restarts < kMaxRestarts) {
                     s.restarts++;
                     s.pid = spawn(s.spec);
@@ -517,6 +550,19 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
                 if (out && out->find(": found") != std::string::npos && --pending == 0) {
                     setProperty(l, ne, kReadyProperty, "1");
                 }
+            } else if (fds[i].fd == lazyFd) {
+                static char buf[65536];  // a pipe's capacity: every queued name in one read
+                ssize_t got = read(lazyFd, buf, sizeof buf);  // whole lines: each write is one name (below PIPE_BUF)
+                for (const std::string& name : split(std::string(buf, got > 0 ? got : 0), '\n'))
+                    for (size_t k = 0; k < nServices; k++) {
+                        Service& s = running[k];
+                        // a crash restarts it as any service; one that keeps exiting stays stopped
+                        if (s.pid != 0 || s.restarts >= kMaxRestarts || std::find(s.names.begin(), s.names.end(), name) == s.names.end()) continue;
+                        s.pid = spawn(s.spec);
+                        s.pidfd = pidfdOpen(s.pid);
+                        fds[k].fd = s.pidfd;
+                        fprintf(stderr, "started on use (%s): %s\n", name.c_str(), s.name.c_str());
+                    }
             } else {
                 signalfd_siginfo info{};
                 if (read(sfd, &info, sizeof info) != sizeof info || info.ssi_signo != SIGHUP) { run = false; continue; }  // asked to stop

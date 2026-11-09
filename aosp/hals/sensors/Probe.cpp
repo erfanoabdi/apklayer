@@ -1,13 +1,23 @@
 // `--probe`: the sensors HAL as native apps reach it, through SensorService (the stack runs it beside the HAL: the HAL serves one client, so
 // a probe of its own FMQ would take it from SensorService): the NDK's ASensorManager lists the sensors and reads the accelerometer at 50 Hz
 // for one second on an ALooper. Prints the count and the last value (the test compares them with the backend's options).
+// libandroid is opened here only: linked, it pulled ~230 more libraries (libandroid_runtime, hwui...) into the always-running HAL, ~85 MB of their
+// static allocations (docs/PLAN.md "app start speed on phones" 8).
 #include <android/looper.h>
 #include <android/sensor.h>
 #include <android-base/logging.h>
 #include <chrono>
 #include <cstdio>
+#include <dlfcn.h>
 
 int sensorsProbe() {
+    void* ndk = dlopen("libandroid.so", RTLD_NOW);
+    CHECK(ndk) << dlerror();
+#define NDK(f) auto f = reinterpret_cast<decltype(&::f)>(dlsym(ndk, #f)); CHECK(f) << #f
+    NDK(ASensorManager_getInstanceForPackage); NDK(ASensorManager_getSensorList); NDK(ASensor_getType); NDK(ASensor_getName);
+    NDK(ASensorManager_getDefaultSensor); NDK(ALooper_prepare); NDK(ASensorManager_createEventQueue); NDK(ASensorEventQueue_registerSensor);
+    NDK(ALooper_pollOnce); NDK(ASensorEventQueue_getEvents); NDK(ASensorEventQueue_disableSensor); NDK(ASensorManager_destroyEventQueue);
+#undef NDK
     ASensorManager* manager = ASensorManager_getInstanceForPackage("apklayer.sensors.probe");
     CHECK(manager);
     ASensorList list = nullptr;

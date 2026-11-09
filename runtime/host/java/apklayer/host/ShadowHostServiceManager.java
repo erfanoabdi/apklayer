@@ -22,7 +22,14 @@ public class ShadowHostServiceManager extends ShadowServiceManager {
     /** Services Robolectric has no fake for that apps take for granted (Aurora Store's onboarding reads its link handling: getSystemService returned null). */
     static { addBinderService(binderServices, "domain_verification", android.content.pm.verify.domain.IDomainVerificationManager.class); }
 
-    @Implementation protected static IBinder getService(String name) { IBinder hub = hub(name); return hub != null ? hub : orNative(name, report(name, ShadowServiceManager.getService(name))); }
+    @Implementation protected static IBinder getService(String name) {
+        IBinder hub = hub(name);
+        IBinder found = hub != null ? hub : orNative(name, report(name, ShadowServiceManager.getService(name)));
+        // cameraserver starts on use (cli/stack.cpp): the lookup above asked for it, CameraManager takes a null as "no camera service". Each wait
+        // asks again, as libbinder's waitForService does each second: a cameraserver that was just ending is started by the next ask.
+        for (int i = 0; found == null && i < 10 && "media.camera".equals(name) && HostCameraShadows.declared(); i++) found = RealBinder.await(name, 1000);
+        return found;
+    }
     @Implementation protected static IBinder checkService(String name) { IBinder hub = hub(name); return hub != null ? hub : orNative(name, report(name, ShadowServiceManager.checkService(name))); }
     @Implementation protected static IBinder waitForService(String name) throws InterruptedException { IBinder hub = hub(name); return hub != null ? hub : orNative(name, report(name, ShadowServiceManager.waitForService(name))); }
 
