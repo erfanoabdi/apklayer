@@ -327,7 +327,6 @@ public final class AppHost implements Runnable {
         }
         if (TRACE_ROOTS && now - lastRootTrace > 1_000_000_000L) { lastRootTrace = now; HostWindows.traceRoots(); }
         task.followNavigation();
-        if (!task.stopped.isEmpty()) HostWindows.hideAddedToStopped(task.stopped);
         if (stack.isEmpty()) return true;  // the grace period after a launcher activity finished itself
         followOrientation();
         text.followTextInput();
@@ -394,7 +393,7 @@ public final class AppHost implements Runnable {
                 (c, old) -> {
                     host.task.recreated(old, c.get());
                     setVisible(c.visible(), true);  // ActivityController's recreation leaves the new window unattached
-                    if (c == top) HostWindows.focus(c, host.windowActive);
+                    HostWindows.focus(c, c == top && host.windowActive);  // Robolectric's recreation focuses it: only the top window has focus
                 });
     }
 

@@ -44,7 +44,7 @@ final class WindowSurface {
       } else {
         t.setPosition(parent, window.frame.left - insets.left, window.frame.top - insets.top)
             .setLayerStack(parent, Integer.getInteger("apklayer.layerstack", 0))
-            .setLayer(parent, WindowOrder.screenLayer(window.attrs.type, window.zOrder, activityZOrder(window, windows)));
+            .setLayer(parent, WindowOrder.screenLayer(window.attrs.type, window.zOrder, activityOrder(window, windows), activityZOrder(window, windows)));
       }
       t.setLayer(child, 0)
           .show(parent)
@@ -80,7 +80,14 @@ final class WindowSurface {
     }
   }
 
-  /** The zOrder of the window's activity (its token's base window, WindowOrder.activityOrder), its own without one. */
+  /** The window's activity's place (WindowOrder.activityOrder): its token, or its own window's binder without one. */
+  private static int activityOrder(ShadowWindowManagerGlobal.WindowInfo window, Map<IWindow, ShadowWindowManagerGlobal.WindowInfo> windows) {
+    if (window.attrs.token != null) return WindowOrder.activityOrder(window.attrs.token);
+    for (Map.Entry<IWindow, ShadowWindowManagerGlobal.WindowInfo> e : windows.entrySet()) if (e.getValue() == window) return WindowOrder.activityOrder(e.getKey().asBinder());
+    return 0;
+  }
+
+  /** The zOrder of the window's activity's base window, its own without one: the add order within the activity. */
   private static int activityZOrder(ShadowWindowManagerGlobal.WindowInfo window, Map<IWindow, ShadowWindowManagerGlobal.WindowInfo> windows) {
     if (window.attrs.type >= android.view.WindowManager.LayoutParams.FIRST_SYSTEM_WINDOW || window.attrs.token == null) return window.zOrder;
     for (ShadowWindowManagerGlobal.WindowInfo w : windows.values()) {

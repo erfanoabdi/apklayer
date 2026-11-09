@@ -39,11 +39,14 @@ public class Covered extends Activity {
         Dialog late = new Dialog(below);
         Button lateButton = new Button(below);
         lateButton.setText("Late dialog of the stopped activity");
+        lateButton.setBackgroundColor(android.graphics.Color.GREEN);
         lateButton.setOnClickListener(v -> System.out.println("[hello-input] covered dialog tapped (late)"));
         late.setContentView(lateButton);
         late.show();
         late.getWindow().setLayout(-1, -1);
-        main.postDelayed(() -> System.out.println("[hello-input] late dialog shown=" + late.getWindow().getDecorView().isShown()), 500);
+        // hidden by the window manager (app visibility), not by its views: isShown() stays true as on Android, the window is GONE
+        main.postDelayed(() -> System.out.println("[hello-input] late dialog windowVisibility=" + late.getWindow().getDecorView().getWindowVisibility()
+                + " isShown=" + late.getWindow().getDecorView().isShown()), 500);
     }
 
     @Override protected void onCreate(Bundle state) {

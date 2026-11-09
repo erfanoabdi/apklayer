@@ -3,6 +3,23 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: window manager semantics for hidden and relaunched activities' windows
+- A stopped activity's windows are hidden as WindowManagerService does: through their app visibility (ViewRootImpl.dispatchAppVisibility to
+  the decor, the dialogs and the popups over them), not by setting their views INVISIBLE; a window added while its activity is hidden comes
+  up hidden (ShadowWindowManagerGlobal.addToDisplay leaves out ADD_FLAG_APP_VISIBLE: Robolectric 0025, runtime/patches AppVisibility). The run
+  loop's scan for windows added to stopped activities (HostWindows.hideAddedToStopped) is gone. As on Android a hidden dialog keeps
+  `isShown()` true and reports `getWindowVisibility()` GONE; Dialog.show() on a hidden dialog no longer makes it visible again, and an app's own
+  Dialog.hide() is no longer undone at restart.
+- Activities stack in their task's order (WindowOrder.activityOrder: start order, registered at launch) instead of the add order of their base
+  window: a relaunched activity (a configuration change; Robolectric's recreation gives it a new token and a new window) keeps its place. A
+  paused activity behind a translucent one was drawn and tapped over it after a font-scale change (AppHost iterates the stack top first, so the
+  lower activity's new window came last). A recreated activity that is not the top one loses the focus Robolectric's recreation gives it.
+- Tests (input group, Parallels ~/apklayer-dlg): stopped-windows checks the late dialog GONE (isShown true) and off the screen;
+  `stopped-windows.py translucent` (hello.input's Translucent): a translucent activity over a paused one with a dialog shown before and one
+  shown while paused, then `apklayer settings set font-scale 1.3` relaunching both: red on the screen and both taps reach the translucent one
+  (without the relaunch fix it fails: the paused activity drawn over it). input and activities pass; input-inject's third long press failed
+  beside activities on this tree and on the tree without these changes alike (the open input-inject item).
+
 ## 2026-11-09: Sailfish OS (Volla Quintus): Lipstick's switcher, its close, media = device, the Back-only bar
 - Switcher: every apklayer window is the session shell's (one Wayland client, one pid), and Lipstick ties a window to its launcher entry by the
   client's pid and the entry's Exec (JollaSystemInfo.isWindowForLauncherItem, matchingPidForCommand), except for entries with

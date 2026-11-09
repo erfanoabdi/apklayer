@@ -1,0 +1,38 @@
+From: apklayer
+Subject: [PATCH] ShadowWindowManagerGlobal, ShadowUiAutomation: a hidden activity's windows (app visibility)
+
+WindowManagerService hides a stopped activity's windows through their app visibility (ViewRootImpl.dispatchAppVisibility), not their
+views; a window added while its activity is hidden comes up hidden (addWindow leaves out ADD_FLAG_APP_VISIBLE): a dialog a stopped
+activity shows stays off the screen and takes no input. UiAutomation's input skips windows whose app is not visible (AppVisibility).
+
+Against external/robolectric 87aa52b08 (REVISION), after 0004, 0017 and 0022. apklayer patch: 0025 of patches/robolectric (see docs/PATCHES.md).
+---
+diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java
+@@ -302,6 +302,9 @@
+           res |= 0x8 /* ADD_FLAG_USE_BLAST */;
+         }
+       }
++      // apklayer patch: WindowManagerService.addWindow sets ADD_FLAG_APP_VISIBLE only while the window's activity is visible: a dialog
++      // a stopped activity shows comes up hidden (AppVisibility)
++      if (AppVisibility.hides(windowInfo.attrs.token, windows)) res &= ~ADD_FLAG_APP_VISIBLE;
+       res |= inTouchMode ? ADD_FLAG_IN_TOUCH_MODE : 0;
+       return res;
+     }
+diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUiAutomation.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUiAutomation.java
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUiAutomation.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowUiAutomation.java
+@@ -278,9 +278,9 @@
+     for (int i = 0; i < viewRootImpls.size(); i++) {
+       Root root = new Root(viewRootImpls.get(i), params.get(i), i);
+       // TODO: Should we also filter out sub-windows of non-started application windows?
+-      // apklayer patch: a window whose root view is not VISIBLE is hidden (ViewRootImpl relayouts it so) and takes no input;
+-      // the host hides a stopped activity's dialogs and popups so (AppHost.setVisible)
+-      if (root.impl.getView().getVisibility() != View.VISIBLE) continue;
++      // apklayer patch: a window whose root view is not VISIBLE, or whose activity the window manager hides (a stopped activity's
++      // windows, AppVisibility), is hidden (ViewRootImpl relayouts it so) and takes no input
++      if (!AppVisibility.shown(root.impl.getView())) continue;
+       if (root.getType() != WindowManager.LayoutParams.TYPE_BASE_APPLICATION
+           || startedActivityTokens.contains(root.impl.getView().getApplicationWindowToken())) {
+         roots.add(root);
