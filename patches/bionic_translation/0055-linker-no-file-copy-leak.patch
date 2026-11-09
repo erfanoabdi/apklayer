@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Mon, 9 Nov 2026 00:00:00 +0000
+Subject: [PATCH] linker: map the library file for its headers, do not leak a copy
+
+apklayer patch (docs/PATCHES.md). apkenv_load_library read each whole library file into a calloc'd buffer for the ELF and program
+headers and never freed it: every process kept a copy of every library it loaded (the Volla X23's 38 MB libGLES_mali.so alone in
+SurfaceFlinger, the composer and each app JVM). The file is now mapped read-only and unmapped once the segments are loaded.
+
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -1480,7 +1480,6 @@
+ 	 * shortcut: any absolute path from the app namespace, not only the app's data; narrow it if a host library gets in the way. */
+ 	if (fd == -1 && app && name[0] == '/' && strlen(name) < sizeof(fullpath) && (fd = apkenv__open_lib(name)) >= 0)
+ 		strcpy(fullpath, name);
+-	int cnt;
+ 	size_t ext_sz;
+ 	size_t req_base;
+ 	const char *bname;
+@@ -1524,27 +1523,17 @@
+ 		}
+ 	}
+ 
++	/* apklayer patch: the file is mapped for the headers, not copied into a calloc that was never freed (a copy of every library
++	 * stayed in every process: 38 MB for a Mali driver, in SurfaceFlinger, the composer and each app) */
++	uint8_t *bytes = MAP_FAILED;
+ 	off_t end;
+ 	if ((end = lseek(fd, 0, SEEK_END)) < 0) {
+-		DL_ERR("lseek() failed!");
+-		goto fail;
+-	}
+-
+-	uint8_t *bytes;
+-	if (!(bytes = calloc(1, end))) {
+-		DL_ERR("calloc() failed!");
+-		goto fail;
+-	}
+-
+-	/* We have to read the ELF header to figure out what to do with this image
+-	 */
+-	if (lseek(fd, 0, SEEK_SET) < 0) {
+ 		DL_ERR("lseek() failed!");
+ 		goto fail;
+ 	}
+ 
+-	if ((cnt = read(fd, bytes, end)) < 0) {
+-		DL_ERR("read() failed!");
++	if ((bytes = mmap(NULL, end, PROT_READ, MAP_PRIVATE, fd, 0)) == MAP_FAILED) {
++		DL_ERR("mmap() failed!");
+ 		goto fail;
+ 	}
+ 
+@@ -1599,10 +1588,13 @@
+ 	si->phnum = hdr->e_phnum;
+ 	/**/
+ 
++	munmap(bytes, end);
+ 	close(fd);
+ 	return si;
+ 
+ fail:
++	if (bytes != MAP_FAILED)
++		munmap(bytes, end);
+ 	if (si)
+ 		apkenv_free_info(si);
+ 	close(fd);
