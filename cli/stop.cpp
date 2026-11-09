@@ -75,6 +75,7 @@ void stopStack(const Layout& l, const Instance& inst) {
     }
     for (const std::string& f : listDir(inst.stateDir))  // the records of what the sweep ended
         if (f.rfind("run.", 0) == 0) unlink(join(inst.stateDir, f).c_str());
+    endShellUnlessShared(l, inst.id);  // a shell a racing launch started after the first check (the sweep spares the session's shell)
     close(lock);
 }
 

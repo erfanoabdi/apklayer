@@ -3,6 +3,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: `apklayer stop` ends a shell a racing launch started (hub-services' leftover apklayer-shell on Parallels)
+- cli/stop.cpp: the shell was ended only before the hub; a launch racing the stop could start a new one, and the final sweep spares the session's shell, so it outlived the stop (hub-smoke: `assert not left`, also at -j 1). The stop now checks again after the sweep (endShellUnlessShared: kept while another instance's stack runs). Parallels: hub-services passes 2 of 2 after it (failed 2 of 2 before), sysprov and the Settings round's groups pass.
+
 ## 2026-11-09: Camera1 (android.hardware.Camera) apps get rotate-and-crop, also when the window turns while the camera is open (docs/PLAN.md "Camera")
 - Cause: Camera.open and Camera.getCameraInfo read the app's CameraCompatibilityInfo in JNI (android_content_res_CameraCompatibilityInfo_toNative)
   through field ids that register_android_content_res_CameraCompatibilityInfo sets; apklayer's runtime never called it, so Camera1 passed
