@@ -3,6 +3,42 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: storage while the hub is down, bounded media watches, drives in the sandbox (docs/PLAN.md "Open by area", Storage)
+- Catch-up at hub start (HubVolumes.watch, HubMediaWatch): the hub records the drives mounted as it last saw them (`<instance>/volumes-mounted`)
+  and the time up to which every change went to MediaProvider's scanner (`<instance>/media-scanned`, written after each flush). A hub start that
+  is not a boot compares: a drive mounted meanwhile is announced as on a hot plug (broadcasts, callbacks, ExternalStorageService scans it), a
+  removed one ejected/unmounted/removed; on internal storage and the drives still mounted every folder and file whose mtime is at or after the kept
+  time (2 s slack: vfat) goes to the scanner (ACTION_MEDIA_SCANNER_SCAN_FILE; a folder's scan finds its deleted entries too). The first start of an
+  instance (nothing kept) announces its drives and has ExternalStorageService scan internal storage, as a first boot; a boot (always-on) leaves it to
+  HubBootBroadcasts as before (HubBootBroadcasts.pending).
+- Bounded inotify (HubMediaWatch): fanotify's FAN_MARK_FILESYSTEM needs CAP_SYS_ADMIN (unprivileged fanotify, 5.13+, has inode marks only), so
+  inotify stays, with a budget (APKLAYER_MEDIA_WATCHES, else a quarter of fs.inotify.max_user_watches, at least 64): a volume's top and its media
+  folders (DCIM, Pictures, Movies, Music, Download, Documents, ...) first, the rest while it lasts. What is over it is scanned at the next hub start or
+  mount; while any folder is unwatched (or inotify dropped events) the kept time stays at this hub's start. `apklayer status` shows
+  `media watch  N directories watched, M not (budget B of inotify's L per user; ...)` from `<state>/media-watch`.
+- Sandbox (APKLAYER_SANDBOX=1): the drives reach a sandboxed app through apklayerd's file broker, as the granted home does: APKLAYER_BROKER_HOME
+  is a ':' list (the home when granted, `/media/<user>`, `/run/media/<user>`), and apklayerd (cli/broker.cpp) serves a drive path to an app holding a
+  storage permission (READ/WRITE_EXTERNAL_STORAGE, READ_MEDIA_*, granted or a legacy app's) or declaring MANAGE_EXTERNAL_STORAGE or
+  WRITE_MEDIA_STORAGE (MediaProvider), read and write as the user. HostVolumes uses USER when the JDK's user.name is "?" (an app uid has no
+  passwd entry: the drives were looked for under `/media/?`). Also fixed: sandboxed processes had no APKLAYER_STORAGE since 2026-11-07 (the CLI
+  drops it at its start, cli/main.cpp, and sandbox-exec is the CLI), so they saw the host paths for /storage and MediaProvider found no volume for
+  them; sandboxSpawn hands it on as it does LD_PRELOAD (APKLAYER_SANDBOX_STORAGE).
+- Mounts outside `/media/<user>` and `/run/media/<user>` stay out (documented in PLAN: udisks2 would list fstab and /mnt mounts too, which are the
+  system's).
+- Test: group `volumes` gains the catch-up (tests/vm/volumes.py, hello-files' `hello.hotplug=catchup`): with the instance stopped a drive is
+  mounted and a picture written on internal storage, the next start lists the drive and indexes its DCIM/pre.png and the picture; then both are
+  removed while stopped and the start after has neither; those two run with a budget of 3 and read `apklayer status` (directories not watched).
+  New optional group `volumes-sandbox` (the same with APKLAYER_SANDBOX=1). hello-files touches MediaStore before MediaStore.Images.Media: as the
+  first MediaStore use, the nested class's initialization crashed the app JVM (SIGSEGV in ConstantPool::klass_at_impl, Class.getDeclaringClass0
+  under Robolectric's ShadowMap; PLAN Storage). Hotplug skips what the hub's start announced before the mount (a drive an earlier run left in
+  the record), and accepts the instance's /storage at its host path. volumes.py: when the umount is busy it ends this instance's processes using
+  the drive, as vold does (the instance's MediaProvider kept a scanned image mapped: Skia's file mapping, until a GC), else detaches lazily
+  (another tree's instance on the same desktop scanning it); both groups are `alone` (every instance's hub sees every drive).
+- Also: Files.readString of /proc/sys/fs/inotify/max_user_watches returned its first byte ("6") on JDK 21: readAllLines.
+- Results (Parallels, own tree ~/apklayer-sbx, instances sbx1/sbx2): volumes (21 of 21), volumes-sandbox, files, sysprov, sandbox, hub-services,
+  services pass. volumes-sandbox failed once in five runs at "catchup present internal file" (the hub sent the scan; the sandboxed MediaProvider
+  did not index the picture within 30 s; it ran right after the unsandboxed volumes group in the same instance), passing when run again.
+
 ## 2026-11-09: the navigation bar has Back only (owner: no Home button)
 - bridge/shell/navbar.c/.h, mobile.c: Home (the ring) and its action (minimize) are gone; Back stays at a quarter of the width, the rest of the bar is plain (taps there do nothing); Home is the compositor's own gesture/button. tests/vm/mobile.py's bar check looks for Back's strokes only.
 

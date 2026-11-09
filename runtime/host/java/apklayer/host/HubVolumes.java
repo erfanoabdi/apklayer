@@ -33,18 +33,38 @@ final class HubVolumes {
     HubVolumes(HubDirectory directory) { this.directory = directory; this.media = new HubMediaWatch(directory); }
 
     /**
-     * The first look (no broadcasts: what is mounted before the hub starts is announced with the boot broadcasts), then the watch, on this thread
-     * until the hub ends (it started the monitor: setpriv's parent-death signal is this thread's).
+     * The first look, then the watch, on this thread until the hub ends (it started the monitor: setpriv's parent-death signal is this thread's).
+     * A boot (HubBootBroadcasts) announces what is mounted. Any other hub start catches up with what happened while no hub ran: the drives
+     * mounted when the last hub ended are recorded ({@code volumes-mounted}), so a drive mounted or removed since is announced as on a hot plug, and
+     * what changed on internal storage and the drives still mounted since the last scan is scanned (HubMediaWatch). An instance's first hub start
+     * (nothing recorded) announces its drives and has MediaProvider scan internal storage, as a first boot would.
      */
     void watch() {
+        boolean boot = HubBootBroadcasts.pending(directory);
+        long since = boot ? -1 : media.stamp();
+        List<VolumeInfo> now = removable();
         synchronized (this) {
-            for (VolumeInfo volume : removable()) mounted.put(volume.fsUuid, volume);
-            HostVolumes.Removable.removeStale(mounted.keySet());
+            if (boot) {
+                for (VolumeInfo volume : now) mounted.put(volume.fsUuid, volume);
+                HostVolumes.Removable.removeStale(mounted.keySet());
+            } else if (since >= 0) mounted.putAll(recorded());
+            for (VolumeInfo volume : now)  // the drives still mounted as they were: what changed on them; a new one is scanned whole when it is announced
+                if (mounted.containsKey(volume.fsUuid) && mounted.get(volume.fsUuid).path.equals(volume.path))
+                    media.add(Path.of(HostVolumes.Removable.mountPoint(volume)), volume.path, since);
         }
         File primary = HostVolumes.internal();
         String storage = System.getProperty("apklayer.storage");
-        if (storage != null && primary != null) media.add(Path.of(storage, "emulated", primary.getName()), primary.getPath());
-        mounted.values().forEach(volume -> media.add(Path.of(HostVolumes.Removable.mountPoint(volume)), volume.path));
+        if (storage != null && primary != null) media.add(Path.of(storage, "emulated", primary.getName()), primary.getPath(), since);
+        if (!boot) {
+            HubBootSettings.awaitBoot();  // the system's package attached, as for the boot's broadcasts
+            try { look(); } catch (RuntimeException failure) { System.out.println("[apklayer-hub] volumes: " + failure); }
+            if (since < 0 && primary != null) {
+                System.out.println("[apklayer-hub] volumes: the instance's first scan of internal storage");
+                mountedVolumes().stream().filter(v -> v.getType() == VolumeInfo.TYPE_EMULATED).forEach(v -> HubStorageService.notify(directory, storageVolume(v)));
+            }
+        }
+        record();
+        media.settle();
         Process monitor;
         try {  // line by line: its stdout into a pipe is block-buffered
             monitor = new ProcessBuilder(HostProcess.dying("stdbuf", "-oL", "udisksctl", "monitor")).redirectErrorStream(true).start();
@@ -79,7 +99,7 @@ final class HubVolumes {
             unmounted.remove(volume.fsUuid);
             mounted.put(volume.fsUuid, volume);
             changed(volume, VolumeInfo.STATE_UNMOUNTED);
-            media.add(Path.of(HostVolumes.Removable.mountPoint(volume)), volume.path);
+            media.add(Path.of(HostVolumes.Removable.mountPoint(volume)), volume.path, -1);
         }
         for (VolumeInfo gone : List.copyOf(mounted.values())) {
             if (now.containsKey(gone.fsUuid)) continue;
@@ -95,6 +115,32 @@ final class HubVolumes {
             changed(state(idle, VolumeInfo.STATE_REMOVED), VolumeInfo.STATE_UNMOUNTED);
         }
         HostVolumes.Removable.removeStale(mounted.keySet());
+        record();
+    }
+
+    private static Path recordFile() { return Path.of(System.getProperty("apklayer.storage", "/nonexistent")).getParent().resolve("volumes-mounted"); }
+
+    /** The drives mounted as the hub last saw them: "uuid TAB label TAB fs type TAB state" per line. */
+    private synchronized void record() {
+        StringBuilder text = new StringBuilder();
+        for (VolumeInfo v : mounted.values()) text.append(v.fsUuid).append('\t').append(v.fsLabel).append('\t').append(v.fsType).append('\t').append(v.state).append('\n');
+        try { Files.writeString(recordFile(), text); } catch (IOException | RuntimeException failure) { System.out.println("[apklayer-hub] volumes: not recorded: " + failure); }
+    }
+
+    private static Map<String, VolumeInfo> recorded() {
+        Map<String, VolumeInfo> volumes = new HashMap<>();
+        File internal = HostVolumes.internal();
+        if (internal == null) return volumes;
+        try {
+            for (String line : Files.readAllLines(recordFile())) {
+                String[] f = line.split("\t", -1);
+                if (f.length != 4 || f[0].isEmpty()) continue;
+                VolumeInfo volume = HostVolumes.Removable.volume(internal.getParentFile().getParentFile(), android.os.Process.myUserHandle().getIdentifier(), f[0], f[1], f[2]);
+                volume.state = Integer.parseInt(f[3]);
+                volumes.put(f[0], volume);
+            }
+        } catch (IOException | RuntimeException none) { /* none recorded */ }
+        return volumes;
     }
 
     private static VolumeInfo state(VolumeInfo volume, int state) {
@@ -119,10 +165,14 @@ final class HubVolumes {
      * told to MediaProvider's ExternalStorageService (StorageSessionController: it attaches and scans a mounted volume, detaches a gone one).
      */
     static void announce(HubDirectory directory, VolumeInfo volume) {
-        StorageVolume user = volume.buildStorageVolume(org.robolectric.RuntimeEnvironment.getApplication(), android.os.Process.myUserHandle().getIdentifier(), false);
+        StorageVolume user = storageVolume(volume);
         String action = VolumeInfo.getBroadcastForEnvironment(user.getState());
         if (action != null) directory.sendSystem(new Intent(action, Uri.fromFile(user.getPathFile())).putExtra(StorageVolume.EXTRA_STORAGE_VOLUME, user)
                 .addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT | Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND), false);
         HubStorageService.notify(directory, user);
+    }
+
+    private static StorageVolume storageVolume(VolumeInfo volume) {
+        return volume.buildStorageVolume(org.robolectric.RuntimeEnvironment.getApplication(), android.os.Process.myUserHandle().getIdentifier(), false);
     }
 }

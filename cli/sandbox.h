@@ -24,6 +24,8 @@ int homeAccessCommand(const Layout& layout, const Instance& instance, const std:
 void setHomeAccess(const std::string& root, const std::string& package, bool on);
 // The user's grant (`home-access`), or a system app that manages all storage (DocumentsUI's Home root through ExternalStorageProvider)
 bool homeAccess(const Layout& layout, const Instance& instance, const std::string& package);
+// Where the desktop mounts this user's drives (udisks2): /media/<user>, /run/media/<user>; an app reaches them through apklayerd's broker
+std::vector<std::string> driveRoots();
 // The namespace uid (an app's, 10000 and up) of a subordinate host uid, (uid_t)-1 for any other
 uid_t appUidOf(uid_t hostUid);
 // The user owns dir again (an app's data after the sandbox ran it as its own uid): before it is removed, or used without the sandbox.
