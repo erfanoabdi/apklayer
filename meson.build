@@ -144,4 +144,3 @@ install_data('data/apklayer-share.desktop', install_dir: get_option('datadir') /
 install_data('data/content-hub-peer.json', rename: 'apklayer-share', install_dir: get_option('datadir') / 'lomiri-content-hub/peers')
 install_data('data/apklayer.svg', install_dir: get_option('datadir') / 'icons/hicolor/scalable/apps')
 install_data('data/apklayer-256.png', rename: 'apklayer.png', install_dir: get_option('datadir') / 'icons/hicolor/256x256/apps')
-install_data('data/modules-load.conf', rename: 'apklayer.conf', install_dir: 'lib/modules-load.d')  # binder_linux at boot

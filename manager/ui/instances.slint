@@ -23,7 +23,7 @@ export component InstancesPage {
                 }
                 for inst in Backend.instances : Row {
                     text: inst.id;
-                    supporting-text: (inst.running ? "Running" : "Stopped") + (inst.autostart ? " · always on" : "") + (inst.binder ? "" : " · binder devices missing");
+                    supporting-text: (inst.running ? "Running" : "Stopped") + (inst.autostart ? " · always on" : "") + (inst.binder ? "" : " · kernel binder devices missing");
                     icon: inst.binder ? AppIcons.layers : AppIcons.admin;
                     selected: inst.id == Backend.instance;
                     clicked => { Backend.select-instance(inst.id); }

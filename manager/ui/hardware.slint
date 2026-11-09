@@ -2,7 +2,7 @@
 // user's choice), every choice with its probe() answer (unavailable ones with why, not selectable), the options, Apply, and a live test against
 // the running instance. A change restarts only that domain's service.
 import { MaterialPalette, MaterialTypography, MaterialStyleMetrics, MaterialText, ScrollView, OutlinedCard, DropDownMenu, TextField, FilledButton,
-         TonalButton, Icon } from "@material";
+         TonalButton, Icon, Switch } from "@material";
 import { Backend, AppIcons, HwDomain, HwOption } from "backend.slint";
 
 // one option's field: follows its value (a chosen file) unless being typed into
@@ -103,6 +103,48 @@ component DomainCard {
     } }
 }
 
+// the page's introduction and the instance's binder: userspace (the default, no kernel devices) or the kernel's driver; a change restarts
+// the instance (as its GPU). Beside the text, so that the first provider's card (and its Apply) stays in view
+component BinderRow {
+    VerticalLayout {
+        spacing: MaterialStyleMetrics.spacing_8;
+        HorizontalLayout {
+            spacing: MaterialStyleMetrics.spacing_16;
+            MaterialText {
+                horizontal-stretch: 1;
+                text: "What instance " + Backend.instance + " runs on and offers its apps. Binder: " +
+                      (Backend.binder-kernel ? "the kernel's (binder_linux devices, made by an administrator)" : "userspace, apklayer's own (the default)") +
+                      "; the switch picks the kernel's. Hardware: Automatic uses the best this device has; Apply restarts only that service (audio, graphics and codecs: from the next start).";
+                style: MaterialTypography.body_medium;
+                color: MaterialPalette.on_surface_variant;
+                wrap: word-wrap;
+            }
+            VerticalLayout {
+                alignment: start;
+                Switch {
+                    width: MaterialStyleMetrics.size_52;
+                    height: MaterialStyleMetrics.size_32;
+                    checked: Backend.binder-kernel;
+                    enabled: !Backend.busy;
+                    accessible-label: "Kernel binder";
+                    checked-state-changed(on) => { Backend.set-binder(on); }
+                }
+            }
+        }
+        if Backend.binder-kernel && Backend.binder-kernel-setup != "" : MaterialText {
+            text: "Its kernel binder devices are missing. An administrator makes them with:";
+            style: MaterialTypography.body_small;
+            color: MaterialPalette.on_surface_variant;
+            wrap: word-wrap;
+        }
+        if Backend.binder-kernel && Backend.binder-kernel-setup != "" : HorizontalLayout { TextField {
+            read-only: true;
+            text: Backend.binder-kernel-setup;
+            accessible-label: "Kernel binder setup command";
+        } }
+    }
+}
+
 export component HardwarePage {
     ScrollView {
         HorizontalLayout {
@@ -113,12 +155,7 @@ export component HardwarePage {
                 padding-bottom: 96px;
                 spacing: MaterialStyleMetrics.spacing_8;
                 alignment: start;
-                MaterialText {
-                    text: "What instance " + Backend.instance + " offers its apps as sensors, location, vibrator, camera, audio, graphics and codecs. Automatic uses the best this device has; Apply restarts only that service (audio, graphics and codecs: from the next start); the test runs against the running instance.";
-                    style: MaterialTypography.body_medium;
-                    color: MaterialPalette.on_surface_variant;
-                    wrap: word-wrap;
-                }
+                BinderRow { }  // the page's introduction, with the binder switch beside it
                 for d in Backend.hardware : DomainCard { domain: d; }
             }
         }

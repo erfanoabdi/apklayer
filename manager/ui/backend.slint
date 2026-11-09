@@ -58,6 +58,8 @@ export global Backend {
     in property <[InfoEntry]> status;
     in property <[MenuItem]> gpus;         // `apklayer gpus`: the selected instance's choice is gpu-index
     in property <int> gpu-index: -1;
+    in property <bool> binder-kernel;      // `apklayer binder`: the selected instance runs on the kernel's binder (else the userspace one, the default)
+    in property <string> binder-kernel-setup;  // the command that makes its kernel binder devices, "" when they exist
     in property <AppEntry> current-app;   // the app selected with select-app, and its info rows
     in property <bool> has-current-app;
     in property <[InfoEntry]> app-info;
@@ -92,6 +94,7 @@ export global Backend {
     callback setup-binder(string);         // pkexec the setup script
     callback stop-instance(string);
     callback set-autostart(string, bool);  // always-on mode (`apklayer instance autostart`): the instance starts at login and its hub never exits when idle
+    callback set-binder(bool);             // kernel or not: `apklayer binder kernel|userspace`, then the instance's stack restarts
     callback set-gpu(int);                 // index into gpus: `apklayer gpu set`, then the instance's stack restarts
     callback set-prop(string, string);
     callback unset-prop(string);

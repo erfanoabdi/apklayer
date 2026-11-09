@@ -13,11 +13,11 @@ deb="$version-1~${codename}1"
 slint="${APKLAYER_SLINT:-$HOME/.cache/apklayer/slint}"
 manager/fetch-slint.sh "$slint"
 
-# per-release differences: Ubuntu keeps binder_linux in linux-modules-extra, which only its kernel metapackages pull in; Debian builds it into its kernel
-# a recommendation, not a dependency: a hard one would pull the generic kernel onto systems running another flavour (lowlatency, cloud, OEM, a custom one)
+# per-release differences: Ubuntu keeps binder_linux in linux-modules-extra, which only its kernel metapackages pull in; Debian builds it into its kernel.
+# Only the kernel binder (apklayer binder kernel) needs it, the userspace one is the default: a suggestion
 case "$codename" in
-    noble) printf '%s\n' 'apklayer:Depends=' 'apklayer:Recommends=linux-modules-extra-generic | linux-image-generic | linux-image-generic-hwe-24.04' ;;
-    *) printf '%s\n' 'apklayer:Depends=' 'apklayer:Recommends=' ;;
+    noble) printf '%s\n' 'apklayer:Depends=' 'apklayer:Suggests=linux-modules-extra-generic | linux-image-generic | linux-image-generic-hwe-24.04' ;;
+    *) printf '%s\n' 'apklayer:Depends=' 'apklayer:Suggests=' ;;
 esac > "debian/$codename.substvars"
 if [ -f "debian/patches/$codename/series" ]; then cp "debian/patches/$codename"/* debian/patches/; fi  # none so far
 

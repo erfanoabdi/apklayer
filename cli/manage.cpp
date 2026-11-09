@@ -146,17 +146,18 @@ int instanceCommand(const Layout& l, const std::string& action, const std::strin
         Instance inst = Instance::open(l, id);
         printf("created\t%s\n", inst.root.c_str());
         if (binderReady(inst.root, id)) puts("binder\tok");
-        else printf("binder\tmissing\t%s\n", haveBinderfs() ? binderSetupCommand(id).c_str() : binderDeviceWhy(id).c_str());
+        else printf("binder\tmissing\t%s\n", binderSetupCommand(id).c_str());  // only with the kernel binder (apklayer binder kernel)
         return 0;
     }
     if (action != "remove") die("instance create|remove <id>");
     if (!isDir(join(l.dataHome, "apklayer/" + id))) die("no such instance: " + id);
     Instance inst = Instance::open(l, id);
+    bool kernel = !userspaceBinder(inst.root);
     if (stackRunning(inst)) stopStack(l, inst);
     for (const std::string& app : listDir(join(inst.root, "app-data"))) reclaim(join(inst.root, "app-data/" + app));  // the sandbox's app uids own these
     for (const std::string& tmp : listDir(inst.tmpDir())) reclaim(join(inst.tmpDir(), tmp));
     for (const std::string& dir : {inst.root, join(l.stateHome, "apklayer/" + id), inst.runtimeDir}) removeTree(dir);  // not $APKLAYER_LOGS: a test's own directory
-    printf("apklayer: removed instance %s (its binder devices stay until the next reboot)\n", id.c_str());
+    printf("apklayer: removed instance %s%s\n", id.c_str(), kernel ? " (its kernel binder devices stay until the next reboot)" : "");
     return 0;
 }
 

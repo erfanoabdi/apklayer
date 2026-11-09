@@ -6,7 +6,8 @@ Step by step, from a fresh Linux machine to an Android app in a window. Tested o
 x86_64 has its own prebuilts but was never run on a real PC (`docs/X86_64.md`); the steps below are written for arm64.
 
 What you need: arm64 Linux with **Ubuntu 24.04 or newer** (tested; Debian 13 should take the same packages, untested), a **Wayland** desktop session (GNOME, KDE), a GPU with Mesa (GBM, EGL, GLES), PipeWire for audio,
-about 5 GB of disk for the sources, prebuilts, build and install, and `sudo` once per boot (kernel binder devices).
+about 5 GB of disk for the sources, prebuilts, build and install. No root step: binder is apklayer's own userspace one (docs/BINDER.md); the kernel's
+binder driver is an option (step 2).
 Nothing here needs the LineageOS tree: the Android parts come from the `prebuilts` branch of this repository.
 
 Every command below uses one directory for everything, `$AL`. Set it once per shell:
@@ -30,16 +31,20 @@ sudo apt install build-essential meson ninja-build pkg-config git python3 curl z
 
 JDK 21 is the tested one (the host patches `java.base`; other versions are untested).
 
-## 2. Kernel binder
+## 2. Kernel binder (optional)
 
-Android's IPC runs on the kernel's binder driver (binderfs). Ubuntu ships it in `linux-modules-extra`, Debian in its standard kernel:
+Android's IPC (binder) runs on apklayer's userspace binder by default (docs/BINDER.md): no kernel module, no devices, nothing as root. Skip this
+step unless you want the kernel's binder driver (binderfs) for an instance: `bin/apklayer [--instance <id>] binder kernel` (back with
+`binder userspace`; `APKLAYER_BINDER=kernel|userspace` overrides it for one command; the manager's Hardware page has the same switch). Ubuntu ships
+the driver in `linux-modules-extra`, Debian in its standard kernel:
 
 ```sh
 modinfo binder_linux >/dev/null || sudo apt install linux-modules-extra-$(uname -r)   # Ubuntu
 ```
 
 `tools/host-setup/binder.sh` (step 3 clones it) loads the module, mounts binderfs at `/dev/binderfs` and creates the devices: `binder`, `hwbinder`,
-`vndbinder` for the default instance, and `binder-<id>`... for every instance named on its command line. The devices do not survive a reboot: run it again after each boot.
+`vndbinder` for the default instance, and `binder-<id>`... for every instance named on its command line. The devices do not survive a reboot: run it again after each boot
+(an installed package: `sudo systemctl enable --now apklayer-binder` does that at every boot).
 
 ```sh
 sudo sh "$AL/repo/tools/host-setup/binder.sh"            # the default instance
@@ -125,10 +130,9 @@ An instance is a separate Android "device": its own services, properties, app da
 `--instance <id>` (or `APKLAYER_INSTANCE=<id>`); without it the instance is `default`.
 
 ```sh
-sudo sh tools/host-setup/binder.sh work   # its binder devices (once per boot)
 bin/apklayer instance create work
 bin/apklayer --instance work run com.example.app
-bin/apklayer instances                    # every instance, whether it runs, whether its binder devices exist
+bin/apklayer instances                    # every instance, whether it runs, whether its binder is ready (kernel binder: its devices exist)
 bin/apklayer --instance work stop
 bin/apklayer instance remove work         # deletes its data
 ```
@@ -182,7 +186,7 @@ permissions close to others.
 
 - Logs: `~/.local/state/apklayer/<instance>/` (`default` for the default instance): `stack.log` (the services' start), `shell.log` (windows, frames, input),
   one log per Android service (`surfaceflinger.log`, `audioserver.log`...) and per app process. `bin/apklayer status` shows what runs.
-- "the Android services did not come up": the binder devices are missing (`ls /dev/binderfs`; run step 2 again after a reboot) or another instance uses the same id.
+- "the Android services did not come up": `binderd.log` in the instance's logs (the userspace binder); with the kernel binder its devices may be missing (`ls /dev/binderfs`; run step 2 again after a reboot); or another instance uses the same id.
 - "the shell did not listen": no Wayland session (`echo $WAYLAND_DISPLAY`); apklayer does not run on X11 or a text console.
 - An app that closes at once: its log names the cause; `bin/apklayer info <package>` shows what was installed. Converted classes are cached: after an
   apklayer update that changed dex2jvm, install the app again.
@@ -211,7 +215,7 @@ sudo apt purge apklayer apklayer-dev
 ```
 
 From a source tree: `bin/apklayer remove-all --yes`, then delete the tree (`rm -rf "$AL"`) and, if an older version's step 6 wrote it,
-`sudo rm -f /data/local/tmp/webview-command-line`. The binder devices go away at the next reboot. The apt packages from step 1 stay; remove
+`sudo rm -f /data/local/tmp/webview-command-line`. Kernel binder devices (if you made any) go away at the next reboot. The apt packages from step 1 stay; remove
 them with `apt` if nothing else needs them.
 
 ## What still needs the LineageOS tree
@@ -227,7 +231,8 @@ from the release (`--bundle <file>` for an offline copy), installs the system ap
 microG (Services and Companion, for apps that need Google's services) and the F-Droid client are optional: `apklayer setup --microg --fdroid`, the
 first-run screen's checkboxes, or at any time the "Add-ons" section at the end of the Apps page's list, which shows whether each is
 installed and offers Install, Update (nothing is downloaded beyond the repository index when the installed version is current) and Remove.
-Setup needs no root: what does (binderfs and the instances' binder devices) the package does at install and at every boot (`apklayer-binder.service`).
+Setup needs no root: binder is the userspace one. The kernel's binder is an option (`apklayer binder kernel`, or the manager's Hardware page); its
+devices need root once per boot: `sudo systemctl enable --now apklayer-binder` (the package ships the unit disabled).
 Ubuntu Touch (Halium phones): docs/HALIUM.md "The apt install on the phone"; "Choose file…" and Share to apklayer go through Lomiri Content Hub
 (docs/HALIUM.md "Choosing and sharing files on Ubuntu Touch").
 
@@ -241,11 +246,11 @@ flatpak run io.github.erfanoabdi.Apklayer                               # the ma
 alias apklayer='flatpak run --command=apklayer io.github.erfanoabdi.Apklayer'   # the CLI
 ```
 
-**No host step.** A Flatpak cannot load kernel modules or mount binderfs, and it sees only the GPU's devices (`--device=dri`), so inside it apklayer
-uses the userspace binder (docs/BINDER.md): `apklayer setup`'s binder step passes and nothing runs as root. With
-`flatpak override --user --device=all io.github.erfanoabdi.Apklayer` and binderfs mounted on the host (the deb's `apklayer-binder.service`, or
-`sudo sh "$(flatpak info --show-location io.github.erfanoabdi.Apklayer)/files/share/apklayer/tools/host-setup/binder.sh"`) the kernel's binder is
-used as with the deb; `APKLAYER_BINDER=userspace|kernel` (`flatpak run --env=...`) forces either.
+**No host step.** A Flatpak cannot load kernel modules or mount binderfs, and it sees only the GPU's devices (`--device=dri`); apklayer uses the
+userspace binder (docs/BINDER.md), the default everywhere: `apklayer setup`'s binder step passes and nothing runs as root. The kernel's binder is
+an option as with the deb (`apklayer binder kernel`): with `flatpak override --user --device=all io.github.erfanoabdi.Apklayer` and binderfs
+mounted on the host (`sudo sh "$(flatpak info --show-location io.github.erfanoabdi.Apklayer)/files/share/apklayer/tools/host-setup/binder.sh"`);
+`APKLAYER_BINDER=userspace|kernel` (`flatpak run --env=...`) forces either.
 The Android runtime bundle is downloaded per user by `apklayer setup`, as with the deb (not a Flatpak extension: the bundle has its own version and
 release cycle, `tools/release/versions`, and updates without a new Flatpak).
 

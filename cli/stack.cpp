@@ -363,6 +363,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         removeTree(inst.runtimeDir);
         makeDirs(inst.runtimeDir);
     }
+    recordStackBinder(inst);  // before the pid file: clients started while this stack runs follow it, not a choice changed since
     stageManifest(inst, l, staged(l, "libapklayer_codec2.so") && !deviceDomain(l, inst, "media"), "apklayer-media.xml", "aosp/hals/media/codec2/manifest.xml");
     stageManifest(inst, l, staged(l, "libapklayer_audio.so"), "apklayer-audio.xml", "aosp/hals/audio/manifest.xml");
     stageManifest(inst, l, staged(l, "libapklayer_audioserver.so"), "apklayer-audio-effects.xml", "aosp/hals/audio/effects-manifest.xml");
@@ -649,7 +650,7 @@ int execTool(const Layout& l, const Instance& inst, const std::vector<std::strin
         makeDirs(inst.runtimeDir);
         loadProperties(l, inst, ne);
     }
-    if (userspaceBinder(inst.root)) ensureBinderDaemon(l.runtimeHome, l.native, inst.id, join(inst.logs(), "binderd.log"));
+    if (stackUserspaceBinder(inst)) ensureBinderDaemon(l.runtimeHome, l.native, inst.id, join(inst.logs(), "binderd.log"));
     return runAndWait(s);
 }
 

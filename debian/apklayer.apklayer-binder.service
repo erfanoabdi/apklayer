@@ -1,5 +1,5 @@
 [Unit]
-Description=apklayer: binderfs and the default instance's binder devices
+Description=apklayer: binderfs and the binder devices of the instances on the kernel binder (apklayer binder kernel; optional)
 Documentation=https://github.com/erfanoabdi/apklayer/blob/main/docs/INSTALL.md
 # a Halium device (Ubuntu Touch) mounts binderfs itself (lxc-android-config mount-android-partitions, before sysinit): never a second mount over it
 After=systemd-modules-load.service mount-android-partitions.service

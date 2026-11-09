@@ -238,7 +238,7 @@ export component AppWindow inherits MaterialWindow {
         VerticalLayout {
             spacing: MaterialStyleMetrics.spacing_12;
             MaterialText { max-width: 400px; wrap: word-wrap; style: MaterialTypography.body_medium; color: MaterialPalette.on_surface_variant;
-                           text: "The kernel's binder devices of a new instance can only be made by an administrator. Set up asks for your password (polkit), or run:"; }
+                           text: "This instance uses the kernel's binder: its devices can only be made by an administrator. Set up asks for your password (polkit), or run:"; }
             TextField { min-width: 280px; read-only: true; text: Backend.binder-command; }
         }
         default-action-clicked => { Backend.setup-binder(Backend.binder-instance); self.close(); }

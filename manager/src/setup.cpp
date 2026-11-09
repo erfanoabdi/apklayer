@@ -73,7 +73,7 @@ void Setup::firstRun(bool force) {
     auto add = [&](const char* id, const char* title, const std::string& detail, bool done) {
         steps_->push_back(SetupStep{id, title, slint::SharedString(detail), done ? "Done" : "", false});
     };
-    add("binder", "Binder devices", binder ? "Ready for instance " + cli_.instance : "Missing for instance " + cli_.instance, binder);
+    add("binder", "Binder", binder ? "Ready for instance " + cli_.instance : "Kernel binder devices missing for instance " + cli_.instance, binder);
     add("java", "Java", "Java 21 runs the apps", false);
     add("runtime", "Android runtime", runtime.empty() ? "From the current release" : "Version " + runtime, !runtime.empty());
     add("instance", "Default instance", "Instance " + cli_.instance, false);

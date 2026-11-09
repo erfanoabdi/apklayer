@@ -216,10 +216,10 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
         if (!env.count("APKLAYER_HOST_HWBINDER")) env["APKLAYER_HOST_HWBINDER"] = hostBinder("hwbinder");
     }
     // the userspace binder (docs/BINDER.md): the route in every Android process (bridge/native/binder_route.c) reads these
-    if (userspaceBinder(instance.root)) {
+    if (stackUserspaceBinder(instance)) {
         env["APKLAYER_BINDER"] = "userspace";
         env["APKLAYER_BINDER_DIR"] = binderSocketDir(layout.runtimeHome);
-    }
+    } else env["APKLAYER_BINDER"] = "kernel";  // the running stack's (or the stack about to start), whatever the caller's environment says
     // bionic_translation's libraries first (the patched ones), then ours; the path layer and bionic's TLS slots come first in every lookup
     env["LD_LIBRARY_PATH"] = layout.bionic + ":" + n;
     env["PATH"] = prepend(join(n, "bin"), getenvOr("PATH", "/usr/local/bin:/usr/bin:/bin"));  // getprop for the apps that run it

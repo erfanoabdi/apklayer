@@ -3,8 +3,10 @@
 apklayer without kernel binder: no `binder_linux` module, no binderfs mount, no root step, no per-instance devices that live until reboot, no
 Flatpak host step. Plan and state: `docs/PLAN.md` "Plan: binder in userspace, no kernel binder". This note is what was built (steps 1 and 2).
 
-Select it with `APKLAYER_BINDER=userspace` (`=kernel` forces the kernel's), or per instance with a file `<instance data root>/binder` that says
-`userspace`. Kernel binder stays the default.
+The default since 0.4.9 (owner's decision 2026-11-09). Kernel binder stays an option: `apklayer [--instance <id>] binder kernel` (or the manager's
+Hardware page) writes `<instance data root>/binder` saying `kernel` (`binder userspace` or no file: this one); `APKLAYER_BINDER=kernel|userspace`
+overrides the file for one command. A Halium phone's own HALs stay on the phone's kernel binder either way (the host contexts below); only the
+instance's own binder is this one.
 
 ## Pieces
 
@@ -103,6 +105,13 @@ marks the proc, and the condition is checked again after the request, so a polle
 cause of occasional missing death notifications under load).
 
 Still one thread for all traffic of one context (step 4, PLAN). BINDER_FREEZE now reaches only the procs of the caller's context.
+
+## The per-app sandbox
+
+With `APKLAYER_SANDBOX=1` the stack enters the instance's user namespace before it starts the daemon, so `SO_PEERCRED` gives the daemon the
+namespace's uids: an app's `sender_euid` is its app uid (10000 and up), the stack's 1000, as with kernel binder. An app's mount view hides the
+runtime directory; the socket directory (`$XDG_RUNTIME_DIR/apklayer-binder`) is bound into it (cli/sandbox.cpp `appView`) and the sockets are
+0666 (the runtime directory, 0700, keeps other users out).
 
 ## Oneway ordering
 

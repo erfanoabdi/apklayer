@@ -1,4 +1,5 @@
-# The test groups of tests/run. Each group runs in an apklayer instance of its own on the VM (binder devices, XDG_RUNTIME_DIR, window shell).
+# The test groups of tests/run. Each group runs in an apklayer instance of its own on the VM (binder, XDG_RUNTIME_DIR, window shell).
+# binder = "kernel": the group runs on the kernel's binder (devices made for it) instead of the userspace default.
 #   run    VM commands, in order, in the repo copy with the instance's environment; the group passes when all of them exit 0
 #   mac    commands on the Mac instead (cwd: the repo)
 #   apps   tests/apps/<name>, built on the Mac and installed once before any group starts
@@ -110,6 +111,10 @@ run = ["python3 -u tests/vm/permissions.py", "python3 -u tests/vm/permission-mob
 [host-binder]
 run = ["python3 tests/vm/host-binder.py"]  # libbinder's host context (frameworks/native 0006): a second instance plays the device
 
+[host-binder-kernel]  # the same on the kernel's binder (apklayer binder kernel, the option next to the userspace default)
+binder = "kernel"
+run = ["python3 tests/vm/host-binder.py"]
+
 [files]
 apps = ["hello-files"]
 setup = ["""f=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/system/etc/permissions/apklayer-test-hello-files.xml; [ -e $f ] || printf '<permissions><privapp-permissions package="hello.files"><permission name="android.permission.MANAGE_DOCUMENTS"/></privapp-permissions></permissions>\\n' > $f"""]
@@ -150,6 +155,11 @@ apps = ["hello-system", "hello-accounts", "hello-accounts-hidden"]
 run = ["tests/vm/accounts.sh"]
 
 [binder]
+apps = ["hello-binder-server", "hello-binder-client"]
+run = ["python3 -u tests/vm/binder.py"]
+
+[binder-kernel]  # the same on the kernel's binder (apklayer binder kernel)
+binder = "kernel"
 apps = ["hello-binder-server", "hello-binder-client"]
 run = ["python3 -u tests/vm/binder.py"]
 

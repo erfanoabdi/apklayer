@@ -30,8 +30,9 @@ How: `getprop`, `/proc/config.gz`, `ls /dev/binderfs`, services listed with libg
 `/dev/hwbinder` are world read-write: an ordinary user process reaches the device servicemanagers without root.
 
 Consequences:
-- On a phone `/dev/binder` *is* the device's. apklayer's stack must run as a named instance (its own `binder-<id>` etc. through
-  `tools/host-setup/binder.sh <id>`, root once per boot), and the device is reached only through the host context.
+- On a phone `/dev/binder` *is* the device's. apklayer's stack runs as a named instance on the userspace binder (docs/BINDER.md; with the
+  kernel binder option its own `binder-<id>` etc. through `tools/host-setup/binder.sh <id>`, root once per boot), and the device is reached only
+  through the host context (`/dev/binderfs/binder`, `/dev/binderfs/hwbinder`: the route leaves them to the kernel).
 - The hosts are older than our libbinder (Android 16): Halium 12 and Android 13 write a binder's stability as a Category and number
   IServiceManager's methods differently (patch 0006 handles both, below).
 - Sailfish OS (glibc 2.30) runs apklayer from RPMs built against Sailfish's own toolchain and libraries (below, "Building for Sailfish OS").
@@ -185,8 +186,8 @@ What needs root, and where it happens (nothing at runtime):
 | Step | Root? | Where |
 |---|---|---|
 | binderfs | no (the device's) | lxc-android-config's `mount-android-partitions` mounts `/dev/binderfs` before sysinit; `apklayer-binder.service` is ordered after it and never mounts a second one |
-| the `ut` instance's binder nodes (`binder-ut`, `hwbinder-ut`, `vndbinder-ut`, 0666) | yes | `apklayer-binder.service` (enabled by the package; runs at install and every boot) for the ids in `/etc/apklayer/instances` (default `ut`); the device's own `/dev/binder` is never touched |
-| another instance's nodes | yes | `echo <id> \| sudo tee -a /etc/apklayer/instances && sudo systemctl restart apklayer-binder` (the command the CLI and the manager print); kept over reboots |
+| the `ut` instance's binder nodes (`binder-ut`, `hwbinder-ut`, `vndbinder-ut`, 0666) | none needed since 0.4.9 | the instance runs on the userspace binder (docs/BINDER.md); the kernel's is an option (`apklayer binder kernel`): then `apklayer-binder.service` (shipped disabled since 0.4.9; enabled by an older package and kept on upgrade) makes them for the ids in `/etc/apklayer/instances` (default `ut`); the device's own `/dev/binder` is never touched |
+| another instance's nodes | kernel binder only | `echo <id> \| sudo tee -a /etc/apklayer/instances && sudo systemctl enable apklayer-binder && sudo systemctl restart apklayer-binder` (the command the CLI and the manager print); kept over reboots |
 | kernel modules | no | binder is built into the Halium kernel (CONFIG_ANDROID_BINDERFS=y) |
 | AppArmor | no | apps from the drawer are unconfined legacy apps (lomiri-app-launch); unprivileged user namespaces work (no restriction sysctl in this kernel) |
 | `/dev` permissions | no | the GPU, ion/dma-heap and the binder nodes the device opens to phablet already; the instance nodes are made 0666 by the unit |

@@ -29,7 +29,7 @@ check "" "uninstalled after the confirmation"
 spare="$APKLAYER_INSTANCE-ui"
 "$cli" instance remove "$spare" >/dev/null 2>&1 || true
 expect=()
-[ -e "/dev/binderfs/binder-$spare" ] || expect=(--expect "Binder devices needed")
+[ "${APKLAYER_BINDER:-}" != kernel ] || [ -e "/dev/binderfs/binder-$spare" ] || expect=(--expect "Binder devices needed")  # the userspace binder (the default) needs none
 "$m" --screenshot "$shots/ui-5-new-instance.png" --size 400x840 --page 1 --dialog instance --type "Instance name=$spare" --click Create --wait-refresh 1 "${expect[@]}"
 "$cli" instances | grep -q "^$spare	" || { echo "FAIL the new instance is not listed"; exit 1; }
 echo "ok   instance created through its dialog (and the binder setup offered when its devices are missing)"
@@ -39,6 +39,17 @@ echo "ok   instance created through its dialog (and the binder setup offered whe
 "$cli" providers | grep -q "^sensors	apklayer	fake	accel=1,2,3$" || { echo "FAIL the Hardware page did not set the sensors option"; exit 1; }
 "$cli" providers unset sensors >/dev/null
 echo "ok   a provider option set through the Hardware page"
+if [ -z "${APKLAYER_BINDER:-}" ]; then  # the Hardware page's binder switch (the environment would override the instance's choice)
+    "$cli" binder | grep -q "^binder	userspace	" || { echo "FAIL the instance is not on the userspace binder by default"; exit 1; }
+    "$m" --screenshot "$shots/ui-7-binder.png" --size 1100x900 --page 4 --click "Kernel binder" --wait-refresh 1
+    "$cli" binder | grep -q "^binder	kernel	instance$" || { echo "FAIL the Hardware page did not choose the kernel binder"; exit 1; }
+    expect=()
+    "$cli" binder | grep -q "^kernel	ready" || expect=(--expect "Kernel binder setup command")
+    "$m" --screenshot "$shots/ui-8-binder.png" --size 1100x900 --page 4 "${expect[@]}"
+    "$m" --screenshot "$shots/ui-9-binder.png" --size 1100x900 --page 4 --click "Kernel binder" --wait-refresh 1
+    "$cli" binder | grep -q "^binder	userspace	instance$" || { echo "FAIL the Hardware page did not choose the userspace binder again"; exit 1; }
+    echo "ok   the binder chosen through the Hardware page (and the kernel's setup command shown when its devices are missing)"
+fi
 "$cli" stop >/dev/null
 echo "PASS manager UI"
 "$(dirname "${BASH_SOURCE[0]}")/ui-updater.sh" "$@"

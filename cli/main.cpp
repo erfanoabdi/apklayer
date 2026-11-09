@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include "autostart.h"
+#include "binder.h"
 #include "daemon.h"
 #include "desktop.h"
 #include "flatpak.h"
@@ -47,8 +48,8 @@ int usage() {
           "  ime enable|disable <package>  let the app's input method be used (from the instance's next start)\n"
           "  screenshot <package|stack> <out.png>  PNG of the app's window as SurfaceFlinger composes it\n"
           "  stop [package]         stop the instance's Android services (apps end with them), or one app\n"
-          "  instances              id, running, binder devices, root of every instance\n"
-          "  instance create|remove <id>  make an instance (prints the binder setup it still needs) or remove it with its data\n"
+          "  instances              id, running, binder ready, root of every instance\n"
+          "  instance create|remove <id>  make an instance (with the kernel binder: prints the setup it still needs) or remove it with its data\n"
           "  instance autostart <id> [on [--no-start]|off]  always-on mode: a systemd user unit starts the instance (stack and hub) at login and keeps it up, its hub never\n"
           "                         exits when idle (background push, alarms, jobs); without on|off: prints the state\n"
           "  prop [list] | set KEY VALUE | unset KEY  the instance's Android property overrides (from its next start)\n"
@@ -64,6 +65,8 @@ int usage() {
           "  status                 the instance's stack, running apps, GPU, audio, battery, location\n"
           "  gpus                   the host's GPUs (id, node, driver, vendor:device, compositor's, this instance's, name)\n"
           "  gpu set <id|node> | unset  the instance's GPU (default: the compositor's; from its next start)\n"
+          "  binder [userspace|kernel]  the instance's binder: userspace (the default, no kernel devices) or the kernel's (from its next start);\n"
+          "                         without one: rows binder <kind> <environment|instance|default>, kernel ready|missing <setup command>\n"
           "  env                    print the environment of Android's processes\n"
           "  daemon                 apklayerd: every command (and every app process) then runs under it (tools/host-setup/apklayerd.service);\n"
           "                         the per-app sandbox (each app its own uid) is opt-in: APKLAYER_SANDBOX=1 (docs/INSTALL.md)\n"
@@ -160,6 +163,7 @@ int main(int argc, char** argv) {
     if (cmd == "status") return status(layout, inst);
     if (cmd == "gpus" && n == 1) return gpusCommand(layout, inst);
     if (cmd == "gpu" && n >= 2) return gpuCommand(layout, inst, std::vector<std::string>(args.begin() + 1, args.end()));
+    if (cmd == "binder") return binderCommand(inst, std::vector<std::string>(args.begin() + 1, args.end()));
     if (cmd == "uninstall" && n == 2) { uninstallApp(layout, args[1]); return 0; }
     if (cmd == "launcher" && n == 3) return launcherCommand(layout, args[1], args[2]);
     if (cmd == "ime" && n == 3) return inputMethod(layout, inst, args[1], args[2]);

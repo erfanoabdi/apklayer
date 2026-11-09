@@ -10,7 +10,7 @@ The framework runs on the JVM as unmodified AOSP (`android-all`) with Robolectri
 
 ```
 app.apk ──dex2jvm──> JVM classes ─> android-all + Robolectric shadows, Android's native libraries   (runtime/host, bridge/native)
-        │ binder (kernel binderfs)
+        │ binder (apklayer's userspace binder; the kernel's binderfs as an option)
         ▼
 Android services as host processes: servicemanager, SurfaceFlinger, gralloc, HWC, audio, media     (aosp/, bridge/hals)
         │ dmabuf, real vsync
@@ -31,7 +31,7 @@ For development, the Android side comes from a LineageOS tree built once; `CHANG
 meson setup b --prefix ~/apklayer-install -Dprebuilts=<prebuilts checkout>   # bionic_translation (subproject, patched), pinned jars: fetched
 ninja -C b                                   # tool, shell, converter, host HALs, native runtime, host classes, framework jars (instrumented once)
 meson install -C b --skip-subprojects        # the runtime into the prefix (bin/apklayer uses it)
-sudo tools/host-setup/binder.sh              # kernel binderfs
+# no root step: binder is apklayer's own (docs/BINDER.md); the kernel's: sudo tools/host-setup/binder.sh, apklayer binder kernel
 bin/apklayer install app.apk | run <package|app.apk> | list | uninstall <package> | screenshot <package> <out.png> | stop
 bin/apklayer instances | instance create|remove <id> | prop [set KEY VALUE | unset KEY] | info | clear-data | permissions [grant|revoke] | stop <package> | status
 bin/apklayer gpus | gpu set <id>|unset         # the host's GPUs; the instance runs on the chosen one (default: the desktop compositor's)

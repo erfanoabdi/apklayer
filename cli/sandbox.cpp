@@ -1,5 +1,7 @@
 #include "sandbox.h"
+
 #include "apps.h"
+#include "binder.h"
 #include "daemon.h"
 #include "linux_compat.h"
 #include "flatpak.h"
@@ -309,6 +311,8 @@ std::vector<Step> appView(const Layout& l, const Instance& inst, const std::stri
     bind(realPath(inst.runtimeDir), inst.runtimeDir, false);  // the instance's properties
     for (const std::string& socket : {l.shellSocket(), daemonSocket(l)})
         if (exists(socket)) bind(socket, socket, true, true);
+    // the userspace binder's sockets (cli/binder.cpp: the stack starts the daemon in this user namespace, so it sees the app uids)
+    if (std::string binders = binderSocketDir(l.runtimeHome); stackUserspaceBinder(inst) && isDir(binders)) bind(realPath(binders), binders, true);
     return steps;
 }
 }  // namespace

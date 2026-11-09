@@ -35,7 +35,7 @@ struct Detail {
 };
 
 struct Snapshot {
-    Rows apps, instances, props, settings, status, gpus, providers;
+    Rows apps, instances, props, settings, status, gpus, providers, binder;
     std::optional<Detail> detail;
     std::string error;  // the first CLI call that failed: the snackbar shows it instead of leaving its page empty
 };
@@ -63,6 +63,7 @@ Snapshot load(const Cli& cli, const std::string& current) {
     s.status = rows(cli, {"status"}, s.error);
     s.gpus = rows(cli, {"gpus"}, s.error);
     s.providers = rows(cli, {"providers"}, s.error);
+    s.binder = rows(cli, {"binder"}, s.error);
     if (!current.empty()) s.detail = loadDetail(cli, current);
     return s;
 }
@@ -159,6 +160,14 @@ public:
         }
         b.set_gpus(gpus);
         b.set_gpu_index(chosen);
+        bool kernel = false;
+        std::string setup;
+        for (const auto& r : s.binder) {  // binder <kind> <from>; kernel ready | kernel missing <command>
+            if (field(r, 0) == "binder") kernel = field(r, 1) == "kernel";
+            if (field(r, 0) == "kernel" && field(r, 1) == "missing") setup = field(r, 2);
+        }
+        b.set_binder_kernel(kernel);
+        b.set_binder_kernel_setup(slint::SharedString(setup));
         if (hardware_) hardware_->show(s.providers);
         if (addons_) addons_->show(s.apps);
         if (!current_.empty() && s.detail) showDetail(*s.detail);
@@ -385,6 +394,15 @@ private:
             b.set_busy_text("Changing the GPU");
             // the choice applies from the stack's next start: stop it, the next app launch starts it on the new GPU
             later([cli = cli_, id = gpuIds_[i]] { Result r = cli.run({"gpu", "set", id}); if (r.status == 0) cli.run({"stop"}); return r; },
+                  [this](const Result& r) { ui_->global<Backend>().set_busy(false); message(summary(r)); refresh(); });
+        });
+        b.on_set_binder([this](bool kernel) {
+            auto& b = ui_->global<Backend>();
+            if (kernel == b.get_binder_kernel()) return;
+            b.set_busy(true);
+            b.set_busy_text("Changing the binder");
+            // as the GPU: from the stack's next start, so stop it (the next app launch starts it on the new binder)
+            later([cli = cli_, kernel] { Result r = cli.run({"binder", kernel ? "kernel" : "userspace"}); if (r.status == 0) cli.run({"stop"}); return r; },
                   [this](const Result& r) { ui_->global<Backend>().set_busy(false); message(summary(r)); refresh(); });
         });
         b.on_set_prop([this](slint::SharedString k, slint::SharedString v) { action("Saving", {"prop", "set", std::string(k), std::string(v)}); });

@@ -28,10 +28,10 @@ Everything glibc-linked, built from the tag with the prebuilts as build inputs (
 | `/usr/bin/apklayer` -> `/usr/lib/apklayer/cli/apklayer`, `/usr/bin/apklayer-manager` | the CLI, the manager |
 | `/usr/lib/apklayer/` | a mirror of a meson build dir (`cli/`, `bridge/shell/apklayer-shell`, `runtime/dex2jvm/dex2jvm.jar`), `bionic_translation/{b,cfg.d}` (the subproject at `subprojects/bionic_translation.wrap`'s revision with `patches/apply`), `native/` (the package's half of the native dir: `bin/` btload, aprop, getprop; the preload, NDK and HAL libraries; `native-runtime.jar` with the JNI shim; `jdk-patch/`; `aosp/host-classes.jar`; `share/bionic_translation/cfg.d` the library mapping; `libs/`, the Maven jars an install runs), `apklayer-manager/libslint_cpp.so` |
 | `/usr/share/apklayer/` | the CLI's root: `versions`, `tools/{build,sysapps.list,host-setup}`, `runtime/host/jvm.args`, `bridge/native/{apklayer.prop,bionic_translation.cfg,android-root}`, `bridge/portal`, `aosp/hals/**.xml` |
-| `/usr/lib/modules-load.d/apklayer.conf`, `apklayer-binder.service` | `binder_linux` at boot; binderfs and the default instance's devices (`tools/host-setup/binder.sh`), enabled and started by the package |
+| `apklayer-binder.service` | kernel binder only (`apklayer binder kernel`): binderfs and the instances' devices at boot (`tools/host-setup/binder.sh`); shipped disabled (`sudo systemctl enable --now apklayer-binder`): the userspace binder, the default since 0.4.9, needs no root step |
 
-Ubuntu keeps `binder_linux` in `linux-modules-extra-<kernel>`, which only the kernel metapackages pull in: the noble deb depends on
-`linux-image-generic | linux-image-generic-hwe-24.04` (`debian/<codename>.substvars`, written by `build-deb.sh`). Other kernels must bring the module.
+Ubuntu keeps `binder_linux` (only the kernel binder option needs it) in `linux-modules-extra-<kernel>`, which only the kernel metapackages pull in: the noble deb suggests
+`linux-modules-extra-generic | linux-image-generic | linux-image-generic-hwe-24.04` (`debian/<codename>.substvars`, written by `build-deb.sh`). Other kernels must bring the module.
 Debian builds it into its kernel package. Per-codename source patches, if one is ever needed: `debian/patches/<codename>/series` (copied into place by `build-deb.sh`).
 
 ## The runtime bundle
@@ -120,8 +120,8 @@ failed, skipped), `progress <0..1|-1>`, and with `--check` (which changes nothin
 is fetched when none is installed (`--update`: when the release has a newer one), the system apps once (marker `~/.local/share/apklayer/setup-done`).
 Offline: `--bundle apklayer-runtime-<cpu>-<R>.tar.zst` (a `.sha256` beside it is checked) or `APKLAYER_RUNTIME_BUNDLE`; `APKLAYER_RELEASES_URL` names another releases.json.
 On a Halium device the step `providers` seeds a new instance with graphics and camera = device (docs/HALIUM.md).
-Nothing in it runs as root (no pkexec, no sudo): binder is only checked (the package's `apklayer-binder.service` makes the nodes at boot; a failed step names
-the command), java checks for Java 21 (`APKLAYER_NATIVE_JAVA` names another), and the WebView's switch file is the instance's own. A runtime directory
+Nothing in it runs as root (no pkexec, no sudo): binder is only checked (the userspace binder, the default, needs nothing; an instance on the kernel binder needs its nodes, which the
+optional `apklayer-binder.service` makes at boot; a failed step names the command), java checks for Java 21 (`APKLAYER_NATIVE_JAVA` names another), and the WebView's switch file is the instance's own. A runtime directory
 missing `android-root/system`, `android-libs` or `aosp/android-all` (a bundle made from a prebuilts checkout of links, before runtime-bundle.sh copied
 through them) counts as not installed: setup unpacks it again, and such a bundle is refused. `apklayer --version` also prints `defaultInstance`
 (`ut` on a Halium device), which the manager uses when no instance is named.

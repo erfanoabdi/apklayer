@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <sys/file.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
 
@@ -10,6 +11,8 @@
 
 #include "flatpak.h"
 #include "halium.h"
+#include "layout.h"
+#include "stack.h"
 #include "util.h"
 
 namespace apklayer {
@@ -30,15 +33,13 @@ std::string binderDevice(const std::string& id) {
 }
 
 std::string binderDeviceWhy(const std::string& id) {
-    if (haveBinderfs()) return "its binder devices are missing: " + binderSetupCommand(id);
-    if (id != "default") return "this kernel has no binderfs, only fixed binder nodes: one instance (the default) can run";
-    if (isHalium()) return "this Halium kernel has no binderfs: /dev/binder is the device's own";
-    return "no binder device: load binder_linux (docs/INSTALL.md)";
+    // binder.sh loads binder_linux and mounts binderfs itself, so a desktop without either needs only that command (isHalium() implies binderfs)
+    return "its kernel binder devices are missing: " + binderSetupCommand(id) + " (or apklayer binder userspace, the default)";
 }
 
 std::string binderSetupCommand(const std::string& id) {
     if (isHalium() && exists("/etc/apklayer/instances"))
-        return "echo " + id + " | sudo tee -a /etc/apklayer/instances && sudo systemctl restart apklayer-binder";
+        return "echo " + id + " | sudo tee -a /etc/apklayer/instances && sudo systemctl enable apklayer-binder && sudo systemctl restart apklayer-binder";
     // the Flatpak's copy as the host sees it: binderfs is mounted and its nodes made on the host, as root (docs/INSTALL.md "Flatpak")
     const std::string installed = inFlatpak() ? "/app/share/apklayer/tools/host-setup/binder.sh" : "/usr/share/apklayer/tools/host-setup/binder.sh";
     return "sudo sh " + (exists(installed) ? hostPath(installed) : std::string("tools/host-setup/binder.sh")) + " " + id;
@@ -47,9 +48,36 @@ std::string binderSetupCommand(const std::string& id) {
 bool userspaceBinder(const std::string& instanceRoot) {
     std::string mode = getenvOr("APKLAYER_BINDER", "");
     if (mode == "userspace" || mode == "kernel") return mode == "userspace";
-    auto setting = readFile(join(instanceRoot, "binder"));
-    if (setting) return setting->rfind("userspace", 0) == 0;
-    return inFlatpak() && !haveBinderfs();  // the Flatpak cannot mount binderfs: no host step then (docs/INSTALL.md "Flatpak")
+    auto setting = readFile(binderChoiceFile(instanceRoot));
+    return !(setting && setting->rfind("kernel", 0) == 0);  // the default since 0.4.9 (docs/BINDER.md); kernel binder only when chosen
+}
+
+std::string binderChoiceFile(const std::string& instanceRoot) { return join(instanceRoot, "binder"); }
+
+bool stackUserspaceBinder(const Instance& inst) {
+    auto pid = readFile(inst.pidFile());
+    if (!(pid && alive(atoi(pid->c_str())))) return userspaceBinder(inst.root);
+    auto running = readFile(join(inst.runtimeDir, "binder"));
+    return running && running->rfind("userspace", 0) == 0;  // none: a stack an apklayer before 0.4.9 started, on the kernel's binder (its default)
+}
+
+void recordStackBinder(const Instance& inst) { writeFile(join(inst.runtimeDir, "binder"), userspaceBinder(inst.root) ? "userspace\n" : "kernel\n"); }
+
+int binderCommand(const Instance& inst, const std::vector<std::string>& args) {
+    if (args.size() == 1 && (args[0] == "userspace" || args[0] == "kernel")) {
+        writeFile(binderChoiceFile(inst.root), args[0] + "\n");
+        printf("apklayer: instance %s uses the %s binder from its next start (apklayer stop)\n", inst.id.c_str(), args[0].c_str());
+        if (getenv("APKLAYER_BINDER") && getenvOr("APKLAYER_BINDER", "") != args[0]) printf("apklayer: APKLAYER_BINDER=%s in this environment overrides it\n", getenv("APKLAYER_BINDER"));
+        if (args[0] == "kernel" && !exists(binderDevice(inst.id))) printf("apklayer: %s\n", binderDeviceWhy(inst.id).c_str());
+        return 0;
+    }
+    if (!args.empty()) die("binder [userspace|kernel]");
+    // rows: the instance's binder and where that comes from; whether its kernel devices exist, else what makes them
+    std::string from = getenv("APKLAYER_BINDER") ? "environment" : exists(binderChoiceFile(inst.root)) ? "instance" : "default";
+    printf("binder\t%s\t%s\n", userspaceBinder(inst.root) ? "userspace" : "kernel", from.c_str());
+    if (exists(binderDevice(inst.id))) puts("kernel\tready");
+    else printf("kernel\tmissing\t%s\n", binderSetupCommand(inst.id).c_str());
+    return 0;
 }
 
 bool binderReady(const std::string& instanceRoot, const std::string& id) { return userspaceBinder(instanceRoot) || exists(binderDevice(id)); }
@@ -82,6 +110,7 @@ void ensureBinderDaemon(const std::string& runtimeHome, const std::string& nativ
     }
     int s = unixSocket(sock, true);
     if (s < 0) die("cannot listen on " + sock);
+    chmod(sock.c_str(), 0666);  // the sandbox's app uids connect too (cli/sandbox.cpp); the runtime directory (0700) keeps other users out
     fcntl(s, F_SETFD, 0);  // the daemon's
     Spawn d;
     d.argv = {join(native, "bin/apklayer-binderd"), "--socket", sock, "--listen-fd", std::to_string(s), "--lock", lock};

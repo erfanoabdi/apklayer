@@ -1,5 +1,5 @@
 """Mac side of the tests: the test VM (tests/vm/local.conf through tests/vm/config.py), commands on it, copying the repo tree and APKs there,
-and the environment of one apklayer instance per test group (own binder devices, own XDG_RUNTIME_DIR and with it its own window shell)."""
+and the environment of one apklayer instance per test group (own binder, own XDG_RUNTIME_DIR and with it its own window shell)."""
 import os
 import shlex
 import subprocess

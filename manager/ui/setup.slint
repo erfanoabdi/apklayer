@@ -23,7 +23,7 @@ export component FirstRunPage {
                 alignment: start;
                 MaterialText { text: "Welcome to apklayer"; style: MaterialTypography.headline_small; color: MaterialPalette.on_surface; }
                 MaterialText {
-                    text: "Android apps run here in instances of their own. A few things are set up once: the kernel's binder devices, the Android runtime, the default instance and Android's own system apps.";
+                    text: "Android apps run here in instances of their own. A few things are set up once: the Android runtime, the default instance and Android's own system apps.";
                     wrap: word-wrap;
                     style: MaterialTypography.body_medium;
                     color: MaterialPalette.on_surface_variant;
@@ -55,7 +55,7 @@ export component FirstRunPage {
                         wrap: word-wrap;
                         style: MaterialTypography.body_medium;
                         color: MaterialPalette.on_surface_variant;
-                        text: "Each instance needs binder devices from the kernel: the binder_linux module (Ubuntu: the linux-modules-extra package of your kernel) and a binderfs mount at /dev/binderfs. Making them needs an administrator; Set up binder asks for your password (polkit).";
+                        text: "This instance is set to the kernel's binder (Hardware page), which needs binder devices from the kernel: the binder_linux module (Ubuntu: the linux-modules-extra package of your kernel) and a binderfs mount at /dev/binderfs. Making them needs an administrator; Set up binder asks for your password (polkit). The userspace binder, the default, needs none.";
                     }
                     HorizontalLayout { alignment: start; TextButton { text: "Set up binder"; icon: AppIcons.admin; enabled: !Backend.setup-running; clicked => { Backend.setup-binder(Backend.instance); } } }
                 }

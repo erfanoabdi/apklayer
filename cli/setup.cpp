@@ -108,9 +108,10 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
     const std::string root = manager::runtimeRoot();
     std::string have = manager::installedRuntime(root);
 
-    // 1. binder: the instance's devices (root's: the package's service makes them at boot, the manager asks pkexec)
-    bool binder = userspaceBinder(instance.root) || (!binderDevice(instance.id).empty() && exists(binderDevice(instance.id)));
-    step("binder", binder ? "done" : "failed", binder ? "Ready for instance " + instance.id : binderDeviceWhy(instance.id));
+    // 1. binder: the userspace one needs nothing; the kernel's (apklayer binder kernel) its devices (root's: tools/host-setup/binder.sh)
+    bool binder = binderReady(instance.root, instance.id);
+    step("binder", binder ? "done" : "failed", userspaceBinder(instance.root) ? "Userspace binder for instance " + instance.id + " (no kernel devices needed)"
+                                               : binder ? "Kernel binder ready for instance " + instance.id : binderDeviceWhy(instance.id));
     std::string java = javaProblem(layout);
     step("java", java.empty() ? "done" : "failed", java.empty() ? "Java 21" : java);
     std::string noSandbox = sandboxUnavailable();

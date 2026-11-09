@@ -78,16 +78,14 @@ ninja -C build %{?_smp_mflags}
 export PATH=/usr/lib/jvm/temurin-21-jdk/bin:$PATH
 DESTDIR=%{buildroot} meson install -C build --skip-subprojects --no-rebuild --quiet
 install -D -m644 debian/instances %{buildroot}%{_sysconfdir}/apklayer/instances
+# kernel binder only (apklayer binder kernel): the userspace binder, the default, needs no unit; `systemctl enable --now apklayer-binder` turns it on
 install -D -m644 debian/apklayer.apklayer-binder.service %{buildroot}%{_unitdir}/apklayer-binder.service
-mkdir -p %{buildroot}%{_unitdir}/multi-user.target.wants
-ln -s ../apklayer-binder.service %{buildroot}%{_unitdir}/multi-user.target.wants/apklayer-binder.service
 # apklayer-manager is not built (above): no launchers for it; the Lomiri content hub peer is Ubuntu Touch's
 rm -f %{buildroot}%{_datadir}/applications/apklayer-manager.desktop %{buildroot}%{_datadir}/applications/apklayer-share.desktop
 rm -rf %{buildroot}%{_datadir}/lomiri-content-hub
 
 %post
 systemctl daemon-reload >/dev/null 2>&1 || :
-systemctl start apklayer-binder.service >/dev/null 2>&1 || :
 
 %postun
 systemctl daemon-reload >/dev/null 2>&1 || :
@@ -99,9 +97,7 @@ systemctl daemon-reload >/dev/null 2>&1 || :
 %{_datadir}/icons/hicolor/*/apps/apklayer.*
 %{_datadir}/desktop-directories/apklayer.directory
 %config(noreplace) %{_sysconfdir}/xdg/menus/applications-merged/apklayer.menu
-%{_prefix}/lib/modules-load.d/apklayer.conf
 %{_unitdir}/apklayer-binder.service
-%{_unitdir}/multi-user.target.wants/apklayer-binder.service
 %config(noreplace) %{_sysconfdir}/apklayer/instances
 
 %files devel

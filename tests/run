@@ -49,9 +49,10 @@ BUILD = (# a host's prebuilts behind the lock would be installed silently: the g
 def prepare(groups, slots):
     t = time.monotonic()
     vm.push()
-    # binder devices for the slots, unless the VM environment selects the userspace binder (docs/BINDER.md: no devices, no root)
-    # (no sudo when the slots' devices are there already: a VM whose sudo asks for a password, set up once by hand)
-    devices = '' if 'APKLAYER_BINDER=userspace' in vm.config.ENV else ' && { %s || sudo -n sh tools/host-setup/binder.sh %s >/dev/null; }' % (
+    # kernel binder devices for the slots only when the VM environment or a group (groups.toml binder = "kernel") picks the kernel's binder: the
+    # userspace one, the default (docs/BINDER.md), needs none (no sudo when the slots' devices are there already: a VM whose sudo asks for a password)
+    kernel = 'APKLAYER_BINDER=kernel' in vm.config.ENV or any(GROUPS[g].get('binder') == 'kernel' for g in groups)
+    devices = '' if not kernel else ' && { %s || sudo -n sh tools/host-setup/binder.sh %s >/dev/null; }' % (
         ' && '.join('[ -e /dev/binderfs/%sbinder-%s ]' % (b, s) for s in slots for b in ('', 'hw', 'vnd')), ' '.join(slots))
     build = vm.ssh(vm.instance_env(slots[0]) + BUILD + devices,
                    capture_output=True, text=True)
@@ -105,6 +106,7 @@ def run_group(name, slot):
     t = time.monotonic()
     log = LOGS / (name + '.log')
     env = vm.instance_env(slot, '%s/out/%s' % (vm.WORK, name))
+    if group.get('binder'): env += 'export APKLAYER_BINDER=%s; ' % group['binder']  # a group pinned to one binder (the kernel's next to the default)
     ok = True
     with log.open('w') as out:
         commands = [(c, [*vm.SSH, env + c]) for c in group.get('run', [])] + [(c, ['sh', '-c', c]) for c in group.get('mac', [])]

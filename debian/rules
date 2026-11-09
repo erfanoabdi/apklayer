@@ -41,7 +41,8 @@ override_dh_auto_clean:
 	rm -rf $(B) $(B)-manager
 
 override_dh_installsystemd:
-	dh_installsystemd --name=apklayer-binder
+	# kernel binder only (apklayer binder kernel): the userspace binder, the default, needs no root step; `systemctl enable --now apklayer-binder` turns it on
+	dh_installsystemd --name=apklayer-binder --no-enable --no-start
 
 # private libraries: bionic_translation's, and Android's (the native runtime links against them; the runtime bundle brings them)
 override_dh_shlibdeps:
