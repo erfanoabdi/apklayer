@@ -34,6 +34,9 @@ void *__memchr_chk(const void *s, int c, size_t n, size_t buflen) { if (n > bufl
 void *__memrchr_chk(const void *s, int c, size_t n, size_t buflen) { if (n > buflen) abort(); return memrchr(s, c, n); }
 void __cfi_slowpath(uint64_t type, void *ptr, void *diag) { (void)type; (void)ptr; (void)diag; } /* no CFI enforcement */
 void __cfi_slowpath_diag(uint64_t type, void *ptr, void *diag) { __cfi_slowpath(type, ptr, diag); }
+/* libdl.so's on Android: dlsym on its handle answers bionic_<name> (bytehook's init finds them there and patches a return into both) */
+void bionic___cfi_slowpath(uint64_t type, void *ptr, void *diag) __attribute__((alias("__cfi_slowpath")));
+void bionic___cfi_slowpath_diag(uint64_t type, void *ptr, void *diag) __attribute__((alias("__cfi_slowpath_diag")));
 
 /* resolv's base64 encoder */
 int __b64_ntop(const unsigned char *src, size_t len, char *dst, size_t size)

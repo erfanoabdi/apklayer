@@ -3,6 +3,28 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: bytehook works under bionic_translation; FCL's crash screen after a game crash (bionic_translation 0054)
+- bytehook (ByteDance's PLT hook library; FCL 1.3.4.5 ships 1.0.10) returned 3 (INITERR_SYM): it reads the linker's ELF at
+  getauxval(AT_BASE) and its .symtab from /system/bin/linker64 (the host's ld.so: stripped, and not the linker of Android code).
+  Then it needs libdl.so in dl_iterate_phdr as an ELF whose dlopen/dlclose reach __loader_* through GOT slots (its dlopen monitor;
+  without the monitor every hook task fails), dladdr agreeing with that report (it verifies a GOT value before patching), and
+  .dynamic pointers relative to the load bias (glibc relocates them in place: bytehook crashed reading libc_bio's at twice the bias).
+- What changed, Android-accurate where our linker's structures allow: libdl_bio is the linker of Android code. Its dl entries call
+  exported `__loader_*` through the GOT (linked `-z now`, as Android binds); dl_iterate_phdr reports it as /system/lib64/libdl.so
+  (its real phdrs, an unrelocated copy of .dynamic) and dladdr names it so; bionic getauxval(AT_BASE) is its ELF header and the path
+  layer serves /system/bin/linker64 as its file (it keeps .symtab; debian/rules no longer strips it). The other host libraries stay
+  listed for unwinders but without PT_DYNAMIC: one of FCL's hooks had patched the path layer's dlsym import (a bytehook trampoline in
+  its GOT), whose dlsym(RTLD_NEXT) then answered NULL and the game JVM jumped to 0 in statfs. `bionic___cfi_slowpath(_diag)` answer dlsym on libdl
+  (bytehook's arm64 init at API >= 26 patches a return into both; INITERR_CFI before). Nothing faked from Android's linker internals:
+  no g_dl_mutex (bytehook finds bionic_translation's mutex layout incompatible and uses its thread-local count, as it is built to).
+- Checked: bytehook 1.0.10 built from source with NDK 30 (x86_64, arm64; API 26 and 29, i.e. its pre-O `dlopen` monitor and its O+
+  `__loader_*` one), a test program under btload: init 0, a hook_single on a library dlopened after it, hook_all("exit") with
+  CALL_PREV (x86 PC and Parallels). FCL on the x86 PC: "Successfully initialized exit hook", Minecraft 26.3 to the title screen,
+  F3+C held 12 s (test input) -> "Game crashed!", JVMCrashActivity in `:crash` with the game's log; its Exit -> the launcher comes back
+  (MainActivity in a new process). Test tests/native/plt-hook.c (group native). Groups native, native-bridge, startup, activities pass
+  (x86 PC, own tree); native (bionic suite) passes on Parallels arm64 (own lean tree, removed). Not checked: FCL on arm64 (Parallels has
+  no Vulkan for the game); Flatpak's debuginfo step may strip libdl_bio's .symtab (bytehook would return 3 there).
+
 ## 2026-11-09: Sailfish OS (Volla Quintus): Lipstick's switcher, its close, media = device, the Back-only bar
 - Switcher: every apklayer window is the session shell's (one Wayland client, one pid), and Lipstick ties a window to its launcher entry by the
   client's pid and the entry's Exec (JollaSystemInfo.isWindowForLauncherItem, matchingPidForCommand), except for entries with

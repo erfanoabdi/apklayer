@@ -165,12 +165,26 @@ static bool own_data_path(char **path)
     return false;
 }
 
+/* /system/bin/linker64 is the file of Android code's linker, bionic_translation's libdl (its getauxval(AT_BASE), 0054): hook libraries
+ * (bytehook) read the linker's .symtab from it */
+static bool linker_path(char **path)
+{
+    Dl_info linker;
+    void *entry;
+    char *mapped;
+    if (strcmp(*path, sizeof(void *) == 8 ? "/system/bin/linker64" : "/system/bin/linker")) return false;
+    if (!(entry = dlsym(RTLD_DEFAULT, "bionic_getauxval")) || !dladdr(entry, &linker) || !linker.dli_fname) return false;
+    if (!(mapped = strdup(linker.dli_fname))) return false;
+    *path = mapped;
+    return true;
+}
+
 static bool from_root(const char *r, char **path);
 
 bool apklayer_apply_path_overrides(char **path)
 {
     if (debug_env) fprintf(stderr, "[paths] %s (root %s)\n", *path, root());
-    if (binder_device(path) || storage_path(path) || own_data_path(path) || data_path(path)) return true;
+    if (binder_device(path) || storage_path(path) || own_data_path(path) || data_path(path) || linker_path(path)) return true;
     /* what one instance's stack stages for itself (the vintf fragments of the HALs it runs, cli/stack.cpp) comes before the shared root */
     const char *own = own_env;
     return (own && own[0] && from_root(own, path)) || from_root(root(), path);

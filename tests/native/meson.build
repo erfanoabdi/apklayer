@@ -14,6 +14,11 @@ if is_variable('c_bio')
   # the dl* entries as namespace bypasses read them: first bl -> __loader_* (0049; androidnsbypass in FCL/Pojav)
   test('loader-entry', executable('loader-entry-test', 'loader-entry.c', dependencies: [native_dl]),
     args: [dl_bio], env: ['LD_LIBRARY_PATH=' + bt_dir], suite: 'bionic', timeout: 30)
+  # PLT hooks as bytehook makes them, through dl_iterate_phdr and libdl's GOT (0054); the library has no libc, the shim linker loads it
+  plt_hook_lib = shared_module('plt-hook-lib', 'plt-hook-lib.c', link_args: ['-nostdlib'], c_args: ['-fno-stack-protector'])
+  test('plt-hook', executable('plt-hook-test', 'plt-hook.c', dependencies: [native_dl], export_dynamic: true),
+    args: [dl_bio, 'libplt-hook-lib.so'], depends: plt_hook_lib, suite: 'bionic', timeout: 30,
+    env: ['LD_LIBRARY_PATH=' + bt_dir, 'BIONIC_LD_LIBRARY_PATH=' + meson.current_build_dir()])
   # bionic code's path functions through the path layer (paths.c, as the shim installs it)
   test('bionic-paths', executable('bionic-paths-test', ['bionic-paths.c', '../../bridge/native/paths.c'], dependencies: [native_dl], c_args: ['-U_FILE_OFFSET_BITS']),
     args: [c_bio], env: ['LD_LIBRARY_PATH=' + bt_dir], suite: 'bionic', timeout: 30)

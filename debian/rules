@@ -55,7 +55,8 @@ override_dh_gencontrol:
 
 override_dh_makeshlibs:
 
+# libdl_bio keeps its .symtab: it is /system/bin/linker64 to Android code, and PLT hook libraries (bytehook) read the linker's .symtab
 override_dh_strip:
-	dh_strip --no-automatic-dbgsym
+	dh_strip --no-automatic-dbgsym -Xlibdl_bio
 
 override_dh_dwz:

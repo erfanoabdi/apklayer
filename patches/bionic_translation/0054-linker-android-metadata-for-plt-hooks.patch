@@ -1,0 +1,313 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Mon, 9 Nov 2026 00:00:00 +0000
+Subject: [PATCH] linker: Android's linker metadata for PLT hook libraries
+
+apklayer patch (docs/PATCHES.md). bytehook (ByteDance's PLT hook library; FCL hooks its game JVM's exit() with it) and libraries like
+it find Android's linker through getauxval(AT_BASE) and /system/bin/linker64's .symtab, watch dlopen/dlclose by patching libdl.so's
+GOT slots for __loader_dlopen/__loader_android_dlopen_ext/__loader_dlclose, and hook libraries through dl_iterate_phdr. Here:
+- libdl's dlopen, android_dlopen_ext and dlclose call exported __loader_* (aliases of the loader functions) through the GOT, bound at
+  load (-z now, as Android's linker binds: bytehook checks a slot's value with dladdr before it patches it);
+- dl_iterate_phdr reports libdl.so as this library's real ELF, its PT_DYNAMIC an unrelocated copy of .dynamic (glibc relocates the
+  pointers in place, Android's linker does not; hook libraries add the load bias themselves), and leaves its host entry out;
+- the other host (glibc) libraries are the runtime's own: listed with their code (unwinders) but without PT_DYNAMIC, so hook
+  libraries neither patch the runtime's imports (FCL's dlsym hook broke the path layer's dlsym(RTLD_NEXT)) nor read glibc's
+  relocated .dynamic (bytehook crashed); dl_phdr_info's later fields are zero for the shim's libraries;
+- dladdr names this library libdl.so, as dl_iterate_phdr does (bytehook checks a GOT value's library);
+- bionic_getauxval(AT_BASE) is this library's ELF header (apklayer's path layer serves /system/bin/linker64 as this file).
+
+diff --git a/linker/dlfcn.c b/linker/dlfcn.c
+--- a/linker/dlfcn.c
++++ b/linker/dlfcn.c
+@@ -20,6 +20,7 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
++#include <sys/auxv.h>
+ #include <sys/types.h>
+ #include <time.h>
+ 
+@@ -100,10 +101,14 @@ LOADER void *apkenv_loader_dlopen(const char *filename, int flag, const void *ca
+ 	return dlopen_from(filename, flag, caller);
+ }
+ 
++/* apklayer patch: as on Android, libdl.so's dlopen/android_dlopen_ext/dlclose call the linker's exported __loader_* through the GOT
++ * (relocations against those names): PLT hookers' dlopen monitors (bytehook) patch these slots of libdl.so to see every dlopen */
++void *__loader_dlopen(const char *filename, int flag, const void *caller) __attribute__((alias("apkenv_loader_dlopen")));
++
+ #if !defined(__aarch64__)
+ void *bionic_dlopen(const char *filename, int flag)
+ {
+-	return dlopen_from(filename, flag, __builtin_return_address(0));
++	return __loader_dlopen(filename, flag, __builtin_return_address(0));
+ }
+ #endif
+ 
+@@ -125,10 +130,13 @@ LOADER void *apkenv_loader_android_dlopen_ext(const char *filename, int flags, c
+ 	return dlopen_from(filename, flags, caller);
+ }
+ 
++void *__loader_android_dlopen_ext(const char *filename, int flags, const struct android_dlextinfo *info, const void *caller)
++	__attribute__((alias("apkenv_loader_android_dlopen_ext")));
++
+ #if !defined(__aarch64__)
+ void *bionic_android_dlopen_ext(const char *filename, int flags, const struct android_dlextinfo *info)
+ {
+-	return apkenv_loader_android_dlopen_ext(filename, flags, info, __builtin_return_address(0));
++	return __loader_android_dlopen_ext(filename, flags, info, __builtin_return_address(0));
+ }
+ #endif
+ 
+@@ -282,8 +290,15 @@ int bionic_dladdr(const void *addr, Dl_info *info)
+ 	pthread_mutex_unlock(&apkenv_dl_lock);
+ 
+ 	/* don't use else because this shouldn't be inside the critical zone */
+-	if (!si)
+-		return dladdr(addr, info);
++	if (!si) {
++		ret = dladdr(addr, info);
++		/* apklayer patch: this library is libdl.so to Android code, as dl_iterate_phdr reports it (bytehook checks a GOT value's
++		 * library and symbol with dladdr) */
++		const struct dl_phdr_info *libdl = apkenv_libdl_phdr_info();
++		if (ret && libdl && (unsigned long)info->dli_fbase == bionic_getauxval(AT_BASE))
++			info->dli_fname = libdl->dlpi_name;
++		return ret;
++	}
+ 
+ 	return ret;
+ }
+@@ -311,20 +326,26 @@ LOADER int apkenv_loader_dlclose(void *handle)
+ 	return 0;
+ }
+ 
++int __loader_dlclose(void *handle) __attribute__((alias("apkenv_loader_dlclose")));
++
+ #if defined(__aarch64__)
+-/* entry(args): bti c; frame; caller (the return address) as the next argument; bl to a forward stub that branches to the target */
+-#define DL_ENTRY(name, caller_reg, target) \
++/* entry(args): bti c; frame; caller (the return address) as the next argument; bl to a forward stub that branches to the target
++ * (DL_ENTRY_GOT: through the target's GOT slot, as a PLT entry does) */
++#define DL_ENTRY_STUB(name, caller_reg, stub) \
+ 	__asm__(".text\n.p2align 2\n.globl " #name "\n.type " #name ", %function\n" #name ":\n" \
+ 		"\thint 34\n\tstp x29, x30, [sp, #-16]!\n\tmov x29, sp\n" caller_reg \
+-		"\tbl 1f\n\tldp x29, x30, [sp], #16\n\tret\n1:\thint 34\n\tb " #target "\n.size " #name ", .-" #name "\n")
+-DL_ENTRY(bionic_dlopen, "\tmov x2, x30\n", apkenv_loader_dlopen);
+-DL_ENTRY(bionic_android_dlopen_ext, "\tmov x3, x30\n", apkenv_loader_android_dlopen_ext);
++		"\tbl 1f\n\tldp x29, x30, [sp], #16\n\tret\n1:\thint 34\n" stub ".size " #name ", .-" #name "\n")
++#define DL_ENTRY(name, caller_reg, target) DL_ENTRY_STUB(name, caller_reg, "\tb " #target "\n")
++#define DL_ENTRY_GOT(name, caller_reg, target) \
++	DL_ENTRY_STUB(name, caller_reg, "\tadrp x16, :got:" #target "\n\tldr x16, [x16, :got_lo12:" #target "]\n\tbr x16\n")
++DL_ENTRY_GOT(bionic_dlopen, "\tmov x2, x30\n", __loader_dlopen);
++DL_ENTRY_GOT(bionic_android_dlopen_ext, "\tmov x3, x30\n", __loader_android_dlopen_ext);
+ DL_ENTRY(bionic_dlsym, "\tmov x2, x30\n", apkenv_loader_dlsym);
+-DL_ENTRY(bionic_dlclose, "", apkenv_loader_dlclose);
++DL_ENTRY_GOT(bionic_dlclose, "", __loader_dlclose);
+ #else
+ int bionic_dlclose(void *handle)
+ {
+-	return apkenv_loader_dlclose(handle);
++	return __loader_dlclose(handle);
+ }
+ #endif
+ 
+@@ -473,3 +494,114 @@ __attribute__((constructor)) void construct(void)
+ 		dl_parse_vendor_library_path(vendor, ":");
+ 	// it might make sense to not specify the env, for example translation layer code calls dl_parse_library_path directly with the app's lib dir
+ }
++
++/* apklayer patch: this library is the linker of Android's code (Android's linker64 and its libdl.so in one), and reports itself as such
++ * to PLT hook libraries (bytehook: FCL's exit hook, crash reporters). getauxval(AT_BASE) is its ELF header, as the kernel's is the
++ * linker's on Android (bytehook and xDL read the linker's section headers from it and its .symtab from /system/bin/linker64, which
++ * apklayer's path layer serves as this file); dl_iterate_phdr reports it as libdl.so (linker.c). */
++static struct dl_phdr_info libdl_host;
++static pthread_once_t libdl_once = PTHREAD_ONCE_INIT;
++
++static int find_libdl(struct dl_phdr_info *info, size_t size, void *data)
++{
++	(void)size, (void)data;
++	uintptr_t self = (uintptr_t)find_libdl - info->dlpi_addr;
++	for (int i = 0; i < info->dlpi_phnum; i++)
++		if (info->dlpi_phdr[i].p_type == PT_LOAD && self - info->dlpi_phdr[i].p_vaddr < info->dlpi_phdr[i].p_memsz) {
++			libdl_host = *info;
++			libdl_host.dlpi_name = sizeof(void *) == 8 ? "/system/lib64/libdl.so" : "/system/lib/libdl.so";
++			return 1;
++		}
++	return 0;
++}
++
++static void libdl_init(void)
++{
++	dl_iterate_phdr(find_libdl, NULL);
++}
++
++const struct dl_phdr_info *apkenv_libdl_phdr_info(void)
++{
++	pthread_once(&libdl_once, libdl_init);
++	return libdl_host.dlpi_phdr ? &libdl_host : NULL;
++}
++
++unsigned long bionic_getauxval(unsigned long type)
++{
++	Dl_info self;
++	if (type == AT_BASE && dladdr((void *)bionic_getauxval, &self) && self.dli_fbase)
++		return (unsigned long)self.dli_fbase;
++	return getauxval(type);
++}
++
++/* apklayer patch: a host (glibc) library's phdrs as Android code gets them from dl_iterate_phdr. The host's libraries are the runtime's
++ * own (the path layer, glibc, the host JVM, Mesa): their code ranges stay listed for unwinders, their PT_DYNAMIC is left out, so hook
++ * libraries do not patch the runtime's imports (FCL's dlsym hook made the path layer's dlsym(RTLD_NEXT) answer NULL) nor read glibc's
++ * .dynamic, whose pointers glibc relocates in place where Android's linker does not (bytehook read them at twice the load bias and
++ * crashed). libdl.so (this library) is Android's: its PT_DYNAMIC points at an unrelocated copy of .dynamic (bytehook's dlopen monitor
++ * patches its GOT). Copies are kept while the process runs, one per library mapping (bias and phdrs). */
++struct android_phdr {
++	struct android_phdr *next;
++	ElfW(Addr) addr;
++	ElfW(Half) phnum;
++	ElfW(Phdr) *phdr; /* phnum Android phdrs, phnum host ones, libdl's .dynamic copy */
++};
++static struct android_phdr *android_phdrs;
++static pthread_mutex_t android_phdrs_lock = PTHREAD_MUTEX_INITIALIZER;
++
++static bool glibc_relocates(ElfW(Sxword) tag) /* glibc's elf_get_dynamic_info ADJUST_DYN_INFO list */
++{
++	return tag == DT_HASH || tag == DT_PLTGOT || tag == DT_STRTAB || tag == DT_SYMTAB || tag == DT_RELA || tag == DT_REL ||
++	       tag == DT_JMPREL || tag == DT_VERSYM || tag == DT_GNU_HASH || tag == 36 /* DT_RELR */;
++}
++
++static ElfW(Phdr) *android_phdr_copy(const struct dl_phdr_info *info, bool libdl)
++{
++	int dynamic = -1;
++	for (int i = 0; i < info->dlpi_phnum; i++)
++		if (info->dlpi_phdr[i].p_type == PT_DYNAMIC)
++			dynamic = i;
++	if (dynamic < 0)
++		return NULL;
++	const ElfW(Dyn) *dyn = (const ElfW(Dyn) *)(info->dlpi_addr + info->dlpi_phdr[dynamic].p_vaddr);
++	size_t n = 1;
++	while (libdl && dyn[n - 1].d_tag != DT_NULL)
++		n++;
++	ElfW(Phdr) *phdr = malloc(2 * info->dlpi_phnum * sizeof(ElfW(Phdr)) + (libdl ? n * sizeof(ElfW(Dyn)) : 0));
++	if (!phdr)
++		return NULL;
++	memcpy(phdr, info->dlpi_phdr, info->dlpi_phnum * sizeof(ElfW(Phdr)));
++	memcpy(phdr + info->dlpi_phnum, info->dlpi_phdr, info->dlpi_phnum * sizeof(ElfW(Phdr)));
++	if (!libdl) {
++		phdr[dynamic].p_type = PT_NULL;
++		return phdr;
++	}
++	ElfW(Dyn) *copy = (ElfW(Dyn) *)(phdr + 2 * info->dlpi_phnum);
++	memcpy(copy, dyn, n * sizeof(ElfW(Dyn)));
++	for (size_t j = 0; j < n; j++)
++		if (glibc_relocates(copy[j].d_tag) && copy[j].d_un.d_ptr >= info->dlpi_addr)
++			copy[j].d_un.d_ptr -= info->dlpi_addr;
++	phdr[dynamic].p_vaddr = phdr[dynamic].p_paddr = (uintptr_t)copy - info->dlpi_addr;
++	phdr[dynamic].p_filesz = phdr[dynamic].p_memsz = n * sizeof(ElfW(Dyn));
++	return phdr;
++}
++
++const ElfW(Phdr) *apkenv_android_phdr(const struct dl_phdr_info *info)
++{
++	struct android_phdr *p;
++	const struct dl_phdr_info *libdl = apkenv_libdl_phdr_info();
++	pthread_mutex_lock(&android_phdrs_lock);
++	for (p = android_phdrs; p; p = p->next)
++		if (p->addr == info->dlpi_addr && p->phnum == info->dlpi_phnum &&
++		    !memcmp(p->phdr + p->phnum, info->dlpi_phdr, p->phnum * sizeof(ElfW(Phdr))))
++			break;
++	ElfW(Phdr) *phdr = p ? NULL : android_phdr_copy(info, libdl && libdl->dlpi_addr == info->dlpi_addr);
++	if (phdr && (p = malloc(sizeof(*p)))) {
++		*p = (struct android_phdr){ android_phdrs, info->dlpi_addr, info->dlpi_phnum, phdr };
++		android_phdrs = p;
++	} else if (phdr) {
++		free(phdr);
++	}
++	pthread_mutex_unlock(&android_phdrs_lock);
++	return p ? p->phdr : info->dlpi_phdr;
++}
+diff --git a/linker/linker.c b/linker/linker.c
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -430,24 +430,50 @@ _Unwind_Ptr bionic_dl_unwind_find_exidx(_Unwind_Ptr pc, int *pcount)
+ /* Here, we only have to provide a callback to iterate across all the
+  * loaded libraries. gcc_eh does the rest. We also use this ourselves,
+  * so compile this even on 32bit arm */
++/* apklayer patch: libdl.so is reported as the ELF it is (this library, apkenv_libdl_phdr_info) and not again under its host name; host
++ * libraries' phdrs as Android's linker would leave them (apkenv_android_phdr) */
++struct host_iterate {
++	int (*cb)(struct dl_phdr_info *info, size_t size, void *data);
++	void *data;
++	const struct dl_phdr_info *libdl;
++};
++
++static int host_iterate_cb(struct dl_phdr_info *info, size_t size, void *data)
++{
++	struct host_iterate *h = data;
++	struct dl_phdr_info android;
++	if (h->libdl && info->dlpi_addr == h->libdl->dlpi_addr)
++		return 0;
++	size = size < sizeof(android) ? size : sizeof(android);
++	memcpy(&android, info, size);
++	android.dlpi_phdr = apkenv_android_phdr(info);
++	return h->cb(&android, size, h->data);
++}
++
+ int bionic_dl_iterate_phdr(int (*cb)(struct dl_phdr_info *info, size_t size, void *data),
+ 			   void *data)
+ {
+ 	soinfo *si;
+-	struct dl_phdr_info dl_info;
++	struct dl_phdr_info dl_info = {0};
+ 	int rv = 0;
++	const struct dl_phdr_info *libdl = apkenv_libdl_phdr_info();
+ 	for (si = apkenv_solist; si != NULL; si = si->next) {
+-		dl_info.dlpi_addr = si->linkmap.l_addr;
+-		dl_info.dlpi_name = si->linkmap.l_name;
+-		dl_info.dlpi_phdr = (void *)si->phdr;
+-		dl_info.dlpi_phnum = si->phnum;
++		if (si == &apkenv_libdl_info && libdl) {
++			dl_info = *libdl;
++			dl_info.dlpi_phdr = apkenv_android_phdr(libdl);
++		} else {
++			dl_info.dlpi_addr = si->linkmap.l_addr;
++			dl_info.dlpi_name = si->linkmap.l_name;
++			dl_info.dlpi_phdr = (void *)si->phdr;
++			dl_info.dlpi_phnum = si->phnum;
++		}
+ 		if ((rv = cb(&dl_info, sizeof(struct dl_phdr_info), data)) != 0)
+ 			break;
+ 	}
+ 	if (rv)
+ 		return rv;
+-	else
+-		return dl_iterate_phdr(cb, data);
++	struct host_iterate h = { cb, data, libdl };
++	return dl_iterate_phdr(host_iterate_cb, &h);
+ }
+ 
+ static inline bool is_gnu_hash(soinfo *si)
+diff --git a/linker/linker.h b/linker/linker.h
+--- a/linker/linker.h
++++ b/linker/linker.h
+@@ -292,6 +292,10 @@ typedef long unsigned int *_Unwind_Ptr;
+ _Unwind_Ptr apkenv_dl_unwind_find_exidx(_Unwind_Ptr pc, int *pcount);
+ #elif defined(__aarch64__) || defined(__i386__) || defined(__mips__) || defined(__x86_64__)
+ int apkenv_dl_iterate_phdr(int (*cb)(struct dl_phdr_info *, size_t, void *), void *);
++/* apklayer patch (dlfcn.c): libdl.so as Android reports it; a host library's phdrs as Android code sees them */
++const struct dl_phdr_info *apkenv_libdl_phdr_info(void);
++unsigned long bionic_getauxval(unsigned long type);
++const ElfW(Phdr) *apkenv_android_phdr(const struct dl_phdr_info *info);
+ #endif
+ 
+ void apkenv_notify_gdb_of_libraries(void);
+diff --git a/meson.build b/meson.build
+--- a/meson.build
++++ b/meson.build
+@@ -69,6 +69,7 @@ dl_bio = shared_library('dl_bio',
+ 	],
+ 	link_args: [
+ 		'-Wl,--no-as-needed',
++		'-Wl,-z,now', # apklayer patch: GOT slots hold their targets from the start, as Android's linker binds (bytehook verifies libdl's)
+ 		'-lpthread' # dependency('threads') doesn't express that we specifically need pthreads
+ 	]
+ )
