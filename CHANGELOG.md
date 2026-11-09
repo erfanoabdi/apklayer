@@ -3,6 +3,23 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: media = device works on the Volla X23 (the device's hardware Codec2)
+- "Failed to create video/avc decoder" was no failed creation: the 64x48 fixture is below `c2.mtk.avc.decoder`'s `size min="64x64"` and the device's
+  software AVC decoder is not in its codec xml, so MediaCodecList matched nothing. With a 320x240 fixture (`red-h264-320x240.mp4`, hello-native-player
+  takes its size from the name) the component was created, then every work failed: the device's logcat (`lxc-attach -n android -- logcat`) showed
+  `Codec2-types: Invalid rect info in C2GraphicBlock`. apklayer.prop's pool mask (gralloc BLOB linear blocks) sends the input as a gralloc handle,
+  which the Android 12 HAL's CreateLinearBlock does not take (ION/dmabuf only) and reads as a graphic block. Fix: `media-device.prop` (cli/stack.cpp)
+  also sets `debug.stagefright.c2-poolmask=327680` (ION | BUFFERQUEUE, Android's default). No library changes: the listener, the output
+  IGraphicBufferProducer and bufferpool already work over the host hwbinder context.
+- Checked on the phone (instance `c2`, userspace instance binder, `graphics = device`, the installed 0.4.7 runtime; the CLI change applied as an
+  instance prop override, the same file loaded last): hello.nativeplayer `PLAYER PASS` through c2.mtk.avc.decoder (SurfaceFlinger screenshot red);
+  NewPipe plays Big Buck Bunny 720p through it; `hello.nativecodec -Dhello.device=true` (new: AAC and H.264 round trips with whatever codecs MediaCodec
+  picks, 320x240): `c2.mtk.avc.encoder` 12 frames, decoded by c2.mtk.avc.decoder at luma 81; AAC encode/decode through the device's software store.
+- CPU, NewPipe 1280x720 (same video, ~25 s window, % of one core, summed over the instance's processes and the device's Codec2 HAL): device 293%
+  (HAL 37%, app 116%, SurfaceFlinger 76%) against the GStreamer path 388% (libapklayer_codec2's openh264 122%, app 116%, SurfaceFlinger 75%).
+- Still opt-in (the probe stays quality 0, the manager says "available, opt-in"): checked on this one device. Own media path unchanged: codec2,
+  native-media, native-player pass on the x86 PC.
+
 ## 2026-11-09: test hosts' prebuilts checked against the lock (tests/run)
 - Found by the AVC/audio-silent round: the x86 PC's shared prebuilts (~/apklayer-x86/lead/prebuilts) were behind the x86_64 lock in ten libapklayer_* libraries (audio, camera, cameraserver, codec2, egl, gnss, mediaserver, sensors, servicemanager, surfaceflinger) and Parallels' ~/apklayer-lead and ~/apklayer-st in eight: every test there installed and ran old native code (audio-silent's "failure" on the PC was the pre-fallback audio HAL). All three now match the locks (rsync from the prebuilts branch, allocator included).
 - tools/check-prebuilts.sh <dir>: the prebuilts' android-libs against deps/android-tree-files*.lock by the host's architecture; tests/run's build step runs it on $APKLAYER_PREBUILTS and stops with the stale files listed. Checked: passes on the PC and both Parallels sets, lists Parallels' untouched ~/apklayer-build.

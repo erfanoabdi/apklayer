@@ -28,7 +28,7 @@ const Known* known(const std::string& name) {
 
 // the CLI's probe() answer for people; note: the CLI's line on that choice (what it needs, what it is)
 std::string probeText(const std::string& name, const std::string& probe, const std::string& note) {
-    if (name == "device" && probe == "quality 0") return "found, not working yet";  // detected, never the automatic choice
+    if (name == "device" && probe == "quality 0") return "available, opt-in";  // detected, never the automatic choice (media: checked on one device)
     if (probe == "quality 0") return "available";
     if (probe.rfind("quality ", 0) == 0) return "available, " + probe;
     if (probe.rfind("refused: ", 0) == 0) return probe;  // a plugin built for another apklayer (its ABI)
