@@ -773,6 +773,13 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-09 - gsi_x86_64 libapklayer_egl: the same lock-order fix (FCL agent, for the x86 PC)
+- Why: the x86 PC runs FCL with it. Sources as the arm64 entry below (already synced).
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `APKLAYER_PRODUCT=lineage_gsi_x86_64 APKLAYER_VARIANT=android_x86_64_shared python3
+  tools/lib/orb-build-module.py libapklayer_egl hals/graphics/egl Egl.cpp EglWindow.cpp EglAttach.cpp Gles1.cpp` (the script takes the product
+  from APKLAYER_PRODUCT now; replays the x86_64 graph's commands, no Soong run).
+- Result: built. libapklayer_egl.so sha256 x86_64 5fb88c8a1f8a474640cb823011e1e1b4c07d32b898e42a0bbc005f11131eafb3 (118200 bytes); x86_64 lock set
+  by hand. Copy for the lead: /tmp/apkl-egl-deadlock/x86_64 on the Mac.
 ### 2026-11-09 - gsi_arm64 libapklayer_egl: no linker lookups under the EGL's own locks (FCL deadlock agent)
 - Why: FCL's game hung: RenderThread held windowsLock in swapWindow and looked up eglSwapBuffers (bionic dlsym: the shim linker's lock)
   while the game thread, inside a dlopen (holding that lock), waited for an EGL lock. Host entry points are now resolved once in the
