@@ -15,16 +15,14 @@ namespace apklayer::egl {
 
 void* hostLib();  // the host's glvnd libEGL.so.1
 
-// A function of the host's libEGL. glvnd exports only the core entry points by name; extension functions (eglCreateImageKHR,
-// eglGetPlatformDisplayEXT, the *SyncKHR ones...) come from its eglGetProcAddress, so that is the fallback for every lookup.
+// A function of the host's libEGL (eglGetProcAddress is the fallback: glvnd exports only the core entry points by name), or with a
+// "gbm_" name of its libgbm. Looked up once, at load (Egl.cpp, kHostNames): a lookup takes the shim linker's lock, and windowsLock is
+// held across host calls while another thread's library constructor, holding the linker's lock, may call EGL (FCL's game hung so).
+void* hostSym(const char* name);
+
 template <typename F>
 F host(const char* name) {
-    void* p = dlsym(hostLib(), name);
-    if (!p && strcmp(name, "eglGetProcAddress") != 0) {
-        auto proc = reinterpret_cast<void* (*)(const char*)>(dlsym(hostLib(), "eglGetProcAddress"));
-        if (proc) p = proc(name);
-    }
-    return reinterpret_cast<F>(p);
+    return reinterpret_cast<F>(hostSym(name));
 }
 
 // GL entry points of the current context (through the host's eglGetProcAddress: glvnd exports no names)
@@ -35,8 +33,7 @@ F gl(const char* name) {
 
 template <typename F>
 F gbmFn(const char* name) {
-    static void* lib = dlopen("libgbm.so.1", RTLD_NOW | RTLD_GLOBAL);
-    return reinterpret_cast<F>(lib ? dlsym(lib, name) : nullptr);
+    return host<F>(name);
 }
 
 extern thread_local EGLint tError;  // errors of our own (the host keeps its own)

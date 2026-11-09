@@ -3,6 +3,16 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: FCL's game hung at its first GL frame: lock order in apklayer's EGL fixed
+- Seen by the lead (owner's run, gdb attach read-only): RenderThread held EglWindow.cpp's windowsLock in swapWindow and called
+  `host<>("eglSwapBuffers")`, a bionic dlsym that waits for the shim linker's lock; the game thread held that lock (inside a dlopen, a
+  library constructor) and waited for an EGL lock. Every `host<>`/`gl<>`/`gbmFn<>` call did a dlsym, many under windowsLock.
+- libapklayer_egl: the host's EGL, GL and GBM entry points are resolved once in the library's constructor (Egl.cpp kHostNames, a name
+  missing from the list is logged and looked up per call); Gles1.cpp fills its hook tables outside its lock (published atomically). A static
+  local's first initialisation (hostGles1/2, translator) still loads a library under its guard: only on a thread's first ES table fill.
+- bionic_translation keeps apkenv_dl_lock across constructors, as Android's linker keeps its own: not changed.
+- Built for arm64 only (Build log); installed into ~/apklayer-fc on Parallels. Test groups not run yet (the owner checks FCL first).
+
 ## 2026-11-09: FCL's game JVM gets past VM init (bionic_translation 0050, 0051)
 - Cause of "Error occurred during initialization of VM: java.lang.StackOverflowError at java.lang.String.<clinit>" (and of a SIGBUS at a
   garbage pc in a later try): `pthread_attr_getguardsize` had no bionic_ wrapper, so FCL's JRE 25 (bionic HotSpot) ran glibc's on the
@@ -754,6 +764,17 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-09 - gsi_arm64 libapklayer_egl: no linker lookups under the EGL's own locks (FCL deadlock agent)
+- Why: FCL's game hung: RenderThread held windowsLock in swapWindow and looked up eglSwapBuffers (bionic dlsym: the shim linker's lock)
+  while the game thread, inside a dlopen (holding that lock), waited for an EGL lock. Host entry points are now resolved once in the
+  library's constructor (Egl.cpp kHostNames), Gles1's hook tables are filled outside its lock. Sources only (Egl.cpp, EglHost.h, Gles1.cpp).
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "egl: no linker lookups under its own locks" hals/graphics/egl`, then
+  `python3 tools/lib/orb-build-module.py libapklayer_egl hals/graphics/egl Egl.cpp EglWindow.cpp EglAttach.cpp Gles1.cpp` (replays the
+  module's compile and link commands; arm64 only).
+- Result: built (the cached compile commands in /tmp were stale, from before EglAttach; regenerated from the graph). libapklayer_egl.so
+  sha256 arm64 b170cadf530b38742850521e540760bb5025f81a61914e0bdb3cf215efa1a749 (118288 bytes); arm64 lock set by hand; x86_64 not rebuilt
+  (its lock unchanged). Not in the prebuilts yet: copy for the lead at /tmp/apkl-egl-deadlock/arm64 on the Mac; installed into
+  ~/apklayer-fc's prebuilts on Parallels (hard link broken).
 ### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_mediaserver: the lazy extractor stays while its handed-out objects are held (lazy extractor agent)
 - Why: native-media failed about one run in two on Parallels with lazy services: the extractor ended while clients used its IMediaExtractor and
   IMediaSources (it counted media.extractor's clients only). MediaServices.cpp now also checks the process's binder nodes before it exits. Sources only.

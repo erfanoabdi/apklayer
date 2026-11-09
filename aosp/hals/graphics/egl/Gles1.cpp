@@ -11,6 +11,7 @@
 #include <dlfcn.h>
 #include <log/log.h>
 
+#include <atomic>
 #include <cstring>
 #include <map>
 #include <mutex>
@@ -76,13 +77,25 @@ void* hostGles2(const char* name) {
 }
 void* none(const char*) { return nullptr; }
 
+// A table filled once, without holding `lock`: its lookups take the shim linker's lock, which another thread's library constructor may hold
+// while it calls EGL. Two threads may both fill; the first table published is kept.
+const Hooks* filled(std::atomic<const Hooks*>& slot, void* (*find)(const char*)) {
+    const Hooks* h = slot.load(std::memory_order_acquire);
+    if (h) return h;
+    auto* t = new Hooks;
+    fill(t, find);
+    if (slot.compare_exchange_strong(h, t, std::memory_order_acq_rel)) return t;
+    delete t;
+    return h;
+}
+
 struct Gles1 {
     void* translated;  // libapklayer-gles1's context, null for a host ES 1 context
 };
 std::mutex lock;
 std::map<EGLContext, Gles1> contexts;
-Hooks hostHooks, translatorHooks, gles2Hooks, noContextHooks;
-bool hostFilled, translatorFilled, gles2Filled;
+Hooks noContextHooks;
+std::atomic<const Hooks*> hostHooks, translatorHooks, gles2Hooks;
 thread_local bool tTranslated;
 
 void setThreadHooks(const Hooks* h) {
@@ -131,27 +144,31 @@ EGLContext gles1CreateContext(EGLDisplay dpy, EGLConfig cfg, EGLContext share, c
 }
 
 void gles1MadeCurrent(EGLContext ctx) {
-    std::lock_guard<std::mutex> l(lock);
-    auto it = contexts.find(ctx);
-    const Translator* t = (tTranslated || (it != contexts.end() && it->second.translated)) ? translator() : nullptr;
-    if (it == contexts.end()) {
+    bool known;
+    void* translated;
+    {
+        std::lock_guard<std::mutex> l(lock);
+        auto it = contexts.find(ctx);
+        known = it != contexts.end();
+        translated = known ? it->second.translated : nullptr;
+    }
+    // translator() and the tables load libraries: not under `lock` (see filled)
+    const Translator* t = (tTranslated || translated) ? translator() : nullptr;
+    if (!known) {
         if (t) t->makeCurrent(nullptr);
         tTranslated = false;
-        if (ctx != EGL_NO_CONTEXT && !gles2Filled) { fill(&gles2Hooks, hostGles2); gles2Filled = true; }
-        setThreadHooks(ctx != EGL_NO_CONTEXT ? &gles2Hooks : &noContextHooks);
+        setThreadHooks(ctx != EGL_NO_CONTEXT ? filled(gles2Hooks, hostGles2) : &noContextHooks);
         return;
     }
-    if (!it->second.translated) {
+    if (!translated) {
         if (t) t->makeCurrent(nullptr);
         tTranslated = false;
-        if (!hostFilled) { fill(&hostHooks, hostGles1); hostFilled = true; }
-        setThreadHooks(&hostHooks);
+        setThreadHooks(filled(hostHooks, hostGles1));
         return;
     }
-    t->makeCurrent(it->second.translated);
+    t->makeCurrent(translated);
     tTranslated = true;
-    if (!translatorFilled) { fill(&translatorHooks, t->proc); translatorFilled = true; }  // extension entry points need the current context
-    setThreadHooks(&translatorHooks);
+    setThreadHooks(filled(translatorHooks, t->proc));  // extension entry points need the current context
 }
 
 void gles1DestroyContext(EGLDisplay dpy, EGLContext ctx) {
