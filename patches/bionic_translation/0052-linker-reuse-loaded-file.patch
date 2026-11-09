@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Mon, 9 Nov 2026 00:00:00 +0000
+Subject: [PATCH] linker: a file already loaded is reused, found by st_dev/st_ino
+
+apklayer patch (docs/PATCHES.md). The shim linker matched loaded libraries by base name and namespace only: the same file opened
+under another path or from another namespace (an absolute path from the app namespace, 0051) was loaded a second time and ran its
+constructors again; FCL's game aborted in libmediadrmmetrics_full's protobuf registration ("File already exists in database").
+Android's linker finds a loaded library by st_dev/st_ino; now so does this one, across namespaces, and says so on stderr.
+
+--- a/linker/linker.h
++++ b/linker/linker.h
+@@ -246,6 +246,8 @@
+ 	struct tls_index_list *tls_index_list;
+ 	bool app_ns; /* apklayer patch: in the app's namespace */
+ 	bool vendor_ns; /* apklayer patch: in the vendor (sphal) namespace */
++	dev_t st_dev; /* apklayer patch: the file, to find it again under another path or namespace */
++	ino_t st_ino;
+ };
+ 
+ extern soinfo apkenv_libdl_info;
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -1482,6 +1482,20 @@
+ 		DL_ERR("shim bionic linker: library '%s' not found", name);
+ 
+ 		return NULL;
++	}
++
++	/* apklayer patch: a file already loaded (another path, name or namespace) is that library, as Android's linker finds it by
++	 * st_dev/st_ino: a second copy runs its constructors again (FCL's game: libmediadrmmetrics_full's protobuf registration aborted) */
++	struct stat st = {0};
++	if (fstat(fd, &st) == 0) {
++		for (soinfo *l = apkenv_solist; l; l = l->next) {
++			if ((l->flags & FLAG_LINKED) && l->st_ino == st.st_ino && l->st_dev == st.st_dev) {
++				if (strcmp(l->fullpath, fullpath) || l->app_ns != app || l->vendor_ns != vendor)
++					fprintf(stderr, "[bionic_linker] %s: already loaded as %s (app %d vendor %d), not loaded again\n", fullpath, l->fullpath, l->app_ns, l->vendor_ns);
++				close(fd);
++				return l;
++			}
++		}
+ 	}
+ 
+ 	off_t end;
+@@ -1528,6 +1542,8 @@
+ 
+ 	si->app_ns = app;
+ 	si->vendor_ns = vendor;
++	si->st_dev = st.st_dev;
++	si->st_ino = st.st_ino;
+ 	/* apkenv */
+ 	strncpy(si->fullpath, fullpath, sizeof(si->fullpath));
+ 	si->fullpath[sizeof(si->fullpath) - 1] = 0;
+@@ -1689,6 +1705,8 @@
+ 		app = vendor = false;
+ 		goto again;
+ 	}
++	if (si && (si->flags & FLAG_LINKED))
++		return si; /* apklayer patch: the same file, loaded before (apkenv_load_library) */
+ 	if (!si || !(si = apkenv_init_library(si)))
+ 		return NULL;
+ 

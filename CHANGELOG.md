@@ -3,6 +3,15 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: FCL's game aborted on a second copy of a system library (bionic_translation 0052)
+- Owner's run with the EGL fix: past JLI_Launch, MioLibPatcher and the Vulkan load, then `descriptor_database.cc:678] File already exists
+  in database: frameworks/av/drm/libmediadrm/protos/metrics.proto` and an abort: libmediadrmmetrics_full's constructor ran a second time.
+- The shim linker matched loaded libraries by base name and namespace only; the same file opened by another path or from another namespace
+  (0051 opens absolute paths from the app namespace) became a second copy. 0052 reuses a loaded file found by st_dev/st_ino, across
+  namespaces, as Android's linker does, and prints `[bionic_linker] <path>: already loaded as <path> (app N vendor N)` on stderr when it does:
+  the next run shows which load it was. Not reproduced outside FCL; bionic suite (10) passes, the JRE under btload and in-process runs.
+- Installed into ~/apklayer-fc on Parallels; test groups not run yet (the owner checks FCL first).
+
 ## 2026-11-09: FCL's game hung at its first GL frame: lock order in apklayer's EGL fixed
 - Seen by the lead (owner's run, gdb attach read-only): RenderThread held EglWindow.cpp's windowsLock in swapWindow and called
   `host<>("eglSwapBuffers")`, a bionic dlsym that waits for the shim linker's lock; the game thread held that lock (inside a dlopen, a
