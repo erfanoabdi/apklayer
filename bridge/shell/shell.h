@@ -146,6 +146,7 @@ struct window {
     struct wp_viewport *viewport;            /* buffer -> logical size (any scale, fractional included) */
     struct wp_fractional_scale_v1 *fscale;
     int text_input_enabled;
+    int ime_px;                 /* app pixels the host's on-screen keyboard covers at the bottom (maliit.c): the bottom inset while shown */
     int minimized;              /* set by our Minimize button, cleared when the window is activated again */
     struct decor decor;         /* title bar subsurface (desktop style without server-side decorations only) */
     struct zxdg_toplevel_decoration_v1 *deco;  /* decoration.c */
@@ -227,6 +228,11 @@ void clipboard_set(struct client *c, const char *text, size_t len);
 void clipboard_client_drop(struct client *c);
 void clipboard_pollfds(struct pollfd *p);
 void clipboard_dispatch(struct pollfd *p);  /* clipboard.c */
+#define MALIIT_FDS 4 /* maliit.c: its GMainContext's descriptors */
+int maliit_pollfds(struct pollfd *p);
+void maliit_dispatch(struct pollfd *p);
+void maliit_enable(struct window *w, int enable);  /* maliit.c: the host keyboard without zwp_text_input_v3 */
+void text_input_send(struct window *w, int before, int after, const char *commit, const char *preedit);  /* textinput.c: one MSG_IME */
 void send_msg(struct client *c, uint32_t type, const int32_t *v, int n);  /* client.c */
 void send_msg_fd(struct client *c, uint32_t type, const int32_t *v, int n, int fd);  /* with fd (SCM_RIGHTS) unless it is < 0 */
 void send_input(struct window *w, int32_t type, int32_t a, int32_t b);  /* client.c */

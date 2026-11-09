@@ -77,8 +77,8 @@ int main(int argc, char **argv)
     }
 
     for (;;) {
-        struct pollfd pfd[2 + CLIPBOARD_FDS + MAX_CLIENTS];
-        struct client *who[2 + CLIPBOARD_FDS + MAX_CLIENTS];
+        struct pollfd pfd[2 + CLIPBOARD_FDS + MALIIT_FDS + MAX_CLIENTS];
+        struct client *who[2 + CLIPBOARD_FDS + MALIIT_FDS + MAX_CLIENTS];
         int n = 0;
         while (wl_display_prepare_read(display) != 0) wl_display_dispatch_pending(display);
         wl_display_flush(display);
@@ -86,15 +86,16 @@ int main(int argc, char **argv)
         pfd[n++] = (struct pollfd){ .fd = lfd, .events = POLLIN };
         clipboard_pollfds(pfd + n);
         n += CLIPBOARD_FDS;
+        int timeout = maliit_pollfds(pfd + n);
+        n += MALIIT_FDS;
         for (int i = 0; i < MAX_CLIENTS; i++) {
             if (clients[i].fd < 0) continue;
             who[n] = &clients[i];
             pfd[n++] = (struct pollfd){ .fd = clients[i].fd, .events = POLLIN };
         }
-        int timeout = -1;
         if (repeat_key >= 0) {
             long long wait = repeat_next_ms - now_ms();
-            timeout = wait > 0 ? (int)wait : 0;
+            if (timeout < 0 || wait < timeout) timeout = wait > 0 ? (int)wait : 0;
         }
         if (poll(pfd, (nfds_t)n, timeout) < 0 && errno != EINTR) { wl_display_cancel_read(display); break; }
 
@@ -105,6 +106,7 @@ int main(int argc, char **argv)
         }
         wl_display_dispatch_pending(display);
         clipboard_dispatch(pfd + 2);
+        maliit_dispatch(pfd + 2 + CLIPBOARD_FDS);
         if (repeat_key >= 0 && now_ms() >= repeat_next_ms) {
             key_event((uint32_t)repeat_key, 1);
             repeat_next_ms += 1000 / repeat_rate;
@@ -118,7 +120,7 @@ int main(int argc, char **argv)
             if (c && cfd >= 0) { memset(c, 0, sizeof *c); c->fd = cfd; }
             else if (cfd >= 0) close(cfd);
         }
-        for (int i = 2 + CLIPBOARD_FDS; i < n; i++) {
+        for (int i = 2 + CLIPBOARD_FDS + MALIIT_FDS; i < n; i++) {
             if (who[i]->fd >= 0 && (pfd[i].revents & (POLLIN | POLLHUP | POLLERR))) client_read(who[i]);
         }
     }

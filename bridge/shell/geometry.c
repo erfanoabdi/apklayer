@@ -24,6 +24,7 @@ static void fit_size(const struct window *w, int lw, int lh, int grow, int *fw, 
 void window_send_configure(struct window *w)
 {
     int s = window_scale(w), nav = w->mobile ? (w->nav_h * s + 50) / 100 : 0;  /* the bar's height in the app's pixels */
+    if (w->ime_px > nav) nav = w->ime_px;  /* the host's on-screen keyboard over the bottom: the app's content stays above it */
     w->told_scale = s;
     w->told_dpi = w->dpi;
     w->told_nav = w->nav_h;

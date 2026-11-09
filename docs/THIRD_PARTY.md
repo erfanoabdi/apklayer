@@ -12,6 +12,9 @@ apklayer itself is AGPL-3.0-or-later (PLAN D5), compatible with all of the above
 
 - gfxstream's GLES_CM translator and GLcommon (`hardware/google/gfxstream` in the LineageOS tree), Apache-2.0, unmodified, built with `-Dgfxstream=<source>`: staged into `<native>/aosp/gfxstream-src` and built on the test host into `libapklayer-gles1.so` (`tools/build gles1`).
 - `bridge/shell/protocols/wayland-android.xml`: libhybris's `android_wlegl` protocol (Collabora, MIT-style), for showing device gralloc buffers on Lomiri/Lipstick.
+- `bridge/shell/maliit.c`: the D-Bus interface description of maliit-framework's `com.meego.inputmethod.inputcontext1` (LGPL-2.1, an interface
+  description, no code), taken from the strings of the Volla X23's libmaliit-plugins.so (maliit-framework 2.3.0, as Sailfish OS's), for the
+  on-screen keyboard of Lipstick and Lomiri.
 - `bridge/shell/protocols/surface-extension.xml`: QtWayland 5.6's `qt_surface_extension` protocol (The Qt Company, BSD), for Lipstick's raise and lower of a window (Home on Sailfish OS); written out in the request order of Sailfish's libQt5Compositor 5.6.3.
 
 - apklayer-manager: Slint C++ 1.18.1 (prebuilt, GPLv3 or Slint's royalty-free/commercial licence) and Material Components for Slint 1.1.0 (MIT), downloaded at build time by `manager/fetch-slint.sh`, not vendored; Material Symbols SVGs (Apache-2.0) vendored in `manager/ui/icons/` with their LICENSE. Note for the commercial licence: Slint's GPLv3 option binds the manager binary; a commercial build needs Slint's royalty-free or commercial terms.

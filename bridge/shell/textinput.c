@@ -1,4 +1,5 @@
-/* Input method (zwp_text_input_v3): preedit/commit text from the compositor's IME to the focused app. */
+/* Input method (zwp_text_input_v3): preedit/commit text from the compositor's IME to the focused app. Compositors without it (Lipstick,
+ * Lomiri) show their on-screen keyboard through Maliit's D-Bus (maliit.c), which delivers through text_input_send. */
 #include "shell.h"
 #include "text-input-v3-client-protocol.h"
 
@@ -38,24 +39,26 @@ static void ti_commit(void *d, struct zwp_text_input_v3 *t, const char *text)
 static void ti_delete(void *d, struct zwp_text_input_v3 *t, uint32_t before, uint32_t after)
 { (void)d; (void)t; pending_before = (int)before; pending_after = (int)after; }
 
-/* All pending changes arrive together: forward them as one IME message. Payload:
- * {i32 id, i32 delete_before, i32 delete_after} utf8 commit "\0" utf8 preedit */
+/* One IME message to w. Payload: {i32 id, i32 delete_before, i32 delete_after} utf8 commit "\0" utf8 preedit */
+void text_input_send(struct window *w, int before, int after, const char *commit, const char *preedit)
+{
+    const char *c = commit ? commit : "", *p = preedit ? preedit : "";
+    size_t cl = strlen(c), pl = strlen(p), n = 12 + cl + 1 + pl;
+    if (n >= 60000) return;
+    char *buf = malloc(n);
+    int32_t head[3] = { W_ID(w), before, after };
+    memcpy(buf, head, 12);
+    memcpy(buf + 12, c, cl + 1);
+    memcpy(buf + 12 + cl + 1, p, pl);
+    send_bytes(W_TARGET(w), MSG_IME, buf, n);
+    free(buf);
+}
+
+/* All pending changes arrive together: forward them as one IME message. */
 static void ti_done(void *d, struct zwp_text_input_v3 *t, uint32_t serial)
 {
     (void)d; (void)t; (void)serial;
-    if (ime_window) {
-        const char *c = pending_commit ? pending_commit : "", *p = pending_preedit ? pending_preedit : "";
-        size_t cl = strlen(c), pl = strlen(p), n = 12 + cl + 1 + pl;
-        if (n < 60000) {
-            char *buf = malloc(n);
-            int32_t head[3] = { W_ID(ime_window), pending_before, pending_after };
-            memcpy(buf, head, 12);
-            memcpy(buf + 12, c, cl + 1);
-            memcpy(buf + 12 + cl + 1, p, pl);
-            send_bytes(W_TARGET(ime_window), MSG_IME, buf, n);
-            free(buf);
-        }
-    }
+    if (ime_window) text_input_send(ime_window, pending_before, pending_after, pending_commit, pending_preedit);
     free(pending_commit); free(pending_preedit);
     pending_commit = pending_preedit = NULL;
     pending_before = pending_after = 0;
@@ -83,7 +86,8 @@ static void apply_enabled(void)
 void text_input_enable(struct window *w, int enable)
 {
     w->text_input_enabled = enable;
-    if (!text_mgr || !seat) return;
+    if (!text_mgr) { maliit_enable(w, enable); return; }
+    if (!seat) return;
     if (!text_input) {
         text_input = zwp_text_input_manager_v3_get_text_input(text_mgr, seat);
         zwp_text_input_v3_add_listener(text_input, &ti_listener, NULL);
@@ -94,6 +98,7 @@ void text_input_enable(struct window *w, int enable)
 void text_input_forget_window(struct window *w)
 {
     w->text_input_enabled = 0;
+    if (!text_mgr) maliit_enable(w, 0);
     if (entered_window == w) {
         apply_enabled();
         entered_window = ime_window = NULL;

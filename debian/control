@@ -6,7 +6,7 @@ Build-Depends: debhelper-compat (= 13), meson, ninja-build, pkg-config, python3,
  openjdk-21-jdk-headless,
  libwayland-dev, wayland-protocols, libxkbcommon-dev, libcairo2-dev, libpng-dev,
  libdrm-dev, libgbm-dev, libegl-dev, libgles-dev,
- libpipewire-0.3-dev, libgstreamer1.0-dev, libgstreamer-plugins-base1.0-dev,
+ libpipewire-0.3-dev, libglib2.0-dev, libgstreamer1.0-dev, libgstreamer-plugins-base1.0-dev,
  libelf-dev, libunwind-dev, libbsd-dev,
  libinput-dev
 Standards-Version: 4.7.0
