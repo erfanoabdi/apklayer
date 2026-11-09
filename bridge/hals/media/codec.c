@@ -17,6 +17,7 @@ struct apklayer_codec {
     GstElement *pipe;
     GstAppSrc *src;
     GstAppSink *sink;
+    GstBuffer *config; /* codec-config bytes (no timestamp) waiting for the next access unit */
     int failed, notify_enabled;
     struct codec_notify *notify;
 };
@@ -214,7 +215,12 @@ int apklayer_codec_queue(struct apklayer_codec *c, const void *data, size_t size
     GstBuffer *b = gst_buffer_new_allocate(NULL, size, NULL);
     if (!b) return -ENOMEM;
     gst_buffer_fill(b, 0, data, size);
-    GST_BUFFER_PTS(b) = pts < 0 ? GST_CLOCK_TIME_NONE : (GstClockTime)pts;
+    /* Codec config (H.264 SPS/PPS, pts < 0) goes out with the next access unit: avdec_h264's frame threads report a config-only unit as an
+     * error, and when that error surfaces in the end-of-stream drain (fewer units than threads: a thumbnail's one sync sample) it ends the
+     * drain and every pending picture is dropped ("No valid frames decoded before end of stream"). */
+    if (pts < 0) { c->config = c->config ? gst_buffer_append(c->config, b) : b; return 0; }
+    if (c->config) { b = gst_buffer_append(c->config, b); c->config = NULL; }
+    GST_BUFFER_PTS(b) = (GstClockTime)pts;
     GstFlowReturn r = gst_app_src_push_buffer(c->src, b);
     return r == GST_FLOW_OK ? 0 : r == GST_FLOW_EOS ? -ENODATA : -EIO;
 }
@@ -346,6 +352,7 @@ void apklayer_codec_close(struct apklayer_codec *c)
     if (!c) return;
     g_atomic_int_set(&c->notify_enabled, 0);
     if (c->pipe) gst_element_set_state(c->pipe, GST_STATE_NULL);
+    if (c->config) gst_buffer_unref(c->config);
     if (c->src) gst_object_unref(c->src);
     if (c->sink) gst_object_unref(c->sink);
     if (c->pipe) gst_object_unref(c->pipe);

@@ -32,7 +32,7 @@ int apklayer_codec_open(const struct apklayer_codec_config *, struct apklayer_co
  * sample/EOS/error availability; schedule work and return promptly, never pull
  * or close from the callback. Passing NULL disables it. close joins callbacks. */
 int apklayer_codec_set_notify(struct apklayer_codec *, void (*ready)(void *), void *opaque);
-/* Copies compressed input only. Timestamps are nanoseconds; -1 means unknown.
+/* Copies compressed input only. Timestamps are nanoseconds; a negative one marks codec config (H.264 SPS/PPS), sent with the next buffer.
  * -EAGAIN means the bounded input queue is full: drain output before retrying. */
 int apklayer_codec_queue(struct apklayer_codec *, const void *, size_t, int64_t pts_ns);
 int apklayer_codec_end(struct apklayer_codec *);

@@ -3,6 +3,25 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: MediaMetadataRetriever's H.264 frames (thumbnails: Gallery, file managers, MediaStore)
+- getFrameAtTime/getScaledFrameAtTime returned no picture for H.264 (`avdec_h264: No valid frames decoded before end of stream`, the
+  Codec2 work C2_CORRUPTED). Cause, in GStreamer (reproduced with a plain appsrc ! decodebin pipeline, no apklayer code): the codec-config
+  buffer (SPS/PPS, which ReorderedDecoder queued as its own buffer) is an access unit without a slice; avdec_h264's frame threads report it
+  as a decode error, and when it surfaces only in the end-of-stream drain, the drain stops and every pending picture is dropped. That is
+  the case when a stream has fewer units than decoder threads: FrameDecoder's one sync sample with end of stream, or a few samples.
+  Parallels (12 CPUs) lost the picture of any stream under 12 units; the x86 PC (4 CPUs, ffmpeg's thread count for the size) did not.
+  Fix (bridge/hals/media/codec.c, the host library: no Android rebuild): config buffers (negative timestamp) are held and sent with
+  the next access unit. VP8/VP9 have no config buffers (a single frame with end of stream decodes); HEVC and AV1 are AOSP's soft decoders.
+- Tests: codec-reorder-test (codec2 group) decodes SPS/PPS then one sample with end of stream (fails before the fix on Parallels);
+  hello-native-codec's retriever check (native-media) asserts a red H.264 frame from getFrameAtTime, getScaledFrameAtTime and
+  OPTION_CLOSEST at 200 ms (the shortcut is gone; failed before the fix). codec2, native-media, native-player pass on Parallels and on
+  the x86 PC (-j 2).
+- Found on the way, not fixed: with the lazy media services (default since today) native-media is flaky on Parallels (about one run in
+  two: `FrameDecoder: source failed to start: -32 (DEAD_OBJECT)`, `extracted sample bytes/PTS`, audio checks with short output). The
+  extractor (and the media server) end once no client holds the service handle, while clients still use objects from them
+  (IMediaExtractor/IMediaSource, IMediaMetadataRetriever): LazyServiceRegistrar counts only the registered services. With
+  `APKLAYER_LAZY_SERVICES=0` three runs in three pass. PLAN "Next phase" item.
+
 ## 2026-11-09: the navigation bar has Back only (owner: no Home button)
 - bridge/shell/navbar.c/.h, mobile.c: Home (the ring) and its action (minimize) are gone; Back stays at a quarter of the width, the rest of the bar is plain (taps there do nothing); Home is the compositor's own gesture/button. tests/vm/mobile.py's bar check looks for Back's strokes only.
 
