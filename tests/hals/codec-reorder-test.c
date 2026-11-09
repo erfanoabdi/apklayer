@@ -35,6 +35,8 @@ int main(int argc, char **argv) {
     if (fixture) { fwrite("A264", 1, 4, fixture); le(fixture, 64, 2); le(fixture, 48, 2); le(fixture, 12, 4); }
     int64_t timestamps[12];
     int reordered = 0;
+    guint8 *first = NULL;
+    gsize first_size = 0;
     for (unsigned n = 0; n < 12; n++) {
         GstSample *sample = gst_app_sink_try_pull_sample(sink, GST_SECOND);
         assert(sample);
@@ -47,6 +49,7 @@ int main(int argc, char **argv) {
             le(fixture, map.size, 4); le(fixture, timestamps[n] / 1000, 8);
             assert(fwrite(map.data, 1, map.size, fixture) == map.size);
         }
+        if (!n) { first = g_memdup2(map.data, map.size); first_size = map.size; }
         assert(apklayer_codec_queue(codec, map.data, map.size, timestamps[n]) == 0);
         printf("H264 queued %u pts=%ld\n", n, (long)timestamps[n]);
         gst_buffer_unmap(buffer, &map);
@@ -79,5 +82,25 @@ int main(int argc, char **argv) {
     gst_object_unref(sink);
     gst_object_unref(encoder);
     puts("PASS H264 reordered timestamps, delayed EOS and output notifications");
+    // A thumbnail (MediaMetadataRetriever's FrameDecoder): SPS/PPS as a codec-config buffer, then one sync sample and end of stream
+    gsize slice = 0;
+    while (slice + 3 < first_size && !(first[slice] == 0 && first[slice + 1] == 0 && first[slice + 2] == 1 && ((first[slice + 3] & 31) == 5 || (first[slice + 3] & 31) == 1))) slice++;
+    assert(slice > 0 && slice + 3 < first_size);
+    if (slice && !first[slice - 1]) slice--;  // the four-byte start code
+    assert(apklayer_codec_open(&cfg, &codec) == 0);
+    assert(apklayer_codec_queue(codec, first, slice, -1) == 0);
+    assert(apklayer_codec_queue(codec, first + slice, first_size - slice, 0) == 0);
+    assert(apklayer_codec_end(codec) == 0);
+    struct apklayer_codec_frame *single = NULL;
+    int result = apklayer_codec_pull(codec, GST_SECOND, &single);
+    if (result) fprintf(stderr, "H264 single sample: %d\n", result);
+    assert(result == 0);
+    const void *planes[4];
+    assert(apklayer_codec_frame_map(single, planes) == 0 && *(const unsigned char *)planes[2] > 180);
+    apklayer_codec_frame_release(single);
+    assert(apklayer_codec_pull(codec, GST_SECOND, &none) == -ENODATA);
+    apklayer_codec_close(codec);
+    g_free(first);
+    puts("PASS H264 codec config and one sample with end of stream");
     return 0;
 }

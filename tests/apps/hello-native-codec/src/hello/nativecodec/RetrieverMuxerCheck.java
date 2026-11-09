@@ -23,6 +23,12 @@ final class RetrieverMuxerCheck {
         try (InputStream in = context.getAssets().open(name)) { Files.write(file.toPath(), in.readAllBytes()); }
         return file;
     }
+    private static boolean red(Bitmap frame, String what) {
+        require(frame != null && frame.getWidth() > 0, what + " " + frame);
+        int pixel = frame.getPixel(frame.getWidth() / 2, frame.getHeight() / 2);
+        require(Color.red(pixel) > 180 && Color.green(pixel) < 80 && Color.blue(pixel) < 80, what + " pixel " + Integer.toHexString(pixel));
+        return true;
+    }
     static void run(Context context) throws Exception {
         File video = asset(context, "red-h264.mp4"), audio = asset(context, "tone.mp3"), out = new File(context.getCacheDir(), "remuxed.mp4");
         try {
@@ -36,16 +42,16 @@ final class RetrieverMuxerCheck {
                 mime = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE);
                 require(duration != null && Long.parseLong(duration) > 0 && width != null && Integer.parseInt(width) > 0 && "video/mp4".equals(mime),
                         "video metadata duration=" + duration + " width=" + width + " mime=" + mime);
-                // shortcut: H.264 frames are not asserted: c2.apklayer.avc.decoder fails FrameDecoder's one-sample end-of-stream work (docs/PLAN.md)
-                avcFrame = retriever.getFrameAtTime(0) != null;
+                // thumbnails (Gallery, file managers, MediaStore): FrameDecoder queues one sync sample with end of stream; CLOSEST decodes up to the time
+                avcFrame = red(retriever.getFrameAtTime(0), "H.264 frame") && red(retriever.getScaledFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 32, 24), "H.264 scaled frame")
+                        && red(retriever.getFrameAtTime(200000, MediaMetadataRetriever.OPTION_CLOSEST), "H.264 closest frame");
             }
             File mpeg4 = asset(context, "red-mpeg4.mp4");
             try (MediaMetadataRetriever retriever = new MediaMetadataRetriever()) {
                 retriever.setDataSource(mpeg4.getPath());
                 Bitmap frame = retriever.getFrameAtTime(0);
-                require(frame != null && frame.getWidth() > 0, "MPEG-4 frame " + frame);
+                red(frame, "MPEG-4 frame");
                 pixel = frame.getPixel(frame.getWidth() / 2, frame.getHeight() / 2);
-                require(Color.red(pixel) > 180 && Color.green(pixel) < 80 && Color.blue(pixel) < 80, "frame pixel " + Integer.toHexString(pixel));
             } finally { mpeg4.delete(); }
             String audioDuration;
             try (MediaMetadataRetriever retriever = new MediaMetadataRetriever()) {
