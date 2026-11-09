@@ -49,7 +49,9 @@ public class Main extends Activity implements SurfaceHolder.Callback {
             player.setOnInfoListener((p, what, extra) -> { System.out.println("[hello-native-player] info=" + what + "/" + extra); return false; });
             player.setOnPreparedListener(p -> {
                 try {
-                    require(!withVideo || (p.getVideoWidth() == 64 && p.getVideoHeight() == 48), "native dimensions");
+                    // red-h264-320x240.mp4: a size hardware decoders take (the Volla X23's c2.mtk.avc.decoder: 64x64 and up)
+                    String size = asset.contains("320x240") ? "320x240" : "64x48";
+                    require(!withVideo || size.equals(p.getVideoWidth() + "x" + p.getVideoHeight()), "native dimensions");
                     require(p.getDuration() >= 390 && p.getDuration() <= (withAudio ? 450 : 410), "native duration " + p.getDuration());
                     require(p.getAudioSessionId() > 0, "native session");
                     MediaPlayer.TrackInfo[] tracks = p.getTrackInfo();

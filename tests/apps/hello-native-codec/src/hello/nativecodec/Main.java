@@ -32,6 +32,7 @@ public class Main extends Activity {
     }
     private void decode() {
         try {
+            if (Boolean.getBoolean("hello.device")) { EncodersCheck.device(); System.out.println("[hello-native-codec] DEVICE PASS"); return; }
             decodeStream("red-vp8.ivf", -1);
             decodeStream("red-vp9.ivf", -1);
             decodeStream("red-vp9-multi.ivf", 2);

@@ -24,7 +24,8 @@ static void t_down(void *d, struct wl_touch *t, uint32_t serial, uint32_t time,
     struct window *w = window_for_surface(sf);
     if (debug_input) fprintf(stderr, "[shell] touch down %d at %d,%d on %s\n", id, wl_fixed_to_int(x), wl_fixed_to_int(y), w ? w->title : "no window");
     if (!w || sf == w->decor.surface) return; /* title bar touches are not forwarded */
-    if (sf == w->nav.surface) {  /* the navigation bar: its button acts when the finger lifts */
+    /* the navigation bar (a subsurface, or the bottom nav_h pixels where the display composes it): its button acts when the finger lifts */
+    if ((w->nav.surface && sf == w->nav.surface) || (w->nav.remote && w->nav.shown && wl_fixed_to_int(y) >= w->cfg_h - w->nav_h)) {
         if (nav_window) return;
         int hit = navbar_hit(&w->nav, wl_fixed_to_int(x));
         nav_window = w;
@@ -82,7 +83,7 @@ const struct wl_touch_listener touch_listener = {
  * action 0 down, 1 up, 2 move, 3 cancel. */
 void touch_inject(struct window *w, int action, int x, int y)
 {
-    int nav = w->mobile && w->nav.shown && y >= w->cfg_h - w->nav_h;
+    int nav = w->mobile && w->nav.shown && !w->nav.remote && y >= w->cfg_h - w->nav_h;  /* a remote bar is on w->surface itself */
     wl_fixed_t fx = wl_fixed_from_int(x), fy = wl_fixed_from_int(nav ? y - (w->cfg_h - w->nav_h) : y);
     if (action == 0) t_down(NULL, NULL, last_input_serial, 0, nav ? w->nav.surface : w->surface, 0, fx, fy);
     else if (action == 1) t_up(NULL, NULL, last_input_serial, 0, 0);

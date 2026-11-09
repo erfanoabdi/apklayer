@@ -22,6 +22,8 @@
 #define MSG_DISPLAY 112
 #define MSG_DMABUF_RELEASE 114
 #define MSG_CONFIGURE 107
+#define MSG_NAVBAR_LAYER 17
+#define MSG_NAVBAR_PIXELS 116
 #define WINDOW_ID 1
 #define SLOTS 8
 
@@ -37,6 +39,8 @@ struct apklayer_display {
     void (*_Atomic configure_fn)(void *, int32_t, int32_t, int32_t);
     _Atomic(void *) configure_user;
     _Atomic int64_t pending_cfg[3];   /* a configure that arrived before the callback was set (w, h, scale; w = 0: none) */
+    void (*_Atomic navbar_fn)(void *, int, int32_t, int32_t);
+    _Atomic(void *) navbar_user;
 };
 
 static int send_msg(struct apklayer_display *d, uint32_t type, const void *payload, uint32_t len, const int *fds, int nfds)
@@ -76,6 +80,27 @@ static int read_full(int fd, void *p, size_t n)
     return 0;
 }
 
+/* A message's header, with the fd that came along (SCM_RIGHTS arrives with a message's first byte; NAVBAR_PIXELS carries one), else -1. */
+static int read_head(int fd, uint32_t head[2], int *rfd)
+{
+    char control[CMSG_SPACE(sizeof(int) * 8)];
+    struct iovec iov = { head, 8 };
+    struct msghdr mh = { .msg_iov = &iov, .msg_iovlen = 1, .msg_control = control, .msg_controllen = sizeof control };
+    ssize_t r = recvmsg(fd, &mh, MSG_CMSG_CLOEXEC);
+    if (r <= 0) return -1;
+    *rfd = -1;
+    for (struct cmsghdr *cm = CMSG_FIRSTHDR(&mh); cm; cm = CMSG_NXTHDR(&mh, cm)) {
+        if (cm->cmsg_level != SOL_SOCKET || cm->cmsg_type != SCM_RIGHTS) continue;
+        int n = (int)((cm->cmsg_len - CMSG_LEN(0)) / sizeof(int));
+        for (int i = 0; i < n; i++) {
+            int f;
+            memcpy(&f, CMSG_DATA(cm) + i * sizeof(int), sizeof f);
+            if (*rfd < 0) *rfd = f; else close(f);
+        }
+    }
+    return r < 8 ? read_full(fd, (uint8_t *)head + r, 8 - (size_t)r) : 0;
+}
+
 static int64_t now_ns(void)
 {
     struct timespec ts;
@@ -88,9 +113,11 @@ static void *reader(void *arg)
     struct apklayer_display *d = arg;
     for (;;) {
         uint32_t head[2];
-        if (read_full(d->fd, head, sizeof head) < 0) break;
+        int mfd = -1;
+        if (read_head(d->fd, head, &mfd) < 0) break;
         int32_t body[64] = { 0 };
         uint32_t len = head[1];
+        if (mfd >= 0 && head[0] != MSG_NAVBAR_PIXELS) { close(mfd); mfd = -1; }
         if (len > sizeof body) { /* skip what we do not understand */
             char skip[256];
             while (len) { size_t n = len < sizeof skip ? len : sizeof skip; if (read_full(d->fd, skip, n) < 0) goto out; len -= (uint32_t)n; }
@@ -109,9 +136,13 @@ static void *reader(void *arg)
             void (*fn)(void *, int32_t, int32_t, int32_t) = atomic_load(&d->configure_fn);
             if (fn) fn(atomic_load(&d->configure_user), body[1], body[2], body[3]);
             else { atomic_store(&d->pending_cfg[1], body[2]); atomic_store(&d->pending_cfg[2], body[3]); atomic_store(&d->pending_cfg[0], body[1]); }  /* apklayer patch: replayed by set_configure_callback */
+        } else if (head[0] == MSG_NAVBAR_PIXELS && len >= 12) {
+            void (*fn)(void *, int, int32_t, int32_t) = atomic_load(&d->navbar_fn);
+            if (fn) { fn(atomic_load(&d->navbar_user), mfd, body[1], body[2]); mfd = -1; }  /* the callback owns the fd */
         } else if (head[0] == MSG_DMABUF_RELEASE && len >= 8) {
             if (d->cb.released) d->cb.released(d->cb.user, body[1]);
         }
+        if (mfd >= 0) close(mfd);
     }
 out:
     return NULL;
@@ -183,6 +214,14 @@ void apklayer_display_set_configure_callback(struct apklayer_display *d, void (*
     atomic_store(&d->configure_fn, configure);
     int64_t pw = atomic_exchange(&d->pending_cfg[0], 0);
     if (pw > 0 && configure) configure(user, (int32_t)pw, (int32_t)atomic_load(&d->pending_cfg[1]), (int32_t)atomic_load(&d->pending_cfg[2]));
+}
+
+void apklayer_display_set_navbar_callback(struct apklayer_display *d, void (*navbar)(void *, int, int32_t, int32_t), void *user)
+{
+    atomic_store(&d->navbar_user, user);
+    atomic_store(&d->navbar_fn, navbar);
+    int32_t id = WINDOW_ID;
+    if (!d->headless) send_msg(d, MSG_NAVBAR_LAYER, &id, 4, NULL, 0);
 }
 
 uint32_t apklayer_display_refresh_mhz(struct apklayer_display *d) { return atomic_load(&d->refresh_mhz); }

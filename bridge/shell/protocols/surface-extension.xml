@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Qt's qt_surface_extension (QtWayland 5.6, src/extensions/surface-extension.xml; Lipstick on Sailfish OS offers it), the requests and events
+     in the order Sailfish's libQt5Compositor 5.6.3 lists them. The shell uses raise and lower (Home) and the visibility and close events
+     (wlshell.c). Protocol definition only. Copyright (C) 2015 The Qt Company Ltd., BSD licence (docs/THIRD_PARTY.md). -->
+<protocol name="surface_extension">
+  <interface name="qt_surface_extension" version="1">
+    <request name="get_extended_surface">
+      <arg name="id" type="new_id" interface="qt_extended_surface"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+  </interface>
+
+  <interface name="qt_extended_surface" version="1">
+    <request name="update_generic_property">
+      <arg name="name" type="string"/>
+      <arg name="value" type="array"/>
+    </request>
+
+    <enum name="orientation">
+      <entry name="PrimaryOrientation" value="0"/>
+      <entry name="PortraitOrientation" value="1"/>
+      <entry name="LandscapeOrientation" value="2"/>
+      <entry name="InvertedPortraitOrientation" value="4"/>
+      <entry name="InvertedLandscapeOrientation" value="8"/>
+    </enum>
+
+    <request name="set_content_orientation_mask">
+      <arg name="orientation" type="int"/>
+    </request>
+
+    <event name="onscreen_visibility">
+      <arg name="visible" type="int"/>
+    </event>
+
+    <event name="set_generic_property">
+      <arg name="name" type="string"/>
+      <arg name="value" type="array"/>
+    </event>
+
+    <event name="close">
+    </event>
+
+    <enum name="windowflag">
+      <entry name="OverridesSystemGestures" value="1"/>
+      <entry name="StaysOnTop" value="2"/>
+      <entry name="BypassWindowManager" value="4"/>
+    </enum>
+
+    <request name="set_window_flags">
+      <arg name="flags" type="int"/>
+    </request>
+
+    <request name="raise">
+    </request>
+
+    <request name="lower">
+    </request>
+  </interface>
+</protocol>

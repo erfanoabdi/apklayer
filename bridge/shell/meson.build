@@ -19,6 +19,7 @@ if wl_client_dep.found() and wl_protos_dep.found() and xkb_dep.found() and cairo
     'xdg-activation-v1': protodir / 'staging/xdg-activation/xdg-activation-v1.xml',  # raising a window (activation.c)
     'xdg-decoration-unstable-v1': protodir / 'unstable/xdg-decoration/xdg-decoration-unstable-v1.xml',  # server-side title bars (decoration.c)
     'wayland-android': 'protocols/wayland-android.xml',  # libhybris's android_wlegl: gralloc buffers on Halium compositors (wlegl.c)
+    'surface-extension': 'protocols/surface-extension.xml',  # Qt's qt_surface_extension: Lipstick's raise and lower (wlshell.c)
   }
   generated = []
   foreach name, xml : protocols

@@ -24,7 +24,13 @@ final class EncodersCheck {
         audio("audio/mp4a-latm", "c2.android.aac.encoder", 48000, 2, 128000, "c2.apklayer.aac.decoder");
         audio("audio/opus", "c2.android.opus.encoder", 48000, 2, 64000, "c2.android.opus.decoder");
         audio("audio/flac", "c2.android.flac.encoder", 48000, 2, 0, "c2.android.flac.decoder");
-        try { video(); } catch (RuntimeException e) { e.printStackTrace(System.out); throw e; }
+        try { video("c2.android.avc.encoder", 128, 96); } catch (RuntimeException e) { e.printStackTrace(System.out); throw e; }
+    }
+
+    /** -Dhello.device=true: a device's own codecs (media = device, docs/HALIUM.md), whatever MediaCodec picks; 320x240: hardware encoders have minimum sizes. */
+    static void device() throws Exception {
+        audio("audio/mp4a-latm", null, 48000, 2, 128000, null);
+        video(null, 320, 240);
     }
 
     private static List<Packet> drain(MediaCodec codec, MediaFormat[] outFormat, long budgetNs, Runnable feed, boolean[] inputDone) {
@@ -52,7 +58,8 @@ final class EncodersCheck {
 
     private static void audio(String mime, String encoderName, int rate, int channels, int bitrate, String decoderName) throws Exception {
         MediaCodec encoder = MediaCodec.createEncoderByType(mime);
-        require(encoder.getName().equals(encoderName), mime + ": encoder " + encoder.getName());
+        require(encoderName == null || encoder.getName().equals(encoderName), mime + ": encoder " + encoder.getName());
+        encoderName = encoder.getName();
         MediaFormat format = MediaFormat.createAudioFormat(mime, rate, channels);
         if (bitrate > 0) format.setInteger(MediaFormat.KEY_BIT_RATE, bitrate);
         if (mime.equals("audio/mp4a-latm")) format.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC);
@@ -88,7 +95,8 @@ final class EncodersCheck {
         require(data >= 20, mime + ": only " + data + " encoded packets"); // FLAC blocks are 4096 samples
         // round trip through a decoder configured from the encoder's output format
         MediaCodec decoder = MediaCodec.createDecoderByType(mime);
-        require(decoder.getName().equals(decoderName), mime + ": decoder " + decoder.getName());
+        require(decoderName == null || decoder.getName().equals(decoderName), mime + ": decoder " + decoder.getName());
+        decoderName = decoder.getName();
         decoder.configure(outFormat[0], null, null, 0);
         decoder.start();
         short[] pcm = new short[rate * 4];
@@ -131,13 +139,14 @@ final class EncodersCheck {
         require(rms > 4500 && rms < 7000, mime + ": round trip rms " + rms);
         require(hertz > 430 && hertz < 450, mime + ": round trip " + hertz + " Hz");
         System.out.println("[hello-native-codec] ENCODER PASS " + mime + " via " + encoderName + ": " + data + " packets, round trip " + samples + " samples, rms="
-                + (int) rms + ", " + (int) hertz + " Hz");
+                + (int) rms + ", " + (int) hertz + " Hz, decoder " + decoderName);
     }
 
-    private static void video() throws Exception {
-        final int w = 128, h = 96, frames = 12;
+    private static void video(String encoderName, int w, int h) throws Exception {
+        final int frames = 12;
         MediaCodec encoder = MediaCodec.createEncoderByType("video/avc");
-        require(encoder.getName().equals("c2.android.avc.encoder"), "AVC encoder " + encoder.getName());
+        require(encoderName == null || encoder.getName().equals(encoderName), "AVC encoder " + encoder.getName());
+        encoderName = encoder.getName();
         MediaFormat format = MediaFormat.createVideoFormat("video/avc", w, h);
         format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible);
         format.setInteger(MediaFormat.KEY_BIT_RATE, 400000);
@@ -180,6 +189,7 @@ final class EncodersCheck {
         require(data == frames, "AVC encoded frames " + data);
         // round trip: the host decoder
         MediaCodec decoder = MediaCodec.createDecoderByType("video/avc");
+        String decoderName = decoder.getName();
         MediaFormat decodeFormat = MediaFormat.createVideoFormat("video/avc", w, h);
         decodeFormat.setByteBuffer("csd-0", outFormat[0].getByteBuffer("csd-0"));
         if (outFormat[0].containsKey("csd-1")) decodeFormat.setByteBuffer("csd-1", outFormat[0].getByteBuffer("csd-1"));
@@ -227,7 +237,7 @@ final class EncodersCheck {
         luma /= Math.max(decoded, 1);
         require(decoded == frames, "AVC round trip decoded " + decoded);
         require(luma > 50 && luma < 100, "AVC round trip luma " + luma); // a 400 kbit/s encoder of 12 tiny frames lands near, not on, the source 81
-        System.out.println("[hello-native-codec] ENCODER PASS video/avc via c2.android.avc.encoder: " + data + " frames, round trip luma " + (int) luma);
+        System.out.println("[hello-native-codec] ENCODER PASS video/avc via " + encoderName + ": " + data + " frames, round trip luma " + (int) luma + ", decoder " + decoderName);
     }
 
     private EncodersCheck() {}

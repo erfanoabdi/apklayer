@@ -138,7 +138,7 @@ install in `~/apklayer-dev-cam/v2`, environment `env.sh`, Parallels builds copie
 | graphics | `device` | UiBench, Calculator, Telegram, NewPipe, libgdx and bgfx games (the other agent's work, 2026-11-05), SurfaceView video (below) | draws on the Mali-G57 |
 | camera | `device` | cameraserver over the device's HIDL `camera.provider@2.4` (`internal/0`: 3 cameras, real sizes up to 8000x6000); `hello.camera -Dhello.real=1` (camera2: list, open, preview + YUV + JPEG session, a 4608x3456 still); Open Camera with its camera2 and with its Camera1 API (live preview on screen, front and rear) | works |
 | media | own Codec2 + the host's GStreamer (default) | `hello.nativeplayer` (original MediaPlayer, H.264 into a SurfaceView on the device's gralloc: `PLAYER PASS`, screenshot red) and `red-tone.mp4` (AAC through faad into the PulseAudio sink, 19456 frames delivered to the AudioTrack) | works |
-| media | `device` (`providers set media device`) | the host's Codec2 (30 MediaTek components, `hidltool codecs default`) and OMX stores found through the host contexts | `hello.nativeplayer` H.264: the codec list now holds the device's components (`Available Codec2 services: "default" "software"`, 30 MediaTek ones from the device's own `/vendor/etc/media_codecs*.xml`), but creating a decoder fails without a log line ("Failed to create video/avc decoder"): not working yet |
+| media | `device` (default on Halium; `providers set media apklayer` for GStreamer) | the host's Codec2 (30 MediaTek components, `hidltool codecs default`) and OMX stores found through the host contexts | works (2026-11-09; the default on Halium since 2026-11-09 when graphics = device too): `hello.nativeplayer` `red-h264-320x240.mp4` through `c2.mtk.avc.decoder` into the SurfaceView (`PLAYER PASS`, screenshot red; the HAL dequeues from the app's BufferQueue through the host context); NewPipe plays Big Buck Bunny 1280x720 through it; `hello.nativecodec -Dhello.device=true`: H.264 encode `c2.mtk.avc.encoder` 320x240 and its decode (`ENCODER PASS`, luma 81), AAC encode and decode through the device's software store (`c2.android.aac.*`: no MediaTek AAC); NewPipe 720p: 293% of a core for the whole instance (the HAL 37%) against 388% on the GStreamer path (libapklayer_codec2's openh264 122%) |
 | audio | PulseAudio (`-Daudio_backend=pulse`) | `hello.nativeaudio`: AudioTrack PCM 8 s at 48408 frames/s, 0 underruns, marker, stop/flush; capture of the microphone (120000 frames in 2.5 s) | works (the record-loopback assertion needs a null sink and is not run here) |
 | vibrator | `hfd` (default) and `device` | `hello.hardware`: pattern and click through `Vibrator`/`VibratorManager`; with `device` the real AIDL `IVibrator/default` (`has=true`, no amplitude control) | works |
 | gnss | `lomiri` (default) | `hello.hardware`: LocationManager gps fix (35.68, 51.56, accuracy 20 m, a real fix) | works |
@@ -162,7 +162,14 @@ Other fixes of this pass:
   session's: `PULSE_SERVER=unix:/run/user/32011/pulse/native` in `env.sh` (a real user's instance has the session's directory).
 - `providers set media device`: new domain (`android.hardware.media.c2`, `android.hardware.media.omx` listed, the stack's own Codec2 store is not started and its vintf fragment not staged); the stack loads
   `media.c2.hal.selection=hidl` last (apklayer.prop says aidl; a Halium 12 vendor's Codec2 is HIDL) and serves the device's `/vendor/etc/media_codecs*.xml` from the instance's root (the shared root's name apklayer's own components).
-  Next step: the Codec2Client's creation status is not logged (a build with the failing call's status in the log).
+  Two causes kept it from working (2026-11-09): (1) the fixture: `red-h264.mp4` is 64x48 and the device's `c2.mtk.avc.decoder` declares `size min="64x64"`, so
+  MediaCodecList had no match (no `Allocating component` line: nothing was created; the device's `c2.android.avc.decoder` is not in its codec xml either):
+  `red-h264-320x240.mp4` is the phone's fixture. (2) apklayer.prop's `debug.stagefright.c2-poolmask` (BLOB | BUFFERQUEUE: gralloc BLOB linear blocks) made
+  the input a gralloc handle; the Android 12 HAL's `_C2BlockFactory::CreateLinearBlock` takes only an ION/dmabuf handle, read it as a graphic block and refused
+  every work (device logcat: `Codec2-types: Invalid rect info in C2GraphicBlock`, our side `queueCSDInputBuffer failed w/ error -2147483648`).
+  `media-device.prop` now also sets the pool mask to Android's default (ION | BUFFERQUEUE, 327680). Nothing else was needed: callbacks (IComponentListener,
+  the output IGraphicBufferProducer, bufferpool) work over the host context. The device's logcat: `sudo lxc-attach -n android -- /system/bin/logcat -d -T '<UTC time>'`
+  (pipe it through `cat`: lxc-attach makes a redirected file root's). OMX was not needed (found, not tried). Not checked: the Quintus (Sailfish), `graphics = apklayer`.
 - AAC: faad (the host's AAC decoder here) keeps its last frame ("still 1 frames left after draining"); the Codec2 AudioDecoder ended such works as corrupted: now empty.
 
 How to run each check (on the phone; `. ~/apklayer-dev-cam/env.sh` gives `$A`): `ut-cam.sh [app] [ms]` (camera = device, the app's `[cam]` lines and cameraserver's log tail), `ut-shots.sh <pkg>` (run, screenshot, stop),
@@ -276,8 +283,15 @@ the providers probe sensorfw, geoclue1, PulseAudio, the device's camera and vibr
 
 What differs from Ubuntu Touch, and what changed:
 - Lipstick has no xdg-shell (wl_shell only), wl_compositor 3, wl_seat 3, no subcompositor: `bridge/shell/wlshell.c` makes a window a wl_shell toplevel laid out
-  maximized at the output's size and active (Lipstick sends no configure); damage falls back to `wl_surface.damage` on v3; without subsurfaces there is no
-  navigation bar (no Back: open). Frames go as the device's gralloc buffers over `android_wlegl` (`[shell] gralloc buffer 1: 1080x2400 stride 1088`).
+  maximized at the output's size and active (Lipstick sends no configure); damage falls back to `wl_surface.damage` on v3. Without subsurfaces the
+  navigation bar is a layer of the app's virtual display (2026-11-09): the shell draws it as before (navbar.c) and sends its pixels as a memfd
+  (`NAVBAR_PIXELS`) to the display's owner, which offered it (`NAVBAR_LAYER`, `apklayer_display_set_navbar_callback`); libapklayer_vdisplay puts
+  them in a layer on top of the app's layer stack at the bottom edge, so SurfaceFlinger composes it into every frame (and `apklayer screenshot`
+  shows it). Touches on the window's bottom `nav_h` pixels are the bar's; the app gets the bar's inset as on other compositors. The pointer on that
+  strip still goes to the app (Lipstick is touch only). Lipstick's own extensions give no second surface inside a window (qt_surface_extension and
+  alien_manager, Jolla's AppSupport windows, are window management), but qt_surface_extension's `lower` is Home: jolla-home's
+  `onWindowLowered` hides an application window to the home screen, and the app stops (minimized); `raise` (`apklayer run` of the running app)
+  and its `onscreen_visibility` (shown again) resume it. Frames go as the device's gralloc buffers over `android_wlegl` (`[shell] gralloc buffer 1: 1080x2400 stride 1088`).
 - The system's programs (glibc 2.30) cannot load apklayer's LD_PRELOAD (needs GLIBC_2.34): the device's `/usr/bin/getprop` (cli `hostToolEnv()`) and the hub's
   `setsid` (HubStartup) start without it now. Other host programs an app starts (`sh -c` overrides, Runtime.exec of a system binary) still inherit it: open.
 - `ro.hardware.egl` is `meow` (MediaTek's layer over Mali): libGLES_meow crashes in SurfaceFlinger during its dlopen (a jump to an unmapped address under

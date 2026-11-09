@@ -26,7 +26,8 @@ void activate_message(const uint8_t *p, uint32_t len)
     struct window *w = NULL;
     for (int i = 0; i < MAX_WINDOWS && !w; i++)
         if (windows[i].client && windows[i].surface && !strcmp(windows[i].title, text)) w = &windows[i];
-    fprintf(stderr, "[shell] activate \"%s\": %s\n", text, !w ? "no such window" : !activation ? "no xdg-activation" : token[0] ? "launcher token" : "own token");
+    fprintf(stderr, "[shell] activate \"%s\": %s\n", text, !w ? "no such window" : !activation ? (w->qt_ext ? "raise" : "no xdg-activation") : token[0] ? "launcher token" : "own token");
+    if (w && !activation) wlshell_raise(w);  /* Lipstick: no xdg-activation, its own raise */
     if (!w || !activation) return;
     if (token[0]) {
         xdg_activation_v1_activate(activation, token, w->surface);
