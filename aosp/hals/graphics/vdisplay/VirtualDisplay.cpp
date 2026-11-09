@@ -130,7 +130,8 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         self->mBarH = h;
         t.setPosition(self->mBar, 0, static_cast<float>(self->mHeight) - h);
         t.setBuffer(self->mBar, gb);
-        t.show(self->mBar);
+        if (self->mFramed) t.show(self->mBar);
+        else t.hide(self->mBar);  // shown with the app's first frame (presentLoop): the shell's splash stays until then
         t.apply();
     }
 
@@ -157,6 +158,10 @@ class Sink : public ConsumerBase::FrameAvailableListener {
             if (item.mFence != nullptr) item.mFence->waitForever("apklayer-vdisplay");  // the GPU finished composing it
             std::lock_guard<std::mutex> lock(mLock);
             present(item);
+            if (!mFramed) {  // the app's first frame (no other layer is shown before it): the bar joins from the next one
+                mFramed = true;
+                if (mBar != nullptr) SurfaceComposerClient::Transaction().show(mBar).apply();
+            }
         }
     }
 
@@ -259,6 +264,7 @@ class Sink : public ConsumerBase::FrameAvailableListener {
     sp<IBinder> mToken;
     sp<SurfaceControl> mBar;  // the navigation bar's layer, once the shell sent one
     int32_t mBarH = 0;
+    bool mFramed = false;  // the display presented a frame: until then the bar stays hidden, or its layer alone makes the first frame (no splash)
     apklayer_display* mDisplay = nullptr;
     std::mutex mLock;
     std::mutex mQueueLock;  // frames SurfaceFlinger queued that the present thread has not acquired yet

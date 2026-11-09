@@ -860,6 +860,9 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_vdisplay: the navigation bar layer waits for the app's first frame (lead)
+- Why: on Sailfish OS the bar layer was shown at once, so SurfaceFlinger presented a bar-only frame before the app drew and the shell dropped its splash (owner: "we lost the splashscreen").
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "vdisplay: bar after the first frame" hals/graphics/vdisplay`, then `APKLAYER_PRODUCT=<product> python3 tools/lib/orb-build-module.py libapklayer_vdisplay hals/graphics/vdisplay VirtualDisplay.cpp` for gsi_arm64 and gsi_x86_64.
 ### 2026-11-09 - gsi_x86_64 libapklayer_egl: the same lock-order fix (FCL agent, for the x86 PC)
 - Why: the x86 PC runs FCL with it. Sources as the arm64 entry below (already synced).
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `APKLAYER_PRODUCT=lineage_gsi_x86_64 APKLAYER_VARIANT=android_x86_64_shared python3
