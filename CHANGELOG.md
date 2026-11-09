@@ -3,6 +3,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: release 0.4.9 (runtime 0.4.9: the runtime's version follows the package's 0.4.x line from now on, owner)
+- Userspace binder by default (no kernel binder, no root step; `apklayer binder kernel` and the manager's Hardware page keep the kernel's), Sailfish OS: Back/Home without subsurfaces and a second app opens, Halium: the device's Codec2 by default (hardware H.264 on the Volla X23), the phone instance at ~945 MB idle (lazy native services, a 6 MB sensors HAL), GLES windows without the per-frame copy, camera rotate-and-crop that follows a turned window, Bluetooth channel and server sockets with pairing requests, storage hot plug and MediaStore scanning, `apklayer stop` leaves nothing running, the always-on unit's hub wins over a stray one, CPU-only YUV buffers in shared memory (the AVC flake), tests/run checks the hosts' prebuilts against the lock.
+
 ## 2026-11-09: the userspace binder is the default (0.4.9, owner's decision); the kernel's is an option
 - Selection (cli/binder.cpp): userspace unless `APKLAYER_BINDER=kernel` or `<instance root>/binder` says kernel. `apklayer binder [userspace|kernel]`
   sets it (rows without an argument: kind and source, kernel devices ready or the command that makes them); the manager's Hardware page has
