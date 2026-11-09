@@ -150,7 +150,7 @@ run = ["python3 -u tests/vm/binder.py"]
 
 [hub-services]
 apps = ["hello-hub-server", "hello-hub-client"]
-run = ["python3 -u tests/vm/hub-smoke.py", "python3 -u tests/vm/binder.py bound", "python3 -u tests/vm/binder.py auto"]
+run = ["python3 -u tests/vm/hub-smoke.py", "python3 -u tests/vm/binder.py bound", "python3 -u tests/vm/binder.py auto", "tests/vm/hub-unit.sh"]
 
 [providers]
 apps = ["hello-cp-provider", "hello-cp-client", "hello-cp-denied"]

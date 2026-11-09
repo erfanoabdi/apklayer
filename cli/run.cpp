@@ -3,6 +3,8 @@
 #include "manage.h"
 #include "sandbox.h"
 #include "spare.h"
+#include "stack.h"
+#include "unit.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -289,7 +291,19 @@ int runHub(const Layout& l, const Instance& inst) {
     const std::string lockPath = join(inst.stateDir, "hub.lock");
     int lock = open(lockPath.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0644);
     NativeEnv ne = nativeEnv(l, inst);
-    if (flock(lock, LOCK_EX | LOCK_NB) != 0 && awaitHubOrLock(l, ne, lockPath, lock)) return 0;
+    // the always-on unit's hub is the instance's (cli/autostart.cpp): were it to return beside another launcher's hub, systemd would count the
+    // unit done and its ExecStopPost stop would end the instance. That launcher (one an app of the previous stack started during a restart) ends instead.
+    bool unit = currentUnit() == "apklayer-instance@" + inst.id + ".service";
+    while (flock(lock, LOCK_EX | LOCK_NB) != 0) {
+        if (!unit) { if (awaitHubOrLock(l, ne, lockPath, lock)) return 0; break; }
+        printf("[apklayer] another hub launcher holds the instance's hub: the always-on unit's replaces it\n");
+        fflush(stdout);
+        if (auto other = readFile(join(inst.stateDir, "hub.pid")))
+            for (const std::string& pid : split(*other, '\n')) terminate(atoi(pid.c_str()));
+        // hub.pid did not name it yet (an older CLI writes it only with its JVM): its hub's ready, or the lock
+        if (flock(lock, LOCK_EX | LOCK_NB) == 0 || !awaitHubOrLock(l, ne, lockPath, lock)) break;
+    }
+    writeFile(join(inst.stateDir, "hub.pid"), std::to_string(getpid()) + "\n");  // the lock's holder: the unit's hub ends it (above), `stop` too
     trace("hub start");
     if (!ensureStack(l, inst)) return 1;
     std::vector<std::string> jvm = hostJvmArgs(l, inst, ne);
