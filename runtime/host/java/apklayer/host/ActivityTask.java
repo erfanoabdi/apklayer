@@ -190,6 +190,7 @@ final class ActivityTask {
             else graceUntilMs = System.nanoTime() / 1_000_000 + 20000;  // a trampoline that starts the real screen from a coroutine (AnkiDroid's IntentHandler)
             return;
         }
+        if (bottom) StartTrace.firstFrame(c.get());
         c.start().postCreate(null).resume().visible();  // the rest of ActivityController.setup(), focus as the window has it
         HostWindows.focus(c, windowActive.getAsBoolean());
         // As in Android, the previous activity is stopped only once an opaque activity covers it;
