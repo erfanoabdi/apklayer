@@ -193,6 +193,29 @@ Open, in order:
    release; `flathub.json` not needed (both arches). Flathub's policy on translation layers ("accepted only if upstream submits") is met by the
    owner submitting. Submission is the owner's step.
 
+## Plan: Ubuntu Touch click package (decided 2026-11-09 by the owner; after 0.4.9)
+Goal: apklayer installs on Ubuntu Touch as a `.click` (OpenStore, or `pkcon install-local` for test builds) instead of the deb: no root, no
+`remount,rw` of the 4 GB read-only rootfs, and it survives OTA updates (clicks live on the user data partition; an OTA replaces the rootfs and
+with it the deb and its Java). Possible once the userspace binder is the default (0.4.9): the deb's only root step was `apklayer-binder.service`
+(the instance's binder nodes); the device's own `/dev/binder`/`/dev/hwbinder` (camera, vibrator, media HALs) already exist.
+Owner's decisions (2026-11-09):
+- **Unconfined** (AppArmor template `unconfined`; OpenStore reviews each upload by hand): a confined click could not open the device's binder
+  nodes or GPU nodes, write the per-app launchers in `~/.local/share/applications` (`X-Lomiri-Touch=true`), or add the always-on instance's
+  systemd user unit.
+- **The JDK ships inside the click** (the trimmed JDK image, tools/release/jdk-image.sh; ~100 MB): a click cannot depend on the rootfs's
+  openjdk-21-jre-headless. The Android runtime bundle still comes at first run (`apklayer setup`) into the user's data, as today.
+- **No per-app sandbox** in the click (it needs newuidmap and subordinate ids set up by root; it is opt-in anyway).
+- **Ubuntu Touch 24.04 only** (noble, glibc 2.39: the deb's arm64 build as it is; no 20.04 build).
+Steps:
+1. `clickable.yaml` + manifest + apparmor (unconfined) packaging the arm64 noble build (CLI, shell, bridge, manager) and the JDK image; the
+   manager is the click's app entry; `APKLAYER_NATIVE_JAVA` or the layout points at the bundled JDK.
+2. Paths: the click's root is `/opt/click.ubuntu.com/<app>/<version>/`, so it changes with each update: launchers whose CLI is gone are
+   rewritten already (cli/desktop.cpp refreshDesktops); the always-on unit and anything else that names the CLI must follow the same way.
+3. A release.yml job beside the deb and the RPM (clickable build for arm64, framework ubuntu-touch-24.04), the click as a release asset.
+4. Check on the Volla X23 (with the deb removed): install, `apklayer setup`, launches from the drawer, the always-on instance across a
+   reboot and an update of the click, `graphics`/`camera`/`media = device`, the manager.
+5. OpenStore submission (unconfined review) once 4 passes.
+
 ## Plan: one build instead of tools/* (decided 2026-11-04 by the owner, after the current round)
 Done 2026-11-04: AppHost split (the task stack in ActivityTask.java; AppHost 407 lines). Done 2026-11-05: items 1-3, 5 and 6 (tools/build, fetch-deps.sh, javac-jar.sh, package.sh removed; tests/run installs into <repo>/inst; debian/rules calls Meson); item 4 done for development and tests (instrumented once by ninja); the deb's per-user bundle setup remains as `tools/release/setup-runtime.sh` until the bundle format is decided (ship the instrumented framework jar in the bundle?).
 `tools/build` (217 lines of shell) hand-rolls javac/jar, zips the JNI shim into the framework jars, patches bionic_translation for old compilers with shell `if`s and stages a "native dir" with copies and symlinks; it caused today's stale shims, half-updated runtimes, the host-classes.stamp in tests/run and the per-user first-start instrumentation. Replace it with Meson end to end (`meson setup b && ninja -C b && meson install`, one layout for development, the deb and CI):
