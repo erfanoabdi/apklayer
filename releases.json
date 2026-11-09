@@ -1,6 +1,53 @@
 {
-  "latest": "0.4.11",
+  "latest": "0.4.12",
   "releases": [
+    {
+      "version": "0.4.12",
+      "date": "2026-11-09",
+      "notes_url": "https://github.com/erfanoabdi/apklayer/releases/tag/v0.4.12",
+      "converter_abi": 3,
+      "data_format": 1,
+      "runtime": {
+        "version": "0.4.11",
+        "prebuilts": "a35749491922eebdca5c0ae5355462b79d5d1f6f",
+        "assets": {
+          "arm64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.12/apklayer-runtime-arm64-0.4.11.tar.zst",
+            "sha256": "656169175fb7f6b4c2dc6ac0233d2a6f555efdad6d252853b64402dc26df9ea2",
+            "size": 514479715,
+            "unpacked_size": 897710080
+          },
+          "amd64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.12/apklayer-runtime-x86_64-0.4.11.tar.zst",
+            "sha256": "f7f5d23705a7e0da809d2ed2de2a2149fac54d9891aed0f997a40aff0cf6d72f",
+            "size": 549628115,
+            "unpacked_size": 1036789760
+          }
+        }
+      },
+      "debs": {
+        "noble": {
+          "amd64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.12/apklayer_0.4.12-1.noble1_amd64.deb",
+            "sha256": "dc4cee3c6c8fd66c4a20ab70747008ed8c6dc26f44f76e42398faa4f9c7d69fd"
+          },
+          "arm64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.12/apklayer_0.4.12-1.noble1_arm64.deb",
+            "sha256": "c3220fd1113342e3ed2a22d723803470cda72bb6bbc28fa43123230e4ee013f9"
+          }
+        },
+        "trixie": {
+          "amd64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.12/apklayer_0.4.12-1.trixie1_amd64.deb",
+            "sha256": "d4a1d488b4e34fb3970180bdede2beee62087580e6ac49be8edd22214ebf93cb"
+          },
+          "arm64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.12/apklayer_0.4.12-1.trixie1_arm64.deb",
+            "sha256": "9e311d0359e6b56e27275b31e8d037905868622608446c7906cb86fc133e7748"
+          }
+        }
+      }
+    },
     {
       "version": "0.4.11",
       "date": "2026-11-09",
