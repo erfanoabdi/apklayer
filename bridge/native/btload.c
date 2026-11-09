@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <dlfcn.h>
 #include <elf.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -66,6 +67,11 @@ static int exec_program(const char *path, int argc, char **argv)
     if (fd >= 0) close(fd);
     bionic_dl_iterate_phdr(find_program, &p);
     if (!header || !p.found) { fprintf(stderr, "btload: no entry for %s\n", path); return 127; }
+    /* the program's own name, as bionic's libc init sets __progname from argv[0] (getprogname: android_platform.c), and glibc's for its err/error */
+    extern void setprogname(const char *);
+    setprogname(argv[0]);
+    program_invocation_name = argv[0];
+    program_invocation_short_name = strrchr(argv[0], '/') ? strrchr(argv[0], '/') + 1 : argv[0];
     enter(p.base + eh.e_entry, argc, argv);
 }
 int main(int argc, char **argv)

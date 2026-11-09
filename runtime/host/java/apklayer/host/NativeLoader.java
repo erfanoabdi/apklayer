@@ -57,7 +57,7 @@ public final class NativeLoader {
 
     private static native void skipNativeExitHandlers();
     private static native void setProcessName(String name);
-    private static native void mapOwnData(String pkg, int uid, String root);
+    private static native void mapOwnData(String pkg, int uid, String groups, String root);
     /** An app spare's launch (spare_target.c): the message on fd, whose stdout and stderr replace this process's; null when the holder is gone. */
     static native String receiveTarget(int fd);
 
@@ -67,9 +67,27 @@ public final class NativeLoader {
     }
 
     /** The app's own /data/data/<pkg>, /data/user/0/<pkg> (root/app) and /data/user_de/0/<pkg> (root/device) for Java's and native file calls, and its
-     *  uid as native code sees it: getuid and the owner of the user's files (bridge/native/paths.c). */
+     *  uid and groups as native code sees them: getuid, getgroups and the owner of the user's files (bridge/native/paths.c). */
     static void mapOwnDataDirs(String pkg, String root) {
-        try { mapOwnData(pkg, android.os.Process.myUid(), root); } catch (LinkageError noShim) { /* no native runtime in this process */ }
+        int uid = android.os.Process.myUid();
+        try { mapOwnData(pkg, uid, appGroups(pkg, uid), root); } catch (LinkageError noShim) { /* no native runtime in this process */ }
+    }
+
+    /** The supplementary groups zygote gives an app process (ProcessList.startProcessLocked; cli/sandbox.cpp appGroups): inet with INTERNET,
+     *  everybody, its cache and shared app gids, ascending as the kernel keeps them. */
+    static String appGroups(String pkg, int uid) {
+        int appId = uid % 100000 - 10000;
+        if (appId < 0) return "";
+        boolean inet = false;
+        String apps = System.getProperty("apklayer.apps");
+        if (apps != null) {
+            try (var in = Files.newBufferedReader(new File(new File(apps, pkg), "info.properties").toPath())) {
+                var info = new java.util.Properties();
+                info.load(in);
+                inet = java.util.Arrays.asList(info.getProperty("permissions", "").split(";")).contains("android.permission.INTERNET");
+            } catch (IOException none) { /* no install record: no permission gids */ }
+        }
+        return (inet ? "3003," : "") + "9997," + (20000 + appId) + "," + (50000 + appId);
     }
 
     /** The process is about to exit: it ends as Android ends an app process (killed), without the native libraries' static destructors (native_loader.c). */

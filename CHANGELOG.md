@@ -3,6 +3,26 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: Termux's shell without the sandbox: Android groups, program names, `ls -a`, its login's ~/.termux (bionic_translation 0061, 0062)
+- `id` listed the desktop user's groups: bionic's getgroups now answers the groups zygote gives an app (0061; inet 3003 with INTERNET,
+  everybody 9997, cache 20000+appId, shared 50000+appId: NativeLoader.appGroups, as the sandbox sets them), carried to the app's programs in
+  `APKLAYER_OWN_DATA=<pkg>:<uid>,<gid>...:<root>`. Termux: `uid=10446 gid=10446 groups=10446,3003,9997,20446,50446`, Android's shape.
+- Programs named themselves "apklayer" (android_platform.c's getprogname default): btload sets getprogname and glibc's
+  program_invocation_name from the program's argv[0] before entering it, as bionic's libc init does (`ls: cannot access '/nope'`).
+- `ls -a` listed no `.`/`..`: 0021 dropped them after a per-thread readdir buffer let a nested listing overwrite the entry Gecko's
+  ScanStoreDir held. 0062 returns glibc's entry on LP64 (bionic's layout, in the stream's own buffer as bionic's): dots back, the held entry
+  stays the stream's (tests/native/app-uid.c checks both).
+- `ls` printed libjsig's "signal chaining ... deprecated": exec_preload.c drops HotSpot's libjsig from the LD_PRELOAD it gives programs.
+- Termux's login printed "cannot create regular file .../home/.termux/": Termux builds its shell's environment itself, so its programs lost
+  the path layer's variables (APKLAYER_DATA...), and `mkdir -p` walking /data/data then "com.termux" relative to it wrote into the shared
+  native android-root's data/ (from_root). exec_preload.c now restores the path layer's variables with the runtime's, and paths.c makes
+  the instance's /data/data/<pkg>, /data/user/0/<pkg>, /data/user_de/0/<pkg> links to the app's tree, so a walk lands there
+  (tests/native/path-layer.c). Installs that ran Termux before may hold a stray `<native>/android-root/data/` tree: delete it.
+- Termux 0.119.0-beta.3 (corpus APK) on UTM, own tree and prebuilts (SurfaceFlinger screenshots): login silent, ~/.termux/termux.properties
+  created, `id` as above, `ls -la` with `.` and `..`, no libjsig line. Groups native, startup, files, activities pass on UTM.
+- Changed native libraries: bionic_translation's libc_bio, libapklayer-preload (paths.c, exec_preload.c), libandroid_runtime (paths.c,
+  app_native.c), btload; host classes (NativeLoader).
+
 ## 2026-11-10: release 0.4.12 (runtime 0.4.11)
 - Halium phones (Sailfish OS, Ubuntu Touch): every native service crashed on 0.4.11 (libhybris's EGL bound to libdl_bio's `__loader_dlopen`, exported for bytehook in 0054, and the linker's gdb notification ran before btload's main): the `__loader_*` symbols are in a hidden version only bytehook's GOT lookup reaches (bionic_translation 0059) and no notification before main (0060); checked on the Volla Quintus and the Volla X23. Also runtime-bundle.sh no longer nests a tree when a link copy fails part way.
 

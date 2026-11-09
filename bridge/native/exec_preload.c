@@ -19,7 +19,10 @@
 extern char **environ;
 #define REAL(name) ({ static void *f_; if (!f_) f_ = dlsym(RTLD_NEXT, #name); f_; })
 
-static const char *const runtime_vars[] = {"LD_LIBRARY_PATH", "LD_PRELOAD", "XDG_DATA_DIRS", "APKLAYER_NATIVE", "BIONIC_LD_LIBRARY_PATH", "APKLAYER_HOST_LIBS", NULL};
+/* The runtime's variables, and the path layer's (paths.c read_env): an app that builds its own environment for its programs (Termux) drops them, and its programs' /data, /system and
+ * binder devices were then the shared root's or the host's (Termux's mkdir -p wrote into the native android-root). LD_PRELOAD stays second (save_runtime_env). */
+static const char *const runtime_vars[] = {"LD_LIBRARY_PATH", "LD_PRELOAD", "XDG_DATA_DIRS", "APKLAYER_NATIVE", "BIONIC_LD_LIBRARY_PATH", "APKLAYER_HOST_LIBS",
+    "APKLAYER_ANDROID_ROOT", "APKLAYER_INSTANCE", "APKLAYER_INSTANCE_ROOT", "APKLAYER_STORAGE", "APKLAYER_DATA", "APKLAYER_HOST_BINDER", "APKLAYER_HOST_HWBINDER", NULL};
 
 #define NVARS (sizeof runtime_vars / sizeof *runtime_vars - 1)
 static char *started[NVARS];  /* "NAME=value" of each runtime variable at load, or NULL */
@@ -31,6 +34,19 @@ __attribute__((constructor)) static void save_runtime_env(void)
     for (size_t i = 0; i < NVARS; i++)
         for (char **e = environ; e && *e; e++)
             if (!strncmp(*e, runtime_vars[i], strlen(runtime_vars[i])) && (*e)[strlen(runtime_vars[i])] == '=') { started[i] = strdup(*e); break; }
+    /* LD_PRELOAD without HotSpot's libjsig (cli/env.cpp): it is the JVM's, and in a program it warns at each signal() ("signal chaining ... deprecated") */
+    char *preload = started[1], *kept = preload ? strdup(preload) : NULL, *save;
+    if (!kept) return;
+    char *out = strchr(kept, '=') + 1;
+    *out = 0;
+    for (char *t = strtok_r(strchr(preload, '=') + 1, ":", &save); t; t = strtok_r(NULL, ":", &save)) {
+        size_t n = strlen(t);
+        if (n >= 10 && !strcmp(t + n - 10, "libjsig.so")) continue;
+        if (out[-1] != '=') *out++ = ':';
+        out = stpcpy(out, t);
+    }
+    free(preload);
+    started[1] = kept;
 }
 
 static const char *runtime_value(const char *name)

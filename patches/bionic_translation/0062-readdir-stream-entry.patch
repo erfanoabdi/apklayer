@@ -1,0 +1,23 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: readdir returns the stream's own entry, "." and ".." included
+
+0021 kept readdir's entry in a buffer per thread and then dropped "." and "..": a nested listing on the same thread (Gecko's
+Classifier::ScanStoreDir recursing while its enumerator held the outer entry) overwrote the held entry, with a "." among others, and
+Gecko recursed into "./././...". Bionic's entry lives in the DIR stream; glibc's 64-bit struct dirent has bionic's layout, so on LP64
+readdir hands glibc's entry through (per stream, as bionic's), and `ls -a` lists "." and "..".
+
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -325,6 +325,12 @@
+ bionic_readdir(DIR *dirp)
+ {
+ 	assert(dirp);
++#ifdef __LP64__
++	/* apklayer patch: glibc's 64-bit dirent is bionic's: its entry, in the stream's own buffer as bionic's is, "." and ".." included. A buffer per
++	 * thread let a nested listing overwrite the outer one's held entry with a "." (Gecko's ScanStoreDir recursed into "./././..."). */
++	_Static_assert(__builtin_offsetof(struct dirent, d_name) == __builtin_offsetof(struct bionic_dirent, d_name) && sizeof(((struct dirent *)0)->d_ino) == 8, "dirent layout");
++	return (struct bionic_dirent *)readdir(dirp);
++#endif
+ 	static __thread struct bionic_dirent bde; /* apklayer patch: see docs/PATCHES.md */
+ 	struct dirent *de;
+ 	do {

@@ -6,6 +6,7 @@
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <limits.h>
+#include <sys/stat.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -117,11 +118,12 @@ static bool data_path(char **path)
 
 /* The app's own data directories under Android's spellings (/data/data/<pkg>, /data/user/0/<pkg>, /data/user_de/0/<pkg>): apps and their native code
  * hard-code them. Set once the process knows its package (apklayer_map_own_data: AppEnvironment through the shim; a spare learns it late), and
- * inherited by the programs it runs through APKLAYER_OWN_DATA=<pkg>:<uid>:<root> (exec_preload.c adds it to every exec). <root> is the app's data tree
- * (cli/layout appData): app/ is its data dir, device/ its device-protected one. Other packages' stay in the instance's /data (data_path), where
+ * inherited by the programs it runs through APKLAYER_OWN_DATA=<pkg>:<uid>[,<gid>...]:<root> (exec_preload.c adds it to every exec). <root> is the app's
+ * data tree (cli/layout appData): app/ is its data dir, device/ its device-protected one. Other packages' stay in the instance's /data (data_path), where
  * they do not exist. <uid> is its Android uid: without the sandbox the process runs as the user, and Android code is told the app uid (its ids,
- * the owner of the user's files: bionic_translation 0056); under the sandbox the real uid is the app's and nothing changes. */
-struct own_data { char *env, *pkg, *dir, *device; long uid; };
+ * the owner of the user's files: bionic_translation 0056) and the supplementary <gid>s zygote gives an app (getgroups: 0061); under the sandbox
+ * the real ids are the app's and nothing changes. */
+struct own_data { char *env, *pkg, *dir, *device; long uid; int ngroups; gid_t groups[16]; };
 static struct own_data *own_data;
 
 /* the app uid bionic code sees, or -1 (none known, or the real uid is the app's: the sandbox) */
@@ -135,21 +137,43 @@ long apklayer_app_uid(void)
 static void push_app_uid(void)
 {
     void (*set)(long) = dlsym(RTLD_DEFAULT, "libc_bio_set_app_uid");
+    void (*set_groups)(int, const gid_t *) = dlsym(RTLD_DEFAULT, "libc_bio_set_app_groups");
+    const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
     long uid = apklayer_app_uid();
     if (set && uid >= 0) set(uid);
+    if (set_groups && uid >= 0) set_groups(o->ngroups, o->groups);
 }
 
-void apklayer_map_own_data(const char *pkg, long uid, const char *root)
+/* groups: the app's supplementary gids, comma separated ("" or NULL: none) */
+void apklayer_map_own_data(const char *pkg, long uid, const char *groups, const char *root)
 {
     struct own_data *o = calloc(1, sizeof *o);
-    if (!o || strchr(pkg, ':') || asprintf(&o->env, "APKLAYER_OWN_DATA=%s:%ld:%s", pkg, uid, root) < 0 || !(o->pkg = strdup(pkg))
-        || asprintf(&o->dir, "%s/app", root) < 0 || asprintf(&o->device, "%s/device", root) < 0) return;
+    if (!groups) groups = "";
+    if (!o || strchr(pkg, ':') || strchr(groups, ':') || asprintf(&o->env, "APKLAYER_OWN_DATA=%s:%ld%s%s:%s", pkg, uid, *groups ? "," : "", groups, root) < 0
+        || !(o->pkg = strdup(pkg)) || asprintf(&o->dir, "%s/app", root) < 0 || asprintf(&o->device, "%s/device", root) < 0) return;
     o->uid = uid;
+    for (char *end; *groups && o->ngroups < (int)(sizeof o->groups / sizeof *o->groups); groups = end + (*end == ',')) {
+        o->groups[o->ngroups] = (gid_t)strtoul(groups, &end, 10);
+        if (end == groups || (*end && *end != ',')) break;
+        o->ngroups++;
+    }
     __atomic_store_n(&own_data, o, __ATOMIC_RELEASE);  /* every thread's file calls read it: published whole, an earlier one stays allocated (a reader may hold it) */
     push_app_uid();
+    /* and in the instance's /data as directories, as on Android: a walk that reaches them component by component (mkdir -p: /data/data, then
+     * "com.termux" relative to it) lands in the app's tree, not in a new one (errors ignored: the sandbox's view has its own) */
+    const char *links[][3] = { {"data", "", o->dir}, {"user", "/0", o->dir}, {"user_de", "/0", o->device} };
+    for (int i = 0; data_env[0] && i < 3; i++) {
+        char *top = NULL, *dir = NULL, *link = NULL;
+        if (asprintf(&top, "%s/%s", data_env, links[i][0]) >= 0) mkdir(top, 0771);
+        if (asprintf(&dir, "%s/%s%s", data_env, links[i][0], links[i][1]) >= 0) mkdir(dir, 0771);
+        if (asprintf(&link, "%s/%s%s/%s", data_env, links[i][0], links[i][1], pkg) >= 0) symlink(links[i][2], link);
+        free(top);
+        free(dir);
+        free(link);
+    }
 }
 
-/* "APKLAYER_OWN_DATA=<pkg>:<uid>:<root>" for a child's environment, or NULL */
+/* "APKLAYER_OWN_DATA=<pkg>:<uid>[,<gid>...]:<root>" for a child's environment, or NULL */
 const char *apklayer_own_data_env(void)
 {
     const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
@@ -161,10 +185,12 @@ static void own_data_from_env(void)
     char *v = getenv("APKLAYER_OWN_DATA"), *colon = v ? strchr(v, ':') : NULL, *end;
     if (!colon || colon == v) return;
     long uid = strtol(colon + 1, &end, 10);
-    if (end == colon + 1 || *end != ':' || !end[1]) return;
-    char *pkg = strndup(v, (size_t)(colon - v));
-    if (pkg) apklayer_map_own_data(pkg, uid, end + 1);
+    char *groups = *end == ',' ? end + 1 : end, *root = strchr(groups, ':');  /* <uid>[,<gid>...]:<root> */
+    if (end == colon + 1 || !root || (*end != ',' && *end != ':') || !root[1]) return;
+    char *pkg = strndup(v, (size_t)(colon - v)), *gids = strndup(groups, (size_t)(root - groups));
+    if (pkg && gids) apklayer_map_own_data(pkg, uid, gids, root + 1);
     free(pkg);
+    free(gids);
 }
 
 static bool own_data_path(char **path)
