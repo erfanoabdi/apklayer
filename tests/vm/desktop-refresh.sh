@@ -4,7 +4,8 @@
 set -uo pipefail
 w=$(mktemp -d "$HOME/.desktop-refresh.XXXXXX"); trap 'rm -rf "$w"' EXIT
 export XDG_DATA_HOME=$w/data XDG_CONFIG_HOME=$w/config
-mkdir -p $XDG_CONFIG_HOME/menus/applications-merged $XDG_DATA_HOME/applications && touch $XDG_CONFIG_HOME/menus/applications-merged/apklayer.menu
+# an existing submenu (merge file and its directory entry): writeMenu would otherwise rewrite every entry as for a first menu
+mkdir -p $XDG_CONFIG_HOME/menus/applications-merged $XDG_DATA_HOME/applications $XDG_DATA_HOME/desktop-directories && touch $XDG_CONFIG_HOME/menus/applications-merged/apklayer-menu $XDG_DATA_HOME/desktop-directories/apklayer-directory
 for p in gone.app kept.app; do
     mkdir -p $XDG_DATA_HOME/apklayer/apps/$p && printf 'package=%s\nlabel=%s\nuid=10001\n' $p $p > $XDG_DATA_HOME/apklayer/apps/$p/info.properties
 done
