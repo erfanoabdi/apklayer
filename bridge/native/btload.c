@@ -73,7 +73,13 @@ int main(int argc, char **argv)
     if (argc < 3) return 2;
     _r_debug_ptr = &_r_debug;
     extern void apklayer_log_to_stderr(void);
-    dl_parse_library_path(argv[1], ":");
+    bool exec = argc >= 5 && !strcmp(argv[3], "--exec");  /* the program's stdout is its own */
+    /* an exec'd program is opened by its absolute path (FCL runs ./libunpack200.so from its lib dir), and the shim linker opens a path only
+     * inside its search path: the program's own directory goes last, as Android's linker runs any path */
+    char *full = exec ? realpath(argv[2], NULL) : NULL, *search = NULL;
+    if (full) argv[2] = full;
+    if (full && asprintf(&search, "%s:%.*s", argv[1], (int)(strrchr(full, '/') - full), full) < 0) search = NULL;
+    dl_parse_library_path(search ? search : argv[1], ":");
     /* host libraries the Android code calls into (APKLAYER_HOST_LIBS, colon separated), global so the bionic linker finds their symbols */
     if (getenv("APKLAYER_HOST_LIBS")) {
         char *libs = strdup(getenv("APKLAYER_HOST_LIBS"));
@@ -83,7 +89,6 @@ int main(int argc, char **argv)
     apklayer_log_to_stderr();
     if (getenv("APKLAYER_CRASH_TRACE")) { extern void apklayer_crash_trace_signals(void); apklayer_crash_trace_signals(); }
     void *h = bionic_dlopen(argv[2], 2 /* RTLD_NOW */);
-    bool exec = argc >= 5 && !strcmp(argv[3], "--exec");  /* the program's stdout is its own */
     if (!exec) { if (h) printf("LOADED %s\n", argv[2]); else printf("FAILED %s: %s\n", argv[2], bionic_dlerror()); }
     else if (!h) { fprintf(stderr, "btload: %s: %s\n", argv[2], bionic_dlerror()); return 127; }
     if (h) { extern void apklayer_install_path_layer(void); apklayer_install_path_layer(); } /* libc_bio is loaded now */
