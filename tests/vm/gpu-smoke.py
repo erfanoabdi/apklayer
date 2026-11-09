@@ -20,7 +20,7 @@ try:
     imported = 0
     shot = None
     for line in proc.stdout:
-        if 'apklayer.egl: imported buffer' in line:
+        if 'apklayer.egl: imported buffer' in line or 'apklayer.egl: attached buffer' in line:  # a copied or an attached window buffer
             imported += 1
             if imported == 3 and shot is None:  # the app is presenting GPU buffers: take the picture now
                 shot = instance.capture('gpu', PKG)

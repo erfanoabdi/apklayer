@@ -1,5 +1,5 @@
 // What the files of apklayer's libEGL share (Egl.cpp: displays, configs, contexts, images, the forwarded entry points; EglWindow.cpp: window
-// and pbuffer surfaces): the host's EGL, GL and GBM functions, our own EGL error, the GBM display.
+// and pbuffer surfaces; EglAttach.cpp: the zero-copy window present): the host's EGL, GL and GBM functions, our own EGL error, the GBM display.
 #pragma once
 
 #include <EGL/egl.h>
@@ -47,6 +47,8 @@ EGLDisplay gbmDisplay();            // the host's display on that node's GBM dev
 EGLImage imageFromNativeBuffer(EGLDisplay dpy, ANativeWindowBuffer* buf);
 // The host surface behind one of our surfaces (EglWindow.cpp); anything else is returned as it is.
 EGLSurface hostSurface(EGLSurface s);
+// A native fence fd for the current context's GL work so far (flushed), or -1 after a glFinish when the host has none.
+int gpuFence(EGLDisplay dpy);
 
 }  // namespace apklayer::egl
 

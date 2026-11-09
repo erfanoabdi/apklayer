@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Deep window configs reach the screen: glbench's window with an 8-bit, a 10-bit (AR30/AB30 and XR30/XB30) and a half-float (AB4H, XB4H)
-EGL config; a screenshot of SurfaceFlinger's picture during each mode's clear scene must show the clear colour (green 0.2, blue 0.3), and no
+"""Deep and multisampled window configs reach the screen: glbench's window with an 8-bit, a 4x multisampled 8-bit, a 10-bit (AR30/AB30 and
+XR30/XB30) and a half-float (AB4H, XB4H) EGL config; a screenshot of SurfaceFlinger's picture during each mode's clear scene must show the clear colour (green 0.2, blue 0.3), and no
 "framebuffer incomplete" may be logged (the window present reads the app's buffer back)."""
 import subprocess
 import sys
@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 import instance  # noqa: E402  (changes into the repo root)
 from PIL import Image  # noqa: E402
 
-MODES = ['window', 'window-10bit', 'window-10bit-opaque', 'window-fp16', 'window-fp16-opaque']
+MODES = ['window', 'window-msaa', 'window-10bit', 'window-10bit-opaque', 'window-fp16', 'window-fp16-opaque']
 instance.stop()
 SHOT = instance.OUT / 'formats'
 for old in SHOT.parent.glob(SHOT.name + '.*'): old.unlink()

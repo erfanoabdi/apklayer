@@ -20,11 +20,11 @@ static void print(const char *line)
 static const EGLint ctx_attr[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
 
 /* depth: 8, 10 (RGB10_A2) or 16 (half float, EGL_EXT_pixel_format_float) bits per channel; opaque: the first matching config without alpha
- * (XR30, XB4H), else the first one (AR30/AB30, AB4H) */
-static EGLConfig choose(EGLDisplay dpy, EGLint surface_type, int depth, int opaque)
+ * (XR30, XB4H), else the first one (AR30/AB30, AB4H); samples: multisampled (0: any) */
+static EGLConfig choose(EGLDisplay dpy, EGLint surface_type, int depth, int opaque, int samples)
 {
     const EGLint attr[] = { EGL_SURFACE_TYPE, surface_type, EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT, EGL_RED_SIZE, depth, EGL_GREEN_SIZE, depth,
-                            EGL_BLUE_SIZE, depth, EGL_ALPHA_SIZE, opaque ? 0 : depth == 10 ? 2 : depth,
+                            EGL_BLUE_SIZE, depth, EGL_ALPHA_SIZE, opaque ? 0 : depth == 10 ? 2 : depth, EGL_SAMPLES, samples,
                             depth == 16 ? 0x3339 /* EGL_COLOR_COMPONENT_TYPE_EXT */ : EGL_NONE, 0x333B /* EGL_COLOR_COMPONENT_TYPE_FLOAT_EXT */, EGL_NONE };
     EGLConfig cfg[64];
     EGLint n = 0;
@@ -47,14 +47,16 @@ JNIEXPORT jint JNICALL Java_hello_glbench_Main_run(JNIEnv *env, jclass cls, jobj
     t.dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     eglInitialize(t.dpy, NULL, NULL);
     /* window-10bit[-opaque], window-fp16[-opaque]: the same with a deep config (the window present reads those buffers back) */
+    /* window-msaa: a 4x multisampled config (the host resolves it into the window's buffer at the swap) */
     int depth = strstr(mode, "10bit") ? 10 : strstr(mode, "fp16") ? 16 : 8;
-    EGLConfig cfg = choose(t.dpy, EGL_WINDOW_BIT, depth, strstr(mode, "opaque") != NULL);
-    EGLint red = 0, alpha = 0, visual = 0;
+    EGLConfig cfg = choose(t.dpy, EGL_WINDOW_BIT, depth, strstr(mode, "opaque") != NULL, strstr(mode, "msaa") ? 4 : 0);
+    EGLint red = 0, alpha = 0, visual = 0, samples = 0;
     eglGetConfigAttrib(t.dpy, cfg, EGL_RED_SIZE, &red);
     eglGetConfigAttrib(t.dpy, cfg, EGL_ALPHA_SIZE, &alpha);
     eglGetConfigAttrib(t.dpy, cfg, EGL_NATIVE_VISUAL_ID, &visual);
-    char line[96];
-    if (cfg) snprintf(line, sizeof line, "glbench: %s config red=%d alpha=%d visual=0x%x", mode, red, alpha, visual);
+    eglGetConfigAttrib(t.dpy, cfg, EGL_SAMPLES, &samples);
+    char line[128];
+    if (cfg) snprintf(line, sizeof line, "glbench: %s config red=%d alpha=%d visual=0x%x samples=%d", mode, red, alpha, visual, samples);
     else snprintf(line, sizeof line, "glbench: %s no config", mode);
     print(line);
     if (!cfg) {
@@ -87,7 +89,7 @@ int main(int argc, char **argv)
     if (argc > 2) sscanf(argv[2], "%dx%d", &t.width, &t.height);
     t.dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     eglInitialize(t.dpy, NULL, NULL);
-    EGLConfig cfg = choose(t.dpy, EGL_PBUFFER_BIT, 8, 0);
+    EGLConfig cfg = choose(t.dpy, EGL_PBUFFER_BIT, 8, 0, 0);
     EGLContext ctx = eglCreateContext(t.dpy, cfg, EGL_NO_CONTEXT, ctx_attr);
     const EGLint pb[] = { EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE };
     t.surface = eglCreatePbufferSurface(t.dpy, cfg, pb);

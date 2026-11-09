@@ -2,7 +2,7 @@
 // bionic_translation's cfg.d. Host EGL and the host graphics HAL's functions resolve at load time (bionic_translation's glibc fallback).
 cc_library_shared {
     name: "libapklayer_egl",
-    srcs: ["Egl.cpp", "EglWindow.cpp", "Gles1.cpp"],
+    srcs: ["Egl.cpp", "EglAttach.cpp", "EglWindow.cpp", "Gles1.cpp"],
     include_dirs: ["frameworks/native/opengl/libs"],  // entries.in: the GLES hook table layout of Android's libGLESv1_CM (Gles1.cpp)
     header_libs: [
         "libapklayer_gralloc_common_headers",
@@ -12,7 +12,7 @@ cc_library_shared {
         "libnativebase_headers",
         "libsystem_headers",
     ],
-    shared_libs: ["libcutils", "liblog", "libnativewindow"],
+    shared_libs: ["libcutils", "liblog", "libnativewindow", "libui", "libutils"],  // libui: GraphicBuffer for EglAttach.cpp (libnativewindow loads it anyway)
     compile_multilib: "both",  // the 32-bit app process loads it too (docs/PLAN.md "apps built for another CPU" 2(a))
     arch: { x86: { enabled: false } },  // a 32-bit app process is ARM only (gsi_x86_64 builds no 32-bit x86 one: Egl.cpp has no i386 stub)
     allow_undefined_symbols: true,

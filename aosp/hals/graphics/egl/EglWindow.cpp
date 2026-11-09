@@ -1,7 +1,7 @@
 // Window surfaces of apklayer's libEGL (Egl.cpp holds the rest). The host's GBM platform has no pbuffers and cannot render into somebody
-// else's buffer, so an Android window is a host window surface on a gbm_surface of the same size, and eglSwapBuffers copies the finished
-// frame on the GPU (glBlitFramebuffer between two dmabuf EGLImages, a native fence handed to the BufferQueue: no CPU touch) into a buffer
-// dequeued from the ANativeWindow. A resize (the window's default size changing) makes a new surface pair behind the same app-side EGLSurface.
+// else's buffer, so an Android window is a host window surface on a gbm_surface of the same size, and eglSwapBuffers hands the finished
+// gbm buffer itself to the ANativeWindow (EglAttach.cpp), or where that cannot be done copies the frame on the GPU (glBlitFramebuffer between
+// two dmabuf EGLImages, a native fence handed to the BufferQueue: no CPU touch) into a buffer dequeued from the ANativeWindow. A resize (the window's default size changing) makes a new surface pair behind the same app-side EGLSurface.
 // A pbuffer is the same pair without an Android window.
 #define LOG_TAG "apklayer.egl"
 
@@ -18,6 +18,7 @@
 #include <set>
 #include <vector>
 
+#include "EglAttach.h"
 #include "EglHost.h"
 
 using namespace apklayer::egl;
@@ -50,6 +51,7 @@ struct Window {
     std::vector<CachedImage> srcCache, dstCache;
     uint64_t useCount = 0;
     int64_t presentationTime = 0;  // eglPresentationTimeANDROID for the next frame (0 = none)
+    WindowAttach* attach = nullptr;  // the zero-copy present (null: every frame is copied)
 };
 std::recursive_mutex windowsLock;
 std::set<Window*> windows;
@@ -139,14 +141,16 @@ CachedImage* cachedImage(Window& w, std::vector<CachedImage>& cache, uint64_t ke
     return &cache.back();
 }
 
-// The frame just swapped into the gbm_surface, copied into a buffer of the Android window and queued.
+// The frame just swapped into the gbm_surface, attached to the Android window and queued, or copied into a buffer of it.
 void presentToWindow(EGLDisplay dpy, Window& w) {
     ANativeWindow* nw = w.native;
     void* bo = gbmFn<void* (*)(void*)>("gbm_surface_lock_front_buffer")(w.gbmSurface);
     if (!bo) { ALOGE("gbm_surface_lock_front_buffer failed"); return; }
+    if (w.presentationTime) { native_window_set_buffers_timestamp(nw, w.presentationTime); w.presentationTime = 0; }
     ANativeWindowBuffer* dst = nullptr;
     int fence = -1;
-    if (nw->dequeueBuffer(nw, &dst, &fence) != 0 || !dst) {
+    if (w.attach && w.attach->present(dpy, w.gbmSurface, bo, w.width, w.height, &dst, &fence)) return;
+    if (!dst && (nw->dequeueBuffer(nw, &dst, &fence) != 0 || !dst)) {
         ALOGE("dequeueBuffer failed");
         gbmFn<void (*)(void*, void*)>("gbm_surface_release_buffer")(w.gbmSurface, bo);
         return;
@@ -193,21 +197,12 @@ void presentToWindow(EGLDisplay dpy, Window& w) {
                 ALOGE("window present %ux%u: framebuffer incomplete (read 0x%x; draw 0x%x: buffer %dx%d format %d usage 0x%llx)",
                       w.width, w.height, rs, ds, dst->width, dst->height, dst->format, (unsigned long long)dst->usage);
         }
-        auto createSync = host<PFNEGLCREATESYNCKHRPROC>("eglCreateSyncKHR");
-        auto dupFence = host<PFNEGLDUPNATIVEFENCEFDANDROIDPROC>("eglDupNativeFenceFDANDROID");
-        EGLSyncKHR sync = createSync && dupFence ? createSync(dpy, EGL_SYNC_NATIVE_FENCE_ANDROID, nullptr) : EGL_NO_SYNC_KHR;
-        if (sync != EGL_NO_SYNC_KHR) {
-            gl<void (*)()>("glFlush")();  // the fence fd exists once the sync is flushed
-            outFence = dupFence(dpy, sync);
-            host<PFNEGLDESTROYSYNCKHRPROC>("eglDestroySyncKHR")(dpy, sync);
-        }
-        if (outFence < 0) gl<void (*)()>("glFinish")();  // no native fence: finish the work here
+        outFence = gpuFence(dpy);
     } else {
         ALOGE("window present: images %p %p or no current context", src, out);
     }
     close(fd);
     gbmFn<void (*)(void*, void*)>("gbm_surface_release_buffer")(w.gbmSurface, bo);
-    if (w.presentationTime) { native_window_set_buffers_timestamp(nw, w.presentationTime); w.presentationTime = 0; }
     nw->queueBuffer(nw, dst, outFence);
 }
 
@@ -274,6 +269,7 @@ void resizeWindow(Window* win) {
         host<PFNEGLMAKECURRENTPROC>("eglMakeCurrent")(cur, wasDraw ? win->host : host<EGLSurface (*)(EGLint)>("eglGetCurrentSurface")(EGL_DRAW),
                                                       wasRead ? win->host : host<EGLSurface (*)(EGLint)>("eglGetCurrentSurface")(EGL_READ), ctx);
     dropCache(*win);  // the old gbm buffers go with their surface
+    if (win->attach) win->attach->surfaceGone(oldGbm);
     host<EGLBoolean (*)(EGLDisplay, EGLSurface)>("eglDestroySurface")(win->dpy, oldHost);
     gbmFn<void (*)(void*)>("gbm_surface_destroy")(oldGbm);
     ALOGI("window %p resized %ux%u -> %ux%u", win, oldW, oldH, win->width, win->height);
@@ -293,6 +289,20 @@ EGLBoolean swapWindow(EGLDisplay dpy, EGLSurface surface) {
 }
 
 }  // namespace
+
+int apklayer::egl::gpuFence(EGLDisplay dpy) {
+    auto createSync = host<PFNEGLCREATESYNCKHRPROC>("eglCreateSyncKHR");
+    auto dupFence = host<PFNEGLDUPNATIVEFENCEFDANDROIDPROC>("eglDupNativeFenceFDANDROID");
+    EGLSyncKHR sync = createSync && dupFence ? createSync(dpy, EGL_SYNC_NATIVE_FENCE_ANDROID, nullptr) : EGL_NO_SYNC_KHR;
+    int fd = -1;
+    if (sync != EGL_NO_SYNC_KHR) {
+        gl<void (*)()>("glFlush")();  // the fence fd exists once the sync is flushed
+        fd = dupFence(dpy, sync);
+        host<PFNEGLDESTROYSYNCKHRPROC>("eglDestroySyncKHR")(dpy, sync);
+    }
+    if (fd < 0) gl<void (*)()>("glFinish")();  // no native fence: finish the work here
+    return fd;
+}
 
 EGLSurface apklayer::egl::hostSurface(EGLSurface s) {  // the host's surface behind one of ours (anything else, EGL_NO_SURFACE included, is the host's already)
     std::lock_guard<std::recursive_mutex> lock(windowsLock);
@@ -320,6 +330,7 @@ EGLSurface eglCreateWindowSurface(EGLDisplay dpy, EGLConfig cfg, EGLNativeWindow
     nw->common.incRef(&nw->common);
     native_window_set_usage(nw, kUsageRender | kUsageTexture);
     native_window_set_buffers_format(nw, 1 /* HAL_PIXEL_FORMAT_RGBA_8888 */);
+    win->attach = WindowAttach::create(nw);
     std::lock_guard<std::recursive_mutex> lock(windowsLock);
     windows.insert(win);
     ALOGI("window surface %p: %ux%u, gbm format 0x%x", win, win->width, win->height, win->visual);
@@ -357,6 +368,7 @@ EGLBoolean eglDestroySurface(EGLDisplay dpy, EGLSurface surface) {
         std::lock_guard<std::recursive_mutex> lock(windowsLock);
         if (Window* w = windowOf(surface)) {
             if (w->native) native_window_api_disconnect(w->native, kApiEgl);
+            delete w->attach;  // after the disconnect freed the queue's buffers
             windows.erase(w);
             if (w->native) w->native->common.decRef(&w->native->common);
             dropCache(*w);
