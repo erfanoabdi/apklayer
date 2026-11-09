@@ -1,0 +1,61 @@
+From: apklayer
+Subject: [PATCH] AndroidTestEnvironment: the manifest's AppComponentFactory instantiates the Application
+
+Robolectric constructed the Application class directly, before the LoadedApk existed; an app whose android:appComponentFactory hooks
+the Application (the tree's SystemUI: PhoneSystemUIAppComponentFactory gives SystemUIApplication the callback that builds its Dagger
+graph) crashed in onCreate. The factory the APK's manifest names also stays in its ApplicationInfo: apklayer's AndroidManifest has no
+manifest file, and its null replaced the parsed one. As upstream Robolectric does (and LoadedApk.makeApplication), the Application now comes from
+LoadedApk.getAppFactory() once the LoadedApk is made, from the Application class's own loader, for a factory of the app's own (with the
+default one the construction stays direct).
+Needs the upstream AndroidTestEnvironment.java in the prebuilts' robolectric-src.
+Against external/robolectric 87aa52b08 (REVISION).
+---
+--- a/robolectric/src/main/java/org/robolectric/android/internal/AndroidTestEnvironment.java
++++ b/robolectric/src/main/java/org/robolectric/android/internal/AndroidTestEnvironment.java
+@@ -334,10 +334,7 @@
+     Bootstrap.setUpDisplay();
+     activityThread.applyConfigurationToResources(androidConfiguration);
+ 
+-    Application application = ReflectionHelpers.callConstructor(applicationClass);
+     RuntimeEnvironment.setConfiguredApplicationClass(applicationClass);
+-
+-    RuntimeEnvironment.application = application;
+ 
+     final Class<?> appBindDataClass;
+     try {
+@@ -358,6 +355,25 @@
+ 
+     Context contextImpl =
+         reflector(ContextImplReflector.class).createAppContext(activityThread, loadedApk);
++
++    // apklayer: the manifest's AppComponentFactory instantiates the Application, as LoadedApk.makeApplication does (upstream calls any factory)
++    Application application;
++    if (loadedApk != null
++        && apiLevel >= P
++        && loadedApk.getAppFactory() != null
++        && loadedApk.getAppFactory().getClass() != android.app.AppComponentFactory.class) {
++      try {
++        application =
++            loadedApk
++                .getAppFactory()
++                .instantiateApplication(applicationClass.getClassLoader(), applicationClass.getName());
++      } catch (ReflectiveOperationException e) {
++        throw new RuntimeException(e);
++      }
++    } else {
++      application = ReflectionHelpers.callConstructor(applicationClass);
++    }
++    RuntimeEnvironment.application = application;
+     ShadowPackageManager shadowPackageManager = Shadow.extract(contextImpl.getPackageManager());
+     shadowPackageManager.addPackageInternal(parsedPackage);
+     activityThreadReflector.setInitialApplication(application);
+@@ -430,7 +446,8 @@
+     }
+     if (parsedPackage != null && parsedPackage.applicationInfo != null) {
+       parsedPackage.applicationInfo.targetSdkVersion = appManifest.getTargetSdkVersion();
+-      if (RuntimeEnvironment.getApiLevel() >= P) {
++      // apklayer: the parsed APK's own factory stays when no manifest file names one
++      if (RuntimeEnvironment.getApiLevel() >= P && appManifest.getAppComponentFactory() != null) {
+         parsedPackage.applicationInfo.appComponentFactory = appManifest.getAppComponentFactory();
+       }
+     }

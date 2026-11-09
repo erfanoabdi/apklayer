@@ -183,7 +183,9 @@ final class ActivityTask {
         boolean bottom = stack.isEmpty();  // the first activity of the task answers isTaskRoot() already while it is created
         taskRootBuilding = bottom;
         HostRoles.install();
-        ActivityController<? extends Activity> built = Robolectric.buildActivity(cls, intent);
+        Activity made;
+        try { made = AppFactory.activity(cls, intent); } catch (ReflectiveOperationException e) { throw new IllegalStateException(e); }
+        ActivityController<? extends Activity> built = made == null ? Robolectric.buildActivity(cls, intent) : ActivityController.of(made, intent);
         String caller = intent.getStringExtra(HubActivityClient.CALLER);  // the app that started it for a result (Activity.getCallingPackage)
         if (caller != null) ((ShadowActivity) Shadow.extract(built.get())).setCallingPackage(caller);
         // the manifest's screenOrientation is the activity's requested orientation from the start (Robolectric starts it at -1): AppHost.followOrientation

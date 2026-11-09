@@ -35,6 +35,14 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Test: binder (hello-binder-server/client) passes a SharedMemory written and sealed by the server; the client maps it read-only, checks the text,
   is refused a writable mapping, and checks two mappings of its own region share memory.
 
+## 2026-11-09: the manifest's android:appComponentFactory makes the Application, activities, services and providers
+- Robolectric patch 0025 and `AppFactory` (branch `appcomponentfactory`, written for SystemUI, merged for every app): as on Android, the factory
+  the APK names (AndroidX's CoreComponentFactory in most apps, Hilt's, SystemUI's) instantiates the components. No factory, or one whose class does
+  not load (ShadowLoadedApk falls back to the default one), keeps the plain constructors.
+- Needs the upstream `AndroidTestEnvironment.java` (external/robolectric at REVISION, unmodified) in the prebuilts' `common/robolectric-src`.
+- Parallels: activities, services, providers, startup, system-apps pass (DocumentsUI and MediaProvider have CoreComponentFactory); Fossify Gallery
+  and Amaze (CoreComponentFactory, seen in use by a probe) draw on both launches in the corpus runner.
+
 ## 2026-11-09: Sailfish OS (Volla Quintus): Lipstick's switcher, its close, media = device, the Back-only bar
 - Switcher: every apklayer window is the session shell's (one Wayland client, one pid), and Lipstick ties a window to its launcher entry by the
   client's pid and the entry's Exec (JollaSystemInfo.isWindowForLauncherItem, matchingPidForCommand), except for entries with
