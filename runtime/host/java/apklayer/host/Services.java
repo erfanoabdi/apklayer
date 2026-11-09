@@ -81,7 +81,9 @@ public final class Services {
             r = new Running();
             Class<? extends Service> cls = (Class<? extends Service>) Class.forName(key, true, Services.class.getClassLoader());
             if (Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] creating service " + cls.getName() + " on " + Thread.currentThread().getName());
-            r.controller = Robolectric.buildService(cls, intent);
+            Service made;
+            try { made = AppFactory.service(cls, intent); } catch (ReflectiveOperationException e) { throw new IllegalStateException(e); }
+            r.controller = made == null ? Robolectric.buildService(cls, intent) : ServiceController.of(made, intent);
             creating = true;
             try { r.controller.create(); } finally { creating = false; }
             r.service = r.controller.get();

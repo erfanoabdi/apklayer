@@ -287,7 +287,9 @@ final class AppEnvironment {
                 try {
                     // as ContentProviderController.create, but attached to the Application itself: ActivityThread.installProvider gives a provider of the
                     // app's own package mInitialApplication (apps cast getContext() to their Application class), Robolectric its base ContextImpl
-                    android.content.ContentProvider provider = Class.forName(info.name).asSubclass(android.content.ContentProvider.class).getDeclaredConstructor().newInstance();
+                    Class<? extends android.content.ContentProvider> cls = Class.forName(info.name).asSubclass(android.content.ContentProvider.class);
+                    android.content.ContentProvider provider = AppFactory.provider(cls);
+                    if (provider == null) provider = cls.getDeclaredConstructor().newInstance();
                     app.getPackageManager().setComponentEnabledSetting(new android.content.ComponentName(app, info.name),
                             PackageManager.COMPONENT_ENABLED_STATE_ENABLED, 0);
                     provider.attachInfo(app, info);

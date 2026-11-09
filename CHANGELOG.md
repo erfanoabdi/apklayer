@@ -3,6 +3,14 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: the manifest's android:appComponentFactory makes the Application, activities, services and providers
+- Robolectric patch 0025 and `AppFactory` (branch `appcomponentfactory`, written for SystemUI, merged for every app): as on Android, the factory
+  the APK names (AndroidX's CoreComponentFactory in most apps, Hilt's, SystemUI's) instantiates the components. No factory, or one whose class does
+  not load (ShadowLoadedApk falls back to the default one), keeps the plain constructors.
+- Needs the upstream `AndroidTestEnvironment.java` (external/robolectric at REVISION, unmodified) in the prebuilts' `common/robolectric-src`.
+- Parallels: activities, services, providers, startup, system-apps pass (DocumentsUI and MediaProvider have CoreComponentFactory); Fossify Gallery
+  and Amaze (CoreComponentFactory, seen in use by a probe) draw on both launches in the corpus runner.
+
 ## 2026-11-09: Sailfish OS (Volla Quintus): Lipstick's switcher, its close, media = device, the Back-only bar
 - Switcher: every apklayer window is the session shell's (one Wayland client, one pid), and Lipstick ties a window to its launcher entry by the
   client's pid and the entry's Exec (JollaSystemInfo.isWindowForLauncherItem, matchingPidForCommand), except for entries with

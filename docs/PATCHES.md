@@ -78,6 +78,7 @@ Build flags: upstream builds it with Meson's default buildtype (debug, -O0); mes
 | 0022-window-children-dim | ShadowWindowManagerGlobal removes a window's sub-windows with it and tells WindowSurface the window's visibility (FLAG_DIM_BEHIND dim layer); ShadowUiAutomation skips orphaned sub-windows |
 | 0023-direct-original-call-sites | InvokeDynamicSupport: a call site of a method without a shadow gets its original handle as target (no SwitchPoint guard, fallback or stack-trace catch: apklayer never replaces the shadow map); ~5600 fewer LambdaForm classes in a NewPipe start. Needs the upstream InvokeDynamicSupport.java in the prebuilts' robolectric-src |
 | 0024-display-event-receiver-own-vsync | ShadowDisplayEventReceiver: each receiver keeps its own due vsync (a Choreographer on another looper, Unity's UnityChoreographer, got none) |
+| 0025-application-from-app-component-factory | AndroidTestEnvironment: the Application comes from the manifest's AppComponentFactory (LoadedApk.getAppFactory) once the LoadedApk exists, for a factory of the app's own, as upstream and LoadedApk.makeApplication; the parsed APK's factory name stays in its ApplicationInfo (apklayer's AndroidManifest has no file, its null replaced it). With `AppFactory` the factory also makes activities, services and providers (the tree's SystemUI injects them through Dagger). Needs the upstream AndroidTestEnvironment.java in the prebuilts' robolectric-src |
 
 ## LineageOS tree (`patches/aosp/<project>/`)
 | Patch | Purpose |
