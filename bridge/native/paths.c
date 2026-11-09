@@ -117,21 +117,39 @@ static bool data_path(char **path)
 
 /* The app's own data directories under Android's spellings (/data/data/<pkg>, /data/user/0/<pkg>, /data/user_de/0/<pkg>): apps and their native code
  * hard-code them. Set once the process knows its package (apklayer_map_own_data: AppEnvironment through the shim; a spare learns it late), and
- * inherited by the programs it runs through APKLAYER_OWN_DATA=<pkg>:<root> (exec_preload.c adds it to every exec). <root> is the app's data tree
+ * inherited by the programs it runs through APKLAYER_OWN_DATA=<pkg>:<uid>:<root> (exec_preload.c adds it to every exec). <root> is the app's data tree
  * (cli/layout appData): app/ is its data dir, device/ its device-protected one. Other packages' stay in the instance's /data (data_path), where
- * they do not exist. */
-struct own_data { char *env, *pkg, *dir, *device; };
+ * they do not exist. <uid> is its Android uid: without the sandbox the process runs as the user, and Android code is told the app uid (its ids,
+ * the owner of the user's files: bionic_translation 0056); under the sandbox the real uid is the app's and nothing changes. */
+struct own_data { char *env, *pkg, *dir, *device; long uid; };
 static struct own_data *own_data;
 
-void apklayer_map_own_data(const char *pkg, const char *root)
+/* the app uid bionic code sees, or -1 (none known, or the real uid is the app's: the sandbox) */
+long apklayer_app_uid(void)
 {
-    struct own_data *o = calloc(1, sizeof *o);
-    if (!o || strchr(pkg, ':') || asprintf(&o->env, "APKLAYER_OWN_DATA=%s:%s", pkg, root) < 0 || !(o->pkg = strdup(pkg))
-        || asprintf(&o->dir, "%s/app", root) < 0 || asprintf(&o->device, "%s/device", root) < 0) return;
-    __atomic_store_n(&own_data, o, __ATOMIC_RELEASE);  /* every thread's file calls read it: published whole, an earlier one stays allocated (a reader may hold it) */
+    const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
+    return o && o->uid >= 0 && (uid_t)o->uid != getuid() ? o->uid : -1;
 }
 
-/* "APKLAYER_OWN_DATA=<pkg>:<root>" for a child's environment, or NULL */
+/* into bionic_translation's libc once it is loaded (also from apklayer_install_path_layer) */
+static void push_app_uid(void)
+{
+    void (*set)(long) = dlsym(RTLD_DEFAULT, "libc_bio_set_app_uid");
+    long uid = apklayer_app_uid();
+    if (set && uid >= 0) set(uid);
+}
+
+void apklayer_map_own_data(const char *pkg, long uid, const char *root)
+{
+    struct own_data *o = calloc(1, sizeof *o);
+    if (!o || strchr(pkg, ':') || asprintf(&o->env, "APKLAYER_OWN_DATA=%s:%ld:%s", pkg, uid, root) < 0 || !(o->pkg = strdup(pkg))
+        || asprintf(&o->dir, "%s/app", root) < 0 || asprintf(&o->device, "%s/device", root) < 0) return;
+    o->uid = uid;
+    __atomic_store_n(&own_data, o, __ATOMIC_RELEASE);  /* every thread's file calls read it: published whole, an earlier one stays allocated (a reader may hold it) */
+    push_app_uid();
+}
+
+/* "APKLAYER_OWN_DATA=<pkg>:<uid>:<root>" for a child's environment, or NULL */
 const char *apklayer_own_data_env(void)
 {
     const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
@@ -140,10 +158,12 @@ const char *apklayer_own_data_env(void)
 
 static void own_data_from_env(void)
 {
-    char *v = getenv("APKLAYER_OWN_DATA"), *colon = v ? strchr(v, ':') : NULL;
-    if (!colon || colon == v || !colon[1]) return;
+    char *v = getenv("APKLAYER_OWN_DATA"), *colon = v ? strchr(v, ':') : NULL, *end;
+    if (!colon || colon == v) return;
+    long uid = strtol(colon + 1, &end, 10);
+    if (end == colon + 1 || *end != ':' || !end[1]) return;
     char *pkg = strndup(v, (size_t)(colon - v));
-    if (pkg) apklayer_map_own_data(pkg, colon + 1);
+    if (pkg) apklayer_map_own_data(pkg, uid, end + 1);
     free(pkg);
 }
 
@@ -239,5 +259,6 @@ void apklayer_install_path_layer(void)
 {
     void (*set)(bool (*)(char **)) = dlsym(RTLD_DEFAULT, "libc_bio_set_apply_path_overrides_func");
     if (set) set(apklayer_apply_path_overrides);
+    push_app_uid();
     if (getenv("APKLAYER_PATHS_DEBUG")) fprintf(stderr, "[paths] path layer %s\n", set ? "installed" : "NOT installed (libc_bio not loaded)");
 }

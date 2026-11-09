@@ -60,12 +60,12 @@ int main(int argc, char **argv) {
     else
         assert(errno != ENOENT);
     /* the app's own /data/data/<pkg>, /data/user/0/<pkg> and /data/user_de/0/<pkg> (paths.c apklayer_map_own_data), not other packages' */
-    void (*map_own)(const char *, const char *) = (void (*)(const char *, const char *))dlsym(RTLD_DEFAULT, "apklayer_map_own_data");
+    void (*map_own)(const char *, long, const char *) = (void (*)(const char *, long, const char *))dlsym(RTLD_DEFAULT, "apklayer_map_own_data");
     assert(map_own);
     assert(mkdir(in("own"), 0700) == 0 && mkdir(in("own/app"), 0700) == 0 && mkdir(in("own/app/files"), 0700) == 0 && mkdir(in("own/device"), 0700) == 0);
     char own[512];
     snprintf(own, sizeof own, "%s/own", tmpl);
-    map_own("p.kg", own);
+    map_own("p.kg", 12345, own);
     fd = open("/data/data/p.kg/files/x", O_CREAT | O_WRONLY, 0600);
     assert(fd >= 0 && access(in("own/app/files/x"), F_OK) == 0);
     close(fd);
@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
     pid_t child = fork();
     if (child == 0) {
         unsetenv("APKLAYER_OWN_DATA");
-        execv("/data/data/p.kg/files/sh", (char *[]){"sh", "-c", "test -e /data/user/0/p.kg/files/x", NULL});
+        execv("/data/data/p.kg/files/sh", (char *[]){"sh", "-c", "case $APKLAYER_OWN_DATA in p.kg:12345:/*) test -e /data/user/0/p.kg/files/x;; *) exit 1;; esac", NULL});
         _exit(127);
     }
     int status;

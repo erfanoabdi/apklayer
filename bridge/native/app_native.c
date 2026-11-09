@@ -15,13 +15,14 @@ extern jint Java_apklayer_host_NativeLoader_registerNative(JNIEnv *, jclass, jcl
 extern void Java_apklayer_host_NativeLoader_skipNativeExitHandlers(JNIEnv *, jclass);
 extern void Java_apklayer_host_NativeLoader_setProcessName(JNIEnv *, jclass, jstring);
 extern jstring Java_apklayer_host_NativeLoader_receiveTarget(JNIEnv *, jclass, jint);
-extern void apklayer_map_own_data(const char *pkg, const char *root);  /* paths.c (the preload's copy comes first in lookup) */
+extern void apklayer_map_own_data(const char *pkg, long uid, const char *root);  /* paths.c (the preload's copy comes first in lookup) */
+extern long apklayer_app_uid(void);
 
-static void map_own_data(JNIEnv *env, jclass cls, jstring pkg, jstring root)
+static void map_own_data(JNIEnv *env, jclass cls, jstring pkg, jint uid, jstring root)
 {
     (void)cls;
     const char *p = (*env)->GetStringUTFChars(env, pkg, NULL), *r = (*env)->GetStringUTFChars(env, root, NULL);
-    if (p && r) apklayer_map_own_data(p, r);
+    if (p && r) apklayer_map_own_data(p, uid, r);
     if (p) (*env)->ReleaseStringUTFChars(env, pkg, p);
     if (r) (*env)->ReleaseStringUTFChars(env, root, r);
 }
@@ -38,7 +39,7 @@ int apklayer_register_nativeloader(JNIEnv *env, jclass loader)
         {"skipNativeExitHandlers", "()V", (void *)Java_apklayer_host_NativeLoader_skipNativeExitHandlers},
         {"setProcessName", "(Ljava/lang/String;)V", (void *)Java_apklayer_host_NativeLoader_setProcessName},
         {"receiveTarget", "(I)Ljava/lang/String;", (void *)Java_apklayer_host_NativeLoader_receiveTarget},
-        {"mapOwnData", "(Ljava/lang/String;Ljava/lang/String;)V", (void *)map_own_data},
+        {"mapOwnData", "(Ljava/lang/String;ILjava/lang/String;)V", (void *)map_own_data},
     };
     if ((*env)->RegisterNatives(env, loader, methods, sizeof methods / sizeof *methods) != 0) {
         fprintf(stderr, "[runtime] cannot register the NativeLoader natives\n");
@@ -290,8 +291,11 @@ static jint linux_write_bytes(JNIEnv *env, jobject self, jobject fd, jobject buf
 
 /* The file-system natives (Robolectric's stand-ins never fail: their stat calls a missing path whose canonical form differs a symlink, mkdir is mkdirs,
  * and symlink, rename, remove, chmod do nothing). Paths go through the path layer as every glibc call does. */
-static jobject stat_make(JNIEnv *env, const struct stat *s)
+static jobject stat_make(JNIEnv *env, struct stat *s)
 {
+    long app = apklayer_app_uid();  /* the user's files are the app uid's, as bionic code sees them (paths.c) */
+    if (app >= 0 && s->st_uid == getuid()) s->st_uid = (uid_t)app;
+    if (app >= 0 && s->st_gid == getgid()) s->st_gid = (gid_t)app;
     jclass cls = (*env)->FindClass(env, "android/system/StructStat");
     jmethodID init = cls ? (*env)->GetMethodID(env, cls, "<init>", "(JJIJIIJJJJJJJ)V") : NULL;
     return init ? (*env)->NewObject(env, cls, init, (jlong)s->st_dev, (jlong)s->st_ino, (jint)s->st_mode, (jlong)s->st_nlink, (jint)s->st_uid, (jint)s->st_gid,

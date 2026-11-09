@@ -20,6 +20,21 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Left: the composer loads libGLES_mali for its fences (~6 MB with its Mali context); SurfaceFlinger's 32 MB is ~18 MB heap, its own
   relocated text and the Mali driver's mappings.
 
+## 2026-11-09: Termux reaches its shell without the sandbox: the app's uid for Android code (bionic_translation 0056, 0057)
+- Without the sandbox every app process runs as the desktop user (uid 1000 on UTM: Android's system uid); Termux's bootstrap second
+  stage stops on `id -u` below 10000. 0056: `libc_bio_set_app_uid` makes bionic's getuid/geteuid/getgid/getegid/getresuid/getresgid
+  answer the app uid (gid = uid) and stat/lstat/fstat/fstatat/statx report the real uid's (gid's) files as the app uid's. The path
+  layer sets it with the own-data mapping (`APKLAYER_OWN_DATA=<pkg>:<uid>:<root>`, inherited by the app's programs), only when the
+  real uid is not the app's (the sandbox: nothing changes). Java agrees: libcore's stat maps the owner the same way, `Os.getuid` and
+  family return `Process.myUid()` (Robolectric left them 0).
+- Then `ln` crashed at exit (SIGSEGV, exit 139): gnulib's close_stdin reads bionic's FILE fields on `stdin`, which was glibc's FILE.
+  0057: bionic's stdin/stdout/stderr point at the `__sF` entries the stdio wrappers already map to glibc's streams, laid out as an idle
+  bionic FILE; fscanf/fwprintf/fwscanf wrappers added.
+- Termux 0.119.0-beta.3 (corpus APK) on UTM: bootstrap installed, the welcome text and a `~ $` prompt; `id` prints uid=10000
+  gid=10000, `ls -la ..` lists home and usr owned by 10000 (SurfaceFlinger screenshots). Leftovers in docs/PLAN.md "After the
+  releases" 1. Tests: tests/native/app-uid.c, std-streams.c, path-layer.c (uid in the child's environment); groups native,
+  native-bridge, startup, activities, files pass on UTM.
+
 ## 2026-11-09: bytehook works under bionic_translation; FCL's crash screen after a game crash (bionic_translation 0054)
 - bytehook (ByteDance's PLT hook library; FCL 1.3.4.5 ships 1.0.10) returned 3 (INITERR_SYM): it reads the linker's ELF at
   getauxval(AT_BASE) and its .symtab from /system/bin/linker64 (the host's ld.so: stripped, and not the linker of Android code).
