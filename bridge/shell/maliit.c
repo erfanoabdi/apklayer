@@ -6,6 +6,7 @@
  * GDBus dispatches into the shell's own loop through a GMainContext of its own (maliit_pollfds / maliit_dispatch). */
 #include "shell.h"
 #include <gio/gio.h>
+#include "text-input-v3-client-protocol.h"
 
 static GMainContext *ctx;
 static GDBusConnection *conn;
@@ -14,6 +15,8 @@ static struct window *mwin;  /* the window whose field has the keyboard */
 static GPollFD gfds[MALIIT_FDS];
 static int gn;
 static gint gprio;
+static char *surround;      /* the focused field's text around the cursor (NULL: none sent), its cursor and anchor in UTF-16 units */
+static int cursor, anchor;
 
 /* What the server calls (maliit-framework's minputcontext1interface.xml, the methods it calls with an answer and those we act on). */
 static const char introspection[] =
@@ -104,9 +107,11 @@ static void method_call(GDBusConnection *c, const gchar *sender, const gchar *pa
         g_variant_get(p, "(iii&sbiy)", &type, &key, &mods, &text, &rep, &count, &req);
         int32_t code = qt_to_android(key);
         /* Backspace and Delete go as IME deletions: in order with the preedit the keyboard sends next (Lomiri takes the word back into its
-         * preedit after a Backspace), which a key event, passed through the app's input pipeline later, is not.
-         * shortcut: a selection is not deleted by them (the keyboard knows no surrounding text); upgrade when the field's state is sent */
+         * preedit after a Backspace), which a key event, passed through the app's input pipeline later, is not. With text selected the app
+         * deletes the selection (HostTextBridge.ime). */
         if (code == 67 || code == 112) { if (type == 6) text_input_send(mwin, code == 67, code == 112, "", ""); }
+        /* Enter as an IME's: a newline, or the field's editor action (HostTextBridge.ime), in order with the keyboard's commits */
+        else if (code == 66) { if (type == 6) text_input_send(mwin, 0, 0, "\n", ""); }
         else if (code) send_msg(W_TARGET(mwin), MSG_KEY, (int32_t[]){ W_ID(mwin), type == 6 ? 0 : 1, code, 0, 0 }, 5);  /* QEvent::KeyPress */
         else if (type == 6 && *text) text_input_send(mwin, 0, 0, text, "");
     }
@@ -135,6 +140,7 @@ static int connect_server(void)
     GDBusNodeInfo *node = conn ? g_dbus_node_info_new_for_xml(introspection, NULL) : NULL;
     if (node) g_dbus_connection_register_object(conn, "/com/meego/inputmethod/inputcontext", node->interfaces[0], &vtable, NULL, NULL, &err);
     g_main_context_pop_thread_default(ctx);
+    if (conn) call("registerAttributeExtension", g_variant_new("(is)", 0, ""));  /* toolbar 0: the Enter key's label (as Qt's Maliit context) */
     fprintf(stderr, "[shell] Maliit server %s: %s\n", g_variant_get_string(v, NULL), conn ? "connected" : err ? err->message : "?");
     if (node) g_dbus_node_info_unref(node);
     g_variant_unref(v);
@@ -143,26 +149,72 @@ static int connect_server(void)
     return conn != NULL;
 }
 
+/* The focused field's state: the server keeps the last whole map (each update replaces it), as Qt's Maliit context sends it. */
+static void send_field_state(struct window *w, gboolean focus_changed)
+{
+    uint32_t hint, purpose;
+    text_input_kind(w, &hint, &purpose);
+    /* Maliit::TextContentType: free text 0, number 1, phone number 2, email 3, URL 4 */
+    int type = purpose == ZWP_TEXT_INPUT_V3_CONTENT_PURPOSE_PHONE ? 2 : purpose == ZWP_TEXT_INPUT_V3_CONTENT_PURPOSE_EMAIL ? 3
+             : purpose == ZWP_TEXT_INPUT_V3_CONTENT_PURPOSE_URL ? 4
+             : (purpose >= ZWP_TEXT_INPUT_V3_CONTENT_PURPOSE_DIGITS && purpose <= ZWP_TEXT_INPUT_V3_CONTENT_PURPOSE_NUMBER)
+               || (purpose >= ZWP_TEXT_INPUT_V3_CONTENT_PURPOSE_PIN && purpose <= ZWP_TEXT_INPUT_V3_CONTENT_PURPOSE_DATETIME) ? 1 : 0;
+    GVariantBuilder b;
+    g_variant_builder_init(&b, G_VARIANT_TYPE("a{sv}"));
+    g_variant_builder_add(&b, "{sv}", "focusState", g_variant_new_boolean(TRUE));
+    g_variant_builder_add(&b, "{sv}", "contentType", g_variant_new_int32(type));
+    g_variant_builder_add(&b, "{sv}", "predictionEnabled", g_variant_new_boolean(!!(hint & ZWP_TEXT_INPUT_V3_CONTENT_HINT_COMPLETION)));
+    g_variant_builder_add(&b, "{sv}", "correctionEnabled", g_variant_new_boolean(!!(hint & ZWP_TEXT_INPUT_V3_CONTENT_HINT_SPELLCHECK)));
+    g_variant_builder_add(&b, "{sv}", "autocapitalizationEnabled", g_variant_new_boolean(!!(hint & (ZWP_TEXT_INPUT_V3_CONTENT_HINT_AUTO_CAPITALIZATION
+        | ZWP_TEXT_INPUT_V3_CONTENT_HINT_TITLECASE | ZWP_TEXT_INPUT_V3_CONTENT_HINT_UPPERCASE))));
+    g_variant_builder_add(&b, "{sv}", "hiddenText", g_variant_new_boolean(!!(hint & ZWP_TEXT_INPUT_V3_CONTENT_HINT_HIDDEN_TEXT)));
+    g_variant_builder_add(&b, "{sv}", "toolbarId", g_variant_new_int32(0));
+    if (surround) {  /* HostTextBridge.followSurrounding: Backspace after a cursor move or with a selection, capitals by the context */
+        g_variant_builder_add(&b, "{sv}", "surroundingText", g_variant_new_string(surround));
+        g_variant_builder_add(&b, "{sv}", "cursorPosition", g_variant_new_int32(cursor));
+        g_variant_builder_add(&b, "{sv}", "anchorPosition", g_variant_new_int32(anchor));
+        g_variant_builder_add(&b, "{sv}", "hasSelection", g_variant_new_boolean(cursor != anchor));
+    }
+    call("updateWidgetInformation", g_variant_new("(a{sv}b)", &b, focus_changed));
+    if (debug_input) fprintf(stderr, "[shell] host keyboard content type %d, hints 0x%x, cursor %d anchor %d\n", type, hint, cursor, anchor);
+}
+
+/* enable 1: a field took focus, 2: show the keyboard again (a tap in the focused field), 0: no field has focus */
 void maliit_enable(struct window *w, int enable)
 {
     if (!enable && mwin != w) return;
     if (!conn && (tried++ || !connect_server())) return;
-    GVariantBuilder b;
-    g_variant_builder_init(&b, G_VARIANT_TYPE("a{sv}"));
-    g_variant_builder_add(&b, "{sv}", "focusState", g_variant_new_boolean(enable));
+    if (enable == 1 || mwin != w) { g_free(surround); surround = NULL; cursor = anchor = 0; }
     if (enable) {
         mwin = w;
-        g_variant_builder_add(&b, "{sv}", "contentType", g_variant_new_int32(0));  /* Maliit::FreeTextContentType */
-        g_variant_builder_add(&b, "{sv}", "predictionEnabled", g_variant_new_boolean(TRUE));
-        g_variant_builder_add(&b, "{sv}", "correctionEnabled", g_variant_new_boolean(TRUE));
-        g_variant_builder_add(&b, "{sv}", "autocapitalizationEnabled", g_variant_new_boolean(TRUE));
-        g_variant_builder_add(&b, "{sv}", "hiddenText", g_variant_new_boolean(FALSE));
+        /* the Enter key: the EditorInfo's action (IME_ACTION_GO .. PREVIOUS), the plain key for IME_FLAG_NO_ENTER_ACTION (multi-line)
+         * shortcut: English labels, no icons; upgrade with the keyboards' own icon names if wanted */
+        static const char *const labels[8] = { "", "", "Go", "Search", "Send", "Next", "Done", "Previous" };
+        int action = w->ime_options & 0xff;
+        const char *label = w->ime_options & 0x40000000 || action > 7 ? "" : labels[action];
+        call("setExtendedAttribute", g_variant_new("(isssv)", 0, "/keys", "actionKey", "label", g_variant_new_string(label)));
         call("activateContext", NULL);
+        send_field_state(w, TRUE);
+        if (debug_input) fprintf(stderr, "[shell] host keyboard Enter \"%s\"\n", label);
+    } else {
+        GVariantBuilder b;
+        g_variant_builder_init(&b, G_VARIANT_TYPE("a{sv}"));
+        g_variant_builder_add(&b, "{sv}", "focusState", g_variant_new_boolean(FALSE));
+        call("updateWidgetInformation", g_variant_new("(a{sv}b)", &b, TRUE));
     }
-    call("updateWidgetInformation", g_variant_new("(a{sv}b)", &b, TRUE));
     call(enable ? "showInputMethod" : "hideInputMethod", NULL);
     if (!enable) { set_area(w, 0); mwin = NULL; }
     if (debug_input) fprintf(stderr, "[shell] host keyboard %s\n", enable ? "shown" : "hidden");
+}
+
+void maliit_surrounding(struct window *w, int cur, int anc, const char *text, size_t len)
+{
+    if (w != mwin || !conn) return;
+    g_free(surround);
+    surround = g_utf8_make_valid(text, (gssize)len);
+    cursor = cur;
+    anchor = anc;
+    send_field_state(w, FALSE);
 }
 
 /* The main loop's poll takes the context's descriptors (unused slots: -1) and hands back what happened. Returns the context's timeout (ms,

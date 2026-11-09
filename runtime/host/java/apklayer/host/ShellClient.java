@@ -128,10 +128,20 @@ final class ShellClient {
         }
     }
 
-    /** A text field gained or lost focus: enable or disable the compositor's input method. */
-    void sendTextInput(boolean enabled) {
+    /** The focused field's text around the cursor (UTF-16 cursor and anchor in it, as Qt's): state 3 of TEXT_INPUT, then the UTF-8 text. */
+    void sendSurrounding(int cursor, int anchor, String text) {
         try {
-            send(TEXT_INPUT, buf(8).putInt(WINDOW_ID).putInt(enabled ? 1 : 0));
+            byte[] utf8 = text.getBytes(StandardCharsets.UTF_8);
+            send(TEXT_INPUT, buf(16 + utf8.length).putInt(WINDOW_ID).putInt(3).putInt(cursor).putInt(anchor).put(utf8));
+        } catch (IOException e) {
+            System.out.println("[apklayer] text input send failed: " + e);
+        }
+    }
+
+    /** state 1: a text field took focus (its EditorInfo's inputType, imeOptions), 0: none has it, 2: show the keyboard again (showSoftInput). */
+    void sendTextInput(int state, int inputType, int imeOptions) {
+        try {
+            send(TEXT_INPUT, buf(16).putInt(WINDOW_ID).putInt(state).putInt(inputType).putInt(imeOptions));
         } catch (IOException e) {
             System.out.println("[apklayer] text input send failed: " + e);
         }
