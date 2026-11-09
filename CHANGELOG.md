@@ -18,6 +18,44 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
   graphics/camera/media = device (Open Camera both cameras, a NewPipe video through c2.mtk.avc.decoder). Apps and data unchanged; the
   `APKLAYER_NATIVE_JAVA` line of `~/.config/apklayer/env` (the dev JDK the deb used) is commented out so the click's JDK runs.
 
+## 2026-11-09: Minecraft 26.3 in FCL plays on the x86 PC (Vulkan on Intel, input, sound)
+- x86 PC (Intel N100, ANV), FCL 1.3.4.5 x86_64 (its GitHub release APK, native, no bridge) in an own tree (~/apklayer-x86/fcl, instance xf1),
+  the game data (.minecraft with 26.3, assets, libraries, account) copied from Parallels (untouched there), FCL's x86_64 JREs from its assets.
+  Scripted taps: Launch, FCL's Vulkan check, "Krypton Wrapper does not support this version" -> Continue; Minecraft picks its Vulkan backend
+  on "Intel(R) Graphics (ADL-N)" with VK_KHR_android_surface and VK_KHR_swapchain through our loader; title screen, Singleplayer, a new world
+  ("steve joined the game"), the touch D-pad moves the player (the tutorial advances), sound streams reach PipeWire ("apklayer playback").
+- bionic_translation 0053: OpenAL Soft aborted the game right after its context ("OpenJDK exited with code : 6"): Android code calling
+  strerror_r got glibc's GNU variant (char *) and read the pointer as an error number; `bionic_strerror_r` is POSIX's now.
+- Debug aid: APKLAYER_PTRACER=1 lets an unprivileged gdb attach to app JVMs (Yama ptrace_scope 1; the hub starts them). Found the abort.
+- Not a bug of ours: Krypton (FCL's GL renderer) fails Minecraft 26.x's "glGetError mismatch" check (SDL's eglGetProcAddress against
+  LWJGL's glXGetProcAddress of gl4es); FCL itself warns that Krypton does not support this version; Vulkan is the backend. Parallels has no
+  GPU Vulkan (its host's only device is llvmpipe, `vulkaninfo`), and llvmpipe gets no swapchain (present is opt-in there), so the game has no
+  backend on Parallels.
+- Open: quitting the game (or its crash) leaves the last frame: FCL runs JVMActivity in `:jvm` and JVMCrashActivity in `:crash` and ends the
+  game with Process.killProcess(myPid); apklayer runs a package's activities in one process and killProcess is Robolectric's no-op, so the
+  crash screen never starts and a second game launch would need a second JVM in the same process. Needs activities of another android:process
+  in their own app process (docs/PLAN.md). OSHI's JNA probe fails (libGLESv3_CM.dll, only SystemReport's info). Groups gpu, gpu-window,
+  native-surface, native, native-bridge, vulkan pass on the PC (own slots xf3/xf4).
+
+## 2026-11-09: FCL's game aborted on a second copy of a system library (bionic_translation 0052)
+- Owner's run with the EGL fix: past JLI_Launch, MioLibPatcher and the Vulkan load, then `descriptor_database.cc:678] File already exists
+  in database: frameworks/av/drm/libmediadrm/protos/metrics.proto` and an abort: libmediadrmmetrics_full's constructor ran a second time.
+- The shim linker matched loaded libraries by base name and namespace only; the same file opened by another path or from another namespace
+  (0051 opens absolute paths from the app namespace) became a second copy. 0052 reuses a loaded file found by st_dev/st_ino, across
+  namespaces, as Android's linker does, and prints `[bionic_linker] <path>: already loaded as <path> (app N vendor N)` on stderr when it does:
+  the next run shows which load it was. Not reproduced outside FCL; bionic suite (10) passes, the JRE under btload and in-process runs.
+- Installed into ~/apklayer-fc on Parallels; test groups not run yet (the owner checks FCL first).
+
+## 2026-11-09: FCL's game hung at its first GL frame: lock order in apklayer's EGL fixed
+- Seen by the lead (owner's run, gdb attach read-only): RenderThread held EglWindow.cpp's windowsLock in swapWindow and called
+  `host<>("eglSwapBuffers")`, a bionic dlsym that waits for the shim linker's lock; the game thread held that lock (inside a dlopen, a
+  library constructor) and waited for an EGL lock. Every `host<>`/`gl<>`/`gbmFn<>` call did a dlsym, many under windowsLock.
+- libapklayer_egl: the host's EGL, GL and GBM entry points are resolved once in the library's constructor (Egl.cpp kHostNames, a name
+  missing from the list is logged and looked up per call); Gles1.cpp fills its hook tables outside its lock (published atomically). A static
+  local's first initialisation (hostGles1/2, translator) still loads a library under its guard: only on a thread's first ES table fill.
+- bionic_translation keeps apkenv_dl_lock across constructors, as Android's linker keeps its own: not changed.
+- Built for arm64 only (Build log); installed into ~/apklayer-fc on Parallels. Test groups not run yet (the owner checks FCL first).
+
 ## 2026-11-09: FCL's game JVM gets past VM init (bionic_translation 0050, 0051)
 - Cause of "Error occurred during initialization of VM: java.lang.StackOverflowError at java.lang.String.<clinit>" (and of a SIGBUS at a
   garbage pc in a later try): `pthread_attr_getguardsize` had no bionic_ wrapper, so FCL's JRE 25 (bionic HotSpot) ran glibc's on the
@@ -793,6 +831,24 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-09 - gsi_x86_64 libapklayer_egl: the same lock-order fix (FCL agent, for the x86 PC)
+- Why: the x86 PC runs FCL with it. Sources as the arm64 entry below (already synced).
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `APKLAYER_PRODUCT=lineage_gsi_x86_64 APKLAYER_VARIANT=android_x86_64_shared python3
+  tools/lib/orb-build-module.py libapklayer_egl hals/graphics/egl Egl.cpp EglWindow.cpp EglAttach.cpp Gles1.cpp` (the script takes the product
+  from APKLAYER_PRODUCT now; replays the x86_64 graph's commands, no Soong run).
+- Result: built. libapklayer_egl.so sha256 x86_64 5fb88c8a1f8a474640cb823011e1e1b4c07d32b898e42a0bbc005f11131eafb3 (118200 bytes); x86_64 lock set
+  by hand. Copy for the lead: /tmp/apkl-egl-deadlock/x86_64 on the Mac.
+### 2026-11-09 - gsi_arm64 libapklayer_egl: no linker lookups under the EGL's own locks (FCL deadlock agent)
+- Why: FCL's game hung: RenderThread held windowsLock in swapWindow and looked up eglSwapBuffers (bionic dlsym: the shim linker's lock)
+  while the game thread, inside a dlopen (holding that lock), waited for an EGL lock. Host entry points are now resolved once in the
+  library's constructor (Egl.cpp kHostNames), Gles1's hook tables are filled outside its lock. Sources only (Egl.cpp, EglHost.h, Gles1.cpp).
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "egl: no linker lookups under its own locks" hals/graphics/egl`, then
+  `python3 tools/lib/orb-build-module.py libapklayer_egl hals/graphics/egl Egl.cpp EglWindow.cpp EglAttach.cpp Gles1.cpp` (replays the
+  module's compile and link commands; arm64 only).
+- Result: built (the cached compile commands in /tmp were stale, from before EglAttach; regenerated from the graph). libapklayer_egl.so
+  sha256 arm64 b170cadf530b38742850521e540760bb5025f81a61914e0bdb3cf215efa1a749 (118288 bytes); arm64 lock set by hand; x86_64 not rebuilt
+  (its lock unchanged). Not in the prebuilts yet: copy for the lead at /tmp/apkl-egl-deadlock/arm64 on the Mac; installed into
+  ~/apklayer-fc's prebuilts on Parallels (hard link broken).
 ### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_mediaserver: the lazy extractor stays while its handed-out objects are held (lazy extractor agent)
 - Why: native-media failed about one run in two on Parallels with lazy services: the extractor ended while clients used its IMediaExtractor and
   IMediaSources (it counted media.extractor's clients only). MediaServices.cpp now also checks the process's binder nodes before it exits. Sources only.

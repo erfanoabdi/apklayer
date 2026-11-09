@@ -4,7 +4,7 @@ if is_variable('c_bio')
   bt_dir = fs.parent(c_bio.full_path())
   native_dl = dependency('dl')
   native_threads = dependency('threads')
-  foreach name : ['mutex-timedlock', 'cond-destroy', 'cond-clock', 'fortify-read', 'attr-copy', 'attr-stack']
+  foreach name : ['mutex-timedlock', 'cond-destroy', 'cond-clock', 'fortify-read', 'attr-copy', 'attr-stack', 'strerror-r']
     test(name, executable(name + '-test', name + '.c', dependencies: [native_dl, native_threads], c_args: ['-Wno-unused-parameter']),
       args: [c_bio], env: ['LD_LIBRARY_PATH=' + bt_dir], suite: 'bionic', timeout: 30)
   endforeach

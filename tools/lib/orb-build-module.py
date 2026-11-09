@@ -17,11 +17,12 @@ os.chdir(Path.home() / 'los24')
 module, mdir, sources = (sys.argv[1], sys.argv[2], sys.argv[3:]) if len(sys.argv) > 3 else (
     'libapklayer_codec2', 'hals/media/codec2', ['AudioDecoder.cpp', 'ComponentStore.cpp', 'Service.cpp'])
 variant = os.environ.get('APKLAYER_VARIANT', 'android_arm64_armv8-a_shared')  # vendor modules: android_vendor_arm64_armv8-a_shared
+product = os.environ.get('APKLAYER_PRODUCT', 'lineage_gsi_arm64')  # lineage_gsi_x86_64 with APKLAYER_VARIANT=android_x86_64_shared
 root = f'out/soong/.intermediates/vendor/apklayer/{mdir}/{module}/{variant}/'
 final, target = root + module + '.so', root + 'unstripped/' + module + '.so'
-cmds_file = Path(f'/tmp/apklayer-{module}-commands')
+cmds_file = Path(f'/tmp/apklayer-{module}-{product}-commands')
 if not cmds_file.exists():  # the module's commands from the regenerated graph (a query, nothing is built)
-    out = subprocess.check_output(['prebuilts/build-tools/linux-x86/bin/ninja', '-f', 'out/combined-lineage_gsi_arm64.ninja', '-t', 'commands', final], text=True)
+    out = subprocess.check_output(['prebuilts/build-tools/linux-x86/bin/ninja', '-f', f'out/combined-{product}.ninja', '-t', 'commands', final], text=True)
     cmds_file.write_text(out)
 commands = cmds_file.read_text().splitlines()
 for src in sources:
@@ -29,7 +30,7 @@ for src in sources:
     Path(c.split(' -o ')[-1].split()[0]).parent.mkdir(parents=True, exist_ok=True)
     print('compile', src, flush=True)
     subprocess.run(c, shell=True, check=True)
-ninja_files = subprocess.check_output(['grep', '-l', target + ':', *[str(p) for p in Path('out/soong').glob('build.lineage_gsi_arm64.*.ninja')]], text=True).splitlines()
+ninja_files = subprocess.check_output(['grep', '-l', target + ':', *[str(p) for p in Path('out/soong').glob(f'build.{product}.*.ninja')]], text=True).splitlines()
 assert len(ninja_files) == 1
 text = re.sub(r'\$\n[ \t]*', '', Path(ninja_files[0]).read_text())
 block = text[text.index('build ' + target + ':'):].split('\n\n')[0]
@@ -46,5 +47,6 @@ for c in commands:
         subprocess.run(c, shell=True, check=True)
 stage = Path.home() / 'apklayer-stage'
 stage.mkdir(exist_ok=True)
-shutil.copy2(final, stage / (module + '.so'))
-print('staged', stage / (module + '.so'), flush=True)
+staged = stage / (module + ('' if product == 'lineage_gsi_arm64' else '-' + product.split('gsi_')[-1]) + '.so')
+shutil.copy2(final, staged)
+print('staged', staged, flush=True)

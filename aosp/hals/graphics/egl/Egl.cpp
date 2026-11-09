@@ -148,6 +148,43 @@ EGLImage apklayer::egl::imageFromNativeBuffer(EGLDisplay dpy, ANativeWindowBuffe
     return image;
 }
 
+// Every name host<>, gl<> and gbmFn<> use (EglHost.h), resolved in resolveForwarded below; a name missing here is looked up on each call.
+static const char* const kHostNames[] = {
+    "eglChooseConfig", "eglCreateContext", "eglCreateImage", "eglCreateImageKHR", "eglCreatePlatformWindowSurface", "eglCreateSyncKHR",
+    "eglDestroyContext", "eglDestroyImageKHR", "eglDestroySurface", "eglDestroySyncKHR", "eglDupNativeFenceFDANDROID", "eglGetConfigAttrib",
+    "eglGetCurrentContext", "eglGetCurrentDisplay", "eglGetCurrentSurface", "eglGetError", "eglGetPlatformDisplay", "eglGetProcAddress",
+    "eglInitialize", "eglMakeCurrent", "eglQueryContext", "eglQueryString", "eglQuerySurface", "eglReleaseThread", "eglSurfaceAttrib",
+    "eglSwapBuffers", "eglSwapInterval",
+    "glBindFramebuffer", "glBindTexture", "glBlitFramebuffer", "glCheckFramebufferStatus", "glDeleteFramebuffers", "glDeleteTextures",
+    "glDisable", "glEGLImageTargetTexture2DOES", "glEnable", "glFinish", "glFlush", "glFramebufferTexture2D", "glGenFramebuffers",
+    "glGenTextures", "glGetIntegerv", "glGetString", "glIsEnabled",
+    "gbm_bo_get_fd", "gbm_bo_get_format", "gbm_bo_get_modifier", "gbm_bo_get_offset", "gbm_bo_get_stride", "gbm_surface_create",
+    "gbm_surface_destroy", "gbm_surface_has_free_buffers", "gbm_surface_lock_front_buffer", "gbm_surface_release_buffer",
+};
+static constexpr size_t kHostCount = sizeof(kHostNames) / sizeof(kHostNames[0]);
+static void* hostSyms[kHostCount];
+static bool hostResolved[kHostCount];  // written by the constructor only, before any other thread can call in
+
+static void* lookupHost(const char* name) {
+    if (!strncmp(name, "gbm_", 4)) {
+        static void* gbm = dlopen("libgbm.so.1", RTLD_NOW | RTLD_GLOBAL);
+        return gbm ? dlsym(gbm, name) : nullptr;
+    }
+    void* p = dlsym(hostLib(), name);
+    if (!p && strcmp(name, "eglGetProcAddress") != 0) {
+        auto proc = reinterpret_cast<void* (*)(const char*)>(dlsym(hostLib(), "eglGetProcAddress"));
+        if (proc) p = proc(name);
+    }
+    return p;
+}
+
+void* apklayer::egl::hostSym(const char* name) {
+    for (size_t i = 0; i < kHostCount; i++)
+        if (!strcmp(kHostNames[i], name)) return hostResolved[i] ? hostSyms[i] : lookupHost(name);
+    ALOGW("host symbol %s is not in kHostNames: looked up on every call", name);
+    return lookupHost(name);
+}
+
 extern "C" {
 
 // ---- implemented here ----
@@ -381,6 +418,10 @@ static long unsupportedForwarded() {
 }
 
 __attribute__((constructor)) static void resolveForwarded() {
+    for (size_t i = 0; i < kHostCount; i++) {
+        hostSyms[i] = lookupHost(kHostNames[i]);
+        hostResolved[i] = true;
+    }
     // glvnd's libEGL exports only the core entry points by name; extension functions (eglDestroyImageKHR, the *SyncKHR and
     // *ANDROID ones...) come from its eglGetProcAddress
     auto proc = host<__eglMustCastToProperFunctionPointerType (*)(const char*)>("eglGetProcAddress");
