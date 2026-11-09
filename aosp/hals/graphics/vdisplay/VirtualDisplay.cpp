@@ -3,6 +3,8 @@
 // gralloc buffers; each finished buffer goes to apklayer-shell as a dmabuf through the host display HAL, zero copy, as the
 // composer does for the primary display. Resizing the window resizes the virtual display (new default buffer size, new display
 // size and projection); SurfaceFlinger and the app follow.
+// Where the compositor has no subsurfaces (Lipstick) the shell's navigation bar is a layer of this display: the shell sends its pixels
+// (apklayer_display_set_navbar_callback) and they go on top of the app's layer stack at the bottom edge, as SystemUI's bar window does.
 // btload --main libapklayer_vdisplay.so <window title> <layer stack> <width> <height>
 #define LOG_TAG "apklayer.vdisplay"
 
@@ -19,6 +21,10 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <climits>
+#include <cstring>
+#include <sys/mman.h>
+#include <unistd.h>
 #include <map>
 #include <string>
 #include <condition_variable>
@@ -66,6 +72,7 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         // apklayer patch: only now, with the display existing; the shell's first (fitted) configure, if it came
         // meanwhile, is replayed here instead of being dropped (the display then kept the 720x1280 it opened at)
         apklayer_display_set_configure_callback(mDisplay, &Sink::onConfigure, this);
+        apklayer_display_set_navbar_callback(mDisplay, &Sink::onNavbar, this);
         std::thread([this] { presentLoop(); }).detach();  // lives as long as the process (main joins the binder pool)
         return true;
     }
@@ -77,7 +84,54 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         t.setDisplayLayerStack(mToken, ui::LayerStack::fromValue(mStack));
         t.setDisplaySize(mToken, mWidth, mHeight);
         t.setDisplayProjection(mToken, ui::ROTATION_0, Rect(mWidth, mHeight), Rect(mWidth, mHeight));
+        if (mBar != nullptr) t.setPosition(mBar, 0, static_cast<float>(mHeight) - mBarH);  // the bar stays at the bottom edge
         t.apply(/*synchronous=*/true);
+    }
+
+    // The shell's navigation bar (fd: w x h XRGB8888, -1: hidden): copied into a buffer of a layer over the app's, at the bottom edge.
+    static void onNavbar(void* user, int fd, int32_t w, int32_t h) {
+        auto* self = static_cast<Sink*>(user);
+        std::lock_guard<std::mutex> lock(self->mLock);
+        SurfaceComposerClient::Transaction t;
+        if (fd < 0 || w <= 0 || h <= 0) {
+            if (fd >= 0) close(fd);
+            if (self->mBar != nullptr) t.hide(self->mBar).apply();
+            return;
+        }
+        size_t len = static_cast<size_t>(w) * h * 4;
+        void* px = mmap(nullptr, len, PROT_READ, MAP_SHARED, fd, 0);
+        close(fd);
+        if (px == MAP_FAILED) return;
+        auto gb = sp<GraphicBuffer>::make(w, h, PIXEL_FORMAT_RGBA_8888, 1,
+                                          GraphicBuffer::USAGE_SW_WRITE_OFTEN | GraphicBuffer::USAGE_HW_TEXTURE | GraphicBuffer::USAGE_HW_COMPOSER,
+                                          "apklayer-navbar");
+        void* dst = nullptr;
+        if (gb->initCheck() != OK || gb->lock(GraphicBuffer::USAGE_SW_WRITE_OFTEN, &dst) != OK) {
+            ALOGE("navigation bar: no %dx%d buffer", w, h);
+            munmap(px, len);
+            return;
+        }
+        for (int32_t y = 0; y < h; y++) {  // XRGB8888 (bytes B G R X) -> RGBA_8888 (R G B A), opaque
+            const uint8_t* s = static_cast<const uint8_t*>(px) + static_cast<size_t>(y) * w * 4;
+            uint8_t* d = static_cast<uint8_t*>(dst) + static_cast<size_t>(y) * gb->getStride() * 4;
+            for (int32_t x = 0; x < w; x++, s += 4, d += 4) { d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = 0xff; }
+        }
+        gb->unlock();
+        munmap(px, len);
+        if (self->mBar == nullptr) {
+            self->mBar = SurfaceComposerClient::getDefault()->createSurface(String8("apklayer-navbar"), w, h, PIXEL_FORMAT_RGBA_8888,
+                                                                            ISurfaceComposerClient::eFXSurfaceBufferState);
+            if (self->mBar == nullptr) { ALOGE("navigation bar: createSurface failed"); return; }
+            t.setLayerStack(self->mBar, ui::LayerStack::fromValue(self->mStack));
+            t.setLayer(self->mBar, INT_MAX);  // over every window of the app
+            t.setFlags(self->mBar, layer_state_t::eLayerOpaque, layer_state_t::eLayerOpaque);
+            ALOGI("navigation bar layer %dx%d", w, h);
+        }
+        self->mBarH = h;
+        t.setPosition(self->mBar, 0, static_cast<float>(self->mHeight) - h);
+        t.setBuffer(self->mBar, gb);
+        t.show(self->mBar);
+        t.apply();
     }
 
     // a finished frame of the virtual display: SurfaceFlinger's queueBuffer (a binder call into this process) only wakes the present thread,
@@ -203,6 +257,8 @@ class Sink : public ConsumerBase::FrameAvailableListener {
     sp<BufferItemConsumer> mConsumer;
     sp<Surface> mSurface;
     sp<IBinder> mToken;
+    sp<SurfaceControl> mBar;  // the navigation bar's layer, once the shell sent one
+    int32_t mBarH = 0;
     apklayer_display* mDisplay = nullptr;
     std::mutex mLock;
     std::mutex mQueueLock;  // frames SurfaceFlinger queued that the present thread has not acquired yet

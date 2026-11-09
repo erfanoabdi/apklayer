@@ -14,6 +14,24 @@ void send_msg(struct client *c, uint32_t type, const int32_t *v, int n)
     }
 }
 
+void send_msg_fd(struct client *c, uint32_t type, const int32_t *v, int n, int fd)
+{
+    if (fd < 0) { send_msg(c, type, v, n); return; }
+    if (!c || c->fd < 0) return;
+    uint32_t buf[2 + 8] = { type, (uint32_t)(n * 4) };
+    memcpy(buf + 2, v, (size_t)n * 4);
+    struct iovec iov = { buf, 8 + (size_t)n * 4 };
+    char control[CMSG_SPACE(sizeof(int))] = { 0 };
+    struct msghdr mh = { .msg_iov = &iov, .msg_iovlen = 1, .msg_control = control, .msg_controllen = sizeof control };
+    struct cmsghdr *cm = CMSG_FIRSTHDR(&mh);
+    cm->cmsg_level = SOL_SOCKET;
+    cm->cmsg_type = SCM_RIGHTS;
+    cm->cmsg_len = CMSG_LEN(sizeof(int));
+    memcpy(CMSG_DATA(cm), &fd, sizeof fd);
+    if (sendmsg(c->fd, &mh, MSG_NOSIGNAL) < 0 && errno != EAGAIN)
+        fprintf(stderr, "[shell] write to %s failed: %s\n", c->pkg, strerror(errno));
+}
+
 /* Variable-length message (text payloads): header and data in one write. */
 void send_bytes(struct client *c, uint32_t type, const char *data, size_t len)
 {
@@ -132,6 +150,11 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
     case MSG_NAVBAR: {
         struct window *w = len >= 8 ? window_find_input(c, v[0]) : NULL;
         if (w) window_nav_visible(w, v[1]);
+        break;
+    }
+    case MSG_NAVBAR_LAYER: {
+        struct window *w = len >= 4 ? window_find(c, v[0]) : NULL;
+        if (w) window_nav_layer(w);
         break;
     }
     case MSG_ACTIVATE:

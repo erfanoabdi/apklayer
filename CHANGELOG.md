@@ -28,10 +28,17 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - tools/check-prebuilts.sh <dir>: the prebuilts' android-libs against deps/android-tree-files*.lock by the host's architecture; tests/run's build step runs it on $APKLAYER_PREBUILTS and stops with the stale files listed. Checked: passes on the PC and both Parallels sets, lists Parallels' untouched ~/apklayer-build.
 - A test tree's prebuilts must be real files (`cp -al`, hard links: no disk), not a `cp -as` symlink farm: meson install copies android-root as cp -a does (the tree's own links stay links), so farm links point outside the guest linker's root (native-bridge: `library "libc++.so" not found` for app_process64).
 
+## 2026-11-09: Sailfish OS, Back and Home: the navigation bar without subsurfaces
+- Cause: Lipstick (QtWayland 5.6) offers no wl_subcompositor, so the shell's navigation bar (a subsurface, navbar.c) was never created; apps got a 0 px bar and had no Back or Home.
+- Fix: without subsurfaces the bar is a layer of the app's virtual display, as SystemUI's bar window is on a device. The display's owner offers it (`apklayer_display_set_navbar_callback`, shell message 17 NAVBAR_LAYER); the shell then reserves the bar's inset as before and sends the bar it draws (same cairo drawing, ripple included) as a memfd on every change (116 NAVBAR_PIXELS, 0 x 0 when hidden or immersive); libapklayer_vdisplay copies it into a buffer of an opaque layer on top of the app's layer stack at the bottom edge, which SurfaceFlinger composes into each frame. Touches on the window's bottom `nav_h` pixels are the bar's (touch.c). Home lowers the window through Lipstick's qt_surface_extension (`lower`: jolla-home hides an application window to the home screen; protocol XML added), and `raise`/`onscreen_visibility` resume the app. Compositors with subsurfaces keep the subsurface bar unchanged. `APKLAYER_SUBSURFACES=0` simulates a compositor without them (test: `mobile.py --no-subsurfaces` in group mobile).
+- Sailfish phone (instance ut, Files, through a second shell of this build on its own socket so the owner's running UiBench kept the session's shell): the shell logs `navigation bar composed by the display`, the app is told a 135 px bar at 450 dpi, SurfaceFlinger's screenshot shows the bar under Files' content; a tap on Back closed Files' open drawer, a tap on Home sent the app to stopped (minimized) and a raise resumed it. Whether Lipstick visibly lowers the window to the home screen needs a human check (the phone is locked; Lipstick's screenshot needs the privileged group).
+- Parallels: mobile (both variants: the bar in the virtual display's picture, Back ends UiBench), gpu-window, input pass (input once failed `input test stalled` / IME timing when run beside other groups on a fresh stack, passes alone).
+- libapklayer_vdisplay rebuilt (Build log); both locks updated, not yet in the prebuilts.
+
 ## 2026-11-09: Sailfish OS, a second app opened only the first (desktop entries)
 - Cause: Lipstick launches an entry through libcontentaction as `invoker --type=generic --id=<entry> --single-instance <Exec>`, and invoker's single-instance lock is keyed by the Exec binary (`/run/user/<uid>/single-instance-locks/usr/lib/apklayer/cli/apklayer/instance.lock`): every app is the same CLI, so with one apklayer app open any other one only raised it.
 - Fix: app entries carry `X-Nemo-Single-Instance=no` (libcontentaction then leaves out --single-instance); `apklayer list`'s refresh writes an entry without the key again on Sailfish OS (cli/desktop.cpp). Checked on the Sailfish phone: with the key, `lca-tool --triggerdesktop apklayer-com.android.documentsui.desktop` started Files (FilesActivity) beside a running UiBench; without it nothing started.
-- Seen there, open: Lipstick offers no wl_subcompositor (globals: wl_compositor 3, wl_shell, android_wlegl, qt_* extensions, alien_manager), so the shell's navigation bar (a subsurface) is never created: no Back/Home in mobile style on Sailfish OS.
+- Seen there (fixed above, same day): Lipstick offers no wl_subcompositor (globals: wl_compositor 3, wl_shell, android_wlegl, qt_* extensions, alien_manager), so the shell's navigation bar (a subsurface) was never created.
 
 ## 2026-11-09: native-media's AVC round trip flake (encoder fed black frames) and audio-silent on the x86 PC
 - native-media, about one run in two on Parallels: `AVC round trip luma 47` (and passing runs averaged ~60, not 81). Per picture, a quarter of
@@ -517,6 +524,15 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
   860377629a3e52380266f4f17bd097f3015871763c925f8313a0103747122fbb (52384 bytes, android_arm64_armv8-a_shared), x86_64
   e62ecffc6ded33f5aad7e90f01bcf420ccef416bacecf15875cec73d3351b989 (52296 bytes, android_x86_64_shared); both locks set by hand. Not in the
   prebuilts yet (copies for the lead: the agent's Mac scratchpad `stage/{arm64,x86_64}/libapklayer_allocator.so`).
+### 2026-11-09 - gsi_arm64 libapklayer_vdisplay: the navigation bar as a layer (Sailfish navbar agent)
+- Why: Lipstick has no wl_subcompositor, so the shell's navigation bar cannot be a subsurface; the virtual display now composes the shell's
+  bar pixels as a layer over the app's (VirtualDisplay.cpp onNavbar, apklayer_display_set_navbar_callback). Sources only, no graph change.
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "vdisplay: navigation bar layer" hals/graphics/vdisplay`, then
+  `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_vdisplay`.; then the same for gsi_x86_64 (`breakfast gsi_x86_64 userdebug && m libapklayer_vdisplay`).
+- Result: both built (x86_64 on the second try: a concurrent sync-aosp.sh from another worktree had put back the host headers without
+  `apklayer_display_set_navbar_callback`; re-synced hals/graphics/vdisplay). sha256 arm64 b8c930e7 (52200 bytes), x86_64 98bf507b (37152 bytes); both locks
+  set by hand; not in the prebuilts yet (copies for the lead: /tmp/apkl-navbar/{arm64,x86_64} on the Mac). The change must reach main before the next
+  whole-tree sync-aosp.sh, or that sync reverts it in the tree.
 ### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_camera: rotate-and-crop (camera rotate-and-crop agent)
 - Why: docs/PLAN.md item 6, rotate-and-crop for portrait-locked apps: the provider lists ANDROID_SCALER_AVAILABLE_ROTATE_AND_CROP_MODES and
   turns and crops each output (BackendCamera.cpp, two lines in the vendored goldfish/CameraDevice.cpp). Sources only, no graph change.

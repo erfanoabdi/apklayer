@@ -80,13 +80,20 @@ int display_mobile(void)
     return mw <= 0 && shortest > 0 && shortest < 600;  /* no physical size: a logical width below Android's sw600dp (a tablet's) */
 }
 
+/* The bar's pixels to the window's owner, which composes them (navbar.h, MSG_NAVBAR_PIXELS). */
+static void nav_send(void *ctx, int fd, int pw, int ph)
+{
+    struct window *w = ctx;
+    send_msg_fd(w->client, MSG_NAVBAR_PIXELS, (int32_t[]){ w->id, pw, ph }, 3, fd);
+}
+
 /* The density and the navigation bar height (Android's 48 dp at that density) of w at its scale. */
 static void metrics(struct window *w)
 {
     int s = window_scale(w);
     w->dpi = display_density(s);
     int px = (48 * w->dpi + 80) / 160;
-    w->nav_h = w->mobile && w->nav.surface ? (px * 100 + s / 2) / s : 0;
+    w->nav_h = w->mobile && (w->nav.surface || w->nav.remote) ? (px * 100 + s / 2) / s : 0;
 }
 
 void window_set_mode(struct window *w, int mode)
@@ -100,6 +107,7 @@ void window_set_mode(struct window *w, int mode)
     if (mobile) {
         decor_destroy(&w->decor);
         navbar_create(&w->nav, w->surface);
+        if (w->nav_layer) navbar_set_remote(&w->nav, nav_send, w);
     } else {
         navbar_destroy(&w->nav);
         if (!bar) decor_destroy(&w->decor);
@@ -141,6 +149,17 @@ void window_nav_visible(struct window *w, int visible)
     if (!w->configured || !w->mobile) return;
     window_layout(w);
     wl_surface_commit(w->surface);
+}
+
+/* The window's owner can compose the bar: without subsurfaces (Lipstick) it does, and the app gets the bar's inset. */
+void window_nav_layer(struct window *w)
+{
+    if (w->nav_layer) return;
+    w->nav_layer = 1;
+    if (!w->mobile) return;
+    navbar_set_remote(&w->nav, nav_send, w);
+    if (w->nav.remote) fprintf(stderr, "[shell] %s: navigation bar composed by the display (no subsurfaces)\n", w->title);
+    window_display_changed(w);
 }
 
 void window_nav_action(struct window *w, int button)

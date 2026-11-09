@@ -2,6 +2,7 @@
 #include "shell.h"
 #include "text-input-v3-client-protocol.h"
 #include "xdg-activation-v1-client-protocol.h"
+#include "surface-extension-client-protocol.h"
 #include "xdg-decoration-unstable-v1-client-protocol.h"
 
 static void seat_caps(void *d, struct wl_seat *st, uint32_t caps)
@@ -93,7 +94,8 @@ static void registry(void *d, struct wl_registry *r, uint32_t name, const char *
     if (debug_input) fprintf(stderr, "[shell] global %s v%u\n", iface, ver);
     if (!strcmp(iface, wl_compositor_interface.name))
         compositor = wl_registry_bind(r, name, &wl_compositor_interface, ver < 4 ? ver : 4);  /* Lipstick: 3 */
-    else if (!strcmp(iface, wl_subcompositor_interface.name))
+    /* APKLAYER_SUBSURFACES=0: a compositor without subsurfaces (Lipstick) simulated (tests/vm/mobile.py --no-subsurfaces) */
+    else if (!strcmp(iface, wl_subcompositor_interface.name) && !(getenv("APKLAYER_SUBSURFACES") && !strcmp(getenv("APKLAYER_SUBSURFACES"), "0")))
         subcompositor = wl_registry_bind(r, name, &wl_subcompositor_interface, 1);
     else if (!strcmp(iface, wp_cursor_shape_manager_v1_interface.name))
         cursor_mgr = wl_registry_bind(r, name, &wp_cursor_shape_manager_v1_interface, 1);
@@ -103,6 +105,8 @@ static void registry(void *d, struct wl_registry *r, uint32_t name, const char *
         text_mgr = wl_registry_bind(r, name, &zwp_text_input_manager_v3_interface, 1);
     else if (!strcmp(iface, zwp_linux_dmabuf_v1_interface.name))
         dmabuf_bind(r, name, ver);
+    else if (!strcmp(iface, qt_surface_extension_interface.name))
+        qt_surface_ext = wl_registry_bind(r, name, &qt_surface_extension_interface, 1);
     else if (!strcmp(iface, "android_wlegl"))
         wlegl_bind(r, name, ver);
     else if (!strcmp(iface, wl_shm_interface.name))

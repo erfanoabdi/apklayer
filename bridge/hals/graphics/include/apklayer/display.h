@@ -36,6 +36,12 @@ void apklayer_display_close(struct apklayer_display *d);
 void apklayer_display_set_configure_callback(struct apklayer_display *d,
                                              void (*configure)(void *user, int32_t width, int32_t height, int32_t scale_percent), void *user);
 
+/* Offers to compose the shell's navigation bar into the frames (mobile style where the compositor has no subsurfaces: Lipstick). The shell
+ * then sends it on every change: navbar(user, fd, width, height) with a memfd of width x height pixels XRGB8888 (little-endian, stride
+ * width * 4) to show over the bottom of the display, or fd -1 and 0 x 0 when it is hidden. The callback owns fd. Reader thread. */
+void apklayer_display_set_navbar_callback(struct apklayer_display *d,
+                                          void (*navbar)(void *user, int fd, int32_t width, int32_t height), void *user);
+
 uint32_t apklayer_display_refresh_mhz(struct apklayer_display *d);  /* 0 until the shell has said (set during open) */
 
 /* One vsync() callback at the active mapped surface's next real compositor frame. */

@@ -36,12 +36,20 @@ void navbar_create(struct navbar *n, struct wl_surface *parent)
     if (viewporter) n->viewport = wp_viewporter_get_viewport(viewporter, n->surface);
 }
 
+void navbar_set_remote(struct navbar *n, void (*send)(void *ctx, int fd, int pw, int ph), void *ctx)
+{
+    if (n->surface || n->remote) return;
+    n->remote = 1;
+    n->send = send;
+    n->ctx = ctx;
+}
+
 /* The centre of a button, in logical pixels: Home in the middle, Back a quarter of the width left of it. */
 static double button_cx(int lw, int which) { return which == NAV_BACK ? lw / 4.0 : lw / 2.0; }
 
 int navbar_hit(const struct navbar *n, int x)
 {
-    if (!n->surface || x < 0 || x >= n->lw) return NAV_NONE;
+    if ((!n->surface && !n->remote) || x < 0 || x >= n->lw) return NAV_NONE;
     if (x < n->lw * 3 / 8) return NAV_BACK;
     if (x < n->lw * 5 / 8) return NAV_HOME;
     return NAV_BAR;
@@ -84,29 +92,34 @@ static void draw(void *px, int pw, int ph, int lw, int lh, int dark, int pressed
 
 void navbar_update(struct navbar *n, int y, int lw, int lh, int scale, int dark, int pressed)
 {
-    if (!n->surface || lw <= 0 || lh <= 0) return;
-    if (y != n->y || !n->shown) { wl_subsurface_set_position(n->sub, 0, y); n->y = y; }
+    if ((!n->surface && !n->remote) || lw <= 0 || lh <= 0) return;
+    if (n->sub && (y != n->y || !n->shown)) { wl_subsurface_set_position(n->sub, 0, y); n->y = y; }
     if (n->shown && n->lw == lw && n->lh == lh && n->scale == scale && n->dark == dark && n->pressed == pressed) return;
     int s = scale > 0 ? scale : 100;
-    if (!n->viewport) s = (s + 50) / 100 * 100;  /* without wp_viewporter: whole multiples only (wl_surface.set_buffer_scale) */
+    if (!n->viewport && !n->remote) s = (s + 50) / 100 * 100;  /* without wp_viewporter: whole multiples only (wl_surface.set_buffer_scale) */
     int pw = (lw * s + 99) / 100, ph = (lh * s + 99) / 100;
     size_t len = (size_t)pw * ph * 4;
-    if (!n->buffer || n->lw != lw || n->lh != lh || n->scale != scale) {
+    if (!n->map || n->lw != lw || n->lh != lh || n->scale != scale) {
         int fd = memfd_create("apklayer-navbar", MFD_CLOEXEC);
         if (fd < 0 || ftruncate(fd, (off_t)len) < 0) { if (fd >= 0) close(fd); return; }
         void *map = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
         if (map == MAP_FAILED) { close(fd); return; }
-        struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, (int32_t)len);
-        struct wl_buffer *buf = wl_shm_pool_create_buffer(pool, 0, pw, ph, pw * 4, WL_SHM_FORMAT_XRGB8888);
-        wl_shm_pool_destroy(pool);
-        close(fd);
-        if (n->buffer) wl_buffer_destroy(n->buffer);
         if (n->map) munmap(n->map, n->map_len);
-        n->buffer = buf;
         n->map = map;
         n->map_len = len;
-        if (n->viewport) wp_viewport_set_destination(n->viewport, lw, lh);
-        else wl_surface_set_buffer_scale(n->surface, s / 100);
+        if (n->remote) {  /* the memfd itself goes to the display owner */
+            if (n->fd > 0) close(n->fd);
+            n->fd = fd;
+        } else {
+            struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, (int32_t)len);
+            struct wl_buffer *buf = wl_shm_pool_create_buffer(pool, 0, pw, ph, pw * 4, WL_SHM_FORMAT_XRGB8888);
+            wl_shm_pool_destroy(pool);
+            close(fd);
+            if (n->buffer) wl_buffer_destroy(n->buffer);
+            n->buffer = buf;
+            if (n->viewport) wp_viewport_set_destination(n->viewport, lw, lh);
+            else wl_surface_set_buffer_scale(n->surface, s / 100);
+        }
     }
     n->lw = lw;
     n->lh = lh;
@@ -114,22 +127,28 @@ void navbar_update(struct navbar *n, int y, int lw, int lh, int scale, int dark,
     n->dark = dark;
     n->pressed = pressed;
     draw(n->map, pw, ph, lw, lh, dark, pressed);
+    n->shown = 1;
+    if (n->remote) { n->send(n->ctx, n->fd, pw, ph); return; }
     wl_surface_attach(n->surface, n->buffer, 0, 0);
     wl_surface_damage_buffer(n->surface, 0, 0, pw, ph);
     wl_surface_commit(n->surface);
-    n->shown = 1;
 }
 
 void navbar_hide(struct navbar *n)
 {
-    if (!n->surface || !n->shown) return;
+    if ((!n->surface && !n->remote) || !n->shown) return;
+    n->shown = 0;
+    if (n->remote) { n->send(n->ctx, -1, 0, 0); return; }
     wl_surface_attach(n->surface, NULL, 0, 0);  /* unmapped: the content under it shows and takes the input */
     wl_surface_commit(n->surface);
-    n->shown = 0;
 }
 
 void navbar_destroy(struct navbar *n)
 {
+    if (n->remote) {
+        navbar_hide(n);  /* its layer goes */
+        if (n->fd > 0) close(n->fd);
+    }
     if (n->buffer) wl_buffer_destroy(n->buffer);
     if (n->map) munmap(n->map, n->map_len);
     if (n->viewport) wp_viewport_destroy(n->viewport);

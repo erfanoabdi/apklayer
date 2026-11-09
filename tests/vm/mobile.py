@@ -8,6 +8,9 @@ shell the output is a 6.1" 1080x2340 panel (422 dpi -> bucket 420), the window s
  4. immersive mode: the app hides the navigation bar (WindowInsetsController.hide(navigationBars()), the script step `immersive:1`): the shell
     hides its bar and the app is told no navigation bar inset (0), `immersive:0` brings both back;
  5. a tap on the bar's Back button: the shell sends Back, UiBench's root activity finishes and the app ends.
+--no-subsurfaces: the same on a compositor without wl_subcompositor (Lipstick's case, simulated with APKLAYER_SUBSURFACES=0): the app's virtual
+display composes the bar as a layer (aosp/hals/graphics/vdisplay), so SurfaceFlinger's picture shows it at the bottom; the taps go to the
+bottom of the window's own surface.
 Also `--display-info` for a few simulated panels (density buckets, style): no app."""
 import os
 from pathlib import Path
@@ -25,6 +28,8 @@ import instance  # noqa: E402  (changes into the repo root)
 PKG = 'com.android.test.uibench'
 ENV = dict(instance.ENV)
 ENV.update(APKLAYER_OUTPUT_MM='66x143', APKLAYER_OUTPUT_PX='1080x2340', APKLAYER_DEBUG_INPUT='1')
+NO_SUBSURFACES = '--no-subsurfaces' in sys.argv
+if NO_SUBSURFACES: ENV['APKLAYER_SUBSURFACES'] = '0'
 STEPS = ((6000, 'hover:1,0'), (10000, 'hover:2,0'), (15000, 'hover:3,0'), (21000, 'hover:4,0'), (27000, 'hover:5,0'), (28000, 'navinset'), (29000, 'immersive:1'), (30300, 'navinset'), (30500, 'hover:6,0'), (31500, 'immersive:0'), (32300, 'navinset'), (32500, 'hover:7,0'))
 ENV['APKLAYER_JOPTS'] = '-Dapklayer.runms=36000 -Dapklayer.script=' + '+'.join('%d:%s' % s for s in STEPS)
 CONFIGURE = re.compile(r'configure content (\d+)x(\d+) @(\d+)% \((\d+)x(\d+) px\), title bar (\d+) logical = (\d+) px(?:, maximized)?, (\w+) style, (\d+) dpi, '
@@ -96,6 +101,16 @@ try:
                     shot = Image.open(instance.capture('mobile', PKG)).size
                     assert abs(shot[0] - w * scale // 100) <= 1 and abs(shot[1] - h * scale // 100) <= 1, 'picture %s px for %dx%d @%d%%' % (shot, w, h, scale)
                     first = (w, h, scale)
+                    if NO_SUBSURFACES:  # the bar in SurfaceFlinger's own picture: a plain background right of Home, Back's and Home's strokes on it
+                        assert 'navigation bar composed by the display' in shell_log(), 'the display did not take the navigation bar'
+                        img = Image.open(instance.OUT / 'mobile.png').convert('RGB')  # captured above
+                        pw, ph = img.size
+                        bg = img.getpixel((pw * 9 // 10, ph - nav_px // 2))
+                        assert bg in ((244, 244, 244), (0, 0, 0)), 'bar background %s' % (bg,)
+                        assert all(img.getpixel((pw * 9 // 10, y)) == bg for y in range(ph - nav_px + 2, ph)), 'the bar does not fill the bottom %d px' % nav_px
+                        row = [img.getpixel((x, ph - nav_px // 2)) for x in range(pw // 8, pw * 5 // 8)]
+                        assert sum(p != bg for p in row) >= 4, 'no Back or Home drawn on the bar'
+                        checks.append('the bar composed by the display (background %s)' % (bg,))
                     checks.append('mobile %dx%d@%d%%, 420 dpi, navigation bar %d px' % (w, h, scale, nav_px))
                     assert 'mobile style' in shell_log(), 'no mobile style in the shell log'
                     instance.inject(PKG, 'scale:300')

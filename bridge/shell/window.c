@@ -231,6 +231,7 @@ void window_destroy(struct window *w)
     decoration_destroy(w);
     if (w->toplevel) xdg_toplevel_destroy(w->toplevel);
     if (w->xdg_surface) xdg_surface_destroy(w->xdg_surface);
+    wlshell_destroy(w);
     if (w->shell_surface) wl_shell_surface_destroy(w->shell_surface);
     wl_surface_destroy(w->surface);
     memset(w, 0, sizeof *w);
@@ -264,4 +265,5 @@ void window_minimize(struct window *w)
     w->minimized = 1;
     send_state(w);
     if (w->toplevel) xdg_toplevel_set_minimized(w->toplevel);
+    else wlshell_lower(w);
 }

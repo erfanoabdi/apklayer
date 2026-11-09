@@ -269,7 +269,7 @@ const struct wl_pointer_listener ptr_listener = {
  * motion and button go through the wl_pointer handlers. */
 void pointer_inject(struct window *w, int x, int y, int button)
 {
-    int bar = y < 0 && !w->mobile, nav = w->mobile && w->nav.shown && y >= w->cfg_h - w->nav_h;
+    int bar = y < 0 && !w->mobile, nav = w->mobile && w->nav.shown && !w->nav.remote && y >= w->cfg_h - w->nav_h;  /* shortcut: a remote bar takes touch only, not the pointer */
     struct wl_surface *sf = bar ? w->decor.surface : nav ? w->nav.surface : w->surface;
     wl_fixed_t fx = wl_fixed_from_int(x), fy = wl_fixed_from_int(bar ? y + DECOR_H : nav ? y - (w->cfg_h - w->nav_h) : y);
     if ((bar ? pointer_decor_win : nav ? pointer_nav_win : pointer_focus) != w) {
