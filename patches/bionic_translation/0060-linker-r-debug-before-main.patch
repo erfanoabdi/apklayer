@@ -1,0 +1,76 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: the linker tells gdb of loads only once _r_debug_ptr is set
+
+The program sets _r_debug_ptr in main (btload, the runtime). A load before that (a host library calling the shim linker from a
+constructor) wrote through the NULL pointer in apkenv_notify_gdb_of_load, a SIGSEGV in apkenv_link_image_one.
+
+diff --git a/linker/linker.c b/linker/linker.c
+index 2c286ef..8255686 100644
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -222,6 +222,9 @@ enum {
+ struct r_debug *_r_debug_ptr;
+ 
+ #define rtld_db_dlactivity() ((void (*)(void))_r_debug_ptr->r_brk)()
++/* apklayer patch: gdb is told of loads only once the program set _r_debug_ptr; a host library that calls the linker from a constructor
++ * (before main) crashed here on the NULL pointer */
++#define apkenv_r_debug_state(state) (_r_debug_ptr ? (_r_debug_ptr->r_state = (state), rtld_db_dlactivity()) : (void)0)
+ 
+ static struct link_map *apkenv_r_debug_head, *apkenv_r_debug_tail;
+ 
+@@ -280,13 +283,11 @@ static void apkenv_notify_gdb_of_load(soinfo *info)
+ 
+ 	pthread_mutex_lock(&apkenv__r_debug_lock);
+ 
+-	_r_debug_ptr->r_state = RT_ADD;
+-	rtld_db_dlactivity();
++	apkenv_r_debug_state(RT_ADD);
+ 
+ 	apkenv_insert_soinfo_into_debug_map(info);
+ 
+-	_r_debug_ptr->r_state = RT_CONSISTENT;
+-	rtld_db_dlactivity();
++	apkenv_r_debug_state(RT_CONSISTENT);
+ 
+ 	apkenv_notify_gdb_of_libraries();
+ 	pthread_mutex_unlock(&apkenv__r_debug_lock);
+@@ -301,13 +302,11 @@ static void apkenv_notify_gdb_of_unload(soinfo *info)
+ 
+ 	pthread_mutex_lock(&apkenv__r_debug_lock);
+ 
+-	_r_debug_ptr->r_state = RT_DELETE;
+-	rtld_db_dlactivity();
++	apkenv_r_debug_state(RT_DELETE);
+ 
+ 	apkenv_remove_soinfo_from_debug_map(info);
+ 
+-	_r_debug_ptr->r_state = RT_CONSISTENT;
+-	rtld_db_dlactivity();
++	apkenv_r_debug_state(RT_CONSISTENT);
+ 
+ 	apkenv_notify_gdb_of_libraries();
+ 	pthread_mutex_unlock(&apkenv__r_debug_lock);
+@@ -315,19 +314,19 @@ static void apkenv_notify_gdb_of_unload(soinfo *info)
+ 
+ void apkenv_notify_gdb_of_libraries(void)
+ {
++	if (!_r_debug_ptr)
++		return;
+ 	struct link_map *tmap = _r_debug_ptr->r_map;
+ 	while (tmap->l_next != NULL)
+ 		tmap = tmap->l_next;
+ 
+-	_r_debug_ptr->r_state = RT_ADD;
+-	rtld_db_dlactivity();
++	apkenv_r_debug_state(RT_ADD);
+ 
+ 	/* append android libs before notifying gdb */
+ 	tmap->l_next = apkenv_r_debug_head;
+ 	apkenv_r_debug_head->l_prev = tmap;
+ 
+-	_r_debug_ptr->r_state = RT_CONSISTENT;
+-	rtld_db_dlactivity();
++	apkenv_r_debug_state(RT_CONSISTENT);
+ 
+ 	/* restore so that ld-linux doesn't freak out */
+ 	tmap->l_next = NULL;

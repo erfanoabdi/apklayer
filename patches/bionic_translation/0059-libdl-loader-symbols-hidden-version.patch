@@ -1,0 +1,103 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: libdl's __loader_* exported under a hidden version
+
+0054 exported __loader_dlopen/__loader_android_dlopen_ext/__loader_dlclose from libdl_bio for bytehook's dlopen monitor. libdl_bio is in
+the process's global scope, so host (glibc) libraries that call a __loader_* of their own through the PLT bound to these instead:
+libhybris' Android linker (android_dlopen calls __loader_dlopen), reached from the device's libEGL.so.1 in btload's constructors, had the
+shim linker load the device's vendor libraries before main (every Android service on a Halium phone crashed, 0.4.11).
+They are now exported as <name>@APKLAYER_LIBDL, a hidden version (index 3: glibc binds an unversioned reference to a hidden symbol of
+index 2), which unversioned references never bind to; libdl's entries reference that version (apkenv_ref_<name>), so the GOT and PLT
+relocations bytehook finds still name __loader_*.
+
+diff --git a/linker/dlfcn.c b/linker/dlfcn.c
+index 96eff34..5eaebfe 100644
+--- a/linker/dlfcn.c
++++ b/linker/dlfcn.c
+@@ -102,13 +102,18 @@ LOADER void *apkenv_loader_dlopen(const char *filename, int flag, const void *ca
+ }
+ 
+ /* apklayer patch: as on Android, libdl.so's dlopen/android_dlopen_ext/dlclose call the linker's exported __loader_* through the GOT
+- * (relocations against those names): PLT hookers' dlopen monitors (bytehook) patch these slots of libdl.so to see every dlopen */
+-void *__loader_dlopen(const char *filename, int flag, const void *caller) __attribute__((alias("apkenv_loader_dlopen")));
++ * (relocations against those names): PLT hookers' dlopen monitors (bytehook) patch these slots of libdl.so to see every dlopen.
++ * They are exported under a hidden version (libdl_bio.map) and referenced through apkenv_ref_<name>: host (glibc) libraries'
++ * unversioned references never bind to them (libhybris' own linker calls its __loader_dlopen through the PLT; it got this one). */
++#define LOADER_EXPORT(name, impl) \
++	__typeof__(impl) apkenv_def_##name __attribute__((alias(#impl))), apkenv_ref_##name; \
++	__asm__(".symver apkenv_def_" #name ", " #name "@APKLAYER_LIBDL\n.symver apkenv_ref_" #name ", " #name "@APKLAYER_LIBDL\n")
++LOADER_EXPORT(__loader_dlopen, apkenv_loader_dlopen);
+ 
+ #if !defined(__aarch64__)
+ void *bionic_dlopen(const char *filename, int flag)
+ {
+-	return __loader_dlopen(filename, flag, __builtin_return_address(0));
++	return apkenv_ref___loader_dlopen(filename, flag, __builtin_return_address(0));
+ }
+ #endif
+ 
+@@ -130,13 +135,12 @@ LOADER void *apkenv_loader_android_dlopen_ext(const char *filename, int flags, c
+ 	return dlopen_from(filename, flags, caller);
+ }
+ 
+-void *__loader_android_dlopen_ext(const char *filename, int flags, const struct android_dlextinfo *info, const void *caller)
+-	__attribute__((alias("apkenv_loader_android_dlopen_ext")));
++LOADER_EXPORT(__loader_android_dlopen_ext, apkenv_loader_android_dlopen_ext);
+ 
+ #if !defined(__aarch64__)
+ void *bionic_android_dlopen_ext(const char *filename, int flags, const struct android_dlextinfo *info)
+ {
+-	return __loader_android_dlopen_ext(filename, flags, info, __builtin_return_address(0));
++	return apkenv_ref___loader_android_dlopen_ext(filename, flags, info, __builtin_return_address(0));
+ }
+ #endif
+ 
+@@ -326,7 +330,7 @@ LOADER int apkenv_loader_dlclose(void *handle)
+ 	return 0;
+ }
+ 
+-int __loader_dlclose(void *handle) __attribute__((alias("apkenv_loader_dlclose")));
++LOADER_EXPORT(__loader_dlclose, apkenv_loader_dlclose);
+ 
+ #if defined(__aarch64__)
+ /* entry(args): bti c; frame; caller (the return address) as the next argument; bl to a forward stub that branches to the target
+@@ -338,14 +342,14 @@ int __loader_dlclose(void *handle) __attribute__((alias("apkenv_loader_dlclose")
+ #define DL_ENTRY(name, caller_reg, target) DL_ENTRY_STUB(name, caller_reg, "\tb " #target "\n")
+ #define DL_ENTRY_GOT(name, caller_reg, target) \
+ 	DL_ENTRY_STUB(name, caller_reg, "\tadrp x16, :got:" #target "\n\tldr x16, [x16, :got_lo12:" #target "]\n\tbr x16\n")
+-DL_ENTRY_GOT(bionic_dlopen, "\tmov x2, x30\n", __loader_dlopen);
+-DL_ENTRY_GOT(bionic_android_dlopen_ext, "\tmov x3, x30\n", __loader_android_dlopen_ext);
++DL_ENTRY_GOT(bionic_dlopen, "\tmov x2, x30\n", apkenv_ref___loader_dlopen);
++DL_ENTRY_GOT(bionic_android_dlopen_ext, "\tmov x3, x30\n", apkenv_ref___loader_android_dlopen_ext);
+ DL_ENTRY(bionic_dlsym, "\tmov x2, x30\n", apkenv_loader_dlsym);
+-DL_ENTRY_GOT(bionic_dlclose, "", __loader_dlclose);
++DL_ENTRY_GOT(bionic_dlclose, "", apkenv_ref___loader_dlclose);
+ #else
+ int bionic_dlclose(void *handle)
+ {
+-	return __loader_dlclose(handle);
++	return apkenv_ref___loader_dlclose(handle);
+ }
+ #endif
+ 
+diff --git a/linker/libdl_bio.map b/linker/libdl_bio.map
+new file mode 100644
+index 0000000..8c3f43d
+--- /dev/null
++++ b/linker/libdl_bio.map
+@@ -0,0 +1,4 @@
++/* apklayer patch: the version of libdl_bio's __loader_dlopen/__loader_android_dlopen_ext/__loader_dlclose (hidden: .symver in
++ * dlfcn.c). The empty first node makes it index 3: glibc binds an unversioned reference to a hidden symbol of index 2. */
++APKLAYER_LIBDL_0 { };
++APKLAYER_LIBDL { } APKLAYER_LIBDL_0;
+diff --git a/meson.build b/meson.build
+index 6ab0c3b..5d0f480 100644
+--- a/meson.build
++++ b/meson.build
+@@ -70,6 +70,7 @@ dl_bio = shared_library('dl_bio',
+ 	link_args: [
+ 		'-Wl,--no-as-needed',
+ 		'-Wl,-z,now', # apklayer patch: GOT slots hold their targets from the start, as Android's linker binds (bytehook verifies libdl's)
++		'-Wl,--version-script=' + meson.current_source_dir() / 'linker/libdl_bio.map', # apklayer patch: __loader_* under a hidden version
+ 		'-lpthread' # dependency('threads') doesn't express that we specifically need pthreads
+ 	]
+ )

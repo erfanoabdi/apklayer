@@ -3,6 +3,17 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: Halium phones after 0.4.11: libdl's __loader_* no longer taken by libhybris (bionic_translation 0059, 0060)
+- Regression in 0.4.11 on Sailfish (Volla Quintus) and Ubuntu Touch (Volla X23): every Android service of the stack exited with status 139.
+  btload's constructor (resolve_gl_stubs) calls the device's libEGL.so.1 (libhybris), whose Android linker (q.so: android_dlopen calls
+  `__loader_dlopen` through the PLT) bound to libdl_bio's `__loader_dlopen`, exported since 0054 for bytehook: the shim linker loaded the
+  vendor's libraries before main and crashed in apkenv_link_image_one on the still-NULL `_r_debug_ptr` (gdb on the phone).
+- 0059: the three `__loader_*` are exported under a hidden symbol version that unversioned references never bind to; libdl's GOT/PLT
+  relocations still name them (bytehook). 0060: no gdb notification before `_r_debug_ptr` is set. plt-hook asserts the versioned export.
+- Checks: Sailfish RPM (sailfish-rpm.sh, version 0.4.11 with this fix) + runtime 0.4.11 on the Quintus: the ut instance's services run,
+  UiBench at depth=1, screenshot drawn; Ubuntu Touch click built on Parallels (click.sh) + runtime 0.4.11 on the X23: UiBench depth=1,
+  screenshot drawn. Parallels (own tree): native, native-bridge, startup, activities pass; x86 PC (own tree): native, native-bridge pass.
+
 ## 2026-11-10: release 0.4.11 (runtime 0.4.11)
 - Native bridge (x86_64 hosts, arm64 apps): a guest thread's pthread record maps to its host thread (binary_translation 0004, native_bridge_support 0001, bionic_translation 0058): Unity/il2cpp's GC no longer scans the wrong stack (PGR's "irrecoverable stack overflow" and black screen); Sailfish OS and Ubuntu Touch: the phone's own on-screen keyboard (Maliit) types into Android fields, with its height as the window's inset; the screen (max window metrics, real display size, the drawing cache limit) is the monitor, not the first window (FCL's guide overlay); headless runs without a shell no longer throw.
 

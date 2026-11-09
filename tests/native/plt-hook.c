@@ -112,7 +112,8 @@ int main(int argc, char **argv)  /* libdl_bio, the library's name (found in BION
     b_iterate(find_cb, &d);
     assert(d.found == 1);
     slot = got_slot(&d.info, "__loader_dlopen");
-    assert(slot && *slot == dlsym(dl, "__loader_dlopen"));
+    /* under a hidden version (0059): host (glibc) libraries' own __loader_dlopen calls (libhybris' linker) never bind to it */
+    assert(slot && *slot == dlvsym(dl, "__loader_dlopen", "APKLAYER_LIBDL") && !dlsym(dl, "__loader_dlopen"));
     assert(got_slot(&d.info, "__loader_android_dlopen_ext") && got_slot(&d.info, "__loader_dlclose"));
     int (*b_dladdr)(const void *, Dl_info *) = (int (*)(const void *, Dl_info *))dlsym(dl, "bionic_dladdr");
     Dl_info value;  /* dladdr names the slot's target as dl_iterate_phdr does (bytehook verifies a GOT value so) */
