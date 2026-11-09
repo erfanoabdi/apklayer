@@ -69,10 +69,14 @@ try:
                     checks.add('tap')
                     shot = instance.capture('verified input', PKG)
                     assert pixels.colors(shot) > 50, 'flat app window'
+                    instance.inject(PKG, 'preedit:q', 'text:')  # a preedit the IME then cancels (an empty done) leaves the field as it was
                 # a long press: the selection's floating toolbar (a PopupWindow, FLAG_NOT_FOCUSABLE) must leave keys and the IME on the field.
                 # The finger stays down until the long click ran, not for a number of script steps: a stalled app emits two steps at once
                 # and its press and release came back to back, a tap (3 of 5 parallel runs).
                 elif 'script: hover:6,0' in line or 'script: hover:9,0' in line or 'script: hover:12,0' in line:
+                    if 'hover:6,0' in line:
+                        texts = [l for l in seen if '[hello-input] text=' in l]
+                        assert texts[-2:] == ['[hello-input] text=你好q', '[hello-input] text=你好'], 'a cancelled preedit: ' + str(texts[-3:])
                     if 'hover:12,0' in line: assert saw('[hello-input] text=xyz'), 'IME text during the selection toolbar did not reach the field'
                     instance.inject(PKG, 'press:%d,%d' % WORD)
                     held.append(sum('[hello-input] long press' in l for l in seen) + 1)
@@ -89,8 +93,12 @@ try:
                     assert saw('[hello-input] text=x'), 'a key during the selection toolbar did not reach the field'
                     assert sum('action mode started' in l for l in seen) >= 2, 'the second long press started no action mode'
                     instance.inject(PKG, 'text:yz')  # IME commit (past the one letter: the insertion toolbar): text input stays on for the field
+                elif 'script: hover:13,0' in line and not held:
+                    instance.inject(PKG, 'text:')  # an empty done (the desktop's IME sends one when the field's text input is enabled)
                 elif 'script: hover:14,0' in line:
                     assert sum('action mode started' in l for l in seen) >= 3, 'the third long press started no action mode'
+                    after = seen[max(i for i, l in enumerate(seen) if 'hover:12,0' in l):]
+                    assert not any('text=' in l or 'action mode finished' in l for l in after), 'an empty IME done replaced the selection: ' + str(after)
                     instance.inject(PKG, 'key:1')  # Esc is Back: it ends the action mode
     assert app.wait() == 0, 'input app failed'
     assert saw('[hello-input] text=ni'), 'IME preedit did not reach the field'

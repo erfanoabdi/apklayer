@@ -3,6 +3,19 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: an empty IME done no longer deletes a selection (input-inject's third long press)
+- Root cause: the desktop's input method (GNOME's IBus) answers each text-input enable with a `done` that carries no preedit and no commit.
+  HostTextBridge turned every such done into `setComposingText("")`, which with no composing region replaces the selection
+  (BaseInputConnection.replaceText): the word a long press had selected was deleted and its action mode ended. In parallel runs the seat's
+  keyboard focus came back to input-inject's window when another group's window closed (`keyboard enter`, `text input enabled` in the shell
+  log), right after a long press: the field emptied, and Back had no action mode to end (or, earlier, the next step found no selection).
+- Fix: as zwp_text_input_v3 defines done (only an existing preedit is replaced), the empty preedit removes only a preedit the IME placed
+  in that field; otherwise a done without text is no edit.
+- input-inject sends such an empty done during the third long press's selection and checks the selection and action mode survive it
+  (fails without the fix, every run), and that a preedit the IME cancels still goes. UTM, own tree: input-inject alone 5 of 5 pass;
+  `tests/run input activities` 3 of 3 pass (before: input failed 2 of 2 in that pairing). The long press already releases on the app's long click, not after app-clock steps (2026-11-08); no hang
+  or deadlock reproduced (no silent app in these runs).
+
 ## 2026-11-09: Sailfish OS (Volla Quintus): Lipstick's switcher, its close, media = device, the Back-only bar
 - Switcher: every apklayer window is the session shell's (one Wayland client, one pid), and Lipstick ties a window to its launcher entry by the
   client's pid and the entry's Exec (JollaSystemInfo.isWindowForLauncherItem, matchingPidForCommand), except for entries with
