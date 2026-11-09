@@ -3,6 +3,19 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: setup reinstalls the system apps a runtime update changed
+- `apklayer setup` installed the runtime's system apps (providers, DocumentsUI, WebView) only while `setup-done` was missing, so a runtime
+  update never replaced them: x86_64 users who set up before 0.4.10 kept the arm64 MediaProvider (JNI not linking through the bridge,
+  Downloads/Media broken) although the bundle now carries the x86_64 one.
+- cli/setup.cpp records each installed APK's sha256 in `<data home>/apklayer/system-apps.sha256` and installs (`install --system`: the APK,
+  native libs and classes replaced; uid, system mark and the instance's app data kept) only the APKs whose sha256 differs. A data home from
+  before the record reinstalls all once; a failed APK stays out of the record (tried again next setup); a user's newer version
+  (INSTALL_FAILED_VERSION_DOWNGRADE) stays. `setup --check` says `todo` while one differs. Same path for `--bundle`, the manager's update and Halium.
+- x86 PC, own tree (fake runtimes `old`/`new` in the data home, the installed-layout CLI `inst/bin/apklayer`): first setup 9 installed,
+  MediaProvider `nativeRoute=bridge-arm64`; record removed (pre-fix data home) and runtime switched to the x86_64 MediaProvider: 9 reinstalled,
+  `nativeRoute=native`, uid unchanged; setup again: nothing installed; only MediaProvider changed: 1 installed. Then groups files and
+  system-apps PASS (downloads, media). Parallels own tree: first-start PASS, tests/vm/setup-space.sh PASS.
+
 ## 2026-11-10: group files on the x86 PC: the data home had no storage provider
 - `[files] FAIL ... Cursor.getCount() ... null` on the PC (main tree) was the roots query of `com.android.externalstorage.documents` with no
   provider for it: the lead data home (`~/apklayer-x86/main/data`) has no system apps installed (only the WebView; "remote providers

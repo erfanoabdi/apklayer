@@ -8,6 +8,8 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <map>
+#include <set>
 #include <unistd.h>
 
 #include "apps.h"
@@ -47,6 +49,24 @@ std::string providersDetail(const Layout& layout, const Instance& instance) {
     for (const char* d : {"graphics", "camera", "vibrator", "media"})
         if (deviceDomain(layout, instance, d)) device += std::string(device.empty() ? "" : ", ") + d;
     return device.empty() ? "Automatic: the best this host has" : "Automatic: the device's " + device;
+}
+
+// the bundle's system APKs (file, sha256) and which of them differ from what setup installed last: the record beside setup-done holds
+// "<sha256> <file>" per APK, so a runtime update (another build, the x86_64 APKs replacing arm64 ones) installs only the changed ones
+struct SystemApps { std::vector<std::pair<std::string, std::string>> all, changed; };
+SystemApps systemApps(const std::string& dir, const std::string& record) {
+    std::map<std::string, std::string> installed;
+    for (const std::string& line : split(readText(record), '\n'))
+        if (size_t sp = line.find(' '); sp != std::string::npos) installed[line.substr(sp + 1)] = line.substr(0, sp);
+    std::vector<std::string> files;
+    for (const std::string& f : listDir(dir)) if (f.size() > 4 && f.substr(f.size() - 4) == ".apk") files.push_back(f);
+    std::sort(files.begin(), files.end());
+    SystemApps r;
+    for (const std::string& f : files) {
+        r.all.emplace_back(f, sha256File(join(dir, f)));
+        if (installed[f] != r.all.back().second) r.changed.push_back(r.all.back());
+    }
+    return r;
 }
 
 // "" when the JVM apps run on is Java 21 or newer, else what is wrong (the deb depends on openjdk-21-jre-headless; an install that skipped it,
@@ -146,7 +166,8 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
     if (o.check) {
         step("runtime", have.empty() ? "todo" : newer ? "todo" : "done", have.empty() ? "Not installed" : newer ? "Version " + release.runtimeVersion + " is available (have " + have + ")" : "Version " + have);
         step("providers", "done", providersDetail(layout, instance));
-        step("system-apps", exists(join(layout.dataHome, "apklayer/setup-done")) ? "done" : "todo", "Providers, documents and the WebView");
+        bool current = systemApps(join(root, "current/system-apps"), join(layout.dataHome, "apklayer/system-apps.sha256")).changed.empty();
+        step("system-apps", current ? "done" : "todo", current ? "Providers, documents and the WebView" : "The runtime has new providers, documents or WebView");
         return 0;
     }
     // the first setup of a phone whose home is on its small system partition: the data on /userdata from the start (nothing installed yet to move)
@@ -197,28 +218,37 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
     // 3. the instance's providers: automatic (a Halium device's graphics, camera and vibrator are the device's), nothing to write
     step("providers", "done", providersDetail(fresh, instance));
 
-    // 4. the system apps of the bundle (providers, documents, the WebView), once
-    if (!exists(marker)) {
-        const std::string dir = join(root, "current/system-apps");
-        std::vector<std::string> list;
-        for (const std::string& f : listDir(dir)) if (f.size() > 4 && f.substr(f.size() - 4) == ".apk") list.push_back(f);
-        std::sort(list.begin(), list.end());
-        std::string failed;
-        for (size_t i = 0; i < list.size(); i++) {
-            step("system-apps", "running", "Installing " + list[i] + " (" + std::to_string(i + 1) + " of " + std::to_string(list.size()) + ")");
-            progress(static_cast<double>(i) / list.size());
-            Spawn s;
-            s.argv = {layout.cliBinary(), "--instance", instance.id, "install", "--system", join(dir, list[i])};
-            s.env = currentEnv();
-            if (runAndWait(s) != 0) failed += (failed.empty() ? "" : "; ") + list[i];
-        }
-        // the WebView provider's switch (Chromium's sandbox off) is the instance's own file, written at launch (cli/run.cpp): nothing for root
-        step("system-apps", failed.empty() ? "done" : "failed", failed.empty() ? std::to_string(list.size()) + " installed" : failed);
-        if (failed.empty()) { makeDirs(dirName(marker)); writeFile(marker, "1\n"); }
+    // 4. the system apps of the bundle (providers, documents, the WebView): the ones that changed since the last setup (a setup from before the
+    // record installs all once), replaced as a system update replaces them (`install --system` of an installed package keeps data, uid, mark)
+    const bool first = !exists(marker);
+    const std::string record = join(layout.dataHome, "apklayer/system-apps.sha256");
+    SystemApps apps = systemApps(join(root, "current/system-apps"), record);
+    std::set<std::string> failed;
+    for (size_t i = 0; i < apps.changed.size(); i++) {
+        const std::string& f = apps.changed[i].first;
+        step("system-apps", "running", "Installing " + f + " (" + std::to_string(i + 1) + " of " + std::to_string(apps.changed.size()) + ")");
+        progress(static_cast<double>(i) / apps.changed.size());
+        Spawn s;
+        s.argv = {layout.cliBinary(), "--instance", instance.id, "install", "--system", join(root, "current/system-apps/" + f)};
+        s.env = currentEnv();
+        int rc = runAndWait(s);
+        if (rc != 0 && rc != kInstallDowngrade) failed.insert(f);  // a downgrade: the user installed a newer one, theirs stays
+    }
+    std::string text, names;  // a failed APK is left out: tried again at the next setup
+    for (const auto& [f, sum] : apps.all) {
+        if (!failed.count(f)) text += sum + " " + f + "\n";
+        else names += (names.empty() ? "" : "; ") + f;
+    }
+    makeDirs(dirName(record));
+    writeFile(record, text);
+    // the WebView provider's switch (Chromium's sandbox off) is the instance's own file, written at launch (cli/run.cpp): nothing for root
+    step("system-apps", failed.empty() ? "done" : "failed", !failed.empty() ? names : apps.changed.empty() ? "Installed" : std::to_string(apps.changed.size()) + " installed");
+    if (failed.empty() && first) {
+        writeFile(marker, "1\n");
         // a phone: the instance always on (its stack and hub up from login, the spare ready), so no launch waits for them (~10 s of a cold start
         // on the Volla X23); once, at the first setup: the user's own choice stays (`apklayer instance autostart <id> off`)
-        if (failed.empty() && isHalium() && !autostartOn(instance)) autostartCommand(fresh, {instance.id, "on"});
-    } else step("system-apps", "done", "Installed");
+        if (isHalium() && !autostartOn(instance)) autostartCommand(fresh, {instance.id, "on"});
+    }
 
     // 5. the optional ones
     auto extra = [&](const char* id, const std::string& index, const std::vector<std::string>& packages) {

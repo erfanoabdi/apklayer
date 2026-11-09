@@ -140,7 +140,7 @@ apklayer setup --move-data <dir>
 
 Output, tab separated: `step <id> <state> <detail>` (ids: binder, java, runtime, providers, system-apps, microg, fdroid; states: todo, running, done,
 failed, skipped), `progress <0..1|-1>`, and with `--check` (which changes nothing) `latest <version> <runtime version> <date>`. Idempotent: the runtime
-is fetched when none is installed (`--update`: when the release has a newer one), the system apps once (marker `~/.local/share/apklayer/setup-done`).
+is fetched when none is installed (`--update`: when the release has a newer one), the system apps the runtime changed since the last setup (each APK's sha256 in `~/.local/share/apklayer/system-apps.sha256`; replaced with their data kept; `setup-done` marks the first setup).
 Space: the bundle downloads into `runtime/.downloads` (the runtime's file system, one place to check), and before a download or an unpack
 setup compares the file system's free space (statvfs) with the bundle plus its unpacked size and a tenth (common/fetch.cpp `runtimeRoom`). It
 fails early (`Not enough space for the Android runtime: it needs X, Y free in <dir>`, with `apklayer setup --move-data <dir>`), or removes the
