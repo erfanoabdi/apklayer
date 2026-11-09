@@ -3,6 +3,15 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: regression retest of the apps that worked before (tests/corpus/results.md "2026-11-10 regression retest")
+- 22 apps on Parallels arm64 and the x86 PC in own trees (rr), install, two launches with SurfaceFlinger screenshots, taps where noted; FCL to
+  Minecraft's title screen, PGR to its download-size dialog, group godot PASS (PC). No regression from the 2026-11-09/10 changes found in
+  drawing, relaunch, input or the native bridge (VLC, Telegram, SimpleX, OTR2 draw through it on the PC).
+- Found, not fixed (docs/PLAN.md): Termux SIGSEGV in HotSpot class linking with one instance CDS archive (Parallels; gone with
+  APKLAYER_CDS=off or a new archive, not reproduced after); Rethink DNS SIGILL on the PC (guest `mrs DIT` after Go read the host's
+  /proc/self/auxv through berberis); one UiBench second launch that took 9 min to end after the runner's SIGTERM (not reproduced).
+  OpenTTD needs libapklayer-gles1.so in the host's runtime (neither fresh tree builds it without -Dgfxstream): known setup item.
+
 ## 2026-11-10: group files on the x86 PC: the data home had no storage provider
 - `[files] FAIL ... Cursor.getCount() ... null` on the PC (main tree) was the roots query of `com.android.externalstorage.documents` with no
   provider for it: the lead data home (`~/apklayer-x86/main/data`) has no system apps installed (only the WebView; "remote providers
