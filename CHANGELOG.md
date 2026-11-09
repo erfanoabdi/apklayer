@@ -39,6 +39,16 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
   (IMediaExtractor/IMediaSource, IMediaMetadataRetriever): LazyServiceRegistrar counts only the registered services. With
   `APKLAYER_LAZY_SERVICES=0` three runs in three pass. PLAN "Next phase" item.
 
+## 2026-11-09: FCL (Fold Craft Launcher 1.3.4.5 arm64) on Parallels: pack200 fixed, launcher to a game version's install page
+- btload --exec (bridge/native/btload.c): a program exec'd by a relative path (FCL's Pack200Utils runs `./libunpack200.so -r in out` from its
+  native library dir) or from a directory outside the bionic search path failed with "shim bionic linker: library ... not found", exit 127 (the
+  linker opens a path only inside its search path). The program is now opened by its realpath and its own directory goes last in the search
+  path, as Android's linker runs any path. Checked: libunpack200.so with the app JVM's environment unpacks a .pack (exit 0); FCL's runtime
+  install (JRE 8/17/21/25, LWJGL, JNA, Caciocavallo) from a cleared data dir leaves no .pack file and no "Failed to unpack" (rt.jar 56 MB).
+- FCL on Parallels (~/apklayer-fc, instance fc1, scripted taps): agreement, storage alert, runtime install, the guide, an offline account
+  ("steve"), the Mojang version list (network from the app works), 1.12.2's install page. The download of a version and a game launch were
+  not driven: the owner took the instance over at that point (FCL left open for them). Test groups not run (the owner was using the VM's desktop).
+
 ## 2026-11-09: the navigation bar has Back only (owner: no Home button)
 - bridge/shell/navbar.c/.h, mobile.c: Home (the ring) and its action (minimize) are gone; Back stays at a quarter of the width, the rest of the bar is plain (taps there do nothing); Home is the compositor's own gesture/button. tests/vm/mobile.py's bar check looks for Back's strokes only.
 
