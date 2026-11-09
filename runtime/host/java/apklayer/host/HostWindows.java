@@ -93,7 +93,7 @@ final class HostWindows {
         long bestKey = -1;
         for (int i = 0; i < views.size(); i++) {
             View v = views.get(i);
-            if (v.getVisibility() != View.VISIBLE || !v.isAttachedToWindow()) continue;
+            if (!v.isAttachedToWindow() || !org.robolectric.shadows.AppVisibility.shown(v)) continue;
             if (x >= 0) {
                 int[] loc = new int[2];
                 v.getLocationOnScreen(loc);
@@ -327,49 +327,25 @@ final class HostWindows {
         }
     }
 
-    private static final java.util.Map<Activity, List<View>> hiddenWith = new java.util.WeakHashMap<>();
-
     /**
-     * The window manager hides an activity's windows while it is stopped: besides its decor (ActivityTask.setVisible), its dialogs (their
-     * token is the activity's) and the popups over those (the parent window's token). Hidden, they take no input (patches/robolectric
-     * 0017) and stay out of the screen; the stopped activity's fragments are stopped too and must not see taps. Shown again: only those hidden here.
+     * ActivityRecord's visibility sent to its windows (WindowState.sendAppVisibilityToClients): a stopped activity's windows, its decor, its
+     * dialogs (their token is the activity's) and the popups over those (the parent window's token), are hidden through their app
+     * visibility, not their views (ViewRootImpl.dispatchAppVisibility). Hidden, they take no input and stay out of the screen; the stopped
+     * activity's fragments are stopped too and must not see taps. A window it adds while hidden comes up hidden (AppVisibility, patches/robolectric 0026).
      */
     static void setAttachedVisible(Activity activity, boolean visible) {
-        if (visible) {
-            List<View> hidden = hiddenWith.remove(activity);
-            if (hidden != null) for (View v : hidden) if (v.getVisibility() == View.INVISIBLE) v.setVisibility(View.VISIBLE);
-            return;
-        }
+        android.os.IBinder token = activity.getActivityToken();
+        org.robolectric.shadows.AppVisibility.setActivityVisible(token, visible);
         Object wmg = android.view.WindowManagerGlobal.getInstance();
         List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
+        List<android.view.ViewRootImpl> roots = org.robolectric.util.ReflectionHelpers.getField(wmg, "mRoots");
         List<android.view.WindowManager.LayoutParams> params = org.robolectric.util.ReflectionHelpers.getField(wmg, "mParams");
-        View decor = activity.getWindow().getDecorView();
-        java.util.Set<android.os.IBinder> tokens = new java.util.HashSet<>();
-        tokens.add(activity.getWindow().getAttributes().token);
-        tokens.add(decor.getWindowToken());
-        tokens.remove(null); // not attached yet: no window is over it
-        List<View> now = new ArrayList<>();
+        java.util.Set<android.os.IBinder> tokens = new java.util.HashSet<>(java.util.Collections.singleton(token));
         for (int i = 0; i < views.size(); i++) { // in the order they were added: a parent window before the windows over it
-            View v = views.get(i);
-            if (v == decor || !tokens.contains(params.get(i).token)) continue;
-            if (v.getWindowToken() != null) tokens.add(v.getWindowToken());
-            if (v.getVisibility() == View.VISIBLE) { v.setVisibility(View.INVISIBLE); now.add(v); }
+            if (!tokens.contains(params.get(i).token)) continue;
+            if (views.get(i).getWindowToken() != null) tokens.add(views.get(i).getWindowToken());
+            roots.get(i).dispatchAppVisibility(visible, 0);
         }
-        if (!now.isEmpty()) hiddenWith.computeIfAbsent(activity, a -> new ArrayList<>()).addAll(now);
-    }
-
-    private static View lastAdded;
-    private static int windowCount;
-
-    /** A window added for a stopped activity (a dialog shown after onStop) is hidden with it: WindowManagerService adds it without ADD_FLAG_APP_VISIBLE. */
-    static void hideAddedToStopped(java.util.Collection<Activity> stopped) {
-        List<View> views = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mViews");
-        View last = views.isEmpty() ? null : views.get(views.size() - 1);
-        if (views.size() == windowCount && last == lastAdded) return;
-        boolean added = views.size() > windowCount || last != lastAdded;
-        windowCount = views.size();
-        lastAdded = last;
-        if (added) for (Activity activity : stopped) setAttachedVisible(activity, false);
     }
 
     /** ViewRootImpl#windowFocusChanged and the top-resumed state, as the window manager reports them for the top window. */

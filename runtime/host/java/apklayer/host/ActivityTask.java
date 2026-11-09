@@ -192,6 +192,7 @@ final class ActivityTask {
         // reshapes the window, so a landscape-locked game gets a landscape surface and landscape pointer coordinates
         if (info.screenOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) built.get().setRequestedOrientation(info.screenOrientation);
         ActivityController<? extends Activity> c = built.create();
+        org.robolectric.shadows.WindowOrder.activityOrder(c.get().getActivityToken());  // its place in the task from its start (ActivityRecord)
         taskRootBuilding = false;
         if (bottom) taskRoot = c.get();
         if (c.get().isFinishing()) {  // finish() in onCreate (Telegram starts its intro screen so): Android destroys it without start or resume
@@ -362,6 +363,7 @@ final class ActivityTask {
     }
 
     void recreated(Activity old, Activity now) {
+        org.robolectric.shadows.WindowOrder.relaunched(old.getActivityToken(), now.getActivityToken());
         for (java.util.Map<Activity, ?> kept : List.<java.util.Map<Activity, ?>>of(resultFor, hubResults)) if (kept.containsKey(old)) move(kept, old, now);
         if (incomingActivity == old) incomingActivity = now;
         if (taskRoot == old) taskRoot = now;

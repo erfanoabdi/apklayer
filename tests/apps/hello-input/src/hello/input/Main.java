@@ -93,6 +93,7 @@ public class Main extends Activity {
         setContentView(layout);
         field.requestFocus();
         if (System.getProperty("hello.covered") != null) Covered.coverWithDialog(this);
+        if (System.getProperty("hello.translucent") != null && state == null) Translucent.underTranslucent(this);
         if (System.getProperty("hello.altim") != null) field.postDelayed(this::altFocusableIm, 1000);
         if (System.getProperty("hello.sheet") != null) field.postDelayed(() -> Sheet.show(this, 1), 1500);
         if (System.getProperty("hello.magnifier") != null) {

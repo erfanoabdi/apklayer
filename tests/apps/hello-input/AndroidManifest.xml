@@ -6,5 +6,6 @@
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
     </activity>
     <activity android:name=".Covered"/>
+    <activity android:name=".Translucent" android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
   </application>
 </manifest>
