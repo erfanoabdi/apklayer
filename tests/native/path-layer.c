@@ -24,6 +24,9 @@ int main(int argc, char **argv) {
     if (!getenv("APKLAYER_STORAGE")) {  /* the path layer reads it once: the check runs again with it set */
         assert(mkdtemp(tmpl));
         setenv("APKLAYER_STORAGE", tmpl, 1);
+        char data[600];
+        snprintf(data, sizeof data, "%s/data", tmpl);
+        assert(mkdir(data, 0700) == 0 && setenv("APKLAYER_DATA", data, 1) == 0);  /* the instance's /data */
         execv("/proc/self/exe", argv);
         return 1;
     }
@@ -60,16 +63,20 @@ int main(int argc, char **argv) {
     else
         assert(errno != ENOENT);
     /* the app's own /data/data/<pkg>, /data/user/0/<pkg> and /data/user_de/0/<pkg> (paths.c apklayer_map_own_data), not other packages' */
-    void (*map_own)(const char *, long, const char *) = (void (*)(const char *, long, const char *))dlsym(RTLD_DEFAULT, "apklayer_map_own_data");
+    void (*map_own)(const char *, long, const char *, const char *) = (void (*)(const char *, long, const char *, const char *))dlsym(RTLD_DEFAULT, "apklayer_map_own_data");
     assert(map_own);
     assert(mkdir(in("own"), 0700) == 0 && mkdir(in("own/app"), 0700) == 0 && mkdir(in("own/app/files"), 0700) == 0 && mkdir(in("own/device"), 0700) == 0);
     char own[512];
     snprintf(own, sizeof own, "%s/own", tmpl);
-    map_own("p.kg", 12345, own);
+    map_own("p.kg", 12345, "3003,9997", own);
     fd = open("/data/data/p.kg/files/x", O_CREAT | O_WRONLY, 0600);
     assert(fd >= 0 && access(in("own/app/files/x"), F_OK) == 0);
     close(fd);
     assert(access("/data/user/0/p.kg/files/x", F_OK) == 0);
+    /* the instance's /data/data/p.kg is the app's tree too: a walk component by component (Termux's mkdir -p) lands there */
+    int walk = open("/data/data", O_DIRECTORY | O_RDONLY);
+    assert(walk >= 0 && mkdirat(walk, "p.kg/files/w", 0700) == 0 && access(in("own/app/files/w"), F_OK) == 0);
+    close(walk);
     assert(mkdir("/data/user_de/0/p.kg/d", 0700) == 0 && access(in("own/device/d"), F_OK) == 0);
     assert(access("/data/data/p.kgx/files/x", F_OK) != 0 && access("/data/data/other/files/x", F_OK) != 0 && access("/data/user/0/other/files/x", F_OK) != 0);
     /* a program the app runs from its data dir maps them too (exec_preload.c: the path, and APKLAYER_OWN_DATA in its environment) */
@@ -77,7 +84,7 @@ int main(int argc, char **argv) {
     pid_t child = fork();
     if (child == 0) {
         unsetenv("APKLAYER_OWN_DATA");
-        execv("/data/data/p.kg/files/sh", (char *[]){"sh", "-c", "case $APKLAYER_OWN_DATA in p.kg:12345:/*) test -e /data/user/0/p.kg/files/x;; *) exit 1;; esac", NULL});
+        execv("/data/data/p.kg/files/sh", (char *[]){"sh", "-c", "case $APKLAYER_OWN_DATA in p.kg:12345,3003,9997:/*) test -e /data/user/0/p.kg/files/x;; *) exit 1;; esac", NULL});
         _exit(127);
     }
     int status;

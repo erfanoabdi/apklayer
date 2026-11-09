@@ -1,0 +1,38 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: getgroups answers the app's Android groups beside its app uid
+
+Without the sandbox an app process runs as the desktop user, and 0056 shows Android code the app uid; getgroups still listed the desktop
+user's supplementary groups (Termux's `id`). With the app uid set, bionic's getgroups answers the groups apklayer's path layer hands
+over (libc_bio_set_app_groups): the ones zygote gives an app process (inet with INTERNET, everybody, the cache and shared app gids).
+
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -177,6 +177,28 @@
+ 	int ret = getresgid(r, e, s);
+ 	if (ret == 0 && app_uid >= 0) *r = *e = *s = (gid_t)app_uid;
+ 	return ret;
++}
++
++/* apklayer patch: the app's supplementary groups. Without apklayer's sandbox getgroups would list the desktop user's groups; an Android app process
++ * has the groups zygote gives it (its permission gids, shared and cache app gids, everybody). Set by apklayer's path layer with the app uid;
++ * only used while app_uid is (the sandbox's real groups are already Android's). */
++static gid_t app_groups[16];
++static int app_ngroups;
++
++void libc_bio_set_app_groups(int n, const gid_t *groups)
++{
++	if (n < 0 || n > (int)(sizeof app_groups / sizeof *app_groups)) return;
++	memcpy(app_groups, groups, (size_t)n * sizeof *groups);
++	app_ngroups = n;
++}
++
++int bionic_getgroups(int size, gid_t *list)
++{
++	if (app_uid < 0) return getgroups(size, list);
++	if (size == 0) return app_ngroups;
++	if (size < app_ngroups) { errno = EINVAL; return -1; }
++	memcpy(list, app_groups, (size_t)app_ngroups * sizeof *list);
++	return app_ngroups;
+ }
+ 
+ int bionic_statx(int dirfd, const char *pathname, int flags, unsigned int mask, struct statx *buf)

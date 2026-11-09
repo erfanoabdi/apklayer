@@ -13,7 +13,7 @@
 #include <unistd.h>
 
 bool apklayer_apply_path_overrides(char **path);
-void apklayer_map_own_data(const char *pkg, long uid, const char *root);
+void apklayer_map_own_data(const char *pkg, long uid, const char *groups, const char *root);
 
 static char real[512];
 static const char *in(const char *rel) { snprintf(real, sizeof real, "%s/emulated/0/%s", getenv("APKLAYER_STORAGE"), rel); return real; }
@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
     assert(mkdir(in("own"), 0700) == 0 && mkdir(in("own/app"), 0700) == 0);
     char own[512];
     snprintf(own, sizeof own, "%s", in("own"));
-    apklayer_map_own_data("p.kg", -1, own);
+    apklayer_map_own_data("p.kg", -1, NULL, own);
     assert(b_mkdir("/data/data/p.kg/d", 0700) == 0 && there("own/app/d"));
     assert(b_rename("/data/user/0/p.kg/d", "/data/data/p.kg/e") == 0 && there("own/app/e"));
     assert(b_rmdir("/data/data/p.kg/e") == 0 && !there("own/app/e"));
