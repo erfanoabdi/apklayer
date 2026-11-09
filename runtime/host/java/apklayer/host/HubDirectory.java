@@ -19,6 +19,10 @@ final class HubDirectory extends Binder {
     void sendSystem(Intent intent, boolean sticky) {
         broadcasts.send(SYSTEM, intent, null, 0, null, null, null, false, sticky, 0);
     }
+    /** A broadcast from the system to receivers holding a permission (StorageManagerService's internal ACTION_VOLUME_STATE_CHANGED). */
+    void sendSystem(Intent intent, String requiredPermission) {
+        broadcasts.send(SYSTEM, intent, null, 0, null, null, new String[] {requiredPermission}, false, false, 0);
+    }
     /** An ordered broadcast from the system to receivers holding a permission (the boot broadcasts: one receiver, and so one process start, at a time). */
     void sendSystemOrdered(Intent intent, String requiredPermission) {
         broadcasts.send(SYSTEM, intent, null, 0, null, null, new String[] {requiredPermission}, true, false, 0);
@@ -45,6 +49,7 @@ final class HubDirectory extends Binder {
     private final HubGnss gnss = new HubGnss(this);
     private final HubCallAudio callAudio;
     final HubUsb usb;
+    final HubVolumes volumes = new HubVolumes(this);
     private final HubPermissionPrompt permissionPrompt;
     private final Map<String, Process> appProcesses = new HashMap<>();
     private final Map<String, Process> hosts = new HashMap<>();
@@ -107,6 +112,7 @@ final class HubDirectory extends Binder {
     /** The host's network or power supply changed (job constraints). */
     void hostChanged() { scheduler.constraintsChanged(); }
     HubProviders providers() { return providers; }
+    HubServiceBindings bindings() { return bindings; }
     HubPackages packages() { return packages; }
     HubInstaller installer() { return installer; }
     /** The installer finished its work: a hub that lost its last app meanwhile (an installer that updated itself) ends as it would have. */
@@ -164,6 +170,14 @@ final class HubDirectory extends Binder {
         HubAudioPermissions.feed(packages);  // AudioService follows ACTION_PACKAGE_ADDED/REMOVED the same way
     }
 
+    /** Every running process's StorageManager reads its volumes again and runs its listeners (before the volume's broadcasts go out). */
+    void volumeChanged(android.os.storage.VolumeInfo volume, int oldState) {
+        for (Peer peer : peersExcept(null)) {
+            try { HubProtocol.call(peer.endpoint, HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_VOLUME, request -> { request.writeTypedObject(volume, 0); request.writeInt(oldState); }, reply -> null); }
+            catch (IllegalStateException gone) { /* it ended meanwhile */ }
+        }
+    }
+
     /** Starts the package as an app (window and all), as "apklayer run" does. */
     void launchApp(String name) {
         if (stopping) return;
@@ -208,7 +222,8 @@ final class HubDirectory extends Binder {
                 process.onExit().thenAccept(exited -> {
                     System.out.println("[apklayer-hub] host " + name + " exited with " + exited.exitValue());
                     synchronized (hosts) { hosts.remove(name, started); }
-                    if (!stopping && peer(name) == null && bindings.needsHost(name)) {
+                    // or a client asked for it while this one was ending (launch above saw it alive and started none): it waits for a registration
+                    if (!stopping && peer(name) == null && (bindings.needsHost(name) || broadcasts.awaitingStart(name))) {
                         int failed;
                         synchronized (failures) { failed = failures.merge(name, 1, Integer::sum); }
                         if (failed < 3) launch(name); else bindings.launchFailed(name);

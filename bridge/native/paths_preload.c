@@ -122,15 +122,39 @@ WRAPAT(int, utimensat, (int dirfd, const char *path, const struct timespec t[2],
 int rename(const char *from, const char *to) { MAP(a, from); MAP(b, to); int r = ((int (*)(const char *, const char *))REAL(rename))(a, b);
     r = apklayer_broker_change("rename", AT_FDCWD, a, AT_FDCWD, b, 0, r); DONE(a); DONE(b); return r; }
 int link(const char *from, const char *to) { MAP(a, from); MAP(b, to); int r = ((int (*)(const char *, const char *))REAL(link))(a, b); DONE(a); DONE(b); return r; }
+/* A removable drive's /storage/<uuid> is a link in the storage directory to the desktop's mount (HostVolumes.Removable): a path that resolved
+ * into that mount is spelled through the link again (/storage/<uuid>/..., or /mnt/media_rw/<uuid>/... as asked), as vold's mounts are.
+ * Returns r, or a new string when resolved was NULL. */
+static char *drive_spelling(const char *path, const char *storage, size_t n, char *r, char *resolved)
+{
+    const char *name = !strncmp(path, "/storage/", 9) ? path + 9 : !strncmp(path, "/mnt/media_rw/", 14) ? path + 14 : NULL;
+    if (!name) return r;
+    const char *slash = strchr(name, '/');
+    char link[4096], target[4096];
+    if (snprintf(link, sizeof link, "%s/%.*s", storage, slash ? (int)(slash - name) : (int)strlen(name), name) >= (int)sizeof link) return r;
+    struct stat st;
+    if (lstat(link, &st) != 0 || !S_ISLNK(st.st_mode) || !((char *(*)(const char *, char *))REAL(realpath))(link, target)) return r;
+    size_t t = strlen(target);
+    if (strncmp(r, target, t) || (r[t] && r[t] != '/')) return r;
+    char spelled[4096];
+    if (snprintf(spelled, sizeof spelled, "%.*s%s%s", (int)(name - 1 - path), path, link + n, r + t) >= (int)sizeof spelled) return r;
+    if (resolved) { if (strlen(spelled) < 4096) strcpy(r, spelled); return r; }  /* the caller's buffer holds PATH_MAX */
+    char *copy = strdup(spelled);
+    if (!copy) return r;
+    free(r);
+    return copy;
+}
+
 /* A resolved path below the storage directory is spelled as Android's again (/storage/...): callers compare it with the volume paths. */
 char *realpath(const char *path, char *resolved)
 {
     MAP(m, path);
     char *r = ((char *(*)(const char *, char *))REAL(realpath))(m, resolved);
-    DONE(m);
     const char *storage = getenv("APKLAYER_STORAGE");
     size_t n = storage ? strlen(storage) : 0;
     if (r && n >= 8 && !strncmp(r, storage, n) && (r[n] == 0 || r[n] == '/')) { memcpy(r, "/storage", 8); memmove(r + 8, r + n, strlen(r + n) + 1); }
+    else if (r && n >= 8 && path) r = drive_spelling(path, storage, n, r, resolved);
+    DONE(m);
     return r;
 }
 char *__realpath_chk(const char *path, char *resolved, size_t n) { (void)n; return realpath(path, resolved); }  /* the JDK's libjava and libnio are built with fortify */

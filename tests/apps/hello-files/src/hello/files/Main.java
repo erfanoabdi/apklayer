@@ -27,6 +27,7 @@ public final class Main extends Activity {
                     System.out.println("[files] DONE"); finish(); return;
                 }
                 if (System.getProperty("hello.volumes") != null) { Volumes.print(this); finish(); return; }
+                if (System.getProperty("hello.hotplug") != null) { Hotplug.start(this); return; }
                 if (System.getProperty("hello.uri") != null) {
                     try (Cursor any = cr.query(Uri.parse(System.getProperty("hello.uri")), null, null, null, null)) { System.out.println("[files] " + System.getProperty("hello.uri") + " -> " + (any == null ? "null" : any.getCount() + " rows, " + any.getClass().getName())); }
                     System.out.println("[files] DONE"); finish(); return;

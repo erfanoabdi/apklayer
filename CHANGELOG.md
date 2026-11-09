@@ -3,6 +3,35 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: storage hot plug and MediaStore scanning (docs/PLAN.md "Open by area", Storage)
+- Hot plug, in the hub (HubVolumes): `udisksctl monitor` (through `stdbuf -oL`: into a pipe its output is block-buffered) says when to look again at
+  the drives mounted under `/media/<user>`/`/run/media/<user>` (HostVolumes.Removable). Per changed volume, as StorageManagerService.onVolumeStateChangedLocked:
+  every running process's StorageManager reads its volumes again and runs its listeners (ENDPOINT_VOLUME, ShadowHostStorageManager.changed:
+  StorageEventListener and StorageVolumeCallback with the volume in its new state; MediaProvider updates its volume cache on it), then
+  ACTION_VOLUME_STATE_CHANGED (WRITE_MEDIA_STORAGE: ExternalStorageProvider's roots) and the public broadcast with EXTRA_STORAGE_VOLUME:
+  ACTION_MEDIA_MOUNTED; on removal ACTION_MEDIA_EJECT, ACTION_MEDIA_UNMOUNTED, and ACTION_MEDIA_REMOVED once `/dev/disk/by-uuid/<uuid>` is gone.
+  A gone drive's `/storage/<uuid>` link is removed (also at hub start).
+- MediaStore, with MediaProvider's own code: the volume's state goes to its ExternalStorageService (HubStorageService, StorageSessionController's
+  call, bound for the one call): a mounted volume is attached and scanned (REASON_MOUNTED), a gone one detached. Files that change on internal
+  storage or a mounted drive (apps' and the desktop's writes; on a device FUSE tells MediaProvider) reach its scanner as
+  ACTION_MEDIA_SCANNER_SCAN_FILE (MediaReceiver): HubMediaWatch, inotify on every directory but Android/, a path sent once quiet for 1.5 s,
+  several in one directory as one scan of it. An always-on instance's boot also announces its mounted volumes (internal storage scanned at boot).
+  MediaScannerConnection.scanFile already worked (MediaProvider's scan_file call).
+- What it took: `/storage/<uuid>` resolves to the drive's directory in the path layer (paths.c: the link followed there; the scanner's walk from a
+  volume root that is a symlink found only the link), and realpath spells a path inside the drive as `/storage/<uuid>/...` (`/mnt/media_rw/...`
+  as asked) again (paths_preload.c; MediaProvider canonicalizes and looked for `/media/<user>/...` among its volumes). MediaProvider's database
+  backup (leveldb through its FUSE daemon) is off (persist.sys.fuse.backup.* in apklayer.prop): each attach waited 20 s for a daemon. A component
+  host that scheduled jobs no longer ends at once when its last service goes: 0.5 s later, and not while a job it planned to run at once has yet to start
+  (HostJobs.due: WorkManager schedules a chain's next work as its last job ends, and the host's halt killed it; MediaProvider ran one work item
+  per process start). A client that asks for a host while the last one is ending gets a new one (HubDirectory.launch: it waited 20 s, "Cannot start
+  com.android.providers.media.module for provider media").
+- Test: group `volumes` (tests/vm/volumes.py, hello-files' hotplug scenario): a vfat loop image with DCIM/pre.png mounted at
+  `/media/<user>/<label>` while the app runs (root: `sudo -n`, or `sudo -A` with SUDO_ASKPASS), then removed: the broadcast, callback, volume in
+  getStorageVolumes and MediaStore, pre.png indexed by the mount scan, a new file on the drive and one on internal storage indexed, the deleted
+  one dropped, EJECT/UNMOUNTED/REMOVED in order, the volume and its link gone; 14 of 14 on Parallels in 15 s. Also pass on Parallels (own
+  instances): files, view, sysprov, system-apps, services, broadcasts, providers, hub-services. The 0.5 s grace applies only to a process that
+  scheduled a job: services' respawn (a host ends after each unbind) needs the immediate end.
+
 ## 2026-11-09: Bluetooth channel sockets, server sockets, pairing requests (docs/PLAN.md "Bluetooth and USB")
 - `BluetoothDevice.createRfcommSocket(int)`/`createInsecureRfcommSocket(int)` (the hidden calls serial apps reach by reflection): `bluez.py rfcomm
   <address> <channel>` connects an AF_BLUETOOTH RFCOMM socket itself and relays it as the service sockets do (the hub accepts a channel 1-30 in place of

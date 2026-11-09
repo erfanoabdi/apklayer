@@ -65,7 +65,7 @@ final class HostVolumes {
     /**
      * The drives the desktop mounted for this user (udisks2: {@code /media/<user>/<label>}, {@code /run/media/<user>/<label>}) as public volumes, as vold
      * mounts an SD card or USB drive: {@code /storage/<fs uuid>} (and {@code /mnt/media_rw/<fs uuid>}, ExternalStorageProvider's path), a link in the
-     * instance's storage directory to the drive. shortcut: read once per process (no hot plug, no ACTION_MEDIA_MOUNTED); upgrade with a udisks2 watcher in the hub.
+     * instance's storage directory to the drive. Read again on every change (HubVolumes watches them and tells each app, ShadowHostStorageManager.changed).
      */
     static final class Removable {
         private Removable() {}
@@ -100,6 +100,25 @@ final class HostVolumes {
                 volumes.add(volume);
             }
             return volumes;
+        }
+
+        /** The desktop's mount point of the volume (its link's target). */
+        static String mountPoint(VolumeInfo volume) {
+            try { return Files.readSymbolicLink(Path.of(System.getProperty("apklayer.storage"), volume.fsUuid)).toString(); }
+            catch (IOException | RuntimeException gone) { return volume.path; }
+        }
+
+        /** Removes the links of drives no longer mounted (a removed drive's {@code /storage/<uuid>}), keeping those in {@code mounted}. */
+        static void removeStale(java.util.Set<String> mounted) {
+            String host = System.getProperty("apklayer.storage"), name = System.getProperty("user.name");
+            if (host == null) return;
+            try (var links = Files.list(Path.of(host))) {
+                for (Path link : links.filter(Files::isSymbolicLink).toList()) {
+                    String target = Files.readSymbolicLink(link).toString();
+                    if (mounted.contains(link.getFileName().toString()) || !target.startsWith("/media/" + name + "/") && !target.startsWith("/run/media/" + name + "/")) continue;
+                    Files.deleteIfExists(link);
+                }
+            } catch (IOException | RuntimeException failure) { System.out.println("[apklayer] storage: stale volume links not removed: " + failure); }
         }
 
         /** The file system uuid udev names the device by (/dev/disk/by-uuid), vold's fsUuid. */

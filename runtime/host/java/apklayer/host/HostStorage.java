@@ -30,15 +30,20 @@ final class HostStorage {
         if (ops != null) ((org.robolectric.shadows.ShadowAppOpsManager) Shadow.extract(ops)).setMode(android.app.AppOpsManager.OP_MANAGE_EXTERNAL_STORAGE,
                 app.getApplicationInfo().uid, app.getPackageName(), android.app.AppOpsManager.MODE_DEFAULT);
         StorageManager manager = app.getSystemService(StorageManager.class);
-        if (manager != null && manager.getStorageVolumes().isEmpty()) {
-            ShadowStorageManager shadow = Shadow.extract(manager);
-            int user = android.os.Process.myUserHandle().getIdentifier();
-            // StorageManagerService.getVolumeList: the user's emulated volume first, then the visible public ones, each built as the service builds it.
-            // Not the stub volumes (Home, Linux root): they are the desktop's folders, DocumentsUI's roots, and reach apps through the picker.
-            for (VolumeInfo volume : manager.getVolumes()) {
-                if (volume.getType() != VolumeInfo.TYPE_EMULATED && volume.getType() != VolumeInfo.TYPE_PUBLIC || !volume.isVisibleForUser(user)) continue;
-                shadow.addStorageVolume(volume.buildStorageVolume(app, user, false));
-            }
+        if (manager != null && manager.getStorageVolumes().isEmpty()) storageVolumes(app, manager);
+    }
+
+    /**
+     * StorageManagerService.getVolumeList: the user's emulated volume first, then the visible public ones, each built as the service builds it.
+     * Not the stub volumes (Home, Linux root): they are the desktop's folders, DocumentsUI's roots, and reach apps through the picker.
+     */
+    static void storageVolumes(android.content.Context app, StorageManager manager) {
+        ShadowStorageManager shadow = Shadow.extract(manager);
+        shadow.resetStorageVolumeList();
+        int user = android.os.Process.myUserHandle().getIdentifier();
+        for (VolumeInfo volume : manager.getVolumes()) {
+            if (volume.getType() != VolumeInfo.TYPE_EMULATED && volume.getType() != VolumeInfo.TYPE_PUBLIC || !volume.isVisibleForUser(user)) continue;
+            shadow.addStorageVolume(volume.buildStorageVolume(app, user, false));
         }
     }
 

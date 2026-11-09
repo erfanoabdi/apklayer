@@ -12,6 +12,9 @@ import org.robolectric.shadows.ShadowStorageManager;
 public class ShadowHostStorageManager extends ShadowStorageManager {
     private static List<VolumeInfo> volumes;
     @org.robolectric.annotation.RealObject private StorageManager real;
+    /** Every StorageManager of the process (a context has its own, with its own listeners), for changed(). */
+    private static final java.util.Set<ShadowHostStorageManager> ALL = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+    { synchronized (ALL) { ALL.add(this); } }
 
     /** No volume has a user-given nickname. */
     @Implementation
@@ -22,6 +25,38 @@ public class ShadowHostStorageManager extends ShadowStorageManager {
         synchronized (ShadowHostStorageManager.class) {
             if (volumes == null) volumes = HostVolumes.list();
             return volumes;
+        }
+    }
+
+    /**
+     * A drive came or went (the hub, HubVolumes): the volumes are read again and every listener runs as StorageManagerService's callbacks would,
+     * on the listener's executor: StorageEventListener.onVolumeStateChanged and onStorageStateChanged, StorageVolumeCallback.onStateChanged with the
+     * volume in its new state (MediaProvider updates its volume cache on it). On the app's main thread.
+     */
+    static void changed(android.content.Context context, VolumeInfo volume, int oldState) {
+        StorageManager manager = context.getSystemService(StorageManager.class);
+        if (manager == null) return;
+        synchronized (ShadowHostStorageManager.class) { volumes = null; }
+        HostStorage.storageVolumes(context, manager);
+        int user = android.os.Process.myUserHandle().getIdentifier();
+        android.os.storage.StorageVolume userVolume = volume.buildStorageVolume(context, user, false);
+        String oldEnv = VolumeInfo.getEnvironmentForState(oldState), newEnv = VolumeInfo.getEnvironmentForState(volume.state);
+        java.util.List<Object> delegates = new java.util.ArrayList<>();
+        java.util.List<ShadowHostStorageManager> all;
+        synchronized (ALL) { all = new java.util.ArrayList<>(ALL); }
+        for (ShadowHostStorageManager shadow : all) {
+            if (shadow.real == null) continue;
+            java.util.List<?> registered = org.robolectric.util.ReflectionHelpers.getField(shadow.real, "mDelegates");
+            synchronized (registered) { delegates.addAll(registered); }
+        }
+        for (Object delegate : delegates) {
+            java.util.concurrent.Executor executor = org.robolectric.util.ReflectionHelpers.getField(delegate, "mExecutor");
+            android.os.storage.StorageEventListener listener = org.robolectric.util.ReflectionHelpers.getField(delegate, "mListener");
+            StorageManager.StorageVolumeCallback callback = org.robolectric.util.ReflectionHelpers.getField(delegate, "mCallback");
+            executor.execute(() -> {
+                if (listener != null) { listener.onVolumeStateChanged(volume, oldState, volume.state); listener.onStorageStateChanged(userVolume.getPath(), oldEnv, newEnv); }
+                if (callback != null) callback.onStateChanged(userVolume);
+            });
         }
     }
 

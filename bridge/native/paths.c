@@ -68,6 +68,21 @@ static bool binder_device(char **path)
     return false;
 }
 
+/* /storage/<uuid>[/...] of a removable drive: its link in the storage directory resolved here, so the volume's root is the drive's directory and
+ * not a symlink (a scanner's walk from the root, which follows no links, stops at one). rest is "/<uuid>..." */
+static bool drive_path(const char *storage, const char *rest, char **mapped)
+{
+    if (rest[0] != '/' || !rest[1] || !strncmp(rest, "/emulated", 9)) return false;
+    const char *slash = strchr(rest + 1, '/');
+    size_t k = slash ? (size_t)(slash - rest) : strlen(rest);
+    char link[4096], target[4096];
+    if (snprintf(link, sizeof link, "%s%.*s", storage, (int)k, rest) >= (int)sizeof link) return false;
+    ssize_t t = readlink(link, target, sizeof target - 1);
+    if (t <= 0 || target[0] != '/') return false;
+    target[t] = 0;
+    return asprintf(mapped, "%s%s", target, rest + k) >= 0;
+}
+
 /* Android's storage paths are the instance's storage directory ($APKLAYER_STORAGE, cli/layout): /storage/emulated/0 as on a device (MediaProvider
  * reads volume and relative path from that spelling), and its other names /sdcard and /data/media/0; a removable drive's /mnt/media_rw/<uuid> is its
  * /storage/<uuid> (a link to the desktop's mount, HostVolumes.Removable). Mapped whether or not the file exists yet. */
@@ -80,6 +95,7 @@ static bool storage_path(char **path)
         size_t n = strlen(names[i][0]);
         if (strncmp(*path, names[i][0], n) || ((*path)[n] && (*path)[n] != '/')) continue;
         char *mapped;
+        if (!names[i][1][0] && drive_path(storage, *path + n, &mapped)) { *path = mapped; return true; }
         if (asprintf(&mapped, "%s%s%s", storage, names[i][1], *path + n) < 0) return false;
         *path = mapped;
         return true;

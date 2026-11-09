@@ -42,7 +42,8 @@ final class HubProtocol {
             // RELAUNCH: `apklayer run` of a running app (the CLI, through servicetool call): {package, intent file or ""} -> 0 delivered, 1 not running
     static final int ENDPOINT_BIND = 1, ENDPOINT_UNBIND = 2, ENDPOINT_START = 3, ENDPOINT_STOP = 4, ENDPOINT_GET_PROVIDER = 5, ENDPOINT_NOTIFY = 6, ENDPOINT_START_ACTIVITY = 7, ENDPOINT_EXIT_IF_IDLE = 8, ENDPOINT_PACKAGE_CHANGED = 9, ENDPOINT_CONFIGURATION = 10, ENDPOINT_JOB = 11,
             ENDPOINT_JOB_STOP = 12,  // {job id, JobParameters stop reason}: a constraint stopped holding (HostJobs.stop)
-            ENDPOINT_CALL_AUDIO = 13;  // {mode, AudioDeviceAttributes or null}: another app changed the instance's audio mode or communication device (HubCallAudio)
+            ENDPOINT_CALL_AUDIO = 13,  // {mode, AudioDeviceAttributes or null}: another app changed the instance's audio mode or communication device (HubCallAudio)
+            ENDPOINT_VOLUME = 14;  // {VolumeInfo in its new state, old state}: a removable drive came or went (HubVolumes, ShadowHostStorageManager.changed)
     private HubProtocol() {}
     static <T> T call(IBinder target, String descriptor, int code, Consumer<Parcel> write, Function<Parcel, T> read) {
         Parcel request = Parcel.obtain(), reply = Parcel.obtain();

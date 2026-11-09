@@ -39,8 +39,16 @@ final class HostJobs {
 
     private HostJobs() {}
 
+    /** Jobs planned to run at once and not started yet (WorkManager's next work in a chain): the component host waits for them (Services.exitIfIdle). */
+    private static final java.util.Set<Integer> DUE = new java.util.HashSet<>();
+    static synchronized boolean due() { return !DUE.isEmpty(); }
+    /** The process has scheduled a job (WorkManager's apps): its host waits a moment before it ends (Services.exitIfIdle). */
+    static volatile boolean scheduled;
+
     static synchronized void plan(JobInfo job, long delayMs) {
         stopRun(job.getId(), JobParameters.STOP_REASON_CANCELLED_BY_APP);  // schedule() of a running job replaces it (JobSchedulerService.scheduleAsPackage)
+        scheduled = true;
+        if (delayMs <= 0 && !job.isPeriodic()) DUE.add(job.getId()); else DUE.remove(job.getId());
         if (HubClient.connected()) { HubClient.current().scheduleJob(job, delayMs); return; }  // the hub holds it: it runs when no process of the app does (HubScheduler)
         Runnable old = PLANNED.remove(job.getId());
         if (old != null) MAIN.removeCallbacks(old);
@@ -52,6 +60,7 @@ final class HostJobs {
     static void plan(JobInfo job) { plan(job, job.isPeriodic() ? job.getIntervalMillis() : job.getMinLatencyMillis()); }
 
     static synchronized void cancel(int jobId) {
+        DUE.remove(jobId);
         FAILURES.remove(jobId);
         WORK.remove(jobId);
         stopRun(jobId, JobParameters.STOP_REASON_CANCELLED_BY_APP);
@@ -106,7 +115,7 @@ final class HostJobs {
     }
 
     private static void start(JobInfo job) {
-        synchronized (HostJobs.class) { PLANNED.remove(job.getId()); }
+        synchronized (HostJobs.class) { PLANNED.remove(job.getId()); DUE.remove(job.getId()); }
         Context app = RuntimeEnvironment.getApplication();
         ComponentName service = job.getService();
         ServiceConnection[] connection = new ServiceConnection[1];

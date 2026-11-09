@@ -99,6 +99,11 @@ final class HubEndpoint extends Binder {
             main.post(() -> ShadowHostNativeAudioManager.changedElsewhere(mode, device));
             reply.writeNoException(); return true;
         }
+        if (code == HubProtocol.ENDPOINT_VOLUME) {
+            android.os.storage.VolumeInfo volume = request.readTypedObject(android.os.storage.VolumeInfo.CREATOR); int oldState = request.readInt(); request.enforceNoDataAvail();
+            main.post(() -> ShadowHostStorageManager.changed(context, volume, oldState));
+            reply.writeNoException(); return true;
+        }
         if (code == HubProtocol.ENDPOINT_JOB) {
             android.app.job.JobInfo job = request.readTypedObject(android.app.job.JobInfo.CREATOR); request.enforceNoDataAvail();
             main.post(() -> HostJobs.run(job));
