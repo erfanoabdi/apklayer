@@ -6,6 +6,8 @@
 #include <android/hardware/BnCameraServiceProxy.h>
 #include <android/os/BnProcessInfoService.h>
 #include <binder/IServiceManager.h>
+#include <binder/LazyServiceRegistrar.h>
+#include <unistd.h>
 #include <hidl/HidlTransportSupport.h>
 
 #include "CameraService.h"
@@ -64,6 +66,22 @@ extern "C" int main(int, char**) {
     auto service = interface_cast<hardware::ICameraService>(defaultServiceManager()->checkService(String16("media.camera")));
     if (service == nullptr || !service->notifySystemEvent(hardware::ICameraService::EVENT_USER_SWITCHED, {0}).isOk()) return 1;
     fprintf(stderr, "cameraserver: media.camera registered\n");
+    // started on first use (cli/stack.cpp): registered again with client counting, the process exits once no client holds any of its services
+    // (an AOSP lazy service) and the stack starts it again on the next lookup. _exit, not the registrar's exit(): static destructors under
+    // btload abort while binder threads still run.
+    if (getenv("APKLAYER_LAZY_SERVICE")) {
+        auto& registrar = binder::LazyServiceRegistrar::getInstance();
+        registrar.setActiveServicesCallback([&registrar](bool clients) {
+            if (!clients && registrar.tryUnregister()) _exit(0);
+            if (!clients) registrar.reRegister();
+            return true;
+        });
+        for (const char* name : {"media.camera", "media.camera.proxy", "processinfo"})
+            if (auto b = defaultServiceManager()->checkService(String16(name)); b != nullptr && b->localBinder() != nullptr) {
+                (void)registrar.registerService(b, name);
+                (void)defaultServiceManager()->checkService(String16(name));  // the client guarantee, as in MediaServices.cpp
+            }
+    }
     ProcessState::self()->startThreadPool();
     IPCThreadState::self()->joinThreadPool();
     return 1;

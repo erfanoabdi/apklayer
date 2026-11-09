@@ -61,7 +61,35 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - From the shell on, touch works: a finger down/up through the shell's wl_touch handlers (test input, 540,228) opened UiBench's "General" (screenshot). So the fault is between Lipstick and the shell.
 - Lipstick 0.36.41 (LipstickCompositorWindow::handleTouchEvent, QtWayland 5.6 Touch) sends wl_pointer.enter, wl_keyboard.enter and wl_touch.down to a mapped application window's client; it does not use qt_touch_extension for that. No fault found in that code for a wl_shell client.
 - A tap written to the touchscreen's evdev node (goodix_ts, event4) produced no Wayland input event at all. The phone was blanked and locked (mce: display off, tklock locked, device lock with a code), so this run says nothing yet. Lipstick's own delivery needs a run with the phone unlocked and the app in front. Unlocking it from a script was not done (needs the owner's permission).
-## 2026-11-09: the always-on phone instance with less memory, second round (docs/PLAN.md "app start speed on phones" 8)
+## 2026-11-09: the always-on phone instance with less memory, third round: the native services (docs/PLAN.md "app start speed on phones" 8)
+- Measured (Volla X23, smaps per service): nearly all of a native service's PSS is anonymous memory, and it follows the number of
+  libraries it loads (~0.25 MB each: the libraries' static allocations): gnss 27 libraries 9 MB, mediaserver ~200 libraries 55 MB.
+  The sensors HAL loaded 258 (libandroid_runtime, hwui, pdfium, stagefright...) for 101 MB: it linked libandroid for its `--probe` only.
+  The probe opens libandroid itself now: the HAL is 6 MB (sensorfw backend; the device's sensors HAL is not used).
+- cameraserver, the media server, the extractor and codec2 start on use and end once no client holds them, as AOSP's lazy services:
+  servicemanager's access policy (aosp/hals/servicemanager/Access.cpp) writes each lookup of their names to a FIFO the stack daemon
+  polls (cli/stack.cpp); the services register through LazyServiceRegistrar (NDK: AServiceManager_registerLazyService) and end with
+  _exit from the active-services callback (the registrar's exit() aborted codec2 under btload). Clients wait as on a device
+  (waitForService and getService's polling ask again; Java's getService("media.camera") waits for cameraserver in 1 s steps,
+  ShadowHostServiceManager). The stack no longer waits for media.camera before it is ready. `APKLAYER_LAZY_SERVICES=0` (in ~/.config/apklayer/env: the stack is often started by apklayerd or the hub) starts them
+  with the stack and keeps them; not under the sandbox.
+- Who starts them on the phone: the media provider's boot scan (media.player, then codec2 through the media server), Open Camera,
+  NewPipe's WebView (Chromium asks CameraManager: cameraserver; MediaCodecList: the media server and codec2); each ends 5-10 s after its
+  last client.
+- SurfaceFlinger's 110-120 MB: ~37 MB is the Mali driver's per-context blob (the composer has the same block once it drew), ~10 MB
+  Skia's SkSL; dma-bufs and gralloc buffers are not in its PSS.
+- A service registered twice (instantiate(), then the registrar) lost servicemanager's client guarantee and, with a client that got it
+  through a registration callback only, never heard of clients and stayed: a lookup right after registering restores it.
+- Phone (deb 0.4.7~git20261109.lazy4 built on Parallels, the five libraries copied into runtime 0.3.4; rollback: ~/speed78/apklayer-mem2.deb
+  and ~/speed78/orig-libs): settled, no app yet, 1293 MB (native 642) -> **974 MB** (hub 346, spare 305, native 306); lazy off in the same
+  deb 1204. After NewPipe, Calculator, Open Camera and a NewPipe video, everything ended: 1374 -> 1032 MB. Launches unchanged (PLAN 8's
+  table: NewPipe cold 21.0-21.4 / warm 12.2-12.5 s, Calculator 17.5-18.3 / 10.0-10.5 s, lazy off 21.3-21.5 / 12.4-13.0 / 17.8-18.2 /
+  10.1-10.8 s). Open Camera: the camera connects 0.1 s after the activity resumes, preview 2.1 s later, as before; NewPipe plays video.
+- Tests: Parallels (~/agent-lazy, private library directory) gpu, startup, hub-services, camera, codec2, native-surface, native-media,
+  native-player, native-audio, audio-aidl, audio-track, audio-system, audio-silent pass (native-media's AVC round trip fails about one run
+  in two with lazy services on or off); x86 PC (~/apklayer-x86/lazy, xk1/xk2) gpu, startup, hub-services, camera, codec2, native-surface,
+  native-media, native-player, native-audio, audio-aidl, audio-system, audio-track pass; audio-silent fails there with lazy services on or off.
+
 - Measured where a host JVM's ~320 MB goes on the Volla X23 (NMT summary, smaps): heap 90 MB committed for 30-43 MB live, the CDS archive's
   read-write half ~33 MB private per JVM, ~110 MB of Android native allocations NMT does not see, metaspace/code/symbols ~40 MB.
 - SettingsProvider runs in the hub's JVM, as in system_server (HubHost, cli runHub; not under the sandbox, or with APKLAYER_SETTINGS_IN_HUB=0).
@@ -322,6 +350,12 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_sensors, libapklayer_servicemanager: a smaller sensors HAL, services started on first use
+- Why: docs/PLAN.md "app start speed on phones" 8. The sensors HAL linked libandroid for its `--probe` only, which pulled ~230 libraries (libandroid_runtime, hwui, pdfium...) and ~85 MB of their static allocations into the always-running HAL on the phone: the probe opens libandroid itself now. servicemanager's access policy (Access.cpp) tells the stack each name a client first asks for, so the stack starts cameraserver, the mediaservers and codec2 on first use.
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "sensors: probe opens libandroid; servicemanager: first-use names" hals/sensors hals/servicemanager`, then `m libapklayer_sensors libapklayer_servicemanager` for gsi_arm64, then gsi_x86_64.
+- Second step, the same day: the started services end when their last client lets go (AOSP's LazyServiceRegistrar), and servicemanager reports every lookup of their names: `tools/sync-aosp.sh "lazy media, codec2 and camera services" hals/servicemanager hals/media hals/camera`, then `m libapklayer_servicemanager libapklayer_mediaserver libapklayer_codec2 libapklayer_cameraserver` for gsi_arm64, then gsi_x86_64. codec2 first failed (AServiceManager_registerLazyService is API 31, the module's target 30: an availability check).
+- Third step: the registrar's exit() aborted codec2 under btload (static destructors while binder threads run): the three services end with _exit from an active-services callback. Synced (`hals/media hals/camera`), arm64 replayed with `tools/lib/orb-build-module.py` (libapklayer_mediaserver, libapklayer_codec2, libapklayer_cameraserver), x86_64 with `m` of the three. Fourth: a lookup after registering again (mediaserver, cameraserver; the same way).
+- Result: all built. sha256 arm64: sensors f914a4bd, servicemanager de9cd51c, mediaserver a49936cd, codec2 21597984, cameraserver 1b251116; x86_64: sensors 2cf69d62, servicemanager 67d202f3, mediaserver eb2ddbc8, codec2 15575c2d, cameraserver 47051065. Both locks set by hand from these files; not yet in the prebuilts (copies for the lead: /tmp/apkl-lazy/{arm64,x86_64} on the Mac). The CLI starts the services lazily only with a servicemanager that reports lookups, so a runtime without these libraries keeps the old behaviour.
 ### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_gnss: a client that dies without close() is closed for it
 - Why: docs/PLAN.md item 6, the GNSS example crashed once after its client died (the hub ends its client with a signal): a death recipient on the callback closes the session; setCallback, close and the death are serialized (the example joins its thread in both).
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "gnss: close a dead client's session" hals/gnss`, then `m libapklayer_gnss` for gsi_arm64, then gsi_x86_64.

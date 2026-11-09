@@ -7,6 +7,8 @@
 #include <android/binder_process.h>
 #include <codec2/aidl/ComponentStore.h>
 #include <cstdio>
+#include <cstdlib>
+#include <unistd.h>
 #include <algorithm>
 #include <cstring>
 #include <C2Config.h>
@@ -105,7 +107,18 @@ extern "C" int main(int argc, char** argv) {
     ABinderProcess_startThreadPool();
     auto service = ndk::SharedRefBase::make<utils::ComponentStore>(apklayer::makeStore());
     const std::string name = std::string(IComponentStore::descriptor) + "/apklayer";
-    auto result = AServiceManager_addService(service->asBinder().get(), name.c_str());
+    // started on first use (cli/stack.cpp): an AOSP lazy service, it exits once no client holds it and the stack starts it again on the next lookup.
+    // _exit, not the registrar's exit(): static destructors under btload abort while binder threads still run.
+    int32_t result = -1;
+    if (!getenv("APKLAYER_LAZY_SERVICE")) result = AServiceManager_addService(service->asBinder().get(), name.c_str());
+    else if (__builtin_available(android 31, *)) {
+        AServiceManager_setActiveServicesCallback([](bool clients, void*) {
+            if (!clients && AServiceManager_tryUnregister()) _exit(0);
+            if (!clients) AServiceManager_reRegister();
+            return true;
+        }, nullptr);
+        result = AServiceManager_registerLazyService(service->asBinder().get(), name.c_str());
+    }
     if (result != EX_NONE) { fprintf(stderr, "codec2: registration failed %d\n", result); return 1; }
     fprintf(stderr, "codec2: registered %s\n", name.c_str());
     ABinderProcess_joinThreadPool();
