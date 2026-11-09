@@ -3,6 +3,22 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: FCL's game JVM gets past VM init (bionic_translation 0050, 0051)
+- Cause of "Error occurred during initialization of VM: java.lang.StackOverflowError at java.lang.String.<clinit>" (and of a SIGBUS at a
+  garbage pc in a later try): `pthread_attr_getguardsize` had no bionic_ wrapper, so FCL's JRE 25 (bionic HotSpot) ran glibc's on the
+  bionic attr; it read bionic's stack_size field (0038 fills it) as the guard, so HotSpot computed a stack of size 0 for its main thread
+  and protected 16 KB above the stack (over the next mapping: libjvm.so's own start under btload). 0050 wraps the remaining attr
+  functions (guard size, scope, inheritsched) and fixes setstack's wrapper (misspelt `settstack`). Test: tests/native/attr-stack.c.
+- 0051: an absolute path dlopened from the app namespace opens outside the search path (Android allows the app's data): FCL's DLOPEN of
+  every jre25/lib/*.so failed with "library ... not found"; the search path buffers hold 32 directories in 4096 bytes (were 8 in 512).
+- Checked on Parallels without FCL (its JRE copied into a test slot): the JRE's `java -version` under btload crashed (SIGSEGV in the shim
+  linker on libjvm's PROT_NONE start) and runs after 0050; FCL's JRE 25 started by JLI_Launch inside our HotSpot 21 (libjsig preloaded,
+  FFM harness) runs a program with its own implicit null checks, StackOverflowErrors on two threads and GC while the host JVM takes
+  NullPointerExceptions on another thread: both JVMs' faults reach their own handlers (the guest finds libjsig through RTLD_DEFAULT and
+  installs first; host faults reach the host through libjsig's chain). bytehook_init's 3 (INITERR_SYM, as bytehook's codes read):
+  FCL logs "Failed to initialize native hooks!" and goes on to JLI_Launch; what those hooks do in the game was not checked. Groups native, native-bridge, native-surface, startup pass (Parallels, own tree).
+- Not yet seen: the game in FCL after the fix (the owner drives FCL; their result is the next step).
+
 ## 2026-11-09: `apklayer stop` ends a shell a racing launch started (hub-services' leftover apklayer-shell on Parallels)
 - cli/stop.cpp: the shell was ended only before the hub; a launch racing the stop could start a new one, and the final sweep spares the session's shell, so it outlived the stop (hub-smoke: `assert not left`, also at -j 1). The stop now checks again after the sweep (endShellUnlessShared: kept while another instance's stack runs). Parallels: hub-services passes 2 of 2 after it (failed 2 of 2 before), sysprov and the Settings round's groups pass.
 

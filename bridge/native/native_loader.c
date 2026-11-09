@@ -37,7 +37,7 @@ static void apply_app_paths(void)
 
 /* The linker's private API Pojav/FCL call through libdl.so (their game's JRE directories): on Android the default namespace's search path; here the
  * app namespace's, after the app's own directories. Only existing directories outside /system and /vendor (the device's, which the system namespace has).
- * shortcut: the shim linker keeps 8 directories (LDPATH_MAX) of 512 bytes in all, the rest is dropped; raise those in bionic_translation when an app needs more. */
+ * shortcut: the shim linker keeps 32 directories (LDPATH_MAX) of 4096 bytes in all (bionic_translation 0051), the rest is dropped; raise those when an app needs more. */
 void bionic_android_update_LD_LIBRARY_PATH(const char *path)
 {
     char copy[sizeof app_extra], *save = NULL;

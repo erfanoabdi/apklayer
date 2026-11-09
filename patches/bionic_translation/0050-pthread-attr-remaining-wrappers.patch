@@ -1,0 +1,71 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Mon, 9 Nov 2026 00:00:00 +0000
+Subject: [PATCH] pthread_wrapper: wrap the remaining pthread_attr functions (guard size, setstack, scope, inheritsched)
+
+apklayer patch (docs/PATCHES.md). pthread_attr_{get,set}guardsize, {get,set}scope and {get,set}inheritsched had no bionic_
+wrapper and pthread_attr_setstack's was misspelt (settstack), so the guest called glibc's on the bionic struct. glibc's
+getguardsize reads offset 16, bionic's stack_size (filled since 0038): HotSpot (FCL's JRE 25 in the app process) took the
+whole stack as guard, saw a stack of size 0, failed VM init with StackOverflowError and put its guard pages above the
+thread's stack, over the next mapping (the start of libjvm.so itself under btload).
+
+--- a/pthread_wrapper/libpthread.c
++++ b/pthread_wrapper/libpthread.c
+@@ -422,12 +422,55 @@
+ 	return sync_bionic_attr(attr, pthread_getattr_np((pthread_t)thread, attr->glibc));
+ }
+ 
+-int bionic_pthread_attr_settstack(bionic_attr_t *attr, void *stackaddr, size_t stacksize)
++/* apklayer patch: was bionic_pthread_attr_settstack, so the guest's pthread_attr_setstack, like the guard size and the other attr
++ * functions below that had no wrapper, ran glibc's on the bionic struct: glibc's getguardsize read bionic's stack_size field
++ * (0038 fills it) as the guard, and HotSpot then saw a thread stack of size 0 (StackOverflowError at VM init, guard pages
++ * put above the stack, over the next mapping). */
++int bionic_pthread_attr_setstack(bionic_attr_t *attr, void *stackaddr, size_t stacksize)
+ {
+ 	assert(attr && IS_MAPPED(attr));
+-	return pthread_attr_setstack(attr->glibc, stackaddr, stacksize);
++	const int ret = sync_bionic_attr(attr, pthread_attr_setstack(attr->glibc, stackaddr, stacksize));
++	if (ret == 0)
++		attr->bionic.stack_base = stackaddr;
++	return ret;
+ }
+ 
++int bionic_pthread_attr_setguardsize(bionic_attr_t *attr, size_t guardsize)
++{
++	assert(attr && IS_MAPPED(attr));
++	return sync_bionic_attr(attr, pthread_attr_setguardsize(attr->glibc, guardsize));
++}
++
++int bionic_pthread_attr_getguardsize(const bionic_attr_t *attr, size_t *guardsize)
++{
++	assert(attr && IS_MAPPED(attr));
++	return pthread_attr_getguardsize(attr->glibc, guardsize);
++}
++
++int bionic_pthread_attr_setscope(bionic_attr_t *attr, int scope)
++{
++	assert(attr && IS_MAPPED(attr));
++	return pthread_attr_setscope(attr->glibc, scope);
++}
++
++int bionic_pthread_attr_getscope(const bionic_attr_t *attr, int *scope)
++{
++	assert(attr && IS_MAPPED(attr));
++	return pthread_attr_getscope(attr->glibc, scope);
++}
++
++int bionic_pthread_attr_setinheritsched(bionic_attr_t *attr, int inherit)
++{
++	assert(attr && IS_MAPPED(attr));
++	return pthread_attr_setinheritsched(attr->glibc, inherit);
++}
++
++int bionic_pthread_attr_getinheritsched(const bionic_attr_t *attr, int *inherit)
++{
++	assert(attr && IS_MAPPED(attr));
++	return pthread_attr_getinheritsched(attr->glibc, inherit);
++}
++
+ int bionic_pthread_attr_getstack(const bionic_attr_t *attr, void *stackaddr, size_t *stacksize)
+ {
+ 	assert(attr && IS_MAPPED(attr));

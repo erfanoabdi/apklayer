@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Mon, 9 Nov 2026 00:00:00 +0000
+Subject: [PATCH] linker: an absolute path from the app namespace opens; longer search paths
+
+apklayer patch (docs/PATCHES.md). Android's linker opens an absolute path the app's namespace permits (the app's own data);
+the shim linker refused any path outside its search path ("library ... not found"): FCL's game JRE in its data
+(jre25/lib/server/libjvm.so, and the JDK's own loads of <java.home>/lib/libjava.so, libnio.so, ...). The search path
+buffers held 8 directories in 512 bytes, so the JRE directories FCL adds were dropped: 32 in 4096 bytes now.
+
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -83,9 +83,9 @@
+ #define ALLOW_SYMBOLS_FROM_MAIN 1
+ #define SO_MAX 512
+ 
+-/* Assume average path length of 64 and max 8 paths */
+-#define LDPATH_BUFSIZE	  512
+-#define LDPATH_MAX	  8
++/* apklayer patch: was 512 bytes and 8 paths; an app's own directories (FCL's game JRE: about a dozen of 100 characters) were dropped */
++#define LDPATH_BUFSIZE	  4096
++#define LDPATH_MAX	  32
+ 
+ #define LDPRELOAD_BUFSIZE 512
+ #define LDPRELOAD_MAX	  8
+@@ -1449,6 +1449,11 @@
+ {
+ 	char fullpath[512];
+ 	int fd = apkenv_open_library(name, fullpath, vendor ? apkenv_vendor_ldpaths : app ? apkenv_app_ldpaths : apkenv_ldpaths, !app && !vendor);
++	/* apklayer patch: Android's linker opens an absolute path the app's namespace permits (its own data: FCL's game JRE, its
++	 * libjvm.so and the JDK's System.loadLibrary of <java.home>/lib/libjava.so); here it was refused outside the search path.
++	 * shortcut: any absolute path from the app namespace, not only the app's data; narrow it if a host library gets in the way. */
++	if (fd == -1 && app && name[0] == '/' && strlen(name) < sizeof(fullpath) && (fd = apkenv__open_lib(name)) >= 0)
++		strcpy(fullpath, name);
+ 	int cnt;
+ 	size_t ext_sz;
+ 	size_t req_base;
