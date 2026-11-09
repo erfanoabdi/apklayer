@@ -27,6 +27,18 @@ final class HostCameraShadows {
             return new String(java.nio.file.Files.readAllBytes(new java.io.File(System.getenv("APKLAYER_DATA"), "apklayer/host_hals.conf").toPath())).contains("android.hardware.camera.provider\n");        } catch (java.io.IOException none) { return false; }
     }
 
+    /** A window of this shape now. The instance's display is portrait-natural, so a portrait window reports rotation 0 and the app turns the
+     *  preview by the sensor orientation; the backend's cameras stay upright on the landscape desktop (rotation 90, bridge/hals/camera camera.h).
+     *  Android's camera compat info, which WindowManager sets for a fixed-orientation activity on a rotated display, makes cameraserver turn
+     *  the frames back (ANDROID_SCALER_ROTATE_AND_CROP_90 for a back camera, 270 for a front one, aosp/hals/camera). Read at each camera open.
+     *  A device camera (Halium) turns with the phone: none. */
+    static void windowShape(boolean portrait) {
+        String root = System.getenv("APKLAYER_INSTANCE_ROOT");
+        if (root != null && deviceCamera(root)) return;
+        android.content.res.CompatibilityInfo.setCameraCompatibilityInfo(new android.content.res.CameraCompatibilityInfo.Builder()
+                .setRotateAndCropRotation(portrait ? android.view.Surface.ROTATION_90 : android.app.WindowConfiguration.ROTATION_UNDEFINED).build());
+    }
+
     static List<Map.Entry<String, String>> entries() {
         return List.of(
                 Map.entry("android.hardware.camera2.CameraManager", CameraManager.class.getName()),

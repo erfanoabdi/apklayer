@@ -272,6 +272,13 @@ ScopedAStatus CameraDevice::getCameraCharacteristics(CameraMetadata* metadata) {
 
         m[ANDROID_SCALER_CROPPING_TYPE] =
             uint8_t(ANDROID_SCALER_CROPPING_TYPE_CENTER_ONLY);
+        // apklayer patch: rotate-and-crop (BackendCamera turns each output), which cameraserver asks for a portrait window
+        m[ANDROID_SCALER_AVAILABLE_ROTATE_AND_CROP_MODES]
+            .add<uint8_t>(ANDROID_SCALER_ROTATE_AND_CROP_NONE)
+            .add<uint8_t>(ANDROID_SCALER_ROTATE_AND_CROP_90)
+            .add<uint8_t>(ANDROID_SCALER_ROTATE_AND_CROP_180)
+            .add<uint8_t>(ANDROID_SCALER_ROTATE_AND_CROP_270)
+            .add<uint8_t>(ANDROID_SCALER_ROTATE_AND_CROP_AUTO);
     }
     {   // ANDROID_SENSOR_...
         m[ANDROID_SENSOR_ORIENTATION] =
@@ -576,6 +583,7 @@ CameraMetadataMap CameraDevice::constructDefaultRequestSettingsImpl(const Reques
         .add<int32_t>(0).add<int32_t>(0)
         .add<int32_t>(sensorSize.width - 1)
         .add<int32_t>(sensorSize.height - 1);
+    m[ANDROID_SCALER_ROTATE_AND_CROP] = uint8_t(ANDROID_SCALER_ROTATE_AND_CROP_AUTO);  // apklayer patch: cameraserver picks the value
 
     m[ANDROID_SENSOR_EXPOSURE_TIME] = int64_t(mHwCamera->getDefaultSensorExpTime());
     m[ANDROID_SENSOR_FRAME_DURATION] = int64_t(mHwCamera->getDefaultSensorFrameDuration());
