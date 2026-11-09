@@ -1,5 +1,5 @@
 /* The navigation bar of a mobile-style window (mobile.c): a subsurface over the bottom of the app's content, as Android's three-button
- * navigation bar: Back and Home (Recents: none, the compositor has its own switcher). The app is told its height as the navigation bar
+ * navigation bar: Back only (Home and Recents: the compositor's own, owner 2026-11-09). The app is told its height as the navigation bar
  * inset (CONFIGURE), so its content stays above it. Coordinates are logical pixels of the window. */
 #ifndef APKLAYER_NAVBAR_H
 #define APKLAYER_NAVBAR_H
@@ -7,7 +7,7 @@
 #include <stddef.h>
 #include <wayland-client.h>
 
-enum { NAV_NONE = -1, NAV_BAR = 0, NAV_BACK, NAV_HOME };
+enum { NAV_NONE = -1, NAV_BAR = 0, NAV_BACK };
 
 struct navbar {
     struct wl_surface *surface;

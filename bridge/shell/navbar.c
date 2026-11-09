@@ -1,5 +1,5 @@
 /* The navigation bar of a mobile-style window (navbar.h): its subsurface, buffer and drawing (cairo), like the title bar (decor.c). Android's
- * three-button bar without Recents: Back (a triangle) left of the centre, Home (a ring) in the centre; light or dark like the instance. */
+ * bar with Back only (a triangle, left of the centre; no Home or Recents: the compositor has its own, owner 2026-11-09); light or dark like the instance. */
 #define _GNU_SOURCE
 #include "navbar.h"
 
@@ -44,14 +44,13 @@ void navbar_set_remote(struct navbar *n, void (*send)(void *ctx, int fd, int pw,
     n->ctx = ctx;
 }
 
-/* The centre of a button, in logical pixels: Home in the middle, Back a quarter of the width left of it. */
-static double button_cx(int lw, int which) { return which == NAV_BACK ? lw / 4.0 : lw / 2.0; }
+/* The centre of Back, in logical pixels: a quarter of the width, where Android puts it. */
+static double button_cx(int lw) { return lw / 4.0; }
 
 int navbar_hit(const struct navbar *n, int x)
 {
     if ((!n->surface && !n->remote) || x < 0 || x >= n->lw) return NAV_NONE;
     if (x < n->lw * 3 / 8) return NAV_BACK;
-    if (x < n->lw * 5 / 8) return NAV_HOME;
     return NAV_BAR;
 }
 
@@ -67,23 +66,18 @@ static void draw(void *px, int pw, int ph, int lw, int lh, int dark, int pressed
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
     cairo_set_line_width(cr, lh / 24.0);
     cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
-    for (int b = NAV_BACK; b <= NAV_HOME; b++) {
-        double cx = button_cx(lw, b), cy = lh / 2.0;
-        if (b == pressed) {  /* the ripple of a held button */
+    {
+        double cx = button_cx(lw), cy = lh / 2.0;
+        if (pressed == NAV_BACK) {  /* the ripple of a held button */
             cairo_set_source_rgba(cr, fg, fg, fg, 0.18);
             cairo_arc(cr, cx, cy, lh * 0.42, 0, 2 * M_PI);
             cairo_fill(cr);
         }
         cairo_set_source_rgba(cr, fg, fg, fg, 0.9);
-        if (b == NAV_BACK) {
-            cairo_move_to(cr, cx - r * 0.85, cy);
-            cairo_line_to(cr, cx + r * 0.75, cy - r);
-            cairo_line_to(cr, cx + r * 0.75, cy + r);
-            cairo_close_path(cr);
-        } else {
-            cairo_new_sub_path(cr);
-            cairo_arc(cr, cx, cy, r * 0.9, 0, 2 * M_PI);
-        }
+        cairo_move_to(cr, cx - r * 0.85, cy);
+        cairo_line_to(cr, cx + r * 0.75, cy - r);
+        cairo_line_to(cr, cx + r * 0.75, cy + r);
+        cairo_close_path(cr);
         cairo_stroke(cr);
     }
     cairo_destroy(cr);

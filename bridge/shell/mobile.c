@@ -164,9 +164,8 @@ void window_nav_layer(struct window *w)
 
 void window_nav_action(struct window *w, int button)
 {
-    if (debug_input) fprintf(stderr, "[shell] navigation bar %s\n", button == NAV_BACK ? "back" : button == NAV_HOME ? "home" : "bar");
+    if (debug_input) fprintf(stderr, "[shell] navigation bar %s\n", button == NAV_BACK ? "back" : "bar");
     if (button == NAV_BACK) window_send_back(w);
-    else if (button == NAV_HOME) window_minimize(w);  /* Android's Home: the app stops and the launcher (the compositor's) shows */
 }
 
 /* --display-info: what apps get on this display, for the stack's ro.sf.lcd_density (cli/stack.cpp). */

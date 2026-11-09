@@ -101,7 +101,7 @@ try:
                     shot = Image.open(instance.capture('mobile', PKG)).size
                     assert abs(shot[0] - w * scale // 100) <= 1 and abs(shot[1] - h * scale // 100) <= 1, 'picture %s px for %dx%d @%d%%' % (shot, w, h, scale)
                     first = (w, h, scale)
-                    if NO_SUBSURFACES:  # the bar in SurfaceFlinger's own picture: a plain background right of Home, Back's and Home's strokes on it
+                    if NO_SUBSURFACES:  # the bar in SurfaceFlinger's own picture: a plain background right of Back, Back's strokes on it
                         assert 'navigation bar composed by the display' in shell_log(), 'the display did not take the navigation bar'
                         img = Image.open(instance.OUT / 'mobile.png').convert('RGB')  # captured above
                         pw, ph = img.size
@@ -109,7 +109,7 @@ try:
                         assert bg in ((244, 244, 244), (0, 0, 0)), 'bar background %s' % (bg,)
                         assert all(img.getpixel((pw * 9 // 10, y)) == bg for y in range(ph - nav_px + 2, ph)), 'the bar does not fill the bottom %d px' % nav_px
                         row = [img.getpixel((x, ph - nav_px // 2)) for x in range(pw // 8, pw * 5 // 8)]
-                        assert sum(p != bg for p in row) >= 4, 'no Back or Home drawn on the bar'
+                        assert sum(p != bg for p in row) >= 4, 'no Back drawn on the bar'
                         checks.append('the bar composed by the display (background %s)' % (bg,))
                     checks.append('mobile %dx%d@%d%%, 420 dpi, navigation bar %d px' % (w, h, scale, nav_px))
                     assert 'mobile style' in shell_log(), 'no mobile style in the shell log'
