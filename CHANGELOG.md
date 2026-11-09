@@ -103,6 +103,26 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
   (Parallels: No route to host; the x86 PC's real adapter: Host is down after paging). Parallels and the x86 PC: bluetooth passes. On the x86 PC's
   real BlueZ `bluez.py listen` registered the server profile (LISTEN), nothing paired.
 
+## 2026-11-09: camera rotate-and-crop follows a window turned while the camera is open; checked on a real webcam (docs/PLAN.md "Camera")
+- The mode was fixed at open. AOSP's live path: on a device WindowManager tells system_server's CameraServiceProxy, which calls cameraserver's
+  notifyDisplayConfigurationChange; CameraService then asks the proxy's getRotateAndCropOverride again for each open client and
+  setRotateAndCropOverride changes the open camera's requests (Camera3Device's AUTO override), no reopen. apklayer's proxy stand-in
+  (aosp/hals/camera/services/Service.cpp, media.camera.proxy) now does that part: an app process tells it its window shape (one apklayer
+  transaction, oneway: package, 0 or 90 degrees, a process token whose death drops the entry) from HostCameraShadows.windowShape when the
+  shape flips, and only to a running cameraserver (media.camera.proxy is not a name the stack starts it for); the proxy answers 90 for a
+  back camera and 270 for a front one, as CameraProviderManager's portrait rotation, NONE for a landscape window, then calls
+  notifyDisplayConfigurationChange itself. Opens keep reading the camera compat info.
+- Tests: camera-portrait.py: with the back camera open hello.camera's Portrait turns its window to landscape (setRequestedOrientation; the
+  preview turned back by the display rotation as Camera2Basic does) and back: results 1 -> 0 -> 1, YUV frames upright (all bars) then turned
+  again, SurfaceFlinger screenshots with all eight bars across in landscape and upright cropped bars after the return. With the old
+  cameraserver it fails ("a landscape window kept rotate-and-crop", the result stayed 1). New optional group camera-real (CAMERA_REAL, default
+  "MacBook Pro Camera"): the same app on a real PipeWire camera (Parallels passes the Mac's FaceTime camera through; the provider reports it
+  as a back camera, orientation 90): the frames' size and brightness, the result modes, and the portrait screenshot after the return must
+  match the landscape screenshot's centre slice as it is (correlation of 18x32 grey grids: upright 0.75; turned 90/180/270 0.02/-0.10/0.05,
+  mirrored 0.47). Parallels (own tree): camera, camera-pipewire, camera-real pass; x86 PC (own tree, x86_64 library): camera passes.
+- Not changed: a portrait desktop monitor gives a portrait window, so it is treated as a turned phone (rotate-and-crop on); a webcam on a
+  turned monitor may or may not turn with it, which apklayer cannot know (docs/PLAN.md).
+
 ## 2026-11-09: camera rotate-and-crop for apps in a portrait window (docs/PLAN.md item 6, "Camera")
 - A portrait window reports rotation 0 on the instance's portrait-natural display, so an app turns the preview by the sensor orientation (90)
   although the backend's cameras stay upright on the landscape desktop: sideways previews in every portrait window (the default window shape on
@@ -487,6 +507,16 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_cameraserver: rotate-and-crop follows a window turned while the camera is open (camera live-turn agent)
+- Why: docs/PLAN.md "Camera": the mode was fixed at open. cameraserver's media.camera.proxy (services/Service.cpp) keeps each app's window
+  shape (an apklayer transaction from HostCameraShadows.windowShape) and calls CameraService's notifyDisplayConfigurationChange, which asks
+  getRotateAndCropOverride again for the open cameras. Sources only, no graph change.
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "camera: live window shape through the proxy" hals/camera`, then
+  `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_cameraserver`, then the same for gsi_x86_64.
+- Result: both built (after another agent's libapklayer_vdisplay build released the lock; x86_64 13:30, kati for each product).
+  libapklayer_cameraserver.so sha256 arm64 5d3a1022fe0aeb8de22024e111460874ec629da8818d84d774fd6c70a4b3f33e (2818672 bytes,
+  android_arm64_armv8-a_shared), x86_64 c424271f091333cb1b99846c53bc3c5d0bdb595e839a0e028ab5c9b931a28ea2 (3064344 bytes, android_x86_64_shared);
+  both locks set by hand. Not in the prebuilts yet (copies for the lead: the agent's Mac scratchpad `stage/{arm64,x86_64}`).
 ### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_allocator: CPU-only YUV buffers in shared memory (media flake agent)
 - Why: native-media's AVC round trip failed about one run in two on Parallels: MediaCodec queues an encoder input image while its own CPU view
   is still mapped, and the GPU-plane YUV fallback (packed 2) locks through a private copy, so the encoder read black frames. The allocator now

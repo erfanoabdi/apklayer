@@ -69,6 +69,11 @@ run = ["tests/vm/camera.sh", "python3 -u tests/vm/camera-portrait.py"]
 [camera-pipewire]  # a camera node on the desktop's PipeWire (other instances' PipeWire backends see it while it runs)
 apps = ["hello-camera"]
 run = ["CAMERA_APP=1 tests/vm/camera-pipewire.sh"]
+
+[camera-real]  # a real webcam through PipeWire (Parallels passes the Mac's camera through): rotate-and-crop checked against its own landscape picture
+apps = ["hello-camera"]
+run = ["CAMERA_REAL=\"${CAMERA_REAL:-MacBook Pro Camera}\" python3 -u tests/vm/camera-portrait.py"]
+optional = true
 [bluetooth]
 apps = ["hello-bluetooth"]
 run = ["tests/vm/bluetooth.sh"]
