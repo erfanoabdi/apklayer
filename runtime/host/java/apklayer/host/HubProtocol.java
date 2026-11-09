@@ -22,7 +22,7 @@ final class HubProtocol {
             START_INPUT = 40, FINISH_INPUT = 41,
             HOST_SETTINGS = 42,  // {} -> the instance's host settings Bundle (HubHostSettings), pushed again on a change (ENDPOINT_CONFIGURATION)
             SETTINGS_CHANGED = 43,  // `apklayer settings set|unset` (the CLI, through servicetool call): {} -> the hub rereads the instance's overrides  // the input method binding (HubInputMethods): {IRemoteInputConnection, EditorInfo} / {}  // {intent} -> 1 when an installed app (or the installer's confirmation) handles it: startActivity's ActivityNotFoundException
-            BLUETOOTH = 44,  // {address, uuid} (both null: a session) -> two descriptors to a BlueZ helper (HubBluetooth)
+            BLUETOOTH = 44,  // {address, uuid or RFCOMM channel, service name} (all null: a session; no address: a server socket's listener) -> two descriptors to a BlueZ helper (HubBluetooth)
             USB_PERMISSION = 45,  // {device name, ask} -> whether the caller may open the USB device (HubUsb); ask: the person decides now
             GNSS = 46,  // {follow} -> true: a pipe of the gps fixes from the hub's one GNSS HAL client (HubGnss); false: the caller's pipes end (null)
             PI_SEND_FOR_RESULT = 47,  // {sender, fill-in, ResultReceiver} -> status: Activity.startIntentSenderForResult (an activity PendingIntent answers the receiver)
@@ -38,7 +38,7 @@ final class HubProtocol {
             JOB_RETRY = 57,  // {job id, system stop}: the run ended asking to be rescheduled; HubScheduler plans it after its backoff
             CONFIRM_CREDENTIAL = 58,  // {title, description, challenge} -> whether the person confirmed with the login password (HubLockScreen.confirm)
             MICROPHONE_MUTE = 59,  // {on} -> the microphone mute after the request (HubCallAudio: AudioService.setMicrophoneMute and its broadcast)
-            BLUETOOTH_PIN = 60;  // {address, name, passkey} -> the PIN (or passkey) the person typed for a pairing BlueZ asked about, null when refused (HubBluetooth.pin)
+            BLUETOOTH_PIN = 60;  // {address, name, pairing variant, key} -> the PIN or passkey the person typed for a pairing BlueZ asked about ("yes" to a comparison), null when refused (HubBluetooth.pin)
             // RELAUNCH: `apklayer run` of a running app (the CLI, through servicetool call): {package, intent file or ""} -> 0 delivered, 1 not running
     static final int ENDPOINT_BIND = 1, ENDPOINT_UNBIND = 2, ENDPOINT_START = 3, ENDPOINT_STOP = 4, ENDPOINT_GET_PROVIDER = 5, ENDPOINT_NOTIFY = 6, ENDPOINT_START_ACTIVITY = 7, ENDPOINT_EXIT_IF_IDLE = 8, ENDPOINT_PACKAGE_CHANGED = 9, ENDPOINT_CONFIGURATION = 10, ENDPOINT_JOB = 11,
             ENDPOINT_JOB_STOP = 12,  // {job id, JobParameters stop reason}: a constraint stopped holding (HostJobs.stop)

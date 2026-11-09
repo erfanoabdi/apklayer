@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """BlueZ (org.bluez on the system bus) for one app's Bluetooth session, started by the hub (HubBluetooth) with stdin/stdout handed to the app (HostBluetooth).
 Speaks JSON lines: commands {"op": ...} on stdin, events {"ev": ...} on stdout. Ends when stdin closes (BlueZ then stops this client's discovery and notifications).
-`bluez.py rfcomm <address> <uuid>`: an RFCOMM connection to the device's service through BlueZ's Profile API; prints `OK` or `ERR <why>` on its own line, then
-relays the connection's bytes between stdin/stdout and the socket."""
+`bluez.py rfcomm <address> <uuid>|<channel>`: an RFCOMM connection to the device's service through BlueZ's Profile API (or straight to the channel, an
+AF_BLUETOOTH socket); `bluez.py listen <uuid> <name>`: the service registered (BlueZ's Profile API, server role), `LISTEN` once it is, then the first
+incoming connection. Both print `OK [address]` or `ERR <why>` on its own line, then relay the connection's bytes between stdin/stdout and the socket."""
 import json
 import os
+import socket
 import sys
 import threading
 import warnings
@@ -144,16 +146,21 @@ AGENT_XML = '''<node><interface name="org.bluez.Agent1"><method name="Release"/>
 <method name="RequestAuthorization"><arg type="o" direction="in"/></method>
 <method name="AuthorizeService"><arg type="o" direction="in"/><arg type="s" direction="in"/></method></interface></node>'''
 agent = None
-pin_requests = {}  # address -> (method, invocation): BlueZ waits for the PIN or passkey the app's side asks the person for (op "pin")
+pin_requests = {}  # address -> (method, invocation): BlueZ waits for the answer the app or the person gives (op "pin")
+VARIANTS = {'RequestPinCode': 0, 'RequestPasskey': 1, 'RequestConfirmation': 2, 'DisplayPasskey': 4, 'DisplayPinCode': 5}  # BluetoothDevice.PAIRING_VARIANT_*
 
 
 def on_agent(connection, sender, path, interface, method, parameters, invocation):
-    # shortcut: the app asked to bond, so confirmations are accepted (Android would show its pairing dialog); a PIN or passkey is asked through the app's side
-    if method in ('RequestPinCode', 'RequestPasskey'):
-        target = parameters.unpack()[0]
-        address = objects.get(target, {}).get(DEVICE, {}).get('Address') or target.rsplit('dev_', 1)[-1].replace('_', ':')
-        pin_requests[address.upper()] = (method, invocation)
-        emit(ev='pin', address=address, name=objects.get(target, {}).get(DEVICE, {}).get('Alias'), passkey=method == 'RequestPasskey')
+    # the app's side answers: its ACTION_PAIRING_REQUEST receiver (setPin) or the hub's dialog; a key to show is told and answered at once
+    if method in VARIANTS:
+        args = parameters.unpack()
+        address = objects.get(args[0], {}).get(DEVICE, {}).get('Address') or args[0].rsplit('dev_', 1)[-1].replace('_', ':')
+        if method.startswith('Request'):
+            pin_requests[address.upper()] = (method, invocation)
+        emit(ev='pin', address=address, name=objects.get(args[0], {}).get(DEVICE, {}).get('Alias'), variant=VARIANTS[method],
+             key=None if len(args) < 2 else str(args[1]) if method == 'DisplayPinCode' else '%06d' % args[1])
+        if not method.startswith('Request'):
+            invocation.return_value(None)
     else:
         invocation.return_value(None)
 
@@ -163,7 +170,7 @@ def ensure_agent():
     if agent is None:
         agent = '/apklayer/agent%d' % os.getpid()
         bus.register_object(agent, Gio.DBusNodeInfo.new_for_xml(AGENT_XML).interfaces[0], on_agent, None, None)
-        call('/org/bluez', BLUEZ + '.AgentManager1', 'RegisterAgent', (agent, 'NoInputNoOutput'), '(os)')  # Just Works for SSP; a legacy device still asks its PIN (RequestPinCode)
+        call('/org/bluez', BLUEZ + '.AgentManager1', 'RegisterAgent', (agent, 'DisplayYesNo'), '(os)')  # Android's: numeric comparison where both sides show it
 
 
 def command(line):
@@ -229,15 +236,15 @@ def command(line):
         ensure_agent()
         emit(ev='bond', address=address, state=11)
         call(target, DEVICE, 'Pair', done=lambda r, e: e and emit(ev='bond', address=address, state=10, message=e))
-    elif op == 'pin':  # the person's PIN or passkey for a waiting request; none: the pairing is refused
+    elif op == 'pin':  # the answer to a waiting request (a PIN, a passkey, "yes" to a comparison); none: the pairing is refused
         method, invocation = pin_requests.pop(address.upper(), (None, None))
         if invocation is None:
             return
         pin = c.get('pin')
         if not pin or method == 'RequestPasskey' and not (pin.isdigit() and int(pin) <= 999999):
-            invocation.return_dbus_error('org.bluez.Error.Rejected', 'no PIN given')
+            invocation.return_dbus_error('org.bluez.Error.Rejected', 'refused')
         else:
-            invocation.return_value(GLib.Variant('(s)', (pin,)) if method == 'RequestPinCode' else GLib.Variant('(u)', (int(pin),)))
+            invocation.return_value(GLib.Variant('(s)', (pin,)) if method == 'RequestPinCode' else GLib.Variant('(u)', (int(pin),)) if method == 'RequestPasskey' else None)
     elif op == 'unbond':
         target = device_path(address)
         if target:
@@ -260,34 +267,23 @@ PROFILE_XML = '''<node><interface name="org.bluez.Profile1"><method name="Releas
 <method name="NewConnection"><arg type="o" direction="in"/><arg type="h" direction="in"/><arg type="a{sv}" direction="in"/></method></interface></node>'''
 
 
-def rfcomm(address, uuid):
-    """One RFCOMM connection: BlueZ connects the profile (SDP lookup of the service's channel) and hands the socket over in NewConnection."""
-    connected = {}
-    profile = '/apklayer/rfcomm%d' % os.getpid()
+def profile(uuid, options, waiting):
+    """Registers an RFCOMM profile whose NewConnection (BlueZ hands the connected socket over) ends the main loop with waiting['fd'] and ['device']."""
+    path = '/apklayer/rfcomm%d' % os.getpid()
 
     def on_profile(connection, sender, path, interface, method, parameters, invocation):
         if method == 'NewConnection':
-            connected['fd'] = invocation.get_message().get_unix_fd_list().get(parameters.unpack()[1])
+            waiting['device'] = parameters.unpack()[0]
+            waiting['fd'] = invocation.get_message().get_unix_fd_list().get(parameters.unpack()[1])
             loop.quit()
         invocation.return_value(None)
-    bus.register_object(profile, Gio.DBusNodeInfo.new_for_xml(PROFILE_XML).interfaces[0], on_profile, None, None)
-    for path, ifaces in call('/', 'org.freedesktop.DBus.ObjectManager', 'GetManagedObjects')[0].items():
-        objects[path] = ifaces
-    target = device_path(address)
-    try:
-        if target is None:
-            raise RuntimeError('unknown device ' + address)
-        call('/org/bluez', BLUEZ + '.ProfileManager1', 'RegisterProfile', (profile, uuid, {'Role': GLib.Variant('s', 'client')}), '(osa{sv})')
-        call(target, DEVICE, 'ConnectProfile', (uuid,), '(s)', lambda r, e: e and (connected.update(error=e), loop.quit()))
-    except (GLib.Error, RuntimeError) as error:
-        print('ERR ' + str(error), flush=True)
-        return 1
-    loop.run()
-    if 'fd' not in connected:
-        print('ERR ' + connected.get('error', 'no connection'), flush=True)
-        return 1
-    print('OK', flush=True)
-    sock = connected['fd']
+    bus.register_object(path, Gio.DBusNodeInfo.new_for_xml(PROFILE_XML).interfaces[0], on_profile, None, None)
+    call('/org/bluez', BLUEZ + '.ProfileManager1', 'RegisterProfile', (path, uuid, options), '(osa{sv})')
+    return path
+
+
+def relay(sock, status):
+    print(status, flush=True)
 
     def pump(source, sink):
         while True:
@@ -295,7 +291,16 @@ def rfcomm(address, uuid):
             if not data:
                 break
             os.write(sink, data)
-    threading.Thread(target=pump, args=(0, sock), daemon=True).start()
+
+    def outgoing():  # the app closed the socket: the connection ends (also when the device sends nothing more)
+        try:
+            pump(0, sock)
+        except OSError:
+            pass
+        connection = socket.socket(fileno=sock)
+        connection.shutdown(socket.SHUT_RDWR)
+        connection.detach()
+    threading.Thread(target=outgoing, daemon=True).start()
     try:
         pump(sock, 1)
     except OSError:
@@ -303,8 +308,60 @@ def rfcomm(address, uuid):
     return 0
 
 
-if len(sys.argv) == 4 and sys.argv[1] == 'rfcomm':
-    sys.exit(rfcomm(sys.argv[2], sys.argv[3]))
+def rfcomm(address, target):
+    """One RFCOMM connection: to a channel, a socket of our own; to a service, BlueZ connects the profile (SDP lookup of its channel) and hands the socket over."""
+    if target.isdigit():  # BluetoothDevice.createRfcommSocket(channel), the hidden call serial apps fall back to
+        # shortcut: the kernel's default security for both the secure and the insecure call; set BT_SECURITY (medium for the secure one) when a device needs it
+        try:
+            sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
+            sock.connect((address, int(target)))
+        except (OSError, AttributeError) as error:
+            print('ERR ' + (getattr(error, 'strerror', None) or str(error)), flush=True)
+            return 1
+        return relay(sock.detach(), 'OK')
+    connected = {}
+    for path, ifaces in call('/', 'org.freedesktop.DBus.ObjectManager', 'GetManagedObjects')[0].items():
+        objects[path] = ifaces
+    device = device_path(address)
+    try:
+        if device is None:
+            raise RuntimeError('unknown device ' + address)
+        profile(target, {'Role': GLib.Variant('s', 'client')}, connected)
+        call(device, DEVICE, 'ConnectProfile', (target,), '(s)', lambda r, e: e and (connected.update(error=e), loop.quit()))
+    except (GLib.Error, RuntimeError) as error:
+        print('ERR ' + str(error), flush=True)
+        return 1
+    loop.run()
+    if 'fd' not in connected:
+        print('ERR ' + connected.get('error', 'no connection'), flush=True)
+        return 1
+    return relay(connected['fd'], 'OK')
+
+
+def listen(uuid, name):
+    """One incoming connection to the service (BluetoothServerSocket.accept), registered until it comes; the app's side starts the next listener after each
+    one. Ends without a connection when stdin closes (the server socket closed)."""
+    waiting = {}
+    try:
+        path = profile(uuid, {'Role': GLib.Variant('s', 'server'), 'Name': GLib.Variant('s', name)}, waiting)
+    except GLib.Error as error:
+        print('ERR ' + error.message, flush=True)
+        return 1
+    print('LISTEN', flush=True)
+    GLib.io_add_watch(GLib.IOChannel.unix_new(0), GLib.PRIORITY_DEFAULT, GLib.IOCondition.IN | GLib.IOCondition.HUP, lambda *a: loop.quit())
+    loop.run()
+    if 'fd' not in waiting:
+        return 1
+    try:  # the next listener registers the service anew
+        call('/org/bluez', BLUEZ + '.ProfileManager1', 'UnregisterProfile', (path,), '(o)')
+        address = call(waiting['device'], PROPS, 'Get', (DEVICE, 'Address'), '(ss)')[0]
+    except GLib.Error:
+        address = waiting['device'].rsplit('dev_', 1)[-1].replace('_', ':')
+    return relay(waiting['fd'], 'OK ' + address)
+
+
+if len(sys.argv) == 4 and sys.argv[1] in ('rfcomm', 'listen'):
+    sys.exit((rfcomm if sys.argv[1] == 'rfcomm' else listen)(sys.argv[2], sys.argv[3]))
 try:  # no auto-start: an activatable BlueZ that cannot start (no adapter) answered only after D-Bus's 25 s timeout, the app's first Bluetooth call waiting on it
     for path, ifaces in bus.call_sync(BLUEZ, '/', 'org.freedesktop.DBus.ObjectManager', 'GetManagedObjects', None, None,
                                       Gio.DBusCallFlags.NO_AUTO_START, -1, None).unpack()[0].items():

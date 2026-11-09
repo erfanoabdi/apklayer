@@ -3,6 +3,25 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: Bluetooth channel sockets, server sockets, pairing requests (docs/PLAN.md "Bluetooth and USB")
+- `BluetoothDevice.createRfcommSocket(int)`/`createInsecureRfcommSocket(int)` (the hidden calls serial apps reach by reflection): `bluez.py rfcomm
+  <address> <channel>` connects an AF_BLUETOOTH RFCOMM socket itself and relays it as the service sockets do (the hub accepts a channel 1-30 in place of
+  the UUID). When the app closes a relayed socket the helper now shuts the connection down (before, it lasted until the device closed it).
+- Server sockets: `listenUsing[Insecure]RfcommWithServiceRecord` (ShadowHostBluetoothServerSocket, new): the hub starts `bluez.py listen <uuid> <name>`,
+  which registers the service with BlueZ's Profile API in the server role, prints `LISTEN`, takes one NewConnection, unregisters and relays it;
+  accept() hands it over as a connected socket and starts the next listener at once, accept(timeout) throws "Try again", close() ends the waiting
+  listener and wakes a blocked accept. One helper per connection because the app's pipes cannot carry a new descriptor. BluetoothSocket.getRemoteDevice
+  is the shadow's (Android 16 keeps it in an Optional the constructor fills: it threw for our sockets). Robolectric's newInstance names a server socket
+  constructor this android-all lacks: plain newInstanceOf.
+- Pairing: ACTION_PAIRING_REQUEST goes to the app first as an ordered broadcast (variant, key); an app that calls setPin (and aborts) answers BlueZ
+  itself, else the receiver after the app's (the system's dialog on Android) asks the hub. The agent registers as DisplayYesNo (Android's capability,
+  was NoInputNoOutput): RequestConfirmation asks the person to compare the passkey (HubInstallDialog.ask), DisplayPasskey/DisplayPinCode show the key
+  to type on the device. BLUETOOTH_PIN carries the pairing variant and key.
+- Tests: the bluetooth group's mock bridges ConnectProfile to an app's server profile (the app's server socket talks to its own client socket), and two
+  more devices pair with setPin 0000 (no dialog) and by passkey comparison (answered yes); the channel socket must fail with the kernel's reason
+  (Parallels: No route to host; the x86 PC's real adapter: Host is down after paging). Parallels and the x86 PC: bluetooth passes. On the x86 PC's
+  real BlueZ `bluez.py listen` registered the server profile (LISTEN), nothing paired.
+
 ## 2026-11-09: camera rotate-and-crop for apps in a portrait window (docs/PLAN.md item 6, "Camera")
 - A portrait window reports rotation 0 on the instance's portrait-natural display, so an app turns the preview by the sensor orientation (90)
   although the backend's cameras stay upright on the landscape desktop: sideways previews in every portrait window (the default window shape on

@@ -70,8 +70,24 @@ public class ShadowHostBluetoothDevice extends ShadowBluetoothDevice {
 
     @Implementation @Override protected BluetoothSocket createRfcommSocketToServiceRecord(UUID uuid) {
         HostBluetooth.require(ShadowHostBluetoothAdapter.CONNECT);
-        return ShadowHostBluetoothSocket.create(real, uuid);
+        return ShadowHostBluetoothSocket.create(real, uuid.toString());
     }
 
     @Implementation protected BluetoothSocket createInsecureRfcommSocketToServiceRecord(UUID uuid) { return createRfcommSocketToServiceRecord(uuid); }
+
+    /** The hidden calls serial apps fall back to (by reflection) when a device's SDP record is missing: straight to the RFCOMM channel. */
+    @Implementation protected BluetoothSocket createRfcommSocket(int channel) {
+        HostBluetooth.require(ShadowHostBluetoothAdapter.CONNECT);
+        return ShadowHostBluetoothSocket.create(real, Integer.toString(channel));
+    }
+
+    @Implementation protected BluetoothSocket createInsecureRfcommSocket(int channel) { return createRfcommSocket(channel); }
+
+    /** An app's own answer to ACTION_PAIRING_REQUEST (HostBluetooth.pairingRequest): the PIN or passkey BlueZ waits for. */
+    @Implementation @Override protected boolean setPin(byte[] pin) {
+        HostBluetooth.require(ShadowHostBluetoothAdapter.CONNECT);
+        super.setPin(pin);
+        HostBluetooth session = HostBluetooth.get();
+        return session != null && pin != null && session.answer(real.getAddress(), new String(pin, java.nio.charset.StandardCharsets.UTF_8));
+    }
 }

@@ -2,6 +2,7 @@ package apklayer.host;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothServerSocket;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanResult;
@@ -10,6 +11,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.ParcelUuid;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -110,6 +112,19 @@ public class ShadowHostBluetoothAdapter extends ShadowBluetoothAdapter {
     }
 
     @Implementation @Override protected boolean isDiscovering() { return discovery != null; }
+
+    @Implementation @Override protected BluetoothServerSocket listenUsingRfcommWithServiceRecord(String name, UUID uuid) throws IOException {
+        return ShadowHostBluetoothServerSocket.listen(real, name, uuid);
+    }
+
+    // shortcut: the insecure service asks the same security of BlueZ (its default); pass RequireAuthentication=false to RegisterProfile when a device needs it
+    @Implementation @Override protected BluetoothServerSocket listenUsingInsecureRfcommWithServiceRecord(String name, UUID uuid) {
+        try { return ShadowHostBluetoothServerSocket.listen(real, name, uuid); }
+        catch (IOException failed) { throw ShadowHostBluetoothAdapter.<RuntimeException>sneaky(failed); }  // Android's throws IOException; Robolectric's declares none
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <E extends Throwable> E sneaky(Throwable failure) throws E { throw (E) failure; }
 
     /** The deprecated LE scan: a BluetoothLeScanner scan with the UUIDs as filters, its results as onLeScan (BluetoothAdapter.startLeScan does the same). */
     @Implementation @Override protected boolean startLeScan(UUID[] serviceUuids, BluetoothAdapter.LeScanCallback callback) {

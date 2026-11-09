@@ -183,14 +183,16 @@ public final class HubClient {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.UID_OF_PID, request -> request.writeInt(pid), reply -> reply.readInt());
     }
     /** Whether another app's caller holds the permission: the kernel's pid of a synchronous call names it, the uid its header carried a oneway one (pid 0 or -1). */
-    /** A BlueZ helper of this process's own (HubBluetooth): {its stdin, its stdout}; an RFCOMM connection when address and uuid are given. */
-    android.os.ParcelFileDescriptor[] bluetooth(String address, String uuid) {
-        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.BLUETOOTH, request -> { request.writeString(address); request.writeString(uuid); },
+    /** A BlueZ helper of this process's own (HubBluetooth): {its stdin, its stdout}; an RFCOMM connection when address and uuid (or a channel) are given,
+     *  a server socket's listener for the service when only uuid and name are. */
+    android.os.ParcelFileDescriptor[] bluetooth(String address, String uuid, String name) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.BLUETOOTH, request -> { request.writeString(address); request.writeString(uuid); request.writeString(name); },
                 reply -> new android.os.ParcelFileDescriptor[] {reply.readTypedObject(android.os.ParcelFileDescriptor.CREATOR), reply.readTypedObject(android.os.ParcelFileDescriptor.CREATOR)});
     }
-    /** The PIN or passkey for a pairing BlueZ asks about, as the person typed it in the hub's dialog; null when they refused. */
-    String bluetoothPin(String address, String name, boolean passkey) {
-        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.BLUETOOTH_PIN, request -> { request.writeString(address); request.writeString(name); request.writeBoolean(passkey); },
+    /** The answer to a pairing BlueZ asks about (BluetoothDevice.PAIRING_VARIANT_*), from the person in the hub's dialog: the PIN or passkey, "yes" to a
+     *  comparison of {@code key}; null when they refused or for a key only shown. */
+    String bluetoothPin(String address, String name, int variant, String key) {
+        return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.BLUETOOTH_PIN, request -> { request.writeString(address); request.writeString(name); request.writeInt(variant); request.writeString(key); },
                 reply -> reply.readString());
     }
     /** The gps fixes from the hub's GNSS HAL client (HubGnss): {@code follow}, a pipe of `ready` and `location LAT LON ACCURACY` lines; else null,

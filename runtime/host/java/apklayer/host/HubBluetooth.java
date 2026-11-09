@@ -19,23 +19,29 @@ import org.json.JSONObject;
  */
 final class HubBluetooth {
     private static final Pattern ADDRESS = Pattern.compile("[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}"),
-            UUID = Pattern.compile("[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}");
+            UUID = Pattern.compile("[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}"),
+            CHANNEL = Pattern.compile("[1-9]|[12][0-9]|30"), KEY = Pattern.compile("[0-9A-Za-z]{1,16}");
     private final HubDirectory directory;
     private Process watcher;
     private final Object pairing = new Object();
 
     HubBluetooth(HubDirectory directory) { this.directory = directory; }
 
-    /** A session (address and uuid null) or an RFCOMM connection to the device's service: {the helper's stdin, its stdout} for the caller. */
-    ParcelFileDescriptor[] open(HubDirectory.Peer caller, String address, String uuid) throws IOException {
+    /** A session (all null), an RFCOMM connection to the device's service or channel, or a listener for one connection to the app's service (no address):
+     *  {the helper's stdin, its stdout} for the caller. */
+    ParcelFileDescriptor[] open(HubDirectory.Peer caller, String address, String uuid, String name) throws IOException {
         HubPackages packages = directory.packages();
         if (!List.of("android.permission.BLUETOOTH_CONNECT", "android.permission.BLUETOOTH_SCAN", "android.permission.BLUETOOTH").stream().anyMatch(p -> packages.holds(caller.name(), p)))
             throw new SecurityException(caller.name() + " holds no Bluetooth permission");
-        if ((address == null) != (uuid == null) || address != null && (!ADDRESS.matcher(address).matches() || !UUID.matcher(uuid).matches()))
+        boolean server = address == null && uuid != null;
+        if (address != null && (uuid == null || !ADDRESS.matcher(address).matches() || !UUID.matcher(uuid).matches() && !CHANNEL.matcher(uuid).matches())
+                || server && !UUID.matcher(uuid).matches())
             throw new IllegalArgumentException("Bad RFCOMM target " + address + " " + uuid);
         watch();
         List<String> command = HostLocation.helper("bluez.py");
         if (address != null) command.addAll(List.of("rfcomm", address, uuid));
+        String service = name == null ? "" : name.replaceAll("\\p{Cntrl}", "");
+        if (server) command.addAll(List.of("listen", uuid, service.substring(0, Math.min(service.length(), 100))));
         ParcelFileDescriptor[] in = ParcelFileDescriptor.createPipe(), out = ParcelFileDescriptor.createPipe();
         try {  // the pipes' far ends become the helper's stdin and stdout (a pipe reopens through /proc; ProcessBuilder passes no other descriptor)
             new ProcessBuilder(command).redirectInput(new File("/proc/self/fd/" + in[0].getFd())).redirectOutput(new File("/proc/self/fd/" + out[1].getFd()))
@@ -44,15 +50,23 @@ final class HubBluetooth {
         return new ParcelFileDescriptor[] {in[1], out[0]};
     }
 
-    /** A pairing's PIN (or 6-digit passkey) from the person, as Android's pairing dialog asks for it (Settings' BluetoothPairingDialog); null when refused. */
-    String pin(HubDirectory.Peer caller, String address, String name, boolean passkey) {
+    /** A pairing's PIN, 6-digit passkey or comparison from the person, as Android's pairing dialog asks (Settings' BluetoothPairingDialog; variants are
+     *  BluetoothDevice.PAIRING_VARIANT_*); null when refused and for a key only shown (DISPLAY_PASSKEY/PIN: BlueZ waits for the device, not for us). */
+    String pin(HubDirectory.Peer caller, String address, String name, int variant, String key) {
         if (!directory.packages().holds(caller.name(), "android.permission.BLUETOOTH_CONNECT") && !directory.packages().holds(caller.name(), "android.permission.BLUETOOTH"))
             throw new SecurityException(caller.name() + " holds no Bluetooth permission");
         if (address == null || !ADDRESS.matcher(address).matches()) throw new IllegalArgumentException("Bad Bluetooth address " + address);
+        if (variant >= 2 && (key == null || !KEY.matcher(key).matches())) throw new IllegalArgumentException("Bad pairing key " + key);
         String device = name == null || name.isBlank() ? address : name.strip();
         synchronized (pairing) {  // one pairing question at a time
-            return HubInstallDialog.askSecret("Pair with " + device + "?", passkey ? "Type the 6-digit passkey shown on " + device + "." : "Type the PIN of " + device + " (often 0000 or 1234).",
-                    "Pair", "Cancel");
+            // shortcut: a shown key's dialog stays until the person closes it (BlueZ's Cancel does not close it); close it on the pairing's end when that matters
+            return switch (variant) {
+                case 0, 1 -> HubInstallDialog.askSecret("Pair with " + device + "?", variant == 1 ? "Type the 6-digit passkey shown on " + device + "."
+                        : "Type the PIN of " + device + " (often 0000 or 1234).", "Pair", "Cancel");
+                case 2 -> HubInstallDialog.ask("Pair with " + device + "?", "Pair only if " + device + " shows the passkey " + key + ".", "Pair", "Cancel") ? "yes" : null;
+                case 4, 5 -> { HubInstallDialog.ask("Pair with " + device, "Type " + key + " on " + device + ", then press Enter there.", "OK", "Cancel"); yield null; }
+                default -> throw new IllegalArgumentException("Bad pairing variant " + variant);
+            };
         }
     }
 

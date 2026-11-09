@@ -4,7 +4,10 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Handler;
@@ -53,7 +56,7 @@ final class HostBluetooth {
                     JSONObject event = new JSONObject(line);
                     if ("adapter".equals(event.optString("ev"))) adapter = event;
                     if ("error".equals(event.optString("ev"))) System.out.println("[apklayer] bluetooth: " + event.optString("message"));
-                    if ("pin".equals(event.optString("ev"))) askPin(event.optString("address"), event.isNull("name") ? null : event.optString("name"), event.optBoolean("passkey"));
+                    if ("pin".equals(event.optString("ev"))) pairingRequest(event);
                     for (Consumer<JSONObject> listener : listeners) listener.accept(event);
                 }
             } catch (IOException | JSONException ended) { System.out.println("[apklayer] bluetooth session ended: " + ended); }
@@ -62,16 +65,58 @@ final class HostBluetooth {
         reader.start();
     }
 
-    /** BlueZ waits for a pairing's PIN: the hub asks the person (not on this reader: the session's other events go on meanwhile). */
-    private void askPin(String address, String name, boolean passkey) {
+    /**
+     * BlueZ asks about a pairing (a PIN, a passkey, a comparison) or shows a key: ACTION_PAIRING_REQUEST goes to the app first, as Android's ordered broadcast,
+     * so an app that answers itself (setPin, abortBroadcast) does; the receiver after the app's ones, the system's pairing dialog there, asks the hub.
+     */
+    private void pairingRequest(JSONObject event) {
+        String address = event.optString("address").toUpperCase(), name = event.isNull("name") ? null : event.optString("name"),
+                key = event.isNull("key") ? null : event.optString("key");
+        int variant = event.optInt("variant");
+        if (variant <= BluetoothDevice.PAIRING_VARIANT_PASSKEY_CONFIRMATION) waiting.add(address);
+        Context app = RuntimeEnvironment.getApplication();
+        Intent request = new Intent(BluetoothDevice.ACTION_PAIRING_REQUEST).putExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address))
+                .putExtra(BluetoothDevice.EXTRA_PAIRING_VARIANT, variant);
+        if (key != null && key.chars().allMatch(Character::isDigit)) request.putExtra(BluetoothDevice.EXTRA_PAIRING_KEY, Integer.parseInt(key));
+        onMain(() -> {
+            synchronized (this) {
+                if (!dialog) {
+                    IntentFilter last = new IntentFilter(BluetoothDevice.ACTION_PAIRING_REQUEST);
+                    last.setPriority(IntentFilter.SYSTEM_LOW_PRIORITY);
+                    app.registerReceiver(new BroadcastReceiver() {
+                        @Override public void onReceive(Context context, Intent intent) { askHub(intent); }
+                    }, last, Context.RECEIVER_NOT_EXPORTED);
+                    dialog = true;
+                }
+            }
+            app.sendOrderedBroadcast(request.putExtra(NAME, name).putExtra(KEY, key).setPackage(app.getPackageName()), null);  // this session's pairing: no other app's
+        });
+    }
+
+    private static final String NAME = "apklayer.name", KEY = "apklayer.key";
+    private final java.util.Set<String> waiting = java.util.concurrent.ConcurrentHashMap.newKeySet();  // addresses BlueZ waits on for an answer
+    private boolean dialog;
+
+    /** No app answered: the hub asks the person (not on the main thread: its dialog waits for them). */
+    private void askHub(Intent request) {
+        String address = ((BluetoothDevice) request.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)).getAddress();
+        int variant = request.getIntExtra(BluetoothDevice.EXTRA_PAIRING_VARIANT, 0);
+        if (variant <= BluetoothDevice.PAIRING_VARIANT_PASSKEY_CONFIRMATION && !waiting.contains(address)) return;  // the app answered (setPin)
         Thread asking = new Thread(() -> {
             String pin = null;
-            try { pin = HubClient.current().bluetoothPin(address, name, passkey); }
-            catch (RuntimeException failure) { System.out.println("[apklayer] bluetooth PIN not asked: " + failure); }
-            send("op", "pin", "address", address, "pin", pin == null ? JSONObject.NULL : pin);
+            try { pin = HubClient.current().bluetoothPin(address, request.getStringExtra(NAME), variant, request.getStringExtra(KEY)); }
+            catch (RuntimeException failure) { System.out.println("[apklayer] bluetooth pairing not asked: " + failure); }
+            if (variant <= BluetoothDevice.PAIRING_VARIANT_PASSKEY_CONFIRMATION) answer(address, pin);
         }, "apklayer-bluetooth-pin");
         asking.setDaemon(true);
         asking.start();
+    }
+
+    /** The answer to the pairing BlueZ waits on for the device (null: refused); false when it waits for none. */
+    boolean answer(String address, String pin) {
+        if (!waiting.remove(address.toUpperCase())) return false;
+        send("op", "pin", "address", address, "pin", pin == null ? JSONObject.NULL : pin);
+        return true;
     }
 
     /** The session, opened on first use; null without a hub or when the hub refused (no Bluetooth permission). */
@@ -79,7 +124,7 @@ final class HostBluetooth {
         if (session != null || failed) return session;
         try {
             HubClient hub = HubClient.current();
-            session = new HostBluetooth(hub.bluetooth(null, null));
+            session = new HostBluetooth(hub.bluetooth(null, null, null));
         } catch (IOException | JSONException | RuntimeException none) {
             failed = true;
             System.out.println("[apklayer] bluetooth unavailable: " + none);

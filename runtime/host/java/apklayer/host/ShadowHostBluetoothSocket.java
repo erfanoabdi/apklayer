@@ -6,46 +6,61 @@ import android.os.ParcelFileDescriptor;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.UUID;
 import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
 import org.robolectric.shadow.api.Shadow;
 import org.robolectric.shadows.ShadowBluetoothSocket;
-import org.robolectric.util.ReflectionHelpers;
 
 /**
- * An RFCOMM BluetoothSocket: connect asks the hub for a BlueZ helper connected to the device's service (BlueZ's Profile API looks up its channel), whose
- * stdin and stdout carry the connection's bytes (bridge/portal/bluez.py rfcomm).
+ * An RFCOMM BluetoothSocket: connect asks the hub for a BlueZ helper connected to the device's service (BlueZ's Profile API looks up its channel) or
+ * channel, whose stdin and stdout carry the connection's bytes (bridge/portal/bluez.py rfcomm); a server socket's accepted one comes connected.
  */
 @Implements(className = "android.bluetooth.BluetoothSocket", isInAndroidSdk = false)
 public class ShadowHostBluetoothSocket extends ShadowBluetoothSocket {
     private String address;
-    private UUID uuid;
+    private BluetoothDevice device;
+    private String target;  // the service's UUID or the channel
     private InputStream in;
     private OutputStream out;
 
-    static BluetoothSocket create(BluetoothDevice device, UUID uuid) {
+    static BluetoothSocket create(BluetoothDevice device, String target) {
         BluetoothSocket socket = Shadow.newInstanceOf(BluetoothSocket.class);
-        if (ReflectionHelpers.hasField(BluetoothSocket.class, "mDevice")) ReflectionHelpers.setField(socket, "mDevice", device);
         ShadowHostBluetoothSocket shadow = Shadow.extract(socket);
+        shadow.device = device;  // getRemoteDevice: Android 16's BluetoothSocket keeps it in an Optional the constructor fills
         shadow.address = device.getAddress();
-        shadow.uuid = uuid;
+        shadow.target = target;
         return socket;
+    }
+
+    /** A connection a server socket accepted: the listener helper's pipes (ShadowHostBluetoothServerSocket). */
+    static BluetoothSocket accepted(BluetoothDevice device, String service, InputStream in, OutputStream out) {
+        BluetoothSocket socket = create(device, service);
+        ShadowHostBluetoothSocket shadow = Shadow.extract(socket);
+        shadow.in = in;
+        shadow.out = out;
+        return socket;
+    }
+
+    /** A helper's status line (read byte by byte: what follows is the connection's). */
+    static String line(InputStream in) throws IOException {
+        StringBuilder status = new StringBuilder();
+        for (int c; (c = in.read()) >= 0 && c != '\n'; ) status.append((char) c);
+        return status.toString();
     }
 
     @Implementation @Override protected synchronized void connect() throws IOException {
         if (address == null) { super.connect(); return; }  // a socket Robolectric made (a server socket's)
         if (in != null) return;
         ParcelFileDescriptor[] pipes;
-        try { pipes = HubClient.current().bluetooth(address, uuid.toString()); }
+        try { pipes = HubClient.current().bluetooth(address, target, null); }
         catch (RuntimeException failure) { throw new IOException("read failed, socket might closed or timeout", failure); }
         out = new ParcelFileDescriptor.AutoCloseOutputStream(pipes[0]);
         in = new ParcelFileDescriptor.AutoCloseInputStream(pipes[1]);
-        StringBuilder status = new StringBuilder();
-        for (int c; (c = in.read()) >= 0 && c != '\n'; ) status.append((char) c);
-        if (!"OK".contentEquals(status)) { close(); throw new IOException("read failed, socket might closed or timeout (" + status + ")"); }
+        String status = line(in);
+        if (!"OK".equals(status)) { close(); throw new IOException("read failed, socket might closed or timeout (" + status + ")"); }
     }
 
+    @Implementation protected BluetoothDevice getRemoteDevice() { return device; }
     @Implementation @Override protected InputStream getInputStream() { return address == null ? super.getInputStream() : in; }
     @Implementation @Override protected OutputStream getOutputStream() { return address == null ? super.getOutputStream() : out; }
     @Implementation @Override protected boolean isConnected() { return address == null ? super.isConnected() : in != null; }

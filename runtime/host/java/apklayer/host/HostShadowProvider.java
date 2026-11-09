@@ -45,6 +45,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.bluetooth.BluetoothDevice", ShadowHostBluetoothDevice.class.getName()),
                 Map.entry("android.bluetooth.BluetoothGatt", ShadowHostBluetoothGatt.class.getName()),
                 Map.entry("android.bluetooth.BluetoothSocket", ShadowHostBluetoothSocket.class.getName()),
+                Map.entry("android.bluetooth.BluetoothServerSocket", ShadowHostBluetoothServerSocket.class.getName()),
                 Map.entry("android.app.JobSchedulerImpl", ShadowHostJobScheduler.class.getName()),
                 Map.entry("android.app.AlarmManager", ShadowHostAlarmManager.class.getName()),
                 Map.entry("android.drm.DrmManagerClient", ShadowHostDrmManagerClient.class.getName()),

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Fills python-dbusmock's bluez5 template (running on $DBUS_SYSTEM_BUS_ADDRESS) for the bluetooth group: adapter hci0, a paired classic device,
 a BLE device advertising the Battery service whose GATT database has Battery Level (read 42; notify sends 43) with its CCC descriptor, RFCOMM on the
-paired device (an echo service behind the Serial Port Profile UUID) and a legacy device that pairs only with PIN 1234 (tests/vm/bluez-mock-calls.py)."""
+paired device (an echo service behind the Serial Port Profile UUID, or the app's own server socket for its service), a legacy device that pairs only with PIN
+1234 (typed into the hub's dialog), one that pairs only with 0000 (the app's setPin) and one that asks to compare the passkey 123456 (tests/vm/bluez-mock-calls.py)."""
 import os
 
 import dbus
@@ -15,13 +16,21 @@ mock.PairDevice('hci0', '11:22:33:44:55:66')
 mock.AddDevice('hci0', 'C0:FF:EE:00:00:01', 'mock-ble')
 mock.AddDevice('hci0', 'C0:FF:EE:00:00:02', 'mock-other')  # filtered out by the app's service UUID filter
 mock.AddDevice('hci0', 'AA:BB:CC:00:00:01', 'mock-pin')
+mock.AddDevice('hci0', 'AA:BB:CC:00:00:02', 'mock-setpin')
+mock.AddDevice('hci0', 'AA:BB:CC:00:00:03', 'mock-compare')
 
 CALLS = "exec(open(%r).read(), globals()); " % os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bluez-mock-calls.py')
 bus.get_object('org.bluez', '/org/bluez').AddMethod('org.bluez.ProfileManager1', 'RegisterProfile', 'osa{sv}', '',
-                                                    "self.profiles = {**getattr(self, 'profiles', {}), args[1].lower(): args[0]}", dbus_interface=MOCK)
+                                                    "self.profiles = {**getattr(self, 'profiles', {}), (args[1].lower(), str(args[2].get('Role', 'client'))): args[0]}",
+                                                    dbus_interface=MOCK)
+bus.get_object('org.bluez', '/org/bluez').AddMethod('org.bluez.ProfileManager1', 'UnregisterProfile', 'o', '',
+                                                    "self.profiles = {k: v for k, v in getattr(self, 'profiles', {}).items() if v != args[0]}", dbus_interface=MOCK)
 bus.get_object('org.bluez', '/org/bluez/hci0/dev_11_22_33_44_55_66').AddMethod('org.bluez.Device1', 'ConnectProfile', 's', '',
                                                                                  CALLS + 'connect_profile(self, args[0])', dbus_interface=MOCK)
 bus.get_object('org.bluez', '/org/bluez/hci0/dev_AA_BB_CC_00_00_01').AddMethod('org.bluez.Device1', 'Pair', '', '', CALLS + 'pair(self)', dbus_interface=MOCK)
+bus.get_object('org.bluez', '/org/bluez/hci0/dev_AA_BB_CC_00_00_02').AddMethod('org.bluez.Device1', 'Pair', '', '', CALLS + "pair(self, answer='0000')", dbus_interface=MOCK)
+bus.get_object('org.bluez', '/org/bluez/hci0/dev_AA_BB_CC_00_00_03').AddMethod('org.bluez.Device1', 'Pair', '', '', CALLS + "pair(self, 'RequestConfirmation', '123456')",
+                                                                                 dbus_interface=MOCK)
 
 BATTERY, LEVEL, CCC = ('0000%s-0000-1000-8000-00805f9b34fb' % n for n in ('180f', '2a19', '2902'))
 dev = '/org/bluez/hci0/dev_C0_FF_EE_00_00_01'
