@@ -471,6 +471,10 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
   bar pixels as a layer over the app's (VirtualDisplay.cpp onNavbar, apklayer_display_set_navbar_callback). Sources only, no graph change.
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "vdisplay: navigation bar layer" hals/graphics/vdisplay`, then
   `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_vdisplay`.; then the same for gsi_x86_64 (`breakfast gsi_x86_64 userdebug && m libapklayer_vdisplay`).
+- Result: both built (x86_64 on the second try: a concurrent sync-aosp.sh from another worktree had put back the host headers without
+  `apklayer_display_set_navbar_callback`; re-synced hals/graphics/vdisplay). sha256 arm64 b8c930e7 (52200 bytes), x86_64 98bf507b (37152 bytes); both locks
+  set by hand; not in the prebuilts yet (copies for the lead: /tmp/apkl-navbar/{arm64,x86_64} on the Mac). The change must reach main before the next
+  whole-tree sync-aosp.sh, or that sync reverts it in the tree.
 ### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_camera: rotate-and-crop (camera rotate-and-crop agent)
 - Why: docs/PLAN.md item 6, rotate-and-crop for portrait-locked apps: the provider lists ANDROID_SCALER_AVAILABLE_ROTATE_AND_CROP_MODES and
   turns and crops each output (BackendCamera.cpp, two lines in the vendored goldfish/CameraDevice.cpp). Sources only, no graph change.
