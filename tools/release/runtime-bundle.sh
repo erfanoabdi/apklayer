@@ -17,7 +17,8 @@ trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/aosp/android-all"
 # hardlinks where the file system allows: tar reads each file once. A prebuilts checkout assembled from links (android-root -> another checkout)
 # is copied through them: the bundle holds the files, never a link out of itself (links inside android-root stay as they are)
-put() { s="$(realpath "$1")" && cp -al "$s" "$2" 2>/dev/null || cp -a "$s" "$2"; }
+# a link copy that fails part way (another file system) leaves a partial "$2": cp -a would then nest the tree inside it
+put() { s="$(realpath "$1")" && cp -al "$s" "$2" 2>/dev/null || { rm -rf "$2" && cp -a "$s" "$2"; }; }
 put "$P/$cpu/android-libs/lib64" "$stage/android-libs"
 put "$P/$cpu/android-root" "$stage/android-root"
 [ ! -d "$P/$cpu/system-apps" ] || put "$P/$cpu/system-apps" "$stage/system-apps"
