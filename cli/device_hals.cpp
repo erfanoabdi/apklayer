@@ -48,8 +48,8 @@ DeviceHal probeDeviceHal(const Layout& l, const std::string& domain) {
     }
     if (domain == "media") {
         if (!declares("android.hardware.media.c2") && !declares("android.hardware.media.omx")) return {-1, "the device declares no Codec2 or OMX store"};
-        // docs/PLAN.md "Plan: hardware providers" (e), docs/HALIUM.md: the codec list holds the device's codecs, creating one fails
-        return {0, "the device's codecs are found, but not working yet (creating a decoder fails)"};
+        // docs/HALIUM.md "Hardware providers": works on the Volla X23 (hardware H.264 decode and encode); opt-in until other devices are checked
+        return {0, "the device's Codec2 store (opt-in: checked on the Volla X23 only)"};
     }
     return {-1, "no device HAL for this domain"};
 }

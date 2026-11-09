@@ -8,6 +8,7 @@ import android.media.MediaCodecList;
 public class Startup extends Application {
     @Override public void onCreate() {
         super.onCreate();
+        if (Boolean.getBoolean("hello.device")) return;  // the device's codecs, not apklayer's (Main)
         boolean found = false;
         for (MediaCodecInfo info : new MediaCodecList(MediaCodecList.ALL_CODECS).getCodecInfos()) {
             if (info.getName().equals("c2.apklayer.vp8.decoder")) {

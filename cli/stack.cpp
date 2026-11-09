@@ -334,9 +334,10 @@ static void loadProperties(const Layout& l, const Instance& inst, const NativeEn
     }
     if (deviceDomain(l, inst, "media")) {
         // the device's Codec2 is HIDL (a Halium 12 vendor): libcodec2's client takes the HAL media.c2.hal.selection names, which apklayer.prop
-        // sets to aidl: loaded last (a plain property keeps the last value)
+        // sets to aidl: loaded last (a plain property keeps the last value). The pool mask is Android's default (ION | BUFFERQUEUE), not apklayer.prop's
+        // gralloc BLOB: the device's HAL takes only an ION/dmabuf handle as a linear input block (a BLOB one it reads as graphic: "Invalid rect info")
         std::string file = join(inst.runtimeDir, "media-device.prop");
-        writeFile(file, "media.c2.hal.selection=hidl\n");
+        writeFile(file, "media.c2.hal.selection=hidl\ndebug.stagefright.c2-poolmask=327680\n");
         propFiles.push_back(file);
     }
     setDerivedProperties(l, ne, propFiles);
