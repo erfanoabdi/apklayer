@@ -72,7 +72,7 @@ final class HostVolumes {
 
         static List<VolumeInfo> list(File storage, int user) {
             List<VolumeInfo> volumes = new ArrayList<>();
-            String host = System.getProperty("apklayer.storage"), name = System.getProperty("user.name");
+            String host = System.getProperty("apklayer.storage"), name = user();
             List<String> lines;
             try { lines = Files.readAllLines(Path.of("/proc/self/mounts")); } catch (IOException | RuntimeException unreadable) { return volumes; }
             for (String line : lines) {
@@ -80,7 +80,7 @@ final class HostVolumes {
                 if (f.length < 4 || host == null) continue;
                 String source = unescape(f[0]), point = unescape(f[1]);
                 if (!point.startsWith("/media/" + name + "/") && !point.startsWith("/run/media/" + name + "/")) continue;
-                if (!new File(point).canRead()) continue;  // not in this app's view (the sandbox's mount namespace)
+                if (!new File(point).canRead()) continue;  // a sandboxed app without a storage permission (apklayerd's broker answers for the user, cli/broker.cpp)
                 String uuid = uuid(source);
                 if (uuid == null) uuid = new File(point).getName().replaceAll("[^A-Za-z0-9_.-]", "_");
                 Path link = Path.of(host, uuid);
@@ -90,16 +90,22 @@ final class HostVolumes {
                         Files.createSymbolicLink(link, Path.of(point));
                     }
                 } catch (IOException | RuntimeException failure) { System.out.println("[apklayer] storage: no volume for " + point + ": " + failure); continue; }
-                VolumeInfo volume = new VolumeInfo("public:" + uuid, VolumeInfo.TYPE_PUBLIC, null, null);
-                volume.fsUuid = uuid;
-                volume.fsLabel = new File(point).getName();
-                volume.fsType = f[2];
-                volume.path = new File(storage, uuid).getPath();
-                mounted(volume, user, false);
+                VolumeInfo volume = volume(storage, user, uuid, new File(point).getName(), f[2]);
                 if (f[3].startsWith("ro,") || f[3].equals("ro") || !new File(point).canWrite()) volume.state = VolumeInfo.STATE_MOUNTED_READ_ONLY;  // canWrite: a sandboxed app's uid
                 volumes.add(volume);
             }
             return volumes;
+        }
+
+        /** The public volume of the drive with that fs uuid at {@code /storage/<uuid>} (also one HubVolumes recorded before the hub ended). */
+        static VolumeInfo volume(File storage, int user, String uuid, String label, String fsType) {
+            VolumeInfo volume = new VolumeInfo("public:" + uuid, VolumeInfo.TYPE_PUBLIC, null, null);
+            volume.fsUuid = uuid;
+            volume.fsLabel = label;
+            volume.fsType = fsType;
+            volume.path = new File(storage, uuid).getPath();
+            mounted(volume, user, false);
+            return volume;
         }
 
         /** The desktop's mount point of the volume (its link's target). */
@@ -110,7 +116,7 @@ final class HostVolumes {
 
         /** Removes the links of drives no longer mounted (a removed drive's {@code /storage/<uuid>}), keeping those in {@code mounted}. */
         static void removeStale(java.util.Set<String> mounted) {
-            String host = System.getProperty("apklayer.storage"), name = System.getProperty("user.name");
+            String host = System.getProperty("apklayer.storage"), name = user();
             if (host == null) return;
             try (var links = Files.list(Path.of(host))) {
                 for (Path link : links.filter(Files::isSymbolicLink).toList()) {
@@ -119,6 +125,12 @@ final class HostVolumes {
                     Files.deleteIfExists(link);
                 }
             } catch (IOException | RuntimeException failure) { System.out.println("[apklayer] storage: stale volume links not removed: " + failure); }
+        }
+
+        /** The desktop user's name: a sandboxed app's uid has no passwd entry (the JDK's user.name is "?" then), its environment keeps USER. */
+        private static String user() {
+            String name = System.getProperty("user.name");
+            return name == null || name.equals("?") ? System.getenv("USER") : name;
         }
 
         /** The file system uuid udev names the device by (/dev/disk/by-uuid), vold's fsUuid. */

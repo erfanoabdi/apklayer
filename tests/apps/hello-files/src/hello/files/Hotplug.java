@@ -41,7 +41,7 @@ final class Hotplug {
             @Override public void onStateChanged(StorageVolume v) { say("callback " + v.getUuid() + " " + v.getState()); CALLBACKS.add(v.getUuid() + " " + v.getState()); }
         });
         new Thread(() -> {
-            try { run(activity, storage); } catch (Throwable failure) { say("FAIL exception " + failure); failure.printStackTrace(System.out); }
+            try { if ("catchup".equals(System.getProperty("hello.hotplug"))) catchUp(activity, storage); else run(activity, storage); } catch (Throwable failure) { say("FAIL exception " + failure); failure.printStackTrace(System.out); }
             say("DONE");
             activity.runOnUiThread(activity::finish);
         }, "hotplug").start();
@@ -49,11 +49,16 @@ final class Hotplug {
 
     private static void run(Context context, StorageManager storage) throws Exception {
         say("ready");
-        String mounted = EVENTS.poll(60, TimeUnit.SECONDS);
-        check("mounted broadcast", mounted != null && mounted.startsWith(Intent.ACTION_MEDIA_MOUNTED + " /storage/") && mounted.endsWith(" mounted"));
+        // past what the hub's start announced (a drive recorded by an earlier run that is gone now: its eject and removal)
+        String mounted;
+        do mounted = EVENTS.poll(60, TimeUnit.SECONDS); while (mounted != null && !mounted.startsWith(Intent.ACTION_MEDIA_MOUNTED + " "));
+        // under the instance's /storage (the sandbox shows it at its host path: no path layer there)
+        String storageRoot = android.os.Environment.getExternalStorageDirectory().getParentFile().getParent();
+        check("mounted broadcast", mounted != null && mounted.startsWith(Intent.ACTION_MEDIA_MOUNTED + " " + storageRoot + "/") && mounted.endsWith(" mounted"));
         if (mounted == null) return;
         String path = mounted.split(" ")[1], uuid = new File(path).getName();
-        String callback = CALLBACKS.poll(10, TimeUnit.SECONDS);
+        String callback;
+        do callback = CALLBACKS.poll(10, TimeUnit.SECONDS); while (callback != null && !callback.startsWith(uuid + " "));
         check("volume callback", (uuid + " mounted").equals(callback));
         StorageVolume volume = storage.getStorageVolumes().stream().filter(v -> uuid.equals(v.getUuid())).findFirst().orElse(null);
         check("volume listed", volume != null && volume.isRemovable() && "mounted".equals(volume.getState()) && path.equals(volume.getDirectory().getPath()));
@@ -79,6 +84,27 @@ final class Hotplug {
         check("volume gone", storage.getStorageVolumes().stream().noneMatch(v -> uuid.equals(v.getUuid())) && !MediaStore.getExternalVolumeNames(context).contains(media));
         check("callback on removal", CALLBACKS.contains(uuid + " removed"));
         check("link removed", !new File(path).exists());
+    }
+
+    /**
+     * What changed while the instance was stopped (hello.hotplug=catchup; HubVolumes and HubMediaWatch at hub start): with hello.catchup.drive=1 a drive
+     * mounted meanwhile is listed and its DCIM/pre.png indexed, with 0 one removed meanwhile is gone; Pictures/<hello.catchup.file> on internal storage
+     * is indexed (written meanwhile) or, with hello.catchup.drive=0, no longer (deleted meanwhile).
+     */
+    private static void catchUp(Context context, StorageManager storage) throws Exception {
+        boolean present = "1".equals(System.getProperty("hello.catchup.drive"));
+        String tag = present ? "catchup present " : "catchup gone ";
+        StorageVolume drive = null;
+        for (long end = System.currentTimeMillis() + 30_000; System.currentTimeMillis() < end && (drive != null) != present; Thread.sleep(300))
+            drive = storage.getStorageVolumes().stream().filter(StorageVolume::isRemovable).findFirst().orElse(null);
+        check(tag + "volume", (drive != null) == present);
+        say("status");  // the runner reads `apklayer status` now
+        // MediaStore before MediaStore.Images.Media: the nested class's initialization as the first use crashed the JVM (Robolectric's ShadowMap
+        // asks its canonical name: SIGSEGV in ConstantPool::klass_at_impl from Class.getDeclaringClass0; docs/PLAN.md Storage)
+        say("volumes " + MediaStore.getExternalVolumeNames(context));
+        if (present) check(tag + "drive scanned", appears(context, drive.getUuid().toLowerCase(), "pre.png", true));
+        else check(tag + "mediastore volume", MediaStore.getExternalVolumeNames(context).stream().noneMatch(v -> !v.equals(MediaStore.VOLUME_EXTERNAL_PRIMARY)));
+        check(tag + "internal file", appears(context, MediaStore.VOLUME_EXTERNAL_PRIMARY, System.getProperty("hello.catchup.file"), present));
     }
 
     /** Whether MediaStore.Images on that volume lists (or no longer lists) the file within 30 s. */

@@ -17,13 +17,19 @@ import java.nio.file.Path;
 final class HubBootBroadcasts {
     private HubBootBroadcasts() {}
 
-    static void sendOnce(HubDirectory directory) {
+    /** Whether this hub start is a boot that will send them (and announce the mounted volumes, which HubVolumes then leaves to it). */
+    static boolean pending(HubDirectory directory) {
         // only an always-on instance is a phone that boots (at login); an on-demand one starts when an app needs it, and waking every app with a boot
         // receiver (each its own JVM) for that would cost more than the one app asked for. APKLAYER_BOOT_BROADCASTS=0: not even then.
-        if (!directory.alwaysOn() || "0".equals(System.getenv("APKLAYER_BOOT_BROADCASTS"))) return;
-        HubBootSettings.awaitBoot();
         String root = System.getenv("APKLAYER_INSTANCE_ROOT");  // <runtime dir>/android-root
-        if (root == null || Path.of(root).getParent() == null) return;
+        return directory.alwaysOn() && !"0".equals(System.getenv("APKLAYER_BOOT_BROADCASTS")) && root != null && Path.of(root).getParent() != null
+                && !Files.exists(Path.of(root).getParent().resolve("boot_completed"));
+    }
+
+    static void sendOnce(HubDirectory directory) {
+        if (!pending(directory)) return;
+        HubBootSettings.awaitBoot();
+        String root = System.getenv("APKLAYER_INSTANCE_ROOT");
         try { Files.createFile(Path.of(root).getParent().resolve("boot_completed")); }
         catch (FileAlreadyExistsException already) { return; }
         catch (IOException failure) { System.out.println("[apklayer-hub] boot broadcasts not sent: " + failure); return; }

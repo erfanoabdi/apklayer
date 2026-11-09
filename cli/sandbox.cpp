@@ -328,6 +328,13 @@ bool homeAccess(const Layout& l, const Instance& inst, const std::string& packag
     return false;
 }
 
+std::vector<std::string> driveRoots() {
+    std::string name = getenvOr("USER", "");  // not getpwuid: inside the instance's user namespace the user is uid 1000
+    if (name.empty()) { const passwd* pw = getpwuid(getuid()); name = pw ? pw->pw_name : ""; }
+    if (name.empty()) return {};
+    return {"/media/" + name, "/run/media/" + name};
+}
+
 uid_t appUidOf(uid_t hostUid) {
     Range u = subordinate("/etc/subuid");
     long n = std::min(u.count, 65536L);
@@ -400,6 +407,8 @@ void sandboxSpawn(const Layout& l, const Instance& inst, Spawn& spec, const std:
     spec.argv = argv;
     // not in sandbox-exec itself: the path layer would answer its own path lookups with Android's (/storage...); sandbox-exec hands it on
     if (spec.env.count("LD_PRELOAD")) { spec.env["APKLAYER_SANDBOX_PRELOAD"] = spec.env["LD_PRELOAD"]; spec.env.erase("LD_PRELOAD"); }
+    // the CLI drops APKLAYER_STORAGE at its start (cli/main.cpp): without it the app had host paths for /storage (MediaProvider found no volume)
+    if (spec.env.count("APKLAYER_STORAGE")) spec.env["APKLAYER_SANDBOX_STORAGE"] = spec.env["APKLAYER_STORAGE"];
 }
 
 int sandboxExec(const Layout& l, const Instance& inst, const std::vector<std::string>& args) {
@@ -434,7 +443,10 @@ int sandboxExec(const Layout& l, const Instance& inst, const std::vector<std::st
         }
         // what the app's uid may not open but the user may hand it (GPU nodes, the granted home): apklayerd's broker (cli/broker.cpp, bridge/native/broker.c)
         if (exists(daemonSocket(l))) setenv("APKLAYER_BROKER", daemonSocket(l).c_str(), 1);
-        if (homeAccess(l, inst, package)) setenv("APKLAYER_BROKER_HOME", realPath(homeDir()).c_str(), 1);
+        // the folders it may ask for (':'-separated): the granted home, the drives (apklayerd checks the app's storage permission on each request)
+        std::string roots = homeAccess(l, inst, package) ? realPath(homeDir()) : "";
+        for (const std::string& dir : driveRoots()) roots += (roots.empty() ? "" : ":") + dir;
+        if (!roots.empty()) setenv("APKLAYER_BROKER_HOME", roots.c_str(), 1);
         setenv("APKLAYER_BROKER_LOG", appLogPath(inst, package).c_str(), 1);
         // the host's shader caches (Mesa's, NVIDIA's under XDG_CACHE_HOME) in the app's own cache: the user's cache is not in the view
         setenv("XDG_CACHE_HOME", join(data, "cache/host").c_str(), 1);
@@ -444,6 +456,7 @@ int sandboxExec(const Layout& l, const Instance& inst, const std::vector<std::st
     }
     prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);  // and no capabilities after exec: the namespace's uids are not 0
     if (const char* preload = getenv("APKLAYER_SANDBOX_PRELOAD")) { setenv("LD_PRELOAD", preload, 1); unsetenv("APKLAYER_SANDBOX_PRELOAD"); }
+    if (const char* storage = getenv("APKLAYER_SANDBOX_STORAGE")) { setenv("APKLAYER_STORAGE", storage, 1); unsetenv("APKLAYER_SANDBOX_STORAGE"); }
     std::vector<char*> pointers;
     for (std::string& a : argv) pointers.push_back(a.data());
     pointers.push_back(nullptr);

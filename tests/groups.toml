@@ -129,6 +129,14 @@ run = ["tests/vm/files.sh", "OWNDATA=1 tests/vm/files.sh", "VOLUMES=1 tests/vm/f
 apps = ["hello-files"]
 needs = ["com.android.providers.media.module", "com.android.externalstorage"]
 run = ["tests/vm/volumes.py"]
+alone = true  # every instance's hub sees every drive: beside volumes-sandbox each would get the other's
+
+[volumes-sandbox]  # the same sandboxed: the drive reaches hello.files and MediaProvider through apklayerd's broker
+optional = true  # needs tools/host-setup/sandbox.sh once, as the sandbox group
+alone = true
+apps = ["hello-files"]
+needs = ["com.android.providers.media.module", "com.android.externalstorage"]
+run = ["APKLAYER_SANDBOX=1 tests/vm/volumes.py"]
 
 [view]
 apps = ["hello-files", "hello-reader"]

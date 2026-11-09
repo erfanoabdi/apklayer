@@ -3,6 +3,7 @@
 #include "logs.h"
 #include "sandbox.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
@@ -34,14 +35,37 @@ std::string packageOf(const Layout& l, uid_t uid) {
     return "";
 }
 
-// The granted home as the app's view shows it: the home without apklayer's own trees there (appView empties them)
+// The desktop's drives (udisks2's mount points, apklayer.host.HostVolumes.Removable) for an app with a storage permission it holds (granted, or a
+// legacy app's not revoked, as cli/manage.cpp reads them) or all-files access it declares (MANAGE_EXTERNAL_STORAGE; MediaProvider's WRITE_MEDIA_STORAGE).
+// shortcut: read and write for any of them, no per-file scoped-storage rules (as internal storage in the sandbox, cli/sandbox.cpp openStorageDir).
+bool driveAccess(const Layout& l, const Instance& inst, const std::string& package) {
+    std::string info = join(appDir(l, package), "info.properties");
+    const bool legacy = atoi(property(info, "targetSdk").c_str()) < 23;
+    std::vector<std::string> granted = split(readFile(join(inst.root, "permissions-granted")).value_or(""), '\n'),
+                             revoked = split(readFile(join(inst.root, "permissions-revoked")).value_or(""), '\n');
+    auto has = [](const std::vector<std::string>& lines, const std::string& line) { return std::find(lines.begin(), lines.end(), line) != lines.end(); };
+    for (const std::string& p : split(property(info, "permissions"), ';')) {
+        if (p == "android.permission.MANAGE_EXTERNAL_STORAGE" || p == "android.permission.WRITE_MEDIA_STORAGE") return true;
+        if (p != "android.permission.READ_EXTERNAL_STORAGE" && p != "android.permission.WRITE_EXTERNAL_STORAGE" && p.rfind("android.permission.READ_MEDIA_", 0) != 0) continue;
+        const std::string key = package + "\t" + p;
+        if (has(granted, key) || (legacy && !has(revoked, key) && !has(revoked, key + "\tonce"))) return true;
+    }
+    return false;
+}
+
+// What of the user's files the app's view shows that it may reach as the user: the granted home without apklayer's own trees there (appView empties
+// them), the drives' mount points
 struct Home {
-    std::string home;
-    std::vector<std::string> closed;
-    explicit Home(const Layout& l) : home(realPath(homeDir())),
-        closed({realPath(join(l.dataHome, "apklayer")), realPath(join(l.stateHome, "apklayer")), realPath(l.runtimeHome)}) {}
+    std::vector<std::string> roots, closed;
+    Home(const Layout& l, const Instance& inst, const std::string& package) :
+        closed({realPath(join(l.dataHome, "apklayer")), realPath(join(l.stateHome, "apklayer")), realPath(l.runtimeHome)}) {
+        if (homeAccess(l, inst, package)) roots.push_back(realPath(homeDir()));
+        if (driveAccess(l, inst, package))
+            for (const std::string& dir : driveRoots()) if (!realPath(dir).empty()) roots.push_back(realPath(dir));
+    }
+    bool root(const std::string& p) const { return std::find(roots.begin(), roots.end(), p) != roots.end(); }
     bool inside(const std::string& p) const {
-        if (p.empty() || !under(p, home) || p == home) return false;
+        if (p.empty() || root(p) || std::none_of(roots.begin(), roots.end(), [&](const std::string& r) { return under(p, r); })) return false;
         for (const std::string& c : closed) if (!c.empty() && under(p, c)) return false;
         return true;
     }
@@ -54,16 +78,15 @@ struct Home {
         int dir = open(slash == 0 ? "/" : target.substr(0, slash).c_str(), O_PATH | O_DIRECTORY | O_CLOEXEC);
         if (dir < 0) return -errno;
         std::string p = fdPath(dir);
-        if ((p != home && !inside(p)) || name->empty() || *name == "." || *name == "..") { close(dir); return -EACCES; }
+        if ((!root(p) && !inside(p)) || name->empty() || *name == "." || *name == "..") { close(dir); return -EACCES; }
         return dir;
     }
 };
 
-// The package of a sandboxed peer with the home granted, "" for any other
-std::string grantedPackage(const Layout& l, uid_t hostUid, const Instance& inst) {
+// The package of a sandboxed peer, "" for any other
+std::string peerPackage(const Layout& l, uid_t hostUid) {
     uid_t uid = appUidOf(hostUid);
-    std::string package = uid == (uid_t)-1 ? "" : packageOf(l, uid);
-    return !package.empty() && homeAccess(l, inst, package) ? package : "";
+    return uid == (uid_t)-1 ? "" : packageOf(l, uid);
 }
 
 // fd or -errno
@@ -78,16 +101,15 @@ int openFor(const Layout& l, const std::string& path, int flags, int mode, uid_t
         if (fd < 0) return -errno;
         if (fstat(fd, &st) != 0 || !S_ISCHR(st.st_mode) || !gpuNode(fdPath(fd))) { close(fd); return -EACCES; }
     } else {
-        uid_t uid = appUidOf(hostUid);
-        std::string package = uid == (uid_t)-1 ? "" : packageOf(l, uid);
+        std::string package = peerPackage(l, hostUid);
         if (package.empty()) return -EACCES;
         if (path == appLogPath(inst, package)) {  // its own app log (android.util.Log lines, AppEnvironment): appended, the user's file as before
             if ((flags & O_ACCMODE) != O_WRONLY || !(flags & O_APPEND)) return -EACCES;
             fd = open(path.c_str(), (base | O_NOFOLLOW) & ~(O_TRUNC | O_EXCL), 0600);
             return fd < 0 ? -errno : (fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK), fd);
         }
-        if (!homeAccess(l, inst, package)) return -EACCES;
-        Home home(l);
+        Home home(l, inst, package);
+        if (home.roots.empty()) return -EACCES;
         std::string name;
         int dir = home.parent(path, !(flags & O_NOFOLLOW), &name);
         if (dir < 0) return dir;
@@ -102,11 +124,13 @@ int openFor(const Layout& l, const std::string& path, int flags, int mode, uid_t
     return fd;
 }
 
-// The granted home's other operations, as the user: mkdir, unlink, rmdir, rename, access. 0 or -errno.
+// The granted home's and drives' other operations, as the user: mkdir, unlink, rmdir, rename, access. 0 or -errno.
 int changeFor(const Layout& l, const std::vector<std::string>& r, uid_t hostUid, const Instance& inst) {
-    if (grantedPackage(l, hostUid, inst).empty()) return -EACCES;
+    std::string package = peerPackage(l, hostUid);
+    if (package.empty()) return -EACCES;
     for (size_t i = 1; i < r.size(); i++) if (r[i].empty()) return -EINVAL;
-    Home home(l);
+    Home home(l, inst, package);
+    if (home.roots.empty()) return -EACCES;
     std::string name, name2;
     const std::string& op = r[0];
     int dir = home.parent(r[1], op == "access", &name);  // never through a link as the last name: the link itself is what goes

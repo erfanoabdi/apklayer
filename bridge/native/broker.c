@@ -1,6 +1,6 @@
 /* The sandbox's file broker, the app's side (cli/broker.cpp is the daemon's): an open the app's uid is refused (EACCES) that the user may make, of a
- * GPU node, of its own app log ($APKLAYER_BROKER_LOG) or in the granted home ($APKLAYER_BROKER_HOME), is made by apklayerd ($APKLAYER_BROKER, its
- * socket; all set by cli/sandbox.cpp) and its fd handed over; in the granted home also mkdir, unlink, rmdir, rename and access. A path relative to a
+ * GPU node, of its own app log ($APKLAYER_BROKER_LOG) or in the granted home or the drives ($APKLAYER_BROKER_HOME), is made by apklayerd ($APKLAYER_BROKER, its
+ * socket; all set by cli/sandbox.cpp) and its fd handed over; there also mkdir, unlink, rmdir, rename and access. A path relative to a
  * directory fd (or the working directory) is made absolute first. Any other refusal stays the caller's. */
 #define _GNU_SOURCE
 #include <errno.h>
@@ -12,11 +12,16 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+/* under one of $APKLAYER_BROKER_HOME's folders (':'-separated: the granted home, the desktop's drives) */
 static int in_home(const char *path)
 {
-    const char *home = getenv("APKLAYER_BROKER_HOME");
-    size_t n = home ? strlen(home) : 0;
-    return n > 1 && !strncmp(path, home, n) && path[n] == '/';
+    for (const char *home = getenv("APKLAYER_BROKER_HOME"); home && *home;) {
+        const char *end = strchr(home, ':');
+        size_t n = end ? (size_t)(end - home) : strlen(home);
+        if (n > 1 && !strncmp(path, home, n) && path[n] == '/') return 1;
+        home = end ? end + 1 : home + n;
+    }
+    return 0;
 }
 
 static int eligible(const char *path)
