@@ -122,6 +122,7 @@ run = ["python3 tests/vm/host-binder.py"]
 
 [files]
 apps = ["hello-files"]
+needs = ["com.android.externalstorage", "com.android.providers.media.module"]  # the storage provider it queries; VOLUMES=1 reads MediaStore
 setup = ["""f=${APKLAYER_NATIVE:-$HOME/arm64-native}/android-root/system/etc/permissions/apklayer-test-hello-files.xml; [ -e $f ] || printf '<permissions><privapp-permissions package="hello.files"><permission name="android.permission.MANAGE_DOCUMENTS"/></privapp-permissions></permissions>\\n' > $f"""]
 run = ["tests/vm/files.sh", "OWNDATA=1 tests/vm/files.sh", "VOLUMES=1 tests/vm/files.sh"]
 
