@@ -3,6 +3,21 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: the tree's Settings and SystemUI explored (docs/PLAN.md "Exploration: the tree's Settings and SystemUI")
+- Settings (los24 gsi_arm64, installed --system with its privapp allowlist) draws its home page, Display, Apps / All apps, Storage, About phone and
+  Network & internet on Parallels (agent tree, screenshots from `apklayer screenshot`, not committed). Generic fixes on the way: `network_management`,
+  `lock_settings` and `device_state` registered as reporting fakes (Settings' Utils.isBandwidthControlEnabled and LockPatternUtils.isSecure threw on null
+  services); `StorageManager.getDisks` answers no disks (the fake said null); `StorageStatsManager.queryExternalStatsForUser` gives the shared storage's
+  size (total only); `getInstalledApplicationsAsUser` lists the installed apps (Robolectric shadows only the plain call: Settings' list was empty);
+  `getResourcesForApplication` of another installed package loads its APK (Robolectric handed out an empty table: other apps' labels and icons in
+  lists, LineageParts' parts catalog Settings reads); a system app sharing android.uid.system holds every permission (HubPackages.holds; LineageSettingsProvider
+  writes secure settings as uid 1000 does); the build's grants (HostSystemConfig.apply) hold before Application.onCreate, as installed grants do.
+- SystemUI: the manifest's AppComponentFactory is honoured (Robolectric patch 0025 for the Application, `AppFactory` for activities, services and providers);
+  SystemUI's Dagger graph builds and SystemUIService is created (started by hand: `-Dapklayer.startservice=` on a component host), then WM Shell stops at
+  IWindowManager.registerDisplayWindowListener (a fake). Nothing of SystemUI draws; what P8 needs is listed in PLAN. Patch 0025 needs the upstream
+  AndroidTestEnvironment.java added to the prebuilts' common/robolectric-src (robolectric/src/main/java/org/robolectric/android/internal/).
+- Tests (Parallels, own tree with that file staged): sysprov, system-apps, activities, hub-services, settings pass.
+
 ## 2026-11-09: the navigation bar has Back only (owner: no Home button)
 - bridge/shell/navbar.c/.h, mobile.c: Home (the ring) and its action (minimize) are gone; Back stays at a quarter of the width, the rest of the bar is plain (taps there do nothing); Home is the compositor's own gesture/button. tests/vm/mobile.py's bar check looks for Back's strokes only.
 

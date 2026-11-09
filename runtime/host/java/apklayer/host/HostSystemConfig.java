@@ -139,8 +139,12 @@ final class HostSystemConfig {
         return out;
     }
 
-    /** Declares the features and grants this package what the build gives it. */
+    private String appliedTo;
+
+    /** Declares the features and grants this package what the build gives it (once: before Application.onCreate, as installed grants are). */
     void apply(Context app) {
+        if (app.getPackageName().equals(appliedTo)) return;
+        appliedTo = app.getPackageName();
         loadedFeatures = java.util.Set.copyOf(features);
         loadedVersions = java.util.Map.copyOf(versions);
         org.robolectric.shadows.ShadowPackageManager shadow = Shadows.shadowOf(app.getPackageManager());

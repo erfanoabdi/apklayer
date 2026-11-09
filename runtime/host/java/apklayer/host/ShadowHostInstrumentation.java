@@ -28,6 +28,7 @@ public class ShadowHostInstrumentation extends ShadowInstrumentation {
         // own, such as the WebView's renderer, gets none of the main process's)
         if (!providersInstalled && System.getProperty("apklayer.package") != null) {
             providersInstalled = true;
+            HostSystemConfig.cached().apply(app);  // the build's grants hold from the start (SystemUI's onCreate checks READ_FRAME_BUFFER)
             AppEnvironment.androidId(app);
             AppEnvironment.installProviders(app);
         }
