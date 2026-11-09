@@ -95,6 +95,22 @@ void undeclareOwnGraphics(const Instance& inst, const Layout& l) {
     }
 }
 
+// Android's way: readiness is a system property of the instance (apklayer.stack.ready=1), waited on with the property store's own wait.
+const char* kReadyProperty = "apklayer.stack.ready";
+
+bool propertyIs(const Layout& l, const NativeEnv& ne, const char* name, const char* value) {
+    Spawn get;
+    get.argv = {join(l.native, "bin/aprop"), "get", name};
+    get.env = ne.env;
+    return trim(runCapture(get)) == value;
+}
+
+bool waitReady(const Layout& l, const NativeEnv& ne, int deathPidfd) { return waitForProperty(l, ne, kReadyProperty, "1", deathPidfd); }
+
+}  // namespace
+
+bool alive(int pid) { return pid > 0 && kill(pid, 0) == 0; }
+
 // The pid of the shell listening on this session's socket (0: none): what stops it, never a match by name (other sessions' shells run too).
 int shellPid(const Layout& l) {
     int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
@@ -118,22 +134,6 @@ void endShellUnlessShared(const Layout& l, const std::string& leaving) {
     }
     terminate(shellPid(l));
 }
-
-// Android's way: readiness is a system property of the instance (apklayer.stack.ready=1), waited on with the property store's own wait.
-const char* kReadyProperty = "apklayer.stack.ready";
-
-bool propertyIs(const Layout& l, const NativeEnv& ne, const char* name, const char* value) {
-    Spawn get;
-    get.argv = {join(l.native, "bin/aprop"), "get", name};
-    get.env = ne.env;
-    return trim(runCapture(get)) == value;
-}
-
-bool waitReady(const Layout& l, const NativeEnv& ne, int deathPidfd) { return waitForProperty(l, ne, kReadyProperty, "1", deathPidfd); }
-
-}  // namespace
-
-bool alive(int pid) { return pid > 0 && kill(pid, 0) == 0; }
 
 // A process in a user namespace this user made (the sandbox's app processes: their environment is not readable, their command line an Android
 // process name). shortcut: any such namespace counts (a container's too) when a recorded pid is checked; upgrade by comparing with the stack's
@@ -651,23 +651,6 @@ int execTool(const Layout& l, const Instance& inst, const std::vector<std::strin
     }
     if (userspaceBinder(inst.root)) ensureBinderDaemon(l.runtimeHome, l.native, inst.id, join(inst.logs(), "binderd.log"));
     return runAndWait(s);
-}
-
-void stopStack(const Layout& l, const Instance& inst) {
-    endShellUnlessShared(l, inst.id);
-    for (const std::string& f : listDir(inst.stateDir)) {  // launches of this instance: their JVM and window sink
-        if (f.rfind("run.", 0) != 0) continue;
-        auto record = readFile(join(inst.stateDir, f));
-        if (record) for (const std::string& pid : split(*record, '\n')) terminate(atoi(pid.c_str()));
-        unlink(join(inst.stateDir, f).c_str());
-    }
-    // the hub lives on the stack's binder: it ends with it (a stale one would hold the lock for the next stack)
-    if (auto hub = readFile(join(inst.stateDir, "hub.pid")))  // the hub JVM, then its launcher: the next hub can take hub.lock as soon as stop returns
-        for (const std::string& pid : split(*hub, '\n')) terminate(atoi(pid.c_str()));
-    auto pid = readFile(inst.pidFile());
-    if (pid) terminate(atoi(pid->c_str()));
-    // the userspace binder (docs/BINDER.md): it would end by itself once its clients are gone; stop means now
-    if (auto binderd = readFile(join(binderSocketDir(l.runtimeHome), inst.id + ".pid"))) terminate(atoi(binderd->c_str()));
 }
 
 }  // namespace apklayer

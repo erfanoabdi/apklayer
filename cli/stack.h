@@ -28,8 +28,11 @@ bool ensureStack(const Layout& layout, const Instance& instance);
 int runStackDaemon(const Layout& layout, const Instance& instance, const std::vector<std::string>& tool = {});
 // Runs one staged library (btload ... --main args) in the instance's environment, in the foreground.
 int execTool(const Layout& layout, const Instance& instance, const std::vector<std::string>& args);
-// Stops the instance's stack (its daemon stops its own services).
+// Stops the instance's stack (its daemon stops its own services) and ends every process of the instance, also those started meanwhile (cli/stop.cpp).
 void stopStack(const Layout& layout, const Instance& instance);
+// The pid of the session's window shell (0: none), and its end unless another instance's stack still runs (the shell serves them all).
+int shellPid(const Layout& layout);
+void endShellUnlessShared(const Layout& layout, const std::string& leaving);
 // The instance's property store (Android's readiness mechanism): set a property, or block until it has a value (false if deathPidfd became readable first).
 void setProperty(const Layout& layout, const NativeEnv& env, const char* name, const char* value);
 bool waitForProperty(const Layout& layout, const NativeEnv& env, const char* name, const char* value, int deathPidfd);

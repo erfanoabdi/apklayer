@@ -29,7 +29,7 @@ public final class HubClient {
             }
         }
         hub = found; endpoint = own; hubPid = own.hubPid();
-        try { hub.linkToDeath(() -> alive = false, 0); }
+        try { hub.linkToDeath(() -> { alive = false; hubDied(); }, 0); }
         catch (android.os.RemoteException failure) { throw new IllegalStateException("Hub disconnected during registration", failure); }
         if (pid != android.os.Process.myPid()) throw new IllegalStateException("Hub caller identity mismatch");
         HubPermissionChecker.install();
@@ -41,6 +41,18 @@ public final class HubClient {
         HostInputMethods.install(context,HubProtocol.call(found, HubProtocol.DESCRIPTOR, HubProtocol.INPUT_METHODS, request -> {}, reply -> reply.readString()));
         System.out.println("[apklayer] hub registered " + context.getPackageName() + " pid=" + pid);
     }
+    /**
+     * The hub is the instance's system_server: what this process registered there (activities, bindings, receivers, alarms, notifications) went with
+     * it, so a next hub (the always-on unit's taking over) cannot be rejoined. As an app process when system_server dies, the process ends; a
+     * component host ends from its loop (ComponentHost), after its due writes.
+     */
+    private static void hubDied() {
+        if (Boolean.getBoolean("apklayer.componenthost") || HubHost.hub) return;
+        System.out.println("[apklayer] the instance hub ended: this app process ends with it");
+        System.out.flush();
+        System.exit(0);
+    }
+
     private static int register(Context context, IBinder hub, HubEndpoint endpoint) {
         // the first call waits for the hub's boot (1.4 s on an idle machine, several seconds on a busy one): say so every 2 s, the launch is not hung
         long since = System.nanoTime();

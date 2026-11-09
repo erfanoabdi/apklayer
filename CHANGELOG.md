@@ -3,6 +3,25 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: `apklayer stop` leaves nothing of the instance running; an app ends with its hub
+- Cause (the two follow-ups of "the always-on unit's hub no longer loses to a stray `apklayer hub`"): stop ended the run.* records before the hub, so
+  the still-running hub restarted a component host stop had just ended; that launch took the spare (a JVM the holder started, no child of the hub)
+  and started a new holder (`app-spare --after N`, detached), which the hub's own shutdown cleanup does not reach and no record listed any more.
+  Reproduced on Parallels with the old CLI by the new test: after stop the holders, the hubserver JVM, its component-host launcher and its helpers
+  (ip monitor, udevadm monitor) were left.
+- Fix (cli/stop.cpp, stopStack moved out of stack.cpp): the hub first (no restarts), then the records, the stack and binderd as before, then, holding
+  start.lock (no launch starts a stack meanwhile), every process of the instance until none is left: those whose environment has the instance's
+  APKLAYER_INSTANCE and APKLAYER_LOGS (what nativeEnv gives everything apklayer starts; a shell that only exports APKLAYER_INSTANCE is not one), and
+  under the sandbox those in the stack's user namespace; never stop itself and its callers, nor the session's shared window shell. Then the
+  leftover run.* records go.
+- HubClient: a hub that dies takes what the process registered with it (activities, bindings, receivers, alarms, notifications, pending intents), so
+  rejoining the next hub would mean replaying all of it. As an Android app process dies with system_server, the app now ends (`the instance hub
+  ended: this app process ends with it`, exit 0) instead of running hubless; component hosts already ended from their loop, the hub's own package is
+  not affected. Parallels: uibench ended 0.7 s after its hub's SIGTERM.
+- Test: tests/vm/stop-race.sh (group hub-services): hello.hubclient bound to its service in a hub-started host, a `component-host` launch started
+  right before `apklayer stop`; afterwards no process carries the instance and no run.* record is left (fails with the old CLI, listing the above).
+  Parallels (own tree): hub-services, startup, providers, services, activities, broadcasts pass.
+
 ## 2026-11-09: Bluetooth channel sockets, server sockets, pairing requests (docs/PLAN.md "Bluetooth and USB")
 - `BluetoothDevice.createRfcommSocket(int)`/`createInsecureRfcommSocket(int)` (the hidden calls serial apps reach by reflection): `bluez.py rfcomm
   <address> <channel>` connects an AF_BLUETOOTH RFCOMM socket itself and relays it as the service sockets do (the hub accepts a channel 1-30 in place of
