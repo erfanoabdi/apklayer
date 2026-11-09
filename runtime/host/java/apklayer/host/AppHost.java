@@ -180,7 +180,7 @@ public final class AppHost implements Runnable {
         }
         StartTrace.mark("window configured by the shell");
         this.shell = shell;
-        org.robolectric.shadows.NavigationBarInset.onVisibility(shell::sendNavigationBar);  // immersive mode: the shell hides its bar
+        if (shell != null) org.robolectric.shadows.NavigationBarInset.onVisibility(shell::sendNavigationBar);  // immersive mode: the shell hides its bar
         if (shell != null && HostConfiguration.night() != null) shell.sendDecorDark(HostConfiguration.night());
         text.shell = shell;
         app.getSystemService(android.content.ClipboardManager.class).addPrimaryClipChangedListener(text::onAppClipboardChanged);
