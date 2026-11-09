@@ -46,7 +46,7 @@ public class Main extends Activity {
         field.addTextChangedListener(new TextWatcher() {
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             public void onTextChanged(CharSequence s, int start, int before, int count) {
-                System.out.println("[hello-input] text=" + s);
+                System.out.println("[hello-input] text=" + s.toString().replace("\n", "\\n"));  // a newline as \n: one log line
             }
             public void afterTextChanged(Editable s) {}
         });
@@ -80,6 +80,12 @@ public class Main extends Activity {
             clipboard.setPrimaryClip(ClipData.newPlainText("long", new String(data)));
         });
         layout.addView(longCopy, new LinearLayout.LayoutParams(-1, (int) (64 * dp)));
+        // the other kinds of field (tests/vm/ime-fields.py, the phones' keyboards): single-line with an Enter action, password, number
+        layout.addView(kind(1, android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
+                android.view.inputmethod.EditorInfo.IME_ACTION_GO, "Email (Enter: Go)"), new LinearLayout.LayoutParams(-1, (int) (48 * dp)));
+        layout.addView(kind(2, android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD,
+                android.view.inputmethod.EditorInfo.IME_ACTION_DONE, "Password"), new LinearLayout.LayoutParams(-1, (int) (48 * dp)));
+        layout.addView(kind(3, android.text.InputType.TYPE_CLASS_NUMBER, 0, "Number"), new LinearLayout.LayoutParams(-1, (int) (48 * dp)));
         clipboard.addPrimaryClipChangedListener(() -> {
             ClipData clip = clipboard.getPrimaryClip();
             if (clip != null && clip.getItemCount() > 0) {
@@ -100,6 +106,21 @@ public class Main extends Activity {
             field.setText("magnify me");
             field.postDelayed(() -> magnify(field), 2000);
         }
+    }
+
+    /** Single-line field n: its text and editor actions go to the log. */
+    private EditText kind(int n, int type, int action, String hint) {
+        EditText f = new EditText(this);
+        f.setHint(hint);
+        f.setInputType(type);
+        if (action != 0) f.setImeOptions(action);
+        f.addTextChangedListener(new TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void onTextChanged(CharSequence s, int start, int before, int count) { System.out.println("[hello-input] field" + n + " text=" + s.toString().replace("\n", "\\n")); }
+            public void afterTextChanged(Editable s) {}
+        });
+        f.setOnEditorActionListener((v, id, event) -> { System.out.println("[hello-input] field" + n + " action=" + id); return true; });  // handled: the focus stays
+        return f;
     }
 
     /** The surfaces a text drag makes (tests/vm/magnifier.sh): a child layer of the window's own layer and the text magnifier. */

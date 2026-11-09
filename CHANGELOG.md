@@ -24,6 +24,32 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
   with the reason, as `volumes` and `system-apps` do. Checked in own trees with the prebuilts' system APKs installed: PC (x86_64 APKs) files
   PASS, system-apps all checks but the known `display` one; Parallels (arm64) files PASS; both SKIP files before the install.
 
+## 2026-11-10: the phones' keyboards: field types, Enter, a selection's Backspace, showing it again (Maliit)
+- Causes: the app told the shell only "a field has focus" (MSG_TEXT_INPUT {id, 0/1}), so Maliit always got free text with predictions (a
+  password field too) and a plain Enter key, and a field-to-field move sent nothing. InputMethodManager.showSoftInput (TextView's tap in a
+  focused field) stayed in Robolectric's shadow, so a keyboard the user swiped away came back only on the next focus change. The keyboard's
+  Backspace arrives as an IME deletion (deleteSurroundingText(1, 0)), which by Android's contract leaves a selection alone; and Lomiri, never
+  told the cursor or the selection, then restored the word it remembered (`ok go ` with `ok` selected became `go go `). Enter went to the app
+  as KEYCODE_ENTER: a desktop Enter does type a newline (tests/vm/ime-fields.py); the phones' Enter now goes as an IME's.
+- Fixes: HostTextBridge sends the focused field's EditorInfo on every focus change (MSG_TEXT_INPUT {id, 1, inputType, imeOptions}), state 2
+  on showSoftInput (the shadow's visibility handler, reset after each call so every tap counts), state 3 with its text around the cursor
+  (500 characters each side, cursor and anchor in UTF-16 units; none while composing, none for a password). The shell maps inputType to
+  text-input-v3's content hint and purpose (textinput.c `text_input_kind`, now also sent to v3 compositors) and from that to Maliit's
+  contentType/hiddenText/prediction/correction/autocapitalization (capitals only for CAP_* flags, as Android's keyboards), the Enter label
+  (Go, Search, Send, Next, Done, Previous; none for IME_FLAG_NO_ENTER_ACTION) and the surrounding text, cursor, anchor and hasSelection
+  (maliit.c sends the whole state each time: the server replaces it). Maliit's Enter goes as an IME commit of "\n" (in order with its
+  commits), which HostTextBridge.ime turns into performEditorAction for a field with an action, as LatinIME does; an IME deletion with text
+  selected deletes the selection (commitText("")).
+- Phones, own instance `kbd` (the installed CLI, this tree's shell and host-classes.jar on a copy of runtime 0.4.11; the Sailfish shell built in
+  the Sailfish build root; Sailfish's instance with `ro.hardware.egl mali`), hello.input's new email (IME_ACTION_GO), password and number fields,
+  uinput taps, the compositors' screenshots. Volla X23 (Lomiri) and Volla Quintus (Lipstick) alike: `ok go `, a long press selects `ok`,
+  Backspace -> ` go ` (one Backspace: the keyboard got hasSelection), Enter + `hi` -> `\nhi go `; the keyboard swiped down (`imInitiatedHide`,
+  no keyboard in the screenshot), a tap in the field shows it again; the email field shows the `@`/`.com` layout with a `Go` key and its
+  Enter runs action 2 (no newline), the password field `Done` and no predictions, the number field the digit pad.
+- Tests: tests/vm/ime-fields.py (group input; test input `delete:<n>`): a key Enter and an IME "\n" type newlines in the multi-line field, an
+  IME deletion with all selected empties it, an IME "\n" in the email field runs IME_ACTION_GO, the fields' EditorInfo and a tap's show request
+  reach the shell. Group input passes on Parallels (own tree; the two runs after the last code change).
+
 ## 2026-11-10: Termux's shell without the sandbox: Android groups, program names, `ls -a`, its login's ~/.termux (bionic_translation 0061, 0062)
 - `id` listed the desktop user's groups: bionic's getgroups now answers the groups zygote gives an app (0061; inet 3003 with INTERNET,
   everybody 9997, cache 20000+appId, shared 50000+appId: NativeLoader.appGroups, as the sandbox sets them), carried to the app's programs in

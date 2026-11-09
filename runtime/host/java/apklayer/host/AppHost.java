@@ -183,6 +183,7 @@ public final class AppHost implements Runnable {
         if (shell != null) org.robolectric.shadows.NavigationBarInset.onVisibility(shell::sendNavigationBar);  // immersive mode: the shell hides its bar
         if (shell != null && HostConfiguration.night() != null) shell.sendDecorDark(HostConfiguration.night());
         text.shell = shell;
+        text.followShowRequests();
         app.getSystemService(android.content.ClipboardManager.class).addPrimaryClipChangedListener(text::onAppClipboardChanged);
         HostKeyStore.install();
         AppEnvironment.installSystemPackage(app);
