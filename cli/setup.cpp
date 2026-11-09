@@ -43,7 +43,7 @@ std::string envOr(const char* name, const char* fallback) { return getenvOr(name
 // the providers step's line: every domain is automatic unless chosen (cli/providers.cpp); on a Halium device, which are the device's own
 std::string providersDetail(const Layout& layout, const Instance& instance) {
     std::string device;
-    for (const char* d : {"graphics", "camera", "vibrator"})
+    for (const char* d : {"graphics", "camera", "vibrator", "media"})
         if (deviceDomain(layout, instance, d)) device += std::string(device.empty() ? "" : ", ") + d;
     return device.empty() ? "Automatic: the best this host has" : "Automatic: the device's " + device;
 }
