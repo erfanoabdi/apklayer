@@ -118,7 +118,7 @@ int main(int argc, char** argv) {
     // the sandbox's answer for this command and every process it starts (the Java side reads the variable)
     bool sandbox = sandboxOn();
     setenv("APKLAYER_SANDBOX", sandbox ? "1" : "0", 1);
-    if (cmd == "run" || cmd == "list") refreshDesktops(layout);  // a launch from a working entry or the manager mends the others
+    if (cmd == "run" || cmd == "list") refreshDesktops(layout), refreshAutostart(layout);  // a launch from a working entry or the manager mends the others
     if (cmd == "install" && n >= 2) {
         bool downgrade = false, system = false;
         size_t first = 1;

@@ -176,7 +176,50 @@ How to run each check (on the phone; `. ~/apklayer-dev-cam/env.sh` gives `$A`): 
 `ut-player.sh red-h264.mp4|red-tone.mp4` (`PLAYER PASS`, `player.png`), `ut-audio.sh` (the audio app's lines), and `apklayer run hello.hardware` with the default providers for vibrator, gnss and sensors.
 Test apps: `tests/apps/build.sh hello-camera hello-hardware hello-native-player hello-native-audio` on the Mac, `apklayer install` on the phone. Open Camera's API: `~/apklayer-dev-cam/ocprefs.py <camera id>` edits its preferences (camera2 or the old API).
 
-## The apt install on the phone (2026-11-05)
+## Ubuntu Touch: the click (2026-11-09, the way to install)
+Ubuntu Touch 24.04 (arm64) installs apklayer as a click, `apklayer.erfanoabdi_<version>_arm64.click` from the release (docs/RELEASES.md "The click";
+the OpenStore once it is accepted). No root, nothing on the read-only rootfs, and an OTA update leaves it alone (clicks live in
+`/opt/click.ubuntu.com`, a bind mount of the user data partition). Install a test build without the store (UT 24.04 has no `pkcon`; the system
+bus's click service installs for the user, no password):
+```sh
+gdbus call --system -d com.lomiri.click -o /com/lomiri/click -m com.lomiri.click.Install /home/phablet/apklayer.erfanoabdi_<version>_arm64.click
+```
+Then open Apklayer from the drawer (the manager runs `apklayer setup`: the runtime bundle into `~/.local/share/apklayer`, providers, system apps,
+the always-on `ut` instance). The click brings its own Java (a JDK 21 image with class data sharing); nothing else from the rootfs beyond the image's
+own packages (`zip` is not needed: setup uses the image's `jar`). The CLI for a terminal: `/opt/click.ubuntu.com/apklayer.erfanoabdi/current/usr/bin/apklayer`
+(an alias is handy). Remove: `gdbus call --system -d com.lomiri.click -o /com/lomiri/click -m com.lomiri.click.Remove apklayer.erfanoabdi`
+(the data in `~/.local/share/apklayer` stays; `apklayer remove-all --yes` first removes it, the launchers and units too).
+
+What the click is (decided by the owner, docs/PLAN.md "Plan: Ubuntu Touch click package"): unconfined (AppArmor template `unconfined`: the apps need
+the device's binder and GPU nodes, the launchers in `~/.local/share/applications` and the always-on unit in `~/.config/systemd/user`), the JDK
+inside, no per-app sandbox (it needs root's newuidmap setup), Ubuntu Touch 24.04 only (the noble build as it is).
+Paths: the click's directory `/opt/click.ubuntu.com/apklayer.erfanoabdi/<version>/` is replaced and removed by each update, so the launchers, the
+always-on unit and the runtime's links name `.../apklayer.erfanoabdi/current/...` (the click's own link); a launcher or unit naming a CLI that is
+gone (the deb's, before the switch) is written again by the next `run` or `list` (the manager runs `list`).
+
+From the deb to the click (done on the Volla X23, 2026-11-09; apps, data, runtime and the `ut` instance's settings stay as they are, all in `/home`):
+1. `systemctl --user stop apklayer-instance@ut; apklayer --instance ut stop`
+2. `sudo mount -o remount,rw / && sudo dpkg -r apklayer && sudo mount -o remount,ro /` (`apt remove` too; `systemctl disable apklayer-binder`
+   if it was enabled: the userspace binder needs no unit)
+3. Install the click (above). A `APKLAYER_NATIVE_JAVA=` line in `~/.config/apklayer/env` (the deb without its Java dependency) would still win over
+   the click's JDK: remove it.
+4. Open Apklayer once, or run `apklayer setup` (the runtime is set up again for the new package half, ~1 minute) and `apklayer list`: the launchers
+   and the always-on unit then name the click's CLI. `systemctl --user start apklayer-instance@ut` (or the next login) starts the instance.
+
+Checked on the Volla X23 (2026-11-09, 0.4.10 test clicks; the owner's apps and data in `~/.local/share/apklayer` from the 0.4.9 deb):
+- install without root through `com.lomiri.click`; `apklayer setup --bundle apklayer-runtime-arm64-0.4.9.tar.zst` (the existing runtime set up again,
+  1 min; and a fresh data home: bundle unpacked, runtime set up, 10 system apps, 3 min 48 s); every JVM runs the click's JDK image with CDS on;
+- drawer launches (`lomiri-app-launch apklayer-<package>`) of NewPipe and Calculator: each in its own scope, from the click's CLI; SurfaceFlinger
+  pictures of Calculator and NewPipe's start list (thumbnails from the network);
+- the manager from the drawer: `aa-exec-click` with the click's profile, unconfined, and it reaches the click's CLI (a launcher made stale by hand was
+  rewritten by its `list`);
+- the always-on `ut` instance: across a reboot (it starts at login; the first two tries before Lomiri's compositor fail and the unit's Restart= brings
+  it up 13 s later, as with the deb) and across two click updates with it running (0.4.10 -> 0.4.11 -> 0.4.12: the old directory is removed at
+  once, the running hub stays up on its deleted files, the next drawer launch runs the new version and draws);
+- graphics, camera and media = device: Open Camera's preview from both cameras (camera = device), a NewPipe video decoded by
+  `c2.mtk.avc.decoder` with AAC through `c2.android.aac.decoder` (media = device), apps on the Mali GPU (graphics = device).
+
+## The apt install on the phone (2026-11-05; replaced by the click)
 The Volla X23 runs Ubuntu Touch 24.04 (noble, glibc 2.39, arm64): the normal `apklayer` deb (`tools/release/build-deb.sh noble <version> <prebuilts> out/` on the Parallels VM, also noble arm64) installs on it as it is.
 
 Install (needs root once, as any deb on Ubuntu Touch; the rootfs is read-only and 4 GB with ~540 MB free):

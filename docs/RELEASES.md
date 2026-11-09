@@ -8,6 +8,7 @@ Plan and open work: `docs/PLAN.md` "Next phase: binary releases".
 | Piece | Made by | For |
 |---|---|---|
 | `apklayer_X.Y.Z-1~<codename>1_<arch>.deb` (uploaded with `.` for `~`) | `debian/` through `tools/release/build-deb.sh` | one OS release (noble, trixie) and CPU (arm64; amd64 experimental) |
+| `apklayer.erfanoabdi_X.Y.Z_arm64.click` | `tools/release/click.sh` (the noble arm64 deb's tree and a JDK image) | Ubuntu Touch 24.04 (arm64), section "The click" |
 | `apklayer-runtime-<cpu>-<R>.tar.zst` + `.sha256` | `tools/release/runtime-bundle.sh <prebuilts> <cpu> <out>` | every Linux of that CPU (`<cpu>`: `arm64`, `x86_64`, the prebuilts' names) |
 | `SHA256SUMS` | the release job | every file of the release |
 | `releases.json` on the `pages` branch | `tools/release/releases-json.py` | the manager's updater (no GitHub API rate limit) |
@@ -33,6 +34,25 @@ Everything glibc-linked, built from the tag with the prebuilts as build inputs (
 Ubuntu keeps `binder_linux` (only the kernel binder option needs it) in `linux-modules-extra-<kernel>`, which only the kernel metapackages pull in: the noble deb suggests
 `linux-modules-extra-generic | linux-image-generic | linux-image-generic-hwe-24.04` (`debian/<codename>.substvars`, written by `build-deb.sh`). Other kernels must bring the module.
 Debian builds it into its kernel package. Per-codename source patches, if one is ever needed: `debian/patches/<codename>/series` (copied into place by `build-deb.sh`).
+
+## The click
+
+Ubuntu Touch 24.04 (arm64) installs apklayer as a click (docs/PLAN.md "Plan: Ubuntu Touch click package", docs/HALIUM.md "Ubuntu Touch: the click"):
+no root, nothing on the read-only rootfs, and it survives OTA updates. `tools/release/click.sh <version> <prebuilts> <out> [<deb>]` (noble arm64, the
+deb's Build-Depends and `click`; the release job passes the noble arm64 deb it built):
+
+| Piece | What |
+|---|---|
+| `usr/...` | the noble arm64 deb unpacked as it is (`dpkg-deb -x`), without its root-side files (units, udev rule, the sandbox's AppArmor profile) |
+| `usr/lib/apklayer/native/jdk/` | the runtime's JDK image (`jdk-image.sh` at build time: every module of the build's JDK 21, java.base with the jdk-patch built in, the CDS archive; ~160 MB unpacked). The CLI takes it before any system Java (cli/env.cpp `findJava`; `APKLAYER_NATIVE_JAVA` still wins) and runs it as the image it is (no `--patch-module`, class data sharing on); `setup-runtime.sh` makes no per-user image from it and puts the JNI shim into the framework jars with its `jar` when the phone has no `zip` |
+| `apklayer.desktop`, `manifest.json`, `apklayer.apparmor` | the manager as the click's app (`Exec=usr/bin/apklayer-manager`), app id `apklayer.erfanoabdi_apklayer`; framework `ubuntu-touch-24.04-1.x`, AppArmor template `unconfined` (policy version 2404.1: aa-clickhook refuses another for this framework, and Lomiri's launch then fails with "profile does not exist") |
+
+The click lives in `/opt/click.ubuntu.com/apklayer.erfanoabdi/<version>/` (the user data partition), which an update replaces and removes at once:
+everything that outlives a process names it through the click's own `current` link (`cli/layout.cpp` selfPath: the CLI's root, the launchers' Exec,
+the always-on unit, `-Dapklayer.cli`, the runtime's links into the package half, which setup-runtime.sh now makes from the unresolved path).
+A running always-on hub keeps its old, deleted files until its next start; launches after an update run the new version.
+The Android runtime bundle comes from `apklayer setup` (the manager's first run) into `~/.local/share/apklayer`, as with the deb. The manager's own
+update check reads `debs` in releases.json and does not know the click: the OpenStore (or a newer click) updates it.
 
 ## The runtime bundle
 

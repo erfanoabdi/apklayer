@@ -3,7 +3,8 @@
 # The deb has no Android half (meson -Dandroid_runtime=false, docs/RELEASES.md): the unpacked Android runtime bundle becomes the native dir with
 # the package's half linked in, the package's JNI shim put into the framework jars, and the framework instrumented once.
 set -eu
-native="$(realpath "$1")" half="$(realpath "$2")" share="$(cd "$(dirname "$0")/.." && pwd)"
+# half as named (not resolved): the click's is under its <app>/current link, so the links below outlive an update (cli/layout.cpp selfPath)
+native="$(realpath "$1")" half="$(cd "$2" && pwd)" share="$(cd "$(dirname "$0")/.." && pwd)"
 # a wrong half (a CLI built for another layout resolved it to /) would link every entry of it into the runtime
 [ -f "$half/native-runtime.jar" ] || { echo "apklayer: $half is not apklayer's native dir (no native-runtime.jar); runtime not set up" >&2; exit 1; }
 exec 9>"$native/.setup.lock" && flock 9
@@ -17,7 +18,9 @@ done
 tar -C "$share/bridge/native/android-root" -cf - . | tar -C "$native/android-root" -xf -  # apklayer's own files of the Android root, replacing (busybox cp has no --remove-destination)
 tmp="$(mktemp -d)" && trap 'rm -rf "$tmp"' EXIT
 (cd "$tmp" && unzip -q "$half/native-runtime.jar" 'native/linux/*' && for j in "$native"/aosp/android-all/*.jar; do
-    zip -q -O "$j.new" "$j" native/linux/x86_64/libandroid_runtime.so native/linux/aarch64/libandroid_runtime.so && mv -f "$j.new" "$j"
+    if command -v zip >/dev/null; then zip -q -O "$j.new" "$j" native/linux/x86_64/libandroid_runtime.so native/linux/aarch64/libandroid_runtime.so
+    else cp "$j" "$j.new" && "$(dirname "$(realpath "$(command -v "${APKLAYER_JAVA:-java}")")")/jar" uf "$j.new" native/linux; fi  # no zip (Ubuntu Touch): the click's JDK has jar
+    mv -f "$j.new" "$j"
 done)
 # the framework jars instrumented once (apklayer.tools.PreInstrument), which app JVMs take while they are newer than their inputs (cli/env.cpp)
 out="$native/aosp/android-all-instrumented" done_jar=""

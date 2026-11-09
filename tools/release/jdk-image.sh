@@ -10,6 +10,7 @@ home="$(dirname "$(dirname "$java")")" img="$native/jdk" patch="$native/jdk-patc
 if [ -d "$sim" ] && { [ ! -f "$sim.jar" ] || [ -n "$(find -L "$sim" -newer "$sim.jar" | head -1)" ]; }; then
     "$home/bin/jar" cf "$sim.jar.new" -C "$sim" . && mv -f "$sim.jar.new" "$sim.jar"
 fi
+[ ! -f "$home/apklayer-stamp" ] || exit 0  # <java> is such an image already (the click's own JDK, tools/release/click.sh)
 [ -x "$home/bin/jlink" ] && [ -f "$home/jmods/java.base.jmod" ] && [ -d "$patch" ] || { echo "apklayer: $home has no jlink and jmods: apps run without class data sharing" >&2; exit 0; }
 stamp="$(stat -c %Y "$home/lib/modules")"
 [ "$(cat "$img/apklayer-stamp" 2>/dev/null)" != "$stamp" ] || [ -n "$(find -L "$patch" -newer "$img/apklayer-stamp" | head -1)" ] || exit 0

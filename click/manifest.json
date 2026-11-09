@@ -1,0 +1,16 @@
+{
+    "name": "apklayer.erfanoabdi",
+    "title": "Apklayer",
+    "version": "@VERSION@",
+    "description": "Run Android apps in Lomiri windows, without a container: install, open and manage them",
+    "maintainer": "Erfan Abdi <erfangplus@gmail.com>",
+    "architecture": "arm64",
+    "framework": "ubuntu-touch-24.04-1.x",
+    "icon": "usr/share/icons/hicolor/scalable/apps/apklayer.svg",
+    "hooks": {
+        "apklayer": {
+            "desktop": "apklayer.desktop",
+            "apparmor": "apklayer.apparmor"
+        }
+    }
+}

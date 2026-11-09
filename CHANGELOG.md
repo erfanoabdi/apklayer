@@ -3,6 +3,21 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: Ubuntu Touch click package; the Volla X23 runs it instead of the deb (docs/PLAN.md "Plan: Ubuntu Touch click package" 1-4)
+- `tools/release/click.sh`: the noble arm64 deb unpacked as it is plus the runtime's JDK image (jdk-image.sh at build time), the manager as the
+  click's app, AppArmor `unconfined` (`click/`). No clickable: `click build` from noble's archive is all it takes. release.yml job `click`
+  (ubuntu:24.04 on the arm runner, from the deb job's noble arm64 deb), joins the release when it succeeds.
+- CLI: the package's own JDK image comes before a system Java and runs as the image it is (CDS, no --patch-module); the CLI names itself through
+  the click's `<app>/current` link (an update removes the versioned directory); a stale always-on unit (a CLI that is gone) is rewritten by
+  `run`/`list` like the launchers; setup-runtime.sh links the package half by its unresolved path and uses the JDK's `jar` when there is no `zip`.
+- Found on the phone: aa-clickhook refuses policy_version 20.04 for framework ubuntu-touch-24.04-1.x ("Invalid policy version", then Lomiri's
+  launch fails: "profile ... does not exist"): 2404.1. UT 24.04 has no pkcon: test builds install through `com.lomiri.click.Install` (no root).
+- Volla X23 (owner's 0.4.9 deb, instance ut always on, NewPipe/Calculator/Open Camera/F-Droid and system apps): deb removed (`dpkg -r`, rootfs
+  remounted rw for it), clicks 0.4.10 -> 0.4.11 -> 0.4.12 installed, setup with the 0.4.9 bundle (existing runtime, and a fresh data home),
+  drawer launches, the manager from the drawer (unconfined, reaches the click's CLI), the always-on instance across a reboot and both updates,
+  graphics/camera/media = device (Open Camera both cameras, a NewPipe video through c2.mtk.avc.decoder). Apps and data unchanged; the
+  `APKLAYER_NATIVE_JAVA` line of `~/.config/apklayer/env` (the dev JDK the deb used) is commented out so the click's JDK runs.
+
 ## 2026-11-09: FCL's game JVM gets past VM init (bionic_translation 0050, 0051)
 - Cause of "Error occurred during initialization of VM: java.lang.StackOverflowError at java.lang.String.<clinit>" (and of a SIGBUS at a
   garbage pc in a later try): `pthread_attr_getguardsize` had no bionic_ wrapper, so FCL's JRE 25 (bionic HotSpot) ran glibc's on the

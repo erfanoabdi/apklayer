@@ -1,6 +1,6 @@
 # Installing apklayer
 
-Released versions come as a deb (Ubuntu 24.04, Debian 13; arm64): `sudo apt install ./apklayer_*.deb` from the latest GitHub Release, then open apklayer-manager (`docs/RELEASES.md`), or as a Flatpak for any distribution (section "Flatpak" at the end). This page builds from source.
+Released versions come as a deb (Ubuntu 24.04, Debian 13; arm64): `sudo apt install ./apklayer_*.deb` from the latest GitHub Release, then open apklayer-manager (`docs/RELEASES.md`), or as a Flatpak for any distribution (section "Flatpak" at the end), or on Ubuntu Touch 24.04 as a click (`docs/HALIUM.md` "Ubuntu Touch: the click"). This page builds from source.
 
 Step by step, from a fresh Linux machine to an Android app in a window. Tested on Ubuntu 24.04 arm64 (a Parallels VM, GNOME Wayland, Mesa virgl), 2026-11-04, from a fresh clone.
 x86_64 has its own prebuilts but was never run on a real PC (`docs/X86_64.md`); the steps below are written for arm64.
@@ -238,8 +238,9 @@ them first and says so. A home on a small file system: `apklayer setup --move-da
 instances; no instance may run) to `<dir>` on a bigger one and leaves a symlink in its place (docs/HALIUM.md for phones).
 Setup needs no root: binder is the userspace one. The kernel's binder is an option (`apklayer binder kernel`, or the manager's Hardware page); its
 devices need root once per boot: `sudo systemctl enable --now apklayer-binder` (the package ships the unit disabled).
-Ubuntu Touch (Halium phones): docs/HALIUM.md "The apt install on the phone"; "Choose file…" and Share to apklayer go through Lomiri Content Hub
-(docs/HALIUM.md "Choosing and sharing files on Ubuntu Touch").
+Ubuntu Touch 24.04 (Halium phones): the click, not the deb (docs/HALIUM.md "Ubuntu Touch: the click": no root, survives OTA updates, its own
+Java); "Choose file…" and Share to apklayer go through Lomiri Content Hub (docs/HALIUM.md "Choosing and sharing files on Ubuntu Touch"; Share to
+apklayer is the deb's only so far).
 
 ## Flatpak
 

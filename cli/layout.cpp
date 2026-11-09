@@ -26,12 +26,24 @@ void applyConfig() {
         setenv(trim(line.substr(0, eq)).c_str(), value.c_str(), 0);
     }
 }
+
+// This program's path. A click (Ubuntu Touch) lives in /opt/click.ubuntu.com/<app>/<version>/, which an update removes: what outlives this
+// process (launchers, the always-on unit, the runtime's links, -Dapklayer.cli) names it through the click's own <app>/current link instead
+std::string selfPath() {
+    std::string exe = realPath("/proc/self/exe");
+    const std::string clicks = "/opt/click.ubuntu.com/";
+    size_t app = exe.rfind(clicks, 0) == 0 ? exe.find('/', clicks.size()) : std::string::npos;
+    size_t version = app == std::string::npos ? app : exe.find('/', app + 1);
+    if (version == std::string::npos) return exe;
+    std::string current = exe.substr(0, app) + "/current";
+    return realPath(current) == exe.substr(0, version) ? current + exe.substr(version) : exe;
+}
 }  // namespace
 
 Layout Layout::detect(bool setUp) {
     applyConfig();
     Layout l;
-    std::string exe = realPath("/proc/self/exe");
+    std::string exe = selfPath();
     l.root = getenvOr("APKLAYER_ROOT", "");
     for (std::string dir = dirName(exe); l.root.empty() && dir != "/"; dir = dirName(dir)) {
         if (looksLikeRoot(dir)) l.root = dir;
@@ -104,7 +116,7 @@ Layout Layout::arm32Layout() const {
     return a;
 }
 
-std::string Layout::cliBinary() const { return realPath("/proc/self/exe"); }
+std::string Layout::cliBinary() const { return selfPath(); }
 
 Instance Instance::open(const Layout& layout, const std::string& id) {
     Instance i;

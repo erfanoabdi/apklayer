@@ -77,6 +77,27 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: {name: 'deb-${{ matrix.os.codename }}-${{ matrix.cpu.arch }}', path: out/*.deb, if-no-files-found: error}
 
+  click:
+    # the Ubuntu Touch 24.04 click (arm64; tools/release/click.sh, docs/RELEASES.md "The click"): the noble arm64 deb's tree as it is, with its own
+    # JDK image; new: a failed build does not hold the release back
+    needs: [guard, deb]
+    runs-on: ubuntu-24.04-arm
+    continue-on-error: true
+    container: 'ubuntu:24.04'
+    steps:
+      - name: Tools
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq click dpkg-dev openjdk-21-jdk-headless >/dev/null
+      - uses: actions/checkout@v4
+        with: {path: src}
+      - uses: actions/download-artifact@v4
+        with: {name: deb-noble-arm64, path: deb}
+      - name: Build
+        run: sh src/tools/release/click.sh "${VERSION#v}" . out deb/apklayer_"${VERSION#v}"-1~noble1_arm64.deb
+      - uses: actions/upload-artifact@v4
+        with: {name: click-arm64, path: out/*.click, if-no-files-found: error}
+
   flatpak:
     # the Flatpak bundle of each CPU (flatpak/build.sh, docs/INSTALL.md "Flatpak"); new: a failed build does not hold the release back
     name: flatpak ${{ matrix.arch }}
@@ -139,8 +160,8 @@ jobs:
         with: {name: rpm-sailfish-aarch64, path: out/*.rpm, if-no-files-found: error}
 
   release:
-    needs: [guard, deb, bundle, sailfish, flatpak]
-    # the debs and the bundle are the release; Sailfish RPMs and Flatpak bundles join it when their jobs succeeded
+    needs: [guard, deb, bundle, sailfish, flatpak, click]
+    # the debs and the bundle are the release; Sailfish RPMs, Flatpak bundles and the click join it when their jobs succeeded
     if: ${{ !cancelled() && needs.guard.result == 'success' && needs.deb.result == 'success' && needs.bundle.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
@@ -162,7 +183,7 @@ jobs:
         env: {GH_TOKEN: '${{ github.token }}'}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "apklayer ${VERSION#v}" --verify-tag \
-            --notes "Install: download the deb for your OS and CPU, \`sudo apt install ./apklayer_*.deb\`, then open apklayer-manager. Flatpak: \`flatpak install --user apklayer-*-<cpu>.flatpak\` (docs/INSTALL.md \"Flatpak\"). apklayer-dev_*.deb: the headers for out-of-tree hardware plugins (docs/PLUGINS.md). Sailfish OS 5 (aarch64): the *.aarch64.rpm files, \`devel-su pkcon install-local\` them (docs/HALIUM.md). SHA256SUMS lists every file."
+            --notes "Install: download the deb for your OS and CPU, \`sudo apt install ./apklayer_*.deb\`, then open apklayer-manager. Flatpak: \`flatpak install --user apklayer-*-<cpu>.flatpak\` (docs/INSTALL.md \"Flatpak\"). apklayer-dev_*.deb: the headers for out-of-tree hardware plugins (docs/PLUGINS.md). Sailfish OS 5 (aarch64): the *.aarch64.rpm files, \`devel-su pkcon install-local\` them (docs/HALIUM.md). Ubuntu Touch 24.04 (arm64): apklayer.erfanoabdi_*_arm64.click (docs/HALIUM.md \"Ubuntu Touch: the click\"; no root). SHA256SUMS lists every file."
       - name: Publish releases.json
         if: github.event_name == 'push'
         working-directory: pages

@@ -57,6 +57,16 @@ int systemctl(std::vector<std::string> args) {
 
 bool autostartOn(const Instance& inst) { return exists(join(inst.stateDir, "autostart")); }
 
+void refreshAutostart(const Layout& l) {
+    // a unit of an earlier install whose CLI is gone (the deb replaced by the click) is written again, as refreshDesktops does for launchers;
+    // read where the manager usually has it (no systemctl call on every launch), written where it really has it
+    std::string exec = property(join(getenvOr("XDG_CONFIG_HOME", join(homeDir(), ".config")), "systemd/user/apklayer-instance@.service"), "ExecStart");
+    if (exec.empty() || exists(exec.substr(0, exec.find(' ')))) return;
+    if (!writeFile(join(unitDir(), "apklayer-instance@.service"), unitText(l))) return;
+    systemctl({"daemon-reload"});
+    fprintf(stderr, "apklayer: the always-on unit named a CLI that is gone; it names %s now\n", l.cliBinary().c_str());
+}
+
 int autostartCommand(const Layout& l, const std::vector<std::string>& args) {
     const std::string id = args[0], state = args.size() > 1 ? args[1] : "";
     bool now = !(args.size() > 2 && args[2] == "--no-start");

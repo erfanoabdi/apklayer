@@ -195,7 +195,7 @@ Open, in order:
    owner submitting. Submission is the owner's step.
 
 ## Plan: Ubuntu Touch click package (decided 2026-11-09 by the owner; after 0.4.9)
-Goal: apklayer installs on Ubuntu Touch as a `.click` (OpenStore, or `pkcon install-local` for test builds) instead of the deb: no root, no
+Goal: apklayer installs on Ubuntu Touch as a `.click` (OpenStore, or `com.lomiri.click.Install` for test builds: 24.04 has no pkcon) instead of the deb: no root, no
 `remount,rw` of the 4 GB read-only rootfs, and it survives OTA updates (clicks live on the user data partition; an OTA replaces the rootfs and
 with it the deb and its Java). Possible once the userspace binder is the default (0.4.9): the deb's only root step was `apklayer-binder.service`
 (the instance's binder nodes); the device's own `/dev/binder`/`/dev/hwbinder` (camera, vibrator, media HALs) already exist.
@@ -216,6 +216,23 @@ Steps:
 4. Check on the Volla X23 (with the deb removed): install, `apklayer setup`, launches from the drawer, the always-on instance across a
    reboot and an update of the click, `graphics`/`camera`/`media = device`, the manager.
 5. OpenStore submission (unconfined review) once 4 passes.
+
+State (2026-11-09): 1-4 done, the Volla X23 runs the click (docs/HALIUM.md "Ubuntu Touch: the click", docs/RELEASES.md "The click").
+1: no clickable: `tools/release/click.sh` unpacks the noble arm64 deb (the deb's own staging) and adds the JDK image, `click/manifest.json`,
+   `click/apklayer.apparmor` (unconfined, policy 2404.1 for framework ubuntu-touch-24.04-1.x); ~92 MB, ~250 MB installed. The CLI takes the package's
+   own JDK image before a system Java (`APKLAYER_NATIVE_JAVA` still wins) and runs it with CDS. 2: the CLI names itself through the click's
+   `<app>/current` link (cli/layout.cpp selfPath), so launchers, the always-on unit and the runtime's links survive updates; a unit naming a gone
+   CLI (the deb's) is rewritten by `run`/`list` (autostart.cpp refreshAutostart). Nothing needs root. 3: release.yml job `click` (noble arm64
+   container, `click build`, the deb job's noble arm64 deb), the click joins the release when it succeeds; checked locally in an ubuntu:24.04
+   container on Parallels, not yet as a workflow_dispatch dry run on main (the branch is not pushed: the lead runs it after the merge).
+4: everything listed passed (HALIUM.md); UT 24.04 has no `pkcon`: the system bus's `com.lomiri.click.Install` installs without root.
+Open: Share/"Open with" to apklayer (the deb's content-hub peer and apklayer-share entry; a click needs a `content-hub` hook and a second app);
+"Choose file…" through Content Hub from the click's manager (APP_ID is now the click's versioned app id) unchecked; the manager's update check
+offers debs only (releases.json `debs`), the OpenStore updates the click; a running always-on hub keeps the old version until its next start
+(the deb has the same).
+For the owner, step 5 (OpenStore): an account and the app `apklayer.erfanoabdi` (name and maintainer as in click/manifest.json, or change them
+there), the unconfined template's justification for the manual review (above), the release's click as the upload; the store's description,
+screenshots and license fields are not in the repository.
 
 ## Plan: per-app memory and start time (owner, 2026-11-09: low priority, after the click package)
 Where we stand (Volla X23): the instance idles at ~974 MB (in Waydroid's range), but each app JVM costs ~1 GB PSS at NewPipe's first screen

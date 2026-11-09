@@ -95,6 +95,7 @@ std::string hostVulkan(const Layout& layout, const Env& env) {
 // while it was made from this JDK's modules, else "" (the JDK with --patch-module, which turns CDS off)
 std::string jdkImage(const Layout& l, const std::string& java) {
     std::string img = join(l.native, "jdk"), home = dirName(dirName(realPath(java)));
+    if (!home.empty() && exists(join(home, "apklayer-stamp"))) return java;  // an image itself (the click's own JDK, tools/release/click.sh)
     struct stat modules{};
     if (home.empty() || stat(join(home, "lib/modules").c_str(), &modules) != 0 || !isExecutable(join(img, "bin/java"))) return "";
     return trim(readFile(join(img, "apklayer-stamp")).value_or("")) == std::to_string(modules.st_mtime) ? join(img, "bin/java") : "";
@@ -103,7 +104,7 @@ std::string jdkImage(const Layout& l, const std::string& java) {
 // The instance's archive of the classes a start loads, made by the first launch that finds none (apklayer.host.CdsDump), named by the class path's
 // files: a new runtime gets its own. The JVM checks it itself and runs without it when it does not match (-Xshare:auto).
 void cdsArgs(const Layout& l, const Instance& inst, std::vector<std::string>& a) {
-    std::string key = readFile(join(l.native, "jdk/apklayer-stamp")).value_or("");
+    std::string key = readFile(join(dirName(dirName(realPath(a[0]))), "apklayer-stamp")).value_or("");  // the image a[0] runs
     for (const std::string& entry : split(hostClasspath(l), ':')) {
         struct stat st{};
         if (stat(entry.c_str(), &st) == 0) key += entry + std::to_string(st.st_size) + "." + std::to_string(st.st_mtime) + ":";
@@ -123,6 +124,9 @@ std::string findJava(const Layout& l) {
     if (!l.java.empty()) return l.java;  // the 32-bit runtime's (Layout::arm32Layout)
     std::string wanted = getenvOr("APKLAYER_NATIVE_JAVA", "");
     if (!wanted.empty() && isExecutable(wanted)) return wanted;
+    // a package with its own JDK image (the click: Ubuntu Touch's rootfs has no Java for it)
+    std::string own = join(l.build, "native/jdk/bin/java");
+    if (!l.runtimeVersion.empty() && isExecutable(own)) return own;
     glob_t found{};
     std::string result = "java";
     // JDK 21 first (the tested one; the host patches java.base), any architecture's package name (arm64, amd64)
