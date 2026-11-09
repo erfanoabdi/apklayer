@@ -52,6 +52,7 @@ public final class AppHost implements Runnable {
     private final ActivityTask task = new ActivityTask(() -> windowActive);
     private int logicalDpi; // 0: 160 x scale
     private int logicalW, logicalH, logicalScale = 100; // current window size in dp and scale %
+    private int outputPxW, outputPxH;                    // the shell's output (screen) in pixels, 0: unknown
     private int lastOrientation = -2;                    // top activity's requested orientation last applied
     private final HostTextBridge text = new HostTextBridge();
     private ShellClient shell;
@@ -101,7 +102,9 @@ public final class AppHost implements Runnable {
         main = new Handler(Looper.getMainLooper());
         input = new HostInput(main, InstrumentationRegistry.getInstrumentation().getUiAutomation(), new HostInput.WindowEvents() {
             @Override
-            public void configure(int w, int h, int scalePct, int dpi, int navPx) {
+            public void configure(int w, int h, int scalePct, int dpi, int navPx, int outputW, int outputH) {
+                outputPxW = outputW;
+                outputPxH = outputH;
                 hostResize(w, h, scalePct, dpi, navPx);
             }
 
@@ -166,6 +169,8 @@ public final class AppHost implements Runnable {
                         break;
                     }
                 } else if (ev[0] == 14) {
+                    outputPxW = ev.length > 7 ? ev[6] : 0;
+                    outputPxH = ev.length > 7 ? ev[7] : 0;
                     hostResize(ev[1], ev[2], ev[3], ev.length > 5 ? ev[4] : 0, ev.length > 5 ? ev[5] : 0);
                     width = display.getWidth();
                     height = display.getHeight();
@@ -446,6 +451,11 @@ public final class AppHost implements Runnable {
         NativeWindowResize.resizing(new ArrayList<>(stack));
         // before the app sees the new shape: a Camera1 app opens or sets its display orientation from onConfigurationChanged or the view's size
         HostCameraShadows.windowShape(h > w);
+        // the screen (WindowConfiguration max bounds: Display.getRealSize, WindowManager.getMaximumWindowMetrics, ViewConfiguration's drawing
+        // cache limit) is the output, turned like the window as a phone's display turns with it; the window stays the app's bounds
+        int pw = w * scalePct / 100, ph = h * scalePct / 100;
+        int longer = Math.max(Math.max(outputPxW, outputPxH), Math.max(pw, ph)), shorter = Math.max(Math.min(outputPxW, outputPxH), Math.min(pw, ph));
+        HostConfiguration.setScreen(outputPxW > 0 && outputPxH > 0 ? (pw >= ph ? new android.graphics.Rect(0, 0, longer, shorter) : new android.graphics.Rect(0, 0, shorter, longer)) : null);
         HostConfiguration.resize("w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi", new ArrayList<>(stack));
         Object wmg = android.view.WindowManagerGlobal.getInstance();
         List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");

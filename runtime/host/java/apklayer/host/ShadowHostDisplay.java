@@ -42,4 +42,22 @@ public class ShadowHostDisplay extends ShadowDisplay {
         @Direct
         long getPresentationDeadlineNanos();
     }
+
+    /** The drawing cache limit is Android's, 4 x the screen (ViewConfiguration's constructor: WindowConfiguration max bounds, the output in
+     * AppHost.hostResize); Robolectric's answered 4 x the window then, and a full-screen software layer of a larger window was dropped. */
+    @Implements(value = android.view.ViewConfiguration.class, isInAndroidSdk = false)
+    public static final class ViewConfigurationShadow extends org.robolectric.shadows.ShadowViewConfiguration {
+        @RealObject private android.view.ViewConfiguration real;
+
+        @Implementation
+        protected int getScaledMaximumDrawingCacheSize() {
+            return Reflector.reflector(ViewConfigurationDirect.class, real).getScaledMaximumDrawingCacheSize();
+        }
+    }
+
+    @ForType(android.view.ViewConfiguration.class)
+    interface ViewConfigurationDirect {
+        @Direct
+        int getScaledMaximumDrawingCacheSize();
+    }
 }

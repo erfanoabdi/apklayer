@@ -3,6 +3,19 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: the screen is the output, not the window (FCL's "too large to fit into a software layer")
+- A tester's FCL log repeated `GuideOverlayView not displayed ... needs 19043840 bytes, only 2636288 available` (4 x 608 x 1084: the first,
+  portrait window; the window had turned 1932x1084). Two causes: Robolectric's ShadowViewConfiguration answers the drawing cache limit as
+  max(480x800, the context's window pixels) x 4, and its qualifiers make WindowConfiguration's max bounds the window (DeviceConfig.setBounds),
+  so WindowManager.getMaximumWindowMetrics and Display.getRealSize/getRealMetrics were the window too. On Android all three are the screen.
+- The shell's CONFIGURE carries the output's pixels (the largest output's mode; 9 ints, send_msg takes up to 16); AppHost.hostResize makes
+  them the max bounds, turned like the window as a phone's display turns with it (at least the window); HostConfiguration re-applies them
+  after each qualifiers change; ShadowHostDisplay.ViewConfigurationShadow answers ViewConfiguration's own value (4 x max bounds), and the
+  ViewConfiguration cache is dropped once the screen is known (one made before the shell's first configure, cached per density, kept 480x800).
+  The window's bounds (current metrics, display metrics, the qualifiers) are unchanged; without a shell (headless) nothing changes.
+- Check: hello.acttarget logs max/real/window/cache, relaunch.py (group activities) asserts max = real = output px (Parallels: 1024x768,
+  window 480x400, cache 3145728). Parallels, own tree ~/apklayer-a25: activities, gpu, window-geometry, mobile pass.
+
 ## 2026-11-09: `stopped-windows.py translucent` on the x86 PC: the sample hit the label, not a dim layer
 - The check failed only on the owner's x86 PC with (106, 0, 0) in the relaunched screenshot. The screenshot itself is the translucent
   activity's plain red: at font scale 1.3 the centered "Translucent activity" label puts a glyph's antialiased edge on the center pixel

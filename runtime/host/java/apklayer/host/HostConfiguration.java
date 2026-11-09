@@ -21,6 +21,7 @@ final class HostConfiguration {
             | android.content.pm.ActivityInfo.CONFIG_LAYOUT_DIRECTION | android.content.pm.ActivityInfo.CONFIG_FONT_SCALE;
     private static String size = System.getProperty("apklayer.qualifiers", "w480dp-h800dp");
     private static Bundle settings = new Bundle();
+    private static android.graphics.Rect screen;
 
     /** The instance's colour scheme; null when the host has none (no portal). */
     static Boolean night() { return settings.containsKey("night") ? settings.getBoolean("night") : null; }
@@ -95,6 +96,13 @@ final class HostConfiguration {
     /** The window's size qualifiers (AppHost.hostResize); the settings' stay on top of them. */
     static void setSize(String qualifiers) { size = qualifiers; apply(); }
 
+    /** The screen in pixels (AppHost.hostResize: the shell's output), null: unknown (Robolectric's max bounds, the window). */
+    static void setScreen(android.graphics.Rect bounds) {
+        if (bounds != null && !bounds.equals(screen) && (screen == null || bounds.width() * bounds.height() != screen.width() * screen.height()))
+            android.view.ViewConfiguration.resetCacheForTesting();  // one made before the screen was known (cached per density) has a window-sized drawing cache limit
+        screen = bounds;
+    }
+
     private static void apply() {
         StringBuilder extra = new StringBuilder();
         String locale = settings.getString("locale");
@@ -102,6 +110,12 @@ final class HostConfiguration {
         Boolean night = night();
         if (night != null) extra.append(extra.length() > 0 ? "-" : "").append(night ? "night" : "notnight");
         RuntimeEnvironment.setQualifiers(extra.length() > 0 ? size + " +" + extra : size);
+        if (screen != null) {  // Robolectric's qualifiers make the max bounds the window (DeviceConfig.setBounds); on Android they are the display
+            Configuration c = new Configuration(RuntimeEnvironment.getApplication().getResources().getConfiguration());
+            c.windowConfiguration.setMaxBounds(screen);
+            c.seq = 0;  // unsequenced: always applied
+            android.app.ResourcesManager.getInstance().applyConfigurationToResources(c, null);
+        }
         // not a qualifier, and the qualifiers' configuration leaves it undefined (0), which keeps the last one: set every time, 1 included
         RuntimeEnvironment.setFontScale(settings.getFloat("fontScale", 1f));
         if (locale != null && !locale.isEmpty()) android.os.LocaleList.setDefault(RuntimeEnvironment.getApplication().getResources().getConfiguration().getLocales());

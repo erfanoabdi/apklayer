@@ -27,6 +27,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.app.SystemServiceRegistry", ShadowHostSystemServiceRegistry.class.getName()),
                 Map.entry("android.app.LoadedApk", ShadowHostLoadedApk.class.getName()),
                 Map.entry("android.view.Display", ShadowHostDisplay.class.getName()),
+                Map.entry("android.view.ViewConfiguration", ShadowHostDisplay.ViewConfigurationShadow.class.getName()),
                 Map.entry("android.app.ActivityManager", ShadowHostActivityManager.class.getName()),
                 Map.entry("android.accounts.AccountManager", HostPlainShadows.AccountManager.class.getName()),
                 Map.entry("android.app.UiModeManager.Globals", HostConfiguration.ShadowGlobals.class.getName()),

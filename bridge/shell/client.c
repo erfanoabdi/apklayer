@@ -7,7 +7,7 @@
 void send_msg(struct client *c, uint32_t type, const int32_t *v, int n)
 {
     if (!c || c->fd < 0) return;
-    uint32_t buf[2 + 8] = { type, (uint32_t)(n * 4) };
+    uint32_t buf[2 + 16] = { type, (uint32_t)(n * 4) };
     memcpy(buf + 2, v, (size_t)n * 4);
     if (write(c->fd, buf, 8 + (size_t)n * 4) < 0 && errno != EAGAIN) {
         fprintf(stderr, "[shell] write to %s failed: %s\n", c->pkg, strerror(errno));
@@ -18,7 +18,7 @@ void send_msg_fd(struct client *c, uint32_t type, const int32_t *v, int n, int f
 {
     if (fd < 0) { send_msg(c, type, v, n); return; }
     if (!c || c->fd < 0) return;
-    uint32_t buf[2 + 8] = { type, (uint32_t)(n * 4) };
+    uint32_t buf[2 + 16] = { type, (uint32_t)(n * 4) };
     memcpy(buf + 2, v, (size_t)n * 4);
     struct iovec iov = { buf, 8 + (size_t)n * 4 };
     char control[CMSG_SPACE(sizeof(int))] = { 0 };

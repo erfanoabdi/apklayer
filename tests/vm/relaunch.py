@@ -6,6 +6,7 @@ reaches it through onNewIntent, a launcher start brings the task forward without
 `run` while that process starts (run record, not registered: the hub queues the launch): the first file's intent is the first activity, the queued
 one follows it (onNewIntent), as two `am start` in a row."""
 import os
+import re
 import selectors
 import subprocess
 import sys
@@ -87,6 +88,14 @@ try:
     jvm = jvms(PKG)
     assert jvm == [int(pid)], 'the app JVM: %s, pid %s' % (jvm, pid)
     print('[relaunch] %s runs, pid %s' % (PKG, pid), flush=True)
+    # the screen is the shell's output in pixels, turned like the window (WindowConfiguration max bounds), the window stays 480x400
+    m = re.search(r'max=(\d+)x(\d+) real=(\d+)x(\d+) window=(\d+)x(\d+) cache=(\d+)', target.expect('[act-t] screen '))
+    mw, mh, rw, rh, ww, wh, cache = map(int, m.groups())
+    out = re.findall(r'first configure: .* output (\d+)x(\d+) @(\d+)%', shell_log.read_text(errors='replace'))[-1]
+    opx = sorted(int(v) * int(out[2]) // 100 for v in out[:2])
+    assert sorted((mw, mh)) == opx and (rw, rh) == (mw, mh) and (mw >= mh) == (ww >= wh) and cache == 4 * mw * mh and mw >= ww and mh >= wh, \
+        'screen %s, output %s px' % (m.group(0), opx)
+    print('[relaunch] screen %s (output %dx%d px)' % (m.group(0), *opx), flush=True)
     other = App('hello.actcaller')  # takes the desktop focus, so that raising the target is visible in its activated state
     apps.append(other)
     other.expect('[act] unknown scenario')
