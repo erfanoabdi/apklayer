@@ -216,6 +216,22 @@ Steps:
    reboot and an update of the click, `graphics`/`camera`/`media = device`, the manager.
 5. OpenStore submission (unconfined review) once 4 passes.
 
+## Plan: per-app memory and start time (owner, 2026-11-09: low priority, after the click package)
+Where we stand (Volla X23): the instance idles at ~974 MB (in Waydroid's range), but each app JVM costs ~1 GB PSS at NewPipe's first screen
+against ~150-300 MB for the same app on Android/Waydroid, where every app forks from zygote and shares the framework's classes, preloaded heap
+and boot image. Our JVMs share only CDS's file-backed pages; heap, metaspace, JIT code and the app's converted classes are per process.
+Starts: NewPipe ~21 s cold / ~12 s warm (onCreate ~7 s, much of it class loading and linking), Calculator ~17.5 / ~10 s.
+In this order:
+1. **JDK 25 with the AOT cache** (Project Leyden: JEP 483 ahead-of-time class loading and linking, JDK 25's method profiles; JDK 25 is an LTS):
+   framework and each app's converted classes loaded and linked from the cache instead of at every start; the most promising for start time
+   and memory together. Check against Robolectric's instrumentation, the JDK patches (runtime/jdk-patch), bionic_translation and the deb's,
+   RPM's, Flatpak's and click's JDK. Measure starts and PSS on the Volla against today.
+2. **Per-JVM limits** (memory only, in the same round): heap sized for the phone, a smaller JIT code cache / less compiled code, metaspace
+   trimming; kept only where starts do not get slower (the 2026-11-09 heap flags were neutral).
+3. **Only if 1 leaves starts too slow: a shared zygote-like JVM** that hosts the framework already initialized and JIT-warm and starts apps in
+   it (today's spare is used once and its warm state is lost). The biggest win for warm starts, and the biggest change: app isolation, one
+   app's crash or leak reaching others, the sandbox.
+
 ## Plan: one build instead of tools/* (decided 2026-11-04 by the owner, after the current round)
 Done 2026-11-04: AppHost split (the task stack in ActivityTask.java; AppHost 407 lines). Done 2026-11-05: items 1-3, 5 and 6 (tools/build, fetch-deps.sh, javac-jar.sh, package.sh removed; tests/run installs into <repo>/inst; debian/rules calls Meson); item 4 done for development and tests (instrumented once by ninja); the deb's per-user bundle setup remains as `tools/release/setup-runtime.sh` until the bundle format is decided (ship the instrumented framework jar in the bundle?).
 `tools/build` (217 lines of shell) hand-rolls javac/jar, zips the JNI shim into the framework jars, patches bionic_translation for old compilers with shell `if`s and stages a "native dir" with copies and symlinks; it caused today's stale shims, half-updated runtimes, the host-classes.stamp in tests/run and the per-user first-start instrumentation. Replace it with Meson end to end (`meson setup b && ninja -C b && meson install`, one layout for development, the deb and CI):
