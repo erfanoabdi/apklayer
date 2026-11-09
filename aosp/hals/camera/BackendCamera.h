@@ -1,6 +1,7 @@
 // A camera of the instance's camera backend (bridge/hals/camera: libapklayer-camera-<backend>.so) behind Goldfish's AIDL camera provider
 // (goldfish/: CameraProvider, CameraDevice, CameraDeviceSession, the metadata of BaseQemuCamera). Modelled on Goldfish's GasQemuCamera: the
-// backend streams I420 frames, the latest is kept and each request's buffers are filled from it (scaled, YUV/RGBA, JPEG through HwCamera).
+// backend streams I420 frames, the latest is kept and each request's buffers are filled from it (scaled, rotated and cropped as asked,
+// YUV/RGBA, JPEG through HwCamera).
 #pragma once
 
 #include <condition_variable>
@@ -42,7 +43,7 @@ struct BackendCamera : public BaseQemuCamera {
 
     static void onFrame(void* user, const apklayer_camera_frame* frame);
     static void onError(void* user, int error);
-    // the latest frame scaled to `size` (cropped to its aspect) into `out`; false if no frame came in time
+    // the latest frame scaled to `size` (cropped to its aspect, rotated and cropped as the request asks) into `out`; false if no frame came in time
     bool latestFrame(Rect<uint16_t> size, Frame* out);
     bool captureYUV(const StreamInfo& si, CachedStreamBuffer* csb);
     bool captureRGBA(const StreamInfo& si, CachedStreamBuffer* csb);
@@ -57,6 +58,7 @@ struct BackendCamera : public BaseQemuCamera {
     std::condition_variable mFrameCond;
     Frame mLatest;  // guarded by mLock
     bool mFailed = false;
+    uint8_t mRotateAndCrop = ANDROID_SCALER_ROTATE_AND_CROP_NONE;  // the requests' ANDROID_SCALER_ROTATE_AND_CROP (cameraserver resolves AUTO)
 };
 
 }  // namespace android::hardware::camera::provider::implementation::hw

@@ -3,7 +3,22 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
-## 2026-11-09: GLES windows without the per-frame copy (docs/PLAN.md "Graphics performance" (c))
+## 2026-11-09: camera rotate-and-crop for apps in a portrait window (docs/PLAN.md item 6, "Camera")
+- A portrait window reports rotation 0 on the instance's portrait-natural display, so an app turns the preview by the sensor orientation (90)
+  although the backend's cameras stay upright on the landscape desktop: sideways previews in every portrait window (the default window shape on
+  the VMs, 325x579). AOSP's own mechanism, end to end: the app process sets Android 16's CameraCompatibilityInfo (rotateAndCropRotation 90, what
+  WindowManager hands a fixed-orientation activity on a rotated display) for any portrait window (HostCameraShadows.windowShape, called from
+  AppHost.hostResize; not for a Halium device camera); CameraManager and Camera1 pass it at each open; cameraserver unchanged turns it into
+  ROTATE_AND_CROP_90 for a back camera, 270 for a front one. The provider (libapklayer_camera) lists availableRotateAndCropModes NONE/90/180/270/AUTO
+  and AUTO in its default requests (two lines in the vendored Goldfish CameraDevice.cpp, docs/PATCHES.md) and BackendCamera turns and crops each
+  processed output: the centre slice of the frame at its aspect turned, each output's crop from it, 90 counterclockwise as the reference HAL
+  (hardware/google/camera EmulatedFrameSource). Not used: the `media.camera.proxy` stand-in (it would need the activity's orientation from the hub).
+- Tests: group camera gains camera-portrait.py: hello.camera's Portrait activity (screenOrientation portrait) checks the capture result's mode (1 back,
+  3 front) and the turned YUV frame, and SurfaceFlinger screenshots of its TextureView preview show the bars upright and cropped to the centre 3:4
+  slice (yellow-cut, cyan, green, magenta, red, blue-cut; mirrored for the front camera); without the change it fails (bars across). hello.camera's
+  Main is landscape-locked (its checks are for the cameras' own orientation). Parallels: camera and camera-pipewire pass (with the lazy
+  cameraserver: started on use, exited after the app).
+
 - libapklayer_egl (new EglAttach.cpp): eglSwapBuffers hands the gbm_surface's finished buffer itself to the Android window. The bo is wrapped as one of our gralloc buffers (one GraphicBuffer per bo, kept, so SurfaceFlinger imports each once) and attached to the window's BufferQueue (Surface::attachBuffer through dlsym; the Surface found by the ANativeObjectBase layout, checked against libgui's vtable); buffers SurfaceFlinger released come back through detachNextBuffer (release fence waited) before Mesa needs one, and when all four gbm buffers are out the swap waits for a release in dequeueBuffer. The copy stays for what this cannot take: a window that is no libgui Surface, a 10-bit, half-float or 565 config, a format other than RGBA/RGBX asked of the window, a queue size other than the surface's (the frame of a resize), a failed attach. MSAA configs present their resolved buffer. Linked libui and libutils (libnativewindow loads them anyway). glbench's `window-msaa` mode (4x samples) joined window-formats.
 - x86 PC (N100 UHD, x86_64 egl b9889035 against 88ac65ee), glbench 1600x1200, the app process's GPU time from DRM fdinfo (drm-engine-render): vsync window clear 2.07 -> 0.89 ms GPU per frame (busy 12.4 -> 5.3%), draws 3.67 -> 2.44 ms (22.0 -> 14.6%), 60 fps either way; swap interval 0: clear 1.25 -> 0.73 ms (GPU 78 -> 39% busy), draws 1.81 -> 1.22 ms with 422 -> 495-501 fps; clear's frame rate fell 623 -> 529-534 fps (p50 1.31 -> 0.71 ms but p95 3.2 -> 5.7 ms: at 600 fps all four buffers are out and the swap waits for SurfaceFlinger's release), the fill scene is GPU-bound and within noise (8.5 -> 8.0 ms).
 - Tests: x86 PC gpu, gpu-window (resize), texture-view, window-formats (msaa and the deep configs), fences, otr2 pass (otr2 once failed beside other groups with "no screenshot", then passed three times alone). Parallels (arm64 egl 7b159ae1, virgl): gpu, window-formats, fences pass; gpu-window and texture-view pass at -j 1 and fail at -j 2 with the old library too (leftover processes, TextureView's finish line).
@@ -359,6 +374,14 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_camera: rotate-and-crop (camera rotate-and-crop agent)
+- Why: docs/PLAN.md item 6, rotate-and-crop for portrait-locked apps: the provider lists ANDROID_SCALER_AVAILABLE_ROTATE_AND_CROP_MODES and
+  turns and crops each output (BackendCamera.cpp, two lines in the vendored goldfish/CameraDevice.cpp). Sources only, no graph change.
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "camera: rotate-and-crop" hals/camera`, then
+  `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_camera`, then the same for gsi_x86_64.
+- Result: both built (x86_64 11:52, kati for each product). libapklayer_camera.so sha256 arm64 5d60dfb5f75e7ce45c6982c01db17a2d5f0c79876faf40af7e972958d5107ae5
+  (307544 bytes, android_arm64_armv8-a_shared), x86_64 23f9b7403be6f50f24281153b779deeb0f3e5dcfa815691dda0fb110bfbb8f13 (340512 bytes,
+  android_x86_64_shared); both locks set by hand. Not in the prebuilts yet (copies for the lead: the agent's Mac scratchpad `stage/{arm64,x86_64}`).
 ### 2026-11-09 - gsi_x86_64 and gsi_arm64 libapklayer_egl: GLES windows without the per-frame copy (zero-copy agent)
 - Why: docs/PLAN.md "Graphics performance" (c): the swap attaches the gbm_surface's buffer to the window's BufferQueue (new EglAttach.cpp; Android.bp links libui and libutils, which libnativewindow loads anyway: a graph change).
 - Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "egl: zero-copy window present" hals/graphics/egl`, then `cd ~/los24 && source build/envsetup.sh && breakfast gsi_x86_64 userdebug && m libapklayer_egl`, then the same for gsi_arm64.

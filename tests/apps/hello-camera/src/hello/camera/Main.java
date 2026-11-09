@@ -40,6 +40,11 @@ public final class Main extends Activity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        if (Boolean.getBoolean("hello.portrait")) {  // the portrait-locked check (tests/vm/camera-portrait.py)
+            startActivity(new android.content.Intent(this, Portrait.class));
+            finish();
+            return;
+        }
         TextureView view = new TextureView(this);
         view.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
             @Override public void onSurfaceTextureAvailable(SurfaceTexture t, int w, int h) { textureReady.countDown(); }
@@ -67,6 +72,9 @@ public final class Main extends Activity {
                     + " yuv=" + Arrays.toString(c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP).getOutputSizes(ImageFormat.YUV_420_888)));
         }
         check(textureReady.await(10, TimeUnit.SECONDS), "the TextureView got no SurfaceTexture");
+        // landscape-locked (the manifest): the cameras' own orientation, no rotate-and-crop (Portrait checks that); a portrait first window turns
+        for (int i = 0; i < 50 && view.getWidth() < view.getHeight(); i++) Thread.sleep(100);
+        System.out.println("[cam] window " + view.getWidth() + "x" + view.getHeight());
 
         HandlerThread thread = new HandlerThread("camera");
         thread.start();

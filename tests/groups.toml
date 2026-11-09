@@ -64,7 +64,7 @@ run = ["tests/vm/devices.sh"]
 
 [camera]
 apps = ["hello-camera"]
-run = ["tests/vm/camera.sh"]
+run = ["tests/vm/camera.sh", "python3 -u tests/vm/camera-portrait.py"]
 
 [camera-pipewire]  # a camera node on the desktop's PipeWire (other instances' PipeWire backends see it while it runs)
 apps = ["hello-camera"]

@@ -3,8 +3,9 @@
   <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34"/>
   <uses-permission android:name="android.permission.CAMERA"/>
   <application android:label="camera-check">
-    <activity android:name=".Main" android:exported="true">
+    <activity android:name=".Main" android:exported="true" android:screenOrientation="landscape">
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
     </activity>
+    <activity android:name=".Portrait" android:screenOrientation="portrait"/>
   </application>
 </manifest>

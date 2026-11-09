@@ -111,22 +111,51 @@ bool BackendCamera::latestFrame(const Rect<uint16_t> size, Frame* out) {
     std::unique_lock lock(mLock);
     // the first frame after a start takes a moment: a file decodes, a device opens (an iPhone as a webcam over USB: about 4 s)
     if (!mFrameCond.wait_for(lock, std::chrono::seconds(8), [this] { return mLatest.width || mFailed; }) || mFailed) return FAILURE(false);
-    const uint32_t sw = mLatest.width, sh = mLatest.height, dw = size.width, dh = size.height;
-    // the centre of the frame at the stream's aspect ratio
-    uint32_t cw = sw, ch = sh;
-    if (uint64_t(sw) * dh > uint64_t(sh) * dw) cw = (uint64_t(sh) * dw / dh) & ~1u;
-    else ch = (uint64_t(sw) * dh / dw) & ~1u;
+    const uint32_t sw = mLatest.width, sh = mLatest.height;
+    // ANDROID_SCALER_ROTATE_AND_CROP: 90 and 270 take the centre slice of the frame at its aspect turned a quarter, and each output's crop is
+    // taken from that (the field of view the metadata docs describe); the frame is turned after scaling. 90 turns the picture counterclockwise,
+    // as the reference HAL (hardware/google/camera EmulatedFrameSource) reads it.
+    const bool quarter = mRotateAndCrop == ANDROID_SCALER_ROTATE_AND_CROP_90 || mRotateAndCrop == ANDROID_SCALER_ROTATE_AND_CROP_270;
+    uint32_t aw = sw, ah = sh;
+    if (quarter && sw > sh) aw = (uint64_t(sh) * sh / sw) & ~1u;
+    else if (quarter) ah = (uint64_t(sw) * sw / sh) & ~1u;
+    const uint32_t dw = quarter ? size.height : size.width, dh = quarter ? size.width : size.height;  // the output before it is turned
+    // the centre of that area at the output's aspect ratio
+    uint32_t cw = aw, ch = ah;
+    if (uint64_t(aw) * dh > uint64_t(ah) * dw) cw = (uint64_t(ah) * dw / dh) & ~1u;
+    else ch = (uint64_t(aw) * dh / dw) & ~1u;
     const uint32_t x0 = (sw - cw) / 2 & ~1u, y0 = (sh - ch) / 2 & ~1u;
     const uint8_t *y = mLatest.data.data(), *u = y + sw * sh, *v = u + sw * sh / 4;
-    out->data.resize(dw * dh * 3 / 2);
-    out->width = dw, out->height = dh;
-    uint8_t *oy = out->data.data(), *ou = oy + dw * dh, *ov = ou + dw * dh / 4;
-    return libyuv::I420Scale(y + y0 * sw + x0, sw, u + y0 / 2 * (sw / 2) + x0 / 2, sw / 2, v + y0 / 2 * (sw / 2) + x0 / 2, sw / 2, cw, ch,
-                             oy, dw, ou, dw / 2, ov, dw / 2, dw, dh, libyuv::kFilterBilinear) == 0;
+    const bool turn = quarter || mRotateAndCrop == ANDROID_SCALER_ROTATE_AND_CROP_180;
+    Frame scaled;
+    Frame* to = turn ? &scaled : out;
+    to->data.resize(dw * dh * 3 / 2);
+    to->width = dw, to->height = dh;
+    uint8_t *oy = to->data.data(), *ou = oy + dw * dh, *ov = ou + dw * dh / 4;
+    if (libyuv::I420Scale(y + y0 * sw + x0, sw, u + y0 / 2 * (sw / 2) + x0 / 2, sw / 2, v + y0 / 2 * (sw / 2) + x0 / 2, sw / 2, cw, ch, oy, dw,
+                          ou, dw / 2, ov, dw / 2, dw, dh, libyuv::kFilterBilinear) != 0)
+        return FAILURE(false);
+    if (!turn) return true;
+    lock.unlock();
+    const libyuv::RotationMode mode = mRotateAndCrop == ANDROID_SCALER_ROTATE_AND_CROP_90    ? libyuv::kRotate270  // libyuv turns clockwise
+                                      : mRotateAndCrop == ANDROID_SCALER_ROTATE_AND_CROP_270 ? libyuv::kRotate90
+                                                                                            : libyuv::kRotate180;
+    const uint32_t w = size.width, h = size.height;
+    out->data.resize(w * h * 3 / 2);
+    out->width = w, out->height = h;
+    uint8_t *ry = out->data.data(), *ru = ry + w * h, *rv = ru + w * h / 4;
+    return libyuv::I420Rotate(oy, dw, ou, dw / 2, ov, dw / 2, ry, w, ru, w / 2, rv, w / 2, dw, dh, mode) == 0;
 }
 
 std::tuple<int64_t, int64_t, CameraMetadata, std::vector<StreamBuffer>, std::vector<DelayedStreamBuffer>>
 BackendCamera::processCaptureRequest(CameraMetadata metadataUpdate, Span<CachedStreamBuffer*> csbs) {
+    if (!metadataUpdate.metadata.empty()) {  // the settings changed (an empty update repeats the last ones)
+        camera_metadata_ro_entry_t entry;
+        const auto* raw = reinterpret_cast<const camera_metadata_t*>(metadataUpdate.metadata.data());
+        mRotateAndCrop = find_camera_metadata_ro_entry(raw, ANDROID_SCALER_ROTATE_AND_CROP, &entry) == 0 && entry.count == 1
+                             ? entry.data.u8[0]
+                             : ANDROID_SCALER_ROTATE_AND_CROP_NONE;
+    }
     CameraMetadata resultMetadata = metadataUpdate.metadata.empty() ? updateCaptureResultMetadata() : applyMetadata(std::move(metadataUpdate));
     std::vector<StreamBuffer> outputBuffers;
     std::vector<DelayedStreamBuffer> delayedOutputBuffers;
