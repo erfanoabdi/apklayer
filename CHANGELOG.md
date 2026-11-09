@@ -55,6 +55,19 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
   (IMediaExtractor/IMediaSource, IMediaMetadataRetriever): LazyServiceRegistrar counts only the registered services. With
   `APKLAYER_LAZY_SERVICES=0` three runs in three pass. PLAN "Next phase" item.
 
+## 2026-11-09: FCL's androidnsbypass crash on arm64 fixed (bionic_translation 0049); FCL starts its game JVM
+- Owner's crash (Parallels, FCL's Vulkan check loading libandroidnsbypass.so): on aarch64 its constructor finds the linker's private API by
+  scanning dlopen/android_dlopen_ext/dlclose/dlsym for their first `bl` (offset read unsigned) and calls the target as __loader_<name>; our
+  C entries in libdl_bio began with backward PLT calls, so it mprotected and jumped into the JDK's lib/modules mapping (SIGSEGV). bionic_translation
+  0049: the four entries are asm laid out as Android's libdl (bti, frame, caller in the next register, forward `bl` to a stub that branches to
+  apkenv_loader_<name>, which takes the private API's arguments); other architectures keep the C entries. Test: tests/native/loader-entry.c
+  (group native) runs the same scan and calls the targets.
+- FCL on Parallels after it: the Vulkan check passes (Venus, Vulkan 1.4.318), Launch of 26.3 (downloaded by the owner in FCL) opens
+  JVMActivity with its touch controls, the in-process game JVM (JRE 25, JLI_Launch through bionic_translation) starts and fails at once:
+  "Error occurred during initialization of VM: java.lang.StackOverflowError at java.lang.String.<clinit>", and its exit ends the app
+  process. Also seen: dlopen of the JRE's libraries by absolute path in app data (jre25/lib/server/libjvm.so, ...) fails in the shim linker
+  (a path outside its search path), FCL then finds them another way; bytehook_init returns 3.
+
 ## 2026-11-09: FCL (Fold Craft Launcher 1.3.4.5 arm64) on Parallels: pack200 fixed, launcher to a game version's install page
 - btload --exec (bridge/native/btload.c): a program exec'd by a relative path (FCL's Pack200Utils runs `./libunpack200.so -r in out` from its
   native library dir) or from a directory outside the bionic search path failed with "shim bionic linker: library ... not found", exit 127 (the
