@@ -8,6 +8,7 @@ final class HostTextBridge {
     ShellClient shell;
     private boolean imeEnabled;        // text input enabled in the shell for the focused field
     private String lastClipboard = ""; // last text exchanged with the shell, to avoid echo loops
+    private View composingIn;          // the field holding the IME's preedit (text-input-v3: a done replaces only an existing preedit)
 
     /** Tells the shell when a text field gets or loses focus, so the IME turns on and off. */
     void followTextInput() {
@@ -30,12 +31,15 @@ final class HostTextBridge {
         if (f == null) return;
         android.view.inputmethod.InputConnection ic = f.onCreateInputConnection(new android.view.inputmethod.EditorInfo());
         if (ic == null) return;
+        boolean hadPreedit = composingIn == f;
+        composingIn = preedit.isEmpty() ? null : f;
         Runnable edit = () -> {
             ic.beginBatchEdit();
             if (before > 0 || after > 0) ic.deleteSurroundingText(before, after);
             if (!commit.isEmpty()) ic.commitText(commit, 1);
             if (!preedit.isEmpty()) ic.setComposingText(preedit, 1);
-            else if (commit.isEmpty()) ic.setComposingText("", 1); // preedit cancelled
+            // preedit cancelled; with none placed an empty done (the desktop's IME on enable) is no edit: setComposingText("") would replace the selection
+            else if (commit.isEmpty() && hadPreedit) ic.setComposingText("", 1);
             ic.endBatchEdit();
         };
         // an InputConnection names the thread its methods must run on (getHandler): Chromium's (a WebView text field) asserts it
