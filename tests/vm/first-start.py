@@ -35,18 +35,24 @@ hub = instance.STATE / 'hub.log'
 try:
     selector = selectors.DefaultSelector()
     selector.register(app.stdout, selectors.EVENT_READ)
-    end, boot, settled = time.monotonic() + 90, None, None
+    end, boot, settled, out = time.monotonic() + 90, None, None, b''
     with open(OUT / 'first-start.log', 'wb') as log:
-        while time.monotonic() < (settled or end):  # the boot settings, then 10 s more for DocumentsUI to load its roots and draw
+        # the boot settings and FilesActivity started, then 10 s more for DocumentsUI to load its roots and draw. Not 10 s after the boot settings
+        # alone: FilesActivity's onCreate waits up to 5 s for ProvidersCache's first load, and the cold MediaProvider took ~6 s on the x86 PC,
+        # so the capture once came before the first frame (a blank window, 1 colour)
+        while time.monotonic() < (settled or end):
             if selector.select(1):
                 data = os.read(app.stdout.fileno(), 65536)
                 assert data, 'DocumentsUI closed on its first start (hub: %s)' % boot
                 log.write(data)
+                out += data
             if boot is None and hub.exists():
                 m = re.search(r'boot count \d+|boot settings not written: .*', hub.read_text(errors='replace'))
-                if m: boot, settled = m.group(0), time.monotonic() + 10
-    print('hub: %s' % boot, flush=True)
+                if m: boot, boot_at = m.group(0), time.monotonic()
+            if boot and settled is None and b'started com.android.documentsui.files.FilesActivity' in out: settled = time.monotonic() + 10
+    print('hub: %s; FilesActivity started %.1f s later' % (boot, settled - 10 - boot_at if settled else -1), flush=True)
     assert boot and boot.startswith('boot count'), 'the boot settings were not written: %s' % boot
+    assert settled, 'DocumentsUI did not start FilesActivity in 90 s'
     shot = instance.capture('documentsui-first-start', PKG)
     shades = pixels.colors(shot)
     assert app.poll() is None, 'DocumentsUI closed'
