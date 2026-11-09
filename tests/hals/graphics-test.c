@@ -111,6 +111,18 @@ int main(void)
         apklayer_gfx_buffer_close(&b);
     }
 
+    r = apklayer_gfx_alloc_memory(gfx, 128, 96, DRM_FORMAT_NV12, &b);
+    CHECK(r == 0 && b.packed == 3 && b.num_planes == 2 && b.offset[1] == b.stride[0] * 96, "CPU-only NV12 allocates in shared memory");
+    if (r == 0) {  /* a writer still holding its lock and a second mapping (another process's lock) see the same bytes */
+        uint32_t st; struct apklayer_gfx_mapping *wm = NULL, *rm = NULL;
+        uint8_t *w = apklayer_gfx_map_linear(gfx, &b, true, &st, &wm);
+        if (w) { w[0] = 81; w[b.offset[1] + 1] = 240; }
+        uint8_t *rd = w ? apklayer_gfx_map_linear(gfx, &b, false, &st, &rm) : NULL;
+        CHECK(rd && rd[0] == 81 && rd[b.offset[1] + 1] == 240, "CPU-only YUV writes are seen by another mapping before the unlock");
+        apklayer_gfx_unmap(rm); apklayer_gfx_unmap(wm);
+        apklayer_gfx_buffer_close(&b);
+    }
+
     r = apklayer_gfx_alloc_blob(gfx, 4096, &b);
     CHECK(r == 0, "BLOB (plain memory) allocates");
     if (r == 0) {

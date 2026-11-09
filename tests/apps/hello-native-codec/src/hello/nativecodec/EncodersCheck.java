@@ -212,7 +212,10 @@ final class EncodersCheck {
                         ByteBuffer b = y.getBuffer();
                         int sum = 0;
                         for (int row = 0; row < image.getHeight(); row++) for (int col = 0; col < image.getWidth(); col++) sum += b.get(row * y.getRowStride() + col * y.getPixelStride()) & 255;
-                        luma += (double) sum / (image.getWidth() * image.getHeight());
+                        double frameLuma = (double) sum / (image.getWidth() * image.getHeight());
+                        // each picture, not only the mean: an encoder fed black frames (its input read before the writer's unlock) averaged ~60
+                        require(frameLuma > 50 && frameLuma < 100, "AVC round trip picture " + decoded + " luma " + frameLuma);
+                        luma += frameLuma;
                         decoded++;
                         image.close();
                     }
