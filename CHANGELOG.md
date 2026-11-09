@@ -3,6 +3,16 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: android.os.SharedMemory is real: a memfd, mappable in the process it is sent to (docs/PLAN.md "libcore on HotSpot")
+- Robolectric's ShadowSharedMemory kept a temp file per create and mapped only its own files, so a SharedMemory from another process failed
+  ("Cannot find the backing file", and its size lookup threw). ShadowHostSharedMemory: nCreate is a memfd (Os.memfd_create, now real through the
+  runtime shim's libcore.io.Linux natives instead of Robolectric's temp file), nGetSize the descriptor's size, nSetProt without PROT_WRITE seals
+  future writes (F_SEAL_FUTURE_WRITE, libcutils' ashmem on memfd). map() cannot build libcore's DirectByteBuffer(int,long,FileDescriptor,Runnable,
+  boolean) on HotSpot: it maps the descriptor reopened through /proc/self/fd with FileChannel.map (the JDK's mapped buffer, MAP_SHARED, freed by
+  its cleaner); unmap() runs that cleaner. No new native mapping code: Os.mmap is not among the runtime's real Linux natives.
+- Test: binder (hello-binder-server/client) passes a SharedMemory written and sealed by the server; the client maps it read-only, checks the text,
+  is refused a writable mapping, and checks two mappings of its own region share memory.
+
 ## 2026-11-09: Sailfish OS (Volla Quintus): Lipstick's switcher, its close, media = device, the Back-only bar
 - Switcher: every apklayer window is the session shell's (one Wayland client, one pid), and Lipstick ties a window to its launcher entry by the
   client's pid and the entry's Exec (JollaSystemInfo.isWindowForLauncherItem, matchingPidForCommand), except for entries with

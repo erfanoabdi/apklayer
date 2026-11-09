@@ -56,6 +56,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.app.IntentService", ShadowHostIntentService.class.getName()),  // its shadow must be a ShadowHostService (stopSelf)
                 Map.entry("android.app.job.JobService", ShadowHostJobService.class.getName()),  // the same, and the real jobFinished reaches HostJobs
                 Map.entry("android.os.ParcelFileDescriptor", ShadowHostRealParcelFileDescriptor.class.getName()),
+                Map.entry("android.os.SharedMemory", ShadowHostSharedMemory.class.getName()),  // a real memfd, mappable in the process it is sent to
                 Map.entry("android.content.ContentResolver", ShadowHostContentResolver.class.getName()),
                 Map.entry("android.provider.Settings", ShadowHostSettings.class.getName()),
                 Map.entry("android.app.Instrumentation", ShadowHostInstrumentation.class.getName()),
