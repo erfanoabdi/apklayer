@@ -35,7 +35,9 @@ def available():
 
 # the runtime built and staged by Meson into <repo copy>/inst (docs/INSTALL.md): ninja rebuilds exactly what changed; the tree's CLI (bin/apklayer)
 # uses that install. -Dprebuilts comes from $APKLAYER_PREBUILTS (APKLY_VM_ENV).
-BUILD = ('{ [ -f b/build.ninja ] || meson setup b --prefix "$PWD/inst" >/dev/null; } && '
+BUILD = (# a host's prebuilts behind the lock would be installed silently: the groups would test old native code
+         '{ [ -z "${APKLAYER_PREBUILTS:-}" ] || sh tools/check-prebuilts.sh "$APKLAYER_PREBUILTS"; } && '
+         '{ [ -f b/build.ninja ] || meson setup b --prefix "$PWD/inst" >/dev/null; } && '
          '{ grep -q "\\"$PWD/inst\\"" b/meson-info/intro-buildoptions.json || meson configure b --prefix "$PWD/inst" >/dev/null; } && '
          # meson lists the patch files when it configures: a new one is applied only after a reconfigure
          '{ [ -z "$(find patches -newer b/build.ninja -name \'*.patch\' | head -1)" ] || ninja -C b reconfigure >/dev/null; } && '
