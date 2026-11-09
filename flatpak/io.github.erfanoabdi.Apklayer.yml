@@ -15,9 +15,10 @@ finish-args:
   - --share=ipc
   # apps' internet, and `apklayer setup`'s downloads
   - --share=network
-  # GPU render nodes, cameras, input devices and USB devices (apklayer usb), the host's /dev/binderfs when it has one (else the userspace
-  # binder: docs/INSTALL.md "Flatpak"). --device=dri covers only the GPU
-  - --device=all
+  # the GPU's render nodes. Binder is the userspace one (cli/binder.cpp: no /dev/binderfs here), input comes through Wayland, cameras through
+  # PipeWire. Not here: USB devices (apklayer usb) and the force-feedback vibrator's /dev/input (--device=usb/input need Flatpak 1.16, Ubuntu
+  # 24.04 has 1.14); `flatpak override --user --device=all` gives them and the host's binderfs (docs/INSTALL.md "Flatpak")
+  - --device=dri
   # audio: the PulseAudio backend through the pulse socket, the PipeWire backend through PipeWire's own
   - --socket=pulseaudio
   - --filesystem=xdg-run/pipewire-0
@@ -26,20 +27,12 @@ finish-args:
   - --system-talk-name=org.bluez
   - --system-talk-name=org.freedesktop.GeoClue2
   - --talk-name=org.freedesktop.Notifications
-  # installed apps' launchers and the Apklayer submenu in the host's app menu (cli/desktop.cpp writes them at the host's XDG paths)
-  - --filesystem=xdg-data/applications:create
-  - --filesystem=xdg-data/desktop-directories:create
-  - --filesystem=xdg-config/menus:create
   # the JDK apps run on (the openjdk21 extension's JRE, installed into /app/jre)
   - --env=APKLAYER_NATIVE_JAVA=/app/jre/bin/java
 build-options:
   append-path: /usr/lib/sdk/openjdk21/bin
   env:
     JAVA_HOME: /usr/lib/sdk/openjdk21/jvm/openjdk-21
-  # shortcut: the build fetches what debian/rules fetches (the bionic_translation wrap, deps.lock jars, manager/fetch-slint.sh); Flathub
-  # needs them as pinned sources instead
-  build-args:
-    - --share=network
 modules:
   - name: openjdk
     buildsystem: simple
@@ -88,12 +81,25 @@ modules:
         sha256: a13f8c9a7d93df3c85c66afd135f0296701d8d32f911991b7aa4273fdd6a42a3
     cleanup: [/bin, /include, /lib/pkgconfig, /libexec, /share/man, /share/zsh, /etc]
 
+  # PyGObject for bridge/portal's D-Bus helpers (the file chooser, the launcher portal's launcher.py): the Platform has Python, not gi
+  - name: pygobject
+    buildsystem: meson
+    config-opts: [-Dpycairo=disabled, -Dtests=false]
+    sources:
+      - type: archive
+        url: https://download.gnome.org/sources/pygobject/3.58/pygobject-3.58.1.tar.gz
+        sha256: 4c80598ade17fbaa7798e01a25d0bf29ce109740786026a074c5c62bb3e79d23
+    cleanup: [/include, /lib/pkgconfig]
+
   - name: apklayer
     buildsystem: meson
     builddir: true
     config-opts:
       - -Dprebuilts=/run/build/apklayer/flatpak/prebuilts
       - -Dandroid_runtime=false
+    build-options:
+      env:
+        APKLAYER_DEPS_LOCAL: /run/build/apklayer/flatpak-deps  # tools/gen/fetch-dep.py: deps.lock's artifacts, the sources below
     sources:
       - type: dir
         path: ..
@@ -101,13 +107,46 @@ modules:
       - type: dir
         path: prebuilts
         dest: flatpak/prebuilts
+      # the build has no network: bionic_translation's wrap (subprojects/bionic_translation.wrap), deps.lock (tools/gen/flatpak-sources.py
+      # writes deps-sources.json from it) and manager/fetch-slint.sh's downloads (it finds them in slint/ and checks their hashes) are pinned here
+      - type: git
+        url: https://gitlab.com/android_translation_layer/bionic_translation
+        commit: 6253dec7f24a57a94039a088cb436d880e92e3be
+        dest: subprojects/bionic_translation
+      - deps-sources.json
+      - type: file
+        only-arches: [aarch64]
+        url: https://github.com/slint-ui/slint/releases/download/v1.18.1/Slint-cpp-1.18.1-Linux-arm64.tar.gz
+        sha256: 810cfed786c3f63aea9c1b73371a02ed591129d18e077094afa9e024e2d714fd
+        dest: slint
+      - type: file
+        only-arches: [aarch64]
+        url: https://github.com/slint-ui/slint/releases/download/v1.18.1/slint-compiler-Linux-aarch64.tar.gz
+        sha256: 6d704012132ec8c8fadddefb86ba192cd83e09048edbcf61aee457aca300c78c
+        dest: slint
+      - type: file
+        only-arches: [x86_64]
+        url: https://github.com/slint-ui/slint/releases/download/v1.18.1/Slint-cpp-1.18.1-Linux-x86_64.tar.gz
+        sha256: f0b24ea601b80afe241677d1179bf5215dceae529f2b275b678a0af9a144b255
+        dest: slint
+      - type: file
+        only-arches: [x86_64]
+        url: https://github.com/slint-ui/slint/releases/download/v1.18.1/slint-compiler-Linux-x86_64.tar.gz
+        sha256: 543091e6102a02db3403aa77c774a11d9f383b31cb03e25cddad63269a1fb779
+        dest: slint
+      - type: file
+        url: https://material.slint.dev/zip/material-1.1.0.zip
+        sha256: 83c57b6f1b8799ddacd94b7e8b140f3f2112c36407b6df31883da0ba4e2dd425
+        dest: slint
     # post-install runs in the build directory (builddir: true), the sources one level up
     post-install:
       - install -Dm644 ../data/apklayer.svg /app/share/icons/hicolor/scalable/apps/io.github.erfanoabdi.Apklayer.svg
       - install -Dm644 ../data/apklayer-256.png /app/share/icons/hicolor/256x256/apps/io.github.erfanoabdi.Apklayer.png
       - install -Dm644 ../flatpak/io.github.erfanoabdi.Apklayer.metainfo.xml -t /app/share/metainfo
-      # the manager's entry under the app id (Flatpak exports only files named after it); the deb's other entries are not exported
-      - sed -e 's/^Icon=.*/Icon=io.github.erfanoabdi.Apklayer/' ../data/apklayer-manager.desktop > /app/share/applications/io.github.erfanoabdi.Apklayer.desktop
+      # the manager's entry under the app id (Flatpak exports only files named after it), which also opens .apk files (`apklayer run`, as the
+      # deb's apklayer-open-apk entry); the deb's other entries are not exported
+      - sed -e 's/^Icon=.*/Icon=io.github.erfanoabdi.Apklayer/' -e 's/^Exec=apklayer-manager$/Exec=apklayer-manager %f/' -e '$a MimeType=application/vnd.android.package-archive;'
+        ../data/apklayer-manager.desktop > /app/share/applications/io.github.erfanoabdi.Apklayer.desktop
       - rm /app/share/applications/apklayer-manager.desktop /app/share/applications/apklayer-share.desktop
       # the manager (debian/rules' second build)
       - cd .. && sh manager/fetch-slint.sh $PWD/slint

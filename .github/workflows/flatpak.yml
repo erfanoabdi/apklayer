@@ -39,5 +39,15 @@ jobs:
         run: |
           flatpak install --user -y --noninteractive out/*.flatpak
           flatpak run --command=apklayer io.github.erfanoabdi.Apklayer setup --check || true
+          # bridge/portal's helpers (the launcher portal's launcher.py) need PyGObject from the Platform
+          flatpak run --command=python3 io.github.erfanoabdi.Apklayer -c 'from gi.repository import Gio; print("PyGObject in the Platform")'
+      - name: Flathub lint
+        # what Flathub's linter still reports (docs/PLAN.md "Flatpak"); not a gate
+        continue-on-error: true
+        run: |
+          flatpak install --user -y --noninteractive flathub org.flatpak.Builder
+          for what in "manifest src/flatpak/io.github.erfanoabdi.Apklayer.yml" "appstream src/flatpak/io.github.erfanoabdi.Apklayer.metainfo.xml" "repo out/repo"; do
+            echo "== flatpak-builder-lint $what"; flatpak run --command=flatpak-builder-lint org.flatpak.Builder $what || true
+          done
       - uses: actions/upload-artifact@v4
         with: {name: 'flatpak-${{ matrix.arch }}', path: out/*.flatpak, if-no-files-found: error}

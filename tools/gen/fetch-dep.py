@@ -21,11 +21,14 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def maven(coord):
+def maven(coord, local=()):
     g, a, v, ext = coord.split(':')
     rel = '%s/%s/%s/%s-%s.%s' % (g.replace('.', '/'), a, v, a, v, ext)
     m2 = HOME / '.m2/repository' / rel
     if m2.is_file(): return m2.read_bytes()
+    for d in local:  # an AAR beside the jars (the Flatpak's pinned sources: flatpak/deps-sources.json); its classes.jar is checked by the caller
+        f = Path(d) / Path(rel).name
+        if f.is_file(): return f.read_bytes()
     for base in (MAVEN, 'https://maven.google.com'):  # androidx.test.* and other Google artifacts are only on Google's
         for attempt in range(5):  # Maven Central answers 429 when parallel jobs fetch at once: back off and try again
             try:
@@ -43,7 +46,7 @@ def resolve(want, src, name, local):
             if f.is_file() and sha(data := f.read_bytes()) == want: return data
     kind, _, rest = src.partition(':')
     if kind == 'maven': return maven(rest)
-    if kind == 'aar-classes': return zipfile.ZipFile(io.BytesIO(maven(rest + ':aar'))).read('classes.jar')
+    if kind == 'aar-classes': return zipfile.ZipFile(io.BytesIO(maven(rest + ':aar', local))).read('classes.jar')
     if kind == 'sdk':
         sdk = os.environ.get('ANDROID_HOME') or os.environ.get('ANDROID_SDK_ROOT') or next(
             (str(d) for d in (HOME / 'Library/Android/sdk', HOME / 'Android/Sdk') if d.is_dir()), '')

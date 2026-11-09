@@ -241,10 +241,11 @@ flatpak run io.github.erfanoabdi.Apklayer                               # the ma
 alias apklayer='flatpak run --command=apklayer io.github.erfanoabdi.Apklayer'   # the CLI
 ```
 
-**No host step.** A Flatpak cannot load kernel modules or mount binderfs, so inside it apklayer uses the userspace binder (docs/BINDER.md) whenever
-`/dev/binderfs` is not visible: `apklayer setup`'s binder step passes and nothing runs as root. When the host has binderfs mounted (the deb's
-`apklayer-binder.service`, or `sudo sh "$(flatpak info --show-location io.github.erfanoabdi.Apklayer)/files/share/apklayer/tools/host-setup/binder.sh"`)
-the kernel's binder is used as with the deb; `APKLAYER_BINDER=userspace|kernel` (`flatpak run --env=...`) forces either.
+**No host step.** A Flatpak cannot load kernel modules or mount binderfs, and it sees only the GPU's devices (`--device=dri`), so inside it apklayer
+uses the userspace binder (docs/BINDER.md): `apklayer setup`'s binder step passes and nothing runs as root. With
+`flatpak override --user --device=all io.github.erfanoabdi.Apklayer` and binderfs mounted on the host (the deb's `apklayer-binder.service`, or
+`sudo sh "$(flatpak info --show-location io.github.erfanoabdi.Apklayer)/files/share/apklayer/tools/host-setup/binder.sh"`) the kernel's binder is
+used as with the deb; `APKLAYER_BINDER=userspace|kernel` (`flatpak run --env=...`) forces either.
 The Android runtime bundle is downloaded per user by `apklayer setup`, as with the deb (not a Flatpak extension: the bundle has its own version and
 release cycle, `tools/release/versions`, and updates without a new Flatpak).
 
@@ -252,21 +253,27 @@ Permissions (`finish-args` in `flatpak/io.github.erfanoabdi.Apklayer.yml`) and w
 
 | Permission | Why |
 |---|---|
-| `--device=all` | GPU render nodes (`--device=dri` alone would do for the GPU), the host's `/dev/binderfs` when it has one, cameras, input and USB devices; `--device=dri` would cover only the GPU |
+| `--device=dri` | the GPU's render nodes. Input comes through Wayland and cameras through PipeWire; USB devices (`apklayer usb`) and the force-feedback vibrator's `/dev/input` need `flatpak override --user --device=all io.github.erfanoabdi.Apklayer` (Flatpak's `--device=usb`/`input` need Flatpak 1.16, Ubuntu 24.04 has 1.14) |
 | `--socket=wayland`, `--share=ipc` | apps' windows and the manager (Wayland only, no X11) |
 | `--socket=pulseaudio`, `--filesystem=xdg-run/pipewire-0` | the audio backends (`apklayer providers`) and PipeWire cameras |
 | `--share=network` | apps' internet, `apklayer setup`'s downloads |
 | `--allow=bluetooth`, `--system-talk-name=org.bluez`, `--system-talk-name=org.freedesktop.GeoClue2`, `--talk-name=org.freedesktop.Notifications` | Bluetooth, location, notifications |
-| `--filesystem=xdg-data/applications:create`, `xdg-data/desktop-directories:create`, `xdg-config/menus:create` | launchers of installed apps and the Apklayer submenu, written at the host's paths as `io.github.erfanoabdi.Apklayer.<package>.desktop`, `....menu`, `....directory` (the deb's are `apklayer-*`: the two installs never touch each other's; as Bottles does; the dynamic launcher portal asks the user once per app and is a later option) |
 
 Different from the deb: data, logs and the runtime live under `~/.var/app/io.github.erfanoabdi.Apklayer/`; the per-app sandbox (`APKLAYER_SANDBOX=1`)
 cannot run (Flatpak's seccomp filter refuses nested user namespaces and `newuidmap` is not setuid inside); an app's full home access needs
-`flatpak override --user --filesystem=home io.github.erfanoabdi.Apklayer`; `apklayer instance autostart` (systemd user units) is not available and the `.apk` file
-association is not set (the Platform has no `xdg-mime`); every command runs in apklayerd (started on demand, as with the per-app sandbox),
+`flatpak override --user --filesystem=home io.github.erfanoabdi.Apklayer`; `apklayer instance autostart` (systemd user units) is not available; an
+installed app's launcher comes from the dynamic launcher portal (`org.freedesktop.portal.DynamicLauncher`, bridge/portal/launcher.py): the desktop
+asks once per app ("Create App"), `launcher hide` and uninstall remove it, an app update keeps the launcher as it was, and there is no Apklayer
+submenu (the deb's `apklayer-*` entries are untouched). On Ubuntu 24.04 the portal refuses every launcher ("Dynamic launcher icon failed
+validation": its icon check runs in bwrap, which the AppArmor user-namespace restriction breaks, LP#2069526); there
+`flatpak override --user --filesystem=xdg-data/applications:create io.github.erfanoabdi.Apklayer` makes apklayer write the launchers itself at the
+host's paths, as the deb does (`io.github.erfanoabdi.Apklayer.<package>.desktop`; then `apklayer stop`: a running apklayerd keeps the permissions it started with). `.apk` files open with the manager's own entry (`MimeType` there, `apklayer run <file>`);
+every command runs in apklayerd (started on demand, as with the per-app sandbox),
 because each `flatpak run` is a pid namespace of its own; the GLES version probe (`eglinfo`, mesa-utils) is not in the Platform, so a host driver under GLES 3.2 gets no 3.2
 claim. NVIDIA: Flatpak needs the `org.freedesktop.Platform.GL.nvidia-<version>` extension matching the host driver (`flatpak update` installs it
 when Flathub has that version); other GPUs use Mesa from `org.freedesktop.Platform.GL.default`.
 
 Build it: `sh flatpak/build.sh <prebuilts checkout> <out dir> [version]` (needs flatpak and flatpak-builder; it joins split prebuilts and installs the
-SDK and openjdk21 extension from Flathub). The build fetches what the deb's build fetches (the bionic_translation wrap, `deps.lock`, Slint) with
-network on; Flathub itself would need those as pinned sources.
+SDK and openjdk21 extension from Flathub). The build has no network: the bionic_translation wrap, `deps.lock`'s artifacts and Slint are pinned
+sources in the manifest; after a change to `deps/deps.lock` run `tools/gen/flatpak-sources.py` (it writes `flatpak/deps-sources.json`), after a new
+bionic_translation revision or Slint version change the manifest beside the wrap or `manager/fetch-slint.sh`.

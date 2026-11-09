@@ -354,7 +354,7 @@ void uninstallApp(const Layout& l, const std::string& package) {
             writeFile(answers, kept);
         }
     }
-    unlink(join(hostXdg("XDG_DATA_HOME", ".local/share"), "applications/" + launcherPrefix() + package + ".desktop").c_str());
+    removeDesktop(l, package);
     printf("apklayer: removed %s\n", package.c_str());
 }
 
