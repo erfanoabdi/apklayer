@@ -12,6 +12,9 @@ import android.widget.TextView;
 public class Main extends Activity {
     static final String DESCRIPTOR = "hello.IEcho", CALLBACK = "hello.ICallback";
 
+    // isRegionReadOnly is @hide (the framework checks it before handing a region on)
+    private static boolean readOnly(android.os.SharedMemory m) throws Exception { return (Boolean) android.os.SharedMemory.class.getMethod("isRegionReadOnly").invoke(m); }
+
     private static void require(boolean yes, String detail) {
         if (!yes) throw new AssertionError(detail);
     }
@@ -102,6 +105,7 @@ public class Main extends Activity {
         boolean sealed = false;
         try { shm.mapReadWrite(); } catch (android.system.ErrnoException expected) { sealed = true; }
         require(sealed, "a region sealed read-only refuses a writable mapping");
+        require(readOnly(shm), "a sealed region reports read-only");
         android.os.SharedMemory.unmap(map);
         shm.close();
         // and in this process: two mappings of one region see each other's writes
@@ -109,6 +113,7 @@ public class Main extends Activity {
         java.nio.ByteBuffer one = own.mapReadWrite(), two = own.map(android.system.OsConstants.PROT_READ, 4000, 96);
         one.putInt(4000, 0x5eed);
         require(two.getInt(0) == 0x5eed, "two mappings share memory");
+        require(!readOnly(own), "a new region is writable");
         own.close();
         System.out.println("[hello-binder-client] shm=" + shmText + " size=" + got.length);
 

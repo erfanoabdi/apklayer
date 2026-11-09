@@ -24,7 +24,7 @@ import org.robolectric.util.ReflectionHelpers;
  */
 @Implements(className = "android.os.SharedMemory", isInAndroidSdk = false)
 public class ShadowHostSharedMemory {
-    private static final int MFD_CLOEXEC = 1, MFD_ALLOW_SEALING = 2, F_ADD_SEALS = 1033, F_SEAL_FUTURE_WRITE = 0x10;  // linux/memfd.h, fcntl.h
+    private static final int MFD_CLOEXEC = 1, MFD_ALLOW_SEALING = 2, F_ADD_SEALS = 1033, F_GET_SEALS = 1034, F_SEAL_WRITE = 0x8, F_SEAL_FUTURE_WRITE = 0x10;  // linux/memfd.h, fcntl.h
 
     @RealObject private SharedMemory real;
 
@@ -43,6 +43,13 @@ public class ShadowHostSharedMemory {
     @Implementation protected static int nSetProt(FileDescriptor fd, int prot) {
         if ((prot & OsConstants.PROT_WRITE) != 0) return 0;
         try { Os.fcntlInt(fd, F_ADD_SEALS, F_SEAL_FUTURE_WRITE); return 0; } catch (ErrnoException e) { return e.errno; }
+    }
+
+    /** The framework's own check, with Linux's values: Robolectric's OsConstants leaves F_GET_SEALS and the seal bits 0 (fcntl(F_DUPFD) leaked a descriptor). */
+    @Implementation protected boolean isRegionReadOnly() {
+        ReflectionHelpers.callInstanceMethod(real, "checkOpen");
+        FileDescriptor fd = ReflectionHelpers.getField(real, "mFileDescriptor");
+        try { return (Os.fcntlInt(fd, F_GET_SEALS, 0) & (F_SEAL_WRITE | F_SEAL_FUTURE_WRITE)) != 0; } catch (ErrnoException e) { return false; }
     }
 
     // shortcut: PROT_EXEC is not mapped executable and PROT_NONE maps read-only (FileChannel has no such modes); upgrade when an app needs either
