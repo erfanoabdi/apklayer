@@ -22,6 +22,28 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
   camera-pipewire passes (one earlier failure: the app stalled reading a jar under load 11). x86 PC (x86pc, -j 2): camera passes (the first
   run after the full rebuild started no app, the rerun passed).
 
+## 2026-11-09: the lazy extractor stays while its objects are held (native-media flaky on Parallels, DEAD_OBJECT)
+- Cause, confirmed in the failing runs' logs (Parallels and the x86 PC): only the extractor ended (stack.log `exited: extractor (status 0)`,
+  its registrar's `has clients: 0`) while the media server stayed. MediaExtractorFactory::CreateFromService drops media.extractor once it has
+  an IMediaExtractor, so the app's AMediaExtractor and the media server's FrameDecoder kept IMediaExtractor/IMediaSource proxies to a process
+  that exited: `-32 (DEAD_OBJECT)`, short audio, wrong samples. LazyServiceRegistrar counts the registered services' clients only.
+- Fix (aosp/hals/media/services/MediaServices.cpp, libapklayer_mediaserver): the extractor also stays while one of its binder nodes created
+  after registration has a strong reference (BINDER_GET_NODE_DEBUG_INFO on libbinder's driver fd, which IPCThreadState::setupPolling hands
+  out; the kernel's and apklayer-binderd's both answer it); the registrar's callback checks before it unregisters, and a thread rechecks every
+  5 s, since servicemanager does not report the handed-out objects' end. It still ends 5-10 s after the last object goes (stack.log: an extractor
+  start and exit per run, kept across several client cycles in one run).
+- Not changed, checked: the media server, cameraserver and codec2 keep the plain registrar. Their clients hold the service for their process's
+  life (IMediaDeathNotifier and MediaMetadataRetriever::sService for media.player, CameraBase's gCameraService and CameraManagerGlobal,
+  Codec2Client's Cache), and the media server's audioserver callbacks would pin it forever under a node check. On a device none of these
+  services is lazy (init starts them).
+- Memory: nothing changes when idle (the extractor is not running; the phone's 974 MB of PLAN item 8 stands); while an app holds an
+  extractor or a track the extractor (~55 MB on the phone, as each media server) stays until the app lets go, as on a device.
+- Tests, Parallels (~/apklayer-lzx, the new library in its own prebuilts copy), lazy services on: before the fix native-media 2 of 4 failed
+  (`H.264 frame null`, `AAC decoded sample count 0`); after it 6 of 6 pass; codec2, native-player, camera, audio-system, startup and
+  hub-services pass (run times of 12-42 s for native-media follow the VM's load from other trees, load average ~8). x86 PC (~/apklayer-x86/lzx,
+  -j 2): native-media failed before (`Failed to instantiate extractor`, the extractor had exited), passes 3 of 3 with the x86_64 library.
+- Libraries (not in the prebuilts yet; both locks set): see the Build log.
+
 ## 2026-11-09: setup checks the free space; apklayer's data on /userdata on a phone with a small home (Sailfish, the Quintus at 0.4.9)
 - The 0.4.9 update on the Volla Quintus had 211 MB free on its 6.8 GB system partition (the home); the lead moved `~/.local/share/apklayer` to
   `/userdata/apklayer/share` by hand. Now: common/fetch.cpp `runtimeRoom` compares statvfs's free space of the runtime's directory with what the
@@ -716,6 +738,15 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_mediaserver: the lazy extractor stays while its handed-out objects are held (lazy extractor agent)
+- Why: native-media failed about one run in two on Parallels with lazy services: the extractor ended while clients used its IMediaExtractor and
+  IMediaSources (it counted media.extractor's clients only). MediaServices.cpp now also checks the process's binder nodes before it exits. Sources only.
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh "media: lazy extractor stays while its objects are held" hals/media/services`,
+  then `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_mediaserver`, then the same for gsi_x86_64.
+- Result: both built (29:44 and 26:48, Soong analysis for each product). libapklayer_mediaserver.so sha256 arm64
+  7d82a43204bcf0a649557792b992901dae35cf81912a6ed725dde31005ca9576 (52056 bytes, android_arm64_armv8-a_shared), x86_64
+  0b6ec07e5c3ab58c6c65364b5b009b58dd9b6d0afbd6857011e8cba61698a47a (52056 bytes, android_x86_64_shared); both locks set by hand. Not in the
+  prebuilts yet (copies for the lead: the agent's Mac scratchpad `stage/{arm64,x86_64}`).
 ### 2026-11-09 - gsi_arm64 and gsi_x86_64 libapklayer_cameraserver: rotate-and-crop follows a window turned while the camera is open (camera live-turn agent)
 - Why: docs/PLAN.md "Camera": the mode was fixed at open. cameraserver's media.camera.proxy (services/Service.cpp) keeps each app's window
   shape (an apklayer transaction from HostCameraShadows.windowShape) and calls CameraService's notifyDisplayConfigurationChange, which asks
