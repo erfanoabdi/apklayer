@@ -1,2 +1,2 @@
 # the Android runtime bundle the package needs (docs/RELEASES.md; bump when the prebuilts branch changes); installed as /usr/share/apklayer/versions
-runtime=0.4.9
+runtime=0.4.10
