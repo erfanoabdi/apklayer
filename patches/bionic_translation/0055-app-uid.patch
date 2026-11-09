@@ -1,0 +1,111 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Mon, 9 Nov 2026 00:00:00 +0000
+Subject: [PATCH] libc: the app's Android uid for Android code
+
+apklayer patch (docs/PATCHES.md). Without apklayer's sandbox every app process runs as the desktop user (its uid, often 1000, is
+Android's system uid); Termux and others want their own app uid. libc_bio_set_app_uid(uid) (apklayer's path layer, once the process
+knows its app) makes getuid, geteuid, getgid, getegid, getresuid, getresgid answer the app uid (gid = uid, as Android gives an app),
+and stat, lstat, fstat, fstatat, statx report a file the real uid (gid) owns as the app uid's. statx gets the path layer too.
+
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -138,8 +138,56 @@
+ bionic___get_h_errno(void)
+ {
+ 	return &h_errno;
++}
++
++/* apklayer patch: the app's Android uid. Without apklayer's sandbox an app runs as the desktop user; Android code must still see its own app uid
++ * (Termux refuses a system uid): the ids it asks for, and the owner of the files the user owns (its own data), are the app's; its gid is its uid,
++ * as Android gives it. Set by apklayer's path layer (libc_bio_set_app_uid) once the process knows its app; -1: the real ids. */
++static long app_uid = -1;
++static uid_t real_uid;
++static gid_t real_gid;
++
++void libc_bio_set_app_uid(long uid)
++{
++	real_uid = getuid(), real_gid = getgid();
++	app_uid = uid;
++}
++
++static void own_ids(unsigned int *uid, unsigned int *gid)
++{
++	if (app_uid < 0) return;
++	if (*uid == real_uid) *uid = (unsigned int)app_uid;
++	if (*gid == real_gid) *gid = (unsigned int)app_uid;
++}
++
++uid_t bionic_getuid(void) { return app_uid >= 0 ? (uid_t)app_uid : getuid(); }
++uid_t bionic_geteuid(void) { return app_uid >= 0 ? (uid_t)app_uid : geteuid(); }
++gid_t bionic_getgid(void) { return app_uid >= 0 ? (gid_t)app_uid : getgid(); }
++gid_t bionic_getegid(void) { return app_uid >= 0 ? (gid_t)app_uid : getegid(); }
++
++int bionic_getresuid(uid_t *r, uid_t *e, uid_t *s)
++{
++	int ret = getresuid(r, e, s);
++	if (ret == 0 && app_uid >= 0) *r = *e = *s = (uid_t)app_uid;
++	return ret;
+ }
+ 
++int bionic_getresgid(gid_t *r, gid_t *e, gid_t *s)
++{
++	int ret = getresgid(r, e, s);
++	if (ret == 0 && app_uid >= 0) *r = *e = *s = (gid_t)app_uid;
++	return ret;
++}
++
++int bionic_statx(int dirfd, const char *pathname, int flags, unsigned int mask, struct statx *buf)
++{
++	char *mapped = (char *)pathname; bool free_it = pathname && pathname[0] == '/' && libc_bio_apply_path_overrides(&mapped);
++	int ret = statx(dirfd, mapped, flags, mask, buf);
++	if (free_it) free(mapped);
++	if (ret == 0) own_ids(&buf->stx_uid, &buf->stx_gid);
++	return ret;
++}
++
+ // this doesn't seem to be needed for 64bit glibc or musl
+ // 32bit glibc seems to work without as well but it doesn't hurt
+ #ifndef __LP64__
+@@ -177,6 +225,7 @@
+ 	char *mapped = (char *)path; bool free_it = libc_bio_apply_path_overrides(&mapped);
+ 	int ret = stat(mapped, &native_stat);
+ 	if (free_it) free(mapped);
++	if (ret == 0) own_ids(&native_stat.st_uid, &native_stat.st_gid); /* apklayer patch: app uid */
+ 	*buf = (struct bionic_stat) {
+ 		.st_dev = native_stat.st_dev,
+ 		.st_ino = native_stat.st_ino,
+@@ -203,6 +252,7 @@
+ 	char *mapped = (char *)path; bool free_it = libc_bio_apply_path_overrides(&mapped);
+ 	int ret = stat(mapped, buf);
+ 	if (free_it) free(mapped);
++	if (ret == 0) own_ids(&buf->st_uid, &buf->st_gid); /* apklayer patch: app uid */
+ 	return ret;
+ }
+ #endif
+@@ -213,13 +263,16 @@
+ 	char *mapped = (char *)path; bool free_it = libc_bio_apply_path_overrides(&mapped);
+ 	int ret = lstat(mapped, buf);
+ 	if (free_it) free(mapped);
++	if (ret == 0) own_ids(&buf->st_uid, &buf->st_gid); /* apklayer patch: app uid */
+ 	return ret;
+ }
+ 
+ int bionic_fstat(int fd, struct stat *buf)
+ {
+ 	verbose("%d", fd);
+-	return fstat(fd, buf);
++	int ret = fstat(fd, buf);
++	if (ret == 0) own_ids(&buf->st_uid, &buf->st_gid); /* apklayer patch: app uid */
++	return ret;
+ }
+ 
+ int bionic_fstatat(int dirfd, const char *pathname, void *buf, int flags)
+@@ -228,6 +281,7 @@
+ 	char *mapped = (char *)pathname; bool free_it = pathname && pathname[0] == '/' && libc_bio_apply_path_overrides(&mapped);
+ 	int ret = fstatat(dirfd, mapped, buf, flags);
+ 	if (free_it) free(mapped);
++	if (ret == 0) own_ids(&((struct stat *)buf)->st_uid, &((struct stat *)buf)->st_gid); /* apklayer patch: app uid */
+ 	return ret;
+ }
+ 

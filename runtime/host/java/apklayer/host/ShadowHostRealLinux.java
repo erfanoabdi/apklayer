@@ -47,6 +47,12 @@ public class ShadowHostRealLinux extends ShadowLinux {
         catch (java.io.IOException | RuntimeException notALink) { throw new android.system.ErrnoException("readlink", android.system.OsConstants.EINVAL, new java.io.IOException(notALink)); }
     }
 
+    /** Os.getuid and the rest: the app's uid as Process.myUid and native code see it (Robolectric leaves them 0, root); an app's gid is its uid. */
+    @Implementation protected int getuid() { return android.os.Process.myUid(); }
+    @Implementation protected int geteuid() { return android.os.Process.myUid(); }
+    @Implementation protected int getgid() { return android.os.Process.myUid(); }
+    @Implementation protected int getegid() { return android.os.Process.myUid(); }
+
     @Implementation protected long lseek(FileDescriptor fd, long offset, int whence) {
         return natively("lseek", ClassParameter.from(FileDescriptor.class, fd), ClassParameter.from(long.class, offset), ClassParameter.from(int.class, whence));
     }

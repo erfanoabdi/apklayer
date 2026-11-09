@@ -1,0 +1,93 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Mon, 9 Nov 2026 00:00:00 +0000
+Subject: [PATCH] libc: stdin, stdout, stderr are bionic-shaped FILEs
+
+apklayer patch (docs/PATCHES.md). Android code since API 23 names the standard streams by the stdin, stdout and stderr symbols; without
+bionic_ ones it got glibc's FILEs. Code that reads a FILE's fields reads bionic's layout: gnulib in Termux's coreutils (close_stdin's
+freadahead reads _r, then the ungetc buffer through _ext._base) read glibc's _IO_FILE there and crashed (ln, at exit, so Termux's
+bootstrap second stage failed). The symbols now point at the __sF entries that every bionic_ stdio wrapper already maps to glibc's
+streams; on 64-bit their fields read as an idle stream (nothing buffered, _file set, _ext._base an empty extension). fscanf,
+fwprintf and fwscanf get the wrappers they lacked.
+
+--- a/libc/libc-stdio.h
++++ b/libc/libc-stdio.h
+@@ -11,7 +11,7 @@
+ #endif
+ } __attribute__((aligned(sizeof(void *))));
+ 
+-extern const struct bionic___sFILE bionic___sF[3];
++extern struct bionic___sFILE bionic___sF[3]; /* apklayer patch: not const (0056) */
+ 
+ static inline FILE *
+ bionic_file_to_glibc_file(FILE *f)
+--- a/libc/libc-stdio.c
++++ b/libc/libc-stdio.c
+@@ -1,14 +1,66 @@
++#include <stdarg.h>
+ #include <stdio.h>
++#include <wchar.h>
+ 
+ #include "libc-stdio.h"
+ 
+ // Bionic standard stream support pre-M Android
+ // Post-M it's saner and they point to stdin/stdout/stderr symbols instead
+-const struct bionic___sFILE bionic___sF[3] = {
++struct bionic___sFILE bionic___sF[3] = { /* apklayer patch: not const, code may write the fields it reads (0056) */
+     {{'s', 't', 'd', 'i', 'n'}},
+     {{'s', 't', 'd', 'o', 'u', 't'}},
+     {{'s', 't', 'd', 'e', 'r', 'r'}}};
+ 
++/* apklayer patch: bionic's stdin, stdout and stderr (API 23+) are the __sF entries, not glibc's FILEs. Android code may read a FILE's
++ * fields: gnulib (Termux's coreutils) reads bionic's layout (close_stdin's freadahead: _r, then _ext._base's ungetc buffer), which a glibc
++ * FILE does not have (ln crashed at exit). Every bionic_ stdio wrapper takes these entries for glibc's streams (bionic_file_to_glibc_file).
++ * The fields read zero (nothing buffered) but _file (the descriptor) and _ext._base, which points to an empty extension. */
++FILE *bionic_stdin = (FILE *)&bionic___sF[0];
++FILE *bionic_stdout = (FILE *)&bionic___sF[1];
++FILE *bionic_stderr = (FILE *)&bionic___sF[2];
++
++#if defined(__LP64__)
++#include <string.h>
++static void *sF_ext[3][8];
++
++__attribute__((constructor)) static void sF_fields(void)
++{
++	for (int i = 0; i < 3; i++) {
++		void *ext = sF_ext[i];
++		memset(bionic___sF[i].__private, 0, sizeof bionic___sF[i].__private);
++		memcpy(bionic___sF[i].__private + 20, &i, sizeof i); /* _file */
++		memcpy(bionic___sF[i].__private + 88, &ext, sizeof ext); /* _ext._base */
++	}
++}
++#endif
++
++int bionic_fscanf(FILE *stream, const char *format, ...)
++{
++	va_list ap;
++	va_start(ap, format);
++	int ret = vfscanf(bionic_file_to_glibc_file(stream), format, ap);
++	va_end(ap);
++	return ret;
++}
++
++int bionic_fwprintf(FILE *stream, const wchar_t *format, ...)
++{
++	va_list ap;
++	va_start(ap, format);
++	int ret = vfwprintf(bionic_file_to_glibc_file(stream), format, ap);
++	va_end(ap);
++	return ret;
++}
++
++int bionic_fwscanf(FILE *stream, const wchar_t *format, ...)
++{
++	va_list ap;
++	va_start(ap, format);
++	int ret = vfwscanf(bionic_file_to_glibc_file(stream), format, ap);
++	va_end(ap);
++	return ret;
++}
++
+ // these only exist in bionic AFAICT
+ 
+ int __srget(FILE *fp)
