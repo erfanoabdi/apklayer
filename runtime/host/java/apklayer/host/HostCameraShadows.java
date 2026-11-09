@@ -62,7 +62,9 @@ final class HostCameraShadows {
             data.writeInt(degrees);
             if (processToken == null) processToken = new android.os.Binder();
             data.writeStrongBinder(processToken);
-            proxy.transact(WINDOW_SHAPE, data, null, android.os.IBinder.FLAG_ONEWAY);
+            // not oneway: the open cameras' mode is set before the app reacts to the new shape (Camera2Client keeps the preview transform
+            // of the setDisplayOrientation call that follows; one made before the mode changed would keep the old one)
+            proxy.transact(WINDOW_SHAPE, data, null, 0);
         } catch (Throwable none) {  // no native binder in this JVM, or cameraserver just ended: the next open reads the compat info
         } finally { if (data != null) data.recycle(); }
     }
