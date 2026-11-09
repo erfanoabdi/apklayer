@@ -15,7 +15,7 @@ import android.app.IServiceConnection;
 /** Instance-owned process directory. Identities come from the kernel Binder caller. */
 final class HubDirectory extends Binder {
     /** A broadcast from the system itself (battery, power): no sender permissions apply. */
-    private static final Peer SYSTEM = new Peer(-1, 1000, "android", null, null, true, 1000, null);
+    private static final Peer SYSTEM = new Peer(-1, 1000, "android", null, null, true, 1000, null, "system");
     void sendSystem(Intent intent, boolean sticky) {
         broadcasts.send(SYSTEM, intent, null, 0, null, null, null, false, sticky, 0);
     }
@@ -29,7 +29,8 @@ final class HubDirectory extends Binder {
     }
     /** An activity the system starts (HubUsb's attach intent). */
     void startSystem(Intent intent) { activities.start(SYSTEM, intent, null); }
-    record Peer(int pid, int uid, String name, IBinder endpoint, IBinder appThread, boolean headless, int appUid, String instance) {}
+    /** instance: what keys the process besides its package (an isolated service instance, a service's own process, an activity's android:process); process: its name. */
+    record Peer(int pid, int uid, String name, IBinder endpoint, IBinder appThread, boolean headless, int appUid, String instance, String process) {}
     private final HubPackages packages;
     /** The instance's host settings (set by HubHost once it runs). */
     volatile HubHostSettings hostSettings;
@@ -145,9 +146,18 @@ final class HubDirectory extends Binder {
         try { HubProtocol.call(target.endpoint, HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_EXIT_IF_IDLE, request -> {}, reply -> null); }
         catch (IllegalStateException gone) { /* it may end before this reply */ }
     }
-    /** The package's process that shows activities (not a headless component host). */
-    Peer appPeer(String name) {
-        synchronized (peers) { return peers.values().stream().filter(peer -> peer.name.equals(name) && !peer.headless).findFirst().orElse(null); }
+    /** The process that shows activities (not a headless component host) of this key: the package's own, or one of its android:process names. */
+    Peer windowPeer(String key) {
+        synchronized (peers) { return peers.values().stream().filter(peer -> key(peer).equals(key) && !peer.headless).findFirst().orElse(null); }
+    }
+    /** Whether the package shows a window or one is starting (a registered window process, or one the hub started that has not ended). */
+    boolean windowsUp(String name) {
+        synchronized (peers) { if (peers.values().stream().anyMatch(peer -> peer.name.equals(name) && !peer.headless)) return true; }
+        synchronized (appProcesses) { return appProcesses.entrySet().stream().anyMatch(e -> (e.getKey().equals(name) || e.getKey().startsWith(name + "#")) && e.getValue().isAlive()); }
+    }
+    /** The caller's app's running processes (ActivityManager.getRunningAppProcesses; Android lists only the caller's uid). */
+    private java.util.List<Peer> processesOf(Peer caller) {
+        synchronized (peers) { return peers.values().stream().filter(peer -> peer.appUid == caller.appUid && peer.name.equals(caller.name)).toList(); }
     }
     /** Ends every process of the package (before the installer replaces or removes it, as Android kills the app), and waits for them to go. */
     void stopPackage(String name) {
@@ -155,7 +165,7 @@ final class HubDirectory extends Binder {
         // the hub's own package (HubHost) is not ended: as a system_server package's, its update takes effect with the next hub
         synchronized (peers) { for (Peer peer : peers.values()) if (peer.name.equals(name) && peer.pid != android.os.Process.myPid()) ProcessHandle.of(peer.pid).ifPresent(ending::add); }
         synchronized (hosts) { hosts.forEach((key, process) -> { if (key.equals(name) || key.startsWith(name + "#")) ending.add(process.toHandle()); }); }
-        synchronized (appProcesses) { Process app = appProcesses.get(name); if (app != null) ending.add(app.toHandle()); }
+        synchronized (appProcesses) { appProcesses.forEach((key, app) -> { if (key.equals(name) || key.startsWith(name + "#")) ending.add(app.toHandle()); }); }
         end(ending, 10_000);
         if (!ending.isEmpty()) System.out.println("[apklayer-hub] stopped " + name + " (" + ending.size() + " processes)");
     }
@@ -178,23 +188,27 @@ final class HubDirectory extends Binder {
         }
     }
 
-    /** Starts the package as an app (window and all), as "apklayer run" does. */
-    void launchApp(String name) {
+    /** Starts a window process (as "apklayer run" does): the package's, or "<package>#<process>" for an activity's android:process (zygote's fork of a new process). */
+    void launchApp(String key) {
         if (stopping) return;
+        int hash = key.indexOf('#');
+        String name = hash < 0 ? key : key.substring(0, hash), process = hash < 0 ? null : key.substring(hash + 1);
         synchronized (appProcesses) {
-            Process old = appProcesses.get(name);
+            Process old = appProcesses.get(key);
             if (old != null && old.isAlive()) return;
             try {
-                Path log = Path.of(System.getenv().getOrDefault("APKLAYER_LOGS", System.getProperty("user.home") + "/.local/state/apklayer/default"), "app-" + name + ".log");
+                Path log = logs.resolve("app-" + (process != null ? process : name) + ".log");
                 Files.createDirectories(log.getParent());
-                ProcessBuilder command = new ProcessBuilder(System.getProperty("apklayer.cli"), "run", name).redirectErrorStream(true).redirectOutput(log.toFile());
-                Process process = command.start(); appProcesses.put(name, process);
-                System.out.println("[apklayer-hub] starting app " + name + " launcherPid=" + process.pid());
-                process.onExit().thenAccept(exited -> {
-                    synchronized (appProcesses) { appProcesses.remove(name, process); }
-                    if (activities.waiting(name)) launchApp(name);  // a launch came while this process was exiting
+                ProcessBuilder command = new ProcessBuilder(System.getProperty("apklayer.cli"), "run", name).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(log.toFile()));  // the CLI tees into the same file
+                if (process != null) command.environment().put("APKLAYER_PROCESS", process);  // cli/run.cpp: its name, its own window, never the running app's
+                Process started = command.start(); appProcesses.put(key, started);
+                System.out.println("[apklayer-hub] starting app " + key + " launcherPid=" + started.pid());
+                started.onExit().thenAccept(exited -> {
+                    synchronized (appProcesses) { appProcesses.remove(key, started); }
+                    if (activities.waiting(key)) launchApp(key);  // a launch came while this process was exiting
+                    activities.restartIfAlone(name);
                 });
-            } catch (IOException failure) { throw new IllegalStateException("Cannot launch app " + name, failure); }
+            } catch (IOException failure) { throw new IllegalStateException("Cannot launch app " + key, failure); }
         }
     }
     /** A new host for `name` when a binding waits for one and none is registered. A host's end shows three ways in any order (its process exits,
@@ -243,7 +257,7 @@ final class HubDirectory extends Binder {
         if ((flags & FLAG_ONEWAY) != 0 || reply == null) throw new IllegalArgumentException("Hub requests must be synchronous");
         switch (code) {
             case HubProtocol.REGISTER -> {
-                String name = request.readString(); IBinder endpoint = request.readStrongBinder(); boolean headless = request.readBoolean(); IBinder appThread = request.readStrongBinder(); int appUid = request.readInt(); String instance = request.readString(); request.enforceNoDataAvail();
+                String name = request.readString(); IBinder endpoint = request.readStrongBinder(); boolean headless = request.readBoolean(); IBinder appThread = request.readStrongBinder(); int appUid = request.readInt(); String instance = request.readString(), process = request.readString(); request.enforceNoDataAvail();
                 if (packages.get(name) == null || endpoint == null || appThread == null || !HubProtocol.ENDPOINT.equals(endpoint.getInterfaceDescriptor()))
                     throw new SecurityException("Unknown app endpoint");
                 int installedUid = packages.uid(name);  // what others know this process by (UID_OF_PID, oneway callers): the installed uid, not one it claims
@@ -253,7 +267,7 @@ final class HubDirectory extends Binder {
                 int kernel = ShadowHostRealBinder.kernelUid(pid);  // sandboxed (cli/sandbox.cpp): the process runs as its app uid, which it cannot choose
                 if (kernel >= android.os.Process.FIRST_APPLICATION_UID && kernel <= android.os.Process.LAST_APPLICATION_UID && kernel != installedUid)
                     throw new SecurityException(name + " is uid " + installedUid + ", its process runs as " + kernel);
-                Peer peer = new Peer(pid, uid, name, endpoint, appThread, headless, appUid, instance);
+                Peer peer = new Peer(pid, uid, name, endpoint, appThread, headless, appUid, instance, process);
                 synchronized (peers) {
                     if (stopping) throw new IllegalStateException(HubProtocol.EXITING);
                     Peer old = peers.get(pid);
@@ -264,7 +278,7 @@ final class HubDirectory extends Binder {
                     endpoint.linkToDeath(() -> remove(peer), 0);
                     peers.put(pid, peer);
                 }
-                System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " registered " + name + " pid=" + pid + " uid=" + uid + " kernel-uid=" + kernel + " t=" + System.nanoTime() / 1_000_000);
+                System.out.println("[apklayer-hub] " + java.time.LocalTime.now() + " registered " + name + (instance != null ? "#" + instance : "") + " pid=" + pid + " uid=" + uid + " kernel-uid=" + kernel + " t=" + System.nanoTime() / 1_000_000);
                 synchronized (failures) { failures.remove(key(peer)); }  // launches are counted per host (package#process): a host that registered did not fail
                 HubAudioPermissions.registered(packages, name);  // before the reply: the app's first track finds its package
                 HubLockScreen.appStarted();
@@ -456,6 +470,18 @@ final class HubDirectory extends Binder {
                 }
                 return true;
             }
+            case HubProtocol.RESTART_ON_DEATH -> {
+                Peer caller = caller(); Intent intent = request.readTypedObject(Intent.CREATOR); request.enforceNoDataAvail();
+                if (!caller.headless && intent != null && intent.getComponent() != null && intent.getComponent().getPackageName().equals(caller.name)) activities.restartOnDeath(caller, intent);
+                reply.writeNoException(); return true;
+            }
+            case HubProtocol.RUNNING_PROCESSES -> {
+                Peer caller = caller(); request.enforceNoDataAvail();
+                java.util.List<Peer> own = processesOf(caller);
+                reply.writeNoException(); reply.writeInt(own.size());
+                for (Peer peer : own) { reply.writeInt(peer.pid); reply.writeString(peer.process != null ? peer.process : peer.name); reply.writeBoolean(peer.headless); }
+                return true;
+            }
             case HubProtocol.UID_OF_PID -> {
                 caller(); int pid = request.readInt(); request.enforceNoDataAvail();
                 Peer peer = peerByPid(pid);
@@ -583,6 +609,8 @@ final class HubDirectory extends Binder {
         inputMethods.finishInput(peer, true);
         bindings.died(peer);
         broadcasts.died(peer);
+        activities.died(peer);
+        activities.restartIfAlone(peer.name);
         startedServices.died(peer);
         gnss.died(peer);
         callAudio.died(peer);

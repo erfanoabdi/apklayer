@@ -3,6 +3,25 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: activities of another android:process run in a process of their own; Process.killProcess ends only that process
+- An activity whose android:process differs from the caller's process starts through the hub at once (ShadowHostInstrumentation, any thread, as
+  Android's startActivity is a call to the system), in a window process keyed `<package>#<process>`: `apklayer run` with APKLAYER_PROCESS
+  (the spare takes it), its own window and log (`app-<package>:<suffix>.log`), Application created, same uid, its own providers only
+  (HostProcessName.windowProcess). The caller is stopped below it and resumed once it finishes or its process dies; startActivityForResult
+  works across processes; a window process that dies answers its callers RESULT_CANCELED (HubActivities.died; receivers take one answer).
+- Process.killProcess(myPid) ends the JVM at once (SIGKILL's effect, not Robolectric's record); another pid only when the hub lists it as
+  this app's. An activity below the killed process's top one comes back in a new process once no window of the app is up (RESTART_ON_DEATH,
+  as ActivityManagerService restarts a dead process's stopped activity; no saved state, only that one activity). A kill right after a local
+  activity start stays ApklayerExit's restart idiom. getRunningAppProcesses lists the app's processes with their names (RUNNING_PROCESSES).
+- Per-process script steps: `-Dapklayer.script.<suffix>`; `apklayer screenshot <package>:<suffix>`. The hub's app launches append to the log
+  the CLI tees into (it truncated it under the CLI's writes).
+- FCL 1.3.4.5 on the x86 PC (own tree ~/apklayer-x86/proc, a copy of the fcl tree's xf1): JVMActivity is not in `:jvm` (that is GameService,
+  a foreground service); `:crash` is JVMCrashActivity. Quit Game on the title screen -> GameMenu.onExit -> killProcess(myPid) -> the launcher
+  (MainActivity) comes back in a new process; the second launch reaches the title screen and quits again the same way. The crash screen runs
+  in `:crash` (started by an intent to the running launcher) and its Exit ends only that process, the launcher stays. A real game crash
+  (F3+C debug crash) does not reach it: the guest JVM's exit(-1) is FCL's to hook through bytehook, whose init fails (INITERR_SYM), so the
+  process just exits (gdb: guest exit(-1), then the host JVM's exit). Test app hello-act-process (`hub.py processes kill`, group activities).
+
 ## 2026-11-09: Ubuntu Touch click package; the Volla X23 runs it instead of the deb (docs/PLAN.md "Plan: Ubuntu Touch click package" 1-4)
 - `tools/release/click.sh`: the noble arm64 deb unpacked as it is plus the runtime's JDK image (jdk-image.sh at build time), the manager as the
   click's app, AppArmor `unconfined` (`click/`). No clickable: `click build` from noble's archive is all it takes. release.yml job `click`

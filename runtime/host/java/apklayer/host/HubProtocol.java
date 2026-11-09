@@ -39,6 +39,8 @@ final class HubProtocol {
             CONFIRM_CREDENTIAL = 58,  // {title, description, challenge} -> whether the person confirmed with the login password (HubLockScreen.confirm)
             MICROPHONE_MUTE = 59,  // {on} -> the microphone mute after the request (HubCallAudio: AudioService.setMicrophoneMute and its broadcast)
             BLUETOOTH_PIN = 60;  // {address, name, pairing variant, key} -> the PIN or passkey the person typed for a pairing BlueZ asked about ("yes" to a comparison), null when refused (HubBluetooth.pin)
+    static final int RESTART_ON_DEATH = 62;  // {intent}: the caller's window process is ending; the hub starts that activity in a new one once the app shows no other window (HubActivities)
+    static final int RUNNING_PROCESSES = 61;  // {} -> count, then {pid, process name, headless} per running process of the caller's app (getRunningAppProcesses, killProcess)
             // RELAUNCH: `apklayer run` of a running app (the CLI, through servicetool call): {package, intent file or ""} -> 0 delivered, 1 not running
     static final int ENDPOINT_BIND = 1, ENDPOINT_UNBIND = 2, ENDPOINT_START = 3, ENDPOINT_STOP = 4, ENDPOINT_GET_PROVIDER = 5, ENDPOINT_NOTIFY = 6, ENDPOINT_START_ACTIVITY = 7, ENDPOINT_EXIT_IF_IDLE = 8, ENDPOINT_PACKAGE_CHANGED = 9, ENDPOINT_CONFIGURATION = 10, ENDPOINT_JOB = 11,
             ENDPOINT_JOB_STOP = 12,  // {job id, JobParameters stop reason}: a constraint stopped holding (HostJobs.stop)

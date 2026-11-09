@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Cross-app tests through the instance hub, one phase per run: `hub.py <test> <phase>`. The test app prints `[<tag>] PASS|FAIL|KILL <pid>`;
 every JVM is owned and reaped. Tests: providers (basic denied death observe files grant idle: basic, then the provider's host ends once idle), services (start selfstop sticky private filters own late oneway respawn rebind framework),
-activities (result explicit again private up), pendingintents (broadcast targets cancel forresult), notifications (click cancel muted channels), webview (probe). HUB_VERBOSE=1: all lines."""
+activities (result explicit again private up), processes (kill: an activity in android:process ":remote"), pendingintents (broadcast targets cancel forresult), notifications (click cancel muted channels), webview (probe). HUB_VERBOSE=1: all lines."""
 import os
 import selectors
 import signal
@@ -20,6 +20,7 @@ TESTS = {
     'providers': ({'denied': 'hello.cpdenied', 'grant': 'hello.cpdenied'}, 'hello.cp', 'cpc', ('[cpp]',), 120),
     'services': ('hello.svccaller', 'hello.svc', 'svc', ('[svc-t]',), 120),
     'activities': ('hello.actcaller', 'hello.act', 'act', ('[act-t]',), 120),
+    'processes': ('hello.actprocess', None, 'ap', (), 120),
     'pendingintents': ('hello.picreator', 'hello.pi', 'pi', ('[pi-h]',), int(os.environ.get('APKLY_PATIENCE', '120'))),
     'notifications': ('hello.ntposter', 'hello.nt', 'nt', ('[nt-h]',), 120),
     'webview': ('hello.wvprobe', None, 'wv', ('Exception', '\tat ', '[apklayer]'), 25),
@@ -117,6 +118,10 @@ try:
                     os.kill(int(line.split()[2]), signal.SIGKILL)
                 if '[%s] PASS' % tag in line:
                     target = log / 'app-hello.acttarget.log'
+                    if TEST == 'processes':  # the remote activity's process: its own log (the hub started it), ended by its own killProcess
+                        remote = (log / 'app-hello.actprocess:remote.log').read_text(errors='replace')
+                        assert 'Process.killProcess(myPid): this process ends' in remote, 'no killProcess in the remote log:\n' + remote[-2000:]
+                        hub_wait('starting app hello.actprocess#hello.actprocess:remote', 1)
                     if TEST == 'activities' and PHASE == 'private' and target.exists():
                         assert 'PRIVATE STARTED' not in target.read_text(errors='replace'), 'private activity started'
                     if TEST == 'webview':

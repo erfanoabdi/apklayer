@@ -43,8 +43,10 @@ public class ShadowHostInstrumentation extends ShadowInstrumentation {
     @Override
     protected ActivityResult execStartActivity(android.content.Context who, android.os.IBinder contextThread, android.os.IBinder token, android.app.Activity target,
             android.content.Intent intent, int requestCode, android.os.Bundle options) {
-        System.setProperty("apklayer.laststart", Long.toString(System.nanoTime() / 1_000_000));  // ApklayerExit: an exit right after is a restart
         if (Boolean.getBoolean("apklayer.tracestart")) new Throwable("[apklayer] startActivity " + intent).printStackTrace(System.out);
+        android.content.pm.ActivityInfo other = ActivityTask.otherProcess(who, intent);  // an activity of another android:process: the hub starts it now
+        if (other != null) { ActivityTask.startInProcess(intent, other, target, requestCode); return null; }
+        System.setProperty("apklayer.laststart", Long.toString(System.nanoTime() / 1_000_000));  // ApklayerExit: an exit right after is a restart
         if (intent.getComponent() == null && HubActivityClient.enabled() && !HostPortals.hostAnswers(intent)
                 && who.getPackageManager().resolveActivity(intent, 0) == null && !HubActivityClient.resolvable(intent))
             throw new android.content.ActivityNotFoundException("No Activity found to handle " + intent);

@@ -219,14 +219,16 @@ public final class AppHost implements Runnable {
             }
         });
 
-        for (String step : System.getProperty("apklayer.script", "").split("[+;]")) {
+        // a window process of another android:process (it gets the launch's options through the hub) runs only its own steps: -Dapklayer.script.<suffix>
+        String process = HostProcessName.windowProcess();
+        for (String step : System.getProperty(process == null ? "apklayer.script" : "apklayer.script." + process.substring(process.indexOf(':') + 1), "").split("[+;]")) {
             if (step.isEmpty()) continue;
             String[] kv = step.split(":", 2);
             long ms = Long.parseLong(kv[0]);
             // allow multiple steps at the same time, separated by ','
             script.merge(ms, kv[1], (a, b) -> a + ";" + b);
         }
-        if (Boolean.getBoolean("apklayer.autotap")) {
+        if (Boolean.getBoolean("apklayer.autotap") && process == null) {
             long t = Long.getLong("apklayer.autotap.ms", 4500);
             script.put(t, "tap:first");
         }

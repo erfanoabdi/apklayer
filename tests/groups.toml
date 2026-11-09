@@ -202,9 +202,10 @@ apps = ["hello-installer", "hello-legacy-receiver"]  # hello-installer carries t
 run = ["python3 -u tests/vm/installer.py"]
 
 [activities]
-apps = ["hello-act-target", "hello-act-caller"]
+apps = ["hello-act-target", "hello-act-caller", "hello-act-process"]
 run = ["python3 -u tests/vm/hub.py activities result", "python3 -u tests/vm/hub.py activities explicit", "python3 -u tests/vm/hub.py activities again",
-       "python3 -u tests/vm/hub.py activities private", "python3 -u tests/vm/hub.py activities up", "python3 -u tests/vm/relaunch.py"]
+       "python3 -u tests/vm/hub.py activities private", "python3 -u tests/vm/hub.py activities up", "python3 -u tests/vm/relaunch.py",
+       "python3 -u tests/vm/hub.py processes kill"]
 
 [pendingintents]
 apps = ["hello-pi-holder", "hello-pi-creator", "hello-act-target", "hello-svc-target"]

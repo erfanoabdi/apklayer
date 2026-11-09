@@ -17,7 +17,7 @@ import android.service.storage.IExternalStorageService;
  * The system keeps that service bound on a device; here it is bound for the one call and let go when it answered (no process stays for it).
  */
 final class HubStorageService {
-    private static final HubDirectory.Peer SYSTEM = new HubDirectory.Peer(-1, 1000, "android", null, null, true, 1000, null);
+    private static final HubDirectory.Peer SYSTEM = new HubDirectory.Peer(-1, 1000, "android", null, null, true, 1000, null, "system");
 
     private HubStorageService() {}
 

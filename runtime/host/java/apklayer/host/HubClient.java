@@ -67,7 +67,10 @@ public final class HubClient {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.REGISTER, request -> {
             request.writeString(context.getPackageName()); request.writeStrongBinder(endpoint); request.writeBoolean(Boolean.getBoolean("apklayer.componenthost") || HubHost.hub);
             request.writeStrongBinder(((android.app.IApplicationThread) android.app.ActivityThread.currentActivityThread().getApplicationThread()).asBinder());
-            request.writeInt(android.os.Process.myUid()); request.writeString(System.getProperty("apklayer.isolated"));
+            // the hub's key of this process: an isolated service instance, or the android:process of a window process started for an activity
+            String isolated = System.getProperty("apklayer.isolated");
+            request.writeInt(android.os.Process.myUid()); request.writeString(isolated != null ? isolated : HostProcessName.windowProcess());
+            request.writeString(System.getProperty("apklayer.processname", context.getPackageName()));  // its name (getRunningAppProcesses)
         }, reply -> reply.readInt());
     }
 

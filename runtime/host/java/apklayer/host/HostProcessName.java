@@ -27,5 +27,16 @@ final class HostProcessName {
     /** Whether this component host runs an android:isolatedProcess service (Android gives such a process no content providers). */
     static boolean isolated;
 
+    /** The android:process this window process was started for (`apklayer run` with APKLAYER_PROCESS: an activity of another process), null for the package's own. */
+    static String windowProcess() {
+        return Boolean.getBoolean("apklayer.componenthost") || System.getProperty("apklayer.isolated") != null ? null : System.getProperty("apklayer.processname");
+    }
+
+    /** The activity's own process ("<package>:jvm"), null when it runs in the package's process (the hub keys window processes so: HubDirectory.key). */
+    static String of(android.content.pm.ActivityInfo info) {
+        String process = info.processName;
+        return process == null || process.equals(info.packageName) || (info.applicationInfo != null && process.equals(info.applicationInfo.processName)) ? null : process;
+    }
+
     private static void set(String name) { System.setProperty("apklayer.processname", name); }  // ShadowActivityThread.currentProcessName answers it
 }
