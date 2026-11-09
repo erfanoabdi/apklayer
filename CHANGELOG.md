@@ -17,6 +17,18 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
   UiBench at depth=1, screenshot drawn; Ubuntu Touch click built on Parallels (click.sh) + runtime 0.4.11 on the X23: UiBench depth=1,
   screenshot drawn. Parallels (own tree): native, native-bridge, startup, activities pass; x86 PC (own tree): native, native-bridge pass.
 
+## 2026-11-10: DocumentsUI's overlay NPE and first-start's blank capture
+- DocumentsUI's Application.onCreate runs ThemeOverlayManager.applyOverlays: with CHANGE_OVERLAY_PACKAGES granted (now on both arches; UTM's old logs
+  granted it later and skipped the call) its AsyncTask iterated OverlayManager.getOverlayInfosForTarget, which Robolectric's ShadowOverlayManager
+  leaves to the null "overlay" proxy: an NPE (FATAL EXCEPTION, the app stayed up). ShadowHostOverlayManager answers as OverlayManagerService on a
+  device without overlays: an empty list (getOverlayInfo null). DocumentsUI logs `OverlayManager.setEnabled() result: true`, no NPE (PC, Parallels).
+- The blank DocumentsUI window (first-start 1 of 2 on the PC, "1 colours") was the test's timing, not the NPE: it captured 10 s after the boot
+  settings, but FilesActivity's onCreate waits up to 5 s for ProvidersCache's first load, and the cold MediaProvider registers ~6 s after its start
+  on the PC; FilesActivity started 6.8-7.0 s after the boot settings there (3 s to spare), 3.2-5.5 s on Parallels. first-start now captures 10 s
+  after FilesActivity started (and says when that was). first-start: PC 9 of 9 (5 before the test change), Parallels 3 of 3.
+- system-apps fails `display` on both hosts (mode differs from the size: PC 1920x2880 vs mode 834x1484, Parallels 768x1024 vs 325x579), the same
+  with the overlay shadow taken out (Parallels): not this change; likely 67a829ee (real size = the shell's output). Every other check passes.
+
 ## 2026-11-10: release 0.4.11 (runtime 0.4.11)
 - Native bridge (x86_64 hosts, arm64 apps): a guest thread's pthread record maps to its host thread (binary_translation 0004, native_bridge_support 0001, bionic_translation 0058): Unity/il2cpp's GC no longer scans the wrong stack (PGR's "irrecoverable stack overflow" and black screen); Sailfish OS and Ubuntu Touch: the phone's own on-screen keyboard (Maliit) types into Android fields, with its height as the window's inset; the screen (max window metrics, real display size, the drawing cache limit) is the monitor, not the first window (FCL's guide overlay); headless runs without a shell no longer throw.
 

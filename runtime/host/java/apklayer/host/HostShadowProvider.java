@@ -106,6 +106,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.media.MediaMetadataRetriever", HostMediaShadows.MediaMetadataRetriever.class.getName()),
                 Map.entry("android.media.MediaMuxer", HostMediaShadows.MediaMuxer.class.getName()),
                 Map.entry("android.app.usage.StorageStatsManager", ShadowHostStorageStatsManager.class.getName()),
+                Map.entry("android.content.om.OverlayManager", ShadowHostOverlayManager.class.getName()),  // no overlays: empty lists, not null
                 Map.entry("android.os.Vibrator", HostPlainShadows.Vibrator.class.getName()),
                 Map.entry("android.os.SystemVibrator", HostPlainShadows.SystemVibrator.class.getName()),
                 Map.entry("android.widget.Toast", ShadowHostToast.class.getName()),
