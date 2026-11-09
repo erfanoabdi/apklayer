@@ -3,6 +3,25 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: Minecraft 26.3 in FCL plays on the x86 PC (Vulkan on Intel, input, sound)
+- x86 PC (Intel N100, ANV), FCL 1.3.4.5 x86_64 (its GitHub release APK, native, no bridge) in an own tree (~/apklayer-x86/fcl, instance xf1),
+  the game data (.minecraft with 26.3, assets, libraries, account) copied from Parallels (untouched there), FCL's x86_64 JREs from its assets.
+  Scripted taps: Launch, FCL's Vulkan check, "Krypton Wrapper does not support this version" -> Continue; Minecraft picks its Vulkan backend
+  on "Intel(R) Graphics (ADL-N)" with VK_KHR_android_surface and VK_KHR_swapchain through our loader; title screen, Singleplayer, a new world
+  ("steve joined the game"), the touch D-pad moves the player (the tutorial advances), sound streams reach PipeWire ("apklayer playback").
+- bionic_translation 0053: OpenAL Soft aborted the game right after its context ("OpenJDK exited with code : 6"): Android code calling
+  strerror_r got glibc's GNU variant (char *) and read the pointer as an error number; `bionic_strerror_r` is POSIX's now.
+- Debug aid: APKLAYER_PTRACER=1 lets an unprivileged gdb attach to app JVMs (Yama ptrace_scope 1; the hub starts them). Found the abort.
+- Not a bug of ours: Krypton (FCL's GL renderer) fails Minecraft 26.x's "glGetError mismatch" check (SDL's eglGetProcAddress against
+  LWJGL's glXGetProcAddress of gl4es); FCL itself warns that Krypton does not support this version; Vulkan is the backend. Parallels has no
+  GPU Vulkan (its host's only device is llvmpipe, `vulkaninfo`), and llvmpipe gets no swapchain (present is opt-in there), so the game has no
+  backend on Parallels.
+- Open: quitting the game (or its crash) leaves the last frame: FCL runs JVMActivity in `:jvm` and JVMCrashActivity in `:crash` and ends the
+  game with Process.killProcess(myPid); apklayer runs a package's activities in one process and killProcess is Robolectric's no-op, so the
+  crash screen never starts and a second game launch would need a second JVM in the same process. Needs activities of another android:process
+  in their own app process (docs/PLAN.md). OSHI's JNA probe fails (libGLESv3_CM.dll, only SystemReport's info). Groups gpu, gpu-window,
+  native-surface, native, native-bridge, vulkan pass on the PC (own slots xf3/xf4).
+
 ## 2026-11-09: FCL's game aborted on a second copy of a system library (bionic_translation 0052)
 - Owner's run with the EGL fix: past JLI_Launch, MioLibPatcher and the Vulkan load, then `descriptor_database.cc:678] File already exists
   in database: frameworks/av/drm/libmediadrm/protos/metrics.proto` and an abort: libmediadrmmetrics_full's constructor ran a second time.
