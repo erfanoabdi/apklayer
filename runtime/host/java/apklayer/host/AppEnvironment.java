@@ -274,8 +274,9 @@ final class AppEnvironment {
      * multiprocess ones, an isolated process (android:isolatedProcess) none.
      */
     static void installProviders(Application app) {
-        // the package's process, or a service's own (an isolated instance: apklayer.isolated; its process name from HostProcessName, if it has one)
-        String process = System.getProperty("apklayer.isolated") == null ? null : System.getProperty("apklayer.processname", "");
+        // the package's process, a service's own (an isolated instance: apklayer.isolated; its process name from HostProcessName, if it has one), or an
+        // activity's android:process (HostProcessName.windowProcess)
+        String process = System.getProperty("apklayer.isolated") == null ? HostProcessName.windowProcess() : System.getProperty("apklayer.processname", "");
         try {
             android.content.pm.ProviderInfo[] providers = app.getPackageManager()
                     .getPackageInfo(app.getPackageName(), android.content.pm.PackageManager.GET_PROVIDERS).providers;

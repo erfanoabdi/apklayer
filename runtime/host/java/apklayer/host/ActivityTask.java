@@ -3,6 +3,7 @@ package apklayer.host;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.os.Handler;
 import android.view.View;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -30,6 +31,7 @@ final class ActivityTask {
 
     ActivityTask(BooleanSupplier windowActive) {
         this.windowActive = windowActive;
+        current = this;
     }
 
     private static volatile Activity taskRoot;
@@ -109,7 +111,11 @@ final class ActivityTask {
             if (outer) launching = false;
         }
         if (outer) while (!launching && !waitingForHub.isEmpty()) { Object[] next = waitingForHub.poll(); startForHub((Intent) next[0], (android.os.ResultReceiver) next[1]); }
+        if (outer) for (Runnable next; !launching && (next = afterLaunch.poll()) != null; ) next.run();
     }
+
+    /** Work that needs the launch under way finished (its activity on the stack): the cover of an activity that started another process's in onCreate. */
+    private final Deque<Runnable> afterLaunch = new ArrayDeque<>();
 
     private void launchNow(Intent intent, ShadowActivity.IntentForResult request) {
         if (Boolean.getBoolean("apklayer.tracestart")) System.out.println("[apklayer] launch " + intent + " flags=0x" + Integer.toHexString(intent.getFlags()));
@@ -146,6 +152,12 @@ final class ActivityTask {
             }
             // Android would crash the app here; on the desktop the app stays on its current screen.
             System.out.println("[apklayer] cannot start " + intent + ": " + e);
+            return;
+        }
+        // an activity of another android:process runs in that process (FCL's game in ":jvm"): the hub starts it there, as ActivityManagerService would
+        // (startActivity routes it at once, ShadowHostInstrumentation; this is the launcher start of a process that got no launch of its own)
+        if (!java.util.Objects.equals(HostProcessName.of(info), HostProcessName.windowProcess()) && HubActivityClient.enabled()) {
+            startInProcess(intent, info, stack.isEmpty() ? null : stack.peek().get(), wantsResult ? request.requestCode : -1);
             return;
         }
         // task rules: reuse an instance already on the stack, clear what is above it, or clear everything
@@ -211,6 +223,54 @@ final class ActivityTask {
         StartTrace.mark("activity resumed " + c.get().getClass().getName());
         CdsDump.afterStart();  // an app window's classes (views, widgets, drawing), not only a component host's
         AppSpare.launchStarted();
+    }
+
+    /** The process's task (AppHost's), for starts made off the main thread. */
+    private static volatile ActivityTask current;
+
+    /** The activity of this app the intent starts when it runs in another android:process than this one (ShadowHostInstrumentation), else null. */
+    static ActivityInfo otherProcess(android.content.Context who, Intent intent) {
+        if (current == null || !HubActivityClient.enabled()) return null;
+        try {
+            ActivityInfo info = intent.getComponent() != null ? who.getPackageManager().getActivityInfo(intent.getComponent(), 0) : resolved(intent);
+            return info.packageName.equals(who.getPackageName()) && !java.util.Objects.equals(HostProcessName.of(info), HostProcessName.windowProcess()) ? info : null;
+        } catch (android.content.pm.PackageManager.NameNotFoundException | RuntimeException notOurs) { return null; }
+    }
+
+    /**
+     * Starts an activity of another android:process through the hub at once (any thread, as Android's startActivity is a call to the system: FCL starts its
+     * crash screen in ":crash" and then kills its own process). The top activity here stays in the task below it: stopped (an opaque cover) until that
+     * one finishes or its process dies, then resumed.
+     */
+    static void startInProcess(Intent intent, ActivityInfo info, Activity requester, int requestCode) {
+        ActivityTask task = current;
+        Handler main = new Handler(android.os.Looper.getMainLooper());
+        java.util.concurrent.atomic.AtomicReference<ActivityController<? extends Activity>> covered = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicBoolean answered = new java.util.concurrent.atomic.AtomicBoolean();
+        Runnable uncover = () -> {
+            answered.set(true);
+            ActivityController<? extends Activity> c = covered.getAndSet(null);
+            if (c != null && stack.peek() == c && task.stopped.remove(c.get())) task.restart(c);
+        };
+        main.post(new Runnable() {  // before the start: its answer comes after this
+            @Override public void run() {
+                if (answered.get()) return;
+                if (task.launching) { task.afterLaunch.add(this); return; }  // started from onCreate: the caller is on the stack once its launch is done
+                ActivityController<? extends Activity> c = stack.peek();
+                if (c != null && !c.get().isFinishing() && task.stopped.add(c.get())) { setVisible(c.pause().stop(), false); covered.set(c); }
+            }
+        });
+        if (!HubActivityClient.routeToProcess(intent, requestCode >= 0 ? requester : null, requestCode, uncover)) { main.post(uncover); return; }
+        System.out.println("[apklayer] started " + info.name + " in process " + (info.processName != null ? info.processName : info.packageName));
+    }
+
+    /** The activity below the top one (Android restarts it when the process dies under its top activity: FCL's launcher after the game), or null. */
+    static Intent belowTop() {
+        try {
+            List<Activity> task = task();
+            for (int i = 1; i < task.size(); i++) if (task.get(i) != null) return new Intent(task.get(i).getIntent()).setComponent(task.get(i).getComponentName());
+        } catch (RuntimeException changing) { /* the main thread changed the stack meanwhile */ }
+        return null;
     }
 
     /**

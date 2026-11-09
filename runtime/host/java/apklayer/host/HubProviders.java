@@ -34,7 +34,7 @@ final class HubProviders {
     }
 
     /** The provider's binder for the hub itself, the instance's system (uid 1000): what system_server writes at boot (HubBootSettings). */
-    IBinder system(String authority) { return find(new HubDirectory.Peer(android.os.Process.myPid(), 1000, "android", null, null, true, 1000, null), authority); }
+    IBinder system(String authority) { return find(new HubDirectory.Peer(android.os.Process.myPid(), 1000, "android", null, null, true, 1000, null, "system"), authority); }
 
     /**
      * A data home's first boot: every documents provider is created at once, each in its process (its database too), as a device's first boot has

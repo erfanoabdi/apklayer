@@ -103,7 +103,10 @@ int openFor(const Layout& l, const std::string& path, int flags, int mode, uid_t
     } else {
         std::string package = peerPackage(l, hostUid);
         if (package.empty()) return -EACCES;
-        if (path == appLogPath(inst, package)) {  // its own app log (android.util.Log lines, AppEnvironment): appended, the user's file as before
+        std::string otherProcess = appLogPath(inst, package + ":");  // app-<package>:<process>.log: a window process of another android:process
+        bool ownProcessLog = path.rfind(otherProcess.substr(0, otherProcess.size() - 4), 0) == 0 && path.find('/', otherProcess.size() - 4) == std::string::npos
+                             && path.size() > otherProcess.size() && path.compare(path.size() - 4, 4, ".log") == 0;
+        if (path == appLogPath(inst, package) || ownProcessLog) {  // its own app log (android.util.Log lines, AppEnvironment): appended, the user's file as before
             if ((flags & O_ACCMODE) != O_WRONLY || !(flags & O_APPEND)) return -EACCES;
             fd = open(path.c_str(), (base | O_NOFOLLOW) & ~(O_TRUNC | O_EXCL), 0600);
             return fd < 0 ? -errno : (fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK), fd);

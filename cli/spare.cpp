@@ -79,7 +79,7 @@ void forward(int sig) { if (forwardTo > 0) kill(forwardTo, sig); }
 
 // A launch's own environment, which the runtime reads after its target: a spare gets it with the target (spare_target.c sets it, Java reads
 // -Dapklayer.env.<name>), a cold JVM in its environment. Neither in the key nor in the spare's own environment.
-const std::set<std::string> kLaunchEnv = {"APKLAYER_INTENT_FILE", "APKLAYER_INTENT_TEXT", "APKLAYER_RESULT_FILE", "APKLAYER_COMPONENT_HOST", "APKLAYER_ISOLATED"};
+const std::set<std::string> kLaunchEnv = {"APKLAYER_INTENT_FILE", "APKLAYER_INTENT_TEXT", "APKLAYER_RESULT_FILE", "APKLAYER_COMPONENT_HOST", "APKLAYER_ISOLATED", "APKLAYER_PROCESS"};
 // What differs from launch to launch and the runtime never reads: the JOPTS (in argv, but the launch's own late ones), a desktop launcher's
 // activation token, pipes of the process that started the launch (the hub's ready pipe, a launch's started pipe), the login session's and the shell's bookkeeping
 const std::set<std::string> kIgnoredEnv = {"APKLAYER_JOPTS", "XDG_ACTIVATION_TOKEN", "DESKTOP_STARTUP_ID", "APKLAYER_HUB_READY_FD", "APKLAYER_STARTED_FD",

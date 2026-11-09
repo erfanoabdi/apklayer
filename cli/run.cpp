@@ -41,13 +41,23 @@ std::string windowTitle(const Instance& inst, const std::string& launcher, const
     return ("apklayer:" + launcher + ":" + inst.id + ":" + package).substr(0, 60);
 }
 
-// The launcher pid (its run.<pid> record, the layer stack) of a running window JVM of the package; empty: none (component hosts have no window sink).
-std::string windowLaunch(const Layout& l, const Instance& inst, const std::string& package) {
-    std::string found;
+// The Android process a window JVM of the package runs: its command line once named (AppEnvironment.startRuntime), its option before that, else the package's.
+std::string processOf(const std::string& pid, const std::string& package) {
+    std::string cmd = readFile("/proc/" + pid + "/cmdline").value_or("");
+    if (cmd.rfind(package + ":", 0) == 0) return cmd.substr(0, cmd.find('\0'));
+    const std::string key = "-Dapklayer.processname=";
+    if (size_t at = cmd.find(key); at != std::string::npos) return cmd.substr(at + key.size(), cmd.find('\0', at) - at - key.size());
+    return package;
+}
+
+// The launcher pid (its run.<pid> record, the layer stack) of a running window JVM of the package, or of one of its android:process names
+// ("<package>:jvm"); empty: none (component hosts have no window sink).
+std::string windowLaunch(const Layout& l, const Instance& inst, const std::string& target) {
+    std::string found, package = target.substr(0, target.find(':'));
     auto running = launches(l, inst);  // kept: a range-for over a member of a temporary would outlive it
     for (const std::string& record : running[package]) {
         std::vector<std::string> pids = split(readFile(join(inst.stateDir, record)).value_or(""), '\n');
-        if (pids.size() >= 2 && atoi(pids[1].c_str()) > 0) found = record.substr(strlen("run."));
+        if (pids.size() >= 2 && atoi(pids[1].c_str()) > 0 && processOf(pids[0], package) == target) found = record.substr(strlen("run."));
     }
     return found;
 }
@@ -96,6 +106,8 @@ std::vector<std::string> packageJvmArgs(const Layout& l, const Instance& inst, c
     if (std::string route = property(join(dir, "info.properties"), "nativeRoute"); route.rfind("bridge-", 0) == 0)
         a.push_back("-Dapklayer.nativebridge=" + route.substr(7));  // its libraries load through the native bridge (NativeLoader)
     if (!getenvOr("APKLAYER_ISOLATED", "").empty()) a.push_back("-Dapklayer.isolated=" + getenvOr("APKLAYER_ISOLATED", ""));
+    // a window process the hub starts for an activity of another android:process ("<package>:jvm"): its name (HostProcessName.windowProcess)
+    if (!getenvOr("APKLAYER_PROCESS", "").empty()) a.push_back("-Dapklayer.processname=" + getenvOr("APKLAYER_PROCESS", ""));
     a.push_back(join(dir, "base.apk"));
     a.push_back(join(dir, "classes.jar"));
     return a;
@@ -142,10 +154,12 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     if (!ensureStack(l, inst)) return 1;
     trace("stack ready");
     if (!ensureShell(l, inst, ne)) return 1;
-    if (mode == RunMode::App && relaunch(l, inst, ne, package)) return 0;
-    if (mode == RunMode::App) {  // the launch's output and the app's android.util.Log go to <logs>/app-<package>.log too (`apklayer logs`, `apklayer report`)
-        teeLaunchOutput(inst, package);
-        own.push_back("-Dapklayer.applog=" + appLogPath(inst, package));
+    // a process for another android:process is always a new one (the hub starts it only when that process is not running)
+    std::string process = getenvOr("APKLAYER_PROCESS", "");
+    if (mode == RunMode::App && process.empty() && relaunch(l, inst, ne, package)) return 0;
+    if (mode == RunMode::App) {  // the launch's output and the app's android.util.Log go to <logs>/app-<package or process>.log too (`apklayer logs`, `apklayer report`)
+        teeLaunchOutput(inst, process.empty() ? package : process);
+        own.push_back("-Dapklayer.applog=" + appLogPath(inst, process.empty() ? package : process));
     }
     if (mode == RunMode::App) {
         // the hub's JVM boots alongside the app's instead of after its Application.onCreate (HubStartup then finds it); an `apklayer hub` that finds

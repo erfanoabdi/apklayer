@@ -67,7 +67,28 @@ public class ShadowHostActivityManager extends ShadowActivityManager {
     protected List<ActivityManager.RunningAppProcessInfo> getRunningAppProcesses() {
         List<ActivityManager.RunningAppProcessInfo> processes = super.getRunningAppProcesses();
         if (processes != null) for (ActivityManager.RunningAppProcessInfo p : processes) if (p.pid == Process.myPid()) p.processName = Application.getProcessName();
-        return processes;
+        if (processes == null || !HubClient.connected()) return processes;
+        // with the hub: every running process of this app (its window processes of other android:process names, its component hosts), this one's entry kept
+        java.util.List<ActivityManager.RunningAppProcessInfo> all = new java.util.ArrayList<>(processes);
+        for (ActivityManager.RunningAppProcessInfo other : ownProcesses()) if (all.stream().noneMatch(p -> p.pid == other.pid)) all.add(other);
+        return all;
+    }
+
+    /** The running processes of this app as the hub knows them (HubProtocol.RUNNING_PROCESSES); empty without the hub. */
+    static List<ActivityManager.RunningAppProcessInfo> ownProcesses() {
+        if (!HubClient.connected()) return List.of();
+        String pkg = org.robolectric.RuntimeEnvironment.getApplication().getPackageName();
+        return HubProtocol.call(HubClient.current().binder(), HubProtocol.DESCRIPTOR, HubProtocol.RUNNING_PROCESSES, request -> {}, reply -> {
+            java.util.List<ActivityManager.RunningAppProcessInfo> found = new java.util.ArrayList<>();
+            for (int n = reply.readInt(); n > 0; n--) {
+                int pid = reply.readInt(); String name = reply.readString(); boolean headless = reply.readBoolean();
+                ActivityManager.RunningAppProcessInfo info = new ActivityManager.RunningAppProcessInfo(name, pid, new String[] {pkg});
+                info.uid = Process.myUid();
+                info.importance = headless ? ActivityManager.RunningAppProcessInfo.IMPORTANCE_SERVICE : ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND;
+                found.add(info);
+            }
+            return found;
+        });
     }
 
     /**

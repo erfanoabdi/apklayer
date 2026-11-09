@@ -97,7 +97,7 @@ final class HubPendingIntents {
         }
         Intent intent = new Intent(record.last());
         if (fillIn != null && (record.flags & IMMUTABLE) == 0) intent.fillIn(fillIn, 0);
-        HubDirectory.Peer creator = new HubDirectory.Peer(-1, record.uid, record.creator, null, null, true, record.uid, null);
+        HubDirectory.Peer creator = new HubDirectory.Peer(-1, record.uid, record.creator, null, null, true, record.uid, null, null);
         System.out.println("[apklayer-hub] PendingIntent of " + record.creator + " type " + record.type + " sent: " + intent.getAction() + " " + intent.getComponent());
         switch (record.type) {
             // started for a result it stays in the caller's task (Android cancels the result of a NEW_TASK start)

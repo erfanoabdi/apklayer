@@ -50,15 +50,27 @@ final class HubActivityClient {
 
     /** Sends the intent to the hub; false when the hub is not used or no installed app handles it. */
     static boolean route(Intent intent, Activity requester, Intent request) {
+        return start(intent, requester, (code, result) -> ((ShadowActivity) Shadow.extract(requester)).receiveResult(request, code, result), null);
+    }
+
+    /** An activity of another android:process of this app (startActivity, any thread); done (main thread) runs once it finishes or its process dies. */
+    static boolean routeToProcess(Intent intent, Activity requester, int requestCode, Runnable done) {
+        return start(intent, requester, (code, result) -> ((ShadowActivity) Shadow.extract(requester)).internalCallDispatchActivityResult(null, requestCode, code, result), done);
+    }
+
+    /** requester: the activity that wants the result (null: none); answer hands it over on the main thread. */
+    private static boolean start(Intent intent, Activity requester, BiConsumer<Integer, Intent> answer, Runnable done) {
         if (!enabled()) return false;
         ResultReceiver receiver = null;
-        if (requester != null) {
-            intent.putExtra(CALLER, requester.getPackageName());
-            ShadowActivity shadow = Shadow.extract(requester);
+        if (requester != null) intent.putExtra(CALLER, requester.getPackageName());
+        if (requester != null || done != null) {
+            java.util.concurrent.atomic.AtomicBoolean answered = new java.util.concurrent.atomic.AtomicBoolean();
             receiver = new ResultReceiver(new Handler(Looper.getMainLooper())) {
                 @Override protected void onReceiveResult(int code, Bundle data) {
+                    if (answered.getAndSet(true)) return;  // the hub's RESULT_CANCELED for a process that ended after its activity answered
                     Intent result = data == null ? null : data.getParcelable("intent", Intent.class);
-                    if (!requester.isDestroyed()) shadow.receiveResult(request, code, result);
+                    if (requester != null && !requester.isDestroyed()) answer.accept(code, result);
+                    if (done != null) done.run();
                 }
             };
         }
@@ -74,8 +86,10 @@ final class HubActivityClient {
      * it starts answers the requester's onActivityResult(requestCode) when it finishes (Play Games' GamesResolutionActivity waits for that, the game paused below).
      */
     static void sendForResult(android.content.IntentSender sender, Intent fillIn, Activity requester, int requestCode) throws android.content.IntentSender.SendIntentException {
+        java.util.concurrent.atomic.AtomicBoolean answered = new java.util.concurrent.atomic.AtomicBoolean();
         ResultReceiver receiver = requester == null || requestCode < 0 ? null : new ResultReceiver(new Handler(Looper.getMainLooper())) {
             @Override protected void onReceiveResult(int code, Bundle data) {
+                if (answered.getAndSet(true)) return;  // the hub's RESULT_CANCELED for a process that ended after its activity answered
                 Intent result = data == null ? null : data.getParcelable("intent", Intent.class);
                 if (!requester.isDestroyed()) ((ShadowActivity) Shadow.extract(requester)).internalCallDispatchActivityResult(null, requestCode, code, result);
             }

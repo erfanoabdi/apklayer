@@ -40,7 +40,7 @@ final class HubInputMethods {
 
     HubInputMethods(HubServiceBindings bindings, HubPackages packages) { this.bindings = bindings; this.packages = packages; }
 
-    private static final HubDirectory.Peer SYSTEM = new HubDirectory.Peer(-1, 1000, "android", null, null, true, 1000, null);
+    private static final HubDirectory.Peer SYSTEM = new HubDirectory.Peer(-1, 1000, "android", null, null, true, 1000, null, "system");
 
     /** The user's default input method, or the first enabled one; null without one. */
     private ComponentName chosen() {
