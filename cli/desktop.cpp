@@ -88,7 +88,9 @@ void writeDesktop(const Layout& l, const std::string& pkg) {
     std::string cli = hostCli(l.cliBinary());
     if (hasEntry(info))
         writeFile(entry, "[Desktop Entry]\nType=Application\nName=" + property(info, "label") + "\nComment=Android app (" + pkg + ") via apklayer\nExec=" + cli + " run " + pkg +
-                             "\nIcon=" + appDir(l, pkg) + "/icon.png\nStartupWMClass=" + pkg + "\nCategories=X-Apklayer-App;\nX-Lomiri-Touch=true\n" + (inDrawer(info) ? "" : "NoDisplay=true\n"));
+                             "\nIcon=" + appDir(l, pkg) + "/icon.png\nStartupWMClass=" + pkg + "\nCategories=X-Apklayer-App;\nX-Lomiri-Touch=true\n"
+                             // Lipstick's invoker --single-instance locks by the Exec binary: every app is this CLI, so a second app only raised the first
+                             "X-Nemo-Single-Instance=no\n" + (inDrawer(info) ? "" : "NoDisplay=true\n"));
     else unlink(entry.c_str());
     writeFile(join(apps, launcherPrefix() + "open-apk.desktop"),
               "[Desktop Entry]\nType=Application\nName=Android app (apklayer)\nExec=" + cli + " run %f\nMimeType=application/vnd.android.package-archive;\nNoDisplay=true\n");
@@ -103,10 +105,13 @@ void removeDesktop(const Layout& l, const std::string& pkg) {
 }
 
 void refreshDesktops(const Layout& l) {
-    // an entry of an earlier install whose CLI is gone (a tarball in /opt replaced by the RPM: the launcher's icon opened nothing) is written again
+    // an entry of an earlier install whose CLI is gone (a tarball in /opt replaced by the RPM: the launcher's icon opened nothing) is written again,
+    // on Sailfish OS also one without X-Nemo-Single-Instance (before 0.4.9: only the first app opened)
+    bool sailfish = exists("/etc/sailfish-release");
     for (const std::string& pkg : listDir(l.appsDir)) {
-        std::string exec = property(join(l.dataHome, "applications/" + launcherPrefix() + pkg + ".desktop"), "Exec");
-        if (!exec.empty() && !exists(exec.substr(0, exec.find(' '))) && exists(infoFile(l, pkg))) writeDesktop(l, pkg);
+        std::string entry = join(l.dataHome, "applications/" + launcherPrefix() + pkg + ".desktop"), exec = property(entry, "Exec");
+        bool stale = !exec.empty() && (!exists(exec.substr(0, exec.find(' '))) || (sailfish && property(entry, "X-Nemo-Single-Instance").empty()));
+        if (stale && exists(infoFile(l, pkg))) writeDesktop(l, pkg);
     }
 }
 

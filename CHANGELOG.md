@@ -3,6 +3,11 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: Sailfish OS, a second app opened only the first (desktop entries)
+- Cause: Lipstick launches an entry through libcontentaction as `invoker --type=generic --id=<entry> --single-instance <Exec>`, and invoker's single-instance lock is keyed by the Exec binary (`/run/user/<uid>/single-instance-locks/usr/lib/apklayer/cli/apklayer/instance.lock`): every app is the same CLI, so with one apklayer app open any other one only raised it.
+- Fix: app entries carry `X-Nemo-Single-Instance=no` (libcontentaction then leaves out --single-instance); `apklayer list`'s refresh writes an entry without the key again on Sailfish OS (cli/desktop.cpp). Checked on the Sailfish phone: with the key, `lca-tool --triggerdesktop apklayer-com.android.documentsui.desktop` started Files (FilesActivity) beside a running UiBench; without it nothing started.
+- Seen there, open: Lipstick offers no wl_subcompositor (globals: wl_compositor 3, wl_shell, android_wlegl, qt_* extensions, alien_manager), so the shell's navigation bar (a subsurface) is never created: no Back/Home in mobile style on Sailfish OS.
+
 ## 2026-11-09: `apklayer stop` leaves nothing of the instance running; an app ends with its hub
 - Cause (the two follow-ups of "the always-on unit's hub no longer loses to a stray `apklayer hub`"): stop ended the run.* records before the hub, so
   the still-running hub restarted a component host stop had just ended; that launch took the spare (a JVM the holder started, no child of the hub)
