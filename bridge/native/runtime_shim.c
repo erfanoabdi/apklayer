@@ -56,6 +56,7 @@ static void parse_binding_format(const char *fmt)
  * callee) from the stack and moves the stack arguments (the 9th on, up to the 12th) down two slots. Floats travel in their own
  * registers and need no change. The thunk template is copied per target; its last word holds the target's address. */
 #include <sys/mman.h>
+#include <sys/prctl.h>
 #if defined(__aarch64__)
 __asm__(
     ".text\n.balign 4\n.globl apklayer_critical_tpl_start\n.globl apklayer_critical_tpl_end\n"
@@ -454,6 +455,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     if (system_property(env, "apklayer.runtimetrace")) {
         apklayer_crash_trace();
     }
+    /* debug aid: a debugger without privileges may attach (Yama ptrace_scope 1 allows only ancestors; the hub starts app JVMs) */
+    if (getenv("APKLAYER_PTRACER")) prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY, 0, 0, 0);
     char *libs = system_property(env, "apklayer.androidlibs"), *format = system_property(env, "method_binding_format");
     if (!libs) { fprintf(stderr, "[runtime] -Dapklayer.androidlibs is not set\n"); return -1; }
     parse_binding_format(format ? format : "$$robo$$${method}$nativeBinding");

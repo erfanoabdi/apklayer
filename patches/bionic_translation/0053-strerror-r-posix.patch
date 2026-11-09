@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Mon, 9 Nov 2026 00:00:00 +0000
+Subject: [PATCH] libc: strerror_r is POSIX's, as bionic's
+
+apklayer patch (docs/PATCHES.md). Bionic's strerror_r returns an int (0 or an error number); without a bionic_ wrapper Android code
+got glibc's symbol of that name, the GNU strerror_r returning char *, and read the pointer as an error. OpenAL Soft (FCL's game)
+checks it and aborted the process. bionic_strerror_r calls glibc's POSIX one, __xpg_strerror_r.
+
+--- a/libc/libc-misc.c
++++ b/libc/libc-misc.c
+@@ -80,6 +80,16 @@
+ #endif
+ }
+ 
++#ifdef __GLIBC__
++/* apklayer patch: bionic's strerror_r is POSIX's (int: 0 or an error number); the glibc symbol of that name is the GNU one (char *), whose
++ * pointer callers read as an error (OpenAL Soft in FCL's game aborted on it). glibc's POSIX one is __xpg_strerror_r. */
++extern int __xpg_strerror_r(int error_number, char *buf, size_t buf_len);
++int bionic_strerror_r(int error_number, char *buf, size_t buf_len)
++{
++	return __xpg_strerror_r(error_number, buf, buf_len);
++}
++#endif
++
+ /* apklayer patch: see docs/PATCHES.md */
+ int bionic_android_get_device_api_level(void)
+ {
