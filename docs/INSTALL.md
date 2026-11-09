@@ -231,6 +231,11 @@ from the release (`--bundle <file>` for an offline copy), installs the system ap
 microG (Services and Companion, for apps that need Google's services) and the F-Droid client are optional: `apklayer setup --microg --fdroid`, the
 first-run screen's checkboxes, or at any time the "Add-ons" section at the end of the Apps page's list, which shows whether each is
 installed and offers Install, Update (nothing is downloaded beyond the repository index when the installed version is current) and Remove.
+Space: the runtime takes ~1.6 GB unpacked per version and an update unpacks the new one beside the current one (the one before stays; older
+ones go), with the bundle (~0.5 GB) downloaded beside them. Setup checks the free space of `~/.local/share/apklayer` before it downloads or unpacks
+and fails early with what is needed, what is free and where; when only removing the runtimes other than the current one makes room it removes
+them first and says so. A home on a small file system: `apklayer setup --move-data <dir>` moves `~/.local/share/apklayer` (runtimes, apps,
+instances; no instance may run) to `<dir>` on a bigger one and leaves a symlink in its place (docs/HALIUM.md for phones).
 Setup needs no root: binder is the userspace one. The kernel's binder is an option (`apklayer binder kernel`, or the manager's Hardware page); its
 devices need root once per boot: `sudo systemctl enable --now apklayer-binder` (the package ships the unit disabled).
 Ubuntu Touch (Halium phones): docs/HALIUM.md "The apt install on the phone"; "Choose file…" and Share to apklayer go through Lomiri Content Hub

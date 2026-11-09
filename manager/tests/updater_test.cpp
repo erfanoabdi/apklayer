@@ -25,7 +25,7 @@ static const char* kReleases = R"({
   "latest": "0.2.0",
   "releases": [
     {"version": "0.2.0", "date": "2026-11-20", "notes_url": "https://example.org/v0.2.0", "converter_abi": 2, "data_format": 1,
-     "runtime": {"version": "2", "assets": {"arm64": {"url": "https://example.org/rt-arm64-2.tar.zst", "sha256": "aa"}}},
+     "runtime": {"version": "2", "assets": {"arm64": {"url": "https://example.org/rt-arm64-2.tar.zst", "sha256": "aa", "size": 500, "unpacked_size": 1600}}},
      "debs": {"noble": {"arm64": {"url": "https://example.org/apklayer_0.2.0-1~noble1_arm64.deb", "sha256": "bb"},
                         "amd64": {"url": "https://example.org/apklayer_0.2.0-1~noble1_amd64.deb", "sha256": "cc"}},
               "trixie": {"arm64": {"url": "https://example.org/apklayer_0.2.0-1~trixie1_arm64.deb", "sha256": "dd"}}}},
@@ -40,6 +40,7 @@ int main() {
     Release r = parseLatest(kReleases, "trixie", {"arm64", "aarch64"}, error);
     CHECK(error.empty() && r.version == "0.2.0" && r.converterAbi == 2 && r.runtimeVersion == "2" && r.notesUrl == "https://example.org/v0.2.0", "releases.json: the latest release");
     CHECK(r.deb.url == "https://example.org/apklayer_0.2.0-1~trixie1_arm64.deb" && r.deb.sha256 == "dd" && r.runtime.sha256 == "aa", "the deb of this codename and CPU, the runtime of this CPU");
+    CHECK(r.runtime.size == 500 && r.runtime.unpacked == 1600 && r.deb.size == 0, "the runtime's sizes (none listed: 0)");
     r = parseLatest(kReleases, "noble", {"amd64", "x86_64"}, error);
     CHECK(r.deb.sha256 == "cc" && !r.runtime.found(), "another CPU: its deb, no runtime asset");
     error.clear();
@@ -125,7 +126,8 @@ int main() {
     std::string root = t + "/runtime";
     auto bundle = [&](const std::string& version, bool withJson) {
         std::string dir = t + "/src-" + version + "/apklayer-runtime-arm64-" + version;
-        sh("mkdir -p '" + dir + "/system-apps' && echo " + version + " > '" + dir + "/system-apps/marker'");
+        // the parts a complete runtime has (fetch.cpp runtimeProblem)
+        sh("mkdir -p '" + dir + "/system-apps' '" + dir + "/android-root/system' '" + dir + "/android-libs' '" + dir + "/aosp/android-all' && echo " + version + " > '" + dir + "/system-apps/marker'");
         if (withJson) write(dir + "/runtime.json", "{\"version\": \"" + version + "\"}\n");
         std::string file = t + "/rt-" + version + ".tar.zst";
         sh("tar --zstd -cf '" + file + "' -C '" + t + "/src-" + version + "' .");
@@ -142,6 +144,32 @@ int main() {
     CHECK(e.find("runtime.json") != std::string::npos && installedRuntime(root) == "3" && !exists(root + "/5"), "a bundle without runtime.json is refused");
     CHECK(!unpackRuntime(bundle("3", true), root, "../x").empty() && !unpackRuntime(bundle("3", true), root, "current").empty(), "a version that is no plain name is refused");
     CHECK(unpackRuntime(bundle("3", true), root, "3").empty() && installedRuntime(root) == "3" && exists(root + "/2"), "the same version again replaces it in place");
+
+
+    // free space (a fake statvfs): the bundle's unpacked size, the runtimes an update may remove first, never current
+    long long tarSize = atoll(sh("tar -cf - -C '" + t + "/src-3' . | wc -c").c_str());
+    CHECK(unpackedSize(bundle("3", true)) == tarSize, "unpacked size of a bundle without a recorded one: counted");
+    sh("printf '\\050\\265\\057\\375\\244\\000\\360\\055\\000garbage' > '" + t + "/recorded.tar.zst'");  // single segment, 4-byte size 3010560
+    CHECK(unpackedSize(t + "/recorded.tar.zst") == 3010560, "unpacked size recorded in the zstd frame header");
+    sh("printf 'xxxx' > '" + t + "/notzstd'");
+    CHECK(unpackedSize(t + "/notzstd") <= 0, "no zstd frame: no size");
+    static long long fakeFree = 0;
+    freeBytes = [](const std::string&) { return fakeFree; };
+    std::string note;
+    fakeFree = 1LL << 40;
+    CHECK(runtimeRoom(root, 1LL << 30, &note).empty() && note.empty() && exists(root + "/2"), "room enough: nothing removed");
+    long long old = atoll(sh("du -sk '" + root + "/2'").c_str()) * 1024;
+    fakeFree = 1000;
+    e = runtimeRoom(root, 1000 + old + 1, &note);
+    CHECK(e.rfind("Not enough space", 0) == 0 && e.find(root) != std::string::npos && exists(root + "/2") && exists(root + "/3"), ("does not fit even without runtime 2: nothing removed, " + e).c_str());
+    CHECK(runtimeRoom(root, 1000 + old, &note).empty() && !exists(root + "/2") && installedRuntime(root) == "3" && note.find("runtime 2") != std::string::npos,
+          ("fits with the previous runtime removed: removed, current kept: " + note).c_str());
+    note.clear();
+    CHECK(!runtimeRoom(root, 1LL << 40, &note).empty() && installedRuntime(root) == "3", "only current left: never removed");
+    e = unpackRuntime(bundle("4", true), root, "4", &note);
+    CHECK(e.rfind("Not enough space", 0) == 0 && installedRuntime(root) == "3" && !exists(root + "/4"), ("unpack: checked before a byte is written: " + e).c_str());
+    freeBytes = [](const std::string&) { return -1LL; };
+    CHECK(runtimeRoom(root, 1LL << 40, &note).empty(), "free space unknown: no refusal");
 
     sh("rm -rf '" + t + "'");
     if (failures) { fprintf(stderr, "FAIL updater backend: %d\n", failures); return 1; }

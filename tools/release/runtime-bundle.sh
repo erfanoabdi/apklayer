@@ -30,6 +30,8 @@ for d in android-root/system android-libs aosp/sim-classes; do [ -d "$stage/$d" 
 [ ! -d "$stage/system-apps" ] || [ -n "$(ls "$stage/system-apps")" ] || { echo "runtime-bundle: system-apps is empty" >&2; exit 1; }
 contents="$(cd "$stage" && ls | sed 's/.*/"&"/' | paste -sd, -)"
 printf '{"version": "%s", "cpu": "%s", "main_commit": "%s", "contents": [%s, "runtime.json"]}\n' "$version" "$cpu" "$main" "$contents" > "$stage/runtime.json"
-tar -C "$stage" --owner=0 --group=0 --numeric-owner --sort=name -cf - . | zstd -q -T0 -12 -o "$out/$name.tar.zst" -f
+tarball() { tar -C "$stage" --owner=0 --group=0 --numeric-owner --sort=name -cf - .; }
+# the frame records the unpacked size (zstd from a pipe does not know it): the CLI checks the free space against it before unpacking
+tarball | zstd -q -T0 -12 --stream-size="$(tarball | wc -c | tr -d ' ')" -o "$out/$name.tar.zst" -f
 (cd "$out" && sha256sum "$name.tar.zst" > "$name.tar.zst.sha256")
 echo "runtime-bundle: $out/$name.tar.zst ($(du -h "$out/$name.tar.zst" | cut -f1)), main $main"

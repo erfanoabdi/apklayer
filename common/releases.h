@@ -9,6 +9,7 @@ namespace manager {
 
 struct Asset {
     std::string url, sha256;
+    long long size = 0, unpacked = 0;  // bytes of the file and, for a runtime bundle, of its contents (0: releases.json before 0.4.10 has none)
     bool found() const { return !url.empty(); }
 };
 

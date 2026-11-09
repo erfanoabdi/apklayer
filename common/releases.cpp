@@ -12,7 +12,8 @@ namespace manager {
 namespace {
 Asset asset(std::string_view perCpu, const std::vector<std::string>& cpus) {
     for (const std::string& cpu : cpus)
-        if (auto a = json::member(perCpu, cpu); !a.empty()) return {json::str(json::member(a, "url")), json::str(json::member(a, "sha256"))};
+        if (auto a = json::member(perCpu, cpu); !a.empty())
+            return {json::str(json::member(a, "url")), json::str(json::member(a, "sha256")), json::num(json::member(a, "size")), json::num(json::member(a, "unpacked_size"))};
     return {};
 }
 

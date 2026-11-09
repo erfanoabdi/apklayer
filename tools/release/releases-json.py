@@ -2,7 +2,7 @@
 """releases-json.py <releases.json> <version> <dist dir> <owner/repo> <source tree> <prebuilts commit>: adds (or replaces) the release <version> in the pages
 branch's releases.json from the files the release workflow uploads (docs/RELEASES.md has the schema), and makes it the latest (check-runtime.py guards the runtime version against the prebuilts commit). The runtime
 version comes from tools/release/versions, converter_abi and data_format from cli/version.h."""
-import datetime, hashlib, json, os, re, sys
+import datetime, hashlib, json, os, re, subprocess, sys
 
 path, version, dist, repo, tree, prebuilts = sys.argv[1:]
 base = f"https://github.com/{repo}/releases/download/v{version}/"
@@ -22,7 +22,9 @@ for name in sorted(os.listdir(dist)):
     if m := re.fullmatch(rf"apklayer_{re.escape(version)}-1[~.]([a-z]+)1_([a-z0-9]+)\.deb", name):  # the release job names them with . for ~
         debs.setdefault(m[1], {})[m[2]] = asset(name)
     elif m := re.fullmatch(rf"apklayer-runtime-([a-z0-9_]+)-{re.escape(versions['runtime'])}\.tar\.zst", name):
-        runtime[cpu_arch[m[1]]] = asset(name)
+        # the CLI checks the free space before it downloads (common/fetch.cpp runtimeRoom): the bundle and its unpacked contents
+        unpacked = subprocess.run(["sh", "-c", 'zstd -dcq -- "$0" | wc -c', os.path.join(dist, name)], capture_output=True, text=True, check=True).stdout
+        runtime[cpu_arch[m[1]]] = asset(name) | {"size": os.path.getsize(os.path.join(dist, name)), "unpacked_size": int(unpacked)}
 assert debs and runtime, f"no debs or runtime bundle for {version} in {dist}"
 
 entry = {"version": version, "date": datetime.date.today().isoformat(), "notes_url": f"https://github.com/{repo}/releases/tag/v{version}",

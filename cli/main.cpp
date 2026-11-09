@@ -37,6 +37,7 @@ int usage() {
           "                         binder check, the Android runtime (releases.json; --bundle or APKLAYER_RUNTIME_BUNDLE offline), the device providers of a Halium\n"
           "                         device (Ubuntu Touch: default instance \"ut\"), the system apps, optional microG and F-Droid; prints `step <id> <state> <detail>`\n"
           "                         lines; --check changes nothing\n"
+          "  setup --move-data <dir>  move ~/.local/share/apklayer (runtimes, apps, instances) to <dir> on a bigger file system, a symlink in its place\n"
           "  reconvert <package> | --all-stale  convert an installed app again from its kept APKs (its data stays); --all-stale: every app converted\n"
           "                         with an older converter ABI (the stale column of list --tsv)\n"
           "  run <package|app.apk>  run an installed app (an .apk path is installed first)\n"

@@ -66,7 +66,7 @@ Environment variables (`APKLAYER_NATIVE`, `APKLAYER_ANDROID_LIBS`, ...) still ov
       "notes_url": "https://github.com/erfanoabdi/apklayer/releases/tag/v0.1.0",
       "converter_abi": 1,
       "data_format": 1,
-      "runtime": {"version": "0.1.0", "prebuilts": "<prebuilts commit>", "assets": {"arm64": {"url": "https://github.com/.../apklayer-runtime-arm64-0.1.0.tar.zst", "sha256": "..."}}},
+      "runtime": {"version": "0.1.0", "prebuilts": "<prebuilts commit>", "assets": {"arm64": {"url": "https://github.com/.../apklayer-runtime-arm64-0.1.0.tar.zst", "sha256": "...", "size": 520000000, "unpacked_size": 1640000000}}},
       "debs": {
         "noble": {"arm64": {"url": ".../apklayer_0.1.0-1.noble1_arm64.deb", "sha256": "..."}, "amd64": {"url": "...", "sha256": "..."}},
         "trixie": {"arm64": {"url": "...", "sha256": "..."}}
@@ -82,6 +82,8 @@ Environment variables (`APKLAYER_NATIVE`, `APKLAYER_ANDROID_LIBS`, ...) still ov
 - `converter_abi` and `data_format` are `cli/version.h`'s numbers at the tag (`docs/PLAN.md` item 8).
 - `runtime.prebuilts` is the prebuilts commit the bundle was built from (what `PREBUILTS_REF` resolved to; the build jobs check out that commit).
 - The manager downloads `runtime.assets.<arch>` into `runtime/<runtime.version>/` when that version differs from what it has, checking `sha256`.
+- `size` and `unpacked_size` (bytes, since 0.4.10) let setup check the free space before it downloads; the bundle's zstd frame also records its
+  unpacked size (runtime-bundle.sh: `--stream-size`), checked again before unpacking (a bundle without one is counted by decompressing it).
 
 ## Cutting a release
 
@@ -113,11 +115,19 @@ compiled into both the CLI and the manager.
 
 ```
 apklayer [--instance ID] setup [--check] [--update] [--bundle <file|file://|URL>] [--microg] [--fdroid]
+apklayer setup --move-data <dir>
 ```
 
 Output, tab separated: `step <id> <state> <detail>` (ids: binder, java, runtime, providers, system-apps, microg, fdroid; states: todo, running, done,
 failed, skipped), `progress <0..1|-1>`, and with `--check` (which changes nothing) `latest <version> <runtime version> <date>`. Idempotent: the runtime
 is fetched when none is installed (`--update`: when the release has a newer one), the system apps once (marker `~/.local/share/apklayer/setup-done`).
+Space: the bundle downloads into `runtime/.downloads` (the runtime's file system, one place to check), and before a download or an unpack
+setup compares the file system's free space (statvfs) with the bundle plus its unpacked size and a tenth (common/fetch.cpp `runtimeRoom`). It
+fails early (`Not enough space for the Android runtime: it needs X, Y free in <dir>`, with `apklayer setup --move-data <dir>`), or removes the
+runtimes other than the current one first when only that makes room (an update would remove them after switching anyway; it says so); the
+current one is never removed. `apklayer setup --move-data <dir>` moves `~/.local/share/apklayer` to `<dir>` and leaves a symlink;
+the first setup does it by itself on a small home with a writable `/userdata/apklayer` (docs/HALIUM.md, Sailfish). Checks: manager/tests/updater_test.cpp
+(fake statvfs), tests/vm/setup-space.sh `<cli>` (a 100 MB loop-mounted data home, root).
 Offline: `--bundle apklayer-runtime-<cpu>-<R>.tar.zst` (a `.sha256` beside it is checked) or `APKLAYER_RUNTIME_BUNDLE`; `APKLAYER_RELEASES_URL` names another releases.json.
 On a Halium device the step `providers` seeds a new instance with graphics and camera = device (docs/HALIUM.md).
 Nothing in it runs as root (no pkexec, no sudo): binder is only checked (the userspace binder, the default, needs nothing; an instance on the kernel binder needs its nodes, which the

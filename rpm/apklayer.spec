@@ -86,6 +86,9 @@ rm -rf %{buildroot}%{_datadir}/lomiri-content-hub
 
 %post
 systemctl daemon-reload >/dev/null 2>&1 || :
+# a phone whose home is on its small system partition keeps apklayer's data on /userdata (cli/datamove.cpp): each user's own directory there,
+# made by `apklayer setup`; sticky like /tmp. One that exists (made by hand) stays as it is.
+if [ -d /userdata ] && [ ! -e /userdata/apklayer ]; then mkdir /userdata/apklayer && chmod 1777 /userdata/apklayer; fi || :
 
 %postun
 systemctl daemon-reload >/dev/null 2>&1 || :

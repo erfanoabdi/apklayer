@@ -3,11 +3,13 @@
 #include <cctype>
 #include <cerrno>
 #include <climits>
+#include <cstdio>
 #include <cstdlib>
 #include <dirent.h>
 #include <fcntl.h>
 #include <fstream>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
@@ -141,9 +143,68 @@ std::string installedRuntime(const std::string& root) {
     return runtimeProblem(root + "/" + v).empty() ? v : "";  // a broken one counts as none: setup unpacks it again
 }
 
-std::string unpackRuntime(const std::string& bundle, const std::string& root, const std::string& version) {
-    if (!safeName(version)) return "not a runtime version: " + version;
+static long long statvfsFree(const std::string& path) {
+    struct statvfs st{};
+    return statvfs(path.c_str(), &st) == 0 ? static_cast<long long>(st.f_bavail) * static_cast<long long>(st.f_frsize) : -1;
+}
+long long (*freeBytes)(const std::string& path) = statvfsFree;
+
+std::string sizeText(long long bytes) {
+    char buf[32];
+    if (bytes >= 1000000000) snprintf(buf, sizeof buf, "%.1f GB", bytes / 1e9);
+    else snprintf(buf, sizeof buf, "%lld MB", (bytes + 999999) / 1000000);
+    return buf;
+}
+
+long long unpackedSize(const std::string& bundle) {
+    // the frame header (RFC 8878 3.1.1.1): magic, descriptor, window byte unless single segment, dictionary id, then the content size if recorded
+    unsigned char h[18] = {};
+    std::ifstream in(bundle, std::ios::binary);
+    in.read(reinterpret_cast<char*>(h), sizeof h);
+    if (in.gcount() >= 6 && h[0] == 0x28 && h[1] == 0xB5 && h[2] == 0x2F && h[3] == 0xFD) {
+        int fhd = h[4], fcs = fhd >> 6, single = (fhd >> 5) & 1;
+        static const int kDictId[] = {0, 1, 2, 4};
+        int at = 5 + (single ? 0 : 1) + kDictId[fhd & 3], n = fcs ? 1 << fcs : single;
+        if (n > 0 && at + n <= in.gcount()) {
+            unsigned long long v = 0;
+            for (int i = n - 1; i >= 0; i--) v = v << 8 | h[at + i];
+            return static_cast<long long>(n == 2 ? v + 256 : v);
+        }
+    }
+    // no recorded size (bundles before 0.4.10): counted
+    Result r = runProgram({"sh", "-c", "zstd -dcq -- \"$0\" | wc -c", bundle});
+    return r.status == 0 && !r.out.empty() ? atoll(r.out.c_str()) : -1;
+}
+
+std::string runtimeRoom(const std::string& root, long long need, std::string* note) {
     if (std::string e = mkdirs(root); !e.empty()) return e;
+    long long free = freeBytes(root);
+    if (need <= 0 || free < 0 || free >= need) return "";
+    char target[PATH_MAX];
+    ssize_t n = readlink((root + "/current").c_str(), target, sizeof target - 1);
+    std::string current = n > 0 ? std::string(target, n) : "", names;
+    std::vector<std::string> others;
+    if (DIR* d = opendir(root.c_str())) {
+        while (dirent* e = readdir(d)) if (e->d_name[0] != '.' && e->d_name != std::string("current") && e->d_name != current) others.push_back(e->d_name);
+        closedir(d);
+    }
+    long long freed = 0;
+    for (const std::string& o : others) {
+        Result du = runProgram({"du", "-sk", "--", root + "/" + o});
+        freed += atoll(du.out.c_str()) * 1024;
+        names += (names.empty() ? "" : ", ") + o;
+    }
+    if (free + freed < need)
+        return "Not enough space for the Android runtime: it needs " + sizeText(need) + ", " + sizeText(free + freed) + " free in " + root + (freed ? " (with runtime " + names + " removed)" : "");
+    for (const std::string& o : others) removeTree(root + "/" + o);
+    if (note) *note = "Removed runtime " + names + " first to make room (" + sizeText(free) + " free in " + root + ")";
+    return "";
+}
+
+std::string unpackRuntime(const std::string& bundle, const std::string& root, const std::string& version, std::string* note) {
+    if (!safeName(version)) return "not a runtime version: " + version;
+    long long size = unpackedSize(bundle);  // a tar stream: the files plus their headers; a tenth more for the file system's blocks
+    if (std::string e = runtimeRoom(root, size > 0 ? size + size / 10 : 0, note); !e.empty()) return e;
     std::string pattern = root + "/.unpack.XXXXXX";
     if (!mkdtemp(pattern.data())) return "cannot create a directory in " + root;
     const std::string tmp = pattern;
@@ -172,7 +233,7 @@ std::string unpackRuntime(const std::string& bundle, const std::string& root, co
         std::vector<std::string> stale;
         while (dirent* e = readdir(d)) {
             std::string n = e->d_name;
-            if (n != "." && n != ".." && n != "current" && n != version && n != previous && n.rfind(".unpack.", 0) != 0) stale.push_back(n);
+            if (n != "." && n != ".." && n != "current" && n != version && n != previous && n[0] != '.') stale.push_back(n);
         }
         closedir(d);
         for (const std::string& n : stale) removeTree(root + "/" + n);

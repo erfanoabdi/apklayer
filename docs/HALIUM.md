@@ -277,7 +277,13 @@ bundle unpacked as `zstd -dc | tar -x` (BusyBox tar has no `--zstd`; gnu-tar con
 
 Install (root): `pkcon install-local apklayer-*.aarch64.rpm temurin-21-jdk-*.rpm libbsd-*.rpm libmd-*.rpm libunwind-*.rpm` (unsigned local RPMs; zstd and
 elfutils-libelf come from Jolla's repositories); `apklayer-binder.service` starts. As defaultuser: `apklayer setup` (no wget on Sailfish: `--bundle
-<apklayer-runtime-arm64-*.tar.zst>`). Then `apklayer providers set camera device` and `vibrator device` (setup reported them automatic, but the instance's host_hals.conf
+<apklayer-runtime-arm64-*.tar.zst>`). Space (2026-11-09): the Quintus' home is on the 6.8 GB system partition (`/dev/mapper/system_a`), `/userdata`
+(ext4, exec allowed, 225 GB) is separate, and a runtime takes ~1.6 GB per version (an update holds two plus the bundle). The RPM's `%post`
+makes `/userdata/apklayer` (mode 1777, kept when it exists); the first `apklayer setup` on a home file system below 16 GB, with that directory
+writable on another file system, moves `~/.local/share/apklayer` to `/userdata/apklayer/<user>/share` and leaves a symlink (cli/datamove.cpp).
+An existing install is never moved by itself: an update that does not fit fails with the space it needs and `apklayer setup --move-data
+/userdata/apklayer/<user>/share`. A layout made by hand (the 0.4.9 phone: `~/.local/share/apklayer` -> `/userdata/apklayer/share`) is used as it
+is. Ubuntu Touch needs none of this: `/home` is on userdata already. Then `apklayer providers set camera device` and `vibrator device` (setup reported them automatic, but the instance's host_hals.conf
 held only graphics until set: open). `cli/halium.cpp` detects the phone as on Ubuntu Touch (instance `ut`, PulseAudio from the session's runtime dir);
 the providers probe sensorfw, geoclue1, PulseAudio, the device's camera and vibrator.
 

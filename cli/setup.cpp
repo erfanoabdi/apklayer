@@ -13,6 +13,7 @@
 #include "apps.h"
 #include "autostart.h"
 #include "binder.h"
+#include "datamove.h"
 #include "env.h"
 #include "fetch.h"
 #include "halium.h"
@@ -66,8 +67,17 @@ std::string javaProblem(const Layout& layout) {
 
 struct Options {
     bool check = false, update = false, microg = false, fdroid = false;
-    std::string bundle;  // a file, file:// or URL of the runtime bundle: no releases.json lookup
+    std::string bundle;    // a file, file:// or URL of the runtime bundle: no releases.json lookup
+    std::string moveData;  // --move-data <dir>: only that
 };
+
+// a runtime step's failure; one for want of space names the way out (cli/datamove.cpp)
+int runtimeFailed(const Layout& layout, const std::string& e) {
+    std::string big = bigDataDir(layout);
+    step("runtime", "failed", e.rfind("Not enough space", 0) != 0 ? e
+        : e + ". Free space there, or move apklayer's data to a bigger file system: apklayer setup --move-data " + (big.empty() ? "<directory>" : big));
+    return 1;
+}
 
 // packages of an F-Droid repository: its index, each APK checked against the index's SHA256, then the CLI's own install
 std::string installFromIndex(const Layout& layout, const Instance& inst, const std::string& id, const std::string& indexUrl, const std::vector<std::string>& packages) {
@@ -102,11 +112,17 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
         else if (args[i] == "--microg") o.microg = true;
         else if (args[i] == "--fdroid") o.fdroid = true;
         else if (args[i] == "--bundle" && i + 1 < args.size()) o.bundle = args[++i];
-        else die("setup [--check] [--update] [--bundle <file|file://|URL>] [--microg] [--fdroid]");
+        else if (args[i] == "--move-data" && i + 1 < args.size()) o.moveData = args[++i];
+        else die("setup [--check] [--update] [--bundle <file|file://|URL>] [--microg] [--fdroid] | setup --move-data <dir>");
+    }
+    if (!o.moveData.empty()) {
+        std::string e = moveData(layout, o.moveData);
+        step("data", e.empty() ? "done" : "failed", e.empty() ? "apklayer's data is in " + o.moveData + " (" + join(layout.dataHome, "apklayer") + " links to it)" : e);
+        return e.empty() ? 0 : 1;
     }
     if (layout.runtimeVersion.empty()) die("setup is for the installed package (a source tree has its own runtime)");
-    const std::string root = manager::runtimeRoot();
-    std::string have = manager::installedRuntime(root);
+    const std::string root = manager::runtimeRoot(), downloads = root + "/.downloads";  // a bundle downloads beside its runtime: one file system to check
+    std::string have = manager::installedRuntime(root), note;
 
     // 1. binder: the userspace one needs nothing; the kernel's (apklayer binder kernel) its devices (root's: tools/host-setup/binder.sh)
     bool binder = binderReady(instance.root, instance.id);
@@ -133,32 +149,44 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
         step("system-apps", exists(join(layout.dataHome, "apklayer/setup-done")) ? "done" : "todo", "Providers, documents and the WebView");
         return 0;
     }
+    // the first setup of a phone whose home is on its small system partition: the data on /userdata from the start (nothing installed yet to move)
+    const std::string marker = join(layout.dataHome, "apklayer/setup-done");
+    if (have.empty() && !exists(marker) && listDir(join(layout.dataHome, "apklayer/apps")).empty() && smallDataHome(layout)) {
+        std::string big = bigDataDir(layout), e = moveData(layout, big);
+        step("runtime", "running", e.empty() ? "apklayer's data goes to " + big + " (the home's file system is small)" : "apklayer's data stays in the home: " + e);
+    }
     if (!o.bundle.empty() && (have.empty() || o.update)) {
         step("runtime", "running", "Unpacking " + baseName(o.bundle));
         std::string src = o.bundle.rfind("file://", 0) == 0 ? manager::fileUriPath(o.bundle) : o.bundle, file = src;
         std::string sum;
         if (src.rfind("http", 0) == 0) {
-            file = manager::downloadsDir() + "/" + baseName(src);
+            file = downloads + "/" + baseName(src);
             std::string sumFile = file + ".sha256";
             if (std::string e = manager::download(src + ".sha256", sumFile, nullptr); !e.empty()) { step("runtime", "failed", e); return 1; }
             sum = trim(readText(sumFile)).substr(0, 64);
-            if (std::string e = manager::fetch(src, sum, file, progress); !e.empty()) { step("runtime", "failed", e); return 1; }
+            unlink(sumFile.c_str());
+            if (std::string e = manager::fetch(src, sum, file, progress); !e.empty()) return runtimeFailed(layout, e);
         } else if (auto text = readFile(src + ".sha256")) {
             if (trim(*text).substr(0, 64) != manager::sha256File(src)) { step("runtime", "failed", "sha256 mismatch for " + baseName(src)); return 1; }
         }
-        if (std::string e = manager::unpackRuntime(file, root, layout.runtimeVersion); !e.empty()) { step("runtime", "failed", e); return 1; }
+        std::string e = manager::unpackRuntime(file, root, layout.runtimeVersion, &note);
         if (file != src) unlink(file.c_str());
+        if (!e.empty()) return runtimeFailed(layout, e);
         have = layout.runtimeVersion;
     } else if (o.bundle.empty() && (have.empty() || (o.update && newer))) {
         if (!release.runtime.found()) { step("runtime", "failed", error.empty() ? "The release has no runtime for " + manager::cpuNames()[0] : error); return 1; }
+        // the bundle and its contents, before a byte is downloaded (releases.json before 0.4.10 lists no sizes: unpackRuntime checks the contents)
+        const long long unpacked = release.runtime.unpacked;
+        if (std::string e = manager::runtimeRoom(root, release.runtime.size + unpacked + unpacked / 10, &note); !e.empty()) return runtimeFailed(layout, e);
         step("runtime", "running", "Downloading runtime " + release.runtimeVersion);
-        std::string file = manager::downloadsDir() + "/" + baseName(release.runtime.url);
+        std::string file = downloads + "/" + baseName(release.runtime.url);
         std::string e = manager::fetch(release.runtime.url, release.runtime.sha256, file, progress);
-        if (e.empty()) e = manager::unpackRuntime(file, root, release.runtimeVersion);
+        if (e.empty()) e = manager::unpackRuntime(file, root, release.runtimeVersion, &note);
         unlink(file.c_str());
-        if (!e.empty()) { step("runtime", "failed", e); return 1; }
+        if (!e.empty()) return runtimeFailed(layout, e);
         have = release.runtimeVersion;
     }
+    if (!note.empty()) step("runtime", "running", note);  // the runtimes removed to make room
     if (have.empty()) { step("runtime", "failed", "No complete Android runtime: run setup again (a download or --bundle <file>)"); return 1; }
     Layout fresh = Layout::detect(false);  // the unpacked bundle is the native dir now: link the package's half in, instrument the framework (a few minutes)
     step("runtime", "running", "Setting up version " + have + " (a few minutes after an update)");
@@ -170,7 +198,6 @@ int setupCommand(const Layout& layout, const Instance& instance, const std::vect
     step("providers", "done", providersDetail(fresh, instance));
 
     // 4. the system apps of the bundle (providers, documents, the WebView), once
-    const std::string marker = join(layout.dataHome, "apklayer/setup-done");
     if (!exists(marker)) {
         const std::string dir = join(root, "current/system-apps");
         std::vector<std::string> list;

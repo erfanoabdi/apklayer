@@ -3,6 +3,23 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: setup checks the free space; apklayer's data on /userdata on a phone with a small home (Sailfish, the Quintus at 0.4.9)
+- The 0.4.9 update on the Volla Quintus had 211 MB free on its 6.8 GB system partition (the home); the lead moved `~/.local/share/apklayer` to
+  `/userdata/apklayer/share` by hand. Now: common/fetch.cpp `runtimeRoom` compares statvfs's free space of the runtime's directory with what the
+  bundle needs (its size and unpacked size from releases.json before downloading, the unpacked size in the bundle's zstd frame before unpacking;
+  a tenth more), fails early with what is needed, what is free and where, and the command that moves the data; when only removing the runtimes
+  other than the current one makes room it removes them first and says so (never the current one). The bundle downloads beside the runtime
+  (`runtime/.downloads`), not into ~/.cache, so one file system is checked. runtime-bundle.sh records the unpacked size (`zstd --stream-size`),
+  releases-json.py lists `size` and `unpacked_size`; older bundles are counted by decompressing.
+- `apklayer setup --move-data <dir>` (cli/datamove.cpp): copies `~/.local/share/apklayer` to `<dir>`, then puts a symlink in its place (no instance
+  may run). The first setup does it by itself when the home's file system is below 16 GB and `/userdata/apklayer` is writable on another one
+  (the RPM's `%post` makes it, mode 1777): `/userdata/apklayer/<user>/share`. Existing installs are never moved without the command; a link made by
+  hand is used as it is. Ubuntu Touch: nothing (its /home is on userdata).
+- Tests: manager/tests/updater_test.cpp (fake statvfs: refusal, the old runtime removed, current kept, the frame's size; its bundles now have the
+  parts runtimeProblem wants, so the unpack checks pass again): 38 ok on Parallels. tests/vm/setup-space.sh on Parallels (a 100 MB loop-mounted data home,
+  the branch's CLI against the 0.4.7 deb): 120 MB refused before unpacking with the move command, the old runtime removed to fit, current kept,
+  `--move-data` and a second move refused, the big bundle fits afterwards, a first setup with /userdata/apklayer moves there: PASS.
+
 ## 2026-11-09: the navigation bar has Back only (owner: no Home button)
 - bridge/shell/navbar.c/.h, mobile.c: Home (the ring) and its action (minimize) are gone; Back stays at a quarter of the width, the rest of the bar is plain (taps there do nothing); Home is the compositor's own gesture/button. tests/vm/mobile.py's bar check looks for Back's strokes only.
 
