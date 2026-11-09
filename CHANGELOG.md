@@ -3,6 +3,35 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: the userspace binder is the default (0.4.9, owner's decision); the kernel's is an option
+- Selection (cli/binder.cpp): userspace unless `APKLAYER_BINDER=kernel` or `<instance root>/binder` says kernel. `apklayer binder [userspace|kernel]`
+  sets it (rows without an argument: kind and source, kernel devices ready or the command that makes them); the manager's Hardware page has
+  a switch beside its introduction (a change stops the instance as the GPU choice does; with the kernel's picked and no devices the command
+  shows). A running stack records its binder (`<runtime dir>/binder`) and every client follows it: a choice changed since, or a stack an older
+  apklayer started on the kernel's, keeps working until its restart (checked on the Volla X23: lazy4's kernel stack running, the new deb
+  installed, Calculator launched on it; after the unit's restart the instance came up on the userspace binder). Without that, the first
+  restart after the upgrade failed once (the hub found no daemon) and systemd's restart recovered.
+- No root step for a default install: setup's binder step passes with "Userspace binder"; the deb ships apklayer-binder.service disabled
+  (`--no-enable --no-start`; an upgrade keeps an enabled one), the RPM drops its wants link and `%post` start, no modules-load.d entry,
+  linux-modules-extra is a Suggests on noble. The kernel binder's messages (instance create, binderDeviceWhy, the manager's dialog) name it as
+  the option it is; Halium's setup command also enables the unit.
+- Per-app sandbox (APKLAYER_SANDBOX=1): works on the userspace binder. The app's view hid the runtime directory and with it the daemon's
+  sockets (every app failed: "no '[sandbox] own read mine'", the hub's caller uid missing); the socket directory is now bound into the view and the
+  sockets are 0666 (the 0700 runtime directory keeps other users out). The stack starts the daemon inside the instance's user namespace, so
+  SO_PEERCRED gives app uids: the sandbox group's hub line reads `uid=10000 kernel-uid=10000` (Parallels, ~/apklayer-sbx: the existing AppArmor
+  profile's path; adding one on the PC was not allowed).
+- Tests: every group runs on the userspace binder; `binder-kernel` and `host-binder-kernel` (groups.toml `binder = "kernel"`) keep the kernel's,
+  tests/run makes devices only for them; host-binder.py skips sudo when the devices exist. manager/tests/ui.sh flips the switch both ways and
+  expects the setup command when the devices are missing.
+- Results. x86 PC (~/apklayer-x86/main, xm1/xm2): gpu, gpu-window, startup, hub-services, services, activities, providers, broadcasts, binder,
+  binder-kernel, host-binder, host-binder-kernel, codec2, native-media, audio-system, webview (after installing the prebuilts' WebView into that
+  data home), camera pass; the manager UI test passes (its ui-updater part needs an installed package's CLI: `setup` refuses a source tree).
+  Parallels (~/apklayer-st, st1/st2): the same groups pass; host-binder-kernel cannot run there (sudo now asks for a password, no `-dev`
+  devices); at -j 2 the slot st1 left an apklayer-shell after the stop now and then (binder-kernel, gpu-window, hub-services; all pass at -j 1:
+  the known Parallels -j 2 flake). sandbox passes on Parallels.
+- UiBench on the x86 PC (tests/vm/startup.sh, 3 alternating rounds, first frame): cold 6.38-6.43 s kernel / 6.43-6.60 s userspace, warm
+  1.66-1.70 s / 1.67-1.70 s.
+
 ## 2026-11-09: Halium, media = device is the default (owner)
 - cli/device_hals.cpp: the device's Codec2 store probes 30 (was 0, opt-in), so an instance whose providers.toml names no media provider uses the device's HIDL/AIDL Codec2 (the stack's own Codec2 over GStreamer is not started); cli/providers.cpp deviceDomain: automatic only with graphics = device too (the device's HAL takes its output buffers from its own gralloc). `apklayer providers set media apklayer` keeps the GStreamer path.
 

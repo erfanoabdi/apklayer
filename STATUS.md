@@ -11,6 +11,7 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): 
 - Background push (2026-11-05, microG 2026-11-08): installing microG Services turns the instance always on (`apklayer instance autostart <id> on|off`); with every app closed microG checks in, keeps its connection to Google (heartbeats, reconnects) and gets real FCM tokens, and a cloud message wakes the closed app (groups `push`, `push-microg`). A real message on Parallels is prepared, it needs a deb with this round (PLAN "Plan: background push" 7).
 - Halium (Volla X23, Ubuntu Touch, 2026-11-05): with `graphics = device` apps and GL games draw on the device's Mali GPU; `camera = device` works (camera2 and Camera1, Open Camera live on both cameras); vibrator, GNSS (lomiri), sensors (sensorfw), audio (PulseAudio backend) and H.264 video all run on the phone; media = device (the device's hardware Codec2: H.264 decode into a SurfaceView, encode; 2026-11-09) works and is the default on Halium with graphics = device (docs/HALIUM.md "Hardware providers").
 - Ubuntu Touch from the deb (2026-11-05): `apklayer setup` and the manager work without root (boot unit for binder, no pkexec); manager at Lomiri's scale; apps from the drawer draw on the GPU. Open: prebuilts branch and runtime 0.3.1 release (PLAN "Ubuntu Touch install").
+- Binder (2026-11-09, for 0.4.9): apklayer's userspace binder (bridge/binderd, docs/BINDER.md) is the default, no root step; the kernel's is an option (`apklayer binder kernel`, the manager's Hardware page). Test groups run on userspace; `binder-kernel`, `host-binder-kernel` keep the kernel's.
 - Next phase, in order: `docs/PLAN.md` "Next phase".
 
 ## How to work here
@@ -30,7 +31,7 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): 
 ## Test VMs
 - **UTM** (default): host and password in `tests/vm/local.conf` (untracked; `local.conf.example`). Ubuntu 26.04 arm64, GNOME Wayland, Venus Vulkan 1.4, virgl
   ES 3.0, 10 CPUs, 30 GB. Repo copy `~/apklayer`, runtime `~/arm64-native`, libraries `~/android-arm64`, bionic_translation `~/bt-arm`. After a reboot:
-  `sudo tools/host-setup/binder.sh [instance...]`. `/tmp` is tmpfs: no big files there.
+  `sudo tools/host-setup/binder.sh [instance...]` (only for the kernel-binder groups). `/tmp` is tmpfs: no big files there.
 - **Parallels**: `ssh parallels@10.211.55.4` (key auth, passwordless sudo), Ubuntu 24.04 arm64, glibc 2.39 (rebuild glibc parts there; Android libraries copy as
   they are), 12 CPUs. Runtime `~/apklayer-rt` (env `~/.config/apklayer/env`), repo copy `~/apklayer`. Its default instance holds the owner's apps.
 - Neither VM can present Vulkan; a real PC is needed for that and for x86_64.

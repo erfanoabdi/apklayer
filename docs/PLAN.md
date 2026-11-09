@@ -385,7 +385,7 @@ Measured on the Ubuntu Touch phone (Volla X23), NewPipe 0.29.1 cold start, about
    Open Camera (camera = device) from a stopped cameraserver: the camera connects ~0.1 s after the activity resumes, first preview frame 2.0-2.3 s after that, as with cameraserver running (2.1 s); NewPipe plays Big Buck Bunny (frames change between screenshots, two PulseAudio streams) with the media server and codec2 started by it. Tests: Parallels (own tree ~/agent-lazy, private library directory) gpu, startup, hub-services, camera, codec2, native-surface, native-media, native-player, native-audio, audio-aidl, audio-track, audio-system, audio-silent pass; x86 PC (~/apklayer-x86/lazy, slots xk1/xk2) gpu, startup, hub-services, camera, codec2, native-media, native-player, native-audio, audio-system, audio-track pass.
    Found on the way: a service registered a second time (the LazyServiceRegistrar after instantiate()) loses servicemanager's client guarantee, and one whose only client got it through a registration callback (Java's wait, waitForService) never heard of its clients and stayed: a lookup right after registering restores the guarantee (it now ends ~2 s after such a client). Not changed, seen in the test runs with and without this round: native-media's AVC round trip fails about one run in two on Parallels (luma 47.3); audio-silent fails on the x86 PC (getOutputSamplingRate). Open: SurfaceFlinger's shader-cache priming (service.sf.prime_shader_cache, not measured); the composer's GL context (80 MB once an app drew, ~37 MB of it the Mali block); SurfaceFlinger's Mali block; libraries the remaining services load but never use (audioserver 165, keystore2 54); NDK camera apps would see no cameraserver on their first ACameraManager call (it uses checkService once), but apklayer's libcamera2ndk is a stub today.
 
-## Plan: binder in userspace, no kernel binder (owner's direction 2026-11-08, for later)
+## Plan: binder in userspace, no kernel binder (owner's direction 2026-11-08; the default since 0.4.9, owner 2026-11-09)
 Goal: apklayer needs no kernel binder at all (no binder_linux module, no binderfs mount, no root setup step, no per-instance devices that stay
 until reboot, no Flatpak host step). Halium phones keep talking to the *device's own* HALs (camera, vibrator) over the phone's kernel binder;
 that is the device's binder, not apklayer's.
@@ -429,7 +429,13 @@ State (2026-11-08, branch `userspace-binder`): steps 1 and 2 done. Design note `
 BR_SPAWN_LOOPER, oneway ordering, buffer allocation, fd lifetime, freezer, what is left out). Prototype: `bridge/binderd` (apklayer-binderd, the model
 written from binder.c v6.6, no innkeeper code), the route in libapklayer-preload.so (`bridge/native/binder_route.c`; the path layer's glibc-level
 opens call it too, since bionic's fortified `__open_2` reaches them on glibc), bionic_translation 0047 (fd hooks), `cli/binder.cpp` (selection:
-`APKLAYER_BINDER=userspace` or `<instance root>/binder`; the CLI binds the socket and hands it to the daemon). Kernel binder stays the default.
+`APKLAYER_BINDER=userspace` or `<instance root>/binder`; the CLI binds the socket and hands it to the daemon).
+**Default since 0.4.9 (2026-11-09, owner's decision; CHANGELOG 2026-11-09).** Kernel binder is an option (`apklayer binder kernel`, the manager's
+Hardware page, `APKLAYER_BINDER=kernel`); the deb's `apklayer-binder.service` ships disabled; groups `binder-kernel` and `host-binder-kernel` keep
+it tested. A running stack records its binder, so an upgrade from a kernel-binder apklayer keeps the running instance working until its restart.
+The per-app sandbox works on it (socket directory bound into the app's view, the daemon in the instance's user namespace). Open: the hop count
+below (the phone's and x86's launch numbers were within noise of the kernel's, CHANGELOG), a Halium device without binderfs whose host context
+is the fixed /dev/binder (isHalium() needs binderfs today, so none is treated as Halium).
 - Tests on the x86 PC with the userspace binder: binder, host-binder (AIDL and HIDL over hwbinder, two instances' daemons), hub-services, services,
   activities, providers, broadcasts, pendingintents, notifications pass; gpu's two UiBench smokes pass. gpu's hwbitmap and keystore (attestation
   chain length 1) fail, as they do with kernel binder on that PC in other trees the same day (both pass on UTM): x86 PC issues, not the binder.
