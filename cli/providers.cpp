@@ -29,8 +29,9 @@ const Domain kDomains[] = {
     {"camera", "libapklayer_camera.so", "aosp/hals/camera/manifest.xml",
      "android.hardware.camera.provider.ICameraProvider android.hardware.camera.provider", nullptr},
     // the stack's own graphics (allocator, mapper, EGL on the host's GPU) need no front here; "device" is a Halium device's gralloc
-    // (allocator@4.0 through the host context, the passthrough mapper@4.0) and its GPU driver (docs/HALIUM.md)
-    {"graphics", nullptr, nullptr, "android.hardware.graphics.allocator android.hardware.graphics.mapper",
+    // (allocator@4.0 through the host context, the passthrough mapper@4.0) and its GPU driver (docs/HALIUM.md), with the vendor HAL that
+    // driver asks for: MediaTek's libgpu_aux (Mali sampling the video decoder's YUV buffers) needs vendor.mediatek.hardware.mms
+    {"graphics", nullptr, nullptr, "android.hardware.graphics.allocator android.hardware.graphics.mapper vendor.mediatek.hardware.mms",
      "the stack's own allocator and EGL on the host's GPU"},
     // media codecs: the stack's own Codec2 store (libapklayer_codec2) over the host's decoders; "device" is a Halium device's Codec2 (HIDL
     // media.c2) and OMX stores through the host hwbinder context, the stack's own store is not started then
@@ -278,11 +279,13 @@ bool writeHostHals(const Layout& l, const Instance& inst) {
     for (const ProviderConfig& c : readProviders(providersFile(inst)))
         if (const Domain* d = findDomain(c.domain); d && c.provider == "device" && !d->device)
             fprintf(stderr, "providers: %s: the device provider is not offered (one client: the OS's own)\n", d->name);
+    std::vector<std::string> names;
     for (const Domain& d : kDomains) {
         if (!d.device || !deviceDomain(l, inst, d.name)) continue;
         text += std::string("# ") + d.name + "\n";
-        for (const std::string& name : split(d.device, ' ')) text += name + "\n";
+        for (const std::string& name : split(d.device, ' ')) text += name + "\n", names.push_back(name);
     }
+    startDeviceHals(names);
     if (text.empty()) { unlink(hostHalsFile(inst).c_str()); return false; }
     makeDirs(join(inst.dataDir, "apklayer"));
     if (!writeFile(hostHalsFile(inst), "# written by apklayer from providers.toml (domains with provider = \"device\")\n" + text))

@@ -3,6 +3,35 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-09: Sailfish OS (Volla Quintus): Lipstick's switcher, its close, media = device, the Back-only bar
+- Switcher: every apklayer window is the session shell's (one Wayland client, one pid), and Lipstick ties a window to its launcher entry by the
+  client's pid and the entry's Exec (JollaSystemInfo.isWindowForLauncherItem, matchingPidForCommand), except for entries with
+  `X-apkd-packageName` (Jolla's AppSupport), which it ties by the window's wl_shell class (read from the lipstick binary: the key, then
+  `QWaylandSurface::className`). The shell already sets the class to the package and the title to the app's name, so app entries now carry
+  `X-apkd-packageName=<package>` (cli/desktop.cpp); `run`/`list` rewrite a Sailfish entry without it. With the key Lipstick's uninstall of such an
+  entry asks com.jolla.apkd (absent: it fails, as the not-RPM-owned entry did before) and its removal calls apkd's forceStopApp (absent, ignored).
+  How the covers look (titles, icons, one per app) needs a human check: the phone is locked with a code and its display off, so Lipstick's
+  screenshot (`devel-su -p`, works) is blank.
+- Close from Lipstick: a cover's close is `QWaylandSurface::destroySurface`, which sends qt_extended_surface.close since the shell makes an
+  extended surface; the shell sends the app MSG_CLOSE, the message the desktop title bar's close sends. New test input `TEST_CLOSE` (kind 8,
+  tests/lib/instance.py `CLOSE`) drives that path; the shell logs `closed by the compositor`. On the phone: UiBench beside Files (Files launched
+  by `lca-tool --triggerdesktop`, Lipstick's invoker); closing Files ended its JVM, its `apklayer run` and its invoker (`the desktop closed the
+  window`, `ending: window closed`), UiBench kept running; then the same for UiBench.
+- media = device: hello.nativeplayer (`red-h264-320x240.mp4`) decoded through `c2.mtk.avc.decoder` (device logcat), then SurfaceFlinger
+  crashed (SIGSEGV in /vendor/lib64/libgpu_aux.so under libGLES_mali, after `GuiExtAuxCreateBufferQueue: Cannot get mms_hidl service`): MediaTek's
+  Mali driver samples the decoder's YUV buffers through libgpu_aux, which needs `vendor.mediatek.hardware.mms@1.x::IMms`; the instance's libhidl
+  looked for it in its own (absent) hwservicemanager, and on this phone the service is `oneshot disabled` (init starts it on demand) and never
+  ran. Fix (cli/providers.cpp, cli/device_hals.cpp): graphics = device also lists `vendor.mediatek.hardware.mms` in host_hals.conf, and the stack
+  asks the device's init to start the declared HIDL HALs it lists (`setprop ctl.interface_start <fqname>`, what Android's libhidl does for a lazy
+  HAL; a running one stays as it is; works as the desktop user, no SELinux there). Checked with mms stopped first: the stack started it,
+  `found on the host`, PLAYER PASS, SurfaceFlinger's screenshot red, SurfaceFlinger kept running. The X23 (Helio G99) never reached libgpu_aux.
+- Back-only bar (main after 0.4.9): the shell of this tree (built in the Sailfish build root, glibc 2.30) composes the bar into the virtual
+  display (`navigation bar composed by the display (no subsurfaces)`); SurfaceFlinger's screenshot shows Back alone; a tap on Back closed Files'
+  open drawer (test input touch).
+- How it ran: the shell and CLI of this tree from a private overlay (`APKLAYER_BUILD`/`APKLAYER_ROOT`, /userdata/apklayer/agent-overlay), the
+  RPM's files untouched; the overlay, the test app and the edited entries were removed afterwards, mms stopped again, instance ut stopped. Not run:
+  test groups on the VMs (the shell change is one test-input case and a log line).
+
 ## 2026-11-09: Ubuntu Touch click package; the Volla X23 runs it instead of the deb (docs/PLAN.md "Plan: Ubuntu Touch click package" 1-4)
 - `tools/release/click.sh`: the noble arm64 deb unpacked as it is plus the runtime's JDK image (jdk-image.sh at build time), the manager as the
   click's app, AppArmor `unconfined` (`click/`). No clickable: `click build` from noble's archive is all it takes. release.yml job `click`

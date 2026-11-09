@@ -130,7 +130,7 @@ def keys(*steps, **kw):
 
 MODS = {'alt': 56, 'ctrl': 29, 'shift': 42, 'super': 125}  # evdev codes of combo:<mod>+<code>
 TEST_INPUT, TEST_DONE = 11, 115  # bridge/shell/shell.h
-FOCUS, KEY, POINTER, TOUCH, TEXT, RESIZE, SCALE, MAXIMIZE = range(8)
+FOCUS, KEY, POINTER, TOUCH, TEXT, RESIZE, SCALE, MAXIMIZE, CLOSE = range(9)
 
 
 def inject(window, *steps, secret=False):

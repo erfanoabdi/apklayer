@@ -1,6 +1,7 @@
 #include "device_hals.h"
 
 #include "binder.h"
+#include "env.h"
 #include "halium.h"
 
 namespace apklayer {
@@ -53,6 +54,27 @@ DeviceHal probeDeviceHal(const Layout& l, const std::string& domain) {
         return {30, "the device's Codec2 store (with graphics = device)"};
     }
     return {-1, "no device HAL for this domain"};
+}
+
+void startDeviceHals(const std::vector<std::string>& packages) {
+    if (!isHalium() || !exists("/usr/bin/setprop")) return;
+    const std::string& text = declared();
+    for (const std::string& package : packages)
+        for (size_t at = text.find("<name>" + package + "</name>"); at != std::string::npos; at = text.find("<name>" + package + "</name>", at + 1)) {
+            size_t end = text.find("</hal>", at);
+            std::string hal = text.substr(at, end == std::string::npos ? std::string::npos : end - at);
+            if (hal.find("<transport>hwbinder</transport>") == std::string::npos) continue;
+            // shortcut: only the <fqname> form (MediaTek's manifests); the older <version>/<interface> form is not started, add it when a device needs it
+            for (size_t f = hal.find("<fqname>"); f != std::string::npos; f = hal.find("<fqname>", f + 1)) {
+                size_t e = hal.find("</fqname>", f);
+                if (e == std::string::npos) break;
+                Spawn set;  // a running HAL stays as it is; a disabled (lazy) one starts, e.g. MediaTek's mms@1.6 on the Volla Quintus
+                set.argv = {"/usr/bin/setprop", "ctl.interface_start", package + trim(hal.substr(f + 8, e - f - 8))};
+                set.env = hostToolEnv();
+                set.logFile = "/dev/null";  // init refuses an interface no service of its own declares (setprop: "could not set property")
+                runAndWait(set);
+            }
+        }
 }
 
 }  // namespace apklayer

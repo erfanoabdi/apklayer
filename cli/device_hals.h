@@ -14,4 +14,8 @@ struct DeviceHal {
 // domain: vibrator, camera, graphics or media (the domains with a device HAL in cli/providers.cpp)
 DeviceHal probeDeviceHal(const Layout& layout, const std::string& domain);
 
+// Asks the device's init to start the HIDL HALs of these packages that its manifests declare (ctl.interface_start, what Android's libhidl
+// does for a lazy HAL hwservicemanager has not got yet): the instance's processes reach the host's hwservicemanager, not its init.
+void startDeviceHals(const std::vector<std::string>& packages);
+
 }  // namespace apklayer

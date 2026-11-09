@@ -25,7 +25,7 @@ static void ext_visibility(void *d, struct qt_extended_surface *e, int32_t visib
 static void ext_property(void *d, struct qt_extended_surface *e, const char *name, struct wl_array *value)
 { (void)d; (void)e; (void)name; (void)value; }
 static void ext_close(void *d, struct qt_extended_surface *e)
-{ (void)e; struct window *w = d; send_msg(W_TARGET(w), MSG_CLOSE, (int32_t[]){ W_ID(w) }, 1); }
+{ (void)e; struct window *w = d; fprintf(stderr, "[shell] %s: closed by the compositor\n", w->title); send_msg(W_TARGET(w), MSG_CLOSE, (int32_t[]){ W_ID(w) }, 1); }
 static const struct qt_extended_surface_listener ext_listener = { ext_visibility, ext_property, ext_close };
 
 static void ping(void *d, struct wl_shell_surface *s, uint32_t serial)

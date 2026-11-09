@@ -169,7 +169,7 @@ Other fixes of this pass:
   every work (device logcat: `Codec2-types: Invalid rect info in C2GraphicBlock`, our side `queueCSDInputBuffer failed w/ error -2147483648`).
   `media-device.prop` now also sets the pool mask to Android's default (ION | BUFFERQUEUE, 327680). Nothing else was needed: callbacks (IComponentListener,
   the output IGraphicBufferProducer, bufferpool) work over the host context. The device's logcat: `sudo lxc-attach -n android -- /system/bin/logcat -d -T '<UTC time>'`
-  (pipe it through `cat`: lxc-attach makes a redirected file root's). OMX was not needed (found, not tried). Not checked: the Quintus (Sailfish), `graphics = apklayer`.
+  (pipe it through `cat`: lxc-attach makes a redirected file root's). OMX was not needed (found, not tried). The Quintus (Sailfish) works too (2026-11-09, below: it needed MediaTek's mms HAL started). Not checked: `graphics = apklayer`.
 - AAC: faad (the host's AAC decoder here) keeps its last frame ("still 1 frames left after draining"); the Codec2 AudioDecoder ended such works as corrupted: now empty.
 
 How to run each check (on the phone; `. ~/apklayer-dev-cam/env.sh` gives `$A`): `ut-cam.sh [app] [ms]` (camera = device, the app's `[cam]` lines and cameraserver's log tail), `ut-shots.sh <pkg>` (run, screenshot, stop),
@@ -341,6 +341,16 @@ What differs from Ubuntu Touch, and what changed:
   alien_manager, Jolla's AppSupport windows, are window management), but qt_surface_extension's `lower` is Home: jolla-home's
   `onWindowLowered` hides an application window to the home screen, and the app stops (minimized); `raise` (`apklayer run` of the running app)
   and its `onscreen_visibility` (shown again) resume it. Frames go as the device's gralloc buffers over `android_wlegl` (`[shell] gralloc buffer 1: 1080x2400 stride 1088`).
+  The navigation bar has Back only since 2026-11-09 (Home is Lipstick's own gesture); checked on the Quintus with the tree's shell.
+- Lipstick's switcher (2026-11-09): all apklayer windows are one client's (the session shell's pid), so Lipstick's usual match of a window to its
+  launcher entry (the client's pid against the entry's Exec) finds nothing. Entries with `X-apkd-packageName` (Jolla's AppSupport key) are matched
+  by the window's wl_shell class instead (lipstick's `isWindowForLauncherItem`; Switcher.qml's `windowIndexOf`): app entries carry it (the
+  package), and the shell sets the class to the package and the title to the app's name. Side effects: Lipstick's uninstall of such an entry and
+  its removal go to com.jolla.apkd, absent here (they fail or are ignored; uninstall did not work for these entries before either). Entries keep
+  `X-Nemo-Single-Instance=no` (invoker's lock is per Exec binary). A cover's close sends qt_extended_surface.close (QtWayland 5.6
+  destroySurface on a surface with an extended surface; without one Lipstick would destroy the surface by force, an error for the whole shell):
+  the app gets the desktop title bar's close and ends (test input `TEST_CLOSE`). Needs a human check: the covers (titles, icons, one per app) and
+  tapping and closing them, with the phone unlocked.
 - The system's programs (glibc 2.30) cannot load apklayer's LD_PRELOAD (needs GLIBC_2.34): the device's `/usr/bin/getprop` (cli `hostToolEnv()`) and the hub's
   `setsid` (HubStartup) start without it now. Other host programs an app starts (`sh -c` overrides, Runtime.exec of a system binary) still inherit it: open.
 - `ro.hardware.egl` is `meow` (MediaTek's layer over Mali): libGLES_meow crashes in SurfaceFlinger during its dlopen (a jump to an unmapped address under
@@ -349,8 +359,14 @@ What differs from Ubuntu Touch, and what changed:
   SurfaceFlinger aborted), libbinder without 0007 (AudioPolicyService refused the hub, uid 100000), libapklayer_vdisplay without the android_wlegl path
   (frames went as shm), libapklayer_cameraserver. The phone runs the tree's current outputs of these four; the lock and the prebuilts branch need them
   (libapklayer_codec2, libapklayer_egl, libgui, libvulkan, libstagefright, libmedia_omx differ from the tree too).
-- Lipstick's screenshot (`saveScreenshot`) needs the `privileged` group (`devel-su -p`); the phone has a lock code, so Lipstick's picture shows the lock
-  screen. App pictures are SurfaceFlinger's (`apklayer screenshot`); seeing the window on Lipstick unlocked needs a human check.
+- Lipstick's screenshot (`saveScreenshot`) needs the `privileged` group (`devel-su -p` works over ssh with the password on stdin); with the phone
+  locked and its display off the picture is blank, otherwise the lock screen. App pictures are SurfaceFlinger's (`apklayer screenshot`); seeing the
+  window on Lipstick unlocked needs a human check.
+- media = device (the Halium default, 2026-11-09) works on the Quintus: hello.nativeplayer through `c2.mtk.avc.decoder` (`devel-su` then
+  `/system/bin/logcat -d`), PLAYER PASS. It needed MediaTek's `vendor.mediatek.hardware.mms` HAL: Mali samples the decoder's YUV buffers through
+  /vendor/lib64/libgpu_aux.so, which asks for IMms and crashed SurfaceFlinger without it. The HAL is `oneshot disabled` in the vendor's init
+  (started on demand); graphics = device lists it for the host context, and the stack asks the device's init to start the declared HIDL HALs it
+  lists (`setprop ctl.interface_start`, allowed for the desktop user here). Not tried: other videos, NewPipe, the encoder.
 
 Results from the RPMs (2026-11-08, `pkcon install-local`, then `apklayer setup --bundle`: runtime unpacked, 10 system apps installed): UiBench
 installs and draws (SurfaceFlinger's screenshot 1080x2400 of its list; the shell sends device gralloc buffers to Lipstick: `[shell] gralloc buffer 0:

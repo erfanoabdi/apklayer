@@ -104,8 +104,9 @@ enum { WM_AUTO = 0, WM_DESKTOP = 1, WM_MOBILE = 2 };
 #define MSG_ACTIVATE 12      /* `apklayer run` of a running app -> shell: {utf8 window title "\0" utf8 xdg-activation token or ""} (activation.c) */
 /* TEST_INPUT kinds: focus; key {evdev, down}; pointer {x, y, button (0 move, +code press, -code release)}; touch {action, x, y};
  * text {preedit} + utf8; resize {logical w, h}; scale {percent}: the compositor's preferred scale;
- * maximize {on, w, h}: the compositor's (un)maximize to window geometry w x h (0 = the size is the client's). x, y: logical content pixels, y < 0 = the title bar. */
-enum { TEST_FOCUS, TEST_KEY, TEST_POINTER, TEST_TOUCH, TEST_TEXT, TEST_RESIZE, TEST_SCALE, TEST_MAXIMIZE };
+ * maximize {on, w, h}: the compositor's (un)maximize to window geometry w x h (0 = the size is the client's); close: the compositor's close
+ * (xdg_toplevel.close, Lipstick's qt_extended_surface.close). x, y: logical content pixels, y < 0 = the title bar. */
+enum { TEST_FOCUS, TEST_KEY, TEST_POINTER, TEST_TOUCH, TEST_TEXT, TEST_RESIZE, TEST_SCALE, TEST_MAXIMIZE, TEST_CLOSE };
 #define MSG_TEXT_INPUT 6
 /* app -> shell uses type 5 for MSG_CLIPBOARD_SET (text); shell -> app 109 pushes the selection */
 #define MSG_CLIPBOARD_SET 5
