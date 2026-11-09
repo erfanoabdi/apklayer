@@ -31,12 +31,40 @@ final class HostCameraShadows {
      *  preview by the sensor orientation; the backend's cameras stay upright on the landscape desktop (rotation 90, bridge/hals/camera camera.h).
      *  Android's camera compat info, which WindowManager sets for a fixed-orientation activity on a rotated display, makes cameraserver turn
      *  the frames back (ANDROID_SCALER_ROTATE_AND_CROP_90 for a back camera, 270 for a front one, aosp/hals/camera). Read at each camera open.
-     *  A device camera (Halium) turns with the phone: none. */
+     *  A device camera (Halium) turns with the phone: none. A camera open while the shape changes follows through cameraserver's proxy
+     *  (windowShapeToCameraServer). */
     static void windowShape(boolean portrait) {
         String root = System.getenv("APKLAYER_INSTANCE_ROOT");
         if (root != null && deviceCamera(root)) return;
         android.content.res.CompatibilityInfo.setCameraCompatibilityInfo(new android.content.res.CameraCompatibilityInfo.Builder()
                 .setRotateAndCropRotation(portrait ? android.view.Surface.ROTATION_90 : android.app.WindowConfiguration.ROTATION_UNDEFINED).build());
+        int degrees = portrait ? 90 : 0;
+        if (degrees != sentDegrees && declared()) { sentDegrees = degrees; windowShapeToCameraServer(degrees); }
+    }
+
+    private static int sentDegrees = -1;
+    private static android.os.IBinder processToken;  // cameraserver forgets the shape when this process ends; made on first use (no Binder in the class's init)
+    private static final int WINDOW_SHAPE = android.os.IBinder.FIRST_CALL_TRANSACTION + 0x1000;  // aosp/hals/camera/services/Service.cpp
+
+    /** What WindowManager tells system_server's CameraServiceProxy on a device: cameraserver's proxy keeps it per package and has
+     *  cameraserver re-ask its rotate-and-crop override for each open camera (notifyDisplayConfigurationChange). Only to a running
+     *  cameraserver ("media.camera.proxy" is not a name the stack starts it for): a later open reads the compat info set above.
+     *  shortcut: the looked-up proxy stays referenced until this JVM collects it, which keeps a lazy cameraserver up that long; fine while
+     *  shape changes are rare. */
+    private static void windowShapeToCameraServer(int degrees) {
+        android.os.Parcel data = null;
+        try {
+            android.os.IBinder proxy = RealBinder.lookup("media.camera.proxy");
+            if (proxy == null) return;
+            data = android.os.Parcel.obtain();
+            data.writeInterfaceToken("android.hardware.ICameraServiceProxy");
+            data.writeString(org.robolectric.RuntimeEnvironment.getApplication().getOpPackageName());
+            data.writeInt(degrees);
+            if (processToken == null) processToken = new android.os.Binder();
+            data.writeStrongBinder(processToken);
+            proxy.transact(WINDOW_SHAPE, data, null, android.os.IBinder.FLAG_ONEWAY);
+        } catch (Throwable none) {  // no native binder in this JVM, or cameraserver just ended: the next open reads the compat info
+        } finally { if (data != null) data.recycle(); }
     }
 
     static List<Map.Entry<String, String>> entries() {
