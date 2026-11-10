@@ -220,6 +220,29 @@ Checked on the Volla X23 (2026-11-09, 0.4.10 test clicks; the owner's apps and d
 - graphics, camera and media = device: Open Camera's preview from both cameras (camera = device), a NewPipe video decoded by
   `c2.mtk.avc.decoder` with AAC through `c2.android.aac.decoder` (media = device), apps on the Mali GPU (graphics = device).
 
+### Lomiri's app spread and audio from the click (2026-11-10)
+- Which app a window is: qtmir (`ApplicationManager::authorizeSession`) gives a Wayland client to the app its pid was launched as (the
+  lomiri-app-launch unit, else `DESKTOP_FILE_HINT` in its environment, else the catch-all `unknown.qtmir`, the spread's "Unknown app"). The
+  shell is one client for every app: 0.4.14's shell was "Unknown app" (or, started by a drawer launch, tied to that first app) and every
+  window landed on that card. qtmir has one way for a client of many apps, the Waydroid one: `DESKTOP_FILE_HINT=Waydroid` authorizes it
+  without an app, and each surface goes to the app its xdg app id names (`findApplicationWithSurface`, which TopLevelWindowModel uses for
+  the spread). The CLI starts the shell that way on Lomiri (XDG_CURRENT_DESKTOP or `$XDG_RUNTIME_DIR/mir_socket`), without the starter's
+  APP_ID/DESKTOP_FILE_HINT, and the shell's app id there is the desktop entry's name (`apklayer-<package>`, `APKLAYER_APP_ID_PREFIX`).
+- Closing from the spread: qtmir asks the window to close and, if it is still there a few seconds later (`onCloseTimedOut`), Mir's
+  force_close SIGTERMs the client: the shell, with every app's windows (seen: hello.nativeaudio's card swiped away, the shell ended 4 s later).
+  The shell now destroys a window as soon as the compositor closes it (`window_close`); the app ends on its CLOSE as before.
+- Audio: the click is the noble deb's tree, and the deb was built without libpulse-dev, so it had no `libapklayer-audio-pulse.so`; the phone
+  has no PipeWire daemon and `apklayer providers` showed audio `(none: off)` (audio.log: "no sound server answers ... playback is silent").
+  debian/control builds it now. Checked with that library in a test runtime: hello.nativeaudio's sink-input (`btload`, "apklayer") on
+  `sink.primary_output`, 3 s of its monitor at RMS 2778 (the 440/880 Hz tone), RATE PASS 47953 frames/s.
+- Checking on the phone: Lomiri's launcher items list the apps with windows (`gdbus introspect --session -d com.lomiri.Shell -o
+  /com/lomiri/Shell/Launcher`: `unknown_2Eqtmir` is the bug), and `com.lomiri.Shell.Debugging.SetLoggingFilterRules` with
+  `qtmir.applications.debug=true` and `toplevelwindowmodel.debug=true` (rules separated by newlines, not `;`) logs each window's app to the
+  journal. Take app pictures with `apklayer screenshot` (SurfaceFlinger), not Lomiri's Volume Up + Down: each Lomiri screenshot opens
+  its screenshot editor over everything (one editor, `screenshotEditor` in Shell.qml). Close it with its trash icon at the top left
+  (40,94 in portrait), or by locking the screen (the power key), which hides it. Several screenshots taken in a row while the phone was
+  busy left it unresponsive (2026-11-10): the owner asked for no Lomiri screenshots from agents.
+
 ## The apt install on the phone (2026-11-05; replaced by the click)
 The Volla X23 runs Ubuntu Touch 24.04 (noble, glibc 2.39, arm64): the normal `apklayer` deb (`tools/release/build-deb.sh noble <version> <prebuilts> out/` on the Parallels VM, also noble arm64) installs on it as it is.
 
@@ -319,7 +342,8 @@ reached over Maliit's D-Bus protocol, which the shell speaks without zwp_text_in
   stays under the keyboard. Termux's extra-keys row sits right above the keyboard on both phones.
 - Checking it: the screen on and unlocked first (the locked screen's keypad takes the taps, and Lipstick's screenshot of a locked phone is
   white). Ubuntu Touch: the power key through uinput (`phablet` is in plugdev), the PIN on Lomiri's keypad, a screenshot with Volume Up + Down
-  (`~/Pictures/Screenshots`, then the tool's trash icon at 40,94). Sailfish: `mce req_tklock_mode_change unlocked` brings the keypad, the code
+  (`~/Pictures/Screenshots`, then always the editor's trash icon at 40,94 in portrait: it stays on screen otherwise; prefer `apklayer
+  screenshot`, see "Lomiri's app spread" above). Sailfish: `mce req_tklock_mode_change unlocked` brings the keypad, the code
   and its accept key through uinput as root (`devel-su`), Lipstick's `saveScreenshot` writes only below `~/Pictures`.
 - Hardware keyboards (2026-11-10): Lipstick sends its XKB keymap in an fd whose offset is at the end (read() gives 0 bytes); the shell maps
   it (MAP_PRIVATE) and falls back to xkbcommon's default keymap when none comes. A uinput keyboard types into apps on both phones.

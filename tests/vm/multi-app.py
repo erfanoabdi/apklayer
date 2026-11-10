@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Two native app JVMs, one cold-started stack; focus, close routing and resize through the shell's test input (instance.inject)."""
+"""Two native app JVMs, one cold-started stack; focus, close routing (Back, then the compositor's close) and resize through the shell's test input (instance.inject)."""
 import os
 from pathlib import Path
 import selectors
@@ -99,9 +99,11 @@ try:
                 if closed and package == survivor and 'script: clipcopy:' + package + '-17000' in line:
                     assert processes[package].poll() is None
                     print('PASS surviving app main loop remains responsive', flush=True)
+                    instance.inject(package, 'close')  # the compositor's close: the shell destroys the window at once (window_close)
     assert focus_checked and closed, 'close did not reach either app'
     shell = Path(LOGDIR + '/shell.log').read_text(errors='replace')
     assert shell.count('[shell] listening on ') == 1, 'concurrent launches restarted the shell'
+    assert re.search(r'"apklayer:[^"]*' + re.escape(survivor) + r'" closed by the compositor', shell), 'the closed window was not destroyed at once'
     service = instance.mine('[l]ibapklayer_servicemanager.so')
     assert len(service) == 1, 'more than one service stack'
     assert '[shell] apklayer: window ' not in shell, 'primary window exists'

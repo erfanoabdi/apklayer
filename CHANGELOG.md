@@ -19,6 +19,27 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
   Lomiri's keys. Volla Quintus (Sailfish, own instance, shell built in the Sailfish build root): Lipstick's keyboard area 1080x868 reached
   Termux as the IME inset (extra keys end at y 1532, the keyboard's top), bar inset 135 px; hello.input's field took text.
 
+## 2026-11-10: Ubuntu Touch: "Unknown app" cards in the spread, silent apps
+- Spread: Lomiri (qtmir) gives a client to the app its pid was launched as. The shell (one client for every app) had no launch of its own, so
+  it was `unknown.qtmir`: every window landed on an "Unknown app" card (seen on the X23: two Unknown app cards holding NewPipe's and UiBench's
+  windows, NewPipe's own card black). A shell started by a drawer launch inherited that app's DESKTOP_FILE_HINT and would carry every window
+  as that app. Fix (cli/stack.cpp ensureShell, bridge/shell/window.c): on Lomiri the shell starts without the starter's APP_ID/DESKTOP_FILE_HINT
+  and with qtmir's hint for a client of many apps (`Waydroid`), and its xdg app id is the desktop entry's name (`apklayer-<package>`), so
+  each window goes to its own app's card. Checked with a test shell (own runtime dir) and drawer-style launches (`lomiri-app-launch`): Lomiri's
+  launcher items and spread show Calculator's card with its window, no Unknown app; swiped away, "No running apps"; the next app
+  (hello.nativeaudio) on its own card; two apps at once are two windows of two apps in TopLevelWindowModel's log.
+- Closing from the spread could end the shell: qtmir force-closes a window that is still there a few seconds after its close request, and
+  Mir's force_close SIGTERMs the client (seen: hello.nativeaudio swiped away, `onCloseTimedOut`, the shell gone, so every app's window).
+  The shell now destroys the window at the compositor's close (`window_close`, also the test input's `close`); the app ends on CLOSE as
+  before. tests/vm/multi-app.py closes the survivor that way (Parallels: PASS). Not yet driven through Lomiri's spread with this shell (the
+  phone was locked again on the owner's request; no Lomiri screenshots).
+- Audio: the click (the noble deb's tree) had no `libapklayer-audio-pulse.so`: debian/control lacked libpulse-dev, and the phone has no
+  PipeWire daemon, so audio was `(none: off)` and AudioFlinger played into nothing. debian/control (and docs/INSTALL.md) build it now.
+  Checked with that library: hello.nativeaudio's PulseAudio sink-input on `sink.primary_output`, monitor RMS 2778 over 3 s (its tone),
+  RATE PASS. Sailfish's RPM already had it (audio = pulse there).
+- Lomiri screenshots (Volume Up + Down) open an editor over everything; taken in a row on the busy phone they left it unresponsive: closed by
+  locking the screen, and docs/HALIUM.md now says to use `apklayer screenshot`.
+
 ## 2026-11-10: a real Bluetooth keyboard types into apps on both Halium phones
 - The keymap fix (keyboard.c, 2026-11-10) was checked only with uinput keyboards. Now with a real Bluetooth one: the owner's x86 PC as an LE
   HID keyboard (`tests/vm/bt-keyboard.py`: BlueZ GattManager1 HID service 0x1812 with a boot keyboard's report map, advertised with

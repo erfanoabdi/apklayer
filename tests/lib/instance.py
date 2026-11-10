@@ -138,7 +138,7 @@ def inject(window, *steps, secret=False):
     parallel. The events take the shell's own path from the seat on (focus, xkb, pointer, touch, text-input, configure). window: the app's
     package. Steps (x, y: logical pixels in the window's content, y < 0: its title bar):
       focus | blur (the focus leaves it) | key:<evdev> | combo:<mod>+<evdev> | click:<x>,<y> | rclick:<x>,<y> | tap:<x>,<y> | press:<x>,<y> | move:<x>,<y> | release:<x>,<y> (a finger down, moved and up: a long press or a drag) | text:<utf8> | preedit:<utf8> | delete:<n> | resize:<w>,<h>
-      | scale:<percent> (the compositor's preferred scale) | maximize:<w>,<h> (window geometry) | unmaximize[:<w>,<h>]
+      | scale:<percent> (the compositor's preferred scale) | maximize:<w>,<h> (window geometry) | unmaximize[:<w>,<h>] | close
       | ime:<px> (the host's on-screen keyboard covers the bottom px app pixels, 0: hidden; as the phones' Maliit keyboard)"""
     print('INJECT %s %s' % (window, ' '.join('text:***' if secret and s.startswith('text:') else s for s in steps)), flush=True)  # secret: a password typed in
     messages = []
@@ -163,6 +163,7 @@ def inject(window, *steps, secret=False):
         elif kind == 'ime': messages.append((IME, int(arg), 0, 0, ''))
         elif kind == 'maximize': messages.append((MAXIMIZE, 1, *xy, ''))
         elif kind == 'unmaximize': messages.append((MAXIMIZE, 0, *xy, ''))  # with w,h: a floating configure of that size
+        elif kind == 'close': messages.append((CLOSE, 0, 0, 0, ''))  # the compositor closes the window (its title bar's X, the spread)
         else: raise ValueError('unknown step ' + step)
     with socket.socket(socket.AF_UNIX) as s:
         s.settimeout(3)

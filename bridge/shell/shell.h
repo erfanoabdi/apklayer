@@ -260,6 +260,7 @@ void window_show_first(struct window *w);  /* window.c: the frame that came befo
 void pointer_forget_window(struct window *w); /* pointer.c: also clear title-bar hover on destroy */
 void window_create(struct client *c, int id, int width, int height, const char *path, const char *title);  /* window.c */
 void window_destroy(struct window *w);  /* window.c */
+void window_close(struct window *w);    /* geometry.c: the compositor's close */
 void window_frame(struct window *w, int buf, const int32_t *damage);  /* window.c */
 void client_vsync_request(struct client *c, int id); /* vsync.c */
 void client_vsync_forget(struct client *c);

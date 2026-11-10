@@ -160,7 +160,10 @@ void window_create(struct client *c, int id, int width, int height, const char *
         w->xdg_surface = xdg_wm_base_get_xdg_surface(wm_base, w->surface);
         w->toplevel = xdg_surface_get_toplevel(w->xdg_surface);
         xdg_toplevel_set_title(w->toplevel, label);
-        xdg_toplevel_set_app_id(w->toplevel, package);
+        const char *prefix = getenv("APKLAYER_APP_ID_PREFIX");  /* Lomiri: its app id is the desktop entry's name (cli/stack.cpp ensureShell) */
+        char app_id[300];
+        snprintf(app_id, sizeof app_id, "%s%s", prefix ? prefix : "", package);
+        xdg_toplevel_set_app_id(w->toplevel, app_id);
     } else wlshell_create(w, label, package);
     window_geometry_init(w);
     decoration_create(w);  /* asked before the first commit: its configure comes with the first one */
