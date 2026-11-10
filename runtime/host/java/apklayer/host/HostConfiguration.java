@@ -194,7 +194,7 @@ final class HostConfiguration {
     /** A new size from the shell (AppHost.hostResize): applied in place, like an activity that handles the change itself. */
     static void resize(String qualifiers, List<ActivityController<? extends Activity>> controllers) {
         setSize(qualifiers);
-        // Android would recreate activities that don't declare it; recreation doesn't re-attach windows in this sandbox yet, and the startup
+        // a resize of the same orientation in place (a turn recreates: AppHost.hostResize); Android would recreate those that don't declare it; the startup
         // scale is applied before any launch.
         android.content.res.Resources appRes = RuntimeEnvironment.getApplication().getResources();
         for (ActivityController<? extends Activity> c : controllers) {

@@ -31,6 +31,18 @@ public final class NavigationBarInset {
     if (l != null) l.accept(visible);
   }
 
+  private static volatile java.util.function.Consumer<Boolean> fullscreenListener;
+
+  /** Who learns when the app goes fullscreen or leaves it (status bar hidden or shown): the host tells the shell. */
+  public static void onFullscreen(java.util.function.Consumer<Boolean> l) { fullscreenListener = l; }
+
+  /** ShadowWindowManagerGlobal.applyInsets (patch 0019): the app hid (fullscreen) or showed the status bar, as Android's fullscreen
+   * (hide(systemBars()), SYSTEM_UI_FLAG_FULLSCREEN, FLAG_FULLSCREEN) does. */
+  public static void statusBarChanged(boolean visible) {
+    java.util.function.Consumer<Boolean> l = fullscreenListener;
+    if (l != null) l.accept(!visible);
+  }
+
   /** The navigation bar is px pixels high (0: none, the desktop style). */
   public static void set(int px) {
     SystemUi.systemUiForDefaultDisplay().setNavigationBarBehavior(px > 0 ? new Bar(px) : SystemUi.NO_NAVIGATION_BAR);

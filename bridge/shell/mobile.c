@@ -151,6 +151,22 @@ void window_nav_visible(struct window *w, int visible)
     wl_surface_commit(w->surface);
 }
 
+/* Android's fullscreen (the app hid the status bar): the compositor's fullscreen state, which brings the output's size and hides its panels
+ * (GNOME's top bar, Lomiri's indicators); its configure drops our title bar (W_BAR). Leaving it, a mobile window is maximized again and
+ * a floating one gets its size back (geometry.c). wl_shell (Lipstick) shows every window full screen already. */
+void window_set_fullscreen(struct window *w, int on)
+{
+    if (w->want_fullscreen == !!on) return;
+    w->want_fullscreen = !!on;
+    fprintf(stderr, "[shell] %s: fullscreen %s\n", w->title, on ? "on" : "off");
+    if (!w->toplevel) return;
+    if (on) xdg_toplevel_set_fullscreen(w->toplevel, NULL);
+    else {
+        xdg_toplevel_unset_fullscreen(w->toplevel);
+        if (w->mobile) xdg_toplevel_set_maximized(w->toplevel);
+    }
+}
+
 /* The window's owner can compose the bar: without subsurfaces (Lipstick) it does, and the app gets the bar's inset. */
 void window_nav_layer(struct window *w)
 {

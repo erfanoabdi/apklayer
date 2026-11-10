@@ -140,6 +140,10 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - Push: a real Telegram/WhatsApp message with microG in an always-on instance on Parallels; the unit starting the stack at login.
 - A person: window raise of a relaunched app; the text magnifier; portal file chooser and pkexec in the manager; Google sign-in in Meet/microG;
   playback quality by ear and eye; audio under load; a Material You app's colours; the IME window's look; the manager's installed paths.
+- Fullscreen (2026-11-10, CHANGELOG): NewPipe's player fullscreen with a playing video on the x86 PC (GNOME) and the Ubuntu Touch X23
+  (Lomiri: does set_fullscreen hide its panel; a landscape request in a maximized mobile window, with the UT rotation work); Robolectric
+  lets any new window's default insets (a dialog, a popup) show the bars again (Android: the focused window controls them); no
+  ACTION_CONFIGURATION_CHANGED broadcast on a resize or turn.
 - Apps: a real Godot 4 game; JW Library cover thumbnails; a NewPipe download.
 
 ## Parked (owner's decision)

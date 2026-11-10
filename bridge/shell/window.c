@@ -204,7 +204,7 @@ void window_set_dark(struct window *w, int dark)
     w->dark = w->decor.dark = dark;
     w->decor.focused = -1;  /* force the redraw */
     fprintf(stderr, "[shell] %s: %s %s\n", w->title, w->mobile ? "navigation bar" : "title bar", dark ? "dark" : "light");
-    if (w->decor.lw > 0) decor_update(&w->decor, w->decor.lw, window_scale(w), w->maximized, w->bar_hover, w->activated);
+    if (w->decor.lw > 0 && !w->fullscreen) decor_update(&w->decor, w->decor.lw, window_scale(w), w->maximized, w->bar_hover, w->activated);
     if (w->mobile && w->configured) { window_layout(w); wl_surface_commit(w->surface); }
 }
 
