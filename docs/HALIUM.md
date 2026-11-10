@@ -307,6 +307,9 @@ reached over Maliit's D-Bus protocol, which the shell speaks without zwp_text_in
   `setExtendedAttribute(0, "/keys", "actionKey", "label", <s>)`): both keyboards read it as `actionKeyOverride`. Lomiri's Backspace after a
   committed word takes the word back into preedit from what it remembers: without the cursor position a Backspace after a cursor move or with a
   selection deleted the wrong text. Swiping the keyboard down calls `imInitiatedHide`; `showInputMethod` brings it back.
+- hideSoftInputFromWindow (2026-11-10): `hideInputMethod` alone hides Lomiri's keyboard, but Lipstick's stays on screen (the server reports a
+  0x0 area all the same); with `focusState` false first (as for a focus loss) both hide it. The shell keeps the field and sends the whole state
+  again on the next show.
 - The area (`updateInputMethodArea`): Lomiri animates it (about ten updates, 720x129 to 720x597, its y relative to the window's 1508 px
   height); Lipstick sends 1080x868 once.
 - Checking it: the screen on and unlocked first (the locked screen's keypad takes the taps, and Lipstick's screenshot of a locked phone is

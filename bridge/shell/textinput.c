@@ -120,6 +120,12 @@ void text_input_enable(struct window *w, int enable)
         if (!text_mgr && w->text_input_enabled) maliit_enable(w, 2);
         return;
     }
+    if (enable == 4) {  /* hideSoftInputFromWindow: the keyboard goes, the field keeps focus (a later showSoftInput brings it back).
+                         * text-input-v3 has no hide request and a disable would also end a desktop input method's composing: a no-op there */
+        if (debug_input) fprintf(stderr, "[shell] text input hide request%s\n", w->text_input_enabled ? "" : " without a field");
+        if (!text_mgr && w->text_input_enabled) maliit_enable(w, 4);
+        return;
+    }
     w->text_input_enabled = enable;
     if (!text_mgr) { maliit_enable(w, enable); return; }
     if (!seat) return;

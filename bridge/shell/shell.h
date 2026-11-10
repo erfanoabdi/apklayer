@@ -219,7 +219,7 @@ extern long long repeat_next_ms;
 /* ---- functions shared between the modules ---- */
 void send_state(struct window *w);  /* window.c */
 void send_bytes(struct client *c, uint32_t type, const char *data, size_t len);  /* client.c */
-void text_input_enable(struct window *w, int enable);  /* enable 2: show the keyboard again (the field keeps it) */
+void text_input_enable(struct window *w, int enable);  /* enable 2: show the keyboard again, 4: hide it (the field keeps it) */
 void text_input_kind(const struct window *w, uint32_t *hint, uint32_t *purpose);  /* the field's text-input-v3 content type */
 void text_input_forget_window(struct window *w);  /* textinput.c */
 void clipboard_init(void);
@@ -233,7 +233,7 @@ void clipboard_dispatch(struct pollfd *p);  /* clipboard.c */
 #define MALIIT_FDS 4 /* maliit.c: its GMainContext's descriptors */
 int maliit_pollfds(struct pollfd *p);
 void maliit_dispatch(struct pollfd *p);
-void maliit_enable(struct window *w, int enable);  /* maliit.c: the host keyboard without zwp_text_input_v3 (enable 2: show it again) */
+void maliit_enable(struct window *w, int enable);  /* maliit.c: the host keyboard without zwp_text_input_v3 (enable 2: show it again, 4: hide it) */
 void maliit_surrounding(struct window *w, int cursor, int anchor, const char *text, size_t len);  /* the field's text around the cursor */
 void text_input_send(struct window *w, int before, int after, const char *commit, const char *preedit);  /* textinput.c: one MSG_IME */
 void send_msg(struct client *c, uint32_t type, const int32_t *v, int n);  /* client.c */
