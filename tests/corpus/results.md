@@ -1,5 +1,20 @@
 # Compatibility results
 
+## 2026-11-10 retest gaps (worktree on main f1bf81d2; own trees `~/apklayer-gap` on Parallels, `~/apklayer-x86/gap` on the x86 PC)
+
+Same setup as the retest below (instances gp1 and gx1, the prebuilts' system providers, tests/corpus/run.py: install, two launches, SurfaceFlinger
+screenshots; drive.py for input). PC prebuilts: the lead's, with libberberis_arm64 c4e7ee14... (binary_translation 0005).
+
+| App | Parallels arm64 | x86 PC | Note |
+|---|---|---|---|
+| OpenTTD | draws: menu, survey dialog; No, New Game, Generate: a running game (map, date advancing) | - | **fixed**: libapklayer-gles1.so now built from the prebuilts' gfxstream copy (release packages lacked it too); its XRGB8888 window buffers failed gralloc's import and were copied (mapper stride), fixed, 0 import failures (CHANGELOG) |
+| App Manager 4.1.1 (F-Droid) | draws (KeyStore password dialog, then the splash's "Determining working mode..." ~20 s, then the Disclaimer); I Agree: the app list stays empty | draws, both launches | open: in no-root mode it reads users and packages through `ServiceManager.getService("user"/"package")` (IUserManager.getProfiles, IPackageManager.getInstalledPackages); apklayer serves no "package" binder there, so its database stays empty (apps.db: 0 rows; PLAN) |
+| Telegram FOSS (TestApps 22275, arm64 only; F-Droid's index of 2026-11-10 has no Telegram) | - | draws, both launches (native bridge) | first round: after the second launch's screenshot the runner's SIGTERM never started the JVM's end (thread dump: no shutdown; it ran 20 min; a later SIGTERM ended it at once); a second round ended normally (PLAN retest (c)) |
+| Rethink DNS (F-Droid versionCode 703, arm64 only) | - | draws (Welcome), both launches, no SIGILL | fixed by binary_translation 0005, confirmed with the lead's prebuilts |
+| SimpleX (arm64 only) | - | draws ("Be free", Get started) | no regression from 0005; the runner's second screenshot came before its first frame with content (black) and drive.py after 15 s shows the welcome |
+| VLC (arm64 only) | - | draws (welcome), both launches | no regression from 0005 |
+| OTR2 (arm64 only) | draws (title, "Compiling shaders"): group otr2 PASS, 98% of the window lit (the corpus runner's copy had failed first: "No space left on device", Parallels at 1.8 GB free; installed by hand once space freed) | - | none |
+
 ## 2026-11-10 regression retest (main e0e9241e, after bionic_translation 0050-0062, native bridge thread mapping, android:process, AppComponentFactory, SharedMemory, screen = output, window order, IME, x86_64 system apps)
 
 Own trees on Parallels arm64 (`~/apklayer-rr`, output 1024x768: portrait windows are 325x579) and the x86 PC (`~/apklayer-x86/rr`, Alder Lake-N, 834x1484 px @200%),
