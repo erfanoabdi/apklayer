@@ -4,6 +4,7 @@
 
 #include "providers.h"
 #include "gpus.h"
+#include "flatpak.h"
 
 #include <algorithm>
 #include <fcntl.h>
@@ -206,6 +207,14 @@ bool ensureShell(const Layout& l, const Instance& inst, const NativeEnv& env) {
         shell.argv = {l.shellBinary()};
         shell.env = env.env;
         shell.env["APKLAYER_SHELL_READY_FD"] = std::to_string(ready[1]);
+        // Lomiri (qtmir) gives a client to the app its pid was launched as: the shell is every app's, so it names none (an inherited
+        // DESKTOP_FILE_HINT tied every window to the first app, none made the shell "unknown app" in the spread). qtmir's Waydroid hint
+        // authorizes a client of many apps: each window is the app its app id names, the desktop entry's (window.c). Lomiri: its desktop
+        // name, or its Mir socket for a start without the session's environment (ssh, a unit)
+        for (const char* k : {"APP_ID", "DESKTOP_FILE_HINT", "APP_DESKTOP_FILE_PATH"}) shell.env.erase(k);
+        auto desktop = shell.env.find("XDG_CURRENT_DESKTOP");
+        if ((desktop != shell.env.end() && desktop->second.find("Lomiri") != std::string::npos) || exists(join(l.runtimeHome, "mir_socket")))
+            shell.env["DESKTOP_FILE_HINT"] = "Waydroid", shell.env["APKLAYER_APP_ID_PREFIX"] = launcherPrefix();
         shell.logFile = join(inst.logs(), "shell.log");
         shell.newSession = true;  // outlives any instance; instances never stop it
         shell.unit = "apklayer-shell";  // every window's: never frozen with the app or manager that started it (cli/unit.h)

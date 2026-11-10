@@ -121,12 +121,15 @@ static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t c
 }
 static void top_bounds(void *d, struct xdg_toplevel *t, int32_t bw, int32_t bh)
 { (void)t; struct window *w = d; w->bounds_w = bw; w->bounds_h = bh; }
-static void top_close(void *data, struct xdg_toplevel *t)
+/* The compositor closes a window: the app ends on CLOSE (ShellClient), its window goes now. Lomiri kills a client whose window outlives a
+ * close request by a few seconds (qtmir onCloseTimedOut, Mir's force_close): that client is this shell, every app's windows. */
+void window_close(struct window *w)
 {
-    (void)t;
-    struct window *w = data;
     send_msg(W_TARGET(w), MSG_CLOSE, (int32_t[]){ W_ID(w) }, 1);
+    fprintf(stderr, "[shell] \"%s\" closed by the compositor\n", w->title);
+    window_destroy(w);
 }
+static void top_close(void *data, struct xdg_toplevel *t) { (void)t; window_close(data); }
 static const struct xdg_toplevel_listener top_listener = { .configure = top_configure, .close = top_close, .configure_bounds = top_bounds };
 
 /* The compositor prefers another scale for the window (pref: percent, 0 = follow the outputs): the bars redraw, the app re-renders. */
