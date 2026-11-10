@@ -313,6 +313,10 @@ reached over Maliit's D-Bus protocol, which the shell speaks without zwp_text_in
   again on the next show.
 - The area (`updateInputMethodArea`): Lomiri animates it (about ten updates, 720x129 to 720x597, its y relative to the window's 1508 px
   height); Lipstick sends 1080x868 once.
+  Apps get it as the IME's insets (2026-11-10), not the navigation bar's: CONFIGURE's keyboard field (geometry.c), `NavigationBarInset.setIme`,
+  the IME source in every window's InsetsState (robolectric 0027); the window's softInputMode does the rest (adjustResize shrinks the
+  content, adjustPan pans to the focused view). The navigation bar inset stays the bar's (84 px on the X23, 135 px on the Quintus) and the bar
+  stays under the keyboard. Termux's extra-keys row sits right above the keyboard on both phones.
 - Checking it: the screen on and unlocked first (the locked screen's keypad takes the taps, and Lipstick's screenshot of a locked phone is
   white). Ubuntu Touch: the power key through uinput (`phablet` is in plugdev), the PIN on Lomiri's keypad, a screenshot with Volume Up + Down
   (`~/Pictures/Screenshots`, then the tool's trash icon at 40,94). Sailfish: `mce req_tklock_mode_change unlocked` brings the keypad, the code

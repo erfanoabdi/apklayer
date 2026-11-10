@@ -1,0 +1,29 @@
+From: apklayer
+Subject: [PATCH] ShadowWindowManagerGlobal: the host's on-screen keyboard as the windows' IME insets source
+
+WindowManagerService's InsetsStateController gives every window the IME's source (InsetsSource.ID_IME, WindowInsets.Type.ime()) while
+the keyboard is shown: the windows' InsetsState carries it (NavigationBarInset.putIme: the area the host keyboard covers), so
+WindowInsets.isVisible(ime()) and getInsets(ime()) are right and ViewRootImpl applies the window's softInputMode itself (adjustResize: the
+IME inset joins the system window insets the decor fits; adjustPan: the visible insets scroll the focused view into sight).
+
+Against external/robolectric 87aa52b08 (REVISION), after 0004, 0019, 0022 and 0026. apklayer patch: 0027 of patches/robolectric (see docs/PATCHES.md).
+---
+diff --git a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java
+@@ -478,6 +478,7 @@
+         Gravity.applyDisplay(attrs.gravity, contentFrame, windowInfo.frame);
+       }
+       systemUiForDisplay(windowInfo.displayId).putInsets(windowInfo);
++      NavigationBarInset.putIme(windowInfo.displayFrame, windowInfo.insetsState); // apklayer patch: the host keyboard
+       windowInfo.put(outFrame, outContentInsets, outVisibleInsets, outStableInsets, outInsetsState);
+     }
+
+@@ -552,6 +553,7 @@
+       for (Entry<IWindow, WindowInfo> windowEntry : windows.entrySet()) {
+         if (windowEntry.getValue().displayId == systemUi.getDisplayId()) {
+           systemUi.putInsets(windowEntry.getValue());
++          NavigationBarInset.putIme(windowEntry.getValue().displayFrame, windowEntry.getValue().insetsState); // apklayer patch
+           sendInsetsControlChanged(windowEntry.getKey(), type, false);
+           // TODO: only send resize if the window resized.
+           sendResize(windowEntry.getKey());

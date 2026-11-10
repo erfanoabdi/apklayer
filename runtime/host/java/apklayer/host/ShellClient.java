@@ -180,10 +180,11 @@ final class ShellClient {
                     input.add(new int[] {13, body.getInt(4), body.getInt(8), body.getInt(12),
                             body.getInt(16)});
                 } else if (type == CONFIGURE) {
-                    // {14, w, h, scale*100, density dpi (0: 160 x scale), navigation bar px (0: none), output w, h px (0: unknown)}
+                    // {14, w, h, scale*100, density dpi (0: 160 x scale), navigation bar px (0: none), output w, h px (0: unknown),
+                    //  host keyboard px (0: none)}
                     input.add(new int[] {14, body.getInt(4), body.getInt(8), body.getInt(12),
                             len >= 24 ? body.getInt(16) : 0, len >= 24 ? body.getInt(20) : 0,
-                            len >= 36 ? body.getInt(28) : 0, len >= 36 ? body.getInt(32) : 0});
+                            len >= 36 ? body.getInt(28) : 0, len >= 36 ? body.getInt(32) : 0, len >= 40 ? body.getInt(36) : 0});
                 } else if (type == TOUCH) {
                     // {16, action, finger, x, y}
                     input.add(new int[] {16, body.getInt(4), body.getInt(8), body.getInt(12), body.getInt(16)});

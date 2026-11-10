@@ -53,6 +53,7 @@ public final class AppHost implements Runnable {
     private int logicalDpi; // 0: 160 x scale
     private int logicalW, logicalH, logicalScale = 100; // current window size in dp and scale %
     private int outputPxW, outputPxH;                    // the shell's output (screen) in pixels, 0: unknown
+    private int imeShown;                                // the host keyboard's height the app was last told (px)
     private int lastOrientation = -2;                    // top activity's requested orientation last applied
     private final HostTextBridge text = new HostTextBridge();
     private ShellClient shell;
@@ -102,10 +103,13 @@ public final class AppHost implements Runnable {
         main = new Handler(Looper.getMainLooper());
         input = new HostInput(main, InstrumentationRegistry.getInstrumentation().getUiAutomation(), new HostInput.WindowEvents() {
             @Override
-            public void configure(int w, int h, int scalePct, int dpi, int navPx, int outputW, int outputH) {
+            public void configure(int w, int h, int scalePct, int dpi, int navPx, int outputW, int outputH, int imePx) {
                 outputPxW = outputW;
                 outputPxH = outputH;
                 hostResize(w, h, scalePct, dpi, navPx);
+                // the host's on-screen keyboard (the phones' Maliit): the IME's insets, apart from the bar; softInputMode does the rest
+                if (imePx != imeShown) System.out.println("[apklayer] host keyboard " + (imeShown = imePx) + " px");
+                org.robolectric.shadows.NavigationBarInset.setIme(imePx);
             }
 
             @Override

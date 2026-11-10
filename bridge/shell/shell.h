@@ -44,11 +44,13 @@
  *                114 DMABUF_RELEASE {i32 id, buf}: the compositor is done with that dmabuf buffer (it may be drawn into again)
  *                112 DISPLAY        {i32 refresh in mHz}: the output's refresh rate (sent at HELLO and when it changes)
  *                113 VSYNC          {i32 id, i32 ms}: answer to VSYNC_REQUEST, the compositor's frame callback time (ms)
- *                107 CONFIGURE      {i32 id, i32 logical w, i32 logical h, i32 scale*100, i32 density dpi, i32 navigation bar px, i32 mobile style}
+ *                107 CONFIGURE      {i32 id, i32 logical w, i32 logical h, i32 scale*100, i32 density dpi, i32 navigation bar px, i32 mobile style,
+ *                                    i32 output w px, i32 output h px, i32 keyboard px}
  *                                    the app renders w*scale x h*scale pixels and re-sends
  *                                    WINDOW_CREATE with the same id to rebuffer in place; density: the dpi the app's resources take
  *                                    (160 * scale on a desktop, the handheld's physical density bucket: mobile.c); navigation bar: the
- *                                    bottom inset the shell's navigation bar covers in mobile style (navbar.c), 0 without one
+ *                                    bottom inset the shell's navigation bar covers in mobile style (navbar.c), 0 without one; keyboard:
+ *                                    the app pixels the host's on-screen keyboard covers at the bottom (maliit.c), the app's IME inset
  *   app -> shell  15 WINDOW_MODE    {i32 id, i32 mode}: 0 auto, 1 desktop (floating, title bar), 2 mobile (maximized, navigation bar);
  *                                   sent before WINDOW_CREATE it sets the new window's style, later it switches it (mobile.c)
  *                 16 NAVBAR         {i32 id, i32 visible}: the app shows or hides the navigation bar (immersive mode)
@@ -105,8 +107,8 @@ enum { WM_AUTO = 0, WM_DESKTOP = 1, WM_MOBILE = 2 };
 /* TEST_INPUT kinds: focus; key {evdev, down}; pointer {x, y, button (0 move, +code press, -code release)}; touch {action, x, y};
  * text {preedit} + utf8; resize {logical w, h}; scale {percent}: the compositor's preferred scale;
  * maximize {on, w, h}: the compositor's (un)maximize to window geometry w x h (0 = the size is the client's); close: the compositor's close
- * (xdg_toplevel.close, Lipstick's qt_extended_surface.close). x, y: logical content pixels, y < 0 = the title bar. */
-enum { TEST_FOCUS, TEST_KEY, TEST_POINTER, TEST_TOUCH, TEST_TEXT, TEST_RESIZE, TEST_SCALE, TEST_MAXIMIZE, TEST_CLOSE };
+ * (xdg_toplevel.close, Lipstick's qt_extended_surface.close); ime {app px}: the host keyboard's area as maliit.c sets it. x, y: logical content pixels, y < 0 = the title bar. */
+enum { TEST_FOCUS, TEST_KEY, TEST_POINTER, TEST_TOUCH, TEST_TEXT, TEST_RESIZE, TEST_SCALE, TEST_MAXIMIZE, TEST_CLOSE, TEST_IME };
 #define MSG_TEXT_INPUT 6
 /* app -> shell uses type 5 for MSG_CLIPBOARD_SET (text); shell -> app 109 pushes the selection */
 #define MSG_CLIPBOARD_SET 5
@@ -147,7 +149,7 @@ struct window {
     struct wp_fractional_scale_v1 *fscale;
     int text_input_enabled;
     int input_type, ime_options; /* the focused field's EditorInfo (MSG_TEXT_INPUT): the keyboard's layout and Enter key */
-    int ime_px;                 /* app pixels the host's on-screen keyboard covers at the bottom (maliit.c): the bottom inset while shown */
+    int ime_px;                 /* app pixels the host's on-screen keyboard covers at the bottom (maliit.c): the app's IME inset (CONFIGURE) */
     int minimized;              /* set by our Minimize button, cleared when the window is activated again */
     struct decor decor;         /* title bar subsurface (desktop style without server-side decorations only) */
     struct zxdg_toplevel_decoration_v1 *deco;  /* decoration.c */

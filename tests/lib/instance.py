@@ -130,7 +130,7 @@ def keys(*steps, **kw):
 
 MODS = {'alt': 56, 'ctrl': 29, 'shift': 42, 'super': 125}  # evdev codes of combo:<mod>+<code>
 TEST_INPUT, TEST_DONE = 11, 115  # bridge/shell/shell.h
-FOCUS, KEY, POINTER, TOUCH, TEXT, RESIZE, SCALE, MAXIMIZE, CLOSE = range(9)
+FOCUS, KEY, POINTER, TOUCH, TEXT, RESIZE, SCALE, MAXIMIZE, CLOSE, IME = range(10)
 
 
 def inject(window, *steps, secret=False):
@@ -138,7 +138,8 @@ def inject(window, *steps, secret=False):
     parallel. The events take the shell's own path from the seat on (focus, xkb, pointer, touch, text-input, configure). window: the app's
     package. Steps (x, y: logical pixels in the window's content, y < 0: its title bar):
       focus | blur (the focus leaves it) | key:<evdev> | combo:<mod>+<evdev> | click:<x>,<y> | rclick:<x>,<y> | tap:<x>,<y> | press:<x>,<y> | move:<x>,<y> | release:<x>,<y> (a finger down, moved and up: a long press or a drag) | text:<utf8> | preedit:<utf8> | delete:<n> | resize:<w>,<h>
-      | scale:<percent> (the compositor's preferred scale) | maximize:<w>,<h> (window geometry) | unmaximize[:<w>,<h>]"""
+      | scale:<percent> (the compositor's preferred scale) | maximize:<w>,<h> (window geometry) | unmaximize[:<w>,<h>]
+      | ime:<px> (the host's on-screen keyboard covers the bottom px app pixels, 0: hidden; as the phones' Maliit keyboard)"""
     print('INJECT %s %s' % (window, ' '.join('text:***' if secret and s.startswith('text:') else s for s in steps)), flush=True)  # secret: a password typed in
     messages = []
     for step in steps:
@@ -159,6 +160,7 @@ def inject(window, *steps, secret=False):
         elif kind == 'delete': messages.append((TEXT, 2, 0, 0, arg))  # the IME deletes <n> characters before the cursor
         elif kind == 'resize': messages.append((RESIZE, *xy, 0, ''))
         elif kind == 'scale': messages.append((SCALE, int(arg), 0, 0, ''))
+        elif kind == 'ime': messages.append((IME, int(arg), 0, 0, ''))
         elif kind == 'maximize': messages.append((MAXIMIZE, 1, *xy, ''))
         elif kind == 'unmaximize': messages.append((MAXIMIZE, 0, *xy, ''))  # with w,h: a floating configure of that size
         else: raise ValueError('unknown step ' + step)

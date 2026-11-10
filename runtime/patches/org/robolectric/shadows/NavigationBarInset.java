@@ -8,6 +8,8 @@ import org.robolectric.shadows.SystemUi.SystemBar.Side;
  * height the shell covers, so the windows' WindowInsets carry it (navigationBars(), systemBars()) and an app's content stays above it, or
  * draws behind it and pads by the inset when it lays out edge to edge. The status bar stays Robolectric's default (none: the host's own
  * top bar). Takes effect at the windows' next relayout (AppHost.hostResize asks for one).
+ * The host's on-screen keyboard (the phones' Maliit keyboard, bridge/shell/maliit.c) is not part of the bar: it is the IME's own insets
+ * source (setIme, patch 0027), and each window's softInputMode decides what it does (ViewRootImpl: adjustResize, adjustPan).
  */
 public final class NavigationBarInset {
   private NavigationBarInset() {}
@@ -29,6 +31,24 @@ public final class NavigationBarInset {
   public static void visibilityChanged(boolean visible) {
     java.util.function.Consumer<Boolean> l = listener;
     if (l != null) l.accept(visible);
+  }
+
+  private static volatile int imePx;
+
+  /** The host's keyboard covers the bottom px pixels of the display (0: hidden): the windows get the IME's insets at once. */
+  public static void setIme(int px) {
+    if (px == imePx) return;
+    imePx = px;
+    ShadowWindowManagerGlobal.getWindowSessionDelegate().notifyInsetsChanges(SystemUi.systemUiForDefaultDisplay(), null);
+  }
+
+  /** ShadowWindowManagerGlobal (patch 0027): the IME's source in a window's InsetsState, as InsetsStateController gives it. */
+  static void putIme(android.graphics.Rect display, android.view.InsetsState state) {
+    if (state == null) return;
+    android.view.InsetsSource ime = state.getOrCreateSource(android.view.InsetsSource.ID_IME, android.view.WindowInsets.Type.ime());
+    int px = imePx;
+    ime.setFrame(display.left, display.bottom - px, display.right, display.bottom);
+    ime.setVisible(px > 0);
   }
 
   /** The navigation bar is px pixels high (0: none, the desktop style). */

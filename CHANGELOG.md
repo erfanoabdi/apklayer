@@ -3,6 +3,22 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: the phones' on-screen keyboard is the apps' IME inset, not the navigation bar (Termux's extra keys above it)
+- Cause: geometry.c folded the Maliit keyboard's height (`ime_px`) into CONFIGURE's navigation bar value, so apps saw a taller navigation bar:
+  no `WindowInsets.Type.ime()`, no softInputMode. An adjustResize app's bottom row (Termux's extra keys) ended up under the keyboard.
+- Fix, the Android way: CONFIGURE carries the keyboard's height as its own field (10th int); the host (`NavigationBarInset.setIme`) puts the
+  IME's insets source (InsetsSource.ID_IME) into every window's InsetsState, as InsetsStateController does (robolectric patch 0027 in
+  ShadowWindowManagerGlobal), and sends the windows the new insets. ViewRootImpl then applies each window's softInputMode itself
+  (adjustResize: the decor shrinks; adjustPan: the focused view pans into sight; unspecified: its own choice); `isVisible(ime())` and
+  `getInsets(ime())` are right. The navigation bar inset stays the bar's own height; the bar stays under the keyboard (owner's decision);
+  the desktop text-input-v3 path is unchanged (it has no keyboard area). Test input `ime:<px>` (TEST_IME) sets the keyboard area as maliit.c does.
+- Checks: `tests/vm/ime-insets.py` (group input; hello.input `-Dhello.ime=resize|pan`): adjustResize ime insets 300 px, content 523 -> 223 px
+  and back; adjustPan content kept, the number field panned from 424 to 232. Parallels (own tree): groups input, activities, mobile PASS.
+  Volla X23 (Ubuntu Touch, own instance, this tree's shell and jars): Termux with Lomiri's keyboard (541 px), the extra-keys row directly
+  above the keyboard (SurfaceFlinger's picture and Lomiri's screenshot), navigation bar inset still 84 px; hello.input typed through
+  Lomiri's keys. Volla Quintus (Sailfish, own instance, shell built in the Sailfish build root): Lipstick's keyboard area 1080x868 reached
+  Termux as the IME inset (extra keys end at y 1532, the keyboard's top), bar inset 135 px; hello.input's field took text.
+
 ## 2026-11-10: a real Bluetooth keyboard types into apps on both Halium phones
 - The keymap fix (keyboard.c, 2026-11-10) was checked only with uinput keyboards. Now with a real Bluetooth one: the owner's x86 PC as an LE
   HID keyboard (`tests/vm/bt-keyboard.py`: BlueZ GattManager1 HID service 0x1812 with a boot keyboard's report map, advertised with

@@ -24,16 +24,15 @@ static void fit_size(const struct window *w, int lw, int lh, int grow, int *fw, 
 void window_send_configure(struct window *w)
 {
     int s = window_scale(w), nav = w->mobile ? (w->nav_h * s + 50) / 100 : 0;  /* the bar's height in the app's pixels */
-    if (w->ime_px > nav) nav = w->ime_px;  /* the host's on-screen keyboard over the bottom: the app's content stays above it */
     w->told_scale = s;
     w->told_dpi = w->dpi;
     w->told_nav = w->nav_h;
     /* the output's pixels: the app's screen (Display.getRealSize, WindowManager.getMaximumWindowMetrics), not its window */
-    send_msg(W_TARGET(w), MSG_CONFIGURE, (int32_t[]){ W_ID(w), w->cfg_w, w->cfg_h, s, w->dpi, nav, w->mobile, output_px_w, output_px_h }, 9);
-    if (w->proxy) send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, w->cfg_w, w->cfg_h, s, w->dpi, nav, w->mobile, output_px_w, output_px_h }, 9);
-    fprintf(stderr, "[shell] %s: configure content %dx%d @%d%% (%dx%d px), title bar %d logical = %d px%s, %s style, %d dpi, navigation bar %d logical = %d px\n",
+    send_msg(W_TARGET(w), MSG_CONFIGURE, (int32_t[]){ W_ID(w), w->cfg_w, w->cfg_h, s, w->dpi, nav, w->mobile, output_px_w, output_px_h, w->ime_px }, 10);
+    if (w->proxy) send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, w->cfg_w, w->cfg_h, s, w->dpi, nav, w->mobile, output_px_w, output_px_h, w->ime_px }, 10);
+    fprintf(stderr, "[shell] %s: configure content %dx%d @%d%% (%dx%d px), title bar %d logical = %d px%s, %s style, %d dpi, navigation bar %d logical = %d px, keyboard %d px\n",
             w->client->pkg, w->cfg_w, w->cfg_h, s, w->cfg_w * s / 100, w->cfg_h * s / 100, W_BAR(w), (W_BAR(w) * s + 99) / 100,
-            w->maximized ? ", maximized" : w->constrained ? ", tiled" : "", w->mobile ? "mobile" : "desktop", w->dpi, w->nav_h, nav);
+            w->maximized ? ", maximized" : w->constrained ? ", tiled" : "", w->mobile ? "mobile" : "desktop", w->dpi, w->nav_h, nav, w->ime_px);
 }
 
 void window_layout(struct window *w)

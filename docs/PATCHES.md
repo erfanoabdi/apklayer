@@ -80,6 +80,7 @@ Build flags: upstream builds it with Meson's default buildtype (debug, -O0); mes
 | 0024-display-event-receiver-own-vsync | ShadowDisplayEventReceiver: each receiver keeps its own due vsync (a Choreographer on another looper, Unity's UnityChoreographer, got none) |
 | 0025-application-from-app-component-factory | AndroidTestEnvironment: the Application comes from the manifest's AppComponentFactory (LoadedApk.getAppFactory) once the LoadedApk exists, for a factory of the app's own, as upstream and LoadedApk.makeApplication; the parsed APK's factory name stays in its ApplicationInfo (apklayer's AndroidManifest has no file, its null replaced it). With `AppFactory` the factory also makes activities, services and providers (the tree's SystemUI injects them through Dagger). Needs the upstream AndroidTestEnvironment.java in the prebuilts' robolectric-src |
 | 0026-window-app-visibility | ShadowWindowManagerGlobal.addToDisplay leaves out ADD_FLAG_APP_VISIBLE for a window of a hidden (stopped) activity; ShadowUiAutomation skips windows whose app is not visible (runtime/patches AppVisibility) |
+| 0027-ime-inset-source | ShadowWindowManagerGlobal puts the IME's insets source (InsetsSource.ID_IME, Type.ime()) into every window's InsetsState: the host's on-screen keyboard (`NavigationBarInset.putIme`), so ViewRootImpl applies softInputMode (adjustResize, adjustPan) |
 
 ## LineageOS tree (`patches/aosp/<project>/`)
 | Patch | Purpose |
