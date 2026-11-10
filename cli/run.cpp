@@ -150,6 +150,8 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     std::string dir = appDir(l, package);
 
     trace("run " + package);
+    std::string appShell = getenvOr("APKLAYER_APP_SHELL", "");  // a Lomiri drawer launch's own shell (cli/halium.cpp): this window's only, not what the launch starts
+    unsetenv("APKLAYER_APP_SHELL");
     NativeEnv ne = nativeEnv(l, inst);
     if (!ensureStack(l, inst)) return 1;
     trace("stack ready");
@@ -221,9 +223,11 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
         Spawn sink;
         sink.argv = {l.btload(), l.androidLibs, "libapklayer_vdisplay.so", "--main", title, std::to_string(self), getenvOr("APKLAYER_DISPLAY_WIDTH", "720"), getenvOr("APKLAYER_DISPLAY_HEIGHT", "1280")};
         sink.env = ne.env;
+        if (!appShell.empty()) sink.env["APKLAYER_SHELL"] = appShell;
         sink.logFile = join(inst.logs(), "vdisplay-" + package + "-" + std::to_string(self) + ".log");
         vdisplay = spawn(sink);
         window = {"-Dapklayer.layerstack=" + std::to_string(self), "-Dapklayer.displaywindow=" + title};
+        if (!appShell.empty()) window.push_back("-Dapklayer.shell=" + appShell);
     }
     std::vector<std::string> late = launchOptions(window, own);
     std::string record = join(inst.stateDir, "run." + std::to_string(self));
@@ -270,6 +274,7 @@ int runApp(const Layout& l, const Instance& inst, const std::string& package, Ru
     }
     unlink(record.c_str());
     if (vdisplay > 0) kill(vdisplay, SIGTERM);
+    if (!appShell.empty()) unlink(appShell.c_str());  // the shell itself ends with this process (its parent)
     return status;
 }
 

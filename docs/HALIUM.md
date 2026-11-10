@@ -245,6 +245,15 @@ Checked on the Volla X23 (2026-11-09, 0.4.10 test clicks; the owner's apps and d
   without an app, and each surface goes to the app its xdg app id names (`findApplicationWithSurface`, which TopLevelWindowModel uses for
   the spread). The CLI starts the shell that way on Lomiri (XDG_CURRENT_DESKTOP or `$XDG_RUNTIME_DIR/mir_socket`), without the starter's
   APP_ID/DESKTOP_FILE_HINT, and the shell's app id there is the desktop entry's name (`apklayer-<package>`, `APKLAYER_APP_ID_PREFIX`).
+- Superseded the same day: the Waydroid hint made Lomiri keep every closed app's window on screen until the shell ended (reverted in
+  083c8b1d). Now a drawer launch (APP_ID set, the CLI in a `lomiri-app-launch--...` unit) starts a shell of its own first
+  (cli/halium.cpp startLomiriAppShell), in that unit and with APP_ID, before `run` moves to its own scope: qtmir gives that shell's
+  client to the app (card with its name and icon). Its socket is `$XDG_RUNTIME_DIR/apklayer/shell-<launcher pid>.sock` (`APKLAYER_SHELL`
+  for the shell and the window sink, `-Dapklayer.shell` for the JVM, spare or cold); it dies with the launcher (PR_SET_PDEATHSIG), so
+  Back, swipe-close or a crash ends the card. Hub dialogs, component hosts and terminal `apklayer run` stay on the shared shell. Lomiri
+  SIGSTOPs that shell with the rest of the app's unit when the app is in the background (its card shows its last frame); focus resumes it.
+  Checked on the X23 (2026-11-10): Calculator's card named and with its icon; Back leaves no window; Calculator and hello.input two cards;
+  swiping a card away ends that app, its shell and its launcher item.
 - Closing from the spread: qtmir asks the window to close and, if it is still there a few seconds later (`onCloseTimedOut`), Mir's
   force_close SIGTERMs the client: the shell, with every app's windows (seen: hello.nativeaudio's card swiped away, the shell ended 4 s later).
   The shell now destroys a window as soon as the compositor closes it (`window_close`); the app ends on its CLOSE as before.

@@ -48,6 +48,8 @@ int main(int argc, char **argv)
     snprintf(dir, sizeof dir, "%s/apklayer", rt);
     mkdir(dir, 0700);
     snprintf(path, sizeof path, "%s/shell.sock", dir);
+    const char *own = getenv("APKLAYER_SHELL");  /* a Lomiri drawer launch's own shell (cli/halium.cpp startLomiriAppShell) */
+    if (own && *own) snprintf(path, sizeof path, "%s", own);
 
     signal(SIGPIPE, SIG_IGN);
     const char *dbg = getenv("APKLAYER_DEBUG_INPUT");

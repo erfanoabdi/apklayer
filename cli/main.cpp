@@ -102,6 +102,7 @@ int main(int argc, char** argv) {
     // a command runs in apklayerd when it runs (its processes are then the daemon's); the internal ones and the daemon itself stay here
     bool autostart = args.size() >= 3 && args[0] == "instance" && args[1] == "autostart";  // systemctl --user is the user's, not apklayerd's
     static const std::set<std::string> kLocal = {"daemon", "stack-daemon", "stack", "exec", "sandbox-exec", "app-spare", "env", "setup"};
+    if (args[0] == "run" && args.size() == 2 && !inDaemon) startLomiriAppShell(layout, id);  // in the drawer launch's unit, before it is left
     bool local = kLocal.count(args[0]) && !(inFlatpak() && args[0] == "setup");  // the Flatpak's setup starts a stack: the daemon's, as every command's
     if (int status = 0; !inDaemon && !autostart && !local && forwardToDaemon(layout, full, &status)) return status;
     if (args[0] == "daemon") return runDaemon(layout, args.size() == 2 && args[1] == "--on-demand");

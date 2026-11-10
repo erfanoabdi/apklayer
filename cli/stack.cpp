@@ -194,6 +194,28 @@ bool waitForProperty(const Layout& l, const NativeEnv& ne, const char* name, con
 // clients), and the started shell reports readiness itself: it writes to APKLAYER_SHELL_READY_FD after listen() (EOF: it died first). A shell
 // that neither listens nor dies (a compositor that does not answer its roundtrips) is ended after kShellStartMs: callers fail instead of blocking.
 static const int kShellStartMs = 10000;
+bool startShell(const Layout& l, Spawn shell) {
+    int ready[2];
+    if (pipe2(ready, O_CLOEXEC) != 0) die("pipe failed");
+    fcntl(ready[1], F_SETFD, 0);  // the shell inherits the write end
+    shell.argv = {l.shellBinary()};
+    shell.env["APKLAYER_SHELL_READY_FD"] = std::to_string(ready[1]);
+    int pid = spawn(shell);
+    close(ready[1]);
+    pollfd p{ready[0], POLLIN, 0};
+    int n;
+    while ((n = poll(&p, 1, kShellStartMs)) < 0 && errno == EINTR) {}
+    char c;
+    bool ok = n > 0 && read(ready[0], &c, 1) == 1;
+    close(ready[0]);
+    if (!ok) {
+        fprintf(stderr, "apklayer: the window shell %s (Wayland display %s); log: %s\n",
+                n > 0 ? "exited before it listened" : ("did not listen within " + std::to_string(kShellStartMs / 1000) + " s").c_str(), getenvOr("WAYLAND_DISPLAY", "unset").c_str(), shell.logFile.c_str());
+        if (n == 0) terminate(pid);
+    }
+    return ok;
+}
+
 bool ensureShell(const Layout& l, const Instance& inst, const NativeEnv& env) {
     makeDirs(join(l.runtimeHome, "apklayer"));
     int lock = open(join(l.runtimeHome, "apklayer/shell.lock").c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
@@ -201,34 +223,17 @@ bool ensureShell(const Layout& l, const Instance& inst, const NativeEnv& env) {
     bool ok = true;
     if (shellPid(l) == 0) {
         unlink(l.shellSocket().c_str());
-        int ready[2];
-        if (pipe2(ready, O_CLOEXEC) != 0) die("pipe failed");
-        fcntl(ready[1], F_SETFD, 0);  // the shell inherits the write end
         Spawn shell;
-        shell.argv = {l.shellBinary()};
         shell.env = env.env;
-        shell.env["APKLAYER_SHELL_READY_FD"] = std::to_string(ready[1]);
         // Lomiri (qtmir) gives a client to the app its pid was launched as: the shell is every app's, so it names none (an inherited
         // DESKTOP_FILE_HINT tied every window to the first app). Not qtmir's Waydroid hint (per-window app ids): Lomiri then kept every
-        // closed app's window on screen until the shell ended (2026-11-10, Volla X23); the spread shows the shell as "Unknown app" instead
+        // closed app's window on screen until the shell ended (2026-11-10, Volla X23). A drawer launch has a shell of its own (startLomiriAppShell)
         for (const char* k : {"APP_ID", "DESKTOP_FILE_HINT", "APP_DESKTOP_FILE_PATH"}) shell.env.erase(k);
         shell.logFile = join(inst.logs(), "shell.log");
         shell.newSession = true;  // outlives any instance; instances never stop it
         shell.unit = "apklayer-shell";  // every window's: never frozen with the app or manager that started it (cli/unit.h)
         shell.detach = true;
-        int pid = spawn(shell);
-        close(ready[1]);
-        pollfd p{ready[0], POLLIN, 0};
-        int n;
-        while ((n = poll(&p, 1, kShellStartMs)) < 0 && errno == EINTR) {}
-        char c;
-        ok = n > 0 && read(ready[0], &c, 1) == 1;
-        close(ready[0]);
-        if (!ok) {
-            fprintf(stderr, "apklayer: the window shell %s (Wayland display %s); log: %s\n",
-                    n > 0 ? "exited before it listened" : ("did not listen within " + std::to_string(kShellStartMs / 1000) + " s").c_str(), getenvOr("WAYLAND_DISPLAY", "unset").c_str(), shell.logFile.c_str());
-            if (n == 0) terminate(pid);
-        }
+        ok = startShell(l, shell);
     }
     close(lock);
     return ok;

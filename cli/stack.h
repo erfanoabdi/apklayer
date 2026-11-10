@@ -41,5 +41,7 @@ bool alive(int pid);
 void terminate(int pid);
 // Starts the session's window shell when none listens on its socket; false (and the reason printed) when it does not listen within a few seconds.
 bool ensureShell(const Layout& layout, const Instance& instance, const NativeEnv& env);
+// Starts a window shell (spec: its environment, log, unit; APKLAYER_SHELL its socket) and returns once it listens; false (reason printed) otherwise.
+bool startShell(const Layout& layout, Spawn spec);
 
 }  // namespace apklayer

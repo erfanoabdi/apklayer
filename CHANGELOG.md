@@ -3,6 +3,13 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: Lomiri: a window shell per drawer launch (named cards, no dead windows)
+- A launch from Lomiri's drawer starts its own apklayer-shell in the launch's lomiri-app-launch unit before leaving it (cli/halium.cpp);
+  the window sink and the JVM connect to it (`APKLAYER_SHELL`, `-Dapklayer.shell`), it dies with the launcher. Shared shell unchanged
+  for everything else (desktops, Sailfish, terminal launches, hub dialogs). ensureShell's start and readiness wait split out (startShell).
+- X23, click 0.4.15 of this tree: Calculator card with name and icon (launcher item `apklayer-com.darkempire78.opencalculator`, no
+  `unknown.qtmir`); Back ends app, shell and card; two apps two cards; swiping a card away ends only that app. Lomiri freezes a background
+  app's shell with its unit (state T) and resumes it on focus. Desktop groups (input, multi-app, mobile) not run: Parallels was down.
 ## 2026-11-10: apklayer-manager in the Sailfish OS RPM
 - Slint 1.18.1 (fetch-slint.sh's version) built from source in the Sailfish build root (apklayer-sailfish-build:5.0.0.62) by
   tools/release/sailfish-slint.sh, called by sailfish-rpm.sh: rust-lang's standalone aarch64 toolchain 1.92 (Slint's minimum; Sailfish's rust
