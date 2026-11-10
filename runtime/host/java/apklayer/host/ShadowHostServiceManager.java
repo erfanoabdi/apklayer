@@ -86,6 +86,10 @@ public class ShadowHostServiceManager extends ShadowServiceManager {
             if (android.content.Context.WINDOW_SERVICE.equals(name) && method.getName().startsWith("attachWindowContextTo"))
                 return new android.window.WindowContextInfo(new android.content.res.Configuration(org.robolectric.RuntimeEnvironment.getApplication().getResources().getConfiguration()),
                         android.view.Display.DEFAULT_DISPLAY);
+            // the display's density without the user's display-size setting (getInitialDisplayDensity, getBaseDisplayDensity): the window's own, which
+            // is the display's here. 0 (the fake's answer) made KuroSDK lay its login dialog out at density 0: PGR showed only the dialog's dim
+            if (android.content.Context.WINDOW_SERVICE.equals(name) && (method.getName().equals("getInitialDisplayDensity") || method.getName().equals("getBaseDisplayDensity")))
+                return org.robolectric.RuntimeEnvironment.getApplication().getResources().getConfiguration().densityDpi;
             // an app's own link handling (Settings' "Open by default"): its web hosts, none verified
             if ("domain_verification".equals(name) && method.getName().equals("getDomainVerificationUserState")) return HostDomainVerification.userState((String) args[0], (Integer) args[1]);
             try {

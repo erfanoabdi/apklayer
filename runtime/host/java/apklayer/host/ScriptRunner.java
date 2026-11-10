@@ -203,6 +203,9 @@ final class ScriptRunner {
             android.view.View decor = dialog == null ? null : dialog.getWindow().getDecorView();
             System.out.println("[apklayer] dialogsize " + (decor == null ? "none" : decor.getWidth() + "x" + decor.getHeight() + " @"
                     + decor.getResources().getDisplayMetrics().densityDpi + "dpi"));
+        } else if (step.equals("views")) { // every window's view tree: class, visibility, alpha, size, position (an invisible dialog's cause)
+            java.util.List<android.view.View> views = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mViews");
+            for (android.view.View root : views) dumpView(root, 0);
         } else if (step.equals("navinset")) { // the top window's navigation bar inset (bottom, px), as its app sees it
             java.util.List<android.view.View> views = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mViews");
             android.view.WindowInsets wi = views.get(views.size() - 1).getRootWindowInsets();
@@ -211,5 +214,15 @@ final class ScriptRunner {
             input.inject(new KeyEvent(now, now, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK, 0));
             input.inject(new KeyEvent(now, now, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK, 0));
         }
+    }
+
+    private static void dumpView(android.view.View v, int depth) {
+        int[] at = new int[2];
+        v.getLocationOnScreen(at);
+        String text = v instanceof android.widget.TextView ? " \"" + ((android.widget.TextView) v).getText() + "\"" : "";
+        System.out.println("[apklayer] view " + "  ".repeat(depth) + v.getClass().getName() + " vis=" + v.getVisibility() + " alpha=" + v.getAlpha()
+                + " scale=" + v.getScaleX() + " " + v.getWidth() + "x" + v.getHeight() + "@" + at[0] + "," + at[1] + text);
+        if (depth < 14 && v instanceof android.view.ViewGroup g)
+            for (int c = 0; c < g.getChildCount(); c++) dumpView(g.getChildAt(c), depth + 1);
     }
 }
