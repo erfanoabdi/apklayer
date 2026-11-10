@@ -1546,6 +1546,10 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-10 - gsi_x86_64 libberberis_proxy_libc: a guest free of no glibc chunk is left alone (PGR agent)
+- Why: PGR on a tester's x86_64 PC (native bridge) aborted in glibc free ("double free or corruption (out)") minutes into each session;
+  binary_translation 0006 checks the chunk header in __wrap_free on a glibc host.
+- Command: `breakfast gsi_x86_64 userdebug && m libberberis_proxy_libc` (flock -n ~/los24-build.lock).
 ### 2026-11-10 - gsi_arm64 libapklayer_vdisplay and graltool: a phone's turn composed rotated (rotation agent)
 - Why: NewPipe's fullscreen on the Volla X23 (Lomiri held portrait, the app asks SENSOR_LANDSCAPE) needs the app's landscape picture shown
   turned in the portrait window; Lomiri's Mir 1 ignores wl_surface.set_buffer_transform and has no wp_viewporter, so the rotation is
