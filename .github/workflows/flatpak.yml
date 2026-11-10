@@ -1,10 +1,8 @@
-# The Flatpak bundles alone (flatpak/build.sh), for work on the manifest: a push to the flatpak-ci branch, or by hand. Releases build them
+# The Flatpak bundles alone (flatpak/build.sh), for work on the manifest, run by hand (gh workflow run flatpak.yml). Releases build them
 # in release.yml's flatpak job.
 name: flatpak
 
 on:
-  push:
-    branches: [flatpak-ci]
   workflow_dispatch:
     inputs:
       prebuilts:
