@@ -13,6 +13,8 @@ ln -sfn "$P" "$here/prebuilts"  # the manifest's prebuilts source
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 flatpak-builder --user --install-deps-from=flathub --force-clean --disable-rofiles-fuse --state-dir="$OUT/state" --repo="$OUT/repo" \
     "$OUT/build" "$here/io.github.erfanoabdi.Apklayer.yml"
+# bytehook needs the linker's .symtab (the manifest restores libdl_bio after stripping)
+readelf -S "$OUT"/build/files/lib/apklayer/bionic_translation/b/libdl_bio.so.*.*.* | grep -q "\.symtab" || { echo "build.sh: libdl_bio lost its .symtab" >&2; exit 1; }
 flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo "$OUT/repo" \
     "$OUT/apklayer-$V-$(flatpak --default-arch).flatpak" io.github.erfanoabdi.Apklayer
 rm -rf "$OUT/build"

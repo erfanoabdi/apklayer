@@ -33,6 +33,9 @@ build-options:
   append-path: /usr/lib/sdk/openjdk21/bin
   env:
     JAVA_HOME: /usr/lib/sdk/openjdk21/jvm/openjdk-21
+# after every module's debuginfo step: libdl_bio's unstripped copy back (apklayer module's post-install)
+cleanup-commands:
+  - for z in /app/lib/apklayer/bionic_translation/b/libdl_bio.so.*.symtab.gz; do gunzip -c "$z" > "${z%.symtab.gz}" && rm "$z"; done
 modules:
   - name: openjdk
     buildsystem: simple
@@ -140,6 +143,9 @@ modules:
         dest: slint
     # post-install runs in the build directory (builddir: true), the sources one level up
     post-install:
+      # libdl_bio keeps its .symtab (as debian/rules' dh_strip -X): PLT hook libraries (bytehook) read it as the linker's; the debuginfo step
+      # after this module strips every ELF file, so an unstripped copy waits compressed (not ELF) and cleanup-commands puts it back
+      - for f in /app/lib/apklayer/bionic_translation/b/libdl_bio.so.*.*.*; do gzip -c "$f" > "$f.symtab.gz"; done
       - install -Dm644 ../data/apklayer.svg /app/share/icons/hicolor/scalable/apps/io.github.erfanoabdi.Apklayer.svg
       - install -Dm644 ../data/apklayer-256.png /app/share/icons/hicolor/256x256/apps/io.github.erfanoabdi.Apklayer.png
       - install -Dm644 ../flatpak/io.github.erfanoabdi.Apklayer.metainfo.xml -t /app/share/metainfo
