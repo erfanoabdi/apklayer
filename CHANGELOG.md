@@ -3,6 +3,17 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: a real Bluetooth keyboard types into apps on both Halium phones
+- The keymap fix (keyboard.c, 2026-11-10) was checked only with uinput keyboards. Now with a real Bluetooth one: the owner's x86 PC as an LE
+  HID keyboard (`tests/vm/bt-keyboard.py`: BlueZ GattManager1 HID service 0x1812 with a boot keyboard's report map, advertised with
+  appearance 0x03C1, a NoInputNoOutput agent, Pairable only for the run; text from a fifo as key-report notifications). Paired from each
+  phone with bluetoothctl (just works); the phone's BlueZ made it a uhid input device. hello.input in the phones' `ut` instances (0.4.14,
+  field focused by the app): Volla Quintus (Sailfish 5.0) `xkb keymap loaded (format 1, 64029 bytes, ok)`, `[hello-input] text=A`, `Ab`,
+  `Ab1`, then `Hello2` (Lipstick's screenshot shows it); Volla X23 (Ubuntu Touch 24.04) `format 1, 64755 bytes, ok`, `Ab1`, `Hello2`
+  (apklayer screenshot). No fix needed. Afterwards both phones unpaired, the PC's bonds removed, its adapter as before (powered,
+  not pairable or discoverable, no advertisement); the Quintus' Bluetooth off again as found. Script fix on the way: its cleanup restores
+  Pairable first (later it came back Busy) and survives SIGTERM.
+
 ## 2026-11-10: release 0.4.14 (runtime 0.4.13)
 - 0.4.13 with the Sailfish OS RPM: its build failed on gfxstream's X11 include (glx.h; the Sailfish build root has no X11), so libapklayer-gles1 is built from the prebuilts' gfxstream only where X11's headers exist (a Halium device's GLES driver has ES 1 itself). Built locally first (tools/release/sailfish-rpm.sh).
 

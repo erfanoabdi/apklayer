@@ -319,6 +319,12 @@ reached over Maliit's D-Bus protocol, which the shell speaks without zwp_text_in
   and its accept key through uinput as root (`devel-su`), Lipstick's `saveScreenshot` writes only below `~/Pictures`.
 - Hardware keyboards (2026-11-10): Lipstick sends its XKB keymap in an fd whose offset is at the end (read() gives 0 bytes); the shell maps
   it (MAP_PRIVATE) and falls back to xkbcommon's default keymap when none comes. A uinput keyboard types into apps on both phones.
+  A real Bluetooth keyboard too (2026-11-10): the x86 PC as an LE HID keyboard (HOGP, `tests/vm/bt-keyboard.py <seconds> <fifo>`, each line
+  written to the fifo is typed), paired from the phone with `bluetoothctl --agent NoInputNoOutput pair <PC>` (Sailfish as root, Bluetooth
+  powered through connman's `net.connman.Technology.SetProperty Powered`; Ubuntu Touch as phablet). Both phones' BlueZ (5.76, 5.85) make it a
+  uhid input device (`Bus=0005`), reconnect it by themselves when the PC advertises again, and the compositors give it the seat's one keymap
+  (no second keymap event). It also types the lock code into Lipstick's keypad and Lomiri's greeter (Lomiri needs the screen woken first:
+  the power key through uinput).
   A shell of one's own beside the running `ut` one: `APKLAYER_BUILD=<dir with bridge/shell/apklayer-shell and the installed tree's other
   parts linked>` and an own `XDG_RUNTIME_DIR` (the shell is one per runtime directory), `WAYLAND_DISPLAY` by absolute path.
 
