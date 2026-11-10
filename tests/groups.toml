@@ -269,6 +269,10 @@ needs = ["com.android.test.uibench"]
 apps = ["hello-permissions"]
 run = ["python3 -u tests/vm/mobile.py", "python3 -u tests/vm/mobile.py --no-subsurfaces", "python3 -u tests/vm/permission-mobile.py"]
 
+[cds]  # the instance's class data sharing archive (CdsDump)
+needs = ["com.android.test.uibench"]
+run = ["tests/vm/cds-dump.sh com.android.test.uibench"]
+
 [startup]
 needs = ["com.android.test.uibench"]
 run = ["tests/vm/startup.sh com.android.test.uibench", "tests/vm/asset-cache.sh com.android.test.uibench"]

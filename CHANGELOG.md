@@ -29,6 +29,24 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Tests: tests/vm/ime-fields.py (group input): the button's hide request reaches the shell, no focus loss, typed text still goes to the field.
   Group input passes on Parallels (own tree, two runs).
 
+## 2026-11-10: CDS archive: custom-loader classes linked before the dump (Termux SIGSEGV)
+- Cause (reproduced on Parallels, every time: UiBench's first launch writes the archive, then a cold Termux launch): HotSpot (JDK 21) links
+  only the builtin loaders' classes before a dynamic dump and archives a custom loader's unlinked class with its constant pool as it is
+  (ConstantPool::remove_unshareable_info returns early for unlinked classes). The framework's classes come from Robolectric's sandbox loader;
+  UiBench's archive held 2054 of them unlinked (the spare's preload and verification load without linking), among them android.widget.Scroller,
+  whose NestMembers entry for Scroller$ViscousFluidInterpolator a nestmate check had resolved. Termux maps Scroller from the archive, never
+  loaded the member, and its first `new Scroller$ViscousFluidInterpolator` takes the archived klass with no mirror: SIGSEGV in
+  InstanceKlass::init_lock. Not the SIGTERM: HotSpot writes to `<name>.temp` and renames it, an interrupted dump leaves only that file.
+- Fix (runtime/host/java/apklayer/host/CdsDump.java): before the dump every class of the app's loader chain (app, sandbox) is linked
+  (getDeclaredFields: JVM_GetClassDeclaredFields links), repeated until linking loads no more (7120 classes; 0 unlinked custom-loader
+  classes in the archive, 87 -> 110 MB, the dump 1.3 -> 1.9-2.4 s on Parallels, once per instance); a JVM whose shutdown has begun (SIGTERM,
+  System.exit) keeps no archive; an interrupted dump's `.tmp`/`.tmp.temp` (85 MB) is removed by the next dump. The archive's name is a hash of
+  the class path files, so the new host jar replaces any archive written before. The class path HotSpot validates is the same for every
+  app (the host's; app classes are in AppClassLoader, matched by their bytes).
+- Test: group `cds` (tests/vm/cds-dump.sh): an app ended mid-dump keeps no archive, a full first launch writes one with no unlinked
+  custom-loader class (fails on the old host jar: 2054), a cold launch runs on it. Parallels: `cds` PASS (FAIL with the old jar), Termux
+  cold on UiBench's archive 3 of 3 launches up (crashed every time before), `startup` (startup.sh) and `activities` (all 7) PASS.
+
 ## 2026-11-10: setup reinstalls the system apps a runtime update changed
 - `apklayer setup` installed the runtime's system apps (providers, DocumentsUI, WebView) only while `setup-done` was missing, so a runtime
   update never replaced them: x86_64 users who set up before 0.4.10 kept the arm64 MediaProvider (JNI not linking through the bridge,
