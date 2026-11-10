@@ -3,6 +3,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: release 0.4.13 (runtime 0.4.13)
+- Bug-fix release: Termux (app uid and groups, program names, `ls -a`, its login and bootstrap on Sailfish's glibc 2.30), CDS archives that crashed the next app (every custom loader's classes linked first), DocumentsUI's overlay crash, the display's mode and real size, setup reinstalls system apps a runtime update changed (x86_64 MediaProvider), Rethink DNS and Go libraries through the bridge (the guest's own auxv), OpenGL ES 1 in packages (gfxstream from the prebuilts), XRGB window buffers shared instead of copied, the Flatpak keeps libdl_bio's .symtab (bytehook), SIGTERM ends an app at any moment (exit deadline, spare holder, bionic code cannot ignore it), cameraserver survives a provider restart (backtrace signal), the phones' on-screen keyboard (show again, Backspace on a selection, Enter, field types, hide) and keyboard devices on Sailfish (keymap mapped), App Manager's hidden package/user services and install dates, libhybris' messages out of programs' stderr, a component host ending on SIGTERM during its setup.
+
 ## 2026-11-10: install dates in PackageInfo
 - PackageInfo.firstInstallTime/lastUpdateTime were 0 for every package (App Manager showed 1/1/70): HubPackages.installTimes takes them from the installed APK (its directory's creation, the APK's modification), for other packages (hub) and the app's own (AppEnvironment). hello-system's hiddenservices check requires real times for every package; system-apps passes on Parallels and the x86 PC.
 
