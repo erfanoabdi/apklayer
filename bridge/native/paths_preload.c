@@ -44,6 +44,11 @@ int apklayer_broker_change(const char *op, int dirfd, const char *path, int dirf
 #define DONE(var) do { if (var##_alloc) free(var); } while (0)
 #define AT(var, p) MAP(var, (p) && (p)[0] == '/' ? (p) : NULL); const char *var##_use = var ? var : (p)
 #define MODE(flags, mode) do { mode = 0; if ((flags) & (O_CREAT | O_TMPFILE)) { va_list ap; va_start(ap, flags); mode = va_arg(ap, int); va_end(ap); } } while (0)
+/* glibc before 2.33 exports no stat or mknod functions (its headers make them calls of __xstat, __xmknod ...), so REAL finds none there: an
+ * Android program's stat64 or mknod, bound to these wrappers by name, goes to the kernel (newfstatat's struct stat is glibc's on 64-bit) */
+#include <sys/syscall.h>
+#define SYSCALL(...) ((long (*)(long, ...))REAL(syscall))(__VA_ARGS__)
+#define KSTAT(dirfd, path, st, flags) (int)SYSCALL(SYS_newfstatat, (long)(dirfd), (long)(path), (long)(st), (long)(flags))
 
 int open(const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open))(m, flags, mode); BROKER(r, m, flags, mode); DONE(m); return r; }
 int open64(const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open64))(m, flags, mode); BROKER(r, m, flags, mode); DONE(m); return r; }
@@ -70,11 +75,11 @@ static FILE *broker_fopen(const char *path, const char *mode, FILE *r)
 FILE *fopen(const char *path, const char *mode) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *))REAL(fopen))(m, mode); r = broker_fopen(m, mode, r); DONE(m); return r; }
 FILE *fopen64(const char *path, const char *mode) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *))REAL(fopen64))(m, mode); r = broker_fopen(m, mode, r); DONE(m); return r; }
 int access(const char *path, int mode) { MAP(m, path); if (apklayer_binder_route_exists(m)) { DONE(m); return 0; } int r = ((int (*)(const char *, int))REAL(access))(m, mode); CHANGE(r, "access", AT_FDCWD, m, mode); DONE(m); return r; }
-int stat(const char *path, struct stat *st) { MAP(m, path); int r = ((int (*)(const char *, struct stat *))REAL(stat))(m, st); BROKER_STAT(r, m, 0, fstat(fd_, st)); DONE(m); return r; }
-int stat64(const char *path, struct stat64 *st) { MAP(m, path); int r = ((int (*)(const char *, struct stat64 *))REAL(stat64))(m, st); BROKER_STAT(r, m, 0, fstat64(fd_, st)); DONE(m); return r; }
-int lstat(const char *path, struct stat *st) { MAP(m, path); int r = ((int (*)(const char *, struct stat *))REAL(lstat))(m, st); BROKER_STAT(r, m, 1, fstat(fd_, st)); DONE(m); return r; }
-int lstat64(const char *path, struct stat64 *st) { MAP(m, path); int r = ((int (*)(const char *, struct stat64 *))REAL(lstat64))(m, st); BROKER_STAT(r, m, 1, fstat64(fd_, st)); DONE(m); return r; }
-int fstatat(int dirfd, const char *path, struct stat *st, int flags) { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; int r = ((int (*)(int, const char *, struct stat *, int))REAL(fstatat))(dirfd, use, st, flags); BROKER_STATAT(r, dirfd, use, flags & AT_SYMLINK_NOFOLLOW, fstat(fd_, st)); DONE(m); return r; }
+int stat(const char *path, struct stat *st) { MAP(m, path); void *f = REAL(stat); int r = f ? ((int (*)(const char *, struct stat *))f)(m, st) : KSTAT(AT_FDCWD, m, st, 0); BROKER_STAT(r, m, 0, fstat(fd_, st)); DONE(m); return r; }
+int stat64(const char *path, struct stat64 *st) { MAP(m, path); void *f = REAL(stat64); int r = f ? ((int (*)(const char *, struct stat64 *))f)(m, st) : KSTAT(AT_FDCWD, m, st, 0); BROKER_STAT(r, m, 0, fstat64(fd_, st)); DONE(m); return r; }
+int lstat(const char *path, struct stat *st) { MAP(m, path); void *f = REAL(lstat); int r = f ? ((int (*)(const char *, struct stat *))f)(m, st) : KSTAT(AT_FDCWD, m, st, AT_SYMLINK_NOFOLLOW); BROKER_STAT(r, m, 1, fstat(fd_, st)); DONE(m); return r; }
+int lstat64(const char *path, struct stat64 *st) { MAP(m, path); void *f = REAL(lstat64); int r = f ? ((int (*)(const char *, struct stat64 *))f)(m, st) : KSTAT(AT_FDCWD, m, st, AT_SYMLINK_NOFOLLOW); BROKER_STAT(r, m, 1, fstat64(fd_, st)); DONE(m); return r; }
+int fstatat(int dirfd, const char *path, struct stat *st, int flags) { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; void *f = REAL(fstatat); int r = f ? ((int (*)(int, const char *, struct stat *, int))f)(dirfd, use, st, flags) : KSTAT(dirfd, use, st, flags); BROKER_STATAT(r, dirfd, use, flags & AT_SYMLINK_NOFOLLOW, fstat(fd_, st)); DONE(m); return r; }
 DIR *opendir(const char *path) { MAP(m, path); DIR *r = ((DIR * (*)(const char *))REAL(opendir))(m);
     if (!r) { int fd = apklayer_broker_open(m, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0, -1); if (fd >= 0 && !(r = fdopendir(fd))) close(fd); } DONE(m); return r; }
 long apklayer_android_spelling(char *buf, long n);
@@ -107,10 +112,33 @@ WRAP(int, statfs, (const char *path, struct statfs *s), (const char *, struct st
 WRAP(int, statfs64, (const char *path, struct statfs64 *s), (const char *, struct statfs64 *), m, s)
 WRAP(int, symlink, (const char *target, const char *path), (const char *, const char *), target, m)
 int fstatat64(int dirfd, const char *path, struct stat64 *st, int flags) { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
-    int r = ((int (*)(int, const char *, struct stat64 *, int))REAL(fstatat64))(dirfd, use, st, flags); BROKER_STATAT(r, dirfd, use, flags & AT_SYMLINK_NOFOLLOW, fstat64(fd_, st)); DONE(m); return r; }
+    void *f = REAL(fstatat64); int r = f ? ((int (*)(int, const char *, struct stat64 *, int))f)(dirfd, use, st, flags) : KSTAT(dirfd, use, st, flags); BROKER_STATAT(r, dirfd, use, flags & AT_SYMLINK_NOFOLLOW, fstat64(fd_, st)); DONE(m); return r; }
 int statx(int dirfd, const char *path, int flags, unsigned int mask, struct statx *st) { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
     int r = ((int (*)(int, const char *, int, unsigned int, struct statx *))REAL(statx))(dirfd, use, flags, mask, st);
     BROKER_STATAT(r, dirfd, use, flags & AT_SYMLINK_NOFOLLOW, ((int (*)(int, const char *, int, unsigned int, struct statx *))REAL(statx))(fd_, "", AT_EMPTY_PATH | (flags & AT_STATX_SYNC_TYPE), mask, st)); DONE(m); return r; }
+/* glibc before 2.33's own entry points, which programs built against it call (the Temurin JDK of the Sailfish package: java.io.File's
+ * exists/isDirectory call __xstat64, so Termux's /data/data/com.termux/files was the host's). On a newer glibc they are compat symbols dlsym
+ * does not return (an old program on it binds to these): the kernel's call. */
+int __xstat(int ver, const char *path, struct stat *st);
+int __xstat64(int ver, const char *path, struct stat64 *st);
+int __lxstat(int ver, const char *path, struct stat *st);
+int __lxstat64(int ver, const char *path, struct stat64 *st);
+int __fxstatat(int ver, int dirfd, const char *path, struct stat *st, int flags);
+int __fxstatat64(int ver, int dirfd, const char *path, struct stat64 *st, int flags);
+static int old_stat(void *real, bool at, int ver, int dirfd, const char *path, void *st, int flags)
+{
+    MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
+    int r = !real ? KSTAT(dirfd, use, st, flags)
+        : at ? ((int (*)(int, int, const char *, void *, int))real)(ver, dirfd, use, st, flags) : ((int (*)(int, const char *, void *))real)(ver, use, st);
+    BROKER_STATAT(r, dirfd, use, flags & AT_SYMLINK_NOFOLLOW, KSTAT(fd_, "", st, AT_EMPTY_PATH));
+    DONE(m); return r;
+}
+int __xstat(int ver, const char *path, struct stat *st) { return old_stat(REAL(__xstat), false, ver, AT_FDCWD, path, st, 0); }
+int __xstat64(int ver, const char *path, struct stat64 *st) { return old_stat(REAL(__xstat64), false, ver, AT_FDCWD, path, st, 0); }
+int __lxstat(int ver, const char *path, struct stat *st) { return old_stat(REAL(__lxstat), false, ver, AT_FDCWD, path, st, AT_SYMLINK_NOFOLLOW); }
+int __lxstat64(int ver, const char *path, struct stat64 *st) { return old_stat(REAL(__lxstat64), false, ver, AT_FDCWD, path, st, AT_SYMLINK_NOFOLLOW); }
+int __fxstatat(int ver, int dirfd, const char *path, struct stat *st, int flags) { return old_stat(REAL(__fxstatat), true, ver, dirfd, path, st, flags); }
+int __fxstatat64(int ver, int dirfd, const char *path, struct stat64 *st, int flags) { return old_stat(REAL(__fxstatat64), true, ver, dirfd, path, st, flags); }
 int faccessat(int dirfd, const char *path, int mode, int flags) { AT(m, path); int r = ((int (*)(int, const char *, int, int))REAL(faccessat))(dirfd, m_use, mode, flags);
     CHANGE(r, "access", dirfd, m_use, mode); DONE(m); return r; }
 int mkdirat(int dirfd, const char *path, mode_t mode) { AT(m, path); int r = ((int (*)(int, const char *, mode_t))REAL(mkdirat))(dirfd, m_use, mode);
@@ -173,9 +201,10 @@ int renameat(int fd1, const char *from, int fd2, const char *to) {
 WRAP(int, creat, (const char *path, mode_t mode), (const char *, mode_t), m, mode)
 WRAP(int, creat64, (const char *path, mode_t mode), (const char *, mode_t), m, mode)
 WRAP(int, mkfifo, (const char *path, mode_t mode), (const char *, mode_t), m, mode)
-WRAP(int, mknod, (const char *path, mode_t mode, dev_t dev), (const char *, mode_t, dev_t), m, mode, dev)
+int mknod(const char *path, mode_t mode, dev_t dev) { return mknodat(AT_FDCWD, path, mode, dev); }
 WRAPAT(int, mkfifoat, (int dirfd, const char *path, mode_t mode), (int, const char *, mode_t), dirfd, use, mode)
-WRAPAT(int, mknodat, (int dirfd, const char *path, mode_t mode, dev_t dev), (int, const char *, mode_t, dev_t), dirfd, use, mode, dev)
+int mknodat(int dirfd, const char *path, mode_t mode, dev_t dev) { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; void *f = REAL(mknodat);
+    int r = f ? ((int (*)(int, const char *, mode_t, dev_t))f)(dirfd, use, mode, dev) : (int)SYSCALL(SYS_mknodat, (long)dirfd, (long)use, (long)mode, (long)dev); DONE(m); return r; }
 WRAPAT(int, fchownat, (int dirfd, const char *path, uid_t u, gid_t g, int flags), (int, const char *, uid_t, gid_t, int), dirfd, use, u, g, flags)
 ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t n) { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
     ssize_t r = ((ssize_t (*)(int, const char *, char *, size_t))REAL(readlinkat))(dirfd, use, buf, n); DONE(m); return proc_link(path, buf, r); }

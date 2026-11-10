@@ -55,6 +55,43 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Parallels (own tree, gfxstream from the staged prebuilts copy, new arm64 mapper): OpenTTD draws its menu, New Game and Generate open a
   running game (the map, date advancing), no "gralloc import failed" (129 before).
 
+## 2026-11-10: Halium phones on 0.4.13: Termux on Sailfish (glibc 2.30 path layer, libhybris's stderr), a component host's SIGTERM during its setup
+- Builds: main f1bf81d2 (0.4.12 + today's fixes) as 0.4.13, built locally (the CI dry run 42733674620 predates bionic_translation 0063): Sailfish
+  RPM (sailfish-rpm.sh on the Mac), click (click.sh on Parallels), runtime bundle arm64 0.4.13 (runtime-bundle.sh in OrbStack, sha256 95f1b042...).
+  `apklayer setup --update --bundle`: both phones reinstalled their 10 system apps (the per-APK record), 4 min (Quintus) / 11 min (X23).
+- Termux on the Volla Quintus (Sailfish OS 5.0, glibc 2.30) never installed its bootstrap; three causes, fixed:
+  1. glibc before 2.33 exports no stat functions (its headers make stat() a call of `__xstat`): the package's Temurin JDK (built against glibc
+     2.17) reaches the file system through `__xstat64`, which the path layer's LD_PRELOAD did not wrap, so java.io.File saw the host's /data
+     ("The termux files directory not found at path /data/data/com.termux/files"). paths_preload.c wraps `__xstat`, `__lxstat`, `__fxstatat`
+     (and their 64 forms); where glibc has no such symbol (2.33+, compat only) they go to the kernel's newfstatat.
+  2. The same glibc gap the other way: the wrappers of stat, stat64, lstat, lstat64, fstatat, fstatat64, mknod and mknodat called
+     `dlsym(RTLD_NEXT)`'s NULL on 2.30, so an Android program bound to them by name jumped to 0 (Termux's dash: `[runtime-trace] signal 11
+     pc=0x0` from libapklayer-preload's stat64). They fall back to the kernel's call.
+  3. btload's constructor resolves the GL extension stubs through the host's libEGL.so.1, on Sailfish libhybris, whose linker prints every
+     vendor library it does not find on stderr (two lines per eglGetProcAddress in an app's environment, ~1200 per program): the second bootstrap
+     stage read `id -u 2>&1` as `library "libEGL.so" not found...10013`. stderr is /dev/null during the lookups (tools/gen/android-stubs.py).
+  Test: tests/native/path-layer.c calls `__xstat64`/`__lxstat64` (fails without the wrappers on glibc 2.39: no such symbol). Quintus: a fresh
+  bootstrap reaches the prompt, `id` typed on Lipstick's keyboard: `uid=10013 gid=10013 groups=10013,3003(inet),9997,20013,50013`.
+- `apklayer --instance ut stop` took 5-10 s on the Volla X23 when it met a component host starting (F-Droid's, restarted by its job ~10 s after
+  each instance start): the host took SIGTERM as an orderly stop from the start of ComponentHost.run, but only its main loop reads the flag,
+  so its setup went on, found the hub ending (`Instance hub is exiting`, then a new `starting hub`) and waited, while the hub's shutdown hook
+  waited 4 s for it and SIGKILLed it (exit 137; strace: SIGTERM forwarded to the JVM at once, the JVM alive 4.2 s later). The orderly-stop
+  handler is now installed when the loop starts; before it, the JVM's default exit. Reproduced 3 of 3 before (stop at the host's registration:
+  9.8, 9.8, 5.1 s, exit 137), after: exit 143 every time.
+- Checks, instance `ut` on each phone (uinput taps, SurfaceFlinger and compositor screenshots):
+  - UiBench starts and draws (both); Termux reaches its prompt, `id` = app uid and Android groups (X23: 10015 with 3003, 9997, 20015, 50015;
+    Quintus after the fixes above);
+  - keyboards (hello.input): shown on focus, `ok go `, a long press selects the word, one Backspace deletes it, Enter's newline, swiped down
+    (`imInitiatedHide`) and shown again by a tap, the email field's `@`/Go layout and Enter = action 2, password (hidden text, Done), the
+    number pad, Hide keyboard (`hide=true`, `host keyboard hidden, field kept`) and a tap shows it again: both phones;
+  - camera = device: Open Camera's live preview from both phones' front cameras (camera 1: a room on the Quintus, the ceiling on the X23; the
+    back ones face the desk); provider reload: with the fake provider under Open Camera, `providers set camera fake ... fps=15` restarted the
+    provider: Camera3-Device's error state, `CameraTraces: Process trace saved`, cameraserver alive on both (the 0063 path; crashed before);
+  - NewPipe opens (X23: the Live list with thumbnails; the Quintus' 0.20.1: Trending, empty as before); `stop` ends every instance process in
+    1.0-1.9 s (after the fix above).
+- Found, not fixed (docs/PLAN.md): hello.camera's YUV check fails with the fake provider on both phones (`yuv bad 640x480 81/90/240 ...`: six
+  bars read as red, two as black; Open Camera shows the bars right), so tests/vm/camera-reload.sh stops before its reload there.
+
 ## 2026-11-10: cameraserver no longer crashes when the camera provider restarts under an open camera (bionic_translation 0063)
 - The SIGSEGV (in libc under libbinder, after BR_DEAD_REPLY and the drain timeout) was not binder: the open device's transactions to the
   dead provider failed as on Android, Camera3Device went into its error state (the app gets onDisconnected/ERROR_CAMERA_DEVICE) and

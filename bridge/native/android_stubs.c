@@ -749,10 +749,16 @@ __asm__(".text\n.globl glWeightPointerOESBounds\n.type glWeightPointerOESBounds,
 __asm__(".text\n.globl glWeightPointerOESBounds\n.type glWeightPointerOESBounds,@function\nglWeightPointerOESBounds:\n\tmovq stubslot_glWeightPointerOESBounds(%rip), %r11\n\ttestq %r11, %r11\n\tjz 1f\n\tjmp *%r11\n1:\txorl %eax, %eax\n\tret\n");
 #endif
 #include <dlfcn.h>
+#include <fcntl.h>
+#include <unistd.h>
 static void __attribute__((constructor)) resolve_gl_stubs(void) {
     void *egl = dlopen("libEGL.so.1", RTLD_LAZY | RTLD_GLOBAL);
     void *(*gpa)(const char *) = egl ? dlsym(egl, "eglGetProcAddress") : 0;
     if (!gpa) return;
+    /* libhybris's EGL (Halium) prints every vendor library its linker does not find on stderr, in each Android program:
+     * not into the program's output (Termux's bootstrap reads `id -u 2>&1`) */
+    int err = dup(2), null = open("/dev/null", O_WRONLY | O_CLOEXEC);
+    if (err >= 0 && null >= 0) dup2(null, 2);
     extern void *stubslot_glAlphaFuncxOES; stubslot_glAlphaFuncxOES = gpa("glAlphaFuncxOES");
     extern void *stubslot_glBindFramebufferOES; stubslot_glBindFramebufferOES = gpa("glBindFramebufferOES");
     extern void *stubslot_glBindRenderbufferOES; stubslot_glBindRenderbufferOES = gpa("glBindRenderbufferOES");
@@ -877,4 +883,7 @@ static void __attribute__((constructor)) resolve_gl_stubs(void) {
     extern void *stubslot_glVertexPointerBounds; stubslot_glVertexPointerBounds = gpa("glVertexPointerBounds");
     extern void *stubslot_glWeightPointerOES; stubslot_glWeightPointerOES = gpa("glWeightPointerOES");
     extern void *stubslot_glWeightPointerOESBounds; stubslot_glWeightPointerOESBounds = gpa("glWeightPointerOESBounds");
+    if (err >= 0 && null >= 0) dup2(err, 2);
+    if (err >= 0) close(err);
+    if (null >= 0) close(null);
 }
