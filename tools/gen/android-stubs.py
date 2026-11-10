@@ -61,10 +61,14 @@ with open(out, "w") as f:
                     '\\ttestq %%r11, %%r11\\n\\tjz 1f\\n\\tjmp *%%r11\\n1:\\txorl %%eax, %%eax\\n\\tret\\n");\n#endif\n' % ((s,) * 4))
         else:
             f.write("long %s(void) { return 0; }\n" % s)
-    f.write("#include <dlfcn.h>\nstatic void __attribute__((constructor)) resolve_gl_stubs(void) {\n"
+    f.write("#include <dlfcn.h>\n#include <fcntl.h>\n#include <unistd.h>\nstatic void __attribute__((constructor)) resolve_gl_stubs(void) {\n"
             "    void *egl = dlopen(\"libEGL.so.1\", RTLD_LAZY | RTLD_GLOBAL);\n"
-            "    void *(*gpa)(const char *) = egl ? dlsym(egl, \"eglGetProcAddress\") : 0;\n    if (!gpa) return;\n")
+            "    void *(*gpa)(const char *) = egl ? dlsym(egl, \"eglGetProcAddress\") : 0;\n    if (!gpa) return;\n"
+            "    /* libhybris's EGL (Halium) prints every vendor library its linker does not find on stderr, in each Android program:\n"
+            "     * not into the program's output (Termux's bootstrap reads `id -u 2>&1`) */\n"
+            "    int err = dup(2), null = open(\"/dev/null\", O_WRONLY | O_CLOEXEC);\n"
+            "    if (err >= 0 && null >= 0) dup2(null, 2);\n")
     for s in gl:
         f.write('    extern void *stubslot_%s; stubslot_%s = gpa("%s");\n' % (s, s, s))
-    f.write("}\n")
+    f.write("    if (err >= 0 && null >= 0) dup2(err, 2);\n    if (err >= 0) close(err);\n    if (null >= 0) close(null);\n}\n")
 print(len(missing), "stubs ->", out)
