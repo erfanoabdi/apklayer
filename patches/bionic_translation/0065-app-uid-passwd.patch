@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Tue, 10 Nov 2026 00:00:00 +0000
+Subject: [PATCH] libc: getpwuid of an app uid answers like bionic
+
+apklayer patch (docs/PATCHES.md). 0056 gives an app its Android uid; glibc has no passwd entry for it, so getpwuid(getuid()) was NULL
+and Unity's libunity read pw_dir from it (PGR died at start). bionic_getpwuid and bionic_getpwuid_r answer an app id the way bionic's
+grp_pwd.cpp app_id_to_passwd does (u<user>_a<n>, /data, /bin/sh, gid = uid); glibc still answers every uid it knows.
+
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -16,6 +16,7 @@
+ #include <string.h>
+ #include <time.h>
+ #include <unistd.h>
++#include <pwd.h> /* apklayer patch: app passwd */
+ 
+ #include <sys/stat.h>
+ #include <sys/syscall.h>
+@@ -172,6 +173,34 @@
+ gid_t bionic_getgid(void) { return app_uid >= 0 ? (gid_t)app_uid : getgid(); }
+ gid_t bionic_getegid(void) { return app_uid >= 0 ? (gid_t)app_uid : getegid(); }
+ 
++/* apklayer patch: the passwd entry of an app uid. glibc knows only the desktop's users, so getpwuid(getuid()) of an app (its Android
++ * uid, above) was NULL, and Unity's libunity read pw_dir from it (PGR died at start, SIGSEGV at 0x20 on UnityMain). bionic answers an
++ * app id itself (grp_pwd.cpp app_id_to_passwd): u<user>_a<n>, home /data, shell /bin/sh, gid = uid. Every other uid is glibc's. */
++static int app_passwd(uid_t uid, struct passwd *pw, char *name, size_t len)
++{
++	uid_t appid = uid % 100000;  /* AID_USER_OFFSET */
++	if (appid < 10000 || appid > 19999 || len < 24) return 0;  /* AID_APP_START..AID_APP_END */
++	snprintf(name, len, "u%u_a%u", uid / 100000, appid - 10000);
++	*pw = (struct passwd){ .pw_name = name, .pw_passwd = (char *)"", .pw_uid = uid, .pw_gid = uid, .pw_gecos = (char *)"",
++	                       .pw_dir = (char *)"/data", .pw_shell = (char *)"/bin/sh" };
++	return 1;
++}
++
++struct passwd *bionic_getpwuid(uid_t uid)
++{
++	static __thread struct passwd app;
++	static __thread char name[32];
++	struct passwd *pw = getpwuid(uid);
++	return pw || !app_passwd(uid, &app, name, sizeof name) ? pw : &app;
++}
++
++int bionic_getpwuid_r(uid_t uid, struct passwd *pw, char *buf, size_t len, struct passwd **result)
++{
++	int ret = getpwuid_r(uid, pw, buf, len, result);
++	if (ret == 0 && !*result && app_passwd(uid, pw, buf, len)) *result = pw;
++	return ret;
++}
++
+ int bionic_getresuid(uid_t *r, uid_t *e, uid_t *s)
+ {
+ 	int ret = getresuid(r, e, s);

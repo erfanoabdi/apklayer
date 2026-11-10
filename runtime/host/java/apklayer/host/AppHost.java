@@ -103,6 +103,7 @@ public final class AppHost implements Runnable {
         logicalH = Math.round(height / density);
         logicalScale = Math.round(density * 100);
         main = new Handler(Looper.getMainLooper());
+        HostInputDevices.install(width, height);  // the device injected events come from (Unity looks it up)
         input = new HostInput(main, InstrumentationRegistry.getInstrumentation().getUiAutomation(), new HostInput.WindowEvents() {
             @Override
             public void configure(int w, int h, int scalePct, int dpi, int navPx, int outputW, int outputH, int imePx, boolean mobileStyle) {
@@ -459,6 +460,7 @@ public final class AppHost implements Runnable {
     private void hostResize(int w, int h, int scalePct, int dpi, int navPx) {
         if (dpi <= 0) dpi = 160 * scalePct / 100;
         int wdp = dp(w * scalePct / 100, dpi), hdp = dp(h * scalePct / 100, dpi);
+        HostInputDevices.install(w * scalePct / 100, h * scalePct / 100);  // its motion ranges are the window's pixels
         // a rotation: the window turned as the app asked (setRequestedOrientation) or the phone turned (mobile style); other shape changes
         // (a drag, fullscreen) are resizes in place
         boolean turned = (turnRequested || mobile) && !stack.isEmpty() && logicalW > 0 && (w > h) != (logicalW > logicalH);

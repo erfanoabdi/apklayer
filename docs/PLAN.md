@@ -12,6 +12,7 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - An Android IME stays optional; no IME switcher. No Recents in the mobile navigation bar.
 
 ## Bugs (open)
+- PGR (Punishing: Gray Raven, Unity): its Notice dialog (KuroSDK) is laid out for 1024x768 (`WindowInsets changed: 1024x768` beside the window's 814x456), so its accept button is below the window; in a fresh instance the game ended once on a microG provider race (the hub's forward to a starting microG: "Instance hub disconnected", uncaught on a Play services thread) and once by its own Process.killProcess after GamesResolutionActivity. Clicks and the startup SIGSEGV are fixed (CHANGELOG 2026-11-10).
 - Ubuntu Touch spread (per-launch shell, 2026-11-10, CHANGELOG): run groups input, multi-app, mobile on Parallels for the shell/CLI change;
   a drawer launch that finds its app already running (relaunch) starts and ends a shell of its own for nothing.
 - Toasts queue per process, not across the instance's apps (NotificationManagerService has one queue).

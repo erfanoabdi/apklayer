@@ -103,7 +103,7 @@ final class HostInput {
             main.post(() -> HostWindows.longClickAt(ev[1], ev[2]));
         } else if (ev[0] <= 2) {
             if (ev[0] == MotionEvent.ACTION_DOWN) downTime = now;
-            inject(MotionEvent.obtain(downTime, now, ev[0], ev[1], ev[2], 0));
+            inject(click(now, ev[0], ev[1], ev[2]));
         } else if (ev[0] == 12) { // key (xkb): {12, action, android keycode, unicode, meta}
             hostKey(now, ev[1], ev[2], ev[3], ev[4]);
         } else if (ev[0] == 13) { // wheel: {13, x, y, vscroll*1000, hscroll*1000}
@@ -131,6 +131,27 @@ final class HostInput {
             inject(new KeyEvent(now, now, ev[2] == 1 ? KeyEvent.ACTION_DOWN : KeyEvent.ACTION_UP,
                     KeyEvent.KEYCODE_BACK, 0));
         }
+    }
+
+    /**
+     * The primary button as one finger on a touchscreen, as Instrumentation.sendPointerSync makes an event without a pointer source: a
+     * plain MotionEvent.obtain has SOURCE_UNKNOWN and no tool type, which Views take but engines that read the source (Unity's
+     * nativeInjectEvent, games that only handle touch) drop, so PGR took no click at all.
+     */
+    private MotionEvent click(long now, int action, int x, int y) {
+        MotionEvent.PointerProperties pp = new MotionEvent.PointerProperties();
+        pp.id = 0;
+        pp.toolType = MotionEvent.TOOL_TYPE_FINGER;
+        MotionEvent.PointerCoords pc = new MotionEvent.PointerCoords();
+        pc.x = x;
+        pc.y = y;
+        pc.pressure = 1f;
+        pc.size = 1f;
+        if (Boolean.getBoolean("apklayer.debugkeys"))
+            System.out.println("[apklayer] click action=" + MotionEvent.actionToString(action) + " source=0x"
+                    + Integer.toHexString(android.view.InputDevice.SOURCE_TOUCHSCREEN) + " tool=finger at " + x + "," + y);
+        return MotionEvent.obtain(downTime, now, action, 1, new MotionEvent.PointerProperties[] {pp}, new MotionEvent.PointerCoords[] {pc},
+                0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_TOUCHSCREEN, 0);
     }
 
     /** A key from the shell: action 0 = down / 1 = up, Android keycode, UTF-32 char (0 = none). */

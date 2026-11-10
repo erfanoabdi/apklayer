@@ -3,6 +3,11 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: Unity games take clicks (PGR)
+- A mouse click reaches the app as one finger on a touchscreen (SOURCE_TOUCHSCREEN, TOOL_TYPE_FINGER), as Instrumentation.sendPointerSync makes an event without a pointer source; it was SOURCE_UNKNOWN with no tool type, which Views take but Unity drops. Hover and the wheel stay mouse events. Test: input (input-inject asserts the click's source).
+- Input devices: one virtual device (id 0: touchscreen, mouse and keyboard sources, motion ranges of the window's pixels) in InputManager (HostInputDevices); Robolectric had none, so getInputDevice(event's id) was null.
+- bionic_translation 0065: getpwuid/getpwuid_r of an app uid answer like bionic (u0_aN, /data, /bin/sh). PGR (Punishing: Gray Raven, Unity 2022.3) died at start with SIGSEGV at 0x20 on UnityMain: libunity read pw_dir from getpwuid(getuid()) == NULL (0056 gives the app its Android uid, glibc has no entry for it). Open (PLAN): PGR's Notice dialog is laid out for 1024x768 (its button below the window); in a fresh instance the game ended on a microG provider race (Instance hub disconnected) and once by its own Process.killProcess.
+
 ## 2026-11-10: release 0.4.17 (runtime 0.4.17)
 - Phones: an app asking for an orientation the phone is not in gets the turned screen, composed rotated by SurfaceFlinger (libapklayer_vdisplay) with touch mapped back: NewPipe's fullscreen video fills the Volla X23's screen; the navigation bar follows the app's fullscreen hide/show. Letterboxing stays for desktops and Lipstick.
 

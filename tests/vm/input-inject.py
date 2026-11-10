@@ -128,6 +128,8 @@ try:
                     if STALL: stall()
     assert app.poll() is None, 'input app ended'
     assert saw('[hello-input] text=ni'), 'IME preedit did not reach the field'
+    # a mouse click reaches the app as one finger on a touchscreen (HostInput.click): engines that read the source (Unity) drop SOURCE_UNKNOWN
+    assert saw('[apklayer] click action=ACTION_DOWN source=0x1002 tool=finger'), 'the click was not a touchscreen event'
     print('PASS touch, keys, Ctrl+A, IME preedit/commit, a touch tap, and keys, IME and Back during a long press selection toolbar through the shell test input'
           + (' (the app stopped %.1f s after each step)' % STALL if STALL else ''), flush=True)
 finally:
