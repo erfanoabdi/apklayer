@@ -3,6 +3,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: release 0.4.17 (runtime 0.4.17)
+- Phones: an app asking for an orientation the phone is not in gets the turned screen, composed rotated by SurfaceFlinger (libapklayer_vdisplay) with touch mapped back: NewPipe's fullscreen video fills the Volla X23's screen; the navigation bar follows the app's fullscreen hide/show. Letterboxing stays for desktops and Lipstick.
+
 ## 2026-11-10: release 0.4.16 (runtime 0.4.13)
 - 0.4.15 with the Sailfish OS RPM: its build looked for slint-v1.18.1.tar.gz while sailfish-rpm.sh saved Slint's archive as v1.18.1.tar.gz (the rename matched the cache path, not the URL; it worked locally from an earlier cache).
 
