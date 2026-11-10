@@ -182,3 +182,7 @@ Behaviour that differs from Android or from stock Robolectric without editing up
 - frameworks/native 0003-vulkan-host-dispatch (2026-11-08): the host-dispatch hooks are `VKAPI_ATTR` (their casts broke the arm32 build: `-Wcast-calling-convention`).
 - hardware/interfaces 0004-gnss-no-mock-fix-from-a-subclass: `Gnss::reportsMockLocation()` (virtual, true); a subclass without a fix reports none.
 - robolectric 0018-location-manager-requests-listener: ProviderEntry tells `LocationRequests` (runtime/patches) when a provider's first request comes and its last goes.
+
+## Slint (Sailfish RPM, `tools/release/sailfish-slint.sh`)
+- slint-platform.h fallback `owning_view` gets a default constructor (a sed in the script, checked by grep): gcc 10's C++20 views must be
+  default-constructible (before P2325R3), so `PhysicalRegion::rectangles()` did not compile in the Sailfish build root.

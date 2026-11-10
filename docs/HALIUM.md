@@ -399,16 +399,21 @@ for the new mount API and pidfd_open, SYS_statx, bionic_translation compat patch
 bundle unpacked as `zstd -dc | tar -x` (BusyBox tar has no `--zstd`; gnu-tar conflicts with busybox-symlinks-tar).
 
 apklayer-manager (2026-11-10): Slint's prebuilt slint-compiler needs glibc 2.35 (its prebuilt library 2.30, but with winit, libinput and gbm), so
-`tools/release/sailfish-slint.sh` builds Slint 1.18.1 (the version
-`manager/fetch-slint.sh` pins) in the build root: Rust's standalone toolchain 1.92 (Slint's minimum; Sailfish's rust is 1.75), Slint's GitHub
-archive, its Cargo.lock's crates (`--locked`, kept in `~/.cache/apklayer/sailfish/cargo`), the result in `~/.cache/apklayer/sailfish/slint` (built
-once, fetch-slint.sh's layout). Features: `std,renderer-software,experimental`, no backend. Slint's winit backend needs xdg_wm_base, which Lipstick
+`tools/release/sailfish-slint.sh` builds Slint 1.18.1 (the version `manager/fetch-slint.sh` pins) inside the build root: Rust's standalone
+toolchain 1.92 (Slint's minimum; Sailfish's rust is 1.75; rust-lang's aarch64 build needs only glibc 2.17), Slint's GitHub archive, the crates
+its Cargo.lock pins (`--locked`, kept in `~/.cache/apklayer/sailfish/cargo`, cached in CI), the result in `~/.cache/apklayer/sailfish/slint`
+(built once, fetch-slint.sh's layout). Both binaries need nothing newer than GLIBC_2.30 (`objdump -T`); the library needs only fontconfig
+besides glibc. Features: `std,renderer-software,experimental,testing`, no backend: Slint's winit backend needs xdg_wm_base, which Lipstick
 lacks; its Qt backend needs Qt 5.15 (Sailfish has 5.6); linuxkms would take the display from Lipstick. So the manager brings its own platform
-(`manager/src/wlshell.cpp`, meson `-Dwlshell=true`, only in the RPM): a wl_shell toplevel at the output's size, Slint's software renderer into two
-wl_shm XRGB8888 buffers, wl_touch's first finger as the pointer, Slint's timers and `invoke_from_event_loop` tasks in a poll loop; the scale is
-Silica's `theme_pixel_ratio` × 1.5 (dconf; 2.25 on the Quintus; `SLINT_SCALE_FACTOR` wins). The RPM installs it with its desktop entry (Icon by
-path, as the app entries; `X-Nemo-Single-Instance=no`), so it is in Lipstick's app grid. No keyboard input in it (Lipstick has no text-input
-protocol; typing into its fields needs a hardware keyboard: not wired), no clipboard.
+(`manager/src/wlshell.cpp`, meson `-Dwlshell=true`, only in the RPM): a wl_shell toplevel at the output's size, Slint's software renderer into
+two wl_shm XRGB8888 buffers, wl_touch's first finger as the pointer, Slint's timers and `invoke_from_event_loop` tasks in a poll loop; the
+scale is Silica's `theme_pixel_ratio` x 1.5 (dconf; 2.25 on the Quintus; `SLINT_SCALE_FACTOR` wins). Slint's header needs one line for gcc 10
+(an apklayer patch in sailfish-slint.sh, docs/PATCHES.md). The RPM installs the manager with its desktop entry: Icon by path and
+`X-Nemo-Single-Instance=no` (as the app entries), `[X-Sailjail] Sandboxing=Disabled` (without it sailjail asks for every permission and
+jails it; Sailfish's own system tools have the same). On the Quintus (2026-11-10): "Apklayer" is in Lipstick's app grid, a tap starts it
+through invoker, it shows the Apps list of the `ut` instance with the installed and system apps and the setup line, and Lipstick's touches
+reach it (an app's page, the Instances page). No keyboard input in it (Lipstick has no text-input protocol), no clipboard. The RPM grows from
+~2.5 to 9.0 MB (libslint_cpp 13 MB unpacked).
 
 Install (root): `pkcon install-local apklayer-*.aarch64.rpm temurin-21-jdk-*.rpm libbsd-*.rpm libmd-*.rpm libunwind-*.rpm` (unsigned local RPMs; zstd and
 elfutils-libelf come from Jolla's repositories); `apklayer-binder.service` starts. As defaultuser: `apklayer setup` (no wget on Sailfish: `--bundle

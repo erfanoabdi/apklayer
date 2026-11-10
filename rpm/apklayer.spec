@@ -88,9 +88,10 @@ DESTDIR=%{buildroot} meson install -C build-manager --no-rebuild --quiet
 install -D -m644 debian/instances %{buildroot}%{_sysconfdir}/apklayer/instances
 # kernel binder only (apklayer binder kernel): the userspace binder, the default, needs no unit; `systemctl enable --now apklayer-binder` turns it on
 install -D -m644 debian/apklayer.apklayer-binder.service %{buildroot}%{_unitdir}/apklayer-binder.service
-# Lipstick's launcher: invoker's single instance would lock by the Exec binary (as the app entries say, cli/desktop.cpp); the icon by its path
+# Lipstick's launcher: the icon by its path and no single-instance lock (as the app entries, cli/desktop.cpp); unsandboxed, as Sailfish's own
+# system tools (sailjail would ask for every permission and jail the manager away from the CLI, its instances and binder)
 sed -i -e 's|^Icon=.*|Icon=%{_datadir}/icons/hicolor/256x256/apps/apklayer.png|' -e '$aX-Nemo-Single-Instance=no' \
-    %{buildroot}%{_datadir}/applications/apklayer-manager.desktop
+    -e '$a\\n[X-Sailjail]\nSandboxing=Disabled' %{buildroot}%{_datadir}/applications/apklayer-manager.desktop
 # the Lomiri content hub peer is Ubuntu Touch's
 rm -f %{buildroot}%{_datadir}/applications/apklayer-share.desktop
 rm -rf %{buildroot}%{_datadir}/lomiri-content-hub

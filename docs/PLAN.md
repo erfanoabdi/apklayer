@@ -106,7 +106,8 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - Releases: the amd64 leg untested; the first command after install blocks ~75 s for runtime setup (the manager's first run must show it);
   the release guard's first tag run untested; deb install through PackageKit/pkexec untested; `setup` should say when the release's runtime differs.
 - System-app reinstall on runtime change not checked on a real deb upgrade or a Halium phone.
-- Sailfish: libhybris mapped into every Android process; an apklayer-manager for Sailfish; a Chum/OBS repository for zypper updates.
+- Sailfish: libhybris mapped into every Android process; a Chum/OBS repository for zypper updates; the manager (2026-11-10) has no text input
+  (Lipstick has no text-input protocol) and its "Open" from an app's page was not checked to start the app.
 
 ## Manager
 - Apps installed before 2026-11-04 need a reinstall for permissions; a grant reaches the app at its next start; signature grants approximated.

@@ -3,6 +3,22 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: apklayer-manager in the Sailfish OS RPM
+- Slint 1.18.1 (fetch-slint.sh's version) built from source in the Sailfish build root (apklayer-sailfish-build:5.0.0.62) by
+  tools/release/sailfish-slint.sh, called by sailfish-rpm.sh: rust-lang's standalone aarch64 toolchain 1.92 (Slint's minimum; Sailfish's rust
+  is 1.75), Slint's GitHub archive, Material 1.1.0, all pinned in rpm/sources; crates `--locked` from Slint's Cargo.lock into
+  ~/.cache/apklayer/sailfish/cargo (release.yml caches it). libslint_cpp.so and slint-compiler: nothing newer than GLIBC_2.30. Features
+  std, renderer-software, experimental, testing; one header line patched for gcc 10 (docs/PATCHES.md).
+- The manager's own Slint platform for Lipstick (manager/src/wlshell.cpp, meson -Dwlshell=true, RPM only): wl_shell window at the output's
+  size, software renderer into wl_shm, wl_touch as the pointer, poll loop for Slint's timers and tasks; scale from Silica's pixel ratio. Winit
+  needs xdg_wm_base (Lipstick has wl_shell only), Slint's Qt backend Qt 5.15 (Sailfish 5.6). The deb, click and Flatpak builds do not set
+  the option and are unchanged.
+- rpm/apklayer.spec builds and installs it (as debian/rules) with its desktop entry: Icon by path, X-Nemo-Single-Instance=no and
+  `[X-Sailjail] Sandboxing=Disabled` (without it sailjail asked for every permission). RPM 2.5 -> 9.0 MB.
+- On the Volla Quintus (RPM 0.4.14 of this tree, rpm -Uvh --replacepkgs): "Apklayer" in Lipstick's app grid; a tap starts it (invoker
+  --type=generic); it lists the `ut` instance's installed and system apps with the setup line; touches open an app's page. Pictures: Lipstick's
+  saveScreenshot. Injected touches (writes into the goodix event node) reach Lipstick only with the phone unlocked; a uinput touchscreen is not
+  picked up (Qt 5.6 evdevtouch, no hotplug).
 ## 2026-11-10: `apklayer stop` ends the shell when no stack shares it (the slot st1 test flake)
 - Cause: endShellUnlessShared counted every instance directory in the runtime directory whose stack.pid (in the state dir) was alive. Any
   command makes an instance's runtime directory, so a leftover `st2` directory in st1's runtime dir (tests/run gives each slot its own
