@@ -12,5 +12,8 @@ bool isHalium();
 std::string defaultInstanceId();
 // Environment a Halium session needs that its login does not set: PULSE_SERVER (the session's socket) for the PulseAudio backend.
 void haliumEnvDefaults(Env& env, const Layout& layout);
+// A launch from Lomiri's drawer (lomiri-app-launch: APP_ID, its unit): a window shell of its own, started in that unit before the launch leaves it, so
+// Lomiri gives its Wayland client (the app's window) to the app (card, name, icon) and drops it when the launch ends. Sets APKLAYER_APP_SHELL (its socket).
+void startLomiriAppShell(const Layout& layout, const std::string& instanceId);
 
 }  // namespace apklayer

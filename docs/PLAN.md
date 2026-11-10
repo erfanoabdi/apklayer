@@ -12,9 +12,8 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - An Android IME stays optional; no IME switcher. No Recents in the mobile navigation bar.
 
 ## Bugs (open)
-- Ubuntu Touch spread (fixed 2026-11-10, CHANGELOG): check on the X23 with the next click that swiping a card away closes only that app and the
-  shell stays up (qtmir's close timeout); and that `apklayer run` from a terminal (no lomiri-app-launch) leaves no card: qtmir makes such an
-  app "externally managed" and its launcher item stayed after the app ended (seen once with the test shell).
+- Ubuntu Touch spread (per-launch shell, 2026-11-10, CHANGELOG): run groups input, multi-app, mobile on Parallels for the shell/CLI change;
+  a drawer launch that finds its app already running (relaunch) starts and ends a shell of its own for nothing.
 - Toasts queue per process, not across the instance's apps (NotificationManagerService has one queue).
 - A restarted launcher gets no saved instance state (HubActivities.restartIfAlone shortcut; FCL after the game quits).
 - Native bridge: pthread_sigqueue with a guest pthread record is not mapped.

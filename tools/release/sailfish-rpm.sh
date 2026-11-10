@@ -34,7 +34,7 @@ mkdir -p "$cache/sources"
 # the sources (rpm/sources), each checked
 grep -v '^#' rpm/sources | while read -r sum url; do
     f="$cache/sources/$(basename "$url")"
-    case "$f" in *SDK_Target*) f="$cache/target.tar.7z" ;; */slint/archive/*) f="$cache/sources/slint-$(basename "$url")" ;; esac
+    case "$url" in *SDK_Target*) f="$cache/target.tar.7z" ;; */slint/archive/*) f="$cache/sources/slint-$(basename "$url")" ;; esac
     [ -s "$f" ] || curl -sfL --retry 5 -o "$f" "$url"
     case "$sum" in
         md5:*) have="md5:$(if command -v md5sum >/dev/null; then md5sum "$f" | cut -d' ' -f1; else md5 -q "$f"; fi)" ;;

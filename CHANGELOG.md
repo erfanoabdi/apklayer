@@ -3,6 +3,19 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: release 0.4.16 (runtime 0.4.13)
+- 0.4.15 with the Sailfish OS RPM: its build looked for slint-v1.18.1.tar.gz while sailfish-rpm.sh saved Slint's archive as v1.18.1.tar.gz (the rename matched the cache path, not the URL; it worked locally from an earlier cache).
+
+## 2026-11-10: release 0.4.15 (runtime 0.4.13)
+- Sailfish OS: apklayer-manager in the RPM (Slint built from source in the build root against glibc 2.30, a wl_shell platform for Lipstick). Ubuntu Touch: each drawer launch gets its own window shell in its lomiri-app-launch unit (the spread shows the app's name and icon, the card goes when the app ends; no Waydroid hint, which kept closed windows), rotation follows the phone, audio through PulseAudio (the click's pulse backend). Both phones: the host keyboard is Android's IME inset (Termux's extra keys above it) and comes on showSoftInput only. Desktop: fullscreen (xdg set_fullscreen; a requested turn recreates activities). `apklayer stop` keeps the shell only for stacks of its own runtime dir.
+
+## 2026-11-10: Lomiri: a window shell per drawer launch (named cards, no dead windows)
+- A launch from Lomiri's drawer starts its own apklayer-shell in the launch's lomiri-app-launch unit before leaving it (cli/halium.cpp);
+  the window sink and the JVM connect to it (`APKLAYER_SHELL`, `-Dapklayer.shell`), it dies with the launcher. Shared shell unchanged
+  for everything else (desktops, Sailfish, terminal launches, hub dialogs). ensureShell's start and readiness wait split out (startShell).
+- X23, click 0.4.15 of this tree: Calculator card with name and icon (launcher item `apklayer-com.darkempire78.opencalculator`, no
+  `unknown.qtmir`); Back ends app, shell and card; two apps two cards; swiping a card away ends only that app. Lomiri freezes a background
+  app's shell with its unit (state T) and resumes it on focus. Desktop groups (input, multi-app, mobile) not run: Parallels was down.
 ## 2026-11-10: apklayer-manager in the Sailfish OS RPM
 - Slint 1.18.1 (fetch-slint.sh's version) built from source in the Sailfish build root (apklayer-sailfish-build:5.0.0.62) by
   tools/release/sailfish-slint.sh, called by sailfish-rpm.sh: rust-lang's standalone aarch64 toolchain 1.92 (Slint's minimum; Sailfish's rust
