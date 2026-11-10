@@ -111,6 +111,31 @@ int fstatat64(int dirfd, const char *path, struct stat64 *st, int flags) { MAP(m
 int statx(int dirfd, const char *path, int flags, unsigned int mask, struct statx *st) { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
     int r = ((int (*)(int, const char *, int, unsigned int, struct statx *))REAL(statx))(dirfd, use, flags, mask, st);
     BROKER_STATAT(r, dirfd, use, flags & AT_SYMLINK_NOFOLLOW, ((int (*)(int, const char *, int, unsigned int, struct statx *))REAL(statx))(fd_, "", AT_EMPTY_PATH | (flags & AT_STATX_SYNC_TYPE), mask, st)); DONE(m); return r; }
+/* glibc before 2.33 exports no stat functions: its headers make stat() a call of __xstat(ver, ...). Programs built against it reach these
+ * (the Temurin JDK of the Sailfish package: java.io.File's exists/isDirectory call __xstat64, so Termux's /data/data/com.termux/files was
+ * the host's). On a newer glibc they are compat symbols dlsym does not return (an old program on it binds to these): the kernel's
+ * newfstatat, whose struct stat is glibc's on both 64-bit CPUs. */
+#include <sys/syscall.h>
+int __xstat(int ver, const char *path, struct stat *st);
+int __xstat64(int ver, const char *path, struct stat64 *st);
+int __lxstat(int ver, const char *path, struct stat *st);
+int __lxstat64(int ver, const char *path, struct stat64 *st);
+int __fxstatat(int ver, int dirfd, const char *path, struct stat *st, int flags);
+int __fxstatat64(int ver, int dirfd, const char *path, struct stat64 *st, int flags);
+static int old_stat(void *real, bool at, int ver, int dirfd, const char *path, void *st, int flags)
+{
+    MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
+    int r = !real ? (int)((long (*)(long, ...))REAL(syscall))(SYS_newfstatat, (long)dirfd, (long)use, (long)st, (long)flags)
+        : at ? ((int (*)(int, int, const char *, void *, int))real)(ver, dirfd, use, st, flags) : ((int (*)(int, const char *, void *))real)(ver, use, st);
+    BROKER_STATAT(r, dirfd, use, flags & AT_SYMLINK_NOFOLLOW, (int)((long (*)(long, ...))REAL(syscall))(SYS_newfstatat, (long)fd_, (long)"", (long)st, (long)AT_EMPTY_PATH));
+    DONE(m); return r;
+}
+int __xstat(int ver, const char *path, struct stat *st) { return old_stat(REAL(__xstat), false, ver, AT_FDCWD, path, st, 0); }
+int __xstat64(int ver, const char *path, struct stat64 *st) { return old_stat(REAL(__xstat64), false, ver, AT_FDCWD, path, st, 0); }
+int __lxstat(int ver, const char *path, struct stat *st) { return old_stat(REAL(__lxstat), false, ver, AT_FDCWD, path, st, AT_SYMLINK_NOFOLLOW); }
+int __lxstat64(int ver, const char *path, struct stat64 *st) { return old_stat(REAL(__lxstat64), false, ver, AT_FDCWD, path, st, AT_SYMLINK_NOFOLLOW); }
+int __fxstatat(int ver, int dirfd, const char *path, struct stat *st, int flags) { return old_stat(REAL(__fxstatat), true, ver, dirfd, path, st, flags); }
+int __fxstatat64(int ver, int dirfd, const char *path, struct stat64 *st, int flags) { return old_stat(REAL(__fxstatat64), true, ver, dirfd, path, st, flags); }
 int faccessat(int dirfd, const char *path, int mode, int flags) { AT(m, path); int r = ((int (*)(int, const char *, int, int))REAL(faccessat))(dirfd, m_use, mode, flags);
     CHANGE(r, "access", dirfd, m_use, mode); DONE(m); return r; }
 int mkdirat(int dirfd, const char *path, mode_t mode) { AT(m, path); int r = ((int (*)(int, const char *, mode_t))REAL(mkdirat))(dirfd, m_use, mode);

@@ -41,6 +41,16 @@ int main(int argc, char **argv) {
     char buf[64] = {0};
     assert(readlinkat(AT_FDCWD, "/storage/t/d", buf, sizeof buf) == 1 && buf[0] == 'b');
     assert(fchownat(AT_FDCWD, "/storage/t/b", getuid(), getgid(), 0) == 0);
+    /* glibc < 2.33's stat entry points, which programs built against it call (the Sailfish package's JDK) */
+    int (*xstat64)(int, const char *, struct stat64 *) = (int (*)(int, const char *, struct stat64 *))dlsym(RTLD_DEFAULT, "__xstat64");
+    int (*lxstat64)(int, const char *, struct stat64 *) = (int (*)(int, const char *, struct stat64 *))dlsym(RTLD_DEFAULT, "__lxstat64");
+    struct stat64 xs;
+    int ver = 0;  /* _STAT_VER: the kernel's struct stat */
+#ifdef __x86_64__
+    ver = 1;
+#endif
+    assert(xstat64 && xstat64(ver, "/storage/t/d", &xs) == 0 && S_ISREG(xs.st_mode));
+    assert(lxstat64 && lxstat64(ver, "/storage/t/d", &xs) == 0 && S_ISLNK(xs.st_mode));
     char name[] = "/storage/t/eXXXXXX";
     fd = mkstemp(name);
     assert(fd >= 0 && strncmp(name, "/storage/t/e", 12) == 0 && strcmp(name + 12, "XXXXXX") != 0);
