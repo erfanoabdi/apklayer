@@ -55,7 +55,9 @@ inline uint32_t toGfxUsage(uint64_t usage) {
 inline uint32_t bytesPerPixel(uint32_t fourcc) {
     switch (fourcc) {
         case DRM_FORMAT_ABGR16161616F: return 8;
-        case DRM_FORMAT_ABGR8888: case DRM_FORMAT_XBGR8888: case DRM_FORMAT_ARGB8888: case DRM_FORMAT_ABGR2101010: return 4;
+        // the X and 10-bit variants: EGL window buffers (EglAttach) carry the host surface's own fourcc (Mesa's XRGB8888, AR30/XR30)
+        case DRM_FORMAT_ABGR8888: case DRM_FORMAT_XBGR8888: case DRM_FORMAT_ARGB8888: case DRM_FORMAT_XRGB8888:
+        case DRM_FORMAT_ABGR2101010: case DRM_FORMAT_XBGR2101010: case DRM_FORMAT_ARGB2101010: case DRM_FORMAT_XRGB2101010: return 4;
         case DRM_FORMAT_BGR888: return 3;
         case DRM_FORMAT_RGB565: case DRM_FORMAT_R16: case DRM_FORMAT_P010: return 2;
         default: return 1;  // R8 and the 8-bit planar formats' luma plane

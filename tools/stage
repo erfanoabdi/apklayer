@@ -8,6 +8,7 @@
 #   tools/stage sysapps                  the tree's providers and system apps installed as apklayer apps on the VM
 #   tools/stage vulkan [stage dir]       the Orb Vulkan loader build onto the VM (the loader keeps its SONAME; the mapping selects the renamed copy)
 #   tools/stage x86_64                   everything an x86_64 machine needs, one tar file: build/x86_64/apklayer-x86_64-stage.tar (docs/X86_64.md)
+#   tools/stage gfxstream <prebuilts>    gfxstream's sources libapklayer-gles1.so is built from (OpenGL ES 1, bridge/hals/graphics/gles1) into <prebuilts>/common/gfxstream
 #   tools/stage arm32                    the arm32 Android libraries of the 32-bit app process into build/arm32/android-libs (gsi_arm64's system/lib,
 #                                        apklayer's modules' 32-bit outputs; then tools/armhf/build.sh)
 # The VM is the one in tests/vm/local.conf.
@@ -174,7 +175,7 @@ stage_arm32() { # re-runs itself inside the OrbStack machine; every staged ELF i
     echo "$bad foreign ELF files"
 }
 
-[ $# -ge 1 ] || { sed -n '2,14p' "$0" >&2; exit 2; }
+[ $# -ge 1 ] || { sed -n '2,15p' "$0" >&2; exit 2; }
 step="$1"; shift
 case "$step" in
     libs) stage_libs "$@";;
@@ -184,5 +185,6 @@ case "$step" in
     vulkan) stage_vulkan "$@";;
     x86_64) stage_x86_64 "$@";;
     arm32) stage_arm32 "$@";;
+    gfxstream) mkdir -p "$1/common/gfxstream" && $ORB tar cf - -C "$tree/hardware/google/gfxstream" meson.build meson_options.txt host common third_party | tar xf - -C "$1/common/gfxstream";;
     *) echo "tools/stage: unknown target $step" >&2; exit 2;;
 esac

@@ -19,6 +19,18 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
   PipeWire stream recorded through parec --monitor-stream for 60 s: RMS -32.5 dBFS, peak -15.4 dBFS, every second above -50 dBFS, varying
   levels (music). The PC's default sink itself is muted by its owner (desktop setting, left as it is).
 
+## 2026-11-10: release packages build OpenGL ES 1 (libapklayer-gles1.so); EGL window buffers in XRGB8888 no longer copied (regression retest gaps)
+- libapklayer-gles1.so (gfxstream's GLES_CM translator, for hosts whose Mesa has no ES 1: Ubuntu's and Debian's) was built only with
+  `-Dgfxstream=<source>`, which no package build passes: the debs, the Flatpak and the rpms shipped without it and OpenTTD (SDL 1.2, ES 1)
+  drew nothing there. Meson now takes the prebuilts' `common/gfxstream` when `-Dgfxstream` is empty (bridge/hals/graphics/gles1/meson.build);
+  `tools/stage gfxstream <prebuilts>` copies the tree's hardware/google/gfxstream (meson files, host, common, third_party; 58 MB) there.
+  The prebuilts branch must carry that directory for the release packages (lead).
+- An EGL window buffer from the host's XRGB8888 surface (OpenTTD's ES 1 window; also AR30/XR30/XB30) failed gralloc's import on every
+  frame ("Stride didn't match, expected 814 got 3256": the mapper's bytesPerPixel had no XRGB8888 and reported the stride in bytes) and every
+  frame went through the copy path. aosp/hals/graphics/common/gralloc_format.h: 4 bytes per pixel for them; mapper.apklayer rebuilt.
+- Parallels (own tree, gfxstream from the staged prebuilts copy, new arm64 mapper): OpenTTD draws its menu, New Game and Generate open a
+  running game (the map, date advancing), no "gralloc import failed" (129 before).
+
 ## 2026-11-10: cameraserver no longer crashes when the camera provider restarts under an open camera (bionic_translation 0063)
 - The SIGSEGV (in libc under libbinder, after BR_DEAD_REPLY and the drain timeout) was not binder: the open device's transactions to the
   dead provider failed as on Android, Camera3Device went into its error state (the app gets onDisconnected/ERROR_CAMERA_DEVICE) and
@@ -1259,6 +1271,14 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-10 - gsi_arm64 and gsi_x86_64 mapper.apklayer: stride of XRGB8888 and 10-bit window buffers (corpus gaps agent)
+- Why: an EGL window buffer with Mesa's XRGB8888 (OpenTTD's ES 1 window) failed gralloc's import ("Stride didn't match, expected 814 got
+  3256": bytesPerPixel had no XRGB8888, AR30, XR30, XB30) and every frame was copied; aosp/hals/graphics/common/gralloc_format.h.
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh ... hals/graphics`, then
+  `breakfast gsi_arm64 userdebug && m mapper.apklayer` and `breakfast gsi_x86_64 userdebug && m mapper.apklayer`.
+- Result: both built. mapper.apklayer.so arm64 sha256 0c3f0c2a645bca60cae807233195ca5b830b9a212a9c59e53cb201cb9b0c5557
+  (86744 bytes), x86_64 2d4bddb459aec9486db298a1b8668357f308238e9775e39c7dcb8efb79ebeff1 (86736 bytes); both locks set. Not in the prebuilts
+  branch yet: copies for the lead at /tmp/apkl-mapper/{arm64,x86_64} on the Mac.
 ### 2026-11-10 - gsi_x86_64 libberberis_arm64: the guest's own /proc/self/auxv (Rethink DNS agent)
 - Why: Rethink DNS's Go library read the host's auxv through berberis (x86 AT_HWCAP bit 24 taken for arm64's DIT, SIGILL on
   `mrs x0, DIT`); patches/aosp/frameworks/libs/binary_translation 0005.
