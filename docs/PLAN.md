@@ -36,7 +36,10 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - OTR2 on the PC at 2448x1374 ~30 fps (bound by GPU or its translated thread); Swappy's other inputs untested; the swap bpftrace trace does not load on the PC.
 - Windows: an app on a smaller second output still sees the largest; output hotplug reaches the app only at its next configure; no Back button under
   server-side decorations; KDE untested; a real-session scale switch check.
-- Mobile style on Lipstick: the pointer on the navigation-bar strip goes to the app. Landscape keeps the bar at the bottom (revisit with a rotating compositor).
+- Mobile style on Lipstick: the pointer on the navigation-bar strip goes to the app. Landscape keeps the bar at the bottom (Lomiri rotates now: Android puts it at the side).
+- Lomiri: a fixed-orientation app is letterboxed at the window's top left when the phone turns the other way; the desktop entry could declare
+  the launcher activity's orientation (`X-Lomiri-Supported-Orientations`) so Lomiri keeps the screen in it. Rerun camera-reload on the X23
+  (hello.camera's Main now gets a landscape letterbox, not a turned portrait window). Sailfish (Lipstick) rotation unchecked.
 
 ## Camera
 - Sensor timestamps; all streams scaled from the largest; NDK libcamera2ndk is a stub (and would miss a lazy cameraserver on first call).
@@ -135,7 +138,7 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - Halium: host binder contexts against real vendor HALs; `media = device` as Halium default (owner, X23 only checked); NewPipe's network on the phone.
 - Sailfish phone: geoclue1 fix with location on; Lipstick's switcher with two apklayer apps; a finger on the full-screen host dialog.
 - Ubuntu Touch phone: the manager on the real screen, the navigation bar under Lomiri's panel, a drawer tap, the shell's android_wlegl window,
-  Lomiri maximizing under its top bar, the bar's look.
+  Lomiri maximizing under its top bar, the bar's look; turning the phone by hand (checked only with a fake accelerometer, tools/halium/ut-rotate.sh).
 - Bluetooth: the PIN dialog against a legacy (HC-05-style) device. USB: a real serial adapter with a serial app.
 - Push: a real Telegram/WhatsApp message with microG in an always-on instance on Parallels; the unit starting the stack at login.
 - A person: window raise of a relaunched app; the text magnifier; portal file chooser and pkexec in the manager; Google sign-in in Meet/microG;

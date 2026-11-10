@@ -53,6 +53,7 @@ public final class AppHost implements Runnable {
     private int logicalDpi; // 0: 160 x scale
     private int logicalW, logicalH, logicalScale = 100; // current window size in dp and scale %
     private int outputPxW, outputPxH;                    // the shell's output (screen) in pixels, 0: unknown
+    private boolean mobile;                              // the shell's mobile window style (a phone: its turns are rotations)
     private int lastOrientation = -2;                    // top activity's requested orientation last applied
     private final HostTextBridge text = new HostTextBridge();
     private ShellClient shell;
@@ -102,9 +103,10 @@ public final class AppHost implements Runnable {
         main = new Handler(Looper.getMainLooper());
         input = new HostInput(main, InstrumentationRegistry.getInstrumentation().getUiAutomation(), new HostInput.WindowEvents() {
             @Override
-            public void configure(int w, int h, int scalePct, int dpi, int navPx, int outputW, int outputH) {
+            public void configure(int w, int h, int scalePct, int dpi, int navPx, int outputW, int outputH, boolean mobileStyle) {
                 outputPxW = outputW;
                 outputPxH = outputH;
+                mobile = mobileStyle;
                 hostResize(w, h, scalePct, dpi, navPx);
             }
 
@@ -171,6 +173,7 @@ public final class AppHost implements Runnable {
                 } else if (ev[0] == 14) {
                     outputPxW = ev.length > 7 ? ev[6] : 0;
                     outputPxH = ev.length > 7 ? ev[7] : 0;
+                    mobile = ev.length > 8 && ev[8] != 0;
                     hostResize(ev[1], ev[2], ev[3], ev.length > 5 ? ev[4] : 0, ev.length > 5 ? ev[5] : 0);
                     width = display.getWidth();
                     height = display.getHeight();
@@ -442,6 +445,7 @@ public final class AppHost implements Runnable {
     private void hostResize(int w, int h, int scalePct, int dpi, int navPx) {
         if (dpi <= 0) dpi = 160 * scalePct / 100;
         int wdp = dp(w * scalePct / 100, dpi), hdp = dp(h * scalePct / 100, dpi);
+        boolean turned = mobile && !stack.isEmpty() && logicalW > 0 && (logicalW > logicalH) != (w > h);
         logicalW = w;
         logicalH = h;
         logicalScale = scalePct;
@@ -457,7 +461,10 @@ public final class AppHost implements Runnable {
         int pw = w * scalePct / 100, ph = h * scalePct / 100;
         int longer = Math.max(Math.max(outputPxW, outputPxH), Math.max(pw, ph)), shorter = Math.max(Math.min(outputPxW, outputPxH), Math.min(pw, ph));
         HostConfiguration.setScreen(outputPxW > 0 && outputPxH > 0 ? (pw >= ph ? new android.graphics.Rect(0, 0, longer, shorter) : new android.graphics.Rect(0, 0, shorter, longer)) : null);
-        HostConfiguration.resize("w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi", new ArrayList<>(stack));
+        String qualifiers = "w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi";
+        // a phone turned (mobile style): Android's rotation, the activities that don't handle it relaunch (layout-land); other resizes in place
+        if (turned) configurationChanged(HostConfiguration.turn(qualifiers));
+        else HostConfiguration.resize(qualifiers, new ArrayList<>(stack));
         Object wmg = android.view.WindowManagerGlobal.getInstance();
         List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
         for (View v : views) { // force a fresh frame at the new size

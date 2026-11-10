@@ -71,8 +71,8 @@ import org.robolectric.simulator.ScreenUpdateHandler;
 final class HostInput {
     /** What the host does with window-level events from the shell. */
     interface WindowEvents {
-        /** A compositor resize or scale change: logical size in dp, scale in percent; the output (screen) in pixels, 0 unknown. */
-        void configure(int w, int h, int scalePct, int dpi, int navPx, int outputW, int outputH);
+        /** A compositor resize or scale change: logical size in dp, scale in percent; the output (screen) in pixels, 0 unknown; mobile: the window style. */
+        void configure(int w, int h, int scalePct, int dpi, int navPx, int outputW, int outputH, boolean mobile);
 
         /** Window state: bit0 = active (focused), bit1 = minimized. */
         void state(int flags);
@@ -124,7 +124,7 @@ final class HostInput {
             onConfigure.state(ev[1]);
         } else if (ev[0] == 14) { // configure: {14, logical w, logical h, scale*100, dpi, navigation bar px, output w, h px}
             onConfigure.configure(ev[1], ev[2], ev[3], ev.length > 5 ? ev[4] : 0, ev.length > 5 ? ev[5] : 0,
-                    ev.length > 7 ? ev[6] : 0, ev.length > 7 ? ev[7] : 0);
+                    ev.length > 7 ? ev[6] : 0, ev.length > 7 ? ev[7] : 0, ev.length > 8 && ev[8] != 0);
         } else if (ev[0] == 100 && (ev[1] == KEY_ESC || ev[1] == KEY_BACKSPACE)) {
             // no xkb keymap in the shell: raw evdev {100, code, pressed}
             inject(new KeyEvent(now, now, ev[2] == 1 ? KeyEvent.ACTION_DOWN : KeyEvent.ACTION_UP,

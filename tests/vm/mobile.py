@@ -7,7 +7,9 @@ shell the output is a 6.1" 1080x2340 panel (422 dpi -> bucket 420), the window s
  3. `apklayer settings set window-mode desktop`, live: the title bar returns (46 logical), no navigation bar; then `unset`: mobile again;
  4. immersive mode: the app hides the navigation bar (WindowInsetsController.hide(navigationBars()), the script step `immersive:1`): the shell
     hides its bar and the app is told no navigation bar inset (0), `immersive:0` brings both back;
- 5. a tap on the bar's Back button: the shell sends Back, UiBench's root activity finishes and the app ends.
+ 5. Lomiri's rotation: the active window loses the maximized state and the turned phone's size comes as a plain configure: the window
+    and the app take it, its activity relaunches (Android's rotation);
+ 6. a tap on the bar's Back button: the shell sends Back, UiBench's root activity finishes and the app ends.
 --no-subsurfaces: the same on a compositor without wl_subcompositor (Lipstick's case, simulated with APKLAYER_SUBSURFACES=0): the app's virtual
 display composes the bar as a layer (aosp/hals/graphics/vdisplay), so SurfaceFlinger's picture shows it at the bottom; the taps go to the
 bottom of the window's own surface.
@@ -135,6 +137,16 @@ try:
                     w, h, scale, bar, style, dpi, nav_l, nav_px = configures()[-1]
                     assert (style, bar, dpi) == ('mobile', 0, 420), 'back to mobile: %s' % (configures()[-1],)
                     checks.append('live switch back to mobile (auto)')
+                    # Lomiri: the active window loses the maximized state, then the turned phone's size comes as a plain configure
+                    portrait, before = (w, h), len(configures())
+                    instance.inject(PKG, 'unmaximize:%d,%d' % (w, h), 'unmaximize:%d,%d' % (h, w))
+                elif 'script: hover:5,0' in line:
+                    w, h = portrait[::-1]  # the VM's compositor maximizes the window again soon after: any CONFIGURE since the turn
+                    assert (w, h) in [c[:2] for c in configures()[before:]], 'the turned phone %dx%d: %s' % (w, h, configures()[before:])
+                    assert any('configure %dx%d @' % (w, h) in l for l in seen), 'the app did not take the turned window %dx%d' % (w, h)
+                    assert any('configuration change: recreated' in l for l in seen), 'the turn did not relaunch the activity (Android: rotation)'
+                    checks.append('a plain configure of the turned phone (Lomiri) resizes the window: %dx%d, the activity relaunched' % (w, h))
+                    instance.inject(PKG, 'maximize:%d,%d' % portrait)
                 elif 'script: hover:6,0' in line:  # immersive:1 ran at 29 s
                     assert 'navigation bar hidden' in shell_log(), 'the app hid the navigation bar: the shell did not'
                     assert any('immersive 1' in l for l in seen), 'immersive:1 did not run'
@@ -151,7 +163,7 @@ try:
     assert app.wait() == 0, 'app failed'
     assert 'navigation bar back' in shell_log(), 'a tap on Back did not reach the shell as Back'
     checks.append('Back on the navigation bar ends the app')
-    assert len(checks) >= 11, checks
+    assert len(checks) >= 12, checks
     print('PASS mobile style and density: %s' % '; '.join(checks), flush=True)
 finally:
     apklayer('settings', 'unset', 'window-mode')

@@ -367,6 +367,8 @@ final class ActivityTask {
         for (java.util.Map<Activity, ?> kept : List.<java.util.Map<Activity, ?>>of(resultFor, hubResults)) if (kept.containsKey(old)) move(kept, old, now);
         if (incomingActivity == old) incomingActivity = now;
         if (taskRoot == old) taskRoot = now;
+        // the requested orientation lives in Android's ActivityRecord, kept across a relaunch; Robolectric's new activity starts at -1
+        if (now.getRequestedOrientation() == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) now.setRequestedOrientation(old.getRequestedOrientation());
     }
 
     @SuppressWarnings("unchecked")

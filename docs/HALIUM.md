@@ -153,7 +153,8 @@ What was wrong with the camera and what changed:
 - Camera1: libbinder 0007 reports the stack's own uid (phablet 32011) as AID_SYSTEM; cameraserver's trusted uid was the instance's own uid only
   (`patches/aosp/frameworks/av/0003` amended: AID_SYSTEM too). Without it every `android.hardware.Camera.open` died with "Untrusted caller".
 - Open Camera (and the `hello.camera` check) draw rotated 90 degrees in the phone's landscape window (the sensor orientation is applied against a window that does not turn): a mobile-window-mode question, not the camera's.
-- With `providers set camera fake` a phone's portrait window gets the camera compat rotate-and-crop (cameraserver turns the bars a quarter, as for a portrait desktop window); hello.camera's Main checks the turned frame there, and the camera-reload check passes on both phones (2026-11-10).
+- With `providers set camera fake` a phone's portrait window gets the camera compat rotate-and-crop (cameraserver turns the bars a quarter, as for a portrait desktop window); hello.camera's Main checks the turned frame there, and the camera-reload check passes on both phones (2026-11-10). Since the rotation fix (2026-11-10, "Rotation on Ubuntu Touch") Lomiri's
+  portrait phone gives the landscape-locked Main a landscape letterbox instead (no turn); the camera-reload check was not rerun there.
 
 Other fixes of this pass:
 - `bridge/hals/media/codec.c`: gst-droid's `amc*` decoders (`amcvideodec-c2mtkavcdecoder2`, the device's MediaCodec through libhybris) rank above the software ones and fail inside the stack's
@@ -176,6 +177,22 @@ Other fixes of this pass:
 How to run each check (on the phone; `. ~/apklayer-dev-cam/env.sh` gives `$A`): `ut-cam.sh [app] [ms]` (camera = device, the app's `[cam]` lines and cameraserver's log tail), `ut-shots.sh <pkg>` (run, screenshot, stop),
 `ut-player.sh red-h264.mp4|red-tone.mp4` (`PLAYER PASS`, `player.png`), `ut-audio.sh` (the audio app's lines), and `apklayer run hello.hardware` with the default providers for vibrator, gnss and sensors.
 Test apps: `tests/apps/build.sh hello-camera hello-hardware hello-native-player hello-native-audio` on the Mac, `apklayer install` on the phone. Open Camera's API: `~/apklayer-dev-cam/ocprefs.py <camera id>` edits its preferences (camera2 or the old API).
+
+## Rotation on Ubuntu Touch (2026-11-10)
+- Lomiri turns its whole scene in QML (OrientedShell) when the focused app allows the orientation (`X-Lomiri-Supported-Orientations` of its
+  desktop entry, all four when absent; "unknown.qtmir" windows allow all) and the user's rotation lock
+  (`gsettings com.lomiri.touch.system rotation-lock`) is off. A Wayland client sees only its toplevel configures: maximized at first, then
+  `[activated]` without maximized, then the turned size as a plain configure (1560x678 on the X23); wl_output stays 720x1560, transform 0.
+  The shell takes every configure's size in the mobile style; the app relaunches on a turn (layout-land), a fixed-orientation activity keeps
+  its shape (letterboxed at the window's top left).
+- Turning the phone from a script (`tools/halium/ut-rotate.sh DIR PKG STEP...`, sudo password on stdin): `tools/halium/fake-accel.py` makes a
+  uinput accelerometer, sensorfwd runs with its evdev accelerometer adaptor (`accelerometeradaptor`, `[accelerometer] input_match`) from a
+  copied conf.d bind-mounted in a private mount namespace, the rotation lock off; each step sets the gravity (0,1000,0 portrait; 1000,0,0 and
+  -1000,0,0 the two landscapes; 0,-1000,0 is upside down, which Lomiri does not take), Lomiri logs `qtmir.sensor: ... new orientation=...` in
+  the user journal. Afterwards it puts Lomiri back to portrait, the lock as it was and the real sensorfwd back (Lomiri's QtSensors reconnects).
+  Lomiri's sensor runs only while the display is on (the script wakes it and enters the PIN, then turns it off again). An app in the instance
+  that asks sensorfwd for the accelerometer crashed this sensorfwd (a QList assert in the evdev adaptor): use `providers set sensors fake` there.
+  No Lomiri screenshots (they leave an editor overlay): the app's own picture (`apklayer screenshot`) and the shell's WAYLAND_DEBUG lines.
 
 ## Ubuntu Touch: the click (2026-11-09, the way to install)
 Ubuntu Touch 24.04 (arm64) installs apklayer as a click, `apklayer.erfanoabdi_<version>_arm64.click` from the release (docs/RELEASES.md "The click";

@@ -3,6 +3,26 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: apps turn with the Ubuntu Touch phone
+- Owner: on the Volla X23 (0.4.14) a rotated phone left the app in its old shape. Cause, read with WAYLAND_DEBUG on the shell while the phone was
+  turned by a fake accelerometer (tools/halium/ut-rotate.sh, docs/HALIUM.md "Rotation on Ubuntu Touch"): Lomiri maximizes the window
+  (`xdg_toplevel.configure(720, 1508, [maximized])`), drops the maximized state once the app is active (`configure(720, 1508, [activated])`) and
+  sends the turned screen's size as a plain configure, `configure(1560, 678, [activated])`. Lomiri sends no wl_output change (720x1560,
+  transform 0). The shell took a floating configure's size only at the first configure, an interactive resize or a restore (the desktop
+  rule against stale sizes), so it ignored the turn: the app stayed 720x1508 in every step.
+- Fix (bridge/shell/geometry.c): in the mobile style the compositor's size is always taken (desktop style keeps its rule). An activity with a fixed
+  orientation keeps its shape (the existing lock rule, now reached on Lomiri), and an orientation request on a phone fits that shape inside
+  the phone's window (a letterbox) instead of the whole work area. Host: a turn in the mobile style is Android's rotation: activities that do
+  not handle it relaunch (HostConfiguration.turn + dispatch, the settings path; layout-land), other resizes stay in place; a relaunched
+  activity keeps its requested orientation (ActivityTask.recreated: Robolectric's new activity started at -1, so the shell lost the lock).
+  The shell's CONFIGURE already carried the style; ShellClient passes it on.
+- On the phone (own instance `rot`, this shell and host jar from Parallels, the click's 0.4.14 otherwise): Calculator (no fixed orientation)
+  turned landscape -> portrait -> landscape -> portrait: CONFIGUREs 1560x678 / 720x1508, `configuration change: recreated ...MainActivity` at
+  each turn, its picture (`apklayer screenshot`) 1560x678 with its landscape layout, then 720x1508. hello.camera (landscape-locked): 1560x678
+  in landscape, 720x312 (landscape letterbox) when the phone turned back to portrait. Before the fix the same run gave 720x1508 throughout.
+- Test: mobile.py (group mobile) injects Lomiri's sequence (unmaximize, then the turned size as a plain configure): the window and the app
+  take it and the activity relaunches. Parallels: window-geometry, mobile, activities pass.
+
 ## 2026-11-10: a real Bluetooth keyboard types into apps on both Halium phones
 - The keymap fix (keyboard.c, 2026-11-10) was checked only with uinput keyboards. Now with a real Bluetooth one: the owner's x86 PC as an LE
   HID keyboard (`tests/vm/bt-keyboard.py`: BlueZ GattManager1 HID service 0x1812 with a boot keyboard's report map, advertised with
