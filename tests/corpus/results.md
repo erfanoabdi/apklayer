@@ -1,5 +1,51 @@
 # Compatibility results
 
+## 2026-11-10 regression retest (main e0e9241e, after bionic_translation 0050-0062, native bridge thread mapping, android:process, AppComponentFactory, SharedMemory, screen = output, window order, IME, x86_64 system apps)
+
+Own trees on Parallels arm64 (`~/apklayer-rr`, output 1024x768: portrait windows are 325x579) and the x86 PC (`~/apklayer-x86/rr`, Alder Lake-N, 834x1484 px @200%),
+prebuilts' system providers installed (no WebView), instance rr1. tests/corpus/run.py per app: install, launch, the app's own SurfaceFlinger
+screenshot once frames settle, a second launch, screenshot; then uninstall. "PC" apps that ship only arm64 run through the native bridge.
+Interaction (drive.py taps/Back) where noted. Every app below drew both launches unless the row says otherwise.
+
+| App | Parallels arm64 | x86 PC | Change vs before |
+|---|---|---|---|
+| UiBench | draws, both launches | draws | none (Parallels: the first round's second launch took 9 min to end, see Note 3) |
+| NewPipe 0.29 | draws (Live list, "Keep Android Open"); OK dismisses it, the list fills, Back leaves | draws | none |
+| Organic Maps | draws (map download) | draws | none |
+| VLC (arm64 only) | draws (welcome) | draws (native bridge) | none |
+| mpv | draws; tapping Open URL opens its dialog | draws | none |
+| FluffyChat | draws (welcome) | draws | none |
+| OpenTTD | uniform: no ES 1 (no libapklayer-gles1.so in the tree, Parallels' Mesa has none) | draws (menu, survey dialog) with the PC's libapklayer-gles1.so copied in | none: a host setup item (`-Dgfxstream`), see PLAN Graphics |
+| Telegram (arm64 only) | draws (intro) | draws (native bridge); Start Messaging opens Your Phone | PC: new (no x86_64 APK before; works through the bridge) |
+| F-Droid 2.0.2 | draws (Discover, fetching) | draws | none |
+| Aurora Store 4.8.4 | draws (welcome) | draws | none |
+| JW Library | draws (Home, "System Update Needed": no WebView in these data homes) | draws (same) | none |
+| Amaze 3.11.4 | draws; tapping Alarms opens it, Back returns | draws | none (the header's folder count, 28 then 14, is the known one) |
+| Fossify Gallery | draws (no media) | draws | none |
+| Termux | first round: SIGSEGV (JVM, Note 1) on both launches; with APKLAYER_CDS=off and with a fresh archive: the shell prompt | draws (shell prompt) | **regression-like, Parallels: CDS archive crash (Note 1)** |
+| SimpleX (arm64 only) | draws (welcome "Be free") | draws (native bridge) | none (runner's "launch FAIL" = no `started` line: its first launch is posted as a message) |
+| WireGuard | draws | draws | none |
+| Rethink DNS (arm64 only) | draws (welcome) | SIGILL: guest MRS of DIT (Note 2) | PC: new (not run there before) |
+| StreetComplete | draws (welcome) | draws | none |
+| Etar | draws (week) | draws | none |
+| QUIK | draws (inbox) | draws | none |
+| Unciv | draws (language picker, landscape) | draws | PC: new |
+| OTR2 (arm64 only) | not run (983 MB, Parallels disk) | draws (title) | none |
+| FCL 1.3.4.5 | - | launcher, Launch, Minecraft 26.3 title screen after ~90 s (proc tree's data, own runtime) | none |
+| PGR (splits) | - | Notice dialog; Agree leads to its download-size dialog ("Disk space is insufficient ... 13372 MB") | none |
+| Godot 4.3 editor | - | group godot PASS | none |
+| App Manager | not run: no local APK | not run | - |
+
+Notes. 1. Termux on Parallels crashed in HotSpot (`InstanceKlass::init_lock` <- `link_class_impl` <- `InterpreterRuntime::_new` in
+android.widget.Scroller's constructor, a shared class whose resolved class has no mirror; SEGV at 0x6c) three times in a row with the instance's
+CDS archive written by UiBench's first launch in that round (the round whose second launch took 9 min to end on SIGTERM); not with
+APKLAYER_CDS=off, not with an archive Termux wrote itself, not after that archive was replaced (two fresh UiBench rounds left only a
+`.jsa.tmp.temp`: the runner ends the app before the dump finishes). The bad archive was deleted during the investigation (not kept).
+2. Rethink's Go code (a c-shared library: Go's runtime falls back to /proc/self/auxv when loaded as a library on Android) reads the host's
+auxv under the x86_64 native bridge (berberis emulates only /proc/self/maps; open_emulation.cc),
+takes x86's AT_HWCAP bit 24 for arm64 HWCAP_DIT and runs `mrs x0, DIT` (0xd53b42a0), which berberis does not decode: SIGILL.
+3. The UiBench hang did not come back in two more rounds.
+
 ## 2026-11-05 (current F-Droid versions, index of 2026-11-05; UTM and Parallels, instances corpus1/corpus2, both from this tree's Meson build)
 
 Every app on both VMs: install, launch, the app's own screenshot once its frames settle, a tap at the window centre, Back, a screenshot after each,
