@@ -60,6 +60,8 @@ public final class NativeLoader {
     private static native void mapOwnData(String pkg, int uid, String groups, String root);
     /** An app spare's launch (spare_target.c): the message on fd, whose stdout and stderr replace this process's; null when the holder is gone. */
     static native String receiveTarget(int fd);
+    /** Every class the JVM has loaded, of every loader (JVMTI, app_native.c): CdsDump links them before the dump; null when JVMTI refuses. */
+    static native Class<?>[] loadedClasses();
 
     /** The process's command line and name as Android's Process.setArgV0 sets them (native code reads /proc/self/cmdline). */
     static void nameProcess(String name) {

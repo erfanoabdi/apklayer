@@ -3,6 +3,23 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: a keyboard's keys reach apps on Sailfish OS; CDS links every custom loader's classes (an app's own ClassLoader subclass too)
+- Sailfish keyboard. Cause: Lipstick (Qt 5 compositor, wl_seat v3) sends a real XKB_V1 keymap (64029 bytes) in an fd whose file offset sits
+  at its end, so the shell's read() got 0 bytes, xkbcommon failed and every key went out untranslated. Fix (bridge/shell/keyboard.c): the
+  keymap is mmap'd MAP_PRIVATE as the protocol says (offset-independent); a NO_KEYMAP or unusable one falls back to xkbcommon's default RMLVO
+  keymap (as Qt clients do), whose state then follows the keys themselves. Checks: Volla Quintus (Sailfish 5.0, own instance, this tree's
+  shell built in the Sailfish build root, run through APKLAYER_BUILD with its own XDG_RUNTIME_DIR): `xkb keymap loaded (format 1, 64029
+  bytes, ok)`, a uinput keyboard types Shift+A, b, 1 into hello.input: `text=A`, `Ab`, `Ab1` (the installed 0.4.13 shell: `0 bytes,
+  FAILED`, no text); Volla X23 (Ubuntu Touch, own instance, the Parallels-built shell): `format 1, 64755 bytes, ok`, `Ab1`; Parallels
+  group input PASS (`format 1, 68405 bytes, ok`).
+- CDS. Cause: CdsDump linked only the classes of loaders apklayer creates (tracked ones and their chains), so an app's own ClassLoader
+  subclass left unlinked classes in the dynamic archive (the nestmate-resolved constant pool entry that crashed Termux). Fix: the classes come
+  from JVMTI GetLoadedClasses (NativeLoader.loadedClasses, bridge/native/app_native.c), every class of a non-builtin loader is linked before
+  the dump; the loader tracking (CdsDump.track) is gone. Test: hello-cdsloader (a ClassLoader subclass defines a nest's member, getNestHost
+  loads the host unlinked), group cds runs `cds-dump.sh hello.cdsloader '[cdsloader] PASS'`: before the fix `FAIL cds-dump: 2 unlinked
+  custom-loader classes in the archive`, after it PASS (no unlinked class, the next cold launch runs on the archive). Parallels (own tree):
+  groups cds, startup, input PASS.
+
 ## 2026-11-10: hello.camera's fake-camera checks pass on both Halium phones (the frames were turned, not mis-laid)
 - Cause: not the provider's YUV layout (BackendCamera::captureYUV already writes through lockYCbCr's y/cb/cr, ystride, cstride and
   chroma_step; the values read back exact). The phones give hello.camera's landscape-locked Main a portrait window (720x1528, 1080x2400), so

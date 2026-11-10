@@ -270,10 +270,10 @@ needs = ["com.android.test.uibench"]
 apps = ["hello-permissions"]
 run = ["python3 -u tests/vm/mobile.py", "python3 -u tests/vm/mobile.py --no-subsurfaces", "python3 -u tests/vm/permission-mobile.py"]
 
-[cds]  # the instance's class data sharing archive (CdsDump); the probe's WebView provider classes come from a loader of their own
-apps = ["hello-wvprobe"]
+[cds]  # the instance's class data sharing archive (CdsDump); the probe's WebView provider classes come from a loader of their own, hello.cdsloader's from its own ClassLoader subclass
+apps = ["hello-wvprobe", "hello-cdsloader"]
 needs = ["com.android.test.uibench", "com.android.webview"]
-run = ["tests/vm/cds-dump.sh com.android.test.uibench", "tests/vm/cds-dump.sh hello.wvprobe"]
+run = ["tests/vm/cds-dump.sh com.android.test.uibench", "tests/vm/cds-dump.sh hello.wvprobe", "tests/vm/cds-dump.sh hello.cdsloader '[cdsloader] PASS'"]
 
 [startup]
 needs = ["com.android.test.uibench"]
