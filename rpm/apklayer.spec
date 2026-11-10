@@ -1,7 +1,8 @@
 # The apklayer RPM for Sailfish OS (docs/HALIUM.md "Building for Sailfish OS"): the deb's model (debian/rules) on Sailfish's own toolchain and
 # libraries. The Meson build and install with prefix /usr and without the Android half, which the per-user runtime bundle brings (`apklayer setup`).
 # tools/release/sailfish-rpm.sh builds it in the Sailfish OS build root (rpm/Dockerfile) with --define 'apklayer_version X' and
-# --define 'apklayer_prebuilts <a joined prebuilts checkout>'. Not built: apklayer-manager (Slint's prebuilt library needs a newer glibc).
+# --define 'apklayer_prebuilts <a joined prebuilts checkout>' and --define 'apklayer_slint <Slint built by tools/release/sailfish-slint.sh>'
+# (apklayer-manager: Slint's prebuilt compiler needs a newer glibc; this one has the software renderer, drawn on Lipstick's wl_shell).
 Name:           apklayer
 Version:        %{apklayer_version}
 Release:        1
@@ -75,15 +76,24 @@ export PATH=/usr/lib/jvm/temurin-21-jdk/bin:$PATH
 env -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS -u FFLAGS -u FCFLAGS meson setup build --prefix=%{_prefix} --libdir=%{_lib} \
     -Dprebuilts=%{apklayer_prebuilts} -Dandroid_runtime=false -Dpackage_version=%{version}
 ninja -C build %{?_smp_mflags}
+# apklayer-manager as debian/rules builds it, on its own wl_shell platform (manager/src/wlshell.cpp: Lipstick has no xdg_wm_base for winit)
+env -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS -u FFLAGS -u FCFLAGS meson setup build-manager manager --prefix=%{_prefix} -Dlibdir=lib/apklayer \
+    -Dslint=%{apklayer_slint} -Dwlshell=true
+ninja -C build-manager %{?_smp_mflags} apklayer-manager
 
 %install
 export PATH=/usr/lib/jvm/temurin-21-jdk/bin:$PATH
 DESTDIR=%{buildroot} meson install -C build --skip-subprojects --no-rebuild --quiet
+DESTDIR=%{buildroot} meson install -C build-manager --no-rebuild --quiet
 install -D -m644 debian/instances %{buildroot}%{_sysconfdir}/apklayer/instances
 # kernel binder only (apklayer binder kernel): the userspace binder, the default, needs no unit; `systemctl enable --now apklayer-binder` turns it on
 install -D -m644 debian/apklayer.apklayer-binder.service %{buildroot}%{_unitdir}/apklayer-binder.service
-# apklayer-manager is not built (above): no launchers for it; the Lomiri content hub peer is Ubuntu Touch's
-rm -f %{buildroot}%{_datadir}/applications/apklayer-manager.desktop %{buildroot}%{_datadir}/applications/apklayer-share.desktop
+# Lipstick's launcher: the icon by its path and no single-instance lock (as the app entries, cli/desktop.cpp); unsandboxed, as Sailfish's own
+# system tools (sailjail would ask for every permission and jail the manager away from the CLI, its instances and binder)
+sed -i -e 's|^Icon=.*|Icon=%{_datadir}/icons/hicolor/256x256/apps/apklayer.png|' -e '$aX-Nemo-Single-Instance=no' \
+    -e '$a\\n[X-Sailjail]\nSandboxing=Disabled' %{buildroot}%{_datadir}/applications/apklayer-manager.desktop
+# the Lomiri content hub peer is Ubuntu Touch's
+rm -f %{buildroot}%{_datadir}/applications/apklayer-share.desktop
 rm -rf %{buildroot}%{_datadir}/lomiri-content-hub
 
 %post
@@ -97,6 +107,8 @@ systemctl daemon-reload >/dev/null 2>&1 || :
 
 %files
 %{_bindir}/apklayer
+%{_bindir}/apklayer-manager
+%{_datadir}/applications/apklayer-manager.desktop
 %{_prefix}/lib/apklayer
 %{_datadir}/apklayer
 %{_datadir}/icons/hicolor/*/apps/apklayer.*

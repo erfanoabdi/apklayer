@@ -148,11 +148,12 @@ jobs:
         with: {path: prebuilts, ref: '${{ needs.guard.outputs.prebuilts }}'}
       - name: Tools
         run: sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq p7zip-full >/dev/null
-      - uses: actions/cache@v4  # the SDK target and the upstream sources (rpm/sources, checked again on every build)
+      - uses: actions/cache@v4  # the SDK target, the upstream sources (rpm/sources, checked again on every build) and Slint's crates
         with:
           path: |
             ~/.cache/apklayer/sailfish/sources
             ~/.cache/apklayer/sailfish/target.tar.7z
+            ~/.cache/apklayer/sailfish/cargo
           key: sailfish-sources-${{ hashFiles('src/rpm/sources') }}
       - name: Build
         run: sh src/tools/release/sailfish-rpm.sh "${VERSION#v}" prebuilts out

@@ -6,3 +6,10 @@ b88cc9163d0c652aaf39a99991d974ddba1c3a9711db8f1b5838af2a14731014 https://libbsd.
 ddf0e32dd5fafe5283198d37e4bf9decf7ba1770b6e7e006c33e6df79e6a6157 https://github.com/libunwind/libunwind/releases/download/v1.8.1/libunwind-1.8.1.tar.gz
 # the Sailfish OS SDK target the build root is made of (rpm/Dockerfile; md5 as releases.sailfishos.org publishes it, .md5sum)
 md5:56f19acb0451cb77261dea099af39774 https://releases.sailfishos.org/sdk/targets/Sailfish_OS-5.0.0.62-Sailfish_SDK_Target-aarch64.tar.7z
+# apklayer-manager's Slint (tools/release/sailfish-slint.sh builds it: the prebuilt compiler needs a newer glibc): the version and Material set that
+# manager/fetch-slint.sh pins, and the standalone Rust toolchain at Slint's minimum (Sailfish's rust is 1.75); the crates come from its Cargo.lock
+fe485305ed303215e76c04918ee9aefbffbe229f18f979098ec36c7fa1dab28b https://github.com/slint-ui/slint/archive/refs/tags/v1.18.1.tar.gz
+83c57b6f1b8799ddacd94b7e8b140f3f2112c36407b6df31883da0ba4e2dd425 https://material.slint.dev/zip/material-1.1.0.zip
+7c8706fad4c038b5eacab0092e15db54d2b365d5f3323ca046fe987f814e7826 https://static.rust-lang.org/dist/rustc-1.92.0-aarch64-unknown-linux-gnu.tar.xz
+cb2ce6be6411b986e25c71ad8a813f9dfbe3461738136fd684e3644f8dd75df4 https://static.rust-lang.org/dist/cargo-1.92.0-aarch64-unknown-linux-gnu.tar.xz
+ce2ab42c09d633b0a8b4b65a297c700ae0fad47aae890f75894782f95be7e36d https://static.rust-lang.org/dist/rust-std-1.92.0-aarch64-unknown-linux-gnu.tar.xz

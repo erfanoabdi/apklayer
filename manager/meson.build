@@ -32,8 +32,14 @@ common = '../common'  # shared with the CLI (cli/setup.cpp)
 add_project_arguments('-I' + meson.current_source_dir() / common, language: 'cpp')
 backend = static_library('backend', 'src/backend.cpp', common / 'proc.cpp', common / 'json.cpp', common / 'releases.cpp', common / 'fetch.cpp',
   include_directories: include_directories(common))
-executable('apklayer-manager', 'src/main.cpp', 'src/setup.cpp', 'src/hardware.cpp', 'src/addons.cpp', ui,
-  dependencies: [slint_dep, dependency('libpng'), dependency('threads')],
+manager_src = ['src/main.cpp', 'src/setup.cpp', 'src/hardware.cpp', 'src/addons.cpp', ui]
+manager_deps = [slint_dep, dependency('libpng'), dependency('threads')]
+if get_option('wlshell')
+  manager_src += 'src/wlshell.cpp'
+  manager_deps += [dependency('wayland-client'), declare_dependency(compile_args: '-DAPKLAYER_WLSHELL')]
+endif
+executable('apklayer-manager', manager_src,
+  dependencies: manager_deps,
   link_with: backend,
   build_rpath: slint / 'cpp/lib',
   install_rpath: '$ORIGIN/..' / slint_libdir,  # shortcut: assumes bindir is one level below the prefix (bin), the default

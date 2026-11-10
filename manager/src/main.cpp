@@ -18,6 +18,9 @@
 #include "setup.h"
 #include "hardware.h"
 #include "addons.h"
+#ifdef APKLAYER_WLSHELL
+#include "wlshell.h"
+#endif
 
 using manager::Cli;
 using manager::Result;
@@ -479,6 +482,9 @@ int main(int argc, char** argv) {
     }
     // the Wayland app id: GNOME matches the window to apklayer-manager.desktop (its icon, its dock entry). Lomiri gives the window to the app its
     // app id names: started as apklayer-share (--share) it must say so, or Lomiri counts that app windowless and suspends it
+#ifdef APKLAYER_WLSHELL
+    if (!manager::useWlShell()) return 1;  // this Slint has no other platform (Sailfish OS: Lipstick's wl_shell)
+#endif
     const char* lomiriApp = getenv("APP_ID");
     slint::set_xdg_app_id(slint::SharedString(lomiriApp && *lomiriApp ? lomiriApp : "apklayer-manager"));
     auto ui = AppWindow::create();

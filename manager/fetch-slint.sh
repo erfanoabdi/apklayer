@@ -3,7 +3,7 @@
 # Usage: manager/fetch-slint.sh [dest]   (default: ~/.cache/apklayer/slint). Then: meson setup manager/b manager -Dslint=<dest>
 set -eu
 DEST="${1:-$HOME/.cache/apklayer/slint}"
-V=1.18.1 M=1.1.0
+V=1.18.1 M=1.1.0  # the Sailfish RPM builds the same from source: tools/release/sailfish-slint.sh and rpm/sources
 case "$(uname -m)" in
     aarch64) cpp=Slint-cpp-$V-Linux-arm64 cpp_sha=810cfed786c3f63aea9c1b73371a02ed591129d18e077094afa9e024e2d714fd
              comp=slint-compiler-Linux-aarch64 comp_sha=6d704012132ec8c8fadddefb86ba192cd83e09048edbcf61aee457aca300c78c ;;
