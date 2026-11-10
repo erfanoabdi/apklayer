@@ -3,6 +3,9 @@
 # and its EGL side (gles1.cpp) as libapklayer-gles1.so. gfxstream's own Meson build makes only the archives this needs (a subproject would build
 # all of its host renderer), linked through a linker script naming them; it is configured once: a new gfxstream source needs a fresh build dir.
 gfxstream = get_option('gfxstream')
+if gfxstream == '' and prebuilts != '' and fs.is_dir(prebuilts / 'common/gfxstream')
+  gfxstream = prebuilts / 'common/gfxstream'  # the prebuilts' copy (tools/stage gfxstream): release packages ship ES 1 too
+endif
 if gfxstream != ''
   gfx_build = meson.current_build_dir() / 'gfxstream-build'
   # decoders: gles alone leaves gfxstream's inc_renderdoc_external undefined; nothing of the Vulkan decoder is built

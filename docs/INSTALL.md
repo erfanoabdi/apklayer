@@ -79,8 +79,8 @@ meson install -C b --skip-subprojects     # --skip-subprojects: bionic_translati
 After a pull or an edit: `ninja -C b && meson install -C b --skip-subprojects --only-changed` (ninja rebuilds exactly what changed:
 a host Java file rebuilds the host classes and what depends on them, an edit of the JNI shim the jars that carry it). A new prebuilts commit:
 pull it, `sh "$AL/prebuilts/join-parts.sh"`, then the same two commands. An edited bionic_translation patch: the
-reconfigure resets the subproject to its revision and applies the series again (`meson subprojects update --reset bionic_translation` by hand does the same). OpenGL ES 1 for hosts whose Mesa lacks it: add `-Dgfxstream=<gfxstream source>`
-(the tree's `hardware/google/gfxstream`).
+reconfigure resets the subproject to its revision and applies the series again (`meson subprojects update --reset bionic_translation` by hand does the same). OpenGL ES 1 for hosts whose Mesa lacks it (libapklayer-gles1.so) is built from the prebuilts' `common/gfxstream`;
+`-Dgfxstream=<gfxstream source>` (the tree's `hardware/google/gfxstream`) picks another copy.
 
 ## 5. Install and run an app
 
@@ -221,8 +221,8 @@ them with `apt` if nothing else needs them.
 ## What still needs the LineageOS tree
 
 Only rebuilding the Android side: apklayer's modules in `aosp/` (`libapklayer_*`), the tree libraries apklayer patches, the Vulkan loader, and regenerating
-the Android root (`tools/stage root|media|sysapps`); see `docs/AOSP-BUILDS.md`. `-Dgfxstream` (OpenGL ES 1 for hosts whose Mesa lacks it) needs
-gfxstream's sources (`hardware/google/gfxstream`, also on android.googlesource.com).
+the Android root (`tools/stage root|media|sysapps`); see `docs/AOSP-BUILDS.md`. `tools/stage gfxstream <prebuilts>` copies gfxstream's sources
+(`hardware/google/gfxstream`, OpenGL ES 1 for hosts whose Mesa lacks it) into the prebuilts' `common/gfxstream`.
 
 ## Installed package: first run
 

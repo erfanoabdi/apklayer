@@ -10,7 +10,7 @@
 
 apklayer itself is AGPL-3.0-or-later (PLAN D5), compatible with all of the above.
 
-- gfxstream's GLES_CM translator and GLcommon (`hardware/google/gfxstream` in the LineageOS tree), Apache-2.0, unmodified, built with `-Dgfxstream=<source>`: staged into `<native>/aosp/gfxstream-src` and built on the test host into `libapklayer-gles1.so` (`tools/build gles1`).
+- gfxstream's GLES_CM translator and GLcommon (`hardware/google/gfxstream` in the LineageOS tree), Apache-2.0, unmodified, its sources in the prebuilts' `common/gfxstream` (`tools/stage gfxstream`, or `-Dgfxstream=<source>`), built by Meson into `libapklayer-gles1.so`.
 - `bridge/shell/protocols/wayland-android.xml`: libhybris's `android_wlegl` protocol (Collabora, MIT-style), for showing device gralloc buffers on Lomiri/Lipstick.
 - `bridge/shell/maliit.c`: the D-Bus interface description of maliit-framework's `com.meego.inputmethod.inputcontext1` (LGPL-2.1, an interface
   description, no code), taken from the strings of the Volla X23's libmaliit-plugins.so (maliit-framework 2.3.0, as Sailfish OS's), for the

@@ -474,7 +474,7 @@ c1772cdf51eeaa200df15a72e71469e792ba9fc069b21a66a80e759b271919ac 2109096 android
 185d1ed7e26fbcc39115c8151b755f867f7fd278128ffab5da1b1227949add3e 134392 android-arm64/lib64/libz.so out/target/product/generic_arm64/system/lib64/libz.so same
 9a7e6bf3811eea2d532ccf5d02fa6d6dcd6a6ca358206f61fb0a175263373546 119528 android-arm64/lib64/libziparchive.so out/target/product/generic_arm64/system/lib64/libziparchive.so same
 b1d96a0d309363a40abcb1496522d6c35e229e523a569be668fd34c2985b0221 51576 android-arm64/lib64/lights_flags_cc_lib.so out/target/product/generic_arm64/system/lib64/lights_flags_cc_lib.so same
-6cf422850138898e7318c97474c311e9ac2f8f4e8f70114f1f35ee57bee686ec 86744 android-arm64/lib64/mapper.apklayer.so out/soong/.intermediates/vendor/apklayer/hals/graphics/mapper/mapper.apklayer/android_arm64_armv8-a_shared/mapper.apklayer.so apklayer
+0c3f0c2a645bca60cae807233195ca5b830b9a212a9c59e53cb201cb9b0c5557 86744 android-arm64/lib64/mapper.apklayer.so out/soong/.intermediates/vendor/apklayer/hals/graphics/mapper/mapper.apklayer/android_arm64_armv8-a_shared/mapper.apklayer.so apklayer
 5f5b29c5fe95ef4d83bd2df5aebbec606318ac047606e8add6dd257714d873f2 167912 android-arm64/lib64/media_quality_aidl_interface-cpp.so out/target/product/generic_arm64/system/lib64/media_quality_aidl_interface-cpp.so patched
 82acb947ef7ff580f001465eed75b062407bad93ba3fa5477cf51b7d59305581 85752 android-arm64/lib64/mediametricsservice-aidl-V1-cpp.so out/target/product/generic_arm64/system/lib64/mediametricsservice-aidl-V1-cpp.so patched
 07adbc39786525e94ab71172e7ad43d12d34a1e0c6fb81ae0bee743b613e7151 85432 android-arm64/lib64/packagemanager_aidl-cpp.so out/target/product/generic_arm64/system/lib64/packagemanager_aidl-cpp.so patched
