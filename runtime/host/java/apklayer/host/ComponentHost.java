@@ -16,8 +16,6 @@ public final class ComponentHost implements Runnable {
     private final Path apk;
     public ComponentHost(AndroidSandbox sandbox, Path apk, Path ignored) { this.sandbox = sandbox; this.apk = apk; }
     @Override public void run() {
-        // from here on SIGTERM is an orderly stop; before (a spare waiting for its launch) the JVM's default exit
-        sun.misc.Signal.handle(new sun.misc.Signal("TERM"), signal -> stopping = true);
         Thread.currentThread().setContextClassLoader(AppClassLoader.app != null ? AppClassLoader.app : sandbox.getRobolectricClassLoader());  // the app's own loader, as on Android
         StartTrace.mark("componenthost run");
         AppEnvironment.setUpApplication(sandbox, apk, false);
@@ -42,6 +40,9 @@ public final class ComponentHost implements Runnable {
         boolean resident = "system".equals(info.processName) || android.os.Process.myUid() == android.os.Process.SYSTEM_UID
                 || (info.flags & android.content.pm.ApplicationInfo.FLAG_PERSISTENT) != 0;
         System.out.println("[apklayer] component-host process " + info.processName + (resident ? ": resident" : ": ends when idle"));
+        // from here on SIGTERM is an orderly stop (the loop below ends, due work is saved); before, while the application is set up and attached to
+        // the hub, the JVM's default exit: a stop that ends the hub meanwhile left the setup waiting for it and the host to the hub's SIGKILL
+        sun.misc.Signal.handle(new sun.misc.Signal("TERM"), signal -> stopping = true);
         ShadowPausedLooper looper = Shadow.extract(Looper.getMainLooper());
         boolean[] told = {false};
         loop(() -> {
