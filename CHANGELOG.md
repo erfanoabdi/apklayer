@@ -3,6 +3,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: release 0.4.16 (runtime 0.4.13)
+- 0.4.15 with the Sailfish OS RPM: its build looked for slint-v1.18.1.tar.gz while sailfish-rpm.sh saved Slint's archive as v1.18.1.tar.gz (the rename matched the cache path, not the URL; it worked locally from an earlier cache).
+
 ## 2026-11-10: release 0.4.15 (runtime 0.4.13)
 - Sailfish OS: apklayer-manager in the RPM (Slint built from source in the build root against glibc 2.30, a wl_shell platform for Lipstick). Ubuntu Touch: each drawer launch gets its own window shell in its lomiri-app-launch unit (the spread shows the app's name and icon, the card goes when the app ends; no Waydroid hint, which kept closed windows), rotation follows the phone, audio through PulseAudio (the click's pulse backend). Both phones: the host keyboard is Android's IME inset (Termux's extra keys above it) and comes on showSoftInput only. Desktop: fullscreen (xdg set_fullscreen; a requested turn recreates activities). `apklayer stop` keeps the shell only for stacks of its own runtime dir.
 
