@@ -3,8 +3,10 @@
 # and its EGL side (gles1.cpp) as libapklayer-gles1.so. gfxstream's own Meson build makes only the archives this needs (a subproject would build
 # all of its host renderer), linked through a linker script naming them; it is configured once: a new gfxstream source needs a fresh build dir.
 gfxstream = get_option('gfxstream')
-if gfxstream == '' and prebuilts != '' and fs.is_dir(prebuilts / 'common/gfxstream')
-  gfxstream = prebuilts / 'common/gfxstream'  # the prebuilts' copy (tools/stage gfxstream): release packages ship ES 1 too
+if gfxstream == '' and prebuilts != '' and fs.is_dir(prebuilts / 'common/gfxstream') and meson.get_compiler('cpp').has_header('X11/Xlib.h')
+  # the prebuilts' copy (tools/stage gfxstream): release packages ship ES 1 too. gfxstream's GL headers include X11's (glx.h): a build root
+  # without them (Sailfish OS: no X11; a Halium device's GLES driver has ES 1 itself) builds without it
+  gfxstream = prebuilts / 'common/gfxstream'
 endif
 if gfxstream != ''
   gfx_build = meson.current_build_dir() / 'gfxstream-build'
