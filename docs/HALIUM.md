@@ -378,6 +378,12 @@ What differs from Ubuntu Touch, and what changed:
   tapping and closing them, with the phone unlocked.
 - The system's programs (glibc 2.30) cannot load apklayer's LD_PRELOAD (needs GLIBC_2.34): the device's `/usr/bin/getprop` (cli `hostToolEnv()`) and the hub's
   `setsid` (HubStartup) start without it now. Other host programs an app starts (`sh -c` overrides, Runtime.exec of a system binary) still inherit it: open.
+- glibc 2.30 has no stat or mknod functions of its own (stat() is an inline `__xstat` call; 2.33 added them): the path layer's LD_PRELOAD wraps
+  `__xstat`/`__lxstat`/`__fxstatat` too (the Temurin JDK reaches files through them: java.io.File on /data/data/<pkg>), and its stat, lstat,
+  fstatat and mknod wrappers call the kernel where glibc has no symbol behind them (an Android program's stat64 jumped to 0). libhybris's
+  linker prints each vendor library it does not find on stderr when btload's constructor looks up the GL extension stubs through libEGL.so.1:
+  that stderr is muted for the lookups (it went into programs' output: Termux's `id -u 2>&1`). Termux installs its bootstrap and runs since
+  2026-11-10 (CHANGELOG).
 - `ro.hardware.egl` is `meow` (MediaTek's layer over Mali): libGLES_meow crashes in SurfaceFlinger during its dlopen (a jump to an unmapped address under
   libdl_bio's constructor call); the instance runs with `apklayer prop set ro.hardware.egl mali`: SurfaceFlinger reports Mali-G68 MC4, OpenGL ES 3.2. Open.
 - The prebuilts (75a684a6) carry libraries older than the Halium work of 2026-11-05: libhidlbase without libhidl 0002/0003 ("gralloc-mapper is missing",
