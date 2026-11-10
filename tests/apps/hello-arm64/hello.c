@@ -124,6 +124,16 @@ JNIEXPORT jint JNICALL Java_hello_arm64_Main_auxv(JNIEnv *env, jclass c)
     return n > 0 && hwcap == getauxval(AT_HWCAP) && hwcap2 == getauxval(AT_HWCAP2);
 }
 
+/* exit-deadline.py native: the library ignores SIGTERM (signal) and then catches it (sigaction), as an app library may; 1 if both calls report
+ * success. The process must still end on SIGTERM (bionic_translation 0064). */
+static void on_term(int sig) { (void)sig; }
+JNIEXPORT jint JNICALL Java_hello_arm64_Main_ignoreTerm(JNIEnv *env, jclass c)
+{
+    (void)env; (void)c;
+    struct sigaction sa = {.sa_handler = on_term};
+    return signal(SIGTERM, SIG_IGN) != SIG_ERR && sigaction(SIGTERM, &sa, NULL) == 0;
+}
+
 static jclass main_class;
 
 static void *thread_main(void *arg)

@@ -19,5 +19,10 @@ public class Main extends Activity {
         setContentView(view);
         if (Boolean.getBoolean("hello.stuckexit"))  // exit-deadline.py: a shutdown hook that never returns (the JVM's end must not wait for it)
             Runtime.getRuntime().addShutdownHook(new Thread(() -> { System.out.println("[act-t] stuck exit hook"); while (true) android.os.SystemClock.sleep(1000); }));
+        if (Boolean.getBoolean("hello.heldshutdown")) {  // exit-deadline.py held: Shutdown.exit waits for this monitor, so SIGTERM's end never reaches a hook
+            Object shutdown;
+            try { shutdown = Class.forName("java.lang.Shutdown"); } catch (ClassNotFoundException e) { throw new IllegalStateException(e); }
+            new Thread(() -> { synchronized (shutdown) { System.out.println("[act-t] holding java.lang.Shutdown"); while (true) android.os.SystemClock.sleep(1000); } }).start();
+        }
     }
 }

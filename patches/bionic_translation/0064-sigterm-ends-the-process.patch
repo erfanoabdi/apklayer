@@ -1,0 +1,38 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: SIGTERM stays the process's end: bionic code neither ignores nor catches it
+
+An app process ends on SIGTERM (`apklayer stop`, a unit's stop, the corpus runner), as an Android app process ends on ActivityManager's
+kill. bionic_sigaction reports success for SIGTERM without installing the action (as 0018 does for the fault signals), and bionic_signal
+goes through bionic_sigaction, as bionic's signal() does (glibc's signal() would install SIG_IGN past it). Guest code through the native
+bridge is covered too: berberis' host sigaction for the guest's is bionic_sigaction.
+apklayer patch 0064 of patches/bionic_translation (see docs/PATCHES.md).
+
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -459,7 +459,7 @@
+ 		sig = SIGRTMIN;
+ 
+ 	struct sigaction goact = {0}, gact = {0};
+-	if (act && (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL || sig == SIGFPE) && !JVM_get_signal_action) { /* apklayer patch: see docs/PATCHES.md */
++	if (act && (((sig == SIGSEGV || sig == SIGBUS || sig == SIGILL || sig == SIGFPE) && !JVM_get_signal_action) || sig == SIGTERM)) { /* apklayer patch: see docs/PATCHES.md */
+ 		if (oact) {
+ 			sigaction(sig, NULL, &goact);
+ 			*oact = (struct bionic_sigaction){0};
+@@ -504,6 +504,17 @@
+ 	return ret;
+ }
+ 
++/* apklayer patch: SIGTERM ends the process, as the kill that ends an app process on Android: bionic code (an app library; guest code through
++ * the native bridge, whose sigaction is this one) neither ignores nor catches it, it is told the call succeeded (bionic_sigaction). Bionic's
++ * signal() is sigaction's too, glibc's would pass it by. */
++void (*bionic_signal(int sig, void (*handler)(int)))(int)
++{
++	struct bionic_sigaction act = {0}, old = {0};
++	act.bsa_handler = handler;
++	act.sa_flags = SA_RESTART;
++	return bionic_sigaction(sig, &act, &old) == 0 ? old.bsa_handler : SIG_ERR;
++}
++
+ int bionic___isfinitef(float f)
+ {
+ 	return isfinite(f);

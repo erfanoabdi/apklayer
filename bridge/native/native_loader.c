@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
 #include <time.h>
@@ -152,14 +153,56 @@ static void *exit_deadline(void *arg)
     return NULL;
 }
 
-JNIEXPORT void JNICALL Java_apklayer_host_NativeLoader_exitDeadline(JNIEnv *env, jclass c, jint seconds)
+static void start_thread(void *(*fn)(void *), int seconds)
 {
-    (void)env;
-    (void)c;
     pthread_t thread;
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-    pthread_create(&thread, &attr, exit_deadline, (void *)(intptr_t)seconds);
+    pthread_attr_setstacksize(&attr, 64 * 1024);
+    pthread_create(&thread, &attr, fn, (void *)(intptr_t)seconds);
     pthread_attr_destroy(&attr);
+}
+
+JNIEXPORT void JNICALL Java_apklayer_host_NativeLoader_exitDeadline(JNIEnv *env, jclass c, jint seconds)
+{
+    (void)env;
+    (void)c;
+    start_thread(exit_deadline, seconds);
+}
+
+/* SIGTERM's arrival starts the exit deadline itself, before any Java code runs: HotSpot's handler only wakes its signal dispatcher, which runs the
+ * Java handler that begins the end; a safepoint (a CDS dump defers it by seconds) or a lock that Shutdown.exit waits for before any hook kept that
+ * end from starting, so the hook's deadline never came (app JVMs outlived the corpus runner's SIGTERM for 9 and 20 min). */
+static struct sigaction term_chained;  /* HotSpot's own (UserHandler) */
+static int term_pipe[2] = {-1, -1};
+
+static void on_term(int sig, siginfo_t *info, void *context)
+{
+    char one = 1;
+    (void)!write(term_pipe[1], &one, 1);
+    if (term_chained.sa_flags & SA_SIGINFO) term_chained.sa_sigaction(sig, info, context);
+    else if (term_chained.sa_handler != SIG_IGN && term_chained.sa_handler != SIG_DFL) term_chained.sa_handler(sig);
+    else { signal(sig, SIG_DFL); raise(sig); }  /* no JVM handler (-Xrs): the default end, once this handler returns */
+}
+
+static void *term_deadline(void *arg)
+{
+    char one;
+    while (read(term_pipe[0], &one, 1) != 1) {}
+    return exit_deadline(arg);
+}
+
+/* Once per process (the native runtime's load, runtime_shim.c). A component host or the hub that takes SIGTERM itself (sun.misc.Signal) replaces it. */
+void apklayer_exit_deadline_on_term(int seconds)
+{
+    if (term_pipe[0] >= 0 || pipe2(term_pipe, O_CLOEXEC) != 0) return;
+    fcntl(term_pipe[1], F_SETFL, O_NONBLOCK);  /* a second SIGTERM never blocks in the handler */
+    start_thread(term_deadline, seconds);
+    struct sigaction sa = {0};
+    sigaction(SIGTERM, NULL, &term_chained);
+    sa.sa_sigaction = on_term;
+    sa.sa_flags = SA_SIGINFO | SA_RESTART;
+    sa.sa_mask = term_chained.sa_mask;
+    sigaction(SIGTERM, &sa, NULL);
 }

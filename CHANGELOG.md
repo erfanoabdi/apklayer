@@ -3,6 +3,30 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: SIGTERM ends an app JVM at any moment (retest (c): UiBench 9 min, Telegram 20 min past the runner's SIGTERM)
+- Found: an app JVM's end on SIGTERM depended on Java code. HotSpot's handler only wakes its signal dispatcher, which runs Terminator's Java
+  handler (a new thread, Shutdown.exit: System.getLogger, the Shutdown monitor, then the hooks); the exit deadline of 2026-11-10 was armed by a
+  hook, so a SIGTERM whose end never reached the hooks was not bounded. Measured on the x86 PC (Telegram through the bridge): a SIGTERM during
+  the CDS dynamic dump's safepoint is not dispatched until the dump ends (5.2-10 s after the first activity: the end came 0.7-5.3 s after
+  SIGTERM, 0.4 s otherwise); a thread holding java.lang.Shutdown keeps the end from ever starting (new test case: it ran until killed).
+- Fix: SIGTERM's arrival starts the 10 s deadline itself (native_loader.c apklayer_exit_deadline_on_term, from the native runtime's load in
+  every app and spare JVM): its handler writes to a pipe that an idle native thread waits on, then chains to HotSpot's. A component host and
+  the hub keep their own SIGTERM handling (sun.misc.Signal replaces it).
+- Found reproducing the runner's flow (it SIGTERMs every run record, the spare's too, and launches again at once): the next launch took the
+  spare that was ending (its holder still served it for ~300 ms): the launch died with 143 (delays 0-300 ms after the spare's SIGTERM, every
+  time). The holder refuses a launch once it got SIGTERM ("the instance's spare is not for this launch: it is ending (SIGTERM)"), the launch
+  starts cold (cli/spare.cpp).
+- A library that ignores or catches SIGTERM (hypothesis (b)) kept the JVM running: hello.arm64's library calling signal(SIGTERM, SIG_IGN)
+  and sigaction did on the x86 PC through berberis (SIGTERM ignored, still running 30 s later). bionic_translation 0064: bionic code
+  neither ignores nor catches SIGTERM (bionic_sigaction reports success, the new bionic_signal goes through it), the guest's included.
+  Not seen in Telegram (strace of its launch: only HotSpot sets SIGTERM's action), so not the cause of its stall.
+- Not found: what kept the two corpus JVMs alive for minutes (no logs of those rounds were kept); with the deadline at SIGTERM's arrival any
+  such stall now ends 10 s after it (exit 137, "the JVM had not ended by its exit deadline: killed" in the app log).
+- Tests: exit-deadline.py cases held (Shutdown held: killed 10.0 s after SIGTERM), spare (the launch right after the spare's SIGTERM starts
+  cold and ends on SIGTERM; before: it took the ending spare and died, 143) in group activities, native (the library ignores and catches
+  SIGTERM, it ends in 0.4 s; before: still running 30 s later) in group native-bridge. x86 PC (own tree): activities, native-bridge PASS;
+  the corpus runner on Telegram: both launches draw. Parallels (own tree): activities, native-bridge (native route), units PASS.
+
 ## 2026-11-10: deferred bugs: WebView Back (not a bug), input-inject under stalls, CDS of other loaders, FCL sound measured
 - WebView Back in a text selection finishes the activity: Android does the same. From the WebView APK we ship (baksmali of
   external/chromium-webview arm64): ContentUiEventHandler.dispatchKeyEvent sends KEYCODE_BACK (with MENU, HOME, volume...) to

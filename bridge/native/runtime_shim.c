@@ -558,6 +558,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
         jclass loader = lazy_find_class(env, "apklayer/host/NativeLoader");
         attribution_failed = !loader || apklayer_register_nativeloader(env, loader);  /* the sandbox's copy: app classes (their own Conscrypt too) reach it through their loader */
         if (loader) (*env)->DeleteLocalRef(env, loader);
+        extern void apklayer_exit_deadline_on_term(int seconds);
+        apklayer_exit_deadline_on_term(10);  /* NativeLoader.EXIT_DEADLINE_S: from SIGTERM's arrival (native_loader.c) */
     }
     if (!attribution_failed) {
         extern int apklayer_register_nativelooper(JNIEnv *, jclass);

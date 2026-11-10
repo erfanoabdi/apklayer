@@ -74,8 +74,8 @@ std::string stamp(const std::string& path) {
     return path + " " + std::to_string(st.st_ino) + " " + std::to_string(st.st_mtim.tv_sec) + "." + std::to_string(st.st_mtim.tv_nsec) + "\n";
 }
 
-volatile sig_atomic_t forwardTo = 0;
-void forward(int sig) { if (forwardTo > 0) kill(forwardTo, sig); }
+volatile sig_atomic_t forwardTo = 0, forwarded = 0;
+void forward(int sig) { if (forwardTo > 0) kill(forwardTo, sig); forwarded = 1; }
 
 // A launch's own environment, which the runtime reads after its target: a spare gets it with the target (spare_target.c sets it, Java reads
 // -Dapklayer.env.<name>), a cold JVM in its environment. Neither in the key nor in the spare's own environment.
@@ -243,7 +243,8 @@ int runAppSpare(const Layout& l, const Instance& inst, int afterFd, const std::s
         if (c < 0) continue;
         int out[3], count = 0;
         std::string message = receive(c, out, &count);
-        bool match = count == 3 && message.size() > key.size() && message.compare(0, key.size(), key) == 0 && message[key.size()] == '\0';
+        // a spare told to end (its record's SIGTERM, which the corpus runner sends right before the next launch) is no launch's: that launch failed
+        bool match = !forwarded && count == 3 && message.size() > key.size() && message.compare(0, key.size(), key) == 0 && message[key.size()] == '\0';
         if (match) {
             fflush(stdout);
             copyEarlyOutput(inst, out[0]);
@@ -254,8 +255,8 @@ int runAppSpare(const Layout& l, const Instance& inst, int afterFd, const std::s
         if (message.empty() || message == "now") { close(c); continue; }  // a launcher that gave up; the hub's wakeAppSpare
         // a launch of another build or environment: this spare is of no use to it (nor likely to the next); it starts one of its own
         release();
-        std::string why = firstDifference(key, message);
-        printf("[apklayer] app spare pid=%d: not for a launch of another runtime build or environment (%s), ends\n", pid, why.c_str());
+        std::string why = forwarded ? "it is ending (SIGTERM)" : firstDifference(key, message);
+        printf("[apklayer] app spare pid=%d: not for this launch (%s), ends\n", pid, why.c_str());
         fflush(stdout);
         sendWithFds(c, "stale " + why, nullptr, 0);
         close(c);

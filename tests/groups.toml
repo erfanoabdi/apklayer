@@ -18,7 +18,7 @@ run = ["meson test -C b --suite bionic --print-errorlogs"]
 [native-bridge]
 # an arm64-only JNI app: translated through the native bridge on x86_64 (Digitalis, docs/X86_64.md), native on arm64
 apps = ["hello-arm64"]
-run = ["tests/vm/native-bridge.sh"]
+run = ["tests/vm/native-bridge.sh", "python3 -u tests/vm/exit-deadline.py native"]
 
 [arm32]
 # an armeabi-v7a-only JNI app in the 32-bit app process (docs/PLAN.md "apps built for another CPU" 2(a)): needs a CPU that runs AArch32 code
@@ -206,7 +206,8 @@ run = ["python3 -u tests/vm/installer.py"]
 apps = ["hello-act-target", "hello-act-caller", "hello-act-process"]
 run = ["python3 -u tests/vm/hub.py activities result", "python3 -u tests/vm/hub.py activities explicit", "python3 -u tests/vm/hub.py activities again",
        "python3 -u tests/vm/hub.py activities private", "python3 -u tests/vm/hub.py activities up", "python3 -u tests/vm/relaunch.py",
-       "python3 -u tests/vm/hub.py processes kill", "python3 -u tests/vm/exit-deadline.py"]
+       "python3 -u tests/vm/hub.py processes kill", "python3 -u tests/vm/exit-deadline.py",
+       "python3 -u tests/vm/exit-deadline.py held", "python3 -u tests/vm/exit-deadline.py spare"]
 
 [pendingintents]
 apps = ["hello-pi-holder", "hello-pi-creator", "hello-act-target", "hello-svc-target"]

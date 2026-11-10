@@ -17,6 +17,7 @@ public class Main extends Activity {
     private static native int errnos();
     private static native int ownStack();
     private static native int auxv();
+    private static native int ignoreTerm();
 
     static int twice(int v) { return 2 * v; }
 
@@ -68,6 +69,7 @@ public class Main extends Activity {
         int green = (px >> 8) & 0xff;  // drivers round 0.5 differently (ANV: 0x82)
         log("GL " + ((px & 0xff00ff) == 0x0000ff && green > 0x70 && green < 0x90 ? "PASS" : "FAIL") + " pixel 0x" + Integer.toHexString(px)
                 + " (" + (System.nanoTime() - t7) / 1000 + " us)");
+        if (Boolean.getBoolean("hello.ignoreterm")) log("SIGTERM ignored and caught by the library: " + (ignoreTerm() == 1 ? "ok" : "FAIL"));  // exit-deadline.py native
         TextView v = new TextView(this);
         v.setText("arm64 JNI: " + (ok ? "PASS" : "FAIL"));
         setContentView(v);
