@@ -1,7 +1,7 @@
 /* apklayer graphics HAL, host side (docs/ARCHITECTURE.md "Android side and host side").
  * Plain C: the Android-side HAL services (aosp/hals/graphics) call this to get GPU buffers from the host. Buffers are dmabufs;
  * the format is a DRM fourcc (Android's formats are translated on the Android side). Vendor-neutral: libgbm on a render node
- * (Mesa, NVIDIA via nvidia-drm, AMD, Intel...). One context per instance (PLAN P9): nothing here is global. */
+ * (Mesa, NVIDIA via nvidia-drm, AMD, Intel...). One context per instance (PLAN archive P9): nothing here is global. */
 #ifndef APKLAYER_GRAPHICS_H
 #define APKLAYER_GRAPHICS_H
 

@@ -1,4 +1,4 @@
-/* Android platform symbols that Android's own native libraries (libandroid_runtime and its closure, PLAN P7) use and
+/* Android platform symbols that Android's own native libraries (libandroid_runtime and its closure, PLAN archive P7) use and
  * that bionic_translation's libc does not provide. Loaded into the process with glibc, where the translator's linker
  * finds symbols nothing else defines (dlsym on the global scope). Almost all are stubs: a desktop has no
  * property service, no linker namespaces, no malloc debugging.  Names and signatures follow bionic's headers. */

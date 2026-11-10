@@ -186,7 +186,7 @@ final class AppEnvironment {
     }
 
     /**
-     * PLAN D20: Robolectric creates the app's data dirs ({@code <package>-dataDir}, {@code
+     * PLAN archive D20: Robolectric creates the app's data dirs ({@code <package>-dataDir}, {@code
      * userDataDir}, {@code deviceDataDir}) in its per-run temp directory when the (lazy)
      * Application is created, and deletes them at exit. They are pre-created here as links into
      * the persistent per-app tree ({@code apklayer.data}); TempDirectory.createIfNotExists keeps

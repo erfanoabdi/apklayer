@@ -2,7 +2,7 @@
 // a probe of its own FMQ would take it from SensorService): the NDK's ASensorManager lists the sensors and reads the accelerometer at 50 Hz
 // for one second on an ALooper. Prints the count and the last value (the test compares them with the backend's options).
 // libandroid is opened here only: linked, it pulled ~230 more libraries (libandroid_runtime, hwui...) into the always-running HAL, ~85 MB of their
-// static allocations (docs/PLAN.md "app start speed on phones" 8).
+// static allocations (docs/history/PLAN-2026-11-10.md "app start speed on phones" 8).
 #include <android/looper.h>
 #include <android/sensor.h>
 #include <android-base/logging.h>

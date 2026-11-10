@@ -2,7 +2,7 @@
 # The instance's CDS archive (apklayer.host.CdsDump), run on the VM: `tests/vm/cds-dump.sh <package> [line]` (line: what the app prints in
 # runs 2 and 3, e.g. hello.cdsloader's own ClassLoader subclass at work). (1) The app ends while its first launch
 # dumps: no archive is kept unless that dump finished. (2) A full first launch writes one with no unlinked custom-loader class (HotSpot keeps
-# such a class's constant pool as it is: a nest host's resolved member entry crashed Termux, docs/PLAN.md). (3) A cold launch runs on it.
+# such a class's constant pool as it is: a nest host's resolved member entry crashed Termux, docs/history/PLAN-2026-11-10.md). (3) A cold launch runs on it.
 # Honours APKLAYER_INSTANCE, APKLAYER_NATIVE, XDG_* like the CLI.
 cd "$(dirname "$0")/../.."
 pkg="$1" marker="${2:-}"

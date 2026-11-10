@@ -1,4 +1,4 @@
-/* An arm64-only JNI library (hello-arm64): on an x86_64 host it runs only through the native bridge (PLAN "apps built for another CPU"). */
+/* An arm64-only JNI library (hello-arm64): on an x86_64 host it runs only through the native bridge (docs/history/PLAN-2026-11-10.md "apps built for another CPU"). */
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>

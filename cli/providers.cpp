@@ -231,7 +231,7 @@ std::vector<ProviderConfig> readProviders(const std::string& file) {
 std::vector<ProviderService> providerServices(const Layout& l, const Instance& inst) {
     std::vector<ProviderService> services;
     std::vector<ProviderConfig> configs = readProviders(providersFile(inst));
-    for (const Domain& d : kDomains) {  // a domain the file does not name: the best this host has, if any (docs/PLAN.md, providers 3)
+    for (const Domain& d : kDomains) {  // a domain the file does not name: the best this host has, if any (docs/history/PLAN-2026-11-10.md, providers 3)
         if (!d.front || named(configs, d.name)) continue;
         std::string choice = defaultChoice(l, d);
         if (choice == "device") configs.push_back({d.name, "device", "", {}});

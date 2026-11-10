@@ -8,7 +8,7 @@
 | `tests/uibench/uibench.apk` | AOSP UiBench test app | Apache-2.0 |
 | `archive/**` (removed; git tag `archive-last`) | AOSP (Apache-2.0) and Mac.apk (AGPL-3.0) code from earlier milestones; not built | as marked in each origin |
 
-apklayer itself is AGPL-3.0-or-later (PLAN D5), compatible with all of the above.
+apklayer itself is AGPL-3.0-or-later (PLAN archive D5), compatible with all of the above.
 
 - gfxstream's GLES_CM translator and GLcommon (`hardware/google/gfxstream` in the LineageOS tree), Apache-2.0, unmodified, its sources in the prebuilts' `common/gfxstream` (`tools/stage gfxstream`, or `-Dgfxstream=<source>`), built by Meson into `libapklayer-gles1.so`.
 - `bridge/shell/protocols/wayland-android.xml`: libhybris's `android_wlegl` protocol (Collabora, MIT-style), for showing device gralloc buffers on Lomiri/Lipstick.
@@ -56,7 +56,7 @@ The tree-host build reuses unchanged `FrameListener.class` and `ScreenUpdateHand
 
 ## License audit for a dual license (2026-10-28, not legal advice)
 
-Question: can apklayer be AGPL-3.0-or-later for everyone plus a commercial license (PLAN D5), distributable as deb/rpm/AUR/Flatpak/AppImage?
+Question: can apklayer be AGPL-3.0-or-later for everyone plus a commercial license (PLAN archive D5), distributable as deb/rpm/AUR/Flatpak/AppImage?
 A commercial license can only cover code the licensor owns or that is permissively licensed. Findings, from file headers, local clones and the GitHub API; "unverified" marks what was not read in full.
 
 | Component | License | Verdict for dual licensing |

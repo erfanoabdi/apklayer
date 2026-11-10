@@ -1,5 +1,5 @@
 #!/bin/sh
-# push-check.sh [instance] [package]: after a real cloud message to a closed app (docs/PLAN.md "Plan: background push", the owner's check), reads the
+# push-check.sh [instance] [package]: after a real cloud message to a closed app (docs/history/PLAN-2026-11-10.md "Plan: background push", the owner's check), reads the
 # always-on instance's logs and says how far the push came: microG's McsService logged in, the message arrived, microG delivered
 # com.google.android.c2dm.intent.RECEIVE, the closed app was started for it, its notification reached the desktop.
 # Defaults: instance push, package org.telegram.messenger.web. microG's own lines (D/GmsGcm...) need APKLAYER_LOGCAT=1 in the instance's unit

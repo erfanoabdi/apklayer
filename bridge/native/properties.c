@@ -1,4 +1,4 @@
-/* Android system properties for the desktop (PLAN P7.1 step 0.4): a shared-memory store with bionic's API and semantics, so
+/* Android system properties for the desktop (PLAN archive P7.1 step 0.4): a shared-memory store with bionic's API and semantics, so
  * libcutils, libbase (GetProperty/WaitForProperty), SurfaceFlinger and the framework natives read real values, and every
  * process of an instance sees the same ones. No property service: any process of the instance may set (security is the
  * host's), but ro.* properties are write-once as on Android. The file is per instance:

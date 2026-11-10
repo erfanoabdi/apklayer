@@ -41,7 +41,7 @@ final class AppMetadata {
     }
 
     /**
-     * Install-time metadata (PLAN D19): info.properties plus the launcher icon rendered by the
+     * Install-time metadata (PLAN archive D19): info.properties plus the launcher icon rendered by the
      * framework's own drawable code (adaptive icons included) as a 256 px PNG.
      */
     static void describe(Application app, Path dir) {
@@ -57,7 +57,7 @@ final class AppMetadata {
             info.setProperty("versionCode", String.valueOf(pkg.getLongVersionCode()));
             info.setProperty("targetSdk", String.valueOf(app.getApplicationInfo().targetSdkVersion));
             List<ManifestFilters.Filter> filters = ManifestFilters.read(app);
-            for (int i = 0; i < filters.size(); i++) info.setProperty("filter." + i, filters.get(i).encode()); // for cross-app intents (PLAN P6)
+            for (int i = 0; i < filters.size(); i++) info.setProperty("filter." + i, filters.get(i).encode()); // for cross-app intents (PLAN archive P6)
             android.content.pm.ProviderInfo[] providers = pm.getPackageInfo(app.getPackageName(), PackageManager.GET_PROVIDERS).providers;
             info.setProperty("authorities", providers == null ? "" : String.join(";", java.util.Arrays.stream(providers).map(p -> p.authority).filter(java.util.Objects::nonNull).toList()));  // read at launch before the manifest is parsed (AppEnvironment)
             String[] requested = pm.getPackageInfo(app.getPackageName(), PackageManager.GET_PERMISSIONS).requestedPermissions;

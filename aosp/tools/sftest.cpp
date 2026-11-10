@@ -1,4 +1,4 @@
-// sftest: shows colour bars on the display through SurfaceFlinger, the whole stack's smoke test (PLAN P7.1). It creates a layer,
+// sftest: shows colour bars on the display through SurfaceFlinger, the whole stack's smoke test (PLAN archive P7.1). It creates a layer,
 // allocates GraphicBuffers (our gralloc), fills them through the mapper's CPU lock, and hands them to SurfaceFlinger with
 // transactions; SurfaceFlinger composites on the GPU and our HWC presents the result to the shell. Usage: sftest [frames]
 #include <gui/SurfaceComposerClient.h>

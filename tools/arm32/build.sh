@@ -1,5 +1,5 @@
 #!/bin/sh
-# tools/arm32/build.sh [out]: the 32-bit app process's runtime (docs/PLAN.md "apps built for another CPU" 2(a)) in <out>/arm32
+# tools/arm32/build.sh [out]: the 32-bit app process's runtime (docs/history/PLAN-2026-11-10.md "apps built for another CPU" 2(a)) in <out>/arm32
 # (default build/arm32): the armel meson build of the native parts (bionic_translation, the JNI shim, btload, the path layer, the host HALs) under
 # lib/apklayer, the armel JRE (jvm/) on its own glibc (sysroot/lib: the closure of what they link), bin/java (that JVM on that loader) and
 # lib/apklayer/native/shim.jar (the shim where Robolectric's loader looks for it). Put the arm32 Android libraries (tools/stage arm32) in

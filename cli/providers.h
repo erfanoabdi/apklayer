@@ -1,4 +1,4 @@
-// The instance's hardware providers (docs/PLAN.md "Plan: hardware providers"): <instance root>/providers.toml names, per domain, the
+// The instance's hardware providers (docs/history/PLAN-2026-11-10.md "Plan: hardware providers"): <instance root>/providers.toml names, per domain, the
 // provider and its backend with options; the stack starts the configured HAL fronts, `apklayer providers` shows and changes them.
 #pragma once
 

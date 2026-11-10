@@ -166,7 +166,7 @@ final class HostWindows {
                 || code == KeyEvent.KEYCODE_MOVE_HOME || code == KeyEvent.KEYCODE_MOVE_END;
     }
 
-    /** Center of the first clickable view in the topmost window (corpus tap, PLAN P3.2). */
+    /** Center of the first clickable view in the topmost window (corpus tap, PLAN archive P3.2). */
     static int[] firstClickableCenter() {
         Object wmg = android.view.WindowManagerGlobal.getInstance();
         List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");

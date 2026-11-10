@@ -1,4 +1,4 @@
-/* apklayer-prop: the property store's command line (PLAN P7.1 step 0.4).
+/* apklayer-prop: the property store's command line (PLAN archive P7.1 step 0.4).
  *   aprop get NAME | set NAME VALUE | wait NAME VALUE | dump | load FILE...   (FILE: Android build.prop format, KEY=VALUE lines) */
 #include <stdint.h>
 #include <time.h>

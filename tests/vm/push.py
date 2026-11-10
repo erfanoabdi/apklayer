@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Background push, alarms, jobs and boot broadcasts with every app process gone (docs/PLAN.md "Background push"), one phase per run: `push.py <phase>`.
+"""Background push, alarms, jobs and boot broadcasts with every app process gone (docs/history/PLAN-2026-11-10.md "Background push"), one phase per run: `push.py <phase>`.
   push      always-on instance: an app is closed, the fake push service (hello-pushgms, as microG's McsService) delivers com.google.android.c2dm.intent.RECEIVE,
             the hub starts the app's process, its receiver posts a notification that reaches the desktop
   alarm     an alarm set by an app that is then closed fires its PendingIntent (the hub holds it: HubScheduler)

@@ -91,7 +91,7 @@ std::string hostVulkan(const Layout& layout, const Env& env) {
 }
 
 
-// Class data sharing (docs/PLAN.md "app start speed on phones"): the runtime's JDK image (tools/release/jdk-image.sh, java.base with the patch built in)
+// Class data sharing (docs/history/PLAN-2026-11-10.md "app start speed on phones"): the runtime's JDK image (tools/release/jdk-image.sh, java.base with the patch built in)
 // while it was made from this JDK's modules, else "" (the JDK with --patch-module, which turns CDS off)
 std::string jdkImage(const Layout& l, const std::string& java) {
     std::string img = join(l.native, "jdk"), home = dirName(dirName(realPath(java)));
@@ -282,7 +282,7 @@ std::vector<std::string> hostJvmArgs(const Layout& l, const Instance& inst, Nati
                                   // C1 only gets a 48 MB code cache; Meet filled it in a call ("Out of space in CodeCache for method handle intrinsic", the
                                   // JVM exits). 240 MB is the tiered default; it is reserved address space, committed as code is compiled
                                   "-XX:ReservedCodeCacheSize=240m",
-                                  // memory of the always-on JVMs (PLAN "app start speed on phones" 8): SerialGC never shrinks below the initial heap
+                                  // memory of the always-on JVMs (docs/history/PLAN-2026-11-10.md "app start speed on phones" 8): SerialGC never shrinks below the initial heap
                                   // (1/64 of RAM: 90 MB on a 6 GB phone, ~45 MB live in the hub), and the Android natives' freed malloc stays in glibc's
                                   // arenas (a trim gave back 3-25 MB a JVM). Measured on the phone: no slower start
                                   "-XX:InitialHeapSize=32m", "-XX:TrimNativeHeapInterval=60000",

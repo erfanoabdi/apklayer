@@ -1,4 +1,4 @@
-// apklayer's virtual display sink (PLAN P7.1, "one display per app"): a SurfaceFlinger virtual display whose output surface is a
+// apklayer's virtual display sink (PLAN archive P7.1, "one display per app"): a SurfaceFlinger virtual display whose output surface is a
 // BufferQueue this process consumes. SurfaceFlinger composes the app's layer stack on the GPU (RenderEngine, no HWC involved) into
 // gralloc buffers; each finished buffer goes to apklayer-shell as a dmabuf through the host display HAL, zero copy, as the
 // composer does for the primary display. Resizing the window resizes the virtual display (new default buffer size, new display

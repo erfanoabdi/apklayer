@@ -1,4 +1,4 @@
-/* The native bridge route (PLAN "apps built for another CPU"): an app whose libraries exist only for another CPU (arm64 on x86_64) loads them
+/* The native bridge route (docs/history/PLAN-2026-11-10.md "apps built for another CPU"): an app whose libraries exist only for another CPU (arm64 on x86_64) loads them
  * through Android's NativeBridge interface, as libnativeloader and ART do on a device with a native bridge. The bridge is Digitalis's
  * libberberis_arm64.so (an arm64 guest for AOSP's Berberis translator), an Android x86_64 library that bionic_translation loads like any
  * other; its guest world (linker64, libc, proxies) is under the Android root's system/{bin,lib64}/arm64. Java side: apklayer.host.NativeLoader. */

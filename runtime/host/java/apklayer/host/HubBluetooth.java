@@ -13,7 +13,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 /**
- * Bluetooth for the instance's apps (docs/PLAN.md "Bluetooth and USB", no Android Bluetooth stack): each app's session is a BlueZ client of its own
+ * Bluetooth for the instance's apps (docs/history/PLAN-2026-11-10.md "Bluetooth and USB", no Android Bluetooth stack): each app's session is a BlueZ client of its own
  * (bridge/portal/bluez.py) started here, where the system bus is reachable (a sandboxed app has none), with its stdin and stdout handed to the app as two
  * pipes (HostBluetooth). The hub's own client follows the adapter and sends ACTION_STATE_CHANGED to every app, as the Bluetooth service does.
  */

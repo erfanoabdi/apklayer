@@ -1,4 +1,4 @@
-// The per-app sandbox (docs/PLAN.md "per-app sandbox with apklayerd"), on with APKLAYER_SANDBOX=1: each instance's stack makes a user namespace
+// The per-app sandbox (docs/history/PLAN-2026-11-10.md "per-app sandbox with apklayerd"), on with APKLAYER_SANDBOX=1: each instance's stack makes a user namespace
 // (Android uid 1000 is the desktop user, 10000 and up the user's /etc/subuid range), every app process runs in it under its own uid and in a mount
 // namespace of its own: its data, the shared runtime read-only, nothing of the user's home.
 #pragma once

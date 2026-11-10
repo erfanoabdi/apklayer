@@ -64,7 +64,7 @@ finally:
     if app.poll() is None: os.killpg(app.pid, signal.SIGKILL)
     app.wait()
     left = instance.mine('[a]pklayer.host.Main|[b]tload|[a]pklayer-shell')
-    if left:  # the spare JVM can outlive the first stop (PLAN "Startup and memory")
+    if left:  # the spare JVM can outlive the first stop (docs/history/PLAN-2026-11-10.md "Startup and memory")
         instance.stop()
         left = instance.mine('[a]pklayer.host.Main|[b]tload|[a]pklayer-shell')
     assert not left, left

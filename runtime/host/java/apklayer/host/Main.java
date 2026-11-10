@@ -7,7 +7,7 @@ import org.robolectric.internal.AndroidSandbox;
 import org.robolectric.simulator.SandboxBuilder;
 
 /**
- * apklayer entry point (PLAN P1.5): builds a Robolectric sandbox without JUnit, the way
+ * apklayer entry point (PLAN archive P1.5): builds a Robolectric sandbox without JUnit, the way
  * Robolectric's own SimulatorMain does, and runs {@link AppHost} inside it.
  *
  * <p>Usage: {@code apklayer.host.Main [--describe <out-dir>] <app.apk> <app-classes.jar>}. The
@@ -15,7 +15,7 @@ import org.robolectric.simulator.SandboxBuilder;
  * the app is not run: its metadata and launcher icon are written to out-dir (install time).
  */
 public final class Main {
-    /** The arm64 native runtime jar (bin/apklayer, PLAN P7) whose library Robolectric's loader extracts. The app's classes and APK are not the sandbox's:
+    /** The arm64 native runtime jar (bin/apklayer, PLAN archive P7) whose library Robolectric's loader extracts. The app's classes and APK are not the sandbox's:
      *  they get a loader of their own ({@link AppClassLoader}), its resources come from the manifest's APK path. Every process kind shares one sandbox. */
     private static AndroidSandbox sandbox() {
         String nativeJar = System.getProperty("apklayer.nativejar");

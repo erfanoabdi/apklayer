@@ -1,4 +1,4 @@
-/* bionic's thread-pointer slots (PLAN P7.1). Android code reads and writes fixed offsets from the thread pointer (tp+2 .. tp+7: app,
+/* bionic's thread-pointer slots (PLAN archive P7.1). Android code reads and writes fixed offsets from the thread pointer (tp+2 .. tp+7: app,
  * OpenGL, OpenGL API, stack guard, sanitizer, ART thread self); on glibc that memory belongs to its own thread structure, so without
  * reserved slots bionic code corrupts it, first visible in threads that make GL calls. bionic_translation's README solves it with a
  * thread-local array in the MAIN EXECUTABLE (main_executable/bionic_compat.c): static TLS of the executable sits right after the

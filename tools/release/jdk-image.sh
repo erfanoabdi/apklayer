@@ -1,5 +1,5 @@
 #!/bin/sh
-# jdk-image.sh <java> <native dir>: the runtime's own JDK image, for class data sharing (docs/PLAN.md "app start speed on phones"). HotSpot turns CDS
+# jdk-image.sh <java> <native dir>: the runtime's own JDK image, for class data sharing (docs/history/PLAN-2026-11-10.md "app start speed on phones"). HotSpot turns CDS
 # off for a patched java.base (--patch-module), so <native>/jdk is a jlink image of the JDK's modules whose java.base has the jdk-patch classes built
 # in (a rebuilt java.base jmod) and the default CDS archive; and the class path's one directory becomes aosp/sim-classes.jar (a dynamic dump exits
 # the VM on a non-empty directory in the class path). The CLI (cli/env.cpp) takes the image while its stamp is the JDK's lib/modules time, else the JDK

@@ -5,7 +5,7 @@ For a directory of Android (bionic) shared libraries (the closure of libandroid_
 this lists every undefined, non-weak symbol that no library of the set, no bionic_translation library, no glibc library
 and no hand-written platform shim defines, then writes a C file with a do-nothing function per symbol. Intended for
 entry points the JVM-hosted runtime never calls (the Java OpenGL bindings, EGL internals); anything that is called
-must be implemented properly in bridge/native/android_platform.c instead (PLAN P7).
+must be implemented properly in bridge/native/android_platform.c instead (PLAN archive P7).
 
 Usage: android-stubs.py LIBDIR BT_BUILD_DIR PLATFORM_SO OUT.c [SYSTEM_MAPPED_SO ...]
   LIBDIR           the Android libraries (*.so)

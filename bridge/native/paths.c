@@ -1,5 +1,5 @@
-/* Android's fixed paths for the desktop (PLAN P7.1 step 0.3). Android libraries read /system, /vendor, /apex, /etc/task_profiles.json,
- * /dev/binder ... A desktop has none of them, and an instance (PLAN P9) must not share them. This overlays them from the
+/* Android's fixed paths for the desktop (PLAN archive P7.1 step 0.3). Android libraries read /system, /vendor, /apex, /etc/task_profiles.json,
+ * /dev/binder ... A desktop has none of them, and an instance (PLAN archive P9) must not share them. This overlays them from the
  * instance's Android root: a path under a known prefix is served from $APKLAYER_ANDROID_ROOT/<path> (else <native>/android-root)
  * when that file exists there, otherwise the host's own file is used, so nothing the host needs is hidden. Installed into
  * bionic_translation's libc (open, fopen, stat, lstat, fstatat) through its apply_path_overrides hook. */

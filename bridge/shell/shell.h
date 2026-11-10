@@ -2,7 +2,7 @@
 #define APKLAYER_SHELL_H
 
 /*
- * apklayer-shell: the per-session Wayland side of apklayer (PLAN D6/D7).
+ * apklayer-shell: the per-session Wayland side of apklayer (PLAN archive D6/D7).
  *
  * App processes (any JVM arch, pure Java) connect to $XDG_RUNTIME_DIR/apklayer/shell.sock.
  * Each app window is one xdg_toplevel. Its pixels live in a file the app creates (two

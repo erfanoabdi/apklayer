@@ -79,7 +79,7 @@ bool hasExtension(VkPhysicalDevice physical, const char* name) {
 }
 
 // OPT-IN (APKLAYER_VULKAN_PRESENT=1): on the UTM VM's Venus GPU (virglrenderer on macOS) a virgl dma-buf imports and binds but Venus aborts on the first
-// command that uses the image, even in a standalone C program (docs/PLAN.md P7.5). Advertised by default, Vulkan games would try the swapchain and die
+// command that uses the image, even in a standalone C program (PLAN archive P7.5). Advertised by default, Vulkan games would try the swapchain and die
 // instead of falling back to GL. Hosts whose driver can use imported dma-bufs (native Linux GPUs) can enable it.
 bool nativeBufferSupported(VkPhysicalDevice physical) {
     if (!getenv("APKLAYER_VULKAN_PRESENT")) return false;

@@ -1,7 +1,7 @@
 # Userspace binder (design note)
 
 apklayer without kernel binder: no `binder_linux` module, no binderfs mount, no root step, no per-instance devices that live until reboot, no
-Flatpak host step. Plan and state: `docs/PLAN.md` "Plan: binder in userspace, no kernel binder". This note is what was built (steps 1 and 2).
+Flatpak host step. Plan and state: `docs/history/PLAN-2026-11-10.md` "Plan: binder in userspace, no kernel binder". This note is what was built (steps 1 and 2).
 
 The default since 0.4.9 (owner's decision 2026-11-09). Kernel binder stays an option: `apklayer [--instance <id>] binder kernel` (or the manager's
 Hardware page) writes `<instance data root>/binder` saying `kernel` (`binder userspace` or no file: this one); `APKLAYER_BINDER=kernel|userspace`
@@ -19,7 +19,7 @@ instance's own binder is this one.
 | CLI | `cli/binder.cpp` (`userspaceBinder`, `ensureBinderDaemon`), `cli/stack.cpp`, `cli/env.cpp` | selection, starting the daemon, the environment |
 
 libbinder, libhwbinder, servicemanager, Java and native Android code are unchanged. Binder objects move freely between processes, as with
-the kernel driver (what RPC binder cannot do, PLAN).
+the kernel driver (what RPC binder cannot do, docs/history/PLAN-2026-11-10.md).
 
 ## How a process reaches the daemon
 
@@ -104,7 +104,7 @@ tells the route how many wake bytes to read away (`ndrain`); any reply that drai
 marks the proc, and the condition is checked again after the request, so a poller never sleeps with work queued (a lost wake byte was the
 cause of occasional missing death notifications under load).
 
-Still one thread for all traffic of one context (step 4, PLAN). BINDER_FREEZE now reaches only the procs of the caller's context.
+Still one thread for all traffic of one context (step 4, docs/history/PLAN-2026-11-10.md). BINDER_FREEZE now reaches only the procs of the caller's context.
 
 ## The per-app sandbox
 
@@ -154,7 +154,7 @@ to the sender) and BINDER_GET_FROZEN_INFO reports `sync_recv`/`async_recv` and p
 - **Transaction logs, debugfs, stats, `BINDER_GET_EXTENDED_ERROR` on the sender of a failed reply**: debugging aids only.
 - **fork() without exec**: a child shares the parent's proc socket and receive area, as it shares the parent's binder fd with the kernel (where
   that is also unusable); exec closes them (they are close-on-exec when libbinder opens with O_CLOEXEC, as it does).
-- **32-bit processes**: the protocol is the 64-bit binder ABI only (arm32 apps are closed, PLAN).
+- **32-bit processes**: the protocol is the 64-bit binder ABI only (arm32 apps are closed).
 - **A process stopped in the middle of a message** cannot stall the daemon for more than 5 s (socket timeouts end that connection).
 
 ## Daemon lifetime
@@ -166,4 +166,4 @@ CLI that found it listening can count on it. `apklayer stop` ends it at once (`<
 
 ## Numbers
 
-See `docs/PLAN.md` (binder section) for the measured round trips and throughput against kernel binder.
+See `docs/history/PLAN-2026-11-10.md` ("Plan: binder in userspace") for the measured round trips and throughput against kernel binder.

@@ -21,7 +21,7 @@ apps = ["hello-arm64"]
 run = ["tests/vm/native-bridge.sh", "python3 -u tests/vm/exit-deadline.py native"]
 
 [arm32]
-# an armeabi-v7a-only JNI app in the 32-bit app process (docs/PLAN.md "apps built for another CPU" 2(a)): needs a CPU that runs AArch32 code
+# an armeabi-v7a-only JNI app in the 32-bit app process (docs/history/PLAN-2026-11-10.md "apps built for another CPU" 2(a)): needs a CPU that runs AArch32 code
 # (the Volla X23; not the VMs on Apple Silicon) and the 32-bit runtime (tools/stage arm32, tools/armhf/build.sh, APKLAYER_ARM32)
 apps = ["hello-arm32"]
 run = ["tests/vm/arm32.sh"]
@@ -389,12 +389,12 @@ alone = true
 run = ["tests/vm/audio-system.sh"]
 
 [audio-silent]
-# no sound server for the instance: the HAL's silent output takes the original AudioTrack's PCM at real time (docs/PLAN.md, audio)
+# no sound server for the instance: the HAL's silent output takes the original AudioTrack's PCM at real time (docs/history/PLAN-2026-11-10.md, audio)
 alone = true
 run = ["python3 -u tests/vm/audio-silent.py", "python3 tests/lib/instance.py clean"]
 
 [openttd-silent]
-# OpenTTD (SDL 1.2) without a sound server, then a focus loss (docs/PLAN.md, graphics): OPENTTD_APK (APKLY_VM_ENV) names its APK on the host
+# OpenTTD (SDL 1.2) without a sound server, then a focus loss (docs/history/PLAN-2026-11-10.md, graphics): OPENTTD_APK (APKLY_VM_ENV) names its APK on the host
 optional = true
 alone = true
 run = ["python3 -u tests/vm/openttd-silent.py", "python3 tests/lib/instance.py clean"]

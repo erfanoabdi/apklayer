@@ -3,7 +3,7 @@
  * a Soong executable rebuilt as a shared library, e.g. libapklayer_servicemanager, is run)
  *        btload LIBDIR PROGRAM --exec ARGV0 ARGS...  (--exec: an Android executable, entered at its ELF entry like the kernel would:
  * the path layer's execve wrapper, exec_preload.c, runs an app's bionic programs this way; needs LD_LIBRARY_PATH to bionic_translation's build dir, XDG_DATA_DIRS to its cfg.d,
- * LD_PRELOAD=libgcc_s.so.1 plus the platform/stub libraries). Used for PLAN P7.0. */
+ * LD_PRELOAD=libgcc_s.so.1 plus the platform/stub libraries). Used for PLAN archive P7.0. */
 #define _GNU_SOURCE
 #include <link.h>
 #include <stdbool.h>

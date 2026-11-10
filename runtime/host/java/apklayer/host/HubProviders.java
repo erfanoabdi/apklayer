@@ -115,7 +115,7 @@ final class HubProviders {
      * oneway calls to an authenticator are checked for ACCOUNT_MANAGER).
      * Limit: that header is the runtime's (an app's Java code cannot set it through the framework) but a process writing raw binder parcels could claim
      * another running app's uid: every app JVM is the same Linux uid, which also lets one read another's files, so the kernel's sender uid is the boundary only
-     * with per-app Linux uids (the per-app sandbox, docs/PLAN.md).
+     * with per-app Linux uids (the per-app sandbox, docs/history/PLAN-2026-11-10.md).
      */
     int check(int pid, int uid, String permission) {
         if (system(pid, uid)) return 0;

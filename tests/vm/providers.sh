@@ -1,5 +1,5 @@
 #!/bin/bash
-# providers.sh: the hardware providers (docs/PLAN.md "Plan: hardware providers") with their fake backends, deterministic values from providers.toml:
+# providers.sh: the hardware providers (docs/history/PLAN-2026-11-10.md "Plan: hardware providers") with their fake backends, deterministic values from providers.toml:
 # each HAL front through its AIDL interface (the fronts' own probes on a stack), then through Android's APIs from hello.hardware, then a changed
 # backend option (`apklayer providers set`) restarting only that domain's service. On the VM, in the group's instance (tests/run providers).
 : "${APKLY_STATE:=${XDG_STATE_HOME:-$HOME/.local/state}/apklayer/${APKLAYER_INSTANCE:-default}}"

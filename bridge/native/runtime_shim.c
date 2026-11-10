@@ -1,4 +1,4 @@
-/* apklayer native runtime shim (PLAN P7): the library Robolectric loads as "native/<os>/<arch>/libandroid_runtime.so".
+/* apklayer native runtime shim (PLAN archive P7): the library Robolectric loads as "native/<os>/<arch>/libandroid_runtime.so".
  * Instead of Google's host build, its JNI_OnLoad loads the *device* libandroid_runtime.so (arm64, from an AOSP build
  * of ~/los24) through bionic_translation and lets Android's own AndroidRuntime::startReg register every framework
  * native. Robolectric instruments the framework classes, so a native `foo` is bound as `$$robo$$foo$nativeBinding`

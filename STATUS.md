@@ -1,18 +1,18 @@
 # apklayer: status
 
-Read first: `CLAUDE.md` (rules), `goal.md`, this file. Plan (done, next, open): `docs/PLAN.md`. History: `CHANGELOG.md`.
+Read first: `CLAUDE.md` (rules), `goal.md`, this file. Open work: `docs/PLAN.md`. History: `CHANGELOG.md`.
 
 ## State (2026-11-04)
 - About 60 real apps draw and run, current F-Droid versions included (`tests/corpus/results.md`); Google apps through microG (sign-in, Meet accounts). Full suite on UTM (2026-11-04, after the startup/media/installer/cleanup rounds): 43 of 44 groups pass; vulkan-present cannot pass on either VM; it passes on the owner's x86_64 PC (real GPU), where the x86_64 route runs.
 - Released: v0.1.0, v0.2.0, v0.2.1 (2026-11-04), v0.3.0 (2026-11-05; one Meson build, runtime 0.2.1). Since 0.1.0: Bluetooth, USB, camera, fake sensors/GNSS/vibrator (`providers.toml`), `apklayer logs|report`, the host binder context (Halium), apps' real target SDK. Meet works in a call: join, sound, remote video (owner checked, 2026-11-04).
-- Halium (Volla X23, Ubuntu Touch, 2026-11-05): with `graphics = device` apps and GL games draw on the device's Mali GPU (docs/HALIUM.md); camera = device is next (PLAN (e)).
-- Window style (2026-11-05): mobile (maximized, navigation bar, phone density) or desktop, `apklayer settings set window-mode`; immersive mode done, phone window check pending (docs/PLAN.md "Mobile window style").
-- Per-app sandbox (2026-11-08, milestone two, still off by default: `APKLAYER_SANDBOX=1`): Android's /data view and groups, kernel caller uids, D-Bus helpers through apklayerd, a spare per app, the deb's AppArmor profile/udev rule/unit; what remains before it is the default: docs/PLAN.md "Plan: per-app sandbox".
-- Background push (2026-11-05, microG 2026-11-08): installing microG Services turns the instance always on (`apklayer instance autostart <id> on|off`); with every app closed microG checks in, keeps its connection to Google (heartbeats, reconnects) and gets real FCM tokens, and a cloud message wakes the closed app (groups `push`, `push-microg`). A real message on Parallels is prepared, it needs a deb with this round (PLAN "Plan: background push" 7).
+- Halium (Volla X23, Ubuntu Touch, 2026-11-05): with `graphics = device` apps and GL games draw on the device's Mali GPU (docs/HALIUM.md); camera = device followed (below).
+- Window style (2026-11-05): mobile (maximized, navigation bar, phone density) or desktop, `apklayer settings set window-mode`; immersive mode done, phone window check pending (docs/PLAN.md "Needs real hardware or a person").
+- Per-app sandbox (2026-11-08, milestone two, still off by default: `APKLAYER_SANDBOX=1`): Android's /data view and groups, kernel caller uids, D-Bus helpers through apklayerd, a spare per app, the deb's AppArmor profile/udev rule/unit; what remains before it is the default: docs/PLAN.md "Sandbox (before it can be the default)".
+- Background push (2026-11-05, microG 2026-11-08): installing microG Services turns the instance always on (`apklayer instance autostart <id> on|off`); with every app closed microG checks in, keeps its connection to Google (heartbeats, reconnects) and gets real FCM tokens, and a cloud message wakes the closed app (groups `push`, `push-microg`). A real message on Parallels is prepared, it needs a deb with this round (docs/PLAN.md "Needs real hardware or a person").
 - Halium (Volla X23, Ubuntu Touch, 2026-11-05): with `graphics = device` apps and GL games draw on the device's Mali GPU; `camera = device` works (camera2 and Camera1, Open Camera live on both cameras); vibrator, GNSS (lomiri), sensors (sensorfw), audio (PulseAudio backend) and H.264 video all run on the phone; media = device (the device's hardware Codec2: H.264 decode into a SurfaceView, encode; 2026-11-09) works and is the default on Halium with graphics = device (docs/HALIUM.md "Hardware providers").
-- Ubuntu Touch as a click (2026-11-09): `tools/release/click.sh`, release job `click`; the Volla X23 runs it instead of the deb (no root, its own JDK, survives updates and reboots; docs/HALIUM.md "Ubuntu Touch: the click"). Next: the owner's OpenStore submission (PLAN "Plan: Ubuntu Touch click package" 5).
+- Ubuntu Touch as a click (2026-11-09): `tools/release/click.sh`, release job `click`; the Volla X23 runs it instead of the deb (no root, its own JDK, survives updates and reboots; docs/HALIUM.md "Ubuntu Touch: the click").
 - Binder (2026-11-09, for 0.4.9): apklayer's userspace binder (bridge/binderd, docs/BINDER.md) is the default, no root step; the kernel's is an option (`apklayer binder kernel`, the manager's Hardware page). Test groups run on userspace; `binder-kernel`, `host-binder-kernel` keep the kernel's.
-- Next phase, in order: `docs/PLAN.md` "Next phase".
+- Open work by area: `docs/PLAN.md`.
 
 ## How to work here
 - A new machine: `docs/INSTALL.md` (prebuilts branch, build, first app).

@@ -1,4 +1,4 @@
-// The "device" provider's probe (docs/PLAN.md "Plan: hardware providers" 1, docs/HALIUM.md): does this machine's own Android (a Halium
+// The "device" provider's probe (docs/history/PLAN-2026-11-10.md "Plan: hardware providers" 1, docs/HALIUM.md): does this machine's own Android (a Halium
 // device) serve a domain's HAL that apklayer can reach through the host binder contexts, and does that path work end to end yet.
 #pragma once
 

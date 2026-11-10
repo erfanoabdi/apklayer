@@ -1,6 +1,6 @@
 #!/bin/sh
 # click.sh <version> <prebuilts dir> <out dir> [<deb>]: the Ubuntu Touch 24.04 click (arm64) of apklayer, <out>/apklayer.erfanoabdi_<version>_arm64.click
-# (docs/RELEASES.md "The click", docs/PLAN.md "Plan: Ubuntu Touch click package"). Its tree is the noble deb's (tools/release/build-deb.sh, built
+# (docs/RELEASES.md "The click", docs/history/PLAN-2026-11-10.md "Plan: Ubuntu Touch click package"). Its tree is the noble deb's (tools/release/build-deb.sh, built
 # here unless <deb> names one) unpacked as it is, plus the runtime's own JDK image (jdk-image.sh: patched java.base, CDS archive), which the CLI
 # takes before any other Java (cli/env.cpp findJava). The manager is the click's app; unconfined (click/apklayer.apparmor). Run on noble arm64 with
 # the deb's Build-Depends and `click` installed.

@@ -12,7 +12,7 @@ import java.util.Map;
 import org.robolectric.annotation.internal.DoNotInstrument;
 
 /**
- * Loads an app's native libraries (PLAN P4). The converter output routes the app's
+ * Loads an app's native libraries (PLAN archive P4). The converter output routes the app's
  * {@code System.loadLibrary/load} and {@code Runtime.loadLibrary/load} calls here (DenyInstrument).
  * The library is mapped by bionic_translation's linker (it is linked against Android's bionic, not
  * glibc), its JNI_OnLoad runs, and every exported {@code Java_...} function is bound to its native

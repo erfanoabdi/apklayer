@@ -1,4 +1,4 @@
-// The host's GPUs (DRM devices with a render node) and the one an instance runs on (docs/PLAN.md "GPU per instance").
+// The host's GPUs (DRM devices with a render node) and the one an instance runs on (docs/history/PLAN-2026-11-10.md "GPU per instance").
 #pragma once
 
 #include <string>

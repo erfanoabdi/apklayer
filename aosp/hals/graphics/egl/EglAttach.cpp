@@ -1,4 +1,4 @@
-// Zero-copy present of a GLES window (docs/PLAN.md "Graphics performance" (c)): the host renders into a gbm_surface (its GBM platform cannot render
+// Zero-copy present of a GLES window (docs/history/PLAN-2026-11-10.md "Graphics performance" (c)): the host renders into a gbm_surface (its GBM platform cannot render
 // into somebody else's buffer), and instead of copying each finished frame into a dequeued buffer, the gbm buffer itself is wrapped as one of our
 // gralloc buffers and attached to the window's BufferQueue. Mesa's gbm surface has four buffers and fails the next frame when none is free, so each
 // one comes back (detachNextBuffer) once SurfaceFlinger released it, and when all four are out a release is waited for (dequeueBuffer) before the

@@ -1,4 +1,4 @@
-/* An armeabi-v7a-only JNI library (hello-arm32): it runs only in the 32-bit app process (PLAN "apps built for another CPU"). */
+/* An armeabi-v7a-only JNI library (hello-arm32): it runs only in the 32-bit app process (docs/history/PLAN-2026-11-10.md "apps built for another CPU"). */
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>

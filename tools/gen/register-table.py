@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""gen-register-table: class name -> registration function, from AOSP's HostRuntime.cpp (PLAN P7).
+"""gen-register-table: class name -> registration function, from AOSP's HostRuntime.cpp (PLAN archive P7).
 
 HostRuntime.cpp keeps a map {"android.os.Binder", REG_JNI(register_android_os_Binder), ...} used with the system property
 core_native_classes. The device libandroid_runtime/libhwui export the same functions as global C++ symbols, so

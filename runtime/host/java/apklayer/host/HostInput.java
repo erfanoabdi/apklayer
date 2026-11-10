@@ -65,7 +65,7 @@ import org.robolectric.simulator.FixedConfiguration;
 import org.robolectric.simulator.ScreenUpdateHandler;
 
 /**
- * Host input (PLAN P2): translates what apklayer-shell sends (pointer, xkb keys, wheel, configure)
+ * Host input (PLAN archive P2): translates what apklayer-shell sends (pointer, xkb keys, wheel, configure)
  * into Android events for the sandbox, and injects them into the topmost window.
  */
 final class HostInput {
@@ -293,7 +293,7 @@ final class HostInput {
 
     /**
      * Views that don't handle ACTION_SCROLL still scroll by touch: replay the wheel as a short touch
-     * drag (DOWN, a few MOVEs, UP) so the velocity tracker produces a fling (PLAN P2.4).
+     * drag (DOWN, a few MOVEs, UP) so the velocity tracker produces a fling (PLAN archive P2.4).
      */
     private void wheelAsDrag(MotionEvent scroll) {
         float notchPx = 64 * android.content.res.Resources.getSystem().getDisplayMetrics().density;

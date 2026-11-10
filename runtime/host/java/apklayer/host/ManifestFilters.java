@@ -10,7 +10,7 @@ import org.xmlpull.v1.XmlPullParserException;
 /**
  * The intent filters of an app's activities, read from its AndroidManifest.xml with the framework's own binary XML
  * parser. Written at install time (info.properties) so that other apps' hosts can route an intent to an installed
- * app without starting it (PLAN P6, apklayerd's registry).
+ * app without starting it (PLAN archive P6, apklayerd's registry).
  */
 final class ManifestFilters {
     private ManifestFilters() {}

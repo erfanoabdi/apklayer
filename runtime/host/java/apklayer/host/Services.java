@@ -18,7 +18,7 @@ import org.robolectric.android.controller.ServiceController;
 import org.robolectric.annotation.internal.DoNotInstrument;
 
 /**
- * Runs the app's own services in-process (PLAN P6 groundwork). The converter output routes the app's
+ * Runs the app's own services in-process (PLAN archive P6 groundwork). The converter output routes the app's
  * {@code startService / startForegroundService / stopService / bindService / unbindService} calls here
  * (DenyInstrument): Robolectric's stock {@code bindService} only reports a preconfigured binder, so
  * apps that cast the binder in {@code onServiceConnected} (Termux, music players...) failed. Services

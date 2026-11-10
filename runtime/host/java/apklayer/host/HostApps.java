@@ -17,7 +17,7 @@ import java.util.TreeMap;
 import org.robolectric.RuntimeEnvironment;
 
 /**
- * Other installed apps (PLAN P6, the first slice of apklayerd): an implicit intent no activity of this app can handle
+ * Other installed apps (PLAN archive P6, the first slice of apklayerd): an implicit intent no activity of this app can handle
  * is matched against the intent filters recorded at install time (info.properties of every installed app), and the
  * match is started in its own process through the CLI with the intent handed over in a file. Only string extras,
  * action, type, data and the target component travel; a chooser for several matches is still to do (the first wins).

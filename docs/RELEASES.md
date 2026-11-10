@@ -1,7 +1,7 @@
 # Binary releases
 
 What a release is made of, where each piece is installed, the `releases.json` format the manager's updater reads, and how to cut a release.
-Plan and open work: `docs/PLAN.md` "Next phase: binary releases".
+Open work: `docs/PLAN.md` "Click, Flatpak, packaging, releases"; the release plan as decided: `docs/history/PLAN-2026-11-10.md` "Next phase: binary releases".
 
 ## The pieces
 
@@ -37,7 +37,7 @@ Debian builds it into its kernel package. Per-codename source patches, if one is
 
 ## The click
 
-Ubuntu Touch 24.04 (arm64) installs apklayer as a click (docs/PLAN.md "Plan: Ubuntu Touch click package", docs/HALIUM.md "Ubuntu Touch: the click"):
+Ubuntu Touch 24.04 (arm64) installs apklayer as a click (docs/history/PLAN-2026-11-10.md "Plan: Ubuntu Touch click package", docs/HALIUM.md "Ubuntu Touch: the click"):
 no root, nothing on the read-only rootfs, and it survives OTA updates. `tools/release/click.sh <version> <prebuilts> <out> [<deb>]` (noble arm64, the
 deb's Build-Depends and `click`; the release job passes the noble arm64 deb it built):
 
@@ -99,7 +99,7 @@ Environment variables (`APKLAYER_NATIVE`, `APKLAYER_ANDROID_LIBS`, ...) still ov
 - `releases` is newest first; `latest` is its first version. A missing OS or CPU means no deb was built for it (amd64 is experimental).
 - Keys of `debs` are codenames (`VERSION_CODENAME` of `/etc/os-release`); CPU keys everywhere are Debian architectures (`dpkg --print-architecture`:
   `arm64`, `amd64`), also for the runtime assets (the bundle file of `amd64` is named `x86_64`).
-- `converter_abi` and `data_format` are `cli/version.h`'s numbers at the tag (`docs/PLAN.md` item 8).
+- `converter_abi` and `data_format` are `cli/version.h`'s numbers at the tag (`docs/history/PLAN-2026-11-10.md` "Next phase: binary releases" item 8).
 - `runtime.prebuilts` is the prebuilts commit the bundle was built from (what `PREBUILTS_REF` resolved to; the build jobs check out that commit).
 - The manager downloads `runtime.assets.<arch>` into `runtime/<runtime.version>/` when that version differs from what it has, checking `sha256`.
 - `size` and `unpacked_size` (bytes, since 0.4.10) let setup check the free space before it downloads; the bundle's zstd frame also records its

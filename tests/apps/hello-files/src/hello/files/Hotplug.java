@@ -100,7 +100,7 @@ final class Hotplug {
         check(tag + "volume", (drive != null) == present);
         say("status");  // the runner reads `apklayer status` now
         // MediaStore before MediaStore.Images.Media: the nested class's initialization as the first use crashed the JVM (Robolectric's ShadowMap
-        // asks its canonical name: SIGSEGV in ConstantPool::klass_at_impl from Class.getDeclaringClass0; docs/PLAN.md Storage)
+        // asks its canonical name: SIGSEGV in ConstantPool::klass_at_impl from Class.getDeclaringClass0; docs/history/PLAN-2026-11-10.md Storage)
         say("volumes " + MediaStore.getExternalVolumeNames(context));
         if (present) check(tag + "drive scanned", appears(context, drive.getUuid().toLowerCase(), "pre.png", true));
         else check(tag + "mediastore volume", MediaStore.getExternalVolumeNames(context).stream().noneMatch(v -> !v.equals(MediaStore.VOLUME_EXTERNAL_PRIMARY)));

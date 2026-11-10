@@ -1,6 +1,6 @@
 /* apklayer display HAL, host side: one display = one window of apklayer-shell (the Wayland client), fed with dmabufs. Real
  * pacing: vsync() is the compositor's own frame callback for the window, refresh() the output's mode (wl_output), nothing is
- * simulated. Plain C for the Android-side composer HAL (aosp/hals/graphics/composer). One display per instance (PLAN P9). */
+ * simulated. Plain C for the Android-side composer HAL (aosp/hals/graphics/composer). One display per instance (PLAN archive P9). */
 #ifndef APKLAYER_DISPLAY_H
 #define APKLAYER_DISPLAY_H
 

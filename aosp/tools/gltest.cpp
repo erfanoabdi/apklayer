@@ -1,4 +1,4 @@
-// gltest: the EGL window-surface smoke test (PLAN P7.1 step 3b). A BufferQueue layer shown through SurfaceFlinger; the app side
+// gltest: the EGL window-surface smoke test (PLAN archive P7.1 step 3b). A BufferQueue layer shown through SurfaceFlinger; the app side
 // renders GL ES into it with a plain EGL window surface (libapklayer_egl copies each frame on the GPU into the window's buffer).
 // Clears to a colour that changes every frame; halfway through the layer is resized. Usage: gltest [frames]
 #include <EGL/egl.h>

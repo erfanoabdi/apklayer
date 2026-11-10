@@ -1,4 +1,4 @@
-/* Zero-copy window contents (PLAN P7.1): dmabufs from apklayer's HWC go to the compositor through zwp_linux_dmabuf_v1. The shell
+/* Zero-copy window contents (PLAN archive P7.1): dmabufs from apklayer's HWC go to the compositor through zwp_linux_dmabuf_v1. The shell
  * imports each buffer once (first DMABUF_FRAME naming it carries the fds), then shows it by index; the compositor's
  * wl_buffer.release is passed back as DMABUF_RELEASE so the producer knows when it may draw into the buffer again. */
 #include <string.h>

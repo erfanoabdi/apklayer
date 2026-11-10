@@ -1,6 +1,6 @@
 # Halium devices: survey and the host binder context
 
-Plan: `docs/PLAN.md` "Plan: hardware providers" (steps d and e). Owner's rule (2026-11-04): through the host context only the
+Plan: `docs/history/PLAN-2026-11-10.md` "Plan: hardware providers" (steps d and e). Owner's rule (2026-11-04): through the host context only the
 vibrator, camera and media (codecs) HALs; never the sensors or GNSS HAL (one client each, held by sensorfw and the OS's location
 service; on Halium those come through the OS services). Listing services (lshal, service list) is fine.
 
@@ -113,7 +113,7 @@ GPU (Mali-G57 through Android's libEGL) in apklayer's processes; the vendor libr
 - Apps that draw (SurfaceFlinger screenshots, `apklayer screenshot`): UiBench, Calculator, Telegram, NewPipe, Shattered Pixel Dungeon and Anuto
   (libgdx), OTR2 (bgfx, GLES 3.1). Scripts on the phone (`~/apklayer-dev`): `ut-shots.sh <pkg>...` (run 25 s, screenshot at the run's end,
   stop), `stackscan.py <pid> <tid>` (the stack scan above, `tools/debug/stackscan.py`).
-- Open: camera = device (cameraserver and HIDL provider listing, PLAN (e)); `sync_file_info returned NULL` (2026-11-05: these were the composer's present fences, eventfds without a render node; it now passes the composition's GPU fence, a Mali sync_file, and logs `present fences: ...` once; not yet checked on the phone, which was unreachable); the window on
+- Open: camera = device (cameraserver and HIDL provider listing, docs/history/PLAN-2026-11-10.md (e)); `sync_file_info returned NULL` (2026-11-05: these were the composer's present fences, eventfds without a render node; it now passes the composition's GPU fence, a Mali sync_file, and logs `present fences: ...` once; not yet checked on the phone, which was unreachable); the window on
   Lomiri needs a human check.
 
 ## Location on the phones (2026-11-05)
@@ -191,7 +191,7 @@ own packages (`zip` is not needed: setup uses the image's `jar`). The CLI for a 
 (an alias is handy). Remove: `gdbus call --system -d com.lomiri.click -o /com/lomiri/click -m com.lomiri.click.Remove apklayer.erfanoabdi`
 (the data in `~/.local/share/apklayer` stays; `apklayer remove-all --yes` first removes it, the launchers and units too).
 
-What the click is (decided by the owner, docs/PLAN.md "Plan: Ubuntu Touch click package"): unconfined (AppArmor template `unconfined`: the apps need
+What the click is (decided by the owner, docs/history/PLAN-2026-11-10.md "Plan: Ubuntu Touch click package"): unconfined (AppArmor template `unconfined`: the apps need
 the device's binder and GPU nodes, the launchers in `~/.local/share/applications` and the always-on unit in `~/.config/systemd/user`), the JDK
 inside, no per-app sandbox (it needs root's newuidmap setup), Ubuntu Touch 24.04 only (the noble build as it is).
 Paths: the click's directory `/opt/click.ubuntu.com/apklayer.erfanoabdi/<version>/` is replaced and removed by each update, so the launchers, the

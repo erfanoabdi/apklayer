@@ -1,4 +1,4 @@
-// libEGL for apklayer's Android userspace (PLAN P7.1 step 3): replaces Android's EGL loader (cfg.d maps libEGL.so here). It
+// libEGL for apklayer's Android userspace (PLAN archive P7.1 step 3): replaces Android's EGL loader (cfg.d maps libEGL.so here). It
 // forwards to the host's EGL on the GBM platform of the host graphics HAL's device (vendor-neutral: Mesa, NVIDIA...) and adds
 // what Android expects of an EGL driver: EGL_ANDROID_image_native_buffer (an ANativeWindowBuffer from our gralloc becomes a
 // dmabuf EGLImage), eglGetNativeClientBufferANDROID, filtering of attributes the host does not know. Window surfaces (EglWindow.cpp) are a host

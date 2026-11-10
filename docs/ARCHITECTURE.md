@@ -39,7 +39,7 @@ apps and games see real Android, shown as Wayland windows. Details of that route
 | `runtime/host/jvm.args` | JDK `--add-opens` flags Robolectric needs on modern SDKs. |
 | `bin/apklayer` | CLI. `install`: dex2jvm (cached by APK sha256 + android-all + dex2jvm commit) → DenyInstrument → `Main --describe`. `run`: starts the services on demand and the app JVM. |
 
-## App data (PLAN D20)
+## App data (PLAN archive D20)
 
 Robolectric creates `<pkg>-dataDir`, `userDataDir` and `deviceDataDir` in its per-run temp
 directory when the Application is created, and deletes them at exit. The host runs with
@@ -56,7 +56,7 @@ links, so SharedPreferences, databases, files and caches persist across launches
 - **Separate shell process.** One component owns Wayland for every app, with crash isolation from the app JVMs.
 - **Arm64 only for now.** The device libraries come from an arm64 LineageOS build; an x86_64 build is the step toward a universal runtime.
 
-## Android side and host side (device-library route, PLAN P7)
+## Android side and host side (device-library route, PLAN archive P7)
 
 The route that runs Android's own userspace (framework natives, libgui, libhwui, SurfaceFlinger, servicemanager) on a Linux
 desktop splits every hardware-facing service in two:
@@ -91,4 +91,4 @@ side; buffers cross as dmabuf fds and fences as sync_file fds; one directory per
   state setup before it knows its package. One per instance, owned by the CLI (`apklayer app-spare`, `cli/spare.cpp`, `AppSpare`): the next app launch or component
   host start (`apklayer run`, the hub's `apklayer component-host`) of the same runtime build and environment takes it with its options, per-launch environment
   (`-Dapklayer.env.*`), stdout and stderr (SCM_RIGHTS); it is refilled once that process is up, and the hub wakes it at its own start.
-- Every piece is meant to be per instance (instance root for data, properties, binder device, sockets); several instances at once are deferred (`docs/PLAN.md`).
+- Every piece is meant to be per instance (instance root for data, properties, binder device, sockets); several instances at once are deferred (`docs/history/PLAN-2026-11-10.md`).

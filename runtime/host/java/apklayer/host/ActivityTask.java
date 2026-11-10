@@ -43,7 +43,7 @@ final class ActivityTask {
     static List<Activity> task() { return stack.stream().map(c -> c.get().isFinishing() ? null : (Activity) c.get()).toList(); }
     /** Intents handed to other apps that will answer: routed handle -> {requesting activity, request intent}. */
     private final java.util.Map<HostApps.Routed, Object[]> crossApp = new java.util.HashMap<>();
-    /** The activity another app started this process for (its result goes back, PLAN P6). */
+    /** The activity another app started this process for (its result goes back, PLAN archive P6). */
     private Activity incomingActivity;
     /** Activities started with startActivityForResult -> the request intent, to return their setResult. */
     private final java.util.Map<Activity, Intent> resultFor = new java.util.IdentityHashMap<>();
@@ -101,7 +101,7 @@ final class ActivityTask {
         launch(intent, stack.isEmpty() ? null : ((ShadowActivity) Shadow.extract(stack.peek().get())).getNextStartedActivityForResult());
     }
 
-    /** @param request the start's record, with its request code: startActivityForResult is only recorded by Robolectric, the host delivers the result (PLAN P5.3) */
+    /** @param request the start's record, with its request code: startActivityForResult is only recorded by Robolectric, the host delivers the result (PLAN archive P5.3) */
     private void launch(Intent intent, ShadowActivity.IntentForResult request) {
         boolean outer = !launching;
         launching = true;

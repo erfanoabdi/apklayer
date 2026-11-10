@@ -5,7 +5,7 @@ import android.os.Bundle;
 import java.io.InputStream;
 
 /** An app's own ClassLoader subclass (tests/vm/cds-dump.sh): it defines Nest's nested pair from the app's class files, and Inner's nest host check
- *  loads Nest without linking it while resolving Nest's NestMembers entry (the constant pool state that crashed an archive, docs/PLAN.md). */
+ *  loads Nest without linking it while resolving Nest's NestMembers entry (the constant pool state that crashed an archive, docs/history/PLAN-2026-11-10.md). */
 public class Main extends Activity {
     static class Own extends ClassLoader {
         Own(ClassLoader parent) { super(parent); }

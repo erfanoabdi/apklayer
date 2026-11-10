@@ -57,7 +57,7 @@ def empty_done_kept():
 
 
 # (name, what it waits for, test input, a check run before the input): each step's precondition is the previous step's effect, never a time,
-# so a stalled app that bursts its ticks only delays the steps (docs/PLAN.md). The finger of a long press stays down until the long click ran.
+# so a stalled app that bursts its ticks only delays the steps (docs/history/PLAN-2026-11-10.md). The finger of a long press stays down until the long click ran.
 STEPS = [
     ('type', lambda: tick[0] * TICK_MS >= 3000, ['focus', 'click:%d,%d' % FIELD, 'key:35', 'key:23'], None),  # h, i
     ('select all', lambda: saw('[hello-input] text=hi'), ['combo:ctrl+30'], None),

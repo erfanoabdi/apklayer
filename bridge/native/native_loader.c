@@ -1,4 +1,4 @@
-/* apklayer native loader (PLAN P4): loads an app's bionic-linked .so through bionic_translation's
+/* apklayer native loader (PLAN archive P4): loads an app's bionic-linked .so through bionic_translation's
  * linker and wires its JNI functions into the running HotSpot JVM.
  * Java side: apklayer.host.NativeLoader. */
 #define _GNU_SOURCE

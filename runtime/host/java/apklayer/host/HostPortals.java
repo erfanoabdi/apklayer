@@ -18,7 +18,7 @@ import org.robolectric.shadow.api.Shadow;
 import org.robolectric.shadows.ShadowNotificationManager;
 import java.util.Set;
 
-/** Intents the app cannot handle itself go to the desktop (PLAN P5.3, OpenURI): links open in the host browser. */
+/** Intents the app cannot handle itself go to the desktop (PLAN archive P5.3, OpenURI): links open in the host browser. */
 final class HostPortals {
     private HostPortals() {}
 

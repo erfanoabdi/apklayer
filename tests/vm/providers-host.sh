@@ -1,5 +1,5 @@
 #!/bin/bash
-# providers-host.sh: the host backends of the sensors and vibrator providers (docs/PLAN.md "Plan: hardware providers" 7c) against mocks, through
+# providers-host.sh: the host backends of the sensors and vibrator providers (docs/history/PLAN-2026-11-10.md "Plan: hardware providers" 7c) against mocks, through
 # Android's APIs from hello.hardware, with no backend named in providers.toml (each domain's default is the best probe()):
 #  1. iio-sensor-proxy and feedbackd (haptic interface): python-dbusmock on a private system and session bus; a value changed while the app
 #     runs (PropertiesChanged) reaches SensorManager;

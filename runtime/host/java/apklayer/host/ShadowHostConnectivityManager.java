@@ -12,7 +12,7 @@ import org.robolectric.annotation.RealObject;
 import org.robolectric.shadows.ShadowConnectivityManager;
 
 /**
- * Network callbacks that fire (PLAN P5.4). Robolectric registers a NetworkCallback and never calls it, so an app that
+ * Network callbacks that fire (PLAN archive P5.4). Robolectric registers a NetworkCallback and never calls it, so an app that
  * waits for onAvailable believes it is offline. The desktop's connection is announced to every new callback as
  * the host's real connection (HostNetwork); changes reach registered callbacks from there.
  */

@@ -33,7 +33,7 @@ import org.robolectric.shadows.ShadowPausedLooper;
 import org.robolectric.shadows.ShadowSystemClock;
 
 /**
- * Runs an APK inside the sandbox (PLAN P1.5). Setup follows Robolectric's simulator
+ * Runs an APK inside the sandbox (PLAN archive P1.5). Setup follows Robolectric's simulator
  * {@code AppLoader}; the main loop follows {@code Simulator.start()/loop()} (4.17), with
  * apklayer's host window instead of Swing. Activities started by the app are launched the way
  * the simulator launches its first one ({@code Robolectric.setupActivity}), on a back stack.
@@ -193,7 +193,7 @@ public final class AppHost implements Runnable {
         }
         if (System.getProperty("apklayer.webviewprovider") != null) org.robolectric.Shadows.shadowOf(app.getPackageManager()).setSystemFeature(android.content.pm.PackageManager.FEATURE_WEBVIEW, true);
         StartTrace.mark("system package installed");
-        // this launch's own intent file (`apklayer run --intent`, PLAN P6) or what another app started it with through the hub; with both, the file's
+        // this launch's own intent file (`apklayer run --intent`, PLAN archive P6) or what another app started it with through the hub; with both, the file's
         // came first (the hub queued its one while this process started: `apklayer run` again, HubActivities.relaunch) and the hub's follows it
         Intent own = HostApps.incoming(), hub = HubActivityClient.incoming(), incoming = own != null ? own : hub;
         if (own != null && hub != null) HubActivityClient.deliver(hub, HubActivityClient.takeReceiver());  // kept until the first activity is up (setStarter)
@@ -369,7 +369,7 @@ public final class AppHost implements Runnable {
     }
 
     /**
-     * PLAN P2.3: a portrait/landscape request from the top activity (manifest screenOrientation or
+     * PLAN archive P2.3: a portrait/landscape request from the top activity (manifest screenOrientation or
      * setRequestedOrientation) reshapes the window. Other values keep the current shape.
      */
     private void followOrientation() {
@@ -404,7 +404,7 @@ public final class AppHost implements Runnable {
     }
 
     /**
-     * Window state from the shell (PLAN P2.9), as in Android's freeform multi-window: an inactive window stays resumed and only
+     * Window state from the shell (PLAN archive P2.9), as in Android's freeform multi-window: an inactive window stays resumed and only
      * loses window focus and top-resumed (SDL and game loops pause on onPause); a minimized one is stopped, restored it restarts.
      */
     private void hostState(int flags) {
@@ -434,7 +434,7 @@ public final class AppHost implements Runnable {
     }
 
     /**
-     * Resize / DPI (PLAN P2): logical size and output scale -> sandbox qualifiers. The density is the shell's (a handheld's physical density
+     * Resize / DPI (PLAN archive P2): logical size and output scale -> sandbox qualifiers. The density is the shell's (a handheld's physical density
      * bucket, bridge/shell/mobile.c) or, on a desktop (dpi 0), 160 x scale; the size in dp is the window's pixels at that density, so the
      * screen capture comes out at the pixel size w x scale and the shell client rebuffers the window to match (ShellClient.present).
      * navPx: the shell's navigation bar over the window's bottom (mobile style), the display's navigation bar inset.

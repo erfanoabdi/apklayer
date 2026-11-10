@@ -1,4 +1,4 @@
-/* LD_PRELOAD part of the path layer (PLAN P7.1 step 0.3): some Android libraries (libbase, libcutils, libprocessgroup) reach glibc's
+/* LD_PRELOAD part of the path layer (PLAN archive P7.1 step 0.3): some Android libraries (libbase, libcutils, libprocessgroup) reach glibc's
  * file functions by name, past bionic_translation's libc wrappers, so Android's fixed paths must be mapped at the glibc level too.
  * This library is first in symbol lookup for every library of the process (the JVM running the native runtime, or btload) and maps
  * the path arguments through apklayer_apply_path_overrides (paths.c: an overlay of $APKLAYER_ANDROID_ROOT, else the host's file).

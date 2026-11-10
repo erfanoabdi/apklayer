@@ -74,7 +74,7 @@ final class HostTextBridge {
 
     /**
      * IME event (zwp_text_input_v3 done): delete surrounding text, commit, then the new preedit,
-     * through the focused field's InputConnection (PLAN P2.6).
+     * through the focused field's InputConnection (PLAN archive P2.6).
      */
     void ime(int before, int after, String commit, String preedit) {
         View f = HostWindows.focusedEditor();
