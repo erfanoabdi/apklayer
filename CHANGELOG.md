@@ -3,6 +3,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: install dates in PackageInfo
+- PackageInfo.firstInstallTime/lastUpdateTime were 0 for every package (App Manager showed 1/1/70): HubPackages.installTimes takes them from the installed APK (its directory's creation, the APK's modification), for other packages (hub) and the app's own (AppEnvironment). hello-system's hiddenservices check requires real times for every package; system-apps passes on Parallels and the x86 PC.
+
 ## 2026-11-10: the hidden "package" and "user" services answer apps that call them directly (App Manager's app list, retest (d))
 - Cause: App Manager 4.1.1 in no-root mode takes `ServiceManager.getService("package"/"user")`, wraps each in a binder of its own (ProxyBinder) and calls
   IPackageManager/IUserManager through `Stub.asInterface` on that wrapper, so every call is a `transact`. Robolectric serves no "package", a "user" that answers

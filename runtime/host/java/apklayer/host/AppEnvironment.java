@@ -260,6 +260,8 @@ final class AppEnvironment {
         android.content.pm.PackageInfo own = pm.getInternalMutablePackageInfo(app.getPackageName());
         if (own != null) {
             markSystem(own.applicationInfo);
+            long[] times = HubPackages.installTimes(own.applicationInfo == null ? null : own.applicationInfo.sourceDir);
+            if (own.firstInstallTime == 0) { own.firstInstallTime = times[0]; own.lastUpdateTime = times[1]; }
             android.content.pm.Signature[] ownCert = HostCertificate.of(own.packageName);
             if (own.signatures == null) own.signatures = HostCertificate.legacy(HostCertificate.details(own.packageName));
             if (own.signingInfo == null) own.signingInfo = new android.content.pm.SigningInfo(new android.content.pm.SigningDetails(ownCert, 2, new android.util.ArraySet<>(), null));

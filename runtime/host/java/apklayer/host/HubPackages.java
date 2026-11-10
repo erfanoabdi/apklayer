@@ -61,7 +61,23 @@ final class HubPackages {
         int flags = PackageManager.GET_ACTIVITIES | PackageManager.GET_SERVICES | PackageManager.GET_RECEIVERS | PackageManager.GET_PROVIDERS
                 | PackageManager.GET_META_DATA | PackageManager.GET_PERMISSIONS | PackageManager.GET_CONFIGURATIONS
                 | PackageManager.MATCH_DIRECT_BOOT_AWARE | PackageManager.MATCH_DIRECT_BOOT_UNAWARE;  // ComputerEngine.updateFlags adds these for an unlocked user; without them no component matches the user state
-        return PackageParser.generatePackageInfo(pkg, new int[0], flags, 0L, 0L, null, android.content.pm.pkg.FrameworkPackageUserState.DEFAULT);
+        long[] times = installTimes(pkg.baseCodePath);
+        return PackageParser.generatePackageInfo(pkg, new int[0], flags, times[0], times[1], null, android.content.pm.pkg.FrameworkPackageUserState.DEFAULT);
+    }
+
+    /**
+     * PackageInfo's firstInstallTime and lastUpdateTime (ms) from the installed APK: its directory's creation (the first install keeps the directory)
+     * and the APK's modification (each install writes it anew); {0, 0} when unreadable. App Manager and others showed 1970 for every app.
+     */
+    static long[] installTimes(String apk) {
+        if (apk == null) return new long[] {0, 0};
+        try {
+            java.nio.file.Path file = java.nio.file.Path.of(apk), dir = file.getParent();
+            long updated = java.nio.file.Files.getLastModifiedTime(file).toMillis();
+            java.nio.file.attribute.BasicFileAttributes d = java.nio.file.Files.readAttributes(dir, java.nio.file.attribute.BasicFileAttributes.class);
+            long created = d.creationTime().toMillis();  // the change time when the file system keeps no birth time
+            return new long[] {created > 0 && created <= updated ? created : updated, updated};
+        } catch (java.io.IOException | RuntimeException unreadable) { return new long[] {0, 0}; }
     }
 
     /** The Android app uid of an installed package (info.properties), or -1. */
