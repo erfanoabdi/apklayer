@@ -24,6 +24,7 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - An installer run once hung after its self update waiting on `apklayer.stack.ready` with no stack (not reproduced).
 - Phone with the deb: after 4-5 NewPipe launches `HubStartup.connect` blocked in `pingBinder` (swap full); restarting the instance cleared it.
 - volumes-sandbox "catchup present internal file" failed once in five (scan sent, not indexed in 30 s).
+- The phones' on-screen keyboard (Maliit) reaches apps as a navigation bar inset (geometry.c folds ime_px into the bar), not WindowInsets.Type.ime(), and no softInputMode applies: Termux's extra-keys row is not shown above the keyboard.
 - Unciv is black on UTM (Mesa 26, virgl and zink; draws on Parallels): an apitrace capture replayed elsewhere to find the call.
 
 ## Graphics
