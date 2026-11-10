@@ -73,9 +73,8 @@ WebView switch per instance, no pkexec); the manager follows Lomiri's scale and 
 `__loader_*`, fixed by bionic_translation 0059/0060) and no desktop group could see it. Before a tag: the Sailfish RPM and the click on the two
 phones, `ut` instance started and UiBench at depth=1 (CHANGELOG 2026-11-10). A release with the fix (0.4.12) is the lead's call.
 0.4.13 check on both phones (2026-11-10, CHANGELOG "Halium phones on 0.4.13"): Termux on Sailfish needed three glibc-2.30/libhybris fixes
-(path layer, GL stub lookups) and `stop` met a component host starting (fixed); all checks pass. Open from it: hello.camera's YUV check with
-the fake camera fails on both phones (six bars read red, two black; Open Camera draws the bars right), so camera-reload.sh cannot run there;
-on the Quintus a uinput keyboard's keys reach no app (`xkb keymap loaded (0 bytes, FAILED)` in the shell; the on-screen keyboard works);
+(path layer, GL stub lookups) and `stop` met a component host starting (fixed); all checks pass. Open from it: (hello.camera's fake-camera YUV check: fixed
+2026-11-10, a portrait window's turned frames, the test now expects them; camera-reload passes on both phones) on the Quintus a uinput keyboard's keys reach no app (`xkb keymap loaded (0 bytes, FAILED)` in the shell; the on-screen keyboard works);
 on Lomiri's greeter only the first tap of a uinput device registers (the test unlock taps one device per digit).
 
 ## After the releases: next phase (in order, set 2026-11-04 afternoon)

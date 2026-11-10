@@ -35,6 +35,7 @@ public final class Main extends Activity {
     // the fake backend's bars (bridge/hals/camera/fake.c): BT.601 Y, U, V of white, yellow, cyan, green, magenta, red, blue, black
     private static final int[][] BARS = {{235, 128, 128}, {210, 16, 146}, {170, 166, 16}, {145, 54, 34}, {106, 202, 222}, {81, 90, 240}, {41, 240, 110}, {16, 128, 128}};
 
+    private static volatile boolean turned, front;
     private final CountDownLatch textureReady = new CountDownLatch(1);
     private final AtomicInteger previewFrames = new AtomicInteger();
 
@@ -88,6 +89,9 @@ public final class Main extends Activity {
         }, handler);
         check(opened.await(10, TimeUnit.SECONDS) && device[0] != null, "the camera did not open");
         System.out.println("[cam] opened " + device[0].getId());
+        // a phone gives this landscape-locked activity a portrait window: cameraserver turns and crops the frames as in Portrait (camera compat)
+        turned = view.getWidth() < view.getHeight();
+        front = manager.getCameraCharacteristics(device[0].getId()).get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT;
 
         SurfaceTexture texture = view.getSurfaceTexture();
         texture.setDefaultBufferSize(W, H);
@@ -150,20 +154,31 @@ public final class Main extends Activity {
     /** The camera provider restarted under the open camera (tests/vm/camera-reload.sh does it at "[cam] reload"): the device reports an error or a
      *  disconnect, the camera comes back available and opens again with frames. */
     private void reopenAfterLoss(CameraManager manager, String id, CountDownLatch lost, Handler handler) throws Exception {
-        CountDownLatch available = new CountDownLatch(1);
         System.out.println("[cam] reload");
         check(lost.await(30, TimeUnit.SECONDS), "the open camera reported no error or disconnect");
+        java.util.concurrent.Semaphore available = new java.util.concurrent.Semaphore(0);
         manager.registerAvailabilityCallback(new CameraManager.AvailabilityCallback() {
-            @Override public void onCameraAvailable(String c) { if (c.equals(id)) available.countDown(); }
+            @Override public void onCameraAvailable(String c) { if (c.equals(id)) available.release(); }
         }, handler);
-        check(available.await(30, TimeUnit.SECONDS), "the camera did not come back");
         CameraDevice[] device = new CameraDevice[1];
         CountDownLatch opened = new CountDownLatch(1), frame = new CountDownLatch(1);
-        manager.openCamera(id, new CameraDevice.StateCallback() {
-            @Override public void onOpened(CameraDevice d) { device[0] = d; opened.countDown(); }
-            @Override public void onDisconnected(CameraDevice d) { opened.countDown(); }
-            @Override public void onError(CameraDevice d, int error) { System.out.println("[cam] reopen error " + error); opened.countDown(); }
-        }, handler);
+        check(available.tryAcquire(30, TimeUnit.SECONDS), "the camera did not come back");
+        // the evicted client's disconnect reports the camera present after the dead provider removed it (CameraService does so on Android
+        // too); the restarted provider's add then repeats that status and CameraManager drops it, so a slow provider (a phone's) is retried
+        for (int tries = 0; ; tries++) {
+            try {
+                manager.openCamera(id, new CameraDevice.StateCallback() {
+                    @Override public void onOpened(CameraDevice d) { device[0] = d; opened.countDown(); }
+                    @Override public void onDisconnected(CameraDevice d) { opened.countDown(); }
+                    @Override public void onError(CameraDevice d, int error) { System.out.println("[cam] reopen error " + error); opened.countDown(); }
+                }, handler);
+                break;
+            } catch (IllegalArgumentException gone) {
+                if (tries == 0) System.out.println("[cam] reopen: " + gone.getMessage());
+                check(tries < 40, "the camera stays unknown");
+                Thread.sleep(250);
+            }
+        }
         check(opened.await(10, TimeUnit.SECONDS) && device[0] != null, "the camera did not open again");
         ImageReader yuv = ImageReader.newInstance(W, H, ImageFormat.YUV_420_888, 3);
         String[] result = new String[1];
@@ -261,6 +276,7 @@ public final class Main extends Activity {
     /** The Y, U, V of each bar's centre, a quarter down the frame, against the fake pattern's. */
     private static String checkYuv(Image image) {
         Image.Plane[] p = image.getPlanes();
+        if (REAL == null && turned) return Portrait.checkTurned(image.getWidth(), image.getHeight(), Portrait.yuv(image), front) + " (turned)";
         if (REAL != null) {  // a real camera (-Dhello.real=<id>): the frame has the asked size and a luminance spread (a lens cap is flat), no bars
             long sum = 0; int min = 255, max = 0, n = 0;
             for (int y = 0; y < H; y += 8) for (int x = 0; x < W; x += 8) { int v = at(p[0], x, y); sum += v; min = Math.min(min, v); max = Math.max(max, v); n++; }
@@ -290,7 +306,9 @@ public final class Main extends Activity {
         Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
         if (bitmap == null) return "bad: does not decode (" + data.length + " bytes)";
         if (REAL != null) return "ok real " + data.length + " bytes " + bitmap.getWidth() + "x" + bitmap.getHeight();  // any scene
-        int red = bitmap.getPixel(11 * W / 16, H / 4), blue = bitmap.getPixel(13 * W / 16, H / 4);
+        // turned: the blue bar is outside the centre slice, the cyan one passes the same test (blue high, red low)
+        int[] r = turned ? Portrait.turnedAt(440, front) : new int[] {11 * W / 16, H / 4}, b2 = turned ? Portrait.turnedAt(200, front) : new int[] {13 * W / 16, H / 4};
+        int red = bitmap.getPixel(r[0], r[1]), blue = bitmap.getPixel(b2[0], b2[1]);
         boolean ok = bitmap.getWidth() == W && bitmap.getHeight() == H && (red >> 16 & 0xff) > 200 && (red & 0xff) < 60 && (blue & 0xff) > 200 && (blue >> 16 & 0xff) < 60;
         return (ok ? "ok" : "bad") + String.format(" %d bytes %dx%d red=#%06x blue=#%06x", data.length, bitmap.getWidth(), bitmap.getHeight(), red & 0xffffff, blue & 0xffffff);
     }

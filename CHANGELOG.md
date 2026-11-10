@@ -3,6 +3,21 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: hello.camera's fake-camera checks pass on both Halium phones (the frames were turned, not mis-laid)
+- Cause: not the provider's YUV layout (BackendCamera::captureYUV already writes through lockYCbCr's y/cb/cr, ystride, cstride and
+  chroma_step; the values read back exact). The phones give hello.camera's landscape-locked Main a portrait window (720x1528, 1080x2400), so
+  HostCameraShadows.windowShape sets the camera compat info and cameraserver forces ROTATE_AND_CROP_90 on every request (Camera3Device
+  overrides even an explicit NONE while compat rotate-and-crop is set). A row a quarter down the turned 640x480 frame crosses the scene's
+  height: red for the bars' three quarters, black for the bottom quarter: exactly `81/90/240` x6, `16/128/128` x2.
+- Fix (test app only): Main checks a portrait window's YUV frame and JPEG with Portrait's turned-frame check (Portrait.turnedAt/checkTurned,
+  now shared). camera-reload's reopen retries an "unknown device" open: the evicted client's disconnect reports the camera present after the
+  dead provider removed it (CameraService does so on Android too), and the restarted provider's add repeats that status, which CameraManager
+  drops, so a slow phone provider gave no second availability callback.
+- Checks: Volla X23 (UT, ut instance) and Volla Quintus (Sailfish, ut) with `providers set camera fake`: `yuv ok 640x480 170/166/16
+  145/54/34 106/202/222 81/90/240 (turned)`, jpeg ok, PASS (front camera too on the X23); camera-reload (phone copy of
+  tests/vm/camera-reload.sh): `reopened yuv ok ... (turned)`, PASS, no cameraserver crash, on both; camera = device again. Parallels (own
+  tree): group camera PASS (camera.sh, camera-reload.sh, camera-portrait.py, CAMERA1=1). No prebuilt changed.
+
 ## 2026-11-10: SIGTERM ends an app JVM at any moment (retest (c): UiBench 9 min, Telegram 20 min past the runner's SIGTERM)
 - Found: an app JVM's end on SIGTERM depended on Java code. HotSpot's handler only wakes its signal dispatcher, which runs Terminator's Java
   handler (a new thread, Shutdown.exit: System.getLogger, the Shutdown monitor, then the hooks); the exit deadline of 2026-11-10 was armed by a
@@ -90,7 +105,7 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
   - NewPipe opens (X23: the Live list with thumbnails; the Quintus' 0.20.1: Trending, empty as before); `stop` ends every instance process in
     1.0-1.9 s (after the fix above).
 - Found, not fixed (docs/PLAN.md): hello.camera's YUV check fails with the fake provider on both phones (`yuv bad 640x480 81/90/240 ...`: six
-  bars read as red, two as black; Open Camera shows the bars right), so tests/vm/camera-reload.sh stops before its reload there.
+  bars read as red, two as black; Open Camera shows the bars right), so tests/vm/camera-reload.sh stops before its reload there. Fixed the same day (the frames were turned for the portrait window, entry above).
 
 ## 2026-11-10: cameraserver no longer crashes when the camera provider restarts under an open camera (bionic_translation 0063)
 - The SIGSEGV (in libc under libbinder, after BR_DEAD_REPLY and the drain timeout) was not binder: the open device's transactions to the

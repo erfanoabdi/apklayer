@@ -153,6 +153,7 @@ What was wrong with the camera and what changed:
 - Camera1: libbinder 0007 reports the stack's own uid (phablet 32011) as AID_SYSTEM; cameraserver's trusted uid was the instance's own uid only
   (`patches/aosp/frameworks/av/0003` amended: AID_SYSTEM too). Without it every `android.hardware.Camera.open` died with "Untrusted caller".
 - Open Camera (and the `hello.camera` check) draw rotated 90 degrees in the phone's landscape window (the sensor orientation is applied against a window that does not turn): a mobile-window-mode question, not the camera's.
+- With `providers set camera fake` a phone's portrait window gets the camera compat rotate-and-crop (cameraserver turns the bars a quarter, as for a portrait desktop window); hello.camera's Main checks the turned frame there, and the camera-reload check passes on both phones (2026-11-10).
 
 Other fixes of this pass:
 - `bridge/hals/media/codec.c`: gst-droid's `amc*` decoders (`amcvideodec-c2mtkavcdecoder2`, the device's MediaCodec through libhybris) rank above the software ones and fail inside the stack's

@@ -294,9 +294,9 @@ public final class Portrait extends Activity {
     }
 
     /** A frame's Y, U, V at a luma pixel. */
-    private interface Yuv { int[] at(int x, int y); }
+    interface Yuv { int[] at(int x, int y); }
 
-    private static Yuv yuv(Image image) {
+    static Yuv yuv(Image image) {
         Image.Plane[] p = image.getPlanes();
         return (x, y) -> new int[] {at(p[0], x, y), at(p[1], x / 2, y / 2), at(p[2], x / 2, y / 2)};
     }
@@ -323,19 +323,22 @@ public final class Portrait extends Activity {
     /** The bars, upright in the scene, run along the frame's height once it is turned a quarter: counterclockwise for the back camera
      *  (ROTATE_AND_CROP_90), so the bars go from the bottom up; clockwise for the front one (270). The centre slice (360 of 640 columns) leaves
      *  bars 2-5 at these rows; a column a quarter into the bars' side (the scene's top part). */
-    private static String checkTurned(int width, int height, Yuv p, boolean front) {
+    static String checkTurned(int width, int height, Yuv p, boolean front) {
         StringBuilder seen = new StringBuilder();
         boolean ok = width == W && height == H;
-        int x = front ? 3 * W / 4 : W / 4;
         for (int bar = 0; bar < 4; bar++) {
-            int sceneX = 200 + 80 * bar, offset = (sceneX - 140) * H / 360;  // the bar's centre in the 640-wide scene, its distance into the slice
-            int y = Math.min(H - 2, front ? offset : H - 1 - offset);
-            int[] c = p.at(x, y);
+            int[] at = turnedAt(200 + 80 * bar, front), c = p.at(at[0], at[1]);
             int Y = c[0], U = c[1], V = c[2];
             seen.append(String.format(" %d/%d/%d", Y, U, V));
             ok &= Math.abs(Y - BARS[bar][0]) <= 6 && Math.abs(U - BARS[bar][1]) <= 8 && Math.abs(V - BARS[bar][2]) <= 8;
         }
         return (ok ? "ok" : "bad") + " " + width + "x" + height + seen;
+    }
+
+    /** Where the scene's column sceneX (inside the centre slice, 140-500 of 640) lands in the turned frame. */
+    static int[] turnedAt(int sceneX, boolean front) {
+        int offset = (sceneX - 140) * H / 360;  // its distance into the slice
+        return new int[] {front ? 3 * W / 4 : W / 4, Math.min(H - 2, front ? offset : H - 1 - offset)};
     }
 
     private static int at(Image.Plane plane, int x, int y) {
