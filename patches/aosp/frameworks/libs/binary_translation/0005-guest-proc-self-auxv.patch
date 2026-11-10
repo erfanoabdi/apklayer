@@ -1,0 +1,102 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: the guest reads its own auxv from /proc/self/auxv
+
+A guest open of /proc/self/auxv (or a path to the same file: /proc/<own pid>/auxv, /proc/thread-self/auxv) reached the host's file, so
+the guest saw x86_64's AT_HWCAP bits as arm64 features: Go's runtime (c-shared libraries read the file, they get no auxv from a process
+start) took x86's bit 24 for HWCAP_DIT and executed `mrs x0, DIT`, which berberis does not decode (SIGILL, Rethink DNS). InitKernelArgs
+records the auxv it gives the guest linker (the one the guest's getauxval reports: AT_HWCAP of the emulated features, no AT_HWCAP2, the
+host page size ...), and OpenatForGuest serves it from a memfd, beside the /proc/self/maps emulation.
+
+diff --git a/guest_loader/arm64/guest_loader_arch.cc b/guest_loader/arm64/guest_loader_arch.cc
+--- a/guest_loader/arm64/guest_loader_arch.cc
++++ b/guest_loader/arm64/guest_loader_arch.cc
+@@ -23,6 +23,7 @@
+ #include "berberis/calling_conventions/calling_conventions_arm64.h"
+ #include "berberis/guest_state/guest_addr.h"
+ #include "berberis/kernel_api/exec_emulation.h"  // DemangleGuestEnvp
++#include "berberis/kernel_api/open_emulation.h"  // apklayer patch: SetGuestAuxv
+ 
+ namespace berberis {
+ 
+@@ -102,6 +103,7 @@
+ 
+   // auxv
+   memcpy(curr, auxv, sizeof(auxv));
++  SetGuestAuxv(auxv, sizeof(auxv));  // apklayer patch: its /proc/self/auxv
+ 
+   return guest_sp;
+ }
+diff --git a/kernel_api/include/berberis/kernel_api/open_emulation.h b/kernel_api/include/berberis/kernel_api/open_emulation.h
+--- a/kernel_api/include/berberis/kernel_api/open_emulation.h
++++ b/kernel_api/include/berberis/kernel_api/open_emulation.h
+@@ -40,6 +40,9 @@
+ bool IsFileDescriptorEmulatedProcSelfMaps(int fd);
+ void CloseEmulatedProcSelfMapsFileDescriptor(int fd);
+ 
++// apklayer patch: the auxv the guest was started with (InitKernelArgs), served as its /proc/self/auxv.
++void SetGuestAuxv(const void* auxv, size_t size);
++
+ extern const char* kGuestCpuinfoPath;
+ 
+ // region digitalis
+diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
+--- a/kernel_api/open_emulation.cc
++++ b/kernel_api/open_emulation.cc
+@@ -231,16 +231,32 @@
+   return mem_fd;
+ }
+ 
+-bool IsProcSelfMaps(const char* path, int flags) {
++bool IsProcSelfMaps(const char* path, int flags, const char* proc_path = PROC_SELF_MAPS) {
+   struct stat cur_stat;
+   struct stat proc_stat;
+   // This check works for /proc/self/maps itself as well as symlinks (unless AT_SYMLINK_NOFOLLOW is
+   // requested). As an added benefit it gracefully handles invalid pointers in path.
+-  return stat(path, &cur_stat) == 0 && stat(PROC_SELF_MAPS, &proc_stat) == 0 &&
++  return stat(path, &cur_stat) == 0 && stat(proc_path, &proc_stat) == 0 &&
+          !(S_ISLNK(cur_stat.st_mode) && (flags & AT_SYMLINK_NOFOLLOW)) &&
+          cur_stat.st_ino == proc_stat.st_ino && cur_stat.st_dev == proc_stat.st_dev;
+ }
+ 
++// apklayer patch: the guest reads its own auxv, not the host's. Host AT_HWCAP bits mean other
++// features (Go's runtime read x86's bit 24 as arm64's DIT and executed mrs x0, DIT: SIGILL).
++#define PROC_SELF_AUXV "/proc/self/auxv"
++uint64_t g_guest_auxv[64];
++size_t g_guest_auxv_size = 0;
++
++int OpenatProcSelfAuxvForGuest(int dirfd, int flags, mode_t mode) {
++  if (g_guest_auxv_size == 0) {
++    return openat(dirfd, PROC_SELF_AUXV, flags, mode);
++  }
++  int mem_fd = CreateMemfdOrDie("[guest " PROC_SELF_AUXV "]");
++  WriteFullyOrDie(mem_fd, g_guest_auxv, g_guest_auxv_size);
++  lseek(mem_fd, 0, 0);
++  return mem_fd;
++}
++
+ // In zygote this is not needed because native bridge is mounting
+ // /proc/cpuinfo to point to the emulated version. But for executables
+ // this does not happen and they end up reading host cpuinfo.
+@@ -306,6 +322,12 @@
+   EmulatedFileDescriptors::GetInstance()->Remove(fd);
+ }
+ 
++void SetGuestAuxv(const void* auxv, size_t size) {  // apklayer patch
++  CHECK_LE(size, sizeof(g_guest_auxv));
++  memcpy(g_guest_auxv, auxv, size);
++  g_guest_auxv_size = size;
++}
++
+ // region digitalis
+ #if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
+ inline constexpr char kSystemArm64LibcxxPath[] = "/system/lib64/arm64/libc++.so";
+@@ -383,6 +405,9 @@
+   if (IsProcSelfMaps(path, host_flags)) {
+     return OpenatProcSelfMapsForGuest(dirfd, host_flags, mode);
+   }
++  if (IsProcSelfMaps(path, host_flags, PROC_SELF_AUXV)) {  // apklayer patch
++    return OpenatProcSelfAuxvForGuest(dirfd, host_flags, mode);
++  }
+ 
+   const char* real_path = nullptr;
+   if ((host_flags & AT_SYMLINK_NOFOLLOW) == 0) {

@@ -8,6 +8,7 @@
 #include <setjmp.h>
 #include <signal.h>
 #include <stdint.h>
+#include <sys/auxv.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -104,6 +105,23 @@ JNIEXPORT jint JNICALL Java_hello_arm64_Main_ownStack(JNIEnv *env, jclass c)
 {
     (void)env; (void)c;
     return own_stack();
+}
+
+/* /proc/self/auxv is the auxv getauxval reports (Go reads the file; the host's x86 AT_HWCAP read as arm64 bits made it run DIT: SIGILL):
+ * 1 if its AT_HWCAP and AT_HWCAP2 (0 when absent) match. */
+JNIEXPORT jint JNICALL Java_hello_arm64_Main_auxv(JNIEnv *env, jclass c)
+{
+    (void)env; (void)c;
+    unsigned long v[128], hwcap = 0, hwcap2 = 0;
+    int fd = open("/proc/self/auxv", O_RDONLY);
+    if (fd < 0) return 0;
+    ssize_t n = read(fd, v, sizeof(v));
+    close(fd);
+    for (ssize_t i = 0; i + 1 < n / (ssize_t)sizeof(v[0]); i += 2) {
+        if (v[i] == AT_HWCAP) hwcap = v[i + 1];
+        if (v[i] == AT_HWCAP2) hwcap2 = v[i + 1];
+    }
+    return n > 0 && hwcap == getauxval(AT_HWCAP) && hwcap2 == getauxval(AT_HWCAP2);
 }
 
 static jclass main_class;

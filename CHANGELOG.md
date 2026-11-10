@@ -3,6 +3,15 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: arm64 Go libraries through the x86_64 native bridge read the guest's auxv (Rethink DNS, binary_translation 0005)
+- Rethink DNS died with SIGILL on the x86 PC: its Go library (libgojni.so, c-shared: Go reads /proc/self/auxv) got the host's file through
+  berberis, took x86's AT_HWCAP bit 24 for arm64's HWCAP_DIT and executed `mrs x0, DIT`, which berberis does not decode.
+- binary_translation 0005: InitKernelArgs records the auxv it gives the guest (the same the guest's getauxval reports), and OpenatForGuest
+  serves it from a memfd for /proc/self/auxv and any path to the same file (/proc/<own pid>/auxv), beside the /proc/self/maps emulation.
+- hello-arm64 checks that /proc/self/auxv's AT_HWCAP/AT_HWCAP2 equal getauxval's (`auxv ok`, group native-bridge).
+- x86 PC (own tree, lead prebuilts + the new libberberis_arm64): native-bridge, native-bridge-vulkan PASS; Rethink DNS (tests/corpus/run.py)
+  loads libgojni.so and draws its Welcome screen on both launches, no SIGILL. Library: Build log (lock set; not in the prebuilts branch yet).
+
 ## 2026-11-10: setup reinstalls the system apps a runtime update changed
 - `apklayer setup` installed the runtime's system apps (providers, DocumentsUI, WebView) only while `setup-done` was missing, so a runtime
   update never replaced them: x86_64 users who set up before 0.4.10 kept the arm64 MediaProvider (JNI not linking through the bridge,
@@ -1170,6 +1179,13 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-10 - gsi_x86_64 libberberis_arm64: the guest's own /proc/self/auxv (Rethink DNS agent)
+- Why: Rethink DNS's Go library read the host's auxv through berberis (x86 AT_HWCAP bit 24 taken for arm64's DIT, SIGILL on
+  `mrs x0, DIT`); patches/aosp/frameworks/libs/binary_translation 0005.
+- Command (OrbStack, `flock -n ~/los24-build.lock`): the patch edited into ~/los24/frameworks/libs/binary_translation, then
+  `cd ~/los24 && source build/envsetup.sh && export APKLAYER_NATIVE_BRIDGE=arm64 && breakfast gsi_x86_64 userdebug && m libberberis_arm64`.
+- Result: built (10:45). libberberis_arm64.so sha256 c4e7ee145e08a34c9f557b6f5609f299e2379b451109907aac0fca837be93f02 (3030368 bytes);
+  x86_64 lock set. Not in the prebuilts branch yet: copy for the lead at /tmp/apkl-auxv/x86_64 on the Mac.
 ### 2026-11-09 - gsi_x86_64 libberberis_proxy_libc: a guest's pthread_getattr_np(pthread_self()) (PGR agent)
 - Why: Unity's il2cpp GC got the host main stack for its guest thread and faulted above the guest stack (PGR black screen through the
   bridge; patches/aosp/frameworks/libs/native_bridge_support 0001, entry above).

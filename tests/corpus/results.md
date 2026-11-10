@@ -25,7 +25,7 @@ Interaction (drive.py taps/Back) where noted. Every app below drew both launches
 | Termux | first round: SIGSEGV (JVM, Note 1) on both launches; with APKLAYER_CDS=off and with a fresh archive: the shell prompt | draws (shell prompt) | **regression-like, Parallels: CDS archive crash (Note 1)** |
 | SimpleX (arm64 only) | draws (welcome "Be free") | draws (native bridge) | none (runner's "launch FAIL" = no `started` line: its first launch is posted as a message) |
 | WireGuard | draws | draws | none |
-| Rethink DNS (arm64 only) | draws (welcome) | SIGILL: guest MRS of DIT (Note 2) | PC: new (not run there before) |
+| Rethink DNS (arm64 only) | draws (welcome) | SIGILL: guest MRS of DIT (Note 2); fixed the same day: draws (welcome, native bridge) | PC: new (not run there before) |
 | StreetComplete | draws (welcome) | draws | none |
 | Etar | draws (week) | draws | none |
 | QUIK | draws (inbox) | draws | none |
@@ -43,7 +43,7 @@ APKLAYER_CDS=off, not with an archive Termux wrote itself, not after that archiv
 `.jsa.tmp.temp`: the runner ends the app before the dump finishes). The bad archive was deleted during the investigation (not kept).
 2. Rethink's Go code (a c-shared library: Go's runtime falls back to /proc/self/auxv when loaded as a library on Android) reads the host's
 auxv under the x86_64 native bridge (berberis emulates only /proc/self/maps; open_emulation.cc),
-takes x86's AT_HWCAP bit 24 for arm64 HWCAP_DIT and runs `mrs x0, DIT` (0xd53b42a0), which berberis does not decode: SIGILL.
+takes x86's AT_HWCAP bit 24 for arm64 HWCAP_DIT and runs `mrs x0, DIT` (0xd53b42a0), which berberis does not decode: SIGILL. Fixed by binary_translation 0005 (the guest's own auxv).
 3. The UiBench hang did not come back in two more rounds.
 
 ## 2026-11-05 (current F-Droid versions, index of 2026-11-05; UTM and Parallels, instances corpus1/corpus2, both from this tree's Meson build)

@@ -16,6 +16,7 @@ public class Main extends Activity {
     private static native int fault();
     private static native int errnos();
     private static native int ownStack();
+    private static native int auxv();
 
     static int twice(int v) { return 2 * v; }
 
@@ -57,7 +58,10 @@ public class Main extends Activity {
         log("guest fault " + (fault == 1 ? "recovered" : "FAIL " + fault));
         int stack = ownStack();  // pthread_getattr_np(pthread_self()) of this JVM thread: its own guest stack
         log("own stack " + (stack == 1 ? "ok" : "WRONG"));
-        boolean ok = "aarch64".equals(cpu) && first == warm && call == 42 && thread == 100 && overloads && errno == 222 && fault == 1 && stack == 1;
+        int auxv = auxv();  // /proc/self/auxv's hwcaps are getauxval's (the guest's, not the host's)
+        log("auxv " + (auxv == 1 ? "ok" : "WRONG"));
+        boolean ok = "aarch64".equals(cpu) && first == warm && call == 42 && thread == 100 && overloads && errno == 222 && fault == 1 && stack == 1
+                && auxv == 1;
         log(ok ? "PASS" : "FAIL first=" + first + " warm=" + warm);
         long t7 = System.nanoTime();
         int px = gl();  // EGL pbuffer cleared to (1, 0.5, 0, 1): 0xff0080ff, read back as RGBA bytes
