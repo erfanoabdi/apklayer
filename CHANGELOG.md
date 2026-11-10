@@ -3,6 +3,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: release 0.4.15 (runtime 0.4.13)
+- Sailfish OS: apklayer-manager in the RPM (Slint built from source in the build root against glibc 2.30, a wl_shell platform for Lipstick). Ubuntu Touch: each drawer launch gets its own window shell in its lomiri-app-launch unit (the spread shows the app's name and icon, the card goes when the app ends; no Waydroid hint, which kept closed windows), rotation follows the phone, audio through PulseAudio (the click's pulse backend). Both phones: the host keyboard is Android's IME inset (Termux's extra keys above it) and comes on showSoftInput only. Desktop: fullscreen (xdg set_fullscreen; a requested turn recreates activities). `apklayer stop` keeps the shell only for stacks of its own runtime dir.
+
 ## 2026-11-10: Lomiri: a window shell per drawer launch (named cards, no dead windows)
 - A launch from Lomiri's drawer starts its own apklayer-shell in the launch's lomiri-app-launch unit before leaving it (cli/halium.cpp);
   the window sink and the JVM connect to it (`APKLAYER_SHELL`, `-Dapklayer.shell`), it dies with the launcher. Shared shell unchanged
