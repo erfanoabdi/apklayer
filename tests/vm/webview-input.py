@@ -36,7 +36,8 @@ STEPS = [(lambda: count('[wv] page finished'), ['focus', 'tap:%d,%d' % AT]),
          (lambda: count('[wv] value=xyz'), ['press:%d,%d' % AT]),
          (lambda: time.monotonic() > pressed[0] + 1, ['release:%d,%d' % AT]),
          (lambda: count('[wv] action mode started') >= 2, ['key:44']),  # z replaces the selection again
-         (lambda: count('[wv] value=z'), [])]  # (Back is Chromium's: it leaves the selection and the app finishes, input-inject checks Back)
+         (lambda: count('[wv] value=z'), [])]  # Back is not a step: on Android it finishes the activity here too (Chromium's
+         # ContentUiEventHandler passes KEYCODE_BACK on to View.onKeyUp, the floating action mode takes none: CHANGELOG 2026-11-10)
 instance.stop()
 app = subprocess.Popen(['bin/apklayer', 'run', PKG], env=ENV, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
 step = 0

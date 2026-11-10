@@ -24,6 +24,12 @@ final class CdsDump {
 
     private static boolean asked;
 
+    /** Every loader apklayer makes (AppClassLoader: the app's, its libraries', the WebView provider's; InMemoryDexClassLoader's): their classes are archived too.
+     *  shortcut: an app's own ClassLoader subclass is not seen (no hook on java.lang.ClassLoader); hook its constructor if one turns up in an archive */
+    private static final java.util.Set<ClassLoader> LOADERS = java.util.Collections.synchronizedSet(java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>()));
+
+    static void track(ClassLoader loader) { LOADERS.add(loader); }
+
     /** The first activity is up (ActivityTask): a component host or the hub never writes the archive, it would lack every window class. */
     static synchronized void afterStart() {
         String file = System.getProperty("apklayer.cdsdump");
@@ -79,7 +85,7 @@ final class CdsDump {
         catch (IllegalStateException e) { return true; }
     }
 
-    /** Links (verifies, no initialization) every class of the loader chain up to the system loader, until linking loads no more. HotSpot (JDK 21)
+    /** Links (verifies, no initialization) every class of the loader chains (the app's and every tracked loader's) up to the system loader, until linking loads no more. HotSpot (JDK 21)
      *  links only the builtin loaders' classes before a dynamic dump and archives a custom loader's unlinked class with its constant pool as it
      *  is: a nest host's member entry that a nestmate check resolved (InstanceKlass::has_nest_member) stays resolved, and a JVM that maps the
      *  host from the archive without having loaded the member crashes on its first `new` of it (Scroller$ViscousFluidInterpolator: SIGSEGV in
@@ -92,7 +98,19 @@ final class CdsDump {
         java.util.Set<Class<?>> done = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
         for (boolean more = true; more; ) {
             more = false;
-            for (ClassLoader l = loader; l != null && l != ClassLoader.getSystemClassLoader() && l != ClassLoader.getPlatformClassLoader(); l = l.getParent()) {
+            java.util.Set<ClassLoader> loaders = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+            java.util.List<ClassLoader> starts = new java.util.ArrayList<>();
+            starts.add(loader);
+            synchronized (LOADERS) { starts.addAll(LOADERS); }  // again each round: linking may create a loader
+            for (int i = 0; i < starts.size(); i++)
+                for (ClassLoader l = starts.get(i); l != null && l != ClassLoader.getSystemClassLoader() && l != ClassLoader.getPlatformClassLoader(); l = l.getParent()) {
+                    if (!loaders.add(l) || !l.getClass().getName().equals(AppClassLoader.class.getName())) continue;
+                    // its shared libraries' loader: Main's AppClassLoader is the system loader's copy of the class, whose track() this copy never sees
+                    java.lang.reflect.Field libraries = l.getClass().getDeclaredField("libraries");
+                    libraries.setAccessible(true);
+                    if (libraries.get(l) instanceof ClassLoader lib) starts.add(lib);
+                }
+            for (ClassLoader l : loaders) {
                 java.util.List<Class<?>> list = (java.util.List<Class<?>>) (Object) classes.get(l);
                 Class<?>[] now;
                 synchronized (list) { now = list.toArray(new Class<?>[0]); }

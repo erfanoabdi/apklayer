@@ -3,6 +3,22 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: deferred bugs: WebView Back (not a bug), input-inject under stalls, CDS of other loaders, FCL sound measured
+- WebView Back in a text selection finishes the activity: Android does the same. From the WebView APK we ship (baksmali of
+  external/chromium-webview arm64): ContentUiEventHandler.dispatchKeyEvent sends KEYCODE_BACK (with MENU, HOME, volume...) to
+  View.dispatchKeyEvent, WebView's onKeyUp passes it on, and the selection's ActionMode is TYPE_FLOATING (SelectionPopupControllerImpl
+  startActionMode(cb, 1)), which DecorView/ActionModeController does not end on Back (only a primary one). Chromium's only
+  OnBackInvokedCallback is for its mouse selection drop-down. A TextView differs (Editor ends its action mode in onKeyPreIme).
+- input-inject: every step waits for the previous step's effect (a list of preconditions on the app's ticks, every 500 ms) instead of fixed
+  times; Ctrl+A's key and a tick before the IME text, `ime applied` after the empty done. APKLY_INPUT_STALL=<s> stops the app JVM after each
+  step: passes at 2, 2.5 and 3 s on Parallels (own tree); group input passes. The run ends after its last step (~25 s, was 26 s fixed).
+- CDS: CdsDump links the classes of every loader apklayer makes (AppClassLoader: the WebView provider's, the app's libraries'; an
+  InMemoryDexClassLoader), not only the app's chain. Group cds runs cds-dump.sh on hello.wvprobe too: before, 99 unlinked custom-loader
+  classes in the archive (7314 linked first), now 0 (8594). Parallels: cds, webview, webview-input, input pass.
+- FCL's sound measured on the x86 PC (tests/vm/fcl-audio.py, instance xf1 of the proc tree): Minecraft 26.3's title screen, the instance's
+  PipeWire stream recorded through parec --monitor-stream for 60 s: RMS -32.5 dBFS, peak -15.4 dBFS, every second above -50 dBFS, varying
+  levels (music). The PC's default sink itself is muted by its owner (desktop setting, left as it is).
+
 ## 2026-11-10: cameraserver no longer crashes when the camera provider restarts under an open camera (bionic_translation 0063)
 - The SIGSEGV (in libc under libbinder, after BR_DEAD_REPLY and the drain timeout) was not binder: the open device's transactions to the
   dead provider failed as on Android, Camera3Device went into its error state (the app gets onDisconnected/ERROR_CAMERA_DEVICE) and
