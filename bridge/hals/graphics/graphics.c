@@ -179,8 +179,10 @@ static int alloc_packed(struct apklayer_gfx *gfx, struct apklayer_gfx_buffer *ou
 static uint32_t alloc_flags(struct apklayer_gfx *gfx, uint32_t fourcc, uint32_t usage)
 {
     uint32_t f = gbm_flags(gfx, usage);
-    if ((f & GBM_BO_USE_LINEAR) && (usage & APKLAYER_GFX_SAMPLE) && (usage & (APKLAYER_GFX_CPU_READ | APKLAYER_GFX_CPU_WRITE))
-        && !(usage & APKLAYER_GFX_SCANOUT && gfx->other_gpu)  /* another GPU's compositor needs LINEAR */
+    /* window buffers only (the composer's usage: a Surface the CPU draws through lock/unlock); every buffer is sampled (toGfxUsage), and an
+     * app's own CPU-written textures (PGR's Unity uploads) are written in ways that bypass the map's GPU copy: tiled, they were noise */
+    if ((f & GBM_BO_USE_LINEAR) && (usage & APKLAYER_GFX_SCANOUT) && (usage & (APKLAYER_GFX_CPU_READ | APKLAYER_GFX_CPU_WRITE))
+        && !gfx->other_gpu  /* another GPU's compositor needs LINEAR */
         && (fourcc == DRM_FORMAT_ABGR8888 || fourcc == DRM_FORMAT_XBGR8888)  /* what readback.c copies */
         && apklayer_gfx_linear_external_only(gfx->gbm, fourcc))
         f = (f & ~GBM_BO_USE_LINEAR) | GBM_BO_USE_RENDERING;
