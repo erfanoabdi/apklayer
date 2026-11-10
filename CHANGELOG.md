@@ -3,6 +3,18 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: `apklayer stop` ends the shell when no stack shares it (the slot st1 test flake)
+- Cause: endShellUnlessShared counted every instance directory in the runtime directory whose stack.pid (in the state dir) was alive. Any
+  command makes an instance's runtime directory, so a leftover `st2` directory in st1's runtime dir (tests/run gives each slot its own
+  runtime dir, so its own shell) made st1's shell "shared" whenever st2's stack ran elsewhere: `stop` left it running. multi-app,
+  window-geometry, mobile and relaunch (activities) then failed in st1 beside another group: the shell left running, and shell.log, unlinked
+  by the test, kept being written by the old shell (FileNotFoundError, IndexError). Reproduced in an own Parallels tree with an empty
+  `.tests/run/sf1/apklayer/sf2`: those 4 groups FAIL in sf1 while input runs in sf2.
+- Fix: the stack also writes its pid into its runtime directory (removed at its stop); a stack counts as sharing the shell only by that
+  pid, so only stacks started with this runtime directory keep the shell. One shell per session unchanged.
+- Checks: Parallels (own tree, the leftover sf2 directory kept), `tests/run -j 2 input multi-app window-geometry activities mobile` passed
+  3 times in a row.
+
 ## 2026-11-10: the phones' on-screen keyboard is the apps' IME inset, not the navigation bar (Termux's extra keys above it)
 - Cause: geometry.c folded the Maliit keyboard's height (`ime_px`) into CONFIGURE's navigation bar value, so apps saw a taller navigation bar:
   no `WindowInsets.Type.ime()`, no softInputMode. An adjustResize app's bottom row (Termux's extra keys) ended up under the keyboard.

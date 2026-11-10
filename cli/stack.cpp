@@ -125,11 +125,12 @@ int shellPid(const Layout& l) {
 }
 
 // The session's window shell serves every instance of the session (their runtime directories under it): it ends with the last stack, so stopping
-// or removing one instance leaves the others' windows alone.
+// or removing one instance leaves the others' windows alone. A stack counts only by the pid it recorded in its runtime directory here: any command
+// makes an instance's runtime directory, so one there can belong to an instance whose stack runs with another runtime directory (and shell).
 void endShellUnlessShared(const Layout& l, const std::string& leaving) {
     for (const std::string& id : listDir(join(l.runtimeHome, "apklayer"))) {
         if (id == leaving || !isDir(join(l.runtimeHome, "apklayer/" + id))) continue;
-        auto pid = readFile(join(l.stateHome, "apklayer/" + id + "/stack.pid"));
+        auto pid = readFile(join(l.runtimeHome, "apklayer/" + id + "/stack.pid"));
         if (pid && alive(atoi(pid->c_str()))) return;
     }
     terminate(shellPid(l));
@@ -482,6 +483,7 @@ int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std:
         start("tool", tool[0], std::vector<std::string>(tool.begin() + 1, tool.end()));
     }
     writeFile(inst.pidFile(), std::to_string(getpid()) + "\n");
+    writeFile(join(inst.runtimeDir, "stack.pid"), std::to_string(getpid()) + "\n");  // the session's shell is shared with this stack (endShellUnlessShared)
 
     // Ready when SurfaceFlinger has registered, and the audio policy when audio services run (an AudioTrack created before it exists gets
     // "server died"). One waiter per service blocks in waitForService; the daemon sets the ready property after all of them returned.

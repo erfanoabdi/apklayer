@@ -17,7 +17,6 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - Native bridge: pthread_sigqueue with a guest pthread record is not mapped.
 - The boot broadcast may wake every app with a boot receiver at once (each a JVM; 14 receivers on Parallels): check, it is ordered since 2026-11-08.
 - NVIDIA tester's "double free or corruption (out)" (0.4.10): recheck on NVIDIA with the current Berberis libraries.
-- Group activities flakes in Parallels slot st1 beside another group (passes on rerun): keep the full `tests/run` output of the next failure.
 - FCL: after a window resize no new frame reached the shell (window looked frozen); not diagnosed.
 - An app whose first MediaStore use is MediaStore.Images.Media crashes the JVM (SIGSEGV in ConstantPool::klass_at_impl via Robolectric's ShadowMap).
 - `--spare` JVM still running after `apklayer stop` (4 in ~120 stops, not reproduced since): candidate fix, a second records pass after the hub.
