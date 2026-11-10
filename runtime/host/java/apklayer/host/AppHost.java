@@ -54,6 +54,7 @@ public final class AppHost implements Runnable {
     private int logicalW, logicalH, logicalScale = 100; // current window size in dp and scale %
     private int outputPxW, outputPxH;                    // the shell's output (screen) in pixels, 0: unknown
     private int imeShown;                                // the host keyboard's height the app was last told (px)
+    private boolean mobile;                              // the shell's mobile window style (a phone: its turns are rotations)
     private int lastOrientation = -2;                    // top activity's requested orientation last applied
     private boolean turnRequested;                       // that request turns the window: its configure is a rotation (hostResize)
     private final HostTextBridge text = new HostTextBridge();
@@ -104,9 +105,10 @@ public final class AppHost implements Runnable {
         main = new Handler(Looper.getMainLooper());
         input = new HostInput(main, InstrumentationRegistry.getInstrumentation().getUiAutomation(), new HostInput.WindowEvents() {
             @Override
-            public void configure(int w, int h, int scalePct, int dpi, int navPx, int outputW, int outputH, int imePx) {
+            public void configure(int w, int h, int scalePct, int dpi, int navPx, int outputW, int outputH, int imePx, boolean mobileStyle) {
                 outputPxW = outputW;
                 outputPxH = outputH;
+                mobile = mobileStyle;
                 hostResize(w, h, scalePct, dpi, navPx);
                 // the host's on-screen keyboard (the phones' Maliit): the IME's insets, apart from the bar; softInputMode does the rest
                 if (imePx != imeShown) System.out.println("[apklayer] host keyboard " + (imeShown = imePx) + " px");
@@ -176,6 +178,7 @@ public final class AppHost implements Runnable {
                 } else if (ev[0] == 14) {
                     outputPxW = ev.length > 7 ? ev[6] : 0;
                     outputPxH = ev.length > 7 ? ev[7] : 0;
+                    mobile = ev.length > 9 && ev[9] != 0;
                     hostResize(ev[1], ev[2], ev[3], ev.length > 5 ? ev[4] : 0, ev.length > 5 ? ev[5] : 0);
                     width = display.getWidth();
                     height = display.getHeight();
@@ -456,8 +459,9 @@ public final class AppHost implements Runnable {
     private void hostResize(int w, int h, int scalePct, int dpi, int navPx) {
         if (dpi <= 0) dpi = 160 * scalePct / 100;
         int wdp = dp(w * scalePct / 100, dpi), hdp = dp(h * scalePct / 100, dpi);
-        // the window turned as the app asked (setRequestedOrientation): a rotation; other shape changes (a drag, fullscreen) are resizes
-        boolean turned = turnRequested && !stack.isEmpty() && logicalW > 0 && (w > h) != (logicalW > logicalH);
+        // a rotation: the window turned as the app asked (setRequestedOrientation) or the phone turned (mobile style); other shape changes
+        // (a drag, fullscreen) are resizes in place
+        boolean turned = (turnRequested || mobile) && !stack.isEmpty() && logicalW > 0 && (w > h) != (logicalW > logicalH);
         if (turned) turnRequested = false;
         logicalW = w;
         logicalH = h;
@@ -474,13 +478,11 @@ public final class AppHost implements Runnable {
         int pw = w * scalePct / 100, ph = h * scalePct / 100;
         int longer = Math.max(Math.max(outputPxW, outputPxH), Math.max(pw, ph)), shorter = Math.max(Math.min(outputPxW, outputPxH), Math.min(pw, ph));
         HostConfiguration.setScreen(outputPxW > 0 && outputPxH > 0 ? (pw >= ph ? new android.graphics.Rect(0, 0, longer, shorter) : new android.graphics.Rect(0, 0, shorter, longer)) : null);
-        String size = "w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi";
-        if (turned) {  // as a rotation on Android: activities that do not declare orientation|screenSize in configChanges are recreated, so they
-            // take their -land/-port layouts (NewPipe's player goes fullscreen from its recreated VideoDetailFragment)
-            HostConfiguration.setSize(size);
-            dispatchConfiguration(android.content.pm.ActivityInfo.CONFIG_ORIENTATION | android.content.pm.ActivityInfo.CONFIG_SCREEN_SIZE
-                    | android.content.pm.ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE | android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT);
-        } else HostConfiguration.resize(size, new ArrayList<>(stack));
+        String qualifiers = "w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi";
+        // as a rotation on Android: activities that do not handle orientation|screenSize relaunch, so they take their -land/-port layouts
+        // (NewPipe's player goes fullscreen from its recreated VideoDetailFragment)
+        if (turned) configurationChanged(HostConfiguration.turn(qualifiers));
+        else HostConfiguration.resize(qualifiers, new ArrayList<>(stack));
         Object wmg = android.view.WindowManagerGlobal.getInstance();
         List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
         for (View v : views) { // force a fresh frame at the new size

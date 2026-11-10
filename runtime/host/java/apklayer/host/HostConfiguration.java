@@ -191,6 +191,13 @@ final class HostConfiguration {
         return old;
     }
 
+    /** A phone's turn (AppHost.hostResize): the new size; returns the configuration changes for {@link #dispatch}. */
+    static int turn(String qualifiers) {
+        Configuration before = new Configuration(RuntimeEnvironment.getApplication().getResources().getConfiguration());
+        setSize(qualifiers);
+        return before.diff(RuntimeEnvironment.getApplication().getResources().getConfiguration());
+    }
+
     /** A new size from the shell (AppHost.hostResize): applied in place, like an activity that handles the change itself. */
     static void resize(String qualifiers, List<ActivityController<? extends Activity>> controllers) {
         setSize(qualifiers);

@@ -12,7 +12,14 @@ static void fit_size(const struct window *w, int lw, int lh, int grow, int *fw, 
 {
     int aw = w->bounds_w, ah = w->bounds_h;
     if (aw <= 0 || ah <= 0) { aw = output_mode_w; ah = output_mode_h > 0 ? output_mode_h - 32 : 0; }  /* no bounds: the output less a top bar */
-    if (w->mobile) { *fw = aw > 0 ? aw : lw; *fh = ah > 0 ? ah : lh; return; }  /* the compositor did not maximize it: the work area */
+    if (w->mobile) {  /* the compositor did not maximize it: the work area; an orientation request: that shape inside the phone's window */
+        if (grow && w->cfg_w > 0 && w->cfg_h > 0) { aw = w->cfg_w; ah = w->cfg_h; }
+        *fw = aw > 0 ? aw : lw; *fh = ah > 0 ? ah : lh;
+        if (grow && lw > 0 && lh > 0 && *fw > 0 && *fh > 0) {
+            if ((long)lw * *fh > (long)lh * *fw) *fh = (int)((long)lh * *fw / lw); else *fw = (int)((long)lw * *fh / lh);
+        }
+        return;
+    }
     int maxw = aw * 85 / 100, maxh = ah * 85 / 100 - DECOR_H;
     *fw = lw; *fh = lh;
     if (maxw <= 0 || maxh <= 0 || lw <= 0 || lh <= 0 || (!grow && lw <= maxw && lh <= maxh)) return;
@@ -78,7 +85,7 @@ static const struct xdg_surface_listener xs_listener = { xs_configure };
 
 /* cw x ch: window geometry (title bar included), 0 = the client's choice. A floating window takes the compositor's size on its first
  * configure, during an interactive resize and when it leaves maximized/fullscreen/tiled; any other floating configure only repeats the size
- * the compositor last saw, which may predate our own reshape (an orientation request), so it is not a resize. */
+ * the compositor last saw, which may predate our own reshape (an orientation request), so it is not a resize (desktop style only). */
 static int injecting;  /* top_configure called by inject() (test input), not by the compositor */
 static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t ch, struct wl_array *st)
 {
@@ -103,7 +110,9 @@ static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t c
     if (constrained && !w->constrained && w->cfg_w > 0) { w->float_w = w->cfg_w; w->float_h = w->cfg_h; }
     w->state_changed |= fullscreen != w->fullscreen;
     w->fullscreen = fullscreen;  /* before the sizes below: a fullscreen window has no title bar */
-    if (cw > 0 && ch > W_BAR(w) && (constrained || resizing || restored || !w->configured)) { nw = cw; nh = ch - W_BAR(w); }
+    /* mobile style: the phone's shell sizes the window whatever its state (Lomiri drops maximized once the app is active, then sends the
+     * turned screen's size when the phone rotates) */
+    if (cw > 0 && ch > W_BAR(w) && (constrained || resizing || restored || !w->configured || w->mobile)) { nw = cw; nh = ch - W_BAR(w); }
     else if (restored && w->float_w > 0) { nw = w->float_w; nh = w->float_h; }
     if (!constrained && w->lock && nw > 0 && nh > 0 && (nw > nh) != (w->lock == 1)) {
         /* an activity fixed to one orientation keeps its shape in a floating window (as Android's desktop keeps a fixed app's aspect ratio on
