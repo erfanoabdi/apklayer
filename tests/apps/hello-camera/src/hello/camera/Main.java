@@ -80,11 +80,11 @@ public final class Main extends Activity {
         thread.start();
         Handler handler = new Handler(thread.getLooper());
         CameraDevice[] device = new CameraDevice[1];
-        CountDownLatch opened = new CountDownLatch(1);
+        CountDownLatch opened = new CountDownLatch(1), lost = new CountDownLatch(1);
         manager.openCamera(REAL != null ? REAL : ID != null ? ID : ids[0], new CameraDevice.StateCallback() {
             @Override public void onOpened(CameraDevice d) { device[0] = d; opened.countDown(); }
-            @Override public void onDisconnected(CameraDevice d) { System.out.println("[cam] disconnected"); opened.countDown(); }
-            @Override public void onError(CameraDevice d, int error) { System.out.println("[cam] open error " + error); opened.countDown(); }
+            @Override public void onDisconnected(CameraDevice d) { System.out.println("[cam] disconnected"); opened.countDown(); lost.countDown(); }
+            @Override public void onError(CameraDevice d, int error) { System.out.println("[cam] open error " + error); opened.countDown(); lost.countDown(); }
         }, handler);
         check(opened.await(10, TimeUnit.SECONDS) && device[0] != null, "the camera did not open");
         System.out.println("[cam] opened " + device[0].getId());
@@ -125,6 +125,7 @@ public final class Main extends Activity {
         check(yuvChecked.await(10, TimeUnit.SECONDS), "no YUV frame");
         System.out.println("[cam] yuv " + yuvResult[0]);
         check(yuvResult[0].startsWith("ok"), "the YUV frame's colours differ");
+        if (Boolean.getBoolean("hello.reload")) { reopenAfterLoss(manager, device[0].getId(), lost, handler); return; }
 
         Thread.sleep(1500);
         System.out.println("[cam] preview: " + results.get() + " results, " + previewFrames.get() + " frames shown");
@@ -144,6 +145,46 @@ public final class Main extends Activity {
         device[0].close();
         camera1Preview(handler);
         thread.quitSafely();
+    }
+
+    /** The camera provider restarted under the open camera (tests/vm/camera-reload.sh does it at "[cam] reload"): the device reports an error or a
+     *  disconnect, the camera comes back available and opens again with frames. */
+    private void reopenAfterLoss(CameraManager manager, String id, CountDownLatch lost, Handler handler) throws Exception {
+        CountDownLatch available = new CountDownLatch(1);
+        System.out.println("[cam] reload");
+        check(lost.await(30, TimeUnit.SECONDS), "the open camera reported no error or disconnect");
+        manager.registerAvailabilityCallback(new CameraManager.AvailabilityCallback() {
+            @Override public void onCameraAvailable(String c) { if (c.equals(id)) available.countDown(); }
+        }, handler);
+        check(available.await(30, TimeUnit.SECONDS), "the camera did not come back");
+        CameraDevice[] device = new CameraDevice[1];
+        CountDownLatch opened = new CountDownLatch(1), frame = new CountDownLatch(1);
+        manager.openCamera(id, new CameraDevice.StateCallback() {
+            @Override public void onOpened(CameraDevice d) { device[0] = d; opened.countDown(); }
+            @Override public void onDisconnected(CameraDevice d) { opened.countDown(); }
+            @Override public void onError(CameraDevice d, int error) { System.out.println("[cam] reopen error " + error); opened.countDown(); }
+        }, handler);
+        check(opened.await(10, TimeUnit.SECONDS) && device[0] != null, "the camera did not open again");
+        ImageReader yuv = ImageReader.newInstance(W, H, ImageFormat.YUV_420_888, 3);
+        String[] result = new String[1];
+        yuv.setOnImageAvailableListener(r -> {
+            try (Image image = r.acquireLatestImage()) { if (image != null && frame.getCount() > 0) { result[0] = checkYuv(image); frame.countDown(); } }
+        }, handler);
+        CameraCaptureSession[] session = new CameraCaptureSession[1];
+        CountDownLatch configured = new CountDownLatch(1);
+        device[0].createCaptureSession(Arrays.asList(yuv.getSurface()), new CameraCaptureSession.StateCallback() {
+            @Override public void onConfigured(CameraCaptureSession s) { session[0] = s; configured.countDown(); }
+            @Override public void onConfigureFailed(CameraCaptureSession s) { configured.countDown(); }
+        }, handler);
+        check(configured.await(10, TimeUnit.SECONDS) && session[0] != null, "the reopened camera's session was not configured");
+        CaptureRequest.Builder repeating = device[0].createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+        repeating.addTarget(yuv.getSurface());
+        session[0].setRepeatingRequest(repeating.build(), null, handler);
+        check(frame.await(10, TimeUnit.SECONDS), "no YUV frame after the reopen");
+        System.out.println("[cam] reopened yuv " + result[0]);
+        check(result[0].startsWith("ok"), "the reopened camera's YUV frame differs");
+        device[0].close();
+        yuv.close();
     }
 
     /** Open Camera's camera2 stream set on a small window: a SurfaceTexture preview no larger than the display (it drops bigger preview sizes;

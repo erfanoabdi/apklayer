@@ -3,6 +3,18 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: cameraserver no longer crashes when the camera provider restarts under an open camera (bionic_translation 0063)
+- The SIGSEGV (in libc under libbinder, after BR_DEAD_REPLY and the drain timeout) was not binder: the open device's transactions to the
+  dead provider failed as on Android, Camera3Device went into its error state (the app gets onDisconnected/ERROR_CAMERA_DEVICE) and
+  setErrorStateLocked's CameraTraces::saveTrace unwound every thread with libunwindstack's ThreadUnwinder. It signals each thread with 33
+  (BIONIC_SIGNAL_BACKTRACE); bionic_sigaction already puts that handler on glibc's SIGRTMIN (33 is glibc's internal SIGSETXID), but
+  tgkill reached glibc's own (the linker and ld.so resolve the plain name there), so 33 arrived and glibc's setxid handler dereferenced
+  its unset command (fault 0x8; strace: rt_sigaction(SIGRT_2), tgkill(SIGRT_1)). Fix: bionic_kill, bionic_tgkill and bionic_tkill send
+  33 as SIGRTMIN. Test: tests/vm/camera-reload.sh (group camera; hello.camera -Dhello.reload): the provider restarts at "[cam] reload",
+  the device reports the disconnect and error, the camera comes back available, opens again with a YUV frame of the bars, no fault in this
+  run's cameraserver logs. Parallels (own tree): camera (also failed with the crash before the fix), hardware, binder, hub-services,
+  native pass. No prebuilt library changed (bionic_translation is built from the patch series).
+
 ## 2026-11-10: SIGTERM that did not end processes (an app JVM's stalled end, a provider reload, the spare's records)
 - Camera (PLAN: "cameraserver and the provider outlived `apklayer stop` after a restart, SIGTERM ignored"): the cause was the stack daemon's
   blocked SIGTERM inherited by the services it restarts, fixed 2026-11-04 (05d02fbc, children get the default mask; the camera note was

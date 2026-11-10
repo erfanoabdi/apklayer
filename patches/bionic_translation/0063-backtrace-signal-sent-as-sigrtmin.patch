@@ -1,0 +1,39 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: kill, tgkill and tkill send bionic's signal 33 as SIGRTMIN, where bionic_sigaction put its handler
+
+bionic_sigaction installs a handler for 33 (BIONIC_SIGNAL_BACKTRACE) on glibc's SIGRTMIN, since 33 is glibc's internal SIGSETXID; the
+senders still sent 33. libunwindstack's ThreadUnwinder (libutils ProcessCallStack, cameraserver's CameraTraces::saveTrace when a camera
+device goes into its error state) sent it with glibc's tgkill (the linker and ld.so both find plain tgkill in glibc before libc_bio) and
+it hit glibc's setxid handler, which dereferenced its unset command (SIGSEGV at 0x8). bionic_tgkill and bionic_tkill take the calls now.
+
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -88,8 +88,13 @@
+ int bionic_pthread_sigmask(int how, const unsigned long *set, unsigned long *oset) { return apk_sigmask(1, how, set, oset); }
+ int bionic_sigprocmask(int how, const unsigned long *set, unsigned long *oset) { return apk_sigmask(0, how, set, oset); }
+ 
++/* apklayer patch: bionic's 33 (BIONIC_SIGNAL_BACKTRACE, libunwindstack's thread signal) is glibc's internal SIGSETXID, whose handler faults
++ * on it; bionic_sigaction installs a 33 handler on SIGRTMIN, so the senders send that too (cameraserver's CameraTraces::saveTrace crashed) */
++#define APK_SIG(sig) ((sig) == 33 ? SIGRTMIN : (sig))
++
+ int bionic_kill(pid_t pid, int sig) /* apklayer patch: see docs/PATCHES.md */
+ {
++	sig = APK_SIG(sig);
+ 	if (pid != getpid() && getenv("APKLAYER_COMPONENT_HOST")) {
+ 		errno = EPERM;
+ 		return -1;
+@@ -102,12 +107,14 @@
+ 	verbose("%d, %d, %d", tgid, tid, sig);
+ 	return syscall(SYS_tgkill, tgid, tid, sig);
+ }
++int bionic_tgkill(int tgid, int tid, int sig) { return syscall(SYS_tgkill, tgid, tid, APK_SIG(sig)); }  /* apklayer patch: plain tgkill is glibc's */
+ 
+ int tkill(int tid, int sig)
+ {
+ 	verbose("%d, %d", tid, sig);
+ 	return syscall(SYS_tkill, tid, sig);
+ }
++int bionic_tkill(int tid, int sig) { return syscall(SYS_tkill, tid, APK_SIG(sig)); }
+ 
+ // Stuff needed for runtime compatibility, but not neccessary for linking
+ // Also stuff that exists in glibc, but needs to be wrapped for runtime compatibility
