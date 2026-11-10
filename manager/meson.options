@@ -1,2 +1,4 @@
 option('slint', type: 'string', value: '',
   description: 'where manager/fetch-slint.sh put Slint (cpp/, bin/slint-compiler, material/); empty: ~/.cache/apklayer/slint')
+option('wlshell', type: 'boolean', value: false,
+  description: 'the own wl_shell platform (src/wlshell.cpp) for a Slint built without winit: Sailfish OS (rpm/apklayer.spec, tools/release/sailfish-slint.sh)')

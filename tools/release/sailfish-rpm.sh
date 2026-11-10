@@ -2,7 +2,7 @@
 # sailfish-rpm.sh <version> <prebuilts dir> <out dir>: the Sailfish OS RPMs (aarch64) of this tree's HEAD, built in the Sailfish OS build root
 # (rpm/Dockerfile: the Platform SDK's SailfishOS-5.0.0.62 aarch64 target as a native aarch64 container; docs/HALIUM.md "Building for Sailfish OS")
 # the way .github/workflows/release.yml builds them: apklayer and apklayer-devel (rpm/apklayer.spec), and what Sailfish's repositories lack:
-# temurin-21-jdk, libmd, libbsd, libunwind (rpm/*.spec, sources in rpm/sources). Needs docker on an aarch64 host (the Mac's OrbStack, GitHub's
+# temurin-21-jdk, libmd, libbsd, libunwind (rpm/*.spec, sources in rpm/sources); apklayer-manager's Slint (sailfish-slint.sh). Needs docker on an aarch64 host (the Mac's OrbStack, GitHub's
 # ubuntu-24.04-arm), 7z (or 7zz), curl; downloads go to $APKLAYER_SAILFISH_CACHE (default ~/.cache/apklayer/sailfish) once. The RPMs land in <out dir>.
 set -eu
 if [ "${1:-}" = --in-root ]; then  # inside the build root: <version>; /work the tree, /cache the sources and prebuilts, /out the RPMs
@@ -16,8 +16,10 @@ if [ "${1:-}" = --in-root ]; then  # inside the build root: <version>; /work the
         rm -f /out/*-debuginfo-* /out/*-debugsource-*
         zyp -n --no-gpg-checks in --allow-unsigned-rpm /out/"$spec"*-"$v".aarch64.rpm
     done
-    set -- --define "_topdir $top" --define "apklayer_version $version" --define "apklayer_prebuilts /cache/prebuilts" /work/rpm/apklayer.spec
+    set -- --define "_topdir $top" --define "apklayer_version $version" --define "apklayer_prebuilts /cache/prebuilts" \
+        --define "apklayer_slint /cache/slint" /work/rpm/apklayer.spec
     zyp -n in $(rpmspec -q --buildrequires "$@" | sed 's/ .*//' | sort -u)
+    sh /work/tools/release/sailfish-slint.sh /cache/slint  # apklayer-manager's Slint, built once (crates in /cache/cargo)
     rpmbuild -bb "$@"
     cp "$top"/RPMS/*/apklayer-*"$version"-*.rpm /out/
     exit 0
@@ -32,7 +34,7 @@ mkdir -p "$cache/sources"
 # the sources (rpm/sources), each checked
 grep -v '^#' rpm/sources | while read -r sum url; do
     f="$cache/sources/$(basename "$url")"
-    case "$f" in *SDK_Target*) f="$cache/target.tar.7z" ;; esac
+    case "$f" in *SDK_Target*) f="$cache/target.tar.7z" ;; */slint/archive/*) f="$cache/sources/slint-$(basename "$url")" ;; esac
     [ -s "$f" ] || curl -sfL --retry 5 -o "$f" "$url"
     case "$sum" in
         md5:*) have="md5:$(if command -v md5sum >/dev/null; then md5sum "$f" | cut -d' ' -f1; else md5 -q "$f"; fi)" ;;
