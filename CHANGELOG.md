@@ -3,6 +3,16 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: SIGTERM soak closes retest (c)
+- tests/corpus/soak-sigterm.py (runs on the host, in one instance): the corpus runner's end of an app repeated: launch to "started ... depth=1", the first frame and 3 s without frames, a screenshot, SIGTERM to every pid in the instance's run.* records, the second launch as soon as the first `apklayer run` returns, SIGTERM again, `apklayer stop`. Each SIGTERMed process's time to exit through a pidfd (no polling) into $APKLY_OUT/soak.jsonl; one alive 5 s after its SIGTERM is captured before the deadline (/proc status with SigBlk/SigIgn/SigCgt, threads and wchan, kernel stacks where sudo -n works, jcmd Thread.print, the instance's logs) into $APKLY_OUT/keep/; one alive after 12 s is captured again, SIGKILLed and fails the soak. The capture path was checked with two shells that ignore SIGTERM (7 s: captured, recorded; 60 s: captured twice, killed, failed).
+- Release 0.4.14 code, unsandboxed instances as tests/run makes them. Exit after SIGTERM, all processes (app JVM, spare JVM, its holder, the window sink):
+  | host / app | rounds | launches | processes | median | max | over 5 s |
+  |---|---|---|---|---|---|---|
+  | Parallels, UiBench | 53 | 106 | 424 | 0.35 s | 0.37 s | 0 |
+  | x86 PC, Telegram FOSS (arm64 libraries through the bridge) | 53 | 106 | 424 | 0.35 s | 0.48 s | 0 |
+  | x86 PC, UiBench | 52 | 104 | 416 | 0.35 s | 0.46 s | 0 |
+  Every launch settled, every `apklayer run` exited 143, no exit deadline hit, nothing captured. PLAN retest (c) closed: the original cause stays unknown, a stall is bounded by the 10 s deadline.
+
 ## 2026-11-10: release 0.4.14 (runtime 0.4.13)
 - 0.4.13 with the Sailfish OS RPM: its build failed on gfxstream's X11 include (glx.h; the Sailfish build root has no X11), so libapklayer-gles1 is built from the prebuilts' gfxstream only where X11's headers exist (a Halium device's GLES driver has ES 1 itself). Built locally first (tools/release/sailfish-rpm.sh).
 
