@@ -128,6 +128,10 @@ static void kb_key(void *d, struct wl_keyboard *k, uint32_t s, uint32_t t, uint3
     last_input_serial = s;
     int down = st == WL_KEYBOARD_KEY_STATE_PRESSED;
     if (debug_input) fprintf(stderr, "[shell] key %u down=%d focus=%d\n", key, down, keyboard_focus != NULL);
+    if (key == 87 /* KEY_F11 */ && keyboard_focus) {  /* the desktop's fullscreen key, as browsers take it: the window, not the app */
+        if (down) window_set_fullscreen(keyboard_focus, !keyboard_focus->want_fullscreen);
+        return;
+    }
     key_event(key, down);
     if (kb_own_state && xkb_state && k) xkb_state_update_key(xkb_state, key + 8, down ? XKB_KEY_DOWN : XKB_KEY_UP);
     if (down && xkb_keymap_g && repeat_rate > 0 && xkb_keymap_key_repeats(xkb_keymap_g, key + 8)) {

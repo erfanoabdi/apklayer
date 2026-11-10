@@ -21,6 +21,19 @@ public class ShadowHostProcess extends ShadowProcess {
 
     /** SIGKILL, as on Android: this process ends at once (the hub sees it die: its windows go, the activities it showed are finished), or another
      *  process of this app (Android lets an app kill only its own uid's processes; the hub knows them). Robolectric's only records the pid. */
+    /** The app's frames that asked for the kill (who ends an app is the first question when it "crashes" without a crash). */
+    private static String caller() {
+        StringBuilder out = new StringBuilder();
+        int n = 0;
+        for (StackTraceElement frame : new Throwable().getStackTrace()) {
+            String c = frame.getClassName();
+            if (c.startsWith("apklayer.") || c.startsWith("android.") || c.startsWith("java.") || c.startsWith("jdk.") || c.startsWith("org.robolectric.")) continue;
+            out.append(n == 0 ? "" : " < ").append(c).append('.').append(frame.getMethodName());
+            if (++n == 6) break;
+        }
+        return n == 0 ? "the framework" : out.toString();
+    }
+
     @Implementation protected static void killProcess(int pid) {
         if (HubHost.hub) return;  // never the hub's JVM (system_server)
         if (pid == PID) {
@@ -33,7 +46,7 @@ public class ShadowHostProcess extends ShadowProcess {
                 try { HubProtocol.call(HubClient.current().binder(), HubProtocol.DESCRIPTOR, HubProtocol.RESTART_ON_DEATH, request -> request.writeTypedObject(below, 0), reply -> null); }
                 catch (RuntimeException hubGone) { /* nothing comes back then */ }
             }
-            System.out.println("[apklayer] Process.killProcess(myPid): this process ends" + (below != null ? ", " + below.getComponent() + " comes back in a new one" : "")); System.out.flush();
+            System.out.println("[apklayer] Process.killProcess(myPid): this process ends" + (below != null ? ", " + below.getComponent() + " comes back in a new one" : "") + ", called from " + caller()); System.out.flush();
             NativeLoader.endWithoutNativeDestructors();
             Runtime.getRuntime().halt(128 + 9);
         }

@@ -1,0 +1,58 @@
+apklayer patch: a window's requested visible types come with its add. IWindowSession.addToDisplay[AsUser] carries them
+(requestedVisibleTypes): ViewRootImpl.setView applies FLAG_FULLSCREEN, the theme's fullscreen and the legacy system UI flags to its
+InsetsController before the add, and the controller tells the session nothing while the window is not added. ShadowWindowManagerGlobal
+used a fresh WindowInfo's default (every bar visible), so each new activity window left fullscreen: PGR was fullscreen at its splash
+and a window again a second later, when its main activity's window came. And only a window that can be DisplayPolicy's top
+fullscreen window (an application window filling the display) decides the bars: a dialog, popup or toast keeps the activity's.
+Against external/robolectric 87aa52b08 (REVISION), after 0004, 0019, 0022, 0026 and 0027.
+---
+--- a/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java
++++ b/shadows/framework/src/main/java/org/robolectric/shadows/ShadowWindowManagerGlobal.java
+@@ -241,10 +241,20 @@
+                 return created;
+               });
+       int displayId = (int) args[sdk <= R ? 4 : 3];
++      // apklayer patch: the window's own requested visible types come with the add (IWindowSession.addToDisplay[AsUser]'s
++      // requestedVisibleTypes): ViewRootImpl applies FLAG_FULLSCREEN and the theme's fullscreen to its InsetsController before the add,
++      // and the controller tells the session nothing until the window is added. A fresh WindowInfo's default (all bars visible) made every
++      // new activity window leave fullscreen (PGR: fullscreen at the splash, a window again a second later with its main activity).
++      if (sdk >= UPSIDE_DOWN_CAKE) {
++        int at = args.length >= 8 ? 5 : 4; // addToDisplayAsUser has the user id before it
++        if (args[at] instanceof Integer) windowInfo.requestedVisibleTypes = (Integer) args[at];
++      }
+       // TODO: This is to allow window insets to be keyed per display, i.e. a window has requested
+       //  insets visibility changed before it was added to a display, does android actually allow
+       //  per display window inset visibilities?
+-      if (sdk >= R) {
++      WindowManager.LayoutParams added = findFirst(WindowManager.LayoutParams.class, args);
++      if (added != null) windowInfo.attrs.copyFrom(added); // apklayer patch: its own type and size before its first relayout
++      if (sdk >= R && controlsSystemBars(added)) { // apklayer patch: see controlsSystemBars
+         applyInsets(displayId, windowInfo.requestedVisibleTypes);
+       }
+       windowInfo.displayId = displayId;
+@@ -528,11 +538,24 @@
+       } else {
+         windowInfo.requestedVisibleTypes = (int) args[1];
+       }
+-      if (windowInfo.displayId != -1) {
++      if (windowInfo.displayId != -1 && controlsSystemBars(windowInfo.attrs)) { // apklayer patch: see controlsSystemBars
+         applyInsets(windowInfo.displayId, windowInfo.requestedVisibleTypes);
+       }
+     }
+ 
++    /**
++     * apklayer patch: whether this window's requested bars decide the screen's, as DisplayPolicy's top fullscreen window does
++     * (canBeTopFullscreenOpaqueWindow): an application window that fills the display. A dialog, a popup or a toast keeps the bars of
++     * the activity under it (its default, every bar visible, had made a fullscreen game a window again).
++     */
++    private static boolean controlsSystemBars(@Nullable WindowManager.LayoutParams attrs) {
++      return attrs != null
++          && attrs.type >= WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW
++          && attrs.type <= WindowManager.LayoutParams.LAST_APPLICATION_WINDOW
++          && attrs.width == WindowManager.LayoutParams.MATCH_PARENT
++          && attrs.height == WindowManager.LayoutParams.MATCH_PARENT;
++    }
++
+     void applyInsets(int displayId, int requestedVisibleTypes) {
+       checkState(displayId != -1);
+       SystemUi systemUi = systemUiForDisplay(displayId);

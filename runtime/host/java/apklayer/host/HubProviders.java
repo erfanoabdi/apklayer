@@ -27,10 +27,20 @@ final class HubProviders {
             System.out.println("[apklayer-hub] " + caller.name() + " cannot reach the private provider " + authority);
             throw new SecurityException("Provider " + authority + " is not exported");
         }
-        HubDirectory.Peer target = processes.process(info.packageName);
-        if (target == null) throw new IllegalStateException("Cannot start " + info.packageName + " for provider " + authority);
-        return HubProtocol.call(target.endpoint(), HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_GET_PROVIDER, request -> request.writeString(authority),
-                reply -> reply.readStrongBinder());
+        // the provider's process may have just died with its death notice still to come: as ActivityManager.getContentProvider, a dead
+        // process is started again (PGR asked microG's provider while microG's last process was ending, and the error ended the game)
+        for (int attempt = 0; ; attempt++) {
+            HubDirectory.Peer target = processes.process(info.packageName);
+            if (target == null) throw new IllegalStateException("Cannot start " + info.packageName + " for provider " + authority);
+            try {
+                return HubProtocol.call(target.endpoint(), HubProtocol.ENDPOINT, HubProtocol.ENDPOINT_GET_PROVIDER, request -> request.writeString(authority),
+                        reply -> reply.readStrongBinder());
+            } catch (IllegalStateException failure) {
+                if (attempt > 0 || !(failure.getCause() instanceof android.os.DeadObjectException)) throw failure;
+                System.out.println("[apklayer-hub] provider " + authority + ": " + target.name() + " pid=" + target.pid() + " is gone, starting it again");
+                directory.endpointDied(target);
+            }
+        }
     }
 
     /** The provider's binder for the hub itself, the instance's system (uid 1000): what system_server writes at boot (HubBootSettings). */

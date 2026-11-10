@@ -603,6 +603,9 @@ final class HubDirectory extends Binder {
             default -> { return super.onTransact(code, request, reply, flags); }
         }
     }
+    /** A call to the peer's endpoint found it dead before its death notice came (linkToDeath runs on a binder thread): the same as the notice. */
+    void endpointDied(Peer peer) { remove(peer); }
+
     private void remove(Peer peer) {
         synchronized (peers) { if (!peers.remove(peer.pid, peer)) return; }
         System.out.println("[apklayer-hub] died " + peer.name + " pid=" + peer.pid);

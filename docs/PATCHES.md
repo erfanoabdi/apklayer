@@ -42,6 +42,7 @@ and list it here. The M1 seed's patch log is in `archive/seed-m1/docs/PATCHES.md
 | 0025-tls-dtpoff | `R_*_DTPOFF` without the load address (x86_64 `__tls_get_addr`) |
 | 0026-app-namespace | two linker namespaces (app and system), as Android's classloader namespace |
 | 0027-stdio-file-mapping-on-glibc | the FILE-taking stdio functions map bionic's standard streams on glibc too |
+- Robolectric 0028-window-add-requested-visible-types: `addToDisplay` takes the window's own requested visible types from the call (IWindowSession's `requestedVisibleTypes` argument, SDK 34+) instead of a fresh default (every bar visible): ViewRootImpl applies FLAG_FULLSCREEN and the theme's fullscreen before the add, so each new activity window had left fullscreen (PGR: fullscreen at the splash, a window again with its main activity); and only an application window filling the display decides the bars (DisplayPolicy's top fullscreen window): a dialog, popup or toast keeps the activity's.
 | 0028-getenv-home-set-by-app | `getenv("HOME")` returns a HOME the app set itself |
 | compat/gcc-before-13-cxx2b | `-std=c++2b` for gcc before 13 |
 | compat/gcc-before-11-cxx20 | `-std=c++20` for gcc before 11 (Sailfish OS 5.0: gcc 10), on top of the previous one |
