@@ -1,6 +1,49 @@
 {
-  "latest": "0.4.13",
+  "latest": "0.4.14",
   "releases": [
+    {
+      "version": "0.4.14",
+      "date": "2026-11-10",
+      "notes_url": "https://github.com/erfanoabdi/apklayer/releases/tag/v0.4.14",
+      "converter_abi": 3,
+      "data_format": 1,
+      "runtime": {
+        "version": "0.4.13",
+        "prebuilts": "7c286230a4e94e0e9dddb857b61f68a1cb505361",
+        "assets": {
+          "arm64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.14/apklayer-runtime-arm64-0.4.13.tar.zst",
+            "sha256": "1e28b3e70205f098a591760a2cd5828a7de958c0bddb2be326da44aa59a36f5b",
+            "size": 514479682,
+            "unpacked_size": 897710080
+          },
+          "amd64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.14/apklayer-runtime-x86_64-0.4.13.tar.zst",
+            "sha256": "4ebae7157d63bfe291b57b9409f76b074f91acdd9ad3d6bde4e12c13fdb2aeba",
+            "size": 549605244,
+            "unpacked_size": 1036789760
+          }
+        }
+      },
+      "debs": {
+        "noble": {
+          "arm64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.14/apklayer_0.4.14-1.noble1_arm64.deb",
+            "sha256": "83da108b4b7c638f0fb848e9dd5bb6d21ee75acf27b9303afdda65015509efd8"
+          }
+        },
+        "trixie": {
+          "amd64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.14/apklayer_0.4.14-1.trixie1_amd64.deb",
+            "sha256": "cae8cc36a49842b050612027f51bc1c94969b65c96c2f03eff34147619f26302"
+          },
+          "arm64": {
+            "url": "https://github.com/erfanoabdi/apklayer/releases/download/v0.4.14/apklayer_0.4.14-1.trixie1_arm64.deb",
+            "sha256": "84fa5fec13aa0641aa2fc0ed320b22b2d35a6ba2937e4ce6fd4e5e23a68eaf64"
+          }
+        }
+      }
+    },
     {
       "version": "0.4.13",
       "date": "2026-11-10",
