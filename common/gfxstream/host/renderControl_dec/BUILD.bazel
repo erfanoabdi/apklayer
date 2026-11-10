@@ -1,0 +1,31 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//:build_variables.bzl", "GFXSTREAM_HOST_COPTS", "GFXSTREAM_HOST_DEFINES")
+
+package(
+    default_applicable_licenses = ["//:gfxstream_license"],
+    default_visibility = ["//:gfxstream"],
+)
+
+cc_library(
+    name = "renderControl_dec",
+    srcs = [
+        "renderControl_dec.cpp",
+        "renderControl_server_context.cpp",
+    ],
+    hdrs = [
+        "renderControl_dec.h",
+        "renderControl_opcodes.h",
+        "renderControl_server_context.h",
+        "renderControl_server_proc.h",
+        "renderControl_types.h",
+    ],
+    copts = GFXSTREAM_HOST_COPTS,
+    defines = GFXSTREAM_HOST_DEFINES,
+    includes = ["."],
+    deps = [
+        "//common/logging:gfxstream_common_logging",
+        "//host/decoder_common:gfxstream_host_decoder_common",
+        "//host/iostream:gfxstream_host_iostream",
+        "//third_party/opengl:gfxstream_egl_headers",
+    ],
+)

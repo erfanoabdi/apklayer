@@ -1,0 +1,66 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//:build_variables.bzl", "GFXSTREAM_HOST_COPTS", "GFXSTREAM_HOST_DEFINES")
+
+package(
+    default_applicable_licenses = ["//:gfxstream_license"],
+    default_visibility = ["//:gfxstream"],
+)
+
+cc_library(
+    name = "gfxstream_vulkan_cereal_headers",
+    hdrs = [
+        "common/goldfish_vk_deepcopy.h",
+        "common/goldfish_vk_dispatch.h",
+        "common/goldfish_vk_extension_structs.h",
+        "common/goldfish_vk_private_defs.h",
+        "common/goldfish_vk_transform.h",
+        "common/vk_struct_id.h",
+    ],
+    copts = GFXSTREAM_HOST_COPTS,
+    defines = GFXSTREAM_HOST_DEFINES,
+    includes = ["common"],
+    deps = [
+        "//common/base:gfxstream_common_base",
+        "//common/logging:gfxstream_common_logging",
+        "//host/vulkan:gfxstream_vulkan_headers",
+        "//third_party/vulkan:gfxstream_vulkan_headers",
+        "//third_party/xcb",
+    ],
+)
+
+cc_library(
+    name = "gfxstream_vulkan_cereal",
+    srcs = [
+        "common/goldfish_vk_deepcopy.cpp",
+        "common/goldfish_vk_dispatch.cpp",
+        "common/goldfish_vk_extension_structs.cpp",
+        "common/goldfish_vk_marshaling.cpp",
+        "common/goldfish_vk_reserved_marshaling.cpp",
+        "common/goldfish_vk_transform.cpp",
+    ],
+    hdrs = [
+        "common/goldfish_vk_deepcopy.h",
+        "common/goldfish_vk_dispatch.h",
+        "common/goldfish_vk_extension_structs.h",
+        "common/goldfish_vk_marshaling.h",
+        "common/goldfish_vk_private_defs.h",
+        "common/goldfish_vk_reserved_marshaling.h",
+        "common/goldfish_vk_transform.h",
+        "common/vk_struct_id.h",
+    ],
+    copts = GFXSTREAM_HOST_COPTS,
+    defines = GFXSTREAM_HOST_DEFINES,
+    includes = ["common"],
+    deps = [
+        "//common/base:gfxstream_common_base",
+        "//common/logging:gfxstream_common_logging",
+        "//host:gfxstream_host_headers",
+        "//host/common:gfxstream_host_common",
+        "//host/features:gfxstream_host_features",
+        "//host/tracing:gfxstream_host_tracing",
+        "//host/vulkan:gfxstream_vulkan_headers",
+        "//host/vulkan:gfxstream_vulkan_server_headers",
+        "//third_party/vulkan:gfxstream_vulkan_headers",
+        "//third_party/xcb",
+    ],
+)

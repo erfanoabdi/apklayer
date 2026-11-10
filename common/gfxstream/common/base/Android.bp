@@ -1,0 +1,49 @@
+package {
+    default_team: "trendy_team_automotive",
+    default_applicable_licenses: ["hardware_google_gfxstream_license"],
+}
+
+cc_library_static {
+    name: "libgfxstream_common_base",
+    defaults: ["gfxstream_defaults"],
+    srcs: [
+        "AlignedBuf.cpp",
+        "CpuTime.cpp",
+        "FileUtils.cpp",
+        "MessageChannel.cpp",
+        "PathUtils.cpp",
+        "SharedMemory_posix.cpp",
+        "StringFormat.cpp",
+        "System.cpp",
+        "Tracing.cpp",
+        "Thread_pthread.cpp",
+    ],
+    target: {
+        android: {
+            cppflags: [
+                "-DHAVE_MEMFD_CREATE",
+            ],
+            srcs: [
+                "UdmabufCreator_linux.cpp",
+            ],
+        },
+        host: {
+            srcs: [
+                "UdmabufCreator_stub.cpp",
+            ],
+        },
+    },
+    export_include_dirs: [
+        "include",
+    ],
+    static_libs: [
+        "libgfxstream_common_logging",
+    ],
+    export_static_lib_headers: [
+        "libgfxstream_common_logging",
+    ],
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.virt",
+    ],
+}

@@ -1,0 +1,413 @@
+// Copyright (C) 2018 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "vulkan_dispatch.h"
+
+#include "gfxstream/shared_library.h"
+#include "gfxstream/files/PathUtils.h"
+#include "gfxstream/synchronization/Lock.h"
+#include "gfxstream/system/System.h"
+#include "gfxstream/common/logging.h"
+
+#include <sstream>
+
+using gfxstream::base::AutoLock;
+using gfxstream::base::Lock;
+using gfxstream::base::pj;
+using gfxstream::base::pathExists;
+
+namespace gfxstream {
+namespace host {
+namespace vk {
+
+// Function to check if the current process is running with full elevated rights
+bool processInHighIntegrityMode() {
+    bool highIntegrity = false;
+#ifdef _WIN32
+    // Check high integrity mode (e.g. admin mode), see is_high_integrity in Vulkan Loader
+    HANDLE processHandle = GetCurrentProcess();
+    HANDLE processToken = NULL;
+    if (!OpenProcessToken(processHandle, TOKEN_QUERY | TOKEN_QUERY_SOURCE, &processToken)) {
+        return false;
+    }
+    uint8_t labelBuffer[SECURITY_MAX_SID_SIZE + sizeof(DWORD)];
+    DWORD bufferSize = 0;
+    if (GetTokenInformation(processToken, TokenIntegrityLevel, labelBuffer, sizeof(labelBuffer),
+                            &bufferSize) != 0) {
+        const TOKEN_MANDATORY_LABEL* mandatoryLabel = (const TOKEN_MANDATORY_LABEL*)labelBuffer;
+        const DWORD subAuthorityCount = *GetSidSubAuthorityCount(mandatoryLabel->Label.Sid);
+        const DWORD integrityLevel =
+            *GetSidSubAuthority(mandatoryLabel->Label.Sid, subAuthorityCount - 1);
+
+        highIntegrity = (integrityLevel >= SECURITY_MANDATORY_HIGH_RID);
+    }
+    CloseHandle(processToken);
+#endif
+
+    return highIntegrity;
+}
+
+static std::string icdJsonNameToProgramAndLauncherPaths(const std::string& icdFilename) {
+    std::string suffix = pj({"lib64", "vulkan", icdFilename});
+    std::string fullpath = pj({gfxstream::base::getProgramDirectory(), suffix});
+    if (!pathExists(fullpath.c_str())) {
+        fullpath = pj({gfxstream::base::getLauncherDirectory(), suffix});
+    }
+    if (!pathExists(fullpath.c_str())) {
+        fullpath = pj({gfxstream::base::getLauncherDirectory(), "lib", "qemu", suffix});
+    }
+    return fullpath;
+}
+
+static void setIcdPaths(const std::string& icdFilename) {
+    const std::string paths = icdJsonNameToProgramAndLauncherPaths(icdFilename);
+    GFXSTREAM_INFO("Setting ICD filenames for the loader = %s", paths.c_str());
+    // Set both for backwards compatibility
+    gfxstream::base::setEnvironmentVariable("VK_DRIVER_FILES", paths);
+    gfxstream::base::setEnvironmentVariable("VK_ICD_FILENAMES", paths);
+}
+
+static void initIcdPaths(bool forTesting) {
+    auto androidIcd = gfxstream::base::getEnvironmentVariable("ANDROID_EMU_VK_ICD");
+
+#ifdef CONFIG_AEMU
+    if (forTesting) {
+#if defined(__APPLE__) && !defined(__arm64__) || defined(__WIN32__)
+        const char* testingICD = "swiftshader";
+#else
+        const char* testingICD = "lavapipe";
+#endif
+        if (!androidIcd.empty()) {
+            GFXSTREAM_WARNING(
+                "%s: In test environment, enforcing %s ICD, existing ANDROID_EMU_VK_ICD "
+                "value('%s') will be ignored",
+                __func__, testingICD, androidIcd.c_str());
+        } else {
+            GFXSTREAM_INFO("%s: In test environment, enforcing %s ICD.", __func__, testingICD);
+        }
+        gfxstream::base::setEnvironmentVariable("ANDROID_EMU_VK_ICD", testingICD);
+        androidIcd = testingICD;
+    } else
+#endif
+    if (androidIcd == "") {
+        // Rely on user to set VK_DRIVER_FILES
+        return;
+    }
+
+    // In high integrity mode (e.g. admin mode on windows), loader won't be able to read the
+    // environment variables. TODO(b/446119531) Load the driver dlls directly in this case.
+    // Note: in testing mode the loader allows env vars in high integrity mode
+    const bool highIntegrityMode = processInHighIntegrityMode();
+    if (highIntegrityMode && !forTesting) {
+        GFXSTREAM_ERROR("%s: Vulkan ICD selection is not supported with elevated permissions.",
+                        __func__);
+    }
+
+    if (androidIcd == "lavapipe") {
+        GFXSTREAM_INFO("%s: ICD set to 'lavapipe', using Lavapipe ICD", __func__);
+        setIcdPaths("lvp_icd.json");
+    } else if (androidIcd == "swiftshader") {
+        GFXSTREAM_INFO("%s: ICD set to 'swiftshader', using Swiftshader ICD", __func__);
+        setIcdPaths("vk_swiftshader_icd.json");
+    } else {
+#ifdef __APPLE__
+        // Mac: Use MoltenVK by default unless GPU mode is set to swiftshader
+        const bool verboseLogs =
+            (gfxstream::base::getEnvironmentVariable("ANDROID_EMUGL_VERBOSE") == "1");
+        if (androidIcd == "kosmickrisp") {
+            gfxstream::base::setEnvironmentVariable("ANDROID_EMU_VK_ICD", "kosmickrisp");
+            setIcdPaths("libkosmickrisp_icd.json");
+
+            if (verboseLogs) {
+                gfxstream::base::setEnvironmentVariable("MESA_KK_DEBUG", "1");
+            }
+        } else {
+            if (androidIcd != "moltenvk") {
+                GFXSTREAM_WARNING("%s: Unknown ICD (%s), resetting to MoltenVK", __func__,
+                                  androidIcd.c_str());
+            }
+            gfxstream::base::setEnvironmentVariable("ANDROID_EMU_VK_ICD", "moltenvk");
+            setIcdPaths("MoltenVK_icd.json");
+            // Configure MoltenVK library with environment variables
+            // 0: No logging.
+            // 1: Log errors only.
+            // 2: Log errors and warning messages.
+            // 3: Log errors, warnings and informational messages.
+            // 4: Log errors, warnings, infos and debug messages.
+            const char* logLevelValue = verboseLogs ? "4" : "1";
+            gfxstream::base::setEnvironmentVariable("MVK_CONFIG_LOG_LEVEL", logLevelValue);
+
+            //  Limit MoltenVK to use single queue, as some older ANGLE versions
+            //  expect this for -guest-angle to work.
+            //  0: Limit Vulkan to a single queue, with no explicit semaphore
+            //  synchronization, and use Metal's implicit guarantees that all operations
+            //  submitted to a queue will give the same result as if they had been run in
+            //  submission order.
+            gfxstream::base::setEnvironmentVariable("MVK_CONFIG_VK_SEMAPHORE_SUPPORT_STYLE", "0");
+
+            // TODO(b/364055067)
+            // MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS is not working correctly
+            gfxstream::base::setEnvironmentVariable("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", "0");
+
+            // MVK_CONFIG_USE_MTLHEAP is required for VK_EXT_external_memory_metal
+            gfxstream::base::setEnvironmentVariable("MVK_CONFIG_USE_MTLHEAP", "1");
+        }
+#else
+        // By default, on other platforms, just use whatever the system
+        // is packing.
+#endif
+    }
+}
+
+class SharedLibraries {
+   public:
+    explicit SharedLibraries(size_t sizeLimit = 1) : mSizeLimit(sizeLimit) {}
+
+    size_t size() const { return mLibs.size(); }
+
+    bool addLibrary(const std::string& path) {
+        if (size() >= mSizeLimit) {
+            GFXSTREAM_WARNING("Cannot add library %s due to size limit(%d)", path.c_str(),
+                              mSizeLimit);
+            return false;
+        }
+
+        auto library = SharedLibrary::open(path.c_str());
+        if (library) {
+            mLibs.push_back(library);
+            GFXSTREAM_INFO("Added library: %s", path.c_str());
+            return true;
+        } else {
+            // This is expected when searching for a valid library path
+            GFXSTREAM_DEBUG("Library cannot be added: %s", path.c_str());
+            return false;
+        }
+    }
+
+    bool addFirstAvailableLibrary(const std::vector<std::string>& possiblePaths) {
+        for (const std::string& possiblePath : possiblePaths) {
+            if (addLibrary(possiblePath)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    ~SharedLibraries() = default;
+
+    void* dlsym(const char* name) {
+        for (const auto& lib : mLibs) {
+            void* funcPtr = reinterpret_cast<void*>(lib->findSymbol(name));
+            if (funcPtr) {
+                return funcPtr;
+            }
+        }
+        return nullptr;
+    }
+
+   private:
+    size_t mSizeLimit;
+    std::vector<SharedLibrary*> mLibs;
+};
+
+static constexpr size_t getVulkanLibraryNumLimits() {
+    return 1;
+}
+
+class VulkanDispatchImpl {
+   public:
+    VulkanDispatchImpl() : mVulkanLibs(getVulkanLibraryNumLimits()) {}
+
+    void initialize(bool forTesting);
+
+    static std::vector<std::string> getPossibleLoaderPathBasenames() {
+#if defined(__APPLE__)
+        return std::vector<std::string>{"libvulkan.dylib"};
+#elif defined(__linux__)
+        return std::vector<std::string>{
+            "libvulkan.so",
+            "libvulkan.so.1",
+        };
+#elif defined(_WIN32)
+        return std::vector<std::string>{"vulkan-1.dll"};
+#elif defined(__QNX__)
+        return std::vector<std::string>{
+            "libvulkan.so",
+            "libvulkan.so.1",
+        };
+#else
+#error "Unhandled platform in VulkanDispatchImpl."
+#endif
+    }
+
+    std::vector<std::string> getPossibleLoaderPaths() {
+        const std::string explicitPath =
+            gfxstream::base::getEnvironmentVariable("ANDROID_EMU_VK_LOADER_PATH");
+        if (!explicitPath.empty()) {
+            return {
+                explicitPath,
+            };
+        }
+
+        std::vector<std::string> possiblePaths;
+        const std::vector<std::string> possibleBasenames = getPossibleLoaderPathBasenames();
+
+        // 1. Add paths relative to the program/launcher directories.
+        std::vector<std::string> possibleDirectories;
+
+        // If in testing mode, prioritize testlib64.
+        if (mForTesting) {
+            possibleDirectories.push_back(
+                pj({gfxstream::base::getProgramDirectory(), "testlib64"}));
+            possibleDirectories.push_back(
+                pj({gfxstream::base::getLauncherDirectory(), "testlib64"}));
+        }
+
+        // Always add lib64/vulkan paths as a primary or secondary option.
+        possibleDirectories.push_back(
+            pj({gfxstream::base::getProgramDirectory(), "lib64", "vulkan"}));
+        possibleDirectories.push_back(
+            pj({gfxstream::base::getLauncherDirectory(), "lib64", "vulkan"}));
+
+
+        for (const std::string& possibleDirectory : possibleDirectories) {
+            for (const std::string& possibleBasename : possibleBasenames) {
+                possiblePaths.push_back(pj({possibleDirectory, possibleBasename}));
+            }
+        }
+
+        // 2. Add system-wide basenames last, as an ultimate fallback.
+        for (const std::string& possibleBasename : possibleBasenames) {
+            possiblePaths.push_back(possibleBasename);
+        }
+
+        return possiblePaths;
+    }
+
+    void* dlopen() {
+        if (mVulkanLibs.size() == 0) {
+            const std::vector<std::string> possiblePaths = getPossibleLoaderPaths();
+            if (!mVulkanLibs.addFirstAvailableLibrary(possiblePaths)) {
+                GFXSTREAM_ERROR(
+                    "Cannot add any library for Vulkan loader from the list of %d items",
+                    possiblePaths.size());
+            }
+        }
+        return static_cast<void*>(&mVulkanLibs);
+    }
+
+    void* dlsym(void* lib, const char* name) {
+        return (void*)((SharedLibraries*)(lib))->dlsym(name);
+    }
+
+    VulkanDispatch* dispatch() { return &mDispatch; }
+
+   private:
+    Lock mLock;
+    bool mForTesting = false;
+    bool mInitialized = false;
+    VulkanDispatch mDispatch;
+    SharedLibraries mVulkanLibs;
+};
+
+VulkanDispatchImpl* sVulkanDispatchImpl() {
+    static VulkanDispatchImpl* impl = new VulkanDispatchImpl;
+    return impl;
+}
+
+static void* sVulkanDispatchDlOpen() { return sVulkanDispatchImpl()->dlopen(); }
+
+static void* sVulkanDispatchDlSym(void* lib, const char* sym) {
+    return sVulkanDispatchImpl()->dlsym(lib, sym);
+}
+
+void VulkanDispatchImpl::initialize(bool forTesting) {
+    AutoLock lock(mLock);
+
+    if (mInitialized) {
+        return;
+    }
+
+    mForTesting = forTesting;
+    initIcdPaths(mForTesting);
+
+    // In verbose logging and testing modes, also enable vulkan loader error and warning messages
+    gfxstream::host::LogLevel logLevel = gfxstream::host::GetGfxstreamLogLevel();
+    if (forTesting || logLevel >= gfxstream::host::LogLevel::kVerbose) {
+        // Set the env var only if the user didn't set it already
+        if (gfxstream::base::getEnvironmentVariable("VK_LOADER_DEBUG").empty()) {
+            GFXSTREAM_VERBOSE("Enabling error messages from vulkan loader");
+            gfxstream::base::setEnvironmentVariable("VK_LOADER_DEBUG", "error,warn");
+        }
+    }
+
+    if (!gfxstream::base::getEnvironmentVariable("GFXSTREAM_USE_TESTING_VALIDATION_LAYERS").empty()) {
+        GFXSTREAM_INFO("GFXSTREAM_USE_TESTING_VALIDATION_LAYERS set. Enabling Vulkan validation layers.");
+
+        // Our VkLayer_khronos_validation.json expects the VVL .so file to be present in the same directory.
+        std::string vvlPath =
+            pj({gfxstream::base::getProgramDirectory(), "testlib64", "layers"});
+        if (!pathExists(vvlPath.c_str())) {
+            vvlPath =
+                pj({gfxstream::base::getLauncherDirectory(), "testlib64", "layers"});
+        }
+
+        if (pathExists(vvlPath.c_str())) {
+#ifdef _WIN32
+            const char kPathSeparator = ';';
+#else
+            const char kPathSeparator = ':';
+#endif
+            const char* const kVkAddLayerPathEnvVar = "VK_ADD_LAYER_PATH";
+            const char* const kVkInstanceLayersEnvVar = "VK_INSTANCE_LAYERS";
+            const char* const kEnableVVLEnvVar = "VK_LAYER_KHRONOS_validation";
+
+            if (!gfxstream::base::getEnvironmentVariable(kVkAddLayerPathEnvVar).empty()) {
+                GFXSTREAM_WARNING("Overriding %s", kVkAddLayerPathEnvVar);
+            }
+            gfxstream::base::setEnvironmentVariable(kVkAddLayerPathEnvVar, vvlPath);
+            auto layersEnvVar = gfxstream::base::getEnvironmentVariable(kVkInstanceLayersEnvVar);
+            if (layersEnvVar.empty()) {
+                gfxstream::base::setEnvironmentVariable(kVkInstanceLayersEnvVar, kEnableVVLEnvVar);
+            } else {
+                if (layersEnvVar.find(kEnableVVLEnvVar) == std::string::npos) {
+                    std::stringstream ss;
+                    ss << layersEnvVar << kPathSeparator << kEnableVVLEnvVar;
+                    gfxstream::base::setEnvironmentVariable(kVkInstanceLayersEnvVar, ss.str());
+                }
+            }
+        } else {
+            GFXSTREAM_WARNING("Vulkan validation layer library path not found in %s. Skipping validation layer setup.", vvlPath.c_str());
+        }
+    }
+
+    init_vulkan_dispatch_from_system_loader(sVulkanDispatchDlOpen, sVulkanDispatchDlSym,
+                                            &mDispatch);
+
+    mInitialized = true;
+}
+
+VulkanDispatch* vkDispatch(bool forTesting) {
+    sVulkanDispatchImpl()->initialize(forTesting);
+    return sVulkanDispatchImpl()->dispatch();
+}
+
+bool vkDispatchValid(const VulkanDispatch* vk) {
+    return vk->vkEnumerateInstanceExtensionProperties != nullptr ||
+           vk->vkGetInstanceProcAddr != nullptr || vk->vkGetDeviceProcAddr != nullptr;
+}
+
+}  // namespace vk
+}  // namespace host
+}  // namespace gfxstream

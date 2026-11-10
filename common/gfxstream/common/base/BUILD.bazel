@@ -1,0 +1,168 @@
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test", "objc_library")
+load("//:build_variables.bzl", "GFXSTREAM_COMMON_COPTS")
+
+package(
+    default_applicable_licenses = ["//:gfxstream_license"],
+    default_visibility = ["//:gfxstream"],
+)
+
+cc_library(
+    name = "gfxstream_common_base_headers",
+    hdrs = glob(
+        [
+            "include/**/*.h",
+        ],
+        exclude = ["include/gfxstream/testing/**"],
+    ),
+    defines = select({
+        "@platforms//os:windows": [
+            "WIN32_LEAN_AND_MEAN",
+        ],
+        "//conditions:default": [],
+    }),
+    strip_include_prefix = "include",
+    deps = select({
+        "@platforms//os:windows": [
+            "//common/base/windows:gfxstream_common_base_windows_compat_hdrs",
+        ],
+        "//conditions:default": [],
+    }) + [
+        "//common/logging:gfxstream_common_logging",
+    ],
+)
+
+objc_library(
+    name = "gfxstream_common_base_mac",
+    srcs = [
+        "system-native-mac.mm",
+    ],
+    copts = ["-std=c++20"],
+    sdk_frameworks = [
+        "IOKit",
+        "AppKit",
+    ],
+    target_compatible_with = [
+        "@platforms//os:macos",
+    ],
+    deps = [
+        ":gfxstream_common_base_headers",
+    ],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "gfxstream_common_base",
+    srcs = [
+        "AlignedBuf.cpp",
+        "CpuTime.cpp",
+        "FileUtils.cpp",
+        "MessageChannel.cpp",
+        "PathUtils.cpp",
+        "StringFormat.cpp",
+        "System.cpp",
+        "Tracing.cpp",
+        "UdmabufCreator_stub.cpp",
+    ] + select({
+        "@platforms//os:windows": [
+            "SharedMemory_win32.cpp",
+            "Thread_win32.cpp",
+            "Win32UnicodeString.cpp",
+        ],
+        "@platforms//os:macos": [
+            "SharedMemory_posix.cpp",
+            "Thread_pthread.cpp",
+        ],
+        "@platforms//os:linux": [
+            "SharedMemory_posix.cpp",
+            "Thread_pthread.cpp",
+        ],
+    }),
+    hdrs = glob(
+        [
+            "include/**/*.h",
+        ],
+        exclude = ["include/gfxstream/testing/**"],
+    ),
+    copts = GFXSTREAM_COMMON_COPTS,
+    defines = select({
+        "@platforms//os:windows": [
+            "WIN32_LEAN_AND_MEAN",
+        ],
+        "//conditions:default": [],
+    }),
+    includes = ["include"],
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-ldl",
+            "-lrt",
+        ],
+        "@platforms//os:windows": [
+            "-DEFAULTLIB:Shlwapi.lib",
+        ],
+        "@platforms//os:macos": [
+            "-framework Foundation",
+            "-framework AppKit",
+            "-framework IOKit",
+        ],
+        "//conditions:default": [],
+    }),
+    strip_include_prefix = "include",
+    deps = [
+        ":gfxstream_common_base_headers",
+        "//common/logging:gfxstream_common_logging",
+    ] + select({
+        "@platforms//os:macos": [
+            ":gfxstream_common_base_mac",
+        ],
+        "@platforms//os:windows": [
+            "//common/base/windows:gfxstream_common_base_windows_compat",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+cc_library(
+    name = "gfxstream_common_base_testing",
+    testonly = True,
+    hdrs = glob([
+        "include/gfxstream/testing/*.h",
+    ]),
+    includes = [
+        "include",
+    ],
+    deps = [
+        ":gfxstream_common_base",
+        ":gfxstream_common_base_headers",
+        "@com_google_googletest//:gtest",
+    ],
+)
+
+cc_test(
+    name = "gfxstream_common_base_tests",
+    srcs = [
+        "AlignedBuf_unittest.cpp",
+        "ArraySize_unittest.cpp",
+        "FileMatcher_unittest.cpp",
+        "HybridEntityManager_unittest.cpp",
+        "LruCache_unittest.cpp",
+        "ManagedDescriptor_unittest.cpp",
+        "StringFormat_unittest.cpp",
+        "TypeTraits_unittest.cpp",
+        "WorkerThread_unittest.cpp",
+    ] + select({
+        "@platforms//os:windows": [
+            "Win32UnicodeString_unittest.cpp",
+        ],
+        "//conditions:default": [],
+    }),
+    copts = GFXSTREAM_COMMON_COPTS,
+    linkopts = [
+        "-undefined error",
+    ],
+    deps = [
+        ":gfxstream_common_base",
+        ":gfxstream_common_base_testing",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)

@@ -1,0 +1,37 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//:build_variables.bzl", "GFXSTREAM_HOST_COPTS", "GFXSTREAM_HOST_DEFINES")
+
+package(
+    default_applicable_licenses = ["//:gfxstream_license"],
+    default_visibility = ["//:gfxstream"],
+)
+
+cc_library(
+    name = "gfxstream_host_vulkan_emulated_textures",
+    srcs = [
+        "astc_texture.cpp",
+        "compressed_image_info.cpp",
+        "gpu_decompression_pipeline.cpp",
+        "shaders/decompression_shaders.h",
+    ],
+    hdrs = [
+        "astc_texture.h",
+        "compressed_image_info.h",
+        "gpu_decompression_pipeline.h",
+    ],
+    copts = GFXSTREAM_HOST_COPTS,
+    defines = GFXSTREAM_HOST_DEFINES,
+    textual_hdrs = glob([
+        "**/*.inl",
+    ]),
+    visibility = ["//visibility:public"],
+    deps = [
+        "//common/base:gfxstream_common_base",
+        "//common/logging:gfxstream_common_logging",
+        "//host:gfxstream_host_headers",
+        "//host/compressed_textures:gfxstream_host_compressed_textures",
+        "//host/vulkan:gfxstream_vulkan_server_headers",
+        "//host/vulkan/cereal:gfxstream_vulkan_cereal",
+        "//third_party/vulkan:gfxstream_vulkan_headers",
+    ],
+)

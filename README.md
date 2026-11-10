@@ -31,7 +31,7 @@ libraries directory (`tools/build native` makes that link).
 
 Not here, because a new machine builds them from source: bionic_translation (public, `tools/build bt`), the CLI, shell, JNI shim, `btload` and host HALs (meson),
 the host classes (`tools/build host`), `native-runtime.jar` (`tools/build native`), the pinned Maven jars (`tools/fetch-deps.sh`), the Slint manager library
-(`manager/fetch-slint.sh`). Not here at all: gfxstream's sources for `tools/build gles1` (only for hosts without OpenGL ES 1).
+(`manager/fetch-slint.sh`). `common/gfxstream/`: gfxstream's sources (`tools/stage gfxstream`, from the tree's hardware/google/gfxstream) that meson builds libapklayer-gles1.so from when -Dgfxstream is empty (OpenGL ES 1 on hosts whose Mesa has none, 2026-11-10).
 
 Licenses: the Android libraries, framework, system apps and SDK stub are Apache-2.0 (AOSP); the WebView provider is Chromium's (BSD-3-Clause and the
 licenses its `about:credits` lists); Robolectric is MIT; the `libapklayer_*` modules are AGPL-3.0-or-later like the main repository.
