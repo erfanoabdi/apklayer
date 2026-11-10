@@ -1,5 +1,5 @@
 project('apklayer', ['c', 'cpp', 'java'],
-  version: '0.4.13',
+  version: '0.4.14',
   license: 'AGPL-3.0-or-later',
   meson_version: '>=1.3',
   default_options: ['warning_level=2', 'buildtype=release', 'cpp_std=c++17'])
