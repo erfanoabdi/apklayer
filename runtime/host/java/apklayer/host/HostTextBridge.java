@@ -50,15 +50,26 @@ final class HostTextBridge {
         shell.sendSurrounding(e - from, s - from, around);  // Qt's cursor is the selection's moving end (Android's end), its anchor the start
     }
 
-    /** InputMethodManager.showSoftInput (TextView's tap in a focused field, or the app's own call): the shell shows a keyboard the user closed again. */
+    /** InputMethodManager.showSoftInput (TextView's tap in a focused field, or the app's own call): the shell shows a keyboard the user closed again;
+     * hideSoftInputFromWindow (ImeShadow): the shell hides it, the field keeps focus. */
     void followShowRequests() {
         Shadows.shadowOf(RuntimeEnvironment.getApplication().getSystemService(InputMethodManager.class)).setSoftInputVisibilityHandler(visible -> {
-            if (!visible) return;
             ReflectionHelpers.setStaticField(ShadowInputMethodManager.class, "softInputVisible", false);  // the shadow reports changes only: every call counts
             if (shell == null || imeField == null) return;
-            shell.sendTextInput(2, 0, 0);
-            if (Boolean.getBoolean("apklayer.debugkeys")) System.out.println("[apklayer] text input show request");
+            shell.sendTextInput(visible ? 2 : 4, 0, 0);
+            if (Boolean.getBoolean("apklayer.debugkeys")) System.out.println("[apklayer] text input " + (visible ? "show" : "hide") + " request");
         });
+    }
+
+    /** Every hideSoftInputFromWindow reaches the visibility handler (the stock shadow reports only a change from visible, which the handler resets).
+     * shortcut: any window token hides it (Android ignores a token of a window that is not the served one); check the token if an app needs it */
+    @org.robolectric.annotation.Implements(value = InputMethodManager.class, isInAndroidSdk = false)
+    public static final class ImeShadow extends ShadowInputMethodManager {
+        @org.robolectric.annotation.Implementation
+        @Override protected boolean hideSoftInputFromWindow(android.os.IBinder token, int flags, android.os.ResultReceiver receiver) {
+            ReflectionHelpers.setStaticField(ShadowInputMethodManager.class, "softInputVisible", true);
+            return super.hideSoftInputFromWindow(token, flags, receiver);
+        }
     }
 
     /**

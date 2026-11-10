@@ -138,7 +138,7 @@ final class ShellClient {
         }
     }
 
-    /** state 1: a text field took focus (its EditorInfo's inputType, imeOptions), 0: none has it, 2: show the keyboard again (showSoftInput). */
+    /** state 1: a text field took focus (its EditorInfo's inputType, imeOptions), 0: none has it, 2: show the keyboard again (showSoftInput), 4: hide it (hideSoftInputFromWindow; the field keeps focus). */
     void sendTextInput(int state, int inputType, int imeOptions) {
         try {
             send(TEXT_INPUT, buf(16).putInt(WINDOW_ID).putInt(state).putInt(inputType).putInt(imeOptions));

@@ -86,6 +86,11 @@ public class Main extends Activity {
         layout.addView(kind(2, android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD,
                 android.view.inputmethod.EditorInfo.IME_ACTION_DONE, "Password"), new LinearLayout.LayoutParams(-1, (int) (48 * dp)));
         layout.addView(kind(3, android.text.InputType.TYPE_CLASS_NUMBER, 0, "Number"), new LinearLayout.LayoutParams(-1, (int) (48 * dp)));
+        Button hide = new Button(this);  // the app's own keyboard close (tests/vm/ime-fields.py): a button takes no focus in touch mode, the field keeps it
+        hide.setText("Hide keyboard");
+        hide.setOnClickListener(v -> System.out.println("[hello-input] hide=" + getSystemService(android.view.inputmethod.InputMethodManager.class)
+                .hideSoftInputFromWindow(v.getWindowToken(), 0)));
+        layout.addView(hide, new LinearLayout.LayoutParams(-1, (int) (48 * dp)));
         clipboard.addPrimaryClipChangedListener(() -> {
             ClipData clip = clipboard.getPrimaryClip();
             if (clip != null && clip.getItemCount() > 0) {

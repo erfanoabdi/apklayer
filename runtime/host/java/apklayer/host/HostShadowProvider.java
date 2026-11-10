@@ -110,6 +110,7 @@ public final class HostShadowProvider implements ShadowProvider {
                 Map.entry("android.os.Vibrator", HostPlainShadows.Vibrator.class.getName()),
                 Map.entry("android.os.SystemVibrator", HostPlainShadows.SystemVibrator.class.getName()),
                 Map.entry("android.widget.Toast", ShadowHostToast.class.getName()),
+                Map.entry("android.view.inputmethod.InputMethodManager", HostTextBridge.ImeShadow.class.getName()),  // every hide request reaches the shell
                 // USB without a HAL: the host's devices and the framework's own connection code over the device node (HostUsb, HubUsb)
                 Map.entry("android.hardware.usb.UsbManager", ShadowHostUsbManager.class.getName()),
                 Map.entry("android.hardware.usb.UsbDevice", HostPlainShadows.UsbDevice.class.getName()),

@@ -17,6 +17,7 @@ static int gn;
 static gint gprio;
 static char *surround;      /* the focused field's text around the cursor (NULL: none sent), its cursor and anchor in UTF-16 units */
 static int cursor, anchor;
+static int hidden;          /* hideSoftInputFromWindow hid it: the field kept focus, the server was told none has it (Lipstick keeps it up otherwise) */
 
 /* What the server calls (maliit-framework's minputcontext1interface.xml, the methods it calls with an answer and those we act on). */
 static const char introspection[] =
@@ -179,13 +180,13 @@ static void send_field_state(struct window *w, gboolean focus_changed)
     if (debug_input) fprintf(stderr, "[shell] host keyboard content type %d, hints 0x%x, cursor %d anchor %d\n", type, hint, cursor, anchor);
 }
 
-/* enable 1: a field took focus, 2: show the keyboard again (a tap in the focused field), 0: no field has focus */
+/* enable 1: a field took focus, 2: show the keyboard again (a tap in the focused field), 4: hide it (the field keeps focus), 0: no field has focus */
 void maliit_enable(struct window *w, int enable)
 {
-    if (!enable && mwin != w) return;
+    if ((!enable || enable == 4) && mwin != w) return;
     if (!conn && (tried++ || !connect_server())) return;
     if (enable == 1 || mwin != w) { g_free(surround); surround = NULL; cursor = anchor = 0; }
-    if (enable) {
+    if (enable == 1 || enable == 2) {
         mwin = w;
         /* the Enter key: the EditorInfo's action (IME_ACTION_GO .. PREVIOUS), the plain key for IME_FLAG_NO_ENTER_ACTION (multi-line)
          * shortcut: English labels, no icons; upgrade with the keyboards' own icon names if wanted */
@@ -202,9 +203,12 @@ void maliit_enable(struct window *w, int enable)
         g_variant_builder_add(&b, "{sv}", "focusState", g_variant_new_boolean(FALSE));
         call("updateWidgetInformation", g_variant_new("(a{sv}b)", &b, TRUE));
     }
-    call(enable ? "showInputMethod" : "hideInputMethod", NULL);
-    if (!enable) { set_area(w, 0); mwin = NULL; }
-    if (debug_input) fprintf(stderr, "[shell] host keyboard %s\n", enable ? "shown" : "hidden");
+    int show = enable == 1 || enable == 2;
+    call(show ? "showInputMethod" : "hideInputMethod", NULL);
+    if (!show) set_area(w, 0);
+    if (!enable) mwin = NULL;  /* 4: the field keeps focus, its next showSoftInput (2) sends its state again */
+    hidden = enable == 4;
+    if (debug_input) fprintf(stderr, "[shell] host keyboard %s\n", show ? "shown" : enable ? "hidden, field kept" : "hidden");
 }
 
 void maliit_surrounding(struct window *w, int cur, int anc, const char *text, size_t len)
@@ -214,7 +218,7 @@ void maliit_surrounding(struct window *w, int cur, int anc, const char *text, si
     surround = g_utf8_make_valid(text, (gssize)len);
     cursor = cur;
     anchor = anc;
-    send_field_state(w, FALSE);
+    if (!hidden) send_field_state(w, FALSE);  /* hidden: sent with the next show */
 }
 
 /* The main loop's poll takes the context's descriptors (unused slots: -1) and hands back what happened. Returns the context's timeout (ms,

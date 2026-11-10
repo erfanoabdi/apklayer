@@ -2,7 +2,7 @@
 """The kinds of text field (input group) through the shell's test input (instance.inject): Enter in hello.input's multi-line field types a
 newline (a key and an IME's "\\n"), an IME deletion with the text selected deletes the selection, an IME's "\\n" in the single-line email field
 runs its editor action (IME_ACTION_GO), each field's EditorInfo reaches the shell, and a tap in the focused field asks the shell to show its
-keyboard again (showSoftInput). The phones' keyboards (Maliit) take the same messages: docs/HALIUM.md."""
+keyboard again (showSoftInput) and the app's hideSoftInputFromWindow asks it to hide it, the field keeping focus. The phones' keyboards (Maliit) take the same messages: docs/HALIUM.md."""
 import os
 from pathlib import Path
 import selectors
@@ -16,7 +16,7 @@ import instance  # noqa: E402  (changes into the repo root)
 PKG = 'hello.input'
 ENV = dict(instance.ENV, APKLAYER_DEBUG_INPUT='1', APKLAYER_DISPLAY_WIDTH='480', APKLAYER_DISPLAY_HEIGHT='600',
            APKLAYER_JOPTS='-Dapklayer.runms=20000 -Dapklayer.debugkeys=true')
-FIELD, EMAIL, PASSWORD = (240, 82), (240, 352), (240, 400)  # content pixels (below the action bar: hello.input's dp layout at scale 1)
+FIELD, EMAIL, PASSWORD, HIDE = (240, 82), (240, 352), (240, 400), (240, 472)  # content pixels (below the action bar: hello.input's dp layout at scale 1)
 seen = []
 
 instance.stop()
@@ -81,10 +81,18 @@ try:
     instance.inject(PKG, 'tap:%d,%d' % PASSWORD)
     kind, options = focused(n)
     assert kind & 0xfff == 0x81, hex(kind)  # TYPE_TEXT_VARIATION_PASSWORD
+    n = len(seen)
+    instance.inject(PKG, 'tap:%d,%d' % HIDE)  # the app's hideSoftInputFromWindow: the keyboard goes, the password field keeps focus
+    expect('[apklayer] text input hide request', n)
+    expect('[hello-input] hide=true', n)
+    assert not any('[apklayer] text input off' in l for l in seen[n:]), 'the field lost focus: ' + str(seen[n:])
+    instance.inject(PKG, 'text:k')  # still the password field's
+    expect('[hello-input] field2 text=k', n)
     shell_log = (instance.STATE / 'shell.log').read_text(errors='replace')
     assert 'text input show request\n' in shell_log, 'the shell got no show request:\n' + shell_log[-1500:]
+    assert 'text input hide request\n' in shell_log, 'the shell got no hide request:\n' + shell_log[-1500:]
     print('PASS Enter types a newline in a multi-line field and runs a single-line field\'s action, an IME deletion takes the selection, '
-          'the fields\' EditorInfo and a tap\'s show request reach the shell', flush=True)
+          'the fields\' EditorInfo, a tap\'s show request and the app\'s hide request reach the shell', flush=True)
 finally:
     instance.stop()
     if app.poll() is None: os.killpg(app.pid, signal.SIGKILL)

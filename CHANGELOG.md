@@ -12,6 +12,23 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - x86 PC (own tree, lead prebuilts + the new libberberis_arm64): native-bridge, native-bridge-vulkan PASS; Rethink DNS (tests/corpus/run.py)
   loads libgojni.so and draws its Welcome screen on both launches, no SIGILL. Library: Build log (lock set; not in the prebuilts branch yet).
 
+## 2026-11-10: hideSoftInputFromWindow hides the phones' keyboards (Maliit)
+- Cause: InputMethodManager.hideSoftInputFromWindow stayed in Robolectric's shadow. Its visibility handler reports only a change, and
+  HostTextBridge resets the shadow's state to hidden after each show (so every showSoftInput counts): a hide never reached the handler.
+- Fix: a shadow of our own (HostTextBridge.ImeShadow, a ShadowInputMethodManager) marks the keyboard shown before each
+  hideSoftInputFromWindow, so the handler sees every hide; HostTextBridge sends MSG_TEXT_INPUT state 4 (the field keeps focus). The shell
+  (textinput.c) passes it to maliit.c, which tells the server no field has focus and calls hideInputMethod, keeping the window's field: Lipstick
+  kept its keyboard on screen after a bare hideInputMethod (the server reported a 0x0 area, the screenshot still showed it), Lomiri hides on
+  either. Surrounding-text updates wait while hidden; the next showSoftInput (a tap in the field) or focus change sends the whole state again.
+  text-input-v3: a no-op (the protocol has no hide request; a disable would also end a desktop input method's composing). Focus leaving all
+  fields already hid the keyboard (state 0).
+- Phones, own instance `hide` (the installed CLI, this tree's shell and host-classes.jar on a copy of runtime 0.4.11; the Sailfish shell built
+  in the Sailfish build root, the UT one on Parallels): hello.input's new "Hide keyboard" button, uinput taps, the compositors' screenshots.
+  Volla X23 (Lomiri) and Volla Quintus (Lipstick): the keyboard is up on the focused field, the button hides it with the cursor still in the
+  field (`[hello-input] hide=true`, shell `host keyboard hidden, field kept`, area 0x0), a tap in the field shows it again.
+- Tests: tests/vm/ime-fields.py (group input): the button's hide request reaches the shell, no focus loss, typed text still goes to the field.
+  Group input passes on Parallels (own tree, two runs).
+
 ## 2026-11-10: setup reinstalls the system apps a runtime update changed
 - `apklayer setup` installed the runtime's system apps (providers, DocumentsUI, WebView) only while `setup-done` was missing, so a runtime
   update never replaced them: x86_64 users who set up before 0.4.10 kept the arm64 MediaProvider (JNI not linking through the bridge,
