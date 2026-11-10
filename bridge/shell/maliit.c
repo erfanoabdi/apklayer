@@ -203,7 +203,10 @@ void maliit_enable(struct window *w, int enable)
         g_variant_builder_add(&b, "{sv}", "focusState", g_variant_new_boolean(FALSE));
         call("updateWidgetInformation", g_variant_new("(a{sv}b)", &b, TRUE));
     }
-    int show = enable == 1 || enable == 2;
+    /* focus alone (1) shows nothing, as on Android: the keyboard comes with the field's showSoftInput (2), which a TextView asks for on a tap
+     * unless showSoftInputOnFocus is off (Calculator's display, apps with their own keypad) */
+    if (enable == 1) { hidden = FALSE; return; }
+    int show = enable == 2;
     call(show ? "showInputMethod" : "hideInputMethod", NULL);
     if (!show) set_area(w, 0);
     if (!enable) mwin = NULL;  /* 4: the field keeps focus, its next showSoftInput (2) sends its state again */
