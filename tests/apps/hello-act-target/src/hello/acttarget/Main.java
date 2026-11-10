@@ -17,5 +17,7 @@ public class Main extends Activity {
         System.out.println("[act-t] screen max=" + max.width() + "x" + max.height() + " real=" + real.x + "x" + real.y + " window=" + cur.width() + "x" + cur.height()
                 + " cache=" + android.view.ViewConfiguration.get(this).getScaledMaximumDrawingCacheSize());
         setContentView(view);
+        if (Boolean.getBoolean("hello.stuckexit"))  // exit-deadline.py: a shutdown hook that never returns (the JVM's end must not wait for it)
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> { System.out.println("[act-t] stuck exit hook"); while (true) android.os.SystemClock.sleep(1000); }));
     }
 }

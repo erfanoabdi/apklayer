@@ -315,6 +315,7 @@ final class AppEnvironment {
     static void startRuntime(Application app) {
         // as ActivityThread.handleBindApplication: Process.setArgV0(processName); a secondary process has its own name (HostProcessName)
         NativeLoader.nameProcess(System.getProperty("apklayer.processname", app.getPackageName()));
+        NativeLoader.killIfExitStalls();
         if (Boolean.getBoolean("apklayer.logcat")) for (String name : new String[] {"alarm", "jobscheduler", "notification", "connectivity"}) System.out.println("[apklayer] service " + name + " = " + app.getSystemService(name));
         HostContentService.install();
         HostNetwork.install(app);

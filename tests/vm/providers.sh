@@ -65,7 +65,7 @@ grep -a "^location\|PASS" $APKLY_STATE/providers-client.out
 grep -aq "^location 1.5000000 2.5000000 7.0" $APKLY_STATE/providers-client.out || fail "gnss: the new location did not reach the client"
 reload=$(tail -n +$((before + 1)) $APKLY_STATE/stack.log | grep -a "providers:")
 echo "$reload"
-grep -q "providers: gnss restarted" <<<"$reload" && ! grep -q "providers: \(sensors\|vibrator\)" <<<"$reload" || fail "not only gnss restarted"
+grep -q "providers: gnss restarted" <<<"$reload" && ! grep -q "providers: \(sensors\|vibrator\|media\|audio\)" <<<"$reload" || fail "not only gnss restarted"
 # `stop` ends the restarted service too (a service the daemon restarts must not inherit its blocked SIGTERM)
 bin/apklayer stop >/dev/null 2>&1
 for p in $(pgrep -f '[l]ibapklayer_(gnss|sensors|vibrator)\.so --main'); do

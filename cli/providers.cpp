@@ -197,7 +197,8 @@ const ProviderConfig* named(const std::vector<ProviderConfig>& configs, const st
 void saveProviders(const std::string& file, const std::vector<ProviderConfig>& domains) { writeProviders(file, domains); }
 
 const std::vector<std::string>& providerDomains() {
-    static const std::vector<std::string> names = [] { std::vector<std::string> v; for (const Domain& d : kDomains) v.push_back(d.name); return v; }();
+    // only those: a front-less domain's name is a stack service of its own ("media": mediaserver, "audio": the audio HAL), which a reload stopped
+    static const std::vector<std::string> names = [] { std::vector<std::string> v; for (const Domain& d : kDomains) if (d.front) v.push_back(d.name); return v; }();
     return names;
 }
 

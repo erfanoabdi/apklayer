@@ -95,6 +95,15 @@ public final class NativeLoader {
         try { skipNativeExitHandlers(); } catch (LinkageError noShim) { /* no native runtime in this process: a plain exit */ }
     }
 
+    private static final int EXIT_DEADLINE_S = 10;  // past `apklayer stop`'s 5 s and the hub's 4 s for its hosts: only a stuck end reaches it
+    private static native void exitDeadline(int seconds);
+    /** From the start of the JVM's end (SIGTERM, System.exit) the process has EXIT_DEADLINE_S, whatever a hook or HotSpot's exit waits for (native_loader.c). */
+    static void killIfExitStalls() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try { exitDeadline(EXIT_DEADLINE_S); } catch (LinkageError noShim) { /* no native runtime: HotSpot's own exit */ }
+        }, "apklayer-exit-deadline"));
+    }
+
     // ---- entry points the converter routes the app's calls to ----
 
     public static String findLibrary(String name) {

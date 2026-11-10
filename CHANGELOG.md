@@ -3,6 +3,23 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-10: SIGTERM that did not end processes (an app JVM's stalled end, a provider reload, the spare's records)
+- Camera (PLAN: "cameraserver and the provider outlived `apklayer stop` after a restart, SIGTERM ignored"): the cause was the stack daemon's
+  blocked SIGTERM inherited by the services it restarts, fixed 2026-11-04 (05d02fbc, children get the default mask; the camera note was
+  written on a branch without it). Checked on Parallels: hello.camera open, the provider restarted (`providers set camera`) and cameraserver
+  restarted, no instance process has SIGTERM blocked or ignored but the stack daemon (its signalfd), `stop` 0.75 s, nothing left.
+- Found doing it: a provider reload (SIGHUP) stopped the stack's mediaserver and audio HAL, whose service names are front-less provider
+  domains (`media`, `audio`): providerDomains() lists only the domains with a front (cli/providers.cpp); providers.sh checks.
+- App JVM that outlived SIGTERM (retest 2026-11-10 (c), not reproduced: SIGTERM to UiBench at its first line, after its start and through
+  the CDS dump, cold and from the spare, ended in 0.01-1.5 s each): every app JVM now has an exit deadline. From the start of its end
+  (a shutdown hook, NativeLoader.killIfExitStalls from AppEnvironment.startRuntime) a native thread outside the JVM kills the process 10 s
+  later if it still runs (native_loader.c exitDeadline), as init and ActivityManager kill what SIGTERM did not end: a stuck hook, the exit
+  path's fflush or a safepoint no longer hold it. Test: exit-deadline.py (group activities; hello.acttarget with a hook that never returns:
+  SIGTERM, exit 137 after 10.0 s).
+- The spare's holder passes SIGTERM to its spare JVM (cli/spare.cpp): killed together from their run record (the corpus runner), the holder
+  left the record with two dead pids, which later kills could hit as recycled pids.
+- Parallels (own tree ~/apklayer-sig): hardware, activities, camera, startup, services, hub-services, units PASS.
+
 ## 2026-11-10: arm64 Go libraries through the x86_64 native bridge read the guest's auxv (Rethink DNS, binary_translation 0005)
 - Rethink DNS died with SIGILL on the x86 PC: its Go library (libgojni.so, c-shared: Go reads /proc/self/auxv) got the host's file through
   berberis, took x86's AT_HWCAP bit 24 for arm64's HWCAP_DIT and executed `mrs x0, DIT`, which berberis does not decode.

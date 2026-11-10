@@ -9,6 +9,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
+#include <signal.h>
+#include <time.h>
 #include <sys/stat.h>
 
 /* bionic_translation (libdl_bio) */
@@ -135,4 +138,28 @@ JNIEXPORT void JNICALL Java_apklayer_host_NativeLoader_skipNativeExitHandlers(JN
     (void)env;
     (void)c;
     on_exit(end_without_native_destructors, NULL);
+}
+
+/* The JVM's end began (a shutdown hook): a process still there `arg` seconds later is killed, as init and ActivityManager kill what SIGTERM did not end.
+ * A thread of its own, not attached to the JVM: it runs while a safepoint or a stuck hook holds every Java thread (an app JVM once outlived SIGTERM for 9 min). */
+static void *exit_deadline(void *arg)
+{
+    struct timespec left = { (time_t)(intptr_t)arg, 0 };
+    while (nanosleep(&left, &left) != 0) {}
+    static const char msg[] = "[apklayer] the JVM had not ended by its exit deadline: killed\n";
+    (void)!write(2, msg, sizeof msg - 1);
+    kill(getpid(), SIGKILL);
+    return NULL;
+}
+
+JNIEXPORT void JNICALL Java_apklayer_host_NativeLoader_exitDeadline(JNIEnv *env, jclass c, jint seconds)
+{
+    (void)env;
+    (void)c;
+    pthread_t thread;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    pthread_create(&thread, &attr, exit_deadline, (void *)(intptr_t)seconds);
+    pthread_attr_destroy(&attr);
 }
