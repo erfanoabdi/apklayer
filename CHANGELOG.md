@@ -40,6 +40,29 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - Lomiri screenshots (Volume Up + Down) open an editor over everything; taken in a row on the busy phone they left it unresponsive: closed by
   locking the screen, and docs/HALIUM.md now says to use `apklayer screenshot`.
 
+## 2026-11-10: Android's fullscreen is the compositor's fullscreen; a requested turn is a rotation (NewPipe's player)
+- Causes: (1) an app hiding the status bar (WindowInsetsController.hide(systemBars()/statusBars()), SYSTEM_UI_FLAG_FULLSCREEN,
+  FLAG_FULLSCREEN) reached nothing: only the navigation bar's visibility went to the shell (immersive mode), so a desktop window kept its
+  header bar and floating size, a mobile one the compositor's panel. (2) NewPipe's fullscreen button asks SENSOR_LANDSCAPE and enters
+  fullscreen from the VideoDetailFragment that Android recreates on the rotation (MainActivity declares no configChanges); apklayer applied
+  every resize in place (onConfigurationChanged for all activities), so the window turned but the player kept its portrait layout and never
+  went fullscreen. (3) Leaving it, NewPipe asks portrait while the window is fullscreen: the shell kept the output's shape, the app stayed
+  landscape.
+- Fix: robolectric 0019 also reports the status bar's visibility (NavigationBarInset.statusBarChanged); the host sends the new MSG_FULLSCREEN
+  (18) {id, on}; the shell (mobile.c window_set_fullscreen) calls xdg_toplevel.set_fullscreen / unset_fullscreen (a mobile window is
+  maximized again), and the FULLSCREEN configure state drops the title bar (W_BAR, decor_hide) so the app gets the whole output. A turn the
+  app asked for (setRequestedOrientation) is a rotation (AppHost.hostResize): activities without orientation|screenSize in configChanges are
+  recreated through HostConfiguration.dispatch (the requested orientation carried over); drags and fullscreen stay in-place resizes. The other
+  shape asked for while fullscreen on a desktop leaves fullscreen so the window turns back (geometry.c window_request_size). wl_shell
+  (Lipstick) unchanged: it shows every window full screen. hello-camera's Portrait declares the configChanges it handles (its doc said so).
+- Tests: new group `fullscreen` (tests/vm/fullscreen.py, script step `fullscreen:0|1|2|3`: hide/show(systemBars()), legacy flags on/off;
+  desktop and a simulated phone): the configure is the whole output with no title bar / no navigation bar inset, the app's picture has that
+  size, leaving restores size, bar and inset, SENSOR_LANDSCAPE then fullscreen then portrait recreates and turns back. Parallels (own tree
+  ~/apklayer-fs, slots fs1/fs2): fullscreen, window-geometry, mobile, activities pass; camera passed 2 of 3 runs (one camera-portrait
+  "preview is not upright and cropped"). NewPipe 0.29.1 (corpus build 1015) on Parallels: the fullscreen button turns the window and now
+  recreates MainActivity into the landscape player layout; the video itself never loaded (the network gave ~20 KB/s), so NewPipe's own
+  fullscreen call (MainPlayerUi.checkLandscape on playing) was not seen. The x86 PC was unreachable and the X23 overloaded: not checked there.
+
 ## 2026-11-10: a real Bluetooth keyboard types into apps on both Halium phones
 - The keymap fix (keyboard.c, 2026-11-10) was checked only with uinput keyboards. Now with a real Bluetooth one: the owner's x86 PC as an LE
   HID keyboard (`tests/vm/bt-keyboard.py`: BlueZ GattManager1 HID service 0x1812 with a boot keyboard's report map, advertised with

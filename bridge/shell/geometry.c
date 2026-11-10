@@ -42,7 +42,8 @@ void window_layout(struct window *w)
     else  /* without wp_viewporter only whole multiples of the logical size are shown at their size (every desktop compositor has it) */
         wl_surface_set_buffer_scale(w->surface, w->w % lw == 0 && w->h % lh == 0 && w->w / lw == w->h / lh ? w->w / lw : 1);
     w->scale = w->w * 100 / lw;
-    if (!w->mobile) decor_update(&w->decor, lw, window_scale(w), w->maximized, w->bar_hover, w->activated);
+    if (w->fullscreen) decor_hide(&w->decor);
+    else if (!w->mobile) decor_update(&w->decor, lw, window_scale(w), w->maximized, w->bar_hover, w->activated);
     else if (w->nav_hidden || w->nav_h <= 0) navbar_hide(&w->nav);
     else navbar_update(&w->nav, lh - w->nav_h, lw, w->nav_h, window_scale(w), w->dark, w->nav.pressed);
     if (w->xdg_surface) xdg_surface_set_window_geometry(w->xdg_surface, 0, -W_BAR(w), lw, lh + W_BAR(w));
@@ -83,10 +84,11 @@ static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t c
 {
     (void)t;
     struct window *w = d;
-    int maximized = 0, activated = 0, constrained = 0, resizing = 0;
+    int maximized = 0, activated = 0, constrained = 0, resizing = 0, fullscreen = 0;
     uint32_t *state;
     wl_array_for_each(state, st) switch (*state) {
-        case XDG_TOPLEVEL_STATE_MAXIMIZED: case XDG_TOPLEVEL_STATE_FULLSCREEN: maximized = constrained = 1; break;
+        case XDG_TOPLEVEL_STATE_FULLSCREEN: fullscreen = 1; /* fall through */
+        case XDG_TOPLEVEL_STATE_MAXIMIZED: maximized = constrained = 1; break;
         case XDG_TOPLEVEL_STATE_TILED_LEFT: case XDG_TOPLEVEL_STATE_TILED_RIGHT:
         case XDG_TOPLEVEL_STATE_TILED_TOP: case XDG_TOPLEVEL_STATE_TILED_BOTTOM: constrained = 1; break;
         case XDG_TOPLEVEL_STATE_RESIZING: resizing = 1; break;
@@ -99,6 +101,8 @@ static void top_configure(void *d, struct xdg_toplevel *t, int32_t cw, int32_t c
     if (debug_input) fprintf(stderr, "[shell] \"%s\" toplevel configure %dx%d%s%s%s\n", w->title, cw, ch, maximized ? " maximized" : constrained ? " tiled" : "",
                              resizing ? " resizing" : "", restored ? " restored" : "");
     if (constrained && !w->constrained && w->cfg_w > 0) { w->float_w = w->cfg_w; w->float_h = w->cfg_h; }
+    w->state_changed |= fullscreen != w->fullscreen;
+    w->fullscreen = fullscreen;  /* before the sizes below: a fullscreen window has no title bar */
     if (cw > 0 && ch > W_BAR(w) && (constrained || resizing || restored || !w->configured)) { nw = cw; nh = ch - W_BAR(w); }
     else if (restored && w->float_w > 0) { nw = w->float_w; nh = w->float_h; }
     if (!constrained && w->lock && nw > 0 && nh > 0 && (nw > nh) != (w->lock == 1)) {
@@ -171,7 +175,13 @@ void window_request_size(struct window *w, int lw, int lh)
     w->lock = lw <= 0 || lh <= 0 ? 0 : lw > lh ? 1 : lw < lh ? 2 : 0;
     if (!w->configured || !w->lock || (w->cfg_w > w->cfg_h) == (w->lock == 1)) return;  /* already that shape */
     fit_size(w, lw, lh, 1, &fw, &fh);  /* the app turns its window (as a rotated phone), fitted to the work area */
-    if (w->constrained) { w->float_w = fw; w->float_h = fh; return; }
+    if (w->constrained) {
+        w->float_w = fw;
+        w->float_h = fh;
+        /* fullscreen on a desktop has the output's shape: the other one asked for (NewPipe leaving its player) leaves it, the window turns */
+        if (w->fullscreen && !w->mobile) window_set_fullscreen(w, 0);
+        return;
+    }
     if (fw == w->cfg_w && fh == w->cfg_h) return;
     w->cfg_w = fw;
     w->cfg_h = fh;
@@ -187,6 +197,7 @@ static void inject(struct window *w, int cw, int ch, int maximized, int resizing
     struct wl_array states;
     wl_array_init(&states);
     if (maximized) *(uint32_t *)wl_array_add(&states, 4) = XDG_TOPLEVEL_STATE_MAXIMIZED;
+    if (maximized && w->fullscreen) *(uint32_t *)wl_array_add(&states, 4) = XDG_TOPLEVEL_STATE_FULLSCREEN;  /* a focus change keeps it */
     if (resizing) *(uint32_t *)wl_array_add(&states, 4) = XDG_TOPLEVEL_STATE_RESIZING;
     if (activated) *(uint32_t *)wl_array_add(&states, 4) = XDG_TOPLEVEL_STATE_ACTIVATED;
     injecting = 1;

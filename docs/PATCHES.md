@@ -72,7 +72,7 @@ Build flags: upstream builds it with Meson's default buildtype (debug, -O0); mes
 | 0013-instrumentation-acquire-khronos | InstrumentationConfiguration: acquire javax.microedition.khronos |
 | 0014-native-surface-parcel | Surface parcel natives are the real ones (a Surface sent through binder) |
 | 0015-display-change-without-idle | changeDisplay(qualifiers) leaves the display-change messages to the app's run loop |
-| 0019-navigation-bar-visibility-listener | ShadowWindowManagerGlobal.applyInsets tells `NavigationBarInset` when an app hides or shows the navigation bar (immersive mode) |
+| 0019-navigation-bar-visibility-listener | ShadowWindowManagerGlobal.applyInsets tells `NavigationBarInset` when an app hides or shows the navigation bar (immersive mode) or the status bar (fullscreen: the shell's MSG_FULLSCREEN) |
 | 0020-alarm-manager-pending-intent-hook | ShadowAlarmManager: PendingIntent alarms go to a hook (the hub holds them, HubScheduler) |
 | 0021-native-assets-content-key | the shared ICU/font copy keyed by the jar's entries' content (name, CRC, size), not its path and mtime (a copy per install) |
 | 0022-window-children-dim | ShadowWindowManagerGlobal removes a window's sub-windows with it and tells WindowSurface the window's visibility (FLAG_DIM_BEHIND dim layer); ShadowUiAutomation skips orphaned sub-windows |

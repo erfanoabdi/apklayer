@@ -165,6 +165,26 @@ final class ScriptRunner {
             if (step.endsWith("1")) c.hide(android.view.WindowInsets.Type.navigationBars());
             else c.show(android.view.WindowInsets.Type.navigationBars());
             System.out.println("[apklayer] immersive " + step.substring(10));
+        } else if (step.startsWith("fullscreen:")) { // fullscreen:1|0 hide/show(systemBars()), 3|2 the legacy flags (SYSTEM_UI_FLAG_FULLSCREEN.., FLAG_FULLSCREEN) set/cleared
+            android.view.WindowManagerGlobal g = android.view.WindowManagerGlobal.getInstance();
+            java.util.List<android.view.View> views = org.robolectric.util.ReflectionHelpers.getField(g, "mViews");
+            java.util.List<android.view.WindowManager.LayoutParams> params = org.robolectric.util.ReflectionHelpers.getField(g, "mParams");
+            android.view.View v = views.get(views.size() - 1);
+            int mode = step.charAt(11) - '0';
+            if (mode < 2) {
+                if (mode == 1) v.getWindowInsetsController().hide(android.view.WindowInsets.Type.systemBars());
+                else v.getWindowInsetsController().show(android.view.WindowInsets.Type.systemBars());
+            } else {
+                v.setSystemUiVisibility(mode == 3 ? android.view.View.SYSTEM_UI_FLAG_FULLSCREEN | android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE : 0);
+                android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
+                lp.copyFrom(params.get(params.size() - 1));
+                if (mode == 3) lp.flags |= android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN;
+                else lp.flags &= ~android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN;
+                g.updateViewLayout(v, lp);
+            }
+            System.out.println("[apklayer] fullscreen " + mode);
         } else if (step.equals("navinset")) { // the top window's navigation bar inset (bottom, px), as its app sees it
             java.util.List<android.view.View> views = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mViews");
             android.view.WindowInsets wi = views.get(views.size() - 1).getRootWindowInsets();

@@ -38,6 +38,7 @@ void decor_set_title(struct decor *d, const char *title);
 int decor_dark(void);
 void decor_draw(void *px, int pw, int ph, int lw, int maximized, int hover, int focused,
                 const char *title, int dark, int (*button_x)(int, int));
+void decor_hide(struct decor *d);  /* unmapped (a fullscreen window); the next decor_update draws it again */
 void decor_destroy(struct decor *d);
 
 #endif

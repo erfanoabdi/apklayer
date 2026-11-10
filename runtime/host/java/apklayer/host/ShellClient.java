@@ -20,7 +20,7 @@ final class ShellClient {
     private static final byte[] DISPLAY_WINDOW = System.getProperty("apklayer.displaywindow", "apklayer").getBytes(StandardCharsets.UTF_8);
     private static final int INPUT = 101, CLOSE = 103, KEY = 105, SCROLL = 106,
             CONFIGURE = 107, STATE = 108, CLIPBOARD = 109, CLIPBOARD_SET = 5, TEXT_INPUT = 6, IME = 110, TOUCH = 111,
-            DISPLAY = 112, VSYNC = 113, VSYNC_REQUEST = 7, DECOR_DARK = 13, WINDOW_MODE = 15, NAVBAR = 16;
+            DISPLAY = 112, VSYNC = 113, VSYNC_REQUEST = 7, DECOR_DARK = 13, WINDOW_MODE = 15, NAVBAR = 16, FULLSCREEN = 18;
     private static final int WINDOW_ID = 1;
 
     private final SocketChannel channel;
@@ -114,6 +114,15 @@ final class ShellClient {
     void sendNavigationBar(boolean visible) {
         try {
             send(NAVBAR, buf(8).putInt(WINDOW_ID).putInt(visible ? 1 : 0));
+        } catch (IOException e) {
+            // shell gone: the read loop notices
+        }
+    }
+
+    /** The app goes fullscreen (hides the status bar) or leaves it: the shell asks the compositor for a fullscreen window. */
+    void sendFullscreen(boolean on) {
+        try {
+            send(FULLSCREEN, buf(8).putInt(WINDOW_ID).putInt(on ? 1 : 0));
         } catch (IOException e) {
             // shell gone: the read loop notices
         }

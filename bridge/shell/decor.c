@@ -100,6 +100,14 @@ int decor_hit(const struct decor *d, int x, int y)
     return DECOR_BAR;
 }
 
+void decor_hide(struct decor *d)
+{
+    if (!d->surface || d->focused == -1) return;
+    wl_surface_attach(d->surface, NULL, 0, 0);
+    wl_surface_commit(d->surface);
+    d->focused = -1;  /* the next decor_update draws and attaches it again */
+}
+
 void decor_destroy(struct decor *d)
 {
     if (d->buffer) wl_buffer_destroy(d->buffer);

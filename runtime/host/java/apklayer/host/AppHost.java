@@ -55,6 +55,7 @@ public final class AppHost implements Runnable {
     private int outputPxW, outputPxH;                    // the shell's output (screen) in pixels, 0: unknown
     private int imeShown;                                // the host keyboard's height the app was last told (px)
     private int lastOrientation = -2;                    // top activity's requested orientation last applied
+    private boolean turnRequested;                       // that request turns the window: its configure is a rotation (hostResize)
     private final HostTextBridge text = new HostTextBridge();
     private ShellClient shell;
     private HostInput input;
@@ -185,6 +186,7 @@ public final class AppHost implements Runnable {
         StartTrace.mark("window configured by the shell");
         this.shell = shell;
         if (shell != null) org.robolectric.shadows.NavigationBarInset.onVisibility(shell::sendNavigationBar);  // immersive mode: the shell hides its bar
+        if (shell != null) org.robolectric.shadows.NavigationBarInset.onFullscreen(shell::sendFullscreen);  // the shell makes the window fullscreen
         if (shell != null && HostConfiguration.night() != null) shell.sendDecorDark(HostConfiguration.night());
         text.shell = shell;
         text.followShowRequests();
@@ -383,6 +385,7 @@ public final class AppHost implements Runnable {
         lastOrientation = req;
         boolean landscape = req == 0 || req == 6 || req == 11, portrait = req == 1 || req == 7 || req == 12;
         boolean turn = (landscape && logicalW < logicalH) || (portrait && logicalW > logicalH);
+        turnRequested = turn;
         if (turn) System.out.println("[apklayer] orientation " + (landscape ? "landscape" : "portrait") + " requested");
         // the shell keeps a fixed orientation's shape through drag resizes too (0 x 0: none), turns the window when it has the other shape and
         // answers with a configure
@@ -398,9 +401,16 @@ public final class AppHost implements Runnable {
         if (host == null) return;  // before the first launch: the activities start with it
         if (host.shell != null && HostConfiguration.night() != null) host.shell.sendDecorDark(HostConfiguration.night());
         if (host.shell != null) host.shell.sendWindowMode(HostConfiguration.windowMode());  // live: the shell restyles the window (bridge/shell/mobile.c)
+        host.dispatchConfiguration(changes);
+    }
+
+    /** The application's new configuration to the activities: those that do not handle the changes themselves are recreated (HostConfiguration.dispatch). */
+    private void dispatchConfiguration(int changes) {
+        AppHost host = this;
         ActivityController<? extends Activity> top = stack.peek();
         HostConfiguration.dispatch(new ArrayList<>(stack), a -> host.task.stopped.contains(a) || (host.stoppedByMinimize && top != null && a == top.get()), changes,
                 (c, old) -> {
+                    c.get().setRequestedOrientation(old.getRequestedOrientation());  // kept across a relaunch, as Android's ActivityRecord keeps it
                     host.task.recreated(old, c.get());
                     setVisible(c.visible(), true);  // ActivityController's recreation leaves the new window unattached
                     HostWindows.focus(c, c == top && host.windowActive);  // Robolectric's recreation focuses it: only the top window has focus
@@ -446,6 +456,9 @@ public final class AppHost implements Runnable {
     private void hostResize(int w, int h, int scalePct, int dpi, int navPx) {
         if (dpi <= 0) dpi = 160 * scalePct / 100;
         int wdp = dp(w * scalePct / 100, dpi), hdp = dp(h * scalePct / 100, dpi);
+        // the window turned as the app asked (setRequestedOrientation): a rotation; other shape changes (a drag, fullscreen) are resizes
+        boolean turned = turnRequested && !stack.isEmpty() && logicalW > 0 && (w > h) != (logicalW > logicalH);
+        if (turned) turnRequested = false;
         logicalW = w;
         logicalH = h;
         logicalScale = scalePct;
@@ -461,7 +474,13 @@ public final class AppHost implements Runnable {
         int pw = w * scalePct / 100, ph = h * scalePct / 100;
         int longer = Math.max(Math.max(outputPxW, outputPxH), Math.max(pw, ph)), shorter = Math.max(Math.min(outputPxW, outputPxH), Math.min(pw, ph));
         HostConfiguration.setScreen(outputPxW > 0 && outputPxH > 0 ? (pw >= ph ? new android.graphics.Rect(0, 0, longer, shorter) : new android.graphics.Rect(0, 0, shorter, longer)) : null);
-        HostConfiguration.resize("w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi", new ArrayList<>(stack));
+        String size = "w" + wdp + "dp-h" + hdp + "dp-" + dpi + "dpi";
+        if (turned) {  // as a rotation on Android: activities that do not declare orientation|screenSize in configChanges are recreated, so they
+            // take their -land/-port layouts (NewPipe's player goes fullscreen from its recreated VideoDetailFragment)
+            HostConfiguration.setSize(size);
+            dispatchConfiguration(android.content.pm.ActivityInfo.CONFIG_ORIENTATION | android.content.pm.ActivityInfo.CONFIG_SCREEN_SIZE
+                    | android.content.pm.ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE | android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT);
+        } else HostConfiguration.resize(size, new ArrayList<>(stack));
         Object wmg = android.view.WindowManagerGlobal.getInstance();
         List<View> views = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
         for (View v : views) { // force a fresh frame at the new size

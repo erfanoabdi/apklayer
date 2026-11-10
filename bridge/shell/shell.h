@@ -54,6 +54,8 @@
  *   app -> shell  15 WINDOW_MODE    {i32 id, i32 mode}: 0 auto, 1 desktop (floating, title bar), 2 mobile (maximized, navigation bar);
  *                                   sent before WINDOW_CREATE it sets the new window's style, later it switches it (mobile.c)
  *                 16 NAVBAR         {i32 id, i32 visible}: the app shows or hides the navigation bar (immersive mode)
+ *                 18 FULLSCREEN     {i32 id, i32 on}: the app hides (1) or shows (0) the status bar, Android's fullscreen: the shell asks the
+ *                                   compositor for a fullscreen window (xdg_toplevel.set_fullscreen) and leaves it again
  *                 17 NAVBAR_LAYER   {i32 id}: the window's owner (the virtual display, aosp/hals/graphics/vdisplay) composes the navigation bar
  *                                   into its frames; used where the compositor has no wl_subcompositor (Lipstick), answered with
  *   shell -> app 116 NAVBAR_PIXELS  {i32 id, i32 w, i32 h} + a memfd (w x h px XRGB8888, SCM_RIGHTS): the bar to show over the bottom of
@@ -100,6 +102,7 @@ enum { MSG_HELLO = 1, MSG_WINDOW_CREATE, MSG_FRAME, MSG_WINDOW_DESTROY,
 #define MSG_DECOR_DARK 13    /* app -> shell: {own window id, 1 light | 2 dark}: the instance's colour scheme (its host settings), for the title bar */
 #define MSG_WINDOW_MODE 15   /* app -> shell: {own window id, WM_*} (mobile.c) */
 #define MSG_NAVBAR 16        /* app -> shell: {own window id, visible}: the app's navigation bar visibility (immersive mode) */
+#define MSG_FULLSCREEN 18    /* app -> shell: {own window id, on}: the app went fullscreen or left it (mobile.c) */
 #define MSG_NAVBAR_LAYER 17  /* app -> shell: {own window id}: the window's owner composes the navigation bar (mobile.c) */
 #define MSG_NAVBAR_PIXELS 116 /* shell -> app: {id, w, h} + memfd: that bar's pixels */
 enum { WM_AUTO = 0, WM_DESKTOP = 1, WM_MOBILE = 2 };
@@ -141,6 +144,8 @@ struct window {
     int lock;                   /* the top activity's fixed orientation (MSG_WINDOW_SIZE): 1 landscape, 2 portrait, 0 none */
     int bounds_w, bounds_h;     /* xdg_toplevel.configure_bounds: the largest window geometry that fits the work area, 0 = unknown */
     int maximized, activated;   /* xdg toplevel states (maximized: also fullscreen) */
+    int fullscreen;             /* the compositor's fullscreen state: no title bar */
+    int want_fullscreen;        /* the app asked for fullscreen (MSG_FULLSCREEN) */
     int test_focus;             /* test input set its activation (testinput.c): the desktop's activation changes are ignored from then on */
     int constrained;            /* maximized, fullscreen or tiled: the compositor decides the size */
     int resized, state_changed; /* what the toplevel configure changed, applied at the xdg_surface configure (geometry.c) */
@@ -188,7 +193,7 @@ struct window {
 #define W_TARGET(w) ((w)->proxy ? (w)->proxy : (w)->client)
 #define W_ID(w) ((w)->proxy ? (w)->proxy_id : (w)->id)
 /* logical height of our title bar above the content: none in mobile style or under the compositor's (server-side) bar */
-#define W_BAR(w) ((w)->mobile || (w)->ssd ? 0 : DECOR_H)
+#define W_BAR(w) ((w)->mobile || (w)->ssd || (w)->fullscreen ? 0 : DECOR_H)
 
 /* ---- state shared between the modules (defined in main.c) ---- */
 extern struct wl_display *display;
@@ -311,6 +316,7 @@ void window_set_mode(struct window *w, int mode); /* WM_*: (re)applies the style
 void window_display_changed(struct window *w);   /* the outputs changed: style (auto), density and navigation bar follow */
 void window_nav_visible(struct window *w, int visible);  /* MSG_NAVBAR */
 void window_nav_layer(struct window *w);  /* MSG_NAVBAR_LAYER */
+void window_set_fullscreen(struct window *w, int on);  /* MSG_FULLSCREEN */
 void window_nav_action(struct window *w, int button);    /* a navigation bar button (NAV_*) was pressed */
 void window_send_back(struct window *w);         /* pointer.c: KEYCODE_BACK down and up */
 void window_minimize(struct window *w);          /* pointer.c: the app stops, then the compositor minimizes */

@@ -155,6 +155,11 @@ static void client_message(struct client *c, uint32_t type, const uint8_t *p, ui
         if (w) window_nav_visible(w, v[1]);
         break;
     }
+    case MSG_FULLSCREEN: {
+        struct window *w = len >= 8 ? window_find_input(c, v[0]) : NULL;
+        if (w) window_set_fullscreen(w, v[1]);
+        break;
+    }
     case MSG_NAVBAR_LAYER: {
         struct window *w = len >= 4 ? window_find(c, v[0]) : NULL;
         if (w) window_nav_layer(w);
