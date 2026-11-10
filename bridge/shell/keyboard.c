@@ -59,29 +59,34 @@ uint32_t kb_android_meta(void)
     return m;
 }
 
+/* 1 when the compositor gave no usable keymap: the default keymap's state then follows the keys themselves
+ * (such a compositor's modifiers event carries no xkb masks). */
+static int kb_own_state;
+
 static void kb_keymap(void *d, struct wl_keyboard *k, uint32_t fmt, int32_t fd, uint32_t sz)
 {
-    (void)d; (void)k; (void)fmt;
-    char *map = malloc(sz + 1);
-    if (map) {
-        ssize_t got = 0;
-        while (got < (ssize_t)sz) {
-            ssize_t r = read(fd, map + got, sz - (size_t)got);
-            if (r <= 0) break;
-            got += r;
-        }
-        map[got] = 0;
-        if (!xkb_ctx) xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-        if (xkb_state) { xkb_state_unref(xkb_state); xkb_state = NULL; }
-        if (xkb_keymap_g) xkb_keymap_unref(xkb_keymap_g);
-        xkb_keymap_g = xkb_ctx ? xkb_keymap_new_from_string(xkb_ctx, map,
-                            XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS) : NULL;
-        if (xkb_keymap_g) xkb_state = xkb_state_new(xkb_keymap_g);
-        fprintf(stderr, "[shell] xkb keymap loaded (%zd bytes, %s)\n", got,
-                xkb_keymap_g ? "ok" : "FAILED");
+    (void)d; (void)k;
+    if (!xkb_ctx) xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    struct xkb_keymap *km = NULL;
+    /* wl_seat v7+ maps the fd MAP_PRIVATE (a compositor may hand a sealed or read-only memfd whose read offset is not 0) */
+    char *map = fmt == WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1 && sz > 0
+        ? mmap(NULL, sz, PROT_READ, MAP_PRIVATE, fd, 0) : MAP_FAILED;
+    if (map != MAP_FAILED) {
+        if (xkb_ctx) km = xkb_keymap_new_from_buffer(xkb_ctx, map, strnlen(map, sz),
+                                                     XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
+        munmap(map, sz);
     }
-    free(map);
     close(fd);
+    kb_own_state = !km;
+    /* no/empty keymap (Lipstick's Qt 5 compositor sends NO_KEYMAP): the default RMLVO keymap, as Qt clients do */
+    if (!km && xkb_ctx) km = xkb_keymap_new_from_names(xkb_ctx, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS);
+    fprintf(stderr, "[shell] xkb keymap loaded (format %u, %u bytes, %s)\n", fmt, sz,
+            !km ? "FAILED" : kb_own_state ? "default" : "ok");
+    if (!km) return; /* keep the previous keymap */
+    if (xkb_state) xkb_state_unref(xkb_state);
+    if (xkb_keymap_g) xkb_keymap_unref(xkb_keymap_g);
+    xkb_keymap_g = km;
+    xkb_state = xkb_state_new(km);
 }
 static void kb_enter(void *d, struct wl_keyboard *k, uint32_t s, struct wl_surface *sf,
                      struct wl_array *keys)
@@ -124,6 +129,7 @@ static void kb_key(void *d, struct wl_keyboard *k, uint32_t s, uint32_t t, uint3
     int down = st == WL_KEYBOARD_KEY_STATE_PRESSED;
     if (debug_input) fprintf(stderr, "[shell] key %u down=%d focus=%d\n", key, down, keyboard_focus != NULL);
     key_event(key, down);
+    if (kb_own_state && xkb_state && k) xkb_state_update_key(xkb_state, key + 8, down ? XKB_KEY_DOWN : XKB_KEY_UP);
     if (down && xkb_keymap_g && repeat_rate > 0 && xkb_keymap_key_repeats(xkb_keymap_g, key + 8)) {
         repeat_key = (int)key;
         repeat_next_ms = now_ms() + repeat_delay;
@@ -135,7 +141,7 @@ static void kb_mods(void *d, struct wl_keyboard *k, uint32_t s, uint32_t dm, uin
                     uint32_t km, uint32_t group)
 {
     (void)d; (void)k; (void)s;
-    if (xkb_state) xkb_state_update_mask(xkb_state, dm, lm, km, 0, 0, group);
+    if (xkb_state && !kb_own_state) xkb_state_update_mask(xkb_state, dm, lm, km, 0, 0, group);
 }
 static void kb_repeat_info(void *d, struct wl_keyboard *k, int32_t rate, int32_t delay)
 { (void)d; (void)k; repeat_rate = rate; repeat_delay = delay; }

@@ -26,7 +26,6 @@ public class ShadowHostBaseDexClassLoader {
                 ClassParameter.from(ByteBuffer[].class, dexFiles),
                 ClassParameter.from(String.class, librarySearchPath),
                 ClassParameter.from(ClassLoader.class, parent));
-        CdsDump.track(real);  // its classes are archived too: linked before the dump
         try {
             byte[][] dexes = new byte[dexFiles.length][];
             for (int i = 0; i < dexFiles.length; i++) {

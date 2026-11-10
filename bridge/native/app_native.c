@@ -2,6 +2,7 @@
 /* Registers the natives of apklayer.host.NativeLoader on the device-library route: the functions are native_loader.c's (the older route builds them into its own
  * libapklayer_native.so, where HotSpot finds them by name; here they are bound with RegisterNatives from the runtime shim). */
 #include <jni.h>
+#include <jvmti.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -29,6 +30,28 @@ static void map_own_data(JNIEnv *env, jclass cls, jstring pkg, jint uid, jstring
     if (r) (*env)->ReleaseStringUTFChars(env, root, r);
 }
 
+/* Every class the JVM has loaded (JVMTI GetLoadedClasses), for CdsDump: the classes of any loader, an app's own ClassLoader subclass's too; null if JVMTI refuses. */
+static jobjectArray loaded_classes(JNIEnv *env, jclass cls)
+{
+    JavaVM *vm;
+    jvmtiEnv *ti;
+    jint n;
+    jclass *all;
+    if ((*env)->GetJavaVM(env, &vm) != JNI_OK || (*vm)->GetEnv(vm, (void **)&ti, JVMTI_VERSION_1_2) != JNI_OK) return NULL;
+    jobjectArray out = NULL;
+    if ((*ti)->GetLoadedClasses(ti, &n, &all) == JVMTI_ERROR_NONE) {
+        jclass class_class = (*env)->GetObjectClass(env, cls);  /* java.lang.Class */
+        out = class_class ? (*env)->NewObjectArray(env, n, class_class, NULL) : NULL;
+        for (jint i = 0; i < n; i++) {
+            if (out) (*env)->SetObjectArrayElement(env, out, i, all[i]);
+            (*env)->DeleteLocalRef(env, all[i]);
+        }
+        (*ti)->Deallocate(ti, (unsigned char *)all);
+    }
+    (*ti)->DisposeEnvironment(ti);
+    return out;
+}
+
 int apklayer_register_nativeloader(JNIEnv *env, jclass loader)
 {
     JNINativeMethod methods[] = {
@@ -43,6 +66,7 @@ int apklayer_register_nativeloader(JNIEnv *env, jclass loader)
         {"setProcessName", "(Ljava/lang/String;)V", (void *)Java_apklayer_host_NativeLoader_setProcessName},
         {"receiveTarget", "(I)Ljava/lang/String;", (void *)Java_apklayer_host_NativeLoader_receiveTarget},
         {"mapOwnData", "(Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;)V", (void *)map_own_data},
+        {"loadedClasses", "()[Ljava/lang/Class;", (void *)loaded_classes},
     };
     if ((*env)->RegisterNatives(env, loader, methods, sizeof methods / sizeof *methods) != 0) {
         fprintf(stderr, "[runtime] cannot register the NativeLoader natives\n");

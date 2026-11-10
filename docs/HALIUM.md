@@ -317,6 +317,10 @@ reached over Maliit's D-Bus protocol, which the shell speaks without zwp_text_in
   white). Ubuntu Touch: the power key through uinput (`phablet` is in plugdev), the PIN on Lomiri's keypad, a screenshot with Volume Up + Down
   (`~/Pictures/Screenshots`, then the tool's trash icon at 40,94). Sailfish: `mce req_tklock_mode_change unlocked` brings the keypad, the code
   and its accept key through uinput as root (`devel-su`), Lipstick's `saveScreenshot` writes only below `~/Pictures`.
+- Hardware keyboards (2026-11-10): Lipstick sends its XKB keymap in an fd whose offset is at the end (read() gives 0 bytes); the shell maps
+  it (MAP_PRIVATE) and falls back to xkbcommon's default keymap when none comes. A uinput keyboard types into apps on both phones.
+  A shell of one's own beside the running `ut` one: `APKLAYER_BUILD=<dir with bridge/shell/apklayer-shell and the installed tree's other
+  parts linked>` and an own `XDG_RUNTIME_DIR` (the shell is one per runtime directory), `WAYLAND_DISPLAY` by absolute path.
 
 ## apklayer on Sailfish OS (Volla Phone Quintus, 2026-11-07)
 Route (2026-11-07, replaces the first sysroot tarball with its own glibc 2.39, which the owner rejected): real RPMs built against Sailfish OS's own

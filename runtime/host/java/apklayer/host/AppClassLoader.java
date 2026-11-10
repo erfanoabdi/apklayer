@@ -30,7 +30,6 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
 
     public AppClassLoader(String name, Path[] jars, ClassLoader parent) {
         super(name, urls(jars), parent);
-        CdsDump.track(this);
     }
 
     /**
