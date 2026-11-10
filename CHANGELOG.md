@@ -3,7 +3,20 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds decisions and open work).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
-## 2026-11-10: hello.camera's fake-camera checks pass on both Halium phones (the frames were turned, not mis-laid)
+## 2026-11-10: the hidden "package" and "user" services answer apps that call them directly (App Manager's app list, retest (d))
+- Cause: App Manager 4.1.1 in no-root mode takes `ServiceManager.getService("package"/"user")`, wraps each in a binder of its own (ProxyBinder) and calls
+  IPackageManager/IUserManager through `Stub.asInterface` on that wrapper, so every call is a `transact`. Robolectric serves no "package", a "user" that answers
+  null, and attaches its fakes to a plain Binder whose onTransact answers nothing: no users, no packages, apps.db 0 rows, an empty list.
+- Fix: `HostPackageService` (IPackageManager.Default with the calls apps make: getInstalledPackages/Applications, getPackageInfo, getApplicationInfo,
+  get{Activity,Receiver,Service,Provider}Info, getPackagesForUid, getNameForUid, getPackageUid, getAllPackages, queryIntentActivities, resolveIntent,
+  enabled settings, hasSystemFeature, checkPermission, install source; its `Users`: getUsers, getUserInfo, getProfiles, getProfileIds, serials...) answers from
+  the app's own PackageManager/UserManager (the hub's package data, Robolectric's user store). `HostBinderStubs` generates (ASM) a real `Stub` subclass that
+  forwards every method to it, so transactions are unparcelled by AIDL's own code; ShadowHostServiceManager hands those binders out for "package" and "user".
+- Checks: hello-system `hiddenservices` (group system-apps: getService by reflection, getInstalledPackages through a wrapper binder lists itself, getPackageInfo,
+  getUsers, getProfiles); Parallels (own tree): system-apps, activities, services, providers pass. App Manager on Parallels: after I Agree the list shows the
+  instance's 25 apps (apps.db 25 rows).
+
+'s fake-camera checks pass on both Halium phones (the frames were turned, not mis-laid)
 - Cause: not the provider's YUV layout (BackendCamera::captureYUV already writes through lockYCbCr's y/cb/cr, ystride, cstride and
   chroma_step; the values read back exact). The phones give hello.camera's landscape-locked Main a portrait window (720x1528, 1080x2400), so
   HostCameraShadows.windowShape sets the camera compat info and cameraserver forces ROTATE_AND_CROP_90 on every request (Camera3Device

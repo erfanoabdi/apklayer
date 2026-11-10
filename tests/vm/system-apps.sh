@@ -1,6 +1,6 @@
 #!/bin/bash
 # system-apps.sh [scenario...]: the system apps and services as an app uses them (tests/apps/hello-system): contacts, calendar, downloads, settings,
-# media, documents, userdict, telephony, notifications, alarms, jobs (synchronous and asynchronous), build identity, signing certificates, display rotation, cache quota, storage stats, vibrator, toasts, system properties, accounts, account removal, location, input methods, Os.accept peers, launch order, a wrapped application base. No argument: all of them in one launch; with arguments: one launch
+# media, documents, userdict, telephony, notifications, alarms, jobs (synchronous and asynchronous), build identity, signing certificates, display rotation, cache quota, storage stats, vibrator, toasts, system properties, the hidden package and user services, accounts, account removal, location, input methods, Os.accept peers, launch order, a wrapped application base. No argument: all of them in one launch; with arguments: one launch
 # each. Prints "[sys] PASS|FAIL name detail" per scenario and exits 1 when one failed or did not report.
 # On the VM, in the group's instance (tests/run system-apps): APKLAYER_INSTANCE, APKLY_STATE (its logs) and hello-system installed by the runner.
 set -uo pipefail
@@ -31,7 +31,7 @@ for scenario in ${@:-all wrappedbase}; do  # wrappedbase: its own launch (App wr
     out=$APKLY_STATE/sys-$scenario.out
     launch $scenario $out
     grep -a "^\[sys\] \(PASS\|FAIL\)" $out
-    if [ "$scenario" = all ]; then total=27; else total=1; fi
+    if [ "$scenario" = all ]; then total=28; else total=1; fi
     got=$(grep -ac "^\[sys\] PASS" $out); [ "$got" -eq "$total" ] || { status=1; grep -a "^\[sys\] FAIL" $out > /dev/null || echo "[sys] no report ($got of $total passed)"; }
 done
 # the IME choice applies to a running instance at once (HubProtocol.SETTINGS_CHANGED): a hub booted without it, then `ime enable`, then the app sees it the default
