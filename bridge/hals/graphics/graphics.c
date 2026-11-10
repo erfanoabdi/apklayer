@@ -173,19 +173,34 @@ static int alloc_packed(struct apklayer_gfx *gfx, struct apklayer_gfx_buffer *ou
     return 0;
 }
 
+/* The flags of a new buffer: gbm_flags, but a buffer the CPU draws and the GPU samples (a software-rendered window, composed by
+ * SurfaceFlinger) is tiled where the GPU samples LINEAR only as an external texture (NVIDIA: SurfaceFlinger's GL_TEXTURE_2D import failed,
+ * glEGLImageTargetTexture2DOES 0x502, and PGR's login dialog showed only its dim). Its CPU map goes through the GPU (readback.c). */
+static uint32_t alloc_flags(struct apklayer_gfx *gfx, uint32_t fourcc, uint32_t usage)
+{
+    uint32_t f = gbm_flags(gfx, usage);
+    if ((f & GBM_BO_USE_LINEAR) && (usage & APKLAYER_GFX_SAMPLE) && (usage & (APKLAYER_GFX_CPU_READ | APKLAYER_GFX_CPU_WRITE))
+        && !(usage & APKLAYER_GFX_SCANOUT && gfx->other_gpu)  /* another GPU's compositor needs LINEAR */
+        && (fourcc == DRM_FORMAT_ABGR8888 || fourcc == DRM_FORMAT_XBGR8888)  /* what readback.c copies */
+        && apklayer_gfx_linear_external_only(gfx->gbm, fourcc))
+        f = (f & ~GBM_BO_USE_LINEAR) | GBM_BO_USE_RENDERING;
+    return f;
+}
+
 int apklayer_gfx_alloc(struct apklayer_gfx *gfx, uint32_t width, uint32_t height, uint32_t fourcc, uint32_t usage,
                        struct apklayer_gfx_buffer *out)
 {
     if (!apklayer_gfx_supports(gfx, fourcc, usage)) return -ENOTSUP;
     buffer_init(out, width, height, fourcc);
     int r = 0;
-    if (gbm_device_is_format_supported(gfx->gbm, fourcc, gbm_flags(gfx, usage))) {
-        struct gbm_bo *bo = gbm_bo_create(gfx->gbm, width, height, fourcc, gbm_flags(gfx, usage));
+    uint32_t flags = alloc_flags(gfx, fourcc, usage);
+    if (gbm_device_is_format_supported(gfx->gbm, fourcc, flags)) {
+        struct gbm_bo *bo = gbm_bo_create(gfx->gbm, width, height, fourcc, flags);
         /* NVIDIA's GBM makes no LINEAR render target (EINVAL; its EGL renders to no pitch-linear image either): SurfaceFlinger's capture
          * (GPU render + CPU read) is then tiled and the CPU reads it through the GPU (apklayer_gfx_map). Mesa never gets here. */
-        if (!bo && (gbm_flags(gfx, usage) & (GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING)) == (GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING))
-            bo = gbm_bo_create(gfx->gbm, width, height, fourcc, gbm_flags(gfx, usage) & ~GBM_BO_USE_LINEAR);
-        if (!bo) { fprintf(stderr, "apklayer-gfx: gbm_bo_create %ux%u fourcc 0x%x flags 0x%x failed: %s\n", width, height, fourcc, gbm_flags(gfx, usage), strerror(errno)); return errno ? -errno : -ENOMEM; }
+        if (!bo && (flags & (GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING)) == (GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING))
+            bo = gbm_bo_create(gfx->gbm, width, height, fourcc, flags & ~GBM_BO_USE_LINEAR);
+        if (!bo) { fprintf(stderr, "apklayer-gfx: gbm_bo_create %ux%u fourcc 0x%x flags 0x%x failed: %s\n", width, height, fourcc, flags, strerror(errno)); return errno ? -errno : -ENOMEM; }
         out->modifier = gbm_bo_get_modifier(bo);
         out->num_planes = gbm_bo_get_plane_count(bo);
         r = out->num_planes < 1 || out->num_planes > APKLAYER_GFX_MAX_PLANES ? -ENOTSUP : 0;
@@ -266,6 +281,10 @@ struct apklayer_gfx_mapping {
     bool write;
     void *mapped;                        /* a tiled buffer's map, read and written through the linear copy in stage */
     uint32_t map_stride, stage_stride, row_bytes, rows;
+    struct gbm_device *upload_gbm;       /* a tiled buffer the driver maps not at all, written: stage goes back through the GPU */
+    int upload_fd;
+    uint32_t upload_w, upload_h, upload_fourcc, upload_stride, upload_offset;
+    uint64_t upload_modifier;
 };
 
 void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffer *buf, int plane, bool write,
@@ -315,11 +334,16 @@ void *apklayer_gfx_map(struct apklayer_gfx *gfx, const struct apklayer_gfx_buffe
             if (!addr && getenv("APKLAYER_RUNTIME_DEBUG")) fprintf(stderr, "[gfx] gbm_bo_map %ux%u: %s\n", fd_data.width, fd_data.height, strerror(errno));
             if (!addr) { gbm_bo_destroy(m->bo); m->bo = NULL; }
         }
-        /* a tiled buffer the driver maps not at all (NVIDIA): read through the GPU into a copy at the buffer's stride */
-        if (!addr && !write && !buf->packed && buf->num_planes == 1 && (m->stage = malloc((size_t)buf->stride[0] * fd_data.height))) {
+        /* a tiled buffer the driver maps not at all (NVIDIA): read through the GPU into a copy at the buffer's stride; a write goes back
+         * through the GPU at the unmap (alloc_flags makes CPU-drawn buffers that SurfaceFlinger composes tiled there) */
+        if (!addr && !buf->packed && buf->num_planes == 1 && (m->stage = malloc((size_t)buf->stride[0] * fd_data.height))) {
             int r = apklayer_gfx_readback(gfx->gbm, fd_data.fd, fd_data.width, fd_data.height, fd_data.format, buf->stride[0], buf->offset[0],
                                           buf->modifier, m->stage, buf->stride[0]);
             if (r) { free(m->stage); m->stage = NULL; errno = -r; } else { addr = m->stage; offset = 0; }
+            if (!r && write) {
+                m->upload_gbm = gfx->gbm; m->upload_fd = fd_data.fd; m->upload_w = fd_data.width; m->upload_h = fd_data.height;
+                m->upload_fourcc = fd_data.format; m->upload_stride = buf->stride[0]; m->upload_offset = buf->offset[0]; m->upload_modifier = buf->modifier;
+            }
         }
         /* Android reads a locked buffer at its own stride: a map with another one (a driver's detiled staging copy) is read and written
          * through a copy at that stride */
@@ -381,6 +405,11 @@ void apklayer_gfx_unmap(struct apklayer_gfx_mapping *m)
     if (m->mapped && m->write)  /* CPU writes go back through the driver's map */
         for (uint32_t y = 0; y < m->rows; y++)
             memcpy((char *)m->mapped + (size_t)y * m->map_stride, (char *)m->stage + (size_t)y * m->stage_stride, m->row_bytes);
+    if (m->upload_gbm) {
+        int r = apklayer_gfx_upload(m->upload_gbm, m->upload_fd, m->upload_w, m->upload_h, m->upload_fourcc, m->upload_stride, m->upload_offset,
+                                    m->upload_modifier, m->stage, m->upload_stride);
+        if (r) fprintf(stderr, "apklayer-gfx: writing a %ux%u tiled buffer through the GPU failed: %s\n", m->upload_w, m->upload_h, strerror(-r));
+    }
     if (m->stage) {
         for (int p = 0; p < m->planes; p++) {
             if (m->write) memcpy(m->plane_addr[p], (char *)m->stage + m->stage_offset[p], m->plane_size[p]);
