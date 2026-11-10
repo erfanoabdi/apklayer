@@ -183,8 +183,13 @@ Test apps: `tests/apps/build.sh hello-camera hello-hardware hello-native-player 
   desktop entry, all four when absent; "unknown.qtmir" windows allow all) and the user's rotation lock
   (`gsettings com.lomiri.touch.system rotation-lock`) is off. A Wayland client sees only its toplevel configures: maximized at first, then
   `[activated]` without maximized, then the turned size as a plain configure (1560x678 on the X23); wl_output stays 720x1560, transform 0.
-  The shell takes every configure's size in the mobile style; the app relaunches on a turn (layout-land), a fixed-orientation activity keeps
-  its shape (letterboxed at the window's top left).
+  The shell takes every configure's size in the mobile style; the app relaunches on a turn (layout-land).
+- An orientation the phone is not held in (NewPipe's fullscreen asks SENSOR_LANDSCAPE on a portrait Lomiri): as Android rotates the display,
+  the app gets the screen turned (a landscape configure: the window's height less our navigation bar by its width, no bar inset) and the
+  virtual display composes it rotated (SurfaceFlinger's projection ROTATION_90; 270 for portrait on a landscape window) into a buffer of the
+  window's shape; touches are turned back (bridge/shell/geometry.c want_turn, aosp/hals/graphics/vdisplay). Our navigation bar stays at the
+  portrait bottom, the phone's physical bottom, where a phone's 3-button bar sits in landscape. Mir 1 ignores wl_surface.set_buffer_transform
+  and has no wp_viewporter, hence SurfaceFlinger's rotation. Lipstick (the bar composed by the display) keeps the letterbox.
 - Turning the phone from a script (`tools/halium/ut-rotate.sh DIR PKG STEP...`, sudo password on stdin): `tools/halium/fake-accel.py` makes a
   uinput accelerometer, sensorfwd runs with its evdev accelerometer adaptor (`accelerometeradaptor`, `[accelerometer] input_match`) from a
   copied conf.d bind-mounted in a private mount namespace, the rotation lock off; each step sets the gravity (0,1000,0 portrait; 1000,0,0 and

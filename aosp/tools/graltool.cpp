@@ -30,7 +30,7 @@ using android::hardware::graphics::common::V1_2::BufferUsage;
 using android::hardware::graphics::common::V1_2::PixelFormat;
 
 namespace {
-void configure(void*, int32_t w, int32_t h, int32_t scale) { printf("graltool: window %dx%d scale %d%%\n", w, h, scale); fflush(stdout); }
+void configure(void*, int32_t w, int32_t h, int32_t scale, int32_t) { printf("graltool: window %dx%d scale %d%%\n", w, h, scale); fflush(stdout); }
 void vsync(void*, int64_t) {}
 void refresh(void*, uint32_t mhz) { printf("graltool: refresh %u mHz\n", mhz); fflush(stdout); }
 void released(void*, int slot) { printf("graltool: released %d\n", slot); fflush(stdout); }

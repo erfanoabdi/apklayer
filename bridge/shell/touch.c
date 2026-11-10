@@ -10,9 +10,9 @@ static int nav_finger;
 static void send_touch(int action, int finger, wl_fixed_t fx, wl_fixed_t fy)
 {
     if (!touch_window) return;
-    int scale = touch_window->scale;
-    int32_t v[5] = { W_ID(touch_window), action, finger, wl_fixed_to_int(fx) * scale / 100,
-                     wl_fixed_to_int(fy) * scale / 100 };
+    int scale = touch_window->scale, x = wl_fixed_to_int(fx), y = wl_fixed_to_int(fy);
+    window_to_app(touch_window, &x, &y);
+    int32_t v[5] = { W_ID(touch_window), action, finger, x * scale / 100, y * scale / 100 };
     send_msg(W_TARGET(touch_window), MSG_TOUCH, v, 5);
 }
 

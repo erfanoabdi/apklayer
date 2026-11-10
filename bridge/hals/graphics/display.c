@@ -36,9 +36,9 @@ struct apklayer_display {
     _Atomic int closing;
     uint8_t sent[SLOTS]; /* the slot's buffer was sent to the shell */
     int headless;
-    void (*_Atomic configure_fn)(void *, int32_t, int32_t, int32_t);
+    void (*_Atomic configure_fn)(void *, int32_t, int32_t, int32_t, int32_t);
     _Atomic(void *) configure_user;
-    _Atomic int64_t pending_cfg[3];   /* a configure that arrived before the callback was set (w, h, scale; w = 0: none) */
+    _Atomic int64_t pending_cfg[4];   /* a configure that arrived before the callback was set (w, h, scale, turn; w = 0: none) */
     void (*_Atomic navbar_fn)(void *, int, int32_t, int32_t);
     _Atomic(void *) navbar_user;
 };
@@ -133,9 +133,10 @@ static void *reader(void *arg)
             int64_t ts = now - ((ms - (int64_t)(uint32_t)body[1]) & 0xffffffffLL) * 1000000;
             if (d->cb.vsync) d->cb.vsync(d->cb.user, ts);
         } else if (head[0] == MSG_CONFIGURE && len >= 16) {
-            void (*fn)(void *, int32_t, int32_t, int32_t) = atomic_load(&d->configure_fn);
-            if (fn) fn(atomic_load(&d->configure_user), body[1], body[2], body[3]);
-            else { atomic_store(&d->pending_cfg[1], body[2]); atomic_store(&d->pending_cfg[2], body[3]); atomic_store(&d->pending_cfg[0], body[1]); }  /* apklayer patch: replayed by set_configure_callback */
+            void (*fn)(void *, int32_t, int32_t, int32_t, int32_t) = atomic_load(&d->configure_fn);
+            int32_t turn = len >= 44 ? body[10] : 0;  /* the shell's turn (bridge/shell/geometry.c want_turn) */
+            if (fn) fn(atomic_load(&d->configure_user), body[1], body[2], body[3], turn);
+            else { atomic_store(&d->pending_cfg[1], body[2]); atomic_store(&d->pending_cfg[2], body[3]); atomic_store(&d->pending_cfg[3], turn); atomic_store(&d->pending_cfg[0], body[1]); }  /* apklayer patch: replayed by set_configure_callback */
         } else if (head[0] == MSG_NAVBAR_PIXELS && len >= 12) {
             void (*fn)(void *, int, int32_t, int32_t) = atomic_load(&d->navbar_fn);
             if (fn) { fn(atomic_load(&d->navbar_user), mfd, body[1], body[2]); mfd = -1; }  /* the callback owns the fd */
@@ -208,12 +209,13 @@ void apklayer_display_close(struct apklayer_display *d)
     free(d);
 }
 
-void apklayer_display_set_configure_callback(struct apklayer_display *d, void (*configure)(void *, int32_t, int32_t, int32_t), void *user)
+void apklayer_display_set_configure_callback(struct apklayer_display *d, void (*configure)(void *, int32_t, int32_t, int32_t, int32_t), void *user)
 {
     atomic_store(&d->configure_user, user);
     atomic_store(&d->configure_fn, configure);
     int64_t pw = atomic_exchange(&d->pending_cfg[0], 0);
-    if (pw > 0 && configure) configure(user, (int32_t)pw, (int32_t)atomic_load(&d->pending_cfg[1]), (int32_t)atomic_load(&d->pending_cfg[2]));
+    if (pw > 0 && configure)
+        configure(user, (int32_t)pw, (int32_t)atomic_load(&d->pending_cfg[1]), (int32_t)atomic_load(&d->pending_cfg[2]), (int32_t)atomic_load(&d->pending_cfg[3]));
 }
 
 void apklayer_display_set_navbar_callback(struct apklayer_display *d, void (*navbar)(void *, int, int32_t, int32_t), void *user)

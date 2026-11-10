@@ -27,31 +27,65 @@ static void fit_size(const struct window *w, int lw, int lh, int grow, int *fw, 
     else { *fh = maxh; *fw = (int)((long)lw * maxh / lh); }
 }
 
-/* Tells the app (and the display's owner, when an app took over the window) its logical content size and the scale to render at. */
+/* An orientation the phone is not in (mobile style), as Android rotates the display: the app gets the screen turned (its configure is the
+ * window's swapped size, so a landscape config), and the display's owner (aosp/hals/graphics/vdisplay) composes it turned into a buffer
+ * of the window's shape (SurfaceFlinger's display projection: ROTATION_90 for landscape on a portrait window, the content a quarter turn
+ * clockwise on the panel; 270 the way back); the user turns the phone. Not wl_surface.set_buffer_transform: Lomiri's Mir 1 ignores it.
+ * Our navigation bar stays at the window's bottom, the phone's physical bottom, where a phone's 3-button bar sits in landscape (beside the
+ * app's content, which it shortens: the app has no side inset for it). A display owner that composes the bar itself (Lipstick, nav.remote)
+ * keeps the letterbox (fit_size). */
+static int want_turn(const struct window *w)
+{
+    if (!w->mobile || !w->lock || w->nav.remote || !w->proxy || w->cfg_w <= 0 || w->cfg_h <= 0 || (w->cfg_w > w->cfg_h) == (w->lock == 1)) return 0;
+    return w->lock == 1 ? 90 : 270;
+}
+static int turned_nav(const struct window *w) { return w->turn && !w->nav_hidden && w->nav_h > 0 ? w->nav_h : 0; }
+
+void window_app_size(const struct window *w, int *aw, int *ah)
+{
+    if (w->turn) { *aw = w->cfg_h - turned_nav(w); *ah = w->cfg_w; }
+    else { *aw = w->cfg_w; *ah = w->cfg_h; }
+}
+
+/* (x, y) on the window's surface (logical) to the app's content: the inverse of the display's turn */
+void window_to_app(const struct window *w, int *x, int *y)
+{
+    int sx = *x, sy = *y;
+    if (w->turn == 90) { *x = sy; *y = w->cfg_w - sx; }
+    else if (w->turn == 270) { *x = w->cfg_h - turned_nav(w) - sy; *y = sx; }
+}
+
+/* Tells the app its logical content size and the scale to render at, and the display's owner (when an app took over the window) the
+ * window's, with the turn it composes the app at. */
 void window_send_configure(struct window *w)
 {
-    int s = window_scale(w), nav = w->mobile ? (w->nav_h * s + 50) / 100 : 0;  /* the bar's height in the app's pixels */
+    int s = window_scale(w), nav = w->mobile && !w->turn ? (w->nav_h * s + 50) / 100 : 0;  /* the bar's height in the app's pixels */
+    int aw, ah, ime = w->turn ? 0 : w->ime_px;  /* shortcut: turned, the keyboard is beside the content and gets no inset */
+    window_app_size(w, &aw, &ah);
     w->told_scale = s;
     w->told_dpi = w->dpi;
     w->told_nav = w->nav_h;
     /* the output's pixels: the app's screen (Display.getRealSize, WindowManager.getMaximumWindowMetrics), not its window */
-    send_msg(W_TARGET(w), MSG_CONFIGURE, (int32_t[]){ W_ID(w), w->cfg_w, w->cfg_h, s, w->dpi, nav, w->mobile, output_px_w, output_px_h, w->ime_px }, 10);
-    if (w->proxy) send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, w->cfg_w, w->cfg_h, s, w->dpi, nav, w->mobile, output_px_w, output_px_h, w->ime_px }, 10);
-    fprintf(stderr, "[shell] %s: configure content %dx%d @%d%% (%dx%d px), title bar %d logical = %d px%s, %s style, %d dpi, navigation bar %d logical = %d px, keyboard %d px\n",
-            w->client->pkg, w->cfg_w, w->cfg_h, s, w->cfg_w * s / 100, w->cfg_h * s / 100, W_BAR(w), (W_BAR(w) * s + 99) / 100,
-            w->maximized ? ", maximized" : w->constrained ? ", tiled" : "", w->mobile ? "mobile" : "desktop", w->dpi, w->nav_h, nav, w->ime_px);
+    send_msg(W_TARGET(w), MSG_CONFIGURE, (int32_t[]){ W_ID(w), aw, ah, s, w->dpi, nav, w->mobile, output_px_w, output_px_h, ime }, 10);
+    if (w->proxy)
+        send_msg(w->client, MSG_CONFIGURE, (int32_t[]){ w->id, w->turn ? ah : aw, w->turn ? aw : ah, s, w->dpi, nav, w->mobile, output_px_w, output_px_h, ime, w->turn }, 11);
+    fprintf(stderr, "[shell] %s: configure content %dx%d @%d%% (%dx%d px), title bar %d logical = %d px%s, %s style, %d dpi, navigation bar %d logical = %d px, keyboard %d px%s\n",
+            w->client->pkg, aw, ah, s, aw * s / 100, ah * s / 100, W_BAR(w), (W_BAR(w) * s + 99) / 100,
+            w->maximized ? ", maximized" : w->constrained ? ", tiled" : "", w->mobile ? "mobile" : "desktop", w->dpi, w->nav_h, nav, ime,
+            w->turn == 90 ? ", turned 90" : w->turn == 270 ? ", turned 270" : "");
 }
 
 void window_layout(struct window *w)
 {
-    int lw = w->cfg_w > 0 ? w->cfg_w : w->w, lh = w->cfg_h > 0 ? w->cfg_h : w->h;
+    w->turn = want_turn(w);
+    int lw = w->cfg_w > 0 ? w->cfg_w : w->w, lh = w->cfg_h > 0 ? w->cfg_h - turned_nav(w) : w->h;  /* turned: the bar is beside the picture */
     if (w->viewport) wp_viewport_set_destination(w->viewport, lw, lh);
     else  /* without wp_viewporter only whole multiples of the logical size are shown at their size (every desktop compositor has it) */
         wl_surface_set_buffer_scale(w->surface, w->w % lw == 0 && w->h % lh == 0 && w->w / lw == w->h / lh ? w->w / lw : 1);
     w->scale = w->w * 100 / lw;
-    if (w->fullscreen) decor_hide(&w->decor);
-    else if (!w->mobile) decor_update(&w->decor, lw, window_scale(w), w->maximized, w->bar_hover, w->activated);
-    else if (w->nav_hidden || w->nav_h <= 0) navbar_hide(&w->nav);
+    lh += turned_nav(w);
+    if (!w->mobile) { if (w->fullscreen) decor_hide(&w->decor); else decor_update(&w->decor, lw, window_scale(w), w->maximized, w->bar_hover, w->activated); }
+    else if (w->nav_hidden || w->nav_h <= 0) navbar_hide(&w->nav);  /* fullscreen too: the bar follows the app's (Lomiri kept a stale one) */
     else navbar_update(&w->nav, lh - w->nav_h, lw, w->nav_h, window_scale(w), w->dark, w->nav.pressed);
     if (w->xdg_surface) xdg_surface_set_window_geometry(w->xdg_surface, 0, -W_BAR(w), lw, lh + W_BAR(w));
 }
@@ -182,6 +216,13 @@ void window_request_size(struct window *w, int lw, int lh)
 {
     int fw, fh;
     w->lock = lw <= 0 || lh <= 0 ? 0 : lw > lh ? 1 : lw < lh ? 2 : 0;
+    if (w->configured && w->turn != want_turn(w)) {  /* a phone turns the app's content, not the window (want_turn) */
+        window_layout(w);
+        wl_surface_commit(w->surface);
+        window_send_configure(w);
+        return;
+    }
+    if (w->mobile && !w->nav.remote) return;
     if (!w->configured || !w->lock || (w->cfg_w > w->cfg_h) == (w->lock == 1)) return;  /* already that shape */
     fit_size(w, lw, lh, 1, &fw, &fh);  /* the app turns its window (as a rotated phone), fitted to the work area */
     if (w->constrained) {

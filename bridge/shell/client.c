@@ -49,7 +49,7 @@ void send_bytes(struct client *c, uint32_t type, const char *data, size_t len)
 void send_input(struct window *w, int32_t type, int32_t a, int32_t b)
 {
     if (!w) return;
-    if (type <= EV_SECONDARY) { a = a * w->scale / 100; b = b * w->scale / 100; } /* logical -> px */
+    if (type <= EV_SECONDARY) { window_to_app(w, &a, &b); a = a * w->scale / 100; b = b * w->scale / 100; } /* logical -> px */
     int32_t v[4] = { W_ID(w), type, a, b };
     send_msg(W_TARGET(w), MSG_INPUT, v, 4);
 }

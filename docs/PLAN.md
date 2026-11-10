@@ -39,9 +39,9 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - Windows: an app on a smaller second output still sees the largest; output hotplug reaches the app only at its next configure; no Back button under
   server-side decorations; KDE untested; a real-session scale switch check.
 - Mobile style on Lipstick: the pointer on the navigation-bar strip goes to the app. Landscape keeps the bar at the bottom (Lomiri rotates now: Android puts it at the side).
-- Lomiri: a fixed-orientation app is letterboxed at the window's top left when the phone turns the other way; the desktop entry could declare
-  the launcher activity's orientation (`X-Lomiri-Supported-Orientations`) so Lomiri keeps the screen in it. Rerun camera-reload on the X23
-  (hello.camera's Main now gets a landscape letterbox, not a turned portrait window). Sailfish (Lipstick) rotation unchecked.
+- Lomiri: a fixed-orientation app is turned (composed rotated, docs/HALIUM.md "Rotation on Ubuntu Touch"); the keyboard gets no inset while
+  turned. Rerun camera-reload on the X23
+  (hello.camera's Main is now turned). Sailfish (Lipstick) keeps the letterbox; its rotation unchecked.
 
 ## Camera
 - Sensor timestamps; all streams scaled from the largest; NDK libcamera2ndk is a stub (and would miss a lazy cameraserver on first call).

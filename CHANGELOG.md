@@ -1518,6 +1518,15 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-10 - gsi_arm64 libapklayer_vdisplay and graltool: a phone's turn composed rotated (rotation agent)
+- Why: NewPipe's fullscreen on the Volla X23 (Lomiri held portrait, the app asks SENSOR_LANDSCAPE) needs the app's landscape picture shown
+  turned in the portrait window; Lomiri's Mir 1 ignores wl_surface.set_buffer_transform and has no wp_viewporter, so the rotation is
+  SurfaceFlinger's (the virtual display's projection ROTATION_90/270), as on a phone. apklayer/display.h's configure callback gains the turn.
+- Command (OrbStack, `flock -n ~/los24-build.lock`): `tools/sync-aosp.sh ... hals/graphics/vdisplay tools`, then
+  `breakfast gsi_arm64 userdebug && m libapklayer_vdisplay libapklayer_graltool`.
+- Result: arm64 built, libapklayer_vdisplay.so sha256 35fc1f321fbfe10f6794c23bed0dadd1146edd883907e861027b433c00d842c3 (52208 bytes), lock set.
+  Then the same for x86_64: `breakfast gsi_x86_64 userdebug && m libapklayer_vdisplay`: sha256
+  7065eff2e754147fee9a411290d5062ec00270f8bd6250303e6aa01462541623 (37144 bytes), lock set. Both copied into the prebuilts branch.
 ### 2026-11-10 - gsi_arm64 and gsi_x86_64 mapper.apklayer: stride of XRGB8888 and 10-bit window buffers (corpus gaps agent)
 - Why: an EGL window buffer with Mesa's XRGB8888 (OpenTTD's ES 1 window) failed gralloc's import ("Stride didn't match, expected 814 got
   3256": bytesPerPixel had no XRGB8888, AR30, XR30, XB30) and every frame was copied; aosp/hals/graphics/common/gralloc_format.h.

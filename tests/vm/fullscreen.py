@@ -6,7 +6,8 @@ the compositor for a fullscreen window, whose configure is the whole output with
 app's picture has that size, leaving restores the window's size, title bar and navigation bar; with a landscape request before (NewPipe's
 player: SENSOR_LANDSCAPE, then fullscreen, then portrait and leave) the same: the requested turn recreates the activity (a rotation), and the
 portrait request in fullscreen leaves fullscreen so the desktop window can turn back.
---mobile: a phone simulated on the compositor as tests/vm/mobile.py does (maximized, navigation bar 126 px)."""
+--mobile: a phone simulated on the compositor as tests/vm/mobile.py does (maximized, navigation bar 126 px); the portrait request on its
+landscape window turns the app (Android rotates the display: a portrait configure, the buffer shown turned 270) and a tap lands turned back."""
 import os
 from pathlib import Path
 import re
@@ -28,8 +29,8 @@ if MOBILE: ENV.update(APKLAYER_OUTPUT_MM='66x143', APKLAYER_OUTPUT_PX='1080x2340
 STEPS = ((5000, 'navinset'), (5200, 'hover:1,0'), (6000, 'fullscreen:1'), (8500, 'navinset'), (8700, 'hover:2,0'),
          (9500, 'fullscreen:0'), (12000, 'navinset'), (12200, 'hover:3,0'), (12500, 'fullscreen:3'), (15000, 'hover:4,0'),
          (15500, 'fullscreen:2'), (18000, 'hover:5,0'), (18500, 'orient:6'), (20500, 'fullscreen:1'), (23000, 'hover:6,0'),
-         (23500, 'orient:1'), (23700, 'fullscreen:0'), (26500, 'navinset'), (26700, 'hover:7,0'))
-ENV['APKLAYER_JOPTS'] = '-Dapklayer.runms=28000 -Dapklayer.script=' + '+'.join('%d:%s' % s for s in STEPS)
+         (23500, 'orient:1'), (23700, 'fullscreen:0'), (26500, 'navinset'), (26700, 'hover:7,0'), (28000, 'hover:8,0'))
+ENV['APKLAYER_JOPTS'] = '-Dapklayer.debugkeys=true -Dapklayer.runms=29000 -Dapklayer.script=' + '+'.join('%d:%s' % s for s in STEPS)
 CONFIGURE = re.compile(r'configure content (\d+)x(\d+) @(\d+)% \((\d+)x(\d+) px\), title bar (\d+) logical')
 SHELL_LOG = instance.STATE / 'shell.log'
 seen, checks = [], []
@@ -113,13 +114,28 @@ try:
                     fullscreen('landscape')
                 elif 'script: hover:7,0' in line:
                     w, h, scale, bar = configure()
-                    # a maximized (mobile) window keeps the work area's size; a floating one takes the portrait shape asked for
-                    assert (w, h, bar) == first if MOBILE else bar == first[2] and h > w, 'portrait after fullscreen: %s' % (configure(),)
+                    if MOBILE:
+                        # a phone turns the app, not its window (geometry.c want_turn): portrait on the maximized landscape window is the
+                        # window's size swapped, less our navigation bar beside the content, no bar inset; the buffer is shown turned 270
+                        nav_l = int(re.findall(r'navigation bar (\d+) logical', shell_log())[-1])
+                        assert (w, h, bar) == (first[1] - nav_l, first[0], 0) and 'turned 270' in shell_log().rsplit('configure content', 1)[-1], \
+                            'portrait on the landscape phone: %s, window %s, bar %d' % (configure(), first, nav_l)
+                        assert insets()[-1] == 0, 'navigation bar inset while turned: %s' % insets()
+                        try: instance.capture('turned-desktop')  # the whole desktop: the portrait app turned on its side (a human check of its look)
+                        except Exception as e: print('no desktop screenshot: %s' % e, flush=True)
+                        instance.inject(PKG, 'tap:100,50')  # the window's (100, 50) is the turned app's (w - 50, 100)
+                        tap = (w - 50) * scale // 100, 100 * scale // 100
+                    else: assert bar == first[2] and h > w, 'portrait after fullscreen: %s' % (configure(),)  # a floating one takes the shape
                     picture('restored-portrait', w, h, scale)
-                    if MOBILE: assert insets()[-1] == 126, 'navigation bar inset: %s' % insets()
                     checks.append('portrait again %dx%d' % (w, h))
+                elif 'script: hover:8,0' in line and MOBILE:
+                    down = [l for l in seen if 'touch action=ACTION_DOWN' in l]
+                    assert down, 'the tap on the turned window did not reach the app'
+                    x, y = (float(v) for v in down[-1].rsplit(' at ', 1)[1].split(','))
+                    assert abs(x - tap[0]) <= 3 and abs(y - tap[1]) <= 3, 'tap on the turned window landed at %s, expected %s' % ((x, y), tap)
+                    checks.append('a tap on the turned window lands at the app\'s %d,%d' % tap)
     assert app.wait() == 0, 'app failed'
-    assert len(checks) == 6, checks
+    assert len(checks) == (7 if MOBILE else 6), checks
     print('PASS fullscreen%s: %s' % (' (mobile)' if MOBILE else '', ', '.join(checks)), flush=True)
 finally:
     instance.stop()

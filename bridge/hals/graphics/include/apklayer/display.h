@@ -31,10 +31,12 @@ struct apklayer_display *apklayer_display_open_headless(const char *name,
                                                       const struct apklayer_display_callbacks *callbacks);
 void apklayer_display_close(struct apklayer_display *d);
 
-/* The window's logical size and scale (percent), as the shell reports it: once the window is up and whenever it is resized. Runs on
- * the reader thread. A separate setter, not a field of the callbacks struct: the composer was built against that struct. */
+/* The window's logical size and scale (percent), as the shell reports it: once the window is up and whenever it is resized; turn: the
+ * degrees (0, 90, 270) the app's content is turned in the window (a phone showing an orientation it is not held in: compose it rotated).
+ * Runs on the reader thread. A separate setter, not a field of the callbacks struct: the composer was built against that struct. */
 void apklayer_display_set_configure_callback(struct apklayer_display *d,
-                                             void (*configure)(void *user, int32_t width, int32_t height, int32_t scale_percent), void *user);
+                                             void (*configure)(void *user, int32_t width, int32_t height, int32_t scale_percent, int32_t turn),
+                                             void *user);
 
 /* Offers to compose the shell's navigation bar into the frames (mobile style where the compositor has no subsurfaces: Lipstick). The shell
  * then sends it on every change: navbar(user, fd, width, height) with a memfd of width x height pixels XRGB8888 (little-endian, stride

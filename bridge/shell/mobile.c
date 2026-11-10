@@ -149,6 +149,7 @@ void window_nav_visible(struct window *w, int visible)
     if (!w->configured || !w->mobile) return;
     window_layout(w);
     wl_surface_commit(w->surface);
+    if (w->turn) window_send_configure(w);  /* turned, the bar is beside the app's content (geometry.c): its width changes */
 }
 
 /* Android's fullscreen (the app hid the status bar): the compositor's fullscreen state, which brings the output's size and hides its panels

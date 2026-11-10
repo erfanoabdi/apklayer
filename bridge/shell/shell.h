@@ -142,6 +142,7 @@ struct window {
     int cfg_w, cfg_h;           /* logical content size (window geometry less the title bar) the app was told, 0 = not yet */
     int float_w, float_h;       /* content size before a maximize/fullscreen/tile: restored when the compositor leaves the size to us */
     int lock;                   /* the top activity's fixed orientation (MSG_WINDOW_SIZE): 1 landscape, 2 portrait, 0 none */
+    int turn;                   /* mobile style: the app turned against the window, degrees (90, 270; 0 none): the display owner composes it so (geometry.c) */
     int bounds_w, bounds_h;     /* xdg_toplevel.configure_bounds: the largest window geometry that fits the work area, 0 = unknown */
     int maximized, activated;   /* xdg toplevel states (maximized: also fullscreen) */
     int fullscreen;             /* the compositor's fullscreen state: no title bar */
@@ -259,6 +260,8 @@ void window_set_dark(struct window *w, int dark);  /* the title bar's colour sch
 int window_scale(const struct window *w);  /* the scale the window is drawn at (percent) */
 void window_scale_changed(struct window *w, int pref);  /* the compositor prefers another scale (pref percent, 0 = output_scale) */
 void window_send_configure(struct window *w);
+void window_app_size(const struct window *w, int *aw, int *ah);  /* the app's logical content size (turned: the window's swapped) */
+void window_to_app(const struct window *w, int *x, int *y);      /* window logical coordinates -> the app's (turned) */
 void window_geometry_init(struct window *w);
 void window_geometry_destroy(struct window *w);
 void window_show_first(struct window *w);  /* window.c: the frame that came before the first configure, or the splash */

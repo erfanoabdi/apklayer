@@ -83,7 +83,10 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         t.setDisplaySurface(mToken, mSurface);
         t.setDisplayLayerStack(mToken, ui::LayerStack::fromValue(mStack));
         t.setDisplaySize(mToken, mWidth, mHeight);
-        t.setDisplayProjection(mToken, ui::ROTATION_0, Rect(mWidth, mHeight), Rect(mWidth, mHeight));
+        // apklayer patch: a turned app (a phone showing an orientation it is not held in) is composed rotated into the window's shape, as a
+        // phone's display rotates (WindowManager's setDisplayProjection): the layer stack has the app's (swapped) size
+        Rect stack = mTurn ? Rect(mHeight, mWidth) : Rect(mWidth, mHeight);
+        t.setDisplayProjection(mToken, mTurn == 90 ? ui::ROTATION_90 : mTurn == 270 ? ui::ROTATION_270 : ui::ROTATION_0, stack, stack);
         if (mBar != nullptr) t.setPosition(mBar, 0, static_cast<float>(mHeight) - mBarH);  // the bar stays at the bottom edge
         t.apply(/*synchronous=*/true);
     }
@@ -246,15 +249,16 @@ class Sink : public ConsumerBase::FrameAvailableListener {
         self->mBusy[slot] = false;
     }
 
-    // the window changed size: the display follows
-    static void onConfigure(void* user, int32_t width, int32_t height, int32_t scalePercent) {
+    // the window changed size or turn: the display follows
+    static void onConfigure(void* user, int32_t width, int32_t height, int32_t scalePercent, int32_t turn) {
         auto* self = static_cast<Sink*>(user);
         uint32_t w = static_cast<uint32_t>(width * scalePercent / 100), h = static_cast<uint32_t>(height * scalePercent / 100);
         std::lock_guard<std::mutex> lock(self->mLock);
-        if (w == 0 || h == 0 || (w == self->mWidth && h == self->mHeight) || self->mToken == nullptr) return;
-        ALOGI("window resized: virtual display %ux%u -> %ux%u", self->mWidth, self->mHeight, w, h);
+        if (w == 0 || h == 0 || (w == self->mWidth && h == self->mHeight && turn == self->mTurn) || self->mToken == nullptr) return;
+        ALOGI("window resized: virtual display %ux%u -> %ux%u, turned %d", self->mWidth, self->mHeight, w, h, turn);
         self->mWidth = w;
         self->mHeight = h;
+        self->mTurn = turn;
         self->mConsumer->setDefaultBufferSize(w, h);
         self->applyDisplay();
     }
@@ -271,6 +275,7 @@ class Sink : public ConsumerBase::FrameAvailableListener {
     std::condition_variable mQueueCv;
     int mQueued = 0;
     uint32_t mStack = 0, mWidth = 0, mHeight = 0;
+    int32_t mTurn = 0;  // degrees the app's layer stack is turned in the window (onConfigure)
     BufferItem mHeld[kSlots];
     bool mUsed[kSlots] = {}, mBusy[kSlots] = {};
     uint64_t mIdOf[kSlots] = {};

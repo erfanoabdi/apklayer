@@ -247,7 +247,9 @@ static void ptr_frame(void *d, struct wl_pointer *p)
          * AXIS_HSCROLL + = right, in notches (the view applies its scroll factor); sent *1000. */
         struct window *w = pointer_focus;
         if (debug_input) fprintf(stderr, "[shell] scroll v=%.1f h=%.1f at %d,%d\n", axis_v, axis_h, ptr_x, ptr_y);
-        int32_t v[5] = { W_ID(w), ptr_x * w->scale / 100, ptr_y * w->scale / 100,
+        int sx = ptr_x, sy = ptr_y;
+        window_to_app(w, &sx, &sy);
+        int32_t v[5] = { W_ID(w), sx * w->scale / 100, sy * w->scale / 100,
                          (int32_t)(-axis_v * 100), (int32_t)(axis_h * 100) };
         send_msg(W_TARGET(pointer_focus), MSG_SCROLL, v, 5);
     }
