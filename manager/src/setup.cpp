@@ -157,6 +157,22 @@ void Setup::runUpdate(Cli cli, std::shared_ptr<State> s) {
         if (Result r = cli.run({"reconvert", pkg}); r.status != 0) failed += (failed.empty() ? "" : "; ") + label + ": " + summary(r);
     }
     if (!failed.empty()) e = "Not converted again, the old version stays: " + failed;
+    // a running instance keeps the programs it started with (the session's window shell, the stack, the hub: the deb replaces them on disk
+    // only, the runtime is chosen at start), so the update's fixes (0.4.18's F11) were missing until the next login (2026-11-10, KDE neon).
+    // Restarted, as Android restarts an updated app: every one stopped first (the shell ends with the last stack), then the always-on ones
+    // come back by their unit (stop leaves it inactive); the others start again with their next app
+    if (e.empty() && (s->debNewer() || s->runtimeNewer())) {
+        std::vector<std::string> alwaysOn;
+        for (const auto& row : cli.rows({"instances"})) {
+            if (field(row, 1) != "1") continue;
+            Cli one = cli;
+            one.instance = field(row, 0);
+            report("Restarting instance " + one.instance, -1);
+            one.run({"stop"});
+            if (field(row, 4) == "1") alwaysOn.push_back(one.instance);
+        }
+        for (const std::string& id : alwaysOn) { Cli one = cli; one.instance = id; one.run({"instance", "autostart", id, "on"}); }
+    }
     State next = probe(cli);
     post([this, e, next] {
         ui_->global<Backend>().set_updating(false);

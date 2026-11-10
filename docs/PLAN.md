@@ -100,7 +100,8 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 
 ## Click, Flatpak, packaging, releases
 - Click: Share/"Open with" (content-hub hook and a second app); "Choose file…" from the click's manager unchecked; the manager's update check offers debs only.
-- A running always-on hub keeps the old version until its next start (deb and click).
+- An update outside the manager (apt, dpkg, click) leaves running instances on the old programs (shell, stack, hub) until they all stop or the next
+  login; the manager's Update restarts them (2026-11-10, not yet built or run: no VM was reachable).
 - Flatpak: the launcher portal dialog unchecked (Ubuntu 24.04's icon validation fails under AppArmor; needs Ubuntu 26.04 or Fedora);
   the `flatpak run` that starts apklayerd keeps a pipe on stdout until `apklayer stop`.
 - Releases: the amd64 leg untested; the first command after install blocks ~75 s for runtime setup (the manager's first run must show it);
