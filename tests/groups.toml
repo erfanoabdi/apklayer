@@ -255,6 +255,10 @@ run = ["python3 -u tests/vm/webview-input.py"]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/splash.py"]
 
+[dialog-resize]
+needs = ["com.android.test.uibench"]
+run = ["python3 -u tests/vm/dialog-resize.py"]
+
 [window-geometry]
 needs = ["com.android.test.uibench"]
 run = ["python3 -u tests/vm/window-geometry.py"]

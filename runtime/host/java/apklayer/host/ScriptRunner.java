@@ -66,6 +66,7 @@ import org.robolectric.simulator.ScreenUpdateHandler;
 
 /** Scripted verification steps (-Dapklayer.script): tap, key, wheel, configure, back. */
 final class ScriptRunner {
+    private static android.app.Dialog dialog;  // the "dialog" step's
     private final HostInput input;
     /** Steps provided by the host itself: name -> action(argument), e.g. clipin, clipcopy, orient. */
     private final java.util.Map<String, java.util.function.Consumer<String>> hostSteps;
@@ -185,6 +186,23 @@ final class ScriptRunner {
                 g.updateViewLayout(v, lp);
             }
             System.out.println("[apklayer] fullscreen " + mode);
+        } else if (step.equals("dialog")) { // a full-screen dialog with a text field over the top activity (KuroSDK's login dialog), magenta
+            java.util.List<android.view.View> views = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mViews");
+            android.content.Context ctx = views.get(0).getContext();
+            while (!(ctx instanceof android.app.Activity) && ctx instanceof android.content.ContextWrapper) ctx = ((android.content.ContextWrapper) ctx).getBaseContext();
+            android.app.Dialog d = new android.app.Dialog(ctx);
+            android.widget.EditText field = new android.widget.EditText(ctx);
+            field.setText("dialog field");
+            d.setContentView(field);
+            d.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0xffff00ff));
+            d.getWindow().setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT);
+            d.show();
+            dialog = d;
+            System.out.println("[apklayer] dialog shown");
+        } else if (step.equals("dialogsize")) { // the dialog's window as laid out: its size and its resources' density
+            android.view.View decor = dialog == null ? null : dialog.getWindow().getDecorView();
+            System.out.println("[apklayer] dialogsize " + (decor == null ? "none" : decor.getWidth() + "x" + decor.getHeight() + " @"
+                    + decor.getResources().getDisplayMetrics().densityDpi + "dpi"));
         } else if (step.equals("navinset")) { // the top window's navigation bar inset (bottom, px), as its app sees it
             java.util.List<android.view.View> views = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mViews");
             android.view.WindowInsets wi = views.get(views.size() - 1).getRootWindowInsets();

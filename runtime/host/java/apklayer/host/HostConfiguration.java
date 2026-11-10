@@ -216,5 +216,13 @@ final class HostConfiguration {
                 e.printStackTrace(System.out);
             }
         }
+        // the other windows (dialogs, popups, an SDK's own windows) are resized too, as the window manager resizes every window of the app: a
+        // MATCH_PARENT dialog's requestLayout alone keeps its old frame (ViewRootImpl relayouts only when its size or configuration changed),
+        // and PGR's login dialog stayed a dim rectangle of the old window size after the window moved to a monitor of another scale
+        List<android.view.ViewRootImpl> roots = org.robolectric.util.ReflectionHelpers.getField(android.view.WindowManagerGlobal.getInstance(), "mRoots");
+        for (android.view.ViewRootImpl root : new java.util.ArrayList<>(roots)) {
+            try { root.updateConfiguration(Display.INVALID_DISPLAY); }
+            catch (Throwable e) { System.out.println("[apklayer] window configuration change failed: " + e); }
+        }
     }
 }
