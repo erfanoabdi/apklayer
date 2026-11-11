@@ -1604,10 +1604,19 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-11 - gsi_x86_64 libberberis_proxy_libc: 0006 checks the quarantine's evicted pointer and tcache double frees
+- Why: with the heap checks PGR still died: a JVM fatal SIGSEGV (SI_TKILL) at ~134 s in two-gear mode, and with
+  BERBERIS_MODE=lite-translate-or-interpret `free(): double free detected in tcache 2`: both frees of one pointer wait in the quarantine
+  ring and the second reaches glibc after the first. Now the evicted pointer is checked again and a chunk holding glibc's tcache key is
+  left alone (host test: freed 40/200 B chunks recognised, live ones not).
+- Command: as the entry below (the new free_quarantine.cc into ~/los24, its git diff the new 0006; m libberberis_proxy_libc).
+
 ### 2026-11-11 - gsi_x86_64 libberberis_proxy_libc: 0006 checks a chunk against its arena's heap (PGR, "double free or corruption (out)")
 - Why: with the munmap_chunk check PGR still aborted ~2 min in, now in _int_free: the stray pointers' headers pass the size checks but the
   chunk is outside glibc's heap. 0006 now also requires the main [heap] (up to the break) or a non-main heap_info's extent, a next chunk
   with PREV_INUSE that fits, and a matching free previous chunk (host test: 6 real chunk kinds pass, 6 forged ones are refused).
+- Result: built (22:19 Mac time), sha256 827635fc...; installed on the NVIDIA PC. PGR: the glibc abort is gone (~20 refused frees, 4 KB
+  thread-arena chunks freed twice); the process still died at 134 s, now a SIGSEGV raised with tgkill that the JVM's handler took as fatal.
 - Command (OrbStack): the new free_quarantine.cc written into ~/los24/frameworks/libs/binary_translation (its git diff is the new 0006),
   then `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_proxy_libc` (APKLAYER_NATIVE_BRIDGE=arm64).
 

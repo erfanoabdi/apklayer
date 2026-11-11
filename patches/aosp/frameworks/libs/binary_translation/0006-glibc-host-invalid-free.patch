@@ -7,13 +7,15 @@ the middle of an array whose words read as a 6 GB chunk header, minutes into eac
 libberberis_arm64 WrapHostCallForGuestErrno -> free). __wrap_free checks the chunk first: an in-use glibc chunk is 16-byte aligned
 and, unless mmapped, 32 bytes to 64 MB, inside its arena's heap (the main [heap] up to the break, or a non-main heap_info's extent),
 with a next chunk that has PREV_INUSE and fits, and a free previous chunk whose size agrees, as glibc's _int_free checks before it
-aborts; anything else is logged (the first 20) and not freed: a leak instead of the abort.
+aborts; anything else is logged (the first 20) and not freed: a leak instead of the abort. The quarantine ring's evicted pointer
+is checked again when glibc really gets it, and a chunk already in glibc's tcache (its tcache key) is a double free left alone
+("free(): double free detected in tcache 2").
 
 diff --git a/android_api/libc/free_quarantine.cc b/android_api/libc/free_quarantine.cc
-index 823190f8..3edd9f6e 100644
+index 823190f8..0b9f4448 100644
 --- a/android_api/libc/free_quarantine.cc
 +++ b/android_api/libc/free_quarantine.cc
-@@ -45,6 +45,131 @@
+@@ -45,6 +45,144 @@
  
  extern "C" void __real_free(void* ptr);
  
@@ -129,6 +131,19 @@ index 823190f8..3edd9f6e 100644
 +  return false;
 +}
 +
++// A chunk glibc already holds in its tcache (a guest double free: both frees wait in the quarantine ring, the second reaches glibc
++// after the first and aborts, "free(): double free detected in tcache 2"): its second word is glibc's per-process tcache key, learnt
++// once from a chunk of our own. 0 when the tcache is off.
++bool InTcache(void* ptr) {
++  static const size_t key = [] {
++    void* own = malloc(24);
++    if (own == nullptr) return static_cast<size_t>(0);
++    __real_free(own);
++    return reinterpret_cast<const size_t*>(own)[1];  // the freed chunk's tcache entry key (it stays in the tcache)
++  }();
++  return key != 0 && reinterpret_cast<const size_t*>(ptr)[1] == key;
++}
++
 +void ReportInvalidFree(void* ptr, void* caller) {
 +  static std::atomic<int> reported{0};
 +  if (reported.fetch_add(1, std::memory_order_relaxed) >= 20) return;
@@ -145,7 +160,7 @@ index 823190f8..3edd9f6e 100644
  #if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
  namespace {
  
-@@ -67,6 +192,10 @@ extern "C" void __wrap_free(void* ptr) {
+@@ -67,12 +205,21 @@ extern "C" void __wrap_free(void* ptr) {
      __real_free(ptr);
      return;
    }
@@ -156,3 +171,14 @@ index 823190f8..3edd9f6e 100644
  
    // Defer the real free through the quarantine ring so a just-freed chunk (and
    // its Scudo region) stays live long enough that the translator's Arena cannot
+   // re-grab and clobber it under a benign guest use-after-free. Release whatever
+   // pointer the ring evicts.
+   void* evicted = QuarantineSwap(ptr);
++  // apklayer patch: checked again when glibc really gets it (a chunk freed twice, or merged meanwhile, is no longer a live chunk)
++  if (evicted != nullptr && GlibcHost() && (InTcache(evicted) || NotAGlibcChunk(evicted))) {
++    ReportInvalidFree(evicted, __builtin_return_address(0));
++    return;
++  }
+   if (evicted != nullptr) {
+     __real_free(evicted);
+   }
