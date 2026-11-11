@@ -1604,6 +1604,13 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-11 - gsi_x86_64 libberberis_proxy_libc: 0006 checks a chunk against its arena's heap (PGR, "double free or corruption (out)")
+- Why: with the munmap_chunk check PGR still aborted ~2 min in, now in _int_free: the stray pointers' headers pass the size checks but the
+  chunk is outside glibc's heap. 0006 now also requires the main [heap] (up to the break) or a non-main heap_info's extent, a next chunk
+  with PREV_INUSE that fits, and a matching free previous chunk (host test: 6 real chunk kinds pass, 6 forged ones are refused).
+- Command (OrbStack): the new free_quarantine.cc written into ~/los24/frameworks/libs/binary_translation (its git diff is the new 0006),
+  then `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_proxy_libc` (APKLAYER_NATIVE_BRIDGE=arm64).
+
 ### 2026-11-11 - libapklayer_egl (gsi_x86_64 and gsi_arm64): spare buffers for the zero-copy present's copied frames - PENDING
 - Why: a GLES window allocated a new full-size buffer for nearly every frame when all gbm buffers were out (PGR on NVIDIA, CHANGELOG 2026-11-11).
 - Command: `tools/sync-aosp.sh "EglAttach spares"`, then in ~/los24 `breakfast gsi_x86_64 userdebug && m libapklayer_egl` and `breakfast gsi_arm64 userdebug && m libapklayer_egl` (flock -n ~/los24-build.lock; module output from out/soong/.intermediates/vendor/apklayer/...).
