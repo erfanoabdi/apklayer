@@ -183,9 +183,12 @@ static uint32_t alloc_flags(struct apklayer_gfx *gfx, uint32_t fourcc, uint32_t 
      * app's own CPU-written textures (PGR's Unity uploads) are written in ways that bypass the map's GPU copy: tiled, they were noise */
     if ((f & GBM_BO_USE_LINEAR) && (usage & APKLAYER_GFX_SCANOUT) && (usage & (APKLAYER_GFX_CPU_READ | APKLAYER_GFX_CPU_WRITE))
         && !gfx->other_gpu  /* another GPU's compositor needs LINEAR */
-        && (fourcc == DRM_FORMAT_ABGR8888 || fourcc == DRM_FORMAT_XBGR8888)  /* what readback.c copies */
-        && apklayer_gfx_linear_external_only(gfx->gbm, fourcc))
-        f = (f & ~GBM_BO_USE_LINEAR) | GBM_BO_USE_RENDERING;
+        && apklayer_gfx_transfer_supported(fourcc)  /* what readback.c copies (RGBA/BGRA/RGBX/BGRX, RGB888, RGB565) */
+        && apklayer_gfx_linear_external_only(gfx->gbm, fourcc)) {
+        uint32_t tiled = (f & ~GBM_BO_USE_LINEAR) | GBM_BO_USE_RENDERING;  /* rendering: the upload is a blit into it */
+        if (gbm_device_is_format_supported(gfx->gbm, fourcc, tiled)) return tiled;
+        fprintf(stderr, "apklayer-gfx: fourcc 0x%x cannot be tiled here: its CPU-drawn window stays LINEAR (the compositor may not show it)\n", fourcc);
+    }
     return f;
 }
 

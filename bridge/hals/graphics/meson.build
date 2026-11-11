@@ -7,6 +7,8 @@ if gbm_dep.found() and drm_dep.found()
     include_directories: gfx_inc, dependencies: [gbm_dep, drm_dep, dependency('threads'), dependency('dl')], install: true, install_dir: native_dir)
   executable('graphics-test', '../../../tests/hals/graphics-test.c',
     include_directories: gfx_inc, dependencies: [drm_dep], link_with: libgfx)
+  executable('readback-test', '../../../tests/hals/readback-test.c',
+    include_directories: gfx_inc, dependencies: [drm_dep, gbm_dep], link_with: libgfx)
   executable('display-test', '../../../tests/hals/display-test.c',
     include_directories: gfx_inc, dependencies: [drm_dep, dependency('threads')], link_with: libgfx)
   egl_dep = dependency('egl', required: false)

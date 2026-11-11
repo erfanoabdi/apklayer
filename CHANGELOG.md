@@ -3,6 +3,21 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-11: NVIDIA: black software-drawn windows in BGRA, RGBX and RGB565; the tiled <-> linear GPU copy for every 8-bit format
+- Cause: NVIDIA samples a LINEAR dmabuf only as an external texture, so 6a1e2246 tiles CPU-drawn window buffers there, but only RGBA_8888/RGBX_8888
+  (the two layouts readback.c's GPU copy took as they are). A software-rendered window in BGRA_8888 (ARGB8888), XRGB8888 or RGB_565 stayed LINEAR
+  and SurfaceFlinger could not import it: a black window. Checked on the tester's RTX 5060 Ti (615.71.09) with the old code: those three window
+  buffers come out LINEAR (modifier 0), ABGR8888 tiled.
+- readback.c: the GPU always moves RGBA8 (glReadPixels RGBA/UNSIGNED_BYTE out; in, a blit from an RGBA8 texture, which converts into the buffer's
+  own format) and the CPU converts that to and from the buffer's layout (ABGR/XBGR/ARGB/XRGB8888, BGR888, RGB565). One EGL context per process
+  under a lock instead of a new display init and context per map and unmap. "LINEAR external-only" is asked per format, and a driver that lists
+  modifiers but not LINEAR for a format counts too. alloc_flags tiles only where the device allocates the format tiled.
+- Test: tests/hals/readback-test.c (group gfx-readback, `b/bridge/hals/graphics/readback-test`): every format through tiled and LINEAR buffers
+  (where the driver maps LINEAR, the bytes the GPU wrote must equal the CPU layout), then the HAL's window path (alloc with the composer's usage,
+  CPU write, unmap, CPU read). RTX 5060 Ti: 10 pass (all formats tiled, every window buffer tiled and identical; NVIDIA allocates no LINEAR
+  render target and no BGR888). AIDA64 on the same PC with the new library: draws, `apklayer screenshot` (the tiled capture read through the
+  GPU) has the right colours. Not run on the VMs (none reachable): the LINEAR byte-layout check runs only on Mesa.
+
 ## 2026-11-10: Unity games take clicks (PGR)
 - NVIDIA: a window buffer the CPU draws and SurfaceFlinger composes (composer usage; a software-rendered window: PGR's KuroSDK login dialog, Unity activities are not hardware accelerated) was LINEAR, which NVIDIA samples only as an external texture: SurfaceFlinger's GL_TEXTURE_2D import failed (glEGLImageTargetTexture2DOES 0x502, "Failed to create a valid texture") and only the dialog's dim showed. Where EGL reports LINEAR external-only for the format, such buffers are tiled and the CPU's map goes through the GPU both ways (readback.c: readback, and the new upload at unmap). Mesa keeps LINEAR.
 - IWindowManager.getInitialDisplayDensity / getBaseDisplayDensity answer the window's density (the fake answered 0): KuroSDK's DensityDpiUtil read the default density as 0 for PGR's login dialog. Script step `views` prints every window's view tree (class, visibility, alpha, size, position).
