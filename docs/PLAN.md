@@ -12,14 +12,13 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - An Android IME stays optional; no IME switcher. No Recents in the mobile navigation bar.
 
 ## Bugs (open)
-- PGR (Punishing: Gray Raven, Unity): its first-run Notice dialog (KuroSDK) is laid out for 1024x768 beside an 814x456 window (`WindowInsets changed: 1024x768`), its accept button below the window; the game once ended itself with Process.killProcess after GamesResolutionActivity (caller now logged). Clicks, the start SIGSEGV, fullscreen and the microG provider race are fixed (CHANGELOG 2026-11-10).
+- PGR (Punishing: Gray Raven, Unity): its first-run Notice dialog (KuroSDK) was laid out for 1024x768 beside an 814x456 window, its accept button below the window. Current runs on the NVIDIA PC (2026-11-11) give every PGR window the real size (3440x1440, after 8e089188's display density) and no Process.killProcess; the dialog itself shows only on a first run, which needs a fresh install (clearing the tester's data would lose the account and the 43 GB download): check on a fresh instance.
 - Ubuntu Touch spread (per-launch shell, 2026-11-10, CHANGELOG): run groups input, multi-app, mobile on Parallels for the shell/CLI change;
   a drawer launch that finds its app already running (relaunch) starts and ends a shell of its own for nothing.
 - Toasts queue per process, not across the instance's apps (NotificationManagerService has one queue).
 - A restarted launcher gets no saved instance state (HubActivities.restartIfAlone shortcut; FCL after the game quits).
 - Native bridge: pthread_sigqueue with a guest pthread record is not mapped.
 - The boot broadcast may wake every app with a boot receiver at once (each a JVM; 14 receivers on Parallels): check, it is ordered since 2026-11-08.
-- PGR aborts in glibc (`munmap_chunk(): invalid pointer`, ~1.5 min in) on the NVIDIA PC: build libberberis_proxy_libc with the extended 0006 (CHANGELOG 2026-11-11, Build log) and rerun PGR there.
 - FCL: after a window resize no new frame reached the shell (window looked frozen); not diagnosed.
 - An app whose first MediaStore use is MediaStore.Images.Media crashes the JVM (SIGSEGV in ConstantPool::klass_at_impl via Robolectric's ShadowMap).
 - `--spare` JVM still running after `apklayer stop` (4 in ~120 stops, not reproduced since): candidate fix, a second records pass after the hub.
@@ -96,10 +95,13 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
   linear GPU copy at all) the noise is the same; the title screen's capture through the same readback is clean. Unity's own GL textures
   (compressed? sRGB in Linear color space?) were the suspects. With ASTC hidden (APKLAYER_GL_HIDE) the scene is still black at 80 s and the
   black area keeps sparse single-pixel red/green/blue clusters, so not ASTC: next, a post-processing pass (NaN/Inf in a half-float target,
-  sRGB render targets) - capture one frame's GL calls; PGR's ~2 min abort makes long runs impossible.
+  sRGB render targets) - capture one frame's GL calls; PGR's ~2 min abort makes long runs impossible. Also ruled out (2026-11-11, one run
+  each with APKLAYER_GL_HIDE): multisampled_render_to_texture, float/half-float/packed-float color buffers; Vulkan instead of GLES (PGR
+  stays on GLES). Leading idea: the stray guest frees that pass 0006 put array memory into glibc's tcache (16 bytes written into it,
+  then handed out again): corrupted 16-byte ASTC blocks are exactly blocks of random pixels. Test with the stricter 0006 (Build log).
 - No translation cache across starts; Telegram (no x86_64 FOSS APK to test); the manager's "translated" label.
 - The guest JVM finds the host's libjsig through RTLD_DEFAULT: watch for a third library's later SIGSEGV handler.
-- Unity: Tencent ACE past the first screens, `hpatchz`; Gray Raven "Failed to load Il2CPP"; no backtrace in the fault note; app log cap misses Log lines.
+- Unity: Tencent ACE past the first screens, `hpatchz`; no backtrace in the fault note; app log cap misses Log lines.
 
 ## Sandbox (before it can be the default)
 - The NVIDIA tester's box with docs/INSTALL.md Troubleshooting's checklist (cause unconfirmed: nvidia-modprobe under no-new-privileges, glvnd vendor choice).
