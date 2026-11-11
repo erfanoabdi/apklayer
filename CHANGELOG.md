@@ -1595,12 +1595,18 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 ### 2026-11-11 - libapklayer_egl (gsi_x86_64 and gsi_arm64): spare buffers for the zero-copy present's copied frames - PENDING
 - Why: a GLES window allocated a new full-size buffer for nearly every frame when all gbm buffers were out (PGR on NVIDIA, CHANGELOG 2026-11-11).
 - Command: `tools/sync-aosp.sh "EglAttach spares"`, then in ~/los24 `breakfast gsi_x86_64 userdebug && m libapklayer_egl` and `breakfast gsi_arm64 userdebug && m libapklayer_egl` (flock -n ~/los24-build.lock; module output from out/soong/.intermediates/vendor/apklayer/...).
-- Result: not run (the OrbStack machine is not reachable from the tester's PC).
+- Result (gsi_x86_64 only): built with tools/lib/orb-build-module.py (EglAttach.cpp; vendor/apklayer a7c3bc6, synced from a HEAD snapshot on the
+  Mac, ~/apkl-tmp/apklayer-9944f2ee). sha256 b28a7a7a169d94f0d59381624e8184d6ebf566a56dd848163dc961c9350250d2; installed on the NVIDIA PC
+  (runtime 0.4.17 android-libs -> ~/apklayer-fix, the old one in ~/apklayer-fix/orig). gsi_arm64 not built.
 
 ### 2026-11-11 - gsi_x86_64 libberberis_proxy_libc: 0006 checks a mmapped chunk as munmap_chunk does (PGR, "munmap_chunk(): invalid pointer") - PENDING
 - Why: PGR aborted 97 s into a session on the NVIDIA PC; the stray free's header had the IS_MMAPPED bit, which 0006 passed to glibc unchecked.
 - Command: `cd ~/los24 && source build/envsetup.sh && export APKLAYER_NATIVE_BRIDGE=arm64 && patches/apply aosp ~/los24 && breakfast gsi_x86_64 userdebug && m libberberis_proxy_libc` (flock -n ~/los24-build.lock); the edited 0006 must replace the applied one (`patch -R` the old version first, as on 2026-11-09).
-- Result: not run (the OrbStack machine is not reachable from the tester's PC).
+- Result: the old 0006 reversed (`git apply -R` of 75a7fefc's version), the series applied (0001-0005 already in), `m libberberis_proxy_libc` built.
+  sha256 b04215855cd2c1f51a926c621cf62060bbab99852756b90e91a8924dd4bea600 (85376 bytes); installed on the NVIDIA PC (~/apklayer-fix).
+  PGR with it (180 s run, default instance): title screen clean, but the game still aborted at about 137 s, now with glibc's
+  `double free or corruption (out)` (7 `free(...) of no glibc chunk` logged and left alone before it, all from one host caller; about 2900
+  `BAD proxy PRE-EXTRACT: raw_x0=0x1` berberis lines per run). Open: which free gets past 0006 (docs/PLAN.md).
 
 ### 2026-11-10 - gsi_x86_64 libberberis_proxy_libc: a guest free of no glibc chunk is left alone (PGR agent)
 - Why: PGR on a tester's x86_64 PC (native bridge) aborted in glibc free ("double free or corruption (out)") minutes into each session;

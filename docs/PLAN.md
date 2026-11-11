@@ -87,6 +87,13 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - A Halium device without binderfs (host context fixed at /dev/binder): isHalium() needs binderfs today.
 
 ## Native bridge (x86_64)
+- PGR on the NVIDIA PC still aborts about 2 min in, now `double free or corruption (out)` with binary_translation 0006's munmap_chunk check
+  (2026-11-11): find which guest free passes 0006 (7 `free(...) of no glibc chunk` from one host caller before it; ~2900 `BAD proxy
+  PRE-EXTRACT: raw_x0=0x1` lines per run).
+- PGR's home scene on NVIDIA: the 3D character and some UI tiles (Missions) are block noise (correct texel blocks mixed with blocks of
+  random saturated pixels, the same places every run); the title screen is clean. Not the gralloc buffers: every buffer is tiled and the
+  CPU-drawn window round-trips exactly (checked with a logging HAL, 2026-11-11); Unity's own GL textures (compressed? sRGB in Linear color
+  space?) are the suspects.
 - No translation cache across starts; Telegram (no x86_64 FOSS APK to test); the manager's "translated" label.
 - The guest JVM finds the host's libjsig through RTLD_DEFAULT: watch for a third library's later SIGSEGV handler.
 - Unity: Tencent ACE past the first screens, `hpatchz`; Gray Raven "Failed to load Il2CPP"; no backtrace in the fault note; app log cap misses Log lines.
