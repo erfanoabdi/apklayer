@@ -3,6 +3,18 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-11: APKLAYER_GL_HIDE: GL extensions hidden from Android code (PGR's home-scene noise is not ASTC)
+- bridge/native/gles_filter.c (libapklayer_gles, in the native dir): the host's libGLESv2 with the named extensions left out of
+  glGetString(GL_EXTENSIONS), glGetStringi and GL_NUM_EXTENSIONS (an ASTC name also drops the ASTC formats from
+  GL_COMPRESSED_TEXTURE_FORMATS); every other GL function is the host's (its DT_NEEDED). cli/env.cpp maps libGLESv2.so/libGLESv3.so to it
+  through a cfg.d in the instance directory, first in XDG_DATA_DIRS, only when APKLAYER_GL_HIDE is set (environment or ~/.config/apklayer/env).
+  New code: nothing in the reference projects filters a host GL's extension list for bionic_translation's apps.
+- Checked on the NVIDIA PC: a probe sees 220 -> 217 extensions and 66 -> 38 compressed formats with the four ASTC names hidden, none without
+  the variable; PGR (the CLI built from this tree, daemon stopped for the run) maps it in 8 processes.
+- PGR with ASTC hidden: the UI draws, the 3D home scene is still black at 80 s (Unity decompresses on the CPU, or it does not draw), and the
+  black area keeps sparse clusters of single red/green/blue pixels; the Missions tile's checker pattern is identical with and without ASTC
+  (the game's own mosaic art). So the noise is not ASTC decoding: more like bad pixels spreading through a post-processing pass (docs/PLAN.md).
+
 ## 2026-11-11: KDE's touchscreen edge swipes over a fullscreen app (Android's transient bars)
 - KWin blocks every screen edge inside the active fullscreen window (Edge::checkBlocking, touch and pointer, unless kwinrc [ScreenEdges]
   RemainActiveOnFullscreen), so over a fullscreen game or video KDE's edge swipes (overview, panels, keyboard) never started.

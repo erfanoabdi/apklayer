@@ -94,7 +94,9 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
   random saturated pixels, the same places every run); the title screen is clean. Not the gralloc buffers: every buffer is tiled and the
   CPU-drawn window round-trips exactly (checked with a logging HAL, 2026-11-11), and with the CPU-drawn buffers kept LINEAR (no tiled <->
   linear GPU copy at all) the noise is the same; the title screen's capture through the same readback is clean. Unity's own GL textures
-  (compressed? sRGB in Linear color space?) are the suspects: hiding ASTC from the app needs a GLES string filter we do not have.
+  (compressed? sRGB in Linear color space?) were the suspects. With ASTC hidden (APKLAYER_GL_HIDE) the scene is still black at 80 s and the
+  black area keeps sparse single-pixel red/green/blue clusters, so not ASTC: next, a post-processing pass (NaN/Inf in a half-float target,
+  sRGB render targets) - capture one frame's GL calls; PGR's ~2 min abort makes long runs impossible.
 - No translation cache across starts; Telegram (no x86_64 FOSS APK to test); the manager's "translated" label.
 - The guest JVM finds the host's libjsig through RTLD_DEFAULT: watch for a third library's later SIGSEGV handler.
 - Unity: Tencent ACE past the first screens, `hpatchz`; Gray Raven "Failed to load Il2CPP"; no backtrace in the fault note; app log cap misses Log lines.
