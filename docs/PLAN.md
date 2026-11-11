@@ -19,7 +19,7 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - A restarted launcher gets no saved instance state (HubActivities.restartIfAlone shortcut; FCL after the game quits).
 - Native bridge: pthread_sigqueue with a guest pthread record is not mapped.
 - The boot broadcast may wake every app with a boot receiver at once (each a JVM; 14 receivers on Parallels): check, it is ordered since 2026-11-08.
-- NVIDIA tester's "double free or corruption (out)" (0.4.10): recheck on NVIDIA with the current Berberis libraries.
+- PGR aborts in glibc (`munmap_chunk(): invalid pointer`, ~1.5 min in) on the NVIDIA PC: build libberberis_proxy_libc with the extended 0006 (CHANGELOG 2026-11-11, Build log) and rerun PGR there.
 - FCL: after a window resize no new frame reached the shell (window looked frozen); not diagnosed.
 - An app whose first MediaStore use is MediaStore.Images.Media crashes the JVM (SIGSEGV in ConstantPool::klass_at_impl via Robolectric's ShadowMap).
 - `--spare` JVM still running after `apklayer stop` (4 in ~120 stops, not reproduced since): candidate fix, a second records pass after the hub.

@@ -11,7 +11,7 @@ diff --git a/android_api/libc/free_quarantine.cc b/android_api/libc/free_quarant
 index 823190f8..a1f2fcc2 100644
 --- a/android_api/libc/free_quarantine.cc
 +++ b/android_api/libc/free_quarantine.cc
-@@ -45,6 +45,49 @@
+@@ -45,6 +45,56 @@
  
  extern "C" void __real_free(void* ptr);
  
@@ -26,8 +26,9 @@ index 823190f8..a1f2fcc2 100644
 +// apklayer patch: on a glibc host (BERBERIS_FLAGS glibc-host-thread-id-handoff, bionic_translation) the guest heap is glibc's, which
 +// aborts the whole process on a pointer it never handed out ("double free or corruption (out)": PGR, a Unity game, freed a pointer
 +// into the middle of an array, a chunk header of 6 GB, minutes into a session). An in-use glibc chunk is 16-byte aligned and, unless
-+// mmapped, 32 bytes to 64 MB (HEAP_MAX_SIZE; larger requests are mmapped); a header outside that is not a chunk: logged and left alone,
-+// a leak instead of the abort. Scudo (an Android host) checks its own headers.
++// mmapped, 32 bytes to 64 MB (HEAP_MAX_SIZE; larger requests are mmapped), and an mmapped one passes munmap_chunk's page check; a
++// header outside that is not a chunk: logged and left alone, a leak instead of the abort ("munmap_chunk(): invalid pointer" when the
++// stray header had the IS_MMAPPED bit). Scudo (an Android host) checks its own headers.
 +bool GlibcHost() {
 +  static const bool glibc = [] {
 +    const char* flags = getenv("BERBERIS_FLAGS");
@@ -39,9 +40,15 @@ index 823190f8..a1f2fcc2 100644
 +bool NotAGlibcChunk(void* ptr) {
 +  auto addr = reinterpret_cast<uintptr_t>(ptr);
 +  if (addr % 16 != 0) return true;
-+  size_t header = reinterpret_cast<const size_t*>(ptr)[-1];
-+  if (header & 2) return false;  // IS_MMAPPED
++  const size_t* words = reinterpret_cast<const size_t*>(ptr);
++  size_t header = words[-1];
 +  size_t size = header & ~static_cast<size_t>(7);
++  if (header & 2) {  // IS_MMAPPED: glibc's munmap_chunk aborts unless the mapping (chunk - prev_size) and its length are page-aligned
++    size_t prev = words[-2];
++    uintptr_t block = addr - 2 * sizeof(size_t) - prev;
++    size_t page = static_cast<size_t>(getpagesize());
++    return size == 0 || ((block | (prev + size)) & (page - 1)) != 0;
++  }
 +  return size < 32 || size % 16 != 0 || size > (static_cast<size_t>(64) << 20);
 +}
 +
@@ -61,7 +68,7 @@ index 823190f8..a1f2fcc2 100644
  #if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
  namespace {
  
-@@ -67,6 +110,10 @@ extern "C" void __wrap_free(void* ptr) {
+@@ -67,6 +117,10 @@ extern "C" void __wrap_free(void* ptr) {
      __real_free(ptr);
      return;
    }

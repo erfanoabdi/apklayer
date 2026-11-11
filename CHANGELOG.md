@@ -3,6 +3,18 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-11: PGR on the NVIDIA PC: it draws; its window goes because the game aborts (binary_translation 0006 extended, not yet built)
+- PGR 4.9.1 on the tester's RTX 5060 Ti (0.4.18 deb, runtime 0.4.17 with yesterday's proxy libc and today's graphics HAL), two runs in the
+  default instance: SurfaceFlinger's picture and the KDE desktop (Spectacle) both show the title screen at 60 s, and the 3D home scene at
+  120 s in the first run: nothing black. The second run ended at 97 s with `munmap_chunk(): invalid pointer` (yesterday's last run too): the
+  process aborts and its window disappears, which looks like the game going black or vanishing.
+- Cause: the guest frees pointers into the middle of arrays (6 logged by 0006 this run, `free(...) of no glibc chunk`); 0006 took every
+  header with the IS_MMAPPED bit as a real chunk, and glibc's munmap_chunk aborts on one whose mapping is not page-aligned. 0006 now applies
+  munmap_chunk's own check (chunk - prev_size and prev_size + size page-aligned) before passing an mmapped pointer on. Checked as host code
+  against glibc 2.39 (a real small and a real mmapped chunk pass, a forged IS_MMAPPED word in an array and a zero-size one are refused).
+- Needs `m libberberis_proxy_libc` in ~/los24 (gsi_x86_64, APKLAYER_NATIVE_BRIDGE=arm64; Build log below): the tree's OrbStack machine is not
+  reachable from the tester's PC, so the library was not built or run with PGR yet.
+
 ## 2026-11-11: NVIDIA: black software-drawn windows in BGRA, RGBX and RGB565; the tiled <-> linear GPU copy for every 8-bit format
 - Cause: NVIDIA samples a LINEAR dmabuf only as an external texture, so 6a1e2246 tiles CPU-drawn window buffers there, but only RGBA_8888/RGBX_8888
   (the two layouts readback.c's GPU copy took as they are). A software-rendered window in BGRA_8888 (ARGB8888), XRGB8888 or RGB_565 stayed LINEAR
@@ -1561,6 +1573,11 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-11 - gsi_x86_64 libberberis_proxy_libc: 0006 checks a mmapped chunk as munmap_chunk does (PGR, "munmap_chunk(): invalid pointer") - PENDING
+- Why: PGR aborted 97 s into a session on the NVIDIA PC; the stray free's header had the IS_MMAPPED bit, which 0006 passed to glibc unchecked.
+- Command: `cd ~/los24 && source build/envsetup.sh && export APKLAYER_NATIVE_BRIDGE=arm64 && patches/apply aosp ~/los24 && breakfast gsi_x86_64 userdebug && m libberberis_proxy_libc` (flock -n ~/los24-build.lock); the edited 0006 must replace the applied one (`patch -R` the old version first, as on 2026-11-09).
+- Result: not run (the OrbStack machine is not reachable from the tester's PC).
+
 ### 2026-11-10 - gsi_x86_64 libberberis_proxy_libc: a guest free of no glibc chunk is left alone (PGR agent)
 - Why: PGR on a tester's x86_64 PC (native bridge) aborted in glibc free ("double free or corruption (out)") minutes into each session;
   binary_translation 0006 checks the chunk header in __wrap_free on a glibc host.
