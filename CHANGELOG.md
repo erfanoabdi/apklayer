@@ -3,6 +3,15 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-11: Manager: a "Lite translation" switch for apps that run through the native bridge
+- The app page shows "Lite translation" for apps whose nativeRoute is bridge-* (arm64-only apps on x86_64); it sets or unsets the instance
+  property berberis.mode.<package> = lite-translate-or-interpret (binary_translation 0008), from the app's next start. PGR draws its home
+  scene cleanly only lite-translated (the heavy tier's miscompile, Build log).
+- Fix on the way: the Slint-generated AppEntry leaves its bools uninitialized: the list's entries are value-initialized now (the new
+  fields read garbage: F-Droid showed the switch, on).
+- Checked on the NVIDIA PC (manager built by hand against the pinned Slint 1.18.1, screenshot mode): the switch is shown for PGR and Azur
+  Lane, absent for F-Droid and UiBench; two clicks on Azur Lane set and then unset its property, PGR's stays.
+
 ## 2026-11-11: APKLAYER_GL_HIDE: GL extensions hidden from Android code (PGR's home-scene noise is not ASTC)
 - bridge/native/gles_filter.c (libapklayer_gles, in the native dir): the host's libGLESv2 with the named extensions left out of
   glGetString(GL_EXTENSIONS), glGetStringi and GL_NUM_EXTENSIONS (an ASTC name also drops the ASTC formats from
