@@ -82,8 +82,6 @@ std::string hostVulkan(const Layout& layout, const Env& env) {
         std::string api = field("apiVersion"), type = field("deviceType"), driver = field("driverID");
         unsigned major = 0, minor = 0;
         if (sscanf(api.c_str(), "%u.%u", &major, &minor) != 2 || type.empty() || type == "PHYSICAL_DEVICE_TYPE_CPU" || driver == "DRIVER_ID_MESA_VENUS") continue;
-        // shortcut: NVIDIA's own driver is untested with the presentation path (Unity picks Vulkan when offered): left out until checked on an NVIDIA host
-        if (driver == "DRIVER_ID_NVIDIA_PROPRIETARY") continue;
         if ((major << 16 | minor) > best) best = major << 16 | minor, version = std::to_string(major) + "." + std::to_string(minor);
     }
     writeFile(cache, (version.empty() ? "-" : version) + "\n");
@@ -197,6 +195,22 @@ static void deviceGraphicsEnv(const Instance& instance, Env& env, const std::str
     env["XDG_DATA_DIRS"] = prepend(share, env["XDG_DATA_DIRS"]);
 }
 
+// GL extensions hidden from Android code (APKLAYER_GL_HIDE="GL_KHR_texture_compression_astc_ldr ...", from the environment or
+// ~/.config/apklayer/env): libGLESv2.so maps to bridge/native/gles_filter.c's library, which answers the extension queries without them,
+// through a cfg.d in the instance's directory first in XDG_DATA_DIRS (the runtime's own cfg.d maps libGLESv2.so to the host's directly).
+// A driver can advertise a format it decodes wrongly (NVIDIA's ASTC, PGR's home scene): the engine then takes its fallback.
+static void glesFilterEnv(const Instance& instance, Env& env, const std::string& native) {
+    auto hide = env.find("APKLAYER_GL_HIDE");
+    std::string lib = join(native, "libapklayer_gles.so");
+    if (hide == env.end() || trim(hide->second).empty() || !exists(lib)) return;
+    std::string share = join(instance.root, "gles-filter/share");
+    makeDirs(join(share, "bionic_translation/cfg.d"));
+    writeFile(join(share, "bionic_translation/cfg.d/gles-filter.cfg"),
+              "# APKLAYER_GL_HIDE: the host's GLES with those extensions hidden (cli/env.cpp glesFilterEnv)\n"
+              "libGLESv2.so " + lib + "\nlibGLESv3.so " + lib + "\n");
+    env["XDG_DATA_DIRS"] = prepend(share, env["XDG_DATA_DIRS"]);
+}
+
 NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     layout.requireRuntime();
     NativeEnv result;
@@ -229,6 +243,7 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     env["PATH"] = prepend(join(n, "bin"), getenvOr("PATH", "/usr/local/bin:/usr/bin:/bin"));  // getprop for the apps that run it
     env["XDG_DATA_DIRS"] = prepend(join(n, "share"), getenvOr("XDG_DATA_DIRS", "/usr/local/share:/usr/share"));
     if (deviceGraphics(layout, instance)) deviceGraphicsEnv(instance, env, layout.java.empty() ? "lib64" : "lib");  // a layout with its own JVM: the 32-bit one
+    else glesFilterEnv(instance, env, n);
     env["LD_PRELOAD"] = join(n, "libapklayer-preload.so") + ":libgcc_s.so.1";
     if (const char* extra = getenv("APKLAYER_PRELOAD_EXTRA")) env["LD_PRELOAD"] += std::string(":") + extra;  // more preloads (debugging)
     env["BIONIC_LD_LIBRARY_PATH"] = l;

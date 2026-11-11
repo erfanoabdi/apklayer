@@ -4,14 +4,18 @@ Subject: [PATCH] apklayer: a guest free of no glibc chunk is left alone on a gli
 On a glibc host (BERBERIS_FLAGS glibc-host-thread-id-handoff, bionic_translation) the guest heap is glibc's, and glibc aborts the
 whole process on a pointer it never handed out. PGR (Punishing: Gray Raven, Unity, arm64-only on an x86_64 PC) freed a pointer into
 the middle of an array whose words read as a 6 GB chunk header, minutes into each session ("double free or corruption (out)",
-libberberis_arm64 WrapHostCallForGuestErrno -> free). __wrap_free checks the chunk header first: an in-use glibc chunk is 16-byte
-aligned and, unless mmapped, 32 bytes to 64 MB; anything else is logged (the first 20) and not freed: a leak instead of the abort.
+libberberis_arm64 WrapHostCallForGuestErrno -> free). __wrap_free checks the chunk first: an in-use glibc chunk is 16-byte aligned
+and, unless mmapped, 32 bytes to 64 MB, inside its arena's heap (the main [heap] up to the break, or a non-main heap_info's extent),
+with a next chunk that has PREV_INUSE and fits, and a free previous chunk whose size agrees, as glibc's _int_free checks before it
+aborts; anything else is logged (the first 20) and not freed: a leak instead of the abort. The quarantine ring's evicted pointer
+is checked again when glibc really gets it, and a chunk already in glibc's tcache (its tcache key) is a double free left alone
+("free(): double free detected in tcache 2").
 
 diff --git a/android_api/libc/free_quarantine.cc b/android_api/libc/free_quarantine.cc
-index 823190f8..a1f2fcc2 100644
+index 823190f8..0b9f4448 100644
 --- a/android_api/libc/free_quarantine.cc
 +++ b/android_api/libc/free_quarantine.cc
-@@ -45,6 +45,49 @@
+@@ -45,6 +45,144 @@
  
  extern "C" void __real_free(void* ptr);
  
@@ -19,6 +23,8 @@ index 823190f8..a1f2fcc2 100644
 +#include <stdio.h>
 +#include <stdlib.h>
 +#include <string.h>
++#include <fcntl.h>
++#include <sys/mman.h>
 +#include <unistd.h>
 +
 +namespace {
@@ -26,8 +32,9 @@ index 823190f8..a1f2fcc2 100644
 +// apklayer patch: on a glibc host (BERBERIS_FLAGS glibc-host-thread-id-handoff, bionic_translation) the guest heap is glibc's, which
 +// aborts the whole process on a pointer it never handed out ("double free or corruption (out)": PGR, a Unity game, freed a pointer
 +// into the middle of an array, a chunk header of 6 GB, minutes into a session). An in-use glibc chunk is 16-byte aligned and, unless
-+// mmapped, 32 bytes to 64 MB (HEAP_MAX_SIZE; larger requests are mmapped); a header outside that is not a chunk: logged and left alone,
-+// a leak instead of the abort. Scudo (an Android host) checks its own headers.
++// mmapped, 32 bytes to 64 MB (HEAP_MAX_SIZE; larger requests are mmapped) inside its arena's heap with sane neighbours, and an mmapped
++// one passes munmap_chunk's page check; anything else is not a chunk: logged and left alone, a leak instead of the abort
++// ("munmap_chunk(): invalid pointer", "double free or corruption (out)"). Scudo (an Android host) checks its own headers.
 +bool GlibcHost() {
 +  static const bool glibc = [] {
 +    const char* flags = getenv("BERBERIS_FLAGS");
@@ -36,13 +43,105 @@ index 823190f8..a1f2fcc2 100644
 +  return glibc;
 +}
 +
++// The start of the main arena's heap ([heap] in /proc/self/maps, read once without malloc); 1 when there is none (brk failed: the main
++// arena is mmapped and not contiguous, so only the header checks apply to its chunks).
++uintptr_t MainHeapStart() {
++  static std::atomic<uintptr_t> start{0};
++  uintptr_t s = start.load(std::memory_order_relaxed);
++  if (s != 0) return s;
++  s = 1;
++  int fd = open("/proc/self/maps", O_RDONLY | O_CLOEXEC);
++  if (fd >= 0) {
++    char buf[4096], line[512];
++    size_t used = 0;
++    ssize_t n;
++    while (s == 1 && (n = read(fd, buf, sizeof buf)) > 0) {
++      for (ssize_t i = 0; i < n && s == 1; i++) {
++        if (buf[i] != '\n') { if (used < sizeof line - 1) line[used++] = buf[i]; continue; }
++        line[used] = 0;
++        used = 0;
++        if (strstr(line, " [heap]") != nullptr) s = strtoull(line, nullptr, 16);
++      }
++    }
++    close(fd);
++  }
++  if (s == 0) s = 1;
++  start.store(s, std::memory_order_relaxed);
++  return s;
++}
++
++// A non-main arena's heap (glibc's heap_info at the HEAP_MAX_SIZE-aligned base: ar_ptr, prev, size): [lo, hi) of its chunks, false when
++// the base is no mapping (mincore, once per base) or no plausible heap_info.
++constexpr uintptr_t kHeapMax = static_cast<uintptr_t>(64) << 20;
++bool ArenaHeap(uintptr_t addr, uintptr_t* lo, uintptr_t* hi) {
++  static std::atomic<uintptr_t> known[64];
++  uintptr_t base = addr & ~(kHeapMax - 1);
++  bool seen = false;
++  for (auto& k : known)
++    if (k.load(std::memory_order_relaxed) == base) { seen = true; break; }
++  if (!seen) {
++    unsigned char vec;
++    if (mincore(reinterpret_cast<void*>(base), static_cast<size_t>(getpagesize()), &vec) != 0) return false;
++    for (auto& k : known) {
++      uintptr_t expected = 0;
++      if (k.compare_exchange_strong(expected, base, std::memory_order_relaxed)) break;
++    }
++  }
++  const size_t* info = reinterpret_cast<const size_t*>(base);
++  size_t size = info[2];
++  if (info[0] == 0 || size < 4 * sizeof(size_t) || size > kHeapMax) return false;
++  *lo = base + 4 * sizeof(size_t);
++  *hi = base + size;
++  return true;
++}
++
 +bool NotAGlibcChunk(void* ptr) {
 +  auto addr = reinterpret_cast<uintptr_t>(ptr);
 +  if (addr % 16 != 0) return true;
-+  size_t header = reinterpret_cast<const size_t*>(ptr)[-1];
-+  if (header & 2) return false;  // IS_MMAPPED
++  const size_t* words = reinterpret_cast<const size_t*>(ptr);
++  size_t header = words[-1];
 +  size_t size = header & ~static_cast<size_t>(7);
-+  return size < 32 || size % 16 != 0 || size > (static_cast<size_t>(64) << 20);
++  if (header & 2) {  // IS_MMAPPED: glibc's munmap_chunk aborts unless the mapping (chunk - prev_size) and its length are page-aligned
++    size_t prev = words[-2];
++    uintptr_t block = addr - 2 * sizeof(size_t) - prev;
++    size_t page = static_cast<size_t>(getpagesize());
++    return size == 0 || ((block | (prev + size)) & (page - 1)) != 0;
++  }
++  if (size < 32 || size % 16 != 0 || size > kHeapMax) return true;
++  // glibc's _int_free trusts the neighbours too: a chunk outside its arena's heap ("double free or corruption (out)"), a next chunk
++  // without PREV_INUSE ("(!prev)") or of an impossible size ("free(): invalid next size"), a free previous chunk whose size disagrees
++  // ("corrupted size vs. prev_size") all abort. PGR freed pointers into arrays whose words passed the header checks above.
++  uintptr_t lo, hi;
++  if (header & 4) {  // NON_MAIN_ARENA
++    if (!ArenaHeap(addr, &lo, &hi)) return true;
++  } else {
++    lo = MainHeapStart();
++    if (lo == 1) return false;  // no [heap]: the header checks are all there is
++    hi = reinterpret_cast<uintptr_t>(sbrk(0));
++  }
++  uintptr_t chunk = addr - 2 * sizeof(size_t), next = chunk + size;
++  if (chunk < lo || next < chunk || next + 2 * sizeof(size_t) > hi) return true;
++  size_t next_header = reinterpret_cast<const size_t*>(next)[1], next_size = next_header & ~static_cast<size_t>(7);
++  if (!(next_header & 1) || next_size <= 2 * sizeof(size_t) || next + next_size > hi) return true;
++  if (!(header & 1)) {  // the previous chunk is free: glibc merges with it
++    size_t prev_size = words[-2];
++    if (prev_size < 32 || prev_size % 16 != 0 || chunk - lo < prev_size) return true;
++    if ((reinterpret_cast<const size_t*>(chunk - prev_size)[1] & ~static_cast<size_t>(7)) != prev_size) return true;
++  }
++  return false;
++}
++
++// A chunk glibc already holds in its tcache (a guest double free: both frees wait in the quarantine ring, the second reaches glibc
++// after the first and aborts, "free(): double free detected in tcache 2"): its second word is glibc's per-process tcache key, learnt
++// once from a chunk of our own. 0 when the tcache is off.
++bool InTcache(void* ptr) {
++  static const size_t key = [] {
++    void* own = malloc(24);
++    if (own == nullptr) return static_cast<size_t>(0);
++    __real_free(own);
++    return reinterpret_cast<const size_t*>(own)[1];  // the freed chunk's tcache entry key (it stays in the tcache)
++  }();
++  return key != 0 && reinterpret_cast<const size_t*>(ptr)[1] == key;
 +}
 +
 +void ReportInvalidFree(void* ptr, void* caller) {
@@ -61,7 +160,7 @@ index 823190f8..a1f2fcc2 100644
  #if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
  namespace {
  
-@@ -67,6 +110,10 @@ extern "C" void __wrap_free(void* ptr) {
+@@ -67,12 +205,21 @@ extern "C" void __wrap_free(void* ptr) {
      __real_free(ptr);
      return;
    }
@@ -72,3 +171,14 @@ index 823190f8..a1f2fcc2 100644
  
    // Defer the real free through the quarantine ring so a just-freed chunk (and
    // its Scudo region) stays live long enough that the translator's Arena cannot
+   // re-grab and clobber it under a benign guest use-after-free. Release whatever
+   // pointer the ring evicts.
+   void* evicted = QuarantineSwap(ptr);
++  // apklayer patch: checked again when glibc really gets it (a chunk freed twice, or merged meanwhile, is no longer a live chunk)
++  if (evicted != nullptr && GlibcHost() && (InTcache(evicted) || NotAGlibcChunk(evicted))) {
++    ReportInvalidFree(evicted, __builtin_return_address(0));
++    return;
++  }
+   if (evicted != nullptr) {
+     __real_free(evicted);
+   }

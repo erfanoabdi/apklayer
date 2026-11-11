@@ -99,6 +99,8 @@ int main(int argc, char **argv)
             long long wait = repeat_next_ms - now_ms();
             if (timeout < 0 || wait < timeout) timeout = wait > 0 ? (int)wait : 0;
         }
+        int edge_wait = edgeswipe_tick();
+        if (edge_wait >= 0 && (timeout < 0 || edge_wait < timeout)) timeout = edge_wait;
         if (poll(pfd, (nfds_t)n, timeout) < 0 && errno != EINTR) { wl_display_cancel_read(display); break; }
 
         if (pfd[0].revents & POLLIN) {

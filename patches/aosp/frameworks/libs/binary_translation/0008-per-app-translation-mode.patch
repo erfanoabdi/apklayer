@@ -1,0 +1,35 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: berberis.mode.<package>, the translation mode of one app
+
+BERBERIS_MODE / berberis.mode set the mode of every translated app. PGR (Unity, arm64 on an x86_64 PC) draws its 3D home scene as
+block noise in the default two-gear mode and cleanly lite-translated; the property berberis.mode.<package> (the package from the code
+cache path native_bridge_initialize gets, set before InitBerberis) gives one app its mode while the others keep two-gear. The
+environment still wins, then the app property, then berberis.mode.
+
+diff --git a/base/config_globals.cc b/base/config_globals.cc
+index 16857af7..d2b69100 100644
+--- a/base/config_globals.cc
++++ b/base/config_globals.cc
+@@ -234,9 +234,20 @@ const char* GetTracingConfig() {
+   return var.get();
+ }
+ 
++// apklayer patch: the app's own mode, berberis.mode.<package> (the code cache path's package, set before InitBerberis), before
++// berberis.mode; BERBERIS_MODE in the environment still wins. One app whose code the heavy tier miscompiles (PGR's home scene: block
++// noise in two-gear mode) runs lite-translated while the others keep two-gear (`apklayer prop set berberis.mode.<package> <mode>`).
+ const char* GetTranslationModeConfig() {
+-  static ConfigStr var("BERBERIS_MODE", "berberis.mode");
+-  return var.get();
++  static const char* value = [] {
++    if (const char* package = GetAppPackageName(); package != nullptr) {
++      std::string prop = std::string("berberis.mode.") + package;
++      ConfigStr app("BERBERIS_MODE", prop.c_str());
++      if (app.get() != nullptr) return app.get();
++    }
++    ConfigStr var("BERBERIS_MODE", "berberis.mode");
++    return var.get();
++  }();
++  return value;
+ }
+ 
+ const char* GetProfilingConfig() {

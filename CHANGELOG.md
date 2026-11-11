@@ -3,6 +3,84 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-11: Vulkan presentation on NVIDIA's driver (Arknights: Endfield's "Unable to initialize the Unity Engine Gfx API")
+- Endfield (Unity, arm64 through the native bridge) showed a black window with Unity's dialog "Unable to initialize the Unity Engine Gfx
+  API." and ended itself: it renders with Vulkan only, and the CLI left NVIDIA's proprietary driver out of the Vulkan presentation probe
+  ("untested", cli/env.cpp hostVulkan), so the instance declared no android.hardware.vulkan.
+- Checked on the RTX 5060 Ti (615.71.09): vulkan-present PASS with hello.vulkan (600 frames, native x86_64) and with hello.vulkan.arm64
+  (600 frames through the bridge's guest libvulkan proxy); the probe now takes NVIDIA like any other host driver. The probe's answer is
+  cached in $XDG_RUNTIME_DIR/apklayer-host-vulkan (until the next login).
+- With Vulkan offered, Endfield gets past the dialog and creates its Vulkan device; it then ends itself with SIGTRAP ~60 s in (tgkill of
+  its own thread from game code, Tencent ACE's libanogs/libanort loaded): the anti-cheat, not worked around. Black until then.
+  PGR stays on GLES when Vulkan is offered (CrashSight: OpenGL ES 3.2).
+
+## 2026-11-11: Manager: a "Lite translation" switch for apps that run through the native bridge
+- The app page shows "Lite translation" for apps whose nativeRoute is bridge-* (arm64-only apps on x86_64); it sets or unsets the instance
+  property berberis.mode.<package> = lite-translate-or-interpret (binary_translation 0008), from the app's next start. PGR draws its home
+  scene cleanly only lite-translated (the heavy tier's miscompile, Build log).
+- Fix on the way: the Slint-generated AppEntry leaves its bools uninitialized: the list's entries are value-initialized now (the new
+  fields read garbage: F-Droid showed the switch, on).
+- Checked on the NVIDIA PC (manager built by hand against the pinned Slint 1.18.1, screenshot mode): the switch is shown for PGR and Azur
+  Lane, absent for F-Droid and UiBench; two clicks on Azur Lane set and then unset its property, PGR's stays.
+
+## 2026-11-11: APKLAYER_GL_HIDE: GL extensions hidden from Android code (PGR's home-scene noise is not ASTC)
+- bridge/native/gles_filter.c (libapklayer_gles, in the native dir): the host's libGLESv2 with the named extensions left out of
+  glGetString(GL_EXTENSIONS), glGetStringi and GL_NUM_EXTENSIONS (an ASTC name also drops the ASTC formats from
+  GL_COMPRESSED_TEXTURE_FORMATS); every other GL function is the host's (its DT_NEEDED). cli/env.cpp maps libGLESv2.so/libGLESv3.so to it
+  through a cfg.d in the instance directory, first in XDG_DATA_DIRS, only when APKLAYER_GL_HIDE is set (environment or ~/.config/apklayer/env).
+  New code: nothing in the reference projects filters a host GL's extension list for bionic_translation's apps.
+- Checked on the NVIDIA PC: a probe sees 220 -> 217 extensions and 66 -> 38 compressed formats with the four ASTC names hidden, none without
+  the variable; PGR (the CLI built from this tree, daemon stopped for the run) maps it in 8 processes.
+- PGR with ASTC hidden: the UI draws, the 3D home scene is still black at 80 s (Unity decompresses on the CPU, or it does not draw), and the
+  black area keeps sparse clusters of single red/green/blue pixels; the Missions tile's checker pattern is identical with and without ASTC
+  (the game's own mosaic art). So the noise is not ASTC decoding: more like bad pixels spreading through a post-processing pass (docs/PLAN.md).
+
+## 2026-11-11: KDE's touchscreen edge swipes over a fullscreen app (Android's transient bars)
+- KWin blocks every screen edge inside the active fullscreen window (Edge::checkBlocking, touch and pointer, unless kwinrc [ScreenEdges]
+  RemainActiveOnFullscreen), so over a fullscreen game or video KDE's edge swipes (overview, panels, keyboard) never started.
+- bridge/shell/edgeswipe.c: as Android's immersive mode, an inward swipe (40 logical px) from a 24 px edge zone of a fullscreen window takes
+  the touch from the app (ACTION_CANCEL, the rest of that sequence is dropped) and leaves the compositor's fullscreen state; the app's own
+  request stays, and the window is fullscreen again once it is active and untouched for 3 s. A drag along the edge stays the app's.
+- Test: tests/vm/fullscreen-edge.py (group fullscreen; the fullscreen check compares sizes, a server-side title bar is 0 in every state).
+  PASS on the NVIDIA PC's KDE Plasma 6.8.2 (instance edgetest, the shell built from this tree). Real finger swipes: needs a human check.
+
+## 2026-11-11: a GLES window no longer allocates a new buffer for nearly every frame (zero-copy present's fallback; not yet built)
+- Seen: PGR on the NVIDIA PC (APKLAYER_RUNTIME_DEBUG=1, 45 s in the default instance): 167 `imported buffer id` lines, every one a new
+  3440x1440 RGBA buffer (consecutive gralloc ids), against 350 frames the shell received; 5 `attached buffer` (the gbm surface's own).
+- Cause (EglAttach.cpp): when every gbm buffer is out, present() dequeues to wait for a release; reclaim() detaches each released buffer, so
+  the queue is short of buffers and the dequeue allocates a new one instead of waiting; the frame is copied into it, and the next reclaim()
+  dropped it. Now reclaim() keeps such a buffer (up to 2) and present() attaches it again for the next such frame (attachSpare); the copy's
+  EGLImage cache (keyed by the buffer) hits too. A dequeue only happens with no spare of the window's size and format.
+  `allowAllocation(false)` around the dequeue was not taken: with only the displayed buffer in SurfaceFlinger it would wait forever.
+- Needs `m libapklayer_egl` in ~/los24 (Build log, PENDING; arm64 and x86_64): not reachable from the tester's PC, so neither built nor run.
+
+## 2026-11-11: PGR on the NVIDIA PC: it draws; its window goes because the game aborts (binary_translation 0006 extended, not yet built)
+- PGR 4.9.1 on the tester's RTX 5060 Ti (0.4.18 deb, runtime 0.4.17 with yesterday's proxy libc and today's graphics HAL), two runs in the
+  default instance: SurfaceFlinger's picture and the KDE desktop (Spectacle) both show the title screen at 60 s, and the 3D home scene at
+  120 s in the first run: nothing black. The second run ended at 97 s with `munmap_chunk(): invalid pointer` (yesterday's last run too): the
+  process aborts and its window disappears, which looks like the game going black or vanishing.
+- Cause: the guest frees pointers into the middle of arrays (6 logged by 0006 this run, `free(...) of no glibc chunk`); 0006 took every
+  header with the IS_MMAPPED bit as a real chunk, and glibc's munmap_chunk aborts on one whose mapping is not page-aligned. 0006 now applies
+  munmap_chunk's own check (chunk - prev_size and prev_size + size page-aligned) before passing an mmapped pointer on. Checked as host code
+  against glibc 2.39 (a real small and a real mmapped chunk pass, a forged IS_MMAPPED word in an array and a zero-size one are refused).
+- Needs `m libberberis_proxy_libc` in ~/los24 (gsi_x86_64, APKLAYER_NATIVE_BRIDGE=arm64; Build log below): the tree's OrbStack machine is not
+  reachable from the tester's PC, so the library was not built or run with PGR yet.
+
+## 2026-11-11: NVIDIA: black software-drawn windows in BGRA, RGBX and RGB565; the tiled <-> linear GPU copy for every 8-bit format
+- Cause: NVIDIA samples a LINEAR dmabuf only as an external texture, so 6a1e2246 tiles CPU-drawn window buffers there, but only RGBA_8888/RGBX_8888
+  (the two layouts readback.c's GPU copy took as they are). A software-rendered window in BGRA_8888 (ARGB8888), XRGB8888 or RGB_565 stayed LINEAR
+  and SurfaceFlinger could not import it: a black window. Checked on the tester's RTX 5060 Ti (615.71.09) with the old code: those three window
+  buffers come out LINEAR (modifier 0), ABGR8888 tiled.
+- readback.c: the GPU always moves RGBA8 (glReadPixels RGBA/UNSIGNED_BYTE out; in, a blit from an RGBA8 texture, which converts into the buffer's
+  own format) and the CPU converts that to and from the buffer's layout (ABGR/XBGR/ARGB/XRGB8888, BGR888, RGB565). One EGL context per process
+  under a lock instead of a new display init and context per map and unmap. "LINEAR external-only" is asked per format, and a driver that lists
+  modifiers but not LINEAR for a format counts too. alloc_flags tiles only where the device allocates the format tiled.
+- Test: tests/hals/readback-test.c (group gfx-readback, `b/bridge/hals/graphics/readback-test`): every format through tiled and LINEAR buffers
+  (where the driver maps LINEAR, the bytes the GPU wrote must equal the CPU layout), then the HAL's window path (alloc with the composer's usage,
+  CPU write, unmap, CPU read). RTX 5060 Ti: 10 pass (all formats tiled, every window buffer tiled and identical; NVIDIA allocates no LINEAR
+  render target and no BGR888). AIDA64 on the same PC with the new library: draws, `apklayer screenshot` (the tiled capture read through the
+  GPU) has the right colours. Not run on the VMs (none reachable): the LINEAR byte-layout check runs only on Mesa.
+
 ## 2026-11-10: Unity games take clicks (PGR)
 - NVIDIA: a window buffer the CPU draws and SurfaceFlinger composes (composer usage; a software-rendered window: PGR's KuroSDK login dialog, Unity activities are not hardware accelerated) was LINEAR, which NVIDIA samples only as an external texture: SurfaceFlinger's GL_TEXTURE_2D import failed (glEGLImageTargetTexture2DOES 0x502, "Failed to create a valid texture") and only the dialog's dim showed. Where EGL reports LINEAR external-only for the format, such buffers are tiled and the CPU's map goes through the GPU both ways (readback.c: readback, and the new upload at unmap). Mesa keeps LINEAR.
 - IWindowManager.getInitialDisplayDensity / getBaseDisplayDensity answer the window's density (the fake answered 0): KuroSDK's DensityDpiUtil read the default density as 0 for PGR's login dialog. Script step `views` prints every window's view tree (class, visibility, alpha, size, position).
@@ -1546,6 +1624,47 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-11 - gsi_x86_64 libberberis_arm64: binary_translation 0007 (BERBERIS_HEAVY_DENY) and 0008 (berberis.mode.<package>)
+- Why: PGR's 3D home scene is block noise in two-gear mode and clean with BERBERIS_MODE=lite-translate-or-interpret (NVIDIA PC,
+  2026-11-11): the heavy optimizer miscompiles something. 0007 lets a run keep instruction groups out of the heavy tier; 0008 gives one
+  app its own mode (PGR lite-translated by default on the NVIDIA PC: `apklayer prop set berberis.mode.<pgr> lite-translate-or-interpret`).
+- Command: heavy_optimize_region.cc and config_globals.cc written into ~/los24/frameworks/libs/binary_translation (their git diffs are
+  0007 and 0008), then
+  `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_arm64` (APKLAYER_NATIVE_BRIDGE=arm64), after the
+  proxy libc build above.
+
+### 2026-11-11 - gsi_x86_64 libberberis_proxy_libc: 0006 checks the quarantine's evicted pointer and tcache double frees
+- Why: with the heap checks PGR still died: a JVM fatal SIGSEGV (SI_TKILL) at ~134 s in two-gear mode, and with
+  BERBERIS_MODE=lite-translate-or-interpret `free(): double free detected in tcache 2`: both frees of one pointer wait in the quarantine
+  ring and the second reaches glibc after the first. Now the evicted pointer is checked again and a chunk holding glibc's tcache key is
+  left alone (host test: freed 40/200 B chunks recognised, live ones not).
+- Command: as the entry below (the new free_quarantine.cc into ~/los24, its git diff the new 0006; m libberberis_proxy_libc).
+
+### 2026-11-11 - gsi_x86_64 libberberis_proxy_libc: 0006 checks a chunk against its arena's heap (PGR, "double free or corruption (out)")
+- Why: with the munmap_chunk check PGR still aborted ~2 min in, now in _int_free: the stray pointers' headers pass the size checks but the
+  chunk is outside glibc's heap. 0006 now also requires the main [heap] (up to the break) or a non-main heap_info's extent, a next chunk
+  with PREV_INUSE that fits, and a matching free previous chunk (host test: 6 real chunk kinds pass, 6 forged ones are refused).
+- Result: built (22:19 Mac time), sha256 827635fc...; installed on the NVIDIA PC. PGR: the glibc abort is gone (~20 refused frees, 4 KB
+  thread-arena chunks freed twice); the process still died at 134 s, now a SIGSEGV raised with tgkill that the JVM's handler took as fatal.
+- Command (OrbStack): the new free_quarantine.cc written into ~/los24/frameworks/libs/binary_translation (its git diff is the new 0006),
+  then `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_proxy_libc` (APKLAYER_NATIVE_BRIDGE=arm64).
+
+### 2026-11-11 - libapklayer_egl (gsi_x86_64 and gsi_arm64): spare buffers for the zero-copy present's copied frames - PENDING
+- Why: a GLES window allocated a new full-size buffer for nearly every frame when all gbm buffers were out (PGR on NVIDIA, CHANGELOG 2026-11-11).
+- Command: `tools/sync-aosp.sh "EglAttach spares"`, then in ~/los24 `breakfast gsi_x86_64 userdebug && m libapklayer_egl` and `breakfast gsi_arm64 userdebug && m libapklayer_egl` (flock -n ~/los24-build.lock; module output from out/soong/.intermediates/vendor/apklayer/...).
+- Result (gsi_x86_64 only): built with tools/lib/orb-build-module.py (EglAttach.cpp; vendor/apklayer a7c3bc6, synced from a HEAD snapshot on the
+  Mac, ~/apkl-tmp/apklayer-9944f2ee). sha256 b28a7a7a169d94f0d59381624e8184d6ebf566a56dd848163dc961c9350250d2; installed on the NVIDIA PC
+  (runtime 0.4.17 android-libs -> ~/apklayer-fix, the old one in ~/apklayer-fix/orig). gsi_arm64 not built.
+
+### 2026-11-11 - gsi_x86_64 libberberis_proxy_libc: 0006 checks a mmapped chunk as munmap_chunk does (PGR, "munmap_chunk(): invalid pointer") - PENDING
+- Why: PGR aborted 97 s into a session on the NVIDIA PC; the stray free's header had the IS_MMAPPED bit, which 0006 passed to glibc unchecked.
+- Command: `cd ~/los24 && source build/envsetup.sh && export APKLAYER_NATIVE_BRIDGE=arm64 && patches/apply aosp ~/los24 && breakfast gsi_x86_64 userdebug && m libberberis_proxy_libc` (flock -n ~/los24-build.lock); the edited 0006 must replace the applied one (`patch -R` the old version first, as on 2026-11-09).
+- Result: the old 0006 reversed (`git apply -R` of 75a7fefc's version), the series applied (0001-0005 already in), `m libberberis_proxy_libc` built.
+  sha256 b04215855cd2c1f51a926c621cf62060bbab99852756b90e91a8924dd4bea600 (85376 bytes); installed on the NVIDIA PC (~/apklayer-fix).
+  PGR with it (180 s run, default instance): title screen clean, but the game still aborted at about 137 s, now with glibc's
+  `double free or corruption (out)` (7 `free(...) of no glibc chunk` logged and left alone before it, all from one host caller; about 2900
+  `BAD proxy PRE-EXTRACT: raw_x0=0x1` berberis lines per run). Open: which free gets past 0006 (docs/PLAN.md).
+
 ### 2026-11-10 - gsi_x86_64 libberberis_proxy_libc: a guest free of no glibc chunk is left alone (PGR agent)
 - Why: PGR on a tester's x86_64 PC (native bridge) aborted in glibc free ("double free or corruption (out)") minutes into each session;
   binary_translation 0006 checks the chunk header in __wrap_free on a glibc host.

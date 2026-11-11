@@ -68,6 +68,21 @@ component AppDetail {
                             }
                         }
                     }
+                    if root.app.translated : Row {
+                        text: "Lite translation";
+                        supporting-text: "Its ARM code without the optimizing translator: slower, for games that draw wrong otherwise. From its next start";
+                        clickable: false;
+                        VerticalLayout {
+                            alignment: center;
+                            Switch {
+                                width: MaterialStyleMetrics.size_52;
+                                checked: root.app.lite;
+                                enabled: !Backend.busy;
+                                accessible-label: "Lite translation";
+                                checked-state-changed(on) => { Backend.set-lite(root.app.package, on); }
+                            }
+                        }
+                    }
                 }
             }
             OutlinedCard {

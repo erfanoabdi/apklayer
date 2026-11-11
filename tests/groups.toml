@@ -265,7 +265,7 @@ run = ["python3 -u tests/vm/window-geometry.py"]
 
 [fullscreen]  # Android's fullscreen as the compositor's (xdg_toplevel.set_fullscreen): desktop and a simulated phone
 needs = ["com.android.test.uibench"]
-run = ["python3 -u tests/vm/fullscreen.py", "python3 -u tests/vm/fullscreen.py --mobile", "python3 -u tests/vm/fullscreen-key.py"]
+run = ["python3 -u tests/vm/fullscreen.py", "python3 -u tests/vm/fullscreen.py --mobile", "python3 -u tests/vm/fullscreen-key.py", "python3 -u tests/vm/fullscreen-edge.py"]
 
 [decoration]
 # server-side title bars under sway (headless, its own socket): needs sway on the VM
@@ -293,6 +293,10 @@ needs = ["com.android.test.uibench"]
 # the second run under a decimal-comma locale: Android's native float parsing (VectorDrawable paths, PathInterpolator) must stay in C
 setup = ["locale -a | grep -qx nl_NL.utf8 || sudo -n locale-gen nl_NL.UTF-8 >/dev/null"]
 run = ["python3 -u tests/vm/gpu-smoke.py", "LANG=nl_NL.UTF-8 LC_ALL=nl_NL.UTF-8 python3 -u tests/vm/gpu-smoke.py", "python3 -u tests/vm/hwbitmap.py"]
+
+[gfx-readback]
+# the GPU copy of buffers the CPU cannot map (readback.c: NVIDIA's tiled window and capture buffers), every format it moves, tiled and LINEAR
+run = ["b/bridge/hals/graphics/readback-test"]
 
 [gpu-select]
 # apklayer gpus / gpu set|unset and the node the instance's processes get (no app: rendering on a choice is gpu/gpu-window with APKLAYER_GPU)

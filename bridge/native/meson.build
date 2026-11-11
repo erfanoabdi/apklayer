@@ -20,6 +20,12 @@ executable('btload', ['btload.c', 'android_platform.c', 'properties.c', 'paths.c
 # and the userspace binder's route (binder_route.c: bionic_translation's fd hooks find it here, one copy per process)
 apklayer_preload = shared_module('apklayer-preload', ['paths.c', 'paths_preload.c', 'exec_preload.c', 'bionic_tls.c', 'binder_route.c', 'broker.c', '../binderd/wire.c'],
   link_args: ['-ldl', '-lpthread'], c_args: native_cargs, override_options: native_opts, install: true, install_dir: native_dir)
+# the host's libGLESv2 with extensions hidden from Android code (APKLAYER_GL_HIDE; cli/env.cpp maps libGLESv2.so here only then)
+gles_filter_glesv2 = dependency('glesv2', required: false)
+if gles_filter_glesv2.found()
+  shared_module('apklayer_gles', 'gles_filter.c', dependencies: gles_filter_glesv2, link_args: ['-Wl,--no-as-needed', '-lGLESv2', '-Wl,--as-needed', '-ldl', '-lpthread'],
+    name_prefix: 'lib', c_args: native_cargs, override_options: native_opts, install: true, install_dir: native_dir)
+endif
 executable('aprop', ['aprop.c', 'properties.c'], c_args: native_cargs, override_options: native_opts, install: true, install_dir: native_dir / 'bin')
 install_data('getprop', install_dir: native_dir / 'bin', install_mode: 'rwxr-xr-x')  # Android's getprop for the apps that run it
 

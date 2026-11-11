@@ -7,6 +7,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <functional>
 #include <optional>
 #include <thread>
@@ -30,6 +31,9 @@ using manager::summary;
 namespace {
 
 std::string field(const std::vector<std::string>& row, size_t i) { return i < row.size() ? row[i] : ""; }
+
+// the native bridge's mode without the heavy tier (binary_translation 0008: the property berberis.mode.<package>)
+const char* const kLiteMode = "lite-translate-or-interpret";
 
 // What the selected app's detail shows besides the list's row: `info` and `permissions` (whose failure, an install older than the list, is a note there)
 struct Detail {
@@ -96,7 +100,7 @@ public:
         auto& b = ui_->global<Backend>();
         auto apps = std::make_shared<slint::VectorModel<AppEntry>>();
         for (const auto& r : s.apps) {
-            AppEntry e;
+            AppEntry e{};  // value-initialized: the generated struct leaves its bools uninitialized
             e.package = slint::SharedString(field(r, 0));
             e.label = slint::SharedString(field(r, 1));
             e.version = slint::SharedString(field(r, 2));
@@ -104,6 +108,11 @@ public:
             e.running = field(r, 5) == "1";
             e.system = field(r, 6) == "1";
             e.in_drawer = field(r, 7) != "0";
+            // the native bridge's apps: the lite-translation switch (bridge/native/native_bridge.c, binary_translation 0008)
+            std::ifstream info(field(r, 3) + "/info.properties");
+            for (std::string line; std::getline(info, line);) if (line.rfind("nativeRoute=bridge-", 0) == 0) e.translated = true;
+            for (const auto& p : s.props)
+                if (field(p, 0) == "berberis.mode." + field(r, 0) && field(p, 1) == kLiteMode) e.lite = true;
             if (field(r, 0) == current_) b.set_current_app(e);
             apps->push_back(e);
         }
@@ -328,6 +337,11 @@ private:
         b.on_uninstall([this](slint::SharedString pkg) { action("Uninstalling", {"uninstall", std::string(pkg)}); });
         b.on_set_permission([this](slint::SharedString pkg, slint::SharedString permission, bool granted) {
             action(granted ? "Granting" : "Revoking", {"permissions", granted ? "grant" : "revoke", std::string(pkg), std::string(permission)});
+        });
+        b.on_set_lite([this](slint::SharedString pkg, bool lite) {
+            std::string key = "berberis.mode." + std::string(pkg);
+            if (lite) action("Lite translation on (from its next start)", {"prop", "set", key, kLiteMode});
+            else action("Lite translation off (from its next start)", {"prop", "unset", key});
         });
         b.on_set_drawer([this](slint::SharedString pkg, bool shown) {
             action(shown ? "Showing in the app drawer" : "Hiding from the app drawer", {"launcher", shown ? "show" : "hide", std::string(pkg)});
