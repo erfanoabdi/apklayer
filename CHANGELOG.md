@@ -1604,10 +1604,12 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
-### 2026-11-11 - gsi_x86_64 libberberis_arm64: binary_translation 0007, BERBERIS_HEAVY_DENY (bisect PGR's home-scene noise)
+### 2026-11-11 - gsi_x86_64 libberberis_arm64: binary_translation 0007 (BERBERIS_HEAVY_DENY) and 0008 (berberis.mode.<package>)
 - Why: PGR's 3D home scene is block noise in two-gear mode and clean with BERBERIS_MODE=lite-translate-or-interpret (NVIDIA PC,
-  2026-11-11): the heavy optimizer miscompiles something. 0007 lets a run keep instruction groups out of the heavy tier.
-- Command: heavy_optimize_region.cc written into ~/los24/frameworks/libs/binary_translation (its git diff is 0007), then
+  2026-11-11): the heavy optimizer miscompiles something. 0007 lets a run keep instruction groups out of the heavy tier; 0008 gives one
+  app its own mode (PGR lite-translated by default on the NVIDIA PC: `apklayer prop set berberis.mode.<pgr> lite-translate-or-interpret`).
+- Command: heavy_optimize_region.cc and config_globals.cc written into ~/los24/frameworks/libs/binary_translation (their git diffs are
+  0007 and 0008), then
   `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_arm64` (APKLAYER_NATIVE_BRIDGE=arm64), after the
   proxy libc build above.
 
