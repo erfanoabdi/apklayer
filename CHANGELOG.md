@@ -3,6 +3,17 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-11: Vulkan presentation on NVIDIA's driver (Arknights: Endfield's "Unable to initialize the Unity Engine Gfx API")
+- Endfield (Unity, arm64 through the native bridge) showed a black window with Unity's dialog "Unable to initialize the Unity Engine Gfx
+  API." and ended itself: it renders with Vulkan only, and the CLI left NVIDIA's proprietary driver out of the Vulkan presentation probe
+  ("untested", cli/env.cpp hostVulkan), so the instance declared no android.hardware.vulkan.
+- Checked on the RTX 5060 Ti (615.71.09): vulkan-present PASS with hello.vulkan (600 frames, native x86_64) and with hello.vulkan.arm64
+  (600 frames through the bridge's guest libvulkan proxy); the probe now takes NVIDIA like any other host driver. The probe's answer is
+  cached in $XDG_RUNTIME_DIR/apklayer-host-vulkan (until the next login).
+- With Vulkan offered, Endfield gets past the dialog and creates its Vulkan device; it then ends itself with SIGTRAP ~60 s in (tgkill of
+  its own thread from game code, Tencent ACE's libanogs/libanort loaded): the anti-cheat, not worked around. Black until then.
+  PGR stays on GLES when Vulkan is offered (CrashSight: OpenGL ES 3.2).
+
 ## 2026-11-11: Manager: a "Lite translation" switch for apps that run through the native bridge
 - The app page shows "Lite translation" for apps whose nativeRoute is bridge-* (arm64-only apps on x86_64); it sets or unsets the instance
   property berberis.mode.<package> = lite-translate-or-interpret (binary_translation 0008), from the app's next start. PGR draws its home

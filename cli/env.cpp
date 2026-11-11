@@ -82,8 +82,6 @@ std::string hostVulkan(const Layout& layout, const Env& env) {
         std::string api = field("apiVersion"), type = field("deviceType"), driver = field("driverID");
         unsigned major = 0, minor = 0;
         if (sscanf(api.c_str(), "%u.%u", &major, &minor) != 2 || type.empty() || type == "PHYSICAL_DEVICE_TYPE_CPU" || driver == "DRIVER_ID_MESA_VENUS") continue;
-        // shortcut: NVIDIA's own driver is untested with the presentation path (Unity picks Vulkan when offered): left out until checked on an NVIDIA host
-        if (driver == "DRIVER_ID_NVIDIA_PROPRIETARY") continue;
         if ((major << 16 | minor) > best) best = major << 16 | minor, version = std::to_string(major) + "." + std::to_string(minor);
     }
     writeFile(cache, (version.empty() ? "-" : version) + "\n");
