@@ -3,6 +3,15 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-11: KDE's touchscreen edge swipes over a fullscreen app (Android's transient bars)
+- KWin blocks every screen edge inside the active fullscreen window (Edge::checkBlocking, touch and pointer, unless kwinrc [ScreenEdges]
+  RemainActiveOnFullscreen), so over a fullscreen game or video KDE's edge swipes (overview, panels, keyboard) never started.
+- bridge/shell/edgeswipe.c: as Android's immersive mode, an inward swipe (40 logical px) from a 24 px edge zone of a fullscreen window takes
+  the touch from the app (ACTION_CANCEL, the rest of that sequence is dropped) and leaves the compositor's fullscreen state; the app's own
+  request stays, and the window is fullscreen again once it is active and untouched for 3 s. A drag along the edge stays the app's.
+- Test: tests/vm/fullscreen-edge.py (group fullscreen; the fullscreen check compares sizes, a server-side title bar is 0 in every state).
+  PASS on the NVIDIA PC's KDE Plasma 6.8.2 (instance edgetest, the shell built from this tree). Real finger swipes: needs a human check.
+
 ## 2026-11-11: a GLES window no longer allocates a new buffer for nearly every frame (zero-copy present's fallback; not yet built)
 - Seen: PGR on the NVIDIA PC (APKLAYER_RUNTIME_DEBUG=1, 45 s in the default instance): 167 `imported buffer id` lines, every one a new
   3440x1440 RGBA buffer (consecutive gralloc ids), against 350 frames the shell received; 5 `attached buffer` (the gbm surface's own).

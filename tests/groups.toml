@@ -265,7 +265,7 @@ run = ["python3 -u tests/vm/window-geometry.py"]
 
 [fullscreen]  # Android's fullscreen as the compositor's (xdg_toplevel.set_fullscreen): desktop and a simulated phone
 needs = ["com.android.test.uibench"]
-run = ["python3 -u tests/vm/fullscreen.py", "python3 -u tests/vm/fullscreen.py --mobile", "python3 -u tests/vm/fullscreen-key.py"]
+run = ["python3 -u tests/vm/fullscreen.py", "python3 -u tests/vm/fullscreen.py --mobile", "python3 -u tests/vm/fullscreen-key.py", "python3 -u tests/vm/fullscreen-edge.py"]
 
 [decoration]
 # server-side title bars under sway (headless, its own socket): needs sway on the VM

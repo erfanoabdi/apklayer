@@ -5,6 +5,7 @@ static struct window *touch_window;     /* window the current touch sequence sta
 static int fingers;                     /* fingers currently down */
 static struct window *nav_window;       /* a finger on this window's navigation bar (mobile.c) */
 static int nav_finger;
+static int swallowed;                   /* fingers of a sequence taken from the app (an edge swipe, edgeswipe.c) still down */
 
 /* TOUCH {i32 id, i32 action(0 down,1 up,2 move,3 cancel), i32 finger, i32 x, i32 y} (pixels) */
 static void send_touch(int action, int finger, wl_fixed_t fx, wl_fixed_t fy)
@@ -35,10 +36,12 @@ static void t_down(void *d, struct wl_touch *t, uint32_t serial, uint32_t time,
         wl_surface_commit(w->surface);
         return;
     }
+    if (swallowed) { swallowed++; return; }  /* until every finger of the swipe is up */
     if (!touch_window) touch_window = w;
     if (w == touch_window) {
         fingers++;
         send_touch(0, id, x, y);
+        edgeswipe_down(w, id, wl_fixed_to_int(x), wl_fixed_to_int(y));
     }
 }
 static void t_up(void *d, struct wl_touch *t, uint32_t serial, uint32_t time, int32_t id)
@@ -55,20 +58,34 @@ static void t_up(void *d, struct wl_touch *t, uint32_t serial, uint32_t time, in
         if (held != NAV_NONE) window_nav_action(w, held);
         return;
     }
+    if (swallowed) { swallowed--; return; }
+    edgeswipe_up(id);
     send_touch(1, id, 0, 0);
     if (fingers > 0 && --fingers == 0) touch_window = NULL;
 }
 static void t_motion(void *d, struct wl_touch *t, uint32_t time, int32_t id, wl_fixed_t x, wl_fixed_t y)
-{ (void)d; (void)t; (void)time; if (!(nav_window && id == nav_finger)) send_touch(2, id, x, y); }
+{
+    (void)d; (void)t; (void)time;
+    if ((nav_window && id == nav_finger) || swallowed) return;
+    if (touch_window && edgeswipe_motion(id, wl_fixed_to_int(x), wl_fixed_to_int(y))) {
+        send_touch(3, 0, 0, 0);  /* the desktop's gesture now, not the app's */
+        swallowed = fingers;
+        touch_window = NULL;
+        fingers = 0;
+        return;
+    }
+    send_touch(2, id, x, y);
+}
 static void t_frame(void *d, struct wl_touch *t) { (void)d; (void)t; }
 static void t_cancel(void *d, struct wl_touch *t)
 {
     (void)d; (void)t;
     if (nav_window && nav_window->client && nav_window->mobile) { nav_window->nav.pressed = NAV_NONE; window_layout(nav_window); wl_surface_commit(nav_window->surface); }
     nav_window = NULL;
+    edgeswipe_cancel();
     send_touch(3, 0, 0, 0);
     touch_window = NULL;
-    fingers = 0;
+    fingers = swallowed = 0;
 }
 static void t_shape(void *d, struct wl_touch *t, int32_t id, wl_fixed_t a, wl_fixed_t b)
 { (void)d; (void)t; (void)id; (void)a; (void)b; }
