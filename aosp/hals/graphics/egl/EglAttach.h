@@ -30,6 +30,7 @@ class WindowAttach {
     };
     explicit WindowAttach(ANativeWindow* nw) : mNative(nw) {}
     void reclaim();
+    bool attachSpare(int format, uint32_t w, uint32_t h, ANativeWindowBuffer** dst, int* dstFence);
     void giveBack(std::list<Entry>::iterator e);
     std::list<Entry>::iterator find(ANativeWindowBuffer* b);
     std::list<Entry>::iterator entryFor(void* gs, void* bo, int format, uint32_t w, uint32_t h);
@@ -38,6 +39,9 @@ class WindowAttach {
     void* mSurface = nullptr;  // the android::Surface behind mNative
     uint64_t mConsumerUsage = 0;
     std::list<Entry> mEntries;
+    // buffers the queue allocated for copied frames (all gbm buffers were out), kept once SurfaceFlinger released them and attached again
+    // for the next copy: dropped, the queue allocated a new full-size buffer for nearly every frame (PGR at 3440x1440 on NVIDIA)
+    std::list<android::sp<android::GraphicBuffer>> mSpares;
 };
 
 }  // namespace apklayer::egl

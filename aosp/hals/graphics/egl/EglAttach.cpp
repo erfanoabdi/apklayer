@@ -3,6 +3,8 @@
 // gralloc buffers and attached to the window's BufferQueue. Mesa's gbm surface has four buffers and fails the next frame when none is free, so each
 // one comes back (detachNextBuffer) once SurfaceFlinger released it, and when all four are out a release is waited for (dequeueBuffer) before the
 // swap returns. Anything this cannot do (no libgui Surface, a format or size the window does not ask for, a failed attach) falls back to the copy.
+// A dequeue while every gbm buffer is out finds the queue short of buffers (ours were detached) and allocates one: that frame is copied into it,
+// and once released it is kept as a spare and attached again for the next such frame instead of being dropped (an allocation per frame).
 #define LOG_TAG "apklayer.egl"
 
 #include "EglAttach.h"
@@ -54,6 +56,7 @@ const Gui* gui() {
 }
 
 constexpr uint64_t kProducerUsage = 0x200 | 0x100;  // GRALLOC_USAGE_HW_RENDER | HW_TEXTURE, as eglCreateWindowSurface asks
+constexpr size_t kMaxSpares = 2;  // copied frames in flight at once (one queued, one on screen)
 std::atomic<uint32_t> gNextId{1};
 
 // The gbm buffer as one of our gralloc buffers (gralloc_handle.h, as the allocator makes them), labelled with the window's format (1 RGBA_8888 or
@@ -136,7 +139,11 @@ void WindowAttach::reclaim() {
         sp<Fence> fence;
         if (gui()->detachNext(mSurface, &gb, &fence) != android::OK || gb == nullptr) return;
         auto e = find(gb->getNativeBuffer());
-        if (e == mEntries.end()) continue;  // one the queue allocated for a copied frame: dropped
+        if (e == mEntries.end()) {  // one the queue allocated for a copied frame: kept for the next one (attachSpare)
+            if (fence != nullptr && fence->isValid()) fence->wait(1000);
+            if (mSpares.size() < kMaxSpares) mSpares.push_back(gb);
+            continue;
+        }
         if (fence != nullptr && fence->isValid()) fence->wait(1000);
         giveBack(e);
     }
@@ -163,6 +170,21 @@ void WindowAttach::surfaceGone(void* gs) {
     }
 }
 
+// A spare of this format and size attached to the window as the copy's destination (*dst, already dequeued: no fence). Spares of another
+// format or size (the window changed) are dropped.
+bool WindowAttach::attachSpare(int format, uint32_t w, uint32_t h, ANativeWindowBuffer** dst, int* dstFence) {
+    while (!mSpares.empty()) {
+        sp<GraphicBuffer> gb = mSpares.front();
+        mSpares.pop_front();
+        if (gb->getWidth() != w || gb->getHeight() != h || gb->getPixelFormat() != format) continue;
+        if (gui()->attach(mSurface, gb->getNativeBuffer()) != android::OK) continue;  // the queue keeps it now (the Surface's slot)
+        *dst = gb->getNativeBuffer();
+        *dstFence = -1;
+        return true;
+    }
+    return false;
+}
+
 bool WindowAttach::present(EGLDisplay dpy, void* gs, void* bo, uint32_t w, uint32_t h, ANativeWindowBuffer** dst, int* dstFence) {
     reclaim();
     int format = 0, qw = 0, qh = 0;
@@ -174,7 +196,9 @@ bool WindowAttach::present(EGLDisplay dpy, void* gs, void* bo, uint32_t w, uint3
     if (!rgb8 || (format != 1 && format != 2) || qw != (int)w || qh != (int)h) return false;
 
     if (!gbmFn<int (*)(void*)>("gbm_surface_has_free_buffers")(gs)) {
-        // all four gbm buffers are out: wait for SurfaceFlinger to release one (the queue blocks as for a copy) and take it back
+        // all four gbm buffers are out: a spare from an earlier copy takes this frame (no allocation); else wait for SurfaceFlinger to release
+        // one (the queue blocks as for a copy, or allocates when it is short of buffers) and take it back
+        if (attachSpare(format, w, h, dst, dstFence)) return false;  // the caller copies into it
         if (mNative->dequeueBuffer(mNative, dst, dstFence) != 0) { *dst = nullptr; *dstFence = -1; return false; }
         auto e = find(*dst);
         if (e == mEntries.end()) return false;  // the queue allocated one: the caller copies into it

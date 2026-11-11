@@ -3,6 +3,16 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-11: a GLES window no longer allocates a new buffer for nearly every frame (zero-copy present's fallback; not yet built)
+- Seen: PGR on the NVIDIA PC (APKLAYER_RUNTIME_DEBUG=1, 45 s in the default instance): 167 `imported buffer id` lines, every one a new
+  3440x1440 RGBA buffer (consecutive gralloc ids), against 350 frames the shell received; 5 `attached buffer` (the gbm surface's own).
+- Cause (EglAttach.cpp): when every gbm buffer is out, present() dequeues to wait for a release; reclaim() detaches each released buffer, so
+  the queue is short of buffers and the dequeue allocates a new one instead of waiting; the frame is copied into it, and the next reclaim()
+  dropped it. Now reclaim() keeps such a buffer (up to 2) and present() attaches it again for the next such frame (attachSpare); the copy's
+  EGLImage cache (keyed by the buffer) hits too. A dequeue only happens with no spare of the window's size and format.
+  `allowAllocation(false)` around the dequeue was not taken: with only the displayed buffer in SurfaceFlinger it would wait forever.
+- Needs `m libapklayer_egl` in ~/los24 (Build log, PENDING; arm64 and x86_64): not reachable from the tester's PC, so neither built nor run.
+
 ## 2026-11-11: PGR on the NVIDIA PC: it draws; its window goes because the game aborts (binary_translation 0006 extended, not yet built)
 - PGR 4.9.1 on the tester's RTX 5060 Ti (0.4.18 deb, runtime 0.4.17 with yesterday's proxy libc and today's graphics HAL), two runs in the
   default instance: SurfaceFlinger's picture and the KDE desktop (Spectacle) both show the title screen at 60 s, and the 3D home scene at
@@ -1573,6 +1583,11 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-11 - libapklayer_egl (gsi_x86_64 and gsi_arm64): spare buffers for the zero-copy present's copied frames - PENDING
+- Why: a GLES window allocated a new full-size buffer for nearly every frame when all gbm buffers were out (PGR on NVIDIA, CHANGELOG 2026-11-11).
+- Command: `tools/sync-aosp.sh "EglAttach spares"`, then in ~/los24 `breakfast gsi_x86_64 userdebug && m libapklayer_egl` and `breakfast gsi_arm64 userdebug && m libapklayer_egl` (flock -n ~/los24-build.lock; module output from out/soong/.intermediates/vendor/apklayer/...).
+- Result: not run (the OrbStack machine is not reachable from the tester's PC).
+
 ### 2026-11-11 - gsi_x86_64 libberberis_proxy_libc: 0006 checks a mmapped chunk as munmap_chunk does (PGR, "munmap_chunk(): invalid pointer") - PENDING
 - Why: PGR aborted 97 s into a session on the NVIDIA PC; the stray free's header had the IS_MMAPPED bit, which 0006 passed to glibc unchecked.
 - Command: `cd ~/los24 && source build/envsetup.sh && export APKLAYER_NATIVE_BRIDGE=arm64 && patches/apply aosp ~/los24 && breakfast gsi_x86_64 userdebug && m libberberis_proxy_libc` (flock -n ~/los24-build.lock); the edited 0006 must replace the applied one (`patch -R` the old version first, as on 2026-11-09).
