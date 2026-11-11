@@ -1604,6 +1604,13 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-11 - gsi_x86_64 libberberis_arm64: binary_translation 0007, BERBERIS_HEAVY_DENY (bisect PGR's home-scene noise)
+- Why: PGR's 3D home scene is block noise in two-gear mode and clean with BERBERIS_MODE=lite-translate-or-interpret (NVIDIA PC,
+  2026-11-11): the heavy optimizer miscompiles something. 0007 lets a run keep instruction groups out of the heavy tier.
+- Command: heavy_optimize_region.cc written into ~/los24/frameworks/libs/binary_translation (its git diff is 0007), then
+  `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_arm64` (APKLAYER_NATIVE_BRIDGE=arm64), after the
+  proxy libc build above.
+
 ### 2026-11-11 - gsi_x86_64 libberberis_proxy_libc: 0006 checks the quarantine's evicted pointer and tcache double frees
 - Why: with the heap checks PGR still died: a JVM fatal SIGSEGV (SI_TKILL) at ~134 s in two-gear mode, and with
   BERBERIS_MODE=lite-translate-or-interpret `free(): double free detected in tcache 2`: both frees of one pointer wait in the quarantine
