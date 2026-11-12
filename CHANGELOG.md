@@ -1651,7 +1651,10 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Why: 0015 made getuid/getgid the app's, /proc/self/status still printed the desktop user's. Same command as 0016 (0016 and 0017 in the tree).
 - Result 1 (23:41 +0330): FAILED at link, `ld.lld: duplicate symbol: berberis::RunUnknownGuestSyscall` (defined in syscall_emulation.o and open_emulation.o):
   the patch included syscall_emulation_common.h in open_emulation.cc, whose header defines it. The old library (0016's, a86e0be7...) stayed. Fix: declare
-  OwnIdsForGuest in open_emulation.cc instead of including the header; rebuilt below, full output in ~/los24-0017-build.log on the Mac.
+  OwnIdsForGuest in open_emulation.cc instead of including the header.
+- Result 2 (23:52 +0330): FAILED, `-Wundefined-internal`: the declaration sat inside the file's anonymous namespace (a different function). Log: ~/los24-0017-build.log (Mac).
+- Result 3 (~00:02 +0330): `build completed successfully (09:15)`; the declaration moved to the top of namespace berberis. Log: ~/los24-0017-build2.log (Mac).
+  Library sha256 6129c8621b3e62dfd4a38b955195188683b93f13da68466a9c2fb7b7ae4e3567. Not installed or run (no PGR while the user sleeps).
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0016 (guest getdents64 on /proc hides other processes)
 - Why: Android's hidepid=invisible /proc view; the path layer hides other cgroups' pids from path calls and readdir, the translator's
   getdents64 on an open /proc fd needs the same (patches/aosp/.../0016).

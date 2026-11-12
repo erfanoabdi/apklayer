@@ -10,13 +10,21 @@ Applies after 0016. Module libberberis_arm64.
 diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
 --- a/kernel_api/open_emulation.cc
 +++ b/kernel_api/open_emulation.cc
-@@ -498,6 +498,52 @@
+@@ -47,6 +47,10 @@
+ 
+ namespace berberis {
+ 
++// apklayer patch (0017): defined in arm64/syscall_emulation_arch.cc (0015), declared in syscall_emulation_common.h, which is not included here
++// (it defines RunUnknownGuestSyscall: duplicate symbol at link)
++void OwnIdsForGuest(unsigned int* uid, unsigned int* gid);
++
+ // apklayer patch (0012, 0014): whether a mapped file is the host's own, for the guest's views of its address space (/proc/self/maps,
+ // /proc/self/map_files). Host-only: the code cache's memfd, a host GPU node, a file in a host system directory (no Android path starts
+ // so: /usr, /lib, /etc, /var, /opt, /snap, /run, /tmp, /nix), the JVM's own data (its jimage lib/modules, CDS *.jsa), or an ELF file
+@@ -498,6 +502,49 @@
    return mem_fd;
  }
  
-+// syscall_emulation_common.h (defined in arm64/syscall_emulation_arch.cc, 0015); not included: it defines RunUnknownGuestSyscall
-+void OwnIdsForGuest(unsigned int* uid, unsigned int* gid);
-+
 +// apklayer patch (0017): the guest's /proc/self/status shows the app's ids (Uid:/Gid: lines), as its getuid/getgid answer (0015); the host's
 +// file has the desktop user's. Read whole, rewritten line by line, served from a memfd. Without an app uid nothing differs (then the host's file).
 +int OpenatProcSelfStatusForGuest(int dirfd, int flags, mode_t mode) {
@@ -63,7 +71,7 @@ diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
  // In zygote this is not needed because native bridge is mounting
  // /proc/cpuinfo to point to the emulated version. But for executables
  // this does not happen and they end up reading host cpuinfo.
-@@ -650,6 +696,10 @@
+@@ -650,6 +697,10 @@
      return OpenatProcSelfAuxvForGuest(dirfd, host_flags, mode);
    }
  
