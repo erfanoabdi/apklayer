@@ -1657,7 +1657,8 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
   Library sha256 6129c8621b3e62dfd4a38b955195188683b93f13da68466a9c2fb7b7ae4e3567. Not installed or run (no PGR while the user sleeps).
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0018 (guest /proc/net, /sys/class/net denied; attr/current context)
 - Why: sandbox identity round: an app on Android gets EACCES for /proc/net and /sys/class/net and reads its SELinux context from attr/current;
-  the guest read the desktop's. Same command as 0016, output kept in ~/los24-0018-build.log (Mac). Status: RUNNING.
+  the guest read the desktop's. Same command as 0016, output kept in ~/los24-0018-build.log (Mac).
+- Result: `build completed successfully (09:14)`, no errors; library sha256 cc7c7e3ffc97886edd122d96aa116a6b5d105808cc699f57926e810697a927eb (0016-0018 in it). Not installed or run.
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0016 (guest getdents64 on /proc hides other processes)
 - Why: Android's hidepid=invisible /proc view; the path layer hides other cgroups' pids from path calls and readdir, the translator's
   getdents64 on an open /proc fd needs the same (patches/aosp/.../0016).
