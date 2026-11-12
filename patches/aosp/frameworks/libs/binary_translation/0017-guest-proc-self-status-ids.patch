@@ -1,0 +1,81 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: the guest's /proc/self/status shows the app's uid and gid
+
+The guest's getuid/getgid and its files' owner are the app's ids (0015), but /proc/self/status still printed the desktop user's in its
+Uid: and Gid: lines (all four fields: real, effective, saved, filesystem), so code that cross-checks the two (anti-tamper) saw both.
+OpenatForGuest now serves /proc/self/status (and /proc/<own pid>/status, the same inode) from a memfd with every field that equals the
+real id replaced by the app's (OwnIdsForGuest). Without an app uid (the sandbox, or none set) the host's file is returned unchanged.
+Applies after 0016. Module libberberis_arm64.
+
+diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
+--- a/kernel_api/open_emulation.cc
++++ b/kernel_api/open_emulation.cc
+@@ -41,6 +41,7 @@
+ #include "berberis/base/forever_alloc.h"
+ #include "berberis/base/scoped_errno.h"  // apklayer patch (0014)
+ #include "berberis/base/tracing.h"
++#include "berberis/kernel_api/syscall_emulation_common.h"  // apklayer patch (0017): OwnIdsForGuest
+ #include "berberis/guest_os_primitives/guest_map_shadow.h"
+ #include "berberis/guest_state/guest_addr.h"
+ #include "berberis/kernel_api/main_executable_real_path_emulation.h"
+@@ -498,6 +499,49 @@
+   return mem_fd;
+ }
+ 
++// apklayer patch (0017): the guest's /proc/self/status shows the app's ids (Uid:/Gid: lines), as its getuid/getgid answer (0015); the host's
++// file has the desktop user's. Read whole, rewritten line by line, served from a memfd. Without an app uid nothing differs (then the host's file).
++int OpenatProcSelfStatusForGuest(int dirfd, int flags, mode_t mode) {
++  int host_fd = openat(dirfd, "/proc/self/status", flags, mode);
++  if (host_fd < 0 || (flags & (O_WRONLY | O_RDWR)) != 0) return host_fd;
++  std::string text;
++  char chunk[4096];
++  for (ssize_t n; (n = read(host_fd, chunk, sizeof(chunk))) > 0;) text.append(chunk, static_cast<size_t>(n));
++  unsigned probe_uid = static_cast<unsigned>(syscall(__NR_getuid));
++  unsigned probe_gid = static_cast<unsigned>(syscall(__NR_getgid));
++  unsigned app_uid = probe_uid, app_gid = probe_gid;
++  OwnIdsForGuest(&app_uid, &app_gid);
++  if (app_uid == probe_uid && app_gid == probe_gid) {
++    lseek(host_fd, 0, SEEK_SET);
++    return host_fd;
++  }
++  close(host_fd);
++  std::string out;
++  size_t pos = 0;
++  while (pos < text.size()) {
++    size_t eol = text.find('\n', pos);
++    if (eol == std::string::npos) eol = text.size();
++    std::string line = text.substr(pos, eol - pos);
++    const bool is_uid = line.compare(0, 5, "Uid:\t") == 0;
++    if (is_uid || line.compare(0, 5, "Gid:\t") == 0) {
++      std::string rewritten = line.substr(0, 4);
++      unsigned a, b, c, d;
++      if (sscanf(line.c_str() + 4, "%u %u %u %u", &a, &b, &c, &d) == 4) {
++        const unsigned real = is_uid ? probe_uid : probe_gid, app = is_uid ? app_uid : app_gid;
++        for (unsigned v : {a, b, c, d}) rewritten += "\t" + std::to_string(v == real ? app : v);
++        line = rewritten;
++      }
++    }
++    out += line;
++    if (eol < text.size()) out += '\n';
++    pos = eol + 1;
++  }
++  int mem_fd = CreateMemfdOrDie("[guest /proc/self/status]");
++  WriteFullyOrDie(mem_fd, out.c_str(), out.size());
++  lseek(mem_fd, 0, 0);
++  return mem_fd;
++}
++
+ // In zygote this is not needed because native bridge is mounting
+ // /proc/cpuinfo to point to the emulated version. But for executables
+ // this does not happen and they end up reading host cpuinfo.
+@@ -650,6 +694,10 @@
+     return OpenatProcSelfAuxvForGuest(dirfd, host_flags, mode);
+   }
+ 
++  if (IsProcSelfMaps(path, host_flags, "/proc/self/status")) {  // apklayer patch (0017): /proc/<own pid>/status is the same inode
++    return OpenatProcSelfStatusForGuest(dirfd, host_flags, mode);
++  }
++
+   const char* real_path = nullptr;
+   if ((host_flags & AT_SYMLINK_NOFOLLOW) == 0) {
+     real_path = TryReadLinkToMainExecutableRealPath(path);
