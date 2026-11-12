@@ -1644,6 +1644,16 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
   ~/apklayer-fix): PGR still ends (6 teardown frees instead of 20, then SIGSEGV), so not the only trigger.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0015 (translated code sees the app's uid)
+- Why: the guest's raw getuid answered 1000 (the desktop user, Android's system uid; traced in PGR from its liblog and libc), while
+  host-side bionic code gets the app uid (bionic_translation 0056/0061). The id syscalls now go through the translator's bionic libc;
+  file owners in the guest's stat calls follow.
+- Command (Mac, OrbStack): the three files (tree + 0011-0015) in ~/los24/frameworks/libs/binary_translation, then
+  `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_arm64` (APKLAYER_NATIVE_BRIDGE=arm64).
+- Result: built in 9 min, sha256 10bac8cef76364575936f1beee844bdef0dfd680a084e2d4d8805eb4df983493 (imports getuid ... getgroups from
+  its libc); installed on the NVIDIA PC (the previous one in ~/apklayer-fix/orig/libberberis_arm64.0014.so). PGR starts as before and still
+  ends (20 teardown frees, SIGSEGV ~2 min in; the run before with 6 frees was variance). The guest's answer itself is not checked yet.
+
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0014 (the guest's /proc/self/map_files without host files)
 - Why: bpftrace on RunGuestSyscall (PGR, /tmp/ace-names.txt on the PC): ACE lists /proc/self/map_files and reads all 6001 links,
   which named the translator, the JVM and 1200 x86_64 libraries despite 0012. Checked here: a live process's map_files through the

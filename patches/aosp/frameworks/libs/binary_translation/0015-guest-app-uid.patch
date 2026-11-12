@@ -1,0 +1,130 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: translated code sees the app's uid, as host-side bionic code does
+
+Without apklayer's sandbox an app process runs as the desktop user, whose uid (often 1000) is Android's system uid. Host-side bionic
+code already gets the app's ids (bionic_translation 0056: getuid, geteuid, getgid, getegid, getresuid, getresgid and the owner of the
+user's files; 0061: getgroups), once apklayer's path layer knows the app. The translator forwarded the guest's getuid, geteuid, getgid,
+getegid, getresuid, getresgid and getgroups to the kernel, so arm64 code (PGR's liblog and libc) got 1000. They now call the
+translator's own libc, which is that bionic libc: the same answer as host code, or the real ids when no app uid is set. A file the
+real uid (gid) owns reads as the app uid's (gid's) in the guest's stat, fstat, newfstatat (ConvertHostStatToGuestArch) and statx,
+as 0056 does for host code. /proc/self/status still shows the real ids. Applies after 0011-0014. Module libberberis_arm64.
+
+diff --git a/kernel_api/arm64/gen_syscall_emulation_arm64_to_x86_64-inl.h b/kernel_api/arm64/gen_syscall_emulation_arm64_to_x86_64-inl.h
+--- a/kernel_api/arm64/gen_syscall_emulation_arm64_to_x86_64-inl.h
++++ b/kernel_api/arm64/gen_syscall_emulation_arm64_to_x86_64-inl.h
+@@ -174,13 +174,17 @@ long RunGuestSyscallImpl(long guest_nr,
+       // apklayer patch (0014): the guest's /proc/self/map_files listing leaves out the host's own files.
+       return GetDents64ForGuest(static_cast<int>(arg_1), std::bit_cast<void*>(arg_2), static_cast<size_t>(arg_3));
+     case 177:  // __NR_getegid
+-      return syscall(108);
++      // apklayer patch (0015): the app's ids, as bionic code on the host gets them (bionic_translation 0056/0061 through this libc)
++      return getegid();
+     case 175:  // __NR_geteuid
+-      return syscall(107);
++      // apklayer patch (0015): the app's ids, as bionic code on the host gets them (bionic_translation 0056/0061 through this libc)
++      return geteuid();
+     case 176:  // __NR_getgid
+-      return syscall(104);
++      // apklayer patch (0015): the app's ids, as bionic code on the host gets them (bionic_translation 0056/0061 through this libc)
++      return getgid();
+     case 158:  // __NR_getgroups
+-      return syscall(115, arg_1, arg_2);
++      // apklayer patch (0015): the app's ids, as bionic code on the host gets them (bionic_translation 0056/0061 through this libc)
++      return getgroups(static_cast<int>(arg_1), std::bit_cast<gid_t*>(arg_2));
+     case 102:  // __NR_getitimer
+       return syscall(36, arg_1, arg_2);
+     case 205:  // __NR_getpeername
+@@ -196,9 +200,11 @@ long RunGuestSyscallImpl(long guest_nr,
+     case 278:  // __NR_getrandom
+       return syscall(318, arg_1, arg_2, arg_3);
+     case 150:  // __NR_getresgid
+-      return syscall(120, arg_1, arg_2, arg_3);
++      // apklayer patch (0015): the app's ids, as bionic code on the host gets them (bionic_translation 0056/0061 through this libc)
++      return getresgid(std::bit_cast<gid_t*>(arg_1), std::bit_cast<gid_t*>(arg_2), std::bit_cast<gid_t*>(arg_3));
+     case 148:  // __NR_getresuid
+-      return syscall(118, arg_1, arg_2, arg_3);
++      // apklayer patch (0015): the app's ids, as bionic code on the host gets them (bionic_translation 0056/0061 through this libc)
++      return getresuid(std::bit_cast<uid_t*>(arg_1), std::bit_cast<uid_t*>(arg_2), std::bit_cast<uid_t*>(arg_3));
+     case 163:  // __NR_getrlimit
+       return syscall(97, arg_1, arg_2);
+     case 165:  // __NR_getrusage
+@@ -214,7 +220,8 @@ long RunGuestSyscallImpl(long guest_nr,
+     case 169:  // __NR_gettimeofday
+       return syscall(96, arg_1, arg_2);
+     case 174:  // __NR_getuid
+-      return syscall(102);
++      // apklayer patch (0015): the app's ids, as bionic code on the host gets them (bionic_translation 0056/0061 through this libc)
++      return getuid();
+     case 8:  // __NR_getxattr
+       return syscall(191, arg_1, arg_2, arg_3, arg_4);
+     case 105:  // __NR_init_module
+diff --git a/kernel_api/arm64/syscall_emulation_arch.cc b/kernel_api/arm64/syscall_emulation_arch.cc
+--- a/kernel_api/arm64/syscall_emulation_arch.cc
++++ b/kernel_api/arm64/syscall_emulation_arch.cc
+@@ -15,6 +15,8 @@
+  */
+ 
+ #include <sys/stat.h>
++#include <sys/syscall.h>  // apklayer patch (0015): __NR_getuid, __NR_getgid
++#include <unistd.h>
+ 
+ #include <cstddef>
+ #include <tuple>
+@@ -35,6 +37,19 @@ std::tuple<bool, int> PtraceForGuestArch(int, pid_t, void*, void*) {
+   return {false, -1};
+ }
+ 
++// apklayer patch (0015): without apklayer's sandbox an app process runs as the desktop user, whose uid (often 1000) is Android's system uid.
++// Host-side bionic code already sees the app uid (bionic_translation 0056: getuid and the owner of the user's files, once apklayer's path
++// layer set it); translated code asked the kernel directly and got the desktop user's. getuid()/getgid() here are that bionic libc's:
++// the app's ids, or the real ones when none is set (then nothing changes).
++void OwnIdsForGuest(unsigned int* uid, unsigned int* gid) {
++  static const uid_t real_uid = static_cast<uid_t>(syscall(__NR_getuid));
++  static const gid_t real_gid = static_cast<gid_t>(syscall(__NR_getgid));
++  const uid_t app_uid = getuid();
++  if (app_uid == real_uid) return;
++  if (*uid == real_uid) *uid = app_uid;
++  if (*gid == real_gid) *gid = getgid();
++}
++
+ void ConvertHostStatToGuestArch(const struct stat& host_stat, GuestAddr guest_addr) {
+   auto* guest_stat = ToHostAddr<Guest_stat>(guest_addr);
+   guest_stat->st_dev = host_stat.st_dev;
+@@ -43,6 +58,7 @@ void ConvertHostStatToGuestArch(const struct stat& host_stat, GuestAddr guest_ad
+   guest_stat->st_nlink = host_stat.st_nlink;
+   guest_stat->st_uid = host_stat.st_uid;
+   guest_stat->st_gid = host_stat.st_gid;
++  OwnIdsForGuest(&guest_stat->st_uid, &guest_stat->st_gid);  // apklayer patch (0015)
+   guest_stat->st_rdev = host_stat.st_rdev;
+   guest_stat->st_size = host_stat.st_size;
+   guest_stat->st_blksize = host_stat.st_blksize;
+diff --git a/kernel_api/include/berberis/kernel_api/syscall_emulation_common.h b/kernel_api/include/berberis/kernel_api/syscall_emulation_common.h
+--- a/kernel_api/include/berberis/kernel_api/syscall_emulation_common.h
++++ b/kernel_api/include/berberis/kernel_api/syscall_emulation_common.h
+@@ -59,6 +59,10 @@ namespace berberis {
+ 
+ void ConvertHostStatToGuestArch(const struct stat& host_stat, GuestAddr guest_stat);
+ 
++// apklayer patch (0015): a file the real uid (gid) owns is the app uid's for the guest, as bionic_translation 0056 does for host code
++// (arm64 guest: kernel_api/arm64/syscall_emulation_arch.cc).
++void OwnIdsForGuest(unsigned int* uid, unsigned int* gid);
++
+ inline long RunGuestSyscall___NR_close(long arg_1) {
+   // TODO(b/346604197): Enable on arm64 once guest_os_primitives is ported.
+ #ifdef __aarch64__
+@@ -294,7 +298,14 @@ inline long RunGuestSyscall___NR_rt_sigreturn(long) {
+ inline long RunGuestSyscall___NR_statx(long arg_1, long arg_2, long arg_3, long arg_4, long arg_5) {
+ #if defined(__NR_statx)
+   // TODO(b/128614662): add struct statx layout checkers.
+-  return syscall(__NR_statx, arg_1, arg_2, arg_3, arg_4, arg_5);
++  long result = syscall(__NR_statx, arg_1, arg_2, arg_3, arg_4, arg_5);
++#if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
++  if (result == 0 && arg_5 != 0) {  // apklayer patch (0015): struct statx (uapi): stx_uid at 20, stx_gid at 24, the same for all arches
++    char* buf = std::bit_cast<char*>(arg_5);
++    OwnIdsForGuest(reinterpret_cast<unsigned int*>(buf + 20), reinterpret_cast<unsigned int*>(buf + 24));
++  }
++#endif
++  return result;
+ #else
+   UNUSED(arg_1, arg_2, arg_3, arg_4, arg_5);
+   errno = ENOSYS;
