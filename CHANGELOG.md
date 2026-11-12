@@ -1644,6 +1644,9 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Command (OrbStack): the new kernel_api/open_emulation.cc (tree + 0009) written into ~/los24/frameworks/libs/binary_translation, then
   `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_arm64` (APKLAYER_NATIVE_BRIDGE=arm64), after the proxy
   libc build below.
+- Result: built in 9 min, sha256 d54cc5273f467dffc9bef9fc3981cb2a6c20d9e77ef20074381051855d9f5200 (3030440 bytes); installed on the NVIDIA PC
+  (the 0008 build in orig/libberberis_arm64.0008.so). The guest's maps show libc's code at 00058000. PGR: unchanged, the title screen at
+  40-60 s, ACE's teardown (libanogs +0x2f4d34) at 82 s, SIGSEGV at ~90 s: the offsets were not ACE's trigger.
 
 ### 2026-11-12 - gsi_x86_64 libberberis_proxy_libc: 0006 reports the guest frame chain and tid; the fencepost false positive (ACE)
 - Why: PGR's double frees come from one routine in libanogs.so (Tencent ACE) that frees 16 slots of an object without clearing them; it
@@ -1651,6 +1654,9 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
   Also: valid chunks ending at a retired heap's fencepost were refused (PLAN).
 - Command (OrbStack): the new free_quarantine.cc written into ~/los24/frameworks/libs/binary_translation, then
   `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_proxy_libc` (APKLAYER_NATIVE_BRIDGE=arm64).
+- Result: built in 9 min, sha256 9ddc56acb6358736a8fb13a9cc84e0ba0e4f1710d2fb17fb74f21528365b8526; installed on the NVIDIA PC. PGR: ACE's
+  16-slot teardown runs on two threads for the same object, one after the other (tids 654544 and 654390); the guest frame chain is not
+  usable past the first frame in ACE's obfuscated code (no standard frame records).
 
 ### 2026-11-12 - gsi_x86_64 libberberis_proxy_libc: 0006 logs each invalid free's guest caller (PGR)
 - Why: every logged `free(...) of no glibc chunk` named the same host caller, libberberis_arm64+0xb6a8f, which is the return address
