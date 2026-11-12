@@ -1644,6 +1644,9 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Command (OrbStack): the new guest_loader/arm64/guest_loader_arch.cc and kernel_api/arm64/open_emulation.cc (tree + 0010) written into
   ~/los24/frameworks/libs/binary_translation, then `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_arm64`
   (APKLAYER_NATIVE_BRIDGE=arm64).
+- Result: the first build (all 8 features, sha256 5e82cdf7...) advertised HWCAP_CPUID and PGR died 1.5 s in with SIGILL on
+  `mrs x9, ID_AA64PFR1_EL1` (0xd5380429): the decoder emulates MIDR_EL1/CTR_EL0 but not the ID_AA64* registers, so code that saw the
+  bit read an undecoded one. 0010 reworked to leave cpuid out of both tables (14 features); rebuilt. PGR: TODO after the rebuild.
 
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0009 (split /proc/self/maps lines keep their file offsets)
 - Why: the guest's /proc/self/maps showed libc's code (r-xp) at file offset 0 instead of 0x58000 (berberis splits the host's merged

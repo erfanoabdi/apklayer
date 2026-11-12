@@ -5,16 +5,17 @@ Two hand-written tables describe the guest CPU's features: guest_loader_arch.cc'
 /proc/self/auxv; getauxval reports it) and FormatGuestCpuinfo's "Features" line. They had drifted apart - AT_HWCAP carried 8 bits while
 /proc/cpuinfo listed 16 - so /proc/cpuinfo advertised evtstrm, fphp, asimdhp, cpuid, asimdrdm, lrcpc, dcpop and asimddp that getauxval
 denied. On a real device the kernel derives both from the same CPU capabilities and they always agree; the mismatch is what code that
-cross-checks the two (anti-tamper, fingerprinting) reads as a faked CPU. Make them equal: AT_HWCAP gains the seven features the
-interpreter provides (FP16, RDM, LRCPC, DC CVAP, dotprod, and CPUID-register access via the decoder's MIDR_EL1/CTR_EL0 handlers), and
-the Features line drops evtstrm (the generic-timer event stream is not provided here). AT_HWCAP2 stays empty, as before (no feature here
-needs it). Module libberberis_arm64.
+cross-checks the two (anti-tamper, fingerprinting) reads as a faked CPU. Make them equal on the 14 features berberis actually provides:
+AT_HWCAP gains FP16, RDM, LRCPC, DC CVAP and dotprod; the Features line drops evtstrm (the generic-timer event stream is not provided)
+and cpuid. cpuid (HWCAP_CPUID) is left out of both on purpose: the decoder emulates MIDR_EL1/CTR_EL0 but not the ID_AA64* registers, and
+code that sees the bit reads them directly (mrs x9, ID_AA64PFR1_EL1), which the interpreter raises SIGILL on. Emulating the ID_AA64*
+reads (a real kernel traps them) is the follow-up that would let the bit be set. AT_HWCAP2 stays empty. Module libberberis_arm64.
 
 diff --git a/guest_loader/arm64/guest_loader_arch.cc b/guest_loader/arm64/guest_loader_arch.cc
-index 9d2eddd..ada4d0e 100644
+index 9d2eddd..e5adb50 100644
 --- a/guest_loader/arm64/guest_loader_arch.cc
 +++ b/guest_loader/arm64/guest_loader_arch.cc
-@@ -52,7 +52,19 @@ GuestAddr InitKernelArgs(GuestAddr guest_sp,
+@@ -52,7 +52,22 @@ GuestAddr InitKernelArgs(GuestAddr guest_sp,
        (1UL << 5) |   // HWCAP_SHA1
        (1UL << 6) |   // HWCAP_SHA2
        (1UL << 7) |   // HWCAP_CRC32
@@ -27,7 +28,10 @@ index 9d2eddd..ada4d0e 100644
 +      // dotprod, CPUID register access); evtstrm, which is not provided, is dropped from the Features line instead (open_emulation.cc).
 +      (1UL << 9) |   // HWCAP_FPHP (half-precision FP)
 +      (1UL << 10) |  // HWCAP_ASIMDHP (half-precision ASIMD)
-+      (1UL << 11) |  // HWCAP_CPUID (MRS of MIDR_EL1/CTR_EL0, decoder.h)
++      // HWCAP_CPUID (bit 11) is intentionally NOT set: the decoder emulates MIDR_EL1/CTR_EL0 but not the ID_AA64* registers, and code
++      // that sees HWCAP_CPUID reads them directly (MRS x9, ID_AA64PFR1_EL1 = 0xd5380429) - which the decoder rejects as undefined and
++      // the interpreter raises SIGILL on (PGR died 1.5 s in). A real kernel traps and emulates those EL0 reads; until the decoder does
++      // too, do not advertise the bit. The Features line omits "cpuid" to match (open_emulation.cc).
 +      (1UL << 12) |  // HWCAP_ASIMDRDM (RDMA)
 +      (1UL << 15) |  // HWCAP_LRCPC (RCpc load-acquire)
 +      (1UL << 16) |  // HWCAP_DCPOP (DC CVAP)
@@ -36,17 +40,19 @@ index 9d2eddd..ada4d0e 100644
    // Bionic linker_main passes AT_EXECFN's string to __libc_shared_globals's
    // init_progname; the riscv64 path also doesn't set it, but providing the
 diff --git a/kernel_api/arm64/open_emulation.cc b/kernel_api/arm64/open_emulation.cc
-index 7731242..33f21a0 100644
+index 7731242..367c208 100644
 --- a/kernel_api/arm64/open_emulation.cc
 +++ b/kernel_api/arm64/open_emulation.cc
-@@ -129,7 +129,9 @@ std::string FormatGuestCpuinfo(int num_cpus) {
+@@ -129,8 +129,10 @@ std::string FormatGuestCpuinfo(int num_cpus) {
      int n = snprintf(block, sizeof(block),
                       "processor\t: %d\n"
                       "BogoMIPS\t: 38.40\n"
 -                     "Features\t: fp asimd evtstrm aes pmull sha1 sha2 crc32 "
+-                     "atomics fphp asimdhp cpuid asimdrdm lrcpc dcpop asimddp\n"
 +                     // apklayer patch: no evtstrm (the generic-timer event stream is not provided); the list now matches AT_HWCAP
 +                     // (guest_loader_arch.cc) bit for bit, so code that cross-checks /proc/cpuinfo against getauxval agrees.
 +                     "Features\t: fp asimd aes pmull sha1 sha2 crc32 "
-                      "atomics fphp asimdhp cpuid asimdrdm lrcpc dcpop asimddp\n"
++                     "atomics fphp asimdhp asimdrdm lrcpc dcpop asimddp\n"
                       "CPU implementer\t: 0x41\n"
                       "CPU architecture: 8\n"
+                      "CPU variant\t: 0x1\n"
