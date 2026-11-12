@@ -99,8 +99,8 @@ index 36805707..cd9bbece 100644
 +                   "berberis: guest %s(%ld, signal %ld) of its own process: guest pc 0x%llx, x30 0x%llx, sp 0x%llx, tid %d, guest frames%s\n",
 +                   name, target, sig, static_cast<unsigned long long>(state->cpu.insn_addr),
 +                   static_cast<unsigned long long>(state->cpu.x[30]), static_cast<unsigned long long>(state->cpu.sp),
-+                   static_cast<int>(gettid()), frames);
-+  if (n > 0) write(2, line, static_cast<size_t>(n) < sizeof line ? static_cast<size_t>(n) : sizeof line - 1);
++                   static_cast<int>(syscall(__NR_gettid)), frames);
++  if (n > 0 && write(2, line, static_cast<size_t>(n) < sizeof line ? static_cast<size_t>(n) : sizeof line - 1) < 0) return;  // stderr gone: nothing to report to
 +}
 +
  long RunGuestSyscall___NR_execveat(long arg_1, long arg_2, long arg_3, long arg_4, long arg_5) {

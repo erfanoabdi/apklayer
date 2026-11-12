@@ -22,8 +22,8 @@ diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
 +#include <cstdlib>  // apklayer patch: getenv (BERBERIS_SHOW_HOST_MAPS)
  #include <cstring>
  #include <mutex>
- #include <utility>
-@@ -153,6 +154,68 @@ int OpenatProcSelfMapsForGuest(int dirfd, int flags, mode_t mode) {
+ // region digitalis
+@@ -184,6 +185,68 @@ int OpenatProcSelfMapsForGuest(int dirfd, int flags, mode_t mode) {
      // endregion
      // Split the line into guest exec / no-exec chunks.
      uintptr_t original_start = start;

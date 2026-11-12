@@ -1643,7 +1643,10 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
   checked with its logic over Endfield's real host maps (ranges and protections unchanged, 383 host files unnamed).
 - Command (Mac, OrbStack): the tree's kernel_api/open_emulation.cc + 0012 in ~/los24/frameworks/libs/binary_translation, then
   `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_arm64` (APKLAYER_NATIVE_BRIDGE=arm64), with 0011.
-- Result: TODO (build on the Mac, install as ~/apklayer-fix/libberberis_arm64.so on the NVIDIA PC, the current one to orig/).
+- Result: the first build failed in 0011 (glibc 2.17 sysroot: no gettid(); write's result unused under -Werror): 0011 now uses
+  syscall(__NR_gettid) and checks write. 0012 regenerated against the fork's file (its includes differ from upstream). Built in 9 min,
+  sha256 065e09bdf9170e5b286faf9485f3083bd30b209d4f6361e28a164df9845cf9b6 (3046720 bytes); installed on the NVIDIA PC (the previous one in
+  orig/libberberis_arm64.0010final.so). PGR/Endfield: TODO.
 
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0011 (the guest caller of a signal to its own process)
 - Why: PGR and Endfield end themselves from guest code (ACE's libanogs/libanort: PGR a SIGSEGV with SI_TKILL ~7 s after its invalid
@@ -1653,7 +1656,7 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
   routine against the guest's /proc/<pid>/maps, which is what the next step needs (docs/PLAN.md "Native bridge (x86_64)").
 - Command (OrbStack): the new kernel_api/arm64/syscall_emulation.cc (tree + 0011) written into ~/los24/frameworks/libs/binary_translation,
   then `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_arm64` (APKLAYER_NATIVE_BRIDGE=arm64).
-- Result: TODO.
+- Result: built together with 0012 (entry above).
 
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0010 (AT_HWCAP and /proc/cpuinfo agree)
 - Why: the guest's getauxval(AT_HWCAP) carried 8 features, the synthesized /proc/cpuinfo listed 16 (traced in a PGR run: ACE reads
