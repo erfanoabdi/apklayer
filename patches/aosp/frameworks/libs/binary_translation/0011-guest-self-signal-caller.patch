@@ -1,0 +1,116 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: log the guest caller of a signal sent to its own process
+
+Anti-tamper code that decides to end a process does it from guest code: Tencent ACE in PGR (Punishing: Gray Raven) and Arknights:
+Endfield, arm64-only games on an x86_64 PC, ends the game with a SIGSEGV of SI_TKILL ~7 s after its invalid frees (PGR) or a SIGTRAP
+~15 s in (Endfield). The host's backtrace of that call is always RunGuestSyscall, so nothing says which guest code made the decision.
+With BERBERIS_LOG_SELF_SIGNAL set, RunGuestSyscall writes one stderr line (the first 32 per process) for every kill, tkill, tgkill and
+rt_tgsigqueueinfo whose target is the process itself or one of its threads, before the syscall: the syscall name, target, signal, the
+guest pc (the svc), x30, sp, tid and up to eight return addresses of the guest frame chain (x29, read with process_vm_readv as in 0006).
+Signal 0 (a liveness probe) and signals to other processes are not logged. Nothing else changes; without the variable it is one
+getenv per process. Module libberberis_arm64.
+
+diff --git a/kernel_api/arm64/syscall_emulation.cc b/kernel_api/arm64/syscall_emulation.cc
+index 36805707..cd9bbece 100644
+--- a/kernel_api/arm64/syscall_emulation.cc
++++ b/kernel_api/arm64/syscall_emulation.cc
+@@ -26,8 +26,11 @@
+ #include <sys/utsname.h>
+ #include <time.h>
+ 
++#include <atomic>
+ #include <bit>
+ #include <cerrno>
++#include <cstdio>
++#include <cstdlib>
+ #include <cstring>
+ 
+ #include "berberis/base/macros.h"
+@@ -41,6 +44,8 @@
+ #include "berberis/kernel_api/syscall_emulation_common.h"
+ 
+ #include "berberis/guest_os_primitives/scoped_pending_signals.h"
++#include <sys/uio.h>  // apklayer patch: process_vm_readv for the guest frame chain (ReportGuestSelfSignal)
++#include <unistd.h>
+ #include "berberis/runtime_library/runtime_library.h"
+ 
+ #include "epoll_emulation.h"
+@@ -69,6 +74,70 @@ int FstatatForGuest(int dirfd, const char* path, struct stat* buf, int flags) {
+   return syscall(__NR_newfstatat, dirfd, real_path ? real_path : path, buf, flags);
+ }
+ 
++// apklayer patch: who in the guest sends a signal to its own process. Anti-tamper code that decides to end a process (Tencent ACE in
++// PGR and Endfield) does it from guest code with kill/tkill/tgkill/rt_tgsigqueueinfo of its own pid, and the host's view of that is
++// always RunGuestSyscall, so the guest's own state is the only record of the caller: its pc (the svc), x30, and up to eight return
++// addresses of its frame chain (AAPCS64: x29 points at {previous x29, return address}, read with process_vm_readv so a bad frame pointer
++// is an error, not a fault). One stderr line per call, the first 32 per process; the syscall itself runs unchanged. Map the addresses to
++// libraries with the guest's /proc/<pid>/maps (patch 0009's offsets). Off unless BERBERIS_LOG_SELF_SIGNAL is set.
++constexpr long kGuestNrKill = 129;              // asm-generic __NR_kill
++constexpr long kGuestNrTkill = 130;             // asm-generic __NR_tkill
++constexpr long kGuestNrTgkill = 131;            // asm-generic __NR_tgkill
++constexpr long kGuestNrRtTgsigqueueinfo = 240;  // asm-generic __NR_rt_tgsigqueueinfo
++
++void ReportGuestSelfSignal(const ThreadState* state, long guest_nr) {
++  static const bool enabled = getenv("BERBERIS_LOG_SELF_SIGNAL") != nullptr;
++  if (!enabled) return;
++  const pid_t self = getpid();
++  long sig = 0, target = 0;
++  bool own = false;
++  switch (guest_nr) {
++    case kGuestNrKill:  // kill(pid, sig): own process, its group (0) or every process (-1)
++      target = static_cast<long>(state->cpu.x[0]);
++      sig = static_cast<long>(state->cpu.x[1]);
++      own = target == self || target == 0 || target == -1 || target == -static_cast<long>(getpgrp());
++      break;
++    case kGuestNrTkill:  // tkill(tid, sig): a thread of this process
++      target = static_cast<long>(state->cpu.x[0]);
++      sig = static_cast<long>(state->cpu.x[1]);
++      own = syscall(__NR_tgkill, self, target, 0) == 0;  // signal 0 only checks the tid is ours
++      break;
++    case kGuestNrTgkill:  // tgkill(tgid, tid, sig)
++    case kGuestNrRtTgsigqueueinfo:  // rt_tgsigqueueinfo(tgid, tid, sig, info)
++      target = static_cast<long>(state->cpu.x[1]);
++      sig = static_cast<long>(state->cpu.x[2]);
++      own = static_cast<pid_t>(state->cpu.x[0]) == self;
++      break;
++    default:
++      return;
++  }
++  if (!own || sig == 0) return;  // a liveness probe (signal 0) sends nothing
++  static std::atomic<int> reported{0};
++  if (reported.fetch_add(1, std::memory_order_relaxed) >= 32) return;
++  char frames[256] = "";
++  size_t used = 0;
++  uint64_t fp = state->cpu.x[29];
++  for (int i = 0; i < 8 && fp != 0 && fp % 16 == 0; i++) {
++    uint64_t record[2];
++    struct iovec local = {record, sizeof record}, remote = {reinterpret_cast<void*>(fp), sizeof record};
++    if (process_vm_readv(self, &local, 1, &remote, 1, 0) != static_cast<ssize_t>(sizeof record)) break;
++    int k = snprintf(frames + used, sizeof frames - used, " 0x%llx", static_cast<unsigned long long>(record[1]));
++    if (k <= 0 || used + k >= sizeof frames) break;
++    used += k;
++    if (record[0] <= fp) break;  // the chain grows upwards
++    fp = record[0];
++  }
++  const char* name = guest_nr == kGuestNrKill ? "kill" : guest_nr == kGuestNrTkill ? "tkill"
++                   : guest_nr == kGuestNrTgkill ? "tgkill" : "rt_tgsigqueueinfo";
++  char line[512];
++  int n = snprintf(line, sizeof line,
++                   "berberis: guest %s(%ld, signal %ld) of its own process: guest pc 0x%llx, x30 0x%llx, sp 0x%llx, tid %d, guest frames%s\n",
++                   name, target, sig, static_cast<unsigned long long>(state->cpu.insn_addr),
++                   static_cast<unsigned long long>(state->cpu.x[30]), static_cast<unsigned long long>(state->cpu.sp),
++                   static_cast<int>(gettid()), frames);
++  if (n > 0) write(2, line, static_cast<size_t>(n) < sizeof line ? static_cast<size_t>(n) : sizeof line - 1);
++}
++
+ long RunGuestSyscall___NR_execveat(long arg_1, long arg_2, long arg_3, long arg_4, long arg_5) {
+   UNUSED(arg_1, arg_2, arg_3, arg_4, arg_5);
+   TRACE("unimplemented syscall __NR_execveat");
+@@ -322,6 +391,7 @@ void RunGuestSyscall(ThreadState* state) {
+     }
+   }
+ 
++  ReportGuestSelfSignal(state, guest_nr);  // apklayer patch: logs only, before the signal is sent (it may end the process)
+   long result = RunGuestSyscallImpl(guest_nr,
+                                     state->cpu.x[0],
+                                     state->cpu.x[1],

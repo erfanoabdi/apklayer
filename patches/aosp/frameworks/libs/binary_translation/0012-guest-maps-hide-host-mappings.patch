@@ -1,0 +1,94 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: the guest's /proc/self/maps names no host mapping
+
+OpenatProcSelfMapsForGuest passed every host line through: the guest's maps listed the translator (libberberis_arm64.so and its
+memfd:exec code cache), the JVM and every x86_64 host library (/usr/lib/x86_64-linux-gnu, the NVIDIA driver and its /dev/nvidia*
+nodes). No device's process has those; Tencent ACE in PGR and Endfield reads the maps and wrecks the game minutes in under the bridge
+(invalid frees, then a self-sent SIGSEGV or a wild read), so the host's names are the most visible difference left from a device.
+A host-only line (host-executable, the code cache's memfd, an ELF file for another machine than aarch64, or a host GPU node) keeps
+its range and protections and is printed as the kernel prints an anonymous mapping (offset 0, 00:00, inode 0, no name), so code that
+walks the address space (GCs, crash handlers) finds the same ranges. The guest's own files (aarch64 libraries, APKs, fonts, data) keep
+their names. The ELF check reads 20 bytes per (device, inode), cached. BERBERIS_SHOW_HOST_MAPS restores the old view.
+Checked against Endfield's host maps (3948 lines): ranges and protections unchanged, 1620 lines of 383 host files unnamed; non-ELF host files (the
+JDK's modules and CDS archive, locale files, hsperfdata) still show. Module libberberis_arm64.
+
+diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
+--- a/kernel_api/open_emulation.cc
++++ b/kernel_api/open_emulation.cc
+@@ -22,6 +22,7 @@
+ 
+ #include <cstdint>
+ #include <cstdio>
++#include <cstdlib>  // apklayer patch: getenv (BERBERIS_SHOW_HOST_MAPS)
+ #include <cstring>
+ #include <mutex>
+ #include <utility>
+@@ -153,6 +154,68 @@ int OpenatProcSelfMapsForGuest(int dirfd, int flags, mode_t mode) {
+     // endregion
+     // Split the line into guest exec / no-exec chunks.
+     uintptr_t original_start = start;
++    // apklayer patch (0012): the host's own mappings carry no name in the guest's view. The guest's /proc/self/maps listed the
++    // translator (libberberis_arm64.so, its memfd:exec code cache), the JVM and every x86_64 host library (/usr/lib/x86_64-linux-gnu,
++    // the NVIDIA driver and its /dev/nvidia* nodes): no device's process has those, and anti-tamper code that reads the maps (Tencent
++    // ACE in PGR and Endfield) sees a foreign process. Such a line keeps its range and protections and is printed as the kernel prints
++    // an anonymous mapping (offset 0, device 00:00, inode 0, no name), so code that walks the address space finds the same ranges.
++    // Host-only means: host-executable (guest code never is), the code cache's memfd, an ELF file for another machine than aarch64,
++    // or a host GPU node.
++    // The guest's own files (aarch64 libraries, APKs, fonts, data) keep their names. Off with BERBERIS_SHOW_HOST_MAPS set.
++    {
++      static const bool show_host_maps = getenv("BERBERIS_SHOW_HOST_MAPS") != nullptr;
++      const char* rest = cur_line.c_str() + prot_offset;  // "r-xp 00000000 103:02 6948332   /path"
++      unsigned dev_major = 0, dev_minor = 0;
++      unsigned long inode = 0;
++      int name_offset = 0;
++      if (!show_host_maps &&
++          sscanf(rest, "%*4s %*x %x:%x %lu %n", &dev_major, &dev_minor, &inode, &name_offset) == 3 && inode != 0 &&
++          name_offset > 0 && rest[name_offset] == '/') {
++        const char* name = rest + name_offset;
++        bool host_only = rest[2] == 'x' || strncmp(name, "/dev/nvidia", 11) == 0 || strncmp(name, "/dev/dri/", 9) == 0 ||
++                         strncmp(name, "/dev/kfd", 8) == 0 ||
++                         strncmp(name, "/memfd:exec ", 12) == 0;  // the code cache's writable view (exec_region_anonymous.cc)
++        if (!host_only && strncmp(name, "/dev/", 5) != 0 && strstr(name, " (deleted)") == nullptr) {
++          // An ELF of another machine; the answer per (device, inode) is kept, a maps read sees each library several times.
++          struct Entry {
++            unsigned long inode;
++            unsigned dev;
++            signed char host_only;
++          };
++          static Entry cache[1024];
++          static std::mutex cache_mutex;
++          const unsigned dev = (dev_major << 20) | dev_minor;
++          Entry& entry = cache[(inode ^ (inode >> 10) ^ dev) % 1024];
++          int known = -1;
++          {
++            std::lock_guard lock(cache_mutex);
++            if (entry.inode == inode && entry.dev == dev) known = entry.host_only;
++          }
++          if (known < 0) {
++            known = 0;
++            int fd = open(name, O_RDONLY | O_CLOEXEC);
++            if (fd >= 0) {
++              unsigned char header[20];
++              if (pread(fd, header, sizeof(header), 0) == static_cast<ssize_t>(sizeof(header)) &&
++                  memcmp(header, "\177ELF", 4) == 0) {
++                const unsigned machine = header[5] == 2 ? (header[18] << 8 | header[19]) : (header[18] | header[19] << 8);
++                known = machine != 183;  // EM_AARCH64
++              }
++              close(fd);
++            }
++            std::lock_guard lock(cache_mutex);
++            entry = Entry{inode, dev, static_cast<signed char>(known)};
++          }
++          host_only = known == 1;
++        }
++        if (host_only) {
++          char anonymous_buf[64];
++          snprintf(anonymous_buf, sizeof(anonymous_buf), " %.4s 00000000 00:00 0", rest);
++          cur_line.resize(prot_offset - 1);
++          cur_line.append(anonymous_buf);
++        }
++      }
++    }
+     // apklayer patch: a chunk of a file-backed line starts that much further into the file. Guest code is never host-executable, so
+     // the host kernel merges a library's read-only and code segments into one mapping (libc: r--p from offset 0 over both); the split
+     // chunk with the code then claimed file offset 0 where a device shows the segment's own (libc 0x58000), and code compared against

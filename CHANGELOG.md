@@ -1637,6 +1637,24 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0012 (the guest's /proc/self/maps names no host mapping)
+- Why: the guest's maps listed libberberis_arm64.so, its code cache, the JVM and /usr/lib/x86_64-linux-gnu (no device's process has
+  them); ACE reads the maps before it wrecks PGR and Endfield. Written on the NVIDIA PC (no los24 there) against upstream plus 0009 and
+  checked with its logic over Endfield's real host maps (ranges and protections unchanged, 383 host files unnamed).
+- Command (Mac, OrbStack): the tree's kernel_api/open_emulation.cc + 0012 in ~/los24/frameworks/libs/binary_translation, then
+  `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_arm64` (APKLAYER_NATIVE_BRIDGE=arm64), with 0011.
+- Result: TODO (build on the Mac, install as ~/apklayer-fix/libberberis_arm64.so on the NVIDIA PC, the current one to orig/).
+
+### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0011 (the guest caller of a signal to its own process)
+- Why: PGR and Endfield end themselves from guest code (ACE's libanogs/libanort: PGR a SIGSEGV with SI_TKILL ~7 s after its invalid
+  frees, Endfield a SIGTRAP ~15 s in through a guest syscall), and the host's view of that call is always RunGuestSyscall, so nothing
+  says which guest code decided to kill. 0011 logs the guest pc, x30, sp and frame chain of every kill/tkill/tgkill/rt_tgsigqueueinfo
+  aimed at the process itself, as 0006 does for invalid frees, under BERBERIS_LOG_SELF_SIGNAL. The addresses then name the deciding
+  routine against the guest's /proc/<pid>/maps, which is what the next step needs (docs/PLAN.md "Native bridge (x86_64)").
+- Command (OrbStack): the new kernel_api/arm64/syscall_emulation.cc (tree + 0011) written into ~/los24/frameworks/libs/binary_translation,
+  then `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_arm64` (APKLAYER_NATIVE_BRIDGE=arm64).
+- Result: TODO.
+
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0010 (AT_HWCAP and /proc/cpuinfo agree)
 - Why: the guest's getauxval(AT_HWCAP) carried 8 features, the synthesized /proc/cpuinfo listed 16 (traced in a PGR run: ACE reads
   /proc/cpuinfo 3 times). A device's kernel derives both from the same CPU, so they always match; the mismatch (evtstrm, fphp, asimdhp,
