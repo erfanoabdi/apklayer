@@ -90,6 +90,9 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 
 ## Native bridge (x86_64)
 (The translator is Digitalis, a fork of AOSP's Berberis that keeps its names: libberberis_arm64, BERBERIS_*, berberis.mode.*; docs/X86_64.md.)
+- Diagnostics for this (tools/ace/): bpftrace on the translator and glibc through `sudo tools/ace/trace.sh <script.bt> [out]`: ace-self-signal
+  (signals to itself), ace-files (raw file syscalls, counted), ace-names (every raw file syscall, in order), ace-proxy (glibc calls of guest
+  threads, with guest callers); pgr-netcut.sh cuts one app's network after N s (nftables on its scope's cgroup).
 - Tencent ACE (`libanogs.so`) turns on PGR and Endfield under the bridge (2026-11-12, NVIDIA PC, 0006 logging guest callers):
   PGR's real invalid frees all come from `libanogs.so +0x2f4d34` (the same pointers freed twice, headers that are pointers or random words),
   ~7 s later the process sends itself SIGSEGV (SI_TKILL) and the JVM aborts (or glibc's `malloc_consolidate(): invalid chunk size`);
@@ -106,7 +109,7 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
   of that runtime-built page; the guest reading back a host handler through sigaction; berberis's "guest call didn't restore sp"
   (16 bytes, 3 per run). Traced run 2026-11-12 17:37 (BERBERIS_TRACING=1, 134 s): the end was a read of 0x2ab000000 (SEGV_MAPERR)
   from libanogs.so +0x2f67a8 on thread 920888, handler in the guest libc (+0xa4ad8); before it that thread re-read /proc/self/maps
-  over and over and made 174 raw faccessat calls (paths not traced). Next: the paths and answers (scratch ace-files.bt, root).
+  over and over and made 174 raw faccessat calls (paths not traced). Next: the paths and answers (tools/ace/ace-files.bt, root).
   Its file checks (bpftrace on RunGuestSyscall, 17:46 run): the emulator probes (qemu_pipe, qemud, genyd, virtpipe-sec, VMOS/x8
   sandboxes) all answer ENOENT as on a device; it opened /proc/<own pid>/maps (served like /proc/self/maps: same inode) and then
   x86_64 host libraries, /dev/nvidiactl and jdk/bin/java by name, which 0012 keeps out of the guest's maps (checked in a traced run:
@@ -124,12 +127,12 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
   page made executable, handlers for 6/11/4/5/7/3/15, the page made non-executable, the 20-slot teardown frees (libanogs +0x2f4d34),
   then a crash: ACE's shutdown path. The decision is taken before that thread starts, elsewhere (possibly by its server after a
   report, ~90 s in). The sp warning is a one-call thread (attached, warning, detached), twice per run.
-  Network tests (nftables drop of the app scope's cgroup, scratch pgr-netcut.sh, 2026-11-12): cut at 45 s: stuck at the Kuro
+  Network tests (nftables drop of the app scope's cgroup, tools/ace/pgr-netcut.sh, 2026-11-12): cut at 45 s: stuck at the Kuro
   login, closed at ~124 s without teardown; cut at 65 s (after the automatic login): teardown and crash at 121 s; cut from the start:
   loading spinner, Unity never starts, alive without teardown at 5.5 min. ACE's checks start with the game's Unity code, so the
   no-network runs do not show whether the verdict is the server's; the 65 s run shows the shutdown does not need the network after
   65 s (decided locally, or a verdict received before the cut).
-  Proxy-libc trace (bpftrace on glibc, scratch ace-proxy.bt): ACE read its own /proc/<pid>/cmdline from JNI_OnLoad and got the JVM's
+  Proxy-libc trace (bpftrace on glibc, tools/ace/ace-proxy.bt): ACE read its own /proc/<pid>/cmdline from JNI_OnLoad and got the JVM's
   command line (the name was set after Application.onCreate); fixed (nameProcessEarly), PGR still ends. Its /data/user/10/<host>/...
   is a fixed probe (user 10: the first secondary user / work profile, where clone apps live), not a uid of ours.
 - binary_translation 0015 (translated code's ids through the translator's bionic libc) is built and installed on the NVIDIA PC; check the

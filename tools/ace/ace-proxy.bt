@@ -1,0 +1,99 @@
+// What the guest (arm64) code asks of the host's glibc through the proxy libc: file checks, process queries, signals.
+// Logged: glibc calls on guest threads (threads that entered RunGuestSyscall), each with a 6-frame host stack ("S" line): a call
+// made for guest code shows the translator's frames, the translator's own work shows its own. The guest caller is the thread's guest
+// x30 / frame (ThreadState from its last RunGuestSyscall: x29 at 0xe8, x30 at 0xf0).
+// Lines: "C <tid> <func> <arg> <arg> <path or -> x30 <guest x30> fr <first guest frame return>", "S <tid> <host stack>",
+//        "R <tid> <func> <result>",
+//        "L <tid> <readlink answer>".
+// Run: sudo tools/ace/trace.sh ace-proxy.bt [output file]   (start PGR, Ctrl+C after it crashes)
+// Note: aliases at the same address (open64, fopen64, stat64, lstat64, fstatat64, openat64) are not attached twice.
+
+uprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE { @st[tid] = (uint64)arg0; }
+
+// Diagnostics, printed at exit: how often the translator's host-call wrapper ran (it was meant as the filter, but it saw no call).
+uprobe:@BRIDGE@:_ZN8berberis25WrapHostCallForGuestErrnoEPPFvPKvPNS_11ThreadStateEEPS1_ { @wrap_calls = count(); }
+
+// The path is the first argument.
+uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:open, uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:__open_2,
+uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:fopen, uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:stat,
+uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:lstat, uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:access,
+uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:readlink, uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:opendir,
+uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:realpath, uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:popen,
+uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:execve
+/@st[tid]/
+{
+  $s = @st[tid];
+  $x30 = $s ? *(uint64 *)($s + 0xf0) : 0;
+  $x29 = $s ? *(uint64 *)($s + 0xe8) : 0;
+  $fr = $x29 ? *(uint64 *)($x29 + 8) : 0;
+  @lbuf[tid] = arg1;  // readlink's buffer
+  printf("C %d %s %d 0 %s x30 0x%lx fr 0x%lx\n", tid, func, arg1, str(arg0), $x30, $fr);
+  printf("S %d%s\n", tid, ustack(6));
+  @pend[tid] = 1;
+}
+
+// The path is the second argument (after a dirfd).
+uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:openat, uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:__openat_2,
+uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:fstatat, uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:statx,
+uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:faccessat, uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:readlinkat
+/@st[tid]/
+{
+  $s = @st[tid];
+  $x30 = $s ? *(uint64 *)($s + 0xf0) : 0;
+  $x29 = $s ? *(uint64 *)($s + 0xe8) : 0;
+  $fr = $x29 ? *(uint64 *)($x29 + 8) : 0;
+  @lbuf[tid] = arg2;  // readlinkat's buffer
+  printf("C %d %s %d 0 %s x30 0x%lx fr 0x%lx\n", tid, func, (int64)arg0, str(arg1), $x30, $fr);
+  printf("S %d%s\n", tid, ustack(6));
+  @pend[tid] = 1;
+}
+
+// Numbers only: process and signal queries.
+uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:ptrace, uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:getauxval,
+uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:sysconf, uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:syscall,
+uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:kill, uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:pthread_kill,
+uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:tgkill, uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:uname,
+uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:dl_iterate_phdr, uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:fdopendir
+/@st[tid]/
+{
+  $s = @st[tid];
+  $x30 = $s ? *(uint64 *)($s + 0xf0) : 0;
+  $x29 = $s ? *(uint64 *)($s + 0xe8) : 0;
+  $fr = $x29 ? *(uint64 *)($x29 + 8) : 0;
+  printf("C %d %s %ld %ld - x30 0x%lx fr 0x%lx\n", tid, func, (int64)arg0, (int64)arg1, $x30, $fr);
+  printf("S %d%s\n", tid, ustack(6));
+  @pend[tid] = 1;
+}
+
+uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:open, uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:__open_2,
+uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:fopen, uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:stat,
+uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:lstat, uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:access,
+uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:opendir, uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:realpath,
+uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:popen, uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:execve,
+uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:openat, uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:__openat_2,
+uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:fstatat, uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:statx,
+uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:faccessat, uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:ptrace,
+uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:getauxval, uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:sysconf,
+uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:syscall, uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:kill,
+uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:pthread_kill, uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:tgkill,
+uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:uname, uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:dl_iterate_phdr,
+uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:fdopendir
+/@pend[tid]/
+{
+  printf("R %d %s %ld\n", tid, func, (int64)retval);
+  delete(@pend[tid]);
+}
+
+// readlink/readlinkat: also the answer.
+uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:readlink, uretprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:readlinkat
+/@pend[tid]/
+{
+  printf("R %d %s %ld\n", tid, func, (int64)retval);
+  if ((int64)retval > 0) { printf("L %d %s\n", tid, str(@lbuf[tid], retval)); }
+  delete(@pend[tid]);
+}
+
+// Diagnostics: every glibc openat/open in the process, split by whether the thread runs guest code (1) or not (0).
+uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:openat, uprobe:/usr/lib/x86_64-linux-gnu/libc.so.6:open { @libc_opens_guest_thread[@st[tid] != 0] = count(); }
+
+END { clear(@st); clear(@lbuf); clear(@pend); }

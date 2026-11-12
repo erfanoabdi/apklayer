@@ -1,0 +1,70 @@
+// Who in the guest sends PGR's fatal self-signal. No rebuild, no ptrace (no TracerPid).
+// ThreadState starts with the arm64 CPUState: x[i] at 8*i (x8 at 0x40, checked), x29 0xe8, x30 0xf0, sp 0xf8, insn_addr 0x100.
+// Route 1: a guest svc (RunGuestSyscall). Route 2: the proxy libc's kill/tgkill/pthread_kill/raise into host glibc:
+// the host syscall is caught by the tracepoints and the guest state is the one RunGuestSyscall last saw on that thread.
+// Run: sudo tools/ace/trace.sh ace-self-signal.bt [output file]   (then start PGR)
+
+uprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE
+{
+  @st[tid] = (uint64)arg0;
+  $s = (uint64)arg0;
+  $nr = *(uint64 *)($s + 0x40);
+  if ($nr == 129 || $nr == 130 || $nr == 131 || $nr == 240) {
+    $sig = ($nr <= 130) ? *(int64 *)($s + 0x08) : *(int64 *)($s + 0x10);
+    if ($sig == 4 || $sig == 5 || $sig == 6 || $sig == 7 || $sig == 9 || $sig == 11) {
+      printf("GUEST SVC nr %d pid %d tid %d a0 %d a1 %d sig %d pc 0x%lx x30 0x%lx sp 0x%lx\n", $nr, pid, tid,
+             *(int64 *)($s + 0x00), *(int64 *)($s + 0x08), $sig,
+             *(uint64 *)($s + 0x100), *(uint64 *)($s + 0xf0), *(uint64 *)($s + 0xf8));
+      @fp[tid] = *(uint64 *)($s + 0xe8);
+    }
+  }
+}
+
+tracepoint:syscalls:sys_enter_tgkill /@st[tid]/
+{
+  if ((args->sig == 4 || args->sig == 5 || args->sig == 6 || args->sig == 7 || args->sig == 9 || args->sig == 11) && args->sig != 0 && args->tgid == pid) {
+    printf("HOST tgkill pid %d tid %d -> tid %d sig %d\n", pid, tid, args->pid, args->sig);
+    @hit[tid] = 1;
+  }
+}
+
+tracepoint:syscalls:sys_enter_tkill /@st[tid]/
+{
+  if ((args->sig == 4 || args->sig == 5 || args->sig == 6 || args->sig == 7 || args->sig == 9 || args->sig == 11) && args->sig != 0) { printf("HOST tkill pid %d tid %d -> tid %d sig %d\n", pid, tid, args->pid, args->sig); @hit[tid] = 1; }
+}
+
+tracepoint:syscalls:sys_enter_kill /@st[tid]/
+{
+  if ((args->sig == 4 || args->sig == 5 || args->sig == 6 || args->sig == 7 || args->sig == 9 || args->sig == 11) && args->sig != 0 && (args->pid == pid || args->pid == 0)) { printf("HOST kill pid %d tid %d -> %d sig %d\n", pid, tid, args->pid, args->sig); @hit[tid] = 1; }
+}
+
+tracepoint:syscalls:sys_enter_rt_tgsigqueueinfo /@st[tid]/
+{
+  if ((args->sig == 4 || args->sig == 5 || args->sig == 6 || args->sig == 7 || args->sig == 9 || args->sig == 11) && args->sig != 0 && args->tgid == pid) { printf("HOST rt_tgsigqueueinfo pid %d tid %d -> tid %d sig %d\n", pid, tid, args->pid, args->sig); @hit[tid] = 1; }
+}
+
+// Shared tail: host stack, guest registers of that thread, guest frame chain, the process maps.
+tracepoint:syscalls:sys_enter_tgkill, tracepoint:syscalls:sys_enter_tkill, tracepoint:syscalls:sys_enter_kill,
+tracepoint:syscalls:sys_enter_rt_tgsigqueueinfo
+/@hit[tid]/
+{
+  delete(@hit[tid]);
+  printf("%s\n", ustack(16));
+  if (@st[tid]) {
+    $s = @st[tid];
+    printf("  guest pc 0x%lx x30 0x%lx sp 0x%lx x29 0x%lx x0 0x%lx x1 0x%lx x2 0x%lx\n",
+           *(uint64 *)($s + 0x100), *(uint64 *)($s + 0xf0), *(uint64 *)($s + 0xf8), *(uint64 *)($s + 0xe8),
+           *(uint64 *)($s + 0x00), *(uint64 *)($s + 0x08), *(uint64 *)($s + 0x10));
+    $fp = *(uint64 *)($s + 0xe8);
+    $i = 0;
+    while ($i < 8) {
+      if ($fp == 0) { break; }
+      printf("  guest frame %d ret 0x%lx\n", $i, *(uint64 *)($fp + 8));
+      $fp = *(uint64 *)$fp;
+      $i++;
+    }
+  }
+  system("cat /proc/%d/maps >/tmp/ace-maps-%d.txt", pid, pid);
+}
+
+END { clear(@st); clear(@fp); clear(@hit); }

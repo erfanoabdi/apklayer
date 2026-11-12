@@ -1,0 +1,35 @@
+// Every file-related raw syscall of the guest (arm64) threads, in order, for offline analysis: where does ACE get the host library
+// names it opens? One string per probe keeps each under BPF's 512-byte stack.
+// Lines: "E <tid> <nr> <fd> <path>" at entry, "R <tid> <result>" at return, "L <tid> <readlink answer>" after a readlinkat.
+// RunGuestSyscall(ThreadState*): x8 = syscall number at 0x40, x0..x5 at 8*i; guest pointers are host pointers (one address space).
+// Guest syscall numbers: 56 openat, 437 openat2, 78 readlinkat, 61 getdents64, 79 newfstatat, 48 faccessat, 291 statx.
+// Run: sudo tools/ace/trace.sh ace-names.bt [output file]   (start PGR, Ctrl+C after it crashes)
+
+uprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE
+{
+  $s = (uint64)arg0;
+  $nr = *(uint64 *)($s + 0x40);
+  if ($nr == 56 || $nr == 437 || $nr == 78 || $nr == 61 || $nr == 79 || $nr == 48 || $nr == 291) {
+    @st[tid] = $s;
+    @nr[tid] = $nr;
+    @buf[tid] = *(uint64 *)($s + 0x10);  // readlinkat's output buffer
+    if ($nr == 61) {
+      printf("E %d %d %d -\n", tid, $nr, *(int64 *)($s + 0x00));
+    } else {
+      printf("E %d %d %d %s\n", tid, $nr, *(int64 *)($s + 0x00), str(*(uint64 *)($s + 0x08)));
+    }
+  }
+}
+
+uretprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE
+/@st[tid]/
+{
+  $ret = *(int64 *)(@st[tid]);
+  printf("R %d %d\n", tid, $ret);
+  if (@nr[tid] == 78 && $ret > 0) {
+    printf("L %d %s\n", tid, str(@buf[tid], $ret));
+  }
+  delete(@st[tid]);
+}
+
+END { clear(@st); clear(@nr); clear(@buf); }

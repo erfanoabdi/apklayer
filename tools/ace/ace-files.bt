@@ -1,0 +1,28 @@
+// Which files the guest (arm64) code checks with raw syscalls, as it asked for them, and what it got back.
+// At RunGuestSyscall(ThreadState*): x8 = syscall number (offset 0x40), x0..x5 at 8*i; the guest shares the host address space,
+// so the guest path pointer is readable as is. The result is the guest x0 after the call (uretprobe).
+// Run: sudo tools/ace/trace.sh ace-files.bt [output file]   (start PGR, let it crash, then Ctrl+C: the table prints)
+
+uprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE
+{
+  $s = (uint64)arg0;
+  $nr = *(uint64 *)($s + 0x40);
+  // 48 faccessat, 439 faccessat2, 56 openat, 79 newfstatat, 78 readlinkat, 291 statx: the path is x1
+  if ($nr == 48 || $nr == 439 || $nr == 56 || $nr == 79 || $nr == 78 || $nr == 291) {
+    @st[tid] = $s;
+    @nr[tid] = $nr;
+    @path[tid] = str(*(uint64 *)($s + 0x08));
+  }
+}
+
+uretprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE
+/@st[tid]/
+{
+  $ret = *(int64 *)(@st[tid]);
+  @files[@nr[tid], @path[tid], $ret < 0 ? $ret : 0] = count();  // key: syscall number (see above), path, -errno or 0
+  delete(@st[tid]);
+  delete(@nr[tid]);
+  delete(@path[tid]);
+}
+
+END { clear(@st); clear(@nr); clear(@path); }
