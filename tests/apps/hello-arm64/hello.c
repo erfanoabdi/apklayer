@@ -8,7 +8,10 @@
 #include <setjmp.h>
 #include <signal.h>
 #include <stdint.h>
+#include <string.h>
+#include <stdio.h>
 #include <sys/auxv.h>
+#include <sys/syscall.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -141,6 +144,41 @@ JNIEXPORT jint JNICALL Java_hello_arm64_Main_ownerUid(JNIEnv *env, jclass c, jst
     struct stat st;
     int r = p && stat(p, &st) == 0 ? (int)st.st_uid : -1;
     if (p) (*env)->ReleaseStringUTFChars(env, path, p);
+    return r;
+}
+
+/* What arm64 code sees of the process table and its ids (binary_translation 0016, 0017; the path layer's /proc view): bit 0 /proc/self/status shows
+ * the app's uid and gid in all four fields of Uid:/Gid: (as getuid/getgid answer), bit 1 /proc/1 is not there (stat), bit 2 a getdents64 listing of
+ * /proc has no pid of another cgroup (init's 1), bit 3 /proc/self/status is there. 15 is all. */
+JNIEXPORT jint JNICALL Java_hello_arm64_Main_procView(JNIEnv *env, jclass c)
+{
+    (void)env; (void)c;
+    int r = 0;
+    char line[256];
+    FILE *f = fopen("/proc/self/status", "r");
+    int ids = f != NULL, seen = 0;
+    while (f && fgets(line, sizeof line, f)) {
+        unsigned a, b, d, e;
+        int uid = !strncmp(line, "Uid:", 4), gid = !strncmp(line, "Gid:", 4);
+        if ((uid || gid) && sscanf(line + 4, "%u %u %u %u", &a, &b, &d, &e) == 4) {
+            unsigned want = uid ? (unsigned)getuid() : (unsigned)getgid();
+            ids = ids && a == want && b == want && d == want && e == want;
+            seen++;
+        }
+    }
+    if (f) fclose(f);
+    if (ids && seen == 2) r |= 1;
+    struct stat st;
+    if (stat("/proc/1", &st) != 0) r |= 2;
+    int fd = open("/proc", O_RDONLY | O_DIRECTORY);
+    int listed_init = 0;
+    char buf[8192];
+    for (long n; fd >= 0 && (n = syscall(SYS_getdents64, fd, buf, sizeof buf)) > 0;)
+        for (long pos = 0; pos < n; pos += *(unsigned short *)(buf + pos + 16))
+            listed_init |= !strcmp(buf + pos + 19, "1");
+    if (fd >= 0) close(fd);
+    if (fd >= 0 && !listed_init) r |= 4;
+    if (stat("/proc/self/status", &st) == 0) r |= 8;
     return r;
 }
 
