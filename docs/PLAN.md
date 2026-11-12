@@ -104,7 +104,9 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
   shows the crash: a thread makes one page executable, installs handlers for 6/11/4/5/7/3/15, clears the page's exec, then jumps to
   0x1069; its SIGSEGV handler (0x...63ba) is misaligned, so berberis takes the default action. Suspects: a stale or wrong translation
   of that runtime-built page; the guest reading back a host handler through sigaction; berberis's "guest call didn't restore sp"
-  (16 bytes, 3 per run). Next: a BERBERIS_TRACING run with the maps saved, to name the page, the handler and the caller.
+  (16 bytes, 3 per run). Traced run 2026-11-12 17:37 (BERBERIS_TRACING=1, 134 s): the end was a read of 0x2ab000000 (SEGV_MAPERR)
+  from libanogs.so +0x2f67a8 on thread 920888, handler in the guest libc (+0xa4ad8); before it that thread re-read /proc/self/maps
+  over and over and made 174 raw faccessat calls (paths not traced). Next: the paths and answers (scratch ace-files.bt, root).
 - 0006 refuses valid chunks at a retired glibc heap's end (next chunk = the 16-byte fencepost; Endfield's and PGR's libil2cpp frees, headers
   0x25/0x45/0x85/0x175/0xb5 just below a 64 MB boundary): accept the fencepost pair (size 16 | PREV_INUSE, then 0 | PREV_INUSE) so the 20
   reports go to real bad frees. Those chunks are leaked meanwhile.
