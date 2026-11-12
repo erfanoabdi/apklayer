@@ -9,6 +9,7 @@
 #include <signal.h>
 #include <stdint.h>
 #include <sys/auxv.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -122,6 +123,25 @@ JNIEXPORT jint JNICALL Java_hello_arm64_Main_auxv(JNIEnv *env, jclass c)
         if (v[i] == AT_HWCAP2) hwcap2 = v[i + 1];
     }
     return n > 0 && hwcap == getauxval(AT_HWCAP) && hwcap2 == getauxval(AT_HWCAP2);
+}
+
+/* The app uid as translated code sees it (binary_translation 0015): bionic's getuid() is a raw syscall the translator answers with the app's
+ * uid, as host-side code gets it (bionic_translation 0056); without apklayer's sandbox the kernel would say the desktop user (often 1000). */
+JNIEXPORT jint JNICALL Java_hello_arm64_Main_uid(JNIEnv *env, jclass c)
+{
+    (void)env; (void)c;
+    return (jint)getuid();
+}
+
+/* The owner of a file as translated code sees it: the app's own files are the app uid's (0015's stat conversion), -1 if stat fails. */
+JNIEXPORT jint JNICALL Java_hello_arm64_Main_ownerUid(JNIEnv *env, jclass c, jstring path)
+{
+    (void)c;
+    const char *p = (*env)->GetStringUTFChars(env, path, NULL);
+    struct stat st;
+    int r = p && stat(p, &st) == 0 ? (int)st.st_uid : -1;
+    if (p) (*env)->ReleaseStringUTFChars(env, path, p);
+    return r;
 }
 
 /* exit-deadline.py native: the library ignores SIGTERM (signal) and then catches it (sigaction), as an app library may; 1 if both calls report

@@ -18,6 +18,8 @@ public class Main extends Activity {
     private static native int ownStack();
     private static native int auxv();
     private static native int ignoreTerm();
+    private static native int uid();
+    private static native int ownerUid(String path);
 
     static int twice(int v) { return 2 * v; }
 
@@ -61,8 +63,12 @@ public class Main extends Activity {
         log("own stack " + (stack == 1 ? "ok" : "WRONG"));
         int auxv = auxv();  // /proc/self/auxv's hwcaps are getauxval's (the guest's, not the host's)
         log("auxv " + (auxv == 1 ? "ok" : "WRONG"));
+        // the app's uid as the arm64 code sees it, and as the owner of its own files: Android's (Process.myUid), not the desktop user's
+        int uid = uid(), owner = ownerUid(getFilesDir().getPath()), app = android.os.Process.myUid();
+        boolean ids = uid == app && owner == app;
+        log("uid " + (ids ? "ok " + uid : "WRONG getuid " + uid + ", files owner " + owner + ", app " + app));
         boolean ok = "aarch64".equals(cpu) && first == warm && call == 42 && thread == 100 && overloads && errno == 222 && fault == 1 && stack == 1
-                && auxv == 1;
+                && auxv == 1 && ids;
         log(ok ? "PASS" : "FAIL first=" + first + " warm=" + warm);
         long t7 = System.nanoTime();
         int px = gl();  // EGL pbuffer cleared to (1, 0.5, 0, 1): 0xff0080ff, read back as RGBA bytes

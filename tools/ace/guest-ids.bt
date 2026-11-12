@@ -1,0 +1,27 @@
+// What translated (arm64) code gets for its own ids: the result the translator hands back for the guest's getuid (174), geteuid (175),
+// getgid (176) and getegid (177) raw syscalls (binary_translation 0015: the app uid, not the desktop user's). First 20 calls.
+// RunGuestSyscall(ThreadState*): x8 = syscall number at 0x40; the result is the guest x0 after the call.
+// Run: sudo tools/ace/trace.sh guest-ids.bt   (then start an arm64 app; PGR's liblog asks within seconds; Ctrl+C)
+
+uprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE
+{
+  $s = (uint64)arg0;
+  $nr = *(uint64 *)($s + 0x40);
+  if ($nr >= 174 && $nr <= 177) {
+    @st[tid] = $s;
+    @nr[tid] = $nr;
+  }
+}
+
+uretprobe:@BRIDGE@:_ZN8berberis15RunGuestSyscallEPNS_11ThreadStateE
+/@st[tid] && @shown < 20/
+{
+  printf("pid %d tid %d %s -> %d\n", pid, tid,
+         @nr[tid] == 174 ? "getuid" : @nr[tid] == 175 ? "geteuid" : @nr[tid] == 176 ? "getgid" : "getegid",
+         *(int64 *)(@st[tid]));
+  @shown = @shown + 1;
+  delete(@st[tid]);
+  delete(@nr[tid]);
+}
+
+END { clear(@st); clear(@nr); clear(@shown); }

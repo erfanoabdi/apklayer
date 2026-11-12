@@ -92,7 +92,7 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 (The translator is Digitalis, a fork of AOSP's Berberis that keeps its names: libberberis_arm64, BERBERIS_*, berberis.mode.*; docs/X86_64.md.)
 - Diagnostics for this (tools/ace/): bpftrace on the translator and glibc through `sudo tools/ace/trace.sh <script.bt> [out]`: ace-self-signal
   (signals to itself), ace-files (raw file syscalls, counted), ace-names (every raw file syscall, in order), ace-proxy (glibc calls of guest
-  threads, with guest callers); pgr-netcut.sh cuts one app's network after N s (nftables on its scope's cgroup).
+  threads, with guest callers), guest-ids (the ids the guest's getuid ... get); pgr-netcut.sh cuts one app's network after N s (nftables).
 - Tencent ACE (`libanogs.so`) turns on PGR and Endfield under the bridge (2026-11-12, NVIDIA PC, 0006 logging guest callers):
   PGR's real invalid frees all come from `libanogs.so +0x2f4d34` (the same pointers freed twice, headers that are pointers or random words),
   ~7 s later the process sends itself SIGSEGV (SI_TKILL) and the JVM aborts (or glibc's `malloc_consolidate(): invalid chunk size`);
@@ -135,9 +135,9 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
   Proxy-libc trace (bpftrace on glibc, tools/ace/ace-proxy.bt): ACE read its own /proc/<pid>/cmdline from JNI_OnLoad and got the JVM's
   command line (the name was set after Application.onCreate); fixed (nameProcessEarly), PGR still ends. Its /data/user/10/<host>/...
   is a fixed probe (user 10: the first secondary user / work profile, where clone apps live), not a uid of ours.
-- binary_translation 0015 (translated code's ids through the translator's bionic libc) is built and installed on the NVIDIA PC; check the
-  guest's answer (an arm64 getuid, e.g. hello-arm64 or bpftrace on RunGuestSyscall's return) and add a test. /proc/self/status still shows
-  the real ids.
+- binary_translation 0015 (translated code's ids through the translator's bionic libc) is built and installed on the NVIDIA PC; checks:
+  hello-arm64 now asserts getuid and its files' owner equal Process.myUid (group native-bridge; not run yet: no arm64 compiler on that PC),
+  and tools/ace/guest-ids.bt shows the guest's answers live (root). /proc/self/status still shows the real ids.
 - 0006 refuses valid chunks at a retired glibc heap's end (next chunk = the 16-byte fencepost; Endfield's and PGR's libil2cpp frees, headers
   0x25/0x45/0x85/0x175/0xb5 just below a 64 MB boundary): accept the fencepost pair (size 16 | PREV_INUSE, then 0 | PREV_INUSE) so the 20
   reports go to real bad frees. Those chunks are leaked meanwhile.
