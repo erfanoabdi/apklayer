@@ -108,6 +108,29 @@ int main(int argc, char **argv) {
         _exit(127);
     }
     assert(waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    /* /proc as an app sees it (paths.c apklayer_proc_pid_hidden): processes of another cgroup (init, the desktop) are gone from stat and readdir,
+     * its own and /proc/self stay. Skipped where every process shares one cgroup (a container). */
+    {
+        char mine[256] = "", init[256] = "";
+        FILE *c = fopen("/proc/self/cgroup", "r");
+        if (c) { fgets(mine, sizeof mine, c); fclose(c); }
+        if ((c = fopen("/proc/1/cgroup", "r"))) { fgets(init, sizeof init, c); fclose(c); }
+        if (!getenv("APKLAYER_PROC_VIEW") && strcmp(mine, init)) {
+            struct stat st;
+            char self[32];
+            snprintf(self, sizeof self, "/proc/%d", getpid());
+            assert(stat("/proc/1", &st) != 0 && errno == ENOENT && stat("/proc/1/cmdline", &st) != 0);
+            assert(stat(self, &st) == 0 && stat("/proc/self/status", &st) == 0 && stat("/proc/meminfo", &st) == 0);
+            DIR *proc = opendir("/proc");
+            int saw_self = 0;
+            for (struct dirent *e; proc && (e = readdir(proc));) {
+                assert(strcmp(e->d_name, "1") != 0);
+                saw_self |= atoi(e->d_name) == getpid();
+            }
+            assert(proc && saw_self);
+            closedir(proc);
+        }
+    }
     char cmd[600];
     snprintf(cmd, sizeof cmd, "rm -rf '%s'", tmpl);
     return system(cmd);

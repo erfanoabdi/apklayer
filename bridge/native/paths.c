@@ -5,7 +5,9 @@
  * bionic_translation's libc (open, fopen, stat, lstat, fstatat) through its apply_path_overrides hook. */
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <fcntl.h>
 #include <limits.h>
+#include <sys/syscall.h>
 #include <sys/stat.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -225,10 +227,55 @@ static bool linker_path(char **path)
     return true;
 }
 
+/* What Android shows an app of /proc: hidepid=invisible, only the processes of its own uid. Here every process of the desktop is in /proc, and
+ * Tencent ACE (PGR, Endfield) stats, lstats and reads the cmdline of Firefox, the hub and others. An app process (own_data set) sees as its own
+ * the processes in its cgroup (the app's systemd scope: its JVM, translator threads, children); another pid's /proc/<pid>[/...] is ENOENT. Not hidden:
+ * /proc, /proc/self, /proc/thread-self and everything not numeric. The kernel's own answer is read with raw syscalls (the wrappers call this).
+ * APKLAYER_PROC_VIEW=host turns it off. Without a scope for the app (no systemd) nothing is hidden: every process shares the cgroup. */
+static int cgroup_read(long pid, char *out, size_t n)
+{
+    char p[48];
+    snprintf(p, sizeof p, "/proc/%ld/cgroup", pid);
+    int fd = (int)syscall(SYS_openat, AT_FDCWD, p, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return -1;
+    ssize_t r = read(fd, out, n - 1);
+    close(fd);
+    if (r < 0) return -1;
+    out[r] = 0;
+    return 0;
+}
+
+/* whether /proc/<pid> (the digits at *name, ended by '/' or the end) is a process of another app or of the desktop */
+int apklayer_proc_pid_hidden(const char *name)
+{
+    static int host_view = -1;
+    if (host_view < 0) { const char *v = getenv("APKLAYER_PROC_VIEW"); host_view = v && !strcmp(v, "host"); }
+    static __thread int busy;  /* the cgroup read below is a path call of its own (the preload wraps syscall) */
+    if (host_view || busy || !__atomic_load_n(&own_data, __ATOMIC_ACQUIRE)) return 0;
+    char *end;
+    long pid = strtol(name, &end, 10);
+    if (end == name || (*end && *end != '/') || pid == getpid()) return 0;
+    char mine[1024], theirs[1024];
+    busy = 1;
+    int hidden = !cgroup_read(getpid(), mine, sizeof mine) && strstr(mine, "/") && (cgroup_read(pid, theirs, sizeof theirs) || strcmp(mine, theirs));
+    busy = 0;
+    return hidden;
+}
+
+/* an absolute path: /proc/<pid>[/...] of a process this app does not see */
+int apklayer_proc_hidden(const char *path)
+{
+    return path && !strncmp(path, "/proc/", 6) && path[6] >= '0' && path[6] <= '9' && apklayer_proc_pid_hidden(path + 6);
+}
+
 static bool from_root(const char *r, char **path);
 
 bool apklayer_apply_path_overrides(char **path)
 {
+    if (apklayer_proc_hidden(*path)) {  /* any path call of the process (the wrappers and bionic_translation's libc): no such process */
+        char *gone = strdup("/proc/.apklayer-hidden");
+        if (gone) { *path = gone; return true; }
+    }
     if (debug_env) fprintf(stderr, "[paths] %s (root %s)\n", *path, root());
     if (binder_device(path) || storage_path(path) || own_data_path(path) || data_path(path) || linker_path(path)) return true;
     /* what one instance's stack stages for itself (the vintf fragments of the HALs it runs, cli/stack.cpp) comes before the shared root */

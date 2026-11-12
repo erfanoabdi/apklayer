@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 bool apklayer_apply_path_overrides(char **path);
+int apklayer_proc_pid_hidden(const char *name);  /* paths.c: whether /proc/<pid> is a process this app does not see */
 /* the userspace binder's nodes (binder_route.c): opened through its daemon, -2 when the path is not one */
 int apklayer_binder_route_open(const char *path, int flags);
 int apklayer_binder_route_exists(const char *path);
@@ -86,6 +87,20 @@ long apklayer_android_spelling(char *buf, long n);
 /* /proc links (an fd, the executable) to a file the overlay served read as its Android path (paths.c) */
 static ssize_t proc_link(const char *path, char *buf, ssize_t r) { return r > 0 && path && !strncmp(path, "/proc/", 6) ? apklayer_android_spelling(buf, r) : r; }
 ssize_t readlink(const char *path, char *buf, size_t n) { MAP(m, path); ssize_t r = ((ssize_t (*)(const char *, char *, size_t))REAL(readlink))(m, buf, n); DONE(m); return proc_link(path, buf, r); }
+
+/* readdir on /proc leaves out the processes the app does not see (paths.c apklayer_proc_pid_hidden); the directory is told by its device and inode */
+static int is_proc_dir(DIR *d)
+{
+    static dev_t dev; static ino_t ino; static int known;
+    struct stat st, mine;
+    if (!known) { if (KSTAT(AT_FDCWD, "/proc", &st, 0)) return 0; dev = st.st_dev; ino = st.st_ino; known = 1; }
+    return (mine.st_ino = 0, (int)SYSCALL(SYS_fstat, (long)dirfd(d), (long)&mine) == 0) && mine.st_ino == ino && mine.st_dev == dev;
+}
+#define PROC_READDIR(name, type) struct type *name(DIR *d) { struct type *(*real)(DIR *) = (struct type *(*)(DIR *))REAL(name); struct type *e; \
+    int proc = -1; while ((e = real(d))) { if (e->d_name[0] < '0' || e->d_name[0] > '9') return e; if (proc < 0) proc = is_proc_dir(d); \
+        if (!proc || !apklayer_proc_pid_hidden(e->d_name)) return e; } return NULL; }
+PROC_READDIR(readdir, dirent)
+PROC_READDIR(readdir64, dirent64)
 
 /* What Java's file APIs (java.io, NIO) call besides the above, so that a mapped directory (/storage, paths.c) can be written: one path argument,
  * or an absolute one for the *at forms. */

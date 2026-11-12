@@ -3,6 +3,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-12 (later)
+- /proc as Android shows it (hidepid=invisible): an app process no longer sees other cgroups' pids (path calls ENOENT, readdir skips them); `APKLAYER_PROC_VIEW=host` restores. Native test only; not yet run on PGR.
+
 ## 2026-11-12: NVIDIA PC on main a3e931cd; PGR and Endfield die from Tencent ACE, not from the translator's heap or graphics
 - The tester's NVIDIA PC runs a deb of main (0.4.18+gita3e931cd, tools/release/build-deb.sh noble) with libberberis_arm64 0007/0008 and the
   proxy libc below (~/apklayer-fix). UiBench draws on the GPU in a fresh instance (218 colours, services stop clean).
