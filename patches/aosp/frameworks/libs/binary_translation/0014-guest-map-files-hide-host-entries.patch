@@ -1,0 +1,287 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: the guest's /proc/self/map_files leaves out the host's own files
+
+/proc/self/map_files has one entry per file-backed mapping, named by its range; reading an entry's link gives the mapped file. Tencent
+ACE in PGR opens the directory, lists it and reads every link (6001 readlinks in one run, traced with bpftrace on RunGuestSyscall):
+that named the translator, the JVM and the x86_64 host libraries (1200 links into /usr/lib/x86_64-linux-gnu alone), although 0012
+keeps them out of its /proc/self/maps. The guest's view now leaves those entries out: getdents64 on its own map_files directory
+drops the entries whose file is host-only, and readlinkat of such an entry (absolute or relative to that directory) fails with
+ENOENT. A device's process has no entry for an anonymous mapping, and 0012 prints these mappings as anonymous. A batch filtered to
+nothing is not returned empty (that reads as the end of the directory): the next batch is fetched.
+The host-only rules move from 0012's maps code into IsHostOnlyMappedFile (code cache memfd, host GPU nodes, host system directories,
+the JVM's data files, ELF files for another machine than aarch64), shared by both views; 0012's output is unchanged (checked over
+PGR's real maps). BERBERIS_SHOW_HOST_MAPS turns both off. Applies after 0011 and 0012. Module libberberis_arm64.
+
+diff --git a/kernel_api/arm64/gen_syscall_emulation_arm64_to_x86_64-inl.h b/kernel_api/arm64/gen_syscall_emulation_arm64_to_x86_64-inl.h
+--- a/kernel_api/arm64/gen_syscall_emulation_arm64_to_x86_64-inl.h
++++ b/kernel_api/arm64/gen_syscall_emulation_arm64_to_x86_64-inl.h
+@@ -171,7 +171,8 @@ long RunGuestSyscallImpl(long guest_nr,
+     case 17:  // __NR_getcwd
+       return syscall(79, arg_1, arg_2);
+     case 61:  // __NR_getdents64
+-      return syscall(217, arg_1, arg_2, arg_3);
++      // apklayer patch (0014): the guest's /proc/self/map_files listing leaves out the host's own files.
++      return GetDents64ForGuest(static_cast<int>(arg_1), std::bit_cast<void*>(arg_2), static_cast<size_t>(arg_3));
+     case 177:  // __NR_getegid
+       return syscall(108);
+     case 175:  // __NR_geteuid
+diff --git a/kernel_api/arm64/syscall_emulation.cc b/kernel_api/arm64/syscall_emulation.cc
+--- a/kernel_api/arm64/syscall_emulation.cc
++++ b/kernel_api/arm64/syscall_emulation.cc
+@@ -40,6 +40,7 @@
+ #include "berberis/guest_state/guest_state.h"
+ #include "berberis/instrument/syscall.h"
+ #include "berberis/kernel_api/main_executable_real_path_emulation.h"
++#include "berberis/kernel_api/open_emulation.h"  // apklayer patch (0014): GetDents64ForGuest
+ #include "berberis/kernel_api/runtime_bridge.h"
+ #include "berberis/kernel_api/syscall_emulation_common.h"
+ 
+diff --git a/kernel_api/include/berberis/kernel_api/open_emulation.h b/kernel_api/include/berberis/kernel_api/open_emulation.h
+--- a/kernel_api/include/berberis/kernel_api/open_emulation.h
++++ b/kernel_api/include/berberis/kernel_api/open_emulation.h
+@@ -38,6 +38,11 @@ int OpenatForGuest(int dirfd, const char* pathname, int flags, mode_t mode);
+ int OpenForGuest(const char* pathname, int flags, mode_t mode);
+ 
+ bool IsFileDescriptorEmulatedProcSelfMaps(int fd);
++
++// apklayer patch (0014): the guest's /proc/self/map_files leaves out the host's own files (see IsHostOnlyMappedFile).
++bool IsHostOnlyMappedFile(const char* name, unsigned dev, unsigned long inode);
++bool IsHiddenProcSelfMapFilesEntry(int dirfd, const char* path);
++long GetDents64ForGuest(int fd, void* dirp, size_t count);
+ void CloseEmulatedProcSelfMapsFileDescriptor(int fd);
+ 
+ // apklayer patch: the auxv the guest was started with (InitKernelArgs), served as its /proc/self/auxv.
+diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
+--- a/kernel_api/open_emulation.cc
++++ b/kernel_api/open_emulation.cc
+@@ -18,6 +18,7 @@
+ 
+ #include <fcntl.h>
+ #include <sys/stat.h>
++#include <sys/syscall.h>  // apklayer patch (0014): __NR_getdents64
+ #include <unistd.h>
+ 
+ #include <cstdint>
+@@ -37,6 +38,7 @@
+ #include "berberis/base/checks.h"
+ #include "berberis/base/fd.h"
+ #include "berberis/base/forever_alloc.h"
++#include "berberis/base/scoped_errno.h"  // apklayer patch (0014)
+ #include "berberis/base/tracing.h"
+ #include "berberis/guest_os_primitives/guest_map_shadow.h"
+ #include "berberis/guest_state/guest_addr.h"
+@@ -44,6 +46,139 @@
+ 
+ namespace berberis {
+ 
++// apklayer patch (0012, 0014): whether a mapped file is the host's own, for the guest's views of its address space (/proc/self/maps,
++// /proc/self/map_files). Host-only: the code cache's memfd, a host GPU node, a file in a host system directory (no Android path starts
++// so: /usr, /lib, /etc, /var, /opt, /snap, /run, /tmp, /nix), the JVM's own data (its jimage lib/modules, CDS *.jsa), or an ELF file
++// for another machine than aarch64 (the translator, the JVM, x86_64 libraries). The guest's own files (aarch64 libraries, APKs, fonts,
++// data) are not. `name` may end in " (deleted)"; the ELF answer is cached per (dev, inode), a maps read sees each library many times.
++bool IsHostOnlyMappedFile(const char* name, unsigned dev, unsigned long inode) {
++  if (name == nullptr || name[0] != '/') return false;
++  if (strncmp(name, "/dev/nvidia", 11) == 0 || strncmp(name, "/dev/dri/", 9) == 0 || strncmp(name, "/dev/kfd", 8) == 0 ||
++      strncmp(name, "/memfd:exec", 11) == 0) {  // the code cache (exec_region_anonymous.cc)
++    return true;
++  }
++  static constexpr const char* kHostDirs[] = {"/usr/", "/lib/", "/lib64/", "/etc/", "/var/", "/opt/", "/snap/",
++                                             "/run/", "/tmp/", "/nix/"};
++  for (const char* dir : kHostDirs) {
++    if (strncmp(name, dir, strlen(dir)) == 0) return true;
++  }
++  const char* deleted = strstr(name, " (deleted)");
++  const size_t len = deleted != nullptr ? static_cast<size_t>(deleted - name) : strlen(name);
++  if ((len >= 4 && memcmp(name + len - 4, ".jsa", 4) == 0) || (len >= 12 && memcmp(name + len - 12, "/lib/modules", 12) == 0)) {
++    return true;
++  }
++  if (deleted != nullptr || strncmp(name, "/dev/", 5) == 0 || strncmp(name, "/memfd:", 7) == 0) return false;
++  struct Entry {
++    unsigned long inode;
++    unsigned dev;
++    signed char host_only;
++  };
++  static Entry cache[1024];
++  static std::mutex cache_mutex;
++  Entry& entry = cache[(inode ^ (inode >> 10) ^ dev) % 1024];
++  {
++    std::lock_guard lock(cache_mutex);
++    if (inode != 0 && entry.inode == inode && entry.dev == dev) return entry.host_only == 1;
++  }
++  int known = 0;
++  int fd = open(name, O_RDONLY | O_CLOEXEC);
++  if (fd >= 0) {
++    unsigned char header[20];
++    if (pread(fd, header, sizeof(header), 0) == static_cast<ssize_t>(sizeof(header)) && memcmp(header, "\177ELF", 4) == 0) {
++      const unsigned machine = header[5] == 2 ? (header[18] << 8 | header[19]) : (header[18] | header[19] << 8);
++      known = machine != 183;  // EM_AARCH64
++    }
++    close(fd);
++  }
++  if (inode != 0) {
++    std::lock_guard lock(cache_mutex);
++    entry = Entry{inode, dev, static_cast<signed char>(known)};
++  }
++  return known == 1;
++}
++
++namespace {
++
++// apklayer patch (0014): /proc/self/map_files names every file-backed mapping by its range; reading an entry's link gives the file.
++// Tencent ACE (PGR, Endfield) lists it and reads every link, which named the translator, the JVM and the x86_64 host libraries even
++// with 0012's maps. The guest's view drops the entries of host-only files: they are anonymous in its maps, and an anonymous mapping
++// has no map_files entry on a device either (readlink: ENOENT; a listing does not show it).
++bool IsProcSelfMapFilesDir(int fd) {
++  struct stat fd_stat;
++  struct stat dir_stat;
++  return fstat(fd, &fd_stat) == 0 && stat("/proc/self/map_files", &dir_stat) == 0 && fd_stat.st_ino == dir_stat.st_ino &&
++         fd_stat.st_dev == dir_stat.st_dev;
++}
++
++// Reads the link target of a map_files entry into `target` if `path` (relative to `dirfd`) is one of this process's.
++bool ReadOwnMapFilesLink(int dirfd, const char* path, char* target, size_t size) {
++  if (path == nullptr) return false;
++  if (path[0] == '/') {
++    const char* entry = strstr(path, "/map_files/");
++    if (entry == nullptr || strchr(entry + 11, '/') != nullptr) return false;
++    char dir[64];
++    const size_t dir_len = static_cast<size_t>(entry - path) + 10;  // up to and with "/map_files"
++    if (dir_len >= sizeof(dir)) return false;
++    memcpy(dir, path, dir_len);
++    dir[dir_len] = '\0';
++    struct stat dir_stat;
++    struct stat self_stat;
++    if (stat(dir, &dir_stat) != 0 || stat("/proc/self/map_files", &self_stat) != 0 || dir_stat.st_ino != self_stat.st_ino ||
++        dir_stat.st_dev != self_stat.st_dev) {
++      return false;
++    }
++  } else if (dirfd == AT_FDCWD || strchr(path, '/') != nullptr || !IsProcSelfMapFilesDir(dirfd)) {
++    return false;
++  }
++  ssize_t n = readlinkat(dirfd, path, target, size - 1);
++  if (n <= 0) return false;
++  target[n] = '\0';
++  return true;
++}
++
++bool IsHostOnlyLinkTarget(const char* target) {
++  struct stat target_stat;
++  if (target[0] == '/' && strstr(target, " (deleted)") == nullptr && stat(target, &target_stat) == 0) {
++    return IsHostOnlyMappedFile(target, static_cast<unsigned>(target_stat.st_dev) ^ 0x80000000u, target_stat.st_ino);
++  }
++  return IsHostOnlyMappedFile(target, 0, 0);
++}
++
++}  // namespace
++
++bool IsHiddenProcSelfMapFilesEntry(int dirfd, const char* path) {
++  static const bool show_host_maps = getenv("BERBERIS_SHOW_HOST_MAPS") != nullptr;
++  char target[4096];
++  return !show_host_maps && ReadOwnMapFilesLink(dirfd, path, target, sizeof(target)) && IsHostOnlyLinkTarget(target);
++}
++
++long GetDents64ForGuest(int fd, void* dirp, size_t count) {
++  static const bool show_host_maps = getenv("BERBERIS_SHOW_HOST_MAPS") != nullptr;
++  for (;;) {
++    long n = syscall(__NR_getdents64, fd, dirp, count);
++    if (n <= 0 || show_host_maps || !IsProcSelfMapFilesDir(fd)) return n;
++    // struct linux_dirent64 { u64 d_ino; s64 d_off; u16 d_reclen; u8 d_type; char d_name[]; }, the same for guest and host.
++    char* buf = static_cast<char*>(dirp);
++    long kept = 0;
++    ScopedErrno scoped_errno;
++    for (long pos = 0; pos < n;) {
++      uint16_t reclen;
++      memcpy(&reclen, buf + pos + 16, sizeof(reclen));
++      if (reclen == 0 || pos + reclen > n) return n;  // not a dirent layout we know: leave it alone
++      const char* name = buf + pos + 19;
++      char target[4096];
++      bool hide = strcmp(name, ".") != 0 && strcmp(name, "..") != 0 && ReadOwnMapFilesLink(fd, name, target, sizeof(target)) &&
++                  IsHostOnlyLinkTarget(target);
++      if (!hide) {
++        if (kept != pos) memmove(buf + kept, buf + pos, reclen);
++        kept += reclen;
++      }
++      pos += reclen;
++    }
++    if (kept > 0) return kept;  // an empty result would read as the end of the directory: fetch the next batch instead
++  }
++}
++
+ namespace {
+ 
+ class EmulatedFileDescriptors {
+@@ -203,53 +338,8 @@ int OpenatProcSelfMapsForGuest(int dirfd, int flags, mode_t mode) {
+           sscanf(rest, "%*4s %*x %x:%x %lu %n", &dev_major, &dev_minor, &inode, &name_offset) == 3 && inode != 0 &&
+           name_offset > 0 && rest[name_offset] == '/') {
+         const char* name = rest + name_offset;
+-        bool host_only = rest[2] == 'x' || strncmp(name, "/dev/nvidia", 11) == 0 || strncmp(name, "/dev/dri/", 9) == 0 ||
+-                         strncmp(name, "/dev/kfd", 8) == 0 ||
+-                         strncmp(name, "/memfd:exec ", 12) == 0;  // the code cache's writable view (exec_region_anonymous.cc)
+-        // Host files that are not programs: host system directories (no Android path starts with these; the glibc locale files,
+-        // gconv cache, /run/user/... and /tmp/hsperfdata_* lived there) and the JVM's own data (its jimage lib/modules, CDS *.jsa).
+-        if (!host_only) {
+-          static constexpr const char* kHostDirs[] = {"/usr/", "/lib/", "/lib64/", "/etc/", "/var/", "/opt/", "/snap/",
+-                                                     "/run/", "/tmp/", "/nix/"};
+-          for (const char* dir : kHostDirs) host_only = host_only || strncmp(name, dir, strlen(dir)) == 0;
+-          const char* end = strstr(name, " (deleted)");
+-          const size_t len = end != nullptr ? static_cast<size_t>(end - name) : strlen(name);
+-          host_only = host_only || (len >= 4 && memcmp(name + len - 4, ".jsa", 4) == 0) ||
+-                      (len >= 12 && memcmp(name + len - 12, "/lib/modules", 12) == 0);
+-        }
+-        if (!host_only && strncmp(name, "/dev/", 5) != 0 && strstr(name, " (deleted)") == nullptr) {
+-          // An ELF of another machine; the answer per (device, inode) is kept, a maps read sees each library several times.
+-          struct Entry {
+-            unsigned long inode;
+-            unsigned dev;
+-            signed char host_only;
+-          };
+-          static Entry cache[1024];
+-          static std::mutex cache_mutex;
+-          const unsigned dev = (dev_major << 20) | dev_minor;
+-          Entry& entry = cache[(inode ^ (inode >> 10) ^ dev) % 1024];
+-          int known = -1;
+-          {
+-            std::lock_guard lock(cache_mutex);
+-            if (entry.inode == inode && entry.dev == dev) known = entry.host_only;
+-          }
+-          if (known < 0) {
+-            known = 0;
+-            int fd = open(name, O_RDONLY | O_CLOEXEC);
+-            if (fd >= 0) {
+-              unsigned char header[20];
+-              if (pread(fd, header, sizeof(header), 0) == static_cast<ssize_t>(sizeof(header)) &&
+-                  memcmp(header, "\177ELF", 4) == 0) {
+-                const unsigned machine = header[5] == 2 ? (header[18] << 8 | header[19]) : (header[18] | header[19] << 8);
+-                known = machine != 183;  // EM_AARCH64
+-              }
+-              close(fd);
+-            }
+-            std::lock_guard lock(cache_mutex);
+-            entry = Entry{inode, dev, static_cast<signed char>(known)};
+-          }
+-          host_only = known == 1;
+-        }
++        // apklayer patch (0014): the host-only rules live in IsHostOnlyMappedFile, shared with /proc/self/map_files.
++        bool host_only = rest[2] == 'x' || IsHostOnlyMappedFile(name, (dev_major << 20) | dev_minor, inode);
+         if (host_only) {
+           char anonymous_buf[64];
+           snprintf(anonymous_buf, sizeof(anonymous_buf), " %.4s 00000000 00:00 0", rest);
+diff --git a/kernel_api/unistd_emulation.cc b/kernel_api/unistd_emulation.cc
+--- a/kernel_api/unistd_emulation.cc
++++ b/kernel_api/unistd_emulation.cc
+@@ -22,10 +22,15 @@
+ #include <cstring>  // memcpy
+ 
+ #include "berberis/kernel_api/main_executable_real_path_emulation.h"
++#include "berberis/kernel_api/open_emulation.h"  // apklayer patch (0014)
+ 
+ namespace berberis {
+ 
+ ssize_t ReadLinkAtForGuest(int dirfd, const char* path, char* buf, size_t buf_size) {
++  if (IsHiddenProcSelfMapFilesEntry(dirfd, path)) {  // apklayer patch (0014): a host-only file's map_files entry
++    errno = ENOENT;
++    return -1;
++  }
+   const char* real_path = TryReadLinkToMainExecutableRealPath(path);
+   if (!real_path) {
+     return readlinkat(dirfd, path, buf, buf_size);

@@ -1637,6 +1637,17 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0014 (the guest's /proc/self/map_files without host files)
+- Why: bpftrace on RunGuestSyscall (PGR, /tmp/ace-names.txt on the PC): ACE lists /proc/self/map_files and reads all 6001 links,
+  which named the translator, the JVM and 1200 x86_64 libraries despite 0012. Checked here: a live process's map_files through the
+  filter (31 entries, only a home-directory data file kept, a 512-byte buffer so whole batches are filtered), readlink of hidden and
+  kept entries, and 0012's output over PGR's real maps unchanged after moving its rules into IsHostOnlyMappedFile.
+- Command (Mac, OrbStack): the five files (tree + 0011 + 0012 + 0014) in ~/los24/frameworks/libs/binary_translation, then
+  `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_arm64` (APKLAYER_NATIVE_BRIDGE=arm64).
+- Result: built in 9 min, sha256 7542b3a1b25526774771866aa8442ef41ec406a734bce39304c714c60e49e9d2; installed on the NVIDIA PC
+  (the previous one in ~/apklayer-fix/orig/libberberis_arm64.0012b.so). PGR (plain run): ACE's teardown (20 frees), SIGSEGV ~2 min
+  after the launch: unchanged. The host names in map_files were not the trigger either.
+
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0012 extended (host directories, JVM data, per-thread maps)
 - Why: with 0012 PGR lived ~5 min instead of ~90 s; its guest maps still named five host files (JDK modules, classes.jsa,
   locale-archive, libc.mo, gconv cache), and /proc/thread-self/maps, /proc/<tid>/maps, /proc/self/task/<tid>/maps (other inodes)
