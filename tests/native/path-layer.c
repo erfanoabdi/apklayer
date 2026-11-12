@@ -121,6 +121,11 @@ int main(int argc, char **argv) {
             snprintf(self, sizeof self, "/proc/%d", getpid());
             assert(stat("/proc/1", &st) != 0 && errno == ENOENT && stat("/proc/1/cmdline", &st) != 0);
             assert(stat(self, &st) == 0 && stat("/proc/self/status", &st) == 0 && stat("/proc/meminfo", &st) == 0);
+            /* other spellings of the same pid, and fd-relative lookups on an open /proc */
+            assert(stat("/proc//1/status", &st) != 0 && stat("/proc/./1", &st) != 0 && stat("/proc/self/../1", &st) != 0 && stat("/proc/self/root/proc/1", &st) != 0);
+            int procfd = open("/proc", O_RDONLY | O_DIRECTORY);
+            assert(procfd >= 0 && fstatat(procfd, "1", &st, 0) != 0 && openat(procfd, "1/status", O_RDONLY) < 0 && fstatat(procfd, "self", &st, 0) == 0);
+            close(procfd);
             DIR *proc = opendir("/proc");
             int saw_self = 0;
             for (struct dirent *e; proc && (e = readdir(proc));) {

@@ -20,7 +20,9 @@
 #include <unistd.h>
 
 bool apklayer_apply_path_overrides(char **path);
-int apklayer_proc_pid_hidden(const char *name);  /* paths.c: whether /proc/<pid> is a process this app does not see */
+int apklayer_proc_pid_hidden(const char *name);
+int apklayer_proc_hidden_at(int dirfd, const char *path);  /* paths.c: path (relative to dirfd) names a process this app does not see */
+#define PROC_GONE(dirfd, path) do { if (apklayer_proc_hidden_at(dirfd, path)) { errno = ENOENT; return -1; } } while (0)  /* paths.c: whether /proc/<pid> is a process this app does not see */
 /* the userspace binder's nodes (binder_route.c): opened through its daemon, -2 when the path is not one */
 int apklayer_binder_route_open(const char *path, int flags);
 int apklayer_binder_route_exists(const char *path);
@@ -55,8 +57,8 @@ int open(const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m,
 int open64(const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open64))(m, flags, mode); BROKER(r, m, flags, mode); DONE(m); return r; }
 int __open_2(const char *path, int flags) { MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open))(m, flags, 0); BROKER(r, m, flags, 0); DONE(m); return r; }
 int __open64_2(const char *path, int flags) { MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open64))(m, flags, 0); BROKER(r, m, flags, 0); DONE(m); return r; }
-int openat(int dirfd, const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; ROUTE(use, flags); int r = ((int (*)(int, const char *, int, ...))REAL(openat))(dirfd, use, flags, mode); r = apklayer_broker_openat(dirfd, use, flags, mode, r); DONE(m); return r; }
-int openat64(int dirfd, const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; ROUTE(use, flags); int r = ((int (*)(int, const char *, int, ...))REAL(openat64))(dirfd, use, flags, mode); r = apklayer_broker_openat(dirfd, use, flags, mode, r); DONE(m); return r; }
+int openat(int dirfd, const char *path, int flags, ...) { int mode; MODE(flags, mode); PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; ROUTE(use, flags); int r = ((int (*)(int, const char *, int, ...))REAL(openat))(dirfd, use, flags, mode); r = apklayer_broker_openat(dirfd, use, flags, mode, r); DONE(m); return r; }
+int openat64(int dirfd, const char *path, int flags, ...) { int mode; MODE(flags, mode); PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; ROUTE(use, flags); int r = ((int (*)(int, const char *, int, ...))REAL(openat64))(dirfd, use, flags, mode); r = apklayer_broker_openat(dirfd, use, flags, mode, r); DONE(m); return r; }
 int __openat_2(int dirfd, const char *path, int flags) { return openat(dirfd, path, flags, 0); }
 int __openat64_2(int dirfd, const char *path, int flags) { return openat64(dirfd, path, flags, 0); }
 /* fopen's open is glibc's own (not the wrapper above): a refused one goes to the broker here, with the flags its mode means */
@@ -80,7 +82,7 @@ int stat(const char *path, struct stat *st) { MAP(m, path); void *f = REAL(stat)
 int stat64(const char *path, struct stat64 *st) { MAP(m, path); void *f = REAL(stat64); int r = f ? ((int (*)(const char *, struct stat64 *))f)(m, st) : KSTAT(AT_FDCWD, m, st, 0); BROKER_STAT(r, m, 0, fstat64(fd_, st)); DONE(m); return r; }
 int lstat(const char *path, struct stat *st) { MAP(m, path); void *f = REAL(lstat); int r = f ? ((int (*)(const char *, struct stat *))f)(m, st) : KSTAT(AT_FDCWD, m, st, AT_SYMLINK_NOFOLLOW); BROKER_STAT(r, m, 1, fstat(fd_, st)); DONE(m); return r; }
 int lstat64(const char *path, struct stat64 *st) { MAP(m, path); void *f = REAL(lstat64); int r = f ? ((int (*)(const char *, struct stat64 *))f)(m, st) : KSTAT(AT_FDCWD, m, st, AT_SYMLINK_NOFOLLOW); BROKER_STAT(r, m, 1, fstat64(fd_, st)); DONE(m); return r; }
-int fstatat(int dirfd, const char *path, struct stat *st, int flags) { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; void *f = REAL(fstatat); int r = f ? ((int (*)(int, const char *, struct stat *, int))f)(dirfd, use, st, flags) : KSTAT(dirfd, use, st, flags); BROKER_STATAT(r, dirfd, use, flags & AT_SYMLINK_NOFOLLOW, fstat(fd_, st)); DONE(m); return r; }
+int fstatat(int dirfd, const char *path, struct stat *st, int flags) { PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; void *f = REAL(fstatat); int r = f ? ((int (*)(int, const char *, struct stat *, int))f)(dirfd, use, st, flags) : KSTAT(dirfd, use, st, flags); BROKER_STATAT(r, dirfd, use, flags & AT_SYMLINK_NOFOLLOW, fstat(fd_, st)); DONE(m); return r; }
 DIR *opendir(const char *path) { MAP(m, path); DIR *r = ((DIR * (*)(const char *))REAL(opendir))(m);
     if (!r) { int fd = apklayer_broker_open(m, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0, -1); if (fd >= 0 && !(r = fdopendir(fd))) close(fd); } DONE(m); return r; }
 long apklayer_android_spelling(char *buf, long n);
@@ -105,7 +107,7 @@ PROC_READDIR(readdir64, dirent64)
 /* What Java's file APIs (java.io, NIO) call besides the above, so that a mapped directory (/storage, paths.c) can be written: one path argument,
  * or an absolute one for the *at forms. */
 #define WRAP(ret, name, params, types, ...) ret name params { MAP(m, path); ret r = ((ret (*) types)REAL(name))(__VA_ARGS__); DONE(m); return r; }
-#define WRAPAT(ret, name, params, types, ...) ret name params { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; \
+#define WRAPAT(ret, name, params, types, ...) ret name params { PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; \
     ret r = ((ret (*) types)REAL(name))(__VA_ARGS__); DONE(m); return r; }
 int mkdir(const char *path, mode_t mode) { MAP(m, path); int r = ((int (*)(const char *, mode_t))REAL(mkdir))(m, mode); CHANGE(r, "mkdir", AT_FDCWD, m, (int)mode); DONE(m); return r; }
 int rmdir(const char *path) { MAP(m, path); int r = ((int (*)(const char *))REAL(rmdir))(m); CHANGE(r, "rmdir", AT_FDCWD, m, 0); DONE(m); return r; }
@@ -126,9 +128,9 @@ WRAP(int, statvfs64, (const char *path, struct statvfs64 *s), (const char *, str
 WRAP(int, statfs, (const char *path, struct statfs *s), (const char *, struct statfs *), m, s)
 WRAP(int, statfs64, (const char *path, struct statfs64 *s), (const char *, struct statfs64 *), m, s)
 WRAP(int, symlink, (const char *target, const char *path), (const char *, const char *), target, m)
-int fstatat64(int dirfd, const char *path, struct stat64 *st, int flags) { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
+int fstatat64(int dirfd, const char *path, struct stat64 *st, int flags) { PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
     void *f = REAL(fstatat64); int r = f ? ((int (*)(int, const char *, struct stat64 *, int))f)(dirfd, use, st, flags) : KSTAT(dirfd, use, st, flags); BROKER_STATAT(r, dirfd, use, flags & AT_SYMLINK_NOFOLLOW, fstat64(fd_, st)); DONE(m); return r; }
-int statx(int dirfd, const char *path, int flags, unsigned int mask, struct statx *st) { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
+int statx(int dirfd, const char *path, int flags, unsigned int mask, struct statx *st) { PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
     int r = ((int (*)(int, const char *, int, unsigned int, struct statx *))REAL(statx))(dirfd, use, flags, mask, st);
     BROKER_STATAT(r, dirfd, use, flags & AT_SYMLINK_NOFOLLOW, ((int (*)(int, const char *, int, unsigned int, struct statx *))REAL(statx))(fd_, "", AT_EMPTY_PATH | (flags & AT_STATX_SYNC_TYPE), mask, st)); DONE(m); return r; }
 /* glibc before 2.33's own entry points, which programs built against it call (the Temurin JDK of the Sailfish package: java.io.File's
@@ -218,10 +220,10 @@ WRAP(int, creat64, (const char *path, mode_t mode), (const char *, mode_t), m, m
 WRAP(int, mkfifo, (const char *path, mode_t mode), (const char *, mode_t), m, mode)
 int mknod(const char *path, mode_t mode, dev_t dev) { return mknodat(AT_FDCWD, path, mode, dev); }
 WRAPAT(int, mkfifoat, (int dirfd, const char *path, mode_t mode), (int, const char *, mode_t), dirfd, use, mode)
-int mknodat(int dirfd, const char *path, mode_t mode, dev_t dev) { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; void *f = REAL(mknodat);
+int mknodat(int dirfd, const char *path, mode_t mode, dev_t dev) { PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; void *f = REAL(mknodat);
     int r = f ? ((int (*)(int, const char *, mode_t, dev_t))f)(dirfd, use, mode, dev) : (int)SYSCALL(SYS_mknodat, (long)dirfd, (long)use, (long)mode, (long)dev); DONE(m); return r; }
 WRAPAT(int, fchownat, (int dirfd, const char *path, uid_t u, gid_t g, int flags), (int, const char *, uid_t, gid_t, int), dirfd, use, u, g, flags)
-ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t n) { MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
+ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t n) { PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
     ssize_t r = ((ssize_t (*)(int, const char *, char *, size_t))REAL(readlinkat))(dirfd, use, buf, n); DONE(m); return proc_link(path, buf, r); }
 /* the fortified spellings (Android code built with FORTIFY: Berberis's guest readlink): the buffer is at least n here */
 ssize_t __readlinkat_chk(int dirfd, const char *path, char *buf, size_t n, size_t buflen) { if (n > buflen) abort(); return readlinkat(dirfd, path, buf, n); }

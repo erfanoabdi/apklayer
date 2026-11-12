@@ -262,10 +262,68 @@ int apklayer_proc_pid_hidden(const char *name)
     return hidden;
 }
 
-/* an absolute path: /proc/<pid>[/...] of a process this app does not see */
+/* whether the directory `dirfd` (AT_FDCWD: the working directory) is /proc */
+static int dir_is_proc(int dirfd)
+{
+    static __thread int busy;
+    struct stat here, proc;
+    if (busy) return 0;
+    busy = 1;
+    int is = syscall(SYS_newfstatat, dirfd, "", &here, AT_EMPTY_PATH) == 0 && syscall(SYS_newfstatat, AT_FDCWD, "/proc", &proc, 0) == 0
+        && here.st_ino == proc.st_ino && here.st_dev == proc.st_dev;
+    busy = 0;
+    return is;
+}
+
+/* /proc/<pid>[/...] under any spelling: "//", "/./", "/../" collapsed, a prefix through /proc/self/root (or <own pid>, thread-self) stripped. `rel` is a path
+ * under /proc already (no leading slash). Hidden only when its first component is a number of a process outside the app's view. */
+static int proc_rel_hidden(const char *rel)
+{
+    while (*rel == '/') rel++;
+    return *rel >= '0' && *rel <= '9' && apklayer_proc_pid_hidden(rel);
+}
+
 int apklayer_proc_hidden(const char *path)
 {
-    return path && !strncmp(path, "/proc/", 6) && path[6] >= '0' && path[6] <= '9' && apklayer_proc_pid_hidden(path + 6);
+    if (!path) return 0;
+    if (path[0] != '/') {  /* relative to a working directory that is /proc */
+        const char *c = path;
+        while (!strncmp(c, "./", 2)) c += 2;
+        return *c >= '0' && *c <= '9' && dir_is_proc(AT_FDCWD) && proc_rel_hidden(c);
+    }
+    size_t len = strlen(path);
+    if (len < 6 || len >= PATH_MAX || !strstr(path, "proc")) return 0;
+    char norm[PATH_MAX], *w = norm;  /* the path with its dots and repeated slashes resolved, textually */
+    for (const char *r = path; *r;) {
+        if (*r == '/') { while (*r == '/') r++; if (r[0] == '.' && (r[1] == '/' || !r[1])) { r++; continue; } 
+            if (r[0] == '.' && r[1] == '.' && (r[2] == '/' || !r[2])) { r += 2; while (w > norm && *--w != '/') ; continue; }
+            *w++ = '/'; continue; }
+        *w++ = *r++;
+    }
+    *w = 0;
+    const char *p = norm;
+    for (int hops = 0; hops < 4 && !strncmp(p, "/proc/", 6); hops++) {
+        const char *rest = p + 6;
+        if (*rest >= '0' && *rest <= '9' && !(hops == 0 && 0)) {
+            char self[16];
+            snprintf(self, sizeof self, "%ld/", (long)getpid());
+            if (!strncmp(rest, self, strlen(self)) && !strncmp(rest + strlen(self), "root/", 5)) { p = rest + strlen(self) + 4; continue; }
+            return apklayer_proc_pid_hidden(rest);
+        }
+        if (!strncmp(rest, "self/root/", 10)) { p = rest + 9; continue; }
+        if (!strncmp(rest, "thread-self/root/", 17)) { p = rest + 16; continue; }
+        return 0;
+    }
+    return 0;
+}
+
+/* an *at call's path: relative to a directory fd that is /proc (opendir + openat/fstatat "1/status"), or absolute/cwd-relative as above */
+int apklayer_proc_hidden_at(int dirfd, const char *path)
+{
+    if (!path || path[0] == '/' || dirfd == AT_FDCWD) return apklayer_proc_hidden(path);
+    const char *c = path;
+    while (!strncmp(c, "./", 2)) c += 2;
+    return *c >= '0' && *c <= '9' && dir_is_proc(dirfd) && proc_rel_hidden(c);
 }
 
 static bool from_root(const char *r, char **path);

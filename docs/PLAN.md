@@ -142,11 +142,20 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
   Android mounts /proc with hidepid=invisible: an app sees only its own uid's processes. Candidate: hide other processes from the game's
   view of /proc (a getdents filter and ENOENT for /proc/<pid> of a process that is not the app's), covering raw syscalls (translator) and
   the proxy libc's calls (path layer), in app processes only (the hub needs the real /proc).
-  Done in the path layer (bridge/native/paths.c apklayer_proc_pid_hidden, paths_preload.c readdir): in an app process (own_data set) a /proc/<pid>
-  outside the app's own cgroup scope is ENOENT for every path call (open, stat, access, readlink, also the translator's raw faccessat/newfstatat/openat
-  if they go through glibc's syscall(), which the preload wraps: unchecked on PGR) and readdir of /proc skips it; `APKLAYER_PROC_VIEW=host` turns it off; tests/native/path-layer.c. Open:
-  getdents64 on an open /proc fd from translated code (a binary_translation patch, 0016, built on the Mac), a check on PGR with ace-proxy.bt, and
-  the sandbox (own uid, same cgroup rule applies; a PID namespace would still be the complete answer).
+  Done (2026-11-13), built but not run on PGR (the owner: no PGR runs while they sleep):
+  - path layer (bridge/native/paths.c `apklayer_proc_pid_hidden`/`apklayer_proc_hidden_at`, paths_preload.c): in an app process (own_data set) a /proc/<pid> outside
+    the app's own cgroup scope is ENOENT under any spelling (`//`, `/./`, `/..`, `/proc/self/root/proc/<pid>`, relative to an open /proc fd or a cwd of /proc);
+    readdir skips it; `APKLAYER_PROC_VIEW=host` turns it off. Checked with a probe and tests/native/path-layer.c (own tests, a plain Linux user session).
+  - binary_translation 0016 (getdents64 on an open /proc), 0017 (/proc/self/status Uid:/Gid:), 0018 (/proc/net, /sys/class/net EACCES as untrusted_app;
+    /proc/self/attr/current = u:r:untrusted_app:s0:c<..>): built on the Mac (CHANGELOG Build log), NOT installed on the PC. The translator's guest faccessat
+    reaches the path layer through glibc's syscall() (checked in its imports); newfstatat and openat through FstatatForGuest/openat (imported by name); the
+    guest's openat2/faccessat2 (439, 437) call syscall() directly with the guest path: also through the preload.
+  - Limits, by design: this is a filter, not a PID namespace: the app sees every process of its own cgroup scope (its JVMs, helpers), the pids are the host's,
+    kill(pid, 0) and /proc/sys/kernel/ns_last_pid-style probes still tell that other pids exist (EPERM vs ESRCH); the sandbox applies the same filter (it
+    shares the host's PID namespace; an uid-based Android view would need a PID namespace per app and host pids elsewhere).
+  - Needs a person (the owner, awake): install the new libberberis_arm64 (sha256 cc7c7e3f...) into ~/apklayer-fix, then `hello-arm64` (its new "proc view" line
+    must say ok, "uid" ok) and, with APKLAYER_SANDBOX=1 on the PC (needs the sudo sandbox.sh once), the same; then PGR with tools/ace/ace-proxy.bt to see
+    whether ACE's /proc probes are gone and whether it still ends.
 - binary_translation 0015: /proc/self/status still shows the real (desktop user's) ids to translated code.
 - 0006 refuses valid chunks at a retired glibc heap's end (next chunk = the 16-byte fencepost; Endfield's and PGR's libil2cpp frees, headers
   0x25/0x45/0x85/0x175/0xb5 just below a 64 MB boundary): accept the fencepost pair (size 16 | PREV_INUSE, then 0 | PREV_INUSE) so the 20
