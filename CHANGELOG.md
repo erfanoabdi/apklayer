@@ -1637,6 +1637,14 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0010 (AT_HWCAP and /proc/cpuinfo agree)
+- Why: the guest's getauxval(AT_HWCAP) carried 8 features, the synthesized /proc/cpuinfo listed 16 (traced in a PGR run: ACE reads
+  /proc/cpuinfo 3 times). A device's kernel derives both from the same CPU, so they always match; the mismatch (evtstrm, fphp, asimdhp,
+  cpuid, asimdrdm, lrcpc, dcpop, asimddp in cpuinfo but not the HWCAP) is a CPU fingerprint a cross-check reads as faked.
+- Command (OrbStack): the new guest_loader/arm64/guest_loader_arch.cc and kernel_api/arm64/open_emulation.cc (tree + 0010) written into
+  ~/los24/frameworks/libs/binary_translation, then `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_arm64`
+  (APKLAYER_NATIVE_BRIDGE=arm64).
+
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0009 (split /proc/self/maps lines keep their file offsets)
 - Why: the guest's /proc/self/maps showed libc's code (r-xp) at file offset 0 instead of 0x58000 (berberis splits the host's merged
   r--p line by the guest x bit and every chunk kept the host line's offset); integrity checks that compare code with the file at the
