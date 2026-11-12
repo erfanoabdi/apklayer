@@ -224,7 +224,6 @@ void window_destroy(struct window *w)
 {
     pointer_forget_window(w);
     text_input_forget_window(w);
-    edgeswipe_forget(w);
     if (keyboard_focus == w) keyboard_focus = NULL;
     for (int i = 0; i < NBUF; i++) if (w->buffers[i]) wl_buffer_destroy(w->buffers[i]);
     if (w->initial_buffer) wl_buffer_destroy(w->initial_buffer);

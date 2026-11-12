@@ -34,7 +34,7 @@ if wl_client_dep.found() and wl_protos_dep.found() and xkb_dep.found() and cairo
       command: [scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
   endforeach
   executable('apklayer-shell',
-    ['main.c', 'client.c', 'window.c', 'geometry.c', 'pointer.c', 'keyboard.c', 'registry.c', 'clipboard.c', 'textinput.c', 'touch.c', 'edgeswipe.c', 'decor.c', 'decor_draw.c', 'navbar.c', 'mobile.c', 'appinfo.c', 'dmabuf.c', 'feedback.c', 'splash.c', 'vsync.c', 'testinput.c', 'activation.c', 'decoration.c', 'wlegl.c', 'wlshell.c', 'maliit.c', generated],
+    ['main.c', 'client.c', 'window.c', 'geometry.c', 'pointer.c', 'keyboard.c', 'registry.c', 'clipboard.c', 'textinput.c', 'touch.c', 'decor.c', 'decor_draw.c', 'navbar.c', 'mobile.c', 'appinfo.c', 'dmabuf.c', 'feedback.c', 'splash.c', 'vsync.c', 'testinput.c', 'activation.c', 'decoration.c', 'wlegl.c', 'wlshell.c', 'maliit.c', generated],
     dependencies: [cairo_dep, gio_shell_dep, wl_client_dep, wl_cursor_dep, xkb_dep, meson.get_compiler('c').find_library('m')],  # hypot (splash.c): glibc 2.39 (Ubuntu 24.04) does not pull libm in by itself
     c_args: ['-Werror=incompatible-pointer-types', '-Werror=implicit-function-declaration'],
     install: true, install_dir: pkg_lib / 'bridge/shell')

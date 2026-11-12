@@ -309,12 +309,6 @@ void keyboard_inject_leave(struct window *w);  /* keyboard.c */
 void keyboard_inject_key(struct window *w, uint32_t evdev, int down);  /* keyboard.c */
 void pointer_inject(struct window *w, int x, int y, int button);  /* pointer.c */
 void touch_inject(struct window *w, int action, int x, int y);  /* touch.c */
-int edgeswipe_down(struct window *w, int finger, int x, int y);  /* edgeswipe.c: an edge swipe on a fullscreen window */
-int edgeswipe_motion(int finger, int x, int y);
-void edgeswipe_up(int finger);
-void edgeswipe_cancel(void);
-int edgeswipe_tick(void);
-void edgeswipe_forget(struct window *w);
 int text_input_inject(struct window *w, const char *text, int preedit);  /* textinput.c */
 void window_inject_configure(struct window *w, int cw, int ch, int activated);  /* geometry.c */
 void window_inject_maximize(struct window *w, int on, int gw, int gh);  /* geometry.c */
