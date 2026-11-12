@@ -1636,6 +1636,13 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - System settings: the hub writes what system_server writes at boot (HubBootSettings: BOOT_COUNT, DEVICE_PROVISIONED, USER_SETUP_COMPLETE, LOCATION_MODE from GeoClue, ENABLED_INPUT_METHODS/DEFAULT_INPUT_METHOD; `apklayer ime enable|disable <pkg>`); android_id stable (SettingsProvider wiped the SSAID table because getInstalledPackages was empty: robolectric 0010); component hosts finish due handler work on SIGTERM; app data per instance (`<data home>/apklayer/<n>/app-data/<pkg>`, the default instance migrates at launch); the path layer covers renameat2, linkat, readlinkat, symlinkat, creat, fchownat, xattrs, mkstemp/mkdtemp, scandir, freopen, mkfifo, inotify.
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
+- 2026-11-12: an app process carries its process name in /proc/self/cmdline before any of the app's code runs (AppEnvironment.nameProcessEarly,
+  from AppHost and ComponentHost before RuntimeEnvironment.getApplication), as ActivityThread.handleBindApplication calls Process.setArgV0 first;
+  it was set only after Application.onCreate. Tencent ACE in PGR reads /proc/<pid>/cmdline from its JNI_OnLoad (traced: bpftrace on the proxy
+  libc's glibc calls) and got the JVM's command line (2534 bytes, `.../jdk/bin/java ...`), which it used as a host app's package in virtual
+  container probes (/data/user/10/<it>/files/shell_c..., Android/data/<it>, sdk/vm_rom.zip). On the NVIDIA PC (a patched host-classes.jar in
+  ~/apklayer-fix): PGR still ends (6 teardown frees instead of 20, then SIGSEGV), so not the only trigger.
+
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0014 (the guest's /proc/self/map_files without host files)
 - Why: bpftrace on RunGuestSyscall (PGR, /tmp/ace-names.txt on the PC): ACE lists /proc/self/map_files and reads all 6001 links,

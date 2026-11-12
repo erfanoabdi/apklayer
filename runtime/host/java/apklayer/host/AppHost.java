@@ -85,6 +85,7 @@ public final class AppHost implements Runnable {
             synchronized (AppHost.class) { firstLaunchQueued = true; }
             new Handler(Looper.getMainLooper()).post(AppHost::firstLaunchMessage);
         }
+        if (describe == null) AppEnvironment.nameProcessEarly();  // before the app's code, as Android's setArgV0
         Application app = RuntimeEnvironment.getApplication(); // created here (lazy), on persistent dirs
         if (describe != null) {
             AppMetadata.describe(app, describe);

@@ -129,6 +129,9 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
   loading spinner, Unity never starts, alive without teardown at 5.5 min. ACE's checks start with the game's Unity code, so the
   no-network runs do not show whether the verdict is the server's; the 65 s run shows the shutdown does not need the network after
   65 s (decided locally, or a verdict received before the cut).
+  Proxy-libc trace (bpftrace on glibc, scratch ace-proxy.bt): ACE read its own /proc/<pid>/cmdline from JNI_OnLoad and got the JVM's
+  command line (the name was set after Application.onCreate); fixed (nameProcessEarly), PGR still ends. Also seen there: /data/user/10/
+  where a device has /data/user/0/ (ACE derives the user from something that is 10 here: getuid() 1000 / 100?), next to check.
 - 0006 refuses valid chunks at a retired glibc heap's end (next chunk = the 16-byte fencepost; Endfield's and PGR's libil2cpp frees, headers
   0x25/0x45/0x85/0x175/0xb5 just below a 64 MB boundary): accept the fencepost pair (size 16 | PREV_INUSE, then 0 | PREV_INUSE) so the 20
   reports go to real bad frees. Those chunks are leaked meanwhile.

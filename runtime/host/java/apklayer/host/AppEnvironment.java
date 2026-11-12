@@ -314,6 +314,15 @@ final class AppEnvironment {
         android.provider.Settings.Secure.putString(resolver, android.provider.Settings.Secure.ANDROID_ID, String.format("%016x", seed.hashCode() * 0x9E3779B97F4A7C15L));
     }
 
+    /** As ActivityThread.handleBindApplication: Process.setArgV0(processName) before any of the app's code runs (its Application class,
+     *  attachBaseContext, static initializers, the libraries they load). Native code reads /proc/self/cmdline that early: Tencent ACE (PGR)
+     *  read the JVM's command line there, took it for a host app's package and probed a virtual container's paths. startRuntime names the
+     *  process again (the same name). */
+    static void nameProcessEarly() {
+        String pkg = System.getProperty("apklayer.package");
+        if (pkg != null) NativeLoader.nameProcess(System.getProperty("apklayer.processname", pkg));
+    }
+
     static void startRuntime(Application app) {
         // as ActivityThread.handleBindApplication: Process.setArgV0(processName); a secondary process has its own name (HostProcessName)
         NativeLoader.nameProcess(System.getProperty("apklayer.processname", app.getPackageName()));
