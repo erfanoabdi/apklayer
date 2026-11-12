@@ -135,9 +135,9 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
   Proxy-libc trace (bpftrace on glibc, tools/ace/ace-proxy.bt): ACE read its own /proc/<pid>/cmdline from JNI_OnLoad and got the JVM's
   command line (the name was set after Application.onCreate); fixed (nameProcessEarly), PGR still ends. Its /data/user/10/<host>/...
   is a fixed probe (user 10: the first secondary user / work profile, where clone apps live), not a uid of ours.
-- binary_translation 0015 (translated code's ids through the translator's bionic libc) is built and installed on the NVIDIA PC; checks:
-  hello-arm64 now asserts getuid and its files' owner equal Process.myUid (group native-bridge; not run yet: no arm64 compiler on that PC),
-  and tools/ace/guest-ids.bt shows the guest's answers live (root). /proc/self/status still shows the real ids.
+- binary_translation 0015 (translated code's ids): checked live on the NVIDIA PC (tools/ace/guest-ids.bt, PGR's liblog: getuid -> 10014,
+  was 1000); still to run: hello-arm64's new uid/files-owner assertions (group native-bridge; that PC has no arm64 compiler).
+  /proc/self/status still shows the real ids.
 - 0006 refuses valid chunks at a retired glibc heap's end (next chunk = the 16-byte fencepost; Endfield's and PGR's libil2cpp frees, headers
   0x25/0x45/0x85/0x175/0xb5 just below a 64 MB boundary): accept the fencepost pair (size 16 | PREV_INUSE, then 0 | PREV_INUSE) so the 20
   reports go to real bad frees. Those chunks are leaked meanwhile.

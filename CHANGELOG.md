@@ -1652,7 +1652,7 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
   `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_arm64` (APKLAYER_NATIVE_BRIDGE=arm64).
 - Result: built in 9 min, sha256 10bac8cef76364575936f1beee844bdef0dfd680a084e2d4d8805eb4df983493 (imports getuid ... getgroups from
   its libc); installed on the NVIDIA PC (the previous one in ~/apklayer-fix/orig/libberberis_arm64.0014.so). PGR starts as before and still
-  ends (20 teardown frees, SIGSEGV ~2 min in; the run before with 6 frees was variance). The guest's answer itself is not checked yet.
+  ends (20 teardown frees, SIGSEGV ~2 min in; the run before with 6 frees was variance). Checked live: PGR's liblog getuid -> 10014 (was 1000).
 
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0014 (the guest's /proc/self/map_files without host files)
 - Why: bpftrace on RunGuestSyscall (PGR, /tmp/ace-names.txt on the PC): ACE lists /proc/self/map_files and reads all 6001 links,
