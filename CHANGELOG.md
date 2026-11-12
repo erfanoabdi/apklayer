@@ -1649,11 +1649,14 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0017 (guest /proc/self/status shows the app's ids)
 - Why: 0015 made getuid/getgid the app's, /proc/self/status still printed the desktop user's. Same command as 0016 (0016 and 0017 in the tree).
+- Status: RUNNING (started 23:32 +0330, patch applied to the tree first, full output kept in this session's task file); result to follow.
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0016 (guest getdents64 on /proc hides other processes)
 - Why: Android's hidepid=invisible /proc view; the path layer hides other cgroups' pids from path calls and readdir, the translator's
   getdents64 on an open /proc fd needs the same (patches/aosp/.../0016).
 - Command (Mac, OrbStack): open_emulation.cc patched in ~/los24/frameworks/libs/binary_translation, then `flock -n ~/los24-build.lock`
-  `breakfast gsi_x86_64 userdebug && m libberberis_arm64` (APKLAYER_NATIVE_BRIDGE=arm64).- Result: built (sha256 a86e0be70a5f173cbabc4d0f721ade8e991ca1809ce6de0b932b1a7d6fcaaf40); not installed or run (the user: no PGR while they sleep).
+  `breakfast gsi_x86_64 userdebug && m libberberis_arm64` (APKLAYER_NATIVE_BRIDGE=arm64).- Result (2026-11-12 23:30 +0330): `build completed successfully (09:10)`, ninja `Build Succeeded: 21 steps`, installed into out/target/product/generic_x86_64/system/lib64/libberberis_arm64.so;
+  error.log empty. Library sha256 a86e0be70a5f173cbabc4d0f721ade8e991ca1809ce6de0b932b1a7d6fcaaf40 (out/soong/.intermediates/.../libberberis_arm64/android_x86_64_shared/).
+  Not installed on the PC or run (the user: no PGR while they sleep). The run kept only `tail -8` of m's output (the tool's task output), not the full log.
 
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0015 (translated code sees the app's uid)
 - Why: the guest's raw getuid answered 1000 (the desktop user, Android's system uid; traced in PGR from its liblog and libc), while
