@@ -1,0 +1,40 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: drop Digitalis's pre-extraction x0 check (BAD proxy PRE-EXTRACT)
+
+Digitalis's debug check in TrampolineFuncGenerator::FuncImpl logged "BAD proxy PRE-EXTRACT" and a register line for every proxied
+call whose first parameter is a pointer type and whose x0 was nonzero below 0x10000. Opaque handles are small values: NVIDIA's GLsync
+objects are 1, 2, ..., so every glClientWaitSync and glDeleteSync of a GL game (PGR, 3DMark) logged two lines, thousands per run
+(4728 in one PGR run). The check only logged; the call itself is unchanged. The extraction mismatch check after it, which compares the
+extracted argument with x0, stays. Header compiled into libberberis_arm64 and every libberberis_proxy_*.
+
+diff --git a/guest_abi/include/berberis/guest_abi/function_wrappers.h b/guest_abi/include/berberis/guest_abi/function_wrappers.h
+--- a/guest_abi/include/berberis/guest_abi/function_wrappers.h
++++ b/guest_abi/include/berberis/guest_abi/function_wrappers.h
+@@ -132,24 +132,9 @@ class TrampolineFuncGenerator<Res(Args...), kCallingConventionsVariant> {
+ 
+   template <typename Func, typename std::size_t... I>
+   static void FuncImpl(Func func, ThreadState* state, std::index_sequence<I...>) {
+-    // region digitalis - pre-extraction raw register check
+-#if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
+-    if constexpr (sizeof...(Args) > 0) {
+-      if constexpr (std::is_pointer_v<std::tuple_element_t<0, std::tuple<Args...>>>) {
+-        auto raw_x0 = state->cpu.x[0];
+-        if (raw_x0 != 0 && raw_x0 < 0x10000) {
+-          TRACE_AND_ALOGE("BAD proxy PRE-EXTRACT: raw_x0=0x%lx func=%p pc=0x%lx lr=0x%lx",
+-              (unsigned long)raw_x0, reinterpret_cast<void*>(func),
+-              (unsigned long)state->cpu.insn_addr, (unsigned long)state->cpu.x[30]);
+-          TRACE_AND_ALOGE("  x0=0x%lx x1=0x%lx x2=0x%lx x3=0x%lx x8=0x%lx x29=0x%lx",
+-              (unsigned long)state->cpu.x[0], (unsigned long)state->cpu.x[1],
+-              (unsigned long)state->cpu.x[2], (unsigned long)state->cpu.x[3],
+-              (unsigned long)state->cpu.x[8], (unsigned long)state->cpu.x[29]);
+-        }
+-      }
+-    }
+-#endif
+-    // endregion
++    // apklayer patch: no pre-extraction check of x0. It logged "BAD proxy PRE-EXTRACT" for every pointer-typed first argument
++    // below 0x10000, but opaque handles are small values (NVIDIA's GLsync objects are 1, 2, ...), so each glClientWaitSync and
++    // glDeleteSync of a GL game logged two lines. The extraction mismatch check below still reports a real mix-up.
+     GuestParamsValues<Func, kCallingConventionsVariant> params(state);
+     // region digitalis - extraction mismatch check
+ #if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)

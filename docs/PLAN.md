@@ -98,8 +98,13 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
   /proc/self/maps, auxv/cpuinfo, emulator properties, TracerPid). No per-app workaround: the environment it checks must look like a device's.
   2026-11-12 (bpftrace on the NVIDIA PC): no guest svc sends PGR's fatal signal (it fired for Endfield's SIGTRAP), and one PGR run ended
   instead with a wild read (SEGV_MAPERR at 0x83, guest registers in libanogs +0x3594dc/+0x1117cc): ACE crashes on purpose after it has
-  decided, so the kill site does not name the check. Next: build 0012 (the guest's maps name no host mapping: libberberis, the JVM,
-  x86_64 libraries) and run PGR and Endfield; if they still turn, the remaining host names (JDK modules, CDS archive, locale files).
+  decided, so the kill site does not name the check. 0012 (the guest's maps name no host mapping) did not change it either, and
+  0011 logged no guest svc kill. bpftrace on the host side: the fatal SIGSEGV is a re-raise (rt_tgsigqueueinfo through glibc's
+  syscall(), then tgkill), so PGR crashes, it is not killed. An earlier BERBERIS_TRACING run (~/apklayer-fix/t/pgr-trace.txt on the PC)
+  shows the crash: a thread makes one page executable, installs handlers for 6/11/4/5/7/3/15, clears the page's exec, then jumps to
+  0x1069; its SIGSEGV handler (0x...63ba) is misaligned, so berberis takes the default action. Suspects: a stale or wrong translation
+  of that runtime-built page; the guest reading back a host handler through sigaction; berberis's "guest call didn't restore sp"
+  (16 bytes, 3 per run). Next: a BERBERIS_TRACING run with the maps saved, to name the page, the handler and the caller.
 - 0006 refuses valid chunks at a retired glibc heap's end (next chunk = the 16-byte fencepost; Endfield's and PGR's libil2cpp frees, headers
   0x25/0x45/0x85/0x175/0xb5 just below a 64 MB boundary): accept the fencepost pair (size 16 | PREV_INUSE, then 0 | PREV_INUSE) so the 20
   reports go to real bad frees. Those chunks are leaked meanwhile.

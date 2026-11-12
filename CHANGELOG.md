@@ -1637,6 +1637,15 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-12 - gsi_x86_64 libberberis_arm64 and every libberberis_proxy_*: binary_translation 0013 (no BAD proxy PRE-EXTRACT)
+- Why: Digitalis's debug check logged two lines for each proxied call whose pointer-typed first argument is below 0x10000; NVIDIA's
+  GLsync handles are 1, 2, ..., so each glClientWaitSync/glDeleteSync did (4728 lines in one PGR run). Logging only; the header is
+  compiled into the translator and each proxy library.
+- Command (Mac, OrbStack): function_wrappers.h (tree + 0013) in ~/los24/frameworks/libs/binary_translation, then `flock -n ~/los24-build.lock`
+  `breakfast gsi_x86_64 userdebug && m libberberis_arm64 libberberis_proxy_*` (the 21 staged proxies; APKLAYER_NATIVE_BRIDGE=arm64).
+- Result: built in 10 min (22 libraries, none with the check's string); installed on the NVIDIA PC over runtime 0.4.17's android-libs
+  and ~/apklayer-fix (the previous ones in ~/apklayer-fix/orig/before-0013/); libberberis_arm64 sha256 c789bc2d3b2398cf07163b0b083af24f1ea38030a3ae446dda9623f5f97e3a53.
+
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0012 (the guest's /proc/self/maps names no host mapping)
 - Why: the guest's maps listed libberberis_arm64.so, its code cache, the JVM and /usr/lib/x86_64-linux-gnu (no device's process has
   them); ACE reads the maps before it wrecks PGR and Endfield. Written on the NVIDIA PC (no los24 there) against upstream plus 0009 and
@@ -1646,7 +1655,9 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Result: the first build failed in 0011 (glibc 2.17 sysroot: no gettid(); write's result unused under -Werror): 0011 now uses
   syscall(__NR_gettid) and checks write. 0012 regenerated against the fork's file (its includes differ from upstream). Built in 9 min,
   sha256 065e09bdf9170e5b286faf9485f3083bd30b209d4f6361e28a164df9845cf9b6 (3046720 bytes); installed on the NVIDIA PC (the previous one in
-  orig/libberberis_arm64.0010final.so). PGR/Endfield: TODO.
+  orig/libberberis_arm64.0010final.so). PGR (BERBERIS_LOG_SELF_SIGNAL=1): unchanged, SIGSEGV SI_TKILL at 90 s on the thread of ACE's
+  frees (20 of them), and 0011 logged no guest kill/tkill/tgkill: the signal goes out through the proxy libc, not a guest svc. The
+  host names in the maps were not ACE's trigger (as 0009's offsets and 0010's HWCAP were not); 0012 stays (a device shows none).
 
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0011 (the guest caller of a signal to its own process)
 - Why: PGR and Endfield end themselves from guest code (ACE's libanogs/libanort: PGR a SIGSEGV with SI_TKILL ~7 s after its invalid
