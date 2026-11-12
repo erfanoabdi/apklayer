@@ -113,8 +113,9 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
   only JDK modules/classes.jsa, locale-archive, libc.mo, gconv cache still named), so those names come from elsewhere (open).
   Per-thread map spellings (/proc/<tid>/maps, /proc/self/task/<tid>/maps, /proc/thread-self/maps) are other inodes: not emulated.
   Runs with 0012+0013: traced (BERBERIS_TRACING=1) still alive at the title screen after 7.5 min (with BERBERIS_SHOW_HOST_MAPS=1
-  the traced run crashed at 134 s); untraced, ACE's teardown (20 frees) and a SIGSEGV at ~5 min (before: 90-100 s), the same second
-  as an `apklayer screenshot` of it.
+  the traced run crashed at 134 s); untraced runs end at 90-100 s with 0012 too (one outlier at ~5 min), also after 0012 was
+  extended (host directories, JVM data, per-thread maps paths): the maps are not ACE's trigger; the long traced run is the
+  tracing's slowness (ACE's checks are timed). Open: where ACE gets the host library names it opens.
 - 0006 refuses valid chunks at a retired glibc heap's end (next chunk = the 16-byte fencepost; Endfield's and PGR's libil2cpp frees, headers
   0x25/0x45/0x85/0x175/0xb5 just below a 64 MB boundary): accept the fencepost pair (size 16 | PREV_INUSE, then 0 | PREV_INUSE) so the 20
   reports go to real bad frees. Those chunks are leaked meanwhile.

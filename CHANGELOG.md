@@ -1644,7 +1644,8 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Command (Mac, OrbStack): kernel_api/open_emulation.cc (tree + 0012) in ~/los24/frameworks/libs/binary_translation, then
   `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_arm64` (APKLAYER_NATIVE_BRIDGE=arm64).
 - Result: built in 9 min, sha256 9aa9cbc81e3ed2d6c79339e997d6f08d3ad68fe01228ff32b998966c3849f0a6 (with 0013); installed on the
-  NVIDIA PC (the previous one in ~/apklayer-fix/orig/libberberis_arm64.0013.so). PGR: below.
+  NVIDIA PC (the previous one in ~/apklayer-fix/orig/libberberis_arm64.0013.so). PGR (plain run): ACE's teardown (20 frees) and the
+  SIGSEGV at 90.7 s, as before 0012: the ~5 min run was an outlier, not 0012's doing.
 
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64 and every libberberis_proxy_*: binary_translation 0013 (no BAD proxy PRE-EXTRACT)
 - Why: Digitalis's debug check logged two lines for each proxied call whose pointer-typed first argument is below 0x10000; NVIDIA's
