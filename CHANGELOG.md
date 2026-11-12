@@ -1647,6 +1647,11 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
   ~/apklayer-fix): PGR still ends (6 teardown frees instead of 20, then SIGSEGV), so not the only trigger.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0016 (guest getdents64 on /proc hides other processes)
+- Why: Android's hidepid=invisible /proc view; the path layer hides other cgroups' pids from path calls and readdir, the translator's
+  getdents64 on an open /proc fd needs the same (patches/aosp/.../0016).
+- Command (Mac, OrbStack): open_emulation.cc patched in ~/los24/frameworks/libs/binary_translation, then `flock -n ~/los24-build.lock`
+  `breakfast gsi_x86_64 userdebug && m libberberis_arm64` (APKLAYER_NATIVE_BRIDGE=arm64).
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0015 (translated code sees the app's uid)
 - Why: the guest's raw getuid answered 1000 (the desktop user, Android's system uid; traced in PGR from its liblog and libc), while
   host-side bionic code gets the app uid (bionic_translation 0056/0061). The id syscalls now go through the translator's bionic libc;

@@ -1,0 +1,65 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: the guest's getdents64 on /proc leaves out other apps' and the desktop's processes
+
+Android mounts /proc with hidepid=invisible: an app sees only its own processes. apklayer's path layer (bridge/native/paths.c) hides every
+/proc/<pid> outside the app's cgroup scope from path calls and readdir; Tencent ACE (PGR, Endfield) lists /proc through the guest's
+getdents64 on an open directory, which reaches the kernel here. GetDents64ForGuest now drops the numeric entries that the preload's
+apklayer_proc_pid_hidden (found with dlsym; without the preload nothing is hidden) reports, as 0014 does for map_files; a batch filtered
+to nothing fetches the next one. APKLAYER_PROC_VIEW=host turns it off. Applies after 0015. Module libberberis_arm64.
+
+diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
+--- a/kernel_api/open_emulation.cc
++++ b/kernel_api/open_emulation.cc
+@@ -16,6 +16,7 @@
+ 
+ #include "berberis/kernel_api/open_emulation.h"
+ 
++#include <dlfcn.h>  // apklayer patch (0016)
+ #include <fcntl.h>
+ #include <sys/stat.h>
+ #include <sys/syscall.h>  // apklayer patch (0014): __NR_getdents64
+@@ -152,11 +153,43 @@
+   return !show_host_maps && ReadOwnMapFilesLink(dirfd, path, target, sizeof(target)) && IsHostOnlyLinkTarget(target);
+ }
+ 
++// apklayer patch (0016): the path layer's (apklayer-preload, first in symbol lookup) test whether /proc/<pid> is a process the app does not
++// see (another cgroup: Android's hidepid view); null without the preload.
++static bool IsHiddenProcPid(const char* name) {
++  static auto* hidden = reinterpret_cast<int (*)(const char*)>(dlsym(RTLD_DEFAULT, "apklayer_proc_pid_hidden"));
++  return hidden != nullptr && hidden(name) != 0;
++}
++
++static bool IsProcDir(int fd) {
++  struct stat fd_stat;
++  struct stat dir_stat;
++  return fstat(fd, &fd_stat) == 0 && stat("/proc", &dir_stat) == 0 && fd_stat.st_ino == dir_stat.st_ino && fd_stat.st_dev == dir_stat.st_dev;
++}
++
+ long GetDents64ForGuest(int fd, void* dirp, size_t count) {
+   static const bool show_host_maps = getenv("BERBERIS_SHOW_HOST_MAPS") != nullptr;
+   for (;;) {
+     long n = syscall(__NR_getdents64, fd, dirp, count);
+-    if (n <= 0 || show_host_maps || !IsProcSelfMapFilesDir(fd)) return n;
++    if (n <= 0) return n;
++    const bool proc_dir = IsProcDir(fd);  // apklayer patch (0016): the process directories of other apps and the desktop are left out
++    if (proc_dir) {
++      char* buf = static_cast<char*>(dirp);
++      long kept = 0;
++      for (long pos = 0; pos < n;) {
++        uint16_t reclen;
++        memcpy(&reclen, buf + pos + 16, sizeof(reclen));
++        if (reclen == 0 || pos + reclen > n) return n;
++        const char* name = buf + pos + 19;
++        if (!(name[0] >= '0' && name[0] <= '9' && IsHiddenProcPid(name))) {
++          if (kept != pos) memmove(buf + kept, buf + pos, reclen);
++          kept += reclen;
++        }
++        pos += reclen;
++      }
++      if (kept > 0) return kept;
++      continue;  // a batch filtered to nothing is not the end of the directory
++    }
++    if (show_host_maps || !IsProcSelfMapFilesDir(fd)) return n;
+     // struct linux_dirent64 { u64 d_ino; s64 d_off; u16 d_reclen; u8 d_type; char d_name[]; }, the same for guest and host.
+     char* buf = static_cast<char*>(dirp);
+     long kept = 0;
