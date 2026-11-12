@@ -3,6 +3,19 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-12: NVIDIA PC on main a3e931cd; PGR and Endfield die from Tencent ACE, not from the translator's heap or graphics
+- The tester's NVIDIA PC runs a deb of main (0.4.18+gita3e931cd, tools/release/build-deb.sh noble) with libberberis_arm64 0007/0008 and the
+  proxy libc below (~/apklayer-fix). UiBench draws on the GPU in a fresh instance (218 colours, services stop clean).
+- Endfield had no Vulkan after the update: the Vulkan probe's cache from the 0.4.18 CLI ("-", until the next login) outlived it, hidden
+  until then by APKLAYER_VULKAN_* lines in ~/.config/apklayer/env. Deleting the cache gives Vulkan 1.4 (PLAN: key it to the CLI).
+- Endfield is black because it dies before its first frame: its SurfaceView's BLAST layer never gets a buffer (SurfaceFlinger dumps at 25
+  and 50 s, `apklayer exec libapklayer_servicetool.so dump SurfaceFlinger`); UnityGfxDeviceW sends itself SIGTRAP through a guest syscall
+  ~15 s in (RunGuestSyscall), and systemd-coredump writes its 747 MB core for a minute while the window stays black.
+- binary_translation 0006 logs the guest caller of an invalid free (x30 of the calling guest thread; the host caller was always
+  WrapHostCallForGuestErrno). PGR: every real invalid free comes from libanogs.so +0x2f4d34 (Tencent ACE: double frees, headers that are
+  pointers or random words), then the process sends itself SIGSEGV and the JVM aborts. The libil2cpp ones are 0006 false positives at a
+  retired heap's fencepost (PLAN).
+
 ## 2026-11-11: Vulkan presentation on NVIDIA's driver (Arknights: Endfield's "Unable to initialize the Unity Engine Gfx API")
 - Endfield (Unity, arm64 through the native bridge) showed a black window with Unity's dialog "Unable to initialize the Unity Engine Gfx
   API." and ended itself: it renders with Vulkan only, and the CLI left NVIDIA's proprietary driver out of the Vulkan presentation probe
@@ -1624,6 +1637,49 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0010 (AT_HWCAP and /proc/cpuinfo agree)
+- Why: the guest's getauxval(AT_HWCAP) carried 8 features, the synthesized /proc/cpuinfo listed 16 (traced in a PGR run: ACE reads
+  /proc/cpuinfo 3 times). A device's kernel derives both from the same CPU, so they always match; the mismatch (evtstrm, fphp, asimdhp,
+  cpuid, asimdrdm, lrcpc, dcpop, asimddp in cpuinfo but not the HWCAP) is a CPU fingerprint a cross-check reads as faked.
+- Command (OrbStack): the new guest_loader/arm64/guest_loader_arch.cc and kernel_api/arm64/open_emulation.cc (tree + 0010) written into
+  ~/los24/frameworks/libs/binary_translation, then `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_arm64`
+  (APKLAYER_NATIVE_BRIDGE=arm64).
+- Result: the first build (all 8 features, sha256 5e82cdf7...) advertised HWCAP_CPUID and PGR died 1.5 s in with SIGILL on
+  `mrs x9, ID_AA64PFR1_EL1` (0xd5380429): the decoder emulates MIDR_EL1/CTR_EL0 but not the ID_AA64* registers, so code that saw the
+  bit read an undecoded one. 0010 reworked to leave cpuid out of both tables (14 features); rebuilt. PGR: TODO after the rebuild.
+
+### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0009 (split /proc/self/maps lines keep their file offsets)
+- Why: the guest's /proc/self/maps showed libc's code (r-xp) at file offset 0 instead of 0x58000 (berberis splits the host's merged
+  r--p line by the guest x bit and every chunk kept the host line's offset); integrity checks that compare code with the file at the
+  reported offset mismatch. Suspected in Tencent ACE's turn on PGR and Endfield.
+- Command (OrbStack): the new kernel_api/open_emulation.cc (tree + 0009) written into ~/los24/frameworks/libs/binary_translation, then
+  `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_arm64` (APKLAYER_NATIVE_BRIDGE=arm64), after the proxy
+  libc build below.
+- Result: built in 9 min, sha256 d54cc5273f467dffc9bef9fc3981cb2a6c20d9e77ef20074381051855d9f5200 (3030440 bytes); installed on the NVIDIA PC
+  (the 0008 build in orig/libberberis_arm64.0008.so). The guest's maps show libc's code at 00058000. PGR: unchanged, the title screen at
+  40-60 s, ACE's teardown (libanogs +0x2f4d34) at 82 s, SIGSEGV at ~90 s: the offsets were not ACE's trigger.
+
+### 2026-11-12 - gsi_x86_64 libberberis_proxy_libc: 0006 reports the guest frame chain and tid; the fencepost false positive (ACE)
+- Why: PGR's double frees come from one routine in libanogs.so (Tencent ACE) that frees 16 slots of an object without clearing them; it
+  runs twice on the same object, and the obfuscated code builds its address at run time, so only the guest stack shows who calls it.
+  Also: valid chunks ending at a retired heap's fencepost were refused (PLAN).
+- Command (OrbStack): the new free_quarantine.cc written into ~/los24/frameworks/libs/binary_translation, then
+  `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_proxy_libc` (APKLAYER_NATIVE_BRIDGE=arm64).
+- Result: built in 9 min, sha256 9ddc56acb6358736a8fb13a9cc84e0ba0e4f1710d2fb17fb74f21528365b8526; installed on the NVIDIA PC. PGR: ACE's
+  16-slot teardown runs on two threads for the same object, one after the other (tids 654544 and 654390); the guest frame chain is not
+  usable past the first frame in ACE's obfuscated code (no standard frame records).
+
+### 2026-11-12 - gsi_x86_64 libberberis_proxy_libc: 0006 logs each invalid free's guest caller (PGR)
+- Why: every logged `free(...) of no glibc chunk` named the same host caller, libberberis_arm64+0xb6a8f, which is the return address
+  in WrapHostCallForGuestErrno (binary_translation 0003): every guest call into the proxy libc comes through it. The guest's x30 names
+  the game code that freed the pointer.
+- Command (OrbStack): the new free_quarantine.cc (upstream + the new 0006) written into ~/los24/frameworks/libs/binary_translation,
+  then `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_proxy_libc` (APKLAYER_NATIVE_BRIDGE=arm64).
+- Result: built in 9 min, sha256 baf866ba2e046c909a5fd1c51a490c5f07469074c35d46229def8d54610cb51b (85440 bytes); installed on the NVIDIA PC
+  (~/apklayer-fix, the previous one in orig/libberberis_proxy_libc.tcache.so). Endfield: three frees on entry, guest callers in its
+  libil2cpp.so (+0xca08fe0, +0xca1695c, +0xca2cf28), each a valid non-main-arena chunk (headers 0x25, 0x175, 0xb5) just below a 64 MB
+  heap's end: 0006 refuses a next chunk of 16 bytes, which is glibc's fencepost at a retired heap's end (a false positive, leaked).
+
 ### 2026-11-11 - gsi_x86_64 libberberis_arm64: binary_translation 0007 (BERBERIS_HEAVY_DENY) and 0008 (berberis.mode.<package>)
 - Why: PGR's 3D home scene is block noise in two-gear mode and clean with BERBERIS_MODE=lite-translate-or-interpret (NVIDIA PC,
   2026-11-11): the heavy optimizer miscompiles something. 0007 lets a run keep instruction groups out of the heavy tier; 0008 gives one
@@ -1632,6 +1688,8 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
   0007 and 0008), then
   `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_arm64` (APKLAYER_NATIVE_BRIDGE=arm64), after the
   proxy libc build above.
+- Result: built 2026-11-11 22:41, sha256 6bfd232961ee67130531c5e33db7cac478b8856b1b0779e75b23be6af3103312 (3030440 bytes; the tree's
+  sources match 0007 and 0008); installed on the NVIDIA PC 2026-11-12 (~/apklayer-fix, the previous c4e7ee14 in orig/).
 
 ### 2026-11-11 - gsi_x86_64 libberberis_proxy_libc: 0006 checks the quarantine's evicted pointer and tcache double frees
 - Why: with the heap checks PGR still died: a JVM fatal SIGSEGV (SI_TKILL) at ~134 s in two-gear mode, and with
