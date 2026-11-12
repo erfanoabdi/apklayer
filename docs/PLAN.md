@@ -31,7 +31,10 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - Present fences signal at the hand-over to the shell, not the real present (needs a kernel fence the composer can signal; then wp_presentation).
 - Swap interval 0: lower near-empty frame rate (waits for a free gbm buffer); an attach that waited drops that buffer's release fence (EglAttach.cpp).
 - Host-ES1 path (Gles1.cpp) untested: needs NVIDIA or a Mesa with -Dgles1=enabled.
-- Vulkan presentation untested on NVIDIA and AMD; Unity games with Vulkan on the PC unchecked; the probe takes any GPU, not the instance's.
+- Vulkan presentation untested on AMD (NVIDIA passes vulkan-present since a3e931cd); the probe takes any GPU, not the instance's.
+- The probe's cached answer ($XDG_RUNTIME_DIR/apklayer-host-vulkan, until the next login) outlives a package update: on the NVIDIA PC the
+  0.4.18 CLI's "-" (no Vulkan) stayed after the update to a3e931cd, so Endfield had no Vulkan until the file was deleted (2026-11-12).
+  Key the cache to the CLI's version (or drop it on update).
 - android.hardware.vulkan.level declared 0; Play feature list lacks multitouch, sensor.*, opengles.aep, vulkan.* where the host has them.
 - GPU per instance: build and test the Vulkan device filter (DeviceSelect.h); copy fallback when a buffer import fails; the VA plugin's device choice; LINEAR on Intel.
 - OTR2 on the PC at 2448x1374 ~30 fps (bound by GPU or its translated thread); Swappy's other inputs untested; the swap bpftrace trace does not load on the PC.
@@ -86,9 +89,15 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - A Halium device without binderfs (host context fixed at /dev/binder): isHalium() needs binderfs today.
 
 ## Native bridge (x86_64)
-- PGR on the NVIDIA PC still aborts about 2 min in, now `double free or corruption (out)` with binary_translation 0006's munmap_chunk check
-  (2026-11-11): find which guest free passes 0006 (7 `free(...) of no glibc chunk` from one host caller before it; ~2900 `BAD proxy
-  PRE-EXTRACT: raw_x0=0x1` lines per run).
+- Tencent ACE (`libanogs.so`) turns on PGR and Endfield under the bridge (2026-11-12, NVIDIA PC, 0006 logging guest callers):
+  PGR's real invalid frees all come from `libanogs.so +0x2f4d34` (the same pointers freed twice, headers that are pointers or random words),
+  ~7 s later the process sends itself SIGSEGV (SI_TKILL) and the JVM aborts (or glibc's `malloc_consolidate(): invalid chunk size`);
+  Endfield's UnityGfxDeviceW sends itself SIGTRAP through a guest syscall ~15 s in, before its first frame (core in coredumpctl). Next: log
+  the guest pc of a game's own tgkill/kill (as 0006 logs free callers) and find what ACE reads before it turns (the bridge's libraries in
+  /proc/self/maps, auxv/cpuinfo, emulator properties, TracerPid). No per-app workaround: the environment it checks must look like a device's.
+- 0006 refuses valid chunks at a retired glibc heap's end (next chunk = the 16-byte fencepost; Endfield's and PGR's libil2cpp frees, headers
+  0x25/0x45/0x85/0x175/0xb5 just below a 64 MB boundary): accept the fencepost pair (size 16 | PREV_INUSE, then 0 | PREV_INUSE) so the 20
+  reports go to real bad frees. Those chunks are leaked meanwhile.
 - PGR's home scene on NVIDIA: the 3D character and some UI tiles (Missions) are block noise (correct texel blocks mixed with blocks of
   random saturated pixels, the same places every run); the title screen is clean. Not the gralloc buffers: every buffer is tiled and the
   CPU-drawn window round-trips exactly (checked with a logging HAL, 2026-11-11), and with the CPU-drawn buffers kept LINEAR (no tiled <->
@@ -99,9 +108,11 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
   each with APKLAYER_GL_HIDE): multisampled_render_to_texture, float/half-float/packed-float color buffers; Vulkan instead of GLES (PGR
   stays on GLES). Leading idea: the stray guest frees that pass 0006 put array memory into glibc's tcache (16 bytes written into it,
   then handed out again): corrupted 16-byte ASTC blocks are exactly blocks of random pixels. Test with the stricter 0006 (Build log).
+  The noise is gone lite-translated: libberberis_arm64 with 0007/0008 is installed on the NVIDIA PC (2026-11-12) and PGR's
+  berberis.mode.<package> is lite-translate-or-interpret; the home scene is not checked yet (the runs end at the title screen).
 - No translation cache across starts; Telegram (no x86_64 FOSS APK to test); the manager's "translated" label.
 - The guest JVM finds the host's libjsig through RTLD_DEFAULT: watch for a third library's later SIGSEGV handler.
-- Unity: Tencent ACE past the first screens, `hpatchz`; no backtrace in the fault note; app log cap misses Log lines.
+- Unity: `hpatchz`; no backtrace in the fault note; app log cap misses Log lines (Unity's own graphics API lines never reach the app log).
 
 ## Sandbox (before it can be the default)
 - The NVIDIA tester's box with docs/INSTALL.md Troubleshooting's checklist (cause unconfirmed: nvidia-modprobe under no-new-privileges, glvnd vendor choice).

@@ -10,12 +10,15 @@ with a next chunk that has PREV_INUSE and fits, and a free previous chunk whose 
 aborts; anything else is logged (the first 20) and not freed: a leak instead of the abort. The quarantine ring's evicted pointer
 is checked again when glibc really gets it, and a chunk already in glibc's tcache (its tcache key) is a double free left alone
 ("free(): double free detected in tcache 2").
+Each logged line names the guest code that called free: the calling guest thread's link register (x30) and pc, from its state found
+with GuestThreadMap::FindThread (never attaching a thread); the host return address is the same WrapHostCallForGuestErrno for every
+guest call. "on entry" is the free's own caller, "at eviction" a pointer an earlier free put in the quarantine ring.
 
 diff --git a/android_api/libc/free_quarantine.cc b/android_api/libc/free_quarantine.cc
-index 823190f8..0b9f4448 100644
+index 823190f..8630859 100644
 --- a/android_api/libc/free_quarantine.cc
 +++ b/android_api/libc/free_quarantine.cc
-@@ -45,6 +45,144 @@
+@@ -45,6 +45,171 @@
  
  extern "C" void __real_free(void* ptr);
  
@@ -26,6 +29,20 @@ index 823190f8..0b9f4448 100644
 +#include <fcntl.h>
 +#include <sys/mman.h>
 +#include <unistd.h>
++
++// The guest thread's state, for the guest caller of an invalid free. guest_thread.h's own includes (guest_state, runtime_primitives)
++// are on this library's path through libberberis_guest_abi_headers; guest_thread_map.h's are not, so its two exported calls used
++// here are declared as it declares them.
++#include "../../guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h"
++#include "berberis/guest_state/guest_state_opaque.h"
++
++namespace berberis {
++class GuestThreadMap {
++ public:
++  static GuestThreadMap* GetInstance();
++  GuestThread* FindThread(pid_t tid);
++};
++}  // namespace berberis
 +
 +namespace {
 +
@@ -144,13 +161,26 @@ index 823190f8..0b9f4448 100644
 +  return key != 0 && reinterpret_cast<const size_t*>(ptr)[1] == key;
 +}
 +
-+void ReportInvalidFree(void* ptr, void* caller) {
++// Every guest call into the proxy libc arrives through WrapHostCallForGuestErrno, so the host return address names no caller: the
++// guest code that called free is the calling guest thread's link register (x30; its pc is the free trampoline). The thread is only
++// looked up (GuestThreadMap::FindThread), never attached as GetCurrentGuestThread would. "on entry": the free's own caller;
++// "at eviction": the quarantine ring's oldest pointer, freed by an earlier call, reported with the caller of the free that evicted it.
++void ReportInvalidFree(void* ptr, void* caller, const char* when) {
 +  static std::atomic<int> reported{0};
 +  if (reported.fetch_add(1, std::memory_order_relaxed) >= 20) return;
-+  char line[200];
++  unsigned long guest_lr = 0, guest_pc = 0;
++  if (berberis::GuestThread* thread = berberis::GuestThreadMap::GetInstance()->FindThread(gettid());
++      thread != nullptr && thread->state() != nullptr) {
++    const berberis::CPUState& cpu = berberis::GetCPUState(*thread->state());
++    guest_lr = static_cast<unsigned long>(berberis::GetLinkRegister(cpu));
++    guest_pc = static_cast<unsigned long>(berberis::GetInsnAddr(cpu));
++  }
++  char line[256];
 +  size_t header = reinterpret_cast<uintptr_t>(ptr) % 16 ? 0 : reinterpret_cast<const size_t*>(ptr)[-1];
-+  int n = snprintf(line, sizeof line, "berberis: free(%p) of no glibc chunk (header 0x%zx, host caller %p): left allocated\n", ptr, header,
-+                   caller);
++  int n = snprintf(line, sizeof line,
++                   "berberis: free(%p) of no glibc chunk %s (header 0x%zx, guest caller 0x%lx, guest pc 0x%lx, host caller %p): left "
++                   "allocated\n",
++                   ptr, when, header, guest_lr, guest_pc, caller);
 +  if (n > 0) write(2, line, static_cast<size_t>(n) < sizeof line ? static_cast<size_t>(n) : sizeof line - 1);
 +}
 +
@@ -160,12 +190,12 @@ index 823190f8..0b9f4448 100644
  #if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
  namespace {
  
-@@ -67,12 +205,21 @@ extern "C" void __wrap_free(void* ptr) {
+@@ -67,12 +232,21 @@ extern "C" void __wrap_free(void* ptr) {
      __real_free(ptr);
      return;
    }
 +  if (GlibcHost() && NotAGlibcChunk(ptr)) {  // apklayer patch: see NotAGlibcChunk
-+    ReportInvalidFree(ptr, __builtin_return_address(0));
++    ReportInvalidFree(ptr, __builtin_return_address(0), "on entry");
 +    return;
 +  }
  
@@ -176,7 +206,7 @@ index 823190f8..0b9f4448 100644
    void* evicted = QuarantineSwap(ptr);
 +  // apklayer patch: checked again when glibc really gets it (a chunk freed twice, or merged meanwhile, is no longer a live chunk)
 +  if (evicted != nullptr && GlibcHost() && (InTcache(evicted) || NotAGlibcChunk(evicted))) {
-+    ReportInvalidFree(evicted, __builtin_return_address(0));
++    ReportInvalidFree(evicted, __builtin_return_address(0), "at eviction");
 +    return;
 +  }
    if (evicted != nullptr) {
