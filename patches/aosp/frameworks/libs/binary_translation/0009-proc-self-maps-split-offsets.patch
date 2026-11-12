@@ -1,0 +1,48 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: a split /proc/self/maps line keeps its chunk's own file offset
+
+OpenatProcSelfMapsForGuest splits a host line into guest-executable and non-executable chunks (the guest's x bit). Guest code is never
+host-executable, so the host kernel merges a library's read-only and code segments into one mapping: the guest libc is one r--p line
+from offset 0 over both. Every chunk printed the host line's offset, so the guest saw libc's code (r-xp) at file offset 0 where a
+device shows 0x58000, and anything that compares a library's code with the file at the reported offset found a mismatch (suspected
+in PGR's and Endfield's Tencent ACE, which wreck the game minutes in under the bridge). A chunk of a file-backed line (inode not 0) now prints the
+host offset plus how far into the line it starts; anonymous lines keep 0, as the kernel prints them.
+
+diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
+index 671a3d4..6b5e9ae 100644
+--- a/kernel_api/open_emulation.cc
++++ b/kernel_api/open_emulation.cc
+@@ -184,6 +184,16 @@ int OpenatProcSelfMapsForGuest(int dirfd, int flags, mode_t mode) {
+     // endregion
+     // Split the line into guest exec / no-exec chunks.
+     uintptr_t original_start = start;
++    // apklayer patch: a chunk of a file-backed line starts that much further into the file. Guest code is never host-executable, so
++    // the host kernel merges a library's read-only and code segments into one mapping (libc: r--p from offset 0 over both); the split
++    // chunk with the code then claimed file offset 0 where a device shows the segment's own (libc 0x58000), and code compared against
++    // the file at the reported offset (integrity checks) did not match. Anonymous lines (inode 0) keep 0, as the kernel prints them.
++    uintptr_t file_offset = 0;
++    unsigned long inode = 0;
++    int offset_end = 0;
++    bool file_backed = sscanf(cur_line.c_str() + prot_offset, "%*4s %" SCNxPTR "%n %*x:%*x %lu", &file_offset, &offset_end,
++                              &inode) == 2 &&
++                       inode != 0;
+     while (start < end) {
+       auto [is_exec, region_size] =
+           maps_shadow->GetExecutableRegionSize(GuestAddr(start), end - start);
+@@ -209,7 +219,15 @@ int OpenatProcSelfMapsForGuest(int dirfd, int flags, mode_t mode) {
+       CHECK_LT(static_cast<size_t>(chars_num), sizeof(addr_range_buf));
+       guest_maps.append(addr_range_buf);
+       // Append the rest of the line starting from protections and including the front space.
+-      guest_maps.append(cur_line.data() + prot_offset - 1);
++      if (file_backed) {  // apklayer patch: the chunk's own file offset (kernel format: at least 8 hex digits)
++        char offset_buf[64];
++        snprintf(offset_buf, sizeof(offset_buf), " %.4s %08" PRIxPTR, cur_line.data() + prot_offset,
++                 file_offset + (start - original_start));
++        guest_maps.append(offset_buf);
++        guest_maps.append(cur_line.data() + prot_offset + offset_end);
++      } else {
++        guest_maps.append(cur_line.data() + prot_offset - 1);
++      }
+       guest_maps.append("\n");
+       start += region_size;
+     }

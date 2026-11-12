@@ -1637,6 +1637,21 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0009 (split /proc/self/maps lines keep their file offsets)
+- Why: the guest's /proc/self/maps showed libc's code (r-xp) at file offset 0 instead of 0x58000 (berberis splits the host's merged
+  r--p line by the guest x bit and every chunk kept the host line's offset); integrity checks that compare code with the file at the
+  reported offset mismatch. Suspected in Tencent ACE's turn on PGR and Endfield.
+- Command (OrbStack): the new kernel_api/open_emulation.cc (tree + 0009) written into ~/los24/frameworks/libs/binary_translation, then
+  `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_arm64` (APKLAYER_NATIVE_BRIDGE=arm64), after the proxy
+  libc build below.
+
+### 2026-11-12 - gsi_x86_64 libberberis_proxy_libc: 0006 reports the guest frame chain and tid; the fencepost false positive (ACE)
+- Why: PGR's double frees come from one routine in libanogs.so (Tencent ACE) that frees 16 slots of an object without clearing them; it
+  runs twice on the same object, and the obfuscated code builds its address at run time, so only the guest stack shows who calls it.
+  Also: valid chunks ending at a retired heap's fencepost were refused (PLAN).
+- Command (OrbStack): the new free_quarantine.cc written into ~/los24/frameworks/libs/binary_translation, then
+  `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_proxy_libc` (APKLAYER_NATIVE_BRIDGE=arm64).
+
 ### 2026-11-12 - gsi_x86_64 libberberis_proxy_libc: 0006 logs each invalid free's guest caller (PGR)
 - Why: every logged `free(...) of no glibc chunk` named the same host caller, libberberis_arm64+0xb6a8f, which is the return address
   in WrapHostCallForGuestErrno (binary_translation 0003): every guest call into the proxy libc comes through it. The guest's x30 names
