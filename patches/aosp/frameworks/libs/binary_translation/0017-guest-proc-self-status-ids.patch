@@ -10,18 +10,13 @@ Applies after 0016. Module libberberis_arm64.
 diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
 --- a/kernel_api/open_emulation.cc
 +++ b/kernel_api/open_emulation.cc
-@@ -41,6 +41,7 @@
- #include "berberis/base/forever_alloc.h"
- #include "berberis/base/scoped_errno.h"  // apklayer patch (0014)
- #include "berberis/base/tracing.h"
-+#include "berberis/kernel_api/syscall_emulation_common.h"  // apklayer patch (0017): OwnIdsForGuest
- #include "berberis/guest_os_primitives/guest_map_shadow.h"
- #include "berberis/guest_state/guest_addr.h"
- #include "berberis/kernel_api/main_executable_real_path_emulation.h"
-@@ -498,6 +499,49 @@
+@@ -498,6 +498,52 @@
    return mem_fd;
  }
  
++// syscall_emulation_common.h (defined in arm64/syscall_emulation_arch.cc, 0015); not included: it defines RunUnknownGuestSyscall
++void OwnIdsForGuest(unsigned int* uid, unsigned int* gid);
++
 +// apklayer patch (0017): the guest's /proc/self/status shows the app's ids (Uid:/Gid: lines), as its getuid/getgid answer (0015); the host's
 +// file has the desktop user's. Read whole, rewritten line by line, served from a memfd. Without an app uid nothing differs (then the host's file).
 +int OpenatProcSelfStatusForGuest(int dirfd, int flags, mode_t mode) {
@@ -68,7 +63,7 @@ diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
  // In zygote this is not needed because native bridge is mounting
  // /proc/cpuinfo to point to the emulated version. But for executables
  // this does not happen and they end up reading host cpuinfo.
-@@ -650,6 +694,10 @@
+@@ -650,6 +696,10 @@
      return OpenatProcSelfAuxvForGuest(dirfd, host_flags, mode);
    }
  

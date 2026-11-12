@@ -1649,7 +1649,9 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0017 (guest /proc/self/status shows the app's ids)
 - Why: 0015 made getuid/getgid the app's, /proc/self/status still printed the desktop user's. Same command as 0016 (0016 and 0017 in the tree).
-- Status: RUNNING (started 23:32 +0330, patch applied to the tree first, full output kept in this session's task file); result to follow.
+- Result 1 (23:41 +0330): FAILED at link, `ld.lld: duplicate symbol: berberis::RunUnknownGuestSyscall` (defined in syscall_emulation.o and open_emulation.o):
+  the patch included syscall_emulation_common.h in open_emulation.cc, whose header defines it. The old library (0016's, a86e0be7...) stayed. Fix: declare
+  OwnIdsForGuest in open_emulation.cc instead of including the header; rebuilt below, full output in ~/los24-0017-build.log on the Mac.
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0016 (guest getdents64 on /proc hides other processes)
 - Why: Android's hidepid=invisible /proc view; the path layer hides other cgroups' pids from path calls and readdir, the translator's
   getdents64 on an open /proc fd needs the same (patches/aosp/.../0016).
