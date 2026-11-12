@@ -1,0 +1,78 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: the guest's open of /proc/net, /sys/class/net and /proc/self/attr/current answers as an app's does on Android
+
+Android's SELinux policy (untrusted_app) refuses an app /proc/net/*, /proc/self/net and /sys/class/net since Android 10 (interface names, MAC
+addresses and every socket of the machine), and an app's /proc/self/attr/current reads its security context
+(u:r:untrusted_app:s0:c<id & 255>,c<256 + id / 256>,c512,c768). On the desktop the guest read the real files: all interfaces of the host
+and the sockets of every process. OpenatForGuest now fails those paths with EACCES (also through /proc/<own pid>, /proc/thread-self) and
+serves the context string from a memfd for the app id OwnIdsForGuest (0015) gives. BERBERIS_SHOW_HOST_MAPS turns it off. The host-side
+JVM (ConnectivityManager and friends) is not affected, only translated code. Applies after 0017. Module libberberis_arm64.
+
+diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
+--- a/kernel_api/open_emulation.cc
++++ b/kernel_api/open_emulation.cc
+@@ -545,6 +545,49 @@
+   return mem_fd;
+ }
+ 
++// apklayer patch (0018): what Android's SELinux policy shows an app (untrusted_app) of the system, for the guest's open().
++// - /proc/net (also /proc/self/net, /proc/<own pid>/net and /proc/thread-self/net) and /sys/class/net: EACCES since Android 10 (the interfaces'
++//   names and MAC addresses and the sockets of the whole desktop are not an app's to read); the host's own JVM code is not affected (guest only).
++// - /proc/self/attr/current (and /proc/<own pid>/attr/current, /proc/thread-self/attr/current): the app's security context, as
++//   u:r:untrusted_app:s0:c<id & 255>,c<256 + id / 256>,c512,c768 (Android's categories for the app's id, user 0); the host's says "unconfined" or fails.
++// The path is compared textually after the leading "/proc/self", "/proc/thread-self" or "/proc/<this pid>" is normalised.
++bool IsAndroidDeniedPath(const char* path, const char** attr_current) {
++  static const bool show_host = getenv("BERBERIS_SHOW_HOST_MAPS") != nullptr;
++  *attr_current = nullptr;
++  if (show_host || path == nullptr || path[0] != '/') return false;
++  if (strncmp(path, "/sys/class/net", 14) == 0 && (path[14] == '\0' || path[14] == '/')) return true;
++  const char* rest = nullptr;
++  char pid_prefix[32];
++  snprintf(pid_prefix, sizeof(pid_prefix), "/proc/%d", getpid());
++  if (strncmp(path, "/proc/self", 10) == 0) {
++    rest = path + 10;
++  } else if (strncmp(path, "/proc/thread-self", 17) == 0) {
++    rest = path + 17;
++  } else if (strncmp(path, pid_prefix, strlen(pid_prefix)) == 0) {
++    rest = path + strlen(pid_prefix);
++  } else {
++    if (strncmp(path, "/proc/net", 9) == 0 && (path[9] == '\0' || path[9] == '/')) return true;
++    return false;
++  }
++  if (strncmp(rest, "/net", 4) == 0 && (rest[4] == '\0' || rest[4] == '/')) return true;
++  if (strcmp(rest, "/attr/current") == 0) *attr_current = rest;
++  return *attr_current != nullptr;
++}
++
++// The context string for the app id (the real uid is the app's in the sandbox; otherwise the guest's own answer, 0015), from a memfd.
++int OpenAttrCurrentForGuest() {
++  unsigned uid = static_cast<unsigned>(syscall(__NR_getuid));
++  unsigned gid = static_cast<unsigned>(syscall(__NR_getgid));
++  OwnIdsForGuest(&uid, &gid);
++  const unsigned app_id = uid >= 10000 ? (uid % 100000) - 10000 : 0;
++  char context[96];
++  const int length = snprintf(context, sizeof(context), "u:r:untrusted_app:s0:c%u,c%u,c512,c768", app_id & 255, 256 + ((app_id >> 8) & 255)) + 1;  // with its NUL, as the kernel returns it
++  int mem_fd = CreateMemfdOrDie("[guest /proc/self/attr/current]");
++  WriteFullyOrDie(mem_fd, context, static_cast<size_t>(length));
++  lseek(mem_fd, 0, 0);
++  return mem_fd;
++}
++
+ // In zygote this is not needed because native bridge is mounting
+ // /proc/cpuinfo to point to the emulated version. But for executables
+ // this does not happen and they end up reading host cpuinfo.
+@@ -697,6 +740,14 @@
+     return OpenatProcSelfAuxvForGuest(dirfd, host_flags, mode);
+   }
+ 
++  const char* attr_current;
++  if (IsAndroidDeniedPath(path, &attr_current)) {  // apklayer patch (0018)
++    if (attr_current == nullptr) {
++      errno = EACCES;
++      return -1;
++    }
++    return OpenAttrCurrentForGuest();
++  }
+   if (IsProcSelfMaps(path, host_flags, "/proc/self/status")) {  // apklayer patch (0017): /proc/<own pid>/status is the same inode
+     return OpenatProcSelfStatusForGuest(dirfd, host_flags, mode);
+   }
