@@ -124,6 +124,11 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
   page made executable, handlers for 6/11/4/5/7/3/15, the page made non-executable, the 20-slot teardown frees (libanogs +0x2f4d34),
   then a crash: ACE's shutdown path. The decision is taken before that thread starts, elsewhere (possibly by its server after a
   report, ~90 s in). The sp warning is a one-call thread (attached, warning, detached), twice per run.
+  Network tests (nftables drop of the app scope's cgroup, scratch pgr-netcut.sh, 2026-11-12): cut at 45 s: stuck at the Kuro
+  login, closed at ~124 s without teardown; cut at 65 s (after the automatic login): teardown and crash at 121 s; cut from the start:
+  loading spinner, Unity never starts, alive without teardown at 5.5 min. ACE's checks start with the game's Unity code, so the
+  no-network runs do not show whether the verdict is the server's; the 65 s run shows the shutdown does not need the network after
+  65 s (decided locally, or a verdict received before the cut).
 - 0006 refuses valid chunks at a retired glibc heap's end (next chunk = the 16-byte fencepost; Endfield's and PGR's libil2cpp frees, headers
   0x25/0x45/0x85/0x175/0xb5 just below a 64 MB boundary): accept the fencepost pair (size 16 | PREV_INUSE, then 0 | PREV_INUSE) so the 20
   reports go to real bad frees. Those chunks are leaked meanwhile.
