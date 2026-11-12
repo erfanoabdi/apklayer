@@ -9,6 +9,11 @@ A host-only line (host-executable, the code cache's memfd, an ELF file for anoth
 its range and protections and is printed as the kernel prints an anonymous mapping (offset 0, 00:00, inode 0, no name), so code that
 walks the address space (GCs, crash handlers) finds the same ranges. The guest's own files (aarch64 libraries, APKs, fonts, data) keep
 their names. The ELF check reads 20 bytes per (device, inode), cached. BERBERIS_SHOW_HOST_MAPS restores the old view.
+Also host-only: files in host system directories (/usr, /lib, /etc, /var, /opt, /snap, /run, /tmp, /nix: no Android path starts so;
+the glibc locale files, /run/user/..., /tmp/hsperfdata_*) and the JVM's own data (its jimage lib/modules, CDS *.jsa).
+A thread's own spellings of the maps (/proc/thread-self/maps, /proc/<tid>/maps, /proc/self/task/<tid>/maps, /proc/<pid>/task/<tid>/maps)
+are other inodes than /proc/self/maps with the same content, so IsProcSelfMaps missed them and they gave the host's maps: they are
+served the same emulated view.
 Checked against Endfield's host maps (3948 lines): ranges and protections unchanged, 1620 lines of 383 host files unnamed; non-ELF host files (the
 JDK's modules and CDS archive, locale files, hsperfdata) still show. Module libberberis_arm64.
 
@@ -23,7 +28,7 @@ diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
  #include <cstring>
  #include <mutex>
  // region digitalis
-@@ -184,6 +185,68 @@ int OpenatProcSelfMapsForGuest(int dirfd, int flags, mode_t mode) {
+@@ -184,6 +185,79 @@ int OpenatProcSelfMapsForGuest(int dirfd, int flags, mode_t mode) {
      // endregion
      // Split the line into guest exec / no-exec chunks.
      uintptr_t original_start = start;
@@ -33,7 +38,7 @@ diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
 +    // ACE in PGR and Endfield) sees a foreign process. Such a line keeps its range and protections and is printed as the kernel prints
 +    // an anonymous mapping (offset 0, device 00:00, inode 0, no name), so code that walks the address space finds the same ranges.
 +    // Host-only means: host-executable (guest code never is), the code cache's memfd, an ELF file for another machine than aarch64,
-+    // or a host GPU node.
++    // a host GPU node, a file in a host system directory, or the JVM's own data files.
 +    // The guest's own files (aarch64 libraries, APKs, fonts, data) keep their names. Off with BERBERIS_SHOW_HOST_MAPS set.
 +    {
 +      static const bool show_host_maps = getenv("BERBERIS_SHOW_HOST_MAPS") != nullptr;
@@ -48,6 +53,17 @@ diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
 +        bool host_only = rest[2] == 'x' || strncmp(name, "/dev/nvidia", 11) == 0 || strncmp(name, "/dev/dri/", 9) == 0 ||
 +                         strncmp(name, "/dev/kfd", 8) == 0 ||
 +                         strncmp(name, "/memfd:exec ", 12) == 0;  // the code cache's writable view (exec_region_anonymous.cc)
++        // Host files that are not programs: host system directories (no Android path starts with these; the glibc locale files,
++        // gconv cache, /run/user/... and /tmp/hsperfdata_* lived there) and the JVM's own data (its jimage lib/modules, CDS *.jsa).
++        if (!host_only) {
++          static constexpr const char* kHostDirs[] = {"/usr/", "/lib/", "/lib64/", "/etc/", "/var/", "/opt/", "/snap/",
++                                                     "/run/", "/tmp/", "/nix/"};
++          for (const char* dir : kHostDirs) host_only = host_only || strncmp(name, dir, strlen(dir)) == 0;
++          const char* end = strstr(name, " (deleted)");
++          const size_t len = end != nullptr ? static_cast<size_t>(end - name) : strlen(name);
++          host_only = host_only || (len >= 4 && memcmp(name + len - 4, ".jsa", 4) == 0) ||
++                      (len >= 12 && memcmp(name + len - 12, "/lib/modules", 12) == 0);
++        }
 +        if (!host_only && strncmp(name, "/dev/", 5) != 0 && strstr(name, " (deleted)") == nullptr) {
 +          // An ELF of another machine; the answer per (device, inode) is kept, a maps read sees each library several times.
 +          struct Entry {
@@ -92,3 +108,45 @@ diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
      // apklayer patch: a chunk of a file-backed line starts that much further into the file. Guest code is never host-executable, so
      // the host kernel merges a library's read-only and code segments into one mapping (libc: r--p from offset 0 over both); the split
      // chunk with the code then claimed file offset 0 where a device shows the segment's own (libc 0x58000), and code compared against
+@@ -259,6 +333,32 @@ bool IsProcSelfMaps(const char* path, int flags, const char* proc_path = PROC_SE
+          cur_stat.st_ino == proc_stat.st_ino && cur_stat.st_dev == proc_stat.st_dev;
+ }
+ 
++// apklayer patch (0012): the per-thread spellings of this process's maps. IsProcSelfMaps compares inodes, and /proc/<pid>/maps is
++// /proc/self/maps, but every thread's own maps file is another inode with the same content (one address space): /proc/thread-self/maps,
++// /proc/<tid>/maps, /proc/self/task/<tid>/maps, /proc/<pid>/task/<tid>/maps. Those still gave the guest the host's unfiltered maps.
++bool IsOwnThreadId(unsigned long id) {
++  char task[64];
++  snprintf(task, sizeof(task), "/proc/self/task/%lu", id);
++  struct stat st;
++  return id != 0 && stat(task, &st) == 0;
++}
++
++bool IsOwnTaskMaps(const char* path) {
++  if (path == nullptr) return false;
++  if (strcmp(path, "/proc/thread-self/maps") == 0) return true;
++  const size_t len = strlen(path);
++  unsigned long a = 0, b = 0;
++  int n = 0;
++  if (sscanf(path, "/proc/self/task/%lu/maps%n", &a, &n) == 1 && static_cast<size_t>(n) == len) return IsOwnThreadId(a);
++  n = 0;
++  if (sscanf(path, "/proc/%lu/task/%lu/maps%n", &a, &b, &n) == 2 && static_cast<size_t>(n) == len) {
++    return IsOwnThreadId(a) && IsOwnThreadId(b);
++  }
++  n = 0;
++  if (sscanf(path, "/proc/%lu/maps%n", &a, &n) == 1 && static_cast<size_t>(n) == len) return IsOwnThreadId(a);
++  return false;
++}
++
+ // apklayer patch: the guest reads its own auxv, not the host's. Host AT_HWCAP bits mean other
+ // features (Go's runtime read x86's bit 24 as arm64's DIT and executed mrs x0, DIT: SIGILL).
+ #define PROC_SELF_AUXV "/proc/self/auxv"
+@@ -420,7 +520,7 @@ const char* TryRedirectGuestLinker64(const char* path) {
+ int OpenatForGuest(int dirfd, const char* path, int guest_flags, mode_t mode) {
+   int host_flags = ToHostOpenFlags(guest_flags);
+ 
+-  if (IsProcSelfMaps(path, host_flags)) {
++  if (IsProcSelfMaps(path, host_flags) || IsOwnTaskMaps(path)) {  // apklayer patch (0012): also a thread's own spellings
+     return OpenatProcSelfMapsForGuest(dirfd, host_flags, mode);
+   }
+   if (IsProcSelfMaps(path, host_flags, PROC_SELF_AUXV)) {  // apklayer patch

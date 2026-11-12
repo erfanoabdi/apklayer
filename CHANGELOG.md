@@ -1637,6 +1637,15 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Fennec: processes carry their Android process name in /proc/self/cmdline (Process.setArgV0); own-package services run in their declared process through the hub, also from component hosts and rewritten app calls (MediaManager of ":media" ran inside the tab process and aborted); a component host's own service stays local. YouTube opens.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0012 extended (host directories, JVM data, per-thread maps)
+- Why: with 0012 PGR lived ~5 min instead of ~90 s; its guest maps still named five host files (JDK modules, classes.jsa,
+  locale-archive, libc.mo, gconv cache), and /proc/thread-self/maps, /proc/<tid>/maps, /proc/self/task/<tid>/maps (other inodes)
+  gave the unfiltered host maps. Checked here: the filter over PGR's real maps, the path matcher with live threads.
+- Command (Mac, OrbStack): kernel_api/open_emulation.cc (tree + 0012) in ~/los24/frameworks/libs/binary_translation, then
+  `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_arm64` (APKLAYER_NATIVE_BRIDGE=arm64).
+- Result: built in 9 min, sha256 9aa9cbc81e3ed2d6c79339e997d6f08d3ad68fe01228ff32b998966c3849f0a6 (with 0013); installed on the
+  NVIDIA PC (the previous one in ~/apklayer-fix/orig/libberberis_arm64.0013.so). PGR: below.
+
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64 and every libberberis_proxy_*: binary_translation 0013 (no BAD proxy PRE-EXTRACT)
 - Why: Digitalis's debug check logged two lines for each proxied call whose pointer-typed first argument is below 0x10000; NVIDIA's
   GLsync handles are 1, 2, ..., so each glClientWaitSync/glDeleteSync did (4728 lines in one PGR run). Logging only; the header is
