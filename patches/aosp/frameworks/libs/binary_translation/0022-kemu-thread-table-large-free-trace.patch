@@ -1,0 +1,328 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] Kemu's fixes (kuloPo/platform_frameworks_libs_binary_translation): guest thread table, large frees, init trace
+
+Three of the 17 commits the Kemu fork has over DigitalisX64's android16 (the same code base as this tree's base abefbe2b), each applied with its source
+files only (their tests and Android.bp entries left out), a few include lines merged by hand:
+- ae5358b1, fb941b4d (guest clone, guest threads): a guest popen/system/posix_spawn (CLONE_VFORK) and any child process that runs in the translator's
+  memory (CLONE_VM without CLONE_THREAD) put GuestThreads into the thread table that nothing removed; once the kernel handed the same tid to a thread of
+  ours, inserting it failed or found a dead thread's stack. Each GuestThread gets a serial and a process id; the vfork parent releases the child's
+  entry, and a thread whose tid has an entry of another process releases it (GuestThreadMap::RemoveThreadIf, ReleaseVforkChild,
+  ReleaseThreadOfGoneProcess).
+- 8e1b5512 (free quarantine): a block above 1 MiB is freed at once, not kept in the 1024-entry ring (bounded at 1 GiB). The size is read after 0006's
+  chunk check, not before: malloc_usable_size on an invalid pointer (PGR's frees) reads a header that is not there.
+- 3b98206b: native_bridge_initialize logs after tracing is configured, so its line shows in BERBERIS_TRACING output.
+Not taken: bc2dccd4 (guest ucontext on the guest stack: this tree's base already has it), the Vulkan layer entry points (6b760028: one of its four hunks
+does not apply to this tree's native_bridge.cc and needs a rebase; it matters only for an app that ships its own Vulkan layer), and the
+tiering/TBI/MOV-alias performance commits (a2a2de1a, b88517d9, 615e5c93, 4de3cab3: large changes to the heavy tier, where PGR's miscompile is; untested here).
+The files keep their upstream Apache-2.0 headers; the Kemu fork's licence as a whole was not checked (docs/THIRD_PARTY.md). Applies after 0021. Module libberberis_arm64, libberberis_proxy_libc.
+
+diff --git a/android_api/libc/free_quarantine.cc b/android_api/libc/free_quarantine.cc
+--- a/android_api/libc/free_quarantine.cc
++++ b/android_api/libc/free_quarantine.cc
+@@ -36,6 +36,9 @@
+ // Bounded memory; each pointer is freed exactly once (just deferred). This brings
+ // Berberis's free timing closer to real hardware so benign guest UAFs stay benign.
+ 
++// kuloPo/Kemu 8e1b5512 (apklayer 0022): allocation sizes for the large-block exemption below, without the fortify warning about allocator padding.
++#define __BIONIC_DISABLE_MALLOC_USABLE_SIZE_FORTIFY_WARNINGS
++#include <malloc.h>
+ #include <stddef.h>
+ 
+ #if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
+@@ -237,6 +240,9 @@
+ namespace {
+ 
+ constexpr size_t kQuarantineSize = 1024;
++// kuloPo/Kemu 8e1b5512 (apklayer 0022): a block above this is freed at once, so the ring holds at most 1 GiB (1024 x 1 MiB) instead of unbounded
++// memory (a guest freeing many large buffers kept every one of them until it was evicted).
++constexpr size_t kMaxQuarantinedAllocationSize = 1024 * 1024;
+ std::atomic<void*> g_quarantine[kQuarantineSize];
+ std::atomic<uint64_t> g_quarantine_idx{0};
+ 
+@@ -259,6 +265,12 @@
+     ReportInvalidFree(ptr, __builtin_return_address(0), "on entry");
+     return;
+   }
++  // kuloPo/Kemu 8e1b5512 (apklayer 0022), after the chunk check above: malloc_usable_size reads the chunk header, which an invalid pointer must not
++  // reach (0006).
++  if (malloc_usable_size(ptr) > kMaxQuarantinedAllocationSize) {
++    __real_free(ptr);
++    return;
++  }
+ 
+   // Defer the real free through the quarantine ring so a just-freed chunk (and
+   // its Scudo region) stays live long enough that the translator's Arena cannot
+diff --git a/guest_os_primitives/guest_thread.cc b/guest_os_primitives/guest_thread.cc
+--- a/guest_os_primitives/guest_thread.cc
++++ b/guest_os_primitives/guest_thread.cc
+@@ -20,6 +20,10 @@
+ #include <bit>
+ #include <cerrno>  // apklayer patch: WrapHostCallForGuestErrno
+ 
++// region digitalis
++#include <atomic>
++// endregion
++
+ #if defined(__BIONIC__)
+ #include "private/bionic_constants.h"
+ #include "private/bionic_tls.h"
+@@ -66,6 +70,10 @@
+ 
+ const size_t kGuestThreadPageAlignedSize = AlignUpPageSize(sizeof(GuestThread));
+ 
++// region digitalis
++std::atomic<uint64_t> g_next_guest_thread_serial{1};
++// endregion
++
+ }  // namespace
+ 
+ // static
+@@ -83,6 +91,9 @@
+ 
+   GuestThread* thread = new (thread_storage) GuestThread;
+   CHECK(thread);
++  // region digitalis
++  thread->serial_ = g_next_guest_thread_serial.fetch_add(1, std::memory_order_relaxed);
++  // endregion
+ 
+   thread->state_ = CreateThreadState();
+   if (!thread->state_) {
+diff --git a/guest_os_primitives/guest_thread_clone.cc b/guest_os_primitives/guest_thread_clone.cc
+--- a/guest_os_primitives/guest_thread_clone.cc
++++ b/guest_os_primitives/guest_thread_clone.cc
+@@ -28,11 +28,17 @@
+ #include "berberis/guest_os_primitives/scoped_pending_signals.h"
+ #include "berberis/guest_state/guest_addr.h"
+ #include "berberis/guest_state/guest_state_opaque.h"
++// region digitalis
++#include "berberis/instrument/guest_thread.h"
++// endregion
+ #include "berberis/runtime/execute_guest.h"
+ #include "berberis/runtime_library/runtime_library.h"
+ 
+ #include "guest_signal_action.h"
+ #include "guest_thread_manager_impl.h"
++// region digitalis
++#include "guest_thread_map.h"
++// endregion
+ #include "scoped_signal_blocker.h"
+ 
+ namespace berberis {
+@@ -114,6 +120,31 @@
+   return 0;
+ }
+ 
++// region digitalis
++// A CLONE_VFORK child runs in our address space, so the thread table entry it inserted for its
++// pid is in our table. The parent resumes only after the child has called execve or exited, so
++// the child no longer uses this memory. Every guest popen/system/posix_spawn comes through here,
++// so release the entry now rather than keep it, with the child's GuestThread and host stack, until
++// a thread of ours gets the same tid. The entry may be gone already: a child that left through the
++// exit syscall has removed and destroyed its GuestThread itself, and once the child is reaped, a
++// thread that gets its pid as tid releases the entry (see InsertCurrentThread and
++// AttachCurrentThread) and may insert a new GuestThread at the same address. So remove the entry
++// only if it still holds the child's GuestThread, identified by its serial.
++// Must be called with signals blocked.
++void ReleaseVforkChild(pid_t pid, uint64_t serial) {
++  GuestThread* thread = GuestThreadMap::GetInstance()->RemoveThreadIf(
++      pid, [serial](GuestThread* entry) { return entry->GetSerial() == serial; });
++  if (thread == nullptr) {
++    return;
++  }
++  if (kInstrumentGuestThread) {
++    OnRemoveGuestThread(pid, thread);
++  }
++  TRACE("guest vfork child %d released", pid);
++  GuestThread::Destroy(thread);
++}
++// endregion
++
+ }  // namespace
+ 
+ // go/berberis-guest-threads
+@@ -195,6 +226,10 @@
+   {
+     ScopedSignalBlocker signal_blocker;
+     info.mask = *signal_blocker.old_mask();
++    // region digitalis
++    // Once clone returns, info.thread may already be destroyed.
++    uint64_t child_serial = info.thread->GetSerial();
++    // endregion
+     pid = clone(RunClonedGuestThread,
+                 info.thread->GetHostStackTop(),
+                 flags & ~CLONE_SETTLS,
+@@ -204,6 +239,11 @@
+                 child_tid);
+     if (pid != -1) {
+       CHECK_EQ(0, sem_wait(&info.sem));  // Wait with blocked signals to avoid EINTR.
++      // region digitalis
++      if (flags & CLONE_VFORK) {
++        ReleaseVforkChild(pid, child_serial);
++      }
++      // endregion
+     }
+   }
+ 
+diff --git a/guest_os_primitives/guest_thread_manager.cc b/guest_os_primitives/guest_thread_manager.cc
+--- a/guest_os_primitives/guest_thread_manager.cc
++++ b/guest_os_primitives/guest_thread_manager.cc
+@@ -48,6 +48,28 @@
+   DetachCurrentThread();
+ }
+ 
++// region digitalis
++// Child processes that run in our memory (clone with CLONE_VM and without CLONE_THREAD) and their
++// threads insert their GuestThreads into our table. If such a process leaves through exit_group or
++// execve, nothing removes those entries, and once the kernel hands one of the tids out again to a
++// thread of ours, that thread would find a dead thread's GuestThread, whose guest stack may be
++// gone. No two live threads have the same tid, so an entry under the calling thread's tid that
++// belongs to a process other than the caller's (pid) was left by a thread that is gone. Release it.
++// Must be called with signals blocked.
++void ReleaseThreadOfGoneProcess(pid_t tid, pid_t pid) {
++  GuestThread* thread = GuestThreadMap::GetInstance()->RemoveThreadIf(
++      tid, [pid](GuestThread* entry) { return entry->GetProcessId() != pid; });
++  if (thread == nullptr) {
++    return;
++  }
++  if (kInstrumentGuestThread) {
++    OnRemoveGuestThread(tid, thread);
++  }
++  TRACE("guest thread %d of gone process %d released", tid, thread->GetProcessId());
++  GuestThread::Destroy(thread);
++}
++// endregion
++
+ }  // namespace
+ 
+ GuestThreadExitListenerFn RegisterGuestThreadExitListener(GuestThreadExitListenerFn new_listener) {
+@@ -69,6 +91,9 @@
+ }
+ 
+ void ResetCurrentGuestThreadAfterFork(GuestThread* thread) {
++  // region digitalis
++  thread->SetProcessId(GetpidSyscall());
++  // endregion
+   GuestThreadMap::GetInstance()->ResetThreadTable(GettidSyscall(), thread);
+ #if defined(__BIONIC__)
+   // Force (host) bionic to update cached tid if necessary
+@@ -181,6 +206,9 @@
+   ScopedSignalBlocker signal_blocker;
+ 
+   pid_t tid = GettidSyscall();
++  // region digitalis
++  ReleaseThreadOfGoneProcess(tid, GetpidSyscall());
++  // endregion
+   GuestThread* thread = GuestThreadMap::GetInstance()->FindThread(tid);
+   if (thread) {
+     // Thread was already attached.
+@@ -218,6 +246,12 @@
+   // The following code is not reentrant!
+   ScopedSignalBlocker signal_blocker;
+ 
++  // region digitalis
++  pid_t pid = GetpidSyscall();
++  ReleaseThreadOfGoneProcess(tid, pid);
++  thread->SetProcessId(pid);
++  // endregion
++
+   // Thread should not be already in the table!
+   // If signal came after we checked tls cache or table but before we blocked signals, it should
+   // have attached AND detached the thread!
+diff --git a/guest_os_primitives/guest_thread_map.h b/guest_os_primitives/guest_thread_map.h
+--- a/guest_os_primitives/guest_thread_map.h
++++ b/guest_os_primitives/guest_thread_map.h
+@@ -34,6 +34,23 @@
+   GuestThread* RemoveThread(pid_t tid);
+   GuestThread* FindThread(pid_t tid);
+ 
++  // region digitalis
++  // Removes the entry of tid if pred(thread) is true for its GuestThread, and returns that
++  // GuestThread, otherwise returns nullptr. The check and the removal happen under one lock, so of
++  // several threads that try to release the same entry only one gets it.
++  template <typename F>
++  GuestThread* RemoveThreadIf(pid_t tid, const F& pred) {
++    std::lock_guard<std::mutex> lock(mutex_);
++    auto it = map_.find(tid);
++    if (it == map_.end() || !pred(it->second)) {
++      return nullptr;
++    }
++    GuestThread* thread = it->second;
++    map_.erase(it);
++    return thread;
++  }
++  // endregion
++
+   // TODO(b/280551726): Replace template with function that accepts a function arg.
+   template <typename F>
+   void ForEachThread(const F& f) {
+diff --git a/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h b/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h
+--- a/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h
++++ b/guest_os_primitives/include/berberis/guest_os_primitives/guest_thread.h
+@@ -19,6 +19,9 @@
+ 
+ #include <csetjmp>  // jmp_buf
+ #include <csignal>  // stack_t
++// region digitalis
++#include <cstdint>
++// endregion
+ #include <pthread.h>  // apklayer patch: pthread_t
+ #include <memory>
+ 
+@@ -117,6 +120,17 @@
+   // Use to unshare signal handlers for CLONE_VM without CLONE_SIGHAND.
+   void CloneSignalActionsTableFrom(GuestSignalActionsTable* from_table);
+ 
++  // region digitalis
++  // Pid of the process (thread group) of the thread that uses this GuestThread. The thread table is
++  // shared with child processes that run in our memory (clone with CLONE_VM and without
++  // CLONE_THREAD), so it can hold threads of several processes.
++  void SetProcessId(pid_t pid) { process_id_ = pid; }
++  [[nodiscard]] pid_t GetProcessId() const { return process_id_; }
++  // Unique among the GuestThreads created in this memory, so it tells this GuestThread apart from
++  // one created after it was destroyed, which may get the same address.
++  [[nodiscard]] uint64_t GetSerial() const { return serial_; }
++  // endregion
++
+  private:
+   GuestThread() = default;
+   static GuestThread* Create();
+@@ -162,6 +176,11 @@
+ 
+   void* sig_alt_stack_ = nullptr;
+   size_t sig_alt_stack_size_ = 0;
++
++  // region digitalis
++  pid_t process_id_ = 0;
++  uint64_t serial_ = 0;
++  // endregion
+ };
+ 
+ using GuestThreadExitListenerFn = void (*)(pid_t);
+diff --git a/native_bridge/native_bridge.cc b/native_bridge/native_bridge.cc
+--- a/native_bridge/native_bridge.cc
++++ b/native_bridge/native_bridge.cc
+@@ -521,10 +521,6 @@
+ bool native_bridge_initialize(const android::NativeBridgeRuntimeCallbacks* runtime_cbs,
+                               const char* private_dir,
+                               const char* instruction_set) {
+-  LOG_NB("native_bridge_initialize(runtime_callbacks=%p, private_dir='%s', app_isa='%s')",
+-         runtime_cbs,
+-         private_dir ? private_dir : "(null)",
+-         instruction_set ? instruction_set : "(null)");
+   auto* env = GetAppEnvByIsa(instruction_set);
+   if (env == nullptr) {
+     return false;
+@@ -534,6 +530,13 @@
+   berberis::InitBerberis();
+ 
+   // region digitalis
++  LOG_NB("native_bridge_initialize(runtime_callbacks=%p, private_dir='%s', app_isa='%s')",
++         runtime_cbs,
++         private_dir ? private_dir : "(null)",
++         instruction_set ? instruction_set : "(null)");
++  // endregion
++
++  // region digitalis
+ #if defined(NATIVE_BRIDGE_GUEST_ARCH_ARM64)
+   // bionic's fdsan enforces, per host file descriptor, that the object holding
+   // it (a unique_fd, Parcel, Fence, DIR*, …) is the one that closes it. That

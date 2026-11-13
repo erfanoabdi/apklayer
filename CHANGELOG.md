@@ -1664,6 +1664,11 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Why: the owner asked for the instance to present a Google Pixel 5. Properties: tools/device-profile.sh pixel5 (bridge/native/profiles/pixel5.prop); the
   guest's /proc/cpuinfo and MIDR_EL1 follow `berberis.cpuinfo=pixel5`. Same command as 0016; output in ~/los24-0020-build.log (Mac).
 - Result: `build completed successfully (10:09)`, no errors; library sha256 0009eb5f2e79879131cdea88538ab897a3dd7342f3a32800e8f257f42fac27c5 (0016-0020).
+### 2026-11-13 - gsi_x86_64 libberberis_arm64, libberberis_proxy_libc: binary_translation 0022 (three fixes from the Kemu fork)
+- Why: the owner asked for the useful changes of github.com/kuloPo/Kemu (a Windows emulator packaging project; its translator is kuloPo/platform_frameworks_libs_binary_translation,
+  17 commits over DigitalisX64's android16). Taken: guest thread-table releases (ae5358b1, fb941b4d: popen/system/posix_spawn left GuestThreads behind), large frees outside the
+  quarantine ring (8e1b5512, size read after 0006's chunk check), init trace after tracing is set up (3b98206b). Not taken: see the patch header.
+  Same command as 0016 (also `m libberberis_proxy_libc`); output in ~/los24-0022-build.log (Mac). Status: RUNNING.
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0019 (guest environment without the desktop's variables; /data/data lists only the own package)
 - Why: the filesystem-layout audit (hello-arm64 "layout") found 37 host variables in the guest's environ and all 20 packages in /data/data.
   Same command as 0016; output kept in ~/los24-0019-build.log (Mac).
