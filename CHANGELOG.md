@@ -4,6 +4,7 @@ Dated entries, newest first by section; this is where status history lives (STAT
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
 ## 2026-11-13 (ACE: the real test, main menu)
+- PGR on 0025 (NVIDIA PC, default instance, 16:30): hs_err written 16:31, i.e. about a minute into the run (earlier runs 1.5-2.5 min); SIGSEGV re-raise (sent by kill), 20 invalid frees logged (0006's cap), 19 of them from guest caller 0x...4f14d34 (libanogs +0x2f4d34 as before). hello-arm64 PASS on 0025 first (uid ok, proc view ok, GL PASS; work(1e7) 31.3 ms). Code-cost tier selection does not change PGR's ending.
 - Owner's correction: PGR only crashes in the main menu. Test setup: scratch instance `sbx` with the default instance's game data copied in (rsync, 45,309,416,504 bytes, 47,813 files, identical; exit 23 was only chgrp on directories),
   plus the account prefs and the SDK database. Libraries: 0024 translator, merged-before-Erfan's-5 preload.
   - sbx, no sandbox (16:06): reached the main menu stage, SIGSEGV (sent by kill, SI_TKILL; translator memmove in the JVM's signal handler, then libc syscall +0x12752d) 2 min 29 s in, 32 invalid frees. Same crash as the default instance:
