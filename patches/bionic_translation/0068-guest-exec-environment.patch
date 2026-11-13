@@ -1,0 +1,129 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] libc: inherited exec uses the active guest environment
+
+AOSP exec.cpp argument collection adapted for the shared path execution layer.
+The inherited forms must read the guest environ slot: glibc execvp otherwise
+ignores guest clearenv/putenv (Termux JNI) and launches with the host environment.
+Explicit envp is never filtered. PATH comes from the parent guest, as bionic
+execvpe specifies. Variadic forms and fexecve route through mapped execve rather
+than glibc internal calls. Services retain host PATH behavior.
+
+--- a/meson.build
++++ b/meson.build
+@@ -119,3 +119,4 @@
+ 		'libc/libc-environment.cpp', # apklayer: isolated app environment
++		'libc/libc-exec.cpp', # apklayer: inherited guest environment and PATH
+ 		'libc/libc-musl.c',
+ 		'libc/libc-signal.c',
+--- /dev/null
++++ b/libc/libc-exec.cpp
+@@ -0,0 +1,109 @@
++/*-
++ * Copyright (c) 1991, 1993
++ *	The Regents of the University of California.  All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ * 3. Neither the name of the University nor the names of its contributors
++ *    may be used to endorse or promote products derived from this software
++ *    without specific prior written permission.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ */
++
++/* apklayer: AOSP exec.cpp argument collection, with the active guest environment and shared path execution. */
++#include <errno.h>
++#include <limits.h>
++#include <stdarg.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++#include <stdio.h>
++
++extern "C" char ***bionic_environment_slot(void);
++extern "C" char *bionic_getenv(const char *);
++extern "C" int apklayer_exec_search_guest(const char *, char *const [], char *const [], const char *, bool) __attribute__((weak));
++extern "C" int bionic_execvpe(const char *, char *const [], char *const []);
++extern "C" int bionic_execvp(const char *, char *const []);
++
++static int as_script(const char *name, char *const argv[], char *const envp[]) {
++  size_t count = 0;
++  while (argv && argv[count]) ++count;
++  char **shell = static_cast<char **>(calloc(count + 3, sizeof(char *)));
++  if (!shell) return -1;
++  shell[0] = const_cast<char *>("/system/bin/sh");
++  shell[1] = const_cast<char *>(name);
++  for (size_t i = 1; i < count; ++i) shell[i + 1] = argv[i];
++  execve(shell[0], shell, envp);
++  int error = errno; free(shell); errno = error; return -1;
++}
++extern "C" int bionic_execv(const char *name, char *const argv[]) {
++  char ***slot = bionic_environment_slot();
++  return slot ? execve(name, argv, *slot) : -1;
++}
++extern "C" int bionic_execvp(const char *name, char *const argv[]) {
++  char ***slot = bionic_environment_slot();
++  return slot ? bionic_execvpe(name, argv, *slot) : -1;
++}
++extern "C" int bionic_execvpe(const char *name, char *const argv[], char *const envp[]) {
++  if (!name || !*name) { errno = ENOENT; return -1; }
++  if (strchr(name, '/')) {
++    execve(name, argv, envp);
++    return errno == ENOEXEC ? as_script(name, argv, envp) : -1;
++  }
++  char ***slot = bionic_environment_slot();
++  if (!slot) return -1;
++  if (slot == &environ) return execvpe(name, argv, envp);  // service/host opt-out retains host PATH semantics
++  const char *path = bionic_getenv("PATH");
++  if (!path) path = "/product/bin:/apex/com.android.runtime/bin:/apex/com.android.art/bin:/apex/com.android.virt/bin:/system_ext/bin:/system/bin:/system/xbin:/odm/bin:/vendor/bin:/vendor/xbin";
++  if (!apklayer_exec_search_guest) { errno = ENOSYS; return -1; }
++  return apklayer_exec_search_guest(name, argv, envp, path, true);
++}
++
++enum { ExecL, ExecLE, ExecLP };
++static int execute_list(int variant, const char *name, const char *arg, va_list ap) {
++  va_list count_ap;
++  va_copy(count_ap, ap);
++  size_t count = 1;
++  while (va_arg(count_ap, char *) != nullptr) ++count;
++  va_end(count_ap);
++  char **args = static_cast<char **>(calloc(count + 1, sizeof(char *)));
++  if (!args) return -1;
++  args[0] = const_cast<char *>(arg);
++  for (size_t i = 1; i <= count; ++i) args[i] = va_arg(ap, char *);
++  char ***slot = variant == ExecLE ? nullptr : bionic_environment_slot();
++  char **envp = variant == ExecLE ? va_arg(ap, char **) : slot ? *slot : nullptr;
++  int result = variant != ExecLE && !slot ? -1 : variant == ExecLP ? bionic_execvp(name, args) : execve(name, args, envp);
++  int error = errno; free(args); errno = error; return result;
++}
++extern "C" int bionic_execl(const char *name, const char *arg, ...) {
++  va_list ap; va_start(ap, arg); int result = execute_list(ExecL, name, arg, ap); va_end(ap); return result;
++}
++extern "C" int bionic_execle(const char *name, const char *arg, ...) {
++  va_list ap; va_start(ap, arg); int result = execute_list(ExecLE, name, arg, ap); va_end(ap); return result;
++}
++extern "C" int bionic_execlp(const char *name, const char *arg, ...) {
++  va_list ap; va_start(ap, arg); int result = execute_list(ExecLP, name, arg, ap); va_end(ap); return result;
++}
++extern "C" int bionic_fexecve(int fd, char *const argv[], char *const envp[]) {
++  char path[64]; snprintf(path, sizeof path, "/proc/self/fd/%d", fd);
++  execve(path, argv, envp);
++  if (errno == ENOENT) errno = EBADF;
++  return -1;
++}

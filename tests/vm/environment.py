@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 import instance
 
 env = dict(instance.ENV)
+env["APKLAYER_NO_SYSTEM_SERVER"] = "1"  # private host control must remain effective after guest env isolation
 run = None
 try:
     run = subprocess.Popen(['bin/apklayer', 'run', 'hello.environment'], env=env, stdout=subprocess.PIPE,

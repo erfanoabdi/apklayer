@@ -101,3 +101,10 @@ if is_variable('apklayer_preload') and is_variable('c_bio')
     test('proc-environment-' + mode, proc_environment_test, args: [c_bio], env: proc_environment_env, suite: 'bionic', timeout: 30)
   endforeach
 endif
+
+if is_variable('c_bio') and is_variable('apklayer_preload')
+  test('guest-exec', executable('guest-exec-test', 'guest-exec.c', dependencies: [dependency('dl')]), args: [c_bio],
+    env: ['LD_PRELOAD=' + apklayer_preload.full_path(), 'LD_LIBRARY_PATH=' + fs.parent(c_bio.full_path()),
+      'APKLAYER_OWN_DATA=hello.exec:10001:/tmp/hello.exec', 'ENV_HOST_ONLY=private', 'PATH=/host-path-must-not-be-searched'],
+    suite: 'bionic', timeout: 30)
+endif

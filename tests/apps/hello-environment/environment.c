@@ -1,4 +1,6 @@
 #include <jni.h>
+#include <dlfcn.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -9,6 +11,39 @@
 extern char **environ;
 static char *put_storage;
 static size_t put_value;
+
+JNIEXPORT void JNICALL Java_hello_environment_Main_activityManagerCheck(JNIEnv *env, jclass cls)
+{
+    (void)cls;
+    const char *failure = NULL;
+    void *android = NULL;
+    if (getenv("APKLAYER_NO_SYSTEM_SERVER")) {
+        failure = "private ActivityManager control leaked into guest getenv";
+        goto done;
+    }
+    /* Native guests can inspect the host getter directly; translated guests only expose public NDK symbols. */
+    const char *(*host_get)(const char *) = dlsym(RTLD_DEFAULT, "libc_bio_host_getenv");
+    if (host_get) {
+        const char *configured = host_get("APKLAYER_NO_SYSTEM_SERVER");
+        if (!configured || strcmp(configured, "1")) {
+            failure = "host APKLAYER_NO_SYSTEM_SERVER must remain exactly 1";
+            goto done;
+        }
+    }
+    android = dlopen("libandroid.so", RTLD_NOW);
+    bool (*is_active)(uid_t) = android ? dlsym(android, "AActivityManager_isUidActive") : NULL;
+    if (!is_active) { failure = "missing AActivityManager_isUidActive NDK entry"; goto done; }
+    puts("[environment] checking native ActivityManager private host control"); fflush(stdout);
+    /* No native system_server activity service: the private control makes checkService return immediately. */
+    if (is_active(getuid())) failure = "unexpected active UID without native activity service";
+    else { puts("[environment] ActivityManager private host control PASS"); fflush(stdout); }
+done:
+    if (android) dlclose(android);
+    if (failure) {
+        jclass error = (*env)->FindClass(env, "java/lang/AssertionError");
+        if (error) (*env)->ThrowNew(env, error, failure);
+    }
+}
 
 JNIEXPORT jbyteArray JNICALL Java_hello_environment_Main_procEnviron(JNIEnv *env, jclass cls, jboolean buffered)
 {
