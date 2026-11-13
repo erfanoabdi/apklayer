@@ -1,0 +1,271 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] Separate translator controls from initial and explicit guest environments
+
+Select the authoritative environment before sizing guest stacks; preserve exact child
+environments, and keep translator controls on the host side. Outside apklayer,
+retain existing loader behavior.
+
+diff --git a/base/include/berberis/base/host_environment.h b/base/include/berberis/base/host_environment.h
+new file mode 100644
+--- /dev/null
++++ b/base/include/berberis/base/host_environment.h
+@@ -0,0 +1,11 @@
++// apklayer patch: translator controls belong to the host, never the app environment.
++#ifndef BERBERIS_BASE_HOST_ENVIRONMENT_H_
++#define BERBERIS_BASE_HOST_ENVIRONMENT_H_
++#include <cstdlib>
++extern "C" const char* libc_bio_host_getenv(const char*) __attribute__((weak));
++namespace berberis {
++inline const char* HostGetenv(const char* name) {
++  return libc_bio_host_getenv ? libc_bio_host_getenv(name) : std::getenv(name);
++}
++}
++#endif
+diff --git a/base/config_globals.cc b/base/config_globals.cc
+--- a/base/config_globals.cc
++++ b/base/config_globals.cc
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  */
+ 
++#include "berberis/base/host_environment.h"
+ #include "berberis/base/config_globals.h"
+ 
+ #if defined(__BIONIC__)
+@@ -81,7 +82,7 @@
+ bool TryReadConfig(const char* env_name,
+                    [[maybe_unused]] const std::string_view prop_name,
+                    const char** value_ptr) {
+-  if (auto env = getenv(env_name)) {
++  if (auto env = berberis::HostGetenv(env_name)) {
+     *value_ptr = MakeForeverCStr(env);
+     return true;
+   }
+diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
+--- a/kernel_api/open_emulation.cc
++++ b/kernel_api/open_emulation.cc
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  */
+ 
++#include "berberis/base/host_environment.h"
+ #include "berberis/kernel_api/open_emulation.h"
+ 
+ #include <dlfcn.h>  // apklayer patch (0016)
+@@ -152,7 +153,7 @@
+ }  // namespace
+ 
+ bool IsHiddenProcSelfMapFilesEntry(int dirfd, const char* path) {
+-  static const bool show_host_maps = getenv("BERBERIS_SHOW_HOST_MAPS") != nullptr;
++  static const bool show_host_maps = berberis::HostGetenv("BERBERIS_SHOW_HOST_MAPS") != nullptr;
+   char target[4096];
+   return !show_host_maps && ReadOwnMapFilesLink(dirfd, path, target, sizeof(target)) && IsHostOnlyLinkTarget(target);
+ }
+@@ -179,7 +180,7 @@
+ }
+ 
+ long GetDents64ForGuest(int fd, void* dirp, size_t count) {
+-  static const bool show_host_maps = getenv("BERBERIS_SHOW_HOST_MAPS") != nullptr;
++  static const bool show_host_maps = berberis::HostGetenv("BERBERIS_SHOW_HOST_MAPS") != nullptr;
+   for (;;) {
+     long n = syscall(__NR_getdents64, fd, dirp, count);
+     if (n <= 0) return n;
+@@ -391,7 +392,7 @@
+     // a host GPU node, a file in a host system directory, or the JVM's own data files.
+     // The guest's own files (aarch64 libraries, APKs, fonts, data) keep their names. Off with BERBERIS_SHOW_HOST_MAPS set.
+     {
+-      static const bool show_host_maps = getenv("BERBERIS_SHOW_HOST_MAPS") != nullptr;
++      static const bool show_host_maps = berberis::HostGetenv("BERBERIS_SHOW_HOST_MAPS") != nullptr;
+       const char* rest = cur_line.c_str() + prot_offset;  // "r-xp 00000000 103:02 6948332   /path"
+       unsigned dev_major = 0, dev_minor = 0;
+       unsigned long inode = 0;
+@@ -577,7 +578,7 @@
+ //   u:r:untrusted_app:s0:c<id & 255>,c<256 + id / 256>,c512,c768 (Android's categories for the app's id, user 0); the host's says "unconfined" or fails.
+ // The path is compared textually after the leading "/proc/self", "/proc/thread-self" or "/proc/<this pid>" is normalised.
+ bool IsAndroidDeniedPath(const char* path, const char** attr_current) {
+-  static const bool show_host = getenv("BERBERIS_SHOW_HOST_MAPS") != nullptr;
++  static const bool show_host = berberis::HostGetenv("BERBERIS_SHOW_HOST_MAPS") != nullptr;
+   *attr_current = nullptr;
+   if (show_host || path == nullptr || path[0] != '/') return false;
+   if (strncmp(path, "/sys/class/net", 14) == 0 && (path[14] == '\0' || path[14] == '/')) return true;
+diff --git a/kernel_api/exec_emulation.cc b/kernel_api/exec_emulation.cc
+--- a/kernel_api/exec_emulation.cc
++++ b/kernel_api/exec_emulation.cc
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  */
+ 
++#include "berberis/base/host_environment.h"
+ #include "berberis/kernel_api/exec_emulation.h"
+ 
+ #include <unistd.h>
+@@ -25,6 +26,10 @@
+ 
+ #include "berberis/base/mmap.h"
+ #include "berberis/base/strings.h"
++
++// The shim owns the initial guest view; explicit child environments are already restored there.
++extern "C" char*** bionic_environment_slot() __attribute__((weak));
++extern "C" int apklayer_execve_guest(const char*, char* const[], char* const[]) __attribute__((weak));
+ 
+ namespace berberis {
+ 
+@@ -126,9 +131,24 @@
+   return env;
+ }
+ 
++char** GuestEnvironmentForStartup(char** envp) {
++  static char* empty[] = {nullptr};
++  if (!bionic_environment_slot) return envp;
++  char*** slot = bionic_environment_slot();
++  if (!slot) std::abort();
++  char** selected = *slot;
++  return selected ? selected : empty;
++}
++
+ char** DemangleGuestEnvp(char** dst, char** envp) {
++  if (bionic_environment_slot) {
++    while (*envp) *dst++ = *envp++;
++    *dst++ = nullptr;
++    return dst;
++  }
++
+   auto [guest_prefix, guest_prefix_size] = GetGuestPlatformVarPrefixWithSize();
+-  static const bool show_host = getenv("BERBERIS_SHOW_HOST_MAPS") != nullptr;
++  static const bool show_host = berberis::HostGetenv("BERBERIS_SHOW_HOST_MAPS") != nullptr;
+ 
+   for (; *envp; ++envp) {
+     char* env = *envp;
+@@ -150,6 +170,7 @@
+ }
+ 
+ int ExecveForGuest(const char* filename, char* const argv[], char* const envp[]) {
++  if (apklayer_execve_guest) return apklayer_execve_guest(filename, argv, envp);
+   ScopedMmap new_envp;
+   return execve(filename, argv, MangleGuestEnvp(&new_envp, envp));
+ }
+diff --git a/kernel_api/arm64/syscall_emulation.cc b/kernel_api/arm64/syscall_emulation.cc
+--- a/kernel_api/arm64/syscall_emulation.cc
++++ b/kernel_api/arm64/syscall_emulation.cc
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  */
+ 
++#include "berberis/base/host_environment.h"
+ #include <fcntl.h>  // AT_FDCWD, AT_SYMLINK_NOFOLLOW
+ #include <linux/futex.h>
+ #include <linux/sched.h>
+@@ -87,7 +88,7 @@
+ constexpr long kGuestNrRtTgsigqueueinfo = 240;  // asm-generic __NR_rt_tgsigqueueinfo
+ 
+ void ReportGuestSelfSignal(const ThreadState* state, long guest_nr) {
+-  static const bool enabled = getenv("BERBERIS_LOG_SELF_SIGNAL") != nullptr;
++  static const bool enabled = berberis::HostGetenv("BERBERIS_LOG_SELF_SIGNAL") != nullptr;
+   if (!enabled) return;
+   const pid_t self = getpid();
+   long sig = 0, target = 0;
+diff --git a/cpu_emulation/heavy_optimizer/arm64/heavy_optimize_region.cc b/cpu_emulation/heavy_optimizer/arm64/heavy_optimize_region.cc
+--- a/cpu_emulation/heavy_optimizer/arm64/heavy_optimize_region.cc
++++ b/cpu_emulation/heavy_optimizer/arm64/heavy_optimize_region.cc
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  */
+ 
++#include "berberis/base/host_environment.h"
+ #include "berberis/heavy_optimizer/arm64/heavy_optimize_region.h"
+ 
+ #include <cstddef>
+@@ -48,7 +49,7 @@
+ 
+ unsigned HeavyDenyMask() {
+   static const unsigned mask = [] {
+-    const char* env = getenv("BERBERIS_HEAVY_DENY");
++    const char* env = berberis::HostGetenv("BERBERIS_HEAVY_DENY");
+     unsigned m = 0;
+     if (env == nullptr) return m;
+     struct { const char* name; unsigned bit; } names[] = {{"simd", kDenySimd}, {"fp", kDenyFp}, {"ldst", kDenyLdst},
+diff --git a/android_api/libc/free_quarantine.cc b/android_api/libc/free_quarantine.cc
+--- a/android_api/libc/free_quarantine.cc
++++ b/android_api/libc/free_quarantine.cc
+@@ -38,6 +38,7 @@
+ 
+ // kuloPo/Kemu 8e1b5512 (apklayer 0022): allocation sizes for the large-block exemption below, without the fortify warning about allocator padding.
+ #define __BIONIC_DISABLE_MALLOC_USABLE_SIZE_FORTIFY_WARNINGS
++#include "berberis/base/host_environment.h"
+ #include <malloc.h>
+ #include <stddef.h>
+ 
+@@ -83,7 +84,7 @@
+ // ("munmap_chunk(): invalid pointer", "double free or corruption (out)"). Scudo (an Android host) checks its own headers.
+ bool GlibcHost() {
+   static const bool glibc = [] {
+-    const char* flags = getenv("BERBERIS_FLAGS");
++    const char* flags = berberis::HostGetenv("BERBERIS_FLAGS");
+     return flags != nullptr && strstr(flags, "glibc-host-thread-id-handoff") != nullptr;
+   }();
+   return glibc;
+@@ -207,7 +208,7 @@
+ // that pointer before (a double free of its own, or of a chunk the ring already released) or never did (memory somebody else freed, or garbage), and lets 2000
+ // invalid frees be described instead of 20. Off: one getenv, nothing recorded.
+ bool LogFrees() {
+-  static const bool on = getenv("BERBERIS_LOG_FREES") != nullptr;
++  static const bool on = berberis::HostGetenv("BERBERIS_LOG_FREES") != nullptr;
+   return on;
+ }
+ 
+diff --git a/kernel_api/include/berberis/kernel_api/exec_emulation.h b/kernel_api/include/berberis/kernel_api/exec_emulation.h
+--- a/kernel_api/include/berberis/kernel_api/exec_emulation.h
++++ b/kernel_api/include/berberis/kernel_api/exec_emulation.h
+@@ -21,6 +21,8 @@
+ 
+ namespace berberis {
+ 
++char** GuestEnvironmentForStartup(char** envp);
++
+ char** DemangleGuestEnvp(char** dst, char** envp);
+ 
+ int ExecveForGuest(const char* filename, char* const argv[], char* const envp[]);
+diff --git a/guest_loader/arm64/guest_loader_arch.cc b/guest_loader/arm64/guest_loader_arch.cc
+--- a/guest_loader/arm64/guest_loader_arch.cc
++++ b/guest_loader/arm64/guest_loader_arch.cc
+@@ -89,6 +89,7 @@
+       AT_NULL,
+   };
+ 
++  envp = GuestEnvironmentForStartup(envp);
+   size_t envp_count = 0;  // number of environment variables + nullptr
+   while (envp[envp_count++] != nullptr) {
+   }
+diff --git a/runtime/arm64/init_kernel_args.cc b/runtime/arm64/init_kernel_args.cc
+--- a/runtime/arm64/init_kernel_args.cc
++++ b/runtime/arm64/init_kernel_args.cc
+@@ -77,6 +77,7 @@
+       AT_NULL,
+   };
+ 
++  envp = GuestEnvironmentForStartup(envp);
+   size_t envp_count = 0;  // number of environment variables + nullptr
+   while (envp[envp_count++] != nullptr) {
+   }
+diff --git a/runtime/arm32/init_kernel_args.cc b/runtime/arm32/init_kernel_args.cc
+--- a/runtime/arm32/init_kernel_args.cc
++++ b/runtime/arm32/init_kernel_args.cc
+@@ -85,6 +85,7 @@
+   constexpr uint32_t argc_count = 1;     // always 1
+   const uint32_t argv_count = argc + 1;  // number of arguments + nullptr
+ 
++  envp = GuestEnvironmentForStartup(envp);
+   uint32_t envp_count = 0;  // number of environment variables + nullptr
+   while (envp[envp_count++] != nullptr) {
+   }
+diff --git a/runtime/riscv64/init_kernel_args.cc b/runtime/riscv64/init_kernel_args.cc
+--- a/runtime/riscv64/init_kernel_args.cc
++++ b/runtime/riscv64/init_kernel_args.cc
+@@ -58,6 +58,7 @@
+       AT_NULL,
+   };
+ 
++  envp = GuestEnvironmentForStartup(envp);
+   size_t envp_count = 0;  // number of environment variables + nullptr
+   while (envp[envp_count++] != nullptr) {
+   }

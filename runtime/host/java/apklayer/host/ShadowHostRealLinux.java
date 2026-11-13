@@ -17,6 +17,15 @@ import org.robolectric.util.ReflectionHelpers.ClassParameter;
 public class ShadowHostRealLinux extends ShadowLinux {
     @RealObject private Object linux;
 
+    @Implementation protected String getenv(String name) { return GuestEnvironment.getenv(name); }
+    @Implementation protected String[] environ() { return GuestEnvironment.environ(); }
+    @Implementation protected void setenv(String name, String value, boolean overwrite) throws android.system.ErrnoException {
+        GuestEnvironment.setenv(name, value, overwrite);
+    }
+    @Implementation protected void unsetenv(String name) throws android.system.ErrnoException {
+        GuestEnvironment.unsetenv(name);
+    }
+
     @SuppressWarnings("unchecked")
     private <T> T natively(String name, ClassParameter<?>... parameters) {
         try {

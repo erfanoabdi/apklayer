@@ -1,0 +1,50 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: expose the active guest libc environment authority
+
+Return real guest libc function addresses and its environ pointer slot to the
+host adapter. The allowlisted functions are wrapped through the existing
+CriticalNative trampoline API; __errno preserves guest libc error semantics.
+No host-libc fallback, copied environment pointer, or duplicate mutable store.
+Module libberberis_arm64; applies after0024.
+
+--- a/native_bridge/native_bridge.cc
++++ b/native_bridge/native_bridge.cc
+@@ -129,6 +129,7 @@
+                          int flags,
+                          const native_bridge_namespace_t* ns = nullptr);
+   GuestAddr DlSym(void* handle, const char* name);
++  GuestAddr EnvironmentSymbol(const char* name);
+   const char* DlError();
+   bool InitAnonymousNamespace(const char* public_ns_sonames, const char* anon_ns_library_path);
+   native_bridge_namespace_t* CreateNamespace(const char* name,
+@@ -448,6 +449,17 @@
+ 
+ extern "C" const char* __progname;
+ 
++// apklayer: resolve environment functions/data in the real guest libc, never the host fallback handle.
++GuestAddr BerberisNativeBridge::EnvironmentSymbol(const char* name) {
++  if (!guest_loader_ || !name) return berberis::kNullGuestAddr;
++  static constexpr const char* allowed[] = {"getenv", "setenv", "unsetenv", "putenv", "clearenv", "environ", "__errno"};
++  bool supported = false;
++  for (const char* symbol : allowed) supported |= strcmp(name, symbol) == 0;
++  if (!supported) return berberis::kNullGuestAddr;
++  static void* libc = guest_loader_->DlOpenExt("libc.so", RTLD_NOW, nullptr);
++  return libc ? DlSym(libc, name) : berberis::kNullGuestAddr;
++}
++
+ bool BerberisNativeBridge::FinalizeInit() {
+   // Guest-libc is expected to be loaded along with app-process during Initialize(). At that time
+   // __progname isn't yet initialized in java. So now when it should be initialized we copy it over
+@@ -838,6 +850,12 @@
+ }  // namespace berberis
+ 
+ extern "C" {
++// apklayer: the caller wraps function addresses with CriticalNative (no JNI arguments).
++// environ is data: its returned address is the authoritative char** slot, not a function.
++__attribute__((visibility("default"))) void* apklayer_guest_environment_symbol(const char* name) {
++  return berberis::ToHostAddr<void>(g_berberis_native_bridge.EnvironmentSymbol(name));
++}
++
+ // "NativeBridgeItf" is effectively an API (it is the name of the symbol that
+ // will be loaded by the native bridge library).
+ android::NativeBridgeCallbacks NativeBridgeItf = {

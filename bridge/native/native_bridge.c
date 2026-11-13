@@ -4,6 +4,9 @@
  * other; its guest world (linker64, libc, proxies) is under the Android root's system/{bin,lib64}/arm64. Java side: apklayer.host.NativeLoader. */
 #define _GNU_SOURCE
 #include <jni.h>
+#include <dlfcn.h>
+#include <errno.h>
+#include "guest_environment.h"
 #include <jvmti.h>
 #include <pthread.h>
 #include <stdbool.h>
@@ -55,6 +58,75 @@ static const uint64_t kAppNamespaceType = 1 | 0x10000000;
 static struct NativeBridgeCallbacks *nb;
 static struct native_bridge_namespace_t *app_ns;
 static jvmtiEnv *ti;
+
+/* The translated libc owns its environment and errno; CriticalNative wrappers have ordinary C arguments. */
+static char *(*guest_env_get)(const char *);
+static int (*guest_env_set)(const char *, const char *, int);
+static int (*guest_env_unset)(const char *);
+static int (*guest_env_put)(char *);
+static int (*guest_env_clear)(void);
+static int *(*guest_env_errno)(void);
+
+static int *environment_errno(void)
+{
+    int saved = errno;
+    int *guest = guest_env_errno();
+    if (guest) *guest = saved;
+    else errno = EFAULT;
+    return guest;
+}
+static char *environment_get(const char *name)
+{
+    int *error = environment_errno(); if (!error) return NULL;
+    char *result = guest_env_get(name); errno = *error; return result;
+}
+static int environment_set(const char *name, const char *value, int overwrite)
+{
+    int *error = environment_errno(); if (!error) return -1;
+    int result = guest_env_set(name, value, overwrite); errno = *error; return result;
+}
+static int environment_unset(const char *name)
+{
+    int *error = environment_errno(); if (!error) return -1;
+    int result = guest_env_unset(name); errno = *error; return result;
+}
+static int environment_put(char *value)
+{
+    int *error = environment_errno(); if (!error) return -1;
+    int result = guest_env_put(value); errno = *error; return result;
+}
+static int environment_clear(void)
+{
+    int *error = environment_errno(); if (!error) return -1;
+    int result = guest_env_clear(); errno = *error; return result;
+}
+static bool install_guest_environment(void *bridge)
+{
+    void *(*symbol)(const char *) = bionic_dlsym(bridge, "apklayer_guest_environment_symbol");
+    int (*install)(const struct libc_bio_environment_backend *) = dlsym(RTLD_DEFAULT, "libc_bio_set_environment_backend");
+    if (!symbol || !install || !nb->getTrampolineForFunctionPointer || !nb->isNativeBridgeFunctionPointer) return false;
+    struct { const char *name, *shorty; void **target; } methods[] = {
+        {"getenv", "JJ", (void **)&guest_env_get}, {"setenv", "IJJI", (void **)&guest_env_set},
+        {"unsetenv", "IJ", (void **)&guest_env_unset}, {"putenv", "IJ", (void **)&guest_env_put},
+        {"clearenv", "I", (void **)&guest_env_clear}, {"__errno", "J", (void **)&guest_env_errno}
+    };
+    /* This provider serves the currently supported 64-bit ARM guest; raw pointers use the J ABI slot. */
+    if (sizeof(void *) != 8) return false;
+    for (size_t i = 0; i < sizeof methods / sizeof *methods; i++) {
+        void *guest = symbol(methods[i].name);
+        if (!guest || !nb->isNativeBridgeFunctionPointer(guest)) return false;
+        *methods[i].target = nb->getTrampolineForFunctionPointer(guest, methods[i].shorty,
+                (uint32_t)strlen(methods[i].shorty), 2 /* kJNICallTypeCriticalNative */);
+        if (!*methods[i].target) return false;
+    }
+    char ***slot = symbol("environ");
+    extern char **environ;
+    if (!slot || slot == &environ) return false;
+    const struct libc_bio_environment_backend provider = {
+        environment_get, environment_set, environment_unset, environment_put, environment_clear, slot
+    };
+    return install(&provider) == 0;
+}
 
 /* A JNI signature's shorty (return type, then parameters; L for any reference), malloc'd */
 static char *shorty_of(const char *sig)
@@ -186,6 +258,8 @@ JNIEXPORT jstring JNICALL Java_apklayer_host_NativeLoader_bridgeInit(JNIEnv *env
         app_ns = nb->createNamespace("classloader-namespace", NULL, libdir, kAppNamespaceType, libdir, system);
         if (!app_ns || !nb->linkNamespaces(app_ns, system, pub))
             snprintf(err, sizeof err, "%s: app namespace: %s", bridge, nb->getError() ? nb->getError() : "?");
+        else if (!install_guest_environment(h))
+            snprintf(err, sizeof err, "%s: guest environment authority unavailable", bridge);
         free(pub);
     }
     if (*err) nb = NULL;

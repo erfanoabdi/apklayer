@@ -3,7 +3,8 @@
  * reserved slots bionic code corrupts it, first visible in threads that make GL calls. bionic_translation's README solves it with a
  * thread-local array in the MAIN EXECUTABLE (main_executable/bionic_compat.c): static TLS of the executable sits right after the
  * thread control block. We cannot relink `java`, but this library is LD_PRELOADed and the executables have no TLS segment, so
- * the first static TLS module is this one and its array lands at the same place (tp+16 = slot 2). Checked at startup. */
+ * the first static TLS module is this one and its array lands at the same place (tp+16 = slot 2). btload defines the same array in its
+ * executable before its path-layer TLS; it preempts this library's definition. Checked at startup. */
 #include <stdint.h>
 #include <stdio.h>
 

@@ -5,6 +5,7 @@
 // llvmpipe) keeps the CPU devices. When a GPU device lacks the extension, nothing is filtered (it might be the one).
 #pragma once
 
+#include "../../HostEnvironment.h"
 #include <log/log.h>
 #include <vulkan/vulkan.h>
 #include <sys/stat.h>
@@ -49,7 +50,7 @@ inline VkResult visibleDevices(PFN_vkGetInstanceProcAddr gipa, VkInstance instan
     if ((r = enumerate(instance, &count, all.data())) < 0) return r;
     all.resize(count);
     *out = all;
-    const char* node = getenv("APKLAYER_RENDER_NODE");
+    const char* node = apklayer::hostGetenv("APKLAYER_RENDER_NODE");
     struct stat st;
     if (!node || !properties2 || stat(node, &st) != 0) return VK_SUCCESS;
     std::vector<VkPhysicalDevice> match, cpu;

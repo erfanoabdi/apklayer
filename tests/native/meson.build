@@ -63,3 +63,41 @@ if is_variable('apklayer_preload') and is_variable('dl_bio')
     test('module-view-' + mode, module_test, args: [dl_bio, module_fixture], env: module_env, suite: 'bionic', timeout: 30)
   endforeach
 endif
+
+if is_variable('c_bio')
+  environment_fixture = shared_module('environment-lib', 'environment-lib.c', link_args: ['-nostdlib'], c_args: ['-fno-stack-protector'])
+  environment_test = executable('environment-test', 'environment.c', dependencies: [dependency('dl')], export_dynamic: true)
+  foreach mode : ['app', 'host', 'service']
+    environment_env = ['LD_LIBRARY_PATH=' + fs.parent(c_bio.full_path()), 'BIONIC_LD_LIBRARY_PATH=' + meson.current_build_dir(),
+      'HOME=/tmp/environment-host-home', 'JAVA_HOME=/host/jdk', 'ENV_HOST_ONLY=private']
+    if mode != 'service'
+      environment_env += ['APKLAYER_OWN_DATA=hello.environment:10001:/tmp/hello.environment']
+    endif
+    if mode == 'host'
+      environment_env += ['APKLAYER_PROC_VIEW=host']
+    endif
+    test('environment-' + mode, environment_test, args: [c_bio, dl_bio, 'libenvironment-lib.so'],
+      depends: environment_fixture, env: environment_env, suite: 'bionic', timeout: 30)
+  endforeach
+endif
+
+if is_variable('apklayer_preload')
+  test('guest-exec-environment', executable('guest-exec-environment-test',
+    ['guest-exec-environment.c', '../../bridge/native/guest_exec_environment.c'], dependencies: [dependency('threads')]),
+    suite: 'bionic', timeout: 30)
+endif
+
+if is_variable('apklayer_preload') and is_variable('c_bio')
+  proc_environment_test = executable('proc-environment-test', 'proc-environment.c', dependencies: [dependency('dl')])
+  foreach mode : ['app', 'host', 'service']
+    proc_environment_env = ['LD_PRELOAD=' + apklayer_preload.full_path(), 'LD_LIBRARY_PATH=' + fs.parent(c_bio.full_path()),
+      'ENV_HOST_ONLY=private']
+    if mode != 'service'
+      proc_environment_env += ['APKLAYER_OWN_DATA=hello.environment:10001:/tmp/hello.environment']
+    endif
+    if mode == 'host'
+      proc_environment_env += ['APKLAYER_PROC_VIEW=host']
+    endif
+    test('proc-environment-' + mode, proc_environment_test, args: [c_bio], env: proc_environment_env, suite: 'bionic', timeout: 30)
+  endforeach
+endif

@@ -512,6 +512,13 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
         patched.CallObjectMethodA = w_CallObjectMethodA; patched.CallStaticObjectMethodA = w_CallStaticObjectMethodA;
     }
     (*ti)->SetJNIFunctionTable(ti, &patched);
+    {
+        extern int apklayer_register_environment(JNIEnv *, jclass);
+        jclass helper = lazy_find_class(env, "apklayer/host/GuestEnvironment");
+        int error = !helper || apklayer_register_environment(env, helper);
+        if (helper) (*env)->DeleteLocalRef(env, helper);
+        if (error) { (*ti)->SetJNIFunctionTable(ti, orig); return -1; }
+    }
     int failed = register_classes(env, vm, rt);
     /* the native audio, binder, media and attribution registrations are always on: apps run on Android's own services */
     int audio_failed = 0;

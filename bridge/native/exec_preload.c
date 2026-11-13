@@ -27,7 +27,8 @@ static const char *const runtime_vars[] = {"LD_LIBRARY_PATH", "LD_PRELOAD", "XDG
 #define NVARS (sizeof runtime_vars / sizeof *runtime_vars - 1)
 static char *started[NVARS];  /* "NAME=value" of each runtime variable at load, or NULL */
 
-struct command { char *btload, *libpath, **argv, **envp; };
+struct command { char *btload, *libpath, **argv, **envp, *environment_fd; int fd; };
+extern int apklayer_pack_guest_environment(char *const envp[]);
 
 __attribute__((constructor)) static void save_runtime_env(void)
 {
@@ -84,14 +85,18 @@ static const char *value(char *const *env, const char *name)
 
 static bool runtime_var(const char *entry)
 {
+    if (!strncmp(entry, "APKLAYER_GUEST_ENV_FD=", 22)) return true;
     for (const char *const *v = runtime_vars; *v; v++)
         if (!strncmp(entry, *v, strlen(*v)) && entry[strlen(*v)] == '=') return true;
     return false;
 }
 
-static void release(struct command *c) { free(c->btload); free(c->libpath); free(c->argv); free(c->envp); }
+static void release(struct command *c) {
+    if (c->fd >= 0) close(c->fd);
+    free(c->environment_fd); free(c->btload); free(c->libpath); free(c->argv); free(c->envp);
+}
 
-static bool rewrite(const char *path, char *const argv[], char *const envp[], struct command *c)
+static int rewrite(const char *path, char *const argv[], char *const envp[], char *const guest_envp[], struct command *c)
 {
     const char *native = runtime_value("APKLAYER_NATIVE"), *libs = runtime_value("BIONIC_LD_LIBRARY_PATH");
     if (!path || !native || !libs || !android_program(path)) return false;
@@ -100,12 +105,16 @@ static bool rewrite(const char *path, char *const argv[], char *const envp[], st
     size_t argc = 0, envc = 0, o = 0;
     while (argv && argv[argc]) argc++;
     while (envp && envp[envc]) envc++;
-    *c = (struct command){0};
+    *c = (struct command){.fd = -1};
     if (asprintf(&c->btload, "%s/bin/btload", native) < 0) c->btload = NULL;
     if (asprintf(&c->libpath, "%s%s%s", app_path ? asked : "", app_path ? ":" : "", libs) < 0) c->libpath = NULL;
     c->argv = calloc(argc + 6, sizeof(char *));
-    c->envp = calloc(envc + NVARS + 1, sizeof(char *));
-    if (!c->btload || !c->libpath || !c->argv || !c->envp) { release(c); return false; }
+    c->envp = calloc(envc + NVARS + 2, sizeof(char *));
+    if (!c->btload || !c->libpath || !c->argv || !c->envp) { release(c); errno = ENOMEM; return -1; }
+    c->fd = apklayer_pack_guest_environment(guest_envp);
+    if (c->fd < 0 || asprintf(&c->environment_fd, "APKLAYER_GUEST_ENV_FD=%d", c->fd) < 0) {
+        int error = errno; release(c); errno = error; return -1;
+    }
     char **a = c->argv;
     *a++ = c->btload, *a++ = c->libpath, *a++ = (char *)path, *a++ = "--exec", *a++ = argc ? argv[0] : (char *)path;
     for (size_t i = 1; i < argc; i++) *a++ = argv[i];
@@ -113,6 +122,7 @@ static bool rewrite(const char *path, char *const argv[], char *const envp[], st
         if (!runtime_var(envp[i])) c->envp[o++] = envp[i];
     for (size_t i = 0; i < NVARS; i++)
         if (started[i]) c->envp[o++] = started[i];
+    c->envp[o++] = c->environment_fd;
     return true;
 }
 
@@ -203,10 +213,17 @@ int execve(const char *path, char *const argv[], char *const envp[])
         return target_done(&t, r);
     }
     /* btload gets the caller's spelling: its linker maps an absolute program path itself (a mapped one is outside its search path) */
-    return target_done(&t, rewrite(path, argv, t.envp, &c) ? exec_command(&c) : ((int (*)(const char *, char *const[], char *const[]))REAL(execve))(t.path, argv, t.envp));
+    int rewritten = rewrite(path, argv, t.envp, envp, &c);
+    return target_done(&t, rewritten < 0 ? -1 : rewritten ? exec_command(&c) : ((int (*)(const char *, char *const[], char *const[]))REAL(execve))(t.path, argv, t.envp));
 }
 
 int execv(const char *path, char *const argv[]) { return execve(path, argv, environ); }
+
+/* Berberis supplies the exact guest environment; rewrite keeps its private loader controls separate. */
+int apklayer_execve_guest(const char *path, char *const argv[], char *const envp[])
+{
+    return execve(path, argv, envp);
+}
 
 /* a name without a slash is searched in PATH: host programs, left to glibc */
 int execvpe(const char *file, char *const argv[], char *const envp[])
@@ -226,7 +243,9 @@ static int spawn(int (*real)(pid_t *, const char *, const posix_spawn_file_actio
     struct target t;
     target(&t, strchr(path, '/') ? path : NULL, envp);
     const char *use = t.path ? t.path : path;
-    if (!t.path || !rewrite(path, argv, t.envp, &c)) return target_done(&t, real(pid, use, actions, attr, argv, t.envp));
+    int rewritten = t.path ? rewrite(path, argv, t.envp, envp, &c) : 0;
+    if (rewritten < 0) return target_done(&t, errno);
+    if (!rewritten) return target_done(&t, real(pid, use, actions, attr, argv, t.envp));
     int r = real(pid, c.btload, actions, attr, c.argv, c.envp);
     release(&c);
     return target_done(&t, r);

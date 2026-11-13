@@ -79,9 +79,28 @@ public final class DenyInstrument {
                 "(Ljava/lang/String;Ljava/lang/Long;)Ljava/lang/Long;").contains(desc);
     }
 
+    private static boolean environmentCall(String owner, String name, String desc) {
+        if (owner.equals("java/lang/System")) return name.equals("getenv")
+                && (desc.equals("(Ljava/lang/String;)Ljava/lang/String;") || desc.equals("()Ljava/util/Map;"));
+        if (owner.equals("java/lang/ProcessBuilder")) return (name.equals("environment") && desc.equals("()Ljava/util/Map;"))
+                || (name.equals("start") && desc.equals("()Ljava/lang/Process;"))
+                || (name.equals("startPipeline") && desc.equals("(Ljava/util/List;)Ljava/util/List;"));
+        return owner.equals("java/lang/Runtime") && name.equals("exec") && java.util.Set.of(
+                "(Ljava/lang/String;)Ljava/lang/Process;", "([Ljava/lang/String;)Ljava/lang/Process;",
+                "(Ljava/lang/String;[Ljava/lang/String;)Ljava/lang/Process;", "([Ljava/lang/String;[Ljava/lang/String;)Ljava/lang/Process;",
+                "(Ljava/lang/String;[Ljava/lang/String;Ljava/io/File;)Ljava/lang/Process;",
+                "([Ljava/lang/String;[Ljava/lang/String;Ljava/io/File;)Ljava/lang/Process;").contains(desc);
+    }
+
+    private static String withReceiver(String owner, String desc) { return "(L" + owner + ";" + desc.substring(1); }
+
     private static Object propertyHandle(Object value) {
         if (value instanceof Handle) {
             Handle h = (Handle) value;
+            if ((h.getTag() == Opcodes.H_INVOKESTATIC || h.getTag() == Opcodes.H_INVOKEVIRTUAL)
+                    && environmentCall(h.getOwner(), h.getName(), h.getDesc()))
+                return new Handle(Opcodes.H_INVOKESTATIC, "apklayer/host/GuestEnvironment", h.getName(),
+                        h.getTag() == Opcodes.H_INVOKESTATIC ? h.getDesc() : withReceiver(h.getOwner(), h.getDesc()), false);
             if (h.getTag() == Opcodes.H_INVOKESTATIC && propertyCall(h.getOwner(), h.getName(), h.getDesc()))
                 return new Handle(h.getTag(), "apklayer/host/GuestSystemProperties", h.getName(), h.getDesc(), false);
         }
@@ -196,12 +215,21 @@ public final class DenyInstrument {
                     @Override
                     public void visitMethodInsn(int opcode, String owner, String mname, String mdesc,
                                                 boolean itf) {
+                        if ((opcode == Opcodes.INVOKESTATIC || opcode == Opcodes.INVOKEVIRTUAL)
+                                && environmentCall(owner, mname, mdesc)) {
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, "apklayer/host/GuestEnvironment", mname,
+                                    opcode == Opcodes.INVOKESTATIC ? mdesc : withReceiver(owner, mdesc), false);
+                            return;
+                        }
                         if (opcode == Opcodes.INVOKESTATIC && propertyCall(owner, mname, mdesc)) {
                             super.visitMethodInsn(opcode, "apklayer/host/GuestSystemProperties", mname, mdesc, false);
                             return;
                         }
                         if (opcode == Opcodes.INVOKEVIRTUAL && owner.equals("java/lang/invoke/MethodHandles$Lookup")
-                                && ((mname.equals("findStatic") && mdesc.equals("(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/MethodHandle;"))
+                                && (((mname.equals("findStatic") || mname.equals("findVirtual")) && mdesc.equals("(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/MethodHandle;"))
+                                || (mname.equals("bind") && mdesc.equals("(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/MethodHandle;"))
+                                || (mname.equals("findSpecial") && mdesc.equals("(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;Ljava/lang/Class;)Ljava/lang/invoke/MethodHandle;"))
+                                || (mname.equals("unreflectSpecial") && mdesc.equals("(Ljava/lang/reflect/Method;Ljava/lang/Class;)Ljava/lang/invoke/MethodHandle;"))
                                 || (mname.equals("unreflect") && mdesc.equals("(Ljava/lang/reflect/Method;)Ljava/lang/invoke/MethodHandle;")))) {
                             super.visitMethodInsn(Opcodes.INVOKESTATIC, "apklayer/host/Reflect", mname,
                                     "(Ljava/lang/invoke/MethodHandles$Lookup;" + mdesc.substring(1), false);

@@ -2,6 +2,7 @@
 // Keep Android WSI in AOSP. Host dispatchable handles retain their host vtables;
 // patches/aosp/frameworks/native/0003-vulkan-host-dispatch.patch gives Android's loader separate private dispatch data.
 #define LOG_TAG "apklayer.vulkan"
+#include "../../HostEnvironment.h"
 #include <hardware/hwvulkan.h>
 #include <vulkan/vk_android_native_buffer.h>
 #include <dlfcn.h>
@@ -82,7 +83,7 @@ bool hasExtension(VkPhysicalDevice physical, const char* name) {
 // command that uses the image, even in a standalone C program (PLAN archive P7.5). Advertised by default, Vulkan games would try the swapchain and die
 // instead of falling back to GL. Hosts whose driver can use imported dma-bufs (native Linux GPUs) can enable it.
 bool nativeBufferSupported(VkPhysicalDevice physical) {
-    if (!getenv("APKLAYER_VULKAN_PRESENT")) return false;
+    if (!apklayer::hostGetenv("APKLAYER_VULKAN_PRESENT")) return false;
     for (const char* name : kNativeBufferNeeds) if (!hasExtension(physical, name)) return false;
     return true;
 }

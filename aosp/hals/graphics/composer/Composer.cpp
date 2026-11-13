@@ -4,6 +4,7 @@
 // frame callback; the period reported is measured from those callbacks, not the (possibly wrong) output mode.
 #define LOG_TAG "apklayer.composer"
 
+#include "../../HostEnvironment.h"
 #include <cerrno>
 #include <cstring>
 #include <aidl/android/hardware/graphics/composer3/BnComposer.h>
@@ -43,7 +44,7 @@ constexpr int32_t kBadDisplay = IComposerClient::EX_BAD_DISPLAY, kBadLayer = ICo
                   kUnsupported = IComposerClient::EX_UNSUPPORTED, kBadConfig = IComposerClient::EX_BAD_CONFIG;
 
 int envInt(const char* name, int fallback) {
-    const char* v = getenv(name);
+    const char* v = apklayer::hostGetenv(name);
     return v ? atoi(v) : fallback;
 }
 

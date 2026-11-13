@@ -1,3 +1,4 @@
+#include "../HostEnvironment.h"
 #include "Stream.h"
 #include <aidl/android/media/audio/common/PcmType.h>
 #include <Utils.h>
@@ -34,7 +35,7 @@ bool silentFallback(int status, bool input) {
     apklayer_audio_config config{static_cast<uint32_t>(context_.getSampleRate()),
         static_cast<uint32_t>(getChannelCount(context_.getChannelLayout())),
         format.pcm == PcmType::INT_16_BIT ? APKLAYER_AUDIO_S16 : APKLAYER_AUDIO_F32,
-        std::getenv("APKLAYER_AUDIO_TARGET")};
+        apklayer::hostGetenv("APKLAYER_AUDIO_TARGET")};
     int status = apklayer_audio_open(&config, &audio_);
     if (status && silentFallback(status, false)) return stub_.emplace(context_).init(nullptr);
     if (status == 0) status = apklayer_audio_pause(audio_);
@@ -92,7 +93,7 @@ void PipeWireStream::shutdown() {
     apklayer_audio_config config{static_cast<uint32_t>(context_.getSampleRate()),
         static_cast<uint32_t>(getChannelCount(context_.getChannelLayout())),
         format.pcm == PcmType::INT_16_BIT ? APKLAYER_AUDIO_S16 : APKLAYER_AUDIO_F32,
-        std::getenv("APKLAYER_AUDIO_TARGET_IN")};
+        apklayer::hostGetenv("APKLAYER_AUDIO_TARGET_IN")};
     int status = apklayer_capture_open(&config, &capture_);
     if (status && silentFallback(status, true)) return stub_.emplace(context_).init(nullptr);
     if (status == 0) status = apklayer_capture_pause(capture_);

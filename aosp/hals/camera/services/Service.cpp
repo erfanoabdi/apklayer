@@ -3,6 +3,7 @@
 // With it "media.camera.proxy", the part of system_server's CameraServiceProxy that CameraService asks (apklayer runs no system_server):
 // without it every open is refused ("Camera disabled by device policy"), and it carries the apps' window shapes to open cameras; and "processinfo" (ActivityManager's process states, which a
 // connect needs to rank camera clients).
+#include "../../HostEnvironment.h"
 #include <android/hardware/BnCameraServiceProxy.h>
 #include <android/os/BnProcessInfoService.h>
 #include <binder/IPCThreadState.h>
@@ -118,7 +119,7 @@ extern "C" int main(int, char**) {
     // started on first use (cli/stack.cpp): registered again with client counting, the process exits once no client holds any of its services
     // (an AOSP lazy service) and the stack starts it again on the next lookup. _exit, not the registrar's exit(): static destructors under
     // btload abort while binder threads still run.
-    if (getenv("APKLAYER_LAZY_SERVICE")) {
+    if (apklayer::hostGetenv("APKLAYER_LAZY_SERVICE")) {
         auto& registrar = binder::LazyServiceRegistrar::getInstance();
         registrar.setActiveServicesCallback([&registrar](bool clients) {
             if (!clients && registrar.tryUnregister()) _exit(0);

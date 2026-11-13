@@ -1,0 +1,449 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Fri, 13 Nov 2026 00:00:00 +0000
+Subject: [PATCH] libc: isolate the app environment from host runtime state
+
+apklayer patch (docs/PATCHES.md). Reuse AOSP bionic/libc/bionic/env.cpp's
+licensed environment implementation with private storage and host pthread
+locking. Application mutations, putenv ownership and direct environ replacement
+never change glibc's environment. Both linker relocations and dlsym resolve the
+actual environ pointer slot. A registered active-ABI backend can own that slot
+and the same getter/setter API. Service and diagnostic host views use glibc.
+Initial Android defaults follow init.environ.rc.in and bionic paths.h; an
+explicit child environment is restored verbatim through the preload callback.
+
+--- a/meson.build
++++ b/meson.build
+@@ -116,6 +116,7 @@
+ 		'libc/libc-chk.c',
+ 		'libc/libc-math.c',
+ 		'libc/libc-misc.c',
++		'libc/libc-environment.cpp', # apklayer: isolated app environment
+ 		'libc/libc-musl.c',
+ 		'libc/libc-signal.c',
+ 		'libc/libc-stdio.c',
+--- a/libc/libc-misc.c
++++ b/libc/libc-misc.c
+@@ -35,32 +35,6 @@
+ 	}
+ }
+ 
+-static char *startup_home; /* the host's HOME as the process started, before any app code ran */
+-__attribute__((constructor)) static void remember_startup_home(void)
+-{
+-	const char *home = getenv("HOME");
+-	startup_home = home ? strdup(home) : NULL;
+-}
+-
+-char *bionic_getenv(const char *name) {
+-	if(!name) {
+-		printf("!!! NULL passed to %s\n", __func__);
+-	}
+-
+-	/* apklayer patch: an Android app process has no HOME; the host's (the user's home) stays hidden, one the app sets itself
+-	 * (GeckoLoader: HOME=<files dir>, where Gecko keeps its profile) is the app's */
+-	if(!strcmp(name, "HOME")) {
+-		const char *home = getenv(name);
+-		return home && (!startup_home || strcmp(home, startup_home)) ? (char *)home : NULL;
+-	}
+-
+-	/* no point returning anything else, apps mix this with using hardcoded paths */
+-	if(!strcmp(name, "ANDROID_ROOT"))
+-		return "/system";
+-
+-	return getenv(name);
+-}
+-
+ /* __gnu_strerror_r emulates glibc's strerror_r.
+  * to make sure we get that, we define _GNU_SOURCE.
+  * musl doesn't have any way to get the glibc behavior. */
+--- a/linker/linker.h
++++ b/linker/linker.h
+@@ -31,6 +31,7 @@
+ 
+ /* apklayer patch: guest-only module names; optional when the host preload is absent. */
+ extern const char *apklayer_proc_module_name(const char *) __attribute__((weak));
++void *apkenv_environment_symbol(const char *name);
+ 
+ #include <elf.h>
+ #include <link.h>
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -1958,6 +1958,13 @@
+ 
+ static bool die_because_of_missing_symbols = false;
+ 
++/* apklayer: environ is DATA: resolve the authoritative slot, not a mirrored pointer value. */
++void *apkenv_environment_symbol(const char *name)
++{
++    char ***(*slot)(void) = dlsym(RTLD_DEFAULT, "bionic_environment_slot");
++    return slot ? slot() : dlsym(RTLD_DEFAULT, name);
++}
++
+ static int apkenv_reloc_library(soinfo *si, REL_TYPE *rel, size_t count)
+ {
+ 	ElfW(Sym) *s;
+@@ -1985,7 +1992,10 @@
+ 			memcpy(wrap_sym_name + 7, sym_name, MIN(sizeof(wrap_sym_name) - 7, strlen(sym_name)));
+ 			sym_addr = 0;
+ 
+-			if ((sym_addr = (uintptr_t)dlsym(RTLD_DEFAULT, wrap_sym_name))) {
++			if (!strcmp(sym_name, "environ") || !strcmp(sym_name, "__environ")) {
++				sym_addr = (uintptr_t)apkenv_environment_symbol(sym_name);
++				if (!sym_addr) return -1;
++			} else if ((sym_addr = (uintptr_t)dlsym(RTLD_DEFAULT, wrap_sym_name))) {
+ 				LINKER_DEBUG_PRINTF("%s hooked symbol %s to %p\n", si->name, wrap_sym_name, (void *)sym_addr);
+ 			} else if ((s = apkenv__do_lookup(si, sym_name, &base))) {
+ 				// normal symbol
+--- a/linker/dlfcn.c
++++ b/linker/dlfcn.c
+@@ -161,6 +161,8 @@
+ {
+ 	(void)caller;
+ 	verbose("bionic_dlsym(%p, %s) called\n", handle, symbol);
++	if (symbol && (!strcmp(symbol, "environ") || !strcmp(symbol, "__environ")))
++		return apkenv_environment_symbol(symbol);
+ 
+ 	soinfo *found;
+ 	ElfW(Sym) *sym;
+--- /dev/null
++++ b/libc/libc-environment.cpp
+@@ -0,0 +1,338 @@
++#define _GNU_SOURCE
++/*
++ * Copyright (c) 1987, 1993
++ *	The Regents of the University of California.  All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ * 3. Neither the name of the University nor the names of its contributors
++ *    may be used to endorse or promote products derived from this software
++ *    without specific prior written permission.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ */
++
++#include <errno.h>
++#include <stdint.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++
++#include <pthread.h>
++
++/* apklayer: copied from AOSP bionic/libc/bionic/env.cpp; own environment, host pthread locking. */
++static char **guest_environ;
++struct ScopedEnvLock {
++  pthread_rwlock_t *lock;
++  ScopedEnvLock(pthread_rwlock_t *value, bool write) : lock(value) {
++    if (write) pthread_rwlock_wrlock(lock); else pthread_rwlock_rdlock(lock);
++  }
++  ~ScopedEnvLock() { pthread_rwlock_unlock(lock); }
++};
++
++static pthread_rwlock_t g_environ_lock = PTHREAD_RWLOCK_INITIALIZER;
++
++// Returns a pointer to the value associated with name,
++// or nullptr if not found.
++// Starts searching guest_environ from *offset,
++// and sets *offset to the index at which the variable was found.
++static char* __findenv(const char* name, size_t name_length, size_t* offset) {
++  if (guest_environ != nullptr) {
++    for (char** p = guest_environ + *offset; *p != nullptr; ++p) {
++      if (!strncmp(name, *p, name_length) && (*p)[name_length] == '=') {
++        *offset = p - guest_environ;
++        return *p + name_length + 1;
++      }
++    }
++  }
++  return nullptr;
++}
++
++char* guest_getenv(const char* name) {
++  size_t name_length;
++  if (name == nullptr ||
++      (name_length = strchrnul(name, '=') - name) == 0 ||
++      name[name_length] == '=') {
++    errno = EINVAL;
++    return nullptr;
++  }
++
++  ScopedEnvLock locker(&g_environ_lock, false);
++  size_t offset = 0;
++  return __findenv(name, name_length, &offset);
++}
++
++static bool __add_new_environ_slot(size_t* offset) {
++  size_t old_size = 0;
++  if (guest_environ != nullptr) {
++    char** p = guest_environ;
++    for (; *p != nullptr; ++p) ++old_size;
++  }
++
++  // Keep track of the most recent guest_environ allocation we did.
++  // We can't just pass guest_environ to reallocarray() because that might
++  // have been replaced with non-heap-allocated memory. Supporting that
++  // is probably a mistake, but it's our (and everyone else's) historical
++  // behavior.
++  static char** old_env = nullptr;
++
++  char** new_env = static_cast<char**>(reallocarray(old_env, old_size + 2, sizeof(char*)));
++  if (!new_env) return false;
++  if (old_env != guest_environ && guest_environ != nullptr) {
++    memcpy(new_env, guest_environ, old_size * sizeof(char*));
++  }
++  guest_environ = old_env = new_env;
++  guest_environ[old_size] = guest_environ[old_size + 1] = nullptr;
++  *offset = old_size;
++  return true;
++}
++
++template <typename F>
++static int __update_environ(const char* name, size_t name_length, bool overwrite, F string_maker) {
++  size_t offset = 0;
++  if (__findenv(name, name_length, &offset) != nullptr) {
++    if (!overwrite) return 0;
++  } else {
++    if (!__add_new_environ_slot(&offset)) return -1;
++  }
++
++  char* str = string_maker();
++  if (!str) return -1;  // Preserve an existing value if its replacement allocation fails.
++  guest_environ[offset] = str;
++  return 0;
++}
++
++int guest_putenv(char* str) {
++  // Unlike the other functions where the input MUST NOT contain '=',
++  // here the input MUST contain '='.
++  size_t name_length;
++  if (str == nullptr ||
++      (name_length = strchrnul(str, '=') - str) == 0 ||
++      str[name_length] != '=') {
++    errno = EINVAL;
++    return -1;
++  }
++
++  ScopedEnvLock locker(&g_environ_lock, true);
++  return __update_environ(str, name_length, true, [str]() { return str; });
++}
++
++int guest_setenv(const char* name, const char* value, int overwrite) {
++  size_t name_length;
++  if (name == nullptr ||
++      (name_length = strchrnul(name, '=') - name) == 0 ||
++      name[name_length] == '=') {
++    errno = EINVAL;
++    return -1;
++  }
++
++  ScopedEnvLock locker(&g_environ_lock, true);
++  auto string_maker = [name, name_length, value]() {
++    // Turn "name" and "value" into "name=value" for insertion into guest_environ.
++    size_t value_length = strlen(value);
++    char* str = static_cast<char*>(malloc(name_length + 1 + value_length + 1));
++    if (str != nullptr) {
++      mempcpy(mempcpy(mempcpy(str, name, name_length), "=", 1), value, value_length + 1);
++    }
++    return str;
++  };
++  return __update_environ(name, name_length, overwrite, string_maker);
++}
++
++int guest_unsetenv(const char* name) {
++  size_t name_length;
++  if (name == nullptr ||
++      (name_length = strchrnul(name, '=') - name) == 0 ||
++      name[name_length] == '=') {
++    errno = EINVAL;
++    return -1;
++  }
++
++  // While guest_setenv()/guest_putenv() will always ensure there's at most one assignment to any given name,
++  // callers could replace guest_environ with a malformed array.
++  // guest_getenv() wouldn't care because it will always stop at the first match,
++  // but guest_unsetenv() needs to make sure that _all_ assignments are removed.
++  // POSIX says "If more than one string in an environment of a process has the same name,
++  // the consequences are undefined" so this isn't _required_ to be a loop,
++  // but it matches what other implementations do.
++  ScopedEnvLock locker(&g_environ_lock, true);
++  size_t offset = 0;
++  while (__findenv(name, name_length, &offset)) {
++    for (char** p = &guest_environ[offset];; ++p) {
++      if (!(*p = *(p + 1))) {
++        break;
++      }
++    }
++  }
++  return 0;
++}
++
++int guest_clearenv() {
++  ScopedEnvLock locker(&g_environ_lock, true);
++  char** old_environ = guest_environ;
++  guest_environ = nullptr;
++  if (old_environ != nullptr) {
++    for (; *old_environ; ++old_environ) {
++      *old_environ = nullptr;
++    }
++  }
++  return 0;
++}
++
++/* apklayer: the host loader/JVM environment is never the app's storage. */
++extern "C" const char *apklayer_own_data_env(void) __attribute__((weak));
++extern "C" char **apklayer_guest_exec_environment(void) __attribute__((weak));
++struct libc_bio_environment_backend {
++  char *(*get)(const char *);
++  int (*set)(const char *, const char *, int);
++  int (*unset)(const char *);
++  int (*put)(char *);
++  int (*clear)(void);
++  char ***slot;
++};
++static libc_bio_environment_backend backend_storage;
++static const libc_bio_environment_backend *backend;
++static pthread_mutex_t init_lock = PTHREAD_MUTEX_INITIALIZER;
++static bool prepared;
++static const char *initial_environment;
++static size_t initial_environment_size;
++
++static bool app_environment() {
++  const char *view = getenv("APKLAYER_PROC_VIEW");
++  return (!view || strcmp(view, "host")) &&
++      (apklayer_own_data_env ? apklayer_own_data_env() != nullptr : getenv("APKLAYER_OWN_DATA") != nullptr);
++}
++
++/* system/core/rootdir/init.environ.rc.in and bionic/libc/include/paths.h. */
++static const char *const android_defaults[] = {
++  "ANDROID_BOOTLOGO=1", "ANDROID_ROOT=/system", "ANDROID_ASSETS=/system/app",
++  "ANDROID_DATA=/data", "ANDROID_STORAGE=/storage", "ANDROID_ART_ROOT=/apex/com.android.art",
++  "ANDROID_I18N_ROOT=/apex/com.android.i18n", "ANDROID_TZDATA_ROOT=/apex/com.android.tzdata",
++  "EXTERNAL_STORAGE=/sdcard", "ASEC_MOUNTPOINT=/mnt/asec",
++  "PATH=/product/bin:/apex/com.android.runtime/bin:/apex/com.android.art/bin:/apex/com.android.virt/bin:/system_ext/bin:/system/bin:/system/xbin:/odm/bin:/vendor/bin:/vendor/xbin",
++  nullptr
++};
++
++/* Called only before app execution; the complete replacement is allocated before publishing it. */
++static int initialize(char *const envp[], bool explicit_child) {
++  const char *const *source = explicit_child ? const_cast<const char *const *>(envp) : android_defaults;
++  size_t count = 0;
++  while (source && source[count]) ++count;
++  char **copy = static_cast<char **>(calloc(count + 1, sizeof(char *)));
++  if (!copy) return -1;
++  size_t bytes = 0;
++  for (size_t i = 0; i < count; ++i) {
++    size_t length = strlen(source[i]) + 1;
++    if (length > SIZE_MAX - bytes) errno = ENOMEM;
++    else copy[i] = strdup(source[i]);
++    if (!copy[i]) {
++      int saved = errno;
++      while (i) free(copy[--i]);
++      free(copy); errno = saved; return -1;
++    }
++    bytes += length;
++  }
++  char *snapshot = static_cast<char *>(malloc(bytes ? bytes : 1));
++  if (!snapshot) {
++    int saved = errno;
++    for (size_t i = 0; i < count; ++i) free(copy[i]);
++    free(copy); errno = saved; return -1;
++  }
++  snapshot[0] = 0;  // a non-null pointer distinguishes an empty guest environment from no guest view
++  char *out = snapshot;
++  for (size_t i = 0; i < count; ++i) {
++    size_t length = strlen(copy[i]) + 1;
++    memcpy(out, copy[i], length); out += length;
++  }
++  ScopedEnvLock locker(&g_environ_lock, true);
++  guest_environ = copy;
++  // Published snapshots remain valid for readers, including across a pre-exec reseed.
++  initial_environment = snapshot;
++  initial_environment_size = bytes;
++  prepared = true;
++  return 0;
++}
++static int prepare() {
++  pthread_mutex_lock(&init_lock);
++  char **child = apklayer_guest_exec_environment ? apklayer_guest_exec_environment() : nullptr;
++  int result = prepared ? 0 : initialize(child, child != nullptr);
++  pthread_mutex_unlock(&init_lock);
++  return result;
++}
++/* /proc/self/environ describes the initial seed, not the live libc environment after app mutations. */
++extern "C" const char *libc_bio_initial_environment(size_t *size) {
++  if (!size) { errno = EINVAL; return nullptr; }
++  *size = 0;
++  if (!app_environment() || prepare() != 0) return nullptr;
++  pthread_mutex_lock(&init_lock);
++  const char *snapshot = initial_environment;
++  *size = initial_environment_size;
++  pthread_mutex_unlock(&init_lock);
++  return snapshot;
++}
++extern "C" int libc_bio_init_guest_environment(char *const envp[], int explicit_child) {
++  pthread_mutex_lock(&init_lock);
++  int result;
++  if (__atomic_load_n(&backend, __ATOMIC_ACQUIRE)) { errno = EBUSY; result = -1; }
++  else result = initialize(envp, explicit_child != 0);
++  pthread_mutex_unlock(&init_lock);
++  return result;
++}
++extern "C" int libc_bio_set_environment_backend(const libc_bio_environment_backend *value) {
++  if (!value || !value->get || !value->set || !value->unset || !value->put || !value->clear || !value->slot) {
++    errno = EINVAL; return -1;
++  }
++  pthread_mutex_lock(&init_lock);
++  int result = 0;
++  if (backend) { errno = EBUSY; result = -1; }
++  else { backend_storage = *value; __atomic_store_n(&backend, &backend_storage, __ATOMIC_RELEASE); }
++  pthread_mutex_unlock(&init_lock);
++  return result;
++}
++extern "C" char ***bionic_environment_slot() {
++  if (!app_environment()) return &environ;
++  const auto *ops = __atomic_load_n(&backend, __ATOMIC_ACQUIRE);
++  return ops ? ops->slot : prepare() == 0 ? &guest_environ : nullptr;
++}
++extern "C" const char *libc_bio_host_getenv(const char *name) { return getenv(name); }
++extern "C" char *bionic_getenv(const char *name) {
++  if (!app_environment()) return getenv(name);
++  const auto *ops = __atomic_load_n(&backend, __ATOMIC_ACQUIRE);
++  return ops ? ops->get(name) : prepare() == 0 ? guest_getenv(name) : nullptr;
++}
++extern "C" int bionic_setenv(const char *name, const char *value, int overwrite) {
++  if (!app_environment()) return setenv(name, value, overwrite);
++  const auto *ops = __atomic_load_n(&backend, __ATOMIC_ACQUIRE);
++  return ops ? ops->set(name, value, overwrite) : prepare() == 0 ? guest_setenv(name, value, overwrite) : -1;
++}
++extern "C" int bionic_unsetenv(const char *name) {
++  if (!app_environment()) return unsetenv(name);
++  const auto *ops = __atomic_load_n(&backend, __ATOMIC_ACQUIRE);
++  return ops ? ops->unset(name) : prepare() == 0 ? guest_unsetenv(name) : -1;
++}
++extern "C" int bionic_putenv(char *value) {
++  if (!app_environment()) return putenv(value);
++  const auto *ops = __atomic_load_n(&backend, __ATOMIC_ACQUIRE);
++  return ops ? ops->put(value) : prepare() == 0 ? guest_putenv(value) : -1;
++}
++extern "C" int bionic_clearenv() {
++  if (!app_environment()) return clearenv();
++  const auto *ops = __atomic_load_n(&backend, __ATOMIC_ACQUIRE);
++  return ops ? ops->clear() : prepare() == 0 ? guest_clearenv() : -1;
++}

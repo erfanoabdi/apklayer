@@ -23,6 +23,7 @@ static int proc_file_kind(const char *leaf)
     if (!strcmp(leaf, "status")) return 2;
     if (!strcmp(leaf, "map_files")) return 3;
     if (!strcmp(leaf, "numa_maps")) return 4;
+    if (!strcmp(leaf, "environ")) return 5;
     return 0;
 }
 
@@ -150,6 +151,28 @@ static void numa_line(FILE *out, const char *line)
     fputs(projected, out); fputs(end, out);
 }
 
+/* Replace only a successfully opened readable proc file; keep its descriptor and close-on-exec flag. */
+static int proc_replace(int fd, int cloexec, const char *name, const char *text, size_t size)
+{
+    long (*raw)(long, ...) = dlsym(RTLD_NEXT, "syscall");
+    int out = raw(SYS_memfd_create, name, 1 /* MFD_CLOEXEC */), result = -1;
+    if (out < 0) return -1;
+    for (size_t at = 0; at < size;) {
+        ssize_t n = write(out, text + at, size - at);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) goto done;
+        at += n;
+    }
+    char path[64]; snprintf(path, sizeof path, "/proc/self/fd/%d", out);
+    int ro = raw(SYS_openat, AT_FDCWD, path, O_RDONLY | O_CLOEXEC, 0);
+    if (ro < 0) goto done;
+    if (dup3(ro, fd, (cloexec & FD_CLOEXEC) ? O_CLOEXEC : 0) >= 0) result = fd;
+    close(ro);
+done:
+    { int saved = errno; close(out); errno = saved; }
+    return result;
+}
+
 /* fd remains owned by the caller, including on failure. */
 static int proc_filter(int fd)
 {
@@ -159,10 +182,17 @@ static int proc_filter(int fd)
     if (flags < 0 || (flags & (O_PATH | O_ACCMODE)) != O_RDONLY) return fd;
     int kind = own_proc_file(fd);
     if (!kind || kind == 3) return fd;
+    if (kind == 5) {
+        const char *(*initial)(size_t *) = dlsym(RTLD_DEFAULT, "libc_bio_initial_environment");
+        if (!initial) { errno = ENOSYS; return -1; }
+        size_t size = 0;
+        errno = 0;
+        const char *text = initial(&size);
+        if (!text) return errno ? -1 : fd;
+        return proc_replace(fd, cloexec, "environ", text, size);
+    }
     long app_uid = apklayer_app_uid();
-    /* Use the real syscall entry: the preload's syscall wrapper calls us too. */
-    long (*raw)(long, ...) = dlsym(RTLD_NEXT, "syscall");
-    int copy = fcntl(fd, F_DUPFD_CLOEXEC, 0), out = -1, result = -1;
+    int copy = fcntl(fd, F_DUPFD_CLOEXEC, 0), result = -1;
     FILE *in = copy < 0 ? NULL : fdopen(copy, "r");
     if (!in) { if (copy >= 0) close(copy); return -1; }
     char *line = NULL, *text = NULL;
@@ -214,24 +244,12 @@ static int proc_filter(int fd)
     if (ferror(in) || ferror(buffer)) goto buffered;
     if (fclose(buffer)) { buffer = NULL; goto done; }
     buffer = NULL;
-    out = raw(SYS_memfd_create, "maps", 1 /* MFD_CLOEXEC */);
-    if (out < 0) goto done;
-    for (size_t at = 0; at < size;) {
-        ssize_t n = write(out, text + at, size - at);
-        if (n < 0 && errno == EINTR) continue;
-        if (n <= 0) goto done;
-        at += n;
-    }
-    char path[64]; snprintf(path, sizeof path, "/proc/self/fd/%d", out);
-    int ro = raw(SYS_openat, AT_FDCWD, path, O_RDONLY | O_CLOEXEC, 0);
-    if (ro < 0) goto done;
-    if (dup3(ro, fd, (cloexec & FD_CLOEXEC) ? O_CLOEXEC : 0) >= 0) result = fd;
-    close(ro);
+    result = proc_replace(fd, cloexec, "maps", text, size);
     goto done;
 buffered:
     fclose(buffer);
 done:
-    { int saved = errno; free(line); free(text); fclose(in); if (out >= 0) close(out); errno = saved; }
+    { int saved = errno; free(line); free(text); fclose(in); errno = saved; }
     return result;
 }
 
