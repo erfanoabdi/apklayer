@@ -242,8 +242,12 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - Bluetooth advertising/peripheral, A2DP/HFP, LE audio, OPP; USB accessory mode, tethering, detaching host drivers.
 - Several phone instances as a product; a JRE provisioned by setup for the Ubuntu Touch deb (the click bundles its JDK).
 
-### Existing native-bridge UID/proc-view test gaps (2026-11-13)
+## Runtime identity goal (active, 2026-11-13)
 
-`tests/run native-bridge` on unsandboxed UTM ARM64 reports `proc view WRONG bits 10`: status Uid/Gid and raw getdents64 do not have the translator's virtualized view. Reproduced with the pre-ART-maps preload from `d0399c42^`; unrelated to maps filtering. JNI, thread callbacks, fault recovery, auxv, own-data ownership and GL checks pass. Align native `/proc` behavior with the translated route, then keep the same assertion on both.
+User requested: fix ART internals, Java runtime clues, process identity and other native inspection paths. Do not equate maps labels with ART compatibility.
 
-On the x86 PC's translated ARM64 route, the same group reports `getuid 1000, files owner 1000, app 10025` and proc bits 11. The identical failure reproduces with the pre-change preload too. Check that deployed translator uid/stat/getdents patches match the source series before changing runtime behavior.
+- Java runtime: compare app property getters, enumeration, reflection, class availability/loaders and traces with Android. Local AOSP libcore System.java and libart/src/main/java/java/lang/AndroidHardcodedSystemProperties.java are the version-specific reference. `tests/native/RuntimeIdentity.java` is a standalone class/DEX diagnostic. Current app setup overrides only four properties; broader getters/enumeration are unfinished. Do not change host-only properties (java.home etc.) globally without tracing their runtime consumers.
+- Native inspection: make maps, map_files, ELF/module enumeration and paths consistent across Java, native ARM64 and translated ARM64. Current maps label is synthetic; loader/ELF introspection remains unfinished. Direct machine syscall instructions bypass native preload hooks.
+- ART internals: identify and implement the requested runtime interfaces/representations against Android; real JNI, Unsafe, reflection and native bridge behavior must agree. HotSpot ArtMethod/object/JIT/GC layout is not ART's; renaming does not resolve it. This requirement is still open.
+- Process identity: UID/file owner, own status Uid/Gid and `/proc` directory visibility now pass the existing native-bridge checks on UTM ARM64 and the x86 translator with userspace binder. Broader consistency (supplementary groups in status, other proc files, namespace/security semantics) still needs comparison and coverage.
+- Waydroid: Android 13 container could start after temporary binder devices were supplied, but the command-line Java probe did not run (CLI consumed -cp). User then instructed not to touch Waydroid binder setup: temporary devices removed, session/container stopped. Leave its binder setup alone. Apklayer tests explicitly select APKLAYER_BINDER=userspace.
