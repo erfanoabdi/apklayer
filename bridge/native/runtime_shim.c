@@ -292,12 +292,14 @@ static void JNICALL w_CallStaticVoidMethodA(JNIEnv *env, jclass c, jmethodID m, 
 static jobject JNICALL w_CallObjectMethodA(JNIEnv *env, jobject o, jmethodID m, const jvalue *a) { jobject r = real_table->CallObjectMethodA(env, o, m, a); trace_pending(env, "CallObjectMethodA"); return r; }
 static jobject JNICALL w_CallStaticObjectMethodA(JNIEnv *env, jclass c, jmethodID m, const jvalue *a) { jobject r = real_table->CallStaticObjectMethodA(env, c, m, a); trace_pending(env, "CallStaticObjectMethodA"); return r; }
 
+/* a host control property: always the JVM's, through the original table (jni_system_route.c routes guest callers only) */
 static char *system_property(JNIEnv *env, const char *key)
 {
-    jclass sys = (*env)->FindClass(env, "java/lang/System");
-    jmethodID get = (*env)->GetStaticMethodID(env, sys, "getProperty", "(Ljava/lang/String;)Ljava/lang/String;");
-    jstring k = (*env)->NewStringUTF(env, key);
-    jstring v = (jstring)(*env)->CallStaticObjectMethod(env, sys, get, k);
+    const struct JNINativeInterface_ *jni = real_table ? real_table : *env;
+    jclass sys = jni->FindClass(env, "java/lang/System");
+    jmethodID get = jni->GetStaticMethodID(env, sys, "getProperty", "(Ljava/lang/String;)Ljava/lang/String;");
+    jstring k = jni->NewStringUTF(env, key);
+    jstring v = (jstring)jni->CallStaticObjectMethod(env, sys, get, k);
     if (!v) return NULL;
     const char *c = (*env)->GetStringUTFChars(env, v, NULL);
     char *copy = strdup(c);
@@ -510,6 +512,13 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     if (getenv("APKLAYER_JNI_EXC")) {
         patched.CallVoidMethodA = w_CallVoidMethodA; patched.CallStaticVoidMethodA = w_CallStaticVoidMethodA;
         patched.CallObjectMethodA = w_CallObjectMethodA; patched.CallStaticObjectMethodA = w_CallStaticObjectMethodA;
+    }
+    {   /* guest native calls of System's property/environment methods reach the app's views (last: it chains to the entries above) */
+        extern int apklayer_route_system_calls(JNIEnv *, jvmtiEnv *, jclass, jniNativeInterface *);
+        jclass reflect = lazy_find_class(env, "apklayer/host/Reflect");
+        int error = !reflect || apklayer_route_system_calls(env, ti, reflect, &patched);
+        if (reflect) (*env)->DeleteLocalRef(env, reflect);
+        if (error) { (*env)->ExceptionDescribe(env); fprintf(stderr, "[runtime] cannot route JNI System calls\n"); return -1; }
     }
     (*ti)->SetJNIFunctionTable(ti, &patched);
     {

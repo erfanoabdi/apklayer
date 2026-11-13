@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Sat, 14 Nov 2026 00:00:00 +0000
+Subject: [PATCH] libc: sigaction reports signal 32 at its default
+
+apklayer patch (docs/PATCHES.md). glibc keeps signal 32 (SIGCANCEL) for itself
+and its sigaction fails with EINVAL; the kernel, and so bionic, reports it at
+SIG_DFL. AOSP's posix_spawn child (ApplyAttrs) queries every signal and exits
+127 when one query fails: under the native bridge, whose host sigaction is
+bionic_sigaction, every guest system() and every posix_spawn child exited 127
+before its exec. A query, or a reset to SIG_DFL, of 32 now succeeds.
+
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -483,6 +483,14 @@
+ {
+ 	verbose("%d, %p, %p", sig, (void *)act, (void *)oact);
+ 
++	/* apklayer patch (0070): glibc keeps 32 (SIGCANCEL) and its sigaction refuses it; the kernel (bionic) reports it at its default.
++	 * bionic's posix_spawn child queries every signal and exits 127 on a refusal (translated guests' system and posix_spawn) */
++	if (sig == 32 && (!act || act->bsa_handler == SIG_DFL)) {
++		if (oact)
++			*oact = (struct bionic_sigaction){0};
++		return 0;
++	}
++
+ 	// THREAD_SIGNAL on android used by libbacktrace
+ 	if (sig == 33)
+ 		sig = SIGRTMIN;

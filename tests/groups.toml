@@ -19,6 +19,12 @@ run = ["meson test -C b --suite bionic --print-errorlogs"]
 apps = ["hello-runtime"]
 run = ["python3 -u tests/vm/runtime-identity.py"]
 
+[identity-matrix]
+# runtime identity probes for docs/runtime-identity-matrix.md (a measurement: tests/identity/collect.sh compares them with Android)
+apps = ["hello-identity"]
+run = ["python3 -u tests/vm/identity-matrix.py"]
+optional = true
+
 [environment]
 apps = ["hello-environment"]
 run = ["python3 -u tests/vm/environment.py"]
