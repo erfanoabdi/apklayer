@@ -4,6 +4,7 @@ its JavaScript reports back after three animation frames (value=42), and `apklay
 not only the toolbar). Uses a test-only onboarding-done profile (preferences as tests/vm/fennec-media.sh sets them).
 Usage (instance environment, repo root): python3 tests/corpus/gecko-page.py. Files: instance.OUT/gecko-page.{log,png}."""
 import http.server
+import os
 import subprocess
 import sys
 import time
@@ -15,6 +16,7 @@ import instance  # noqa: E402
 from PIL import Image  # noqa: E402
 
 pkg = 'org.mozilla.fennec_fdroid'
+PATIENCE = int(os.environ.get('GECKO_PAGE_PATIENCE', 70))  # seconds until the beacon: x86 translation's first start needs more
 info = subprocess.check_output(['bin/apklayer', 'info', pkg], env=instance.ENV, text=True)
 data = Path(dict(line.split('\t', 1) for line in info.splitlines() if '\t' in line)['dataDir'])
 assert '/%s/app-data/' % instance.INSTANCE in str(data), data
@@ -53,21 +55,38 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *args): pass
 
 
+def threads():
+    """Diagnosis of a page that never loads: Gecko's busiest threads per process (name, state, CPU seconds, kernel wait channel)."""
+    for line in instance.mine('[f]ennec'):
+        pid = line.split()[0]
+        rows = []
+        for task in Path('/proc/%s/task' % pid).glob('*'):
+            try:
+                stat = (task / 'stat').read_text().rsplit(')', 1)[1].split()
+                rows.append(((int(stat[11]) + int(stat[12])) / os.sysconf('SC_CLK_TCK'), (task / 'comm').read_text().strip(), stat[0],
+                             (task / 'wchan').read_text().strip()))
+            except (OSError, IndexError, ValueError): pass
+        name = Path('/proc/%s/cmdline' % pid).read_bytes().split(b'\0')[0].decode(errors='replace')[:60]
+        print('THREADS %s %s: ' % (pid, name) + ', '.join('%s %s %.1fs %s' % (n, st, cpu, w) for cpu, n, st, w in sorted(rows, reverse=True)[:8]), flush=True)
+
+
 server = http.server.HTTPServer(('127.0.0.1', 0), Handler)
 server.timeout = 2
 intent = instance.OUT / 'gecko-page.intent'
 intent.write_text('action=android.intent.action.VIEW\ndata=http://127.0.0.1:%d/page?nonce=%d\ncomponent=org.mozilla.fenix.IntentReceiverActivity\n'
                   % (server.server_port, time.time_ns()))
-env = dict(instance.ENV, APKLAYER_INTENT_FILE=str(intent), APKLAYER_JOPTS='-Dapklayer.runms=90000 -Dapklayer.logcat=true')
+env = dict(instance.ENV, APKLAYER_INTENT_FILE=str(intent), APKLAYER_JOPTS='-Dapklayer.runms=%d -Dapklayer.logcat=true' % (1000 * (PATIENCE + 60)))
 shot = instance.OUT / 'gecko-page.png'
 process = None
 try:
     with open(instance.OUT / 'gecko-page.log', 'w') as log:
         process = subprocess.Popen(['bin/apklayer', 'run', pkg], env=env, stdout=log, stderr=subprocess.STDOUT)
-        deadline = time.monotonic() + 70
+        deadline = time.monotonic() + PATIENCE
         while not any(p.startswith('/rendered?value=42') for p in seen):
             assert process.poll() is None, 'Fennec exited'
-            assert time.monotonic() < deadline, 'No rendered-page beacon: ' + repr(seen)
+            if time.monotonic() >= deadline:
+                threads()
+                raise AssertionError('No rendered-page beacon: ' + repr(seen))
             server.handle_request()
         shell = instance.STATE / 'shell.log'
         subprocess.run(['python3', 'tests/corpus/first-frame.py', str(shell), str(shell.stat().st_size), '15', '1', '1'])
