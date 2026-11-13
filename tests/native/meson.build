@@ -26,6 +26,7 @@ endif
 # the path layer's LD_PRELOAD library (bridge/native/paths_preload.c): /storage mapped for the functions glibc does not route through open/stat
 if is_variable('apklayer_preload')
   test('path-layer', executable('path-layer-test', 'path-layer.c'), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
+  test('own-data-spelling', executable('own-data-spelling-test', 'own-data-spelling.c'), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
   # needs its own cgroup scope (the filter judges processes by it): `systemd-run --user --scope meson test proc-leaks`; skipped (77) where every process shares one
   test('proc-leaks', executable('proc-leaks-test', 'proc-leaks.c', dependencies: [native_dl]), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
 endif

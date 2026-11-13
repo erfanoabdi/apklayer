@@ -466,11 +466,38 @@ static bool from_root(const char *r, char **path)
     return false;
 }
 
+/* The reverse of own_data_path. A link the kernel resolves (an fd's /proc/self/fd/N, map_files, realpath) names the app's data directory by its host
+ * path (<root>/app, <root>/device); Android code reads /data/user/0/<pkg> and /data/user_de/0/<pkg> there, as getFilesDir returned them (Tencent ACE,
+ * mmkv and crash reporters compare the two). Rewritten in place, never longer than the host path (the caller's buffer holds n bytes); the new
+ * length is returned, n when the path is not below the app's data directories. */
+static long own_data_spelling(char *buf, long n)
+{
+    const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
+    if (!o || !o->dir || !o->device || n <= 0) return n;
+    const char *const hosts[2] = { o->dir, o->device };
+    const char *const androids[2] = { "/data/user/0/", "/data/user_de/0/" };
+    for (int i = 0; i < 2; i++) {
+        long k = (long)strlen(hosts[i]);
+        if (n < k || strncmp(buf, hosts[i], (size_t)k) || (n > k && buf[k] != '/')) continue;
+        char spelled[PATH_MAX];
+        int m = snprintf(spelled, sizeof spelled, "%s%s", androids[i], o->pkg);
+        long rest = n - k;
+        if (m < 0 || m + rest > (long)sizeof spelled || m > k) return n;  /* never longer than the host path: the caller's buffer has n bytes */
+        memcpy(buf + m, buf + k, (size_t)rest);
+        memcpy(buf, spelled, (size_t)m);
+        return m + rest;
+    }
+    return n;
+}
+
+long apklayer_android_spelling_own_data(char *buf, long n) { return own_data_spelling(buf, n); }  /* paths_preload.c: realpath */
+
 /* A file the overlay served (under the instance's or the shared Android root) spelled as Android's again, in place (readlink's buffer, n bytes,
  * no terminator): what /proc/self/fd/N links to. bionic's realpath (O_PATH, then readlink of the fd) in translated code reads it, and the guest
  * linker matches the result against its config's /system sections. Returns the new length. */
 long apklayer_android_spelling(char *buf, long n)
 {
+    n = own_data_spelling(buf, n);
     const char *roots[2] = { own_env, root() };
     for (int i = 0; i < 2; i++) {
         long k = roots[i] ? (long)strlen(roots[i]) : 0;

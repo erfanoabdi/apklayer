@@ -220,13 +220,33 @@ final class AppEnvironment {
      */
     static String stableDataPath(String path) {
         if (path == null || System.getProperty("apklayer.data") == null) return path;
-        return stablePaths.computeIfAbsent(path, p -> {
+        return androidSpelling(stablePaths.computeIfAbsent(path, p -> {
             try {
                 Path temp = RuntimeEnvironment.getTempDirectory().getBasePath();
                 Path dir = Path.of(p);
                 return dir.startsWith(temp) && Files.exists(dir) ? dir.toRealPath().toString() : p;
             } catch (IOException | RuntimeException unknown) { return p; }
-        });
+        }));
+    }
+
+    /**
+     * apklayer patch: the app's own data directories under Android's names (/data/user/0/<package>, /data/user_de/0/<package>) once the path layer maps
+     * them (NativeLoader.mapOwnDataDirs: an app process that knows its package, never the hub), as getDataDir and ApplicationInfo.dataDir read on a
+     * device. The host path of the same directory (root/app, root/device) stayed in every path the app built from getFilesDir(): Unity, ACE and
+     * others walk it and see /home and the user's name. Not mapped (the hub, a spare before its package): the real path, as before.
+     */
+    private static volatile String[] ownDirs;  // {real root/app, real root/device}, resolved once
+
+    private static String androidSpelling(String path) {
+        String root = System.getProperty("apklayer.data"), pkg = System.getProperty("apklayer.package");
+        if (path == null || root == null || pkg == null || !NativeLoader.ownDataMapped()) return path;
+        try {
+            String[] dirs = ownDirs;
+            if (dirs == null) ownDirs = dirs = new String[] {Path.of(root, "app").toRealPath().toString(), Path.of(root, "device").toRealPath().toString()};
+            if (path.equals(dirs[0])) return "/data/user/0/" + pkg;
+            if (path.equals(dirs[1])) return "/data/user_de/0/" + pkg;
+        } catch (IOException | RuntimeException unknown) { /* not one of the app's directories */ }
+        return path;
     }
 
     /** The data directories an ApplicationInfo of the app names, by their real paths (stableDataPath). */

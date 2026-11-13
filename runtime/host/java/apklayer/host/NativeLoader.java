@@ -70,6 +70,9 @@ public final class NativeLoader {
         try { setProcessName(name); } catch (LinkageError noShim) { /* no native runtime in this process */ }
     }
 
+    /** True once this process maps the app's /data/data, /data/user/0 and /data/user_de/0 names to its data directories (mapOwnDataDirs). */
+    static boolean ownDataMapped() { return environmentTargetReady; }
+
     /** The app's own /data/data/<pkg>, /data/user/0/<pkg> (root/app) and /data/user_de/0/<pkg> (root/device) for Java's and native file calls, and its
      *  uid and groups as native code sees them: getuid, getgroups and the owner of the user's files (bridge/native/paths.c). */
     static void mapOwnDataDirs(String pkg, String root) {

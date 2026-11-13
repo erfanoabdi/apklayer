@@ -96,6 +96,7 @@ int closedir(DIR *d) { for (int i = 0; i < 8; i++) { DIR *z = d; __atomic_compar
 DIR *opendir(const char *path) { MAP(m, path); DIR *r = ((DIR * (*)(const char *))REAL(opendir))(m);
     if (!r) { int fd = apklayer_broker_open(m, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0, -1); if (fd >= 0 && !(r = fdopendir(fd))) close(fd); } if (r && apklayer_is_data_root(path)) data_dir_note(r); DONE(m); return r; }
 long apklayer_android_spelling(char *buf, long n);
+long apklayer_android_spelling_own_data(char *buf, long n);  /* paths.c: only the app's own data directory's host path -> /data/user/0/<pkg> (realpath, getcwd) */
 /* /proc links (an fd, the executable) to a file the overlay served read as its Android path (paths.c) */
 static ssize_t proc_link(const char *path, char *buf, ssize_t r) { return r > 0 && path && !strncmp(path, "/proc/", 6) ? apklayer_android_spelling(buf, r) : r; }
 ssize_t readlink(const char *path, char *buf, size_t n) { MAP(m, path); ssize_t r = ((ssize_t (*)(const char *, char *, size_t))REAL(readlink))(m, buf, n); DONE(m); return proc_link(path, buf, r); }
@@ -212,6 +213,7 @@ char *realpath(const char *path, char *resolved)
     size_t n = storage ? strlen(storage) : 0;
     if (r && n >= 8 && !strncmp(r, storage, n) && (r[n] == 0 || r[n] == '/')) { memcpy(r, "/storage", 8); memmove(r + 8, r + n, strlen(r + n) + 1); }
     else if (r && n >= 8 && path) r = drive_spelling(path, storage, n, r, resolved);
+    if (r) { long len = (long)strlen(r), spelled = apklayer_android_spelling_own_data(r, len); if (spelled != len) r[spelled] = 0; }  /* the app's own data directory as /data/user/0/<pkg> */
     DONE(m);
     return r;
 }
