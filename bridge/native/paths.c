@@ -301,9 +301,18 @@ int apklayer_proc_hidden(const char *path)
 {
     if (apklayer_proc_map_hidden && apklayer_proc_map_hidden(AT_FDCWD, path)) return 1;
     if (!path) return 0;
-    if (path[0] != '/') {  /* relative to a working directory that is /proc */
+    if (path[0] != '/') {  /* relative to the working directory: /proc itself ("1/status"), or / ("proc/1/status") */
         const char *c = path;
         while (!strncmp(c, "./", 2)) c += 2;
+        if (!strncmp(c, "proc/", 5) && c[5] >= '0' && c[5] <= '9') {
+            struct stat root, here;
+            static __thread int busy_cwd;
+            if (busy_cwd) return 0;
+            busy_cwd = 1;
+            int at_root = syscall(SYS_newfstatat, AT_FDCWD, ".", &here, 0) == 0 && syscall(SYS_newfstatat, AT_FDCWD, "/", &root, 0) == 0 && here.st_ino == root.st_ino && here.st_dev == root.st_dev;
+            busy_cwd = 0;
+            return at_root && proc_rel_hidden(c + 5);
+        }
         return *c >= '0' && *c <= '9' && apklayer_proc_is_dir(AT_FDCWD) && proc_rel_hidden(c);
     }
     size_t len = strlen(path);
@@ -332,14 +341,16 @@ int apklayer_proc_hidden(const char *path)
     return 0;
 }
 
-/* an *at call's path: relative to a directory fd that is /proc (opendir + openat/fstatat "1/status"), or absolute/cwd-relative as above */
+/* an *at call's path: relative to a directory fd that is /proc (opendir + openat/fstatat "1/status"), or absolute/cwd-relative as above. A path relative to /proc
+ * is judged as the absolute one it names ("self/../1" is /proc/1, "../proc/1" too), so the textual rules above apply to it as they do to /proc/<path>. */
 int apklayer_proc_hidden_at(int dirfd, const char *path)
 {
     if (apklayer_proc_map_hidden && apklayer_proc_map_hidden(dirfd, path)) return 1;
     if (!path || path[0] == '/' || dirfd == AT_FDCWD) return apklayer_proc_hidden(path);
-    const char *c = path;
-    while (!strncmp(c, "./", 2)) c += 2;
-    return *c >= '0' && *c <= '9' && apklayer_proc_is_dir(dirfd) && proc_rel_hidden(c);
+    char abs[PATH_MAX];
+    if (strlen(path) + 7 >= sizeof abs || !apklayer_proc_is_dir(dirfd)) return 0;
+    snprintf(abs, sizeof abs, "/proc/%s", path);
+    return apklayer_proc_hidden(abs);
 }
 
 bool apklayer_apply_path_overrides(char **path);

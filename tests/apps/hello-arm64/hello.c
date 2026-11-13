@@ -15,6 +15,9 @@
 #include <stdio.h>
 #include <sys/auxv.h>
 #include <sys/syscall.h>
+#include <sys/utsname.h>
+#include <sys/system_properties.h>
+#include <sched.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -279,6 +282,42 @@ JNIEXPORT jstring JNICALL Java_hello_arm64_Main_cpuProfile(JNIEnv *env, jclass c
     unsigned long midr = 0;
     __asm__ volatile("mrs %0, midr_el1" : "=r"(midr));
     snprintf(out, sizeof out, "%d cores, part first %s last %s, MIDR_EL1 0x%lx", cores, first, last, midr);
+    return (*env)->NewStringUTF(env, out);
+}
+
+/* What translated code can observe about the machine, for the sandbox audit and the ACE question (docs/PLAN.md): kernel identity, the files an anti-cheat reads,
+ * system properties, CPU counts from every source. One line per finding, "fid <what>: <value>"; values are the desktop's unless a layer hides them. */
+JNIEXPORT jstring JNICALL Java_hello_arm64_Main_fidelity(JNIEnv *env, jclass c)
+{
+    (void)c;
+    static char out[16000];
+    out[0] = 0;
+    char l[400];
+    struct utsname u;
+    if (!uname(&u)) add(out, sizeof out, "fid uname: sysname=%s release=%s machine=%s nodename=%s version=%.50s\\n", u.sysname, u.release, u.machine, u.nodename, u.version);
+    const char *files[] = {"/proc/version", "/proc/cmdline", "/proc/sys/kernel/osrelease", "/proc/sys/kernel/hostname", "/system/build.prop", "/vendor/build.prop", "/default.prop",
+        "/sys/fs/selinux/enforce", "/sys/class/dmi/id/product_name", "/sys/class/dmi/id/sys_vendor", "/sys/class/dmi/id/board_vendor", "/sys/class/dmi/id/bios_vendor",
+        "/sys/devices/system/cpu/online", "/sys/devices/system/cpu/possible", "/sys/devices/system/cpu/present", "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq",
+        "/sys/class/power_supply/battery/capacity", "/sys/class/thermal/thermal_zone0/type", "/proc/self/status", NULL};
+    for (int i = 0; files[i]; i++) {
+        FILE *f = fopen(files[i], "r");
+        if (!f) { add(out, sizeof out, "fid file %s: %s\\n", files[i], strerror(errno)); continue; }
+        int n = !strcmp(files[i], "/proc/self/status") ? 0 : 1;
+        if (!n) {
+            while (fgets(l, sizeof l, f)) if (!strncmp(l, "TracerPid", 9) || !strncmp(l, "NoNewPrivs", 10) || !strncmp(l, "Seccomp", 7) || !strncmp(l, "Cpus_allowed_list", 17) || !strncmp(l, "Name", 4)) { l[strcspn(l, "\\n")] = 0; add(out, sizeof out, "fid status %s\\n", l); }
+        } else if (fgets(l, sizeof l, f)) { l[strcspn(l, "\\n")] = 0; add(out, sizeof out, "fid file %s: %.150s\\n", files[i], l); }
+        else add(out, sizeof out, "fid file %s: (empty)\\n", files[i]);
+        fclose(f);
+    }
+    const char *dirs[] = {"/sys/fs/selinux", "/sys/class/dmi", "/sys/class/power_supply", "/sys/class/thermal", "/sys/class/net", "/proc/bus/input/devices", "/proc/modules", "/proc/devices",
+        "/proc/iomem", "/proc/asound", "/dev/kvm", "/dev/nvidiactl", "/dev/dri", "/dev/input", "/dev/binder", "/dev/ashmem", "/dev/qemu_pipe", "/dev/goldfish_pipe", "/sys/module/kvm", NULL};
+    struct stat st;
+    for (int i = 0; dirs[i]; i++) add(out, sizeof out, "fid exists %s: %s\\n", dirs[i], stat(dirs[i], &st) == 0 ? "yes" : strerror(errno));
+    cpu_set_t set; CPU_ZERO(&set); sched_getaffinity(0, sizeof set, &set);
+    add(out, sizeof out, "fid cpus: sysconf conf=%ld onln=%ld, sched_getaffinity=%d\\n", sysconf(_SC_NPROCESSORS_CONF), sysconf(_SC_NPROCESSORS_ONLN), CPU_COUNT(&set));
+    const char *props[] = {"ro.kernel.qemu", "ro.hardware", "ro.boot.hardware", "ro.board.platform", "ro.product.model", "ro.product.board", "ro.build.fingerprint", "ro.build.tags", "ro.build.type",
+        "ro.debuggable", "ro.secure", "ro.boot.verifiedbootstate", "ro.boot.flash.locked", "ro.boot.qemu", "ro.build.selinux", "ro.bootmode", "sys.usb.state", "init.svc.adbd", NULL};
+    for (int i = 0; props[i]; i++) { char v[PROP_VALUE_MAX] = ""; int n = __system_property_get(props[i], v); add(out, sizeof out, "fid prop %s: %s\\n", props[i], n > 0 ? v : "(unset)"); }
     return (*env)->NewStringUTF(env, out);
 }
 

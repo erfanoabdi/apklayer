@@ -139,7 +139,8 @@ WRAP(int, statvfs, (const char *path, struct statvfs *s), (const char *, struct 
 WRAP(int, statvfs64, (const char *path, struct statvfs64 *s), (const char *, struct statvfs64 *), m, s)
 WRAP(int, statfs, (const char *path, struct statfs *s), (const char *, struct statfs *), m, s)
 WRAP(int, statfs64, (const char *path, struct statfs64 *s), (const char *, struct statfs64 *), m, s)
-WRAP(int, symlink, (const char *target, const char *path), (const char *, const char *), target, m)
+/* a link to another process's /proc entry would be followed by the kernel past the path layer: not made (the target is no path of this app's view) */
+int symlink(const char *target, const char *path) { if (apklayer_proc_hidden_at(AT_FDCWD, target)) { errno = ENOENT; return -1; } MAP(m, path); int r = ((int (*)(const char *, const char *))REAL(symlink))(target, m); DONE(m); return r; }
 int fstatat64(int dirfd, const char *path, struct stat64 *st, int flags) { PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
     void *f = REAL(fstatat64); int r = f ? ((int (*)(int, const char *, struct stat64 *, int))f)(dirfd, use, st, flags) : KSTAT(dirfd, use, st, flags); BROKER_STATAT(r, dirfd, use, flags & AT_SYMLINK_NOFOLLOW, fstat64(fd_, st)); DONE(m); return r; }
 int statx(int dirfd, const char *path, int flags, unsigned int mask, struct statx *st) { PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path;
@@ -240,7 +241,7 @@ ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t n) { PROC_GONE
 /* the fortified spellings (Android code built with FORTIFY: Berberis's guest readlink): the buffer is at least n here */
 ssize_t __readlinkat_chk(int dirfd, const char *path, char *buf, size_t n, size_t buflen) { if (n > buflen) abort(); return readlinkat(dirfd, path, buf, n); }
 ssize_t __readlink_chk(const char *path, char *buf, size_t n, size_t buflen) { if (n > buflen) abort(); return readlink(path, buf, n); }
-WRAPAT(int, symlinkat, (const char *target, int dirfd, const char *path), (const char *, int, const char *), target, dirfd, use)
+int symlinkat(const char *target, int dirfd, const char *path) { if (apklayer_proc_hidden_at(AT_FDCWD, target)) { errno = ENOENT; return -1; } PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; int r = ((int (*)(const char *, int, const char *))REAL(symlinkat))(target, dirfd, use); DONE(m); return r; }
 WRAP(int, setxattr, (const char *path, const char *name, const void *v, size_t n, int f), (const char *, const char *, const void *, size_t, int), m, name, v, n, f)
 WRAP(int, lsetxattr, (const char *path, const char *name, const void *v, size_t n, int f), (const char *, const char *, const void *, size_t, int), m, name, v, n, f)
 WRAP(ssize_t, getxattr, (const char *path, const char *name, void *v, size_t n), (const char *, const char *, void *, size_t), m, name, v, n)
@@ -260,11 +261,25 @@ int renameat2(int fd1, const char *from, int fd2, const char *to, unsigned int f
 }
 FILE *freopen(const char *path, const char *mode, FILE *f) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *, FILE *))REAL(freopen))(m, mode, f); DONE(m); return apklayer_proc_file(r); }
 FILE *freopen64(const char *path, const char *mode, FILE *f) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *, FILE *))REAL(freopen64))(m, mode, f); DONE(m); return apklayer_proc_file(r); }
+/* scandir reads the directory inside glibc, past the readdir above: the pids of other cgroups (and, in /data/data, other packages) leave the list.
+ * The kept entries are moved to the front in order and the rest freed; the count shrinks, the array keeps its allocation (the caller frees the array and each kept entry). */
+static int proc_dir_path(const char *path) { return path && (!strcmp(path, "/proc") || !strcmp(path, "/proc/")); }
+#define SCANDIR_FILTER(list, r, proc, data) do { int k_ = 0; \
+    for (int i_ = 0; i_ < (r); i_++) { const char *n_ = (*(list))[i_]->d_name; \
+        if ((data) ? apklayer_data_entry_hidden(n_) : ((proc) && n_[0] >= '0' && n_[0] <= '9' && apklayer_proc_pid_hidden(n_))) free((*(list))[i_]); \
+        else (*(list))[k_++] = (*(list))[i_]; } \
+    (r) = k_; } while (0)
 int scandir(const char *path, struct dirent ***list, int (*filter)(const struct dirent *), int (*compare)(const struct dirent **, const struct dirent **)) {
-    MAP(m, path); int r = ((int (*)(const char *, struct dirent ***, void *, void *))REAL(scandir))(m, list, filter, compare); DONE(m); return r;
+    MAP(m, path); int proc = proc_dir_path(path), data = apklayer_is_data_root(path);
+    int r = ((int (*)(const char *, struct dirent ***, void *, void *))REAL(scandir))(m, list, filter, compare);
+    if (r > 0 && (proc || data)) SCANDIR_FILTER(list, r, proc, data);
+    DONE(m); return r;
 }
 int scandir64(const char *path, struct dirent64 ***list, int (*filter)(const struct dirent64 *), int (*compare)(const struct dirent64 **, const struct dirent64 **)) {
-    MAP(m, path); int r = ((int (*)(const char *, struct dirent64 ***, void *, void *))REAL(scandir64))(m, list, filter, compare); DONE(m); return r;
+    MAP(m, path); int proc = proc_dir_path(path), data = apklayer_is_data_root(path);
+    int r = ((int (*)(const char *, struct dirent64 ***, void *, void *))REAL(scandir64))(m, list, filter, compare);
+    if (r > 0 && (proc || data)) SCANDIR_FILTER(list, r, proc, data);
+    DONE(m); return r;
 }
 /* The mkstemp family fills the template's last characters in: the mapped copy differs only in its prefix, so its tail is the caller's name. */
 #define TEMPLATE(ret, name, params, types, tail, ...) ret name params { \

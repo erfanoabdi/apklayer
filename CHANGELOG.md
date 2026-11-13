@@ -3,6 +3,16 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-13 (ACE: the real test, main menu)
+- PGR on 0025 (NVIDIA PC, default instance, 16:30): hs_err written 16:31, i.e. about a minute into the run (earlier runs 1.5-2.5 min); SIGSEGV re-raise (sent by kill), 20 invalid frees logged (0006's cap), 19 of them from guest caller 0x...4f14d34 (libanogs +0x2f4d34 as before). hello-arm64 PASS on 0025 first (uid ok, proc view ok, GL PASS; work(1e7) 31.3 ms). Code-cost tier selection does not change PGR's ending.
+- Owner's correction: PGR only crashes in the main menu. Test setup: scratch instance `sbx` with the default instance's game data copied in (rsync, 45,309,416,504 bytes, 47,813 files, identical; exit 23 was only chgrp on directories),
+  plus the account prefs and the SDK database. Libraries: 0024 translator, merged-before-Erfan's-5 preload.
+  - sbx, no sandbox (16:06): reached the main menu stage, SIGSEGV (sent by kill, SI_TKILL; translator memmove in the JVM's signal handler, then libc syscall +0x12752d) 2 min 29 s in, 32 invalid frees. Same crash as the default instance:
+    the crash does not depend on the account, the login or the instance's state; the copied files reproduce it.
+  - sbx WITH APKLAYER_SANDBOX=1 (16:14, app runs as uid 10014 in its own mount namespace): SIGSEGV again at ~1 min 36 s of game time, same signature (si_code SI_TKILL from the process itself, pc libc syscall +0x12752d), 33 invalid frees.
+    So the sandbox does not prevent it either. The app's uid, /data/data and /home being empty tmpfs, are not the trigger (the view still names host paths in /proc/self/maps; those are not hidden there).
+  - Ruled out as the trigger so far: device model/CPU (Pixel 5 profile), account/instance state (the copy), the sandbox, the proc filter and environment changes (all installed during these runs).
+
 ## 2026-11-13: native inherited executable environments
 - Current-converter Termux still launched bash with host HOME/PATH and runtime variables. Its installed JNI library calls clearenv, loops over putenv, then calls execvp; the first two used isolated guest storage, while inherited glibc execvp selected the host environment.
 - bionic_translation patch 0068 routes execv/execvp/execvpe, execl/execlp/execle and fexecve through the active guest environment and shared mapped-execution boundary. Explicit child environments remain unchanged; executable search uses the guest parent's PATH. Host JVM exec APIs remain untouched.
@@ -53,6 +63,27 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - bionic_translation 0066 shares JDK module names with the app process view in dladdr/dl_iterate_phdr. Glibc/JVM callers retain original names. Real load addresses, symbols and unwind program headers remain intact; the existing PT_DYNAMIC protection still prevents guest PLT hooks from patching host internals.
 - Three native tests load actual ELF fixtures under JDK paths and check names, host/service opt-outs, retained load/unwind metadata and a backtrace across the fixture. Expanded the real ARM64 APK check to inspect modules and resolve its own JNI address.
 - ART investigation: current SerialGC cannot supply ART's lifetime-stable primitive-array storage through standard JNI pinning. The existing TypedArray/PathIterator adapters are bounded, consumer-specific implementations, not general nonmoving arrays. The standalone runtime diagnostic now reports VMRuntime queries and ART-only reflection fields.
+
+## 2026-11-13 (ACE: the /home question)
+- PGR in a scratch instance (`sbx`, a fresh install of the game, 3.5 GB of its data, not the default instance's 43 GB): with APKLAYER_SANDBOX=1 (needs no sudo here: subuid, newuidmap and the AppArmor profile were already installed) it ran
+  100 s and 2 min 39 s without the 2 min 15 s SIGSEGV, 1-2 invalid frees. Control, same fresh instance WITHOUT the sandbox: 5 min (my limit), no SIGSEGV, 2 invalid frees. So the sandbox is not what spared it: a fresh instance
+  behaves differently from the default one (17-31 frees, SIGSEGV at 2m15-2m23 every time, 6 runs). What differs is the default instance's state (accounts, its 43 GB of data, login/hot-update state), not /home or the identity.
+  **WRONG, corrected by the owner (2026-11-13): PGR only crashes in the main menu, never on the download screen.** The fresh `sbx` instance has none of the 43 GB, so every sbx run (sandbox on or off, the prefs-copied one too)
+  stayed on the download screen and could not crash: those runs say nothing about the sandbox, /home, the identity or the account. The sandbox question is open until a run reaches the main menu.
+  (The sandbox view itself, hello-arm64 "layout" under APKLAYER_SANDBOX=1: /data/data lists 0 other packages and uid 10020 hold, but /home, /usr, /tmp and /run/user are still visible, and 254 of 274 maps lines name
+  /home/wesley/.local/share/apklayer paths: the app view keeps the host's paths. docs/PLAN.md "Sandbox".)
+- ACE's file probes (APKLAYER_PATHS_DEBUG=1 run, 235k lookups): su in /data/local, /dev/qemu_pipe, qemud, genyd, virtpipe*, /fstab.ttVM_x86, /data/data/com.bluestacks.appmart: all ENOENT as on a device; it also looked at
+  /home/wesley/.local/bin/su and read the names of ~/apklayer-fix libraries (192 lookups): host paths a device does not have.
+- Pixel 5 profile on the default instance (device-profile.sh pixel5 for one run, removed after): SIGSEGV at 2m17s as before, 31 frees: the device model and CPU are not ACE's trigger.
+- codec2 (btload libapklayer_codec2.so) cores today 15:27-15:32 (SIGABRT in libc++ from libcodec2_aidl_V2's exit handler, called by libbinder's exit path; stack restarts it, "1 of 5"): 27 cores since 2026-11-09, also in
+  the default instance's stack log (10 exits with status 134): not from this session's patches; cause open.
+
+## 2026-11-13 (proc filter)
+- /proc filter, bugs found by tests/native/proc-leaks.c (new; 40 spellings and syscalls, in its own cgroup scope): a path relative to an open /proc fd was judged by its first component only
+  (`self/../1`, `../proc/1` leaked); a cwd of `/` with `proc/1/status` was not caught; `scandir("/proc")` read the directory inside glibc, past readdir, and listed every pid; a symlink to `/proc/1` could be
+  made and followed by the kernel. Now: a fd-relative path is judged as the absolute one it names, the `proc/<pid>` cwd spelling is covered, scandir/scandir64 filter /proc and the data directories, and
+  symlink/symlinkat refuse a hidden target (ENOENT). 0 leaks of 40. Left as on Android (pids are global there too, SELinux decides): kill(pid, 0), getsid/getpgid/getpriority/sched_get*(pid), pidfd_open.
+  The filter is a cgroup test, not a PID namespace (docs/PLAN.md). Installed on the NVIDIA PC; hello-arm64 passes.
 
 ## 2026-11-13: guest runtime identity
 - Validation: 21/21 native tests, runtime-identity APK, art-maps APK, and full native-bridge group pass on both UTM ARM64 and x86 PC with userspace Binder. Targeted reruns passed after correcting the nonexistent thread map_files test path and preserving platform-prefixed application -D flags.
@@ -1740,12 +1771,34 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Why: the owner asked for the instance to present a Google Pixel 5. Properties: tools/device-profile.sh pixel5 (bridge/native/profiles/pixel5.prop); the
   guest's /proc/cpuinfo and MIDR_EL1 follow `berberis.cpuinfo=pixel5`. Same command as 0016; output in ~/los24-0020-build.log (Mac).
 - Result: `build completed successfully (10:09)`, no errors; library sha256 0009eb5f2e79879131cdea88538ab897a3dd7342f3a32800e8f257f42fac27c5 (0016-0020).
+### 2026-11-13 - gsi_x86_64 libberberis_proxy_libc: binary_translation 0026 (invalid frees say why, and whether the guest freed the pointer before)
+- Why: the owner asked to fix PGR's 20 invalid frees. 0006's line says only "no glibc chunk" and its cap of 20 hides the real count; before a fix the cause has to be known. Diagnostics only:
+  the failing check is named, BERBERIS_LOG_FREES=1 keeps the last 65536 frees and cap 2000 (power-of-two count lines beyond). Independent of 0025 (not applied). `m libberberis_proxy_libc`;
+  output in ~/los24-0026-build.log (Mac).
+- Result: `build completed successfully (10:29)`, no errors; libberberis_proxy_libc.so sha256 739b6786a3c6cad6b07fab67ae14613ff51a1672a16b5096c2009052fe66c958.
+- Installed (2026-11-13 14:50; the previous proxy libc in ~/apklayer-fix/orig/libberberis_proxy_libc.0022.so); hello-arm64 PASS. PGR with BERBERIS_LOG_FREES=1 (default instance, 100 s window, ended at 2 min 19 s as before):
+  **17 invalid frees in the whole run** (cap 2000, no overflow line): the 20 of earlier runs was not hiding more. All 17 are second frees of pointers the guest freed itself earlier, every one already released
+  to glibc: 16 on thread 1143098 (libanogs +0x2f4d34, the 20-slot teardown) of chunks thread 1142333 freed 4439-25654 frees before (callers libanogs +0x300168 x10, +0x31bf34 x6), 1 at eviction.
+  Why each fails: chunk outside its heap 6, impossible size in the header 6 (headers 0x0/0x1014/0x2021...: the header word of a chunk glibc merged into a larger free one), prev_size 2, next chunk free 2, tcache key 1.
+  So 0006 is right to refuse them (glibc aborts; Android's Scudo would too) and the allocator emulation is not at fault: ACE's shutdown path frees its pool slots twice. Nothing in free() to fix; the frees are a symptom of
+  the teardown, whose cause (why ACE shuts down at ~90 s) is still open (docs/PLAN.md).
+### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0025 (Kemu's code-cost tier selection, a2a2de1a)
+- Why: the owner asked for a2a2de1a too. Ported (assembler under cpu_emulation/, `Call` is `CallRel`; tests left out): hot regions pick the heavy tier by captured loops and emitted x86
+  cost (default; BERBERIS_GEARUP_POLICY=legacy restores the length rule). Dry-run applies to the Mac tree with 0024 in it. Built after 0026's (proxy libc); same command as 0016, output in ~/los24-0025-build.log (Mac).
+- First attempt (15:00): the Mac's connection dropped before the build began (no log, the patch was applied); started again 18:15 with the log kept.
+- Result: `build completed successfully (15:36)`, no errors (longer than the 9-11 min of the others: the assembler headers changed, so most of the translator recompiled); libberberis_arm64.so sha256 e49d7f176032424ea850942d27cf6619adaa1f5dbf4a57c84abefbf41f281a97 (0016-0025, differs from 0024's b8140cba...).
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0024 (Kemu's untagged addresses in exclusive and atomic accesses)
 - Why: the owner asked for 4de3cab3 too (after 0023's two). Written after 0023 (patches/aosp/.../0024); its heavy-tier hunk was redone by hand. Not applied to the Mac tree
-  or built yet: waits for 0023's build (RUNNING) so each can be tested alone first.
+  or built yet: waits for 0023's build so each can be tested alone first.
+- Built together with the merge of origin/main (Erfan's ART maps commits d0399c42, 8bdbc709: bridge/native/proc_maps.c in the preload). Same command as 0016; output in ~/los24-0024-build.log (Mac).
+- Result: `build completed successfully (11:04)`, no errors; library sha256 b8140cba30817fc8c1fecd650c188f139e3a00b161af44354b9a23b7dd6d0050 (0016-0024).
+- PGR runs (NVIDIA PC, default instance without the Pixel 5 profile, ~100 s window, 2026-11-13): with 0023 + Erfan's ART maps preload (14:12): 2 min 23 s, SIGSEGV re-raise (sent by kill, pthread_sigmask),
+  17 invalid frees logged; with 0024 + Erfan's 09261503 preload (proc_view.c, installed from this tree; earlier preload in ~/apklayer-fix/orig/libapklayer-preload.0238.so) (14:16): 2 min 22 s,
+  the same SIGSEGV, 20 invalid frees logged (0006's cap). hello-arm64 PASS (uid ok, proc view ok, GL PASS) with 0024. PGR ends the same way as before 0016.
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0023 (Kemu's MOV copy and shared TBI mask commits)
 - Why: the owner asked for the Kemu speed commits that apply: b88517d9 (MOV register copies) and 615e5c93 (one TBI mask per LDP/STP). 4de3cab3 and a2a2de1a do not apply (patch header).
-  Same command as 0016; output in ~/los24-0023-build.log (Mac). Status: RUNNING.
+  Same command as 0016; output in ~/los24-0023-build.log (Mac).
+- Result: `build completed successfully (11:17)`, no errors; library sha256 fefddf5fcbb96a0e5ac701b0784ee8fa2287eb2dff838dc9060811cd26ba5304 (0016-0023).
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64, libberberis_proxy_libc: binary_translation 0022 (three fixes from the Kemu fork)
 - Why: the owner asked for the useful changes of github.com/kuloPo/Kemu (a Windows emulator packaging project; its translator is kuloPo/platform_frameworks_libs_binary_translation,
   17 commits over DigitalisX64's android16). Taken: guest thread-table releases (ae5358b1, fb941b4d: popen/system/posix_spawn left GuestThreads behind), large frees outside the

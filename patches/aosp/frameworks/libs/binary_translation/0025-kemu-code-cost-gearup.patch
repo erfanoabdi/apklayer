@@ -1,0 +1,700 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] Kemu's code-cost tier selection (kuloPo a2a2de1a): promote loops, score the rest on emitted x86 code
+
+When a hot guest region is translated, the translator decided between the lite and the heavy optimizer tier by the region's guest instruction count. The Kemu fork's
+commit a2a2de1a replaces that rule (the test files and their Android.bp entries left out; the assembler moved under cpu_emulation/ in this tree, and `Call` is
+`CallRel` here, so two hunks were redone by hand):
+- the assembler records, for every emitted instruction, a relative cost weight and its control flow (gen_asm.py generates it for the generated instructions,
+  the hand-written ones in x86_32_or_x86_64.h/x86_64.h call TrackInsnCost): MachineCode(collect_cost) keeps them (code_cost.h/.cc, AnalyzeCodeCost).
+- translator_x86_64.cc: a fully translated region with a captured loop is promoted to heavy whatever its length; other hot regions translate a lite candidate as
+  well and take the heavy code only when its score is below 90% of the lite one's (same guest range, same number of back edges); a region the cost cannot
+  rate keeps the length rule. `BERBERIS_GEARUP_POLICY=legacy` (or the property berberis.gearup_policy) restores the old rule; unset or "cost" is the new
+  default. Counters (g_gearup_cost_stats) and TRACE lines show the decisions.
+This changes which regions run in the heavy tier, where PGR's home-scene noise comes from (berberis.mode.<package> keeps an app out of it, 0008): check PGR's
+home scene before shipping. Applies after 0024. Module libberberis_arm64.
+
+diff --git a/cpu_emulation/assembler/Android.bp b/cpu_emulation/assembler/Android.bp
+--- a/cpu_emulation/assembler/Android.bp
++++ b/cpu_emulation/assembler/Android.bp
+@@ -214,6 +214,7 @@
+     defaults: ["berberis_guest_agnostic_defaults"],
+     host_supported: true,
+     srcs: [
++        "code_cost.cc",
+         "machine_code.cc",
+     ],
+     header_libs: ["libberberis_assembler_headers"],
+diff --git a/cpu_emulation/assembler/gen_asm.py b/cpu_emulation/assembler/gen_asm.py
+--- a/cpu_emulation/assembler/gen_asm.py
++++ b/cpu_emulation/assembler/gen_asm.py
+@@ -528,6 +528,30 @@
+ #
+ # Note: on x86-32 that mode can also be emulated using regular instruction form, if needed.
+ def _gen_emit_instruction(f, insn, arch, rip_operand=False, dyn_rm=False):
++  if 'x86' in arch:
++    # Relative work units, shared by both tiers after all lowering. These are
++    # deliberately not advertised as CPU-specific latency or micro-op counts.
++    name = insn['asm'].lower()
++    weight = 1
++    if 'mul' in name:
++      weight = 3
++    if 'div' in name or 'sqrt' in name:
++      weight = 16
++    if 'lock' in name or 'cmpxchg' in name or 'fence' in name:
++      weight = 32
++    if not name.startswith(('lea', 'prefetch')):
++      for arg in insn['args']:
++        if asm_defs.is_mem_op(arg['class']):
++          weight += 4 if arg.get('usage') == 'use_def' else 2
++    flow = 'kNext'
++    if name.startswith(('call', 'rep', 'loop')):
++      flow = 'kUnknown'
++    elif name.startswith(('jmp', 'ret')):
++      flow = 'kExit'
++      weight += 1
++    elif name.startswith(('push', 'pop')):
++      weight += 2
++    print('  auto cost_scope = TrackInsnCost(%d, CodeCostFlow::%s);' % (weight, flow), file=f)
+   result = []
+   arg_count = 0
+   for arg in insn['args']:
+diff --git a/cpu_emulation/assembler/include/berberis/assembler/common.h b/cpu_emulation/assembler/include/berberis/assembler/common.h
+--- a/cpu_emulation/assembler/include/berberis/assembler/common.h
++++ b/cpu_emulation/assembler/include/berberis/assembler/common.h
+@@ -61,6 +61,28 @@
+ 
+   uint32_t pc() const { return code_->code_offset(); }
+ 
++  class ScopedInsnCost {
++   public:
++    constexpr ScopedInsnCost(MachineCode* code, uint16_t weight, CodeCostFlow flow)
++        : code_(code), begin_(code ? code->code_offset() : 0), weight_(weight), flow_(flow) {}
++    constexpr ~ScopedInsnCost() {
++      if (code_) {
++        code_->RecordInsnCost(begin_, weight_, flow_);
++      }
++    }
++
++   private:
++    MachineCode* code_;
++    uint32_t begin_;
++    uint16_t weight_;
++    CodeCostFlow flow_;
++    DISALLOW_COPY_AND_ASSIGN(ScopedInsnCost);
++  };
++
++  ScopedInsnCost TrackInsnCost(uint16_t weight, CodeCostFlow flow = CodeCostFlow::kNext) {
++    return {code_->collect_cost() ? code_ : nullptr, weight, flow};
++  }
++
+   // GNU-assembler inspired names: https://sourceware.org/binutils/docs-2.42/as.html#g_t8byte
+   template <typename... Args>
+   void Byte(Args... args) {
+diff --git a/cpu_emulation/assembler/include/berberis/assembler/machine_code.h b/cpu_emulation/assembler/include/berberis/assembler/machine_code.h
+--- a/cpu_emulation/assembler/include/berberis/assembler/machine_code.h
++++ b/cpu_emulation/assembler/include/berberis/assembler/machine_code.h
+@@ -24,6 +24,7 @@
+ #include <cstdint>
+ #include <string>
+ 
++#include "berberis/assembler/code_cost.h"
+ #include "berberis/base/arena_alloc.h"
+ #include "berberis/base/arena_vector.h"
+ #include "berberis/base/forever_map.h"
+@@ -58,13 +59,26 @@
+ // NOTE: this class is not intended for concurrent usage by multiple threads.
+ class MachineCode {
+  public:
+-  MachineCode() : code_(&arena_), relocations_(&arena_) {
++  explicit MachineCode(bool collect_cost = false)
++      : code_(&arena_), relocations_(&arena_), cost_insns_(&arena_), collect_cost_(collect_cost) {
+     // The amount is chosen according to the performance of spec2000 benchmarks.
+     code_.reserve(1024);
+   }
+ 
+   Arena* arena() { return &arena_; }
+ 
++  bool collect_cost() const { return collect_cost_; }
++  const ArenaVector<CodeCostInsn>& cost_insns() const { return cost_insns_; }
++
++  void RecordInsnCost(uint32_t begin, uint16_t weight, CodeCostFlow flow) {
++    // A hand-written assembler helper may call a generated instruction.
++    // Keep the inner instruction records instead of double counting it.
++    if (begin == code_offset() || (!cost_insns_.empty() && cost_insns_.back().begin >= begin)) {
++      return;
++    }
++    cost_insns_.push_back({begin, code_offset(), weight, flow});
++  }
++
+   // TODO(eaeltsin): this will include const pool size when supported.
+   [[nodiscard]] uint32_t install_size() const { return code_.size(); }
+ 
+@@ -136,6 +150,8 @@
+   Arena arena_;
+   ArenaVector<uint8_t> code_;
+   RelocationList relocations_;
++  ArenaVector<CodeCostInsn> cost_insns_;
++  bool collect_cost_;
+ 
+   DISALLOW_COPY_AND_ASSIGN(MachineCode);
+ };
+diff --git a/cpu_emulation/assembler/include/berberis/assembler/x86_32_or_x86_64.h b/cpu_emulation/assembler/include/berberis/assembler/x86_32_or_x86_64.h
+--- a/cpu_emulation/assembler/include/berberis/assembler/x86_32_or_x86_64.h
++++ b/cpu_emulation/assembler/include/berberis/assembler/x86_32_or_x86_64.h
+@@ -237,6 +237,7 @@
+   }
+ 
+   void Nop(uint32_t bytes) {
++    auto cost_scope = TrackInsnCost(0, CodeCostFlow::kNext);
+     static const uint32_t kNumNops = 15;
+     static const uint8_t nop1[] = {0x90};
+     static const uint8_t nop2[] = {0x66, 0x90};
+@@ -295,6 +296,7 @@
+ 
+   // Flow control.
+   void JmpRel(int32_t offset) {
++    auto cost_scope = TrackInsnCost(2, CodeCostFlow::kJump);
+     CHECK_GE(offset, INT32_MIN + 2);
+     int32_t short_offset = offset - 2;
+     if (IsInRange<int8_t>(short_offset)) {
+@@ -308,6 +310,7 @@
+   }
+ 
+   void CallRel(int32_t offset) {
++    auto cost_scope = TrackInsnCost(20, CodeCostFlow::kUnknown);
+     CHECK_GE(offset, INT32_MIN + 5);
+     Emit8(0xe8);
+     Emit32(offset - 5);
+@@ -321,6 +324,7 @@
+     if (cc == Condition::kNever) {
+       return;
+     }
++    auto cost_scope = TrackInsnCost(2, CodeCostFlow::kBranch);
+     CHECK_EQ(0, static_cast<uint8_t>(cc) & 0xf0);
+     CHECK_GE(offset, INT32_MIN + 2);
+     int32_t short_offset = offset - 2;
+@@ -853,6 +857,7 @@
+     int32_t offset = label.position() - pc();
+     CallRel(offset);
+   } else {
++    auto cost_scope = TrackInsnCost(20, CodeCostFlow::kUnknown);
+     Emit8(0xe8);
+     jumps_.push_back(Jump{&label, pc()});
+     Emit32(0xffff'fffc);
+@@ -874,6 +879,7 @@
+     int32_t offset = label.position() - pc();
+     JccRel(cc, offset);
+   } else {
++    auto cost_scope = TrackInsnCost(2, CodeCostFlow::kBranch);
+     Emit16(0x800f | (static_cast<uint8_t>(cc) << 8));
+     jumps_.push_back(Jump{&label, pc()});
+     Emit32(0xffff'fffc);
+@@ -909,6 +915,7 @@
+     int32_t offset = label.position() - pc();
+     JmpRel(offset);
+   } else {
++    auto cost_scope = TrackInsnCost(2, CodeCostFlow::kJump);
+     Emit8(0xe9);
+     jumps_.push_back(Jump{&label, pc()});
+     Emit32(0xffff'fffc);
+@@ -960,6 +967,7 @@
+ 
+ template <typename DerivedAssemblerType>
+ constexpr inline void Assembler<DerivedAssemblerType>::Xchgl(Register dest, Register src) {
++  auto cost_scope = TrackInsnCost(3, CodeCostFlow::kNext);
+   if (DerivedAssemblerType::IsAccumulator(src) || DerivedAssemblerType::IsAccumulator(dest)) {
+     Register other = DerivedAssemblerType::IsAccumulator(src) ? dest : src;
+     EmitInstruction<0x90>(SizeAgnosticRegister(other));
+diff --git a/cpu_emulation/assembler/include/berberis/assembler/x86_64.h b/cpu_emulation/assembler/include/berberis/assembler/x86_64.h
+--- a/cpu_emulation/assembler/include/berberis/assembler/x86_64.h
++++ b/cpu_emulation/assembler/include/berberis/assembler/x86_64.h
+@@ -198,6 +198,7 @@
+   using BaseAssembler::Vmovss;
+ 
+   void Xchgl(Register dest, Register src) {
++    auto cost_scope = TrackInsnCost(3, CodeCostFlow::kNext);
+     // In 32-bit mode "xchgl %eax, %eax" did nothing and was often reused as "nop".
+     //
+     // On x86-64 "xchgl %eax, %eax" clears top half of %eax register, but having single-byte nop
+@@ -219,6 +220,7 @@
+   using BaseAssembler::Call;
+ 
+   void Call(const void* target) {
++    auto cost_scope = TrackInsnCost(20, CodeCostFlow::kUnknown);
+     // There are no call instruction with properties we need thus we emulate it.
+     // This is what the following code looks like when decoded with objdump (if
+     // target address is 0x1234'5678'9abc'def0):
+@@ -249,6 +251,7 @@
+     } else if (cc == Condition::kNever) {
+       return;
+     }
++    auto cost_scope = TrackInsnCost(3, CodeCostFlow::kConditionalExit);
+     CHECK_EQ(0, static_cast<uint8_t>(cc) & 0xf0);
+     // There are no Jcc instruction with properties we need thus we emulate it.
+     // This is what the following code looks like when decoded with objdump (if
+@@ -274,6 +277,7 @@
+     } else if (cc == Condition::kNever) {
+       return;
+     }
++    auto cost_scope = TrackInsnCost(2, CodeCostFlow::kConditionalExit);
+     CHECK_EQ(static_cast<uint8_t>(cc) & 0xf0, 0);
+     Emit8(0x0f);
+     Emit8(0x80 | static_cast<uint8_t>(cc));
+@@ -297,6 +301,7 @@
+       -> std::enable_if_t<std::is_integral_v<T> && sizeof(uintptr_t) < sizeof(T)> = delete;
+ 
+   void Jmp(uintptr_t target) {
++    auto cost_scope = TrackInsnCost(3, CodeCostFlow::kExit);
+     // There are no jump instruction with properties we need thus we emulate it.
+     // This is what the following code looks like when decoded with objdump (if
+     // target address is 0x1234'5678'9abc'def0):
+@@ -314,6 +319,7 @@
+   // This is used to shorten jmps in the code installed in lower 2G address space.
+   // Use this if the target is also within this address space.
+   void Jmp32(uintptr_t target) {
++    auto cost_scope = TrackInsnCost(2, CodeCostFlow::kExit);
+     Emit8(0xe9);
+     Emit32(0xcccc'cccc);
+     AddRelocation(pc() - 4, RelocationType::RelocAbsToDisp32, pc(), target);
+@@ -601,6 +607,7 @@
+ }
+ 
+ constexpr inline void Assembler::Movq(Register dest, int64_t imm64) {
++  auto cost_scope = TrackInsnCost(1, CodeCostFlow::kNext);
+   if (IsInRange<uint32_t>(imm64)) {
+     // Shorter encoding.
+     Movl(dest, static_cast<uint32_t>(imm64));
+@@ -614,6 +621,7 @@
+ }
+ 
+ constexpr inline void Assembler::Vmovapd(XMMRegister arg0, XMMRegister arg1) {
++  auto cost_scope = TrackInsnCost(1);
+   if (IsSwapProfitable(arg1, arg0)) {
+     return EmitInstruction<0xc4, 0x01, 0x01, 0x29>(VectorRegister128Bit(arg1),
+                                                    VectorRegister128Bit(arg0));
+@@ -622,6 +630,7 @@
+ }
+ 
+ constexpr inline void Assembler::Vmovapd(YMMRegister arg0, YMMRegister arg1) {
++  auto cost_scope = TrackInsnCost(1);
+   if (IsSwapProfitable(arg1, arg0)) {
+     return EmitInstruction<0xc4, 0x01, 0x05, 0x29>(VectorRegister256Bit(arg1),
+                                                    VectorRegister256Bit(arg0));
+@@ -630,6 +639,7 @@
+ }
+ 
+ constexpr inline void Assembler::Vmovaps(XMMRegister arg0, XMMRegister arg1) {
++  auto cost_scope = TrackInsnCost(1);
+   if (IsSwapProfitable(arg1, arg0)) {
+     return EmitInstruction<0xc4, 0x01, 0x00, 0x29>(VectorRegister128Bit(arg1),
+                                                    VectorRegister128Bit(arg0));
+@@ -638,6 +648,7 @@
+ }
+ 
+ constexpr inline void Assembler::Vmovaps(YMMRegister arg0, YMMRegister arg1) {
++  auto cost_scope = TrackInsnCost(1);
+   if (IsSwapProfitable(arg1, arg0)) {
+     return EmitInstruction<0xc4, 0x01, 0x04, 0x29>(VectorRegister256Bit(arg1),
+                                                    VectorRegister256Bit(arg0));
+@@ -646,6 +657,7 @@
+ }
+ 
+ constexpr inline void Assembler::Vmovdqa(XMMRegister arg0, XMMRegister arg1) {
++  auto cost_scope = TrackInsnCost(1);
+   if (IsSwapProfitable(arg1, arg0)) {
+     return EmitInstruction<0xc4, 0x01, 0x01, 0x7f>(VectorRegister128Bit(arg1),
+                                                    VectorRegister128Bit(arg0));
+@@ -654,6 +666,7 @@
+ }
+ 
+ constexpr inline void Assembler::Vmovdqa(YMMRegister arg0, YMMRegister arg1) {
++  auto cost_scope = TrackInsnCost(1);
+   if (IsSwapProfitable(arg1, arg0)) {
+     return EmitInstruction<0xc4, 0x01, 0x05, 0x7f>(VectorRegister256Bit(arg1),
+                                                    VectorRegister256Bit(arg0));
+@@ -662,6 +675,7 @@
+ }
+ 
+ constexpr inline void Assembler::Vmovdqu(XMMRegister arg0, XMMRegister arg1) {
++  auto cost_scope = TrackInsnCost(1);
+   if (IsSwapProfitable(arg1, arg0)) {
+     return EmitInstruction<0xc4, 0x01, 0x02, 0x7f>(VectorRegister128Bit(arg1),
+                                                    VectorRegister128Bit(arg0));
+@@ -670,6 +684,7 @@
+ }
+ 
+ constexpr inline void Assembler::Vmovdqu(YMMRegister arg0, YMMRegister arg1) {
++  auto cost_scope = TrackInsnCost(1);
+   if (IsSwapProfitable(arg1, arg0)) {
+     return EmitInstruction<0xc4, 0x01, 0x06, 0x7f>(VectorRegister256Bit(arg1),
+                                                    VectorRegister256Bit(arg0));
+@@ -678,6 +693,7 @@
+ }
+ 
+ constexpr inline void Assembler::Vmovsd(XMMRegister arg0, XMMRegister arg1, XMMRegister arg2) {
++  auto cost_scope = TrackInsnCost(1);
+   if (IsSwapProfitable(arg2, arg0)) {
+     return EmitInstruction<0xc4, 0x01, 0x03, 0x11>(
+         VectorRegister128Bit(arg2), VectorRegister128Bit(arg0), VectorRegister128Bit(arg1));
+@@ -687,6 +703,7 @@
+ }
+ 
+ constexpr inline void Assembler::Vmovss(XMMRegister arg0, XMMRegister arg1, XMMRegister arg2) {
++  auto cost_scope = TrackInsnCost(1);
+   if (IsSwapProfitable(arg2, arg0)) {
+     return EmitInstruction<0xc4, 0x01, 0x02, 0x11>(
+         VectorRegister128Bit(arg2), VectorRegister128Bit(arg0), VectorRegister128Bit(arg1));
+@@ -696,6 +713,7 @@
+ }
+ 
+ constexpr inline void Assembler::Xchgq(Register dest, Register src) {
++  auto cost_scope = TrackInsnCost(3, CodeCostFlow::kNext);
+   // We compare output to that from clang and thus want to produce the same code.
+   // 0x48 0x90 is suboptimal encoding for that operation (pure 0x90 does the same
+   // and this is what gcc + gas are producing), but this is what clang <= 8 does.
+diff --git a/runtime/arm64/translator_x86_64.cc b/runtime/arm64/translator_x86_64.cc
+--- a/runtime/arm64/translator_x86_64.cc
++++ b/runtime/arm64/translator_x86_64.cc
+@@ -16,6 +16,7 @@
+ 
+ #include "translator.h"
+ 
++#include <atomic>
+ #include <cstdint>
+ #include <cstdlib>
+ #include <cstring>
+@@ -209,12 +210,37 @@
+   return value;
+ }
+ 
+-// Optimizing (second-gear) translation install. The heavy optimizer translates
+-// the region; if it bails on an instruction it does not yet handle, this returns
+-// {false, ...} and the caller re-lite-translates the whole region.
++// Aggregate diagnostics only; updates happen during compilation, never in JIT code.
++struct GearUpCostStats {
++  std::atomic<uint64_t> attempts{0};
++  std::atomic<uint64_t> comparable{0};
++  std::atomic<uint64_t> selected_heavy{0};
++  std::atomic<uint64_t> selected_lite{0};
++  std::atomic<uint64_t> promoted_short{0};
++  std::atomic<uint64_t> declined_long{0};
++};
++// Keep debugger-readable counters in production builds where TRACE is disabled.
++[[gnu::used, gnu::retain]] GearUpCostStats g_gearup_cost_stats;
++
++bool UseGearUpCostModel() {
++  static const bool enabled = []() {
++    static ConfigStr config("BERBERIS_GEARUP_POLICY", "berberis.gearup_policy");
++    // Unset or empty selects cost; use "legacy" for length-based selection.
++    const char* policy = config.get();
++    return !policy || !*policy || strcmp(policy, "cost") == 0;
++  }();
++  return enabled;
++}
++
++// Build and install a hot region. Prefer heavy for captured in-region loops.
++// Otherwise the cost policy can install a settled lite candidate directly.
++// Unscorable regions use the guest-length policy; a declined heavy candidate
++// without reusable lite code returns failure so the caller can generate settled
++// lite code.
+ std::tuple<bool, HostCodePiece, size_t, GuestCodeEntry::Kind> HeavyOptimizeAndInstallRegion(
+-    GuestAddr pc) {
+-  MachineCode machine_code;
++    GuestAddr pc,
++    bool use_cost_model) {
++  MachineCode machine_code(use_cost_model);
+   bool has_in_region_backedge = false;
+   auto [stop_pc, success, number_of_instructions] = HeavyOptimizeRegion(
+       pc, &machine_code, {.end_pc = pc + GetExecutableRegionSize(pc)}, &has_in_region_backedge);
+@@ -240,16 +266,70 @@
+     }
+     return {false, {}, 0, {}};
+   }
+-  // Decline gear-up for fully-translated regions too small for the heavy
+-  // optimizer to help. The size threshold (not the back-edge signal) governs the
+-  // full-success path on purpose: a small loop the heavy tier translates in full
+-  // is not automatically a win — e.g. a tight data-dependent CSEL loop is *slower*
+-  // heavy than lite, so keep it lite. The back-edge signal only rescues a region
+-  // that BAILED (above): there the alternative is re-liting and losing an
+-  // already-captured in-region loop. The caller re-lite-translates a declined
+-  // gear-up without self-profiling, so the region settles on the lite tier
+-  // permanently instead of re-attempting gear-up every threshold.
+-  if (number_of_instructions < GetGearUpMinInsns()) {
++  // Select heavy directly for captured loops. Lite commonly ends at the back-edge
++  // while heavy continues, making candidates cover different guest ranges.
++  // Skip the cost comparison and its candidate lite translation.
++  if (use_cost_model && !has_in_region_backedge) {
++    g_gearup_cost_stats.attempts.fetch_add(1, std::memory_order_relaxed);
++    auto heavy_cost = AnalyzeCodeCost(machine_code);
++    if (heavy_cost.valid) {
++      MachineCode lite_code(true);
++      LiteTranslateParams params;
++      params.end_pc = pc + GetExecutableRegionSize(pc);
++      params.allow_in_region_loops = true;
++      auto [lite_success, lite_stop] = TryLiteTranslateRegion(pc, &lite_code, params);
++      auto lite_cost = AnalyzeCodeCost(lite_code);
++      // Do not compare a truncated or differently bounded guest region.
++      if (lite_success && lite_stop == stop_pc && lite_cost.valid &&
++          heavy_cost.backedges == lite_cost.backedges) {
++        bool prefer_heavy = PreferHeavyCode(heavy_cost, lite_cost);
++        g_gearup_cost_stats.comparable.fetch_add(1, std::memory_order_relaxed);
++        auto& selected =
++            prefer_heavy ? g_gearup_cost_stats.selected_heavy : g_gearup_cost_stats.selected_lite;
++        selected.fetch_add(1, std::memory_order_relaxed);
++        if (prefer_heavy && number_of_instructions < GetGearUpMinInsns()) {
++          g_gearup_cost_stats.promoted_short.fetch_add(1, std::memory_order_relaxed);
++        } else if (!prefer_heavy && number_of_instructions >= GetGearUpMinInsns()) {
++          g_gearup_cost_stats.declined_long.fetch_add(1, std::memory_order_relaxed);
++        }
++        TRACE("Gear-up cost pc=0x%lx heavy=%lu lite=%lu heavy_loop=%lu lite_loop=%lu tier=%s",
++              pc,
++              heavy_cost.score,
++              lite_cost.score,
++              heavy_cost.loop_score,
++              lite_cost.loop_score,
++              prefer_heavy ? "heavy" : "lite");
++        TRACE("Gear-up cost totals attempts=%lu comparable=%lu heavy=%lu lite=%lu short=%lu long=%lu",
++              g_gearup_cost_stats.attempts.load(std::memory_order_relaxed),
++              g_gearup_cost_stats.comparable.load(std::memory_order_relaxed),
++              g_gearup_cost_stats.selected_heavy.load(std::memory_order_relaxed),
++              g_gearup_cost_stats.selected_lite.load(std::memory_order_relaxed),
++              g_gearup_cost_stats.promoted_short.load(std::memory_order_relaxed),
++              g_gearup_cost_stats.declined_long.load(std::memory_order_relaxed));
++        auto* chosen = prefer_heavy ? &machine_code : &lite_code;
++        auto piece = InstallTranslated(chosen, pc, size, prefer_heavy ? "heavy" : "lite");
++        if (piece.code == kNullHostCodeAddr) {
++          return {false, {}, 0, {}};
++        }
++        return {true, piece, size, prefer_heavy ? kHeavyOptimized : kLiteTranslated};
++      }
++      // The legacy decision would settle on lite. Reuse a complete candidate
++      // even if its natural boundary differs, instead of translating it again.
++      if (lite_success && number_of_instructions < GetGearUpMinInsns()) {
++        size_t lite_size = lite_stop - pc;
++        auto piece = InstallTranslated(&lite_code, pc, lite_size, "lite");
++        if (piece.code == kNullHostCodeAddr) {
++          return {false, {}, 0, {}};
++        }
++        return {true, piece, lite_size, kLiteTranslated};
++      }
++    }
++  }
++  // Apply the length fallback only to regions without a captured loop. Loop
++  // regions retain the heavy translation, including code after the back-edge.
++  // The caller re-lite-translates declined regions without self-profiling, so
++  // they settle on the lite tier instead of retrying gear-up at each threshold.
++  if (number_of_instructions < GetGearUpMinInsns() && !has_in_region_backedge) {
+     return {false, {}, 0, {}};
+   }
+   // region digitalis
+@@ -261,6 +341,11 @@
+   // endregion
+ }
+ 
++std::tuple<bool, HostCodePiece, size_t, GuestCodeEntry::Kind> HeavyOptimizeAndInstallRegion(
++    GuestAddr pc) {
++  return HeavyOptimizeAndInstallRegion(pc, UseGearUpCostModel());
++}
++
+ template <TranslationGear kGear = TranslationGear::kFirst>
+ void TranslateRegion(GuestAddr pc) {
+   TranslationCache* cache = TranslationCache::GetInstance();
+diff --git a/cpu_emulation/assembler/code_cost.cc b/cpu_emulation/assembler/code_cost.cc
+new file mode 100644
+--- /dev/null
++++ b/cpu_emulation/assembler/code_cost.cc
+@@ -0,0 +1,126 @@
++/*
++ * Copyright (C) 2014 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include "berberis/assembler/code_cost.h"
++
++#include <algorithm>
++#include <cstring>
++#include <vector>
++
++#include "berberis/assembler/machine_code.h"
++
++namespace berberis {
++
++CodeCostSummary AnalyzeCodeCost(const MachineCode& code) {
++  const auto& insns = code.cost_insns();
++  // Bound the auxiliary work even for unusually large generated regions.
++  if (insns.empty() || insns.size() > 16384 || insns.front().begin != 0) {
++    return {};
++  }
++  const size_t count = insns.size();
++  std::vector<bool> visited(count, false);
++  std::vector<size_t> pending{0};
++  size_t loop_begin = count;
++  size_t loop_end = count;
++  CodeCostSummary result;
++
++  auto add_target = [&](int64_t offset) {
++    if (offset < 0 || offset >= code.install_size()) {
++      return false;
++    }
++    auto it = std::lower_bound(
++        insns.begin(), insns.end(), offset, [](const CodeCostInsn& insn, int64_t value) {
++          return insn.begin < value;
++        });
++    if (it == insns.end() || it->begin != offset) {
++      return false;
++    }
++    pending.push_back(it - insns.begin());
++    return true;
++  };
++
++  while (!pending.empty()) {
++    size_t index = pending.back();
++    pending.pop_back();
++    if (visited[index]) {
++      continue;
++    }
++    visited[index] = true;
++    const auto& insn = insns[index];
++    if (insn.end <= insn.begin || insn.end > code.install_size() ||
++        insn.flow == CodeCostFlow::kUnknown) {
++      return {};
++    }
++    result.score += insn.weight;
++    result.instructions++;
++
++    if (insn.flow == CodeCostFlow::kBranch || insn.flow == CodeCostFlow::kJump) {
++      // These records describe local, finalized relative jumps only.
++      // External relocated jumps have their own flow classification.
++      const uint8_t* bytes = code.AddrAs<uint8_t>(insn.begin);
++      uint32_t size = insn.end - insn.begin;
++      int64_t displacement;
++      if (size == 2 && (bytes[0] == 0xeb || (bytes[0] & 0xf0) == 0x70)) {
++        displacement = static_cast<int8_t>(bytes[1]);
++      } else if ((size == 5 && bytes[0] == 0xe9) ||
++                 (size == 6 && bytes[0] == 0x0f && (bytes[1] & 0xf0) == 0x80)) {
++        int32_t value;
++        memcpy(&value, bytes + size - 4, sizeof(value));
++        displacement = value;
++      } else {
++        return {};
++      }
++      int64_t target = insn.end + displacement;
++      if (!add_target(target)) {
++        return {};
++      }
++      if (target <= insn.begin) {
++        if (++result.backedges > 1) {
++          return {};
++        }
++        loop_begin = pending.back();
++        loop_end = index;
++      }
++    }
++    if (insn.flow != CodeCostFlow::kExit && insn.flow != CodeCostFlow::kJump) {
++      if (!add_target(insn.end)) {
++        return {};
++      }
++    }
++  }
++
++  if (result.backedges) {
++    for (size_t i = loop_begin; i <= loop_end; ++i) {
++      if (visited[i]) {
++        result.loop_score += insns[i].weight;
++      }
++    }
++  }
++  result.valid = true;
++  return result;
++}
++
++bool PreferHeavyCode(const CodeCostSummary& heavy, const CodeCostSummary& lite) {
++  if (!heavy.valid || !lite.valid || heavy.backedges != lite.backedges || !lite.score) {
++    return false;
++  }
++  if (heavy.score * 10 > lite.score * 9) {
++    return false;
++  }
++  return !lite.backedges || (lite.loop_score && heavy.loop_score * 10 <= lite.loop_score * 9);
++}
++
++}  // namespace berberis
+diff --git a/cpu_emulation/assembler/include/berberis/assembler/code_cost.h b/cpu_emulation/assembler/include/berberis/assembler/code_cost.h
+new file mode 100644
+--- /dev/null
++++ b/cpu_emulation/assembler/include/berberis/assembler/code_cost.h
+@@ -0,0 +1,63 @@
++/*
++ * Copyright (C) 2014 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifndef BERBERIS_ASSEMBLER_CODE_COST_H_
++#define BERBERIS_ASSEMBLER_CODE_COST_H_
++
++#include <cstdint>
++
++namespace berberis {
++
++class MachineCode;
++
++// Compile-time metadata only. No counters are inserted into generated code.
++enum class CodeCostFlow : uint8_t {
++  kNext,
++  kBranch,
++  kJump,
++  kExit,
++  kConditionalExit,
++  kUnknown,
++};
++
++struct CodeCostInsn {
++  uint32_t begin;
++  uint32_t end;
++  uint16_t weight;
++  CodeCostFlow flow;
++};
++
++struct CodeCostSummary {
++  bool valid = false;
++  uint32_t instructions = 0;
++  uint32_t backedges = 0;
++  uint64_t score = 0;
++  uint64_t loop_score = 0;
++};
++
++// These are relative work scores, not cycle estimates. Unknown emission,
++// calls, or multiple backedges make the model unavailable. Unreachable
++// recovery code does not contribute. A simple loop is compared separately
++// without assuming its trip count or any branch probabilities.
++CodeCostSummary AnalyzeCodeCost(const MachineCode& code);
++
++// Require a 10% margin in both the reachable body and the loop body, if any.
++// Candidates must cover the same guest region; the caller verifies this.
++bool PreferHeavyCode(const CodeCostSummary& heavy, const CodeCostSummary& lite);
++
++}  // namespace berberis
++
++#endif  // BERBERIS_ASSEMBLER_CODE_COST_H_

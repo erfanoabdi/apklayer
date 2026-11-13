@@ -1,7 +1,7 @@
 #!/bin/sh
 # setup-runtime.sh <bundle> <package native dir>: the installed CLI (cli/layout.cpp) runs it on first use and after a package update, under a lock.
 # The deb has no Android half (meson -Dandroid_runtime=false, docs/RELEASES.md): the unpacked Android runtime bundle becomes the native dir with
-# the package's half linked in, the package's JNI shim put into the framework jars, and the framework instrumented once.
+# the package's half linked in, the package's JNI shim and its libcore overlay classes (dalvik/system, as runtime/meson.build's framework-patched.jar) put into the framework jars, and the framework instrumented once.
 set -eu
 # half as named (not resolved): the click's is under its <app>/current link, so the links below outlive an update (cli/layout.cpp selfPath)
 native="$(realpath "$1")" half="$(cd "$2" && pwd)" share="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,9 +17,9 @@ for f in "$half"/* "$half"/aosp/*; do  # links to the package's files, so an upd
 done
 tar -C "$share/bridge/native/android-root" -cf - . | tar -C "$native/android-root" -xf -  # apklayer's own files of the Android root, replacing (busybox cp has no --remove-destination)
 tmp="$(mktemp -d)" && trap 'rm -rf "$tmp"' EXIT
-(cd "$tmp" && unzip -q "$half/native-runtime.jar" 'native/linux/*' && for j in "$native"/aosp/android-all/*.jar; do
-    if command -v zip >/dev/null; then zip -q -O "$j.new" "$j" native/linux/x86_64/libandroid_runtime.so native/linux/aarch64/libandroid_runtime.so
-    else cp "$j" "$j.new" && "$(dirname "$(realpath "$(command -v "${APKLAYER_JAVA:-java}")")")/jar" uf "$j.new" native/linux; fi  # no zip (Ubuntu Touch): the click's JDK has jar
+(cd "$tmp" && unzip -q "$half/native-runtime.jar" 'native/linux/*' 'dalvik/system/*' && for j in "$native"/aosp/android-all/*.jar; do
+    if command -v zip >/dev/null; then zip -q -r -O "$j.new" "$j" dalvik native/linux/x86_64/libandroid_runtime.so native/linux/aarch64/libandroid_runtime.so
+    else cp "$j" "$j.new" && "$(dirname "$(realpath "$(command -v "${APKLAYER_JAVA:-java}")")")/jar" uf "$j.new" native/linux dalvik; fi  # no zip (Ubuntu Touch): the click's JDK has jar
     mv -f "$j.new" "$j"
 done)
 # the framework jars instrumented once (apklayer.tools.PreInstrument), which app JVMs take while they are newer than their inputs (cli/env.cpp)
