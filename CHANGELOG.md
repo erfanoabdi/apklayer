@@ -1671,7 +1671,8 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Why: the owner asked for the useful changes of github.com/kuloPo/Kemu (a Windows emulator packaging project; its translator is kuloPo/platform_frameworks_libs_binary_translation,
   17 commits over DigitalisX64's android16). Taken: guest thread-table releases (ae5358b1, fb941b4d: popen/system/posix_spawn left GuestThreads behind), large frees outside the
   quarantine ring (8e1b5512, size read after 0006's chunk check), init trace after tracing is set up (3b98206b). Not taken: see the patch header.
-  Same command as 0016 (also `m libberberis_proxy_libc`); output in ~/los24-0022-build.log (Mac). Status: RUNNING.
+  Same command as 0016 (also `m libberberis_proxy_libc`); output in ~/los24-0022-build.log (Mac).
+- Result: `build completed successfully (10:31)`, no errors; libberberis_arm64.so sha256 0134ea3c35129853dc272536400be09e29bf5002a5ece9dc341e91c1ba77961c (0016-0022).
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0019 (guest environment without the desktop's variables; /data/data lists only the own package)
 - Why: the filesystem-layout audit (hello-arm64 "layout") found 37 host variables in the guest's environ and all 20 packages in /data/data.
   Same command as 0016; output kept in ~/los24-0019-build.log (Mac).
