@@ -424,11 +424,24 @@ static int other_package_path(const char *path)
     return 0;
 }
 
+/* The desktop's terminals: /dev/pts/<n> are the user's shells and terminal tabs. An app on Android has none of them in its /dev/pts; ACE (PGR) probes
+ * /dev/pts/0..7, which on Android tells a debugger or `adb shell` session from a plain start. ENOENT for an app process (own data set) under any path that
+ * names one by number; /dev/pts itself and /dev/pts/ptmx stay (Termux opens a pty of its own: its new terminals are numbered ones too, so APKLAYER_PTS_VIEW=host
+ * turns the filter off). */
+static int desktop_terminal_path(const char *path)
+{
+    if (strncmp(path, "/dev/pts/", 9)) return 0;
+    const char *leaf = path + 9;
+    static int host_view = -1;
+    if (host_view < 0) { const char *v = getenv("APKLAYER_PTS_VIEW"); host_view = v && !strcmp(v, "host"); }
+    return !host_view && *leaf >= '0' && *leaf <= '9' && __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
+}
+
 static bool from_root(const char *r, char **path);
 
 bool apklayer_apply_path_overrides(char **path)
 {
-    if (apklayer_proc_hidden(*path) || other_package_path(*path)) {  /* any path call of the process (the wrappers and bionic_translation's libc): no such process */
+    if (apklayer_proc_hidden(*path) || other_package_path(*path) || desktop_terminal_path(*path)) {  /* any path call of the process (the wrappers and bionic_translation's libc): no such process */
         char *gone = strdup("/proc/.apklayer-hidden");
         if (gone) { *path = gone; return true; }
     }
