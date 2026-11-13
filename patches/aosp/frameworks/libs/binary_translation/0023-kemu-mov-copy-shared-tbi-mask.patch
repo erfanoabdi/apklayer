@@ -1,0 +1,240 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] Kemu's two heavy/lite-tier cleanups: MOV register copies and one TBI mask per load/store pair
+
+Two of the speed commits of the Kemu fork (kuloPo/platform_frameworks_libs_binary_translation, over DigitalisX64's android16), source files only (their tests
+left out), applied one after the other against this tree:
+- b88517d9 "arm64: lower MOV register aliases to direct copies": MOV (ORR with the zero register, no shift, no invert) is a plain register copy
+  (SemanticsPlayer::LogicalShiftedReg) instead of an ORR; a W-register MOV still zero-extends the upper half through an explicit Copy32 (interpreter,
+  lite tier: MOVL; heavy tier: MovlRegReg, which the register allocator cannot coalesce away).
+- 615e5c93 "arm64: share TBI masking across paired memory accesses": LDP/STP mask the pointer's top byte once (ApplyTbi) and use LoadUntagged/StoreUntagged
+  for both halves, in the lite and the heavy tier; each access keeps its own fault-recovery block.
+The heavy tier is where PGR's home-scene noise comes from (berberis.mode.<package> keeps it out, 0008): this changes code that tier generates, so a regression
+would show there first; check PGR's home scene with the heavy tier on before shipping it. Not taken: 4de3cab3 (untagged addresses in exclusive and atomic
+accesses: one hunk does not apply to this tree's frontend.cc) and a2a2de1a (code-cost tiering: needs assembler files this tree does not have in that layout).
+Applies after 0022. Module libberberis_arm64.
+
+diff --git a/cpu_emulation/decoder/include/berberis/decoder/arm64/semantics_player.h b/cpu_emulation/decoder/include/berberis/decoder/arm64/semantics_player.h
+--- a/cpu_emulation/decoder/include/berberis/decoder/arm64/semantics_player.h
++++ b/cpu_emulation/decoder/include/berberis/decoder/arm64/semantics_player.h
+@@ -265,6 +265,16 @@
+   }
+ 
+   void LogicalShiftedReg(const typename Decoder::LogicalShiftedRegArgs& args) {
++    // MOV is ORR with ZR and an unshifted, non-inverted source. A W write
++    // must still clear the upper half, even when source and destination alias;
++    // a zero source has no upper half to clear.
++    if (args.opcode == Decoder::LogicalShiftedRegOpcode::kOrr && args.src1 == 31 && !args.invert &&
++        args.shift_amount == 0) {
++      Register src = GetRegOrZero(args.src2);
++      bool needs_zero_extend = !args.is_64bit && args.src2 != 31;
++      SetRegOrIgnore(args.dst, needs_zero_extend ? listener_->Copy32(src) : src);
++      return;
++    }
+     Register src1 = GetRegOrZero(args.src1);
+     Register src2 = GetRegOrZero(args.src2);
+     Register result = listener_->LogicalShiftedReg(args.opcode, args.is_64bit, args.invert,
+diff --git a/cpu_emulation/heavy_optimizer/arm64/frontend.cc b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
+--- a/cpu_emulation/heavy_optimizer/arm64/frontend.cc
++++ b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
+@@ -3282,7 +3282,17 @@
+   if (!success()) {
+     return AllocTempReg();
+   }
+-  Register masked = ApplyTbi(base);
++  return LoadUntagged(size, is_signed, is_64bit_target, ApplyTbi(base), offset);
++}
++
++Register HeavyOptimizerFrontend::LoadUntagged(Decoder::LoadStoreSize size,
++                                              bool is_signed,
++                                              bool is_64bit_target,
++                                              Register masked,
++                                              int32_t offset) {
++  if (!success()) {
++    return AllocTempReg();
++  }
+   Register res;
+   switch (size) {
+     case Decoder::LoadStoreSize::k64bit:
+@@ -3334,7 +3344,16 @@
+   if (!success()) {
+     return;
+   }
+-  Register masked = ApplyTbi(base);
++  StoreUntagged(size, ApplyTbi(base), offset, data);
++}
++
++void HeavyOptimizerFrontend::StoreUntagged(Decoder::LoadStoreSize size,
++                                           Register masked,
++                                           int32_t offset,
++                                           Register data) {
++  if (!success()) {
++    return;
++  }
+   switch (size) {
+     case Decoder::LoadStoreSize::k64bit:
+       Gen<x86_64::MovqOpReg>({.base = masked, .disp = offset}, data);
+@@ -3390,11 +3409,13 @@
+   }
+   UNUSED_ARGS(offset);  // Already applied by the SemanticsPlayer.
+   bool is_64bit_target = (size == Decoder::LoadStoreSize::k64bit) || is_signed;
+-  Register val1 = Load(size, is_signed, is_64bit_target, base, 0);
++  Register masked = ApplyTbi(base);
++  Register val1 = LoadUntagged(size, is_signed, is_64bit_target, masked, 0);
+   if (!success()) {
+     return;
+   }
+-  Register val2 = Load(size, is_signed, is_64bit_target, base, static_cast<int32_t>(scale));
++  Register val2 =
++      LoadUntagged(size, is_signed, is_64bit_target, masked, static_cast<int32_t>(scale));
+   if (!success()) {
+     return;
+   }
+@@ -3419,11 +3440,12 @@
+     return;
+   }
+   UNUSED_ARGS(offset);  // Already applied by the SemanticsPlayer.
+-  Store(size, base, 0, data1);
++  Register masked = ApplyTbi(base);
++  StoreUntagged(size, masked, 0, data1);
+   if (!success()) {
+     return;
+   }
+-  Store(size, base, static_cast<int32_t>(scale), data2);
++  StoreUntagged(size, masked, static_cast<int32_t>(scale), data2);
+ }
+ 
+ // LDR (register offset): address = base + extend(offset_reg) << shift_amount,
+diff --git a/cpu_emulation/heavy_optimizer/arm64/frontend.h b/cpu_emulation/heavy_optimizer/arm64/frontend.h
+--- a/cpu_emulation/heavy_optimizer/arm64/frontend.h
++++ b/cpu_emulation/heavy_optimizer/arm64/frontend.h
+@@ -179,6 +179,15 @@
+   // A caller whose 32-bit op is conditional keeps an explicit MOVL.
+   [[nodiscard]] Register CopyForWrite32(Register value) { return Copy(value); }
+ 
++  // A W-register copy with no 32-bit op to zero-extend it: an explicit MOVL,
++  // which the allocator cannot coalesce away.
++  [[nodiscard]] Register Copy32(Register value) {
++    if (!success()) {
++      return AllocTempReg();
++    }
++    return std::get<0>(Gen<x86_64::MovlRegReg>(value));
++  }
++
+   [[nodiscard]] bool success() const { return success_; }
+ 
+   void Undefined(BailReason reason = BailReason::kUnimplemented);
+@@ -600,6 +609,14 @@
+   }
+ 
+  private:
++  // Each access retains its own recovery block after sharing the TBI mask.
++  Register LoadUntagged(Decoder::LoadStoreSize size,
++                        bool is_signed,
++                        bool is_64bit_target,
++                        Register masked,
++                        int32_t offset);
++  void StoreUntagged(Decoder::LoadStoreSize size, Register masked, int32_t offset, Register data);
++
+   // Out-of-line so the trace/atomic machinery never inlines into the many bail
+   // sites. Called from Undefined() only when Tracing::IsOn().
+   void RecordBail(BailReason reason);
+diff --git a/cpu_emulation/interpreter/arm64/interpreter.h b/cpu_emulation/interpreter/arm64/interpreter.h
+--- a/cpu_emulation/interpreter/arm64/interpreter.h
++++ b/cpu_emulation/interpreter/arm64/interpreter.h
+@@ -9685,6 +9685,8 @@
+ 
+   [[nodiscard]] Register Copy(Register value) const { return value; }
+ 
++  [[nodiscard]] Register Copy32(Register value) const { return static_cast<uint32_t>(value); }
++
+   [[nodiscard]] GuestAddr GetInsnAddr() const { return state_->cpu.insn_addr; }
+ 
+   void FinalizeInsn(uint8_t insn_len) {
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator.h b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator.h
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator.h
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator.h
+@@ -146,6 +146,12 @@
+     return result;
+   }
+ 
++  [[nodiscard]] Register Copy32(Register value) {
++    Register result = AllocTempReg();
++    as_.Movl(result, value);
++    return result;
++  }
++
+   void StoreMappedRegs() { StoreMappedRegs(ModifiedMappedRegs()); }
+ 
+   //
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc
+@@ -494,13 +494,19 @@
+ 
+   Register Load(Decoder::LoadStoreSize size, bool is_signed, bool is_64bit_target,
+                 Register base, int32_t offset) {
+-    // apply TBI mask before using base as memory operand.
+-    base = ApplyTbi(base);
++    return LoadUntagged(size, is_signed, is_64bit_target, ApplyTbi(base), offset);
++  }
++
++  Register LoadUntagged(Decoder::LoadStoreSize size,
++                        bool is_signed,
++                        bool is_64bit_target,
++                        Register masked,
++                        int32_t offset) {
+     AssemblerBase::Label* recovery_label = as_.MakeLabel();
+     as_.SetRecoveryPoint(recovery_label);
+ 
+     Register res = AllocTempReg();
+-    Assembler::Operand mem{.base = base, .disp = offset};
++    Assembler::Operand mem{.base = masked, .disp = offset};
+     switch (size) {
+       case Decoder::LoadStoreSize::k64bit:
+         as_.Movq(res, mem);
+@@ -543,12 +549,14 @@
+   }
+ 
+   void Store(Decoder::LoadStoreSize size, Register base, int32_t offset, Register data) {
+-    // apply TBI mask before using base as memory operand.
+-    base = ApplyTbi(base);
++    StoreUntagged(size, ApplyTbi(base), offset, data);
++  }
++
++  void StoreUntagged(Decoder::LoadStoreSize size, Register masked, int32_t offset, Register data) {
+     AssemblerBase::Label* recovery_label = as_.MakeLabel();
+     as_.SetRecoveryPoint(recovery_label);
+ 
+-    Assembler::Operand mem{.base = base, .disp = offset};
++    Assembler::Operand mem{.base = masked, .disp = offset};
+     switch (size) {
+       case Decoder::LoadStoreSize::k64bit:
+         as_.Movq(mem, data);
+@@ -591,10 +599,11 @@
+     // Fix: load both halves into temps first, then commit both via SetReg.
+     // LDPSW sign-extends each 32-bit element into its 64-bit target register.
+     bool is_64bit_target = (size == Decoder::LoadStoreSize::k64bit) || is_signed;
+-    Register val1 = Load(size, is_signed, is_64bit_target, base, 0);
++    Register masked = ApplyTbi(base);
++    Register val1 = LoadUntagged(size, is_signed, is_64bit_target, masked, 0);
+     if (!success()) return;
+-    Register val2 = Load(size, is_signed, is_64bit_target, base,
+-                         static_cast<int32_t>(scale));
++    Register val2 =
++        LoadUntagged(size, is_signed, is_64bit_target, masked, static_cast<int32_t>(scale));
+     if (!success()) return;
+     if (rt1 != 31) SetReg(rt1, val1);
+     if (rt2 != 31) SetReg(rt2, val2);
+@@ -603,9 +612,10 @@
+   void StorePair(Decoder::LoadStoreSize size, Register base, int32_t offset,
+                  Register data1, Register data2, uint8_t scale) {
+     UNUSED(offset);  // Already applied by caller in semantics_player.
+-    Store(size, base, 0, data1);
++    Register masked = ApplyTbi(base);
++    StoreUntagged(size, masked, 0, data1);
+     if (!success()) return;
+-    Store(size, base, static_cast<int32_t>(scale), data2);
++    StoreUntagged(size, masked, static_cast<int32_t>(scale), data2);
+   }
+ 
+   // Apply the correct 32->64 extension to the offset
