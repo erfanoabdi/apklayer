@@ -234,18 +234,17 @@ public class Main extends Activity {
     private void late() throws Exception {
         require(COUNTER.equals(startService(counter("l"))), "startService");
         Object[] host = state();  // hello.svctarget's component host runs now
-        java.nio.file.Path apps = java.nio.file.Path.of(System.getProperty("apklayer.apps")), info = apps.resolve("hello.svclate/info.properties");
-        try (java.nio.file.WatchService watch = apps.getFileSystem().newWatchService()) {
-            apps.register(watch, java.nio.file.StandardWatchEventKinds.ENTRY_CREATE);
-            System.out.println("[svc] INSTALL hello-svc-late");
-            while (!java.nio.file.Files.exists(info)) {  // events, not a poll: the package directory appears, then its info.properties (written last by install)
-                if (java.nio.file.Files.isDirectory(info.getParent())) info.getParent().register(watch, java.nio.file.StandardWatchEventKinds.ENTRY_CREATE);  // a rename into the directory is a create
-                if (java.nio.file.Files.exists(info)) break;
+        java.nio.file.Path files = getFilesDir().toPath(), ready = files.resolve("late-installed");
+        java.nio.file.Files.deleteIfExists(ready);
+        try (java.nio.file.WatchService watch = files.getFileSystem().newWatchService()) {
+            files.register(watch, java.nio.file.StandardWatchEventKinds.ENTRY_CREATE);
+            System.out.println("[svc] INSTALL hello-svc-late " + ready);
+            while (!java.nio.file.Files.exists(ready)) {
                 java.nio.file.WatchKey key = watch.poll(60, TimeUnit.SECONDS);
                 require(key != null, "hello.svclate was not installed");
                 key.pollEvents(); key.reset();
             }
-        }
+        } finally { java.nio.file.Files.deleteIfExists(ready); }
         android.content.pm.PackageInfo installed = getPackageManager().getPackageInfo("hello.svclate", android.content.pm.PackageManager.GET_SERVICES);
         require(installed.services != null && installed.services.length == 1, "late package's services " + java.util.Arrays.toString(installed.services));
         ComponentName late = new ComponentName("hello.svclate", "hello.svctarget.CounterService");

@@ -113,6 +113,12 @@ try:
                 if line.startswith('[%s] INSTALL ' % tag):  # a package installed while the instance runs (services late)
                     apk = Path(os.environ.get('APKLY_APKS', '.tests/apks')) / (line.split()[2] + '.apk')
                     subprocess.run(['bin/apklayer', 'install', str(apk)], env=ENV, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                    # Acknowledge the CLI install in the app's own files, without exposing the host package store.
+                    ready = line.split(' ', 3)[3]
+                    if ENV.get('APKLAYER_SANDBOX', os.environ.get('APKLAYER_SANDBOX')) == '1':
+                        subprocess.run(['bin/apklayer', 'sandbox-exec', package, '--', 'touch', ready], env=ENV, check=True)
+                    else:
+                        Path(ready).touch()
                 if line.startswith('[%s] KILL ' % tag) and not killed:
                     killed = True
                     os.kill(int(line.split()[2]), signal.SIGKILL)

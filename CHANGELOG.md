@@ -3,6 +3,12 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-13: consistent installed and in-memory DEX behavior
+- Validation: runtime-identity (including conflicting parent metadata) passes on UTM ARM64 and x86 with userspace Binder. Native-bridge, dex2jvm and the full 12-phase services group pass on both. Local fixture bytecode inspection proves parent-first routing preserves the actual override.
+- The service late-install test now waits for a driver acknowledgment in its own getFilesDir() directory, then checks PackageManager and starts the service. It no longer reads the private host package-store property; CLI installation itself does not emit Android package broadcasts.
+- Extracted DenyInstrument's existing class transform into a per-session instance, reused by jar installation and lazy InMemoryDexClassLoader definitions. DEX signatures are indexed up front, while method bodies stay lazy. The property, native-load, Unsafe, service and relocation transformations no longer depend on installation versus dynamic loading.
+- Removed global mutable relocation/hierarchy state. Parent class metadata is consulted for inherited service routing where its class resource is available; dynamic loaders honor parent-first selection even when their DEX bundles a conflicting copy (ABI 7/postprocessing 17). Two embedded DEX fixtures verify independent same-named classes, Java-owned relocation, own Context overrides, shared app property state and direct/reflection/handle/native-load behavior.
+
 ## 2026-11-13: NUMA runtime inspection
 - Validation: 24/24 native tests and the extended art-maps APK pass on UTM ARM64 and x86 userspace Binder.
 - Own numa_maps uses the same JDK/ART filename policy as maps and module enumeration, changing only the file token and retaining addresses, NUMA policy and node/page accounting. Kernel-escaped spaces and deleted files are covered; unsupported kernels keep ENOENT.
