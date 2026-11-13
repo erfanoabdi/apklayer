@@ -79,6 +79,10 @@ def apklayer(out, runtime):
                      capture_output=True, text=True)
     print(install.stdout.strip())
     text = stream(env + 'python3 -u %s/tests/vm/identity-matrix.py 2>&1' % vm.ROOT, 'PASS identity probes', 150)
+    if 'PASS identity probes' not in text:  # the run's output can miss the app's lines; the instance's app log has them
+        text = vm.ssh(env + 'cat "${XDG_STATE_HOME:-$HOME/.local/state}/apklayer/%s/app-hello.identity.log"' % slot,
+                      capture_output=True, text=True).stdout
+        text += '\nPASS identity probes (app log)' if '[identity] END' in text else ''
     Path(out).write_text('\n'.join(lines_of(text)) + '\n')
     print('\n'.join(text.splitlines()[-1 if 'PASS identity probes' in text else -40:]) if text else 'no output')
     return 0 if 'PASS identity probes' in text else 1
