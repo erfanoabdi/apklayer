@@ -25,10 +25,18 @@ public final class Main {
 
     /** The app's class loader (its classes, and the APK for its java resources), a child of the sandbox, known inside the sandbox and to its loader's fallback. */
     private static ClassLoader appLoader(AndroidSandbox sandbox, Path apk, Path classes) throws ReflectiveOperationException {
+        // PathClassLoader's DexPathList uses libcore's native stat while constructing its
+        // library search paths. Cold starts and install inspection need the same bootstrap
+        // as a prepared spare before any Android class loader can be constructed.
+        Thread.currentThread().setContextClassLoader(sandbox.getRobolectricClassLoader());
+        java.lang.reflect.Method natives = sandbox.bootstrappedClass(AppEnvironment.class).getDeclaredMethod("loadNativeRuntime");
+        natives.setAccessible(true);
+        natives.invoke(null);
         AppClassLoader loader = new AppClassLoader("app", new Path[] {classes, apk}, sandbox.getRobolectricClassLoader());
-        sandbox.bootstrappedClass(AppClassLoader.class).getField("app").set(null, loader);
+        sandbox.bootstrappedClass(AppClassLoader.class).getField("app").set(null, loader.definingLoader());
         Class.forName("org.robolectric.internal.bytecode.ApklayerAppHook").getField("app").set(null, loader);  // a runtime overlay class (runtime/patches)
-        return loader;
+        sandbox.bootstrappedClass(AppClassLoader.class).getField("index").set(null, loader);
+        return loader.definingLoader();
     }
 
     /** Android has no module system: app code reflects into any java.* / javax.* class of libcore (App Manager reads SecretKeySpec.key). Every such

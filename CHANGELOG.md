@@ -3,6 +3,12 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-13: real app defining loaders
+- Converted app, shared-library and WebView-provider classes are defined in actual AOSP PathClassLoader objects. The existing host index retains byte/resource lookup and delegation policy. Context, thread, reflection and JNI see the same defining owner; removed the old BaseDex cast facade (ABI 6/postprocessing 16). Parent boot-loader identity and DexPathList metadata remain explicit follow-ups.
+- Thin libcore loader overlays register parallel loading, delegate converted class lookup and retain lazy shared-resource enumeration without the removed JDK CompoundEnumeration. Both raw and preinstrumented framework jars merge the selected overlay entries. Native filesystem registration now precedes loader construction on cold starts/install inspection.
+- Restored AOSP WebViewFactory's global Resources.registerResourcePaths step before native loading, replacing per-context WebViewDelegate asset mutation. The old runtime passed the UTM baseline while the new loader exposed a configuration-resource failure; the upstream registration fixes it. The probe now requires JS/cookie success in two configuration contexts; x86 took 27 seconds, so its old 25-second test deadline is now 60 seconds.
+- Validation: loader identity/parallel/concurrency/resource/protected-lookup APK, JNI native-bridge and all three CDS cases pass on both architectures. WebView including a changed-configuration context passes on both. Full sharedlib passes on x86; UTM passes legacy and installed-provider behavior but lacks the six optional framework jars expected by that group's first assertion. Jar merge's selected entries, unchanged input and atomic failure test passes locally.
+
 ## 2026-11-13: native module identity
 - Validation: 24/24 native tests, native-bridge and art-maps pass on UTM ARM64 and x86 userspace Binder. The expanded APK module inspection also passes natively and through ARM64 translation.
 - bionic_translation 0066 shares JDK module names with the app process view in dladdr/dl_iterate_phdr. Glibc/JVM callers retain original names. Real load addresses, symbols and unwind program headers remain intact; the existing PT_DYNAMIC protection still prevents guest PLT hooks from patching host internals.

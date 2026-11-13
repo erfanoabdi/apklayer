@@ -186,7 +186,7 @@ final class HostSharedLibraries {
             } catch (RuntimeException notBoundYet) { /* the context path covers it */ }
             return;
         }
-        ClassLoader app = AppClassLoader.app;  // the loader Main built, a class of the outer loader: reached by reflection
+        ClassLoader app = AppClassLoader.index;  // the loader Main built, a class of the outer loader: reached by reflection
         try {
             if (app != null) app.getClass().getMethod("addLibraries", Path[].class).invoke(app, (Object) resolved.jars().toArray(new Path[0]));
         } catch (ReflectiveOperationException failure) { throw new IllegalStateException(failure); }

@@ -14,7 +14,7 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Open work: `docs/PLAN.md`
 - Binder (2026-11-09, for 0.4.9): apklayer's userspace binder (bridge/binderd, docs/BINDER.md) is the default, no root step; the kernel's is an option (`apklayer binder kernel`, the manager's Hardware page). Test groups run on userspace; `binder-kernel`, `host-binder-kernel` keep the kernel's.
 - Open work by area: `docs/PLAN.md`.
 
-- Runtime identity (2026-11-13): app property calls use AOSP defaults; VMRuntime queries and native maps/smaps/map_files/status group views are covered. Native suite (24 tests, including ELF/module/unwind checks), runtime-identity/art-maps APKs and native-bridge pass on UTM ARM64 and x86 translation with userspace binder. Waydroid ART baseline obtained. Actual ART layouts/JNI IDs, loader identity and other inspection gaps remain active in PLAN.
+- Runtime identity (2026-11-13): app property calls use AOSP defaults; VMRuntime queries and native maps/smaps/map_files/status group views are covered. Native suite (24 tests, including ELF/module/unwind checks), runtime-identity/art-maps APKs and native-bridge pass on UTM ARM64 and x86 translation with userspace binder. Waydroid ART baseline obtained. App/shared/provider classes now have actual PathClassLoader ownership; JNI/CDS tests pass on both architectures, and WebView survives new configuration contexts. Actual ART layouts/JNI IDs, boot-parent identity and other inspection gaps remain active in PLAN.
 
 ## How to work here
 - A new machine: `docs/INSTALL.md` (prebuilts branch, build, first app).

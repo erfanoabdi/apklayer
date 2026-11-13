@@ -23,7 +23,7 @@ TESTS = {
     'processes': ('hello.actprocess', None, 'ap', (), 120),
     'pendingintents': ('hello.picreator', 'hello.pi', 'pi', ('[pi-h]',), int(os.environ.get('APKLY_PATIENCE', '120'))),
     'notifications': ('hello.ntposter', 'hello.nt', 'nt', ('[nt-h]',), 120),
-    'webview': ('hello.wvprobe', None, 'wv', ('Exception', '\tat ', '[apklayer]'), 25),
+    'webview': ('hello.wvprobe', None, 'wv', ('Exception', '\tat ', '[apklayer]'), 60),  # cold renderer plus two configuration contexts
 }
 package, prop, tag, shown, seconds = TESTS[TEST]
 if isinstance(package, dict): package = package.get(PHASE, 'hello.cpclient')

@@ -88,3 +88,5 @@ Not blocking but open: collect NOTICE/legal files for everything shipped (AOSP l
 
 - `runtime/host/java/apklayer/host/AndroidHardcodedSystemProperties.java`: AOSP libcore `libart/src/main/java/java/lang/AndroidHardcodedSystemProperties.java` (Apache-2.0), package adapted for the guest property view.
 - `runtime/host/java/apklayer/host/PropertiesWithNonOverrideableDefaults.java`: extracted from AOSP libcore `ojluni/src/main/java/java/lang/System.java` (GPLv2 with Classpath Exception), original notices retained; package and visibility adapted.
+
+- `runtime/patches/dalvik/system/{BaseDexClassLoader,PathClassLoader}.java`: AOSP libcore `dalvik/src/main/java/dalvik/system/` at local LineageOS libcore commit `4ebfb391ee0109d16abe6e2bc965724b940928c5` (Apache-2.0). Original headers retained. Thin adaptations register parallel loading on HotSpot, delegate converted class/resource lookup, and replace unavailable sun.misc.CompoundEnumeration with equivalent lazy iteration.

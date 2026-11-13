@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """jar-put.py <in.jar> <out.jar> <entry>=<file>...: a copy of in.jar with these entries added or replaced (Meson: the JNI shim and the critical-natives
-list into native-runtime.jar, the shim into the framework jars). The output is a new file, so hardlinked copies of the input stay as they are."""
+list into native-runtime.jar, the shim into the framework jars). A value @archive.jar copies the named entry from that archive. The output is a new file, so hardlinked copies of the input stay as they are."""
 import os
 import sys
 import zipfile
@@ -15,7 +15,11 @@ def main():
             if info.filename not in put:
                 zout.writestr(info, zin.read(info))
         for name, path in put.items():
-            zout.write(path, name)
+            if path.startswith('@'):
+                with zipfile.ZipFile(path[1:]) as overlay:
+                    zout.writestr(name, overlay.read(name))
+            else:
+                zout.write(path, name)
     os.replace(tmp, out)
 
 

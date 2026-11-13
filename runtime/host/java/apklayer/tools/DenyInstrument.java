@@ -149,15 +149,6 @@ public final class DenyInstrument {
                                                                        String signature, String[] exceptions) {
                         return new org.objectweb.asm.MethodVisitor(Opcodes.ASM9,
                                 super.visitMethod(access, name, desc, signature, exceptions)) {
-                            @Override
-                            public void visitTypeInsn(int opcode, String type) {
-                                // apklayer patch: preserve Android native-library lookup on a JVM loader.
-                                if (opcode == Opcodes.CHECKCAST && type.equals("dalvik/system/BaseDexClassLoader")) {
-                                    super.visitTypeInsn(opcode, "java/lang/ClassLoader");
-                                    super.visitMethodInsn(Opcodes.INVOKESTATIC, "apklayer/host/HostDexClassLoaders", "adapt",
-                                            "(Ljava/lang/ClassLoader;)Ldalvik/system/BaseDexClassLoader;", false);
-                                } else super.visitTypeInsn(opcode, type);
-                            }
                             @Override public void visitLdcInsn(Object value) { super.visitLdcInsn(propertyHandle(value)); }
                             @Override public void visitInvokeDynamicInsn(String n, String d, Handle bootstrap, Object... args) {
                                 for (int i = 0; i < args.length; i++) args[i] = propertyHandle(args[i]);

@@ -25,6 +25,9 @@ public class ShadowHostWebViewFactory {
         org.robolectric.shadows.ShadowPackageManager shadow = org.robolectric.Shadows.shadowOf(pm); // the provider is an installed package here too: its renderer services resolve
         shadow.installPackage(info);
         org.robolectric.util.ReflectionHelpers.setStaticField(android.webkit.WebViewFactory.class, "sPackageInfo", info);
+        // Same step as WebViewFactory.getProviderClass: register for existing and future
+        // Resources, including AssetManagers recreated after a configuration change.
+        android.content.res.Resources.registerResourcePaths(info.packageName, info.applicationInfo);
         System.out.println("[apklayer] WebView provider " + info.packageName + " " + info.versionName + " (" + info.getLongVersionCode() + ")");
     }
 
@@ -37,7 +40,7 @@ public class ShadowHostWebViewFactory {
     @Implementation protected static boolean isWebViewSupported() { return System.getProperty("apklayer.webviewprovider") != null; }
 
     /** A class loader of its own, as WebViewFactory makes one on Android: Chromium, jni_zero and its bundled libraries never meet the app's copies (microG and Meet bundle Cronet). */
-    private static AppClassLoader providerLoader(String dir) {
+    private static ClassLoader providerLoader(String dir) {
         AppClassLoader loader = new AppClassLoader("webview", new java.nio.file.Path[] {new File(dir, "classes.jar").toPath(), new File(dir, "base.apk").toPath()},
                 ShadowHostWebViewFactory.class.getClassLoader());
         try {  // framework code naming a provider class (its services) through the sandbox loader: after the app's own, the provider's
@@ -45,7 +48,7 @@ public class ShadowHostWebViewFactory {
             @SuppressWarnings("unchecked") java.util.function.Function<String, Class<?>> app = (java.util.function.Function<String, Class<?>>) hook.get(null);
             hook.set(null, (java.util.function.Function<String, Class<?>>) name -> { Class<?> c = app == null ? null : app.apply(name); return c != null ? c : loader.apply(name); });
         } catch (ReflectiveOperationException noOverlay) { throw new IllegalStateException("runtime overlay without ApklayerAppHook", noOverlay); }
-        return loader;
+        return loader.definingLoader();
     }
 
     /**
@@ -66,8 +69,8 @@ public class ShadowHostWebViewFactory {
         File library = new File(dir, "lib/libwebviewchromium.so");
         // the provider package itself (its renderer services in a component host) already runs in its app loader
         ClassLoader loader = new File(dir).getName().equals(System.getProperty("apklayer.package")) && AppClassLoader.app != null ? AppClassLoader.app : providerLoader(dir);
-        NativeLoader.load(library.getPath(), loader);
         providerPackage(dir);
+        NativeLoader.load(library.getPath(), loader);
         try { return providerClass = Class.forName(FACTORY, true, loader); }
         catch (ClassNotFoundException missing) { throw new IllegalStateException("The WebView provider's classes are missing from " + dir, missing); }
     }
