@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <limits.h>
 
 extern char **environ;
 #define REAL(name) ({ static void *f_; if (!f_) f_ = dlsym(RTLD_NEXT, #name); f_; })
@@ -165,6 +166,60 @@ static int target_done(struct target *t, int r)
     return r;
 }
 
+/* Real candidate execs share mapping, translator, permission checks and script handling. */
+int apklayer_exec_search_guest(const char *file, char *const argv[], char *const envp[], const char *search, bool inherited)
+{
+    if (!file || !search || !argv || !argv[0] || strchr(file, '/')) { errno = EINVAL; return -1; }
+    if (!*file) { errno = ENOENT; return -1; }
+    size_t filelen = strlen(file);
+    int denied = 0;
+    const char *dir = search;
+    do {
+        const char *end = strchr(dir, ':');
+        size_t length = end ? (size_t)(end - dir) : strlen(dir);
+        char candidate[PATH_MAX];
+        if (length + filelen + 2 > sizeof candidate) { errno = ENAMETOOLONG; goto next; }
+        size_t used = length;
+        memcpy(candidate, dir, length);
+        if (length && dir[length - 1] != '/') candidate[used++] = '/';
+        memcpy(candidate + used, file, filelen + 1);
+        execve(candidate, argv, envp);
+        if (errno == ENOEXEC) {
+            size_t argc = 0;
+            while (argv[argc]) argc++;
+            char **shell = calloc(argc + 2, sizeof(char *));
+            if (!shell) { errno = ENOMEM; return -1; }
+            shell[0] = "/system/bin/sh"; shell[1] = candidate;
+            for (size_t i = 1; i < argc; i++) shell[i + 1] = argv[i];
+            execve(shell[0], shell, envp);
+            int error = errno; free(shell); errno = error;
+            return -1;
+        }
+        switch (errno) {
+            case EACCES: denied = EACCES; /* fall through */
+            case ENOENT: case ENOTDIR: case ELOOP: case ESTALE: case ENODEV: case ETIMEDOUT: break;
+            case EISDIR: case ENAMETOOLONG: if (inherited) break; /* bionic execvp continues these too */
+                return -1;
+            default: return -1;
+        }
+next:
+        if (!end) break;
+        dir = end + 1;
+    } while (true);
+    if (denied) errno = denied;
+    return -1;
+}
+
+/* JDK's helper has already changed cwd; bypass its cached host PATH without changing envp. */
+static int search_request(const char *path, char *const args[], char *const envp[])
+{
+    static const char marker[] = "/proc/self/fd/apklayer-exec-search/";
+    if (!args || !args[0] || strcmp(path, args[0]) || !args[1] || (strcmp(args[1], "1i") && strcmp(args[1], "1e"))
+            || !args[2] || !args[3] || strchr(args[3], '/')
+            || strcmp(path + sizeof marker - 1, args[3])) { errno = EINVAL; return -1; }
+    return apklayer_exec_search_guest(args[3], args + 3, envp, args[2], !strcmp(args[1], "1i"));
+}
+
 /* A script whose interpreter is on a mapped path (Termux: #!/data/data/com.termux/files/usr/bin/sh) would have the kernel look the interpreter up
  * unmapped: it runs as the kernel would run it, "<interpreter> [<arg>] <script> <argv[1]...>", through these wrappers. NULL: run the file as it is. */
 static char **script_argv(const char *file, const char *path, char *const argv[])
@@ -200,11 +255,15 @@ static char **script_argv(const char *file, const char *path, char *const argv[]
 
 int execve(const char *path, char *const argv[], char *const envp[])
 {
+    static const char marker[] = "/proc/self/fd/apklayer-exec-search/";
+    if (!strncmp(path, marker, sizeof marker - 1)) return search_request(path, argv, envp);
     static __thread int depth;  /* a script's interpreter may be a script: the kernel's limit */
     struct command c;
     struct target t;
     char **sa;
     target(&t, path, envp);
+    // Script/Android-ELF adaptation must not bypass the executable permission check.
+    if (faccessat(AT_FDCWD, t.path, X_OK, AT_EACCESS) < 0) return target_done(&t, -1);
     if (depth < 4 && (sa = script_argv(t.path, path, argv))) {
         depth++;
         int r = execve(sa[0], sa, envp);

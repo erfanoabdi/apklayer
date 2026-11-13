@@ -6,6 +6,9 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
+import java.util.StringTokenizer;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -66,6 +69,14 @@ public final class GuestEnvironment {
 
     private static final class BuilderState {
         static final Field ENVIRONMENT = field();
+        static final Method ARRAY_ENVIRONMENT = arrayEnvironment();
+        private static Method arrayEnvironment() {
+            try {
+                Method method = ProcessBuilder.class.getDeclaredMethod("environment", String[].class);
+                method.setAccessible(true);
+                return method;
+            } catch (ReflectiveOperationException failure) { throw new ExceptionInInitializerError(failure); }
+        }
         private static Field field() {
             try {
                 Field field = ProcessBuilder.class.getDeclaredField("environment");
@@ -97,27 +108,76 @@ public final class GuestEnvironment {
     }
 
     public static Process start(ProcessBuilder builder) throws IOException {
-        if (current(builder) != null) return builder.start();
-        // Without environment(), Android inherits at each start; it does not freeze the
-        // builder's environment. Restore null even when process creation fails.
-        assign(builder, snapshot());
-        try { return builder.start(); }
-        finally { assign(builder, null); }
+        try (Launch request = new Launch(builder)) {
+            try { return builder.start(); }
+            catch (IOException failure) { throw request.failure(failure); }
+        }
     }
 
     public static List<Process> startPipeline(List<ProcessBuilder> builders) throws IOException {
         Objects.requireNonNull(builders);
-        java.util.ArrayList<ProcessBuilder> inherited = new java.util.ArrayList<>();
+        ArrayList<Launch> requests = new ArrayList<>();
         try {
-            for (ProcessBuilder builder : builders) {
-                if (current(builder) == null) {
-                    assign(builder, snapshot());
-                    inherited.add(builder);
+            for (ProcessBuilder builder : builders) requests.add(new Launch(builder));
+            return ProcessBuilder.startPipeline(builders);
+        } catch (IOException failure) {
+            for (Launch request : requests) failure = request.failure(failure);
+            throw failure;
+        } finally {
+            for (int i = requests.size() - 1; i >= 0; i--) requests.get(i).close();
+        }
+    }
+
+    // UNIXProcess caches the parent's PATH on first launch, used only for explicit environments.
+    private static boolean pathInitialized;
+    private static String initialPath;
+    private static synchronized String searchPath(boolean explicit) {
+        String live = getenv("PATH");
+        if (!pathInitialized) { initialPath = live; pathInitialized = true; }
+        String path = explicit ? initialPath : live;
+        if (path != null) return path; // Empty PATH means the child's current directory.
+        return explicit ? ":/bin:/usr/bin" : "/product/bin:/apex/com.android.runtime/bin:/apex/com.android.art/bin:/apex/com.android.virt/bin:/system_ext/bin:/system/bin:/system/xbin:/odm/bin:/vendor/bin:/vendor/xbin";
+    }
+
+    // This impossible proc-fd filename fails closed when our preload is unavailable.
+    private static final String EXEC_SEARCH = "/proc/self/fd/apklayer-exec-search/";
+    private static final class Launch implements AutoCloseable {
+        final ProcessBuilder builder;
+        final List<String> command;
+        final boolean inherited;
+        boolean adapted;
+
+        Launch(ProcessBuilder builder) {
+            this.builder = Objects.requireNonNull(builder);
+            command = builder.command();
+            inherited = current(builder) == null;
+            // Let ProcessBuilder produce its own argument errors without initializing PATH.
+            boolean valid = !command.isEmpty();
+            for (String arg : command) valid &= arg != null && arg.indexOf('\0') < 0;
+            if (valid) {
+                String path = searchPath(!inherited);
+                if (command.get(0).indexOf('/') < 0) {
+                    ArrayList<String> wrapped = new ArrayList<>(command.size() + 3);
+                    wrapped.add(EXEC_SEARCH + command.get(0)); wrapped.add(inherited ? "1i" : "1e"); wrapped.add(path);
+                    wrapped.addAll(command);
+                    builder.command(wrapped);
+                    adapted = true;
                 }
             }
-            return ProcessBuilder.startPipeline(builders);
-        } finally {
-            for (ProcessBuilder builder : inherited) assign(builder, null);
+            try { if (inherited) assign(builder, snapshot()); }
+            catch (RuntimeException | Error failure) { close(); throw failure; }
+        }
+
+        IOException failure(IOException failure) {
+            if (!adapted) return failure;
+            String marker = EXEC_SEARCH + command.get(0);
+            if (!failure.getMessage().contains(marker)) return failure;
+            return new IOException(failure.getMessage().replace(marker, command.get(0)), failure.getCause());
+        }
+
+        @Override public void close() {
+            if (adapted) builder.command(command);
+            if (inherited) assign(builder, null);
         }
     }
 
@@ -135,11 +195,24 @@ public final class GuestEnvironment {
     }
     public static Process exec(Runtime runtime, String command, String[] envp, File directory) throws IOException {
         Objects.requireNonNull(runtime);
-        return runtime.exec(command, envp == null ? environ() : envp, directory);
+        if (command.isEmpty()) throw new IllegalArgumentException("Empty command");
+        StringTokenizer tokens = new StringTokenizer(command);
+        String[] argv = new String[tokens.countTokens()];
+        for (int i = 0; tokens.hasMoreTokens(); i++) argv[i] = tokens.nextToken();
+        return exec(runtime, argv, envp, directory);
     }
     public static Process exec(Runtime runtime, String[] command, String[] envp, File directory) throws IOException {
         Objects.requireNonNull(runtime);
-        return runtime.exec(command, envp == null ? environ() : envp, directory);
+        ProcessBuilder builder = new ProcessBuilder(command).directory(directory);
+        if (envp != null) {
+            try { BuilderState.ARRAY_ENVIRONMENT.invoke(builder, (Object) envp); }
+            catch (InvocationTargetException failure) {
+                if (failure.getCause() instanceof RuntimeException runtimeFailure) throw runtimeFailure;
+                if (failure.getCause() instanceof Error error) throw error;
+                throw new AssertionError(failure.getCause());
+            } catch (IllegalAccessException impossible) { throw new AssertionError(impossible); }
+        }
+        return start(builder);
     }
 
     /** Public JDK APIs only; virtual replacements prepend their original receiver. */

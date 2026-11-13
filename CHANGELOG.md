@@ -3,6 +3,11 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-13: Java guest executable lookup
+- ProcessBuilder and Runtime.exec now select executables using the guest parent's PATH, independently of the child's environment. A bounded Android 13 dalvikvm64 reference confirmed live parent PATH for inherited environments and first-launch cached parent PATH for explicit environments, including builder.environment().
+- Java sends basename launches through a validated, impossible proc-fd request path. The existing native exec adapter tries each candidate after changing cwd, preserves original argv and executable permissions, and handles Android script fallback and error precedence. Builders and pipeline commands are restored after success or failure; Runtime string commands retain whitespace tokenization. No Java file-existence prediction or host PATH mutation is used.
+- The expanded ARM64 APK passes on x86 translation: inherited/explicit A/B selection, relative and empty PATH, cwd, pipeline, builder reuse, argument spacing, missing and non-executable candidates, plain scripts, prior Java/native environment and proc snapshots, and the native ActivityManager private-control call. Local APK build, native syntax check and diff check pass. ARM runtime validation remains pending; native libc execvp/execvpe routing is separate follow-up work.
+
 ## 2026-11-13: WIP shared active-ABI environment checkpoint
 - User requested an immediate commit of the accumulated working tree. This checkpoint is not release-ready: private backend-control libraries are still building and final artifact staging/regression checks remain.
 - App Java/Os getters, native libc mutation APIs and environ now share the active ABI's environment; translated apps use the real guest libc slot and critical trampolines. Direct/reflection/method-handle Java calls and child environment snapshots share the same routing (converter ABI 8/postprocessing 18). Host JVM environment mutation is removed.

@@ -29,6 +29,7 @@ public final class Main extends Activity {
     private static native void mutatePut(String value);
     private static native void releasePut();
     private static native byte[] procEnviron(boolean buffered);
+    private static native void activityManagerCheck();
     private int failures;
     private interface Step { void run() throws Throwable; }
 
@@ -40,6 +41,7 @@ public final class Main extends Activity {
         new Thread(() -> {
             try {
                 System.loadLibrary("hello");
+                step("native ActivityManager private control", Main::activityManagerCheck);
                 tests();
             } catch (Throwable failure) {
                 failures++;
@@ -192,6 +194,7 @@ public final class Main extends Activity {
     private void tests() {
         byte[][] initial = new byte[3][];
         initialProc(initial);
+        failures += PathChecks.run(this);
         try {
             step("initial cleanup", () -> { unset(KEY); unset(PUT); unset(LOCAL); });
             views(KEY, null, "absent");
