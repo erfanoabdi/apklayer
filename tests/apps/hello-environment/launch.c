@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -93,6 +94,53 @@ static void spawn_checks(const char *dir) {
            "posix_spawn missing: 127");
 }
 
+/* A #!/bin/sh script is run by Android's shell (/bin is /system/bin on Android), through each launch form: the PATH search of the exec
+ * family, an exec of its path and posix_spawn. Its line goes to the pipe, read here. */
+static void script_run(const char *label, const char *dir, const char *script, int how) {
+    int fds[2];
+    char out[64] = "", path[512];
+    snprintf(path, sizeof path, "%s/%s", dir, script);
+    if (pipe(fds)) { fail("pipe"); return; }
+    char *argv[] = {(char *)script, NULL};
+    pid_t pid = -1;
+    if (how == 2) {
+        actions_t actions;
+        if (!actions_init(&actions) && !add_dup2(&actions, fds[1], 1) && !add_close(&actions, fds[0])
+                && spawn_fn(&pid, path, &actions, NULL, argv, NULL)) pid = -1;
+        actions_destroy(&actions);
+    } else if ((pid = fork()) == 0) {
+        dup2(fds[1], 1);
+        close(fds[0]);
+        if (how == 0) { setenv("PATH", dir, 1); execvp(script, argv); }
+        else execv(path, argv);
+        _exit(127);
+    }
+    close(fds[1]);
+    ssize_t n = pid > 0 ? read(fds[0], out, sizeof out - 1) : -1;
+    out[n > 0 ? n : 0] = 0;
+    close(fds[0]);
+    int status = pid > 0 ? waited(pid) : -1;
+    if (strcmp(out, "Smksh\n") || !EXITED(status, 0)) {
+        char what[160];
+        snprintf(what, sizeof what, "%s: #!/bin/sh script printed '%.20s' status %#x (want Smksh: Android's shell)", label, out, status);
+        fail(what);
+    }
+}
+
+static void script_checks(const char *dir) {
+    char path[512];
+    snprintf(path, sizeof path, "%s/binsh-script", dir);
+    FILE *f = fopen(path, "w");
+    if (!f) { fail("script create"); return; }
+    fputs("#!/bin/sh\necho \"S${KSH_VERSION:+mksh}\"\n", f);
+    fclose(f);
+    chmod(path, 0700);
+    script_run("execvp PATH search", dir, "binsh-script", 0);
+    script_run("execv path", dir, "binsh-script", 1);
+    if (spawn_fn) script_run("posix_spawn path", dir, "binsh-script", 2);
+    unlink(path);
+}
+
 JNIEXPORT jstring JNICALL Java_hello_environment_Main_launchCheck(JNIEnv *env, jclass cls, jstring jdir)
 {
     (void)cls;
@@ -116,6 +164,7 @@ JNIEXPORT jstring JNICALL Java_hello_environment_Main_launchCheck(JNIEnv *env, j
     p = popen("exit 0", "re");
     EXPECT(p && (fcntl(fileno(p), F_GETFD) & FD_CLOEXEC) && EXITED(pclose(p), 0), "popen e: close-on-exec");
     spawn_checks(dir);
+    script_checks(dir);
     unsetenv("APKLY_LAUNCH");
     (*env)->ReleaseStringUTFChars(env, jdir, dir);
     return failures[0] ? (*env)->NewStringUTF(env, failures) : NULL;

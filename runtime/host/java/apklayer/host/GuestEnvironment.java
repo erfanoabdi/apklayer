@@ -156,7 +156,8 @@ public final class GuestEnvironment {
             for (String arg : command) valid &= arg != null && arg.indexOf('\0') < 0;
             if (valid) {
                 String path = searchPath(!inherited);
-                if (command.get(0).indexOf('/') < 0) {
+                // A path too (not searched): the native side execs it as the guest's, so its #!/bin/sh is Android's /system/bin/sh.
+                {
                     ArrayList<String> wrapped = new ArrayList<>(command.size() + 3);
                     wrapped.add(EXEC_SEARCH + command.get(0)); wrapped.add(inherited ? "1i" : "1e"); wrapped.add(path);
                     wrapped.addAll(command);

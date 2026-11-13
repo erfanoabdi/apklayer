@@ -166,8 +166,31 @@ static int target_done(struct target *t, int r)
     return r;
 }
 
+/* Android's /bin is a link to /system/bin (bionic's shell path is /bin/sh where that exists, and the host has its own): a guest's
+ * /bin/<name> is /system/bin/<name>. NULL: the path as it is. */
+static const char *guest_bin(const char *path, char *buf, size_t size)
+{
+    if (!path || strncmp(path, "/bin/", 5) || (size_t)snprintf(buf, size, "/system%s", path) >= size) return path;
+    return buf;
+}
+
+/* Set while a guest entry (the guest exec and spawn entries, the guest PATH search, a guest Java launch) execs on this thread: a
+ * script's #!/bin/<name> is then Android's /system/bin/<name> too. Host execs (the runtime's own scripts) keep the host's /bin. */
+static __thread int guest_launch;
+
 /* Real candidate execs share mapping, translator, permission checks and script handling. */
+static int exec_search(const char *file, char *const argv[], char *const envp[], const char *search, bool inherited);
 int apklayer_exec_search_guest(const char *file, char *const argv[], char *const envp[], const char *search, bool inherited)
+{
+    int saved = guest_launch;
+    guest_launch = 1;
+    int r = exec_search(file, argv, envp, search, inherited), error = errno;
+    guest_launch = saved;
+    errno = error;
+    return r;
+}
+
+static int exec_search(const char *file, char *const argv[], char *const envp[], const char *search, bool inherited)
 {
     if (!file || !search || !argv || !argv[0] || strchr(file, '/')) { errno = EINVAL; return -1; }
     if (!*file) { errno = ENOENT; return -1; }
@@ -210,13 +233,38 @@ next:
     return -1;
 }
 
-/* JDK's helper has already changed cwd; bypass its cached host PATH without changing envp. */
+/* A guest Java launch of a path (GuestEnvironment): a guest exec of it; a file without #! runs with Android's shell, as Android's
+ * ProcessBuilder runs it with /bin/sh (the JDK's own fallback would run the transport path with the host's). */
+static int guest_path_exec(const char *file, char *const argv[], char *const envp[])
+{
+    char bin[PATH_MAX];
+    int saved = guest_launch;
+    guest_launch = 1;
+    execve(guest_bin(file, bin, sizeof bin), argv, envp);
+    if (errno == ENOEXEC) {
+        size_t argc = 0;
+        while (argv[argc]) argc++;
+        char **shell = calloc(argc + 2, sizeof(char *));
+        if (shell) {
+            shell[0] = "/system/bin/sh"; shell[1] = (char *)file;
+            for (size_t i = 1; i < argc; i++) shell[i + 1] = argv[i];
+            execve(shell[0], shell, envp);
+            int error = errno; free(shell); errno = error;
+        } else errno = ENOMEM;
+    }
+    int error = errno;
+    guest_launch = saved;
+    errno = error;
+    return -1;
+}
+
+/* JDK's helper has already changed cwd; bypass its cached host PATH without changing envp. A command with a slash is not searched. */
 static int search_request(const char *path, char *const args[], char *const envp[])
 {
     static const char marker[] = "/proc/self/fd/apklayer-exec-search/";
     if (!args || !args[0] || strcmp(path, args[0]) || !args[1] || (strcmp(args[1], "1i") && strcmp(args[1], "1e"))
-            || !args[2] || !args[3] || strchr(args[3], '/')
-            || strcmp(path + sizeof marker - 1, args[3])) { errno = EINVAL; return -1; }
+            || !args[2] || !args[3] || strcmp(path + sizeof marker - 1, args[3])) { errno = EINVAL; return -1; }
+    if (strchr(args[3], '/')) return guest_path_exec(args[3], args + 3, envp);
     return apklayer_exec_search_guest(args[3], args + 3, envp, args[2], !strcmp(args[1], "1i"));
 }
 
@@ -238,12 +286,14 @@ static char **script_argv(const char *file, const char *path, char *const argv[]
     char *name = p;
     p += strcspn(p, " \t");
     if (*p) { *p++ = 0; p += strspn(p, " \t"); if (*p) arg = p; }  /* the rest of the line is one argument, as the kernel passes it */
+    char bin[sizeof line + 8];
+    if (guest_launch) name = (char *)guest_bin(name, bin, sizeof bin);  /* a guest's #!/bin/sh: Android's /system/bin/sh */
     char *mapped = name;
     if (!*name || !apklayer_apply_path_overrides(&mapped)) return NULL;  /* an unmapped interpreter: the kernel finds it */
     free(mapped);
     size_t argc = 0;
     while (argv && argv[argc]) argc++;
-    char **a = calloc(1, (argc + 4) * sizeof(char *) + sizeof line);  /* the argv array, then copies of the interpreter's name and argument */
+    char **a = calloc(1, (argc + 4) * sizeof(char *) + sizeof bin + sizeof line);  /* the argv array, then copies of the interpreter's name and argument */
     if (!a) return NULL;
     char *strings = (char *)(a + argc + 4), **o = a;
     *o++ = strcpy(strings, name);
@@ -278,19 +328,16 @@ int execve(const char *path, char *const argv[], char *const envp[])
 
 int execv(const char *path, char *const argv[]) { return execve(path, argv, environ); }
 
-/* Android's /bin is a link to /system/bin (bionic's shell path is /bin/sh where that exists, and the host has its own): a guest's
- * /bin/<name> is /system/bin/<name>. NULL: the path as it is. */
-static const char *guest_bin(const char *path, char *buf, size_t size)
-{
-    if (!path || strncmp(path, "/bin/", 5) || (size_t)snprintf(buf, size, "/system%s", path) >= size) return path;
-    return buf;
-}
-
 /* Berberis supplies the exact guest environment; rewrite keeps its private loader controls separate. */
 int apklayer_execve_guest(const char *path, char *const argv[], char *const envp[])
 {
     char bin[PATH_MAX];
-    return execve(guest_bin(path, bin, sizeof bin), argv, envp);
+    int saved = guest_launch;
+    guest_launch = 1;
+    int r = execve(guest_bin(path, bin, sizeof bin), argv, envp), error = errno;
+    guest_launch = saved;
+    errno = error;
+    return r;
 }
 
 /* A guest's posix_spawn (bionic_translation 0069: its system, popen and posix_spawn[p]), as a guest execve: the mapped path, its
@@ -306,7 +353,11 @@ int apklayer_spawn_guest(pid_t *pid, const char *path, const posix_spawn_file_ac
     path = guest_bin(path, bin, sizeof bin);
     target(&t, path, envp);
     if (faccessat(AT_FDCWD, t.path, X_OK, AT_EACCESS) < 0) return target_done(&t, errno);
-    if (depth < 4 && (sa = script_argv(t.path, path, argv))) {
+    int saved = guest_launch;
+    guest_launch = 1;
+    sa = depth < 4 ? script_argv(t.path, path, argv) : NULL;
+    guest_launch = saved;
+    if (sa) {
         depth++;
         int r = apklayer_spawn_guest(pid, sa[0], actions, attr, sa, envp);
         depth--;

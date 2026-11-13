@@ -145,13 +145,20 @@ final class PathChecks {
             rejected("missing command", 2, new ProcessBuilder(NAME));
             Os.setenv("PATH", plain.toString(), true);
             probe("no-shebang shell fallback", "PLAIN", () -> new ProcessBuilder(NAME).start());
+            probe("no-shebang path shell fallback", "PLAIN", () -> new ProcessBuilder(plain.resolve(NAME).toString()).start());
+            // Android's /bin is /system/bin: a #!/bin/sh script and /bin/sh itself are Android's shell (mksh), not the host's
+            Path binsh = script(root.resolve("binsh"), "#!/bin/sh\necho -n \"S${KSH_VERSION:+mksh}$1\"\n", 0700);
+            Os.setenv("PATH", binsh.toString(), true);
+            probe("#!/bin/sh script by PATH", "Smksh", () -> new ProcessBuilder(NAME).start());
+            probe("#!/bin/sh script by path", "Smksh1", () -> new ProcessBuilder(binsh.resolve(NAME).toString(), "1").start());
+            probe("Runtime.exec /bin/sh", "mksh", () -> Runtime.getRuntime().exec(new String[]{"/bin/sh", "-c", "echo -n ${KSH_VERSION:+mksh}"}));
         } catch (Throwable failure) {
             failures++; System.out.println("[environment] PATH setup exception " + failure); failure.printStackTrace();
         } finally {
             try {
                 if (original == null) Os.unsetenv("PATH"); else Os.setenv("PATH", original, true);
                 if (root != null) {
-                    for (String dir : new String[]{"a", "b", "denied", "plain"}) {
+                    for (String dir : new String[]{"a", "b", "denied", "plain", "binsh"}) {
                         Files.deleteIfExists(root.resolve(dir).resolve(NAME)); Files.deleteIfExists(root.resolve(dir));
                     }
                     Files.deleteIfExists(root);
