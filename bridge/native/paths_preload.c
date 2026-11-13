@@ -22,6 +22,8 @@
 bool apklayer_apply_path_overrides(char **path);
 int apklayer_proc_pid_hidden(const char *name);
 int apklayer_proc_hidden_at(int dirfd, const char *path);  /* paths.c: path (relative to dirfd) names a process this app does not see */
+int apklayer_data_entry_hidden(const char *name);  /* paths.c: a name in /data/data that is not this app's package */
+int apklayer_is_data_root(const char *path);
 #define PROC_GONE(dirfd, path) do { if (apklayer_proc_hidden_at(dirfd, path)) { errno = ENOENT; return -1; } } while (0)  /* paths.c: whether /proc/<pid> is a process this app does not see */
 /* the userspace binder's nodes (binder_route.c): opened through its daemon, -2 when the path is not one */
 int apklayer_binder_route_open(const char *path, int flags);
@@ -83,8 +85,13 @@ int stat64(const char *path, struct stat64 *st) { MAP(m, path); void *f = REAL(s
 int lstat(const char *path, struct stat *st) { MAP(m, path); void *f = REAL(lstat); int r = f ? ((int (*)(const char *, struct stat *))f)(m, st) : KSTAT(AT_FDCWD, m, st, AT_SYMLINK_NOFOLLOW); BROKER_STAT(r, m, 1, fstat(fd_, st)); DONE(m); return r; }
 int lstat64(const char *path, struct stat64 *st) { MAP(m, path); void *f = REAL(lstat64); int r = f ? ((int (*)(const char *, struct stat64 *))f)(m, st) : KSTAT(AT_FDCWD, m, st, AT_SYMLINK_NOFOLLOW); BROKER_STAT(r, m, 1, fstat64(fd_, st)); DONE(m); return r; }
 int fstatat(int dirfd, const char *path, struct stat *st, int flags) { PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; void *f = REAL(fstatat); int r = f ? ((int (*)(int, const char *, struct stat *, int))f)(dirfd, use, st, flags) : KSTAT(dirfd, use, st, flags); BROKER_STATAT(r, dirfd, use, flags & AT_SYMLINK_NOFOLLOW, fstat(fd_, st)); DONE(m); return r; }
+/* the DIR*s of /data/data and its user spellings an app process opened: readdir leaves other packages out (paths.c apklayer_data_entry_hidden) */
+static DIR *data_dirs[8];
+static void data_dir_note(DIR *d) { for (int i = 0; d && i < 8; i++) { DIR *z = NULL; if (__atomic_compare_exchange_n(&data_dirs[i], &z, d, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) return; } }
+static int is_data_dir(DIR *d) { for (int i = 0; i < 8; i++) if (__atomic_load_n(&data_dirs[i], __ATOMIC_ACQUIRE) == d) return 1; return 0; }
+int closedir(DIR *d) { for (int i = 0; i < 8; i++) { DIR *z = d; __atomic_compare_exchange_n(&data_dirs[i], &z, NULL, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE); } return ((int (*)(DIR *))REAL(closedir))(d); }
 DIR *opendir(const char *path) { MAP(m, path); DIR *r = ((DIR * (*)(const char *))REAL(opendir))(m);
-    if (!r) { int fd = apklayer_broker_open(m, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0, -1); if (fd >= 0 && !(r = fdopendir(fd))) close(fd); } DONE(m); return r; }
+    if (!r) { int fd = apklayer_broker_open(m, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0, -1); if (fd >= 0 && !(r = fdopendir(fd))) close(fd); } if (r && apklayer_is_data_root(path)) data_dir_note(r); DONE(m); return r; }
 long apklayer_android_spelling(char *buf, long n);
 /* /proc links (an fd, the executable) to a file the overlay served read as its Android path (paths.c) */
 static ssize_t proc_link(const char *path, char *buf, ssize_t r) { return r > 0 && path && !strncmp(path, "/proc/", 6) ? apklayer_android_spelling(buf, r) : r; }
@@ -99,7 +106,8 @@ static int is_proc_dir(DIR *d)
     return (mine.st_ino = 0, (int)SYSCALL(SYS_fstat, (long)dirfd(d), (long)&mine) == 0) && mine.st_ino == ino && mine.st_dev == dev;
 }
 #define PROC_READDIR(name, type) struct type *name(DIR *d) { struct type *(*real)(DIR *) = (struct type *(*)(DIR *))REAL(name); struct type *e; \
-    int proc = -1; while ((e = real(d))) { if (e->d_name[0] < '0' || e->d_name[0] > '9') return e; if (proc < 0) proc = is_proc_dir(d); \
+    int proc = -1, data = is_data_dir(d); while ((e = real(d))) { if (data) { if (!apklayer_data_entry_hidden(e->d_name)) return e; continue; } \
+        if (e->d_name[0] < '0' || e->d_name[0] > '9') return e; if (proc < 0) proc = is_proc_dir(d); \
         if (!proc || !apklayer_proc_pid_hidden(e->d_name)) return e; } return NULL; }
 PROC_READDIR(readdir, dirent)
 PROC_READDIR(readdir64, dirent64)

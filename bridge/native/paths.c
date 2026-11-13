@@ -326,11 +326,82 @@ int apklayer_proc_hidden_at(int dirfd, const char *path)
     return *c >= '0' && *c <= '9' && dir_is_proc(dirfd) && proc_rel_hidden(c);
 }
 
+bool apklayer_apply_path_overrides(char **path);
+
+/* Other packages' data is not an app's to see: Android's /data/data is not listable for an app and another package's directory is not reachable. The instance's
+ * /data/data (data_env/data) holds a link for every installed package, so without this an app lists them all. Applies to app uids (>= 10000); a system uid
+ * (the hub's system components) sees them. Filter: a name under the three spellings of the user's data that is not the app's own package. */
+static const char *const data_roots[] = { "/data/data", "/data/user/0", "/data/user_de/0", NULL };
+
+static int data_filter_active(void)
+{
+    const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
+    static int host_view = -1;
+    if (host_view < 0) { const char *v = getenv("APKLAYER_PROC_VIEW"); host_view = v && !strcmp(v, "host"); }
+    return o && !host_view && o->uid >= 10000;
+}
+
+/* a directory entry of one of those roots: false for the app's own package */
+int apklayer_data_entry_hidden(const char *name)
+{
+    const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
+    return data_filter_active() && strcmp(name, ".") && strcmp(name, "..") && strcmp(name, o->pkg);
+}
+
+/* the path is one of the roots themselves (a trailing slash allowed) */
+int apklayer_is_data_root(const char *path)
+{
+    if (!path || !data_filter_active()) return 0;
+    for (int i = 0; data_roots[i]; i++) {
+        size_t n = strlen(data_roots[i]);
+        if (!strncmp(path, data_roots[i], n) && (!path[n] || (path[n] == '/' && !path[n + 1]))) return 1;
+    }
+    return 0;
+}
+
+/* the directory `fd` is one of the roots (what the translator's getdents64 sees): compared by device and inode with the mapped roots, once */
+int apklayer_fd_is_data_root(int fd)
+{
+    static dev_t dev[3]; static ino_t ino[3]; static int known;
+    struct stat st;
+    if (!data_filter_active()) return 0;
+    if (!__atomic_load_n(&known, __ATOMIC_ACQUIRE)) {
+        for (int i = 0; i < 3; i++) {
+            char *m = (char *)data_roots[i];
+            bool alloc = apklayer_apply_path_overrides(&m);
+            struct stat r;
+            int ok = syscall(SYS_newfstatat, AT_FDCWD, m, &r, 0) == 0;
+            if (alloc) free(m);
+            dev[i] = ok ? r.st_dev : 0; ino[i] = ok ? r.st_ino : 0;
+        }
+        __atomic_store_n(&known, 1, __ATOMIC_RELEASE);
+    }
+    if (syscall(SYS_newfstatat, fd, "", &st, AT_EMPTY_PATH)) return 0;
+    for (int i = 0; i < 3; i++) if (ino[i] && st.st_ino == ino[i] && st.st_dev == dev[i]) return 1;
+    return 0;
+}
+
+/* /data/data/<other>[/...] (and the user spellings) */
+static int other_package_path(const char *path)
+{
+    const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
+    if (!data_filter_active()) return 0;
+    for (int i = 0; data_roots[i]; i++) {
+        size_t n = strlen(data_roots[i]);
+        if (strncmp(path, data_roots[i], n) || path[n] != '/') continue;
+        const char *rest = path + n + 1;
+        size_t k = strlen(o->pkg);
+        if (!*rest) return 0;
+        return !(!strncmp(rest, o->pkg, k) && (!rest[k] || rest[k] == '/'));
+    }
+    return 0;
+}
+
 static bool from_root(const char *r, char **path);
 
 bool apklayer_apply_path_overrides(char **path)
 {
-    if (apklayer_proc_hidden(*path)) {  /* any path call of the process (the wrappers and bionic_translation's libc): no such process */
+    if (apklayer_proc_hidden(*path) || other_package_path(*path)) {  /* any path call of the process (the wrappers and bionic_translation's libc): no such process */
         char *gone = strdup("/proc/.apklayer-hidden");
         if (gone) { *path = gone; return true; }
     }

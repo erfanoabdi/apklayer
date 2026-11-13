@@ -21,6 +21,7 @@ public class Main extends Activity {
     private static native int uid();
     private static native int ownerUid(String path);
     private static native int procView();
+    private static native String layout(String pkg);
 
     static int twice(int v) { return 2 * v; }
 
@@ -71,6 +72,8 @@ public class Main extends Activity {
         // /proc as an app sees it (binary_translation 0016, 0017; hidepid-like): own ids in status, other apps' and the desktop's pids not there
         int proc = procView();
         log("proc view " + (proc == 15 ? "ok" : "WRONG bits " + proc));
+        if (System.getProperty("hello.layout") != null || new java.io.File(getFilesDir(), "layout").exists())  // the filesystem-layout audit: one line per finding
+            for (String line : layout(getPackageName()).split("\n")) log("layout " + line);
         boolean ok = "aarch64".equals(cpu) && first == warm && call == 42 && thread == 100 && overloads && errno == 222 && fault == 1 && stack == 1
                 && auxv == 1 && ids && proc == 15;
         log(ok ? "PASS" : "FAIL first=" + first + " warm=" + warm);

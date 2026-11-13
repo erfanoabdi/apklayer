@@ -1,0 +1,118 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: the guest's environment is an app's, and its /data/data lists only its own package
+
+Two views the desktop gave away (the sandbox audit, hello-arm64 "layout"): the guest's environ held 37 host variables (HOME=/home/<user>, XDG_*, DBUS_*,
+DISPLAY, WAYLAND_*, APKLAYER_*, BIONIC_LD_LIBRARY_PATH, ANDROID_ROOT=<runtime dir>...), and /data/data listed all 20 installed packages.
+- exec_emulation.cc DemangleGuestEnvp (the one place the guest's initial environment passes through, arm64 and arm32): drops the desktop session's and the
+  runtime's variables (APKLAYER_, BERBERIS_, BIONIC_, XDG_, WAYLAND_, DISPLAY, DBUS_, SSH_, GTK_, QT_, KDE_, GNOME_, LC_, LANG, USER, LOGNAME, HOME, SHELL,
+  TERM, PWD, JAVA_, ...) and spells ANDROID_ROOT, ANDROID_DATA, ANDROID_I18N_ROOT and ANDROID_TZDATA_ROOT as Android does (/system, /data, /apex/...); the path
+  layer maps them back for host-side code. BERBERIS_SHOW_HOST_MAPS keeps the old environment.
+- open_emulation.cc GetDents64ForGuest: a listing of /data/data, /data/user/0 or /data/user_de/0 of an app leaves out other packages' entries, through the
+  path layer's apklayer_fd_is_data_root and apklayer_data_entry_hidden (found with dlsym; nothing without the preload; the hub's system uid sees all).
+Applies after 0018. Module libberberis_arm64.
+
+diff --git a/kernel_api/exec_emulation.cc b/kernel_api/exec_emulation.cc
+--- a/kernel_api/exec_emulation.cc
++++ b/kernel_api/exec_emulation.cc
+@@ -18,6 +18,8 @@
+ 
+ #include <unistd.h>
+ 
++#include <cstdio>
++#include <cstdlib>
+ #include <cstring>
+ #include <utility>
+ 
+@@ -93,14 +95,50 @@
+ 
+ }  // namespace
+ 
++// apklayer patch (0019): the desktop's variables are not an Android app's. An app process on a device has what zygote gives it (ANDROID_*, BOOTCLASSPATH,
++// PATH, TMPDIR, HOME-less, ASEC_MOUNTPOINT, EXTERNAL_STORAGE...); the runtime's own (APKLAYER_*, BIONIC_LD_LIBRARY_PATH, BERBERIS_*), the desktop session's (HOME,
++// USER, XDG_*, DISPLAY, WAYLAND_*, DBUS_*, SSH_*, LANG, LC_*, ...) and the host's search paths stay out of what the guest's `environ` shows and what
++// /proc/self/environ would read. The paths in ANDROID_ROOT and the like become Android's (/system, /data, /apex/...). BERBERIS_SHOW_HOST_MAPS keeps all.
++static bool IsHostOnlyVar(const char* s) {
++  static constexpr const char* kPrefixes[] = {"APKLAYER_", "BERBERIS_", "BIONIC_", "XDG_", "WAYLAND_", "DISPLAY=", "DBUS_", "SSH_", "GTK_", "QT_", "KDE_",
++                                              "GNOME_", "LC_", "LANG=", "LANGUAGE=", "USER=", "LOGNAME=", "HOME=", "SHELL=", "MAIL=", "XAUTHORITY=", "SESSION_",
++                                              "DESKTOP_", "COLORTERM=", "TERM=", "PWD=", "OLDPWD=", "SHLVL=", "_=", "JAVA_", "JDK_", "XCURSOR_", "VK_", "__"};
++  for (const char* p : kPrefixes) {
++    if (StartsWith(s, p)) return true;
++  }
++  return false;
++}
++
++// A value naming the runtime's real directories becomes the Android spelling (the path layer maps it back for host-side code); applied to the few variables
++// Android's own start-up sets. The runtime's root is the part of ANDROID_ROOT before "/system".
++static char* AndroidSpelling(char* env) {
++  static constexpr struct { const char* name; const char* value; } kFixed[] = {
++      {"ANDROID_I18N_ROOT=", "/apex/com.android.i18n"}, {"ANDROID_TZDATA_ROOT=", "/apex/com.android.tzdata"}, {"ANDROID_ROOT=", "/system"}, {"ANDROID_DATA=", "/data"}};
++  for (const auto& f : kFixed) {
++    if (StartsWith(env, f.name)) {
++      static thread_local char buffer[4][128];
++      static thread_local int next = 0;
++      char* out = buffer[next++ & 3];
++      snprintf(out, sizeof(buffer[0]), "%s%s", f.name, f.value);
++      return out;
++    }
++  }
++  return env;
++}
++
+ char** DemangleGuestEnvp(char** dst, char** envp) {
+   auto [guest_prefix, guest_prefix_size] = GetGuestPlatformVarPrefixWithSize();
++  static const bool show_host = getenv("BERBERIS_SHOW_HOST_MAPS") != nullptr;
+ 
+   for (; *envp; ++envp) {
+     char* env = *envp;
+     if (IsPlatformVar(env)) {
+       continue;
+     }
++    if (!show_host) {
++      if (IsHostOnlyVar(env) && !(StartsWith(env, guest_prefix) && IsPlatformVar(env + guest_prefix_size))) continue;
++      env = AndroidSpelling(env);
++    }
+     if (StartsWith(env, guest_prefix) && IsPlatformVar(env + guest_prefix_size)) {
+       env += guest_prefix_size;
+     }
+diff --git a/kernel_api/open_emulation.cc b/kernel_api/open_emulation.cc
+--- a/kernel_api/open_emulation.cc
++++ b/kernel_api/open_emulation.cc
+@@ -164,6 +164,14 @@
+   return hidden != nullptr && hidden(name) != 0;
+ }
+ 
++// apklayer patch (0019): the path layer's test whether `fd` is /data/data (or /data/user/0, /data/user_de/0) of an app, and whether a name in it is another
++// package (hidden: an app does not see other packages' data); null without the preload.
++static bool IsHiddenDataEntry(int fd, const char* name) {
++  static auto* is_root = reinterpret_cast<int (*)(int)>(dlsym(RTLD_DEFAULT, "apklayer_fd_is_data_root"));
++  static auto* hidden = reinterpret_cast<int (*)(const char*)>(dlsym(RTLD_DEFAULT, "apklayer_data_entry_hidden"));
++  return is_root != nullptr && hidden != nullptr && hidden(name) != 0 && is_root(fd) != 0;
++}
++
+ static bool IsProcDir(int fd) {
+   struct stat fd_stat;
+   struct stat dir_stat;
+@@ -176,6 +184,23 @@
+     long n = syscall(__NR_getdents64, fd, dirp, count);
+     if (n <= 0) return n;
+     const bool proc_dir = IsProcDir(fd);  // apklayer patch (0016): the process directories of other apps and the desktop are left out
++    static auto* data_dir_root = reinterpret_cast<int (*)(int)>(dlsym(RTLD_DEFAULT, "apklayer_fd_is_data_root"));
++    if (!proc_dir && data_dir_root != nullptr && data_dir_root(fd) != 0) {  // apklayer patch (0019): other packages' data directories are left out
++      char* buf = static_cast<char*>(dirp);
++      long kept = 0;
++      for (long pos = 0; pos < n;) {
++        uint16_t reclen;
++        memcpy(&reclen, buf + pos + 16, sizeof(reclen));
++        if (reclen == 0 || pos + reclen > n) return n;
++        if (!IsHiddenDataEntry(fd, buf + pos + 19)) {
++          if (kept != pos) memmove(buf + kept, buf + pos, reclen);
++          kept += reclen;
++        }
++        pos += reclen;
++      }
++      if (kept > 0) return kept;
++      continue;
++    }
+     if (proc_dir) {
+       char* buf = static_cast<char*>(dirp);
+       long kept = 0;

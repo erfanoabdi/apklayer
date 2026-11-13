@@ -1,6 +1,8 @@
 /* An arm64-only JNI library (hello-arm64): on an x86_64 host it runs only through the native bridge (docs/history/PLAN-2026-11-10.md "apps built for another CPU"). */
 #include <dlfcn.h>
+#include <dirent.h>
 #include <errno.h>
+#include <stdarg.h>
 #include <fcntl.h>
 #include <jni.h>
 #include <math.h>
@@ -8,6 +10,7 @@
 #include <setjmp.h>
 #include <signal.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <sys/auxv.h>
@@ -180,6 +183,84 @@ JNIEXPORT jint JNICALL Java_hello_arm64_Main_procView(JNIEnv *env, jclass c)
     if (fd >= 0 && !listed_init) r |= 4;
     if (stat("/proc/self/status", &st) == 0) r |= 8;
     return r;
+}
+
+/* Filesystem layout as translated code sees it (the sandbox audit, docs/PLAN.md): one line per finding, "ok|LEAK <what>". Host paths are the desktop's
+ * (/home, /usr, /run/user, /tmp, .local/share, /snap); Android code never meets them. */
+static int host_path(const char *s)
+{
+    static const char *const p[] = {"/home/", "/usr/", "/run/", "/tmp/", "/snap/", "/nix/", "/opt/", "/var/", "/lib/", "/lib64/", "/etc/", "/mnt/", "/media/", "/root", NULL};
+    for (int i = 0; p[i]; i++) if (!strncmp(s, p[i], strlen(p[i]))) return 1;
+    return strstr(s, ".local/share") || strstr(s, "apklayer") || strstr(s, "x86_64-linux-gnu") || strstr(s, "libberberis") || strstr(s, "/jdk");
+}
+static void add(char *out, size_t n, const char *fmt, ...)
+{
+    va_list ap; va_start(ap, fmt);
+    size_t k = strlen(out);
+    if (k + 1 < n) vsnprintf(out + k, n - k, fmt, ap);
+    va_end(ap);
+}
+static void file_head(char *out, size_t n, const char *tag, const char *path, int lines)
+{
+    FILE *f = fopen(path, "r"); char l[300];
+    if (!f) { add(out, n, "%s %s: open failed (%s)\n", "info", path, strerror(errno)); return; }
+    for (int i = 0; i < lines && fgets(l, sizeof l, f); i++) { l[strcspn(l, "\n")] = 0; add(out, n, "%s %s: %s\n", tag, path, l); }
+    fclose(f);
+}
+JNIEXPORT jstring JNICALL Java_hello_arm64_Main_layout(JNIEnv *env, jclass c, jstring pkg)
+{
+    (void)c;
+    static char out[24000];
+    out[0] = 0;
+    const char *p = (*env)->GetStringUTFChars(env, pkg, NULL);
+    char path[512], l[1024];
+    struct stat st;
+    const char *must[] = {"/system", "/system/bin", "/system/lib64", "/system/etc", "/system/build.prop", "/system/framework", "/vendor", "/data", "/data/local/tmp", "/storage", "/sdcard", "/proc/self", "/dev/null", "/cache", NULL};
+    for (int i = 0; must[i]; i++) add(out, sizeof out, "%s exists %s%s\n", stat(must[i], &st) == 0 ? "ok" : "info", must[i], stat(must[i], &st) == 0 ? "" : " (missing)");
+    snprintf(path, sizeof path, "/data/data/%s", p);
+    add(out, sizeof out, "%s /data/data/<pkg> %s uid %u mode %o\n", stat(path, &st) == 0 ? "ok" : "LEAK", stat(path, &st) == 0 ? "there" : "missing", st.st_uid, st.st_mode & 07777);
+    snprintf(path, sizeof path, "/data/user/0/%s", p);
+    add(out, sizeof out, "%s /data/user/0/<pkg> %s\n", stat(path, &st) == 0 ? "ok" : "info", stat(path, &st) == 0 ? "there" : "missing");
+    /* what an app must not see: other packages' data and the host's roots */
+    DIR *d = opendir("/data/data"); int others = 0; struct dirent *e;
+    while (d && (e = readdir(d))) if (e->d_name[0] != '.' && strcmp(e->d_name, p)) { others++; add(out, sizeof out, "info /data/data has %s\n", e->d_name); }
+    if (d) closedir(d);
+    add(out, sizeof out, "%s /data/data lists %d other packages\n", others ? "LEAK" : "ok", others);
+    d = opendir("/data/app"); int apps = 0;
+    while (d && (e = readdir(d))) if (e->d_name[0] != '.') { apps++; add(out, sizeof out, "info /data/app has %s\n", e->d_name); }
+    if (d) closedir(d);
+    add(out, sizeof out, "info /data/app lists %d entries%s\n", apps, d ? "" : " (cannot open)");
+    const char *host[] = {"/home", "/usr", "/etc/passwd", "/etc/os-release", "/run/user", "/tmp", "/proc/self/exe", NULL};
+    for (int i = 0; host[i]; i++) add(out, sizeof out, "%s visible %s\n", stat(host[i], &st) == 0 ? "LEAK" : "ok", host[i]);
+    ssize_t n = readlink("/proc/self/exe", l, sizeof l - 1); if (n > 0) { l[n] = 0; add(out, sizeof out, "%s /proc/self/exe -> %s\n", host_path(l) ? "LEAK" : "ok", l); }
+    n = readlink("/proc/self/cwd", l, sizeof l - 1); if (n > 0) { l[n] = 0; add(out, sizeof out, "%s cwd -> %s\n", host_path(l) ? "LEAK" : "ok", l); }
+    char *cwd = getcwd(l, sizeof l); if (cwd) add(out, sizeof out, "%s getcwd %s\n", host_path(l) ? "LEAK" : "ok", l);
+    /* maps: every named mapping */
+    FILE *f = fopen("/proc/self/maps", "r"); int maps = 0, leaks = 0;
+    while (f && fgets(l, sizeof l, f)) {
+        char *name = strchr(l, '/'); if (!name) continue; name[strcspn(name, "\n")] = 0; maps++;
+        if (host_path(name)) { leaks++; if (leaks <= 8) add(out, sizeof out, "LEAK maps %s\n", name); }
+    }
+    if (f) fclose(f);
+    add(out, sizeof out, "%s maps: %d named mappings, %d host paths\n", leaks ? "LEAK" : "ok", maps, leaks);
+    /* mounts and kernel strings */
+    f = fopen("/proc/self/mountinfo", "r"); int mounts = 0, mleaks = 0;
+    while (f && fgets(l, sizeof l, f)) { mounts++; if (strstr(l, "/home/") || strstr(l, "apklayer") || strstr(l, "/run/user")) { mleaks++; if (mleaks <= 4) { l[strcspn(l, "\n")] = 0; add(out, sizeof out, "LEAK mountinfo %s\n", l); } } }
+    if (f) fclose(f);
+    add(out, sizeof out, "info mountinfo: %d lines, %d name host paths\n", mounts, mleaks);
+    file_head(out, sizeof out, "info", "/proc/version", 1);
+    file_head(out, sizeof out, "info", "/proc/self/cgroup", 3);
+    file_head(out, sizeof out, "info", "/proc/self/cmdline", 1);
+    f = fopen("/proc/self/environ", "r");
+    if (f) { int k = 0; char buf[8192]; size_t r = fread(buf, 1, sizeof buf - 1, f); fclose(f); buf[r] = 0;
+        for (char *v = buf; v < buf + r; v += strlen(v) + 1) if (host_path(v) || !strncmp(v, "HOME=", 5) || !strncmp(v, "XDG_", 4) || !strncmp(v, "DISPLAY", 7) || !strncmp(v, "WAYLAND", 7) || !strncmp(v, "USER=", 5) || !strncmp(v, "LD_PRELOAD", 10) || !strncmp(v, "DBUS", 4)) { if (k++ < 12) add(out, sizeof out, "LEAK environ %.120s\n", v); }
+        add(out, sizeof out, "%s environ: %d host-looking variables\n", k ? "LEAK" : "ok", k); }
+    const char *envs[] = {"HOME", "USER", "PATH", "TMPDIR", "ANDROID_ROOT", "ANDROID_DATA", "EXTERNAL_STORAGE", "LD_LIBRARY_PATH", "LD_PRELOAD", NULL};
+    for (int i = 0; envs[i]; i++) { const char *v = getenv(envs[i]); add(out, sizeof out, "%s getenv %s=%.100s\n", v && host_path(v) ? "LEAK" : "info", envs[i], v ? v : "(unset)"); }
+    snprintf(path, sizeof path, "/data/data/%s/files", p);
+    char *rp = realpath(path, l); add(out, sizeof out, "%s realpath(%s) = %s\n", rp && host_path(l) ? "LEAK" : "ok", path, rp ? l : "(fails)");
+    if (p) (*env)->ReleaseStringUTFChars(env, pkg, p);
+    return (*env)->NewStringUTF(env, out);
 }
 
 /* exit-deadline.py native: the library ignores SIGTERM (signal) and then catches it (sigaction), as an app library may; 1 if both calls report
