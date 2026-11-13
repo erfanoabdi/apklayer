@@ -236,6 +236,10 @@ int main(int argc, char **argv)
     int (*set)(const char *, const char *, int) = need(libc, "bionic_setenv");
     char home[] = "HOME=/guest-home", value[] = "CHILD_VALUE=guest";
     CHECK(!clear() && !put(home) && !put(value) && !set("PATH", "/no-such-dir:/system/bin", 1));  /* Termux JNI sequence */
+    /* 0070: a query of signal 32 (glibc's own) succeeds, as bionic's posix_spawn child makes it for every signal */
+    int (*b_sigaction)(int, const void *, void *) = need(libc, "bionic_sigaction");
+    long old[16] = {1};
+    CHECK(b_sigaction(32, NULL, old) == 0 && old[0] == 0);
     system_checks();
     popen_checks();
     spawn_checks(argv[0]);

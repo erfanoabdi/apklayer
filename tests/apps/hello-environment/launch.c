@@ -59,20 +59,30 @@ static void spawn_checks(const char *dir) {
     EXPECT(!actions_init(&actions) && !attr_init(&attr), "spawn object init");
     EXPECT(!add_dup2(&actions, fds[1], 1) && !add_close(&actions, fds[0])
            && !add_open(&actions, 2, path, O_WRONLY | O_CREAT | O_TRUNC, 0600), "file actions");
-    EXPECT(!set_mask(&attr, &mask) && !set_flags(&attr, POSIX_SPAWN_SETSIGMASK), "attributes");
-    char *argv[] = {"sh", "-c", ANDROID_CHILD " && echo \"$APKLY_LAUNCH\" && echo err >&2 && kill -USR1 $$ && exit 6", NULL};
+    char *argv[] = {"sh", "-c", ANDROID_CHILD " && echo \"$APKLY_LAUNCH\" && echo err >&2 && exit 6", NULL};
     pid_t pid = -1;
-    EXPECT(!spawn_fn(&pid, "/system/bin/sh", &actions, &attr, argv, NULL), "posix_spawn");
+    EXPECT(!spawn_fn(&pid, "/system/bin/sh", &actions, NULL, argv, NULL), "posix_spawn");
     close(fds[1]);
     ssize_t n = read(fds[0], out, sizeof out - 1);
     out[n > 0 ? n : 0] = 0;
     close(fds[0]);
     EXPECT(!strcmp(out, "guest-launch\n"), "posix_spawn child output");
-    EXPECT(pid > 0 && EXITED(waited(pid), 6), "posix_spawn status with SIGUSR1 masked");
+    EXPECT(pid > 0 && EXITED(waited(pid), 6), "posix_spawn status");
     FILE *err = fopen(path, "r");
     EXPECT(err && fgets(out, sizeof out, err) && !strcmp(out, "err\n"), "posix_spawn addopen in app data");
     if (err) fclose(err);
     unlink(path);
+    actions_destroy(&actions);
+    /* POSIX_SPAWN_SETSIGMASK: a SIGUSR1 sent at once stays pending in the program (toybox cat on a pipe) until it exits normally */
+    EXPECT(!set_mask(&attr, &mask) && !set_flags(&attr, POSIX_SPAWN_SETSIGMASK) && !pipe(fds) && !actions_init(&actions)
+           && !add_dup2(&actions, fds[0], 0) && !add_close(&actions, fds[1]), "attributes");
+    char *cat[] = {"toybox", "cat", NULL};
+    EXPECT(!spawn_fn(&pid, "/system/bin/toybox", &actions, &attr, cat, NULL), "posix_spawn toybox");
+    close(fds[0]);
+    if (pid > 0) kill(pid, SIGUSR1);
+    close(fds[1]);
+    int toybox = pid > 0 ? waited(pid) : -1;
+    if (!EXITED(toybox, 0)) { snprintf(out, sizeof out, "posix_spawn SETSIGMASK: toybox with SIGUSR1 pending ended %#x", toybox); fail(out); }
     actions_destroy(&actions);
     attr_destroy(&attr);
     char *search[] = {"sh", "-c", ANDROID_CHILD, NULL};
