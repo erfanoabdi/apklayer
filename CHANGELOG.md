@@ -3,6 +3,11 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-13: NUMA runtime inspection
+- Validation: 24/24 native tests and the extended art-maps APK pass on UTM ARM64 and x86 userspace Binder.
+- Own numa_maps uses the same JDK/ART filename policy as maps and module enumeration, changing only the file token and retaining addresses, NUMA policy and node/page accounting. Kernel-escaped spaces and deleted files are covered; unsupported kernels keep ENOENT.
+- Extended native fixtures compare accounting with the real unfiltered rows and cover process/thread aliases, relative reads and host/service opt-outs. The actual ARM64 APK also reads the running JVM's NUMA mappings, natively and under x86 translation.
+
 ## 2026-11-13: ARM64 shared-library validation complete
 - The six optional Java library jars were already committed in prebuilts; only UTM's copy was stale. Synced those exact architecture-independent artifacts (hashes also match the x86 lock), without rebuilding or changing binaries. Full sharedlib now passes on UTM as well as x86, including optional/platform libraries, installed providers, refusal of missing requirements and uninstall protection.
 

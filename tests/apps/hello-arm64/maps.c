@@ -5,6 +5,7 @@
 #include <link.h>
 #include <stdint.h>
 #include <fcntl.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/syscall.h>
@@ -57,5 +58,7 @@ JNIEXPORT jint JNICALL Java_hello_arm64_Main_artMaps(JNIEnv *env, jclass cls)
     int addressed = dladdr((void *)modules.self, &own);
     if (!listed && modules.count && !modules.leaked && modules.own && addressed
             && own.dli_fname && strstr(own.dli_fname, "libhello.so")) bits |= 64;
+    FILE *numa = fopen("/proc/self/numa_maps", "r");
+    if (numa ? art(numa) : errno == ENOENT) bits |= 128;
     return bits;
 }
