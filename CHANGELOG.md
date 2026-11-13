@@ -3,6 +3,13 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-13 (proc filter)
+- /proc filter, bugs found by tests/native/proc-leaks.c (new; 40 spellings and syscalls, in its own cgroup scope): a path relative to an open /proc fd was judged by its first component only
+  (`self/../1`, `../proc/1` leaked); a cwd of `/` with `proc/1/status` was not caught; `scandir("/proc")` read the directory inside glibc, past readdir, and listed every pid; a symlink to `/proc/1` could be
+  made and followed by the kernel. Now: a fd-relative path is judged as the absolute one it names, the `proc/<pid>` cwd spelling is covered, scandir/scandir64 filter /proc and the data directories, and
+  symlink/symlinkat refuse a hidden target (ENOENT). 0 leaks of 40. Left as on Android (pids are global there too, SELinux decides): kill(pid, 0), getsid/getpgid/getpriority/sched_get*(pid), pidfd_open.
+  The filter is a cgroup test, not a PID namespace (docs/PLAN.md). Installed on the NVIDIA PC; hello-arm64 passes.
+
 ## 2026-11-13: guest runtime identity
 - Validation: 21/21 native tests, runtime-identity APK, art-maps APK, and full native-bridge group pass on both UTM ARM64 and x86 PC with userspace Binder. Targeted reruns passed after correcting the nonexistent thread map_files test path and preserving platform-prefixed application -D flags.
 - App Java property access now uses the AOSP libcore fixed/default property behavior without exposing host configuration or changing host java.home. Direct calls, reflection, method handles/references and Boolean/Integer/Long helpers share the view; application -D options survive. Converter ABI 5/postprocessing 15 reconverts stale apps.

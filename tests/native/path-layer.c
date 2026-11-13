@@ -126,6 +126,15 @@ int main(int argc, char **argv) {
             int procfd = open("/proc", O_RDONLY | O_DIRECTORY);
             assert(procfd >= 0 && fstatat(procfd, "1", &st, 0) != 0 && openat(procfd, "1/status", O_RDONLY) < 0 && fstatat(procfd, "self", &st, 0) == 0);
             close(procfd);
+            /* a link to a hidden process is not made, and the cwd spelling of /proc/1 is hidden */
+            assert(symlink("/proc/1", in("lnk")) != 0 && errno == ENOENT);
+            assert(symlinkat("/proc/1", AT_FDCWD, in("lnk2")) != 0);
+            assert(fstatat(open("/proc", O_RDONLY | O_DIRECTORY), "self/../1", &st, 0) != 0);
+            struct dirent **scanned;
+            int scanned_n = scandir("/proc", &scanned, NULL, NULL);
+            assert(scanned_n > 0);
+            for (int i = 0; i < scanned_n; i++) { assert(strcmp(scanned[i]->d_name, "1") != 0); free(scanned[i]); }
+            free(scanned);
             DIR *proc = opendir("/proc");
             int saw_self = 0;
             for (struct dirent *e; proc && (e = readdir(proc));) {
