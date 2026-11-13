@@ -18,3 +18,5 @@ x86_64 webview: com.android.webview 156.0.8078.47, sha256 a98312a1427ca5c029e300
 2026-11-08: libapklayer_audio (arm64 494a68a9, x86_64 e47b976f) from main a2075bda: a silent output at real time without a sound server
 2026-11-09: libapklayer_surfaceflinger (arm64 53ef4a23, x86_64 c2182dc9) from main ce53baac: renderengine skips a layer whose buffer cannot be imported (frameworks/native 0008)
 2026-11-09: libapklayer_camera (arm64 7c957136, x86_64 fd04d404) and libapklayer_gnss (arm64 71f4077c, x86_64 b67ac787) from main 82cd43b5: MJPEG frames decoded by the camera provider (libyuv MJPGToI420); the GNSS HAL closes a dead client's session
+
+2026-11-13: x86_64 libberberis_arm64 from current Orb gsi_x86_64 output, sha256 fefddf5fcbb96a0e5ac701b0784ee8fa2287eb2dff838dc9060811cd26ba5304 (3046512 bytes). Restores deployed UID/stat/proc patches; native-bridge and art-maps pass with userspace binder.
