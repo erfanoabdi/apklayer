@@ -1667,6 +1667,9 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Why: the owner asked for the instance to present a Google Pixel 5. Properties: tools/device-profile.sh pixel5 (bridge/native/profiles/pixel5.prop); the
   guest's /proc/cpuinfo and MIDR_EL1 follow `berberis.cpuinfo=pixel5`. Same command as 0016; output in ~/los24-0020-build.log (Mac).
 - Result: `build completed successfully (10:09)`, no errors; library sha256 0009eb5f2e79879131cdea88538ab897a3dd7342f3a32800e8f257f42fac27c5 (0016-0020).
+### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0025 (Kemu's code-cost tier selection, a2a2de1a)
+- Why: the owner asked for a2a2de1a too. Ported (assembler under cpu_emulation/, `Call` is `CallRel`; tests left out): hot regions pick the heavy tier by captured loops and emitted x86
+  cost (default; BERBERIS_GEARUP_POLICY=legacy restores the length rule). Dry-run applies to the Mac tree with 0024 in it. Not built yet: waits for 0024's build (one at a time).
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0024 (Kemu's untagged addresses in exclusive and atomic accesses)
 - Why: the owner asked for 4de3cab3 too (after 0023's two). Written after 0023 (patches/aosp/.../0024); its heavy-tier hunk was redone by hand. Not applied to the Mac tree
   or built yet: waits for 0023's build so each can be tested alone first.
