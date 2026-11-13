@@ -10,7 +10,7 @@
 static void check(FILE *f, int filtered)
 {
     assert(f);
-    char line[1024]; int seen = 0, pid = 0;
+    char line[1024]; int seen = 0, pid = 0, groups = 0;
     while (fgets(line, sizeof line, f)) {
         int uid = !strncmp(line, "Uid:", 4), gid = !strncmp(line, "Gid:", 4);
         if (uid || gid) {
@@ -18,9 +18,20 @@ static void check(FILE *f, int filtered)
             assert(sscanf(line+4, "%u %u %u %u", &a, &b, &c, &d)==4);
             assert(a==want && b==want && c==want && d==want); seen++;
         }
+        if (!strncmp(line, "Groups:", 7)) {
+            gid_t expected[128];
+            int count;
+            if (filtered) { expected[0]=3003; expected[1]=9997; expected[2]=20001; expected[3]=50001; count=4; }
+            else { count=getgroups(128,expected); assert(count>=0); }
+            int found=0;
+            for (char *v=strtok(line+7," \t\n"); v; v=strtok(NULL," \t\n")) {
+                assert(found<count && strtoul(v,NULL,10)==expected[found]); found++;
+            }
+            assert(found==count); groups++;
+        }
         if (!strncmp(line, "Tgid:", 5)) { assert(atoi(line+5)==getpid()); pid++; }
     }
-    assert(!ferror(f) && seen==2 && pid==1);
+    assert(!ferror(f) && seen==2 && pid==1 && groups==1);
     fclose(f);
 }
 int main(void)
@@ -35,5 +46,5 @@ int main(void)
     }
     int dir=open("/proc/self", O_RDONLY|O_DIRECTORY); assert(dir>=0);
     int fd=openat(dir,"status",O_RDONLY); assert(fd>=0); check(fdopen(fd,"r"),filtered); close(dir);
-    puts("PASS status: own PID, all UID/GID columns, stdio/syscall/openat and thread aliases");
+    puts("PASS status: own PID, all UID/GID columns and supplementary groups, stdio/syscall/openat and thread aliases");
 }

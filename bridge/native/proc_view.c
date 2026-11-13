@@ -13,6 +13,7 @@
 
 const char *apklayer_own_data_env(void);
 long apklayer_app_uid(void);
+int apklayer_app_groups(gid_t *out, size_t capacity);
 int apklayer_proc_is_dir(int fd);
 int apklayer_proc_pid_hidden(const char *name);
 
@@ -29,11 +30,81 @@ static int own_proc_file(int fd)
     int end = 0;
     if (sscanf(path, "/proc/%lu/%15s%n", &pid, leaf, &end) == 2 && end && !path[end] && !strchr(leaf, '/')) {
         snprintf(task, sizeof task, "/proc/self/task/%lu", pid);
-        return access(task, F_OK) == 0 ? (!strcmp(leaf, "maps") ? 1 : !strcmp(leaf, "status") ? 2 : 0) : 0;
+        return access(task, F_OK) == 0 ? ((!strcmp(leaf, "maps") || !strcmp(leaf, "smaps")) ? 1 : !strcmp(leaf, "status") ? 2 : !strcmp(leaf, "map_files") ? 3 : 0) : 0;
     }
     end = 0;
     return sscanf(path, "/proc/%lu/task/%lu/%15s%n", &pid, &tid, leaf, &end) == 3 && end && !path[end] && pid == (unsigned long)getpid()
-        ? (!strcmp(leaf, "maps") ? 1 : !strcmp(leaf, "status") ? 2 : 0) : 0;
+        ? ((!strcmp(leaf, "maps") || !strcmp(leaf, "smaps")) ? 1 : !strcmp(leaf, "status") ? 2 : !strcmp(leaf, "map_files") ? 3 : 0) : 0;
+}
+
+static int app_proc_view(void)
+{
+    const char *view = getenv("APKLAYER_PROC_VIEW");
+    return apklayer_own_data_env() && (!view || strcmp(view, "host"));
+}
+
+/* JVM libraries live for the process lifetime; cache only a discovered root, never a failed lookup. */
+static const char *jdk_root(void)
+{
+    static __thread char root[PATH_MAX];
+    if (root[0]) return root;
+    long (*raw)(long, ...) = dlsym(RTLD_NEXT, "syscall");
+    int fd = raw(SYS_openat, AT_FDCWD, "/proc/self/maps", O_RDONLY | O_CLOEXEC, 0);
+    FILE *maps = fd < 0 ? NULL : fdopen(fd, "r");
+    if (!maps) { if (fd >= 0) close(fd); return root; }
+    char *line = NULL; size_t cap = 0;
+    while (getline(&line, &cap, maps) >= 0) {
+        char *path = strchr(line, '/'), *jvm = path ? strstr(path, "/lib/server/libjvm.so") : NULL;
+        if (jvm && (size_t)(jvm - path) < sizeof root) {
+            memcpy(root, path, jvm - path); root[jvm - path] = 0;
+            break;
+        }
+    }
+    free(line); fclose(maps);
+    return root;
+}
+
+int apklayer_proc_map_dir(int fd)
+{
+    if (!app_proc_view()) return 0;
+    int saved = errno, result = own_proc_file(fd) == 3;
+    errno = saved;
+    return result;
+}
+
+/* Used by the shared path layer as well as readdir/getdents, including relative and symlink aliases. */
+int apklayer_proc_map_hidden(int dirfd, const char *path)
+{
+    if (!path || !app_proc_view()) return 0;
+    const char *base = strrchr(path, '/');
+    base = base ? base + 1 : path;
+    int saved = errno;
+    unsigned long start, end; int consumed = 0;
+    int parsed = sscanf(base, "%lx-%lx%n", &start, &end, &consumed);
+    errno = saved;
+    if (parsed != 2 || !consumed || base[consumed] || start >= end) return 0;
+    int parent = dirfd, owned = -1, hidden = 0;
+    long (*raw)(long, ...) = dlsym(RTLD_NEXT, "syscall");
+    if (base != path) {
+        size_t len = base - path;
+        if (len >= PATH_MAX) return 0;
+        char directory[PATH_MAX]; memcpy(directory, path, len); directory[len] = 0;
+        parent = owned = raw(SYS_openat, dirfd, directory, O_PATH | O_DIRECTORY | O_CLOEXEC, 0);
+    } else if (parent == AT_FDCWD) {
+        parent = owned = raw(SYS_openat, AT_FDCWD, ".", O_PATH | O_DIRECTORY | O_CLOEXEC, 0);
+    }
+    if (parent >= 0 && apklayer_proc_map_dir(parent)) {
+        char target[PATH_MAX];
+        ssize_t n = raw(SYS_readlinkat, parent, base, target, sizeof target - 1);
+        if (n > 0) {
+            target[n] = 0;
+            const char *root = jdk_root(); size_t len = strlen(root);
+            hidden = len && !strncmp(target, root, len) && target[len] == '/';
+        }
+    }
+    if (owned >= 0) close(owned);
+    errno = saved;
+    return hidden;
 }
 
 /* fd remains owned by the caller, including on failure. */
@@ -44,7 +115,7 @@ static int proc_filter(int fd)
     int flags = fcntl(fd, F_GETFL), cloexec = fcntl(fd, F_GETFD);
     if (flags < 0 || (flags & (O_PATH | O_ACCMODE)) != O_RDONLY) return fd;
     int kind = own_proc_file(fd);
-    if (!kind) return fd;
+    if (!kind || kind == 3) return fd;
     long app_uid = apklayer_app_uid();
     /* Use the real syscall entry: the preload's syscall wrapper calls us too. */
     long (*raw)(long, ...) = dlsym(RTLD_NEXT, "syscall");
@@ -64,6 +135,14 @@ static int proc_filter(int fd)
     if (ferror(in) || fseek(in, 0, SEEK_SET)) goto buffered;
     while (getline(&line, &cap, in) >= 0) {
         if (kind == 2) {
+            gid_t groups[16];
+            int ngroups;
+            if (!strncmp(line, "Groups:", 7) && (ngroups = apklayer_app_groups(groups, 16)) >= 0) {
+                fputs("Groups:\t", buffer);
+                for (int i = 0; i < ngroups; i++) fprintf(buffer, "%u ", (unsigned)groups[i]);
+                fputc('\n', buffer);
+                continue;
+            }
             unsigned ids[4];
             int uid = !strncmp(line, "Uid:", 4), gid = !strncmp(line, "Gid:", 4);
             if (app_uid >= 0 && (uid || gid) && sscanf(line + 4, "%u %u %u %u", &ids[0], &ids[1], &ids[2], &ids[3]) == 4) {
@@ -127,7 +206,9 @@ FILE *apklayer_proc_file(FILE *file)
 long apklayer_proc_getdents64(int fd, void *buf, size_t count)
 {
     long (*raw)(long, ...) = dlsym(RTLD_NEXT, "syscall");
-    int filter = apklayer_own_data_env() && apklayer_proc_is_dir(fd);
+    int proc = apklayer_own_data_env() && apklayer_proc_is_dir(fd);
+    int maps = apklayer_proc_map_dir(fd);
+    int filter = proc || maps;
     for (;;) {
         long n = raw(SYS_getdents64, fd, buf, count);
         if (n <= 0 || !filter) return n;
@@ -139,7 +220,7 @@ long apklayer_proc_getdents64(int fd, void *buf, size_t count)
             char *entry = (char *)buf + at;
             memcpy(&len, entry + 16, sizeof len);
             if (len < 20 || len > (size_t)n - at || !memchr(entry + 19, 0, len - 19)) { errno = EIO; return -1; }
-            if (!apklayer_proc_pid_hidden(entry + 19)) {
+            if (!(proc && apklayer_proc_pid_hidden(entry + 19)) && !(maps && apklayer_proc_map_hidden(fd, entry + 19))) {
                 memmove((char *)buf + used, entry, len);
                 used += len;
             }

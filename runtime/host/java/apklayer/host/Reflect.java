@@ -2,6 +2,9 @@ package apklayer.host;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import org.robolectric.annotation.internal.DoNotInstrument;
 
 /**
@@ -18,6 +21,23 @@ public final class Reflect {
                 && m.getParameterCount() == 0) {
             return UnsafeAccess.getUnsafe();
         }
-        return m.invoke(receiver, args);
+        return GuestSystemProperties.replacement(m).invoke(receiver, args);
+    }
+
+    public static MethodHandle findStatic(MethodHandles.Lookup lookup, Class<?> owner,
+            String name, MethodType type) throws NoSuchMethodException, IllegalAccessException {
+        MethodHandle original = lookup.findStatic(owner, name, type); // Preserve access/type checks.
+        if (owner != System.class && owner != Boolean.class && owner != Integer.class
+                && owner != Long.class) return original;
+        Method method = owner.getDeclaredMethod(name, type.parameterArray());
+        Method replacement = GuestSystemProperties.replacement(method);
+        return replacement == method ? original : MethodHandles.publicLookup().unreflect(replacement);
+    }
+
+    public static MethodHandle unreflect(MethodHandles.Lookup lookup, Method method)
+            throws IllegalAccessException {
+        MethodHandle original = lookup.unreflect(method);
+        Method replacement = GuestSystemProperties.replacement(method);
+        return replacement == method ? original : MethodHandles.publicLookup().unreflect(replacement);
     }
 }

@@ -5,6 +5,7 @@
  * bionic_translation's libc (open, fopen, stat, lstat, fstatat) through its apply_path_overrides hook. */
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <sys/syscall.h>
@@ -133,6 +134,17 @@ long apklayer_app_uid(void)
 {
     const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
     return o && o->uid >= 0 && (uid_t)o->uid != getuid() ? o->uid : -1;
+}
+
+/* The same immutable app groups handed to bionic; -1 means the kernel already owns this process's identity. */
+int apklayer_app_groups(gid_t *out, size_t capacity)
+{
+    const struct own_data *o = __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
+    if (!o || o->uid < 0 || (uid_t)o->uid == getuid()) return -1;
+    if (!capacity) return o->ngroups;
+    if (capacity < (size_t)o->ngroups) { errno = EINVAL; return -1; }
+    memcpy(out, o->groups, o->ngroups * sizeof *out);
+    return o->ngroups;
 }
 
 /* into bionic_translation's libc once it is loaded (also from apklayer_install_path_layer) */
@@ -283,8 +295,11 @@ static int proc_rel_hidden(const char *rel)
     return *rel >= '0' && *rel <= '9' && apklayer_proc_pid_hidden(rel);
 }
 
+extern int apklayer_proc_map_hidden(int dirfd, const char *path) __attribute__((weak));
+
 int apklayer_proc_hidden(const char *path)
 {
+    if (apklayer_proc_map_hidden && apklayer_proc_map_hidden(AT_FDCWD, path)) return 1;
     if (!path) return 0;
     if (path[0] != '/') {  /* relative to a working directory that is /proc */
         const char *c = path;
@@ -320,6 +335,7 @@ int apklayer_proc_hidden(const char *path)
 /* an *at call's path: relative to a directory fd that is /proc (opendir + openat/fstatat "1/status"), or absolute/cwd-relative as above */
 int apklayer_proc_hidden_at(int dirfd, const char *path)
 {
+    if (apklayer_proc_map_hidden && apklayer_proc_map_hidden(dirfd, path)) return 1;
     if (!path || path[0] == '/' || dirfd == AT_FDCWD) return apklayer_proc_hidden(path);
     const char *c = path;
     while (!strncmp(c, "./", 2)) c += 2;
