@@ -257,3 +257,67 @@ User requested: fix ART internals, Java runtime clues, process identity and othe
 - ART internals: identify and implement the requested runtime interfaces/representations against Android; real JNI, Unsafe, reflection and native bridge behavior must agree. VMRuntime version/library/ISA/width and heap hint queries are implemented. HotSpot ArtMethod/object/JIT/GC layouts and JNI IDs are not ART's. ShadowVMRuntime nonmoving arrays use synthetic addresses, not pinned object storage; native consumers need a real lifetime/pinning strategy. Actual ART ABI support remains open. The current launcher selects SerialGC (`cli/env.cpp`); standard JNI critical-array access is bounded and may copy, so holding it across arbitrary Java execution is not a valid pinning implementation. A direct-buffer mirror also fails Java/native bidirectional coherence. Existing TypedArray and PathIterator shadows work through consumer-specific lookup/copy adapters; preserve those. General support requires collector-backed nonmoving allocation with managed lifetime, or an ART execution engine. `tests/native/RuntimeIdentity.java` now diagnoses the real ART reflection fields and VMRuntime queries without dereferencing synthetic addresses.
 - Process identity: UID/file owner, own status Uid/Gid and `/proc` directory visibility now pass the existing native-bridge checks on UTM ARM64 and the x86 translator with userspace binder. Supplementary groups in status now share the bionic app group list. Broader consistency (other proc files, namespace/security semantics) still needs comparison and coverage.
 - Waydroid baseline: Android 13 standalone dalvikvm64 confirms ART version 2.1.0, library libart.so, Java version 0/runtime 0.9, ART home, real PathClassLoader, and absence of HotSpot/Robolectric/apklayer classes. VMRuntime ISA/width and heap-hint clamp agree; default utilization is configuration/version dependent (.75 there, .6 in the current local ART reference). This is not an Android app sandbox comparison. Apklayer tests explicitly select APKLAYER_BINDER=userspace.
+- Gap matrix (2026-11-14): `docs/runtime-identity-matrix.md` compares Android 13 against apklayer ARM64 and x86. The Android column is Waydroid on the x86 PC, running hello-identity as a real installed app. Of 116 judged probes: 29 match, 13 partial, 73 mismatch. Probes: `tests/apps/hello-identity`; results and tools: `tests/identity/`; group: `identity-matrix`. The ranked work that follows, most real-app impact first:
+  1. **JNI_GetCreatedJavaVMs.** x86 aborts the process (berberis nativehelper trampoline `CHECK(*output_size == 1u)`), and ARM64 returns 0 VMs. Make the host libnativehelper/libandroid_runtime stub report the app JVM, and make the trampoline tolerate 0. Translator + bridge/native.
+  2. **ARM64 `/proc/self/status` through libc returns EBADF** (the raw syscall works). Fix the proc view status snapshot read path. Also set the status `Name`, comm and `PR_GET_NAME` to the package, not `java` (both arches). Proc view + launcher.
+  3. **Host JVM traces in native views** (both arches):
+     - fd readlinks (Robolectric_all.jar, the JDK `modules`, apklayer jars at host paths);
+     - task comms (`VM Thread`, `C2 CompilerThre`, `apklayer-*`);
+     - `/proc/self/exe` and `AT_EXECFN` pointing at the JDK `java` (ARM64);
+     - the desktop cgroup and mountinfo;
+     - 258 rwx maps;
+     - host paths in maps.
+
+     Project these to Android shapes the way maps already is: `/system/bin/app_process64`, ART thread names, `/apex/**/javalib` jars, an Android cgroup and mountinfo. Proc view + launcher.
+  4. **Native ARM64 linker namespace and symbol scope.**
+     - `dlopen` of libjvm/libjava/libc.so.6/libjavacore/libbinder/libandroid_runtime succeeds;
+     - `dlsym(RTLD_DEFAULT)` finds glibc and JNI symbols;
+     - `dladdr` names glibc `libc.so.6`, `libc_bio.so.0` and `bionic_*` symbols;
+     - `dl_iterate_phdr` lists host modules, 77 of them without a soname.
+
+     The x86 translator already hides these. Give the app an Android namespace view in bionic_translation.
+  5. **Raw syscalls on native ARM64 bypass the views.** `svc #0` getuid returns the host uid 1000, and openat of maps shows libjvm without libart. This needs syscall interception for app code: a seccomp SIGSYS trap or syscall user dispatch limited to app text. x86 translation is already consistent. Design first.
+  6. **Java stack traces and threads.**
+     - 19 host frames (`$$robo$$`, org.robolectric, apklayer.host) under onCreate;
+     - the main thread is "SDK 36 Main Thread" (id 16) instead of `main` (id 2);
+     - Thread.getAllStackTraces exposes HotSpot/apklayer threads;
+     - **bug:** `Method.invoke` of an app package-private method throws IllegalAccessException from `apklayer.host.Reflect`.
+
+     Java shadow.
+  7. **Class visibility and loader chain.**
+     - Hide org.robolectric.*, apklayer.*, and JDK-only java.lang.Module/StackWalker/management/`Runtime.version()` (it leaks the Ubuntu JDK string) from app lookups.
+     - Add the missing libcore classes: Daemons, VMClassLoader, BootClassLoader, AndroidHardcodedSystemProperties, Transformers, sun.misc.Cleaner.
+     - Make the parent chain PathClassLoader -> BootClassLoader -> null, with the system loader a PathClassLoader.
+     - Fill DexPathList (the base.apk element, the native library directories at `/data/app/...`) and drop the `__robo_data__` fields.
+
+     Java shadow (boot-parent identity, DexPathList metadata).
+  8. **Security providers and TLS.** The list is SUN/SunJSSE/ApklayerTrust, where Android has AndroidNSSP/AndroidOpenSSL/... with AndroidOpenSSL as the SSLContext default. Present Conscrypt first, under Android's names. Java shadow.
+  9. **Properties.**
+     - Native: dalvik.vm.heapsize, heapgrowthlimit and isa.*, persist.sys.dalvik.vm.lib.2, ro.vndk.version and init.svc.* are missing. `ro.dalvik.vm.native.bridge` names `libberberis_arm64.so` on x86 (a device names libndk_translation.so or 0).
+     - Java: http.agent, user.language/region, android.icu/openssl/zlib versions and java.boot.class.path are missing.
+     - Runtime.maxMemory is 7.5 GB (ARM64) where a phone gives heapgrowthlimit (192 MB).
+
+     Property defaults + Java shadow + launcher (-Xmx).
+  10. **Process attributes and environment.**
+      - dumpable 1, no_new_privs 0, seccomp 0 and AT_SECURE 0 (Android: 0/1/2/1);
+      - the parent is the apklayer CLI (Android: zygote64), and the main thread is not the pid;
+      - uname nodename and attr/current leak the desktop on ARM64 (x86 says untrusted_app);
+      - x86 AT_PLATFORM is null and HWCAP2 0;
+      - TMPDIR/BOOTCLASSPATH are unset.
+
+      Launcher + bionic patch + translator.
+  11. **JNI surface.**
+      - GetVersion returns 0x150000 (Android: 0x10006);
+      - JNIEnv functions do not resolve to libart.so in dladdr;
+      - FindClass of an app class from an attached native thread succeeds (Android: ClassNotFoundException);
+      - AttachCurrentThread leaves comm unchanged.
+
+      Translator/bionic patch JNI wrapper.
+  12. **Exception messages.** Rewrite to ART text: NPE, AIOOBE/SIOOBE, CCE, ArrayStoreException, ArithmeticException, NoSuchMethodException, and UnsatisfiedLinkError (`dlopen failed: library "x" not found`). Java shadow.
+  13. **Hidden-API policy for target SDK >= 28.** Blocked VMRuntime/VMDebug members are open today, and `getTargetSdkVersion` returns 10000. Apply the blocklist on app reflection and return the app's real target SDK. Java shadow.
+  14. **ART structures (largest, last).**
+      - A real libart.so ELF at its maps path: a file with .dynsym/.symtab, ART symbols bound to shims, code matching memory.
+      - Executable.artMethod and Class/Field/Thread ART fields backed by a synthetic ArtMethod/ArtField table: 32-byte ArtMethods with access flags @4, data_ = JNI function, entry point in "libart", jmethodID == artMethod, 16-byte ArtFields.
+      - String `count`, identityHashCode in 28 bits, and non-moving large arrays.
+
+      Needed only by hook frameworks, HiddenApiBypass (Termux, Aurora) and anti-cheat. The corpus has no direct ART probing. ART emulation.
