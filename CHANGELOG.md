@@ -1669,10 +1669,12 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Result: `build completed successfully (10:09)`, no errors; library sha256 0009eb5f2e79879131cdea88538ab897a3dd7342f3a32800e8f257f42fac27c5 (0016-0020).
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0024 (Kemu's untagged addresses in exclusive and atomic accesses)
 - Why: the owner asked for 4de3cab3 too (after 0023's two). Written after 0023 (patches/aosp/.../0024); its heavy-tier hunk was redone by hand. Not applied to the Mac tree
-  or built yet: waits for 0023's build (RUNNING) so each can be tested alone first.
+  or built yet: waits for 0023's build so each can be tested alone first.
+- Built together with the merge of origin/main (Erfan's ART maps commits d0399c42, 8bdbc709: bridge/native/proc_maps.c in the preload). Same command as 0016; output in ~/los24-0024-build.log (Mac). Status: RUNNING.
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0023 (Kemu's MOV copy and shared TBI mask commits)
 - Why: the owner asked for the Kemu speed commits that apply: b88517d9 (MOV register copies) and 615e5c93 (one TBI mask per LDP/STP). 4de3cab3 and a2a2de1a do not apply (patch header).
-  Same command as 0016; output in ~/los24-0023-build.log (Mac). Status: RUNNING.
+  Same command as 0016; output in ~/los24-0023-build.log (Mac).
+- Result: `build completed successfully (11:17)`, no errors; library sha256 fefddf5fcbb96a0e5ac701b0784ee8fa2287eb2dff838dc9060811cd26ba5304 (0016-0023).
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64, libberberis_proxy_libc: binary_translation 0022 (three fixes from the Kemu fork)
 - Why: the owner asked for the useful changes of github.com/kuloPo/Kemu (a Windows emulator packaging project; its translator is kuloPo/platform_frameworks_libs_binary_translation,
   17 commits over DigitalisX64's android16). Taken: guest thread-table releases (ae5358b1, fb941b4d: popen/system/posix_spawn left GuestThreads behind), large frees outside the
