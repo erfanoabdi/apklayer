@@ -1,0 +1,103 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] Kemu's untagged addresses in exclusive and atomic accesses (kuloPo 4de3cab3)
+
+LoadStoreExclusive masks the pointer's top byte once (ApplyTbi, "or reservation key") and then called Load/Store, which masked it a second time. LDAR, STLR and
+LDXR, and the initial load of the lite tier's atomic retry loops (LDCLR/LDSET/LDEOR, LDSMAX... groups), now call LoadUntagged/StoreUntagged (0023, from
+615e5c93) on the already-masked address. Reservation keys, memory ordering (the MFENCE after STLR) and each access's fault recovery are unchanged. Source files
+only. The Kemu commit's heavy-tier hunk did not apply to this tree's frontend.cc (the surrounding Mfence call is GenRaw here, not builder_.Gen), so the same
+three calls were changed by hand there. Lite tier: lite_translator_int_carry_excl.inc, heavy tier: frontend.cc. Applies after 0023. Module libberberis_arm64.
+
+diff --git a/cpu_emulation/heavy_optimizer/arm64/frontend.cc b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
+--- a/cpu_emulation/heavy_optimizer/arm64/frontend.cc
++++ b/cpu_emulation/heavy_optimizer/arm64/frontend.cc
+@@ -1827,7 +1827,7 @@
+   switch (args.op) {
+     case Decoder::AtomicOp::kLdar: {
+       // Load-acquire: x86-TSO provides acquire ordering for all loads.
+-      Register res = Load(lss, /*is_signed=*/false, /*is_64bit_target=*/true, base, 0);
++      Register res = LoadUntagged(lss, /*is_signed=*/false, /*is_64bit_target=*/true, base, 0);
+       if (!success()) {
+         return;
+       }
+@@ -1845,14 +1845,14 @@
+       if (!success()) {
+         return;
+       }
+-      Store(lss, base, 0, data);
++      StoreUntagged(lss, base, 0, data);
+       GenRaw<x86_64::Mfence>();
+       return;
+     }
+ 
+     case Decoder::AtomicOp::kLdxr: {
+       // Load-exclusive: load the value, then record the reservation.
+-      Register res = Load(lss, /*is_signed=*/false, /*is_64bit_target=*/true, base, 0);
++      Register res = LoadUntagged(lss, /*is_signed=*/false, /*is_64bit_target=*/true, base, 0);
+       if (!success()) {
+         return;
+       }
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_int_carry_excl.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_int_carry_excl.inc
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_int_carry_excl.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_int_carry_excl.inc
+@@ -276,7 +276,7 @@
+     switch (args.op) {
+       case Decoder::AtomicOp::kLdar: {
+         // Load-acquire: x86 TSO provides acquire semantics for all loads.
+-        Register res = Load(lss, /*is_signed=*/false, /*is_64bit_target=*/true, base, 0);
++        Register res = LoadUntagged(lss, /*is_signed=*/false, /*is_64bit_target=*/true, base, 0);
+         if (!success()) return;
+         if (args.rt < 31) SetReg(args.rt, res);
+         break;
+@@ -291,7 +291,7 @@
+         Register data = (args.rt < 31) ? GetReg(args.rt) : AllocTempReg();
+         if (!success()) return;
+         if (args.rt >= 31) as_.Xorl(data, data);
+-        Store(lss, base, 0, data);
++        StoreUntagged(lss, base, 0, data);
+         as_.Mfence();
+         break;
+       }
+@@ -427,7 +427,7 @@
+ 
+       case Decoder::AtomicOp::kLdxr: {
+         // Load-exclusive: load value and set reservation in ThreadState.
+-        Register res = Load(lss, /*is_signed=*/false, /*is_64bit_target=*/true, base, 0);
++        Register res = LoadUntagged(lss, /*is_signed=*/false, /*is_64bit_target=*/true, base, 0);
+         if (!success()) return;
+ 
+         // Store reservation address.
+@@ -536,9 +536,9 @@
+           as_.Notq(clr_mask);
+         }
+ 
+-        // Initial fetch of [mem] into RAX (Load() emits fault recovery).
+-        Register init = Load(lss, /*is_signed=*/false, /*is_64bit_target=*/true,
+-                             base, 0);
++        // Initial fetch of [mem] into RAX (LoadUntagged() emits fault recovery).
++        Register init =
++            LoadUntagged(lss, /*is_signed=*/false, /*is_64bit_target=*/true, base, 0);
+         if (!success()) return;
+         as_.Movq(Assembler::rax, init);
+ 
+@@ -580,7 +580,7 @@
+ 
+         // Old value is in RAX. For byte/halfword sizes the failure path of
+         // CMPXCHG only refreshes AL/AX; upper bits are whatever the initial
+-        // Movzxbl/Movzxwl in Load() set them to (zero), so they're already
++        // Movzxbl/Movzxwl in LoadUntagged() set them to (zero), so they're already
+         // clean. Still mask explicitly to match the existing kLdadd/kSwp
+         // pattern for byte/halfword zero-extension to 64 bits.
+         if (args.rt < 31) {
+@@ -615,9 +615,9 @@
+         if (!success()) return;
+         if (args.rs >= 31) as_.Xorl(operand, operand);
+ 
+-        // Initial fetch of [mem] into RAX (Load emits fault recovery).
+-        Register init = Load(lss, /*is_signed=*/false,
+-                             /*is_64bit_target=*/true, base, 0);
++        // Initial fetch of [mem] into RAX (LoadUntagged emits fault recovery).
++        Register init =
++            LoadUntagged(lss, /*is_signed=*/false, /*is_64bit_target=*/true, base, 0);
+         if (!success()) return;
+         as_.Movq(Assembler::rax, init);
+ 

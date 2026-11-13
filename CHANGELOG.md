@@ -1667,6 +1667,9 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Why: the owner asked for the instance to present a Google Pixel 5. Properties: tools/device-profile.sh pixel5 (bridge/native/profiles/pixel5.prop); the
   guest's /proc/cpuinfo and MIDR_EL1 follow `berberis.cpuinfo=pixel5`. Same command as 0016; output in ~/los24-0020-build.log (Mac).
 - Result: `build completed successfully (10:09)`, no errors; library sha256 0009eb5f2e79879131cdea88538ab897a3dd7342f3a32800e8f257f42fac27c5 (0016-0020).
+### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0024 (Kemu's untagged addresses in exclusive and atomic accesses)
+- Why: the owner asked for 4de3cab3 too (after 0023's two). Written after 0023 (patches/aosp/.../0024); its heavy-tier hunk was redone by hand. Not applied to the Mac tree
+  or built yet: waits for 0023's build (RUNNING) so each can be tested alone first.
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0023 (Kemu's MOV copy and shared TBI mask commits)
 - Why: the owner asked for the Kemu speed commits that apply: b88517d9 (MOV register copies) and 615e5c93 (one TBI mask per LDP/STP). 4de3cab3 and a2a2de1a do not apply (patch header).
   Same command as 0016; output in ~/los24-0023-build.log (Mac). Status: RUNNING.
