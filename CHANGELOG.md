@@ -1684,7 +1684,14 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 ### 2026-11-13 - gsi_x86_64 libberberis_proxy_libc: binary_translation 0026 (invalid frees say why, and whether the guest freed the pointer before)
 - Why: the owner asked to fix PGR's 20 invalid frees. 0006's line says only "no glibc chunk" and its cap of 20 hides the real count; before a fix the cause has to be known. Diagnostics only:
   the failing check is named, BERBERIS_LOG_FREES=1 keeps the last 65536 frees and cap 2000 (power-of-two count lines beyond). Independent of 0025 (not applied). `m libberberis_proxy_libc`;
-  output in ~/los24-0026-build.log (Mac). Status: RUNNING.
+  output in ~/los24-0026-build.log (Mac).
+- Result: `build completed successfully (10:29)`, no errors; libberberis_proxy_libc.so sha256 739b6786a3c6cad6b07fab67ae14613ff51a1672a16b5096c2009052fe66c958.
+- Installed (2026-11-13 14:50; the previous proxy libc in ~/apklayer-fix/orig/libberberis_proxy_libc.0022.so); hello-arm64 PASS. PGR with BERBERIS_LOG_FREES=1 (default instance, 100 s window, ended at 2 min 19 s as before):
+  **17 invalid frees in the whole run** (cap 2000, no overflow line): the 20 of earlier runs was not hiding more. All 17 are second frees of pointers the guest freed itself earlier, every one already released
+  to glibc: 16 on thread 1143098 (libanogs +0x2f4d34, the 20-slot teardown) of chunks thread 1142333 freed 4439-25654 frees before (callers libanogs +0x300168 x10, +0x31bf34 x6), 1 at eviction.
+  Why each fails: chunk outside its heap 6, impossible size in the header 6 (headers 0x0/0x1014/0x2021...: the header word of a chunk glibc merged into a larger free one), prev_size 2, next chunk free 2, tcache key 1.
+  So 0006 is right to refuse them (glibc aborts; Android's Scudo would too) and the allocator emulation is not at fault: ACE's shutdown path frees its pool slots twice. Nothing in free() to fix; the frees are a symptom of
+  the teardown, whose cause (why ACE shuts down at ~90 s) is still open (docs/PLAN.md).
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0025 (Kemu's code-cost tier selection, a2a2de1a)
 - Why: the owner asked for a2a2de1a too. Ported (assembler under cpu_emulation/, `Call` is `CallRel`; tests left out): hot regions pick the heavy tier by captured loops and emitted x86
   cost (default; BERBERIS_GEARUP_POLICY=legacy restores the length rule). Dry-run applies to the Mac tree with 0024 in it. Not built yet: waits for 0024's build (one at a time).
