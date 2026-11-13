@@ -262,9 +262,7 @@ int apklayer_proc_pid_hidden(const char *name)
 {
     static int host_view = -1;
     if (host_view < 0) { const char *v = getenv("APKLAYER_PROC_VIEW"); host_view = v && !strcmp(v, "host"); }
-    /* the cgroup read below is a path call of its own (the preload wraps syscall). volatile: glibc declares syscall/read/close leaf, so GCC may
-     * otherwise drop the store before the call and the guard never holds */
-    static __thread volatile int busy;
+    static __thread volatile int busy;  /* volatile: GCC drops the store of a non-escaping local around the call (systemd-run recursed to SIGSEGV); the cgroup read below is a path call of its own (the preload wraps syscall) */
     if (host_view || busy || !__atomic_load_n(&own_data, __ATOMIC_ACQUIRE)) return 0;
     char *end;
     long pid = strtol(name, &end, 10);
@@ -279,7 +277,7 @@ int apklayer_proc_pid_hidden(const char *name)
 /* whether the directory `dirfd` (AT_FDCWD: the working directory) is /proc */
 int apklayer_proc_is_dir(int dirfd)
 {
-    static __thread volatile int busy;  /* its raw syscalls reach the preload's syscall() and with it this function again (volatile: above) */
+    static __thread volatile int busy;  /* volatile: see apklayer_proc_pid_hidden */
     struct stat here, proc;
     if (busy) return 0;
     busy = 1;
