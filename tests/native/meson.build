@@ -107,4 +107,9 @@ if is_variable('c_bio') and is_variable('apklayer_preload')
     env: ['LD_PRELOAD=' + apklayer_preload.full_path(), 'LD_LIBRARY_PATH=' + fs.parent(c_bio.full_path()),
       'APKLAYER_OWN_DATA=hello.exec:10001:/tmp/hello.exec', 'ENV_HOST_ONLY=private', 'PATH=/host-path-must-not-be-searched'],
     suite: 'bionic', timeout: 30)
+  # guest system, popen/pclose/fclose and posix_spawn[p] (0069): /system/bin/sh, the guest environment and PATH, bionic's spawn objects
+  test('guest-spawn', executable('guest-spawn-test', 'guest-spawn.c', dependencies: [dependency('dl'), dependency('threads')]), args: [c_bio],
+    env: ['LD_PRELOAD=' + apklayer_preload.full_path(), 'LD_LIBRARY_PATH=' + fs.parent(c_bio.full_path()),
+      'APKLAYER_OWN_DATA=hello.spawn:10001:/tmp/hello.spawn', 'ENV_HOST_ONLY=private', 'PATH=/host-path-must-not-be-searched'],
+    suite: 'bionic', timeout: 30)
 endif

@@ -1,0 +1,578 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Fri, 13 Nov 2026 00:00:00 +0000
+Subject: [PATCH] libc: guest system, popen and posix_spawn launch as bionic's
+
+apklayer patch (docs/PATCHES.md). system and popen resolved to glibc's: the
+host /bin/sh with the host environment. posix_spawn[p] and their attribute and
+file-action calls resolved to glibc's too, whose posix_spawnattr_t (336 bytes)
+and posix_spawn_file_actions_t (80 bytes) overran bionic's pointer-sized
+objects, and posix_spawnp searched the host PATH. AOSP spawn.cpp's records and
+accessors are kept and converted to glibc's at launch (file-action paths
+through the path layer, POSIX_SPAWN_CLOEXEC_DEFAULT as closes after the
+actions); system.cpp and stdio.cpp popen/fclose run /system/bin/sh with the
+guest environment through the preload's guest spawn (path mapping, scripts,
+Android programs through btload). posix_spawnp searches the parent's guest
+PATH. As bionic, only a failed fork is an error: a later failure is a child
+that exits with 127. popen children are tracked beside the glibc FILE, so
+fclose and pclose (one function in bionic) both wait for them. bionic_execve
+takes the guest exec entry.
+
+--- a/libc/libc-exec.cpp
++++ b/libc/libc-exec.cpp
+@@ -41,7 +41,13 @@
+ extern "C" int apklayer_exec_search_guest(const char *, char *const [], char *const [], const char *, bool) __attribute__((weak));
+ extern "C" int bionic_execvpe(const char *, char *const [], char *const []);
+ extern "C" int bionic_execvp(const char *, char *const []);
++extern "C" int apklayer_execve_guest(const char *, char *const [], char *const []) __attribute__((weak));
+ 
++/* apklayer patch (0069): a guest's own execve takes the guest exec entry, as translated guests' do (Android's /bin is /system/bin) */
++extern "C" int bionic_execve(const char *name, char *const argv[], char *const envp[]) {
++  return apklayer_execve_guest ? apklayer_execve_guest(name, argv, envp) : execve(name, argv, envp);
++}
++
+ static int as_script(const char *name, char *const argv[], char *const envp[]) {
+   size_t count = 0;
+   while (argv && argv[count]) ++count;
+@@ -55,7 +61,7 @@
+ }
+ extern "C" int bionic_execv(const char *name, char *const argv[]) {
+   char ***slot = bionic_environment_slot();
+-  return slot ? execve(name, argv, *slot) : -1;
++  return slot ? bionic_execve(name, argv, *slot) : -1;
+ }
+ extern "C" int bionic_execvp(const char *name, char *const argv[]) {
+   char ***slot = bionic_environment_slot();
+@@ -64,7 +70,7 @@
+ extern "C" int bionic_execvpe(const char *name, char *const argv[], char *const envp[]) {
+   if (!name || !*name) { errno = ENOENT; return -1; }
+   if (strchr(name, '/')) {
+-    execve(name, argv, envp);
++    bionic_execve(name, argv, envp);
+     return errno == ENOEXEC ? as_script(name, argv, envp) : -1;
+   }
+   char ***slot = bionic_environment_slot();
+@@ -89,7 +95,7 @@
+   for (size_t i = 1; i <= count; ++i) args[i] = va_arg(ap, char *);
+   char ***slot = variant == ExecLE ? nullptr : bionic_environment_slot();
+   char **envp = variant == ExecLE ? va_arg(ap, char **) : slot ? *slot : nullptr;
+-  int result = variant != ExecLE && !slot ? -1 : variant == ExecLP ? bionic_execvp(name, args) : execve(name, args, envp);
++  int result = variant != ExecLE && !slot ? -1 : variant == ExecLP ? bionic_execvp(name, args) : bionic_execve(name, args, envp);
+   int error = errno; free(args); errno = error; return result;
+ }
+ extern "C" int bionic_execl(const char *name, const char *arg, ...) {
+--- a/libc/libc-musl.c
++++ b/libc/libc-musl.c
+@@ -612,10 +612,7 @@
+ 	return ungetwc(wc, bionic_file_to_glibc_file(stream));
+ }
+ 
+-int bionic_pclose(FILE *stream)
+-{
+-	return pclose(bionic_file_to_glibc_file(stream));
+-}
++/* apklayer patch: bionic_pclose is bionic_fclose (libc-spawn.cpp), which waits for the child of a guest popen */
+ 
+ long int bionic_ftell(FILE *stream)
+ {
+--- /dev/null
++++ b/libc/libc-spawn.cpp
+@@ -0,0 +1,488 @@
++/*
++ * Copyright (C) 2017 The Android Open Source Project
++ * All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ *  * Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ *  * Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in
++ *    the documentation and/or other materials provided with the
++ *    distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
++ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
++ * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
++ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
++ * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
++ * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
++ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
++ * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ */
++
++/* apklayer: bionic's process launches (AOSP spawn.cpp, system.cpp, stdio.cpp popen/fclose) over the host's posix_spawn.
++ * bionic's posix_spawnattr_t and posix_spawn_file_actions_t are pointers to its own records (glibc's are 336/80-byte structs
++ * the guest never allocated): the records and their accessors are AOSP's, converted to glibc's at launch. The child gets the
++ * guest environment, the guest PATH and /system/bin/sh; apklayer's preload maps the path and runs Android programs through
++ * btload. As bionic, only a failed fork is an error: any later failure is a child that exits with 127. */
++#include <dirent.h>
++#include <errno.h>
++#include <fcntl.h>
++#include <limits.h>
++#include <pthread.h>
++#include <sched.h>
++#include <signal.h>
++#include <spawn.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/socket.h>
++#include <sys/stat.h>
++#include <sys/wait.h>
++#include <unistd.h>
++
++extern "C" {
++#include "libc-stdio.h"
++}
++
++extern "C" char ***bionic_environment_slot(void);
++extern "C" char *bionic_getenv(const char *);
++extern "C" bool libc_bio_apply_path_overrides(char **path);
++extern "C" int apklayer_spawn_guest(pid_t *, const char *, const posix_spawn_file_actions_t *, const posix_spawnattr_t *,
++                                    char *const[], char *const[]) __attribute__((weak));
++
++static const char shell[] = "/system/bin/sh";  // bionic _PATH_BSHELL
++static const char default_path[] = "/product/bin:/apex/com.android.runtime/bin:/apex/com.android.art/bin:/apex/com.android.virt/bin:"
++    "/system_ext/bin:/system/bin:/system/xbin:/odm/bin:/vendor/bin:/vendor/xbin";  // bionic _PATH_DEFPATH
++enum : short { kCloexecDefault = 256, kBionicFlags = 0x1ff };  // bionic spawn.h; 1..128 are glibc's values too
++
++enum Action { kOpen, kClose, kDup2, kChdir, kFchdir };
++struct bionic_file_action {
++  bionic_file_action *next;
++  Action what;
++  int fd;
++  int new_fd;
++  char *path;
++  int flags;
++  mode_t mode;
++};
++struct bionic_file_actions { bionic_file_action *head, *last; };
++struct bionic_spawnattr {
++  short flags;
++  pid_t pgroup;
++  sched_param schedparam;
++  int schedpolicy;
++  union { unsigned long sigset; uint64_t sigset64; } sigmask, sigdefault;  // bionic sigset_t, sigset64_t
++};
++typedef bionic_spawnattr *battr_t;
++typedef bionic_file_actions *bactions_t;
++
++static char **guest_environ() {
++  static char *empty[] = {nullptr};
++  char ***slot = bionic_environment_slot();
++  return slot && *slot ? *slot : empty;
++}
++
++static int launch(pid_t *pid, const char *path, const posix_spawn_file_actions_t *actions, const posix_spawnattr_t *attr,
++                  char *const argv[], char *const envp[]) {
++  if (apklayer_spawn_guest) return apklayer_spawn_guest(pid, path, actions, attr, argv, envp);
++  return posix_spawn(pid, path, actions, attr, argv, envp);
++}
++
++/* bionic's child runs the attributes, file actions and exec itself and _exit(127)s on failure: glibc reports that failure
++ * instead. A child that exits with 127 keeps waitpid, SIGCHLD, system() and pclose as bionic has them. */
++static int failed_child(pid_t *pid) {
++  sigset_t all, old;
++  sigfillset(&all);
++  pthread_sigmask(SIG_SETMASK, &all, &old);
++  pid_t child = vfork();
++  if (child == 0) _exit(127);
++  int error = child < 0 ? errno : 0;
++  pthread_sigmask(SIG_SETMASK, &old, nullptr);
++  if (!error && pid) *pid = child;
++  return error;
++}
++static int as_bionic(int error, pid_t *pid) {
++  return error == 0 || error == EAGAIN || error == ENOMEM ? error : failed_child(pid);
++}
++
++static sigset_t *host_set(sigset_t *set, uint64_t bits) {
++  sigemptyset(set);
++  memcpy(set, &bits, sizeof bits);  // the kernel's bit order in both libcs
++  return set;
++}
++
++static int host_attr(const bionic_spawnattr *b, posix_spawnattr_t *h) {
++  int e = posix_spawnattr_init(h);
++  if (e) return e;
++  short flags = b->flags & ~kCloexecDefault;
++  sigset_t set;
++  if (!(e = posix_spawnattr_setflags(h, flags)) && (flags & POSIX_SPAWN_SETPGROUP)) e = posix_spawnattr_setpgroup(h, b->pgroup);
++  if (!e && (flags & (POSIX_SPAWN_SETSCHEDPARAM | POSIX_SPAWN_SETSCHEDULER))) e = posix_spawnattr_setschedparam(h, &b->schedparam);
++  if (!e && (flags & POSIX_SPAWN_SETSCHEDULER)) e = posix_spawnattr_setschedpolicy(h, b->schedpolicy);
++  if (!e && (flags & POSIX_SPAWN_SETSIGMASK)) e = posix_spawnattr_setsigmask(h, host_set(&set, b->sigmask.sigset64));
++  if (!e && (flags & POSIX_SPAWN_SETSIGDEF)) e = posix_spawnattr_setsigdefault(h, host_set(&set, b->sigdefault.sigset64));
++  if (e) posix_spawnattr_destroy(h);
++  return e;
++}
++
++static bool action_target(const bionic_file_actions *b, int fd) {
++  for (const bionic_file_action *a = b ? b->head : nullptr; a; a = a->next)
++    if ((a->what == kOpen || a->what == kDup2) && a->new_fd == fd) return true;
++  return false;
++}
++
++/* POSIX_SPAWN_CLOEXEC_DEFAULT (no glibc flag): bionic marks fds 3 and up close-on-exec before the file actions, so what they
++ * open or dup2 survives. The same result: after the actions, close every inherited fd they did not make. */
++static int close_inherited(const bionic_file_actions *b, posix_spawn_file_actions_t *h) {
++  DIR *dir = opendir("/proc/self/fd");
++  if (!dir) return errno;
++  int e = 0, own = dirfd(dir);
++  for (dirent *entry; !e && (entry = readdir(dir));) {
++    char *end;
++    long fd = strtol(entry->d_name, &end, 10);
++    if (*end || end == entry->d_name || fd < 3 || fd == own || fd > INT_MAX) continue;
++    int flags = fcntl((int)fd, F_GETFD);
++    if (flags >= 0 && !(flags & FD_CLOEXEC) && !action_target(b, (int)fd)) e = posix_spawn_file_actions_addclose(h, (int)fd);
++  }
++  closedir(dir);
++  return e;
++}
++
++static int add_path(posix_spawn_file_actions_t *h, const bionic_file_action *a) {
++  char *path = a->path;
++  bool mapped = path[0] == '/' && libc_bio_apply_path_overrides(&path);  // glibc's child opens without the path layer
++  int e = a->what == kOpen ? posix_spawn_file_actions_addopen(h, a->new_fd, path, a->flags, a->mode)
++                           : posix_spawn_file_actions_addchdir_np(h, path);
++  if (mapped) free(path);
++  return e;
++}
++
++static int host_actions(const bionic_file_actions *b, bool cloexec_default, posix_spawn_file_actions_t *h) {
++  int e = posix_spawn_file_actions_init(h);
++  for (const bionic_file_action *a = b ? b->head : nullptr; a && !e; a = a->next) {
++    switch (a->what) {
++      case kOpen: case kChdir: e = add_path(h, a); break;
++      case kClose: e = posix_spawn_file_actions_addclose(h, a->fd); if (e == EBADF) e = 0; break;  // bionic ignores a failed close
++      case kDup2: e = posix_spawn_file_actions_adddup2(h, a->fd, a->new_fd); break;
++      case kFchdir: e = posix_spawn_file_actions_addfchdir_np(h, a->fd); break;
++    }
++  }
++  if (!e && cloexec_default) e = close_inherited(b, h);
++  if (e) posix_spawn_file_actions_destroy(h);
++  return e;
++}
++
++/* bionic execvpe: a name without a slash is searched in the parent's guest PATH (the child's envp does not choose it); a file
++ * without #! runs with the shell. The search is made here, before the launch: host posix_spawn runs no code of ours in the child. */
++static int launch_file(pid_t *pid, const char *path, const posix_spawn_file_actions_t *actions, const posix_spawnattr_t *attr,
++                       char *const argv[], char *const envp[]) {
++  int e = launch(pid, path, actions, attr, argv, envp);
++  if (e != ENOEXEC) return e;
++  size_t argc = 0;
++  while (argv && argv[argc]) ++argc;
++  char **script = static_cast<char **>(calloc(argc + 3, sizeof(char *)));
++  if (!script) return ENOMEM;
++  script[0] = const_cast<char *>("sh");
++  script[1] = const_cast<char *>(path);
++  for (size_t i = 1; i < argc; ++i) script[i + 1] = argv[i];
++  e = launch(pid, shell, actions, attr, script, envp);
++  free(script);
++  return e;
++}
++
++static bool runnable(const char *candidate) {
++  char *path = const_cast<char *>(candidate);
++  bool mapped = path[0] == '/' && libc_bio_apply_path_overrides(&path);
++  struct stat st;
++  bool ok = stat(path, &st) == 0 && S_ISREG(st.st_mode) && faccessat(AT_FDCWD, path, X_OK, AT_EACCESS) == 0;
++  if (mapped) free(path);
++  return ok;
++}
++
++static int search(pid_t *pid, const char *file, const posix_spawn_file_actions_t *actions, const posix_spawnattr_t *attr,
++                  char *const argv[], char *const envp[]) {
++  if (!*file) return ENOENT;
++  if (strchr(file, '/')) return launch_file(pid, file, actions, attr, argv, envp);
++  if (bionic_environment_slot() == &environ) return posix_spawnp(pid, file, actions, attr, argv, envp);  // services: host PATH (0068)
++  const char *value = bionic_getenv("PATH");
++  char *list = strdup(value ? value : default_path);
++  if (!list) return ENOMEM;
++  int e = ENOENT;
++  size_t length = strlen(file);
++  for (char *dir = list, *end; dir; dir = end ? end + 1 : nullptr) {
++    end = strchr(dir, ':');
++    if (end) *end = 0;
++    size_t used = strlen(dir);
++    char candidate[PATH_MAX];
++    if (used + length + 2 > sizeof candidate) continue;
++    memcpy(candidate, dir, used);
++    if (used && dir[used - 1] != '/') candidate[used++] = '/';
++    memcpy(candidate + used, file, length + 1);
++    if (runnable(candidate)) { e = launch_file(pid, candidate, actions, attr, argv, envp); break; }
++  }
++  free(list);
++  return e;
++}
++
++static int spawn(pid_t *pid, const char *path, const bactions_t *actions, const battr_t *attr, char *const argv[],
++                 char *const env[], bool path_search) {
++  const bionic_spawnattr *b = attr ? *attr : nullptr;
++  const bionic_file_actions *a = actions ? *actions : nullptr;
++  bool cloexec_default = b && (b->flags & kCloexecDefault);
++  posix_spawnattr_t host_attributes;
++  posix_spawn_file_actions_t host_file_actions;
++  int e = b ? host_attr(b, &host_attributes) : 0;
++  if (e) return e == ENOMEM ? e : failed_child(pid);
++  if ((a || cloexec_default) && (e = host_actions(a, cloexec_default, &host_file_actions))) {
++    if (b) posix_spawnattr_destroy(&host_attributes);
++    return e == ENOMEM ? e : failed_child(pid);
++  }
++  const posix_spawn_file_actions_t *ha = a || cloexec_default ? &host_file_actions : nullptr;
++  const posix_spawnattr_t *hb = b ? &host_attributes : nullptr;
++  char *const *envp = env ? env : guest_environ();
++  e = path_search ? search(pid, path, ha, hb, argv, envp) : launch(pid, path, ha, hb, argv, envp);
++  if (ha) posix_spawn_file_actions_destroy(&host_file_actions);
++  if (hb) posix_spawnattr_destroy(&host_attributes);
++  return as_bionic(e, pid);
++}
++
++extern "C" int bionic_posix_spawn(pid_t *pid, const char *path, const bactions_t *actions, const battr_t *attr,
++                                  char *const argv[], char *const env[]) {
++  return spawn(pid, path, actions, attr, argv, env, false);
++}
++extern "C" int bionic_posix_spawnp(pid_t *pid, const char *file, const bactions_t *actions, const battr_t *attr,
++                                   char *const argv[], char *const env[]) {
++  return spawn(pid, file, actions, attr, argv, env, true);
++}
++
++/* AOSP spawn.cpp's attribute and file-action records, unchanged. */
++extern "C" int bionic_posix_spawnattr_init(battr_t *attr) {
++  *attr = static_cast<bionic_spawnattr *>(calloc(1, sizeof(bionic_spawnattr)));
++  return *attr == nullptr ? errno : 0;
++}
++extern "C" int bionic_posix_spawnattr_destroy(battr_t *attr) { free(*attr); *attr = nullptr; return 0; }
++extern "C" int bionic_posix_spawnattr_setflags(battr_t *attr, short flags) {
++  if ((flags & ~kBionicFlags) != 0) return EINVAL;
++  (*attr)->flags = flags;
++  return 0;
++}
++extern "C" int bionic_posix_spawnattr_getflags(const battr_t *attr, short *flags) { *flags = (*attr)->flags; return 0; }
++extern "C" int bionic_posix_spawnattr_setpgroup(battr_t *attr, pid_t pgroup) { (*attr)->pgroup = pgroup; return 0; }
++extern "C" int bionic_posix_spawnattr_getpgroup(const battr_t *attr, pid_t *pgroup) { *pgroup = (*attr)->pgroup; return 0; }
++extern "C" int bionic_posix_spawnattr_setsigmask(battr_t *attr, const unsigned long *mask) { (*attr)->sigmask.sigset = *mask; return 0; }
++extern "C" int bionic_posix_spawnattr_setsigmask64(battr_t *attr, const uint64_t *mask) { (*attr)->sigmask.sigset64 = *mask; return 0; }
++extern "C" int bionic_posix_spawnattr_getsigmask(const battr_t *attr, unsigned long *mask) { *mask = (*attr)->sigmask.sigset; return 0; }
++extern "C" int bionic_posix_spawnattr_getsigmask64(const battr_t *attr, uint64_t *mask) { *mask = (*attr)->sigmask.sigset64; return 0; }
++extern "C" int bionic_posix_spawnattr_setsigdefault(battr_t *attr, const unsigned long *mask) { (*attr)->sigdefault.sigset = *mask; return 0; }
++extern "C" int bionic_posix_spawnattr_setsigdefault64(battr_t *attr, const uint64_t *mask) { (*attr)->sigdefault.sigset64 = *mask; return 0; }
++extern "C" int bionic_posix_spawnattr_getsigdefault(const battr_t *attr, unsigned long *mask) { *mask = (*attr)->sigdefault.sigset; return 0; }
++extern "C" int bionic_posix_spawnattr_getsigdefault64(const battr_t *attr, uint64_t *mask) { *mask = (*attr)->sigdefault.sigset64; return 0; }
++extern "C" int bionic_posix_spawnattr_setschedparam(battr_t *attr, const sched_param *param) { (*attr)->schedparam = *param; return 0; }
++extern "C" int bionic_posix_spawnattr_getschedparam(const battr_t *attr, sched_param *param) { *param = (*attr)->schedparam; return 0; }
++extern "C" int bionic_posix_spawnattr_setschedpolicy(battr_t *attr, int policy) { (*attr)->schedpolicy = policy; return 0; }
++extern "C" int bionic_posix_spawnattr_getschedpolicy(const battr_t *attr, int *policy) { *policy = (*attr)->schedpolicy; return 0; }
++
++extern "C" int bionic_posix_spawn_file_actions_init(bactions_t *actions) {
++  *actions = static_cast<bionic_file_actions *>(calloc(1, sizeof(**actions)));
++  return *actions == nullptr ? errno : 0;
++}
++extern "C" int bionic_posix_spawn_file_actions_destroy(bactions_t *actions) {
++  bionic_file_action *a = (*actions)->head;
++  while (a) {
++    bionic_file_action *last = a;
++    a = a->next;
++    free(last->path);
++    free(last);
++  }
++  free(*actions);
++  *actions = nullptr;
++  return 0;
++}
++static int add_action(bactions_t *actions, Action what, int fd, int new_fd, const char *path, int flags, mode_t mode) {
++  bionic_file_action *action = static_cast<bionic_file_action *>(malloc(sizeof(*action)));
++  if (action == nullptr) return errno;
++  action->next = nullptr;
++  if (what == kOpen || what == kChdir) {
++    action->path = strdup(path);
++    if (action->path == nullptr) { free(action); return errno; }
++  } else {
++    action->path = nullptr;
++  }
++  action->what = what;
++  action->fd = fd;
++  action->new_fd = new_fd;
++  action->flags = flags;
++  action->mode = mode;
++  if ((*actions)->head == nullptr) (*actions)->head = (*actions)->last = action;
++  else { (*actions)->last->next = action; (*actions)->last = action; }
++  return 0;
++}
++extern "C" int bionic_posix_spawn_file_actions_addopen(bactions_t *actions, int fd, const char *path, int flags, mode_t mode) {
++  if (fd < 0) return EBADF;
++  return add_action(actions, kOpen, -1, fd, path, flags, mode);
++}
++extern "C" int bionic_posix_spawn_file_actions_addclose(bactions_t *actions, int fd) {
++  if (fd < 0) return EBADF;
++  return add_action(actions, kClose, fd, -1, nullptr, 0, 0);
++}
++extern "C" int bionic_posix_spawn_file_actions_adddup2(bactions_t *actions, int fd, int new_fd) {
++  if (fd < 0 || new_fd < 0) return EBADF;
++  return add_action(actions, kDup2, fd, new_fd, nullptr, 0, 0);
++}
++extern "C" int bionic_posix_spawn_file_actions_addchdir_np(bactions_t *actions, const char *path) {
++  return add_action(actions, kChdir, -1, -1, path, 0, 0);
++}
++extern "C" int bionic_posix_spawn_file_actions_addfchdir_np(bactions_t *actions, int fd) {
++  if (fd < 0) return EBADF;
++  return add_action(actions, kFchdir, fd, -1, nullptr, 0, 0);
++}
++
++/* AOSP system.cpp. SIGINT/SIGQUIT are ignored once for all concurrent calls and restored by the last (glibc's count; AOSP's
++ * concurrent calls could restore SIG_IGN). bionic has no cancellation points: cancellation stays off while the masks and
++ * actions are changed. */
++static pthread_mutex_t system_lock = PTHREAD_MUTEX_INITIALIZER;
++static int system_users;
++static struct sigaction system_int, system_quit;
++
++static bool ignored(const struct sigaction *sa) { return !(sa->sa_flags & SA_SIGINFO) && sa->sa_handler == SIG_IGN; }
++
++extern "C" int bionic_system(const char *command) {
++  if (command == nullptr) return 1;  // POSIX: always nonzero when command is NULL
++  int cancel;
++  pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel);
++  sigset_t chld, old_mask, defaults;
++  sigemptyset(&chld);
++  sigaddset(&chld, SIGCHLD);
++  pthread_sigmask(SIG_BLOCK, &chld, &old_mask);
++  struct sigaction ignore = {};
++  ignore.sa_handler = SIG_IGN;
++  sigemptyset(&ignore.sa_mask);
++  sigemptyset(&defaults);
++  pthread_mutex_lock(&system_lock);
++  if (system_users++ == 0) {
++    sigaction(SIGINT, &ignore, &system_int);
++    sigaction(SIGQUIT, &ignore, &system_quit);
++  }
++  if (!ignored(&system_int)) sigaddset(&defaults, SIGINT);
++  if (!ignored(&system_quit)) sigaddset(&defaults, SIGQUIT);
++  pthread_mutex_unlock(&system_lock);
++
++  posix_spawnattr_t attributes;
++  int e = posix_spawnattr_init(&attributes);
++  if (!e) e = posix_spawnattr_setsigdefault(&attributes, &defaults);
++  if (!e) e = posix_spawnattr_setsigmask(&attributes, &old_mask);
++  if (!e) e = posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK);
++  const char *argv[] = {"sh", "-c", "--", command, nullptr};
++  pid_t child = -1;
++  if (!e) e = as_bionic(launch(&child, shell, nullptr, &attributes, const_cast<char **>(argv), guest_environ()), &child);
++  posix_spawnattr_destroy(&attributes);
++  int status = -1;
++  if (!e) {
++    pid_t pid;
++    do pid = waitpid(child, &status, 0); while (pid == -1 && errno == EINTR);
++    if (pid == -1) { e = errno; status = -1; }
++  }
++
++  pthread_mutex_lock(&system_lock);
++  if (--system_users == 0) {
++    sigaction(SIGINT, &system_int, nullptr);
++    sigaction(SIGQUIT, &system_quit, nullptr);
++  }
++  pthread_mutex_unlock(&system_lock);
++  pthread_sigmask(SIG_SETMASK, &old_mask, nullptr);
++  pthread_setcancelstate(cancel, nullptr);
++  if (e) { errno = e; return -1; }
++  return status;
++}
++
++/* AOSP stdio.cpp popen and fclose: the stream is glibc's, so the child's pid is kept beside it and both bionic close entry points
++ * (pclose is fclose's alias in bionic) wait for it. Every popen fd is close-on-exec, so no child keeps another popen's stream. */
++struct popen_child { FILE *file; pid_t pid; popen_child *next; };
++static pthread_mutex_t popen_lock = PTHREAD_MUTEX_INITIALIZER;
++static popen_child *popen_children;
++
++static pid_t take_popen_child(FILE *fp) {
++  pid_t pid = 0;
++  pthread_mutex_lock(&popen_lock);
++  for (popen_child **p = &popen_children; *p; p = &(*p)->next) {
++    if ((*p)->file != fp) continue;
++    popen_child *found = *p;
++    *p = found->next;
++    pid = found->pid;
++    free(found);
++    break;
++  }
++  pthread_mutex_unlock(&popen_lock);
++  return pid;
++}
++
++static FILE *popen_fail(int parent_fd, int child_fd, int error) {
++  if (parent_fd >= 0) close(parent_fd);
++  if (child_fd >= 0) close(child_fd);
++  errno = error;
++  return nullptr;
++}
++
++extern "C" FILE *bionic_popen(const char *cmd, const char *mode) {
++  int fds[2];
++  bool bidirectional = false;
++  if (strchr(mode, '+') != nullptr) {
++    if (socketpair(AF_LOCAL, SOCK_CLOEXEC | SOCK_STREAM, 0, fds) == -1) return nullptr;
++    bidirectional = true;
++    mode = "r+";
++  } else {
++    if (pipe2(fds, O_CLOEXEC) == -1) return nullptr;
++    mode = strrchr(mode, 'r') ? "r" : "w";
++  }
++  // If the parent wants to read, the child's fd needs to be stdout.
++  int parent_fd = fds[*mode == 'r' ? 0 : 1], child_fd = fds[*mode == 'r' ? 1 : 0];
++  int desired_child_fd = *mode == 'r' ? STDOUT_FILENO : STDIN_FILENO;
++  if (child_fd == desired_child_fd) {  // a dup2 onto itself would keep it close-on-exec
++    int new_fd = fcntl(child_fd, F_DUPFD_CLOEXEC, 0);
++    if (new_fd == -1) return popen_fail(parent_fd, child_fd, errno);
++    close(child_fd);
++    child_fd = new_fd;
++  }
++  popen_child *entry = static_cast<popen_child *>(calloc(1, sizeof(popen_child)));
++  FILE *fp = entry ? fdopen(parent_fd, mode) : nullptr;
++  if (!fp) { int error = entry ? errno : ENOMEM; free(entry); return popen_fail(parent_fd, child_fd, error); }
++  posix_spawn_file_actions_t actions;
++  int e = posix_spawn_file_actions_init(&actions);
++  if (!e) e = posix_spawn_file_actions_adddup2(&actions, child_fd, desired_child_fd);
++  if (!e && bidirectional) e = posix_spawn_file_actions_adddup2(&actions, STDOUT_FILENO, STDIN_FILENO);
++  const char *argv[] = {"sh", "-c", "--", cmd, nullptr};
++  pid_t pid = -1;
++  if (!e) e = as_bionic(launch(&pid, shell, &actions, nullptr, const_cast<char **>(argv), guest_environ()), &pid);
++  posix_spawn_file_actions_destroy(&actions);
++  close(child_fd);
++  if (e) { fclose(fp); free(entry); errno = e; return nullptr; }
++  entry->file = fp;
++  entry->pid = pid;
++  pthread_mutex_lock(&popen_lock);
++  entry->next = popen_children;
++  popen_children = entry;
++  pthread_mutex_unlock(&popen_lock);
++  return fp;
++}
++
++extern "C" int bionic_fclose(FILE *stream) {
++  FILE *fp = bionic_file_to_glibc_file(stream);
++  pid_t pid = take_popen_child(fp);
++  int r = fclose(fp);
++  if (pid > 0) {
++    int status;
++    pid_t waited;
++    do waited = wait4(pid, &status, 0, nullptr); while (waited == -1 && errno == EINTR);
++    if (waited != -1) r = status;
++  }
++  return r;
++}
++extern "C" int bionic_pclose(FILE *stream) { return bionic_fclose(stream); }
+--- a/meson.build
++++ b/meson.build
+@@ -118,6 +118,7 @@
+ 		'libc/libc-misc.c',
+ 		'libc/libc-environment.cpp', # apklayer: isolated app environment
+ 		'libc/libc-exec.cpp', # apklayer: inherited guest environment and PATH
++		'libc/libc-spawn.cpp', # apklayer: guest system, popen and posix_spawn
+ 		'libc/libc-musl.c',
+ 		'libc/libc-signal.c',
+ 		'libc/libc-stdio.c',

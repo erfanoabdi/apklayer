@@ -30,6 +30,7 @@ public final class Main extends Activity {
     private static native void releasePut();
     private static native byte[] procEnviron(boolean buffered);
     private static native void activityManagerCheck();
+    private static native String launchCheck(String dir);
     private int failures;
     private interface Step { void run() throws Throwable; }
 
@@ -42,6 +43,8 @@ public final class Main extends Activity {
             try {
                 System.loadLibrary("hello");
                 step("native ActivityManager private control", Main::activityManagerCheck);
+                step("native process launches", () -> check(null, launchCheck(getFilesDir().getPath()),
+                        "native system/popen/posix_spawn: Android shell, environment, status"));
                 tests();
             } catch (Throwable failure) {
                 failures++;
