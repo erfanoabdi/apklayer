@@ -22,3 +22,5 @@ x86_64 webview: com.android.webview 156.0.8078.47, sha256 a98312a1427ca5c029e300
 2026-11-13: x86_64 libberberis_arm64 from current Orb gsi_x86_64 output, sha256 fefddf5fcbb96a0e5ac701b0784ee8fa2287eb2dff838dc9060811cd26ba5304 (3046512 bytes). Restores deployed UID/stat/proc patches; native-bridge and art-maps pass with userspace binder.
 
 2026-11-13 WIP environment checkpoint: x86 libberberis_arm64 e49d7f17 (binary_translation0025/0026; active guest environment authority and startup), plus original Android sh/toybox for both ABIs. Environment/runtime probes pass both VMs; final private HAL/framework control builds and staging are pending. Not a release-ready artifact set.
+
+2026-11-13 final x86 environment artifacts: main 57072514, completed incremental gsi_x86_64 build (/tmp/apklayer-environment-x86-build2.log). Refreshed ten private-host-control backend modules (libvulkan also staged as libapklayer_vulkan) and libberberis_arm64; original Android sh/toybox recorded in the x86 lock. Final x86 runtime regression tests and ARM backend staging remain pending.
