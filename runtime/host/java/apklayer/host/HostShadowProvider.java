@@ -125,7 +125,6 @@ public final class HostShadowProvider implements ShadowProvider {
         if (HostCameraShadows.declared()) entries.addAll(HostCameraShadows.entries());  // the stack runs cameraserver over the camera HAL
         if (System.getProperty("apklayer.webviewprovider") != null) { // the original WebView implementation (a provider APK)
             entries.add(Map.entry("android.webkit.WebView", ShadowHostRealWebView.class.getName()));
-            entries.add(Map.entry("android.webkit.WebViewDelegate", ShadowHostWebViewDelegate.class.getName()));
             entries.add(Map.entry("android.webkit.WebViewFactory", ShadowHostWebViewFactory.class.getName()));
             entries.add(Map.entry("android.webkit.CookieManager", HostPlainShadows.CookieManager.class.getName()));
             entries.add(Map.entry("android.webkit.WebStorage", HostPlainShadows.WebStorage.class.getName()));

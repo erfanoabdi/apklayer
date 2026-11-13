@@ -7,7 +7,7 @@ import java.nio.file.Path;
 import java.util.function.Function;
 
 /**
- * apklayer patch: an app's own class loader, as Android's LoadedApk gives every app a PathClassLoader of its own. Its parent is the Robolectric sandbox
+ * apklayer patch: the byte/resource index behind each app's genuine PathClassLoader. It defines converted bytes in that Android loader, never in this index. Its parent is the Robolectric sandbox
  * (the framework, Robolectric and the host). What Android's boot class path owns (java, android, dalvik, com.android...) comes from the parent first, as on
  * a device; everything else is the app's own first, so an app's Guava, BouncyCastle, Conscrypt, Kotlin or Chromium never mixes with the host's or another
  * package's copy. The WebView provider gets one of these too (ShadowHostWebViewFactory).
@@ -20,6 +20,23 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
 
     /** The app's loader as seen inside the sandbox (set by Main; null in the hub). */
     public static volatile ClassLoader app;
+    /** Host index for the app; distinct from the genuine Android defining loader exposed above. */
+    public static volatile ClassLoader index;
+    private final ClassLoader definingLoader;
+    private static final java.lang.reflect.Method DEFINE = loaderMethod("defineClass", String.class, byte[].class, int.class, int.class);
+    private static final java.lang.reflect.Method LOADED = loaderMethod("findLoadedClass", String.class);
+    private static final java.lang.reflect.Method RESOLVE = loaderMethod("resolveClass", Class.class);
+
+    private static java.lang.reflect.Method loaderMethod(String name, Class<?>... parameters) {
+        try {
+            java.lang.reflect.Method method = ClassLoader.class.getDeclaredMethod(name, parameters);
+            method.setAccessible(true);
+            return method;
+        } catch (ReflectiveOperationException failure) { throw new ExceptionInInitializerError(failure); }
+    }
+
+    /** Actual defining loader: casts, Class.getClassLoader and JNI all see the same object. */
+    public ClassLoader definingLoader() { return definingLoader; }
 
     /** Packages of Android's boot class path, plus the host's own: these come from the parent first. */
     private static final String[] PLATFORM = {"java.", "javax.", "android.", "dalvik.", "libcore.", "com.android.", "org.json.", "org.w3c.dom.",
@@ -30,6 +47,16 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
 
     public AppClassLoader(String name, Path[] jars, ClassLoader parent) {
         super(name, urls(jars), parent);
+        try {
+            Class<?> pathLoader = parent.loadClass("dalvik.system.PathClassLoader");
+            definingLoader = (ClassLoader) pathLoader.getConstructor(String.class, String.class, ClassLoader.class)
+                    .newInstance("", System.getProperty("apklayer.libdir", ""), parent);
+            java.lang.reflect.Method attach = pathLoader.getDeclaredMethod("setApklayerDelegate", ClassLoader.class, Function.class);
+            attach.setAccessible(true);
+            attach.invoke(definingLoader, this, (Function<String, String>) this::findLibrary);
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException("Cannot create the app's PathClassLoader", failure);
+        }
     }
 
     /**
@@ -54,7 +81,7 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
 
     @Override
     protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-        if (name.startsWith("[")) return Class.forName(name.replace('/', '.'), false, this);  // ART's loaders answer array names (Chromium's JNI asks)
+        if (name.startsWith("[")) return Class.forName(name.replace('/', '.'), false, definingLoader);  // ART's loaders answer array names (Chromium's JNI asks)
         name = name.replace('/', '.');  // ... and binary names with slashes (Paddleboat)
         // No lock of ours is held while the parent loads: a thread in the sandbox's loadClass (holding its lock) may be defining an app class here through
         // apply, whose superclass then comes through this method; apply itself copes with two threads defining one class.
@@ -71,7 +98,10 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
             c = apply(name);
             if (c == null) c = getParent().loadClass(name);
         }
-        if (resolve) resolveClass(c);
+        if (resolve) {
+            try { RESOLVE.invoke(definingLoader, c); }
+            catch (ReflectiveOperationException failure) { throw new ClassNotFoundException(name, failure); }
+        }
         return c;
     }
 
@@ -81,14 +111,35 @@ public final class AppClassLoader extends URLClassLoader implements Function<Str
         AppClassLoader libs = libraries;
         Class<?> c = libs == null ? null : libs.apply(name);
         if (c != null) return c;
-        c = findLoadedClass(name);
+        c = ownLoadedClass(name);
         if (c != null) return c;
-        try { return findClass(name); }
+        try { return defineOwnClass(name); }
         catch (ClassNotFoundException missing) { return null; }
         catch (LinkageError duplicate) {  // another thread defined it first
-            c = findLoadedClass(name);
+            c = ownLoadedClass(name);
             if (c == null) throw duplicate;
             return c;
+        }
+    }
+
+    private Class<?> ownLoadedClass(String name) {
+        try { return (Class<?>) LOADED.invoke(definingLoader, name); }
+        catch (ReflectiveOperationException failure) { throw new IllegalStateException(failure); }
+    }
+
+    private Class<?> defineOwnClass(String name) throws ClassNotFoundException {
+        URL source = super.findResource(name.replace('.', '/') + ".class");
+        if (source == null) throw new ClassNotFoundException(name);
+        try (java.io.InputStream input = source.openStream()) {
+            byte[] bytes = input.readAllBytes();
+            return (Class<?>) DEFINE.invoke(definingLoader, name, bytes, 0, bytes.length);
+        } catch (java.lang.reflect.InvocationTargetException failure) {
+            Throwable cause = failure.getCause();
+            if (cause instanceof Error error) throw error;
+            if (cause instanceof RuntimeException runtime) throw runtime;
+            throw new ClassNotFoundException(name, cause);
+        } catch (ReflectiveOperationException | java.io.IOException failure) {
+            throw new ClassNotFoundException(name, failure);
         }
     }
 

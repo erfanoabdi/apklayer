@@ -39,7 +39,7 @@ try:
                 if '[hello-arm64] ART maps ' in text:
                     assert 'ART maps PASS' in text, text
                     passed = True
-        print('PASS APK ART maps: Java and six NDK reads', flush=True)
+        print('PASS APK ART maps: Java, NDK maps/NUMA reads and native module inspection', flush=True)
 finally:
     instance.stop()
     if run is not None:

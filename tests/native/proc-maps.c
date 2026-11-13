@@ -82,9 +82,61 @@ static void check_map_files(const char *directory, void *other, int filtered)
     for (int i = 0; i < 3; i++) assert(found[i] == !(filtered && i < 2));
 }
 
+static void strip_numa_file(char *line)
+{
+    char *file = strstr(line, " file=");
+    if (file) memmove(file, file + 6 + strcspn(file + 6, " \t\n"), strlen(file + 6 + strcspn(file + 6, " \t\n")) + 1);
+}
+static void numa_rows(FILE *f, void *other, char rows[3][2048])
+{
+    void *mappings[] = {a, b, other};
+    char *line = NULL; size_t cap = 0; int found = 0;
+    assert(f);
+    while (getline(&line, &cap, f) >= 0) {
+        unsigned long start;
+        if (sscanf(line, "%lx", &start) != 1) continue;
+        for (int i = 0; i < 3; i++) if (start == (unsigned long)mappings[i]) {
+            assert(strlen(line) < 2048); strcpy(rows[i], line); found++;
+        }
+    }
+    assert(!ferror(f) && found == 3); free(line); fclose(f);
+}
+static void check_numa(void *other, int filtered)
+{
+    char raw[3][2048], actual[3][2048];
+    const char *original = getenv("APKLAYER_PROC_VIEW");
+    char *saved = original ? strdup(original) : NULL;
+    assert(!setenv("APKLAYER_PROC_VIEW", "host", 1));
+    FILE *host = fopen("/proc/self/numa_maps", "r");
+    int error = errno;
+    if (saved) { assert(!setenv("APKLAYER_PROC_VIEW", saved, 1)); free(saved); }
+    else assert(!unsetenv("APKLAYER_PROC_VIEW"));
+    if (!host) { assert(error == ENOENT); return; } /* kernels without CONFIG_NUMA have no file */
+    numa_rows(host, other, raw);
+    for (int i = 0; i < 3; i++) assert(strstr(raw[i], " N") && strstr(raw[i], "kernelpagesize_kB="));
+    char numeric[128]; snprintf(numeric, sizeof numeric, "/proc/%d/task/%ld/numa_maps", getpid(), syscall(SYS_gettid));
+    const char *paths[] = {"/proc/self/numa_maps", "/proc/thread-self/numa_maps", numeric};
+    for (int alias = 0; alias < 3; alias++) {
+        for (int api = 0; api < 3; api++) {
+            FILE *f = api == 0 ? fopen(paths[alias], "r") : fdopen(api == 1 ? open(paths[alias], O_RDONLY) : syscall(SYS_openat, AT_FDCWD, paths[alias], O_RDONLY, 0), "r");
+            numa_rows(f, other, actual);
+            for (int i = 0; i < 3; i++) {
+                if (filtered && i == 0) assert(strstr(actual[i], "/libart.so") && !strstr(actual[i], "/libjvm.so"));
+                else if (filtered && i == 1) assert(!strstr(actual[i], " file="));
+                else assert(!strcmp(raw[i], actual[i]));
+                char expected[2048]; strcpy(expected, raw[i]); strip_numa_file(expected); strip_numa_file(actual[i]);
+                assert(!strcmp(expected, actual[i])); /* address, policy and all page/node counters preserved */
+            }
+        }
+    }
+    int dir = open("/proc/self", O_RDONLY | O_DIRECTORY); assert(dir >= 0);
+    numa_rows(fdopen(openat(dir, "numa_maps", O_RDONLY), "r"), other, actual); close(dir);
+    assert(!filtered || (strstr(actual[0], "/libart.so") && !strstr(actual[1], " file=")));
+}
+
 int main(void)
 {
-    char root[] = "/tmp/apklayer-maps-XXXXXX", path[512], jvm[512], java[512]; assert(mkdtemp(root));
+    char root[] = "/tmp/apklayer maps-XXXXXX", path[512], jvm[512], java[512]; assert(mkdtemp(root));
     snprintf(path, sizeof path, "%s/lib", root); assert(!mkdir(path, 0700));
     snprintf(path, sizeof path, "%s/lib/server", root); assert(!mkdir(path, 0700));
     snprintf(jvm, sizeof jvm, "%s/lib/server/libjvm.so", root);
@@ -93,6 +145,7 @@ int main(void)
     char guestroot[] = "/tmp/apklayer-guest-XXXXXX", guest[512]; assert(mkdtemp(guestroot));
     snprintf(guest, sizeof guest, "%s/guest.so", guestroot);
     void *other = mapping(guest);
+    assert(*(volatile unsigned char *)a == 0 && *(volatile unsigned char *)b == 0 && *(volatile unsigned char *)other == 0);
     int filtered = getenv("APKLAYER_OWN_DATA") && !getenv("APKLAYER_PROC_VIEW");
     const char *paths[] = {"/proc/self/maps", "/proc/thread-self/maps", path};
     snprintf(path, sizeof path, "/proc/%d/task/%ld/maps", getpid(), syscall(SYS_gettid));
@@ -109,6 +162,7 @@ int main(void)
     check(fdopen(openat(dir, "maps", O_RDONLY), "r"), filtered); close(dir);
     FILE *reopened = fopen("/dev/null", "r"); assert(reopened);
     check(freopen("/proc/self/maps", "r", reopened), filtered);
+    check_numa(other, filtered);
     check_map_files("/proc/self/map_files", other, filtered);
     /* map_files is process-only: Linux task directories expose maps/smaps but no map_files. */
     snprintf(path, sizeof path, "/proc/%d/map_files", getpid());
@@ -119,6 +173,7 @@ int main(void)
     assert(!unlink(path));
     assert(!unlink(jvm)); /* deleted JDK mappings keep the same identity */
     check(fopen("/proc/self/maps", "r"), filtered);
+    check_numa(other, filtered);
     check_map_files("/proc/self/map_files", other, filtered);
     assert(!munmap(other, 4096) && !unlink(guest) && !rmdir(guestroot));
     assert(!munmap(a, 4096) && !munmap(b, 4096)); assert(!unlink(java));

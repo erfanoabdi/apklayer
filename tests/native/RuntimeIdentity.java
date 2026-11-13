@@ -17,7 +17,27 @@ public final class RuntimeIdentity {
             } catch (ClassNotFoundException absent) { System.out.println("class " + name + "=absent"); }
         }
         System.out.println("loader app=" + RuntimeIdentity.class.getClassLoader());
+        runtime();
+        field("java.lang.reflect.Executable", "artMethod");
+        field("java.lang.Class", "methods");
         try { throw new Exception("runtime identity trace"); }
         catch (Exception trace) { for (StackTraceElement frame : trace.getStackTrace()) System.out.println("frame " + frame); }
+    }
+    private static void runtime() {
+        try {
+            Class<?> type = Class.forName("dalvik.system.VMRuntime");
+            Object runtime = type.getMethod("getRuntime").invoke(null);
+            for (String name : new String[]{"vmVersion", "vmLibrary", "vmInstructionSet",
+                    "getCurrentInstructionSet", "is64Bit", "getTargetHeapUtilization"}) {
+                try { System.out.println("runtime " + name + "=" + type.getMethod(name).invoke(runtime)); }
+                catch (ReflectiveOperationException unavailable) { System.out.println("runtime " + name + "=" + unavailable); }
+            }
+        } catch (ReflectiveOperationException unavailable) { System.out.println("runtime absent=" + unavailable); }
+    }
+    private static void field(String owner, String name) {
+        try {
+            java.lang.reflect.Field field = Class.forName(owner).getDeclaredField(name);
+            System.out.println("field " + owner + "." + name + "=" + field.getType().getName());
+        } catch (ReflectiveOperationException absent) { System.out.println("field " + owner + "." + name + "=absent"); }
     }
 }

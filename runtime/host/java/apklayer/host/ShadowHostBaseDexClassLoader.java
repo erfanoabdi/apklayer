@@ -1,6 +1,7 @@
 package apklayer.host;
 
 import io.github.kksimp.dex2jvm.DexConverter;
+import apklayer.tools.DenyInstrument;
 import dalvik.system.BaseDexClassLoader;
 import java.nio.ByteBuffer;
 import org.robolectric.annotation.Implementation;
@@ -19,6 +20,7 @@ import org.robolectric.util.ReflectionHelpers.ClassParameter;
 public class ShadowHostBaseDexClassLoader {
     @RealObject private BaseDexClassLoader real;
     private DexConverter.Session session;
+    private DenyInstrument transformer;
 
     @Implementation
     protected void __constructor__(ByteBuffer[] dexFiles, String librarySearchPath, ClassLoader parent) {
@@ -33,7 +35,17 @@ public class ShadowHostBaseDexClassLoader {
                 dexes[i] = new byte[b.remaining()];
                 b.get(dexes[i]);
             }
-            session = DexConverter.open(dexes);
+            DexConverter.Session opened = DexConverter.open(dexes);
+            DenyInstrument processing = new DenyInstrument(parent, true);
+            for (var file : opened.dexFiles()) {
+                for (var cls : file.classes()) {
+                    java.util.Set<String> methods = new java.util.HashSet<>();
+                    for (var method : cls.methods()) methods.add(method.name() + method.descriptor());
+                    processing.addClass(cls.name(), cls.superclassName(), methods);
+                }
+            }
+            transformer = processing;
+            session = opened;
         } catch (Throwable t) {
             System.err.println("[apklayer] in-memory dex not converted: " + t);
         }
@@ -47,10 +59,15 @@ public class ShadowHostBaseDexClassLoader {
                 Class<?> loaded = ReflectionHelpers.callInstanceMethod(real, "findLoadedClass",
                         ClassParameter.from(String.class, name.replace('/', '.')));
                 if (loaded != null) return loaded;
-                byte[] bytes = session.classBytes(internal);
+                String source = transformer.sourceName(internal);
+                // Original java.* names cannot be defined by a non-boot JVM loader; converted
+                // references already request the relocated name, just like installed jars.
+                if (!transformer.mappedName(source).equals(internal)) throw new ClassNotFoundException(name);
+                byte[] bytes = session.classBytes(source);
                 if (bytes != null) {
+                    bytes = transformer.transform(bytes);
                     return ReflectionHelpers.callInstanceMethod(real, "defineClass",
-                            ClassParameter.from(String.class, name.replace('/', '.')),
+                            ClassParameter.from(String.class, transformer.mappedName(source).replace('/', '.')),
                             ClassParameter.from(byte[].class, bytes), ClassParameter.from(int.class, 0),
                             ClassParameter.from(int.class, bytes.length));
                 }

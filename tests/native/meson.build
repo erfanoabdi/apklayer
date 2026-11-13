@@ -47,3 +47,19 @@ if is_variable('apklayer_preload')
   test('proc-maps-java', find_program('java'), args: [meson.current_source_dir() / 'ArtMaps.java'],
     env: ['LD_PRELOAD=' + apklayer_preload.full_path(), 'APKLAYER_OWN_DATA=hello.maps:10001,3003,9997,20001,50001:/tmp/hello.maps'], suite: 'bionic', timeout: 30)
 endif
+
+if is_variable('apklayer_preload') and is_variable('dl_bio')
+  module_fixture = shared_module('module-view-lib', 'module-view-lib.c',
+    c_args: ['-fasynchronous-unwind-tables', '-fno-optimize-sibling-calls'], link_args: ['-Wl,--eh-frame-hdr'])
+  module_test = executable('module-view-test', 'module-view.c', dependencies: [dependency('dl')])
+  foreach mode : ['app', 'host', 'service']
+    module_env = ['LD_PRELOAD=' + apklayer_preload.full_path(), 'LD_LIBRARY_PATH=' + fs.parent(dl_bio.full_path())]
+    if mode != 'service'
+      module_env += ['APKLAYER_OWN_DATA=hello.modules:10001:/tmp/hello.modules']
+    endif
+    if mode == 'host'
+      module_env += ['APKLAYER_PROC_VIEW=host']
+    endif
+    test('module-view-' + mode, module_test, args: [dl_bio, module_fixture], env: module_env, suite: 'bionic', timeout: 30)
+  endforeach
+endif

@@ -53,7 +53,7 @@ public class Main extends Activity {
                             && !maps.contains("libjava.so") && !maps.contains("/lib/modules") && !maps.contains(".jsa");
                 } catch (java.io.IOException e) { throw new AssertionError(e); }
             }
-            boolean ok = javaMaps && nativeBits == 63 && "Dalvik".equals(System.getProperty("java.vm.name"));
+            boolean ok = javaMaps && nativeBits == 255 && "Dalvik".equals(System.getProperty("java.vm.name"));
             log("ART maps " + (ok ? "PASS" : "FAIL") + " java=" + javaMaps + " nativeBits=" + nativeBits);
             TextView text = new TextView(this); text.setText("ART maps: " + ok); setContentView(text);
             return;

@@ -17,6 +17,15 @@ int apklayer_app_groups(gid_t *out, size_t capacity);
 int apklayer_proc_is_dir(int fd);
 int apklayer_proc_pid_hidden(const char *name);
 
+static int proc_file_kind(const char *leaf)
+{
+    if (!strcmp(leaf, "maps") || !strcmp(leaf, "smaps")) return 1;
+    if (!strcmp(leaf, "status")) return 2;
+    if (!strcmp(leaf, "map_files")) return 3;
+    if (!strcmp(leaf, "numa_maps")) return 4;
+    return 0;
+}
+
 /* Resolve the opened file, so relative openat, symlinks and per-thread spellings share one check. */
 static int own_proc_file(int fd)
 {
@@ -30,11 +39,11 @@ static int own_proc_file(int fd)
     int end = 0;
     if (sscanf(path, "/proc/%lu/%15s%n", &pid, leaf, &end) == 2 && end && !path[end] && !strchr(leaf, '/')) {
         snprintf(task, sizeof task, "/proc/self/task/%lu", pid);
-        return access(task, F_OK) == 0 ? ((!strcmp(leaf, "maps") || !strcmp(leaf, "smaps")) ? 1 : !strcmp(leaf, "status") ? 2 : !strcmp(leaf, "map_files") ? 3 : 0) : 0;
+        return access(task, F_OK) == 0 ? proc_file_kind(leaf) : 0;
     }
     end = 0;
     return sscanf(path, "/proc/%lu/task/%lu/%15s%n", &pid, &tid, leaf, &end) == 3 && end && !path[end] && pid == (unsigned long)getpid()
-        ? ((!strcmp(leaf, "maps") || !strcmp(leaf, "smaps")) ? 1 : !strcmp(leaf, "status") ? 2 : !strcmp(leaf, "map_files") ? 3 : 0) : 0;
+        ? proc_file_kind(leaf) : 0;
 }
 
 static int app_proc_view(void)
@@ -62,6 +71,20 @@ static const char *jdk_root(void)
     }
     free(line); fclose(maps);
     return root;
+}
+
+/* Only bionic's dladdr/phdr callbacks call this; host loader and unwinder APIs stay untouched. */
+const char *apklayer_proc_module_name(const char *name)
+{
+    if (!name || !app_proc_view()) return name;
+    int saved = errno;
+    const char *root = jdk_root(); size_t len = strlen(root);
+    const char *result = name;
+    if (len && !strncmp(name, root, len) && name[len] == '/')
+        result = !strcmp(name + len, "/lib/server/libjvm.so")
+            ? (sizeof(void *) == 8 ? "/apex/com.android.art/lib64/libart.so" : "/apex/com.android.art/lib/libart.so") : "";
+    errno = saved;
+    return result;
 }
 
 int apklayer_proc_map_dir(int fd)
@@ -107,6 +130,26 @@ int apklayer_proc_map_hidden(int dirfd, const char *path)
     return hidden;
 }
 
+/* numa_maps escapes whitespace in file= tokens; replace only that token, retaining NUMA accounting. */
+static void numa_line(FILE *out, const char *line)
+{
+    const char *token = strstr(line, " file=");
+    if (!token) { fputs(line, out); return; }
+    const char *name = token + 6, *end = name + strcspn(name, " \t\n");
+    char decoded[PATH_MAX]; size_t used = 0;
+    for (const char *p = name; p < end && used + 1 < sizeof decoded; p++) {
+        if (*p == '\\' && end - p >= 4 && p[1] >= '0' && p[1] <= '7' && p[2] >= '0' && p[2] <= '7' && p[3] >= '0' && p[3] <= '7') {
+            decoded[used++] = (char)((p[1] - '0') * 64 + (p[2] - '0') * 8 + p[3] - '0'); p += 3;
+        } else decoded[used++] = *p;
+    }
+    decoded[used] = 0;
+    if (used >= 10 && !strcmp(decoded + used - 10, " (deleted)")) decoded[used - 10] = 0;
+    const char *projected = apklayer_proc_module_name(decoded);
+    if (projected == decoded) { fputs(line, out); return; }
+    fwrite(line, 1, (*projected ? name : token) - line, out);
+    fputs(projected, out); fputs(end, out);
+}
+
 /* fd remains owned by the caller, including on failure. */
 static int proc_filter(int fd)
 {
@@ -134,6 +177,7 @@ static int proc_filter(int fd)
     }
     if (ferror(in) || fseek(in, 0, SEEK_SET)) goto buffered;
     while (getline(&line, &cap, in) >= 0) {
+        if (kind == 4) { numa_line(buffer, line); continue; }
         if (kind == 2) {
             gid_t groups[16];
             int ngroups;

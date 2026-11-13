@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Fri, 13 Nov 2026 00:00:00 +0000
+Subject: [PATCH] linker: share app process module names with proc views
+
+apklayer patch (docs/PATCHES.md). The optional preload callback presents the
+same JDK module names as app maps/smaps. Only bionic callers see the projection:
+glibc and the JVM retain their own module names. Preserve real load biases,
+symbol addresses, unwind headers and 0054's protection of host PT_DYNAMIC.
+This changes names, not ELF contents or ART object layouts.
+
+--- a/linker/linker.h
++++ b/linker/linker.h
+@@ -29,6 +29,9 @@
+ #ifndef _LINKER_H_
+ #define _LINKER_H_
+ 
++/* apklayer patch: guest-only module names; optional when the host preload is absent. */
++extern const char *apklayer_proc_module_name(const char *) __attribute__((weak));
++
+ #include <elf.h>
+ #include <link.h>
+ #include <stdbool.h>
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -446,6 +446,8 @@
+ 	size = size < sizeof(android) ? size : sizeof(android);
+ 	memcpy(&android, info, size);
+ 	android.dlpi_phdr = apkenv_android_phdr(info);
++	if (apklayer_proc_module_name)
++		android.dlpi_name = apklayer_proc_module_name(android.dlpi_name);
+ 	return h->cb(&android, size, h->data);
+ }
+ 
+--- a/linker/dlfcn.c
++++ b/linker/dlfcn.c
+@@ -301,6 +301,8 @@
+ 		const struct dl_phdr_info *libdl = apkenv_libdl_phdr_info();
+ 		if (ret && libdl && (unsigned long)info->dli_fbase == bionic_getauxval(AT_BASE))
+ 			info->dli_fname = libdl->dlpi_name;
++		if (ret && apklayer_proc_module_name)
++			info->dli_fname = apklayer_proc_module_name(info->dli_fname);
+ 		return ret;
+ 	}
+ 

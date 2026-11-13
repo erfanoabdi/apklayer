@@ -25,6 +25,8 @@ public final class Main extends Activity {
         try {
             properties();
             ArtRuntimeChecks.run();
+            LoaderChecks.run(this);
+            DynamicDexChecks.run(this);
             text.setText("Runtime identity PASS");
             System.out.println("[hello-runtime] Runtime identity PASS");
         } catch (Throwable failure) {
