@@ -24,5 +24,5 @@ bin/apklayer exec libapklayer-no-such-tool.so >/dev/null 2>&1 || true  # the too
 store="$XDG_RUNTIME_DIR/apklayer/${APKLAYER_INSTANCE:-default}/properties"
 model=$(APKLAYER_PROPERTIES="$store" "$work/aprop" get ro.product.model) fingerprint=$(APKLAYER_PROPERTIES="$store" "$work/aprop" get ro.build.fingerprint)
 echo "exec without a stack: model '$model', fingerprint '$fingerprint'"
-test "$model" = "Linux desktop" && [[ $fingerprint == lineage/lineage_desktop/desktop:* ]]
+test "$model" = "Pixel 5" && [[ $fingerprint == google/redfin/redfin:* ]]
 echo 'PASS cross-process read-only, mutable and independent instance properties'

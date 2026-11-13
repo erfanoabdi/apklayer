@@ -9,15 +9,49 @@ ro.hardware.egl=apklayer
 ro.hardware.vulkan=apklayer
 ro.hardware.gralloc=apklayer
 ro.zygote=zygote64
-# The device an instance presents (what a device's vendor partition defines; the GSI's system values say "generic", which apps take for an
-# emulator). Android's Build.* and the native readers both see these; the fingerprint and the CPU ABI lists are derived at stack start (cli/stack.cpp).
-ro.product.brand=lineage
-ro.product.manufacturer=LineageOS
-ro.product.model=Linux desktop
-ro.product.device=desktop
-ro.product.name=lineage_desktop
-ro.product.board=apklayer
-ro.bootloader=apklayer
+# The device an instance presents (what a device's vendor partition defines; the GSI's system values say "generic", which apps take for an emulator).
+# Android's Build.* and the native readers both see these; the fingerprint and the CPU ABI lists are derived at stack start (cli/stack.cpp).
+# The default is a Google Pixel 5 (redfin, Snapdragon 765G): the same values as bridge/native/profiles/pixel5.prop (tools/device-profile.sh), whose CPU half
+# is `berberis.cpuinfo=pixel5` below (the translator's /proc/cpuinfo and MIDR_EL1). `apklayer prop set` overrides any of them per instance; tools/device-profile.sh
+# off sets the instance back to the generic desktop (profiles/desktop.prop). ro.hardware stays "apklayer": the graphics and gralloc modules are chosen by it.
+berberis.cpuinfo=pixel5
+ro.product.brand=google
+ro.product.manufacturer=Google
+ro.product.model=Pixel 5
+ro.product.device=redfin
+ro.product.name=redfin
+ro.product.board=redfin
+ro.board.platform=lito
+ro.bootloader=slider-1.2-7683913
+ro.soc.manufacturer=Qualcomm
+ro.soc.model=SM7250
+ro.hardware.chipname=SM7250
+ro.build.product=redfin
+ro.product.system.brand=google
+ro.product.system.manufacturer=Google
+ro.product.system.model=Pixel 5
+ro.product.system.device=redfin
+ro.product.system.name=redfin
+ro.product.vendor.brand=google
+ro.product.vendor.manufacturer=Google
+ro.product.vendor.model=Pixel 5
+ro.product.vendor.device=redfin
+ro.product.vendor.name=redfin
+ro.product.odm.brand=google
+ro.product.odm.manufacturer=Google
+ro.product.odm.model=Pixel 5
+ro.product.odm.device=redfin
+ro.product.odm.name=redfin
+ro.product.product.brand=google
+ro.product.product.manufacturer=Google
+ro.product.product.model=Pixel 5
+ro.product.product.device=redfin
+ro.product.product.name=redfin
+ro.product.system_ext.brand=google
+ro.product.system_ext.manufacturer=Google
+ro.product.system_ext.model=Pixel 5
+ro.product.system_ext.device=redfin
+ro.product.system_ext.name=redfin
 # a release build, as a shipped device reports (the tree is userdebug/test-keys, which root detectors flag); ro.debuggable is the tree's 0. The display id,
 # flavor and description that embed them are derived at stack start (cli/stack.cpp).
 ro.build.type=user
@@ -28,7 +62,7 @@ ro.system.build.tags=release-keys
 ro.build.user=android-build
 ro.build.host=localhost
 # a phone-class device (the GSI's system build.prop has none; Robolectric's says "robolectric", an emulator image "emulator")
-ro.build.characteristics=default
+ro.build.characteristics=nosdcard
 # SurfaceFlinger pre-compiles shaders at startup by rendering into dummy buffers of many formats; one of them cannot be wrapped as a
 # render target on the VM's virtio-gpu (Skia: "WrapBackendTexture failed to wrap the texture into a renderable target"). An optimisation
 # only: shaders compile at first use instead. To revisit when the failing format is known.

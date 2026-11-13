@@ -124,6 +124,7 @@ install_data('tools/sysapps.list', 'tools/release/setup-runtime.sh', 'tools/rele
 install_subdir('tools/host-setup', install_dir: share_dir / 'tools')
 install_data('runtime/host/jvm.args', install_dir: share_dir / 'runtime/host')
 install_data('bridge/native/apklayer.prop', 'bridge/native/bionic_translation.cfg', install_dir: share_dir / 'bridge/native')
+install_data('bridge/native/profiles/pixel5.prop', 'bridge/native/profiles/desktop.prop', install_dir: share_dir / 'bridge/native/profiles')  # tools/device-profile.sh
 # (its links to the libraries are copied as links: Meson's install_subdir fails on a link whose target is missing when it installs again)
 meson.add_install_script('sh', '-c', 'mkdir -p "$MESON_INSTALL_DESTDIR_PREFIX/$1" && cp -r --remove-destination "$2" "$MESON_INSTALL_DESTDIR_PREFIX/$1/"', 'sh',
   fs.relative_to(share_dir / 'bridge/native', get_option('prefix')), meson.project_source_root() / 'bridge/native/android-root')
