@@ -153,9 +153,8 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
   - Limits, by design: this is a filter, not a PID namespace: the app sees every process of its own cgroup scope (its JVMs, helpers), the pids are the host's,
     kill(pid, 0) and /proc/sys/kernel/ns_last_pid-style probes still tell that other pids exist (EPERM vs ESRCH); the sandbox applies the same filter (it
     shares the host's PID namespace; an uid-based Android view would need a PID namespace per app and host pids elsewhere).
-  - Needs a person (the owner, awake): install the new libberberis_arm64 (sha256 cc7c7e3f...) into ~/apklayer-fix, then `hello-arm64` (its new "proc view" line
-    must say ok, "uid" ok) and, with APKLAYER_SANDBOX=1 on the PC (needs the sudo sandbox.sh once), the same; then PGR with tools/ace/ace-proxy.bt to see
-    whether ACE's /proc probes are gone and whether it still ends.
+  - Installed on the NVIDIA PC and hello-arm64 passes (2026-11-13: `proc view ok`, `uid ok`; fails with the old libraries). Still to run: the same under
+    APKLAYER_SANDBOX=1 (needs the sudo sandbox.sh once), then PGR with tools/ace/ace-proxy.bt to see whether ACE's /proc probes are gone and whether it still ends.
 - binary_translation 0015: /proc/self/status still shows the real (desktop user's) ids to translated code.
 - 0006 refuses valid chunks at a retired glibc heap's end (next chunk = the 16-byte fencepost; Endfield's and PGR's libil2cpp frees, headers
   0x25/0x45/0x85/0x175/0xb5 just below a 64 MB boundary): accept the fencepost pair (size 16 | PREV_INUSE, then 0 | PREV_INUSE) so the 20

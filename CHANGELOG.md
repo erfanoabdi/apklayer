@@ -1658,7 +1658,8 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0018 (guest /proc/net, /sys/class/net denied; attr/current context)
 - Why: sandbox identity round: an app on Android gets EACCES for /proc/net and /sys/class/net and reads its SELinux context from attr/current;
   the guest read the desktop's. Same command as 0016, output kept in ~/los24-0018-build.log (Mac).
-- Result: `build completed successfully (09:14)`, no errors; library sha256 cc7c7e3ffc97886edd122d96aa116a6b5d105808cc699f57926e810697a927eb (0016-0018 in it). Not installed or run.
+- Result: `build completed successfully (09:14)`, no errors; library sha256 cc7c7e3ffc97886edd122d96aa116a6b5d105808cc699f57926e810697a927eb (0016-0018 in it). Not installed or run.- Installed on the NVIDIA PC (2026-11-13; the previous library in ~/apklayer-fix/orig/libberberis_arm64.0015.so, the preload link before in orig/preload-link-before-0016.txt) with the path layer's /proc filter (hand-built preload, ~/apklayer-fix/libapklayer-preload.so). hello-arm64 (rebuilt on the Mac): `uid ok 10020`, `proc view ok`, PASS, GL PASS. Control with the 0015 library and the old preload: `proc view WRONG bits 8`, FAIL. PGR and the sandbox not run.
+
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0016 (guest getdents64 on /proc hides other processes)
 - Why: Android's hidepid=invisible /proc view; the path layer hides other cgroups' pids from path calls and readdir, the translator's
   getdents64 on an open /proc fd needs the same (patches/aosp/.../0016).
