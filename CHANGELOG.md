@@ -1767,6 +1767,9 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Why: the owner asked for the instance to present a Google Pixel 5. Properties: tools/device-profile.sh pixel5 (bridge/native/profiles/pixel5.prop); the
   guest's /proc/cpuinfo and MIDR_EL1 follow `berberis.cpuinfo=pixel5`. Same command as 0016; output in ~/los24-0020-build.log (Mac).
 - Result: `build completed successfully (10:09)`, no errors; library sha256 0009eb5f2e79879131cdea88538ab897a3dd7342f3a32800e8f257f42fac27c5 (0016-0020).
+### 2026-11-13 - gsi_x86_64 libberberis_proxy_libc: binary_translation 0027 (describe a main-arena chunk outside the main heap)
+- Why: PGR on the deb + 0025 ends in glibc's `double free or corruption (out)` with no refused free logged (three runs, chunks 7168/6144 bytes at 0x7b43...): NotAGlibcChunk accepted them. Diagnostics only (BERBERIS_LOG_FREES=1): a main-arena chunk outside [MainHeapStart, sbrk(0)) is described (the range, header, next header, guest caller). Applied to the Mac tree after 0026.
+  Command: `flock -n ~/los24-build.lock` `breakfast gsi_x86_64 userdebug && m libberberis_proxy_libc` (APKLAYER_NATIVE_BRIDGE=arm64); output in ~/los24-0027-build.log (Mac).
 ### 2026-11-13 - gsi_x86_64 libberberis_proxy_libc: binary_translation 0026 (invalid frees say why, and whether the guest freed the pointer before)
 - Why: the owner asked to fix PGR's 20 invalid frees. 0006's line says only "no glibc chunk" and its cap of 20 hides the real count; before a fix the cause has to be known. Diagnostics only:
   the failing check is named, BERBERIS_LOG_FREES=1 keeps the last 65536 frees and cap 2000 (power-of-two count lines beyond). Independent of 0025 (not applied). `m libberberis_proxy_libc`;

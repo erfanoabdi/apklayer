@@ -1,0 +1,71 @@
+From: Wesley van Neck <wesleyvanneck550@gmail.com>
+Subject: [PATCH] free check: describe a main-arena chunk outside the main heap (PGR's glibc abort past 0006)
+
+PGR (deb bc12ccc4 + 0025, 2026-11-13, three runs) ends in glibc's "double free or corruption (out)" (_int_free_merge_chunk p=0x7ff028024cd0 size 7168; p=0x7b439003e590
+size 6144) from libberberis_arm64 WrapHostCallForGuestErrno -> free, with no refused free logged: NotAGlibcChunk accepted the chunk. A main-arena chunk is judged
+against [MainHeapStart, sbrk(0)), and judged by its header alone when /proc/self/maps has no [heap] line, so a pointer into memory outside the main heap (or any
+pointer when [heap] is not found) passes when its words look like a chunk. With BERBERIS_LOG_FREES=1 each free (on entry, and the ring's evicted pointer) of a
+main-arena chunk outside that range is described (the range once, then 64 lines: header, next chunk's header, guest caller). Diagnostic only: free behaves as before.
+Applies after 0026-free-quarantine-diagnostics. Module libberberis_proxy_libc.
+
+diff --git a/android_api/libc/free_quarantine.cc b/android_api/libc/free_quarantine.cc
+--- a/android_api/libc/free_quarantine.cc
++++ b/android_api/libc/free_quarantine.cc
+@@ -342,6 +342,41 @@
+   return false;
+ }
+ 
++// apklayer patch (0027): BERBERIS_LOG_FREES=1 also describes a free that passed NotAGlibcChunk but whose main-arena chunk lies outside the
++// [heap] range the check used (or when the check had no [heap] at all and judged by the headers alone): PGR ends in glibc's "double free or corruption
++// (out)" on such chunks (p=0x7b43..., size 7168 and 6144) with no refused free logged. Once: what the check took as the main heap. Then at most 64 lines:
++// the chunk's header, its next chunk's header, the range, the guest caller. Nothing is changed: the pointer is freed as before.
++void DescribeOutsideMainHeap(void* ptr, const char* when) {
++  if (!LogFrees()) return;
++  static std::atomic<int> reported{0};
++  static std::atomic<bool> range_said{false};
++  const uintptr_t addr = reinterpret_cast<uintptr_t>(ptr);
++  if (addr % 16 != 0) return;
++  const size_t* words = reinterpret_cast<const size_t*>(ptr);
++  const size_t header = words[-1], size = header & ~static_cast<size_t>(7);
++  if (header & 6) return;  // non-main arena or mmapped: judged by their own checks
++  const uintptr_t lo = MainHeapStart(), hi = reinterpret_cast<uintptr_t>(sbrk(0));
++  char line[640];
++  if (!range_said.exchange(true)) {
++    int n = snprintf(line, sizeof line, "berberis: free check: main heap start 0x%lx (1 = no [heap] line in /proc/self/maps), sbrk(0) 0x%lx\n",
++                     static_cast<unsigned long>(lo), static_cast<unsigned long>(hi));
++    if (n > 0) write(2, line, static_cast<size_t>(n) < sizeof line ? static_cast<size_t>(n) : sizeof line - 1);
++  }
++  const uintptr_t chunk = addr - 2 * sizeof(size_t);
++  if (lo != 1 && chunk >= lo && chunk + size <= hi) return;  // inside the main heap: what the check verified
++  if (reported.fetch_add(1, std::memory_order_relaxed) >= 64) return;
++  size_t next_header = 0;
++  const uintptr_t next = chunk + size;
++  if (size >= 32 && size <= (static_cast<size_t>(64) << 20) && next % 16 == 0) {
++    unsigned char vec;
++    if (mincore(reinterpret_cast<void*>(next & ~static_cast<uintptr_t>(4095)), 1, &vec) == 0) next_header = reinterpret_cast<const size_t*>(next)[1];
++  }
++  int n = snprintf(line, sizeof line,
++                   "berberis: free(%p) %s: main-arena chunk outside the main heap [0x%lx, 0x%lx) (header 0x%zx, next chunk's header 0x%zx, guest caller 0x%lx, tid %d)\n",
++                   ptr, when, static_cast<unsigned long>(lo), static_cast<unsigned long>(hi), header, next_header, CurrentGuestLr(), static_cast<int>(gettid()));
++  if (n > 0) write(2, line, static_cast<size_t>(n) < sizeof line ? static_cast<size_t>(n) : sizeof line - 1);
++}
++
+ }  // namespace
+ #endif  // NATIVE_BRIDGE_GUEST_ARCH_ARM64
+ 
+@@ -355,6 +390,7 @@
+     ReportInvalidFree(ptr, __builtin_return_address(0), "on entry");
+     return;
+   }
++  DescribeOutsideMainHeap(ptr, "on entry");  // apklayer patch (0027): the diagnostic only
+   RecordFree(ptr);  // apklayer patch (0026): only a pointer that passed the check, so a later free of it can name this one
+   // kuloPo/Kemu 8e1b5512 (apklayer 0022), after the chunk check above: malloc_usable_size reads the chunk header, which an invalid pointer must not
+   // reach (0006).
+@@ -374,6 +410,7 @@
+     return;
+   }
+   if (evicted != nullptr) {
++    DescribeOutsideMainHeap(evicted, "at eviction");  // apklayer patch (0027): the diagnostic only
+     __real_free(evicted);
+   }
+   return;
