@@ -20,6 +20,8 @@ if is_variable('c_bio')
     args: [dl_bio, 'libplt-hook-lib.so'], depends: plt_hook_lib, suite: 'bionic', timeout: 30,
     env: ['LD_LIBRARY_PATH=' + bt_dir, 'BIONIC_LD_LIBRARY_PATH=' + meson.current_build_dir()])
   # bionic code's path functions through the path layer (paths.c, as the shim installs it)
+  test('etc-files', executable('etc-files-test', ['etc-files.c', '../../bridge/native/paths.c'], dependencies: [native_dl], c_args: ['-U_FILE_OFFSET_BITS']),
+    args: [meson.project_source_root() / 'bridge/native/android-root'], suite: 'bionic', timeout: 30)
   test('bionic-paths', executable('bionic-paths-test', ['bionic-paths.c', '../../bridge/native/paths.c'], dependencies: [native_dl], c_args: ['-U_FILE_OFFSET_BITS']),
     args: [c_bio], env: ['LD_LIBRARY_PATH=' + bt_dir], suite: 'bionic', timeout: 30)
 endif
