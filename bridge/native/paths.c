@@ -263,7 +263,7 @@ int apklayer_proc_pid_hidden(const char *name)
 }
 
 /* whether the directory `dirfd` (AT_FDCWD: the working directory) is /proc */
-static int dir_is_proc(int dirfd)
+int apklayer_proc_is_dir(int dirfd)
 {
     static __thread int busy;
     struct stat here, proc;
@@ -289,7 +289,7 @@ int apklayer_proc_hidden(const char *path)
     if (path[0] != '/') {  /* relative to a working directory that is /proc */
         const char *c = path;
         while (!strncmp(c, "./", 2)) c += 2;
-        return *c >= '0' && *c <= '9' && dir_is_proc(AT_FDCWD) && proc_rel_hidden(c);
+        return *c >= '0' && *c <= '9' && apklayer_proc_is_dir(AT_FDCWD) && proc_rel_hidden(c);
     }
     size_t len = strlen(path);
     if (len < 6 || len >= PATH_MAX || !strstr(path, "proc")) return 0;
@@ -323,7 +323,7 @@ int apklayer_proc_hidden_at(int dirfd, const char *path)
     if (!path || path[0] == '/' || dirfd == AT_FDCWD) return apklayer_proc_hidden(path);
     const char *c = path;
     while (!strncmp(c, "./", 2)) c += 2;
-    return *c >= '0' && *c <= '9' && dir_is_proc(dirfd) && proc_rel_hidden(c);
+    return *c >= '0' && *c <= '9' && apklayer_proc_is_dir(dirfd) && proc_rel_hidden(c);
 }
 
 bool apklayer_apply_path_overrides(char **path);

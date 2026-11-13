@@ -30,6 +30,7 @@ endif
 
 if is_variable('apklayer_preload')
   maps_test = executable('proc-maps-test', 'proc-maps.c')
+  status_test = executable('proc-status-test', 'proc-status.c')
   foreach mode : ['app', 'host', 'service']
     maps_env = ['LD_PRELOAD=' + apklayer_preload.full_path()]
     if mode != 'service'
@@ -39,6 +40,7 @@ if is_variable('apklayer_preload')
       maps_env += ['APKLAYER_PROC_VIEW=host']
     endif
     test('proc-maps-' + mode, maps_test, env: maps_env, suite: 'bionic', timeout: 30)
+    test('proc-status-' + mode, status_test, env: maps_env, suite: 'bionic', timeout: 30)
   endforeach
   test('proc-maps-java', find_program('java'), args: [meson.current_source_dir() / 'ArtMaps.java'],
     env: ['LD_PRELOAD=' + apklayer_preload.full_path(), 'APKLAYER_OWN_DATA=hello.maps:10001:/tmp/hello.maps'], suite: 'bionic', timeout: 30)

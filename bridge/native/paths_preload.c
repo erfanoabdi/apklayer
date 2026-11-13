@@ -20,8 +20,9 @@
 #include <unistd.h>
 
 bool apklayer_apply_path_overrides(char **path);
-int apklayer_maps_fd(int fd);
-FILE *apklayer_maps_file(FILE *file);
+int apklayer_proc_fd(int fd);
+long apklayer_proc_getdents64(int fd, void *buf, size_t count);
+FILE *apklayer_proc_file(FILE *file);
 int apklayer_proc_pid_hidden(const char *name);
 int apklayer_proc_hidden_at(int dirfd, const char *path);  /* paths.c: path (relative to dirfd) names a process this app does not see */
 int apklayer_data_entry_hidden(const char *name);  /* paths.c: a name in /data/data that is not this app's package */
@@ -57,12 +58,12 @@ int apklayer_broker_change(const char *op, int dirfd, const char *path, int dirf
 #define SYSCALL(...) ((long (*)(long, ...))REAL(syscall))(__VA_ARGS__)
 #define KSTAT(dirfd, path, st, flags) (int)SYSCALL(SYS_newfstatat, (long)(dirfd), (long)(path), (long)(st), (long)(flags))
 
-int open(const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open))(m, flags, mode); BROKER(r, m, flags, mode); DONE(m); return apklayer_maps_fd(r); }
-int open64(const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open64))(m, flags, mode); BROKER(r, m, flags, mode); DONE(m); return apklayer_maps_fd(r); }
-int __open_2(const char *path, int flags) { MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open))(m, flags, 0); BROKER(r, m, flags, 0); DONE(m); return apklayer_maps_fd(r); }
-int __open64_2(const char *path, int flags) { MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open64))(m, flags, 0); BROKER(r, m, flags, 0); DONE(m); return apklayer_maps_fd(r); }
-int openat(int dirfd, const char *path, int flags, ...) { int mode; MODE(flags, mode); PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; ROUTE(use, flags); int r = ((int (*)(int, const char *, int, ...))REAL(openat))(dirfd, use, flags, mode); r = apklayer_broker_openat(dirfd, use, flags, mode, r); DONE(m); return apklayer_maps_fd(r); }
-int openat64(int dirfd, const char *path, int flags, ...) { int mode; MODE(flags, mode); PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; ROUTE(use, flags); int r = ((int (*)(int, const char *, int, ...))REAL(openat64))(dirfd, use, flags, mode); r = apklayer_broker_openat(dirfd, use, flags, mode, r); DONE(m); return apklayer_maps_fd(r); }
+int open(const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open))(m, flags, mode); BROKER(r, m, flags, mode); DONE(m); return apklayer_proc_fd(r); }
+int open64(const char *path, int flags, ...) { int mode; MODE(flags, mode); MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open64))(m, flags, mode); BROKER(r, m, flags, mode); DONE(m); return apklayer_proc_fd(r); }
+int __open_2(const char *path, int flags) { MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open))(m, flags, 0); BROKER(r, m, flags, 0); DONE(m); return apklayer_proc_fd(r); }
+int __open64_2(const char *path, int flags) { MAP(m, path); ROUTE(m, flags); int r = ((int (*)(const char *, int, ...))REAL(open64))(m, flags, 0); BROKER(r, m, flags, 0); DONE(m); return apklayer_proc_fd(r); }
+int openat(int dirfd, const char *path, int flags, ...) { int mode; MODE(flags, mode); PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; ROUTE(use, flags); int r = ((int (*)(int, const char *, int, ...))REAL(openat))(dirfd, use, flags, mode); r = apklayer_broker_openat(dirfd, use, flags, mode, r); DONE(m); return apklayer_proc_fd(r); }
+int openat64(int dirfd, const char *path, int flags, ...) { int mode; MODE(flags, mode); PROC_GONE(dirfd, path); MAP(m, path && path[0] == '/' ? path : NULL); const char *use = m ? m : path; ROUTE(use, flags); int r = ((int (*)(int, const char *, int, ...))REAL(openat64))(dirfd, use, flags, mode); r = apklayer_broker_openat(dirfd, use, flags, mode, r); DONE(m); return apklayer_proc_fd(r); }
 int __openat_2(int dirfd, const char *path, int flags) { return openat(dirfd, path, flags, 0); }
 int __openat64_2(int dirfd, const char *path, int flags) { return openat64(dirfd, path, flags, 0); }
 /* fopen's open is glibc's own (not the wrapper above): a refused one goes to the broker here, with the flags its mode means */
@@ -79,8 +80,8 @@ static FILE *broker_fopen(const char *path, const char *mode, FILE *r)
     if (!f) close(fd);
     return f;
 }
-FILE *fopen(const char *path, const char *mode) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *))REAL(fopen))(m, mode); r = broker_fopen(m, mode, r); DONE(m); return apklayer_maps_file(r); }
-FILE *fopen64(const char *path, const char *mode) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *))REAL(fopen64))(m, mode); r = broker_fopen(m, mode, r); DONE(m); return apklayer_maps_file(r); }
+FILE *fopen(const char *path, const char *mode) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *))REAL(fopen))(m, mode); r = broker_fopen(m, mode, r); DONE(m); return apklayer_proc_file(r); }
+FILE *fopen64(const char *path, const char *mode) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *))REAL(fopen64))(m, mode); r = broker_fopen(m, mode, r); DONE(m); return apklayer_proc_file(r); }
 int access(const char *path, int mode) { MAP(m, path); if (apklayer_binder_route_exists(m)) { DONE(m); return 0; } int r = ((int (*)(const char *, int))REAL(access))(m, mode); CHANGE(r, "access", AT_FDCWD, m, mode); DONE(m); return r; }
 int stat(const char *path, struct stat *st) { MAP(m, path); void *f = REAL(stat); int r = f ? ((int (*)(const char *, struct stat *))f)(m, st) : KSTAT(AT_FDCWD, m, st, 0); BROKER_STAT(r, m, 0, fstat(fd_, st)); DONE(m); return r; }
 int stat64(const char *path, struct stat64 *st) { MAP(m, path); void *f = REAL(stat64); int r = f ? ((int (*)(const char *, struct stat64 *))f)(m, st) : KSTAT(AT_FDCWD, m, st, 0); BROKER_STAT(r, m, 0, fstat64(fd_, st)); DONE(m); return r; }
@@ -256,8 +257,8 @@ int renameat2(int fd1, const char *from, int fd2, const char *to, unsigned int f
     if (!flags) r = apklayer_broker_change("rename", fd1, a_use, fd2, b_use, 0, r);  /* RENAME_NOREPLACE/EXCHANGE: not brokered */
     DONE(a); DONE(b); return r;
 }
-FILE *freopen(const char *path, const char *mode, FILE *f) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *, FILE *))REAL(freopen))(m, mode, f); DONE(m); return apklayer_maps_file(r); }
-FILE *freopen64(const char *path, const char *mode, FILE *f) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *, FILE *))REAL(freopen64))(m, mode, f); DONE(m); return apklayer_maps_file(r); }
+FILE *freopen(const char *path, const char *mode, FILE *f) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *, FILE *))REAL(freopen))(m, mode, f); DONE(m); return apklayer_proc_file(r); }
+FILE *freopen64(const char *path, const char *mode, FILE *f) { MAP(m, path); FILE *r = ((FILE * (*)(const char *, const char *, FILE *))REAL(freopen64))(m, mode, f); DONE(m); return apklayer_proc_file(r); }
 int scandir(const char *path, struct dirent ***list, int (*filter)(const struct dirent *), int (*compare)(const struct dirent **, const struct dirent **)) {
     MAP(m, path); int r = ((int (*)(const char *, struct dirent ***, void *, void *))REAL(scandir))(m, list, filter, compare); DONE(m); return r;
 }
@@ -304,6 +305,7 @@ long syscall(long nr, ...)
     long a[6];
     for (int i = 0; i < 6; i++) a[i] = va_arg(ap, long);
     va_end(ap);
+    if (nr == SYS_getdents64) return apklayer_proc_getdents64((int)a[0], (void *)a[1], (size_t)a[2]);
     int at = nr == SYS_openat || nr == SYS_newfstatat || nr == SYS_faccessat || nr == SYS_readlinkat || nr == SYS_statx || nr == SYS_mkdirat ||
              nr == SYS_unlinkat || nr == SYS_fchmodat || nr == SYS_fchownat || nr == SYS_utimensat || nr == SYS_mknodat ||
              nr == SYS_renameat || nr == SYS_renameat2 || nr == SYS_linkat
@@ -324,6 +326,6 @@ long syscall(long nr, ...)
 #ifdef SYS_open
         || nr == SYS_open
 #endif
-    ) return apklayer_maps_fd((int)r);
+    ) return apklayer_proc_fd((int)r);
     return nr == SYS_readlinkat ? proc_link(path, (char *)a[2], r) : r;
 }
