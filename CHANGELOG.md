@@ -1657,7 +1657,9 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
   Library sha256 6129c8621b3e62dfd4a38b955195188683b93f13da68466a9c2fb7b7ae4e3567. Not installed or run (no PGR while the user sleeps).
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0021 (the lite tier's MIDR_EL1 follows the device profile)
 - Why: with 0020 installed, hello-arm64 on a pixel5 instance still read MIDR_EL1 0x410fd034: the lite tier's Mrs (lite_translator_integer_ctrl.inc) loads the
-  constant itself. Same command as 0016; output in ~/los24-0021-build.log (Mac). Status: RUNNING.
+  constant itself. Same command as 0016; output in ~/los24-0021-build.log (Mac).
+- Result: `build completed successfully (10:01)`, no errors; library sha256 7020a749e21f2526688f48d0ae10457fa4a63c09129887945b44969fb473df2b (0016-0021).
+- Installed on the NVIDIA PC (previous library in ~/apklayer-fix/orig/libberberis_arm64.0020.so). hello-arm64 on the scratch instance `pxl` (tools/device-profile.sh pixel5): Google / Pixel 5 / redfin, fingerprint google/redfin/redfin:17/..., `profile cpu 8 cores, part first 0x805 last 0x804, MIDR_EL1 0x51df805e`, PASS, GL PASS; on the default instance unchanged (12 cores, 0xd05, 0x410fd034).
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0020 (guest CPU follows a device profile: Pixel 5)
 - Why: the owner asked for the instance to present a Google Pixel 5. Properties: tools/device-profile.sh pixel5 (bridge/native/profiles/pixel5.prop); the
   guest's /proc/cpuinfo and MIDR_EL1 follow `berberis.cpuinfo=pixel5`. Same command as 0016; output in ~/los24-0020-build.log (Mac).
