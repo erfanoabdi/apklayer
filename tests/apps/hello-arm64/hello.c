@@ -1,4 +1,5 @@
 /* An arm64-only JNI library (hello-arm64): on an x86_64 host it runs only through the native bridge (docs/history/PLAN-2026-11-10.md "apps built for another CPU"). */
+#define _GNU_SOURCE  /* cpu_set_t, CPU_COUNT (the device-profile lines) */
 #include <dlfcn.h>
 #include <dirent.h>
 #include <errno.h>
