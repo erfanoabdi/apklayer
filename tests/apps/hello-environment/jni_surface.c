@@ -1,6 +1,7 @@
 /* The JNI surface ART gives app code (JniSurfaceChecks compares with Android 13): GetVersion, libnativehelper's invocation API
  * (JNI_GetCreatedJavaVMs returns the app's VM, JNI_GetDefaultJavaVMInitArgs and JNI_CreateJavaVM fail), FindClass on a natively
  * attached thread (the system class loader: no app classes) and the native name an attached thread gets. */
+#define _GNU_SOURCE  /* pthread_getname_np */
 #include <dlfcn.h>
 #include <jni.h>
 #include <pthread.h>
