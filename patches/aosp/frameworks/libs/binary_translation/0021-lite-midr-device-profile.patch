@@ -1,0 +1,47 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: the lite tier's MIDR_EL1 follows the device profile too
+
+0020 made the interpreter return the Pixel 5's MIDR_EL1 (0x51DF805E) under `berberis.cpuinfo=pixel5`, but a guest `mrs x0, midr_el1` still read the
+generic Cortex-A53's 0x410FD034 (hello-arm64 "profile cpu": MIDR_EL1 0x410fd034 on the profiled instance): translated code runs in the lite tier,
+whose Mrs (lite_translator_integer_ctrl.inc) loads the constant itself so a CPU-detect read needs no region exit. It now takes the same setting
+(read once, when the first region is translated; the heavy tier bails on the register to this one). Applies after 0020. Module libberberis_arm64.
+
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator.h b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator.h
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator.h
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator.h
+@@ -19,6 +19,7 @@
+ 
+ #include <bitset>
+ #include <cstdint>
++#include <cstring>  // apklayer patch (0021): strcmp
+ #include <tuple>
+ #include <unordered_map>
+ #include <vector>
+@@ -26,6 +27,7 @@
+ #include "berberis/assembler/common.h"
+ #include "berberis/assembler/x86_64.h"
+ #include "berberis/base/checks.h"
++#include "berberis/base/config_globals.h"  // apklayer patch (0021): ConfigStr
+ #include "berberis/base/macros.h"
+ #include "berberis/decoder/arm64/decoder.h"
+ #include "berberis/decoder/arm64/semantics_player.h"
+diff --git a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc
+--- a/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc
++++ b/cpu_emulation/lite_translator/arm64_to_x86_64/lite_translator_integer_ctrl.inc
+@@ -741,9 +741,15 @@
+       // interpreter returns; keeping it JIT-resolved avoids a region
+       // exit on every CPU-detect MRS in hot code (Bionic ifunc
+       // resolvers, compression-lib feature probes).
++      // apklayer patch (0021): a device profile's core (berberis.cpuinfo; interpreter.h and FormatGuestCpuinfo read the same setting): pixel5 = Kryo 475
++      // Silver. The region is translated once, so the value is read when it is translated.
++      static const uint64_t midr = [] {
++        ConfigStr profile("BERBERIS_CPUINFO", "berberis.cpuinfo");
++        return profile.get() != nullptr && strcmp(profile.get(), "pixel5") == 0 ? 0x51DF805EULL : 0x410FD034ULL;
++      }();
+       Register res = AllocTempReg();
+       if (!success()) return no_register;
+-      as_.Movq(res, 0x410FD034ULL);
++      as_.Movq(res, midr);
+       return res;
+     }
+     Undefined();

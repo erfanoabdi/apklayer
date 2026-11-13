@@ -263,6 +263,25 @@ JNIEXPORT jstring JNICALL Java_hello_arm64_Main_layout(JNIEnv *env, jclass c, js
     return (*env)->NewStringUTF(env, out);
 }
 
+/* The CPU as translated code reads it (a device profile, binary_translation 0020): the cores in /proc/cpuinfo ("N cores, <implementer> <part> ...") and MIDR_EL1
+ * read directly with mrs (the translator emulates the register). */
+JNIEXPORT jstring JNICALL Java_hello_arm64_Main_cpuProfile(JNIEnv *env, jclass c)
+{
+    (void)c;
+    char out[256], l[256], first[96] = "", last[96] = "";
+    int cores = 0;
+    FILE *f = fopen("/proc/cpuinfo", "r");
+    while (f && fgets(l, sizeof l, f)) {
+        if (!strncmp(l, "processor", 9)) cores++;
+        if (!strncmp(l, "CPU part", 8)) { snprintf(last, sizeof last, "%s", strchr(l, ':') + 2); last[strcspn(last, "\n")] = 0; if (!first[0]) snprintf(first, sizeof first, "%s", last); }
+    }
+    if (f) fclose(f);
+    unsigned long midr = 0;
+    __asm__ volatile("mrs %0, midr_el1" : "=r"(midr));
+    snprintf(out, sizeof out, "%d cores, part first %s last %s, MIDR_EL1 0x%lx", cores, first, last, midr);
+    return (*env)->NewStringUTF(env, out);
+}
+
 /* exit-deadline.py native: the library ignores SIGTERM (signal) and then catches it (sigaction), as an app library may; 1 if both calls report
  * success. The process must still end on SIGTERM (bionic_translation 0064). */
 static void on_term(int sig) { (void)sig; }
