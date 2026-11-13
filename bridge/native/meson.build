@@ -8,7 +8,7 @@ c_bio = bt.get_variable('c_bio')
 jni_dep = dependency('jni', required: false)
 if jni_dep.found()
   # the JNI shim Robolectric loads (runtime/meson.build puts it into native-runtime.jar and the framework jars)
-  shim = shared_module('android_runtime', ['runtime_shim.c', 'media_runtime.c', 'binder_runtime.c', 'app_native.c', 'environment_runtime.c', 'proc_title.c', 'native_loader.c', 'native_bridge.c', 'spare_target.c', 'private_stdio.c',
+  shim = shared_module('android_runtime', ['runtime_shim.c', 'media_runtime.c', 'binder_runtime.c', 'app_native.c', 'environment_runtime.c', 'jni_system_route.c', 'proc_title.c', 'native_loader.c', 'native_bridge.c', 'spare_target.c', 'private_stdio.c',
       'android_platform.c', 'properties.c', 'paths.c', 'android_stubs.c'],
     dependencies: jni_dep, link_with: dl_bio, c_args: native_cargs, override_options: native_opts)
 endif

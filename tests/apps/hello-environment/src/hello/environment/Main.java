@@ -195,6 +195,7 @@ public final class Main extends Activity {
         byte[][] initial = new byte[3][];
         initialProc(initial);
         failures += PathChecks.run(this);
+        failures += JniSystemChecks.run();
         try {
             step("initial cleanup", () -> { unset(KEY); unset(PUT); unset(LOCAL); });
             views(KEY, null, "absent");
