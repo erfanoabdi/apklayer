@@ -18,7 +18,8 @@ static void fail(const char *what) {
     snprintf(failures + used, sizeof failures - used, "%s%s", used ? "; " : "", what);
 }
 #define EXPECT(c, what) do { if (!(c)) fail(what); } while (0)
-#define EXITED(s, n) (WIFEXITED(s) && WEXITSTATUS(s) == (n))
+static int exited(int s, int n) { return WIFEXITED(s) && WEXITSTATUS(s) == n; }  /* evaluates the call once */
+#define EXITED(s, n) exited((s), (n))
 #define ANDROID_CHILD "test \"$APKLY_LAUNCH|${APKLAYER_INSTANCE-unset}|${KSH_VERSION:+mksh}\" = \"guest-launch|unset|mksh\""
 
 /* posix_spawn is API 28, this library is built for 26: from libc at run time, as such apps do */

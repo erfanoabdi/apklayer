@@ -63,7 +63,19 @@ takes the guest exec entry.
  extern "C" int bionic_execl(const char *name, const char *arg, ...) {
 --- a/libc/libc-musl.c
 +++ b/libc/libc-musl.c
-@@ -612,10 +612,7 @@
+@@ -412,10 +412,7 @@
+ 	return __fpending(bionic_file_to_glibc_file(stream));
+ }
+ 
+-int bionic_fclose(FILE *stream)
+-{
+-	return fclose(bionic_file_to_glibc_file(stream));
+-}
++/* apklayer patch: bionic_fclose in libc-spawn.cpp (it also waits for a guest popen's child) */
+ 
+ int bionic_fprintf(FILE *restrict f, const char *restrict fmt, ...)
+ {
+@@ -612,10 +609,7 @@
  	return ungetwc(wc, bionic_file_to_glibc_file(stream));
  }
  
@@ -71,7 +83,7 @@ takes the guest exec entry.
 -{
 -	return pclose(bionic_file_to_glibc_file(stream));
 -}
-+/* apklayer patch: bionic_pclose is bionic_fclose (libc-spawn.cpp), which waits for the child of a guest popen */
++/* apklayer patch: bionic_pclose in libc-spawn.cpp (bionic_fclose: it waits for a guest popen's child) */
  
  long int bionic_ftell(FILE *stream)
  {

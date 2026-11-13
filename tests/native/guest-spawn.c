@@ -6,6 +6,7 @@
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <ftw.h>
 #include <limits.h>
 #include <pthread.h>
 #include <signal.h>
@@ -19,9 +20,11 @@
 #include <unistd.h>
 
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "guest-spawn: line %d: %s\n", __LINE__, #c); abort(); } } while (0)
-#define EXITED(s, n) (WIFEXITED(s) && WEXITSTATUS(s) == (n))
+static int exited(int s, int n) { return WIFEXITED(s) && WEXITSTATUS(s) == n; }  /* evaluates the call once */
+#define EXITED(s, n) exited((s), (n))
 
 typedef void *handle;  /* bionic's posix_spawnattr_t and posix_spawn_file_actions_t: one pointer */
+enum { B_SETPGROUP = 2, B_SETSIGDEF = 4, B_SETSIGMASK = 8, B_CLOEXEC_DEFAULT = 256 };  /* bionic spawn.h */
 static int (*b_system)(const char *);
 static FILE *(*b_popen)(const char *, const char *);
 static int (*b_pclose)(FILE *), (*b_fclose)(FILE *);
@@ -45,6 +48,7 @@ static void read_file(const char *rel, char *out, size_t size) {
     int fd = open(path, O_RDONLY | O_CLOEXEC); CHECK(fd >= 0);
     ssize_t n = read(fd, out, size - 1); CHECK(n >= 0); out[n] = 0; close(fd);
 }
+static int remove_entry(const char *path, const struct stat *st, int type, struct FTW *ftw) { (void)st; (void)type; (void)ftw; return remove(path); }
 static int wait_child(pid_t pid) { int status; CHECK(waitpid(pid, &status, 0) == pid); return status; }
 static int spawn_sh(handle *actions, handle *attr, const char *cmd, char *const env[]) {
     char *argv[] = {"sh", "-c", (char *)cmd, NULL};
@@ -128,7 +132,7 @@ static void spawn_checks(const char *self) {
     char out[256], fdtext[16];
     CHECK(!a_init(&attr) && attr);
     CHECK(a_setflags(&attr, 512) == EINVAL);
-    CHECK(!a_setflags(&attr, POSIX_SPAWN_SETSIGMASK) && !a_getflags(&attr, &flags) && flags == POSIX_SPAWN_SETSIGMASK);
+    CHECK(!a_setflags(&attr, B_SETSIGMASK) && !a_getflags(&attr, &flags) && flags == B_SETSIGMASK);
     mask = 1ull << (SIGUSR1 - 1);
     CHECK(!a_setmask64(&attr, &mask) && !a_getmask64(&attr, &got) && got == mask);
     CHECK(EXITED(spawn_sh(NULL, &attr, "kill -USR1 $$; exit 6", NULL), 6));  /* SETSIGMASK: SIGUSR1 blocked */
@@ -136,7 +140,7 @@ static void spawn_checks(const char *self) {
     mask = 1ull << (SIGUSR2 - 1);
     CHECK(!a_setflags(&attr, 0));
     CHECK(EXITED(spawn_sh(NULL, &attr, "kill -USR2 $$; exit 8", NULL), 8));  /* inherited SIG_IGN */
-    CHECK(!a_setflags(&attr, POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETPGROUP) && !a_setdef64(&attr, &mask) && !a_setpgroup(&attr, 0));
+    CHECK(!a_setflags(&attr, B_SETSIGDEF | B_SETPGROUP) && !a_setdef64(&attr, &mask) && !a_setpgroup(&attr, 0));
     int status = spawn_sh(NULL, &attr, "kill -USR2 $$; exit 8", NULL);
     CHECK(WIFSIGNALED(status) && WTERMSIG(status) == SIGUSR2);  /* SETSIGDEF */
     CHECK(EXITED(spawn_sh(NULL, &attr, "read -r a b c d pgrp rest </proc/$$/stat; test \"$pgrp\" = \"$$\"", NULL), 0));  /* SETPGROUP 0 */
@@ -157,7 +161,7 @@ static void spawn_checks(const char *self) {
     int keep = open("/dev/null", O_RDONLY); CHECK(keep > 2);
     snprintf(fdtext, sizeof fdtext, "%d", keep);
     char cmd[160]; snprintf(cmd, sizeof cmd, "test -e /proc/$$/fd/%s && exit 1; test -e /proc/$$/fd/9", fdtext);
-    CHECK(!a_setflags(&attr, 256) && !a_getflags(&attr, &flags) && flags == 256);
+    CHECK(!a_setflags(&attr, B_CLOEXEC_DEFAULT) && !a_getflags(&attr, &flags) && flags == B_CLOEXEC_DEFAULT);
     CHECK(!f_init(&actions) && !f_dup2(&actions, keep, 9));
     CHECK(EXITED(spawn_sh(&actions, &attr, cmd, NULL), 0));
     CHECK(!a_setflags(&attr, 0));
@@ -235,8 +239,7 @@ int main(int argc, char **argv)
     system_checks();
     popen_checks();
     spawn_checks(argv[0]);
-    char cleanup[PATH_MAX + 16]; snprintf(cleanup, sizeof cleanup, "/bin/rm -rf '%s'", root);
-    CHECK(system(cleanup) == 0);  /* the host's own system(): unchanged */
+    CHECK(!nftw(root, remove_entry, 16, FTW_DEPTH | FTW_PHYS));
     puts("PASS native guest spawn: system signals/status, popen r/w/r+/e with pclose and fclose, concurrent popen/system, "
          "posix_spawn attributes/file actions/CLOEXEC_DEFAULT, guest environment and PATH, /system/bin/sh, status 127");
 }
