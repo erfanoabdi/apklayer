@@ -3,6 +3,9 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-13: ARM64 shared-library validation complete
+- The six optional Java library jars were already committed in prebuilts; only UTM's copy was stale. Synced those exact architecture-independent artifacts (hashes also match the x86 lock), without rebuilding or changing binaries. Full sharedlib now passes on UTM as well as x86, including optional/platform libraries, installed providers, refusal of missing requirements and uninstall protection.
+
 ## 2026-11-13: real app defining loaders
 - Converted app, shared-library and WebView-provider classes are defined in actual AOSP PathClassLoader objects. The existing host index retains byte/resource lookup and delegation policy. Context, thread, reflection and JNI see the same defining owner; removed the old BaseDex cast facade (ABI 6/postprocessing 16). Parent boot-loader identity and DexPathList metadata remain explicit follow-ups.
 - Thin libcore loader overlays register parallel loading, delegate converted class lookup and retain lazy shared-resource enumeration without the removed JDK CompoundEnumeration. Both raw and preinstrumented framework jars merge the selected overlay entries. Native filesystem registration now precedes loader construction on cold starts/install inspection.
