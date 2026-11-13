@@ -1681,6 +1681,10 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Why: the owner asked for the instance to present a Google Pixel 5. Properties: tools/device-profile.sh pixel5 (bridge/native/profiles/pixel5.prop); the
   guest's /proc/cpuinfo and MIDR_EL1 follow `berberis.cpuinfo=pixel5`. Same command as 0016; output in ~/los24-0020-build.log (Mac).
 - Result: `build completed successfully (10:09)`, no errors; library sha256 0009eb5f2e79879131cdea88538ab897a3dd7342f3a32800e8f257f42fac27c5 (0016-0020).
+### 2026-11-13 - gsi_x86_64 libberberis_proxy_libc: binary_translation 0026 (invalid frees say why, and whether the guest freed the pointer before)
+- Why: the owner asked to fix PGR's 20 invalid frees. 0006's line says only "no glibc chunk" and its cap of 20 hides the real count; before a fix the cause has to be known. Diagnostics only:
+  the failing check is named, BERBERIS_LOG_FREES=1 keeps the last 65536 frees and cap 2000 (power-of-two count lines beyond). Independent of 0025 (not applied). `m libberberis_proxy_libc`;
+  output in ~/los24-0026-build.log (Mac). Status: RUNNING.
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0025 (Kemu's code-cost tier selection, a2a2de1a)
 - Why: the owner asked for a2a2de1a too. Ported (assembler under cpu_emulation/, `Call` is `CallRel`; tests left out): hot regions pick the heavy tier by captured loops and emitted x86
   cost (default; BERBERIS_GEARUP_POLICY=legacy restores the length rule). Dry-run applies to the Mac tree with 0024 in it. Not built yet: waits for 0024's build (one at a time).
