@@ -201,3 +201,7 @@ Behaviour that differs from Android or from stock Robolectric without editing up
 ## Slint (Sailfish RPM, `tools/release/sailfish-slint.sh`)
 - slint-platform.h fallback `owning_view` gets a default constructor (a sed in the script, checked by grep): gcc 10's C++20 views must be
   default-constructible (before P2325R3), so `PhysicalRegion::rectangles()` did not compile in the Sailfish build root.
+
+### App runtime maps identity (2026-11-13)
+
+`bridge/native/proc_maps.c` is shared preload code, not an upstream patch: the app's own maps expose the JVM mapping as ART and anonymize the JDK's other mappings. `paths_preload.c` routes descriptor and stdio opens to it; no app-specific workaround or additional dependency. Tests: `tests/native/proc-maps.c`, `ArtMaps.java` (bionic suite). This complements binary_translation 0012/0014's host filtering; it does not supply ART native symbols or rewrite map_files.

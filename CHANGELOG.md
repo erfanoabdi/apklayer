@@ -2174,3 +2174,10 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 
 ### 2026-11-03 — per-instance screenshots: libapklayer_vdisplay (registers its display token) and the new libapklayer_screenshot
 - Why: tests on a desktop shared by several instances cannot tell windows apart; `apklayer screenshot` captures one app's virtual display through SurfaceFlinger's own captureDisplay. New module in vendor/apklayer/tools (build-graph regeneration). Only VirtualDisplay.cpp, tools/Android.bp and tools/screenshot.cpp copied into vendor/apklayer (not a full sync-aosp.sh: the tree has a hals/camera directory this branch lacks). Command: `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_vdisplay libapklayer_screenshot`. Result: below.
+
+## 2026-11-13 — App maps runtime identity
+
+- The shared preload path layer presents the app JVM's mapped libjvm as `/apex/com.android.art/lib[64]/libart.so`, with the same ranges, permissions and file offsets. Other files under that JDK root become anonymous mappings. Bundled JDKs and deleted mappings are covered; no address ranges are invented or removed.
+- Covers open/open64/fortified open, openat, fopen/freopen and the interposed syscall entry, including relative paths and own-thread aliases. Services without app identity retain the host view; the existing `APKLAYER_PROC_VIEW=host` override retains it for diagnosis.
+- Focused UTM proof: compiled the changed preload directly, passed app/service/host-view C tests, real HotSpot FileReader/NIO checks, and the existing path-layer regression. Tests are registered in the bionic suite (`tests/run native`). That runner was attempted but refuses the VM's stale Android prebuilts; no full runtime install or translated x86/ARM32 run was performed.
+- Limit: this is maps-based runtime identification, not ART execution or symbol/object-layout compatibility. `/proc/self/map_files` and direct machine syscall instructions are outside this preload change; the existing translator filters remain separate. Maps are snapshots at open (reopen to refresh).
