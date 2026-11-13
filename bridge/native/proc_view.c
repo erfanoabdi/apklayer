@@ -24,6 +24,7 @@ static int proc_file_kind(const char *leaf)
     if (!strcmp(leaf, "map_files")) return 3;
     if (!strcmp(leaf, "numa_maps")) return 4;
     if (!strcmp(leaf, "environ")) return 5;
+    if (!strcmp(leaf, "mounts") || !strcmp(leaf, "mountinfo") || !strcmp(leaf, "mountstats")) return 6;
     return 0;
 }
 
@@ -173,6 +174,63 @@ done:
     return result;
 }
 
+/* What an app sees of the mount table (/proc/<pid>/mounts, mountinfo, mountstats): Android's mounts are its partitions, /data and the app's storage; the desktop's
+ * (the user's /home, /run/user, /mnt drives, the NVIDIA and portal mounts, /boot, /tmp, systemd's autofs) name the host and are left out. The mounts that
+ * exist on both are kept as they are. A mount is kept when its mount point is below one of Android's roots, or is one of the kernel's virtual file systems. */
+static int mount_kept(const char *point)
+{
+    static const char *const roots[] = {"/", "/proc", "/sys", "/dev", "/system", "/vendor", "/product", "/system_ext", "/odm", "/apex", "/data", "/storage", "/sdcard", "/mnt/runtime", "/cache", "/metadata", "/linkerconfig", NULL};
+    if (!strcmp(point, "/")) return 1;
+    for (int i = 1; roots[i]; i++) {
+        size_t n = strlen(roots[i]);
+        if (!strncmp(point, roots[i], n) && (!point[n] || point[n] == '/')) return 1;
+    }
+    return 0;
+}
+
+/* the mount point is field 2 of mounts and field 5 of mountinfo; mountstats says "mounted on <point> with fstype" */
+static int mounts_line_kept(const char *line)
+{
+    char point[PATH_MAX]; size_t used = 0;
+    const char *p = line;
+    int skip = 1;                                           /* mounts: device, point */
+    if (!strncmp(line, "device ", 7)) {                      /* mountstats */
+        p = strstr(line, " mounted on ");
+        if (!p) return 1;
+        p += 12; skip = 0;
+    } else if (line[0] >= '0' && line[0] <= '9') {          /* mountinfo: id parent major:minor root point */
+        for (int field = 0; field < 4 && *p; p++) if (*p == ' ') field++;
+        skip = 0;
+    }
+    for (int field = 0; field < skip && *p; p++) if (*p == ' ') field++;
+    for (; *p && *p != ' ' && used + 1 < sizeof point; p++) {
+        if (*p == '\\' && p[1] >= '0' && p[1] <= '7' && p[2] >= '0' && p[2] <= '7' && p[3] >= '0' && p[3] <= '7') {
+            point[used++] = (char)((p[1] - '0') * 64 + (p[2] - '0') * 8 + p[3] - '0'); p += 3;
+        } else point[used++] = *p;
+    }
+    point[used] = 0;
+    return mount_kept(point);
+}
+
+static int mounts_filter(int fd, int cloexec)
+{
+    int copy = fcntl(fd, F_DUPFD_CLOEXEC, 0);
+    FILE *in = copy < 0 ? NULL : fdopen(copy, "r");
+    if (!in) { if (copy >= 0) close(copy); return -1; }
+    char *line = NULL, *text = NULL;
+    size_t cap = 0, size = 0;
+    int result = -1;
+    FILE *out = open_memstream(&text, &size);
+    if (!out) goto done;
+    while (getline(&line, &cap, in) >= 0) if (mounts_line_kept(line)) fputs(line, out);
+    if (ferror(in) || ferror(out) || fclose(out)) { out = NULL; goto done; }
+    out = NULL;
+    result = proc_replace(fd, cloexec, "mounts", text, size);
+done:
+    { int saved = errno; if (out) fclose(out); free(line); free(text); if (in) fclose(in); errno = saved; }
+    return result;
+}
+
 /* fd remains owned by the caller, including on failure. */
 static int proc_filter(int fd)
 {
@@ -191,6 +249,7 @@ static int proc_filter(int fd)
         if (!text) return errno ? -1 : fd;
         return proc_replace(fd, cloexec, "environ", text, size);
     }
+    if (kind == 6) return mounts_filter(fd, cloexec);
     long app_uid = apklayer_app_uid();
     int copy = fcntl(fd, F_DUPFD_CLOEXEC, 0), result = -1;
     FILE *in = copy < 0 ? NULL : fdopen(copy, "r");
