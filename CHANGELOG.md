@@ -3,6 +3,10 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-13: environment coherence baseline (implementation in progress)
+- Added the optional environment APK/group to compare System.getenv, fresh maps, ProcessBuilder snapshots, Android Os and real ARM64 libc getenv/environ. Checks mutation, overwrite, mutable putenv storage, snapshot immutability and explicit HOME assignment; cleans its test keys and restores HOME.
+- Baseline on 58a8a20a: 34 failed comparisons on UTM ARM64 and 42 on the x86 translator, with userspace Binder. This is a deliberately red compatibility probe, not a passing gate. It demonstrates cached host Java values, missing native mutation visibility, Os/native divergence under translation and the unchanged-HOME suppression bug. Shared active-ABI environment implementation is in progress.
+
 ## 2026-11-13: consistent installed and in-memory DEX behavior
 - Validation: runtime-identity (including conflicting parent metadata) passes on UTM ARM64 and x86 with userspace Binder. Native-bridge, dex2jvm and the full 12-phase services group pass on both. Local fixture bytecode inspection proves parent-first routing preserves the actual override.
 - The service late-install test now waits for a driver acknowledgment in its own getFilesDir() directory, then checks PackageManager and starts the service. It no longer reads the private host package-store property; CLI installation itself does not emit Android package broadcasts.
