@@ -131,7 +131,7 @@ stage_x86_64() { # re-runs itself inside the OrbStack machine; every staged ELF 
         mkdir -p "$stage/android-root/system/lib64" "$stage/android-root/system/bin" "$stage/android-root/system/etc"
         cp -r "$out/system/lib64/arm64" "$stage/android-root/system/lib64/" && cp -r "$out/system/bin/arm64" "$stage/android-root/system/bin/"
         cp "$out/system/etc/ld.config.arm64.txt" "$stage/android-root/system/etc/"
-        cp "$tree/frameworks/libs/binary_translation/prebuilt/cpuinfo.arm64" "$stage/android-root/system/etc/cpuinfo.arm64.txt"  # the guest's /proc/cpuinfo
+        cp "$repo/aosp/nativebridge/cpuinfo.arm64.txt" "$stage/android-root/system/etc/cpuinfo.arm64.txt"  # the guest's /proc/cpuinfo fallback (the translator synthesizes it per online CPU: 0010)
     fi
     echo "== Robolectric"
     mkdir -p "$stage/aosp" && cp "$tree/out/host/linux-x86/framework/Robolectric_all.jar" "$stage/aosp/"
