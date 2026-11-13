@@ -58,9 +58,11 @@ ro.build.type=user
 ro.build.tags=release-keys
 ro.system.build.type=user
 ro.system.build.tags=release-keys
-# a release build's builder (Build.USER/HOST), not the machine that built the tree
+# a release build's builder (Build.USER/HOST), not the machine that built the tree: Google's builds are made by android-build on a build-farm host
 ro.build.user=android-build
-ro.build.host=localhost
+ro.build.host=abfarm-release-rbe-64-00057
+# the lineage name of the tree's GSI product (generic_x86_64) is the tree's, not the device's: the Pixel 5's product name
+ro.lineage.device=redfin
 # a phone-class device (the GSI's system build.prop has none; Robolectric's says "robolectric", an emulator image "emulator")
 ro.build.characteristics=nosdcard
 # SurfaceFlinger pre-compiles shaders at startup by rendering into dummy buffers of many formats; one of them cannot be wrapped as a

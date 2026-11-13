@@ -41,8 +41,8 @@ final class BuildCheck implements Check {
         // a build number, not the builder's name a build without BUILD_NUMBER writes (eng.<user>)
         if (Build.VERSION.INCREMENTAL.startsWith("eng.") || Build.FINGERPRINT.contains("/eng.") || ((String) get.invoke(null, "ro.build.description")).contains(" eng."))
             wrong.append("a builder's name in the build number: ").append(Build.VERSION.INCREMENTAL).append("; ");
-        // a release build's builder, not the machine that built the tree (apklayer.prop)
-        if (!"android-build".equals(Build.USER) || !"localhost".equals(Build.HOST)) wrong.append("builder ").append(Build.USER).append('@').append(Build.HOST).append("; ");
+        // a release build's builder (a build-farm host), not the machine that built the tree (apklayer.prop)
+        if (!"android-build".equals(Build.USER) || !Build.HOST.startsWith("abfarm-")) wrong.append("builder ").append(Build.USER).append('@').append(Build.HOST).append("; ");
         Check.require(wrong.length() == 0, wrong.toString());
         return Build.FINGERPRINT;
     }
