@@ -3,6 +3,18 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-13 (ACE: the /home question)
+- PGR in a scratch instance (`sbx`, a fresh install of the game, 3.5 GB of its data, not the default instance's 43 GB): with APKLAYER_SANDBOX=1 (needs no sudo here: subuid, newuidmap and the AppArmor profile were already installed) it ran
+  100 s and 2 min 39 s without the 2 min 15 s SIGSEGV, 1-2 invalid frees. Control, same fresh instance WITHOUT the sandbox: 5 min (my limit), no SIGSEGV, 2 invalid frees. So the sandbox is not what spared it: a fresh instance
+  behaves differently from the default one (17-31 frees, SIGSEGV at 2m15-2m23 every time, 6 runs). What differs is the default instance's state (accounts, its 43 GB of data, login/hot-update state), not /home or the identity.
+  (The sandbox view itself, hello-arm64 "layout" under APKLAYER_SANDBOX=1: /data/data lists 0 other packages and uid 10020 hold, but /home, /usr, /tmp and /run/user are still visible, and 254 of 274 maps lines name
+  /home/wesley/.local/share/apklayer paths: the app view keeps the host's paths. docs/PLAN.md "Sandbox".)
+- ACE's file probes (APKLAYER_PATHS_DEBUG=1 run, 235k lookups): su in /data/local, /dev/qemu_pipe, qemud, genyd, virtpipe*, /fstab.ttVM_x86, /data/data/com.bluestacks.appmart: all ENOENT as on a device; it also looked at
+  /home/wesley/.local/bin/su and read the names of ~/apklayer-fix libraries (192 lookups): host paths a device does not have.
+- Pixel 5 profile on the default instance (device-profile.sh pixel5 for one run, removed after): SIGSEGV at 2m17s as before, 31 frees: the device model and CPU are not ACE's trigger.
+- codec2 (btload libapklayer_codec2.so) cores today 15:27-15:32 (SIGABRT in libc++ from libcodec2_aidl_V2's exit handler, called by libbinder's exit path; stack restarts it, "1 of 5"): 27 cores since 2026-11-09, also in
+  the default instance's stack log (10 exits with status 134): not from this session's patches; cause open.
+
 ## 2026-11-13 (proc filter)
 - /proc filter, bugs found by tests/native/proc-leaks.c (new; 40 spellings and syscalls, in its own cgroup scope): a path relative to an open /proc fd was judged by its first component only
   (`self/../1`, `../proc/1` leaked); a cwd of `/` with `proc/1/status` was not caught; `scandir("/proc")` read the directory inside glibc, past readdir, and listed every pid; a symlink to `/proc/1` could be

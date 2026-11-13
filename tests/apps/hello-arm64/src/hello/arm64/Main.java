@@ -24,6 +24,7 @@ public class Main extends Activity {
     private static native int procView();
     private static native String layout(String pkg);
     private static native String cpuProfile();
+    private static native String fidelity();
 
     static int twice(int v) { return 2 * v; }
 
@@ -90,7 +91,7 @@ public class Main extends Activity {
         int proc = procView();
         log("proc view " + (proc == 15 ? "ok" : "WRONG bits " + proc));
         if (System.getProperty("hello.layout") != null || new java.io.File(getFilesDir(), "layout").exists())  // the filesystem-layout audit: one line per finding
-            for (String line : layout(getPackageName()).split("\n")) log("layout " + line);
+            for (String line : (layout(getPackageName()) + fidelity()).split("\n")) log("layout " + line);
         log("profile " + android.os.Build.MANUFACTURER + " / " + android.os.Build.MODEL + " / " + android.os.Build.DEVICE + " / " + android.os.Build.BOARD + " / "
                 + android.os.Build.HARDWARE + " / " + android.os.Build.FINGERPRINT);
         log("profile cpu " + cpuProfile());
