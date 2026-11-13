@@ -33,6 +33,18 @@ public final class Reflect {
         return replacement.invoke(receiver, args);
     }
 
+    /** Original and replacement, pairwise: the static methods guest native code reaches through JNI (bridge/native/jni_system_route.c). */
+    static Method[] jniRoutes() {
+        java.util.List<Method> pairs = new java.util.ArrayList<>();
+        for (Class<?> owner : new Class<?>[] {System.class, Boolean.class, Integer.class, Long.class})
+            for (Method method : owner.getDeclaredMethods()) {
+                if (!Modifier.isStatic(method.getModifiers()) || !Modifier.isPublic(method.getModifiers())) continue;
+                Method replacement = replacement(method);
+                if (replacement != method && replacement.getReturnType() == method.getReturnType()) { pairs.add(method); pairs.add(replacement); }
+            }
+        return pairs.toArray(new Method[0]);
+    }
+
     private static Method replacement(Method method) {
         Method environment = GuestEnvironment.replacement(method);
         return environment == method ? GuestSystemProperties.replacement(method) : environment;

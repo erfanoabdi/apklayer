@@ -102,9 +102,9 @@ static void *attached_thread(void *arg)
     JNIEnv *env;
     JavaVMAttachArgs attach = { JNI_VERSION_1_6, "jni-system-attached", NULL };
     if ((*vm)->AttachCurrentThread(vm, &env, &attach) != JNI_OK) return NULL;
-    jobject result = call_varargs(env, t->op, ids[t->op], t->a);
-    jobject second = call_a(env, t->op, ids[t->op], t->a);  /* both forms on this thread; the A result is kept */
-    (void)result;
+    /* reads run in both forms on this thread (the A result is kept), a mutation once */
+    if (ops[t->op].name[0] == 'g') call_varargs(env, t->op, ids[t->op], t->a);
+    jobject second = call_a(env, t->op, ids[t->op], t->a);
     jthrowable failure = (*env)->ExceptionOccurred(env);
     (*env)->ExceptionClear(env);
     t->result = second ? (*env)->NewGlobalRef(env, second) : NULL;
