@@ -84,44 +84,74 @@ def apklayer(out, runtime):
     return 0 if 'PASS identity probes' in text else 1
 
 
-WAYDROID_STATE = 'sudo -n waydroid status 2>&1 | tr "\\t" " "; ls /dev/binderfs | tr "\\n" " "; echo; ls -la /dev | grep -i binder | awk "{print \\$NF}" | tr "\\n" " "'
+ADD_NODES = '''
+import fcntl, os, struct
+for name in ("anbox-binder", "anbox-hwbinder", "anbox-vndbinder"):
+    if not os.path.exists("/dev/binderfs/" + name):
+        with open("/dev/binderfs/binder-control", "rb") as control:
+            fcntl.ioctl(control, 0xC1086201, bytearray(name.encode().ljust(256, b"\\0") + bytes(8)))
+    if not os.path.lexists("/dev/" + name):  # the session (the desktop user) opens them: 0666 as Waydroid makes them
+        os.symlink("/dev/binderfs/" + name, "/dev/" + name)
+    os.chmod("/dev/binderfs/" + name, 0o666)
+'''
+
+
+def snapshot():
+    """Waydroid's container state, the binderfs nodes and the /dev binder links (name -> target)."""
+    text = vm.ssh('sudo -n waydroid status 2>&1 | grep -i container; echo NODES $(ls /dev/binderfs); '
+                  'for l in /dev/*binder*; do [ -L "$l" ] && echo "LINK $l $(readlink $l)"; done', capture_output=True, text=True).stdout
+    nodes = next((l.split()[1:] for l in text.splitlines() if l.startswith('NODES')), [])
+    links = {l.split()[1]: l.split()[2] for l in text.splitlines() if l.startswith('LINK ')}
+    return text, set(nodes), links
+
+
+def android(command):
+    """A shell command inside the running Waydroid container, as root with Android's environment (what `waydroid shell` sets)."""
+    setup = ('eval "$(sed -n \'s/^export \\([A-Z_]*\\) /export \\1=/p\' /data/system/environ/classpath)"; '
+             'export PATH=/product/bin:/apex/com.android.runtime/bin:/apex/com.android.art/bin:/system_ext/bin:/system/bin:/system/xbin:/vendor/bin '
+             'ANDROID_ROOT=/system ANDROID_DATA=/data ANDROID_ART_ROOT=/apex/com.android.art ANDROID_I18N_ROOT=/apex/com.android.i18n '
+             'ANDROID_TZDATA_ROOT=/apex/com.android.tzdata ANDROID_RUNTIME_ROOT=/apex/com.android.runtime; ')
+    return 'sudo -n lxc-attach -P /var/lib/waydroid/lxc -n waydroid --clear-env -- /system/bin/sh -c %s' % shlex.quote(setup + command)
 
 
 def waydroid(out):
-    before = vm.ssh(WAYDROID_STATE, capture_output=True, text=True).stdout
-    print('before:\n' + before)
+    state, nodes, links = snapshot()
+    print('before:\n' + state)
     apk = build('x86_64')
     vm.copy([apk], '$HOME/apklayer-x86/matrix/apks')
     user = 'XDG_RUNTIME_DIR=/run/user/$(id -u) WAYLAND_DISPLAY=wayland-0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus'
-    started = 'Session:	RUNNING' not in before.replace(' ', '\t') or 'Container: STOPPED' in before
+    data = '$HOME/.local/share/waydroid/data'  # the container's /data (waydroid.prop host_data_path)
     try:
-        # the session start command returns when the session is up; -w on later commands waits for Android's init
-        print(stream('%s waydroid session start 2>&1' % user, 'Android with user 0 is ready', 180)[-600:])
-        print(vm.ssh('sudo -n waydroid -w shell -- getprop sys.boot_completed; sudo -n waydroid app install '
-                     '$HOME/apklayer-x86/matrix/apks/%s 2>&1 | tail -2' % apk.name, capture_output=True, text=True).stdout)
-        # the app prints END when its file is written; logcat -m 1 returns at that line
-        vm.ssh('sudo -n waydroid shell -- logcat -c', capture_output=True)
-        launch = vm.popen('sudo -n waydroid shell -- am start -W -n %s/.Main 2>&1' % PKG, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        print(stream('sudo -n waydroid shell -- logcat -v raw -s System.out', '[identity] END', 120)[-200:])
-        launch.wait()
-        text = vm.ssh('sudo -n waydroid shell -- cat /data/data/%s/files/identity.txt' % PKG, capture_output=True, text=True).stdout
+        # Waydroid's binder nodes (waydroid.cfg: anbox-binder, -hwbinder, -vndbinder) through binder-control's BINDER_CTL_ADD, linked into /dev
+        vm.ssh("sudo -n python3 -c " + shlex.quote(ADD_NODES))
+        # the session runs detached (its own session id: ssh's end does not stop it); it starts the container
+        vm.ssh('%s setsid -f waydroid session start > $HOME/apklayer-x86/matrix/waydroid-session.log 2>&1 < /dev/null' % user)
+        # boot: the events buffer's boot_progress_enable_screen (logcat replays the buffer, then follows)
+        # (logcat -m 1 returns at the first match; a remote command a local kill leaves behind would keep the container busy)
+        print(vm.ssh(android('logcat -b events -v brief -e boot_progress_enable_screen -m 1'), capture_output=True, text=True, timeout=300).stdout[-200:])
+        vm.ssh('sudo -n cp $HOME/apklayer-x86/matrix/apks/%s %s/local/tmp/identity.apk' % (apk.name, data))
+        print(vm.ssh(android('pm install -r /data/local/tmp/identity.apk; rm /data/local/tmp/identity.apk; logcat -c'),
+                     capture_output=True, text=True, timeout=120).stdout)
+        # the app prints END when its file is written
+        vm.ssh(android('am start -n %s/.Main' % PKG))
+        print(vm.ssh(android('logcat -v raw -s System.out -m 1 -e "identity. END"'), capture_output=True, text=True, timeout=120).stdout[-200:])
+        text = vm.ssh(android('cat /data/data/%s/files/identity.txt' % PKG), capture_output=True, text=True).stdout
         Path(out).write_text(text)
         print('%d lines' % len(text.splitlines()))
     finally:
-        vm.ssh('sudo -n waydroid shell -- am force-stop %s; sudo -n waydroid app remove %s; %s waydroid session stop' % (PKG, PKG, user),
-               capture_output=True)
+        vm.ssh(android('am force-stop %s; pm uninstall %s' % (PKG, PKG)), capture_output=True)
+        vm.ssh(android('rm -f /data/local/tmp/identity.apk'), capture_output=True)
+        vm.ssh('%s waydroid session stop' % user, capture_output=True)
         vm.ssh('rm -f $HOME/apklayer-x86/matrix/apks/%s' % apk.name)
-        after = vm.ssh(WAYDROID_STATE, capture_output=True, text=True).stdout
-        print('after:\n' + after)
-        if started:
-            # binder nodes and /dev links that were not there before belong to this run
-            nodes = set(before.splitlines()[-2].split()) if len(before.splitlines()) > 1 else set()
-            for node in set(after.splitlines()[-2].split()) - nodes if len(after.splitlines()) > 1 else []:
-                if re.fullmatch(r'[\w-]+', node) and node not in ('binder-control', 'features'):
-                    vm.ssh('sudo -n rm -f /dev/binderfs/%s' % shlex.quote(node))
-            links = set(before.splitlines()[-1].split())
-            for link in set(after.splitlines()[-1].split()) - links:
-                pass  # link targets only; reported in the after state for a manual look
+        if 'STOPPED' in state:
+            vm.ssh('sudo -n waydroid container stop', capture_output=True)
+        after, after_nodes, after_links = snapshot()
+        for node in sorted(after_nodes - nodes):  # binder nodes this run made
+            if re.fullmatch(r'[\w-]+', node):
+                vm.ssh('sudo -n rm -f /dev/binderfs/%s' % node)
+        for link in sorted(set(after_links) - set(links)):
+            vm.ssh('sudo -n rm -f %s' % shlex.quote(link))
+        print('after:\n' + snapshot()[0])
     return 0
 
 
