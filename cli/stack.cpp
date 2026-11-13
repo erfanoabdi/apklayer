@@ -1,5 +1,6 @@
 #include "stack.h"
 #include "binder.h"
+#include "build_props.h"
 #include "sandbox.h"
 
 #include "providers.h"
@@ -333,11 +334,11 @@ static std::string deviceGraphicsProperties(const Instance& inst) {
 // apklayer.prop, the tree's build.prop) and what init derives from them (setDerivedProperties). The stack's start, and `exec` without a stack.
 static void loadProperties(const Layout& l, const Instance& inst, const NativeEnv& ne) {
     const std::string& n = l.native;
-    std::vector<std::string> propFiles = {join(l.root, "bridge/native/apklayer.prop"), join(n, "android-root/props/system_build.prop")};
+    std::vector<std::string> propFiles = {join(l.root, "bridge/native/apklayer.prop"), join(l.root, "bridge/native/profiles/pixel5-extra.prop"), join(n, "android-root/props/system_build.prop")};
     // the instance's own overrides (`apklayer prop set`): first, as ro.* is write-once (and the fingerprint is derived from them), and again last, as
     // every other property keeps the last value loaded
     if (exists(inst.propOverrides())) { propFiles.insert(propFiles.begin(), inst.propOverrides()); propFiles.push_back(inst.propOverrides()); }
-    if (deviceGraphics(l, inst)) propFiles.insert(propFiles.begin() + (propFiles.size() > 2), deviceGraphicsProperties(inst));  // after the overrides' first copy
+    if (deviceGraphics(l, inst)) propFiles.insert(propFiles.begin() + (propFiles.size() > 3), deviceGraphicsProperties(inst));  // after the overrides' first copy
     if (int density = displayDensity(l); density > 0 && density != 160) {  // ro.sf.lcd_density: this display's, before apklayer.prop's 160 (write-once)
         std::string file = join(inst.root, "display.prop");
         writeFile(file, "ro.sf.lcd_density=" + std::to_string(density) + "\n");
@@ -358,6 +359,7 @@ static void loadProperties(const Layout& l, const Instance& inst, const NativeEn
     prop.env = ne.env;
     prop.logFile = join(inst.logs(), "aprop.log");
     runAndWait(prop);
+    writeBuildProps(l, inst, dumpStore(l, inst));  // /system/build.prop and the partitions' from the store just loaded (cli/build_props.cpp)
 }
 
 int runStackDaemon(const Layout& l, const Instance& inst, const std::vector<std::string>& tool) {

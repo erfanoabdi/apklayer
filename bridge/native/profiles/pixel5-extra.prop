@@ -1,0 +1,30 @@
+# The Pixel 5 (redfin) properties a retail device sets to the same value on every unit: verified boot as a locked, green device, A/B and
+# file-based encryption, the launch API level, the heap the Dalvik runtime hands apps, telephony as a phone without a SIM. Loaded after
+# apklayer.prop by cli/stack.cpp loadProperties (ro.* is write-once: an instance override of the same name still wins). Left out on purpose:
+# what differs per unit (serial number, vbmeta digest and size, baseband version, IMEI) and what this build cannot honestly claim.
+ro.product.first_api_level=30
+ro.boot.verifiedbootstate=green
+ro.boot.flash.locked=1
+ro.boot.vbmeta.device_state=locked
+ro.boot.veritymode=enforcing
+ro.boot.slot_suffix=_a
+ro.boot.bootloader=slider-1.2-7683913
+ro.build.ab_update=true
+ro.virtual_ab.enabled=true
+ro.crypto.state=encrypted
+ro.crypto.type=file
+dalvik.vm.heapsize=512m
+dalvik.vm.heapgrowthlimit=256m
+dalvik.vm.heapstartsize=8m
+dalvik.vm.heapmaxfree=8m
+dalvik.vm.heapminfree=512k
+dalvik.vm.heaptargetutilization=0.75
+gsm.sim.state=ABSENT
+gsm.network.type=Unknown
+gsm.operator.alpha=
+gsm.operator.numeric=
+gsm.operator.iso-country=
+gsm.operator.isroaming=false
+ro.telephony.sim.count=1
+ro.config.low_ram=false
+ro.zram.enabled=true
