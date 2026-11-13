@@ -437,11 +437,34 @@ static int desktop_terminal_path(const char *path)
     return !host_view && *leaf >= '0' && *leaf <= '9' && __atomic_load_n(&own_data, __ATOMIC_ACQUIRE);
 }
 
+/* The desktop's own files in /etc that Android has no equivalent of: its distribution, hostname, machine and shell identity. An app that reads them learns it
+ * runs on Ubuntu (Tencent ACE asks the path layer for /etc/passwd and /etc/localtime; hello-arm64's audit lists /etc/os-release as visible). ENOENT for an app
+ * process (own data set). Not hidden: /etc/localtime (glibc's time zone: the JVM reads it), /etc/resolv.conf and /etc/hosts (the resolver; hosts is Android's own
+ * file in the root), /etc/passwd and /etc/group (Android's empty files in the root), ld.so.cache and the TLS and fonts directories the host libraries need.
+ * APKLAYER_ETC_VIEW=host turns the filter off. */
+static int desktop_etc_path(const char *path)
+{
+    static const char *const names[] = {"/etc/os-release", "/etc/lsb-release", "/etc/issue", "/etc/issue.net", "/etc/hostname", "/etc/machine-id", "/etc/timezone",
+                                        "/etc/debian_version", "/etc/fstab", "/etc/mtab", "/etc/shadow", "/etc/gshadow", "/etc/sudoers", "/etc/shells", "/etc/motd",
+                                        "/etc/apt", "/etc/dpkg", "/etc/systemd", "/etc/netplan", "/etc/NetworkManager", "/etc/X11", "/etc/xdg", "/etc/alternatives",
+                                        "/etc/default", "/etc/network", "/etc/cloud", "/etc/udev", "/etc/pam.d", "/etc/security", "/etc/sudoers.d", "/etc/profile.d",
+                                        "/etc/profile", "/etc/environment", NULL};
+    if (strncmp(path, "/etc/", 5) || !__atomic_load_n(&own_data, __ATOMIC_ACQUIRE)) return 0;
+    static int host_view = -1;
+    if (host_view < 0) { const char *v = getenv("APKLAYER_ETC_VIEW"); host_view = v && !strcmp(v, "host"); }
+    if (host_view) return 0;
+    for (int i = 0; names[i]; i++) {
+        size_t n = strlen(names[i]);
+        if (!strncmp(path, names[i], n) && (!path[n] || path[n] == '/')) return 1;
+    }
+    return 0;
+}
+
 static bool from_root(const char *r, char **path);
 
 bool apklayer_apply_path_overrides(char **path)
 {
-    if (apklayer_proc_hidden(*path) || other_package_path(*path) || desktop_terminal_path(*path)) {  /* any path call of the process (the wrappers and bionic_translation's libc): no such process */
+    if (apklayer_proc_hidden(*path) || other_package_path(*path) || desktop_terminal_path(*path) || desktop_etc_path(*path)) {  /* any path call of the process (the wrappers and bionic_translation's libc): no such process */
         char *gone = strdup("/proc/.apklayer-hidden");
         if (gone) { *path = gone; return true; }
     }

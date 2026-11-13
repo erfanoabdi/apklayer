@@ -28,6 +28,7 @@ endif
 # the path layer's LD_PRELOAD library (bridge/native/paths_preload.c): /storage mapped for the functions glibc does not route through open/stat
 if is_variable('apklayer_preload')
   test('path-layer', executable('path-layer-test', 'path-layer.c'), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
+  test('etc-hidden', executable('etc-hidden-test', 'etc-hidden.c', dependencies: [native_dl]), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
   test('dev-pts', executable('dev-pts-test', 'dev-pts.c', dependencies: [native_dl]), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
   test('proc-mounts', executable('proc-mounts-test', 'proc-mounts.c', dependencies: [native_dl]), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
   test('own-data-spelling', executable('own-data-spelling-test', 'own-data-spelling.c'), env: ['LD_PRELOAD=' + apklayer_preload.full_path()], suite: 'bionic', timeout: 30)
