@@ -3,6 +3,15 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-13 (ACE: the real test, main menu)
+- Owner's correction: PGR only crashes in the main menu. Test setup: scratch instance `sbx` with the default instance's game data copied in (rsync, 45,309,416,504 bytes, 47,813 files, identical; exit 23 was only chgrp on directories),
+  plus the account prefs and the SDK database. Libraries: 0024 translator, merged-before-Erfan's-5 preload.
+  - sbx, no sandbox (16:06): reached the main menu stage, SIGSEGV (sent by kill, SI_TKILL; translator memmove in the JVM's signal handler, then libc syscall +0x12752d) 2 min 29 s in, 32 invalid frees. Same crash as the default instance:
+    the crash does not depend on the account, the login or the instance's state; the copied files reproduce it.
+  - sbx WITH APKLAYER_SANDBOX=1 (16:14, app runs as uid 10014 in its own mount namespace): SIGSEGV again at ~1 min 36 s of game time, same signature (si_code SI_TKILL from the process itself, pc libc syscall +0x12752d), 33 invalid frees.
+    So the sandbox does not prevent it either. The app's uid, /data/data and /home being empty tmpfs, are not the trigger (the view still names host paths in /proc/self/maps; those are not hidden there).
+  - Ruled out as the trigger so far: device model/CPU (Pixel 5 profile), account/instance state (the copy), the sandbox, the proc filter and environment changes (all installed during these runs).
+
 ## 2026-11-13: consistent installed and in-memory DEX behavior
 - Validation: runtime-identity (including conflicting parent metadata) passes on UTM ARM64 and x86 with userspace Binder. Native-bridge, dex2jvm and the full 12-phase services group pass on both. Local fixture bytecode inspection proves parent-first routing preserves the actual override.
 - The service late-install test now waits for a driver acknowledgment in its own getFilesDir() directory, then checks PackageManager and starts the service. It no longer reads the private host package-store property; CLI installation itself does not emit Android package broadcasts.
