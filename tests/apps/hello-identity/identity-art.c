@@ -149,6 +149,28 @@ static void jni(struct buf *b, JNIEnv *env)
         else if (WIFSIGNALED(status)) put(b, names[i], "CRASH signal %d (in a forked child)", WTERMSIG(status));
         else put(b, names[i], "%s", result);
     }
+    /* the rest of libnativehelper's invocation API: ART fails both (JNI_ERR), in a child too (an unbound table aborts) */
+    typedef jint (*default_fn)(void *);
+    typedef jint (*create_fn)(JavaVM **, JNIEnv **, void *);
+    default_fn defaults = helper ? (default_fn)dlsym(helper, "JNI_GetDefaultJavaVMInitArgs") : NULL;
+    create_fn create = helper ? (create_fn)dlsym(helper, "JNI_CreateJavaVM") : NULL;
+    for (int i = 0; i < 2; i++) {
+        const char *name = i ? "JNI_CreateJavaVM.libnativehelper" : "JNI_GetDefaultJavaVMInitArgs.libnativehelper";
+        if (!(i ? (void *)create : (void *)defaults)) { put(b, name, "no symbol"); continue; }
+        pid_t child = fork();
+        if (child == 0) {
+            JavaVMInitArgs args = { JNI_VERSION_1_6, 0, NULL, JNI_FALSE };
+            JavaVM *new_vm = NULL;
+            JNIEnv *new_env = NULL;
+            jint r = i ? create(&new_vm, &new_env, &args) : defaults(&args);
+            _exit(r & 0xff);
+        }
+        int status = 0;
+        if (child > 0) waitpid(child, &status, 0);
+        if (child < 0) put(b, name, "fork failed");
+        else if (WIFSIGNALED(status)) put(b, name, "CRASH signal %d (in a forked child)", WTERMSIG(status));
+        else put(b, name, "ret=%d", (int)(signed char)WEXITSTATUS(status));
+    }
     if (helper) dlclose(helper);
     if (art) dlclose(art);
 }

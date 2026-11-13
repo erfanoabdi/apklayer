@@ -520,6 +520,10 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
         if (reflect) (*env)->DeleteLocalRef(env, reflect);
         if (error) { (*env)->ExceptionDescribe(env); fprintf(stderr, "[runtime] cannot route JNI System calls\n"); return -1; }
     }
+    {   /* ART's JNI surface for guest callers (GetVersion, FindClass without a Java frame, attach names) and libnativehelper's invocation API */
+        extern int apklayer_jni_guest_surface(JNIEnv *, JavaVM *, jvmtiEnv *, jniNativeInterface *);
+        if (apklayer_jni_guest_surface(env, vm, ti, &patched) != 0) { (*env)->ExceptionDescribe(env); fprintf(stderr, "[runtime] cannot set up the guest JNI surface\n"); return -1; }
+    }
     (*ti)->SetJNIFunctionTable(ti, &patched);
     {
         extern int apklayer_register_environment(JNIEnv *, jclass);
