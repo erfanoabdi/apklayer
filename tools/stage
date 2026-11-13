@@ -51,7 +51,7 @@ stage_root() {
     fi
     # system/etc/security/cacerts: the CA store native TLS reads (Dart's dart:io "Failed to find root cert cache" without it)
     $ORB tar cf - -C "$OUT" system/etc/cgroups.json system/etc/task_profiles.json system/etc/task_profiles system/usr/hyphen-data system/etc/permissions system/etc/compatconfig system/etc/sysconfig system/etc/default-permissions system/etc/vintf/manifest.xml \
-        system/fonts system/etc/fonts.xml system/etc/font_fallback.xml system/etc/security/cacerts system/framework/org.lineageos.platform-res.apk apex/com.android.i18n/etc apex/com.android.tzdata/etc | sink .
+        system/fonts system/etc/fonts.xml system/etc/font_fallback.xml system/etc/security/cacerts system/framework/org.lineageos.platform-res.apk apex/com.android.i18n/etc apex/com.android.tzdata/etc system/bin/sh system/bin/toybox | sink .
     # the optional shared libraries apps declare (<uses-library>, HostSharedLibraries) as JVM classes at the path their etc/permissions/<name>.xml names:
     # the javac output of each library module (architecture independent; the device's jar there is DEX)
     jars="$tree/out/soong/.intermediates/external/apache-http/org.apache.http.legacy.impl/android_common/repackaged-jarjar/javac/org.apache.http.legacy.jar"

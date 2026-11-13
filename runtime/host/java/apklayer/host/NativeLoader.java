@@ -25,6 +25,8 @@ import org.robolectric.annotation.internal.DoNotInstrument;
 public final class NativeLoader {
     private static final Map<String, Long> LOADED = new HashMap<>();
     private static boolean ready;
+    private static volatile boolean environmentTargetReady;
+    private static volatile LinkageError environmentSetupFailure;
     private static String systemPath = "", appPath = "";
     /** The CPU the app's libraries are for when it is not this one ("arm64" on x86_64): they load through the native bridge (native_bridge.c, set at install). */
     private static String bridge() { return System.getProperty("apklayer.nativebridge"); }  // read when used: a spare-born process gets it with its launch
@@ -72,7 +74,12 @@ public final class NativeLoader {
      *  uid and groups as native code sees them: getuid, getgroups and the owner of the user's files (bridge/native/paths.c). */
     static void mapOwnDataDirs(String pkg, String root) {
         int uid = android.os.Process.myUid();
-        try { mapOwnData(pkg, uid, appGroups(pkg, uid), root); } catch (LinkageError noShim) { /* no native runtime in this process */ }
+        try {
+            mapOwnData(pkg, uid, appGroups(pkg, uid), root);
+            environmentTargetReady = true;
+        } catch (LinkageError noShim) {
+            environmentSetupFailure = noShim;
+        }
     }
 
     /** The supplementary groups zygote gives an app process (ProcessList.startProcessLocked; cli/sandbox.cpp appGroups): inet with INTERNET,
@@ -188,6 +195,14 @@ public final class NativeLoader {
 
     public static void runtimeLoad(Runtime r, String path) {
         load(path, CALLER.getCallerClass().getClassLoader());
+    }
+
+    /** Framework bootstrap/spares use the native backend's service view. Only a mapped app
+     * may initialize its ABI route; a spare does not yet know that route or its library path. */
+    static void ensureInitialized() {
+        if (environmentSetupFailure != null) throw environmentSetupFailure;
+        if (!environmentTargetReady) return;
+        synchronized (NativeLoader.class) { init(); }
     }
 
     private static void init() {

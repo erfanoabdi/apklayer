@@ -11,6 +11,7 @@
 // composition's own GPU fence.
 #pragma once
 
+#include "../../HostEnvironment.h"
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/eventfd.h>
@@ -31,7 +32,7 @@ namespace apklayer::composer {
 class PresentFences {
   public:
     PresentFences() {
-        const char* only = getenv("APKLAYER_PRESENT_FENCE");  // "gpu": no syncobj (tests the path of hosts without a render node)
+        const char* only = apklayer::hostGetenv("APKLAYER_PRESENT_FENCE");  // "gpu": no syncobj (tests the path of hosts without a render node)
         if (only && strcmp(only, "gpu") == 0) return;
         DIR* dir = opendir("/dev/dri");
         if (!dir) return;

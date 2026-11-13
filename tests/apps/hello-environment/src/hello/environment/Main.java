@@ -6,6 +6,17 @@ import android.system.Os;
 import android.widget.TextView;
 import java.util.Map;
 import java.util.Objects;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.concurrent.TimeUnit;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 public final class Main extends Activity {
     private static final String KEY = "APKLY_ENV_TEST_BRIDGE";
@@ -17,8 +28,9 @@ public final class Main extends Activity {
     private static native int put(String key, String value);
     private static native void mutatePut(String value);
     private static native void releasePut();
+    private static native byte[] procEnviron(boolean buffered);
     private int failures;
-    private interface Step { void run() throws Exception; }
+    private interface Step { void run() throws Throwable; }
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -63,14 +75,142 @@ public final class Main extends Activity {
         step(label + " Os.getenv", () -> check(value, Os.getenv(key), label + " Os.getenv"));
         step(label + " libc getenv", () -> check(value, read(key, false), label + " libc getenv"));
         step(label + " environ", () -> check(value, read(key, true), label + " libc environ"));
+        step(label + " reflection", () -> {
+            check(value, System.class.getMethod("getenv", String.class).invoke(null, key), label + " reflected getenv");
+            Map<?, ?> snapshot = (Map<?, ?>) System.class.getMethod("getenv").invoke(null);
+            check(value, snapshot.get(key), label + " reflected getenv map");
+        });
+        step(label + " MethodHandle", () -> {
+            String actual = (String) MethodHandles.lookup().findStatic(System.class, "getenv",
+                    MethodType.methodType(String.class, String.class)).invokeExact(key);
+            check(value, actual, label + " MethodHandle getenv");
+            Map<?, ?> snapshot = (Map<?, ?>) MethodHandles.lookup().findStatic(System.class, "getenv",
+                    MethodType.methodType(Map.class)).invokeExact();
+            check(value, snapshot.get(key), label + " MethodHandle getenv map");
+        });
+        step(label + " method reference", () -> {
+            Function<String, String> getter = System::getenv;
+            Supplier<Map<String, String>> snapshot = System::getenv;
+            check(value, getter.apply(key), label + " method-reference getenv");
+            check(value, snapshot.get().get(key), label + " method-reference map");
+        });
+    }
+
+    private String[] command() {
+        return new String[]{"/system/bin/sh", "-c", "echo -n \"$APKLY_ENV_TEST_BRIDGE|$HOME\""};
+    }
+
+    private Thread drain(InputStream stream, ByteArrayOutputStream result) {
+        Thread reader = new Thread(() -> {
+            try {
+                byte[] buffer = new byte[1024];
+                for (int count; (count = stream.read(buffer)) != -1; )
+                    if (result.size() < 16384) result.write(buffer, 0, Math.min(count, 16384 - result.size()));
+            } catch (java.io.IOException closed) { /* Parent closes pipes during cleanup. */ }
+        }, "environment-child-pipe");
+        reader.start();
+        return reader;
+    }
+
+    private void child(Process process, String expected, String label) throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        ByteArrayOutputStream errors = new ByteArrayOutputStream();
+        Thread out = drain(process.getInputStream(), output);
+        Thread err = drain(process.getErrorStream(), errors);
+        System.out.println("[environment] checking child " + label);
+        try {
+            process.getOutputStream().close();
+            boolean exited = process.waitFor(10, TimeUnit.SECONDS);
+            check(true, exited, label + " exits within deadline");
+            if (exited) {
+                out.join(500);
+                err.join(500);
+                check(0, process.exitValue(), label + " exit code");
+                check(expected, output.toString("UTF-8"), label + " stdout");
+                check("", errors.toString("UTF-8"), label + " stderr");
+            }
+        } finally {
+            if (process.isAlive()) process.destroyForcibly();
+            check(true, process.waitFor(2, TimeUnit.SECONDS), label + " reaped");
+            process.getInputStream().close();
+            process.getErrorStream().close();
+            process.getOutputStream().close();
+            out.join(500);
+            err.join(500);
+            check(false, out.isAlive() || err.isAlive(), label + " pipe readers stopped");
+        }
+    }
+
+    private void children(String home) {
+        step("child setup", () -> Os.setenv(KEY, "child-inherited", true));
+        step("inherited builder", () -> child(new ProcessBuilder(command()).start(), "child-inherited|" + home, "inherited builder"));
+        step("inherited Runtime.exec", () -> child(Runtime.getRuntime().exec(command()), "child-inherited|" + home, "inherited Runtime.exec"));
+        step("snapshot builder", () -> {
+            ProcessBuilder saved = new ProcessBuilder(command());
+            saved.environment();
+            Os.setenv(KEY, "after-snapshot", true);
+            child(saved.start(), "child-inherited|" + home, "snapshot builder");
+        });
+        step("explicit builder", () -> {
+            ProcessBuilder explicit = new ProcessBuilder(command());
+            explicit.environment().clear();
+            explicit.environment().put(KEY, "child-explicit");
+            explicit.environment().put("HOME", "/data/local/tmp/explicit-home");
+            child(explicit.start(), "child-explicit|/data/local/tmp/explicit-home", "explicit builder");
+        });
+        step("explicit Runtime.exec", () -> child(Runtime.getRuntime().exec(command(),
+                new String[]{KEY + "=exec-explicit", "HOME=/data/local/tmp/exec-home"}),
+                "exec-explicit|/data/local/tmp/exec-home", "explicit Runtime.exec"));
+        views(KEY, "after-snapshot", "children leave parent intact");
+        views("HOME", home, "children preserve parent HOME");
+    }
+
+    private byte[] javaProcEnviron() throws Exception {
+        return Files.readAllBytes(Paths.get("/proc/self/environ"));
+    }
+
+    private void initialProc(byte[][] initial) {
+        step("initial Java proc environ", () -> {
+            initial[0] = javaProcEnviron();
+            check(true, initial[0].length > 0, "initial proc environ is nonempty");
+            for (String entry : new String(initial[0], StandardCharsets.UTF_8).split("\u0000")) {
+                String name = entry.split("=", 2)[0];
+                check(false, name.startsWith("APKLAYER_") || name.startsWith("BIONIC_")
+                        || name.equals("JAVA_HOME") || name.equals("HOME"), "initial proc excludes host key " + name);
+            }
+        });
+        step("initial JNI fread proc environ", () -> {
+            initial[1] = procEnviron(true);
+            check(true, Arrays.equals(initial[0], initial[1]), "Java/JNI fread initial proc bytes agree");
+        });
+        step("initial JNI open proc environ", () -> {
+            initial[2] = procEnviron(false);
+            check(true, Arrays.equals(initial[0], initial[2]), "Java/JNI open initial proc bytes agree");
+        });
     }
 
     private void tests() {
+        byte[][] initial = new byte[3][];
+        initialProc(initial);
         try {
             step("initial cleanup", () -> { unset(KEY); unset(PUT); unset(LOCAL); });
             views(KEY, null, "absent");
+            step("null getenv rejected", () -> {
+                boolean rejected = false;
+                try { System.getenv((String) null); } catch (NullPointerException expected) { rejected = true; }
+                check(true, rejected, "null getenv throws NPE");
+            });
+            step("empty value", () -> Os.setenv(KEY, "", true));
+            views(KEY, "", "empty differs from absent");
+            step("empty cleanup", () -> Os.unsetenv(KEY));
             final Map<String, String> before = System.getenv();
             final Map<String, String> builder = new ProcessBuilder("unused").environment();
+            step("builder invalid key rejected", () -> {
+                boolean rejected = false;
+                try { builder.put("APKLY_ENV_TEST_INVALID=KEY", "value"); }
+                catch (IllegalArgumentException expected) { rejected = true; }
+                check(true, rejected, "builder rejects equals in key");
+            });
             step("unmodifiable getenv", () -> {
                 boolean rejected = false;
                 try { before.put(LOCAL, "forbidden"); }
@@ -109,11 +249,18 @@ public final class Main extends Activity {
                     views("HOME", home, "explicit HOME");
                     Os.setenv("HOME", home, true);
                     views("HOME", home, "same HOME value again");
+                    children(home);
                 } finally {
                     if (original == null) Os.unsetenv("HOME");
                     else Os.setenv("HOME", original, true);
                 }
             });
+            step("Java proc snapshot after mutation", () -> check(true,
+                    initial[0] != null && Arrays.equals(initial[0], javaProcEnviron()), "Java proc initial bytes unchanged"));
+            step("JNI fread proc snapshot after mutation", () -> check(true,
+                    initial[1] != null && Arrays.equals(initial[1], procEnviron(true)), "JNI fread proc initial bytes unchanged"));
+            step("JNI open proc snapshot after mutation", () -> check(true,
+                    initial[2] != null && Arrays.equals(initial[2], procEnviron(false)), "JNI open proc initial bytes unchanged"));
         } finally {
             step("final cleanup", () -> { unset(KEY); unset(PUT); unset(LOCAL); releasePut(); });
         }

@@ -37,11 +37,17 @@ static int find_program(struct dl_phdr_info *info, size_t size, void *data)
  * there and the environment after argv's NULL */
 __attribute__((noreturn)) static void enter(uintptr_t entry, int argc, char **args)
 {
+    char ***(*environment_slot)(void) = dlsym(RTLD_DEFAULT, "bionic_environment_slot");
+    if (!environment_slot) { fputs("btload: guest environment unavailable\n", stderr); exit(127); }
+    char ***slot = environment_slot();
+    if (!slot) { perror("btload: guest environment"); exit(127); }
+    char **guest = *slot;
     size_t envc = 0;
-    while (environ[envc]) envc++;
+    while (guest && guest[envc]) envc++;
     char **argv = calloc(argc + envc + 2, sizeof(char *));
+    if (!argv) { perror("btload: guest stack"); exit(127); }
     memcpy(argv, args, argc * sizeof(char *));
-    memcpy(argv + argc + 1, environ, envc * sizeof(char *));
+    if (envc) memcpy(argv + argc + 1, guest, envc * sizeof(char *));
     uintptr_t raw[2] __attribute__((aligned(16))) = {(uintptr_t)argc, (uintptr_t)argv};
 #if defined(__aarch64__)
     __asm__ volatile("mov sp, %1\n br %0" ::"r"(entry), "r"(raw) : "memory");

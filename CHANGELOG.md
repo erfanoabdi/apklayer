@@ -3,6 +3,13 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-13: WIP shared active-ABI environment checkpoint
+- User requested an immediate commit of the accumulated working tree. This checkpoint is not release-ready: private backend-control libraries are still building and final artifact staging/regression checks remain.
+- App Java/Os getters, native libc mutation APIs and environ now share the active ABI's environment; translated apps use the real guest libc slot and critical trampolines. Direct/reflection/method-handle Java calls and child environment snapshots share the same routing (converter ABI 8/postprocessing 18). Host JVM environment mutation is removed.
+- Explicit child environments travel separately from runtime controls through a sealed descriptor. Own proc environ exposes immutable initial bytes. Translator and HAL controls have explicit private host getters. Added staged Android sh/toybox from existing product outputs.
+- Verified so far: all 31 native tests pass on ARM64 and x86; runtime-identity and the environment APK (including five real Android-shell children) pass on both. X86 used translator e49d7f17 built from the current patched sources before the subsequent backend-control rebuild. Newly added APK proc-environ checks compile but have not yet run.
+- Pending: finish the live Orb x86 build, build ARM backend-control libraries, stage/hash/push final artifacts, run APK proc checks and native/WebView/service regressions. Bare-name ProcessBuilder executable lookup still uses HotSpot's host parent PATH; preserve Android parent-versus-child PATH semantics when fixing it. JNI calls directly into host System also remain in the broader identity goal.
+
 ## 2026-11-13: btload executable TLS slots
 - btload now defines the reserved bionic TLS array in its own executable, before path-layer thread-local state. The executable's definition preempts the preload's copy; native Android child programs no longer place their fixed slots over path-layer variables.
 - The environment child probe exposed tp+32 instead of required tp+16 on ARM64. After this change, all five real Android-shell child cases pass without TLS warnings; ELF inspection places the 48-byte array at TLS offset zero. The broader environment replacement remains in progress.
@@ -1691,6 +1698,12 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
   ~/apklayer-fix): PGR still ends (6 teardown frees instead of 20, then SIGSEGV), so not the only trigger.
 
 ## Build log (los24, incremental builds; earlier ones in `docs/history/BUILD-LOG-2026-10-26_27.md`)
+### 2026-11-13 - private backend environment controls, gsi_x86_64 and gsi_arm64
+- Why: isolated app environments must not hide translator/HAL configuration from apklayer backend libraries. Framework native patch0009 and shared host-getter HAL headers preserve these controls without exposing them through app getters.
+- Commands (one at a time under `flock -n ~/los24-build.lock`): `source build/envsetup.sh && export APKLAYER_NATIVE_BRIDGE=arm64 && breakfast gsi_x86_64 userdebug && m libberberis_arm64 libbinder libsensorprivacy libvulkan libapklayer_mediaserver libapklayer_codec2 libapklayer_composer vulkan.apklayer libapklayer_audio libapklayer_cameraserver libapklayer_servicemanager`; then the same with `breakfast gsi_arm64 userdebug` and without libberberis_arm64. Incremental; no clean. First own x86 attempt was stopped during configuration to restore the required `APKLAYER_NATIVE_BRIDGE=arm64` setting, then restarted with it; no artifacts from that attempt were staged. Results pending.
+### 2026-11-13 - gsi_x86_64 libberberis_arm64: shared guest environment (0025/0026)
+- Why: expose the actual translated libc environment slot/functions, retain host-only translator controls, and seed guest stacks from the same initial/explicit-child environment as native apps.
+- Command: `flock -n ~/los24-build.lock bash -c 'cd ~/los24 && source build/envsetup.sh && breakfast gsi_x86_64 userdebug && m libberberis_arm64'` (incremental, no clean). Log: `/tmp/apklayer-environment-berberis-build.log` on the Mac. First attempt did not start: shared lock held by an independently running `m libberberis_arm64` (PID 3818087, log `~/los24-0025-build.log`). Do not treat its output as this build; rerun after it exits. Result pending.
 ### 2026-11-12 - gsi_x86_64 libberberis_arm64: binary_translation 0017 (guest /proc/self/status shows the app's ids)
 - Why: 0015 made getuid/getgid the app's, /proc/self/status still printed the desktop user's. Same command as 0016 (0016 and 0017 in the tree).
 - Result 1 (23:41 +0330): FAILED at link, `ld.lld: duplicate symbol: berberis::RunUnknownGuestSyscall` (defined in syscall_emulation.o and open_emulation.o):

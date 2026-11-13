@@ -1,0 +1,79 @@
+From: Erfan Abdi <erfangplus@gmail.com>
+Subject: [PATCH] apklayer: keep private framework controls in the host environment
+
+The app libc environment is isolated. Backend switches for missing system_server
+and host Vulkan dispatch must continue reading the host runtime's configuration.
+Use one private helper; the weak host getter falls back to ordinary getenv on
+Android without apklayer. Applies after0008; modules libbinder, libsensorprivacy,
+libvulkan (both ABIs).
+
+--- a/libs/binder/ActivityManager.cpp
++++ b/libs/binder/ActivityManager.cpp
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  */
+ 
++#include "../HostEnvironment.h"
+ #include <mutex>
+ #include <cstdlib>
+ #include <unistd.h>
+@@ -39,7 +40,7 @@
+     std::lock_guard<Mutex> scoped_lock(mLock);
+     sp<IActivityManager> service = mService;
+     // apklayer patch: standalone clients must not wait for system_server.
+-    if (std::getenv("APKLAYER_NO_SYSTEM_SERVER")) {
++    if (apklayer::hostGetenv("APKLAYER_NO_SYSTEM_SERVER")) {
+         if (service == nullptr || !IInterface::asBinder(service)->isBinderAlive()) {
+             auto binder = defaultServiceManager()->checkService(String16("activity"));
+             mService = interface_cast<IActivityManager>(binder);
+--- a/libs/sensorprivacy/SensorPrivacyManager.cpp
++++ b/libs/sensorprivacy/SensorPrivacyManager.cpp
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  */
+ 
++#include "../HostEnvironment.h"
+ #include <mutex>
+ #include <cstdlib>
+ #include <unistd.h>
+@@ -35,7 +36,7 @@
+     std::lock_guard<Mutex> scoped_lock(mLock);
+     sp<hardware::ISensorPrivacyManager> service = mService;
+     // apklayer patch: standalone clients must not wait for system_server.
+-    if (std::getenv("APKLAYER_NO_SYSTEM_SERVER")) {
++    if (apklayer::hostGetenv("APKLAYER_NO_SYSTEM_SERVER")) {
+         if (service == nullptr || !IInterface::asBinder(service)->isBinderAlive()) {
+             auto binder = defaultServiceManager()->checkService(String16("sensor_privacy"));
+             mService = interface_cast<hardware::ISensorPrivacyManager>(binder);
+--- a/vulkan/libvulkan/driver.cpp
++++ b/vulkan/libvulkan/driver.cpp
+@@ -16,6 +16,7 @@
+ 
+ #define ATRACE_TAG ATRACE_TAG_GRAPHICS
+ 
++#include "../../libs/HostEnvironment.h"
+ #include "driver.h"
+ 
+ #include <dlfcn.h>
+@@ -57,7 +58,7 @@
+ std::unordered_map<const void*, HostDispatchEntry> host_dispatch_data;
+ }
+ bool HostDispatchEnabled() {
+-    static const bool enabled = getenv("APKLAYER_VULKAN_HOST") != nullptr;
++    static const bool enabled = apklayer::hostGetenv("APKLAYER_VULKAN_HOST") != nullptr;
+     return enabled;
+ }
+ bool SetHostData(const void* object, const void* data) {
+--- /dev/null
++++ b/libs/HostEnvironment.h
+@@ -0,0 +1,10 @@
++#pragma once
++#include <cstdlib>
++
++/* Backend controls belong to the host runtime; app environment changes must not reconfigure HALs. */
++extern "C" const char* libc_bio_host_getenv(const char*) __attribute__((weak));
++namespace apklayer {
++inline const char* hostGetenv(const char* name) {
++    return libc_bio_host_getenv ? libc_bio_host_getenv(name) : std::getenv(name);
++}
++}

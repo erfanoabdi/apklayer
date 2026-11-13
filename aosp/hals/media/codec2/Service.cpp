@@ -1,5 +1,6 @@
 /* AOSP media/codec2/hal/services/vendor.cpp AIDL registration, without Android
  * init/minijail: the normal Linux launcher owns this process. */
+#include "../../HostEnvironment.h"
 #include "HostDecoder.h"
 #include "DecodeProbe.h"
 #include "ReorderProbe.h"
@@ -110,7 +111,7 @@ extern "C" int main(int argc, char** argv) {
     // started on first use (cli/stack.cpp): an AOSP lazy service, it exits once no client holds it and the stack starts it again on the next lookup.
     // _exit, not the registrar's exit(): static destructors under btload abort while binder threads still run.
     int32_t result = -1;
-    if (!getenv("APKLAYER_LAZY_SERVICE")) result = AServiceManager_addService(service->asBinder().get(), name.c_str());
+    if (!apklayer::hostGetenv("APKLAYER_LAZY_SERVICE")) result = AServiceManager_addService(service->asBinder().get(), name.c_str());
     else if (__builtin_available(android 31, *)) {
         AServiceManager_setActiveServicesCallback([](bool clients, void*) {
             if (!clients && AServiceManager_tryUnregister()) _exit(0);

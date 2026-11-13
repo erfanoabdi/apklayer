@@ -2,6 +2,7 @@
 // SELinux and the kernel's per-transaction security context; neither exists on a desktop host (the kernel's security module is
 // AppArmor, which cannot supply an SELinux context), and the host's own isolation (bwrap, P6) is the boundary. The tree's
 // ServiceManager logic is used unchanged; only this policy layer is ours. Same interface as cmds/servicemanager/Access.h.
+#include "../HostEnvironment.h"
 #include "Access.h"
 
 #include <binder/IPCThreadState.h>
@@ -32,10 +33,10 @@ Access::CallingContext Access::getCallingContext() {
 // call (get, check, wait, isDeclared); the stack starts the service unless it runs, and the client waits as on a device (waitForService and
 // getService's polling look again, which also covers a lazy service that was just ending). Single-threaded: the service manager's looper makes every call.
 static void announce(const std::string& name) {
-    static const char* fifo = getenv("APKLAYER_LAZY_FIFO");
+    static const char* fifo = apklayer::hostGetenv("APKLAYER_LAZY_FIFO");
     static std::set<std::string> names = [] {
         std::set<std::string> out;
-        std::istringstream list(getenv("APKLAYER_LAZY_NAMES") ? getenv("APKLAYER_LAZY_NAMES") : "");
+        std::istringstream list(apklayer::hostGetenv("APKLAYER_LAZY_NAMES") ? apklayer::hostGetenv("APKLAYER_LAZY_NAMES") : "");
         for (std::string n; list >> n;) out.insert(n);
         return out;
     }();

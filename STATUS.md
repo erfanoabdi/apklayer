@@ -16,6 +16,8 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Open work: `docs/PLAN.md`
 
 - Runtime identity (2026-11-13): app property calls use AOSP defaults; VMRuntime queries and native maps/smaps/map_files/status group views are covered. Native suite (24 tests, including ELF/module/unwind checks), runtime-identity/art-maps APKs and native-bridge pass on UTM ARM64 and x86 translation with userspace binder. Waydroid ART baseline obtained. App/shared/provider classes now have actual PathClassLoader ownership; JNI/CDS tests pass on both architectures, and WebView survives new configuration contexts. Installed and in-memory DEX now share property/native-load/service transformations with per-loader metadata. Actual ART layouts/JNI IDs, boot-parent identity and other inspection gaps remain active in PLAN.
 
+- Environment replacement WIP (2026-11-13): shared active-ABI storage and Java/native/child probes pass on both VMs; private backend-control AOSP builds and final staging/regressions are pending. The working implementation is checkpointed at the owner's request; see CHANGELOG and PLAN before treating it as release-ready.
+
 ## How to work here
 - A new machine: `docs/INSTALL.md` (prebuilts branch, build, first app).
 - Build: `meson setup b --prefix <dir> -Dprebuilts=<prebuilts> && ninja -C b && meson install -C b --skip-subprojects [--only-changed]` builds and stages everything (bionic_translation as a patched subproject, pinned jars, native runtime, host classes, framework jars instrumented once; `-Dgfxstream=` for ES 1); the tree's `bin/apklayer` uses that install. Staging from the tree: `tools/stage`.

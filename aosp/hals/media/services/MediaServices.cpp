@@ -1,5 +1,6 @@
 /* AOSP media/mediaserver/main_mediaserver.cpp service registration, run as a
  * shared-library entrypoint under btload. No replacement media/player policy. */
+#include "../../HostEnvironment.h"
 #include <MediaPlayerService.h>
 #include <MediaExtractorService.h>
 #include <ResourceManagerService.h>
@@ -58,7 +59,7 @@ static void tryExit(android::binder::LazyServiceRegistrar& registrar) {
 }
 
 static void lazy(const char* name) {
-    if (!getenv("APKLAYER_LAZY_SERVICE")) return;
+    if (!apklayer::hostGetenv("APKLAYER_LAZY_SERVICE")) return;
     auto& registrar = android::binder::LazyServiceRegistrar::getInstance();
     registrar.setActiveServicesCallback([&registrar](bool clients) {
         gClients = clients;
@@ -73,7 +74,7 @@ static void lazy(const char* name) {
 
 // The extractor's own check (above): servicemanager reports the service's clients only, so the handed-out objects' end is noticed by polling.
 static void watchHandedOut() {
-    if (!getenv("APKLAYER_LAZY_SERVICE")) return;
+    if (!apklayer::hostGetenv("APKLAYER_LAZY_SERVICE")) return;
     // the driver's fd (ProcessState has no other accessor); this thread joins the pool as a looper below anyway
     if (android::IPCThreadState::self()->setupPolling(&gDriver) != 0) return;
     gRegistered = nodes(false);  // before the thread pool starts: no client has an object yet
