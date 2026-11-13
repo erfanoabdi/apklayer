@@ -262,7 +262,9 @@ int apklayer_proc_pid_hidden(const char *name)
 {
     static int host_view = -1;
     if (host_view < 0) { const char *v = getenv("APKLAYER_PROC_VIEW"); host_view = v && !strcmp(v, "host"); }
-    static __thread int busy;  /* the cgroup read below is a path call of its own (the preload wraps syscall) */
+    /* the cgroup read below is a path call of its own (the preload wraps syscall). volatile: glibc declares syscall/read/close leaf, so GCC may
+     * otherwise drop the store before the call and the guard never holds */
+    static __thread volatile int busy;
     if (host_view || busy || !__atomic_load_n(&own_data, __ATOMIC_ACQUIRE)) return 0;
     char *end;
     long pid = strtol(name, &end, 10);
@@ -277,7 +279,7 @@ int apklayer_proc_pid_hidden(const char *name)
 /* whether the directory `dirfd` (AT_FDCWD: the working directory) is /proc */
 int apklayer_proc_is_dir(int dirfd)
 {
-    static __thread int busy;
+    static __thread volatile int busy;  /* its raw syscalls reach the preload's syscall() and with it this function again (volatile: above) */
     struct stat here, proc;
     if (busy) return 0;
     busy = 1;
@@ -306,7 +308,7 @@ int apklayer_proc_hidden(const char *path)
         while (!strncmp(c, "./", 2)) c += 2;
         if (!strncmp(c, "proc/", 5) && c[5] >= '0' && c[5] <= '9') {
             struct stat root, here;
-            static __thread int busy_cwd;
+            static __thread volatile int busy_cwd;
             if (busy_cwd) return 0;
             busy_cwd = 1;
             int at_root = syscall(SYS_newfstatat, AT_FDCWD, ".", &here, 0) == 0 && syscall(SYS_newfstatat, AT_FDCWD, "/", &root, 0) == 0 && here.st_ino == root.st_ino && here.st_dev == root.st_dev;
@@ -347,6 +349,7 @@ int apklayer_proc_hidden_at(int dirfd, const char *path)
 {
     if (apklayer_proc_map_hidden && apklayer_proc_map_hidden(dirfd, path)) return 1;
     if (!path || path[0] == '/' || dirfd == AT_FDCWD) return apklayer_proc_hidden(path);
+    if (!*path) return 0;  /* AT_EMPTY_PATH: the open descriptor itself (glibc's fstat is fstatat(fd, "", AT_EMPTY_PATH)), no name to hide */
     char abs[PATH_MAX];
     if (strlen(path) + 7 >= sizeof abs || !apklayer_proc_is_dir(dirfd)) return 0;
     snprintf(abs, sizeof abs, "/proc/%s", path);
