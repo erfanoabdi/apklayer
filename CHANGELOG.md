@@ -7,6 +7,8 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - PGR in a scratch instance (`sbx`, a fresh install of the game, 3.5 GB of its data, not the default instance's 43 GB): with APKLAYER_SANDBOX=1 (needs no sudo here: subuid, newuidmap and the AppArmor profile were already installed) it ran
   100 s and 2 min 39 s without the 2 min 15 s SIGSEGV, 1-2 invalid frees. Control, same fresh instance WITHOUT the sandbox: 5 min (my limit), no SIGSEGV, 2 invalid frees. So the sandbox is not what spared it: a fresh instance
   behaves differently from the default one (17-31 frees, SIGSEGV at 2m15-2m23 every time, 6 runs). What differs is the default instance's state (accounts, its 43 GB of data, login/hot-update state), not /home or the identity.
+  **WRONG, corrected by the owner (2026-11-13): PGR only crashes in the main menu, never on the download screen.** The fresh `sbx` instance has none of the 43 GB, so every sbx run (sandbox on or off, the prefs-copied one too)
+  stayed on the download screen and could not crash: those runs say nothing about the sandbox, /home, the identity or the account. The sandbox question is open until a run reaches the main menu.
   (The sandbox view itself, hello-arm64 "layout" under APKLAYER_SANDBOX=1: /data/data lists 0 other packages and uid 10020 hold, but /home, /usr, /tmp and /run/user are still visible, and 254 of 274 maps lines name
   /home/wesley/.local/share/apklayer paths: the app view keeps the host's paths. docs/PLAN.md "Sandbox".)
 - ACE's file probes (APKLAYER_PATHS_DEBUG=1 run, 235k lookups): su in /data/local, /dev/qemu_pipe, qemud, genyd, virtpipe*, /fstab.ttVM_x86, /data/data/com.bluestacks.appmart: all ENOENT as on a device; it also looked at
