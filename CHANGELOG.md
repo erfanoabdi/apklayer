@@ -3,6 +3,11 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-13: native inherited executable environments
+- Current-converter Termux still launched bash with host HOME/PATH and runtime variables. Its installed JNI library calls clearenv, loops over putenv, then calls execvp; the first two used isolated guest storage, while inherited glibc execvp selected the host environment.
+- bionic_translation patch 0068 routes execv/execvp/execvpe, execl/execlp/execle and fexecve through the active guest environment and shared mapped-execution boundary. Explicit child environments remain unchanged; executable search uses the guest parent's PATH. Host JVM exec APIs remain untouched.
+- x86 validation: all 32 native tests pass (zero skips/failures/timeouts), including a new Termux-style clearenv/putenv regression across eight exec forms; the complete environment APK also passes through ARM64 translation. ARM runtime and current-DEX real Termux confirmation remain pending.
+
 ## 2026-11-13: Java guest executable lookup
 - ProcessBuilder and Runtime.exec now select executables using the guest parent's PATH, independently of the child's environment. A bounded Android 13 dalvikvm64 reference confirmed live parent PATH for inherited environments and first-launch cached parent PATH for explicit environments, including builder.environment().
 - Java sends basename launches through a validated, impossible proc-fd request path. The existing native exec adapter tries each candidate after changing cwd, preserves original argv and executable permissions, and handles Android script fallback and error precedence. Builders and pipeline commands are restored after success or failure; Runtime string commands retain whitespace tokenization. No Java file-existence prediction or host PATH mutation is used.
