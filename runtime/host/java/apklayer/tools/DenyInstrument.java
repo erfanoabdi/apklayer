@@ -4,6 +4,7 @@ import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.Handle;
 import org.objectweb.asm.commons.ClassRemapper;
 import org.objectweb.asm.commons.Remapper;
 
@@ -61,6 +62,31 @@ public final class DenyInstrument {
             "(Landroid/content/Context;Landroid/content/Intent;)Landroid/content/ComponentName;",
             "stopService(Landroid/content/Intent;)Z",
             "(Landroid/content/Context;Landroid/content/Intent;)Z");
+
+    private static boolean propertyCall(String owner, String name, String desc) {
+        if (owner.equals("java/lang/System")) return java.util.Set.of(
+                "getProperty(Ljava/lang/String;)Ljava/lang/String;",
+                "getProperty(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+                "setProperty(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+                "clearProperty(Ljava/lang/String;)Ljava/lang/String;",
+                "getProperties()Ljava/util/Properties;", "setProperties(Ljava/util/Properties;)V").contains(name + desc);
+        if (owner.equals("java/lang/Boolean")) return name.equals("getBoolean") && desc.equals("(Ljava/lang/String;)Z");
+        if (owner.equals("java/lang/Integer")) return name.equals("getInteger") && java.util.Set.of(
+                "(Ljava/lang/String;)Ljava/lang/Integer;", "(Ljava/lang/String;I)Ljava/lang/Integer;",
+                "(Ljava/lang/String;Ljava/lang/Integer;)Ljava/lang/Integer;").contains(desc);
+        return owner.equals("java/lang/Long") && name.equals("getLong") && java.util.Set.of(
+                "(Ljava/lang/String;)Ljava/lang/Long;", "(Ljava/lang/String;J)Ljava/lang/Long;",
+                "(Ljava/lang/String;Ljava/lang/Long;)Ljava/lang/Long;").contains(desc);
+    }
+
+    private static Object propertyHandle(Object value) {
+        if (value instanceof Handle) {
+            Handle h = (Handle) value;
+            if (h.getTag() == Opcodes.H_INVOKESTATIC && propertyCall(h.getOwner(), h.getName(), h.getDesc()))
+                return new Handle(h.getTag(), "apklayer/host/GuestSystemProperties", h.getName(), h.getDesc(), false);
+        }
+        return value;
+    }
 
     /** True if the call lands on the framework's Context method (not on a method the app declares). */
     private static boolean isFrameworkContextCall(String owner, String name, String desc) {
@@ -132,9 +158,25 @@ public final class DenyInstrument {
                                             "(Ljava/lang/ClassLoader;)Ldalvik/system/BaseDexClassLoader;", false);
                                 } else super.visitTypeInsn(opcode, type);
                             }
+                            @Override public void visitLdcInsn(Object value) { super.visitLdcInsn(propertyHandle(value)); }
+                            @Override public void visitInvokeDynamicInsn(String n, String d, Handle bootstrap, Object... args) {
+                                for (int i = 0; i < args.length; i++) args[i] = propertyHandle(args[i]);
+                                super.visitInvokeDynamicInsn(n, d, (Handle) propertyHandle(bootstrap), args);
+                            }
                             @Override
                             public void visitMethodInsn(int opcode, String owner, String mname, String mdesc,
                                                         boolean itf) {
+                                if (opcode == Opcodes.INVOKESTATIC && propertyCall(owner, mname, mdesc)) {
+                                    super.visitMethodInsn(opcode, "apklayer/host/GuestSystemProperties", mname, mdesc, false);
+                                    return;
+                                }
+                                if (opcode == Opcodes.INVOKEVIRTUAL && owner.equals("java/lang/invoke/MethodHandles$Lookup")
+                                        && ((mname.equals("findStatic") && mdesc.equals("(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/MethodHandle;"))
+                                        || (mname.equals("unreflect") && mdesc.equals("(Ljava/lang/reflect/Method;)Ljava/lang/invoke/MethodHandle;")))) {
+                                    super.visitMethodInsn(Opcodes.INVOKESTATIC, "apklayer/host/Reflect", mname,
+                                            "(Ljava/lang/invoke/MethodHandles$Lookup;" + mdesc.substring(1), false);
+                                    return;
+                                }
                                 // MultiDex.install(Context): the converter already merged every dex into one jar
                                 if (opcode == Opcodes.INVOKESTATIC && mname.equals("install") && mdesc.equals("(Landroid/content/Context;)V")
                                         && (owner.equals("androidx/multidex/MultiDex") || owner.equals("android/support/multidex/MultiDex"))) {

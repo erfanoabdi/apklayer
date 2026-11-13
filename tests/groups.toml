@@ -15,6 +15,10 @@
 [native]
 run = ["meson test -C b --suite bionic --print-errorlogs"]
 
+[runtime-identity]
+apps = ["hello-runtime"]
+run = ["python3 -u tests/vm/runtime-identity.py"]
+
 [native-bridge]
 # an arm64-only JNI app: translated through the native bridge on x86_64 (Digitalis, docs/X86_64.md), native on arm64
 apps = ["hello-arm64"]

@@ -3,6 +3,13 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-13: guest runtime identity
+- Validation: 21/21 native tests, runtime-identity APK, art-maps APK, and full native-bridge group pass on both UTM ARM64 and x86 PC with userspace Binder. Targeted reruns passed after correcting the nonexistent thread map_files test path and preserving platform-prefixed application -D flags.
+- App Java property access now uses the AOSP libcore fixed/default property behavior without exposing host configuration or changing host java.home. Direct calls, reflection, method handles/references and Boolean/Integer/Long helpers share the view; application -D options survive. Converter ABI 5/postprocessing 15 reconverts stale apps.
+- VMRuntime returns ART version/library and the app ISA/width, with AOSP heap-utilization hint semantics. This supplies queries, not ART object layouts, native symbols or JNI IDs.
+- Shared native process view covers smaps, hides JDK map_files entries across path and directory APIs, and reports supplementary groups from the same app identity used by bionic. Host/service opt-outs remain covered. Linux has no thread-self/map_files: tests use numeric process paths while retaining thread maps/smaps checks.
+- Real Waydroid Android 13 standalone ART baseline obtained through lxc-attach/dalvikvm64: runtime/property versions, ISA/width and hint clamping agree. It also confirms remaining gaps: real ART fields and PathClassLoader, absent host-only classes. Default heap hint varies by runtime configuration/version.
+
 ## 2026-11-13 (device)
 - The Pixel 5 is the default device: bridge/native/apklayer.prop presents Google / Pixel 5 / redfin (Snapdragon 765G, `berberis.cpuinfo=pixel5`: 8 cores and MIDR_EL1 from 0020/0021); the old identity is profiles/desktop.prop (`tools/device-profile.sh desktop`), `off` returns to the default. tests/vm/properties.sh expects the Pixel 5 now. Android stays 17, ro.hardware stays apklayer. The deb installs the profiles (meson.build).
 

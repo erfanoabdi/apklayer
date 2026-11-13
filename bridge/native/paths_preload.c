@@ -108,8 +108,9 @@ static int is_proc_dir(DIR *d)
     if (!known) { if (KSTAT(AT_FDCWD, "/proc", &st, 0)) return 0; dev = st.st_dev; ino = st.st_ino; known = 1; }
     return (mine.st_ino = 0, (int)SYSCALL(SYS_fstat, (long)dirfd(d), (long)&mine) == 0) && mine.st_ino == ino && mine.st_dev == dev;
 }
+int apklayer_proc_map_hidden(int dirfd, const char *path);
 #define PROC_READDIR(name, type) struct type *name(DIR *d) { struct type *(*real)(DIR *) = (struct type *(*)(DIR *))REAL(name); struct type *e; \
-    int proc = -1, data = is_data_dir(d); while ((e = real(d))) { if (data) { if (!apklayer_data_entry_hidden(e->d_name)) return e; continue; } \
+    int proc = -1, data = is_data_dir(d); while ((e = real(d))) { if (apklayer_proc_map_hidden(dirfd(d), e->d_name)) continue; if (data) { if (!apklayer_data_entry_hidden(e->d_name)) return e; continue; } \
         if (e->d_name[0] < '0' || e->d_name[0] > '9') return e; if (proc < 0) proc = is_proc_dir(d); \
         if (!proc || !apklayer_proc_pid_hidden(e->d_name)) return e; } return NULL; }
 PROC_READDIR(readdir, dirent)
@@ -315,6 +316,8 @@ long syscall(long nr, ...)
              ;
     int two = nr == SYS_renameat || nr == SYS_renameat2 || nr == SYS_linkat;  /* (fd, path, fd, path, ...) */
     const char *path = at ? (const char *)a[1] : NULL, *path2 = two ? (const char *)a[3] : NULL;
+    if (at) PROC_GONE((int)a[0], path);
+    if (two) PROC_GONE((int)a[2], path2);
     MAP(m, path && path[0] == '/' ? path : NULL);
     MAP(m2, path2 && path2[0] == '/' ? path2 : NULL);
     if (m) a[1] = (long)m;

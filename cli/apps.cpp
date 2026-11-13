@@ -31,7 +31,7 @@ std::string cacheKey(const Layout& l, const std::string& apk, const std::vector<
     std::string text = sha256File(apk);
     for (const std::string& s : splits) text += " " + sha256File(s);  // a split's code converts with the base (dex2jvm reads split_*.apk beside base.apk)
     text += "\nconverter-abi " + std::to_string(kConverterAbi);
-    text += "\npost-processing v14: verified, Android classloader adapter, java.* own classes relocated (no library relocation: apps have their own class loader), static finals written outside clinit, native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke\n";
+    text += "\npost-processing v15: app-facing ART properties, verified, Android classloader adapter, java.* own classes relocated (no library relocation: apps have their own class loader), static finals written outside clinit, native loader, multidex no-op, in-process services, Unsafe.getUnsafe, Method.invoke\n";
     std::vector<std::string> jars = listDir(l.frameworkDir());
     std::sort(jars.begin(), jars.end());
     for (const std::string& j : jars)
