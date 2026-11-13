@@ -7,6 +7,7 @@ import android.widget.TextView;
 /** Calls an arm64-only JNI library (hello.c): arithmetic, a call into Java, a native thread calling Java; times the first and a warm call. */
 public class Main extends Activity {
     private static native String cpu();
+    private static native int artMaps();
     private static native double work(int n);
     private static native int callJava(int v);
     private static native int threadCall(int v);
@@ -41,6 +42,21 @@ public class Main extends Activity {
         super.onCreate(state);
         long t0 = System.nanoTime();
         System.loadLibrary("hello");
+        if (Boolean.getBoolean("hello.artmaps")) {
+            int nativeBits = artMaps();
+            boolean javaMaps = true;
+            for (String path : new String[]{"/proc/self/maps", "/proc/thread-self/maps"}) {
+                try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader(path))) {
+                    String maps = r.lines().collect(java.util.stream.Collectors.joining("\n"));
+                    javaMaps &= maps.contains("/apex/com.android.art/lib64/libart.so") && !maps.contains("libjvm.so")
+                            && !maps.contains("libjava.so") && !maps.contains("/lib/modules") && !maps.contains(".jsa");
+                } catch (java.io.IOException e) { throw new AssertionError(e); }
+            }
+            boolean ok = javaMaps && nativeBits == 63 && "Dalvik".equals(System.getProperty("java.vm.name"));
+            log("ART maps " + (ok ? "PASS" : "FAIL") + " java=" + javaMaps + " nativeBits=" + nativeBits);
+            TextView text = new TextView(this); text.setText("ART maps: " + ok); setContentView(text);
+            return;
+        }
         long t1 = System.nanoTime();
         String cpu = cpu();
         long t2 = System.nanoTime();

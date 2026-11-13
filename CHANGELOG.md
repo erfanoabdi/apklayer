@@ -2203,3 +2203,19 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 
 ### 2026-11-03 — per-instance screenshots: libapklayer_vdisplay (registers its display token) and the new libapklayer_screenshot
 - Why: tests on a desktop shared by several instances cannot tell windows apart; `apklayer screenshot` captures one app's virtual display through SurfaceFlinger's own captureDisplay. New module in vendor/apklayer/tools (build-graph regeneration). Only VirtualDisplay.cpp, tools/Android.bp and tools/screenshot.cpp copied into vendor/apklayer (not a full sync-aosp.sh: the tree has a hals/camera directory this branch lacks). Command: `cd ~/los24 && source build/envsetup.sh && breakfast gsi_arm64 userdebug && m libapklayer_vdisplay libapklayer_screenshot`. Result: below.
+
+## 2026-11-13 — App maps runtime identity
+
+- The shared preload path layer presents the app JVM's mapped libjvm as `/apex/com.android.art/lib[64]/libart.so`, with the same ranges, permissions and file offsets. Other files under that JDK root become anonymous mappings. Bundled JDKs and deleted mappings are covered; no address ranges are invented or removed.
+- Covers open/open64/fortified open, openat, fopen/freopen and the interposed syscall entry, including relative paths and own-thread aliases. Services without app identity retain the host view; the existing `APKLAYER_PROC_VIEW=host` override retains it for diagnosis.
+- Focused UTM proof: compiled the changed preload directly, passed app/service/host-view C tests, real HotSpot FileReader/NIO checks, and the existing path-layer regression. Tests are registered in the bionic suite (`tests/run native`). That runner was attempted but refuses the VM's stale Android prebuilts; no full runtime install or translated x86/ARM32 run was performed.
+- Limit: this is maps-based runtime identification, not ART execution or symbol/object-layout compatibility. `/proc/self/map_files` and direct machine syscall instructions are outside this preload change; the existing translator filters remain separate. Maps are snapshots at open (reopen to refresh).
+
+### ART maps: full runner and APK validation (2026-11-13)
+
+- Refreshed stale UTM Android DSOs and Robolectric source files from the local prebuilts checkout; refreshed the x86 PC's vdisplay DSO. Hashes match the checked-in locks. No AOSP rebuild was needed. Meson built and installed the runtime on both hosts.
+- Added `art-maps`: hello-arm64 checks Dalvik's Java VM name, Java FileReader maps, and six NDK reads (fopen, open, syscall/openat through self and thread-self paths). UTM native ARM64 and the x86 PC's translated ARM64 both report `ART maps PASS java=true nativeBits=63`.
+- `tests/run native`: 18/18 pass on both UTM and x86, including the mapping range/permission, deleted mapping, read-only, CLOEXEC, seek, service/host opt-out and real HotSpot FileReader/NIO tests.
+- `tests/run files gpu`: both groups pass on both machines, including Java/Os/NIO own-data access, document-provider volumes, UiBench rendering in two locales, and hardware bitmap readback.
+- The broader `native-bridge` group fails existing UID/proc-view checks: UTM returns proc bits 10; x86 returns uid/file owner 1000 instead of app uid 10025 and proc bits 11. Both failures were reproduced with the preload built from `d0399c42^` in an isolated temporary native directory. JNI calls, native thread callbacks, fault recovery, auxv and GL rendering pass. Tracked separately in PLAN; not masked or claimed as passing.
+- All owned test instances stopped. ARM32 hardware and direct machine-level syscall instructions remain outside this validation; the feature's scope remains maps identity, not ART symbols/object layouts.
