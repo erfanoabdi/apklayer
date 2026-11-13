@@ -14,6 +14,7 @@
 #include <vector>
 #include <set>
 #include <string>
+#include "../hals/HostEnvironment.h"
 
 #define CHECK(x) do { VkResult r = (x); if (r != VK_SUCCESS) { fprintf(stderr, "vktest: %s = %d line %d\n", #x, r, __LINE__); return 1; } } while (0)
 #define REQUIRE(x) do { if (!(x)) { fprintf(stderr, "vktest: %s failed line %d\n", #x, __LINE__); return 1; } } while (0)
@@ -79,7 +80,7 @@ static int run(void* library, unsigned cycle) {
     printf("vktest: dma_buf=%d drm_modifier=%d semaphore_fd=%d sync_fd_features=0x%x android_swapchain=%d\n",
         dma, modifier, semaphoreFd, semaphoreProperties.externalSemaphoreFeatures, swapchain); fflush(stdout);
     // Android's swapchain exists when asked for (APKLAYER_VULKAN_PRESENT) and the host device can import dma-bufs and share sync fds (Driver.cpp)
-    REQUIRE(swapchain == (getenv("APKLAYER_VULKAN_PRESENT") && dma && modifier && semaphoreFd));
+    REQUIRE(swapchain == (apklayer::hostGetenv("APKLAYER_VULKAN_PRESENT") && dma && modifier && semaphoreFd));
     count = 0; vkGetPhysicalDeviceQueueFamilyProperties(gpu, &count, nullptr);
     std::vector<VkQueueFamilyProperties> families(count); vkGetPhysicalDeviceQueueFamilyProperties(gpu, &count, families.data());
     uint32_t family = UINT32_MAX;

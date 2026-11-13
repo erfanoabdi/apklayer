@@ -4,7 +4,7 @@ Subject: [PATCH] apklayer: keep private framework controls in the host environme
 The app libc environment is isolated. Backend switches for missing system_server
 and host Vulkan dispatch must continue reading the host runtime's configuration.
 Use one private helper; the weak host getter falls back to ordinary getenv on
-Android without apklayer. Applies after0008; modules libbinder, libsensorprivacy,
+Android without apklayer. Applies after0008; modules libactivitymanager_aidl, libsensorprivacy,
 libvulkan (both ABIs).
 
 --- a/libs/binder/ActivityManager.cpp
