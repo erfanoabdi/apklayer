@@ -1673,7 +1673,11 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0024 (Kemu's untagged addresses in exclusive and atomic accesses)
 - Why: the owner asked for 4de3cab3 too (after 0023's two). Written after 0023 (patches/aosp/.../0024); its heavy-tier hunk was redone by hand. Not applied to the Mac tree
   or built yet: waits for 0023's build so each can be tested alone first.
-- Built together with the merge of origin/main (Erfan's ART maps commits d0399c42, 8bdbc709: bridge/native/proc_maps.c in the preload). Same command as 0016; output in ~/los24-0024-build.log (Mac). Status: RUNNING.
+- Built together with the merge of origin/main (Erfan's ART maps commits d0399c42, 8bdbc709: bridge/native/proc_maps.c in the preload). Same command as 0016; output in ~/los24-0024-build.log (Mac).
+- Result: `build completed successfully (11:04)`, no errors; library sha256 b8140cba30817fc8c1fecd650c188f139e3a00b161af44354b9a23b7dd6d0050 (0016-0024).
+- PGR runs (NVIDIA PC, default instance without the Pixel 5 profile, ~100 s window, 2026-11-13): with 0023 + Erfan's ART maps preload (14:12): 2 min 23 s, SIGSEGV re-raise (sent by kill, pthread_sigmask),
+  17 invalid frees logged; with 0024 + Erfan's 09261503 preload (proc_view.c, installed from this tree; earlier preload in ~/apklayer-fix/orig/libapklayer-preload.0238.so) (14:16): 2 min 22 s,
+  the same SIGSEGV, 20 invalid frees logged (0006's cap). hello-arm64 PASS (uid ok, proc view ok, GL PASS) with 0024. PGR ends the same way as before 0016.
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0023 (Kemu's MOV copy and shared TBI mask commits)
 - Why: the owner asked for the Kemu speed commits that apply: b88517d9 (MOV register copies) and 615e5c93 (one TBI mask per LDP/STP). 4de3cab3 and a2a2de1a do not apply (patch header).
   Same command as 0016; output in ~/los24-0023-build.log (Mac).
