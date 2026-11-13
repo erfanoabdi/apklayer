@@ -6,8 +6,9 @@
  * pass unchanged). Method.invoke called through JNI on one of these methods goes through apklayer.host.Reflect.invoke.
  * The caller: guest code is what bionic_translation's linker loaded (an app's or Android's library, or the native bridge that runs
  * translated code: on x86_64 Berberis calls JNI for its guest). The return address of the JNI call is classified: in a glibc-loaded
- * module (the JVM, the shim, JDK libraries) it is the host's; in a bionic-loaded one, the guest's; anywhere else (JIT code, the JVM's
- * native wrappers: a guest JNI call in tail position returns there) the host's. Host control reads keep the host values. */
+ * module (the JVM, the shim, JDK libraries) it is the host's; in a bionic-loaded one, the guest's. Anywhere else (a guest JNI call in tail
+ * position returns to the JVM's native wrapper; JIT-compiled guest code) the native method running on the thread decides: one an app
+ * class loader defined is bound to the app's libraries. Host control reads keep the host values. */
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <jni.h>
@@ -25,13 +26,33 @@ static jclass *owners;           /* each replacement's class, passed with its ID
 static jclass reflect_class;     /* apklayer.host.Reflect */
 static jmethodID method_invoke, reflect_invoke;
 static jniNativeInterface next;  /* the table under this layer */
+static jvmtiEnv *ti;
+static jclass app_loader;        /* dalvik.system.BaseDexClassLoader */
 static int debug;
 
-static int guest_caller(const void *pc)
+/* the native method this thread runs was defined by an app's class loader (its natives are the app's libraries) */
+static int app_native_frame(JNIEnv *env)
+{
+    jmethodID m;
+    jlocation at;
+    jboolean native = JNI_FALSE;
+    jclass c = NULL;
+    jobject loader = NULL;
+    if (!ti || (*ti)->GetFrameLocation(ti, NULL, 0, &m, &at) != JVMTI_ERROR_NONE
+        || (*ti)->IsMethodNative(ti, m, &native) != JVMTI_ERROR_NONE || !native
+        || (*ti)->GetMethodDeclaringClass(ti, m, &c) != JVMTI_ERROR_NONE) return 0;
+    int app = (*ti)->GetClassLoader(ti, c, &loader) == JVMTI_ERROR_NONE && loader && next.IsInstanceOf(env, loader, app_loader);
+    if (loader) next.DeleteLocalRef(env, loader);
+    next.DeleteLocalRef(env, c);
+    return app;
+}
+
+static int guest_caller(JNIEnv *env, const void *pc)
 {
     Dl_info info;
     if (dladdr(pc, &info)) return 0;      /* a host module */
-    return bionic_dladdr(pc, &info);      /* a bionic-loaded one (its host fallback finds nothing either) */
+    if (bionic_dladdr(pc, &info)) return 1;  /* a bionic-loaded one (its host fallback found nothing either) */
+    return app_native_frame(env);
 }
 
 static jint find(jmethodID m)
@@ -41,11 +62,11 @@ static jint find(jmethodID m)
 }
 
 /* the route for this call, or -1: a routed ID called from guest code */
-static jint route(jmethodID m, const void *pc)
+static jint route(JNIEnv *env, jmethodID m, const void *pc)
 {
     jint i = find(m);
     if (i < 0) return -1;
-    int guest = guest_caller(pc);
+    int guest = guest_caller(env, pc);
     if (debug) {
         Dl_info info = {0};
         if (!dladdr(pc, &info)) bionic_dladdr(pc, &info);
@@ -57,19 +78,19 @@ static jint route(jmethodID m, const void *pc)
 #define STATIC_CALLS(Type, type) \
 static type JNICALL static_##Type##V(JNIEnv *env, jclass c, jmethodID m, va_list ap) \
 { \
-    jint r = route(m, __builtin_return_address(0)); \
+    jint r = route(env, m, __builtin_return_address(0)); \
     return r < 0 ? next.CallStatic##Type##MethodV(env, c, m, ap) : next.CallStatic##Type##MethodV(env, owners[r], routes[r].replacement, ap); \
 } \
 static type JNICALL static_##Type##A(JNIEnv *env, jclass c, jmethodID m, const jvalue *a) \
 { \
-    jint r = route(m, __builtin_return_address(0)); \
+    jint r = route(env, m, __builtin_return_address(0)); \
     return r < 0 ? next.CallStatic##Type##MethodA(env, c, m, a) : next.CallStatic##Type##MethodA(env, owners[r], routes[r].replacement, a); \
 } \
 static type JNICALL static_##Type(JNIEnv *env, jclass c, jmethodID m, ...) \
 { \
     va_list ap; \
     va_start(ap, m); \
-    jint r = route(m, __builtin_return_address(0)); \
+    jint r = route(env, m, __builtin_return_address(0)); \
     type v = r < 0 ? next.CallStatic##Type##MethodV(env, c, m, ap) : next.CallStatic##Type##MethodV(env, owners[r], routes[r].replacement, ap); \
     va_end(ap); \
     return v; \
@@ -79,13 +100,13 @@ STATIC_CALLS(Boolean, jboolean)
 
 static void JNICALL static_VoidV(JNIEnv *env, jclass c, jmethodID m, va_list ap)
 {
-    jint r = route(m, __builtin_return_address(0));
+    jint r = route(env, m, __builtin_return_address(0));
     if (r < 0) next.CallStaticVoidMethodV(env, c, m, ap);
     else next.CallStaticVoidMethodV(env, owners[r], routes[r].replacement, ap);
 }
 static void JNICALL static_VoidA(JNIEnv *env, jclass c, jmethodID m, const jvalue *a)
 {
-    jint r = route(m, __builtin_return_address(0));
+    jint r = route(env, m, __builtin_return_address(0));
     if (r < 0) next.CallStaticVoidMethodA(env, c, m, a);
     else next.CallStaticVoidMethodA(env, owners[r], routes[r].replacement, a);
 }
@@ -93,7 +114,7 @@ static void JNICALL static_Void(JNIEnv *env, jclass c, jmethodID m, ...)
 {
     va_list ap;
     va_start(ap, m);
-    jint r = route(m, __builtin_return_address(0));
+    jint r = route(env, m, __builtin_return_address(0));
     if (r < 0) next.CallStaticVoidMethodV(env, c, m, ap);
     else next.CallStaticVoidMethodV(env, owners[r], routes[r].replacement, ap);
     va_end(ap);
@@ -105,7 +126,7 @@ static int invoke_routed(JNIEnv *env, jobject method, jmethodID m, const void *p
     if (m != method_invoke || !method) return 0;
     jmethodID target = next.FromReflectedMethod(env, method);
     if (!target || find(target) < 0) { next.ExceptionClear(env); return 0; }
-    return route(target, pc) >= 0;
+    return route(env, target, pc) >= 0;
 }
 static jobject JNICALL invoke_A(JNIEnv *env, jobject o, jmethodID m, const jvalue *a)
 {
@@ -137,8 +158,9 @@ static jobject JNICALL invoke_plain(JNIEnv *env, jobject o, jmethodID m, ...)
     return v;
 }
 
-int apklayer_route_system_calls(JNIEnv *env, jclass reflect, jniNativeInterface *table)
+int apklayer_route_system_calls(JNIEnv *env, jvmtiEnv *jvmti, jclass reflect, jniNativeInterface *table)
 {
+    ti = jvmti;
     const char *d = getenv("APKLAYER_JNI_ROUTE_DEBUG");
     debug = d && *d == '1';
     jmethodID pairs_of = (*env)->GetStaticMethodID(env, reflect, "jniRoutes", "()[Ljava/lang/reflect/Method;");
@@ -147,7 +169,10 @@ int apklayer_route_system_calls(JNIEnv *env, jclass reflect, jniNativeInterface 
     jclass method_class = (*env)->FindClass(env, "java/lang/reflect/Method");
     method_invoke = method_class ? (*env)->GetMethodID(env, method_class, "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;") : NULL;
     jobjectArray pairs = pairs_of ? (*env)->CallStaticObjectMethod(env, reflect, pairs_of) : NULL;
-    if (!reflect_invoke || !method_invoke || !pairs) return -1;
+    jmethodID loader_class_of = (*env)->GetStaticMethodID(env, reflect, "appLoaderClass", "()Ljava/lang/Class;");
+    jobject loader_class = loader_class_of ? (*env)->CallStaticObjectMethod(env, reflect, loader_class_of) : NULL;
+    if (!reflect_invoke || !method_invoke || !pairs || !loader_class) return -1;
+    app_loader = (*env)->NewGlobalRef(env, loader_class);
     jsize n = (*env)->GetArrayLength(env, pairs) / 2;
     routes = calloc((size_t)n, sizeof *routes);
     owners = calloc((size_t)n, sizeof *owners);

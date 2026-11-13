@@ -45,6 +45,9 @@ public final class Reflect {
         return pairs.toArray(new Method[0]);
     }
 
+    /** The class of app class loaders: a guest JNI call from no native module is the app's when an app class's native method runs. */
+    static Class<?> appLoaderClass() { return dalvik.system.BaseDexClassLoader.class; }
+
     private static Method replacement(Method method) {
         Method environment = GuestEnvironment.replacement(method);
         return environment == method ? GuestSystemProperties.replacement(method) : environment;

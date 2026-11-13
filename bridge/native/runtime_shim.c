@@ -514,9 +514,9 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
         patched.CallObjectMethodA = w_CallObjectMethodA; patched.CallStaticObjectMethodA = w_CallStaticObjectMethodA;
     }
     {   /* guest native calls of System's property/environment methods reach the app's views (last: it chains to the entries above) */
-        extern int apklayer_route_system_calls(JNIEnv *, jclass, jniNativeInterface *);
+        extern int apklayer_route_system_calls(JNIEnv *, jvmtiEnv *, jclass, jniNativeInterface *);
         jclass reflect = lazy_find_class(env, "apklayer/host/Reflect");
-        int error = !reflect || apklayer_route_system_calls(env, reflect, &patched);
+        int error = !reflect || apklayer_route_system_calls(env, ti, reflect, &patched);
         if (reflect) (*env)->DeleteLocalRef(env, reflect);
         if (error) { (*env)->ExceptionDescribe(env); fprintf(stderr, "[runtime] cannot route JNI System calls\n"); return -1; }
     }
