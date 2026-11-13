@@ -14,7 +14,7 @@ Read first: `CLAUDE.md` (rules), `goal.md`, this file. Open work: `docs/PLAN.md`
 - Binder (2026-11-09, for 0.4.9): apklayer's userspace binder (bridge/binderd, docs/BINDER.md) is the default, no root step; the kernel's is an option (`apklayer binder kernel`, the manager's Hardware page). Test groups run on userspace; `binder-kernel`, `host-binder-kernel` keep the kernel's.
 - Open work by area: `docs/PLAN.md`.
 
-- App maps identity (2026-11-13): shared preload masks JDK mappings and presents libjvm as ART for maps-based checks. Native and real-JVM focused tests pass on UTM; full runner blocked by stale VM prebuilts (CHANGELOG.md).
+- App maps identity (2026-11-13): shared preload masks JDK mappings and presents libjvm as ART for maps-based checks. Registered native suite (18 tests) and APK Java/JNI checks pass on UTM ARM64 and the x86 PC through ARM64 translation (CHANGELOG.md).
 
 ## How to work here
 - A new machine: `docs/INSTALL.md` (prebuilts branch, build, first app).

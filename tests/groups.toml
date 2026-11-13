@@ -461,3 +461,7 @@ run = ["python3 -u tests/vm/otr2-input.py scale"]
 needs = ["com.dogbytegames.otrnext"]
 alone = true
 run = ["python3 -u tests/vm/otr2-input.py aspect"]
+
+[art-maps]
+apps = ["hello-arm64"]
+run = ["python3 -u tests/vm/art-maps.py"]

@@ -204,4 +204,4 @@ Behaviour that differs from Android or from stock Robolectric without editing up
 
 ### App runtime maps identity (2026-11-13)
 
-`bridge/native/proc_maps.c` is shared preload code, not an upstream patch: the app's own maps expose the JVM mapping as ART and anonymize the JDK's other mappings. `paths_preload.c` routes descriptor and stdio opens to it; no app-specific workaround or additional dependency. Tests: `tests/native/proc-maps.c`, `ArtMaps.java` (bionic suite). This complements binary_translation 0012/0014's host filtering; it does not supply ART native symbols or rewrite map_files.
+`bridge/native/proc_maps.c` is shared preload code, not an upstream patch: the app's own maps expose the JVM mapping as ART and anonymize the JDK's other mappings. `paths_preload.c` routes descriptor and stdio opens to it; no app-specific workaround or additional dependency. Tests: `tests/native/proc-maps.c`, `ArtMaps.java` (bionic suite), plus `tests/run art-maps` (converted Java and ARM64 NDK fopen/open/syscall, native and translated). This complements binary_translation 0012/0014's host filtering; it does not supply ART native symbols or rewrite map_files.

@@ -241,3 +241,9 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
 - NFC, biometrics, game controllers, ModemManager telephony, screen capture portal; backlight and thermal are the host's.
 - Bluetooth advertising/peripheral, A2DP/HFP, LE audio, OPP; USB accessory mode, tethering, detaching host drivers.
 - Several phone instances as a product; a JRE provisioned by setup for the Ubuntu Touch deb (the click bundles its JDK).
+
+### Existing native-bridge UID/proc-view test gaps (2026-11-13)
+
+`tests/run native-bridge` on unsandboxed UTM ARM64 reports `proc view WRONG bits 10`: status Uid/Gid and raw getdents64 do not have the translator's virtualized view. Reproduced with the pre-ART-maps preload from `d0399c42^`; unrelated to maps filtering. JNI, thread callbacks, fault recovery, auxv, own-data ownership and GL checks pass. Align native `/proc` behavior with the translated route, then keep the same assertion on both.
+
+On the x86 PC's translated ARM64 route, the same group reports `getuid 1000, files owner 1000, app 10025` and proc bits 11. The identical failure reproduces with the pre-change preload too. Check that deployed translator uid/stat/getdents patches match the source series before changing runtime behavior.
