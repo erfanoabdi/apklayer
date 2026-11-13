@@ -1735,7 +1735,8 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0025 (Kemu's code-cost tier selection, a2a2de1a)
 - Why: the owner asked for a2a2de1a too. Ported (assembler under cpu_emulation/, `Call` is `CallRel`; tests left out): hot regions pick the heavy tier by captured loops and emitted x86
   cost (default; BERBERIS_GEARUP_POLICY=legacy restores the length rule). Dry-run applies to the Mac tree with 0024 in it. Built after 0026's (proxy libc); same command as 0016, output in ~/los24-0025-build.log (Mac).
-- First attempt (15:00): the Mac's connection dropped before the build began (no log, the patch was applied); started again 18:15 with the log kept. Status: RUNNING.
+- First attempt (15:00): the Mac's connection dropped before the build began (no log, the patch was applied); started again 18:15 with the log kept.
+- Result: `build completed successfully (15:36)`, no errors (longer than the 9-11 min of the others: the assembler headers changed, so most of the translator recompiled); libberberis_arm64.so sha256 e49d7f176032424ea850942d27cf6619adaa1f5dbf4a57c84abefbf41f281a97 (0016-0025, differs from 0024's b8140cba...).
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0024 (Kemu's untagged addresses in exclusive and atomic accesses)
 - Why: the owner asked for 4de3cab3 too (after 0023's two). Written after 0023 (patches/aosp/.../0024); its heavy-tier hunk was redone by hand. Not applied to the Mac tree
   or built yet: waits for 0023's build so each can be tested alone first.
