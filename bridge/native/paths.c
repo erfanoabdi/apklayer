@@ -363,6 +363,7 @@ int apklayer_proc_hidden_at(int dirfd, const char *path)
 {
     if (apklayer_proc_map_hidden && apklayer_proc_map_hidden(dirfd, path)) return 1;
     if (!path || path[0] == '/' || dirfd == AT_FDCWD) return apklayer_proc_hidden(path);
+    if (!*path) return 0;  /* AT_EMPTY_PATH: the open descriptor itself (glibc's fstat is fstatat(fd, "", AT_EMPTY_PATH)), no name to hide */
     char abs[PATH_MAX];
     if (strlen(path) + 7 >= sizeof abs || !apklayer_proc_is_dir(dirfd)) return 0;
     snprintf(abs, sizeof abs, "/proc/%s", path);

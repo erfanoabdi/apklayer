@@ -12,6 +12,7 @@
 #include <string.h>
 #include <sys/inotify.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/xattr.h>
 #include <unistd.h>
 
@@ -41,6 +42,14 @@ int main(int argc, char **argv) {
     char buf[64] = {0};
     assert(readlinkat(AT_FDCWD, "/storage/t/d", buf, sizeof buf) == 1 && buf[0] == 'b');
     assert(fchownat(AT_FDCWD, "/storage/t/b", getuid(), getgid(), 0) == 0);
+    {   /* a descriptor-relative stat (glibc's fstat is fstatat(fd, "", AT_EMPTY_PATH)): the /proc filter asks whether fd is /proc with a raw
+         * syscall that reaches the preload's syscall() again; it recursed until the stack ran out (systemd-run under the preload, 2026-11-13) */
+        struct stat st;
+        int dir = open(in("t"), O_RDONLY | O_DIRECTORY);
+        assert(dir >= 0 && fstatat(dir, "", &st, AT_EMPTY_PATH) == 0 && S_ISDIR(st.st_mode) && fstat(dir, &st) == 0);
+        assert(fstatat(dir, "b", &st, 0) == 0 && syscall(SYS_newfstatat, dir, "", &st, AT_EMPTY_PATH) == 0);
+        close(dir);
+    }
     /* glibc < 2.33's stat entry points, which programs built against it call (the Sailfish package's JDK) */
     int (*xstat64)(int, const char *, struct stat64 *) = (int (*)(int, const char *, struct stat64 *))dlsym(RTLD_DEFAULT, "__xstat64");
     int (*lxstat64)(int, const char *, struct stat64 *) = (int (*)(int, const char *, struct stat64 *))dlsym(RTLD_DEFAULT, "__lxstat64");
