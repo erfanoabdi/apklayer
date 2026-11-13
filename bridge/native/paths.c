@@ -262,7 +262,7 @@ int apklayer_proc_pid_hidden(const char *name)
 {
     static int host_view = -1;
     if (host_view < 0) { const char *v = getenv("APKLAYER_PROC_VIEW"); host_view = v && !strcmp(v, "host"); }
-    static __thread int busy;  /* the cgroup read below is a path call of its own (the preload wraps syscall) */
+    static __thread volatile int busy;  /* volatile: GCC drops the store of a non-escaping local around the call (systemd-run recursed to SIGSEGV); the cgroup read below is a path call of its own (the preload wraps syscall) */
     if (host_view || busy || !__atomic_load_n(&own_data, __ATOMIC_ACQUIRE)) return 0;
     char *end;
     long pid = strtol(name, &end, 10);
@@ -277,7 +277,7 @@ int apklayer_proc_pid_hidden(const char *name)
 /* whether the directory `dirfd` (AT_FDCWD: the working directory) is /proc */
 int apklayer_proc_is_dir(int dirfd)
 {
-    static __thread int busy;
+    static __thread volatile int busy;  /* volatile: see apklayer_proc_pid_hidden */
     struct stat here, proc;
     if (busy) return 0;
     busy = 1;
@@ -306,7 +306,7 @@ int apklayer_proc_hidden(const char *path)
         while (!strncmp(c, "./", 2)) c += 2;
         if (!strncmp(c, "proc/", 5) && c[5] >= '0' && c[5] <= '9') {
             struct stat root, here;
-            static __thread int busy_cwd;
+            static __thread volatile int busy_cwd;
             if (busy_cwd) return 0;
             busy_cwd = 1;
             int at_root = syscall(SYS_newfstatat, AT_FDCWD, ".", &here, 0) == 0 && syscall(SYS_newfstatat, AT_FDCWD, "/", &root, 0) == 0 && here.st_ino == root.st_ino && here.st_dev == root.st_dev;
