@@ -3,6 +3,12 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-13: native module identity
+- Validation: 24/24 native tests, native-bridge and art-maps pass on UTM ARM64 and x86 userspace Binder. The expanded APK module inspection also passes natively and through ARM64 translation.
+- bionic_translation 0066 shares JDK module names with the app process view in dladdr/dl_iterate_phdr. Glibc/JVM callers retain original names. Real load addresses, symbols and unwind program headers remain intact; the existing PT_DYNAMIC protection still prevents guest PLT hooks from patching host internals.
+- Three native tests load actual ELF fixtures under JDK paths and check names, host/service opt-outs, retained load/unwind metadata and a backtrace across the fixture. Expanded the real ARM64 APK check to inspect modules and resolve its own JNI address.
+- ART investigation: current SerialGC cannot supply ART's lifetime-stable primitive-array storage through standard JNI pinning. The existing TypedArray/PathIterator adapters are bounded, consumer-specific implementations, not general nonmoving arrays. The standalone runtime diagnostic now reports VMRuntime queries and ART-only reflection fields.
+
 ## 2026-11-13: guest runtime identity
 - Validation: 21/21 native tests, runtime-identity APK, art-maps APK, and full native-bridge group pass on both UTM ARM64 and x86 PC with userspace Binder. Targeted reruns passed after correcting the nonexistent thread map_files test path and preserving platform-prefixed application -D flags.
 - App Java property access now uses the AOSP libcore fixed/default property behavior without exposing host configuration or changing host java.home. Direct calls, reflection, method handles/references and Boolean/Integer/Long helpers share the view; application -D options survive. Converter ABI 5/postprocessing 15 reconverts stale apps.

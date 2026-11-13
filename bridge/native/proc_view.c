@@ -64,6 +64,20 @@ static const char *jdk_root(void)
     return root;
 }
 
+/* Only bionic's dladdr/phdr callbacks call this; host loader and unwinder APIs stay untouched. */
+const char *apklayer_proc_module_name(const char *name)
+{
+    if (!name || !app_proc_view()) return name;
+    int saved = errno;
+    const char *root = jdk_root(); size_t len = strlen(root);
+    const char *result = name;
+    if (len && !strncmp(name, root, len) && name[len] == '/')
+        result = !strcmp(name + len, "/lib/server/libjvm.so")
+            ? (sizeof(void *) == 8 ? "/apex/com.android.art/lib64/libart.so" : "/apex/com.android.art/lib/libart.so") : "";
+    errno = saved;
+    return result;
+}
+
 int apklayer_proc_map_dir(int fd)
 {
     if (!app_proc_view()) return 0;

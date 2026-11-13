@@ -1,5 +1,9 @@
 /* Real NDK callers, native on ARM64 and translated on x86_64. */
+#define _GNU_SOURCE
 #include <jni.h>
+#include <dlfcn.h>
+#include <link.h>
+#include <stdint.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
@@ -20,6 +24,21 @@ static int art(FILE *f)
     fclose(f);
     return ok;
 }
+struct modules { uintptr_t self; int count, leaked, own; };
+static int module(struct dl_phdr_info *info, size_t size, void *data)
+{
+    (void)size;
+    struct modules *m = data;
+    const char *name = info->dlpi_name ? info->dlpi_name : "";
+    m->count++;
+    m->leaked |= strstr(name, "libjvm.so") != NULL || strstr(name, "libjava.so") != NULL;
+    for (int i = 0; i < info->dlpi_phnum; i++) {
+        const ElfW(Phdr) *p = info->dlpi_phdr + i;
+        uintptr_t start = info->dlpi_addr + p->p_vaddr;
+        if (p->p_type == PT_LOAD && m->self >= start && m->self < start + p->p_memsz) m->own++;
+    }
+    return 0;
+}
 JNIEXPORT jint JNICALL Java_hello_arm64_Main_artMaps(JNIEnv *env, jclass cls)
 {
     (void)env; (void)cls;
@@ -32,5 +51,11 @@ JNIEXPORT jint JNICALL Java_hello_arm64_Main_artMaps(JNIEnv *env, jclass cls)
         fd = syscall(SYS_openat, AT_FDCWD, paths[i], O_RDONLY | O_CLOEXEC, 0);
         bits |= (fd >= 0 && art(fdopen(fd, "r"))) << (3*i + 2);
     }
+    struct modules modules = {.self = (uintptr_t)&Java_hello_arm64_Main_artMaps};
+    Dl_info own;
+    int listed = dl_iterate_phdr(module, &modules);
+    int addressed = dladdr((void *)modules.self, &own);
+    if (!listed && modules.count && !modules.leaked && modules.own && addressed
+            && own.dli_fname && strstr(own.dli_fname, "libhello.so")) bits |= 64;
     return bits;
 }
