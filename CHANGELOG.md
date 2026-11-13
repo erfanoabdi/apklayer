@@ -1655,9 +1655,13 @@ Tested with hello.bluetooth's real-device roles (tests/apps/hello-bluetooth Real
 - Result 2 (23:52 +0330): FAILED, `-Wundefined-internal`: the declaration sat inside the file's anonymous namespace (a different function). Log: ~/los24-0017-build.log (Mac).
 - Result 3 (~00:02 +0330): `build completed successfully (09:15)`; the declaration moved to the top of namespace berberis. Log: ~/los24-0017-build2.log (Mac).
   Library sha256 6129c8621b3e62dfd4a38b955195188683b93f13da68466a9c2fb7b7ae4e3567. Not installed or run (no PGR while the user sleeps).
+### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0020 (guest CPU follows a device profile: Pixel 5)
+- Why: the owner asked for the instance to present a Google Pixel 5. Properties: tools/device-profile.sh pixel5 (bridge/native/profiles/pixel5.prop); the
+  guest's /proc/cpuinfo and MIDR_EL1 follow `berberis.cpuinfo=pixel5`. Same command as 0016; output in ~/los24-0020-build.log (Mac). Status: RUNNING.
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0019 (guest environment without the desktop's variables; /data/data lists only the own package)
 - Why: the filesystem-layout audit (hello-arm64 "layout") found 37 host variables in the guest's environ and all 20 packages in /data/data.
-  Same command as 0016; output kept in ~/los24-0019-build.log (Mac). Status: RUNNING.
+  Same command as 0016; output kept in ~/los24-0019-build.log (Mac).
+- Result: `build completed successfully (09:36)`, no errors; library sha256 27fe328e906493334dfdd8aad26235f71c9254834e0f5a39c5c3431841298ee3 (0016-0019).
 ### 2026-11-13 - gsi_x86_64 libberberis_arm64: binary_translation 0018 (guest /proc/net, /sys/class/net denied; attr/current context)
 - Why: sandbox identity round: an app on Android gets EACCES for /proc/net and /sys/class/net and reads its SELinux context from attr/current;
   the guest read the desktop's. Same command as 0016, output kept in ~/los24-0018-build.log (Mac).

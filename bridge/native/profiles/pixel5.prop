@@ -1,0 +1,42 @@
+# Device profile: Google Pixel 5 (redfin, Snapdragon 765G / SM7250). Applied with tools/device-profile.sh pixel5 (instance overrides: ro.* are
+# write-once and the overrides load first, so these win over apklayer.prop and the tree's build.prop). The Android version stays the tree's (a real
+# Pixel 5 stopped at 14): the fingerprint is derived from these names, release and build id (cli/stack.cpp). ro.hardware stays "apklayer": the graphics
+# and gralloc modules are chosen by ro.hardware.egl/vulkan/gralloc, and hw_get_module falls back to ro.hardware.
+ro.product.brand=google
+ro.product.manufacturer=Google
+ro.product.model=Pixel 5
+ro.product.device=redfin
+ro.product.name=redfin
+ro.product.board=redfin
+ro.board.platform=lito
+ro.bootloader=slider-1.2-7683913
+ro.soc.manufacturer=Qualcomm
+ro.soc.model=SM7250
+ro.hardware.chipname=SM7250
+ro.build.product=redfin
+ro.build.characteristics=nosdcard
+ro.product.system.brand=google
+ro.product.system.manufacturer=Google
+ro.product.system.model=Pixel 5
+ro.product.system.device=redfin
+ro.product.system.name=redfin
+ro.product.vendor.brand=google
+ro.product.vendor.manufacturer=Google
+ro.product.vendor.model=Pixel 5
+ro.product.vendor.device=redfin
+ro.product.vendor.name=redfin
+ro.product.odm.brand=google
+ro.product.odm.manufacturer=Google
+ro.product.odm.model=Pixel 5
+ro.product.odm.device=redfin
+ro.product.odm.name=redfin
+ro.product.product.brand=google
+ro.product.product.manufacturer=Google
+ro.product.product.model=Pixel 5
+ro.product.product.device=redfin
+ro.product.product.name=redfin
+ro.product.system_ext.brand=google
+ro.product.system_ext.manufacturer=Google
+ro.product.system_ext.model=Pixel 5
+ro.product.system_ext.device=redfin
+ro.product.system_ext.name=redfin
