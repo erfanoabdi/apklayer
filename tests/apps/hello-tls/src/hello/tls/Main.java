@@ -43,6 +43,7 @@ public final class Main extends Activity {
                 try (javax.net.ssl.SSLSocket sock = (javax.net.ssl.SSLSocket) SSLContext.getDefault().getSocketFactory().createSocket("example.com", 443)) {
                     sock.startHandshake(); report(true, "socket handshake with example.com: " + sock.getSession().getProtocol() + " peerHost=" + sock.getSession().getPeerHost());
                 } catch (Exception e) { report(false, "socket handshake with example.com: " + e); }
+                try { java.security.KeyPairGenerator g = java.security.KeyPairGenerator.getInstance("XDH"); g.initialize(new java.security.spec.NamedParameterSpec("X25519")); report(g.generateKeyPair().getPublic() != null, "XDH X25519 key pair via NamedParameterSpec (" + g.getProvider().getName() + ")"); } catch (Exception e) { report(false, "XDH X25519 key pair: " + e); }
                 expectFail("https://expired.badssl.com/", "expired certificate");
                 expectFail("https://self-signed.badssl.com/", "self-signed certificate");
                 expectFail("https://wrong.host.badssl.com/", "wrong host name");
