@@ -108,8 +108,27 @@ void cdsArgs(const Layout& l, const Instance& inst, std::vector<std::string>& a)
         if (stat(entry.c_str(), &st) == 0) key += entry + std::to_string(st.st_size) + "." + std::to_string(st.st_mtime) + ":";
     }
     char name[32];
-    snprintf(name, sizeof name, "%016zx.jsa", std::hash<std::string>{}(key));
+    // JDK 25: the AOT cache (JEP 483) instead of the dynamic archive. The first launches record (-XX:AOTMode=record: the configuration is written at a normal
+    // JVM exit, which CdsDump makes after its training) and CdsDump starts the create step in a JVM of its own; a missing or mismatched cache is no error
+    // (AOTMode auto: the JVM runs on without it)
+    std::string rel = readFile(join(dirName(dirName(realPath(a[0]))), "release")).value_or("");
+    size_t ver = rel.find("JAVA_VERSION=\"");
+    bool aot = ver != std::string::npos && atoi(rel.c_str() + ver + 14) >= 25 && getenvOr("APKLAYER_AOT", "") != "off";
+    snprintf(name, sizeof name, aot ? "%016zx.aot" : "%016zx.jsa", std::hash<std::string>{}(key));
     std::string jsa = join(inst.stateDir, std::string("cds/") + name);
+    if (aot) {
+        if (exists(jsa)) {
+            a.push_back("-XX:AOTCache=" + jsa);
+            glob_t old{};  // the configurations of the JVMs that recorded and ended after the cache was made
+            if (glob((jsa + "conf.*").c_str(), 0, nullptr, &old) == 0) for (size_t i = 0; i < old.gl_pathc; i++) unlink(old.gl_pathv[i]);
+            globfree(&old);
+        } else {  // every JVM of the instance records (which one trains is known only at its first activity): a configuration file each, a JVM truncates it at its start
+            static int count = 0;
+            makeDirs(dirName(jsa));
+            a.insert(a.end(), {"-XX:AOTMode=record", "-XX:AOTConfiguration=" + jsa + "conf." + std::to_string(getpid()) + "." + std::to_string(count++), "-Dapklayer.cdsdump=" + jsa});
+        }
+        return;
+    }
     // at the address it was written for, as JDKs before 20 did: relocated (21's default) its pages are each JVM's own, ~25 MB more per JVM than no
     // archive (instance PSS on UTM: 2237 MB without, 2329 relocated, 2197 here); the JVM relocates it still when that address is taken
     if (exists(jsa)) a.insert(a.end(), {"-XX:SharedArchiveFile=" + jsa, "-XX:+UnlockDiagnosticVMOptions", "-XX:ArchiveRelocationMode=0"});
@@ -129,7 +148,7 @@ std::string findJava(const Layout& l) {
     std::string result = "java";
     // JDK 21 first (the tested one; the host patches java.base), any architecture's package name (arm64, amd64)
     // (temurin-21-jdk: Adoptium's RPM path, also the Sailfish OS package's: rpm/temurin-21-jdk.spec)
-    // (JDK 25 only when no 21 is installed: tools/release/jdk-image.sh builds its image without jmods; the AOT cache is not used, docs/PLAN.md)
+    // (JDK 25 only when no 21 is installed: tools/release/jdk-image.sh builds its image without jmods; on 25 the AOT cache replaces the CDS archive, cdsArgs)
     if ((glob("/usr/lib/jvm/java-21-openjdk-*/bin/java", 0, nullptr, &found) == 0 ||
          glob("/usr/lib/jvm/temurin-21-jdk*/bin/java", GLOB_APPEND, nullptr, &found) == 0 ||
          glob("/usr/lib/jvm/java-25-openjdk-*/bin/java", GLOB_APPEND, nullptr, &found) == 0 ||

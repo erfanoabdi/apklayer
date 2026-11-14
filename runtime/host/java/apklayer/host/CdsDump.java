@@ -53,6 +53,7 @@ final class CdsDump {
                 long start = System.nanoTime();
                 int linked = linkCustomClasses();
                 if (exiting()) { System.out.println("[apklayer] cds: no archive: the JVM is ending"); return; }
+                if (file.getFileName().toString().endsWith(".aot")) { aotCreateAndExit(file, linked); return; }
                 ManagementFactory.getPlatformMBeanServer().invoke(new ObjectName("com.sun.management:type=DiagnosticCommand"), "vmCds",
                         new Object[] {new String[] {"dynamic_dump", tmp.toString()}}, new String[] {String[].class.getName()});
                 if (exiting()) {  // SIGTERM or System.exit during the dump: the app was being torn down
@@ -69,6 +70,25 @@ final class CdsDump {
         } catch (Exception | LinkageError e) {
             System.out.println("[apklayer] cds: no archive: " + e);
         }
+    }
+
+    /** JDK 25 (cli/env.cpp cdsArgs): this JVM runs -XX:AOTMode=record, whose configuration HotSpot writes at a normal exit only (not with the native exit). A detached
+     *  script waits for this process to end, then makes the cache with the same JVM options and class path in a JVM of its own (a record run's JVM cannot create);
+     *  the app of this first launch ends here (shortcut: the first launch is the training run; a headless one at install would keep it). */
+    private static void aotCreateAndExit(Path aot, int linked) throws Exception {
+        // the JVM's own option list (the launcher's argv is overwritten by the process title): no main class, the create run does not start the app
+        java.util.List<String> args = ManagementFactory.getRuntimeMXBean().getInputArguments();
+        String conf = args.stream().filter(a -> a.startsWith("-XX:AOTConfiguration=")).findFirst().orElseThrow().substring(21);
+        java.util.List<String> cmd = new java.util.ArrayList<>(java.util.List.of("setsid", "sh", "-c",
+                "p=$1 c=$2 o=$3; shift 3; while kill -0 $p 2>/dev/null; do sleep 0.3; done; [ -s \"$c\" ] && \"$@\" -XX:AOTMode=create -XX:AOTConfiguration=\"$c\" "
+                + "-XX:AOTCache=\"$o.tmp\" >\"$o.log\" 2>&1 && mv \"$o.tmp\" \"$o\"; rm -f \"$o\"conf.* \"$o.tmp\"; for f in \"${o%/*}\"/*.aot; do [ \"$f\" = \"$o\" ] || rm -f \"$f\"; done",
+                "sh", String.valueOf(ProcessHandle.current().pid()), conf, aot.toString(), System.getProperty("java.home") + "/bin/java"));
+        for (String arg : args)
+            if (!arg.startsWith("-XX:AOTMode=") && !arg.startsWith("-XX:AOTConfiguration=") && !arg.startsWith("-Dapklayer.cdsdump=")) cmd.add(arg);
+        cmd.addAll(java.util.List.of("-cp", System.getProperty("java.class.path")));
+        new ProcessBuilder(cmd).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
+        System.out.println("[apklayer] cds: training done (" + linked + " classes linked first), the JVM ends to write the AOT configuration");
+        System.exit(0);
     }
 
     /** The JVM's shutdown has begun (a hook can no longer be added). */
