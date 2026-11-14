@@ -47,7 +47,7 @@ final class HostBuild {
         set(Build.class, "SUPPORTED_ABIS", list("ro.product.cpu.abilist"));
         set(Build.class, "SUPPORTED_64_BIT_ABIS", list("ro.product.cpu.abilist64"));
         set(Build.class, "SUPPORTED_32_BIT_ABIS", abis32);
-        set(Build.class, "CPU_ABI", ABI);
+        set(Build.class, "CPU_ABI", appAbi());  // the app's ABI: Gecko reads <abi>/greprefs.js from its omni.ja (an arm64 Fennec on x86_64 died: the archive has no x86_64 entry)
         set(Build.class, "CPU_ABI2", abis32.length > 0 ? abis32[0] : "");
         // what Build's class initialiser derives from TYPE and ro.debuggable (root and debug detection reads them)
         set(Build.class, "IS_ENG", "eng".equals(Build.TYPE));
