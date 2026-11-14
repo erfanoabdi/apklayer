@@ -17,10 +17,8 @@ Only what is still to do. History: `CHANGELOG.md`; earlier plans with their deci
   a drawer launch that finds its app already running (relaunch) starts and ends a shell of its own for nothing.
 - Toasts queue per process, not across the instance's apps (NotificationManagerService has one queue).
 - A restarted launcher gets no saved instance state (HubActivities.restartIfAlone shortcut; FCL after the game quits).
-- Native bridge: pthread_sigqueue with a guest pthread record is not mapped.
 - Fennec 158 on x86 translation (CHANGELOG part 9): fixed so far: Build.CPU_ABI (part 7) and the Gecko main thread's `pthread_join` on a stale thread record (binary_translation 0029, needs the new libberberis_arm64 9786502a in the prebuilts). Now the page is fetched (GET /page) and its inline script runs in the content process, but its `fetch('/rendered')` never reaches the parent: the parent's main thread sleeps in a guest futex wait (FUTEX_WAIT_BITSET word 6, no later wake) after ~15 s while its IPC I/O thread receives the child's PHttpChannel constructor (3012 bytes); a lost wake-up of the parent main thread's event queue. gecko-page.py on x86 still fails (no beacon); ARM passes. Next: which guest condvar/mutex that is and why its signal does not wake it (kemu atomics, futex wake path of libapklayer-preload).
 - FCL: after a window resize no new frame reached the shell (window looked frozen); not diagnosed.
-- An app whose first MediaStore use is MediaStore.Images.Media crashes the JVM (SIGSEGV in ConstantPool::klass_at_impl via Robolectric's ShadowMap).
 - An installer run once hung after its self update waiting on `apklayer.stack.ready` with no stack (not reproduced).
 - Phone with the deb: after 4-5 NewPipe launches `HubStartup.connect` blocked in `pingBinder` (swap full); restarting the instance cleared it.
 - volumes-sandbox "catchup present internal file" failed once in five (scan sent, not indexed in 30 s).
