@@ -217,10 +217,11 @@ done:
 
 /* What an app sees of the mount table (/proc/<pid>/mounts, mountinfo, mountstats): Android's mounts are its partitions, /data and the app's storage; the desktop's
  * (the user's /home, /run/user, /mnt drives, the NVIDIA and portal mounts, /boot, /tmp, systemd's autofs) name the host and are left out. The mounts that
- * exist on both are kept as they are. A mount is kept when its mount point is below one of Android's roots, or is one of the kernel's virtual file systems. */
+ * exist on both are kept as they are. Removable drives stay (udisks2: /media/<user>/<label>, /run/media/...): the storage service lists them from this table
+ * (HostVolumes.Removable) in the app's own process, vold's public volumes; without them an app never saw a drive. A mount is kept when its mount point is below one of Android's roots, or is one of the kernel's virtual file systems. */
 static int mount_kept(const char *point)
 {
-    static const char *const roots[] = {"/", "/proc", "/sys", "/dev", "/system", "/vendor", "/product", "/system_ext", "/odm", "/apex", "/data", "/storage", "/sdcard", "/mnt/runtime", "/cache", "/metadata", "/linkerconfig", NULL};
+    static const char *const roots[] = {"/", "/proc", "/sys", "/dev", "/system", "/vendor", "/product", "/system_ext", "/odm", "/apex", "/data", "/storage", "/sdcard", "/mnt/runtime", "/cache", "/metadata", "/linkerconfig", "/media", "/run/media", NULL};
     if (!strcmp(point, "/")) return 1;
     /* the desktop's own kernel file systems: no such mount in an Android app's table */
     static const char *const desktop[] = {"/dev/shm", "/dev/mqueue", "/dev/hugepages", "/dev/binderfs", "/sys/kernel/security", "/sys/firmware", "/sys/fs/fuse", "/proc/sys/fs/binfmt_misc", "/sys/fs/cgroup/user.slice", NULL};

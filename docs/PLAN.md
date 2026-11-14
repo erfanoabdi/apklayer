@@ -12,7 +12,6 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 - An Android IME stays optional. No Recents in the mobile navigation bar.
 
 ## Bugs
-- `volumes` and `volumes-sandbox` fail in a fresh tree (UTM, Parallels) at "volume listed" and "mediastore volume": MediaStore never learns the volume.
 - Droid-ify and NewPipe: an NPE from a fragment/activity view that was not created (`ScreenFragment.getToolbar`).
 - NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
 - Fennec on x86: `free(): invalid pointer` or SIGSEGV at 0x8 with `debug.apklayer.log=1`.
