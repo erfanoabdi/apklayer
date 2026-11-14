@@ -16,6 +16,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
+#include <stdarg.h>
+#include <stdint.h>
 
 extern char **environ;
 #define REAL(name) ({ static void *f_; if (!f_) f_ = dlsym(RTLD_NEXT, #name); f_; })
@@ -27,6 +29,34 @@ static const char *const runtime_vars[] = {"LD_LIBRARY_PATH", "LD_PRELOAD", "XDG
 
 #define NVARS (sizeof runtime_vars / sizeof *runtime_vars - 1)
 static char *started[NVARS];  /* "NAME=value" of each runtime variable at load, or NULL */
+
+/* The exec path runs in a vfork child, on the parent's heap: what it allocates and never frees (a successful exec does not return)
+ * leaked there. Its allocations come from a per-thread arena instead: an entry point rewinds it on return, and a vfork child (another
+ * pid than the one that last used it) starts it over. Larger than the arena: the heap. */
+static __thread struct { char buf[32768] __attribute__((aligned(16))); size_t top; pid_t pid; } arena;
+static size_t arena_enter(void) { pid_t p = getpid(); if (arena.pid != p) arena.pid = p, arena.top = 0; return arena.top; }
+static void *xcalloc(size_t n, size_t size)
+{
+    if (size && n > SIZE_MAX / size) return NULL;
+    size_t bytes = (n * size + 15) & ~(size_t)15;
+    if (bytes > sizeof arena.buf - arena.top) return calloc(n, size);
+    void *p = arena.buf + arena.top;
+    arena.top += bytes;
+    return memset(p, 0, bytes);
+}
+static void xfree(void *p) { if (p && ((char *)p < arena.buf || (char *)p >= arena.buf + sizeof arena.buf)) free(p); }
+static int xasprintf(char **out, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(NULL, 0, fmt, ap);
+    va_end(ap);
+    if (n < 0 || !(*out = xcalloc(1, (size_t)n + 1))) return -1;
+    va_start(ap, fmt);
+    vsnprintf(*out, (size_t)n + 1, fmt, ap);
+    va_end(ap);
+    return n;
+}
 
 struct command { char *btload, *libpath, **argv, **envp, *environment_fd; int fd; };
 extern int apklayer_pack_guest_environment(char *const envp[]);
@@ -94,7 +124,7 @@ static bool runtime_var(const char *entry)
 
 static void release(struct command *c) {
     if (c->fd >= 0) close(c->fd);
-    free(c->environment_fd); free(c->btload); free(c->libpath); free(c->argv); free(c->envp);
+    xfree(c->environment_fd); xfree(c->btload); xfree(c->libpath); xfree(c->argv); xfree(c->envp);
 }
 
 static int rewrite(const char *path, char *const argv[], char *const envp[], char *const guest_envp[], struct command *c)
@@ -107,13 +137,13 @@ static int rewrite(const char *path, char *const argv[], char *const envp[], cha
     while (argv && argv[argc]) argc++;
     while (envp && envp[envc]) envc++;
     *c = (struct command){.fd = -1};
-    if (asprintf(&c->btload, "%s/bin/btload", native) < 0) c->btload = NULL;
-    if (asprintf(&c->libpath, "%s%s%s", app_path ? asked : "", app_path ? ":" : "", libs) < 0) c->libpath = NULL;
-    c->argv = calloc(argc + 6, sizeof(char *));
-    c->envp = calloc(envc + NVARS + 2, sizeof(char *));
+    if (xasprintf(&c->btload, "%s/bin/btload", native) < 0) c->btload = NULL;
+    if (xasprintf(&c->libpath, "%s%s%s", app_path ? asked : "", app_path ? ":" : "", libs) < 0) c->libpath = NULL;
+    c->argv = xcalloc(argc + 6, sizeof(char *));
+    c->envp = xcalloc(envc + NVARS + 2, sizeof(char *));
     if (!c->btload || !c->libpath || !c->argv || !c->envp) { release(c); errno = ENOMEM; return -1; }
     c->fd = apklayer_pack_guest_environment(guest_envp);
-    if (c->fd < 0 || asprintf(&c->environment_fd, "APKLAYER_GUEST_ENV_FD=%d", c->fd) < 0) {
+    if (c->fd < 0 || xasprintf(&c->environment_fd, "APKLAYER_GUEST_ENV_FD=%d", c->fd) < 0) {
         int error = errno; release(c); errno = error; return -1;
     }
     char **a = c->argv;
@@ -150,7 +180,7 @@ static void target(struct target *t, const char *path, char *const envp[])
     const char *own = apklayer_own_data_env();
     size_t n = 0, o = 0;
     while (own && envp && envp[n]) n++;
-    if (!own || !(t->made = calloc(n + 2, sizeof(char *)))) return;
+    if (!own || !(t->made = xcalloc(n + 2, sizeof(char *)))) return;
     for (size_t i = 0; i < n; i++)
         if (strncmp(envp[i], "APKLAYER_OWN_DATA=", 18)) t->made[o++] = envp[i];
     t->made[o] = (char *)own;
@@ -160,8 +190,8 @@ static void target(struct target *t, const char *path, char *const envp[])
 static int target_done(struct target *t, int r)
 {
     int e = errno;
-    if (t->mapped) free(t->path);
-    free(t->made);
+    if (t->mapped) xfree(t->path);
+    xfree(t->made);
     errno = e;
     return r;
 }
@@ -180,7 +210,16 @@ static __thread int guest_launch;
 
 /* Real candidate execs share mapping, translator, permission checks and script handling. */
 static int exec_search(const char *file, char *const argv[], char *const envp[], const char *search, bool inherited);
+static int apklayer_exec_search_guest_in(const char *file, char *const argv[], char *const envp[], const char *search, bool inherited);
 int apklayer_exec_search_guest(const char *file, char *const argv[], char *const envp[], const char *search, bool inherited)
+{
+    size_t mark = arena_enter();
+    int r = apklayer_exec_search_guest_in(file, argv, envp, search, inherited);
+    arena.top = mark;
+    return r;
+}
+
+static int apklayer_exec_search_guest_in(const char *file, char *const argv[], char *const envp[], const char *search, bool inherited)
 {
     int saved = guest_launch;
     guest_launch = 1;
@@ -210,12 +249,12 @@ static int exec_search(const char *file, char *const argv[], char *const envp[],
         if (errno == ENOEXEC) {
             size_t argc = 0;
             while (argv[argc]) argc++;
-            char **shell = calloc(argc + 2, sizeof(char *));
+            char **shell = xcalloc(argc + 2, sizeof(char *));
             if (!shell) { errno = ENOMEM; return -1; }
             shell[0] = "/system/bin/sh"; shell[1] = candidate;
             for (size_t i = 1; i < argc; i++) shell[i + 1] = argv[i];
             execve(shell[0], shell, envp);
-            int error = errno; free(shell); errno = error;
+            int error = errno; xfree(shell); errno = error;
             return -1;
         }
         switch (errno) {
@@ -244,12 +283,12 @@ static int guest_path_exec(const char *file, char *const argv[], char *const env
     if (errno == ENOEXEC) {
         size_t argc = 0;
         while (argv[argc]) argc++;
-        char **shell = calloc(argc + 2, sizeof(char *));
+        char **shell = xcalloc(argc + 2, sizeof(char *));
         if (shell) {
             shell[0] = "/system/bin/sh"; shell[1] = (char *)file;
             for (size_t i = 1; i < argc; i++) shell[i + 1] = argv[i];
             execve(shell[0], shell, envp);
-            int error = errno; free(shell); errno = error;
+            int error = errno; xfree(shell); errno = error;
         } else errno = ENOMEM;
     }
     int error = errno;
@@ -290,10 +329,10 @@ static char **script_argv(const char *file, const char *path, char *const argv[]
     if (guest_launch) name = (char *)guest_bin(name, bin, sizeof bin);  /* a guest's #!/bin/sh: Android's /system/bin/sh */
     char *mapped = name;
     if (!*name || !apklayer_apply_path_overrides(&mapped)) return NULL;  /* an unmapped interpreter: the kernel finds it */
-    free(mapped);
+    xfree(mapped);
     size_t argc = 0;
     while (argv && argv[argc]) argc++;
-    char **a = calloc(1, (argc + 4) * sizeof(char *) + sizeof bin + sizeof line);  /* the argv array, then copies of the interpreter's name and argument */
+    char **a = xcalloc(1, (argc + 4) * sizeof(char *) + sizeof bin + sizeof line);  /* the argv array, then copies of the interpreter's name and argument */
     if (!a) return NULL;
     char *strings = (char *)(a + argc + 4), **o = a;
     *o++ = strcpy(strings, name);
@@ -303,7 +342,16 @@ static char **script_argv(const char *file, const char *path, char *const argv[]
     return a;
 }
 
+static int execve_in(const char *path, char *const argv[], char *const envp[]);
 int execve(const char *path, char *const argv[], char *const envp[])
+{
+    size_t mark = arena_enter();
+    int r = execve_in(path, argv, envp);
+    arena.top = mark;
+    return r;
+}
+
+static int execve_in(const char *path, char *const argv[], char *const envp[])
 {
     static const char marker[] = "/proc/self/fd/apklayer-exec-search/";
     if (!strncmp(path, marker, sizeof marker - 1)) return search_request(path, argv, envp);
@@ -316,9 +364,9 @@ int execve(const char *path, char *const argv[], char *const envp[])
     if (faccessat(AT_FDCWD, t.path, X_OK, AT_EACCESS) < 0) return target_done(&t, -1);
     if (depth < 4 && (sa = script_argv(t.path, path, argv))) {
         depth++;
-        int r = execve(sa[0], sa, envp);
+        int r = execve_in(sa[0], sa, envp);
         depth--;
-        free(sa);
+        xfree(sa);
         return target_done(&t, r);
     }
     /* btload gets the caller's spelling: its linker maps an absolute program path itself (a mapped one is outside its search path) */
@@ -342,7 +390,18 @@ int apklayer_execve_guest(const char *path, char *const argv[], char *const envp
 
 /* A guest's posix_spawn (bionic_translation 0069: its system, popen and posix_spawn[p]), as a guest execve: the mapped path, its
  * permission check, a script with a mapped interpreter, an Android program through btload. Returns the error, as posix_spawn. */
+static int apklayer_spawn_guest_in(pid_t *pid, const char *path, const posix_spawn_file_actions_t *actions, const posix_spawnattr_t *attr,
+                         char *const argv[], char *const envp[]);
 int apklayer_spawn_guest(pid_t *pid, const char *path, const posix_spawn_file_actions_t *actions, const posix_spawnattr_t *attr,
+                         char *const argv[], char *const envp[])
+{
+    size_t mark = arena_enter();
+    int r = apklayer_spawn_guest_in(pid, path, actions, attr, argv, envp);
+    arena.top = mark;
+    return r;
+}
+
+static int apklayer_spawn_guest_in(pid_t *pid, const char *path, const posix_spawn_file_actions_t *actions, const posix_spawnattr_t *attr,
                          char *const argv[], char *const envp[])
 {
     static __thread int depth;  /* a script's interpreter may be a script: the kernel's limit */
@@ -359,9 +418,9 @@ int apklayer_spawn_guest(pid_t *pid, const char *path, const posix_spawn_file_ac
     guest_launch = saved;
     if (sa) {
         depth++;
-        int r = apklayer_spawn_guest(pid, sa[0], actions, attr, sa, envp);
+        int r = apklayer_spawn_guest_in(pid, sa[0], actions, attr, sa, envp);
         depth--;
-        free(sa);
+        xfree(sa);
         return target_done(&t, r);
     }
     int rewritten = rewrite(path, argv, t.envp, envp, &c);
@@ -383,7 +442,7 @@ int execvpe(const char *file, char *const argv[], char *const envp[])
 
 int execvp(const char *file, char *const argv[]) { return execvpe(file, argv, environ); }
 
-static int spawn(int (*real)(pid_t *, const char *, const posix_spawn_file_actions_t *, const posix_spawnattr_t *, char *const[], char *const[]),
+static int spawn_in(int (*real)(pid_t *, const char *, const posix_spawn_file_actions_t *, const posix_spawnattr_t *, char *const[], char *const[]),
                  pid_t *pid, const char *path, const posix_spawn_file_actions_t *actions, const posix_spawnattr_t *attr, char *const argv[], char *const envp[])
 {
     struct command c;
@@ -396,6 +455,15 @@ static int spawn(int (*real)(pid_t *, const char *, const posix_spawn_file_actio
     int r = real(pid, c.btload, actions, attr, c.argv, c.envp);
     release(&c);
     return target_done(&t, r);
+}
+
+static int spawn(int (*real)(pid_t *, const char *, const posix_spawn_file_actions_t *, const posix_spawnattr_t *, char *const[], char *const[]),
+                 pid_t *pid, const char *path, const posix_spawn_file_actions_t *actions, const posix_spawnattr_t *attr, char *const argv[], char *const envp[])
+{
+    size_t mark = arena_enter();
+    int r = spawn_in(real, pid, path, actions, attr, argv, envp);
+    arena.top = mark;
+    return r;
 }
 
 int posix_spawn(pid_t *pid, const char *path, const posix_spawn_file_actions_t *actions, const posix_spawnattr_t *attr, char *const argv[], char *const envp[])
