@@ -317,6 +317,7 @@ static void children(struct buf *b)
     child(b, "child.comm", "/system/bin/sh -c '/system/bin/toybox cat /proc/self/comm; true' 2>&1");
     child(b, "child.cmdline", "/system/bin/sh -c 't=/system/bin/toybox; $t cat /proc/self/cmdline | $t tr \"\\0\" \" \"; echo' 2>&1");
     child(b, "child.exe", "/system/bin/sh -c 't=/system/bin/toybox; $t readlink /proc/self/exe; $t readlink /proc/$$/exe' 2>&1");
+    child(b, "child.ownEnviron", "PROBE_CHILD=1 /system/bin/sh -c 't=/system/bin/toybox; PROBE_GRAND=1 $t cat /proc/self/environ | $t tr \"\\0\" \"\\n\" | $t cut -d= -f1 | $t sort | $t tr \"\\n\" \" \"; echo' 2>&1");
     child(b, "child.parentEnviron", "PROBE_PARENT=1 /system/bin/sh -c 't=/system/bin/toybox; $t cat /proc/$$/environ | $t tr \"\\0\" \"\\n\" | $t cut -d= -f1 | $t sort | $t tr \"\\n\" \" \"; echo' 2>&1");
 }
 
