@@ -41,6 +41,7 @@ endif
 if is_variable('apklayer_preload')
   maps_test = executable('proc-maps-test', 'proc-maps.c')
   status_test = executable('proc-status-test', 'proc-status.c')
+  views_test = executable('proc-views-test', 'proc-views.c', dependencies: dependency('threads'))
   foreach mode : ['app', 'host', 'service']
     maps_env = ['LD_PRELOAD=' + apklayer_preload.full_path()]
     if mode != 'service'
@@ -51,6 +52,7 @@ if is_variable('apklayer_preload')
     endif
     test('proc-maps-' + mode, maps_test, env: maps_env, suite: 'bionic', timeout: 30)
     test('proc-status-' + mode, status_test, env: maps_env, suite: 'bionic', timeout: 30)
+    test('proc-views-' + mode, views_test, env: maps_env, suite: 'bionic', timeout: 30)
   endforeach
   test('proc-maps-java', find_program('java'), args: [meson.current_source_dir() / 'ArtMaps.java'],
     env: ['LD_PRELOAD=' + apklayer_preload.full_path(), 'APKLAYER_OWN_DATA=hello.maps:10001,3003,9997,20001,50001:/tmp/hello.maps'], suite: 'bionic', timeout: 30)
@@ -111,6 +113,14 @@ if is_variable('apklayer_preload') and is_variable('c_bio')
 endif
 
 if is_variable('c_bio') and is_variable('apklayer_preload')
+  bionic_status_test = executable('bionic-status-test', 'bionic-status.c', dependencies: [dependency('dl')])
+  foreach mode : ['app', 'service']
+    bionic_status_env = ['LD_PRELOAD=' + apklayer_preload.full_path(), 'LD_LIBRARY_PATH=' + fs.parent(c_bio.full_path())]
+    if mode == 'app'
+      bionic_status_env += ['APKLAYER_OWN_DATA=hello.status:10001:/tmp/hello.status']
+    endif
+    test('bionic-status-' + mode, bionic_status_test, args: [c_bio], env: bionic_status_env, suite: 'bionic', timeout: 30)
+  endforeach
   test('guest-exec', executable('guest-exec-test', 'guest-exec.c', dependencies: [dependency('dl')]), args: [c_bio],
     env: ['LD_PRELOAD=' + apklayer_preload.full_path(), 'LD_LIBRARY_PATH=' + fs.parent(c_bio.full_path()),
       'APKLAYER_OWN_DATA=hello.exec:10001:/tmp/hello.exec', 'ENV_HOST_ONLY=private', 'PATH=/host-path-must-not-be-searched'],
@@ -120,4 +130,20 @@ if is_variable('c_bio') and is_variable('apklayer_preload')
     env: ['LD_PRELOAD=' + apklayer_preload.full_path(), 'LD_LIBRARY_PATH=' + fs.parent(c_bio.full_path()),
       'APKLAYER_OWN_DATA=hello.spawn:10001:/tmp/hello.spawn', 'ENV_HOST_ONLY=private', 'PATH=/host-path-must-not-be-searched'],
     suite: 'bionic', timeout: 30)
+endif
+
+# guest code on native arm64 (bionic_translation 0073/0074): raw `svc` syscalls answered through the process views, and the app namespace's
+# dlopen/dladdr/dl_iterate_phdr (the library has no libc; the bionic linker loads it in the app namespace). Skipped (77) off arm64.
+if is_variable('apklayer_preload') and is_variable('dl_bio')
+  raw_syscall_lib = shared_module('raw-syscall-lib', 'raw-syscall-lib.c', link_args: ['-nostdlib'], c_args: ['-fno-stack-protector'])
+  raw_syscall_test = executable('raw-syscall-test', 'raw-syscall.c', dependencies: [dependency('dl'), dependency('threads')])
+  foreach mode : ['app', 'off']
+    raw_env = ['LD_PRELOAD=' + apklayer_preload.full_path(), 'LD_LIBRARY_PATH=' + fs.parent(dl_bio.full_path()),
+      'BIONIC_LD_LIBRARY_PATH=' + meson.current_build_dir(), 'APKLAYER_ANDROID_ROOT=' + meson.project_source_root() / 'bridge/native/android-root',
+      'APKLAYER_OWN_DATA=hello.raw:10001,3003,9997,20001,50001:/tmp/hello.raw']
+    if mode == 'off'
+      raw_env += ['APKLAYER_RAW_SYSCALL_VIEW=off']
+    endif
+    test('raw-syscall-' + mode, raw_syscall_test, args: [dl_bio, 'libraw-syscall-lib.so', mode], depends: raw_syscall_lib, env: raw_env, suite: 'bionic', timeout: 30)
+  endforeach
 endif

@@ -57,6 +57,15 @@ def notification_clicks():
         time.sleep(1)
 
 
+def app_path(pkg, path):
+    """The app spells its data as on a device (/data/user/0/<pkg>/...): the same place on the host, in the instance's app-data tree (`apklayer info` dataDir/app)."""
+    for pre in ('/data/user/0/%s/' % pkg, '/data/data/%s/' % pkg):
+        if path.startswith(pre):
+            info = dict(l.split('\t', 1) for l in subprocess.run(['bin/apklayer', 'info', pkg], env=ENV, capture_output=True, text=True, check=True).stdout.splitlines() if '\t' in l)
+            return str(Path(info['dataDir'], 'app', path[len(pre):]))
+    return path
+
+
 def own_data_dir(pkg):
     """The app's data (its WebView profile) is in this instance's directory, not one every instance of the data home shares (cli/layout appData)."""
     info = dict(l.split('\t', 1) for l in subprocess.run(['bin/apklayer', 'info', pkg], env=ENV, capture_output=True, text=True, check=True).stdout.splitlines() if '\t' in l)
@@ -114,13 +123,7 @@ try:
                     apk = Path(os.environ.get('APKLY_APKS', '.tests/apks')) / (line.split()[2] + '.apk')
                     subprocess.run(['bin/apklayer', 'install', str(apk)], env=ENV, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
                     # Acknowledge the CLI install in the app's own files, without exposing the host package store.
-                    ready = line.split(' ', 3)[3]
-                    prefix = '/data/user/0/%s/' % package
-                    if ready.startswith(prefix) and not Path(ready).parent.exists() and ENV.get('APKLAYER_SANDBOX', os.environ.get('APKLAYER_SANDBOX')) != '1':
-                        # the app names its files by Android's path (getFilesDir): the harness outside the app reaches the same directory by its host path
-                        info = subprocess.run(['bin/apklayer', 'info', package], env=ENV, capture_output=True, text=True).stdout
-                        data = dict(l.split('\t', 1) for l in info.splitlines() if '\t' in l).get('dataDir')
-                        if data: ready = str(Path(data) / 'app' / ready[len(prefix):])
+                    ready = app_path(package, line.split(' ', 3)[3])
                     if ENV.get('APKLAYER_SANDBOX', os.environ.get('APKLAYER_SANDBOX')) == '1':
                         subprocess.run(['bin/apklayer', 'sandbox-exec', package, '--', 'touch', ready], env=ENV, check=True)
                     else:

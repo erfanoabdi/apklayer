@@ -25,6 +25,8 @@ static void maps(struct buf *b)
     char *text = slurp("/proc/self/maps", &size);
     if (!text) { put(b, "maps", "ERR %d", errno); return; }
     int lines = 0, rwx = 0, named = 0, anon = 0;
+    char rwx_names[2048] = "";
+    unsigned long rwx_kb = 0;
     char *paths = calloc(1, size + 1), *exe_first = NULL;
     size_t plen = 0;
     for (char *line = strtok(text, "\n"); line; line = strtok(NULL, "\n")) {
@@ -32,9 +34,16 @@ static void maps(struct buf *b)
         char perms[8] = "";
         int path_at = 0;
         sscanf(line, "%*s %7s %*s %*s %*s %n", perms, &path_at);
-        if (!strcmp(perms, "rwxp") || !strcmp(perms, "rwxs")) rwx++;
         const char *path = path_at ? line + path_at : "";
         while (*path == ' ') path++;
+        if (!strcmp(perms, "rwxp") || !strcmp(perms, "rwxs")) {
+            unsigned long start = 0, end = 0;
+            sscanf(line, "%lx-%lx", &start, &end);
+            rwx++; rwx_kb += (end - start) >> 10;
+            char item[96];  /* which mappings are W+X: their names (anonymous as "anon") */
+            snprintf(item, sizeof item, "%.80s;", *path ? path : "anon");
+            if (!strstr(rwx_names, item)) strncat(rwx_names, item, sizeof rwx_names - strlen(rwx_names) - 1);
+        }
         if (!*path) { anon++; continue; }
         named++;
         if (!exe_first && strchr(perms, 'x')) exe_first = (char *)path;
@@ -43,6 +52,8 @@ static void maps(struct buf *b)
     put(b, "maps.lines", "%d", lines);
     put(b, "maps.anonymous", "%d", anon);
     put(b, "maps.rwx", "%d", rwx);
+    put(b, "maps.rwx.kb", "%lu", rwx_kb);
+    put(b, "maps.rwx.names", "%s", rwx_names);
     put(b, "maps.firstExec", "%s", exe_first ? exe_first : "none");
     char present[4096] = "", absent[4096] = "";
     for (size_t i = 0; i < sizeof MARKERS / sizeof *MARKERS; i++) {
@@ -275,6 +286,28 @@ static void tasks(struct buf *b)
     put(b, "task.comms", "%s", out);
 }
 
+/* What a program the app starts sees (an Android shell and its toybox children, as Termux's): its own status/comm/cmdline/exe, and its parent
+ * shell's environ (the exec environment on Android). Output lines are joined with '|'. */
+static void child(struct buf *b, const char *key, const char *command)
+{
+    FILE *p = popen(command, "r");
+    if (!p) { put(b, key, "ERR popen %s", strerror(errno)); return; }
+    char out[8192] = "", line[1024];
+    while (fgets(line, sizeof line, p)) strncat(out, line, sizeof out - strlen(out) - 1);
+    int status = pclose(p);
+    put(b, key, "exit=%d %s", status, out);
+}
+
+static void children(struct buf *b)
+{
+    /* toybox by its full path: the Android root has /system/bin/toybox but no applet links */
+    child(b, "child.status", "/system/bin/sh -c 't=/system/bin/toybox; $t cat /proc/self/status | $t grep -E \"^(Name|Uid|TracerPid|NoNewPrivs|Seccomp):\"; true' 2>&1");
+    child(b, "child.comm", "/system/bin/sh -c '/system/bin/toybox cat /proc/self/comm; true' 2>&1");
+    child(b, "child.cmdline", "/system/bin/sh -c 't=/system/bin/toybox; $t cat /proc/self/cmdline | $t tr \"\\0\" \" \"; echo' 2>&1");
+    child(b, "child.exe", "/system/bin/sh -c 't=/system/bin/toybox; $t readlink /proc/self/exe; $t readlink /proc/$$/exe' 2>&1");
+    child(b, "child.parentEnviron", "PROBE_PARENT=1 /system/bin/sh -c 't=/system/bin/toybox; $t cat /proc/$$/environ | $t tr \"\\0\" \"\\n\" | $t cut -d= -f1 | $t sort | $t tr \"\\n\" \" \"; echo' 2>&1");
+}
+
 JNIEXPORT jstring JNICALL Java_hello_identity_Main_proc(JNIEnv *env, jclass cls)
 {
     (void)cls;
@@ -301,6 +334,7 @@ JNIEXPORT jstring JNICALL Java_hello_identity_Main_proc(JNIEnv *env, jclass cls)
     links(&b);
     mountinfo(&b);
     tasks(&b);
+    children(&b);
     char *ppid_line = slurp("/proc/self/stat", NULL);
     if (ppid_line) {
         int ppid = 0;

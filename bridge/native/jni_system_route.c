@@ -55,6 +55,12 @@ static int guest_caller(JNIEnv *env, const void *pc)
     return app_native_frame(env);
 }
 
+/* the classification for the other guest-facing JNI entries (jni_guest_surface.c) */
+int apklayer_jni_guest_caller(JNIEnv *env, const void *pc)
+{
+    return guest_caller(env, pc);
+}
+
 static jint find(jmethodID m)
 {
     for (jint i = 0; i < route_count; i++) if (routes[i].original == m) return i;

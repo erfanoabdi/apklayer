@@ -1,0 +1,30 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] sigaction reports SIG_DFL, not the fatal-signal stub, as the old action of SIGSEGV/SIGILL/SIGBUS/SIGFPE
+
+InitGuestSignalHandling claims SIGSEGV, SIGILL, SIGBUS and SIGFPE with kFatalGuestHandlerStub, the address of a host variable (libberberis_arm64's data), so that
+HandleHostSignal runs first. rt_sigaction then handed that address to the guest as the previous action of a signal the guest never touched. A crash handler that
+chains to the previous action (Gecko's fatal-signal handler at libxul+0x6a4fe50, Breakpad, Unity) branched to it: berberis_HandleNoExec ("Trying to execute
+non-executable code at ...8460"), a new SIGSEGV from inside the handler, for ever (100% CPU, no crash). The old action now reads SIG_DFL with no flags, as the kernel's
+would. Regression: tests/apps/hello-arm64 (oldHandlers). Module libberberis_arm64.
+
+diff --git a/guest_os_primitives/guest_signal_handling.cc b/guest_os_primitives/guest_signal_handling.cc
+--- a/guest_os_primitives/guest_signal_handling.cc
++++ b/guest_os_primitives/guest_signal_handling.cc
+@@ -665,7 +665,16 @@
+ 
+   std::lock_guard<std::mutex> lock(*GetSignalActionsGuardMutex());
+   GuestSignalAction& action = GetCurrentGuestThread()->GetSignalActionsTable()->at(signal - 1);
+-  return action.Change(signal, act, HandleHostSignal, old_act, error);
++  bool changed = action.Change(signal, act, HandleHostSignal, old_act, error);
++  // apklayer patch: the fatal-signal stub claims SIGSEGV/SIGILL/SIGBUS/SIGFPE, but it is the address of a host variable, not guest code: a crash
++  // handler that chains to the old action (Gecko's, Breakpad's) would jump to it and loop in berberis_HandleNoExec for ever. The guest has
++  // not installed a handler: report SIG_DFL, as the kernel does.
++  if (changed && old_act && old_act->guest_sa_sigaction == kFatalGuestHandlerStub) {
++    old_act->guest_sa_sigaction = Guest_SIG_DFL;
++    old_act->sa_flags = 0;
++    old_act->sa_mask = {};
++  }
++  return changed;
+ }
+ 
+ // region digitalis

@@ -446,7 +446,7 @@ native.art.nativeMethodAtID.accessFlagsScan=-1
 native.art.nativeMethodAtID.dexMethodIndex@8=55
 native.art.nativeMethodAtID.data@16=unresolved
 native.art.nativeMethodAtID.entry@24=unresolved
-native.art.GetVersion=0x150000
+native.art.GetVersion=0x10006
 native.art.refs.lowBits=local=0 global=2 weak=1
 native.art.refs.types=local=1 global=2 weak=3
 native.art.isCopy.string=critical=1 chars=1 utf=1
@@ -454,8 +454,10 @@ native.art.isCopy.intArray=critical=0 elements=1
 native.art.isCopy.largeIntArray=elements=1
 native.art.JavaVM.sameAsOnLoad=1
 native.art.JNI_GetCreatedJavaVMs.default=no symbol
-native.art.JNI_GetCreatedJavaVMs.libnativehelper=CRASH signal 6 (in a forked child)
+native.art.JNI_GetCreatedJavaVMs.libnativehelper=ret=0 count=1 same=1 at=JNI_GetCreatedJavaVMs+0x0 (/system/lib64/arm64/libnativehelper.so)
 native.art.JNI_GetCreatedJavaVMs.libart=no symbol
 native.jnithread.GetEnv.beforeAttach=-2
-native.jnithread.FindClass.appClass=found
-native.jnithread.attachedThread=name=Thread-4 group=main comm=hello.identity
+native.jnithread.FindClass.appClass=NOT FOUND java.lang.ClassNotFoundException: hello.identity.Main
+native.jnithread.attachedThread=name=Thread-4 group=main comm=Thread-4
+native.art.JNI_GetDefaultJavaVMInitArgs.libnativehelper=ret=-1
+native.art.JNI_CreateJavaVM.libnativehelper=ret=-1

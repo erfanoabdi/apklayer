@@ -1,0 +1,396 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Sat, 14 Nov 2026 00:00:00 +0000
+Subject: [PATCH] linker: the app namespace's view of dlopen, dlsym, dladdr and dl_iterate_phdr
+
+apklayer patch (docs/PATCHES.md). Code of the app namespace (a library whose soinfo is app_ns) is shown what Android's linker
+shows an app: dlopen of a name outside the app's directories answers only the public libraries (public.libraries.txt of the
+Android root, else AOSP's list) with bionic's "dlopen failed: library "x" not found" (the host's libjvm.so/libc.so.6 and the
+private platform libraries fail); dladdr and dl_iterate_phdr name modules as Android does (libc.so under
+/apex/com.android.runtime/lib64/bionic, the platform libraries under /system/lib64, the program app_process64) and leave host-only
+modules out of an app callback's dl_iterate_phdr; glibc/JVM-only symbols are not found through RTLD_DEFAULT. Callers that are not in
+the app namespace (the JVM, the shim, Android's platform libraries and their unwinders) keep every view and every name.
+
+diff --git a/linker/app_view.c b/linker/app_view.c
+new file mode 100644
+--- /dev/null
++++ b/linker/app_view.c
+@@ -0,0 +1,161 @@
++/* apklayer patch: the app namespace's view of the process, as Android's linker gives an app (libnativeloader's classloader namespace).
++ * What an app's own native code (a library in the app namespace: soinfo app_ns) sees through dlopen, dlsym, dladdr and dl_iterate_phdr:
++ *  - dlopen of a name outside the app's own directories answers only the public libraries (/system/etc/public.libraries.txt): the host's
++ *    libjvm.so, libc.so.6 and the platform-private Android libraries are "not found", as the namespace's rules refuse them on Android;
++ *  - modules are named as Android's are (libc.so under /apex/com.android.runtime/lib64/bionic, the platform libraries under /system/lib64);
++ *    host-only modules (the JVM, glibc's helpers, desktop libraries) are not listed by dl_iterate_phdr for such a callback and not named by dladdr;
++ *  - glibc/JVM-only symbols are not found through RTLD_DEFAULT.
++ * The runtime's own callers (the host's glibc modules, Android's platform libraries) keep every view: only a caller in the app namespace is
++ * projected, and the unwinders of the platform libraries still see every module. */
++#define _GNU_SOURCE
++#include <stdbool.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++#include <sys/auxv.h>
++#include <link.h>
++
++#include "linker.h"
++#include "app_view.h"
++
++#define MAX_PUBLIC 128
++static const char *public_libs[MAX_PUBLIC];
++static int public_count;
++static char *public_buf;
++static bool public_read;
++
++static const char *const fallback_public[] = {
++	"libaaudio.so", "libamidi.so", "libandroid.so", "libbinder_ndk.so", "libc.so", "libcamera2ndk.so", "libdl.so", "libEGL.so",
++	"libGLESv1_CM.so", "libGLESv2.so", "libGLESv3.so", "libicu.so", "libjnigraphics.so", "liblog.so", "libmediandk.so", "libm.so",
++	"libnativehelper.so", "libnativewindow.so", "libneuralnetworks.so", "libOpenMAXAL.so", "libOpenSLES.so", "libRS.so", "libstdc++.so",
++	"libsync.so", "libvulkan.so", "libwebviewchromium_plat_support.so", "libz.so", NULL,
++};
++
++/* /system/etc/public.libraries.txt of the Android root (one name per line, "# comments", "name 32|64" suffixes), else the list above */
++static void read_public(void)
++{
++	public_read = true;
++	const char *root = getenv("APKLAYER_ANDROID_ROOT"), *native = getenv("APKLAYER_NATIVE");
++	char path[1024] = "";
++	if (root) snprintf(path, sizeof path, "%s/system/etc/public.libraries.txt", root);
++	else if (native) snprintf(path, sizeof path, "%s/android-root/system/etc/public.libraries.txt", native);
++	FILE *f = path[0] ? fopen(path, "r") : NULL;
++	if (f) {
++		char line[256];
++		public_buf = calloc(1, 16384);
++		size_t used = 0;
++		while (public_buf && fgets(line, sizeof line, f) && public_count < MAX_PUBLIC) {
++			char *name = line + strspn(line, " \t");
++			char *rest = name + strcspn(name, " \t\r\n#");
++			bool other_bits = false;
++			if (*rest == ' ' || *rest == '\t') {
++				char *bits = rest + strspn(rest, " \t");
++				other_bits = !strncmp(bits, "32", 2);
++			}
++			*rest = 0;
++			size_t n = strlen(name);
++			if (!n || other_bits || used + n + 1 > 16384) continue;
++			memcpy(public_buf + used, name, n + 1);
++			public_libs[public_count++] = public_buf + used;
++			used += n + 1;
++		}
++		fclose(f);
++	}
++	if (!public_count)
++		for (const char *const *p = fallback_public; *p && public_count < MAX_PUBLIC; p++) public_libs[public_count++] = *p;
++}
++
++static bool is_public(const char *base)
++{
++	if (!public_read) read_public();
++	for (int i = 0; i < public_count; i++)
++		if (!strcmp(public_libs[i], base)) return true;
++	return false;
++}
++
++static const char *base_name(const char *path)
++{
++	const char *slash = strrchr(path, '/');
++	return slash ? slash + 1 : path;
++}
++
++static bool starts(const char *s, const char *prefix) { return !strncmp(s, prefix, strlen(prefix)); }
++
++/* the platform's own directories: a path there names a library of the system namespace, refused unless public */
++static bool system_dir_path(const char *name)
++{
++	static const char *const dirs[] = { "/system/", "/apex/", "/vendor/", "/product/", "/system_ext/", "/odm/", "/usr/", "/lib/", "/lib64/", NULL };
++	for (const char *const *d = dirs; *d; d++)
++		if (starts(name, *d)) return true;
++	return false;
++}
++
++/* may a dlopen from the app namespace open this name? */
++bool apkenv_app_may_open(const char *name)
++{
++	if (!name) return true;
++	if (name[0] == '/') {
++		/* an absolute path: the app's own data and the path layer's spellings of it (not the platform's directories) */
++		return !system_dir_path(name) || is_public(base_name(name));
++	}
++	if (apkenv_app_has_library(name)) return true;  /* the app's own copy, or a name mapped for the app (cfg.d "app:" lines) */
++	return is_public(name);
++}
++
++/* "X is not found" as bionic's linker words it */
++const char *apkenv_android_not_found(const char *name, char *buf, size_t size)
++{
++	snprintf(buf, size, "dlopen failed: library \"%s\" not found", name ? name : "");
++	return buf;
++}
++
++/* host-only symbols that RTLD_DEFAULT does not find on Android */
++bool apkenv_app_symbol_hidden(const char *symbol)
++{
++	return starts(symbol, "gnu_") || starts(symbol, "JVM_") || starts(symbol, "JNI_CreateJavaVM") || starts(symbol, "JNI_GetDefaultJavaVMInitArgs")
++		|| !strcmp(symbol, "__libc_start_main") || starts(symbol, "__libc_start_");
++}
++
++#define RUNTIME_BIONIC "/apex/com.android.runtime/lib64/bionic/"
++#define ART_LIBART "/apex/com.android.art/lib64/libart.so"
++
++/* host_path -> the Android module path in buf; false: a host-only module (hidden). `kind` 0: a bionic-loaded module, 1: a glibc-loaded one. */
++bool apkenv_android_module(const char *host_path, char *buf, size_t size, bool glibc_loaded)
++{
++	if (!host_path || !*host_path) {
++		if (glibc_loaded) return false;
++		snprintf(buf, size, "%s", host_path ? host_path : "");
++		return true;
++	}
++	const char *base = base_name(host_path);
++	if (starts(host_path, "/apex/") || starts(host_path, "/system/")) {  /* already an Android name (the libdl entry, libart's) */
++		snprintf(buf, size, "%s", host_path);
++		return true;
++	}
++	if (starts(base, "libc_bio.so") || !strcmp(base, "libc.so.6")) { snprintf(buf, size, RUNTIME_BIONIC "libc.so"); return true; }
++	if (starts(base, "libpthread_bio.so") || starts(base, "libdl_bio.so")) { snprintf(buf, size, RUNTIME_BIONIC "libc.so"); return true; }  /* bionic's libc has them (one module in the list: the iteration reports the first) */
++	if (!strcmp(base, "libm.so.6") || !strcmp(base, "libm.so")) { snprintf(buf, size, RUNTIME_BIONIC "libm.so"); return true; }
++	if (starts(base, "libstdc++_bio.so")) { snprintf(buf, size, "/system/lib64/libstdc++.so"); return true; }
++	if (starts(base, "ld-linux")) { snprintf(buf, size, "/system/bin/linker64"); return true; }
++	if (starts(base, "linux-vdso") || !strcmp(host_path, "[vdso]")) { snprintf(buf, size, "[vdso]"); return true; }
++	/* the platform's libraries as staged (<native>/android-libs, the shim of the runtime's jar), under /system/lib64 */
++	if (strstr(host_path, "/android-libs/") || strstr(host_path, "/android-root/system/lib64/")) {
++		snprintf(buf, size, "/system/lib64/%s", base);
++		return true;
++	}
++	if (strstr(host_path, "robolectric-nativeruntime") || strstr(host_path, "/native-runtime")) {
++		snprintf(buf, size, "/system/lib64/libandroid_runtime.so");
++		return true;
++	}
++	if (glibc_loaded) return false;
++	snprintf(buf, size, "%s", host_path);  /* a bionic-loaded library that is not the platform's: the app's own */
++	return true;
++}
++
++/* does this callback or address belong to a library of the app namespace? */
++bool apkenv_in_app_namespace(const void *addr)
++{
++	soinfo *si = apkenv_find_containing_library(addr);
++	return si && si->app_ns;
++}
+diff --git a/linker/app_view.h b/linker/app_view.h
+new file mode 100644
+--- /dev/null
++++ b/linker/app_view.h
+@@ -0,0 +1,13 @@
++/* apklayer patch: the app namespace's view (app_view.c) */
++#ifndef APP_VIEW_H
++#define APP_VIEW_H
++#include <stdbool.h>
++#include <stddef.h>
++
++bool apkenv_app_may_open(const char *name);
++bool apkenv_app_has_library(const char *name);
++const char *apkenv_android_not_found(const char *name, char *buf, size_t size);
++bool apkenv_app_symbol_hidden(const char *symbol);
++bool apkenv_android_module(const char *host_path, char *buf, size_t size, bool glibc_loaded);
++bool apkenv_in_app_namespace(const void *addr);
++#endif
+diff --git a/linker/dlfcn.c b/linker/dlfcn.c
+--- a/linker/dlfcn.c
++++ b/linker/dlfcn.c
+@@ -26,6 +26,7 @@
+ 
+ #include "config.h"
+ #include "linker.h"
++#include "app_view.h"
+ #include "linker_format.h"
+ 
+ #include "../wrapper/verbose.h"
+@@ -76,6 +77,12 @@
+ 	pthread_mutex_lock(&apkenv_dl_lock);
+ 	void *glibc_handle = NULL;
+ 	soinfo *from = apkenv_find_containing_library(caller);
++	if (from && from->app_ns && !apkenv_app_may_open(filename)) {  /* the namespace refuses it (host libraries, private platform libraries) */
++		apkenv_android_not_found(filename, dl_err_buf, sizeof(dl_err_buf));
++		dl_err_str = dl_err_buf;
++		pthread_mutex_unlock(&apkenv_dl_lock);
++		return NULL;
++	}
+ 	apkenv_want_vendor = from && from->vendor_ns;  /* apklayer patch: a vendor library's dlopen looks in the vendor namespace */
+ 	ret = apkenv_find_library(filename, from && from->app_ns, true, flag, &glibc_handle); // flag only used for glibc dlopen
+ 
+@@ -84,6 +91,9 @@
+ 		ret->refcount++;
+ 	} else if (glibc_handle) {
+ 		ret = glibc_handle;
++	} else if (from && from->app_ns && filename) {  /* bionic's wording */
++		apkenv_android_not_found(filename, dl_err_buf, sizeof(dl_err_buf));
++		dl_err_str = dl_err_buf;
+ 	} else {
+ 		set_dlerror(DL_ERR_CANNOT_LOAD_LIBRARY);
+ 	}
+@@ -218,7 +228,7 @@
+ 	if (handle == RTLD_DEFAULT) {
+ 		sym = apkenv_lookup(symbol, &found, NULL);
+ 		if (!sym) { /* apklayer patch: the host libraries too, as Android's RTLD_DEFAULT finds libc's symbols (glibc's here) */
+-			void *host = dlsym(RTLD_DEFAULT, symbol);
++			void *host = apkenv_in_app_namespace(caller) && apkenv_app_symbol_hidden(symbol) ? NULL : dlsym(RTLD_DEFAULT, symbol);
+ 			if (host) {
+ 				pthread_mutex_unlock(&apkenv_dl_lock);
+ 				return wrapper_create(symbol, host);
+@@ -233,7 +243,7 @@
+ 			sym = apkenv_lookup(symbol, &found, si->next);
+ 		}
+ 		if (!sym) { /* apklayer patch: see docs/PATCHES.md */
+-			void *host = dlsym(RTLD_DEFAULT, symbol);
++			void *host = apkenv_in_app_namespace(caller) && apkenv_app_symbol_hidden(symbol) ? NULL : dlsym(RTLD_DEFAULT, symbol);
+ 			if (host) {
+ 				pthread_mutex_unlock(&apkenv_dl_lock);
+ 				return wrapper_create(symbol, host);
+@@ -268,6 +278,8 @@
+ int bionic_dladdr(const void *addr, Dl_info *info)
+ {
+ 	int ret = 0;
++	bool app_view = apkenv_in_app_namespace(__builtin_return_address(0));  /* apklayer patch: an app's own code is shown Android's modules */
++	static __thread char view[1024], symview[256];
+ 
+ 	pthread_mutex_lock(&apkenv_dl_lock);
+ 
+@@ -291,6 +303,7 @@
+ 		}
+ 
+ 		ret = 1;
++		if (app_view && apkenv_android_module(info->dli_fname, view, sizeof view, false)) info->dli_fname = view;
+ 	}
+ 
+ 	pthread_mutex_unlock(&apkenv_dl_lock);
+@@ -305,6 +318,23 @@
+ 			info->dli_fname = libdl->dlpi_name;
+ 		if (ret && apklayer_proc_module_name)
+ 			info->dli_fname = apklayer_proc_module_name(info->dli_fname);
++		if (ret && app_view) {
++			/* a host module as Android's: glibc's and bionic_translation's libc are libc.so, their bionic_ names are the plain ones, and what only
++			 * the host has (the JVM, glibc's own entry points) has no name */
++			const char *host_name = info->dli_fname;
++			if (!apkenv_android_module(host_name, view, sizeof view, true)) view[0] = 0;
++			bool libc_like = strstr(view, "/bionic/libc.so") != NULL;
++			if (info->dli_sname && !strncmp(info->dli_sname, "bionic_", 7)) {
++				snprintf(symview, sizeof symview, "%s", info->dli_sname + 7);
++				info->dli_sname = symview;
++			}
++			if (info->dli_sname && (apkenv_app_symbol_hidden(info->dli_sname) || (!libc_like && !strncmp(info->dli_sname, "JNI_", 4)))) {
++				info->dli_sname = NULL;
++				info->dli_saddr = NULL;
++			}
++			if (info->dli_sname && !strncmp(info->dli_sname, "__system_property", 17)) strcpy(view, "/apex/com.android.runtime/lib64/bionic/libc.so");
++			info->dli_fname = view[0] ? view : "";
++		}
+ 		return ret;
+ 	}
+ 
+diff --git a/linker/linker.c b/linker/linker.c
+--- a/linker/linker.c
++++ b/linker/linker.c
+@@ -73,6 +73,7 @@
+ 
+ #include "config.h"
+ #include "linker.h"
++#include "app_view.h"
+ #include "linker_debug.h"
+ #include "linker_environ.h"
+ #include "linker_tls.h"
+@@ -435,12 +436,15 @@
+ 	int (*cb)(struct dl_phdr_info *info, size_t size, void *data);
+ 	void *data;
+ 	const struct dl_phdr_info *libdl;
++	bool app_view;  /* apklayer patch: the callback is in the app namespace: Android's modules only (app_view.c) */
++	bool seen_libc;
+ };
+ 
+ static int host_iterate_cb(struct dl_phdr_info *info, size_t size, void *data)
+ {
+ 	struct host_iterate *h = data;
+ 	struct dl_phdr_info android;
++	char view[1024];
+ 	if (h->libdl && info->dlpi_addr == h->libdl->dlpi_addr)
+ 		return 0;
+ 	size = size < sizeof(android) ? size : sizeof(android);
+@@ -448,6 +452,18 @@
+ 	android.dlpi_phdr = apkenv_android_phdr(info);
+ 	if (apklayer_proc_module_name)
+ 		android.dlpi_name = apklayer_proc_module_name(android.dlpi_name);
++	if (h->app_view) {
++		const char *name = android.dlpi_name;
++		if (info->dlpi_phdr == (const void *)getauxval(AT_PHDR))  /* the program: the app's process is app_process64 */
++			snprintf(view, sizeof view, "/system/bin/app_process64");
++		else if (!apkenv_android_module(name, view, sizeof view, true))
++			return 0;
++		if (!strcmp(view, "/apex/com.android.runtime/lib64/bionic/libc.so")) {  /* bionic's libc is one module (glibc's and bionic's are two here) */
++			if (h->seen_libc) return 0;
++			h->seen_libc = true;
++		}
++		android.dlpi_name = view;
++	}
+ 	return h->cb(&android, size, h->data);
+ }
+ 
+@@ -458,6 +474,8 @@
+ 	struct dl_phdr_info dl_info = {0};
+ 	int rv = 0;
+ 	const struct dl_phdr_info *libdl = apkenv_libdl_phdr_info();
++	bool app_view = apkenv_in_app_namespace((const void *)cb);
++	char view[1024];
+ 	for (si = apkenv_solist; si != NULL; si = si->next) {
+ 		if (si == &apkenv_libdl_info && libdl) {
+ 			dl_info = *libdl;
+@@ -467,13 +485,15 @@
+ 			dl_info.dlpi_name = si->linkmap.l_name;
+ 			dl_info.dlpi_phdr = (void *)si->phdr;
+ 			dl_info.dlpi_phnum = si->phnum;
++			if (app_view && apkenv_android_module(dl_info.dlpi_name, view, sizeof view, false))
++				dl_info.dlpi_name = view;
+ 		}
+ 		if ((rv = cb(&dl_info, sizeof(struct dl_phdr_info), data)) != 0)
+ 			break;
+ 	}
+ 	if (rv)
+ 		return rv;
+-	struct host_iterate h = { cb, data, libdl };
++	struct host_iterate h = { cb, data, libdl, app_view, false };
+ 	return dl_iterate_phdr(host_iterate_cb, &h);
+ }
+ 
+@@ -1639,6 +1659,22 @@
+ 	free(dir);
+ 	free(tmp);
+ 	return in;
++}
++
++/* apklayer patch (app_view.c): does the app namespace have this name itself: a loaded library of it, a file in its directories, or a
++ * name the cfg maps only for the app ("app:" lines) */
++bool apkenv_app_has_library(const char *name)
++{
++	for (soinfo *si = apkenv_solist; si; si = si->next)
++		if (si->app_ns && !strcmp(si->name, name)) return true;
++	for (const char **path = apkenv_app_ldpaths; *path; path++) {
++		char full[1024];
++		snprintf(full, sizeof full, "%s/%s", *path, name);
++		if (access(full, F_OK) == 0) return true;
++	}
++	for (int i = 0; i < lib_override_map.len; i++)
++		if (!strncmp(lib_override_map.overrides[i].from, "app:", 4) && !strcmp(lib_override_map.overrides[i].from + 4, name)) return true;
++	return false;
+ }
+ 
+ /* apklayer patch: libraries the vendor namespace never loads its own copy of (BIONIC_VENDOR_SHARED_LIBS: basenames separated
+diff --git a/meson.build b/meson.build
+--- a/meson.build
++++ b/meson.build
+@@ -39,6 +39,7 @@
+ 
+ dl_bio = shared_library('dl_bio',
+ 	sources: [
++		'linker/app_view.c',
+ 		'linker/dlfcn.c',
+ 		'linker/linker.c',
+ 		'linker/linker_environ.c',

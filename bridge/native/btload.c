@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/prctl.h>
 #include <unistd.h>
 extern void dl_parse_library_path(const char *path, char *delim);
 extern void *bionic_dlsym(void *handle, const char *symbol);
@@ -61,6 +62,36 @@ __attribute__((noreturn)) static void enter(uintptr_t entry, int argc, char **ar
     __builtin_unreachable();
 }
 
+/* The program this process became, as Android names it (/proc/self/exe, comm and cmdline views: bridge/native/proc_task.c), and the process's original
+ * argument area, in which the program's own command line replaces btload's (the kernel shows that area as the cmdline). */
+const char *apklayer_btload_program;
+static char *area_start;
+static size_t area_len;
+
+static void become(const char *path, int argc, char **argv)
+{
+    char **copy = calloc((size_t)argc + 1, sizeof *copy);
+    if (!copy) return;
+    for (int i = 0; i < argc; i++) copy[i] = strdup(argv[i]);
+    apklayer_btload_program = strdup(argv[0][0] == '/' ? argv[0] : path);
+    if (area_start) {
+        size_t at = 0;
+        memset(area_start, 0, area_len);
+        for (int i = 0; i < argc && copy[i]; i++) {
+            size_t n = strlen(copy[i]) + 1;
+            if (at + n > area_len) break;
+            memcpy(area_start + at, copy[i], n);
+            at += n;
+        }
+    }
+    const char *base = strrchr(apklayer_btload_program, '/');
+    char name[16];
+    snprintf(name, sizeof name, "%s", base ? base + 1 : apklayer_btload_program);
+    prctl(PR_SET_NAME, name, 0, 0, 0);
+    memcpy(argv, copy, (size_t)argc * sizeof *copy);
+    free(copy);
+}
+
 static int exec_program(const char *path, int argc, char **argv)
 {
     extern bool apklayer_apply_path_overrides(char **path);
@@ -73,6 +104,7 @@ static int exec_program(const char *path, int argc, char **argv)
     if (fd >= 0) close(fd);
     bionic_dl_iterate_phdr(find_program, &p);
     if (!header || !p.found) { fprintf(stderr, "btload: no entry for %s\n", path); return 127; }
+    become(path, argc, argv);  /* first: argv then points at copies, the argument area is rewritten */
     /* the program's own name, as bionic's libc init sets __progname from argv[0] (getprogname: android_platform.c), and glibc's for its err/error */
     extern void setprogname(const char *);
     setprogname(argv[0]);
@@ -83,6 +115,8 @@ static int exec_program(const char *path, int argc, char **argv)
 int main(int argc, char **argv)
 {
     if (argc < 3) return 2;
+    area_start = argv[0];
+    area_len = (size_t)(argv[argc - 1] + strlen(argv[argc - 1]) + 1 - argv[0]);
     _r_debug_ptr = &_r_debug;
     extern void apklayer_log_to_stderr(void);
     bool exec = argc >= 5 && !strcmp(argv[3], "--exec");  /* the program's stdout is its own */
