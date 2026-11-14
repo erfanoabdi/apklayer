@@ -3,6 +3,12 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-15: sandbox file broker gaps closed (times, xattrs, renameat2 flags, mkstemp, mkdtemp, scandir)
+- apklayerd's broker (cli/broker.cpp, bridge/native/broker.c, paths_preload.c) now also does, in the granted home as the user: utimes/lutimes/utimensat/futimens,
+  setxattr/getxattr/listxattr/removexattr (path, l* and f* forms; reads answer "ok <n>" NUL data), renameat2 with RENAME_NOREPLACE/RENAME_EXCHANGE (the rename
+  request carries the flags). mkstemp family, mkdtemp and scandir (glibc opens inside itself, past the wrappers) fall back to names/lists made through the broker.
+- Test: tests/native/broker.c (`broker-test`) runs as the app's uid in `apklayer sandbox-exec` with the preload; tests/vm/sandbox.sh asserts 14 lines of it. Group sandbox passes (UTM, own tree).
+
 ## 2026-11-14: symbols in WebView text fields over RDP
 - Before 3591e113 every ASCII symbol (`! @ # $ % ^ & * ( ) - _ = + [ { ] } ; : ' " ` ~ \ | , < . > / ?`) was lost in a WebView `<input>` (letters, digits and capitals worked): the shell sends them as keycode 0 + unicode, HostInput made an ACTION_MULTIPLE text event, which Chromium and Termux ignore. With 3591e113 (real keycode + shift meta from KeyCharacterMap) all keys arrive in the WebView and in a native EditText. New `tests/vm/symbol-keys.py` (groups `input`, `webview-input`): evdev keys with Shift, every symbol, digit and capital, the field compared with what was typed; on the old HostInput it fails with exactly the symbols above.
 - Characters without an Android keycode (accents, euro: AltGr) go through the focused field's InputConnection (`HostInput.textCommit` -> `HostTextBridge.ime`), ACTION_MULTIPLE only without a focused field. Script step `uchar:<code point>` stands in for such a key in tests (checked: e-acute and euro in both field kinds).
