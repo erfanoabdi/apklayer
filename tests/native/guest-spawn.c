@@ -36,6 +36,7 @@ static int (*a_setdef64)(handle *, const uint64_t *);
 static int (*f_init)(handle *), (*f_destroy)(handle *), (*f_open)(handle *, int, const char *, int, mode_t), (*f_close)(handle *, int);
 static int (*f_dup2)(handle *, int, int), (*f_chdir)(handle *, const char *);
 static char root[PATH_MAX];
+static int (*b_setenv)(const char *, const char *, int);
 
 static void *need(void *lib, const char *name) { void *f = dlsym(lib, name); if (!f) fprintf(stderr, "missing %s\n", name); CHECK(f); return f; }
 static void write_file(const char *rel, const char *text, mode_t mode) {
@@ -160,14 +161,15 @@ static void spawn_checks(const char *self) {
     /* POSIX_SPAWN_CLOEXEC_DEFAULT: inherited fds close, what the actions make stays */
     int keep = open("/dev/null", O_RDONLY); CHECK(keep > 2);
     snprintf(fdtext, sizeof fdtext, "%d", keep);
-    char cmd[160]; snprintf(cmd, sizeof cmd, "test -e /proc/$$/fd/%s && exit 1; test -e /proc/$$/fd/9", fdtext);
+    int high = dup2(keep, 60); CHECK(high == 60);  /* far above the lowest free numbers: closed too (closefrom above the highest open fd) */
+    char cmd[160]; snprintf(cmd, sizeof cmd, "test -e /proc/$$/fd/%s && exit 1; test -e /proc/$$/fd/60 && exit 2; test -e /proc/$$/fd/9", fdtext);
     CHECK(!a_setflags(&attr, B_CLOEXEC_DEFAULT) && !a_getflags(&attr, &flags) && flags == B_CLOEXEC_DEFAULT);
     CHECK(!f_init(&actions) && !f_dup2(&actions, keep, 9));
     CHECK(EXITED(spawn_sh(&actions, &attr, cmd, NULL), 0));
     CHECK(!a_setflags(&attr, 0));
     snprintf(cmd, sizeof cmd, "test -e /proc/$$/fd/%s", fdtext);
     CHECK(EXITED(spawn_sh(NULL, &attr, cmd, NULL), 0));  /* without it the fd is inherited */
-    close(keep); f_destroy(&actions); CHECK(!a_destroy(&attr) && !attr);
+    close(high); close(keep); f_destroy(&actions); CHECK(!a_destroy(&attr) && !attr);
     /* explicit environment; /bin is /system/bin; failures after the fork are status 127 */
     char *env[] = {"HOME=/explicit-home", "CHILD_VALUE=explicit", NULL};
     CHECK(EXITED(spawn_sh(NULL, NULL, "test \"$HOME|$CHILD_VALUE|$ANDROID_SH\" = \"/explicit-home|explicit|1\"", env), 0));
@@ -186,6 +188,12 @@ static void spawn_checks(const char *self) {
     CHECK(!b_spawnp(&pid, "spawn-script", NULL, NULL, script, NULL) && EXITED(wait_child(pid), 9));
     CHECK(!b_spawnp(&pid, "missing-tool", NULL, NULL, script, NULL) && EXITED(wait_child(pid), 127));
     CHECK(!b_spawnp(&pid, "", NULL, NULL, script, NULL) && EXITED(wait_child(pid), 127));
+    /* a relative PATH entry resolves where the child will be (after the chdir action), not in the parent's directory */
+    CHECK(!b_setenv("PATH", "bin", 1));
+    CHECK(!b_spawnp(&pid, "spawn-script", NULL, NULL, script, NULL) && EXITED(wait_child(pid), 127));
+    CHECK(!f_init(&actions) && !f_chdir(&actions, "/system"));
+    CHECK(!b_spawnp(&pid, "spawn-script", &actions, NULL, script, NULL) && EXITED(wait_child(pid), 9));
+    CHECK(!f_destroy(&actions));
     (void)self;
 }
 
@@ -233,7 +241,7 @@ int main(int argc, char **argv)
     f_open = need(libc, "bionic_posix_spawn_file_actions_addopen"); f_close = need(libc, "bionic_posix_spawn_file_actions_addclose");
     f_dup2 = need(libc, "bionic_posix_spawn_file_actions_adddup2"); f_chdir = need(libc, "bionic_posix_spawn_file_actions_addchdir_np");
     int (*clear)(void) = need(libc, "bionic_clearenv"), (*put)(char *) = need(libc, "bionic_putenv");
-    int (*set)(const char *, const char *, int) = need(libc, "bionic_setenv");
+    int (*set)(const char *, const char *, int) = b_setenv = need(libc, "bionic_setenv");
     char home[] = "HOME=/guest-home", value[] = "CHILD_VALUE=guest";
     CHECK(!clear() && !put(home) && !put(value) && !set("PATH", "/no-such-dir:/system/bin", 1));  /* Termux JNI sequence */
     /* 0070: a query of signal 32 (glibc's own) succeeds, as bionic's posix_spawn child makes it for every signal */

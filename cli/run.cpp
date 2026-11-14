@@ -1,4 +1,5 @@
 #include "run.h"
+#include "apps.h"
 #include "logs.h"
 #include "manage.h"
 #include "sandbox.h"
@@ -97,6 +98,7 @@ bool relaunch(const Layout& l, const Instance& inst, const NativeEnv& ne, const 
 std::vector<std::string> packageJvmArgs(const Layout& l, const Instance& inst, const std::string& package) {
     std::string dir = appDir(l, package);
     if (!exists(join(dir, "info.properties"))) die("not installed: " + package + " (apklayer install <app.apk>)");
+    if (isStale(join(dir, "info.properties"))) fprintf(stderr, "apklayer: %s was converted by an older converter ABI; run `apklayer reconvert %s` (its data stays) for the current runtime identity\n", package.c_str(), package.c_str());
     ensureUid(l, dir);
     std::string data = appDataDir(l, inst, package);
     if (!sandboxOn()) reclaim(data);  // the sandbox ran it as the app's own uid; without it the app runs as the user
