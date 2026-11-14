@@ -1,5 +1,6 @@
 #include "layout.h"
 
+#include "config.h"
 #include "env.h"
 
 #include <sys/stat.h>
@@ -42,6 +43,7 @@ std::string selfPath() {
 
 Layout Layout::detect(bool setUp) {
     applyConfig();
+    applySettings();  // ~/.config/apklayer/config (cli/config.cpp)
     Layout l;
     std::string exe = selfPath();
     l.root = getenvOr("APKLAYER_ROOT", "");

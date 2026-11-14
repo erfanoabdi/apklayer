@@ -1,5 +1,7 @@
 #include "run.h"
 #include "apps.h"
+
+#include "config.h"
 #include "logs.h"
 #include "manage.h"
 #include "sandbox.h"
@@ -145,6 +147,7 @@ std::vector<std::string> launchOptions(const std::vector<std::string>& window, c
 }  // namespace
 
 int runApp(const Layout& l, const Instance& inst, const std::string& package, RunMode mode) {
+    applySettings(package);  // the app's own settings over the global ones (cli/config.cpp)
     std::vector<std::string> own = packageJvmArgs(l, inst, package);
     std::vector<std::string> files(own.end() - 2, own.end());  // the APK and classes jar: Main's arguments
     own.resize(own.size() - files.size());
@@ -333,7 +336,7 @@ int runHub(const Layout& l, const Instance& inst) {
     // SettingsProvider is system_server's own (android:process="system"): it runs in the hub's JVM, as on a device, not in a JVM of its own (docs/history/PLAN-2026-11-10.md
     // "app start speed on phones" 8). Its data and package as for its own process, the hub's uid. Under the sandbox it keeps its own host (its app uid's files).
     std::vector<std::string> system;
-    if (!sandboxOn() && getenvOr("APKLAYER_SETTINGS_IN_HUB", "1") != "0" && exists(join(appDir(l, kSystemProcessPackage), "classes.jar"))) {
+    if (!sandboxOn() && exists(join(appDir(l, kSystemProcessPackage), "classes.jar"))) {
         system = packageJvmArgs(l, inst, kSystemProcessPackage);
         system.erase(std::remove_if(system.begin(), system.end(), [](const std::string& a) { return a.rfind("-Dapklayer.uid=", 0) == 0; }), system.end());
         jvm.insert(jvm.end(), system.begin(), system.end() - 2);

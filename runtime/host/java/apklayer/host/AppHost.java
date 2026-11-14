@@ -245,10 +245,6 @@ public final class AppHost implements Runnable {
             // allow multiple steps at the same time, separated by ','
             script.merge(ms, kv[1], (a, b) -> a + ";" + b);
         }
-        if (Boolean.getBoolean("apklayer.autotap") && process == null) {
-            long t = Long.getLong("apklayer.autotap.ms", 4500);
-            script.put(t, "tap:first");
-        }
         // runms holds in headless mode too, on the sandbox clock step() advances (Simulator's advanceTo + idleFor); with a window real time drives it
         pausedMode = shell == null;
         runMs = Long.getLong("apklayer.runms", pausedMode ? 3000 : Long.MAX_VALUE);

@@ -213,31 +213,6 @@ final class HostWindows {
         return null;
     }
 
-    static void dumpClickables() {
-        Object wmg = android.view.WindowManagerGlobal.getInstance();
-        List<View> roots = org.robolectric.util.ReflectionHelpers.getField(wmg, "mViews");
-        int[] loc = new int[2];
-        int n = 0;
-        for (View root : roots) {
-            java.util.ArrayDeque<View> q = new java.util.ArrayDeque<>();
-            q.add(root);
-            while (!q.isEmpty() && n < 25) {
-                View v = q.poll();
-                if (v.getVisibility() != View.VISIBLE) continue;
-                if (v.isClickable() && v.getWidth() > 0) {
-                    v.getLocationOnScreen(loc);
-                    System.out.println("[apklayer]   click " + v.getClass().getSimpleName() + " \""
-                            + (v instanceof android.widget.TextView t ? t.getText() : "") + "\" ["
-                            + loc[0] + "," + loc[1] + " " + v.getWidth() + "x" + v.getHeight() + "]");
-                    n++;
-                }
-                if (v instanceof android.view.ViewGroup g) {
-                    for (int i = 0; i < g.getChildCount(); i++) q.add(g.getChildAt(i));
-                }
-            }
-        }
-    }
-
     private static boolean hoverActive;
 
     /** Hover (mouse move without a button): offered to the topmost window under the pointer. */

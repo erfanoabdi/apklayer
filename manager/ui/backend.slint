@@ -7,6 +7,8 @@ export struct AppEntry { package: string, label: string, version: string, icon: 
                          translated: bool, lite: bool }
 export struct InstanceEntry { id: string, running: bool, binder: bool, root: string, autostart: bool }
 export struct PropEntry { key: string, value: string, source: string, live: string }
+// a setting of `apklayer config list` (cli/config.cpp): kind choice|text; own: set in this scope (global, or the app's)
+export struct ConfigEntry { key: string, title: string, help: string, kind: string, value: string, default-value: string, choices: [string], own: bool }
 export struct InfoEntry { key: string, value: string }
 // `apklayer permissions`: runtime ones (dangerous) can be granted and revoked; state: what the others' grant is ("Granted", "Not granted", ...)
 export struct PermEntry { name: string, title: string, runtime: bool, granted: bool, state: string }
@@ -105,6 +107,9 @@ export global Backend {
     in property <string> window-mode-setting;  // the instance's window style (`apklayer settings`): "" automatic (mobile on a phone or in a mobile shell), "mobile", "desktop"
     in property <string> app-window-mode-setting;  // the selected app's window style override (window-mode.<package>): "" follows the instance, "mobile", "desktop"
     callback set-setting(string, string);  // key, value ("" unsets): applied at once in a running instance
+    in property <[ConfigEntry]> config;         // the Settings page
+    in property <[ConfigEntry]> app-config;     // the selected app's own (those a setting can be given per app)
+    callback set-config(string, string, string);  // package ("" global), key, value ("" unsets): `apklayer config set|unset`
     in property <[HwDomain]> hardware;
     callback set-provider(string, int);    // domain, index into its backends: `apklayer providers set|unset` with the options typed in
     callback provider-option(string, int, string, string);  // domain, backend index, key, value: a field edited

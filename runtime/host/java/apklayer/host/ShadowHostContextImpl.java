@@ -44,7 +44,6 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
         while (base instanceof android.content.ContextWrapper) base = ((android.content.ContextWrapper) base).getBaseContext();
         if (name != null && SHADOW_STATE_SERVICES.contains(name) && base != null && base != real) return base.getSystemService(name);
         Object service = (Object) Shadow.directlyOn(real, "android.app.ContextImpl", "getSystemService", ClassParameter.from(String.class, name));
-        if (Boolean.getBoolean("apklayer.tracesvc")) System.out.println("[apklayer] getSystemService " + name + " -> " + service + " (" + real.getClass().getSimpleName() + ", " + Thread.currentThread().getName() + ")");
         if (service == null && Boolean.getBoolean("apklayer.logcat")) System.out.println("[apklayer] no system service " + name + " for " + real.getPackageName());
         if (name != null && fakeChecked.add(name)) reportFake(name, service);
         return service;

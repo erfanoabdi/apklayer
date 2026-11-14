@@ -267,7 +267,6 @@ NativeEnv nativeEnv(const Layout& layout, const Instance& instance) {
     if (deviceGraphics(layout, instance)) deviceGraphicsEnv(instance, env, layout.java.empty() ? "lib64" : "lib");  // a layout with its own JVM: the 32-bit one
     else glesFilterEnv(instance, env, n);
     env["LD_PRELOAD"] = join(n, "libapklayer-preload.so") + ":libgcc_s.so.1";
-    if (const char* extra = getenv("APKLAYER_PRELOAD_EXTRA")) env["LD_PRELOAD"] += std::string(":") + extra;  // more preloads (debugging)
     env["BIONIC_LD_LIBRARY_PATH"] = l;
     if (!env.count("APKLAYER_CRASH_TRACE")) env["APKLAYER_CRASH_TRACE"] = "1";
     // system_server's services stay in the JVM; native clients use their existing unavailable-service fallbacks

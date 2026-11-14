@@ -20,7 +20,7 @@ public final class Main {
     private static AndroidSandbox sandbox() {
         String nativeJar = System.getProperty("apklayer.nativejar");
         return SandboxBuilder.newBuilder().addClasspathEntries(nativeJar == null ? List.of() : List.of(Path.of(nativeJar)))
-                .setSdkVersion(Integer.getInteger("apklayer.sdk", 36)).build();
+                .setSdkVersion(36).build();
     }
 
     /** The app's class loader (its classes, and the APK for its java resources), a child of the sandbox, known inside the sandbox and to its loader's fallback. */
