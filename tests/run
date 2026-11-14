@@ -151,6 +151,11 @@ def main():
     prepare(groups, slots)
     ready = time.monotonic()
     have = vm.ssh(vm.instance_env(slots[0]) + 'bin/apklayer list', capture_output=True, text=True).stdout
+    # a fresh data home lacks the system apps (providers, WebView): the ones the groups need are installed from the prebuilts (tests/vm/sysapps.sh)
+    lacking = sorted({p for g in groups for p in GROUPS[g].get('needs', []) if p not in have})
+    if lacking:
+        vm.ssh(vm.instance_env(slots[0]) + 'sh tests/vm/sysapps.sh ' + ' '.join(lacking) + '; bin/apklayer stop >/dev/null 2>&1', stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        have = vm.ssh(vm.instance_env(slots[0]) + 'bin/apklayer list; bin/apklayer stop >/dev/null 2>&1', capture_output=True, text=True).stdout
     results = []
     for g in groups:
         missing = [p for p in GROUPS[g].get('needs', []) if p not in have]
