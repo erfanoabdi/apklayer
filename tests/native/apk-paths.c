@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 #define PKG "com.example.apk"
@@ -75,6 +76,12 @@ int main(int argc, char **argv) {
     char *real = realpath(".", NULL);                                                 /* a heap result is replaced by the Android spelling */
     assert(real && !strcmp(real, "/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/" PKG "-Zl3q8XvKc0bYtqN2dHkP5Q=="));
     free(real);
+    char raw[PATH_MAX];                                                               /* the raw syscall: what bionic's getcwd in translated code ends in */
+    long rn = syscall(SYS_getcwd, raw, sizeof raw);
+    assert(rn > 0 && !strcmp(raw, "/data/app/~~Zl3q8XvKc0bYtqN2dHkP5Q==/" PKG "-Zl3q8XvKc0bYtqN2dHkP5Q==") && (size_t)rn == strlen(raw) + 1);
+    char tiny[40];
+    long tn = syscall(SYS_getcwd, tiny, sizeof tiny);                               /* too small for the Android name: the kernel's answer or its error, never an overrun */
+    assert(tn <= 0 || (size_t)tn <= sizeof tiny);
     assert(access("base.apk", F_OK) == 0);                                            /* the real directory is unchanged: relative opens resolve in it */
     assert(chdir(fixed) == 0 && access("base.apk", F_OK) == 0);                       /* and the spelled name maps back */
     assert(chdir("/") == 0);
