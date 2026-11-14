@@ -1,0 +1,50 @@
+From: apklayer <noreply@apklayer.invalid>
+Subject: [PATCH] libc: debug-only host variable pass-through into the app environment
+
+Debug aid: APKLAYER_GUEST_ENV_PASSTHROUGH="MOZ_LOG,MOZ_LOG_FILE" (host environment, comma-separated names) copies those host variables into the app's initial
+environment, which otherwise is only Android's defaults (0067). Gecko reads its logging switches from the environment, so nsComponentManager:5 could not be turned
+on from outside. Not set in normal runs; the identity filter is unchanged.
+
+diff --git a/libc/libc-environment.cpp b/libc/libc-environment.cpp
+--- a/libc/libc-environment.cpp
++++ b/libc/libc-environment.cpp
+@@ -30,6 +30,7 @@
+ 
+ #include <errno.h>
+ #include <stdint.h>
++#include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+ #include <unistd.h>
+@@ -230,8 +231,30 @@
+ };
+ 
+ /* Called only before app execution; the complete replacement is allocated before publishing it. */
++/* apklayer patch (debug only): APKLAYER_GUEST_ENV_PASSTHROUGH="MOZ_LOG,MOZ_LOG_FILE" names host variables copied into the app's initial environment
++ * (Gecko's logging reads MOZ_LOG from it). Unset in normal runs: the app environment stays Android's. */
++static const char *const *with_passthrough(const char *const *base) {
++  const char *names = getenv("APKLAYER_GUEST_ENV_PASSTHROUGH");
++  if (!names || !*names) return base;
++  size_t n = 0;
++  while (base[n]) ++n;
++  size_t limit = n + 63;
++  char **list = static_cast<char **>(calloc(limit + 1, sizeof(char *)));
++  char *copy = strdup(names);
++  if (!list || !copy) { free(list); free(copy); return base; }
++  memcpy(list, base, n * sizeof(char *));
++  char *save = nullptr;
++  for (char *name = strtok_r(copy, ",", &save); name && n < limit; name = strtok_r(nullptr, ",", &save)) {
++    const char *value = getenv(name);
++    char *entry = nullptr;
++    if (value && asprintf(&entry, "%s=%s", name, value) > 0) list[n++] = entry;
++  }
++  free(copy);
++  return list;  /* kept: read once at startup */
++}
++
+ static int initialize(char *const envp[], bool explicit_child) {
+-  const char *const *source = explicit_child ? const_cast<const char *const *>(envp) : android_defaults;
++  const char *const *source = explicit_child ? const_cast<const char *const *>(envp) : with_passthrough(android_defaults);
+   size_t count = 0;
+   while (source && source[count]) ++count;
+   char **copy = static_cast<char **>(calloc(count + 1, sizeof(char *)));
