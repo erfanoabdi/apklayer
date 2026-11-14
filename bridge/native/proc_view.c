@@ -119,7 +119,12 @@ const char *apklayer_proc_module_name(const char *name)
     const char *result = name;
     if (len && !strncmp(name, root, len) && name[len] == '/')
         result = !strcmp(name + len, "/lib/server/libjvm.so")
-            ? (sizeof(void *) == 8 ? "/apex/com.android.art/lib64/libart.so" : "/apex/com.android.art/lib/libart.so") : "";
+            ? (sizeof(void *) == 8 ? "/apex/com.android.art/lib64/libopenjdkjvm.so" : "/apex/com.android.art/lib/libopenjdkjvm.so") : "";
+    else if (strstr(name, "/android-root/apex/")) {  /* libart.so (jni_art.c): a file of the Android root, named as Android spells it */
+        static __thread char spelled[PATH_MAX];
+        const char *android = apklayer_proc_map_name(name, spelled, sizeof spelled);
+        if (android) result = android;
+    }
     errno = saved;
     return result;
 }
@@ -461,7 +466,7 @@ static int proc_filter(int fd)
             size_t len = strlen(jdk);
             if (len && !strncmp(path, jdk, len) && path[len] == '/') {
                 if (strstr(path + len, "/lib/server/libjvm.so"))
-                    fprintf(buffer, "%lx-%lx %s %08lx %02x:%02x %lu /apex/com.android.art/%s/libart.so\n", start, end, perms, offset, major, minor, inode, sizeof(void *) == 8 ? "lib64" : "lib");
+                    fprintf(buffer, "%lx-%lx %s %08lx %02x:%02x %lu /apex/com.android.art/%s/libopenjdkjvm.so\n", start, end, perms, offset, major, minor, inode, sizeof(void *) == 8 ? "lib64" : "lib");
                 else fprintf(buffer, "%lx-%lx %s 00000000 00:00 0\n", start, end, perms);
                 continue;
             }

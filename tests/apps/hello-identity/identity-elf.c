@@ -71,6 +71,18 @@ static void addresses(struct buf *b, JNIEnv *env)
     JavaVM *vm = NULL;
     (*env)->GetJavaVM(env, &vm);
     put(b, "dladdr.jni.GetEnv", "%s", where(vm ? (void *)(*vm)->GetEnv : NULL, w, sizeof w));
+    /* every function of both tables (JNI 1.6: up to GetObjectRefType) lives in libart.so, as ART's (a check: expect all of them) */
+    void **jni = (void **)*env, **invoke = (void **)*vm;
+    int in_art = 0, total = 0;
+    for (int i = 4; i < 233; i++, total++) {
+        Dl_info info;
+        in_art += dladdr(jni[i], &info) && info.dli_fname && strstr(info.dli_fname, "/com.android.art/lib64/libart.so");
+    }
+    for (int i = 3; i < 8; i++, total++) {
+        Dl_info info;
+        in_art += dladdr(invoke[i], &info) && info.dli_fname && strstr(info.dli_fname, "/com.android.art/lib64/libart.so");
+    }
+    put(b, "dladdr.jni.inLibart", "%d/%d", in_art, total);
     put(b, "dladdr.self", "%s", where((void *)addresses, w, sizeof w));
 }
 

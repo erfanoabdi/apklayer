@@ -19,6 +19,7 @@
 extern void *bionic_dlopen(const char *filename, int flag);
 extern void *bionic_dlsym(void *handle, const char *symbol);
 int apklayer_jni_guest_caller(JNIEnv *env, const void *pc);  /* jni_system_route.c */
+void apklayer_art_load(JavaVM *vm, void *jni_table, void *invoke_table);  /* jni_art.c */
 
 static jniNativeInterface next;  /* the table under this layer */
 static jvmtiEnv *ti;
@@ -182,5 +183,6 @@ int apklayer_jni_guest_surface(JNIEnv *env, JavaVM *vm, jvmtiEnv *jvmti, jniNati
     *vm = &invoke;  /* the JVM's one JavaVM (main_vm): every holder of the pointer gets these entries */
 
     bind_invocation(vm);
+    apklayer_art_load(vm, table, &invoke);  /* last: the thunks wrap the entries above */
     return 0;
 }
