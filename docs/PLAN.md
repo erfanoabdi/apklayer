@@ -259,16 +259,12 @@ User requested: fix ART internals, Java runtime clues, process identity and othe
 - Waydroid baseline: Android 13 standalone dalvikvm64 confirms ART version 2.1.0, library libart.so, Java version 0/runtime 0.9, ART home, real PathClassLoader, and absence of HotSpot/Robolectric/apklayer classes. VMRuntime ISA/width and heap-hint clamp agree; default utilization is configuration/version dependent (.75 there, .6 in the current local ART reference). This is not an Android app sandbox comparison. Apklayer tests explicitly select APKLAYER_BINDER=userspace.
 - Gap matrix (2026-11-14): `docs/runtime-identity-matrix.md` compares Android 13 against apklayer ARM64 and x86. The Android column is Waydroid on the x86 PC, running hello-identity as a real installed app. Of 116 judged probes: 29 match, 13 partial, 73 mismatch. Probes: `tests/apps/hello-identity`; results and tools: `tests/identity/`; group: `identity-matrix`. The ranked work that follows, most real-app impact first:
   1. **JNI_GetCreatedJavaVMs.** x86 aborts the process (berberis nativehelper trampoline `CHECK(*output_size == 1u)`), and ARM64 returns 0 VMs. Make the host libnativehelper/libandroid_runtime stub report the app JVM, and make the trampoline tolerate 0. Translator + bridge/native.
-  2. **ARM64 `/proc/self/status` through libc returns EBADF** (the raw syscall works). Fix the proc view status snapshot read path. Also set the status `Name`, comm and `PR_GET_NAME` to the package, not `java` (both arches). Proc view + launcher.
-  3. **Host JVM traces in native views** (both arches):
-     - fd readlinks (Robolectric_all.jar, the JDK `modules`, apklayer jars at host paths);
-     - task comms (`VM Thread`, `C2 CompilerThre`, `apklayer-*`);
-     - `/proc/self/exe` and `AT_EXECFN` pointing at the JDK `java` (ARM64);
-     - the desktop cgroup and mountinfo;
-     - 258 rwx maps;
-     - host paths in maps.
-
-     Project these to Android shapes the way maps already is: `/system/bin/app_process64`, ART thread names, `/apex/**/javalib` jars, an Android cgroup and mountinfo. Proc view + launcher.
+  3. **Host JVM traces in native views, the remainder.** Done 2026-11-14 (`bridge/native/proc_task.c`, `proc_view.c`, bionic_translation 0071/0072; the status EBADF and the process name): fd links, task comms, exe/AT_EXECFN (ARM), cgroup, mountinfo, rwx and host library paths in maps. Left:
+     - `/proc/self/exe` opened as a file is still the JDK `java` ELF (the link reads app_process64; no stand-in ELF);
+     - the app's own files in maps and fd links keep their host paths (`/home/.../apps/<pkg>/lib/*.so`, base.apk, classes.jar); `/data/app/<pkg>-x/` needs a path-layer mapping first;
+     - dl_iterate_phdr/dladdr names stay as item 4 describes (they are bionic's, not the proc views');
+     - `/proc/<pid>/environ` of a process that publishes no guest environment (the JVM, a forked helper) is still the kernel's bytes, host variables included;
+     - x86: the guest exec environment carries host variables (QT_PLUGIN_PATH, QT_QPA_PLATFORM_PLUGIN_PATH) that the same environ view shows.
   4. **Native ARM64 linker namespace and symbol scope.**
      - `dlopen` of libjvm/libjava/libc.so.6/libjavacore/libbinder/libandroid_runtime succeeds;
      - `dlsym(RTLD_DEFAULT)` finds glibc and JNI symbols;
@@ -298,14 +294,13 @@ User requested: fix ART internals, Java runtime clues, process identity and othe
      - Runtime.maxMemory is 7.5 GB (ARM64) where a phone gives heapgrowthlimit (192 MB).
 
      Property defaults + Java shadow + launcher (-Xmx).
-  10. **Process attributes and environment.**
-      - dumpable 1, no_new_privs 0, seccomp 0 and AT_SECURE 0 (Android: 0/1/2/1);
-      - the parent is the apklayer CLI (Android: zygote64), and the main thread is not the pid;
+  10. **Process attributes and environment.** Done 2026-11-14: dumpable/no_new_privs/seccomp (prctl and status views, the real process keeps its attributes), the parent as zygote64 (cmdline/comm/exe of the CLI parent; PPid is the real pid), `/proc/<shell>/environ` of a btload program (the exec environment, published in a sealed memfd). Left:
+      - AT_SECURE is 0 (the kernel's auxv, set at exec);
       - uname nodename and attr/current leak the desktop on ARM64 (x86 says untrusted_app);
-      - x86 AT_PLATFORM is null and HWCAP2 0;
-      - TMPDIR/BOOTCLASSPATH are unset.
+      - x86 AT_PLATFORM is null and HWCAP2 0 (translator);
+      - TMPDIR/BOOTCLASSPATH are unset;
+      - the main thread is not the pid (launcher).
 
-      Launcher + bionic patch + translator.
   11. **JNI surface.**
       - GetVersion returns 0x150000 (Android: 0x10006);
       - JNIEnv functions do not resolve to libart.so in dladdr;
