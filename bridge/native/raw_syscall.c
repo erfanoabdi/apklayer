@@ -79,7 +79,7 @@ static long guest_syscall(long nr, const long a[6])
         if (r == 0 && apklayer_uname_view) apklayer_uname_view((struct utsname *)a[0]);
         return r < 0 ? -errno : r;
     case __NR_rt_sigaction:  /* SIGSYS only (the filter): the handler is ours, the guest's is never installed (a Go runtime installs its own through the kernel) */
-        if (a[3] && a[2]) memset((void *)a[2], 0, (size_t)a[3] < 32 ? (size_t)a[3] : 32);  /* the old action reads as the default */
+        if (a[2]) memset((void *)a[2], 0, 3 * sizeof(unsigned long));  /* the old action (the kernel's arm64 struct: handler, flags, mask) reads as the default */
         return 0;
     default:
         break;
