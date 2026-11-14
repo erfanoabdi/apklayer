@@ -6,7 +6,7 @@ bionic_translation: the Meson subproject (`subprojects/bionic_translation.wrap`)
 to the tree's external/robolectric sources and compiles them into `native-runtime.jar` ahead of `Robolectric_all.jar`; LineageOS tree:
 `patches/apply aosp ~/los24` (each `patches/aosp/<project path>/` goes onto that project). apklayer's own code is not a patch and is not
 listed per class: the shadows in `runtime/host` (registered by `HostShadowProvider`), the own classes in `runtime/patches`, the java.base
-additions (`JdkPatch`/`JdkMembers`, and `JdkIdentityPatch` with its templates `JdkHooks` = java.lang.ApklayerHooks and `JdkBootLoader` = java.lang.BootClassLoader: hooks in Throwable, Thread, Class and the exception classes, filled by `GuestTraces`), the post-processing of converted apps (`DenyInstrument`) and generated stubs (`tools/gen`).
+additions (`JdkPatch`/`JdkMembers`, and `JdkIdentityPatch` with its templates `JdkHooks` = java.lang.ApklayerHooks, `JdkBootLoader` = java.lang.BootClassLoader and `JdkArt` = java.lang.reflect.ApklayerArt (the synthetic ArtMethod table behind `Executable.artMethod`, called at the end of the Method/Constructor constructors): hooks in Throwable, Thread, Class and the exception classes, filled by `GuestTraces`), the post-processing of converted apps (`DenyInstrument`) and generated stubs (`tools/gen`).
 `android-all` is never patched; dex2jvm is vendored (docs/THIRD_PARTY.md).
 
 Rule: keep a patch thin, mark it inline "apklayer patch" (in its header, and in the code where the change is not in a patch file),

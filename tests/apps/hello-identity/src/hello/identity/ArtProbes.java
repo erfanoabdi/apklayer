@@ -65,6 +65,13 @@ final class ArtProbes {
             long a = artMethod(Adjacent.class.getDeclaredMethod("a")), b = artMethod(Adjacent.class.getDeclaredMethod("b"));
             return Math.abs(b - a);
         });
+        Out.probe("art.artMethod.walk", () -> {  // the Unsafe walk of a hook framework: flags @4 vs modifiers, index @8, the array's length prefix (apklayer's table: index == position)
+            Method a = Adjacent.class.getDeclaredMethod("a");
+            long at = artMethod(a), size = artMethod(Adjacent.class.getDeclaredMethod("b")) - at;
+            int flags = (Integer) call(unsafe(), "getInt", new Class<?>[]{long.class}, at + 4), index = (Integer) call(unsafe(), "getInt", new Class<?>[]{long.class}, at + 8);
+            int length = (Integer) call(unsafe(), "getInt", new Class<?>[]{long.class}, at - 8 - size * index);
+            return "size=" + size + " flags.low16match=" + ((flags & 0xffff) == a.getModifiers()) + " publicApiBit=" + ((flags & 0x10000000) != 0) + " lengthPrefix>=3=" + (length >= 3);
+        });
         Out.probe("art.field.artField", () -> {  // ART 10+: Field keeps dexFieldIndex/offset/accessFlags, no ArtField*
             Field f = Adjacent.class.getDeclaredField("second");
             StringBuilder b = new StringBuilder();

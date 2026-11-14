@@ -46,11 +46,13 @@ public final class JdkPatch {
     }
 
     /** JdkMembers nested class -> the java.base class that receives its members. */
-    static final java.util.Map<String, String> TARGETS = java.util.Map.of(
-            "Thread", "java/lang/Thread", "InetAddress", "java/net/InetAddress", "DateFormat", "java/text/DateFormat",
-            "ECParameterSpec", "java/security/spec/ECParameterSpec", "ByteBuffer", "java/nio/ByteBuffer",
-            "DatagramSocket", "java/net/DatagramSocket", "Cipher", "javax/crypto/Cipher", "Mac", "javax/crypto/Mac",
-            "KeyAgreement", "javax/crypto/KeyAgreement", "Signature", "java/security/Signature");
+    static final java.util.Map<String, String> TARGETS = java.util.Map.ofEntries(
+            java.util.Map.entry("Thread", "java/lang/Thread"), java.util.Map.entry("InetAddress", "java/net/InetAddress"),
+            java.util.Map.entry("DateFormat", "java/text/DateFormat"), java.util.Map.entry("ECParameterSpec", "java/security/spec/ECParameterSpec"),
+            java.util.Map.entry("ByteBuffer", "java/nio/ByteBuffer"), java.util.Map.entry("DatagramSocket", "java/net/DatagramSocket"),
+            java.util.Map.entry("Cipher", "javax/crypto/Cipher"), java.util.Map.entry("Mac", "javax/crypto/Mac"),
+            java.util.Map.entry("KeyAgreement", "javax/crypto/KeyAgreement"), java.util.Map.entry("Signature", "java/security/Signature"),
+            java.util.Map.entry("Executable", "java/lang/reflect/Executable"));
 
     /** Copies the fields and methods (not the constructor) of JdkMembers$<name> into {@code target}, the nested class renamed to the target. */
     private static void withMembers(String name, String target, Path out) throws Exception {

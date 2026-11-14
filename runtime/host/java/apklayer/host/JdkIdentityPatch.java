@@ -21,12 +21,15 @@ final class JdkIdentityPatch {
     private JdkIdentityPatch() {}
 
     static final String HOOKS = "java/lang/ApklayerHooks";
+    static final String ART = "java/lang/reflect/ApklayerArt";
     private static final String FRAMES = "([Ljava/lang/StackTraceElement;)[Ljava/lang/StackTraceElement;";
 
     static void write(Path dir) throws Exception {
-        SimpleRemapper names = new SimpleRemapper(java.util.Map.of("apklayer/host/JdkHooks", HOOKS, "apklayer/host/JdkBootLoader", "java/lang/BootClassLoader"));
+        SimpleRemapper names = new SimpleRemapper(java.util.Map.of("apklayer/host/JdkHooks", HOOKS, "apklayer/host/JdkBootLoader", "java/lang/BootClassLoader", "apklayer/host/JdkArt", ART));
         copy("apklayer/host/JdkHooks", HOOKS, names, dir);
         copy("apklayer/host/JdkBootLoader", "java/lang/BootClassLoader", names, dir);
+        copy("apklayer/host/JdkArt", ART, names, dir);
+        for (String c : new String[]{"Method", "Constructor"}) artInit(dir, "java/lang/reflect/" + c, "Ljava/lang/reflect/Executable;");
         // a Throwable's frames, made once from its backtrace: through the hook before they are kept
         patch(dir, "java/lang/Throwable", (owner, name, desc, mv) -> name.equals("getOurStackTrace") ? new MethodVisitor(Opcodes.ASM9, mv) {
             @Override public void visitMethodInsn(int op, String o, String n, String d, boolean itf) {
@@ -63,6 +66,16 @@ final class JdkIdentityPatch {
                 }
             };
             return mv;
+        });
+    }
+
+    /** Before each RETURN of a constructor of {@code owner}: {@code ApklayerArt.init(this)}. */
+    private static void artInit(Path dir, String owner, String param) throws Exception {
+        patch(dir, owner, (o, name, desc, mv) -> !name.equals("<init>") ? mv : new MethodVisitor(Opcodes.ASM9, mv) {
+            @Override public void visitInsn(int op) {
+                if (op == Opcodes.RETURN) { mv.visitVarInsn(Opcodes.ALOAD, 0); mv.visitMethodInsn(Opcodes.INVOKESTATIC, ART, "init", "(" + param + ")V", false); }
+                super.visitInsn(op);
+            }
         });
     }
 
