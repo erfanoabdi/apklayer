@@ -37,15 +37,14 @@ final class HostProviders {
         Provider sun = have.get("SUN");
         have.put(conscrypt.getName(), conscrypt);
         if (sun != null) have.put("CertPathProvider", new CertPath(sun));
-        try { have.put("HarmonyJSSE", new com.android.org.conscrypt.JSSEProvider()); } catch (Throwable none) { System.err.println("[apklayer] warning: HarmonyJSSE: " + none); }
+        try { have.put("HarmonyJSSE", new HarmonyJsse(have.get("SunEC"))); } catch (Throwable none) { System.err.println("[apklayer] warning: HarmonyJSSE: " + none); }
         List<Provider> order = new ArrayList<>();
         for (String name : new String[] {"AndroidNSSP", "AndroidOpenSSL", "CertPathProvider", "AndroidKeyStoreBCWorkaround", "BC", "HarmonyJSSE", "AndroidKeyStore"}) {
             Provider p = have.get(name);
             if (p != null) order.add(p);
         }
-        // SunJSSE's XDHKeyExchange casts the key pair of KeyPairGenerator "XDH" to java.security.interfaces.XEC*: Conscrypt's X25519 keys are not, so the JDK's SunEC serves XDH/X25519 (last in the order)
+        // SunJSSE's XDHKeyExchange casts the key pair of KeyPairGenerator "XDH" to java.security.interfaces.XEC*: Conscrypt's X25519 keys are not, so the JDK's SunEC serves XDH/X25519 (not a registered provider: HarmonyJsse serves them)
         for (Object key : new ArrayList<>(conscrypt.keySet())) if (key.toString().contains("XDH") || key.toString().contains("X25519")) conscrypt.remove(key);
-        if (have.get("SunEC") != null) order.add(have.get("SunEC"));
         // libcore's security.properties: the JDK's defaults (SunX509 key managers, PKCS12) name algorithms Android's providers do not have
         Security.setProperty("ssl.KeyManagerFactory.algorithm", "PKIX");
         Security.setProperty("ssl.TrustManagerFactory.algorithm", "PKIX");
@@ -68,6 +67,22 @@ final class HostProviders {
                 putService(new Provider.Service(this, s[0], s[1], real.getClassName(), null, null) {
                     @Override public Object newInstance(Object parameter) throws java.security.NoSuchAlgorithmException { return real.newInstance(parameter); }
                     @Override public boolean supportsParameter(Object parameter) { return real.supportsParameter(parameter); }
+                });
+            }
+        }
+    }
+
+    /** HarmonyJSSE (libcore's JSSEProvider, final: its services are forwarded) that also serves SunEC's XDH/X25519, so that SunEC stays out of Security.getProviders() (Android has none). */
+    static final class HarmonyJsse extends Provider {
+        HarmonyJsse(Provider ec) {
+            super("HarmonyJSSE", "1.0", new com.android.org.conscrypt.JSSEProvider().getInfo());
+            java.util.List<Provider.Service> real = new ArrayList<>(new com.android.org.conscrypt.JSSEProvider().getServices());
+            if (ec != null) for (String type : new String[] {"KeyPairGenerator", "KeyAgreement", "KeyFactory"}) for (String alg : new String[] {"XDH", "X25519"}) real.add(ec.getService(type, alg));
+            for (Provider.Service r : real) {
+                if (r == null) continue;
+                putService(new Provider.Service(this, r.getType(), r.getAlgorithm(), r.getClassName(), null, null) {
+                    @Override public Object newInstance(Object parameter) throws java.security.NoSuchAlgorithmException { return r.newInstance(parameter); }
+                    @Override public boolean supportsParameter(Object parameter) { return r.supportsParameter(parameter); }
                 });
             }
         }
