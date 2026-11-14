@@ -216,6 +216,10 @@ First measurement (2026-11-13, 116 judged probes): 29 match, 13 partial, 73 mism
 | FindClass(app class) from an attached native thread | **ClassNotFoundException** (system loader) | ClassNotFoundException | ClassNotFoundException | **match (fixed 2026-11-14)** | M | jni_guest_surface.c: guest callers on a thread with no Java frame get the Android answer for app-loader classes; framework/JDK classes and calls from a native method or JNI_OnLoad still resolve through the app loader |
 | Attached thread name / group / comm | Thread-3 / main / Thread-3 | Thread-4 / main / comm Thread-4 | same | **match (fixed 2026-11-14; numbering differs)** | L | jni_guest_surface.c (AttachCurrentThread names the native thread, ART's SetThreadName rule) |
 
+### HTTPS in a real app (2026-11-14, UTM ARM64, main fecb75f5 + prebuilts 7304dd9c)
+
+`tests/run tls` passes (29 s). NewPipe (corpus, first launch, Trending over HTTPS through its okhttp) draws no data: the RxCachedThreadScheduler thread dies with `ExceptionInInitializerError` in `sun.security.ssl.NamedGroup.<clinit>` (SunJSSE's `SSLSocketFactoryImpl.createSocket`, called by okhttp's `ConnectPlan.connectTlsEtc`). Cause: `InvalidParameterException: unhandled field class java.security.spec.ECFieldF2m` from Conscrypt's `OpenSSLECGroupContext.getInstance` (via `ECParameters.engineInit`): SunJSSE enumerates the sect* curves through `AlgorithmParameters.getInstance("EC")`, which resolves to Conscrypt's EC parameters. So the app's TLS path runs SunJSSE (an explicit SunJSSE socket factory, not the default AndroidOpenSSL SSLContext) over Conscrypt's EC. Not a one-line fix; in PLAN item 7.
+
 ## Corpus evidence (which apps probe what)
 
 The scan was static: strings in the dex and .so files of 44 APKs (Mac Downloads, UTM, x86 PC); the script is listed in the PLAN entry.
