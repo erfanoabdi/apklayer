@@ -3,6 +3,10 @@
 Dated entries, newest first by section; this is where status history lives (STATUS.md stays short, docs/PLAN.md holds open work only).
 Builds in `~/los24` are logged here before they run (section "Build log"). Older history: `docs/history/` (entries before 2026-11-03: `docs/history/CHANGELOG-2026-10-28_29.md`).
 
+## 2026-11-14: deb installs: Conscrypt (AndroidOpenSSL) reaches the framework jars
+- tools/release/setup-runtime.sh put only the `dalvik/system` overlay classes into the bundle's framework jars, not `com/android/org/conscrypt` (NativeCryptoJni, OpenSSLECGroupContext, OpenSSLXDHKeyPairGenerator) that runtime/meson.build's framework-patched.jar carries: on every deb/click install the framework's NativeCryptoJni called System.loadLibrary("javacrypto") (`no javacrypto in java.library.path`), AndroidOpenSSL was missing and apps got the JDK's SSL sockets (Play Store: `SSLSocketImpl cannot be cast to com.android.org.conscrypt.OpenSSLSocketImpl`, no sign-in).
+- Checked on the laptop (x86_64, deb 0.4.18+git52b9b801): the script re-run on the 0.4.18 runtime, both framework jars hold the patched class, F-Droid starts without the Conscrypt warning and loads its HTTPS repos.
+
 ## 2026-11-14: Play services with Android 17 GApps: service starts during creation, hub starts that never wait, account authenticators bound as the system
 - LiteGapps x86_64 17.0 (SDK 37, matching the framework: its build.prop says 37/17, the jar's name says 16): GmsCore 26.26.34, Phonesky 52.4.41; GMS holds its 131 signature permissions.
 - Services.startService: a start from inside a service's creation (its AppComponentFactory or onCreate) waits in DEFERRED, and `creating` now covers the factory. Play services' GmsAppComponentFactory logs each instantiation with startService(CHIMERA_LOG), which instantiated again under it: StackOverflowError in PersistentIntentOperationService.
