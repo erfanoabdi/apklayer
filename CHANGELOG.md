@@ -7,6 +7,9 @@ Builds in `~/los24` are logged here before they run (section "Build log"). Older
 - apklayerd's broker (cli/broker.cpp, bridge/native/broker.c, paths_preload.c) now also does, in the granted home as the user: utimes/lutimes/utimensat/futimens,
   setxattr/getxattr/listxattr/removexattr (path, l* and f* forms; reads answer "ok <n>" NUL data), renameat2 with RENAME_NOREPLACE/RENAME_EXCHANGE (the rename
   request carries the flags). mkstemp family, mkdtemp and scandir (glibc opens inside itself, past the wrappers) fall back to names/lists made through the broker.
+- Groups run with APKLAYER_SANDBOX=1 on UTM: activities (exit-deadline.py finds the launcher's record, apklayerd runs it), services broadcasts providers pendingintents
+  notifications files keystore webview permissions devices portal properties view gpu gpu-window pass; system-apps passes but `location` (also unsandboxed;
+  hello-system's sysprops tells the sandbox by the os uid now); sysprov and hub-services fail (docs/PLAN.md); binder fails in a fresh tree sandboxed or not (RealBinder not found).
 - Test: tests/native/broker.c (`broker-test`) runs as the app's uid in `apklayer sandbox-exec` with the preload; tests/vm/sandbox.sh asserts 14 lines of it. Group sandbox passes (UTM, own tree).
 
 ## 2026-11-14: symbols in WebView text fields over RDP

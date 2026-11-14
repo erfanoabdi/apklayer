@@ -101,6 +101,7 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - A release-candidate deb with the sandbox on for a day.
 - Spare-born processes start in the spare's cwd: a chdir to APKLAYER_CWD (spare_target.c, 1f8a8527) kept hello.input from coming up and hung the system-apps OtherProcess, so it was removed; find out why before putting it back (run.cpp still sets APKLAYER_CWD).
 - Shared spare, cold component hosts.
+- Sandboxed (APKLAYER_SANDBOX=1, UTM 2026-11-15) these groups fail: sysprov (ANDROID_ID differs across `stop` right after the first read: the settings host's save is lost; the test cannot kill the host as the user), hub-services (hub-unit.sh: the launcher is apklayerd's child, not the unit's), system-apps location (fails unsandboxed too).
 - Isolated processes run as the app uid; drive access is all or nothing. Design for the first (not small): android:isolatedProcess gets its own uid (AID_ISOLATED 99000+, one per process) in the userns map (cli/sandbox.cpp: the subuid range of 65536 ids ends before it: map the isolated range on a second newuidmap line or shrink the app range); `sandbox-exec` takes that uid and a view kind (appView without the app's data dir, its APK, no broker env); the hub needs caller uid to package for an isolated uid (getPackagesForUid, binder caller checks).
 
 ## Packaging and releases
