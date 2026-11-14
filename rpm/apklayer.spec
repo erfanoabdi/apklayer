@@ -101,6 +101,8 @@ systemctl daemon-reload >/dev/null 2>&1 || :
 # a phone whose home is on its small system partition keeps apklayer's data on /userdata (cli/datamove.cpp): each user's own directory there,
 # made by `apklayer setup`; sticky like /tmp. One that exists (made by hand) stays as it is.
 if [ -d /userdata ] && [ ! -e /userdata/apklayer ]; then mkdir /userdata/apklayer && chmod 1777 /userdata/apklayer; fi || :
+# an update leaves running instances on the old programs (the manager's Update stops them); a package manager must not stop a user's apps
+if [ "$1" -gt 1 ] && pgrep -x apklayer-shell >/dev/null 2>&1; then echo "apklayer: updated; running instances keep the old programs until stopped: run 'apklayer stop' (and 'apklayer --instance ID stop' for each other instance), or log out" >&2; fi || :
 
 %postun
 systemctl daemon-reload >/dev/null 2>&1 || :
