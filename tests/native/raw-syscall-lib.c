@@ -1,5 +1,6 @@
 /* The guest side of raw-syscall.c: a library with no libc, loaded by bionic_translation's linker (the app namespace), that makes raw `svc #0`
  * syscalls as anti-tamper code and static runtimes do, and inspects the process through the linker's dl* entries (resolved from libdl_bio). */
+#if defined(__aarch64__)
 typedef unsigned long size_t;
 typedef struct { const char *fname; void *fbase; const char *sname; void *saddr; } dl_info_t;
 struct phdr_info { unsigned long addr; const char *name; };
@@ -75,3 +76,4 @@ void guest_census(int *out)
     dl_iterate_phdr(census_cb, &c);
     out[0] = c.total, out[1] = c.host, out[2] = c.jvm, out[3] = c.libc, out[4] = c.program;
 }
+#endif
