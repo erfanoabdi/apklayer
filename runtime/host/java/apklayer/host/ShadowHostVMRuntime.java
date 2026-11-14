@@ -21,6 +21,13 @@ public class ShadowHostVMRuntime extends ShadowVMRuntime {
     }
     @Implementation protected boolean is64Bit() { return !"armeabi-v7a".equals(HostBuild.appAbi()); }
 
+    // ActivityThread.handleBindApplication tells the runtime the app's target SDK (AppEnvironment does here); before that, as AOSP, SDK_VERSION_CUR_DEVELOPMENT.
+    private int targetSdkVersion = 10000;
+    @Implementation protected int getTargetSdkVersion() { return targetSdkVersion; }
+    @Implementation protected void setTargetSdkVersion(int target) { targetSdkVersion = target; }
+    // hiddenapi exemptions an app's bypass library sets (GuestHiddenApi)
+    @Implementation protected void setHiddenApiExemptions(String[] signaturePrefixes) { GuestHiddenApi.exempt(signaturePrefixes); }
+
     // AOSP's default; setTargetHeapUtilization retains its Java validation and synchronization.
     // This is a GC hint, permitted to be ignored; it cannot control HotSpot's heap policy.
     private float targetHeapUtilization = 0.6f;

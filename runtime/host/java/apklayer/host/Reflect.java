@@ -30,7 +30,31 @@ public final class Reflect {
             if (args != null) System.arraycopy(args, 0, forwarded, 1, args.length);
             return replacement.invoke(null, forwarded);
         }
+        if (replacement == m) return invokeAs(m, receiver, args);
         return replacement.invoke(receiver, args);
+    }
+
+    private static final StackWalker CALLER = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
+
+    /**
+     * Method.invoke checks access against the class that calls it, which is this one (the converter routes every app call here): an app's
+     * package-private or private call it may make would throw IllegalAccessException from apklayer.host.Reflect. The check is made for the app's
+     * class (the caller of this method) and the call goes through a private copy of the Method made accessible.
+     */
+    private static Object invokeAs(Method m, Object receiver, Object[] args) throws IllegalAccessException, InvocationTargetException {
+        Class<?> owner = m.getDeclaringClass();
+        int mods = m.getModifiers();
+        if (m.isAccessible() || Modifier.isPublic(mods) && Modifier.isPublic(owner.getModifiers())) return m.invoke(receiver, args);
+        Class<?> caller = CALLER.walk(frames -> frames.map(StackWalker.StackFrame::getDeclaringClass).filter(c -> c != Reflect.class).findFirst().orElse(Reflect.class));  // the app's class
+        boolean allowed = Modifier.isPublic(mods) || caller == owner || caller.getNestHost() == owner.getNestHost()  // ART does not check the declaring class's access for a public member
+                || (!Modifier.isPrivate(mods) && (caller.getPackageName().equals(owner.getPackageName()) && caller.getClassLoader() == owner.getClassLoader()
+                    || Modifier.isProtected(mods) && owner.isAssignableFrom(caller)));
+        if (!allowed) return m.invoke(receiver, args);  // the JDK's IllegalAccessException (as for any foreign caller)
+        Method copy;
+        try { copy = owner.getDeclaredMethod(m.getName(), m.getParameterTypes()); }
+        catch (NoSuchMethodException gone) { return m.invoke(receiver, args); }
+        copy.setAccessible(true);
+        return copy.invoke(receiver, args);
     }
 
     /** Original and replacement, pairwise: the static methods guest native code reaches through JNI (bridge/native/jni_system_route.c). */

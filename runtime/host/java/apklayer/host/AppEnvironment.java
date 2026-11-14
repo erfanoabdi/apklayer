@@ -59,6 +59,17 @@ final class AppEnvironment {
                         return target > 0 ? target : super.getTargetSdkVersion();
                     }
                 };
+        if (apk != null && !describing && !HubHost.hub) {  // an app process: Android-shaped traces, threads and reflection, the app's own target SDK
+            Thread.currentThread().setName("main");  // the sandbox's "SDK 36 Main Thread", and its group "SDK 36"
+            try {
+                java.lang.reflect.Field groupName = ThreadGroup.class.getDeclaredField("name");
+                groupName.setAccessible(true);  // (not through Unsafe: see AppClassLoader.dexElements)
+                groupName.set(Thread.currentThread().getThreadGroup(), "main");
+            } catch (ReflectiveOperationException | RuntimeException keep) { /* the group keeps its name */ }
+            int target = ApkSdk.target(apk.toFile());
+            if (target > 0) { dalvik.system.VMRuntime.getRuntime().setTargetSdkVersion(target); GuestHiddenApi.target(target); }
+            GuestTraces.install();
+        }
         // an app that is itself the MediaStore provider answers for "media": no stand-in (Robolectric's fake one, HostMediaStub) in front of it.
         // Robolectric parses the manifest's providers only when it creates the application, after deciding on its fake: the install recorded them (AppMetadata).
         ownsMediaAuthority = apk != null && java.util.Arrays.asList(installProperty(apk, "authorities").split(";")).contains("media");

@@ -116,7 +116,7 @@ final class JavaProbes {
                         Object c = cookie.get(dex);
                         b.append(" cookie=").append(c == null ? "null" : c.getClass().getSimpleName() + "[" + java.lang.reflect.Array.getLength(c) + "]");
                     }
-                } catch (Throwable t) { b.append(" dexFile:").append(t.getClass().getSimpleName()); }
+                } catch (Throwable t) { b.append(" dexFile:").append(t.getClass().getSimpleName()).append(' ').append(shorten(t.getMessage())); }
             }
             return b.toString();
         });
@@ -155,6 +155,20 @@ final class JavaProbes {
             Method m = JavaProbes.class.getDeclaredMethod("traceHere");
             return frames((StackTraceElement[]) m.invoke(null), 6);
         });
+        Out.probe("java.reflect.packagePrivate", () -> JavaProbes.class.getDeclaredMethod("secret", int.class).invoke(null, 41));
+        Out.probe("java.reflect.privateInstance", () -> {
+            Method m = Main.class.getDeclaredMethod("hidden"); // a private method of another class: IllegalAccessException on Android too
+            try { return m.invoke(new Object()); } catch (IllegalAccessException | IllegalArgumentException e) { return e.getClass().getSimpleName(); }
+        });
+        Out.probe("java.stack.printTop", () -> {
+            java.io.StringWriter w = new java.io.StringWriter();
+            new Exception("probe").printStackTrace(new java.io.PrintWriter(w));
+            String[] lines = w.toString().split("\n");
+            return lines.length + " lines: " + lines[0] + " / " + lines[1].trim() + " / " + lines[lines.length - 1].trim();
+        });
+        Out.probe("java.reflect.unsafeGetUnsafe", () -> sun.misc.Unsafe.class.getDeclaredMethod("getUnsafe").invoke(null) != null);  // HiddenApiBypass's first step
+        Out.probe("java.reflect.unsafeMethods", () -> { Method[] all = sun.misc.Unsafe.class.getDeclaredMethods(); int n = 0; for (Method m : all) if (m.getName().startsWith("get")) n++; return all.length + " methods, " + n + " get*, class loader " + sun.misc.Unsafe.class.getClassLoader(); });
+        Out.probe("java.reflect.unsafeNames", () -> { java.util.TreeSet<String> s = new java.util.TreeSet<>(); for (Method m : sun.misc.Unsafe.class.getDeclaredMethods()) if (m.getName().startsWith("get") && !m.getName().startsWith("getInt") && !m.getName().startsWith("getL") && !m.getName().startsWith("getB") && !m.getName().startsWith("getO") && !m.getName().startsWith("getS") && !m.getName().startsWith("getC") && !m.getName().startsWith("getD") && !m.getName().startsWith("getF")) s.add(m.getName()); return s.toString(); });
         Out.probe("java.stack.callerOfStatic", () -> {
             Class<?> vmstack = Class.forName("dalvik.system.VMStack");
             Method m = vmstack.getDeclaredMethod("getCallingClassLoader");
@@ -175,6 +189,8 @@ final class JavaProbes {
             return "name=" + t.getName() + " group=" + t.getThreadGroup().getName();
         });
     }
+
+    static String secret(int n) { return "secret" + (n + 1); }
 
     static StackTraceElement[] traceHere() { return new Throwable().getStackTrace(); }
 
