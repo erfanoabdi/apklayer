@@ -173,6 +173,10 @@ void apklayer_map_own_data(const char *pkg, long uid, const char *groups, const 
     }
     __atomic_store_n(&own_data, o, __ATOMIC_RELEASE);  /* every thread's file calls read it: published whole, an earlier one stays allocated (a reader may hold it) */
     push_app_uid();
+    {   /* AT_EXECFN names the JDK's java in the stack's string: an app process reads app_process64 (proc_task.c, the preload's) */
+        extern void apklayer_proc_rewrite_execfn(void) __attribute__((weak));
+        if (apklayer_proc_rewrite_execfn) apklayer_proc_rewrite_execfn();
+    }
     /* and in the instance's /data as directories, as on Android: a walk that reaches them component by component (mkdir -p: /data/data, then
      * "com.termux" relative to it) lands in the app's tree, not in a new one (errors ignored: the sandbox's view has its own) */
     const char *links[][3] = { {"data", "", o->dir}, {"user", "/0", o->dir}, {"user_de", "/0", o->device} };
@@ -569,5 +573,9 @@ void apklayer_install_path_layer(void)
     void (*set)(bool (*)(char **)) = dlsym(RTLD_DEFAULT, "libc_bio_set_apply_path_overrides_func");
     if (set) set(apklayer_apply_path_overrides);
     push_app_uid();
+    {   /* this process's exec environment where another process of the app can read it (its /proc/<pid>/environ view, proc_task.c) */
+        extern int apklayer_proc_publish_environment(void) __attribute__((weak));
+        if (apklayer_proc_publish_environment) apklayer_proc_publish_environment();
+    }
     if (getenv("APKLAYER_PATHS_DEBUG")) fprintf(stderr, "[paths] path layer %s\n", set ? "installed" : "NOT installed (libc_bio not loaded)");
 }

@@ -16,6 +16,13 @@ long apklayer_app_uid(void);
 int apklayer_app_groups(gid_t *out, size_t capacity);
 int apklayer_proc_is_dir(int fd);
 int apklayer_proc_pid_hidden(const char *name);
+/* proc_task.c */
+const char *apklayer_proc_thread_name(long tid, const char *real, char *out);
+int apklayer_proc_cgroup(char *out, size_t size, long pid);
+const char *apklayer_proc_status_line(const char *line);
+int apklayer_proc_parent_is_host_tool(long pid);
+int apklayer_proc_foreign_environment(long pid);
+const char *apklayer_proc_map_name(const char *host, char *out, size_t size);
 
 static int proc_file_kind(const char *leaf)
 {
@@ -25,27 +32,46 @@ static int proc_file_kind(const char *leaf)
     if (!strcmp(leaf, "numa_maps")) return 4;
     if (!strcmp(leaf, "environ")) return 5;
     if (!strcmp(leaf, "mounts") || !strcmp(leaf, "mountinfo") || !strcmp(leaf, "mountstats")) return 6;
+    if (!strcmp(leaf, "comm")) return 7;
+    if (!strcmp(leaf, "stat")) return 8;
+    if (!strcmp(leaf, "cgroup")) return 9;
+    if (!strcmp(leaf, "cmdline")) return 10;
     return 0;
 }
 
-/* Resolve the opened file, so relative openat, symlinks and per-thread spellings share one check. */
-static int own_proc_file(int fd)
+/* Resolve the opened file, so relative openat, symlinks and per-thread spellings share one check. *tid: the thread the file describes
+ * (/proc/<tid>/... too). A file of another process sets *foreign to its pid and returns its kind (0 for an own file). */
+static int proc_file_of(int fd, long *tid, long *foreign)
 {
     char link[64], path[PATH_MAX], task[80];
     snprintf(link, sizeof link, "/proc/self/fd/%d", fd);
     ssize_t n = readlink(link, path, sizeof path - 1);
+    *foreign = 0;
     if (n < 0) return 0;
     path[n] = 0;
-    unsigned long pid, tid;
+    unsigned long pid, id;
     char leaf[16];
     int end = 0;
     if (sscanf(path, "/proc/%lu/%15s%n", &pid, leaf, &end) == 2 && end && !path[end] && !strchr(leaf, '/')) {
         snprintf(task, sizeof task, "/proc/self/task/%lu", pid);
-        return access(task, F_OK) == 0 ? proc_file_kind(leaf) : 0;
+        *tid = (long)pid;
+        if (access(task, F_OK) == 0) return proc_file_kind(leaf);
+        *foreign = (long)pid;
+        return proc_file_kind(leaf);
     }
     end = 0;
-    return sscanf(path, "/proc/%lu/task/%lu/%15s%n", &pid, &tid, leaf, &end) == 3 && end && !path[end] && pid == (unsigned long)getpid()
-        ? proc_file_kind(leaf) : 0;
+    if (sscanf(path, "/proc/%lu/task/%lu/%15s%n", &pid, &id, leaf, &end) == 3 && end && !path[end]) {
+        *tid = (long)id;
+        if (pid == (unsigned long)getpid()) return proc_file_kind(leaf);
+    }
+    return 0;
+}
+
+static int own_proc_file(int fd)
+{
+    long tid, foreign;
+    int kind = proc_file_of(fd, &tid, &foreign);
+    return foreign ? 0 : kind;
 }
 
 static int app_proc_view(void)
@@ -74,6 +100,8 @@ static const char *jdk_root(void)
     free(line); fclose(maps);
     return root;
 }
+
+const char *apklayer_proc_jdk_root(void) { return jdk_root(); }
 
 /* Only bionic's dladdr/phdr callbacks call this; host loader and unwinder APIs stay untouched. */
 const char *apklayer_proc_module_name(const char *name)
@@ -231,6 +259,69 @@ done:
     return result;
 }
 
+/* The whole (small) proc file at fd: comm, stat, cgroup, cmdline; malloc'd, *size its length */
+static char *slurp_fd(int fd, size_t *size)
+{
+    size_t cap = 4096, used = 0;
+    char *text = malloc(cap + 1);
+    for (off_t at = 0; text;) {
+        ssize_t n = pread(fd, text + used, cap - used, at);
+        if (n < 0 && errno == EINTR) continue;
+        if (n < 0) { free(text); return NULL; }
+        if (!n) break;
+        used += (size_t)n; at += n;
+        if (used == cap) { char *more = realloc(text, cap * 2 + 1); if (!more) { free(text); return NULL; } text = more; cap *= 2; }
+    }
+    if (text) text[used] = 0;
+    *size = used;
+    return text;
+}
+
+/* comm, stat, cgroup and cmdline of a thread of this process (tid), and the zygote and environ views of another process (foreign) */
+static int task_filter(int fd, int cloexec, int kind, long tid, long foreign)
+{
+    if (foreign) {
+        if (kind == 5) {  /* another Android program of the app: its exec environment (proc_task.c) */
+            int env = apklayer_proc_foreign_environment(foreign);
+            size_t size = 0;
+            char *text = env < 0 ? strdup("") : slurp_fd(env, &size);  /* a process that publishes none (the JVM): the host's environment is not shown */
+            if (env >= 0) close(env);
+            int result = text ? proc_replace(fd, cloexec, "environ", text, size) : fd;
+            free(text);
+            return result;
+        }
+        if ((kind == 7 || kind == 10) && apklayer_proc_parent_is_host_tool(foreign))
+            return kind == 7 ? proc_replace(fd, cloexec, "comm", "zygote64\n", 9) : proc_replace(fd, cloexec, "cmdline", "zygote64", 9);
+        return fd;
+    }
+    size_t size;
+    char *text = slurp_fd(fd, &size), out[512], name[16];
+    if (!text) return -1;
+    int result = fd;
+    if (kind == 7) {
+        text[strcspn(text, "\n")] = 0;
+        int n = snprintf(out, sizeof out, "%s\n", apklayer_proc_thread_name(tid, text, name));
+        result = proc_replace(fd, cloexec, "comm", out, (size_t)n);
+    } else if (kind == 8) {  /* pid (comm) state ...: comm may hold ')' itself, so up to the last one */
+        char *open_paren = strchr(text, '('), *close_paren = strrchr(text, ')');
+        if (open_paren && close_paren && close_paren > open_paren) {
+            char real[64], *joined = NULL;
+            snprintf(real, sizeof real, "%.*s", (int)(close_paren - open_paren - 1), open_paren + 1);
+            int n = asprintf(&joined, "%.*s(%s%s", (int)(open_paren - text), text, apklayer_proc_thread_name(tid, real, name), close_paren);
+            if (n >= 0) result = proc_replace(fd, cloexec, "stat", joined, (size_t)n);
+            free(joined);
+        }
+    } else if (kind == 9) {
+        int n = apklayer_proc_cgroup(out, sizeof out, getpid());
+        result = proc_replace(fd, cloexec, "cgroup", out, (size_t)n);
+    } else if (kind == 10 && dlsym(RTLD_DEFAULT, "apklayer_btload_program")) {  /* btload's moved arguments: no NUL padding after them */
+        while (size > 1 && !text[size - 1] && !text[size - 2]) size--;
+        result = proc_replace(fd, cloexec, "cmdline", text, size);
+    }
+    free(text);
+    return result;
+}
+
 /* fd remains owned by the caller, including on failure. */
 static int proc_filter(int fd)
 {
@@ -238,8 +329,10 @@ static int proc_filter(int fd)
     if (fd < 0 || !apklayer_own_data_env() || (view && !strcmp(view, "host"))) return fd;
     int flags = fcntl(fd, F_GETFL), cloexec = fcntl(fd, F_GETFD);
     if (flags < 0 || (flags & (O_PATH | O_ACCMODE)) != O_RDONLY) return fd;
-    int kind = own_proc_file(fd);
+    long tid = 0, foreign = 0;
+    int kind = proc_file_of(fd, &tid, &foreign);
     if (!kind || kind == 3) return fd;
+    if (foreign || kind >= 7) return task_filter(fd, cloexec, kind, tid, foreign);
     if (kind == 5) {
         const char *(*initial)(size_t *) = dlsym(RTLD_DEFAULT, "libc_bio_initial_environment");
         if (!initial) { errno = ENOSYS; return -1; }
@@ -268,6 +361,15 @@ static int proc_filter(int fd)
     while (getline(&line, &cap, in) >= 0) {
         if (kind == 4) { numa_line(buffer, line); continue; }
         if (kind == 2) {
+            const char *fixed = apklayer_proc_status_line(line);
+            if (fixed) { fputs(fixed, buffer); continue; }
+            if (!strncmp(line, "Name:", 5)) {
+                char real[64], name[16];
+                snprintf(real, sizeof real, "%s", line + 5 + strspn(line + 5, " \t"));
+                real[strcspn(real, "\n")] = 0;
+                fprintf(buffer, "Name:\t%s\n", apklayer_proc_thread_name(tid, real, name));
+                continue;
+            }
             gid_t groups[16];
             int ngroups;
             if (!strncmp(line, "Groups:", 7) && (ngroups = apklayer_app_groups(groups, 16)) >= 0) {
@@ -295,6 +397,17 @@ static int proc_filter(int fd)
                 if (strstr(path + len, "/lib/server/libjvm.so"))
                     fprintf(buffer, "%lx-%lx %s %08lx %02x:%02x %lu /apex/com.android.art/%s/libart.so\n", start, end, perms, offset, major, minor, inode, sizeof(void *) == 8 ? "lib64" : "lib");
                 else fprintf(buffer, "%lx-%lx %s 00000000 00:00 0\n", start, end, perms);
+                continue;
+            }
+            if (!*path && perms[0] == 'r' && perms[1] == 'w' && perms[2] == 'x') {  /* the JVM's code cache: ART's JIT cache is never writable and executable at once */
+                fprintf(buffer, "%lx-%lx r-x%c %08lx %02x:%02x %lu [anon:dalvik-jit-code-cache]\n", start, end, perms[3], offset, major, minor, inode);
+                continue;
+            }
+            char mapped[PATH_MAX], plain[PATH_MAX];
+            snprintf(plain, sizeof plain, "%.*s", (int)strcspn(path, "\n"), path);
+            const char *android = *plain ? apklayer_proc_map_name(plain, mapped, sizeof mapped) : NULL;
+            if (android) {
+                fprintf(buffer, "%lx-%lx %s %08lx %02x:%02x %lu %s\n", start, end, perms, offset, major, minor, inode, android);
                 continue;
             }
         }
