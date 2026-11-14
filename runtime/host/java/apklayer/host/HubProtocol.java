@@ -41,7 +41,7 @@ final class HubProtocol {
             BLUETOOTH_PIN = 60;  // {address, name, pairing variant, key} -> the PIN or passkey the person typed for a pairing BlueZ asked about ("yes" to a comparison), null when refused (HubBluetooth.pin)
     static final int EJECT_VOLUME = 64;  // {volume id} -> whether the drive is unmounted: StorageManager.unmount (HubVolumes.eject: the instance's processes holding files on it end first)
     static final int TOAST_SLOT = 99;  // {duration ms}: returns when the caller's toast may go on screen (one at a time over the instance, in call order: HubDirectory.toastSlot)
-    static final int NOTIFICATION_SETTINGS = 64;  // {} -> the app's notification settings page, shown by the hub; returns when the person closed it (HubPermissionPrompt.notificationSettings)
+    static final int NOTIFICATION_SETTINGS = 65;  // {} -> the app's notification settings page, shown by the hub; returns when the person closed it (HubPermissionPrompt.notificationSettings)
     static final int CANCEL_CREDENTIAL = 63;  // {} -> the caller's open credential question closes (BiometricPrompt's CancellationSignal; HubLockScreen.cancel)
     static final int RESTART_ON_DEATH = 62;  // {intent}: the caller's window process is ending; the hub starts that activity in a new one once the app shows no other window (HubActivities)
     static final int RUNNING_PROCESSES = 61;  // {} -> count, then {pid, process name, headless} per running process of the caller's app (getRunningAppProcesses, killProcess)
