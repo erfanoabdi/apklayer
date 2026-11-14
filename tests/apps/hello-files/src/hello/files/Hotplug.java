@@ -23,21 +23,27 @@ import java.util.concurrent.TimeUnit;
  */
 final class Hotplug {
     private Hotplug() {}
-    private static volatile boolean sawChecking;
     private static final LinkedBlockingQueue<String> EVENTS = new LinkedBlockingQueue<>(), CALLBACKS = new LinkedBlockingQueue<>();
+
+    private static final java.util.Set<String> SEEN = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     static void start(Activity activity) {
         IntentFilter filter = new IntentFilter();
-        for (String action : new String[] {Intent.ACTION_MEDIA_CHECKING, Intent.ACTION_MEDIA_MOUNTED, Intent.ACTION_MEDIA_EJECT, Intent.ACTION_MEDIA_UNMOUNTED, Intent.ACTION_MEDIA_REMOVED}) filter.addAction(action);
+        for (String action : new String[] {Intent.ACTION_MEDIA_MOUNTED, Intent.ACTION_MEDIA_EJECT, Intent.ACTION_MEDIA_UNMOUNTED, Intent.ACTION_MEDIA_REMOVED}) filter.addAction(action);
         filter.addDataScheme("file");
         activity.getApplicationContext().registerReceiver(new BroadcastReceiver() {
             @Override public void onReceive(Context c, Intent i) {
                 StorageVolume v = i.getParcelableExtra(StorageVolume.EXTRA_STORAGE_VOLUME, StorageVolume.class);
                 say("event " + i.getAction() + " " + i.getData() + " volume=" + (v == null ? null : v.getUuid() + "/" + v.getState() + "/removable=" + v.isRemovable()));
-                if (Intent.ACTION_MEDIA_CHECKING.equals(i.getAction())) sawChecking = true;
                 EVENTS.add(i.getAction() + " " + i.getData().getPath() + " " + (v == null ? "" : v.getState()));
             }
         }, filter, Context.RECEIVER_EXPORTED);
+        IntentFilter extra = new IntentFilter(Intent.ACTION_MEDIA_CHECKING);  // apart: the strict order of EVENTS stays
+        extra.addAction(Intent.ACTION_MEDIA_BAD_REMOVAL);
+        extra.addDataScheme("file");
+        activity.getApplicationContext().registerReceiver(new BroadcastReceiver() {
+            @Override public void onReceive(Context c, Intent i) { say("event " + i.getAction() + " " + i.getData()); SEEN.add(i.getAction() + " " + i.getData().getPath()); }
+        }, extra, Context.RECEIVER_EXPORTED);
         StorageManager storage = activity.getSystemService(StorageManager.class);
         storage.registerStorageVolumeCallback(activity.getMainExecutor(), new StorageManager.StorageVolumeCallback() {
             @Override public void onStateChanged(StorageVolume v) { say("callback " + v.getUuid() + " " + v.getState()); CALLBACKS.add(v.getUuid() + " " + v.getState()); }
@@ -60,13 +66,14 @@ final class Hotplug {
         if (mounted == null) return;
         String path = mounted.split(" ")[1], uuid = new File(path).getName();
         String callback;
-        do callback = CALLBACKS.poll(10, TimeUnit.SECONDS); while (callback != null && !callback.equals(uuid + " mounted"));
-        check("checking broadcast", sawChecking);
+        do callback = CALLBACKS.poll(10, TimeUnit.SECONDS); while (callback != null && !callback.equals(uuid + " mounted"));  // past its "checking"
         check("volume callback", (uuid + " mounted").equals(callback));
-        StorageVolume volume = storage.getStorageVolumes().stream().filter(v -> uuid.equals(v.getUuid())).findFirst().orElse(null);
+        StorageVolume volume = storage.getStorageVolumes().stream().filter(v -> v != null && uuid.equals(v.getUuid())).findFirst().orElse(null);
         check("volume listed", volume != null && volume.isRemovable() && "mounted".equals(volume.getState()) && path.equals(volume.getDirectory().getPath()));
-        File[] dirs = context.getExternalFilesDirs(null);
-        check("files dirs secondary", dirs.length == 2 && dirs[1].isDirectory() && dirs[1].getPath().equals(path + "/Android/data/" + context.getPackageName() + "/files"));
+        for (int i = 0; i < 30 && !SEEN.contains(Intent.ACTION_MEDIA_CHECKING + " " + path); i++) Thread.sleep(100);
+        check("MEDIA_CHECKING broadcast", SEEN.contains(Intent.ACTION_MEDIA_CHECKING + " " + path));
+        File[] dirs = context.getExternalFilesDirs(null);  // the primary's, then the drive's
+        check("secondary external files dir", dirs.length == 2 && dirs[1] != null && dirs[1].getPath().equals(path + "/Android/data/" + context.getPackageName() + "/files") && dirs[1].isDirectory());
         String media = uuid.toLowerCase();
         check("mediastore volume", MediaStore.getExternalVolumeNames(context).contains(media));
         boolean scanned = appears(context, media, "pre.png", true);

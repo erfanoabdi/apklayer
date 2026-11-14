@@ -56,7 +56,6 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - Permission prompt: precise/approximate location, "only this time", background location step.
 - Roles: kept across restarts, shown in the manager, qualification check.
 - No screen for `APP_NOTIFICATION_SETTINGS`. Channel groups stay per process.
-- `getWindowInsets`, `attachWindowContextToDisplayArea`.
 - Shared libraries: `sharedLibraryFiles/Infos`, HIDL libraries, `<uses-native-library>`, resources.
 - Storage: no scoped-storage rules; BAD_REMOVAL/UNMOUNTABLE not sent. getExternalFilesDirs' secondary dir and MEDIA_CHECKING are in but unverified: the `volumes` group's "volume listed" fails on UTM even without them.
 - Every instance scans every drive. Eject can fail "busy" while MediaProvider maps an image.

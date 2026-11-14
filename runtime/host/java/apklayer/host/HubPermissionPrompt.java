@@ -84,7 +84,11 @@ final class HubPermissionPrompt {
     boolean role(String pkg, String role) {
         String name = role.substring(role.lastIndexOf('.') + 1).replace('_', ' ').toLowerCase();
         String question = "Set " + HubInstaller.labelOf(pkg, pkg) + " as your default " + name + " app?";
-        try { return dialogs.submit(() -> HubInstallDialog.ask(question, "", "Set as default", "Cancel")).get(); }
+        try {
+            boolean yes = dialogs.submit(() -> HubInstallDialog.ask(question, "", "Set as default", "Cancel")).get();
+            if (yes) HostRoles.record(pkg, role);
+            return yes;
+        }
         catch (Exception interrupted) { return false; }
     }
 }

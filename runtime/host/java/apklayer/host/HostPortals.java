@@ -120,7 +120,7 @@ final class HostPortals {
             System.out.println("[apklayer] role " + role + (held ? " held" : " not given"));
             boolean given = held;
             requester.runOnUiThread(() -> {
-                // shortcut: the role is held by this process only (ShadowRoleManager), asked again after a restart; keep it in the hub when an app needs it kept
+                // the hub recorded it (HostRoles.record): the app's next start holds it again
                 if (given) Shadows.shadowOf(application.getSystemService(RoleManager.class)).addHeldRole(role);
                 if (wantsResult && !requester.isDestroyed())
                     ((ShadowActivity) Shadow.extract(requester)).receiveResult(intent, given ? android.app.Activity.RESULT_OK : android.app.Activity.RESULT_CANCELED, null);

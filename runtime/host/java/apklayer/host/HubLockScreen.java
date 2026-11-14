@@ -24,6 +24,7 @@ final class HubLockScreen {
     private static final int USER = 0;
     private static volatile long unlocked = Long.MIN_VALUE / 2;  // nanoTime of the last verification
     private static volatile boolean locked;  // the desktop session is locked
+    private static final java.util.Map<String, Thread> ASKERS = new java.util.concurrent.ConcurrentHashMap<>();  // the package -> the thread asking its password question
     private static final Object ASKING = new Object();  // one password question at a time
     private static final int TRIES = 5;
     private HubLockScreen() {}
@@ -104,14 +105,22 @@ final class HubLockScreen {
         String ask = (description == null || description.isEmpty() ? HubInstaller.labelOf(pkg, pkg) + " asks for your password." : description)
                 + " Enter the password you log in to this computer with.";
         synchronized (ASKING) {
-            for (int attempt = 0; attempt < TRIES; attempt++) {
-                String typed = HubInstallDialog.askSecret(heading, attempt == 0 ? ask : "Wrong password. Try again.", "Confirm", "Cancel");
-                if (typed == null) { System.out.println("[apklayer-hub] credential confirmation of " + pkg + ": cancelled"); return false; }
-                if (!HubDesktopPassword.check(typed)) { System.out.println("[apklayer-hub] credential confirmation of " + pkg + ": wrong password"); continue; }
-                boolean verified = verify(challenge);
-                System.out.println("[apklayer-hub] credential confirmation of " + pkg + (verified ? ": confirmed" : ": the instance credential was not verified") + (challenge != 0 ? " (an operation's challenge)" : ""));
-                return verified;
-            }
+            ASKERS.put(pkg, Thread.currentThread());
+            try { return ask(pkg, heading, ask, challenge); } finally { ASKERS.remove(pkg); }
+        }
+    }
+
+    /** The app's BiometricPrompt was cancelled (its CancellationSignal): its open password dialog closes, as when the person cancels it. */
+    static void cancel(String pkg) { HubInstallDialog.dismiss(ASKERS.get(pkg)); }
+
+    private static boolean ask(String pkg, String heading, String ask, long challenge) {
+        for (int attempt = 0; attempt < TRIES; attempt++) {
+            String typed = HubInstallDialog.askSecret(heading, attempt == 0 ? ask : "Wrong password. Try again.", "Confirm", "Cancel");
+            if (typed == null) { System.out.println("[apklayer-hub] credential confirmation of " + pkg + ": cancelled"); return false; }
+            if (!HubDesktopPassword.check(typed)) { System.out.println("[apklayer-hub] credential confirmation of " + pkg + ": wrong password"); continue; }
+            boolean verified = verify(challenge);
+            System.out.println("[apklayer-hub] credential confirmation of " + pkg + (verified ? ": confirmed" : ": the instance credential was not verified") + (challenge != 0 ? " (an operation's challenge)" : ""));
+            return verified;
         }
         return false;
     }

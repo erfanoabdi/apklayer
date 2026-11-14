@@ -184,17 +184,16 @@ public class ShadowHostContextImpl extends ShadowContextImpl {
     @Implementation @Override protected java.io.File getExternalFilesDir(String type) { return externalAppDir("files", type); }
     @Implementation @Override protected java.io.File[] getExternalFilesDirs(String type) { return externalAppDirs("files", type); }
     @Implementation protected java.io.File[] getExternalCacheDirs() { return externalAppDirs("cache", null); }
-    /** Environment.buildExternalStorageAppFilesDirs: the primary volume's directory first, then one on each other mounted volume (a removable drive). */
+    /** Environment.buildExternalStorageAppFilesDirs: the primary volume's directory, then one on every other mounted writable volume (a drive); null for one that cannot be made. */
     private java.io.File[] externalAppDirs(String kind, String type) {
         java.util.List<java.io.File> dirs = new java.util.ArrayList<>();
         dirs.add(externalAppDir(kind, type));
-        android.os.storage.StorageManager storage = (android.os.storage.StorageManager) real.getSystemService(android.content.Context.STORAGE_SERVICE);
-        if (storage != null) for (android.os.storage.StorageVolume v : storage.getStorageVolumes()) {
-            if (v.isPrimary() || v.getDirectory() == null || !android.os.Environment.MEDIA_MOUNTED.equals(v.getState())) continue;
-            java.io.File dir = new java.io.File(v.getDirectory(), "Android/data/" + real.getPackageName() + "/" + kind);
+        android.os.storage.StorageManager storage = real.getSystemService(android.os.storage.StorageManager.class);
+        if (storage != null) for (android.os.storage.StorageVolume volume : storage.getStorageVolumes()) {
+            if (volume.isPrimary() || !android.os.Environment.MEDIA_MOUNTED.equals(volume.getState()) || volume.getDirectory() == null) continue;
+            java.io.File dir = new java.io.File(volume.getDirectory(), "Android/data/" + real.getPackageName() + "/" + kind);
             if (type != null) dir = new java.io.File(dir, type);
-            dir.mkdirs();
-            dirs.add(dir);
+            dirs.add(dir.isDirectory() || dir.mkdirs() ? dir : null);
         }
         return dirs.toArray(new java.io.File[0]);
     }

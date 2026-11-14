@@ -16,6 +16,7 @@ check() {  # check <package> <testBase expected> <optional libraries' classes fo
     else echo "FAIL $1"; grep -a -A12 "FAIL\|Exception" "$out" | head -30; fail=1; fi
 }
 check hello.sharedlib false 6
+grep -aq "\[sharedlib\] hello.sharedlib other PASS" "$APKLY_STATE/sharedlib-hello.sharedlib.out" && echo "PASS other app's sharedLibraryFiles/Infos" || { echo "FAIL other app's sharedLibraryFiles/Infos"; fail=1; }
 check hello.sharedlib.old true 0
 bin/apklayer stop >/dev/null 2>&1
 work=$(mktemp -d)

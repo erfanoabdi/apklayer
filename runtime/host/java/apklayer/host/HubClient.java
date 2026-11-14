@@ -267,6 +267,8 @@ public final class HubClient {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CONFIRM_CREDENTIAL, request -> { request.writeString(title); request.writeString(description); request.writeLong(challenge); },
                 reply -> reply.readBoolean());
     }
+    /** The app cancelled its BiometricPrompt: the hub closes the password dialog of this app's open confirmCredential. */
+    void cancelCredential() { HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.CANCEL_CREDENTIAL, request -> { }, reply -> null); }
     /** AudioManager.setMicrophoneMute: the mute in force after the request (HubCallAudio). */
     boolean microphoneMute(boolean on) {
         return HubProtocol.call(hub, HubProtocol.DESCRIPTOR, HubProtocol.MICROPHONE_MUTE, request -> request.writeBoolean(on), reply -> reply.readBoolean());
