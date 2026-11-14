@@ -103,6 +103,7 @@ History: `CHANGELOG.md`, `docs/history/`. Closed ART work: `docs/ART-DEFERRED.md
 - The NVIDIA tester's box with the INSTALL.md checklist.
 - Run the groups sandboxed on the x86 PC (needs `sudo sh tools/host-setup/sandbox.sh` once).
 - A release-candidate deb with the sandbox on for a day.
+- Spare-born processes start in the spare's cwd: a chdir to APKLAYER_CWD (spare_target.c, 1f8a8527) kept hello.input from coming up and hung the system-apps OtherProcess, so it was removed; find out why before putting it back (run.cpp still sets APKLAYER_CWD).
 - Shared spare, cold component hosts, broker gaps (chmod, utimes, symlink, xattrs, renameat2, mkstemp, scandir).
 - Isolated processes run as the app uid; drive access is all or nothing.
 
