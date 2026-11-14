@@ -13,7 +13,7 @@ History: `CHANGELOG.md`, `docs/history/` (full old plans). Closed ART work: `doc
 
 ## Bugs
 - `volumes` and `volumes-sandbox` fail in a fresh tree (UTM, Parallels) at "volume listed" and "mediastore volume": MediaStore never learns the volume.
-- Droid-ify and NewPipe: an NPE from a fragment/activity view that was not created (`ScreenFragment.getToolbar`).
+- Droid-ify: the NPE in `ScreenFragment.getToolbar` seen on UTM after the F-Droid index sync does not show on Parallels (first frame, tabs and turns are fine; there the index never downloads: TLS handshake_failure). Needs the sync to finish (network with working TLS), then the cause. Group `fragment` covers the plain fragment lifecycle (passes).
 - NewPipe 0.x: Trending is blank (its extractor cannot parse today's YouTube page).
 - Fennec on x86: `free(): invalid pointer` or SIGSEGV at 0x8 with `debug.apklayer.log=1`.
 - Termux: a failed exec in a forked child may still hang in `exit()` (fix untested in Termux itself).
