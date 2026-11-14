@@ -191,7 +191,9 @@ final class ActivityTask {
         // the manifest's screenOrientation is the activity's requested orientation from the start (Robolectric starts it at -1): AppHost.followOrientation
         // reshapes the window, so a landscape-locked game gets a landscape surface and landscape pointer coordinates
         if (info.screenOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) built.get().setRequestedOrientation(info.screenOrientation);
-        ActivityController<? extends Activity> c = built.create();
+        android.os.Bundle savedState = intent.getBundleExtra(SAVED_STATE);  // a restarted activity gets what it saved before its process died
+        intent.removeExtra(SAVED_STATE);
+        ActivityController<? extends Activity> c = built.create(savedState);
         org.robolectric.shadows.WindowOrder.activityOrder(c.get().getActivityToken());  // its place in the task from its start (ActivityRecord)
         taskRootBuilding = false;
         if (bottom) taskRoot = c.get();
@@ -267,11 +269,21 @@ final class ActivityTask {
         System.out.println("[apklayer] started " + info.name + " in process " + (info.processName != null ? info.processName : info.packageName));
     }
 
+    static final String SAVED_STATE = "apklayer.saved_state";
+
     /** The activity below the top one (Android restarts it when the process dies under its top activity: FCL's launcher after the game), or null. */
     static Intent belowTop() {
         try {
             List<Activity> task = task();
-            for (int i = 1; i < task.size(); i++) if (task.get(i) != null) return new Intent(task.get(i).getIntent()).setComponent(task.get(i).getComponentName());
+            for (int i = 1; i < task.size(); i++) if (task.get(i) != null) {
+                Intent below = new Intent(task.get(i).getIntent()).setComponent(task.get(i).getComponentName());
+                try {  // the saved instance state travels in the intent through the hub's restart record (HubActivities.restartOnDeath)
+                    android.os.Bundle state = new android.os.Bundle();
+                    org.robolectric.util.ReflectionHelpers.callInstanceMethod(task.get(i), "performSaveInstanceState", org.robolectric.util.ReflectionHelpers.ClassParameter.from(android.os.Bundle.class, state));
+                    if (!state.isEmpty()) below.putExtra(SAVED_STATE, state);
+                } catch (RuntimeException e) { System.out.println("[apklayer] saved state not taken: " + e); }
+                return below;
+            }
         } catch (RuntimeException changing) { /* the main thread changed the stack meanwhile */ }
         return null;
     }

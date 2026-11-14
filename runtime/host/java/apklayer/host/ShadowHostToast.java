@@ -21,13 +21,14 @@ import org.robolectric.util.ReflectionHelpers;
  * ToastPresenter (a TYPE_TOAST window for the toast's duration). As NotificationManagerService's mToastQueue: one toast on screen at a time, the
  * others wait in show() order (at most MAX_PACKAGE_TOASTS), show() of a queued toast keeps its place, cancel() hides it or takes it out of the
  * queue; Toast.Callback hears onToastShown and onToastHidden. Robolectric's shadow only recorded show(), so no app's toast was ever seen.
- * shortcut: the queue is per process, not one for every app of the instance (two apps' toasts can overlap); a hub queue if that ever matters.
+ * Across processes the hub grants one on-screen slot at a time (HubProtocol.TOAST_SLOT).
  */
 @Implements(className = "android.widget.Toast", isInAndroidSdk = false)
 public class ShadowHostToast {
     private static final int SHORT_DELAY = 2000, LONG_DELAY = 3500, MAX_PACKAGE_TOASTS = 5;  // NotificationManagerService's
     private record Entry(Toast toast, Context context, View custom, CharSequence text) {}
     private static final List<Entry> queue = new ArrayList<>();  // main thread only; the first one is on screen
+    private static Entry waiting;  // asked the hub for the slot
     private static Runnable hide;  // hides the first one
     @RealObject private Toast real;
 
@@ -43,7 +44,7 @@ public class ShadowHostToast {
             for (Entry queued : queue) if (queued.toast == real) return;  // NotificationManagerService updates the record in place
             if (queue.size() >= MAX_PACKAGE_TOASTS) { System.out.println("[apklayer] toast dropped: " + MAX_PACKAGE_TOASTS + " toasts queued"); return; }
             queue.add(entry);
-            if (queue.size() == 1) showNext();
+            if (queue.size() == 1 && waiting == null) showNext();
         });
     }
 
@@ -58,9 +59,24 @@ public class ShadowHostToast {
     private static void showNext() {
         while (!queue.isEmpty()) {
             Entry entry = queue.get(0);
-            try { show(entry); return; }
+            try { if (HubClient.connected() && !HubHost.hub) { slot(entry); return; } show(entry); return; }
             catch (RuntimeException e) { System.out.println("[apklayer] toast not shown: " + e); queue.remove(0); }
         }
+    }
+
+    /** The hub's one toast queue over every app and process: asked off the main thread, the toast shows once the hub grants the slot (it frees it after the duration). */
+    private static void slot(Entry entry) {
+        waiting = entry;
+        long ms = entry.toast.getDuration() == Toast.LENGTH_LONG ? LONG_DELAY : SHORT_DELAY;
+        new Thread(() -> {
+            try { HubProtocol.call(HubClient.current().binder(), HubProtocol.DESCRIPTOR, HubProtocol.TOAST_SLOT, request -> request.writeLong(ms), reply -> null); }
+            catch (RuntimeException hubGone) { /* shown without the slot */ }
+            main().post(() -> {
+                if (waiting == entry) waiting = null;
+                if (queue.isEmpty() || queue.get(0) != entry) { if (hide == null && waiting == null) showNext(); return; }  // cancelled while it waited
+                try { show(entry); } catch (RuntimeException e) { System.out.println("[apklayer] toast not shown: " + e); queue.remove(entry); showNext(); }
+            });
+        }, "toast-slot").start();
     }
 
     private static void show(Entry entry) {
