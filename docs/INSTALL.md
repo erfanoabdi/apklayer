@@ -341,6 +341,11 @@ default; NixOS allows the user namespaces the sandbox wants, so it needs no AppA
               users = ["you"];
             };
           };
+
+          # Each name in sandbox.users is given 65536 subordinate ids of its own, written as part of
+          # that user's declaration -- so it has to be a user this configuration declares, not one
+          # that only exists in /etc/passwd.
+          users.users.you.isNormalUser = true;
         }
       ];
     };

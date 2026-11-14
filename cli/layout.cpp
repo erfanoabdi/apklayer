@@ -118,7 +118,11 @@ Layout Layout::arm32Layout() const {
     return a;
 }
 
-std::string Layout::cliBinary() const { return selfPath(); }
+// APKLAYER_CLI: a package that wraps the CLI -- Nix's wrapProgram moves the binary aside and leaves a
+// script in its place -- points this at the wrapper, so what outlives the process (launchers,
+// the always-on unit, -Dapklayer.cli, the spawned stack and hub) names the wrapper and keeps its
+// environment, not the inner binary /proc/self/exe resolves to.
+std::string Layout::cliBinary() const { return getenvOr("APKLAYER_CLI", selfPath()); }
 
 Instance Instance::open(const Layout& layout, const std::string& id) {
     Instance i;
