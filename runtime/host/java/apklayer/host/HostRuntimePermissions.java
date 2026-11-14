@@ -15,13 +15,14 @@ import java.util.Set;
  * permissions-granted ("package\tpermission") and permissions-revoked ("package\tpermission": denied for good, after a revoke or a second
  * "Don't allow"; "package\tpermission\tonce": denied once, asked again). A permission in neither is not held until the app asks, except by apps
  * that target API 22 or lower (granted at install, as Android does) and with APKLAYER_PERMISSIONS=grant (no prompts, every runtime permission held
- * unless revoked: the tests, tests/lib/vm.py).
+ * unless revoked: the tests, tests/lib/vm.py). "Only this time" (AppOps' one-time permission) is a grant in permissions-granted that is also listed
+ * in permissions-once ("package\tpermission"): the hub ends it (back to not asked) when the process that asked exits, and at its own start.
  */
 final class HostRuntimePermissions {
     private HostRuntimePermissions() {}
 
     static final int GRANTED = 0, UNASKED = 1, DENIED_ONCE = 2, DENIED = 3;
-    static final String GRANTED_FILE = "permissions-granted", REVOKED_FILE = "permissions-revoked";
+    static final String GRANTED_FILE = "permissions-granted", REVOKED_FILE = "permissions-revoked", ONCE_FILE = "permissions-once";
     private static final boolean GRANT_ALL = "grant".equals(System.getenv("APKLAYER_PERMISSIONS"));
     private static final Map<String, Object[]> cache = new HashMap<>();  // file -> {mtime and size, lines}
 
@@ -57,6 +58,23 @@ final class HostRuntimePermissions {
         write(GRANTED_FILE, granted);
         write(REVOKED_FILE, revoked);
         return next;
+    }
+
+    /** "Only this time": granted now, listed to end with the asking process. */
+    static synchronized void grantOnce(String pkg, String permission) {
+        answer(pkg, permission, true);
+        Set<String> once = new LinkedHashSet<>(lines(ONCE_FILE));
+        once.add(pkg + "\t" + permission);
+        write(ONCE_FILE, once);
+    }
+
+    /** Ends the one-time grant of {@code permission} (null: of every permission) of {@code pkg} (null: of every package): not held, asked again. */
+    static synchronized void endOnce(String pkg, String permission) {
+        Set<String> once = new LinkedHashSet<>(lines(ONCE_FILE)), granted = new LinkedHashSet<>(lines(GRANTED_FILE));
+        for (String key : lines(ONCE_FILE))
+            if ((pkg == null || key.startsWith(pkg + "\t")) && (permission == null || key.endsWith("\t" + permission))) { once.remove(key); granted.remove(key); }
+        write(GRANTED_FILE, granted);
+        write(ONCE_FILE, once);
     }
 
     private static Set<String> lines(String name) {
