@@ -71,17 +71,19 @@ final class HostNetwork {
 
     /** Runs {@code changed} on every route or address event of the host (the hub's job constraints, an app's networks). */
     static void watch(Runnable changed) {
-        try {
-            Process monitor = new ProcessBuilder(HostProcess.dying("ip", "monitor", "route", "address")).redirectErrorStream(true).start();
-            Thread thread = new Thread(() -> {
-                try (BufferedReader in = new BufferedReader(new InputStreamReader(monitor.getInputStream()))) {
-                    while (in.readLine() != null) changed.run();
-                } catch (IOException ended) { /* the monitor stopped with the JVM */ }
-            }, "apklayer-network");
-            thread.setDaemon(true);
-            thread.start();
-            Runtime.getRuntime().addShutdownHook(new Thread(monitor::destroy));
-        } catch (IOException noIp) { System.out.println("[apklayer] network: no `ip` tool, the state is read once"); }
+        // the monitor starts on its own thread: a process launch in the app JVM takes ~1.1 s (measured on Parallels), which was on the start-up path
+        Thread thread = new Thread(() -> {
+            Process monitor;
+            try { monitor = new ProcessBuilder(HostProcess.dying("ip", "monitor", "route", "address")).redirectErrorStream(true).start(); }
+            catch (IOException noIp) { System.out.println("[apklayer] network: no `ip` tool, the state is read once"); return; }
+            try { Runtime.getRuntime().addShutdownHook(new Thread(monitor::destroy)); } catch (IllegalStateException shuttingDown) { monitor.destroy(); return; }
+            changed.run();  // a change while the monitor was starting
+            try (BufferedReader in = new BufferedReader(new InputStreamReader(monitor.getInputStream()))) {
+                while (in.readLine() != null) changed.run();
+            } catch (IOException ended) { /* the monitor stopped with the JVM */ }
+        }, "apklayer-network");
+        thread.setDaemon(true);
+        thread.start();
     }
 
     private static synchronized void apply(Application app, State next) {

@@ -1,0 +1,52 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Erfan Abdi <erfangplus@gmail.com>
+Date: Sun, 15 Nov 2026 00:00:00 +0000
+Subject: [PATCH] libc: getgrgid of an app gid answers like bionic
+
+apklayer patch (docs/PATCHES.md). 0065 names an app uid (u0_a<N>); its group (gid = uid, 0056) had no name in glibc, so Termux's
+`id -gn` and `ls -l` printed the number. bionic_getgrgid and bionic_getgrgid_r answer an app gid as grp_pwd.cpp does (u<user>_a<n>,
+no members); every gid glibc knows stays glibc's.
+
+--- a/libc/libc.c
++++ b/libc/libc.c
+@@ -17,6 +17,7 @@
+ #include <time.h>
+ #include <unistd.h>
+ #include <pwd.h> /* apklayer patch: app passwd */
++#include <grp.h> /* apklayer patch: app group */
+ 
+ #include <sys/stat.h>
+ #include <sys/syscall.h>
+@@ -209,6 +210,32 @@
+ 	return ret;
+ }
+ 
++/* apklayer patch: the group of an app uid, named as its passwd entry is (bionic's grp_pwd.cpp: u<user>_a<n>, no members); ls -l, id -gn. */
++static int app_group(gid_t gid, struct group *gr, char *buf, size_t len)
++{
++	static char *no_members[1];
++	gid_t appid = gid % 100000;
++	if (appid < 10000 || appid > 19999 || len < 24) return 0;
++	snprintf(buf, len, "u%u_a%u", gid / 100000, appid - 10000);
++	*gr = (struct group){ .gr_name = buf, .gr_passwd = (char *)"", .gr_gid = gid, .gr_mem = no_members };
++	return 1;
++}
++
++struct group *bionic_getgrgid(gid_t gid)
++{
++	static __thread struct group app;
++	static __thread char name[32];
++	struct group *gr = getgrgid(gid);
++	return gr || !app_group(gid, &app, name, sizeof name) ? gr : &app;
++}
++
++int bionic_getgrgid_r(gid_t gid, struct group *gr, char *buf, size_t len, struct group **result)
++{
++	int ret = getgrgid_r(gid, gr, buf, len, result);
++	if (ret == 0 && !*result && app_group(gid, gr, buf, len)) *result = gr;
++	return ret;
++}
++
+ int bionic_getresuid(uid_t *r, uid_t *e, uid_t *s)
+ {
+ 	int ret = getresuid(r, e, s);

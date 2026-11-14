@@ -26,7 +26,7 @@ extern char **environ;
 /* The runtime's variables, and the path layer's (paths.c read_env): an app that builds its own environment for its programs (Termux) drops them, and its programs' /data, /system and
  * binder devices were then the shared root's or the host's (Termux's mkdir -p wrote into the native android-root). LD_PRELOAD stays second (save_runtime_env). */
 static const char *const runtime_vars[] = {"LD_LIBRARY_PATH", "LD_PRELOAD", "XDG_DATA_DIRS", "APKLAYER_NATIVE", "BIONIC_LD_LIBRARY_PATH", "APKLAYER_HOST_LIBS",
-    "APKLAYER_ANDROID_ROOT", "APKLAYER_INSTANCE", "APKLAYER_INSTANCE_ROOT", "APKLAYER_STORAGE", "APKLAYER_DATA", "APKLAYER_HOST_BINDER", "APKLAYER_HOST_HWBINDER", NULL};
+    "APKLAYER_ANDROID_ROOT", "APKLAYER_INSTANCE", "XDG_RUNTIME_DIR", "APKLAYER_INSTANCE_ROOT", "APKLAYER_STORAGE", "APKLAYER_DATA", "APKLAYER_HOST_BINDER", "APKLAYER_HOST_HWBINDER", NULL};
 
 #define NVARS (sizeof runtime_vars / sizeof *runtime_vars - 1)
 static char *started[NVARS];  /* "NAME=value" of each runtime variable at load, or NULL */
