@@ -272,8 +272,10 @@ namespace {
         int fd = open(spec.logFile.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
         if (fd >= 0) { dup2(fd, 1); dup2(fd, 2); }
     }
-    int devnull = open("/dev/null", O_RDONLY);
+    int devnull = open("/dev/null", O_RDWR);
     if (devnull >= 0) dup2(devnull, 0);
+    // a detached daemon outlives its launcher and must not hold the launcher's stdout/stderr (`flatpak run x | cat` waited for the daemon)
+    if (devnull >= 0 && spec.detach && spec.logFile.empty()) { dup2(devnull, 1); dup2(devnull, 2); }
     std::vector<std::string> storage;
     std::vector<char*> envp, argv;
     toEnvp(spec.env, storage, envp);

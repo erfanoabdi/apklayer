@@ -376,7 +376,7 @@ run = ["python3 -u tests/vm/godot-vulkan.py"]
 
 [logs]  # the launch's app log and its size cap (cli/logs.cpp, cli/logcap.h)
 apps = ["hello-input"]
-run = ["python3 -u tests/vm/logs.py", "g++ -std=c++17 -I cli tests/native/log-cap.cpp -o /tmp/log-cap-$APKLAYER_INSTANCE && /tmp/log-cap-$APKLAYER_INSTANCE; r=$?; rm -f /tmp/log-cap-$APKLAYER_INSTANCE; exit $r"]
+run = ["python3 -u tests/vm/logs.py", "g++ -std=c++17 -I cli tests/native/log-cap.cpp -o /tmp/log-cap-$APKLAYER_INSTANCE && /tmp/log-cap-$APKLAYER_INSTANCE; r=$?; rm -f /tmp/log-cap-$APKLAYER_INSTANCE; exit $r", "g++ -std=c++17 -I cli tests/native/detach-stdout.cpp cli/util.cpp -o /tmp/detach-stdout-$APKLAYER_INSTANCE && /tmp/detach-stdout-$APKLAYER_INSTANCE; r=$?; rm -f /tmp/detach-stdout-$APKLAYER_INSTANCE; exit $r"]
 
 [input]
 apps = ["hello-input", "hello-system"]  # hello.system's Ime: the Android input method bound to hello.input's field (ime-bind)
