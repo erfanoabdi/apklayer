@@ -606,6 +606,10 @@ final class HubDirectory extends Binder {
                 Peer caller = caller(); String title = request.readString(), description = request.readString(); long challenge = request.readLong(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeBoolean(HubLockScreen.confirm(caller.name(), title, description, challenge)); return true;
             }
+            case HubProtocol.CANCEL_CREDENTIAL -> {
+                Peer caller = caller(); request.enforceNoDataAvail();
+                HubLockScreen.cancel(caller.name()); reply.writeNoException(); return true;
+            }
             case HubProtocol.CHECK_PERMISSION -> {
                 caller(); int pid = request.readInt(), uid = request.readInt(); String permission = request.readString(); request.enforceNoDataAvail();
                 reply.writeNoException(); reply.writeInt(providers.check(pid, uid, permission)); return true;

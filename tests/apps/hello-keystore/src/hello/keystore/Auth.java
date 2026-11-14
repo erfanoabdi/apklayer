@@ -50,6 +50,16 @@ final class Auth {
         if (!noPassword) cipher.doFinal("per operation".getBytes());
         System.out.println("[ks] per-operation key " + (noPassword ? "not authenticated, as cancelled" : "used after BiometricPrompt"));
 
+        // a prompt the app cancels through its CancellationSignal: the hub's dialog closes by itself (the runner leaves it unanswered; without it the
+        // confirm intent below would wait behind it)
+        System.out.println("[ks] prompt 3 (cancelled by the app)");
+        CancellationSignal signal = new CancellationSignal();
+        Cipher third = Cipher.getInstance("AES/GCM/NoPadding");
+        third.init(Cipher.ENCRYPT_MODE, perOp);
+        new BiometricPrompt.Builder(activity).setTitle("Cancelled by the app").setAllowedAuthenticators(BiometricManager.Authenticators.DEVICE_CREDENTIAL).build()
+                .authenticate(new BiometricPrompt.CryptoObject(third), signal, activity.getMainExecutor(), new BiometricPrompt.AuthenticationCallback() {});
+        Thread.sleep(3000);
+        signal.cancel();
         KeyguardManager keyguard = activity.getSystemService(KeyguardManager.class);
         android.content.Intent confirm = keyguard.createConfirmDeviceCredentialIntent("Unlock keystore-check", "The test confirms the device credential.");
         require(confirm != null, "a confirm intent");
